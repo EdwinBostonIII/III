@@ -1,12 +1,14 @@
 /* 1104_conjecture_term.iii -- falsifier for Conjecture increment 3 (nous_conjecture_term):
- * critical-pair completion over STRUCTURED terms (a binary f over leaf symbols). Proves the term
- * lift is sound, with BOTH critical-pair kinds:
- *   (A) ROOT: f(a,b)->c, f(a,b)->d -- a divergence whose LHS is a structured term; completed.
- *   (B) SUBTERM: f(a,b)->c with a->e -- the child rewrite f(a,b)->f(e,b) diverges from c; this pair
- *       is invisible to root-only completion (increment 1) and is the genuine term-level richness.
- *   (C) NEGATIVE: a cycle-creating conjecture is rejected (termination).
- *   (D) NEGATIVE: a non-restoring conjecture is rejected (joinability required).
- *   (E) POSITIVE: the good completing rule is admitted.
+ * critical-pair completion over STRUCTURED terms with a SOUND reduction-order termination guard.
+ *   (A) ROOT critical pair over f-terms: f(a,b)->c, f(a,b)->d -- detect, complete, join, confluent.
+ *   (B) SUBTERM critical pair (mu-compatible): f(a,b)->c with a->e (e<a, strictly mu-decreasing);
+ *       the child rewrite f(a,b)->f(e,b) diverges from c -- the genuine term-level case incr 1 cannot
+ *       express -- detect, complete f(e,b)->c, join, confluent.
+ *   (C) NEGATIVE -- a cycle-creating conjecture is mu-increasing, hence REJECTED.
+ *   (D) NEGATIVE -- the SUBTERM-SOUNDNESS counterexample: with f(0,9)->f(1,9) present, conjecturing
+ *       1->0 would close the loop f(0,9)->f(1,9)->f(0,9); the reduction order REJECTS it (a reachability
+ *       check would have wrongly admitted it). This locks in the regression for that real hole.
+ *   (E) POSITIVE -- the good completing rule is admitted; a clean system is diagnosed terminating.
  * 99 = pass. */
 module corpus_1104
 
@@ -18,47 +20,54 @@ extern @abi(c-msvc-x64) fn ntm_find_cp(out: *u32) -> u8 from "nous_conjecture_te
 extern @abi(c-msvc-x64) fn ntm_joins(u: u32, v: u32) -> u8 from "nous_conjecture_term.iii"
 extern @abi(c-msvc-x64) fn ntm_dispose_candidate(l: u32, r: u32, u: u32, v: u32) -> u8 from "nous_conjecture_term.iii"
 extern @abi(c-msvc-x64) fn ntm_conjecture_complete() -> i32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_system_terminating() -> u8 from "nous_conjecture_term.iii"
 
 const NTM_ADMITTED : i32 = 1i32
 
 var CP : [u32; 2]
 
 fn main() -> u64 {
-    /* (A) ROOT critical pair over f-terms: f(a,b)->c, f(a,b)->d (a=0,b=1,c=2,d=3) */
+    /* (A) ROOT critical pair: f(a,b)->c, f(a,b)->d (a=0,b=1,c=2,d=3) -- mu-decreasing f-rules */
     nr_reset()
-    let fab : u32 = ntm_f(0u32, 1u32)
-    nr_add(fab, ntm_leaf(2u32))
-    nr_add(fab, ntm_leaf(3u32))
+    nr_add(ntm_f(0u32, 1u32), ntm_leaf(2u32))
+    nr_add(ntm_f(0u32, 1u32), ntm_leaf(3u32))
     if ntm_find_cp(&CP as *u32) != 1u8 { return 1u64 }
     if ntm_joins(ntm_leaf(2u32), ntm_leaf(3u32)) != 0u8 { return 2u64 }
     if ntm_conjecture_complete() != NTM_ADMITTED { return 3u64 }
     if ntm_joins(ntm_leaf(2u32), ntm_leaf(3u32)) != 1u8 { return 4u64 }
     if ntm_find_cp(&CP as *u32) != 0u8 { return 5u64 }
 
-    /* (B) SUBTERM critical pair: f(a,b)->c with a->e (e=4); child rewrite diverges from c */
+    /* (B) SUBTERM critical pair (mu-compatible): f(4,1)->2 with 4->0 (e=0 < a=4, strictly decreasing) */
     nr_reset()
-    nr_add(ntm_f(0u32, 1u32), ntm_leaf(2u32))
-    nr_add(ntm_leaf(0u32), ntm_leaf(4u32))
+    nr_add(ntm_f(4u32, 1u32), ntm_leaf(2u32))
+    nr_add(ntm_leaf(4u32), ntm_leaf(0u32))
     if ntm_find_cp(&CP as *u32) != 1u8 { return 6u64 }
-    if ntm_joins(ntm_leaf(2u32), ntm_f(4u32, 1u32)) != 0u8 { return 7u64 }
+    if ntm_joins(ntm_leaf(2u32), ntm_f(0u32, 1u32)) != 0u8 { return 7u64 }
     if ntm_conjecture_complete() != NTM_ADMITTED { return 8u64 }
-    if ntm_joins(ntm_leaf(2u32), ntm_f(4u32, 1u32)) != 1u8 { return 9u64 }
+    if ntm_joins(ntm_leaf(2u32), ntm_f(0u32, 1u32)) != 1u8 { return 9u64 }
     if ntm_find_cp(&CP as *u32) != 0u8 { return 10u64 }
 
-    /* (C) NEGATIVE -- termination: a->b->c; conjecturing c->a (2->0) cycles -> rejected */
+    /* (C) NEGATIVE -- cycle-creating conjecture is mu-increasing: chain 2->1->0; conjecture 0->2
+     *     (would cycle 0->2->1->0) increases mu -> REJECTED. */
     nr_reset()
-    nr_add(ntm_leaf(0u32), ntm_leaf(1u32))
-    nr_add(ntm_leaf(1u32), ntm_leaf(2u32))
-    if ntm_dispose_candidate(ntm_leaf(2u32), ntm_leaf(0u32), ntm_leaf(1u32), ntm_leaf(2u32)) != 0u8 { return 11u64 }
+    nr_add(ntm_leaf(2u32), ntm_leaf(1u32))
+    nr_add(ntm_leaf(1u32), ntm_leaf(0u32))
+    if ntm_dispose_candidate(ntm_leaf(0u32), ntm_leaf(2u32), ntm_leaf(0u32), ntm_leaf(2u32)) != 0u8 { return 11u64 }
 
-    /* (D) NEGATIVE -- non-restoring: the subterm setup; an unrelated 7->8 doesn't rejoin (2, f(e,b)) */
+    /* (D) NEGATIVE -- the subterm-soundness counterexample: f(0,9)->f(1,9) present; conjecturing 1->0
+     *     would close the loop f(0,9)->f(1,9)->f(0,9). REJECTED by the reduction order (NOT by a
+     *     reachability check, which missed this). The whole system is non-terminating-by-mu. */
     nr_reset()
-    nr_add(ntm_f(0u32, 1u32), ntm_leaf(2u32))
-    nr_add(ntm_leaf(0u32), ntm_leaf(4u32))
-    if ntm_dispose_candidate(ntm_leaf(7u32), ntm_leaf(8u32), ntm_leaf(2u32), ntm_f(4u32, 1u32)) != 0u8 { return 12u64 }
+    nr_add(ntm_f(0u32, 9u32), ntm_f(1u32, 9u32))
+    if ntm_dispose_candidate(ntm_leaf(1u32), ntm_leaf(0u32), ntm_leaf(1u32), ntm_leaf(0u32)) != 0u8 { return 12u64 }
+    if ntm_system_terminating() != 0u8 { return 13u64 }
 
-    /* (E) POSITIVE -- the good completing rule f(e,b)->c IS admitted */
-    if ntm_dispose_candidate(ntm_f(4u32, 1u32), ntm_leaf(2u32), ntm_leaf(2u32), ntm_f(4u32, 1u32)) != 1u8 { return 13u64 }
+    /* (E) POSITIVE -- the good completing rule f(0,1)->2 IS admitted; a clean system is terminating */
+    nr_reset()
+    nr_add(ntm_f(4u32, 1u32), ntm_leaf(2u32))
+    nr_add(ntm_leaf(4u32), ntm_leaf(0u32))
+    if ntm_dispose_candidate(ntm_f(0u32, 1u32), ntm_leaf(2u32), ntm_leaf(2u32), ntm_f(0u32, 1u32)) != 1u8 { return 14u64 }
+    if ntm_system_terminating() != 1u8 { return 15u64 }
 
     return 99u64
 }

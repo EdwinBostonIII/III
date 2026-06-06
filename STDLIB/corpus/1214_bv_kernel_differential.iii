@@ -1,0 +1,193 @@
+/* 1214_bv_kernel_differential.iii -- THE BV64 KERNEL'S RANDOMIZED DIFFERENTIAL SOUNDNESS GATE.
+ *
+ * Hand-picked KAT vectors (1213) cannot BOUND the only property a trusted-base change must have:
+ * "no FALSE equality is provable."  This test bounds it empirically with two seeded-deterministic
+ * differentials over thousands of random BV expression trees -- each cross-checked against an
+ * INDEPENDENT, already-proven sound authority:
+ *
+ *  (A) CLOSED, vs NATIVE u64 (definitive).  For random all-literal trees over {+,-,*,&,|,^,<<}:
+ *      evaluate the tree with native u64 (= the ground truth, Z/2^64), then assert the kernel
+ *      CONFIRMS the right value (tc_conv(tree, lit v) == 1) AND REJECTS the wrong one
+ *      (tc_conv(tree, lit (v^1)) == 0).  Any fold / wraparound / count-mask / struct_eq error
+ *      is caught -- the kernel cannot agree with native arithmetic AND prove a false off-by-one.
+ *
+ *  (B) SYMBOLIC, vs numera/bv_ring (the sound Z/2^64 polynomial decider).  For random trees over
+ *      {x,y,literals} in the polynomial fragment {+,-,*,<<lit}: the kernel's definitional equality
+ *      is a SUBSET of polynomial equality (every kernel rule preserves the polynomial), so
+ *      tc_conv(a,b)==1  MUST imply  bv_equal(a,b)==1.  A single violation is a kernel-proved
+ *      non-polynomial equality = a FALSE equality.  Reflexive pairs (a vs a) give non-vacuity.
+ *
+ * Deterministic (fixed seed, xorshift64); no float; no oracle but III's own.  99 = both gates clean. */
+module corpus_1214
+
+/* --- the BV64 CIC kernel under test --- */
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+
+/* --- the INDEPENDENT sound oracle: numera/bv_ring (polynomial decider over Z/2^64) --- */
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+/* --- seeded xorshift64 PRNG (deterministic; the two builders consume the SAME stream after a
+ *     reseed, so a given seed yields the SAME tree in BOTH representations) --- */
+var RNG : [u64; 1]
+fn rng_seed(s: u64) -> u64 { RNG[0u64] = s ; return 0u64 }
+fn rng_next() -> u64 {
+    let mut x : u64 = RNG[0u64]
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    RNG[0u64] = x
+    return x
+}
+
+/* ===== (A) CLOSED: all-literal trees, kernel vs native u64 ===== */
+/* build an all-literal TC BV tree of the given depth, consuming the rng stream. */
+fn gen_tc_lit(depth: u32) -> u32 {
+    if depth == 0u32 { return tc_bvlit_u64(rng_next()) }
+    let op : u64 = rng_next() % 7u64
+    let l : u32 = gen_tc_lit(depth - 1u32)
+    if op == 6u64 {
+        let k : u64 = rng_next() & 63u64
+        return tc_bvshl(l, tc_bvlit_u64(k))
+    }
+    let r : u32 = gen_tc_lit(depth - 1u32)
+    if op == 0u64 { return tc_bvadd(l, r) }
+    if op == 1u64 { return tc_bvsub(l, r) }
+    if op == 2u64 { return tc_bvmul(l, r) }
+    if op == 3u64 { return tc_bvand(l, r) }
+    if op == 4u64 { return tc_bvor(l, r) }
+    return tc_bvxor(l, r)
+}
+/* evaluate the SAME tree natively (same rng stream after the same reseed). */
+fn eval_lit(depth: u32) -> u64 {
+    if depth == 0u32 { return rng_next() }
+    let op : u64 = rng_next() % 7u64
+    let l : u64 = eval_lit(depth - 1u32)
+    if op == 6u64 {
+        let k : u64 = rng_next() & 63u64
+        return l << k                      /* native u64 shift, k in [0,63] = l*2^k mod 2^64 */
+    }
+    let r : u64 = eval_lit(depth - 1u32)
+    if op == 0u64 { return l + r }          /* all native u64 = Z/2^64 ground truth */
+    if op == 1u64 { return l - r }
+    if op == 2u64 { return l * r }
+    if op == 3u64 { return l & r }
+    if op == 4u64 { return l | r }
+    return l ^ r
+}
+
+/* ===== (B) SYMBOLIC: trees over {x,y,lit} in the polynomial fragment, kernel vs bv_ring ===== */
+fn gen_tc_sym(depth: u32) -> u32 {
+    if depth == 0u32 {
+        let r : u64 = rng_next() % 3u64
+        if r == 0u64 { return tc_var(0u32) }              /* x */
+        if r == 1u64 { return tc_var(1u32) }              /* y */
+        return tc_bvlit_u64(rng_next())
+    }
+    let op : u64 = rng_next() % 4u64
+    let l : u32 = gen_tc_sym(depth - 1u32)
+    if op == 3u64 {
+        let k : u64 = rng_next() & 7u64                    /* small shift: keep bv_ring coeffs sane */
+        return tc_bvshl(l, tc_bvlit_u64(k))
+    }
+    let rr : u32 = gen_tc_sym(depth - 1u32)
+    if op == 0u64 { return tc_bvadd(l, rr) }
+    if op == 1u64 { return tc_bvsub(l, rr) }
+    return tc_bvmul(l, rr)
+}
+fn gen_bv_sym(depth: u32) -> u32 {
+    if depth == 0u32 {
+        let r : u64 = rng_next() % 3u64
+        if r == 0u64 { return bv_var(0u32) }
+        if r == 1u64 { return bv_var(1u32) }
+        return bv_const(rng_next())
+    }
+    let op : u64 = rng_next() % 4u64
+    let l : u32 = gen_bv_sym(depth - 1u32)
+    if op == 3u64 {
+        let k : u64 = rng_next() & 7u64
+        return bv_shl(l, k as u32)
+    }
+    let rr : u32 = gen_bv_sym(depth - 1u32)
+    if op == 0u64 { return bv_add(l, rr) }
+    if op == 1u64 { return bv_sub(l, rr) }
+    return bv_mul(l, rr)
+}
+
+fn bv_kernel_differential() -> u64 @export {
+    /* ---- (A) CLOSED differential: 600 random all-literal trees ---- */
+    rng_seed(0x9E3779B97F4A7C15u64)
+    let mut seedA : u64 = RNG[0u64]
+    let mut i : u32 = 0u32
+    let mut kernel_eq_seen : u64 = 0u64
+    while i < 600u32 {
+        seedA = seedA + 0x100000001B3u64
+        let depth : u32 = 2u32 + ((seedA >> 5u64) & 3u64) as u32     /* depth 2..5 */
+        rng_seed(seedA)
+        tc_reset()
+        let tree : u32 = gen_tc_lit(depth)
+        rng_seed(seedA)
+        let v : u64 = eval_lit(depth)
+        /* the kernel must CONFIRM the native value ... */
+        if tc_conv(tree, tc_bvlit_u64(v)) != 1u8 { return 1000u64 + (i as u64) }
+        /* ... and REJECT the wrong (off-by-one) value -- the soundness assertion. */
+        if tc_conv(tree, tc_bvlit_u64(v ^ 1u64)) != 0u8 { return 2000u64 + (i as u64) }
+        i = i + 1u32
+    }
+
+    /* ---- (B) SYMBOLIC differential: 600 random tree PAIRS, kernel-eq => bv_ring-eq ---- */
+    rng_seed(0xD1B54A32D192ED03u64)
+    let mut seedB : u64 = RNG[0u64]
+    let mut j : u32 = 0u32
+    while j < 600u32 {
+        seedB = seedB + 0x100000001B3u64
+        let depth2 : u32 = 1u32 + ((seedB >> 7u64) & 3u64) as u32    /* depth 1..4 */
+        let s1 : u64 = seedB
+        let mut s2 : u64 = seedB ^ 0xA5A5A5A5A5A5A5A5u64
+        /* every 5th pair is REFLEXIVE (a vs a) -- guarantees kernel-eq cases (non-vacuity). */
+        if (j % 5u32) == 0u32 { s2 = s1 }
+        /* build both trees in the TC arena, ask the kernel. */
+        tc_reset()
+        rng_seed(s1)
+        let a_tc : u32 = gen_tc_sym(depth2)
+        rng_seed(s2)
+        let b_tc : u32 = gen_tc_sym(depth2)
+        let kc : u8 = tc_conv(a_tc, b_tc)
+        /* build the SAME two trees as bv_ring polynomials, ask the sound oracle. */
+        bv_reset()
+        rng_seed(s1)
+        let a_bv : u32 = gen_bv_sym(depth2)
+        rng_seed(s2)
+        let b_bv : u32 = gen_bv_sym(depth2)
+        let bc : u8 = bv_equal(a_bv, b_bv)
+        /* SOUNDNESS: the kernel must NEVER claim an equality the sound decider rejects. */
+        if kc == 1u8 {
+            kernel_eq_seen = kernel_eq_seen + 1u64
+            if bc != 1u8 { return 3000u64 + (j as u64) }
+        }
+        j = j + 1u32
+    }
+    /* non-vacuity: the reflexive pairs must have produced kernel-eq verdicts. */
+    if kernel_eq_seen < 100u64 { return 4u64 }
+    return 99u64
+}
+
+fn main() -> u64 {
+    return bv_kernel_differential()
+}

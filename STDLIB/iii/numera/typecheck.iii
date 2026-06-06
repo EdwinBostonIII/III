@@ -63,6 +63,17 @@ extern @abi(c-msvc-x64) fn ccl_reach_c(h: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
 extern @abi(c-msvc-x64) fn clek_register(c: u64) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_lek_c(cs: u32, bs: u32) -> u32 from "ccl.iii"
+/* BV64 morphism constructors -- tc_to_ccl compiles TC BV nodes into these CCL primitives. */
+extern @abi(c-msvc-x64) fn ccl_bvlit_c(lo: u32, hi: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvadd_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvsub_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvmul_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvand_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvor_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvxor_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvshl_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvaddovf_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvmulovf_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_to_tc(c: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_shift_fstk(p: u32, k: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_app2(f: u32, a: u32) -> u32 from "ccl.iii"
@@ -123,6 +134,23 @@ const TC_SUP    : u8 = 33u8  /* sup(a,f): A=label a, B=children-fn f:B[a]->W  (c
 const TC_WREC   : u8 = 34u8
 const TC_REACH  : u8 = 35u8
 const TC_LEK    : u8 = 36u8  /* mig2: LEK(cs,bs):Bool -- A,B = cost/budget registry slots; iota-reduces iff cl_le_product */  /* mig2: REACH(h):Bool -- A=hexad literal u16; iota-reduces (via CCL) iff iii_hexad_reachable(h) */  /* wrec(P,s,w): A=motive P:W->U, B=step, C=scrutinee w */
+
+/* --- BV64: the native 64-bit machine-int (bitvector) model.  BV : U0 is a closed type
+ * like Nat/Bool; its values are bvlit(w) (a u64 carried as A=lo32,B=hi32); its operations
+ * compute by IOTA with native mod-2^64 wraparound in the CCL reducer (see ccl.iii BV
+ * morphisms).  This lets the kernel PROVE width-sensitive facts -- x<<k == x*2^k (mod 2^64),
+ * overflow-checked constant folding -- by reduction, not by a unary Peano tower. --- */
+const TC_BV       : u8 = 37u8  /* BV : U0                                          */
+const TC_BVLIT    : u8 = 38u8  /* bvlit:  A=lo32, B=hi32 of the u64 value          */
+const TC_BVADD    : u8 = 39u8  /* A=left, B=right : BV  (mod 2^64)                 */
+const TC_BVSUB    : u8 = 40u8  /* A=left, B=right : BV                             */
+const TC_BVMUL    : u8 = 41u8  /* A=left, B=right : BV                             */
+const TC_BVAND    : u8 = 42u8  /* A=left, B=right : BV                             */
+const TC_BVOR     : u8 = 43u8  /* A=left, B=right : BV                             */
+const TC_BVXOR    : u8 = 44u8  /* A=left, B=right : BV                             */
+const TC_BVSHL    : u8 = 45u8  /* A=base, B=count : BV  (count masked &63)         */
+const TC_BVADDOVF : u8 = 46u8  /* A=left, B=right : Bool  (unsigned add carry-out) */
+const TC_BVMULOVF : u8 = 47u8  /* A=left, B=right : Bool  (u64 full-product ovf)   */
 
 const TC_ERR     : u32 = 0u32           /* the null / error node id (reserved) */
 const TC_CAP     : u32 = 131072u32      /* arena capacity (nodes) -- raised 16384->131072 (8x) so the
@@ -414,6 +442,11 @@ fn tc_rigid_head(t: u32) -> u32 {
     if tag == TC_INR   { return TC_INR   as u32 }
     if tag == TC_W     { return TC_W     as u32 }
     if tag == TC_SUP   { return TC_SUP   as u32 }
+    /* BV64: the type BV and a literal are rigid (irreducible own-WHNF heads), enabling the sound
+     * fast-reject (e.g. BV vs Nat, bvlit vs zero).  The BV OPERATION nodes (bvadd..bvmulovf) are
+     * REDUCIBLE (they iota-reduce), so they correctly DEFER and are NOT listed here. */
+    if tag == TC_BV    { return TC_BV    as u32 }
+    if tag == TC_BVLIT { return TC_BVLIT as u32 }
     return TC_SHAPE_DEFER
 }
 
@@ -490,10 +523,46 @@ fn tc_reach(h: u32) -> u32 @export { return tc_mk(TC_REACH, h, 0u32) }
 fn tc_lek(cs: u32, bs: u32) -> u32 @export { return tc_mk(TC_LEK, cs, bs) }
 fn tc_sov_lek(cs: u32, bs: u32) -> u32 @export { return tc_mk3(TC_ID, tc_bool(), tc_lek(cs, bs), tc_true()) }
 fn tc_sov_reach(h: u32) -> u32 @export { return tc_mk3(TC_ID, tc_bool(), tc_reach(h), tc_true()) }
+
+/* --- BV64 term constructors --- */
+fn tc_bv() -> u32 @export { return tc_mk(TC_BV, 0u32, 0u32) }
+fn tc_bvlit(lo: u32, hi: u32) -> u32 @export { return tc_mk(TC_BVLIT, lo, hi) }
+fn tc_bvlit_u64(v: u64) -> u32 @export { return tc_mk(TC_BVLIT, (v & 0xFFFFFFFFu64) as u32, (v >> 32u64) as u32) }
+fn tc_bvadd(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVADD, a, b) }
+fn tc_bvsub(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVSUB, a, b) }
+fn tc_bvmul(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVMUL, a, b) }
+fn tc_bvand(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVAND, a, b) }
+fn tc_bvor(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVOR, a, b) }
+fn tc_bvxor(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVXOR, a, b) }
+fn tc_bvshl(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVSHL, a, b) }
+fn tc_bvaddovf(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVADDOVF, a, b) }
+fn tc_bvmulovf(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVMULOVF, a, b) }
+
+/* both operands of a binary BV node must check against BV (= U0's bitvector type). */
+fn tc_bv_op2_ok(t: u32) -> u8 {
+    let bvt : u32 = tc_bv()
+    if tc_check(TC_A[t], bvt) == 0u8 { return 0u8 }
+    if tc_check(TC_B[t], bvt) == 0u8 { return 0u8 }
+    return 1u8
+}
+
 fn tc_infer(t: u32) -> u32 @export {
     let tag : u8 = TC_TAG[t]
     if tag == TC_REACH { return tc_bool() }
     if tag == TC_LEK { return tc_bool() }
+    /* --- BV64 typing: BV:U0 ; bvlit:BV ; arith/bitwise ops : BV->BV->BV ;
+     *     overflow predicates : BV->BV->Bool (computed by iota on literals). --- */
+    if tag == TC_BV { return tc_sort(0u32) }
+    if tag == TC_BVLIT { return tc_bv() }
+    if tag == TC_BVADD { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVSUB { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVMUL { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVAND { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVOR  { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVXOR { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVSHL { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVADDOVF { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bool() }
+    if tag == TC_BVMULOVF { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bool() }
     if tag == TC_VAR {
         return tc_ctx_lookup(TC_A[t])
     }
@@ -1935,6 +2004,20 @@ fn tc_to_ccl(t: u32) -> u32 {
     }
     if tag == TC_REACH { return ccl_reach_c(TC_A[t]) }
     if tag == TC_LEK { return ccl_lek_c(TC_A[t], TC_B[t]) }
+    /* BV64: the type compiles to a distinct atom (so distinct types stay distinct under
+     * conv); a literal carries its u64 value (A=lo,B=hi); each op compiles to its flat CCL
+     * primitive over the compiled operands -- where ccl_step performs the mod-2^64 iota. */
+    if tag == TC_BV { return ccl_atom(2055u32) }
+    if tag == TC_BVLIT { return ccl_bvlit_c(TC_A[t], TC_B[t]) }
+    if tag == TC_BVADD { return ccl_bvadd_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVSUB { return ccl_bvsub_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVMUL { return ccl_bvmul_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVAND { return ccl_bvand_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVOR  { return ccl_bvor_c(tc_to_ccl(TC_A[t]),  tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVXOR { return ccl_bvxor_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVSHL { return ccl_bvshl_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVADDOVF { return ccl_bvaddovf_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVMULOVF { return ccl_bvmulovf_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_LAM { return ccl_cur_d(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_APP { return ccl_app2(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_ANN { return tc_to_ccl(TC_A[t]) }
@@ -3177,5 +3260,73 @@ fn ccl_open_conv_kat() -> u64 @export {
     /* (c) and x*3 != x+x. */
     if tc_conv(mul_x3, shl1_x) != 0u8 { return 3u64 }
 
+    return 99u64
+}
+
+/* ===== BV64 KERNEL KAT: the CIC kernel PROVES width-sensitive 64-bit machine arithmetic
+ * BY IOTA -- the named horizon (DOCS/III-SOVEREIGN-OPTIMIZER-LEDGER.md), closed.  POSITIVES
+ * are real Z/2^64 facts the kernel must certify (constant folding WITH wraparound; the
+ * x<<k == x*2^k width identity for a SYMBOLIC x, by one iota -- NOT a unary Peano tower;
+ * overflow-checked folding; the multi-class collapse).  NEGATIVES are non-facts it must
+ * REJECT (distinct literals; the off-by-one shift; x != x+1).  99 = all hold; a distinct
+ * code localises any break (bite-proven). ===== */
+fn tc_bv_kat() -> u64 @export {
+    tc_reset()
+    let bv : u32 = tc_bv()
+    /* (1) BV : U0 ; a literal checks against BV */
+    if tc_conv(tc_infer(bv), tc_sort(0u32)) != 1u8 { return 1u64 }
+    if tc_check(tc_bvlit_u64(7u64), bv) != 1u8 { return 2u64 }
+    /* (2) CLOSED constant folding, mod 2^64 (native u64 wraparound) */
+    if tc_conv(tc_bvadd(tc_bvlit_u64(2u64), tc_bvlit_u64(3u64)), tc_bvlit_u64(5u64)) != 1u8 { return 3u64 }
+    if tc_conv(tc_bvmul(tc_bvlit_u64(6u64), tc_bvlit_u64(7u64)), tc_bvlit_u64(42u64)) != 1u8 { return 4u64 }
+    if tc_conv(tc_bvsub(tc_bvlit_u64(5u64), tc_bvlit_u64(3u64)), tc_bvlit_u64(2u64)) != 1u8 { return 5u64 }
+    if tc_conv(tc_bvadd(tc_bvlit_u64(0xFFFFFFFFFFFFFFFFu64), tc_bvlit_u64(1u64)), tc_bvlit_u64(0u64)) != 1u8 { return 6u64 }   /* MAX+1 wraps to 0 */
+    if tc_conv(tc_bvmul(tc_bvlit_u64(0x100000000u64), tc_bvlit_u64(0x100000000u64)), tc_bvlit_u64(0u64)) != 1u8 { return 7u64 }  /* 2^32 * 2^32 == 0 (mod 2^64) */
+    if tc_conv(tc_bvand(tc_bvlit_u64(0xF0F0u64), tc_bvlit_u64(0xFF00u64)), tc_bvlit_u64(0xF000u64)) != 1u8 { return 8u64 }
+    if tc_conv(tc_bvor(tc_bvlit_u64(0xF0F0u64), tc_bvlit_u64(0x0F0Fu64)), tc_bvlit_u64(0xFFFFu64)) != 1u8 { return 9u64 }
+    if tc_conv(tc_bvxor(tc_bvlit_u64(0xFFFFu64), tc_bvlit_u64(0x0F0Fu64)), tc_bvlit_u64(0xF0F0u64)) != 1u8 { return 10u64 }
+    /* (3) SOUNDNESS negatives: distinct literals are NOT convertible (ccl_struct_eq guard) */
+    if tc_conv(tc_bvlit_u64(2u64), tc_bvlit_u64(3u64)) != 0u8 { return 11u64 }
+    if tc_conv(tc_bvadd(tc_bvlit_u64(2u64), tc_bvlit_u64(3u64)), tc_bvlit_u64(6u64)) != 0u8 { return 12u64 }
+    /* (4) SYMBOLIC ring identities -- x stays neutral, no polynomial canonicalisation */
+    let x : u32 = tc_var(0u32)
+    if tc_conv(tc_bvadd(x, tc_bvlit_u64(0u64)), x) != 1u8 { return 13u64 }                         /* x + 0 = x */
+    if tc_conv(tc_bvmul(x, tc_bvlit_u64(1u64)), x) != 1u8 { return 14u64 }                         /* x * 1 = x */
+    if tc_conv(tc_bvmul(x, tc_bvlit_u64(0u64)), tc_bvlit_u64(0u64)) != 1u8 { return 15u64 }        /* x * 0 = 0 */
+    if tc_conv(x, tc_bvadd(x, tc_bvlit_u64(1u64))) != 0u8 { return 16u64 }                         /* x != x + 1 */
+    if tc_conv(tc_bvadd(tc_bvmul(x, tc_bvlit_u64(1u64)), tc_bvmul(x, tc_bvlit_u64(0u64))), x) != 1u8 { return 17u64 }  /* (x*1)+(x*0) == x */
+    /* (5) THE WIDTH FACT: x<<k == x*2^k (mod 2^64), x SYMBOLIC, by ONE iota step */
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(1u64)),  tc_bvmul(x, tc_bvlit_u64(2u64))) != 1u8 { return 18u64 }
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(5u64)),  tc_bvmul(x, tc_bvlit_u64(32u64))) != 1u8 { return 19u64 }
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(31u64)), tc_bvmul(x, tc_bvlit_u64(0x80000000u64))) != 1u8 { return 20u64 }
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(63u64)), tc_bvmul(x, tc_bvlit_u64(0x8000000000000000u64))) != 1u8 { return 21u64 }
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(5u64)),  tc_bvmul(x, tc_bvlit_u64(64u64))) != 0u8 { return 22u64 }   /* off-by-one REJECTED */
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(64u64)), x) != 1u8 { return 23u64 }                                 /* count mask: x<<64 == x (64&63=0) */
+    if tc_conv(tc_bvshl(x, tc_bvlit_u64(65u64)), tc_bvmul(x, tc_bvlit_u64(2u64))) != 1u8 { return 24u64 }   /* x<<65 == x<<1 == x*2 */
+    /* (6) OVERFLOW-CHECKED folding: the kernel computes the flag by iota */
+    if tc_conv(tc_bvaddovf(tc_bvlit_u64(0xFFFFFFFFFFFFFFFFu64), tc_bvlit_u64(1u64)), tc_true()) != 1u8 { return 25u64 }
+    if tc_conv(tc_bvaddovf(tc_bvlit_u64(1u64), tc_bvlit_u64(1u64)), tc_false()) != 1u8 { return 26u64 }
+    if tc_conv(tc_bvmulovf(tc_bvlit_u64(0x200000000u64), tc_bvlit_u64(0x200000000u64)), tc_true()) != 1u8 { return 27u64 }  /* 2^33 * 2^33 = 2^66 overflows */
+    if tc_conv(tc_bvmulovf(tc_bvlit_u64(2u64), tc_bvlit_u64(3u64)), tc_false()) != 1u8 { return 28u64 }
+    if tc_conv(tc_bvmulovf(tc_bvlit_u64(0u64), tc_bvlit_u64(0xFFFFFFFFFFFFFFFFu64)), tc_false()) != 1u8 { return 29u64 }
+    if tc_check(tc_bvaddovf(tc_bvlit_u64(1u64), tc_bvlit_u64(2u64)), tc_bool()) != 1u8 { return 30u64 }     /* overflow flag : Bool */
+    /* (7) the width fact as a KERNEL-CHECKED THEOREM (proof term = refl, not just conv):
+     *     |- (lam x:BV. refl (x<<1)) : Pi(x:BV). Id(BV, x<<1, x*2)  -- and the off-by-one goal REJECTED. */
+    let lhs1 : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    let rhs1 : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64))
+    let goal1 : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs1, rhs1))
+    let cert1 : u32 = tc_lam(tc_bv(), tc_refl(lhs1))
+    if tc_check(cert1, goal1) != 1u8 { return 31u64 }
+    let badgoal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs1, tc_bvmul(tc_var(0u32), tc_bvlit_u64(4u64))))
+    if tc_check(cert1, badgoal) != 0u8 { return 32u64 }
+    /* (8) SUBSTITUTION INTO A BV OPERAND (the categorical-weakening / strengthen path -- a BV op under a
+     *     binder that is then beta-reduced).  Without the ccl_strengthen + COMP-distribute fixes a BV op
+     *     was wrongly treated as a closed constant and the substitution was DROPPED.  Each must beta-reduce
+     *     through the BV operands: */
+    if tc_conv(tc_app(tc_lam(tc_bv(), tc_bvadd(tc_var(0u32), tc_bvlit_u64(5u64))), tc_bvlit_u64(3u64)), tc_bvlit_u64(8u64)) != 1u8 { return 33u64 }   /* (λy. y+5) 3 == 8 */
+    if tc_conv(tc_app(tc_lam(tc_bv(), tc_bvadd(tc_var(0u32), tc_var(0u32))), tc_bvlit_u64(3u64)), tc_bvlit_u64(6u64)) != 1u8 { return 34u64 }          /* (λy. y+y) 3 == 6 (both operands substituted) */
+    if tc_conv(tc_app(tc_lam(tc_bv(), tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))), tc_bvlit_u64(4u64)), tc_bvlit_u64(8u64)) != 1u8 { return 35u64 }    /* (λy. y<<1) 4 == 8 (shl→mul through substitution) */
+    /* and the substitution must NOT manufacture a false equality: (λy. y+5) 3 != 9 */
+    if tc_conv(tc_app(tc_lam(tc_bv(), tc_bvadd(tc_var(0u32), tc_bvlit_u64(5u64))), tc_bvlit_u64(3u64)), tc_bvlit_u64(9u64)) != 0u8 { return 36u64 }
     return 99u64
 }

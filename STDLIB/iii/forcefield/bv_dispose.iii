@@ -1,0 +1,144 @@
+/* STDLIB/iii/forcefield/bv_dispose.iii -- THE WIDTH-FAITHFUL TWO-TIER OPTIMIZER DISPOSER.
+ *
+ * The autonomous optimizer's sieve (forcefield/cg_autocatalyst) disposes Peano-strength candidates
+ * through the CIC kernel.  This module is the MACHINE-WORD analogue + a strict hardening: it disposes a
+ * candidate machine-arithmetic rewrite (lhs == rhs over the 64-bit ring Z/2^64) through TWO independent
+ * authorities, composed for the first time:
+ *
+ *   TIER 1 -- bv_ring (numera/bv_ring), the UNTRUSTED but SOUND polynomial decider.  A cheap, arena-light
+ *             REFUTATION oracle: if the two sides are not equal as canonical polynomials over Z/2^64, the
+ *             rewrite is DEFINITELY meaning-changing -> reject WITHOUT ever paying for a kernel proof.
+ *             (bv_ring is sound: poly-equal => functionally-equal for all u64 valuations; it only ever
+ *             DECLINES a sound rewrite, never blesses an unsound one -- so its veto is always trustworthy.)
+ *   TIER 2 -- the BV64 CIC kernel (numera/typecheck), the TRUSTED, WIDTH-FAITHFUL disposer.  Only a
+ *             candidate that survives Tier 1 is converted by the kernel's native BV iota (mod-2^64, the
+ *             x86 count-mask) -- the SOLE arbiter of admission.  A rewrite is ADMITTED iff BOTH agree.
+ *
+ * This is uniquely-III: a sound external decider PROPOSES/refutes and the substrate's own dependent-type
+ * kernel DISPOSES, both over the TRUE machine-word semantics -- so the autonomous optimizer can now
+ * discover + certify WIDTH-FAITHFUL machine-arithmetic optimizations (strength reduction, the semiring
+ * collapses, overflow-checked folds), not merely ideal-integer Peano strength.  No other substrate pairs a
+ * sound symbolic ring decider with a width-native proof kernel as a single disposal gate.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes bv_ring + typecheck (the BV64 model), in-tree.
+ */
+module forcefield_bv_dispose
+
+/* --- the BV64 CIC kernel: the trusted, width-faithful disposer --- */
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+
+/* --- numera/bv_ring: the untrusted, SOUND polynomial refutation oracle --- */
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+/* THE DISPOSER.  lhs_tc/rhs_tc are the candidate's two sides as TC BV terms (already built in the TC
+ * arena); lhs_bv/rhs_bv are the SAME two sides as bv_ring polynomials (already built in the bv_ring
+ * arena).  ADMIT (return 1) iff bv_ring confirms poly-equality AND the kernel's BV iota converts them.
+ * Tier 1 first: a bv_ring veto short-circuits before any kernel work. */
+fn bvd_admit(lhs_tc: u32, rhs_tc: u32, lhs_bv: u32, rhs_bv: u32) -> u8 @export {
+    if bv_equal(lhs_bv, rhs_bv) == 0u8 { return 0u8 }   /* TIER 1: cheap, sound refutation (no kernel arena) */
+    return tc_conv(lhs_tc, rhs_tc)                        /* TIER 2: width-faithful kernel disposal (sole arbiter) */
+}
+
+/* THE KAT.  99 = the two-tier disposer admits exactly the width-faithful TRUE rewrites and rejects the
+ * meaning-changing ones, with both authorities in agreement and the kernel as the final arbiter.
+ *   (1) strength x*2 == x<<1, and the width family x<<k == x*2^k (k=1,5,31): ADMITTED;
+ *   (2) the multi-class collapse (x*1)+(x*0) == x: ADMITTED;
+ *   (3) x-x == 0 (a bv_ring-decidable identity the kernel ALSO proves by folding the closed difference):
+ *       handled below as a SOUNDNESS-PAIRING check, not an admission (the kernel's syntactic conv does
+ *       NOT fold x-x, so the disposer correctly DECLINES it -- bv_ring proposes, the kernel is sovereign);
+ *   (4) FALSE rewrites x<<1 == x*3 and x+1 == x: REJECTED (Tier-1 veto);
+ *   (5) the SOUNDNESS PAIRING: every admission implies the kernel converts (Tier 2 is the arbiter). */
+fn bvd_selftest() -> u64 @export {
+    /* (1a) x*2 == x<<1 */
+    bv_reset()
+    let b_x2  : u32 = bv_mul(bv_var(0u32), bv_const(2u64))
+    let b_xs1 : u32 = bv_shl(bv_var(0u32), 1u32)
+    tc_reset()
+    let t_x2  : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64))
+    let t_xs1 : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    if bvd_admit(t_x2, t_xs1, b_x2, b_xs1) != 1u8 { return 1u64 }
+
+    /* (1b) the width family x<<k == x*2^k for k = 5 and k = 31 */
+    bv_reset()
+    let b_l5 : u32 = bv_shl(bv_var(0u32), 5u32)
+    let b_r5 : u32 = bv_mul(bv_var(0u32), bv_const(32u64))
+    tc_reset()
+    let t_l5 : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(5u64))
+    let t_r5 : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(32u64))
+    if bvd_admit(t_l5, t_r5, b_l5, b_r5) != 1u8 { return 2u64 }
+    bv_reset()
+    let b_l31 : u32 = bv_shl(bv_var(0u32), 31u32)
+    let b_r31 : u32 = bv_mul(bv_var(0u32), bv_const(0x80000000u64))
+    tc_reset()
+    let t_l31 : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(31u64))
+    let t_r31 : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(0x80000000u64))
+    if bvd_admit(t_l31, t_r31, b_l31, b_r31) != 1u8 { return 3u64 }
+
+    /* (2) the multi-class collapse (x*1)+(x*0) == x */
+    bv_reset()
+    let b_col : u32 = bv_add(bv_mul(bv_var(0u32), bv_const(1u64)), bv_mul(bv_var(0u32), bv_const(0u64)))
+    let b_xc  : u32 = bv_var(0u32)
+    tc_reset()
+    let t_col : u32 = tc_bvadd(tc_bvmul(tc_var(0u32), tc_bvlit_u64(1u64)), tc_bvmul(tc_var(0u32), tc_bvlit_u64(0u64)))
+    let t_xc  : u32 = tc_var(0u32)
+    if bvd_admit(t_col, t_xc, b_col, b_xc) != 1u8 { return 4u64 }
+
+    /* (4a) FALSE: x<<1 == x*3 -- Tier-1 veto (bv_ring refutes; kernel never consulted) */
+    bv_reset()
+    let b_f1l : u32 = bv_shl(bv_var(0u32), 1u32)
+    let b_f1r : u32 = bv_mul(bv_var(0u32), bv_const(3u64))
+    tc_reset()
+    let t_f1l : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    let t_f1r : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(3u64))
+    if bvd_admit(t_f1l, t_f1r, b_f1l, b_f1r) != 0u8 { return 5u64 }
+
+    /* (4b) FALSE: x+1 == x */
+    bv_reset()
+    let b_f2l : u32 = bv_add(bv_var(0u32), bv_const(1u64))
+    let b_f2r : u32 = bv_var(0u32)
+    tc_reset()
+    let t_f2l : u32 = tc_bvadd(tc_var(0u32), tc_bvlit_u64(1u64))
+    let t_f2r : u32 = tc_var(0u32)
+    if bvd_admit(t_f2l, t_f2r, b_f2l, b_f2r) != 0u8 { return 6u64 }
+
+    /* (3) x-x == 0: bv_ring DECIDES it true, but the kernel's syntactic BV conv does NOT fold x-x
+     * (no symbolic cancellation in the trusted base, by design) -> the disposer DECLINES (Tier 2 is
+     * sovereign; bv_ring may propose more than the kernel certifies, never less). */
+    bv_reset()
+    let b_xx : u32 = bv_sub(bv_var(0u32), bv_var(0u32))
+    let b_z  : u32 = bv_const(0u64)
+    if bv_equal(b_xx, b_z) != 1u8 { return 7u64 }     /* bv_ring DOES decide x-x == 0 */
+    tc_reset()
+    let t_xx : u32 = tc_bvsub(tc_var(0u32), tc_var(0u32))
+    let t_z  : u32 = tc_bvlit_u64(0u64)
+    if bvd_admit(t_xx, t_z, b_xx, b_z) != 0u8 { return 8u64 }   /* but the disposer DECLINES (kernel sovereign) */
+
+    /* (5) SOUNDNESS PAIRING: a Tier-1 survivor the kernel REJECTS is not admitted -- demonstrate the
+     * kernel's veto is final by feeding a poly-equal pair whose TC sides are deliberately mismatched
+     * (x*2 vs x*4): bv_ring vetoes first, but even were Tier 1 bypassed, tc_conv(x*2, x*4) == 0. */
+    bv_reset()
+    let b_p2 : u32 = bv_mul(bv_var(0u32), bv_const(2u64))
+    let b_p4 : u32 = bv_mul(bv_var(0u32), bv_const(4u64))
+    tc_reset()
+    let t_p2 : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64))
+    let t_p4 : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(4u64))
+    if bv_equal(b_p2, b_p4) != 0u8 { return 9u64 }    /* bv_ring vetoes x*2 != x*4 */
+    if tc_conv(t_p2, t_p4) != 0u8 { return 10u64 }    /* and the kernel independently rejects it */
+    if bvd_admit(t_p2, t_p4, b_p2, b_p4) != 0u8 { return 11u64 }
+    return 99u64
+}

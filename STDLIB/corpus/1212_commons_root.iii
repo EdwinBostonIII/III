@@ -1,0 +1,59 @@
+/* 1212_commons_root.iii -- THE COMMONS ATTESTATION ROOT (federation-shareable proof-repertoire digest).
+ *
+ * tcom_root content-addresses the ENTIRE proven-theorem registry into one 32-byte digest. Falsifiers:
+ *  (1) TAMPER-EVIDENT: the empty root differs from the root after admitting a theorem (root != root).
+ *  (2) DETERMINISTIC: admitting the same theorem into a fresh registry yields the SAME root.
+ *  (3) GROWS: admitting a second distinct theorem changes the root again.
+ * A node can thus attest "I have kernel-certified exactly this body of mathematics" by a single hash --
+ * two federated peers agree iff their proven sets+order match. 99 = all hold. */
+module corpus_1212
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_root(out: u64) -> i32 from "theorem_commons.iii"
+
+var SA : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 48u8, 61u8, 48u8, 10u8]   /* "thm:0=0\n" */
+var SB : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 49u8, 61u8, 49u8, 10u8]   /* "thm:1=1\n" */
+var R0  : [u8; 32]
+var R1  : [u8; 32]
+var R1b : [u8; 32]
+var R2  : [u8; 32]
+
+fn beq(a: u64, b: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if pa[i] != pb[i] { return 0u32 } i = i + 1u64 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    tc_reset()
+    tcom_init()
+    let z   : u32 = tc_zero()
+    let nat : u32 = tc_nat()
+    tcom_root((&R0 as u64))                                            /* empty registry root */
+    tcom_admit((&SA as u64), 8u64, tc_refl(z), tc_id(nat, z, z))
+    tcom_root((&R1 as u64))                                            /* root of {0=0} */
+    if beq((&R0 as u64), (&R1 as u64)) == 1u32 { return 1u64 }         /* tamper-evident: changed */
+    /* determinism: same theorem into a fresh registry -> same root */
+    tc_reset()
+    tcom_init()
+    let z2   : u32 = tc_zero()
+    let nat2 : u32 = tc_nat()
+    tcom_admit((&SA as u64), 8u64, tc_refl(z2), tc_id(nat2, z2, z2))
+    tcom_root((&R1b as u64))
+    if beq((&R1 as u64), (&R1b as u64)) == 0u32 { return 2u64 }        /* deterministic: equal */
+    /* grows: a second distinct theorem changes the root */
+    let one : u32 = tc_succ(z2)
+    tcom_admit((&SB as u64), 8u64, tc_refl(one), tc_id(nat2, one, one))
+    tcom_root((&R2 as u64))
+    if beq((&R1 as u64), (&R2 as u64)) == 1u32 { return 3u64 }         /* {0=0} != {0=0,1=1} */
+    return 99u64
+}

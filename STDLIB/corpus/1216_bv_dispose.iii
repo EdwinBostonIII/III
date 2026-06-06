@@ -1,0 +1,16 @@
+/* 1216_bv_dispose.iii -- THE WIDTH-FAITHFUL TWO-TIER OPTIMIZER DISPOSER.
+ *
+ * bvd_selftest proves the autonomous optimizer can now dispose a candidate MACHINE-ARITHMETIC rewrite
+ * (lhs == rhs over Z/2^64) through two independent authorities composed as one gate: numera/bv_ring (an
+ * untrusted but SOUND polynomial decider) cheaply REFUTES, and the BV64 CIC kernel (numera/typecheck)
+ * width-faithfully DISPOSES -- ADMIT iff both agree, the kernel the sole arbiter.  It admits the width
+ * family (x<<k == x*2^k) + the multi-class collapse, REJECTS the meaning-changing rewrites (x<<1==x*3,
+ * x+1==x), and demonstrates the kernel's sovereignty (x-x==0 is bv_ring-decidable yet the kernel's
+ * syntactic conv declines it, so the disposer declines).  99 = the gate is sound + non-vacuous. */
+module corpus_1216
+
+extern @abi(c-msvc-x64) fn bvd_selftest() -> u64 from "bv_dispose.iii"
+
+fn main() -> u64 {
+    return bvd_selftest()
+}

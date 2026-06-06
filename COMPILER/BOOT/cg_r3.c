@@ -1114,6 +1114,23 @@ static int shift_const_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
     return (int)v;
 }
 
+/* IDENTITY-ELEMENT fold test (dual of cg_r3.iii's r3_arith_identity -- IDENTICAL logic so the emitted
+ * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is MUL and rhs == 1, or op is
+ * ADD/SUB and rhs == 0, the result IS the lhs (x*1==x, x+0==x, x-0==x over Z/2^64) -- so the constant +
+ * the op can be skipped (the lhs is still EMITTED, preserving side effects).  Kernel-justified (BV64
+ * model: bvmul(x,1)==x, bvadd(x,0)==x, bvsub(x,0)==x by iota; corpus 1213/1214).  Returns 1 if identity. */
+static int arith_identity(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
+    uint64_t v = rhs->u.int_.value;
+    int op = n->u.binary.op;
+    if (op == III_BIN_MUL && v == 1) return 1;   /* x * 1 == x */
+    if (op == III_BIN_ADD && v == 0) return 1;   /* x + 0 == x */
+    if (op == III_BIN_SUB && v == 0) return 1;   /* x - 0 == x */
+    return 0;
+}
+
 static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
 {
     if (node == 0) return 0;
@@ -1142,13 +1159,12 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
             stack_push_reg(cg, "rax");
             return 0;
         }
-        /* F4 — cast.  Stage-1 is u64-uniform; the cast is a value-
-         * preserving no-op for same-width types and a narrowing
-         * truncation for u8/u16/u32 (movzbq/movzwq/movl-implicit-zero).
-         * We inspect the target type's name to decide; unknown types
-         * pass through unchanged (Stage-1+ width tracking adds rigor).
-         * LOAD-BEARING: a sign-aware variant (tried + reverted 2026-06-04) reddened corpus
-         * 1113/1114 via the compiler's own bit-31 `as i32` self-host sites.  Keep zero-extend. */
+        /* F4 — cast.  K4 (DOCS/III-ARCHITECTURE-REVIEW.md): SIGN-AWARE narrowing extension, byte-identical
+         * to cg_r3.iii r3_emit_cast_extend so iiis-0 (this seed) == iiis-2 (.iii) on stage1.  A narrowing
+         * cast to a SIGNED type sign-extends (i8->movsbq, i16->movswq, i32->movslq) so `x as i8 as i64`
+         * (chain) == `let y:i8=x as i8; y as i64` (slot); unsigned targets zero-extend (u8/bool->movzbq,
+         * u16->movzwq, u32->movl).  The prior zero-extend was load-bearing ONLY because compiler/stdlib
+         * `as i32` sites with bit-31 set relied on it; those were converted to `as u32` (coordinated audit). */
         case III_AST_EXPR_CAST: {
             if (emit_expr(cg, n->u.cast_.value_expr) != 0) return -1;
             stack_pop_reg(cg, "rax");
@@ -1160,14 +1176,20 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                     char buf[16];
                     for (uint32_t i = 0; i < nm.length; i++) buf[i] = (char)src[nm.offset + i];
                     buf[nm.length] = 0;
-                    if (strcmp(buf, "u8") == 0 || strcmp(buf, "i8") == 0) {
+                    if (strcmp(buf, "u8") == 0 || strcmp(buf, "bool") == 0) {
                         emit_line(cg, "    movzbq %%al, %%rax");
-                    } else if (strcmp(buf, "u16") == 0 || strcmp(buf, "i16") == 0) {
+                    } else if (strcmp(buf, "i8") == 0) {
+                        emit_line(cg, "    movsbq %%al, %%rax");
+                    } else if (strcmp(buf, "u16") == 0) {
                         emit_line(cg, "    movzwq %%ax, %%rax");
-                    } else if (strcmp(buf, "u32") == 0 || strcmp(buf, "i32") == 0) {
+                    } else if (strcmp(buf, "i16") == 0) {
+                        emit_line(cg, "    movswq %%ax, %%rax");
+                    } else if (strcmp(buf, "u32") == 0) {
                         emit_line(cg, "    movl %%eax, %%eax");
+                    } else if (strcmp(buf, "i32") == 0) {
+                        emit_line(cg, "    movslq %%eax, %%rax");
                     }
-                    /* u64/i64/usize/isize/bool/Phase: no-op. */
+                    /* u64/i64/usize/isize: no-op. */
                 }
             }
             stack_push_reg(cg, "rax");
@@ -1372,6 +1394,19 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                 } else {
                     emit_line(cg, "    shrq $%d, %%rax", shk);
                 }
+                stack_push_reg(cg, "rax");
+                return 0;
+            }
+            int idn = arith_identity(cg, n);
+            if (idn != 0) {
+                /* IDENTITY-ELEMENT FOLD (the live self-optimizer; dual-implemented byte-identically in
+                 * cg_r3.iii): x*1 / x+0 / x-0 == x -- emit only the lhs (still evaluated for side effects),
+                 * skip loading the constant + the op.  Byte-identical RESULT to the general path (op with
+                 * the identity element + the u32 truncation).  Reuses only twin-verified emit primitives. */
+                if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
+                stack_pop_reg(cg, "rax");
+                if (expr_is_u32(cg, n->u.binary.lhs))
+                    emit_line(cg, "    movl %%eax, %%eax");
                 stack_push_reg(cg, "rax");
                 return 0;
             }

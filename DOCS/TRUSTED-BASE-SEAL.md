@@ -14,10 +14,43 @@ root. Any edit to the reducer or the translation MOVES the root, reddening the b
 explicit reseal acknowledges that the trusted base changed.
 
 ```
-TRUSTED_BASE_ROOT = 5996d3dedc730d3bafb3378b99f1bdce6e921f3ca466a7e89d488b06816c2915
+TRUSTED_BASE_ROOT = f079dd81e42d12d014e25bef419317581114ea9887abc16e26b3d850ca3b2127
 ```
 
 > **Reseal log:**
+> - `4d5bb214…` → `f079dd81…` (2026-06-06, BV64 substitution soundness fix — found by the adversarial
+>   audit workflow): the BV64 morphism tags (29–38) are numerically `>= CCL_ATOM` (8) and `>= CCL_TRUE` (9),
+>   so they accidentally satisfied two categorical rules meant for the original CLOSED-constant range:
+>   `ccl_strengthen`'s `if tag >= CCL_ATOM { return v }` and `ccl_step`'s COMP weakening `if atag >= CCL_ATOM
+>   { return a }` BOTH treated a BV **operation** node (e.g. `bvadd(Snd, lit)`, which references the bound
+>   variable `#0`) as a weakening-invariant constant — so a BV op under a SUBSTITUTED binder would silently
+>   DROP the substitution (a latent unsoundness: a β-redex through a BV operand reduced to the wrong term).
+>   FIX: both sites now special-case the BV op tags (30–38) to recurse STRUCTURALLY — `ccl_strengthen`
+>   strengthens each operand (failing if it depends on `#0`), and the COMP rule DISTRIBUTES the composition
+>   `bvop(A,B) o b -> bvop(A o b, B o b)` (mirroring the existing `PAIR` rules). A `BVLIT` (tag 29) IS a
+>   genuine closed value and correctly still weakens. The KAT (`1213`) gained cases 33–36 (a BV op under a
+>   β-reduced binder: `(λy. y+5) 3 == 8`, `(λy. y+y) 3 == 6`, `(λy. y<<1) 4 == 8`, and the negative
+>   `(λy. y+5) 3 != 9`) — which RED before the fix, GREEN after. The 32-vector KAT, the ~1200-case
+>   differential (`1214`), and the 14-rule adversarial audit (all SOUND, terminates + confluent) re-verified.
+>   Additive + structural; `BVLIT`/atoms/data-ctors behave byte-identically. (`tc_rigid_head` also gained
+>   `TC_BV`/`TC_BVLIT` as rigid heads — outside the sealed `tc_to_ccl`, so it does not affect this root.)
+> - `5996d3de…` → `4d5bb214…` (2026-06-06, BV64 machine-int model — the named optimizer horizon): `ccl.iii`
+>   gained the **BV64 bitvector morphisms** (kinds 29–38: `CCL_BVLIT` + `BVADD/BVSUB/BVMUL/BVAND/BVOR/BVXOR/BVSHL`
+>   + the overflow predicates `BVADDOVF/BVMULOVF`), their constructors, the `ccl_bv_fold` iota (closed-literal
+>   NATIVE mod-2^64 evaluation + the Z/2^64 monoid/semiring identity collapses + the single definitional rule
+>   `x<<k == x*2^(k&63)`), a `ccl_step` dispatch arm, **mandatory `ccl_struct_eq` cases** (a BVLIT compares its
+>   64-bit value, op nodes recurse — without this two distinct literals would hit the equal-tag fallthrough and the
+>   kernel would prove FALSE equalities), and `ccl_to_tc` read-back; `tc_to_ccl` (in `typecheck.iii`) gained the
+>   matching BV compile cases (the type → atom 2055, ops → the flat CCL primitives). The kernel now VERIFIES 64-bit
+>   machine arithmetic BY IOTA — `x<<k == x*2^k (mod 2^64)` for a SYMBOLIC x in ONE step, overflow-checked constant
+>   folding, the multi-class collapse — exactly the REACH(h)/LEK move at scale. The trusted surface is only the
+>   closed-literal evaluator + textbook ring identities (the full symbolic ring DECISION stays in the UNTRUSTED
+>   proposer `numera/bv_ring`, never the kernel). ADDITIVE: new tags + a flat dispatch arm; every pre-existing
+>   node's behaviour is byte-identical (BV tags ≥29 never collide with the 1..28 fragment). VERIFIED SOUND
+>   post-reseal: `1211_bv_kernel` (the 32-vector BV KAT, incl. soundness negatives) = 99, the full typecheck/ccl
+>   KAT suite + proof tower + Sovereign-Optimizer KATs (1113–1211) green, `build_stdlib` FAIL=0, golden compiler
+>   (iiis-0..3) UNMOVED (ccl/typecheck are stdlib, not in the bootstrap link closure — confirmed). The protective
+>   drift-gate worked as designed: it reddened the build until this acknowledgement.
 > - `40209d80…` → `5996d3de…` (2026-06-04, induction keystone): `ccl_eta_contract` no longer
 >   eta-contracts `lam x. C x → C` when the head `C` is a data constructor / eliminator (tag ≥
 >   `CCL_TRUE`). A bare constructor is not a standalone function in this kernel, so the contracted form

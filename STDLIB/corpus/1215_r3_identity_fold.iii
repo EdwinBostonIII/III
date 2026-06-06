@@ -1,0 +1,40 @@
+/* 1215_r3_identity_fold.iii -- THE R3 IDENTITY-ELEMENT CODEGEN FOLD (correctness).
+ *
+ * cg_r3 now folds x*1 / x+0 / x-0 -> x (emit only the lhs, skip the constant + the op), the
+ * kernel-certified identity-element classes (BV64: bvmul(x,1)==x, bvadd(x,0)==x, bvsub(x,0)==x).
+ * This test pins the RESULT semantics across the fold: a runtime-derived lhs through each identity
+ * op must equal the lhs, for u64 AND u32 (the movl truncation path), at boundary values.  It passes
+ * whether or not the fold fired (the fold is RESULT-preserving by construction); disassembly confirms
+ * the fold actually fires post-re-root.  99 = all identities hold. */
+module corpus_1215
+
+fn ident_ops_u64(x: u64) -> u64 {
+    let a : u64 = x * 1u64
+    let b : u64 = x + 0u64
+    let c : u64 = x - 0u64
+    if a != x { return 1u64 }
+    if b != x { return 2u64 }
+    if c != x { return 3u64 }
+    return 0u64
+}
+
+fn ident_ops_u32(x: u32) -> u32 {
+    let a : u32 = x * 1u32
+    let b : u32 = x + 0u32
+    let c : u32 = x - 0u32
+    if a != x { return 1u32 }
+    if b != x { return 2u32 }
+    if c != x { return 3u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    if ident_ops_u64(0u64) != 0u64 { return 1u64 }
+    if ident_ops_u64(1u64) != 0u64 { return 2u64 }
+    if ident_ops_u64(12345678901234567u64) != 0u64 { return 3u64 }
+    if ident_ops_u64(0xFFFFFFFFFFFFFFFFu64) != 0u64 { return 4u64 }
+    if ident_ops_u32(0u32) != 0u32 { return 5u64 }
+    if ident_ops_u32(0xDEADBEEFu32) != 0u32 { return 6u64 }
+    if ident_ops_u32(0xFFFFFFFFu32) != 0u32 { return 7u64 }
+    return 99u64
+}

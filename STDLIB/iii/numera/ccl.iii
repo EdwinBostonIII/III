@@ -73,6 +73,20 @@ extern @abi(c-msvc-x64) fn tc_snd(p: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_transp(pr: u32, proof: u32, base: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_absurd(cc: u32, e: u32) -> u32 from "typecheck.iii"
 
+/* BV64 read-back constructors -- ccl_to_tc reifies a BV CCL normal form (a literal or a
+ * neutral op-tree like bvmul(x, lit)) back into TC nodes.  Mutual reference, archive-linked. */
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+
 extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
 extern @abi(c-msvc-x64) fn cl_le_product(c: *u64, cp: *u64) -> u8 from "cost_lattice.iii"
 const CCL_ID   : u8 = 1u8     /* Id            (nullary morphism)        */
@@ -105,6 +119,31 @@ const CCL_SUP    : u8 = 25u8   /* sup(a,f) : W-type constructor (2 args)      */
 const CCL_WREC   : u8 = 26u8
 const CCL_REACH  : u8 = 27u8
 const CCL_LEK    : u8 = 28u8   /* mig2: LEK(cost_slot,budget_slot) reduces TRUE/FALSE via cl_le_product over CLEK_REG (M13 budget, full 6-vector) */   /* mig2: REACH(h) A=hexad literal; reduces TRUE/FALSE via iii_hexad_reachable -- the kernel VERIFIES M3 reachability by iota, not a baked/trusted value */   /* wrec(P,s,w) : W eliminator (3 args, motive)  */
+
+/* ===== BV64: the native 64-bit machine-int (bitvector) model ====================
+ * The kernel VERIFIES 64-bit machine arithmetic BY IOTA -- the same move REACH(h)
+ * made for hexad-reachability, at scale.  These are FLAT primitive morphisms (NOT
+ * the App/Comp point-free spine): each carries its operand node-ids directly in A/B
+ * (a BVLIT carries the u64 value as A=lo32,B=hi32), and ccl_step reduces them with
+ * NATIVE u64 wraparound = arithmetic mod 2^64.  The trusted surface is exactly the
+ * closed-literal evaluator + the Z/2^64 monoid/semiring identities (the absorbing /
+ * identity elements) + the single definitional shl->mul rule -- each a one-line,
+ * textbook-sound ring fact.  A NEUTRAL operand (a free variable x) simply does not
+ * reduce, so x<<k and x*2^k both normalise to bvmul(x, lit 2^k) and tc_conv proves
+ * them equal WITHOUT any polynomial canonicalisation in the trusted base.  The full
+ * symbolic ring DECISION stays in the UNTRUSTED proposer (numera/bv_ring). */
+const CCL_BVLIT    : u8 = 29u8   /* a 64-bit literal value: A=lo32, B=hi32 (a normal form)         */
+const CCL_BVADD    : u8 = 30u8   /* A=left node, B=right node : BV  (mod 2^64)                     */
+const CCL_BVSUB    : u8 = 31u8   /* A=left, B=right : BV                                            */
+const CCL_BVMUL    : u8 = 32u8   /* A=left, B=right : BV                                            */
+const CCL_BVAND    : u8 = 33u8   /* A=left, B=right : BV  (bitwise)                                 */
+const CCL_BVOR     : u8 = 34u8   /* A=left, B=right : BV                                            */
+const CCL_BVXOR    : u8 = 35u8   /* A=left, B=right : BV                                            */
+const CCL_BVSHL    : u8 = 36u8   /* A=base, B=count : BV  (count masked &63; shl->mul definitional) */
+const CCL_BVADDOVF : u8 = 37u8   /* A=left, B=right : Bool  (unsigned add carry-out)                */
+const CCL_BVMULOVF : u8 = 38u8   /* A=left, B=right : Bool  (u64 full-product overflow)             */
+
+const CCL_BV_ONES : u64 = 0xFFFFFFFFFFFFFFFFu64   /* the all-ones 64-bit word (~0) */
 
 const CCL_SENT : u32 = 0xFFFFFFFFu32
 const CCL_CAP  : u32 = 65536u32
@@ -170,6 +209,23 @@ fn clek_register(c: u64) -> u32 @export {
     return slot
 }
 fn ccl_lek_c(cs: u32, bs: u32) -> u32 @export { return ccl_mk(CCL_LEK, cs, bs) }
+
+/* ===== BV64 constructors + u64<->(lo,hi) packing ===== */
+/* the u64 value of a BVLIT node (A=lo32, B=hi32). */
+fn ccl_bv_val(c: u32) -> u64 { return (CCL_A[c] as u64) | ((CCL_B[c] as u64) << 32u64) }
+/* a fresh BVLIT node carrying the u64 value v. */
+fn ccl_bvlit_v(v: u64) -> u32 { return ccl_mk(CCL_BVLIT, (v & 0xFFFFFFFFu64) as u32, (v >> 32u64) as u32) }
+fn ccl_bvlit_c(lo: u32, hi: u32) -> u32 @export { return ccl_mk(CCL_BVLIT, lo, hi) }
+fn ccl_bvadd_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVADD, a, b) }
+fn ccl_bvsub_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVSUB, a, b) }
+fn ccl_bvmul_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVMUL, a, b) }
+fn ccl_bvand_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVAND, a, b) }
+fn ccl_bvor_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVOR, a, b) }
+fn ccl_bvxor_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVXOR, a, b) }
+fn ccl_bvshl_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVSHL, a, b) }
+fn ccl_bvaddovf_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVADDOVF, a, b) }
+fn ccl_bvmulovf_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVMULOVF, a, b) }
+
 fn ccl_iter_c() -> u32 @export { return ccl_mk(CCL_ITER, 0u32, 0u32) }
 fn ccl_natrec_c() -> u32 @export { return ccl_mk(CCL_NATREC, 0u32, 0u32) }
 fn ccl_case_c() -> u32 @export { return ccl_mk(CCL_CASE, 0u32, 0u32) }
@@ -216,6 +272,18 @@ fn ccl_shift_fstk(p: u32, k: u32) -> u32 @export {
 fn ccl_strengthen(v: u32) -> u32 {
     let tag : u8 = CCL_TAG[v]
     if tag == CCL_SND { return CCL_SENT }        /* #0 -- uses the bound variable */
+    /* BV op nodes (tags 30..38) carry environment-dependent operands -> strengthen them (and FAIL if
+     * any operand depends on #0); they are NOT weakening-invariant constants.  A BVLIT (tag 29) IS a
+     * closed value and correctly hits the constant rule below.  Mirror of the COMP/PAIR strengthen. */
+    if tag >= CCL_BVADD {
+        if tag <= CCL_BVMULOVF {
+            let bsa : u32 = ccl_strengthen(CCL_A[v])
+            if bsa == CCL_SENT { return CCL_SENT }
+            let bsb : u32 = ccl_strengthen(CCL_B[v])
+            if bsb == CCL_SENT { return CCL_SENT }
+            return ccl_mk(tag, bsa, bsb)
+        }
+    }
     if tag >= CCL_ATOM { return v }              /* closed constant: weakening-invariant */
     if tag == CCL_COMP {
         let a : u32 = CCL_A[v]
@@ -427,6 +495,95 @@ fn ccl_elim_redex(t: u32) -> u32 {
     return CCL_SENT
 }
 
+/* ===== BV64 iota: the contractum of a BV op whose BOTH operands are ALREADY normal,
+ * or CCL_SENT if no rule fires (the op is stuck on a neutral / non-literal operand).
+ * Soundness: every rule is a textbook identity of the ring Z/2^64 (= u64 with native
+ * wraparound).  Closed literals fold by NATIVE u64 arithmetic; the identity/absorbing
+ * elements collapse against a neutral operand; bvshl on a literal count is the single
+ * definitional rule x<<k == x*2^(k&63) (the x86-64 SHL count mask -- a shift >= width
+ * wraps the COUNT, it does NOT zero the value).  The caller (ccl_step) sets CCL_FIRED.
+ * A neutral operand never matches a literal guard, so x stays neutral and no polynomial
+ * over x is ever canonicalised in this trusted base. ===== */
+fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
+    let at : u8 = CCL_TAG[a]
+    let bt : u8 = CCL_TAG[b]
+    let mut alit : u8 = 0u8
+    let mut blit : u8 = 0u8
+    if at == CCL_BVLIT { alit = 1u8 }
+    if bt == CCL_BVLIT { blit = 1u8 }
+    let mut va : u64 = 0u64
+    let mut vb : u64 = 0u64
+    if alit == 1u8 { va = ccl_bv_val(a) }
+    if blit == 1u8 { vb = ccl_bv_val(b) }
+
+    if op == CCL_BVADD {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va + vb) } }   /* fold (mod 2^64) */
+        if alit == 1u8 { if va == 0u64 { return b } }                      /* 0 + x = x */
+        if blit == 1u8 { if vb == 0u64 { return a } }                      /* x + 0 = x */
+        return CCL_SENT
+    }
+    if op == CCL_BVSUB {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va - vb) } }   /* fold (mod 2^64) */
+        if blit == 1u8 { if vb == 0u64 { return a } }                      /* x - 0 = x */
+        return CCL_SENT
+    }
+    if op == CCL_BVMUL {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va * vb) } }   /* fold (mod 2^64) */
+        if alit == 1u8 { if va == 0u64 { return a } }                      /* 0 * x = 0  (a is lit 0) */
+        if blit == 1u8 { if vb == 0u64 { return b } }                      /* x * 0 = 0 */
+        if alit == 1u8 { if va == 1u64 { return b } }                      /* 1 * x = x */
+        if blit == 1u8 { if vb == 1u64 { return a } }                      /* x * 1 = x */
+        return CCL_SENT
+    }
+    if op == CCL_BVAND {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va & vb) } }
+        if alit == 1u8 { if va == 0u64 { return a } }                      /* 0 & x = 0 */
+        if blit == 1u8 { if vb == 0u64 { return b } }                      /* x & 0 = 0 */
+        if alit == 1u8 { if va == CCL_BV_ONES { return b } }               /* ~0 & x = x */
+        if blit == 1u8 { if vb == CCL_BV_ONES { return a } }               /* x & ~0 = x */
+        return CCL_SENT
+    }
+    if op == CCL_BVOR {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va | vb) } }
+        if alit == 1u8 { if va == 0u64 { return b } }                      /* 0 | x = x */
+        if blit == 1u8 { if vb == 0u64 { return a } }                      /* x | 0 = x */
+        if alit == 1u8 { if va == CCL_BV_ONES { return a } }               /* ~0 | x = ~0 */
+        if blit == 1u8 { if vb == CCL_BV_ONES { return b } }               /* x | ~0 = ~0 */
+        return CCL_SENT
+    }
+    if op == CCL_BVXOR {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va ^ vb) } }
+        if alit == 1u8 { if va == 0u64 { return b } }                      /* 0 ^ x = x */
+        if blit == 1u8 { if vb == 0u64 { return a } }                      /* x ^ 0 = x */
+        return CCL_SENT
+    }
+    if op == CCL_BVSHL {
+        if blit == 1u8 {
+            let k : u64 = vb & 63u64                                       /* x86-64 SHL count mask */
+            return ccl_bvmul_c(a, ccl_bvlit_v(1u64 << k))                  /* x<<k == x * 2^(k&63) */
+        }
+        return CCL_SENT
+    }
+    if op == CCL_BVADDOVF {
+        if alit == 1u8 { if blit == 1u8 {
+            let sum : u64 = va + vb
+            if sum < va { return ccl_true_c() }                           /* carry-out of bit 63 */
+            return ccl_false_c()
+        } }
+        return CCL_SENT
+    }
+    if op == CCL_BVMULOVF {
+        if alit == 1u8 { if blit == 1u8 {
+            if va == 0u64 { return ccl_false_c() }                         /* 0 * b never overflows */
+            let prod : u64 = va * vb
+            if (prod / va) != vb { return ccl_true_c() }                   /* full product exceeds 64 bits */
+            return ccl_false_c()
+        } }
+        return CCL_SENT
+    }
+    return CCL_SENT
+}
+
 /* one leftmost-outermost directed CCL reduction step; sets CCL_FIRED on success. */
 fn ccl_step(t: u32) -> u32 {
     /* data eliminator iota first (constructor scrutinee) -- checked at every node. */
@@ -449,6 +606,25 @@ fn ccl_step(t: u32) -> u32 {
         let bptr : *u64 = ((&CLEK_REG as u64) + bs * 8u64) as *u64
         if cl_le_product(cptr, bptr) == 1u8 { return ccl_true_c() }
         return ccl_false_c()
+    }
+    /* BV64 iota: a literal is its own normal form; an op reduces its operands
+     * leftmost-outermost, then fires a ring rule once both are normal. */
+    if tag == CCL_BVLIT { return t }
+    if tag >= CCL_BVADD {
+        if tag <= CCL_BVMULOVF {
+            let bo_a : u32 = CCL_A[t]
+            let bo_b : u32 = CCL_B[t]
+            let bo_ra : u32 = ccl_step(bo_a)
+            if CCL_FIRED[0u64] == 1u32 { return ccl_mk(tag, bo_ra, bo_b) }
+            let bo_rb : u32 = ccl_step(bo_b)
+            if CCL_FIRED[0u64] == 1u32 { return ccl_mk(tag, bo_a, bo_rb) }
+            let bo_f : u32 = ccl_bv_fold(tag, bo_a, bo_b)
+            if bo_f != CCL_SENT {
+                CCL_FIRED[0u64] = 1u32
+                return bo_f
+            }
+            return t
+        }
     }
     if tag == CCL_CUR {
         let body : u32 = CCL_A[t]
@@ -534,6 +710,17 @@ fn ccl_step(t: u32) -> u32 {
                 }
             }
         }
+        /* BV op nodes (tags 30..38) carry ENVIRONMENT-DEPENDENT operands (e.g. bvadd(Snd, lit)
+         * references #0) -- so  bvop(A,B) o b  must DISTRIBUTE the composition into the operands
+         * (like the PAIR rule above), NOT weaken to a closed constant.  A BVLIT (tag 29) IS a closed
+         * literal value (its A,B are the u64 halves, not morphisms) and correctly weakens below.
+         * SOUNDNESS: without this, a BV op under a substituted binder would drop the substitution. */
+        if atag >= CCL_BVADD {
+            if atag <= CCL_BVMULOVF {
+                CCL_FIRED[0u64] = 1u32
+                return ccl_mk(atag, ccl_comp(CCL_A[a], b), ccl_comp(CCL_B[a], b))
+            }
+        }
         if atag >= CCL_ATOM {
             CCL_FIRED[0u64] = 1u32
             return a
@@ -599,6 +786,21 @@ fn ccl_struct_eq(x: u32, y: u32) -> u8 @export {
     }
     if tx == CCL_CUR {
         return ccl_struct_eq(CCL_A[x], CCL_A[y])
+    }
+    /* BV64 (SOUNDNESS-CRITICAL): a BVLIT is equal ONLY when its 64-bit value (A=lo,B=hi)
+     * matches -- WITHOUT this, two distinct literals would hit the nullary fallthrough below
+     * (equal-tag => equal) and the kernel would prove FALSE definitional equalities (bvlit 2
+     * == bvlit 3).  A BV op node (tags 30..38) is structural: equal iff both operands are. */
+    if tx == CCL_BVLIT {
+        if CCL_A[x] != CCL_A[y] { return 0u8 }
+        if CCL_B[x] != CCL_B[y] { return 0u8 }
+        return 1u8
+    }
+    if tx >= CCL_BVADD {
+        if tx <= CCL_BVMULOVF {
+            if ccl_struct_eq(CCL_A[x], CCL_A[y]) == 0u8 { return 0u8 }
+            return ccl_struct_eq(CCL_B[x], CCL_B[y])
+        }
     }
     /* nullary morphisms Id/Fst/Snd/App: equal tag => equal. */
     return 1u8
@@ -781,6 +983,19 @@ fn ccl_to_tc(c: u32) -> u32 @export {
     if tag == CCL_TRUE { return tc_true() }
     if tag == CCL_FALSE { return tc_false() }
     if tag == CCL_ZERO { return tc_zero() }
+    /* BV64 read-back: flat primitive nodes reify directly (a literal, or a neutral op
+     * tree like bvmul(x, lit) that survived reduction).  Without these a BV normal form
+     * would hit the tc_var(0) stuck-fallback below and silently lose its meaning. */
+    if tag == CCL_BVLIT { return tc_bvlit(CCL_A[c], CCL_B[c]) }
+    if tag == CCL_BVADD { return tc_bvadd(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVSUB { return tc_bvsub(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVMUL { return tc_bvmul(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVAND { return tc_bvand(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVOR  { return tc_bvor(ccl_to_tc(CCL_A[c]),  ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVXOR { return tc_bvxor(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVSHL { return tc_bvshl(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVADDOVF { return tc_bvaddovf(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVMULOVF { return tc_bvmulovf(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
     if tag == CCL_ATOM {
         let aid : u32 = CCL_A[c]
         if aid == 2050u32 { return tc_nat() }
@@ -788,6 +1003,7 @@ fn ccl_to_tc(c: u32) -> u32 @export {
         if aid == 2052u32 { return tc_unit() }
         if aid == 2053u32 { return tc_empty() }
         if aid == 2054u32 { return tc_tt() }
+        if aid == 2055u32 { return tc_bv() }
         if aid >= 2100u32 { return tc_sort(aid - 2100u32) }
         return tc_var(0u32)
     }

@@ -870,6 +870,20 @@ fn r3_shift_const_k(op: u32, rhs: u32) -> u32 {
     if v > 63u64 { return 0u32 }
     return v as u32
 }
+/* IDENTITY-ELEMENT fold test (dual of cg_r3.c's arith_identity -- IDENTICAL logic so the emitted
+ * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is MUL(3) and rhs == 1, or
+ * op is ADD(1)/SUB(2) and rhs == 0, the result IS the lhs (x*1==x, x+0==x, x-0==x over Z/2^64) --
+ * so the constant + the op can be skipped (the lhs is still EMITTED, preserving side effects).
+ * Kernel-justified (BV64 model: bvmul(x,1)==x, bvadd(x,0)==x, bvsub(x,0)==x by iota; corpus 1213/1214).
+ * Returns 1 if the op is an identity, else 0. */
+fn r3_arith_identity(op: u32, rhs: u32) -> u32 {
+    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
+    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+    if op == 3u32 { if v == 1u64 { return 1u32 } }   /* x * 1 == x */
+    if op == 1u32 { if v == 0u64 { return 1u32 } }   /* x + 0 == x */
+    if op == 2u32 { if v == 0u64 { return 1u32 } }   /* x - 0 == x */
+    return 0u32
+}
 fn r3_emit_load_slot(slot: u32) -> u32 { let _s: u32 = slot; r3_emit_arr(&R3_STR_DASH_OPEN as u64, R3_STR_DASH_OPEN_LEN); r3_emit_dec(((_s+1u32)*8u32) as u64); r3_emit_arr(&R3_STR_BPCMA_RAX as u64, R3_STR_BPCMA_RAX_LEN); return R3_OK }
 
 /* iiis-1 width-aware local load — matches cg_r3.c's type-aware load.
@@ -1874,15 +1888,13 @@ fn r3_emit_return_extend(rt: u32) -> u32 {
     return R3_OK
 }
 
-/* iiis-1 bit-identity: cast-extend mirrors cg_r3.c's EXPR_CAST behavior
- * which is UNSIGNED-UNIFORM (no signed/unsigned distinction): u8/i8/bool
- * → movzbq, u16/i16 → movzwq, u32/i32 → movl %eax, %eax.
- * Differs from return-extend (which IS signed-aware for callee returns).
- * NOTE: this is LOAD-BEARING -- the compiler self-hosts on the zero-extend at its own bit-31 `as i32`
- * sites; a sign-extend "fix" here (attempted + reverted 2026-06-04) reddened corpus 1113/1114 (sov_isa
- * sr_schema KATs). The chain-vs-slot asymmetry (cast zero-extends, typed-slot load sign-extends) is a
- * KNOWN Stage-1 limitation; full sign-rigor is a future stage needing a coordinated `as i32`->`as u32`
- * audit of the compiler spine, not a point edit. See DOCS/III-ARCHITECTURE-REVIEW.md R3. */
+/* K4 (DOCS/III-ARCHITECTURE-REVIEW.md): cast-extend is now SIGN-AWARE, identical to r3_emit_return_extend --
+ * a narrowing cast to a SIGNED type sign-extends (i8->movsbq, i16->movswq, i32->movslq) so `x as i8 as i64`
+ * (chain) == `let y:i8=x as i8; y as i64` (slot) for negative values; unsigned targets zero-extend
+ * (u8/bool->movzbq, u16->movzwq, u32->movl). This closes the chain-vs-slot asymmetry. The prior zero-extend
+ * was load-bearing ONLY because compiler/stdlib `as i32` sites with bit-31 set relied on it; those have been
+ * converted to `as u32` (the coordinated audit) so sign-rigor here is correct everywhere. Gated by the full
+ * corpus incl. 1113/1114 (sov_isa sr_schema) -- the exact tests the naive 2026-06-04 attempt reddened. */
 fn r3_emit_cast_extend(rt: u32) -> u32 {
     if rt == 0u32 { return R3_OK }
     let rk: u32 = iii_ast_node_kind(R3_G_AST, rt)
@@ -1892,11 +1904,11 @@ fn r3_emit_cast_extend(rt: u32) -> u32 {
     if len == 0u32 { return R3_OK }
     if r3_name_eq_lit(off, len, &R3_TY_U8 as u64, R3_TY_U8_LEN) == 1u32 { r3_emit_arr(&R3_STR_MOVZBQ_AL_RAX as u64, R3_STR_MOVZBQ_AL_RAX_LEN); return R3_OK }
     if r3_name_eq_lit(off, len, &R3_TY_BOOL as u64, R3_TY_BOOL_LEN) == 1u32 { r3_emit_arr(&R3_STR_MOVZBQ_AL_RAX as u64, R3_STR_MOVZBQ_AL_RAX_LEN); return R3_OK }
-    if r3_name_eq_lit(off, len, &R3_TY_I8 as u64, R3_TY_I8_LEN) == 1u32 { r3_emit_arr(&R3_STR_MOVZBQ_AL_RAX as u64, R3_STR_MOVZBQ_AL_RAX_LEN); return R3_OK }
+    if r3_name_eq_lit(off, len, &R3_TY_I8 as u64, R3_TY_I8_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVSBQ as u64, R3_STR_EXT_MOVSBQ_LEN); return R3_OK }
     if r3_name_eq_lit(off, len, &R3_TY_U16 as u64, R3_TY_U16_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVZWQ as u64, R3_STR_EXT_MOVZWQ_LEN); return R3_OK }
-    if r3_name_eq_lit(off, len, &R3_TY_I16 as u64, R3_TY_I16_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVZWQ as u64, R3_STR_EXT_MOVZWQ_LEN); return R3_OK }
+    if r3_name_eq_lit(off, len, &R3_TY_I16 as u64, R3_TY_I16_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVSWQ as u64, R3_STR_EXT_MOVSWQ_LEN); return R3_OK }
     if r3_name_eq_lit(off, len, &R3_TY_U32 as u64, R3_TY_U32_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVL as u64, R3_STR_EXT_MOVL_LEN); return R3_OK }
-    if r3_name_eq_lit(off, len, &R3_TY_I32 as u64, R3_TY_I32_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVL as u64, R3_STR_EXT_MOVL_LEN); return R3_OK }
+    if r3_name_eq_lit(off, len, &R3_TY_I32 as u64, R3_TY_I32_LEN) == 1u32 { r3_emit_arr(&R3_STR_EXT_MOVSLQ as u64, R3_STR_EXT_MOVSLQ_LEN); return R3_OK }
     return R3_OK
 }
 fn r3_array_elem_byte_size(tarr: u32) -> u32 { if tarr == 0u32 { return 8u32 }; let k: u32 = iii_ast_node_kind(R3_G_AST, tarr); if k != R3_K_TYPE_ARR { return 8u32 }; let inner: u32 = iii_ast_type_array_inner(R3_G_AST, tarr); let w: u32 = r3_type_ref_byte_size(inner); if w == 0u32 { return 8u32 }; return w }
@@ -2465,6 +2477,16 @@ fn r3_emit_expr(node: u32) -> u32 {
             if op == 10u32 {
                 r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(shk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
             }
+            r3_push_rax(); return R3_OK
+        }
+        let idn: u32 = r3_arith_identity(op, rhs)
+        if idn != 0u32 {
+            /* IDENTITY-ELEMENT FOLD (the live self-optimizer; dual-implemented byte-identically in cg_r3.c):
+             * x*1 / x+0 / x-0 == x -- emit only the lhs (still evaluated for side effects), skip loading the
+             * constant + the op.  Byte-identical RESULT to the general path (op with the identity element +
+             * the u32 truncation).  Reuses only twin-verified emit primitives, so iiis-0 == iiis-2 holds. */
+            r3_emit_expr(lhs); r3_pop_rax()
+            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
             r3_push_rax(); return R3_OK
         }
         let signed: u32 = r3_either_is_signed(lhs, rhs)

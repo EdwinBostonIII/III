@@ -89,3 +89,14 @@ fn tcom_cite(stmt: u64, len: u64) -> i32 @export {
 }
 
 fn tcom_size() -> u64 @export { return TCOM_COUNT as u64 }
+
+/* THE COMMONS ATTESTATION ROOT: a single content-address over the ENTIRE proven-theorem registry --
+ * cad(keccak) of the concatenated 32-byte theorem addresses in admission order. Writes 32 bytes to `out`.
+ * Properties (federation + tamper-evidence): DETERMINISTIC (same proven set+order -> same root);
+ * TAMPER-EVIDENT (admitting/changing any theorem changes the root); SHAREABLE (two nodes agree iff they
+ * have proven the same theorems) -- a peer can attest "I have certified exactly this body of mathematics"
+ * by one 32-byte digest. The empty registry's root is keccak() (the canonical empty digest). */
+fn tcom_root(out: u64) -> i32 @export {
+    if out == 0u64 { return TCOM_E_NULL }
+    return cad_oneshot(TCOM_SUITE, (&TCOM_HASH as u64) as *u8, (TCOM_COUNT as u64) * 32u64, out as *u8)
+}

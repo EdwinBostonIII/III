@@ -465,6 +465,18 @@ var R0_STR_CX_MOVZBQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 
 const R0_STR_CX_MOVZBQ_LEN : u64 = 21u64
 var R0_STR_CX_MOVZWQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 119u8, 113u8, 32u8, 37u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "    movzwq %ax, %rax\n" */
 const R0_STR_CX_MOVZWQ_LEN : u64 = 21u64
+/* K4 (DOCS/III-ARCHITECTURE-REVIEW.md) -- cg_r0 cast-extend made SIGN-AWARE to MATCH cg_r3.iii's
+ * r3_emit_cast_extend (it was stuck on the pre-K4 zero-uniform behaviour, diverging from cg_r3 on signed
+ * narrowing casts -- the cg_seam_gate cast_i8_uni FAIL).  A narrowing cast to a SIGNED type sign-extends
+ * (i8->movsbq, i16->movswq, i32->movslq); unsigned targets keep zero-extend.  Byte-identical strings to
+ * cg_r3's EXT_MOVS* so the two backends agree.  Dependent `as i32`-bit-31 sites were converted to `as u32`
+ * in the K4 source audit, so sign-rigor here is correct everywhere (corpus-gated). */
+var R0_STR_CX_MOVSBQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 115u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "    movsbq %al, %rax\n" */
+const R0_STR_CX_MOVSBQ_LEN : u64 = 21u64
+var R0_STR_CX_MOVSWQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 115u8, 119u8, 113u8, 32u8, 37u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "    movswq %ax, %rax\n" */
+const R0_STR_CX_MOVSWQ_LEN : u64 = 21u64
+var R0_STR_CX_MOVSLQ : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 115u8, 108u8, 113u8, 32u8, 37u8, 101u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "    movslq %eax, %rax\n" */
+const R0_STR_CX_MOVSLQ_LEN : u64 = 22u64
 fn r0_tn_eq(a: u64, alen: u32, b: u64, blen: u64) -> u32 {
     if (alen as u64) != blen { return 0u32 }
     if iii_emit_memcmp_c(a, b, blen) == 0i32 { return 1u32 }
@@ -484,12 +496,12 @@ fn r0_emit_cast_extend(rt: u32) -> u32 {
     let off: u32 = iii_ast_type_ref_name_off(R0_G_AST, rt)
     let a: u64 = iii_ast_source_buf(R0_G_AST) + (off as u64)
     if r0_tn_eq(a, len, &R0_TY_U8 as u64, R0_TY_U8_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZBQ as u64, R0_STR_CX_MOVZBQ_LEN); r0_push_rax(); return R0_OK }
-    if r0_tn_eq(a, len, &R0_TY_I8 as u64, R0_TY_I8_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZBQ as u64, R0_STR_CX_MOVZBQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_I8 as u64, R0_TY_I8_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVSBQ as u64, R0_STR_CX_MOVSBQ_LEN); r0_push_rax(); return R0_OK }
     if r0_tn_eq(a, len, &R0_TY_BOOL as u64, R0_TY_BOOL_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZBQ as u64, R0_STR_CX_MOVZBQ_LEN); r0_push_rax(); return R0_OK }
     if r0_tn_eq(a, len, &R0_TY_U16 as u64, R0_TY_U16_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZWQ as u64, R0_STR_CX_MOVZWQ_LEN); r0_push_rax(); return R0_OK }
-    if r0_tn_eq(a, len, &R0_TY_I16 as u64, R0_TY_I16_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZWQ as u64, R0_STR_CX_MOVZWQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_I16 as u64, R0_TY_I16_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVSWQ as u64, R0_STR_CX_MOVSWQ_LEN); r0_push_rax(); return R0_OK }
     if r0_tn_eq(a, len, &R0_TY_U32 as u64, R0_TY_U32_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN); r0_push_rax(); return R0_OK }
-    if r0_tn_eq(a, len, &R0_TY_I32 as u64, R0_TY_I32_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_I32 as u64, R0_TY_I32_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVSLQ as u64, R0_STR_CX_MOVSLQ_LEN); r0_push_rax(); return R0_OK }
     return R0_OK
 }
 var R0_STR_BPCMA_RCX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]

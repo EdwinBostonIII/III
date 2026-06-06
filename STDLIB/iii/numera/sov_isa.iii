@@ -69,6 +69,7 @@ extern @abi(c-msvc-x64) fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: 
 extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
 extern @abi(c-msvc-x64) fn tc_iter(z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_id(ity: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
@@ -84,6 +85,18 @@ extern @abi(c-msvc-x64) fn tc_j(mtv: u32, base: u32, proof: u32) -> u32 from "ty
 extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_infer(t: u32) -> u32 from "typecheck.iii"
+/* BV64: the native 64-bit machine-int model -- the WIDTH-FAITHFUL disposer for the codegen's
+ * constant-shift fold (x<<k == x*2^k mod 2^64), proven by ONE kernel iota, not a Peano tower. */
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
 /* Integration C: sound conversion pre-filter (WHNF shape signature + Kleene trit). */
 extern @abi(c-msvc-x64) fn tc_shape_sig(t: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
@@ -1793,6 +1806,18 @@ fn sov_feed_commons() -> u64 @export {
     return 99u64
 }
 
+/* CITE-OR-PROVE (T9, closes the loop propose->prove->persist->CITE): the proof-carrying optimizer's REUSE
+ * path. Check the Theorem Commons FIRST; if the strength schema is already kernel-certified there, CITE it
+ * (77) and SKIP the expensive proof (the L6 tower build + tc_check). Only on a miss does it pay to prove +
+ * admit (88). No other compiler reuses KERNEL PROOFS by content-address -- this is proof-carrying
+ * optimization that gets cheaper as the system's certified repertoire grows. */
+fn sov_cite_or_prove_strength() -> u64 @export {
+    if tcom_cite((&SOV_THM_STRENGTH as u64), SOV_THM_STRENGTH_LEN) == 0i32 { return 77u64 }
+    if sov_feed_setup() == 0u64 { return 1u64 }
+    if tcom_admit((&SOV_THM_STRENGTH as u64), SOV_THM_STRENGTH_LEN, sov_sr_term(), sov_sr_goal()) != 0i32 { return 2u64 }
+    return 88u64
+}
+
 /* THE STRENGTH-REDUCTION KAT.  99 = III's CIC kernel PROVED its own strength-reduction schema
  * mul(x, 2^k) == double^k(x) for a SYMBOLIC k (the proof-carrying-optimization headline), with the
  * off-by-double negative control rejected.  Nothing weakened; 99 never hard-coded. */
@@ -2155,44 +2180,60 @@ fn sov_census_all_sound() -> u8 @export {
 }
 
 /* ============================================================================
- *  THE CONSTANT-SHIFT CODEGEN FOLD, KERNEL-CERTIFIED (not merely runtime-validated).
- *  cg_r3/cg_r3.c fold  x<<k -> shl $k  (and x*2^k -> shl $k).  Correctness rests on ONE theorem:
- *  the left shift x<<k (= x doubled k times, itd) EQUALS x*2^k.  The strength schema (sov_sr_term)
- *  proves Id(mul(x,2^k), itd(x,k)) for ALL k; applying sym gives the fold's exact direction
- *  Id(itd(x,k), mul(x,2^k)) -- i.e. (x<<k) == (x*2^k) -- a distinct kernel-checked proof term.
- *  THE MOD-2^WIDTH "FRONTIER" IS CLOSED BY CONGRUENCE: the two values are EQUAL as Nat, so any
- *  function of them -- including the hardware's fixed-width truncation -- yields equal results (Id is a
- *  congruence).  So the system-wide fold is kernel-certified, hardware-faithfully, by the same
- *  dependent-type proof as the strength reduction it is unified with.
+ *  THE CONSTANT-SHIFT CODEGEN FOLD, KERNEL-CERTIFIED WIDTH-FAITHFULLY (BV64, 2026-06-06).
+ *  cg_r3/cg_r3.c fold  x<<k -> shl $k  (and x*2^k -> shl $k) for a COMPILE-TIME-CONSTANT k.
+ *  Correctness is the HARDWARE fact  x<<k == x*2^k (mod 2^64), with the x86-64 count mask k&63.
+ *
+ *  Previously this was proven over unbounded Peano Nat (x<<k = x doubled k times == x*2^k as
+ *  ideal integers) and the mod-2^width truncation was waved through "by congruence" -- a deep
+ *  k-induction tower (the reason TC_CAP was raised to 131072) that NEVER modelled wraparound.
+ *  Now it is proven DIRECTLY in the kernel's native 64-bit machine-int model: bvshl(x, lit k)
+ *  iota-reduces in ONE step to bvmul(x, lit 2^(k&63)), so the certificate is a bare `refl` and
+ *  the equality is the TRUE width-sensitive machine fact -- not an ideal-integer approximation.
+ *  The deep Peano tower is no longer load-bearing for the width fact; the inductive strength
+ *  SCHEMA (sov_sr_term) remains as a separate ideal-integer capability.  Untrusted proposer:
+ *  numera/bv_ring (full symbolic ring decision); trusted disposer: the CIC kernel's BV iota.
  * ============================================================================ */
-/* The fold's certificate: lam x. lam k. sym( schema(x)(k) ) : Id(itd(x,k), mul(x, pow2 k)). */
+/* The fold's certificate: lam x:BV. refl(x<<1) : Pi(x:BV). Id(BV, x<<1, x*2). */
 fn sov_shift_fold_term() -> u32 {
-    let mlhs : u32 = sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32)))   /* mul(x, 2^k)  in [x,k] x=#1,k=#0 */
-    let mrhs : u32 = sov_m_itd(tc_var(1u32), tc_var(0u32))               /* itd(x,k) = x<<k */
-    let sxk  : u32 = tc_app(tc_app(sov_sr_term(), tc_var(1u32)), tc_var(0u32))   /* : Id(mlhs, mrhs) */
-    let symt : u32 = sov_tw_sym()                                        /* Pi(a).Pi(b).Pi(Id(a,b)).Id(b,a) */
-    let symapp : u32 = tc_app(tc_app(tc_app(symt, mlhs), mrhs), sxk)     /* : Id(mrhs, mlhs) = Id(x<<k, x*2^k) */
-    return tc_lam(tc_nat(), tc_lam(tc_nat(), symapp))
+    let lhs : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))    /* x << 1 */
+    return tc_lam(tc_bv(), tc_refl(lhs))                          /* lam x:BV. refl(x<<1) */
 }
-/* The fold's goal: Pi(x).Pi(k). Id(Nat, itd(x,k), mul(x, pow2 k))  -- i.e. (x<<k) == (x*2^k) for all k. */
+/* The fold's goal: Pi(x:BV). Id(BV, x<<1, x*2)  -- the canonical width-faithful strength reduction. */
 fn sov_shift_fold_goal() -> u32 {
-    let mrhs : u32 = sov_m_itd(tc_var(1u32), tc_var(0u32))
-    let mlhs : u32 = sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32)))
-    return tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), mrhs, mlhs)))
+    let lhs : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    let rhs : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64))
+    return tc_pi(tc_bv(), tc_id(tc_bv(), lhs, rhs))
+}
+/* Kernel-check  Pi(x:BV). Id(BV, x<<k, x*factor)  via a bare-refl certificate; 1 iff accepted. */
+fn sov_bv_fold_check(k: u64, factor: u64) -> u8 {
+    let lhs : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(k))
+    let rhs : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(factor))
+    let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, rhs))
+    let cert : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    return tc_check(cert, goal)
 }
 
-/* 99 = the CIC kernel CERTIFIES the constant-shift fold's identity (x<<k == x*2^k) for a SYMBOLIC k,
- * AND rejects the off-by-one (x<<k != x*2^(k+1)).  This upgrades the cg_r3 fold from runtime-validated
- * to kernel-certified, unified with the strength reduction under one dependent-type proof. */
+/* 99 = the CIC kernel CERTIFIES the constant-shift fold WIDTH-FAITHFULLY (x<<k == x*2^k mod 2^64)
+ * across the codegen-relevant family k in {1,5,31,63}, honours the x86-64 count mask (x<<64 == x),
+ * computes the fold's OVERFLOW flag by iota, AND rejects the off-by-one (x<<1 != x*4) -- every fact
+ * a bare-refl kernel proof over BV64, no Peano tower.  Upgrades the cg_r3 fold from runtime-validated
+ * (and ideal-integer kernel-approximated) to kernel-certified width-faithfully. */
 fn sov_shift_fold_witness() -> u64 @export {
     tc_reset()
-    SOV_SUCCF[0u32] = sov_succf()
-    sov_l6_build_tower()
-    SOV_G_L6[0u32] = sov_l6_term()
     if tc_check(sov_shift_fold_term(), sov_shift_fold_goal()) != 1u8 { return 1u64 }
-    /* NEG: the certificate does NOT prove x<<k == x*2^(k+1) (the off-by-one shift). */
-    let ng : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_itd(tc_var(1u32), tc_var(0u32)), sov_m_mul(tc_var(1u32), sov_m_pow2(tc_succ(tc_var(0u32)))))))
+    if sov_bv_fold_check(1u64,  2u64) != 1u8 { return 4u64 }
+    if sov_bv_fold_check(5u64,  32u64) != 1u8 { return 5u64 }
+    if sov_bv_fold_check(31u64, 0x80000000u64) != 1u8 { return 6u64 }
+    if sov_bv_fold_check(63u64, 0x8000000000000000u64) != 1u8 { return 7u64 }
+    if sov_bv_fold_check(64u64, 1u64) != 1u8 { return 8u64 }   /* x86-64 count mask: x<<64 == x*1 == x */
+    /* NEG: off-by-one rejected -- the x<<1 certificate does NOT prove x*4 (= x*2^2). */
+    let lhs1 : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    let ng : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs1, tc_bvmul(tc_var(0u32), tc_bvlit_u64(4u64))))
     if tc_check(sov_shift_fold_term(), ng) != 0u8 { return 2u64 }
+    /* OVERFLOW-CHECKED folding: the kernel computes the fold's overflow flag by iota. */
+    if tc_conv(tc_bvaddovf(tc_bvlit_u64(0xFFFFFFFFFFFFFFFFu64), tc_bvlit_u64(1u64)), tc_true()) != 1u8 { return 9u64 }
+    if tc_conv(tc_bvmulovf(tc_bvlit_u64(2u64), tc_bvlit_u64(3u64)), tc_false()) != 1u8 { return 10u64 }
     return 99u64
 }
 fn sov_shift_fold_kat() -> u64 @export {

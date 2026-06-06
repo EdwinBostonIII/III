@@ -1,0 +1,16 @@
+/* 1213_bv_kernel.iii -- THE CIC KERNEL'S NATIVE 64-BIT MACHINE-INT (BITVECTOR) MODEL.
+ *
+ * tc_bv_kat proves the kernel CERTIFIES width-sensitive 64-bit machine arithmetic BY IOTA --
+ * the named horizon of DOCS/III-SOVEREIGN-OPTIMIZER-LEDGER.md, now closed.  It witnesses:
+ * closed constant folding WITH mod-2^64 wraparound; the width identity x<<k == x*2^k (mod 2^64)
+ * for a SYMBOLIC x by ONE iota step (NOT a unary Peano tower); the x86-64 count mask (x<<64==x);
+ * overflow-checked folding (bvaddovf/bvmulovf compute the flag by iota); the multi-class collapse
+ * (x*1)+(x*0)==x; and the SOUNDNESS negatives (distinct literals NOT convertible, off-by-one shift
+ * REJECTED, x != x+1).  Every fact is the kernel's own conversion/tc_check verdict -- no oracle. 99 = pass. */
+module corpus_1213
+
+extern @abi(c-msvc-x64) fn tc_bv_kat() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return tc_bv_kat()
+}

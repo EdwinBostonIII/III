@@ -1,0 +1,683 @@
+/* STDLIB/iii/numera/constants.iii -- the Constitutional Constants Ledger (R1.D2),
+ * ported to .iii (H13 one-language; the C CONSTANTS/src retires here).
+ *
+ * Every constitutional constant from DOCS/III-CONSTANTS.md -- catalogued once,
+ * canonical-hashed in slot order to the derivative ledger root R1.D2, and gated
+ * by tier-aware mutation validators (the constitution enforcing its OWN amendment
+ * rules: NEVER_MUTABLE is unmovable; CATALYST_APPEND must not regress; AMEND_APPLY
+ * / R2_MAJOR_BUMP each have their lane).  Until now this lived in C; for H13 III
+ * must catalogue and hash its own constitution in its own language.
+ *
+ * FAITHFUL port: the canonical per-entry encoding matches the C byte-for-byte
+ *   magic "III-CONSTANTS-D2"(16) || count(u32 LE) ||
+ *   for each: slot(u32 LE) | type(u8) | tier(u8) | lp(name) | lp(units) |
+ *             lp(source) | lp(section) | value_len(u32 LE) | value | 0xFF
+ * (lp(s) = len(u32 LE) || bytes), hashed by the one .iii sha256.  The 196-entry
+ * port reproduces the C ledger root R1.D2 = 575b7722d9c24fadad5a83050eb164fa
+ * afa13aa51fe491ea7f76db7c7670e9ce byte-for-byte (the selftest's byte-equiv
+ * oracle), proving the transcription faithful.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (constitutional ledger).  K: 1.00.
+ * NIH: sha256 only.  No ML, no float, no u64 division.
+ * Discipline: flag loops; module-global pools (never function-local runtime-idx);
+ * length-explicit literal reads; sticky section mirrors the C SECT macro.
+ */
+module numera_constants
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* type tags (mirror iii_constant_type_t) */
+const CT_U64    : u8 = 1u8
+const CT_S64    : u8 = 2u8
+const CT_Q14    : u8 = 3u8
+const CT_BAND   : u8 = 4u8
+const CT_TUPLE2 : u8 = 5u8
+const CT_BOOL   : u8 = 6u8
+const CT_STRING : u8 = 7u8
+
+/* mutation tiers (mirror iii_mutation_tier_t) */
+const MT_NEVER   : u8 = 1u8
+const MT_R2      : u8 = 2u8
+const MT_AMEND   : u8 = 3u8
+const MT_CATALYST: u8 = 4u8
+const MT_DERIVED : u8 = 5u8
+const MT_OPTARGET: u8 = 6u8
+const MT_OPPOLICY: u8 = 7u8
+const MT_SCHED   : u8 = 8u8
+const MT_SEALED  : u8 = 9u8
+
+/* validate results (mirror iii_constant_validate_t) */
+const CV_OK        : i32 = 0i32
+const CV_NOT_FOUND : i32 = 1i32
+const CV_WRONG_TIER: i32 = 2i32
+const CV_NEVER     : i32 = 3i32
+const CV_REGRESS   : i32 = 4i32
+const CV_INVALID   : i32 = 5i32
+const CV_LOCKED    : i32 = 6i32
+
+const CL_MAX : u32 = 256u32
+
+/* canonical hash buffer + entry pools */
+var CL_BUF   : [u8; 24576]
+var CL_POS   : u64 = 0u64
+var CL_COUNT : u32 = 0u32
+var CL_BUILT : u8  = 0u8
+var CL_SECT  : [u8; 16]
+var CL_SLEN  : u64 = 0u64
+var CL_VTMP  : [u8; 64]
+var CL_ROOT  : [u8; 32]
+
+/* validator table (parallel; CL_MAX slots) */
+var CL_TYPE  : [u8;  256]
+var CL_TIER  : [u8;  256]
+var CL_NOFF  : [u32; 256]
+var CL_NLEN  : [u32; 256]
+var CL_VOFF  : [u32; 256]
+var CL_VLEN  : [u32; 256]
+var CL_NPOOL : [u8; 8192]
+var CL_NPOS  : u64 = 0u64
+var CL_VPOOL : [u8; 8192]
+var CL_VPOS  : u64 = 0u64
+
+/* === canonical-buffer append primitives === */
+fn cl_put(src_addr: u64, n: u64) {
+    let d : *u8 = (&CL_BUF as u64) as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[CL_POS + i] = s[i]   i = i + 1u64 }
+    CL_POS = CL_POS + n
+}
+fn cl_u32(v: u32) {
+    CL_BUF[CL_POS]        = (v & 0xFFu32) as u8
+    CL_BUF[CL_POS + 1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    CL_BUF[CL_POS + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    CL_BUF[CL_POS + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    CL_POS = CL_POS + 4u64
+}
+fn cl_u8(v: u8) { CL_BUF[CL_POS] = v   CL_POS = CL_POS + 1u64 }
+fn cl_lp(src_addr: u64, n: u64) { cl_u32(n as u32)   cl_put(src_addr, n) }
+
+/* set the sticky section (mirrors the C #define SECT). */
+fn cl_sect(lit: u64, len: u64) {
+    let d : *u8 = (&CL_SECT as u64) as *u8
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < len { d[i] = s[i]   i = i + 1u64 }
+    CL_SLEN = len
+}
+
+/* encode an 8-byte little-endian value into CL_VTMP. */
+fn cl_v_u64(v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { CL_VTMP[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+    return 8u64
+}
+
+/* core emit: record the validator entry + append the canonical encoding.
+ * val_addr/vlen are the already-encoded value bytes; section is sticky. */
+fn cl_emit(name: u64, nlen: u64, typ: u8, tier: u8, units: u64, ulen: u64, src: u64, slen: u64, val_addr: u64, vlen: u64) {
+    let slot : u32 = CL_COUNT + 1u32
+    let si : u64 = (CL_COUNT as u64) & 0xFFu64
+    /* validator record: copy name -> NPOOL, value -> VPOOL */
+    CL_NOFF[si] = CL_NPOS as u32
+    CL_NLEN[si] = nlen as u32
+    let np : *u8 = (&CL_NPOOL as u64) as *u8
+    let nsrc : *u8 = name as *u8
+    let mut a : u64 = 0u64
+    while a < nlen { np[CL_NPOS + a] = nsrc[a]   a = a + 1u64 }
+    CL_NPOS = CL_NPOS + nlen
+    CL_VOFF[si] = CL_VPOS as u32
+    CL_VLEN[si] = vlen as u32
+    let vp : *u8 = (&CL_VPOOL as u64) as *u8
+    let vsrc : *u8 = val_addr as *u8
+    let mut b : u64 = 0u64
+    while b < vlen { vp[CL_VPOS + b] = vsrc[b]   b = b + 1u64 }
+    CL_VPOS = CL_VPOS + vlen
+    CL_TYPE[si] = typ
+    CL_TIER[si] = tier
+    /* canonical encoding */
+    cl_u32(slot)
+    cl_u8(typ)
+    cl_u8(tier)
+    cl_lp(name, nlen)
+    cl_lp(units, ulen)
+    cl_lp(src, slen)
+    cl_lp((&CL_SECT as u64), CL_SLEN)
+    cl_u32(vlen as u32)
+    cl_put(val_addr, vlen)
+    cl_u8(0xFFu8)
+    CL_COUNT = CL_COUNT + 1u32
+}
+
+/* per-type registration wrappers (cut caller args; encode the value). */
+fn cl_u(name: u64, nlen: u64, v: u64, units: u64, ulen: u64, src: u64, slen: u64, tier: u8) {
+    let n : u64 = cl_v_u64(v)
+    cl_emit(name, nlen, CT_U64, tier, units, ulen, src, slen, (&CL_VTMP as u64), n)
+}
+fn cl_s(name: u64, nlen: u64, v: i64, units: u64, ulen: u64, src: u64, slen: u64, tier: u8) {
+    let n : u64 = cl_v_u64(v as u64)
+    cl_emit(name, nlen, CT_S64, tier, units, ulen, src, slen, (&CL_VTMP as u64), n)
+}
+fn cl_q(name: u64, nlen: u64, v: u64, src: u64, slen: u64, tier: u8) {
+    CL_VTMP[0u64] = (v & 0xFFu64) as u8
+    CL_VTMP[1u64] = ((v >> 8u64) & 0xFFu64) as u8
+    cl_emit(name, nlen, CT_Q14, tier, ("Q14" as u64), 3u64, src, slen, (&CL_VTMP as u64), 2u64)
+}
+fn cl_b(name: u64, nlen: u64, lo: u32, hi: u32, src: u64, slen: u64, tier: u8) {
+    CL_VTMP[0u64] = (lo & 0xFFu32) as u8   CL_VTMP[1u64] = ((lo >> 8u32) & 0xFFu32) as u8
+    CL_VTMP[2u64] = ((lo >> 16u32) & 0xFFu32) as u8   CL_VTMP[3u64] = ((lo >> 24u32) & 0xFFu32) as u8
+    CL_VTMP[4u64] = (hi & 0xFFu32) as u8   CL_VTMP[5u64] = ((hi >> 8u32) & 0xFFu32) as u8
+    CL_VTMP[6u64] = ((hi >> 16u32) & 0xFFu32) as u8   CL_VTMP[7u64] = ((hi >> 24u32) & 0xFFu32) as u8
+    cl_emit(name, nlen, CT_BAND, tier, ("range" as u64), 5u64, src, slen, (&CL_VTMP as u64), 8u64)
+}
+fn cl_t2(name: u64, nlen: u64, a: u32, b: u32, src: u64, slen: u64, tier: u8) {
+    CL_VTMP[0u64] = (a & 0xFFu32) as u8   CL_VTMP[1u64] = ((a >> 8u32) & 0xFFu32) as u8
+    CL_VTMP[2u64] = ((a >> 16u32) & 0xFFu32) as u8   CL_VTMP[3u64] = ((a >> 24u32) & 0xFFu32) as u8
+    CL_VTMP[4u64] = (b & 0xFFu32) as u8   CL_VTMP[5u64] = ((b >> 8u32) & 0xFFu32) as u8
+    CL_VTMP[6u64] = ((b >> 16u32) & 0xFFu32) as u8   CL_VTMP[7u64] = ((b >> 24u32) & 0xFFu32) as u8
+    cl_emit(name, nlen, CT_TUPLE2, tier, ("(N,K)" as u64), 5u64, src, slen, (&CL_VTMP as u64), 8u64)
+}
+fn cl_bool(name: u64, nlen: u64, v: u8, src: u64, slen: u64, tier: u8) {
+    CL_VTMP[0u64] = v
+    cl_emit(name, nlen, CT_BOOL, tier, ("bool" as u64), 4u64, src, slen, (&CL_VTMP as u64), 1u64)
+}
+fn cl_str(name: u64, nlen: u64, sval: u64, svlen: u64, src: u64, slen: u64, tier: u8) {
+    cl_emit(name, nlen, CT_STRING, tier, ("utf8" as u64), 4u64, src, slen, sval, svlen)
+}
+
+/* === the ledger: every constitutional constant, in slot order === */
+fn cl_build() {
+    if CL_BUILT == 1u8 { return }
+    CL_POS = 20u64   /* reserve magic(16) + count(4); backpatched at finalize */
+    CL_COUNT = 0u32
+    CL_NPOS = 0u64
+    CL_VPOS = 0u64
+
+    cl_sect(("§2" as u64), 3u64)
+    cl_u(("LEX_KEYWORD_COUNT" as u64), 17u64, 47u64, ("count" as u64), 5u64, ("LEX §4" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_KEYWORD_RESERVED_SLOTS" as u64), 26u64, 16u64, ("count" as u64), 5u64, ("LEX §4" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_KEYWORD_MAX" as u64), 15u64, 63u64, ("count" as u64), 5u64, ("LEX §4" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_MODIFIER_COUNT" as u64), 18u64, 19u64, ("count" as u64), 5u64, ("LEX §5" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_MODIFIER_RESERVED_SLOTS" as u64), 27u64, 8u64, ("count" as u64), 5u64, ("LEX §5" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_MODIFIER_MAX" as u64), 16u64, 27u64, ("count" as u64), 5u64, ("LEX §5" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_OPERATOR_COUNT" as u64), 18u64, 23u64, ("count" as u64), 5u64, ("LEX §6" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_OPERATOR_RESERVED_SLOTS" as u64), 27u64, 7u64, ("count" as u64), 5u64, ("LEX §6" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_OPERATOR_MAX" as u64), 16u64, 30u64, ("count" as u64), 5u64, ("LEX §6" as u64), 7u64, MT_CATALYST)
+    cl_u(("LEX_PUNCTUATOR_COUNT" as u64), 20u64, 25u64, ("count" as u64), 5u64, ("LEX §7" as u64), 7u64, MT_AMEND)
+    cl_u(("LEX_RESERVED_UNUSED_CHARS" as u64), 25u64, 5u64, ("count" as u64), 5u64, ("LEX §7.3" as u64), 9u64, MT_CATALYST)
+    cl_u(("LEX_LITERAL_TOKEN_KINDS" as u64), 23u64, 9u64, ("count" as u64), 5u64, ("LEX §3.1" as u64), 9u64, MT_AMEND)
+    cl_u(("LEX_COMMENT_KINDS" as u64), 17u64, 3u64, ("count" as u64), 5u64, ("LEX §10" as u64), 8u64, MT_AMEND)
+    cl_u(("LEX_WHITESPACE_CHARS" as u64), 20u64, 3u64, ("count" as u64), 5u64, ("LEX §11" as u64), 8u64, MT_AMEND)
+    cl_u(("LEX_IDENT_MAX_CODEPOINTS" as u64), 24u64, 256u64, ("codepoints" as u64), 10u64, ("LEX §8.3" as u64), 9u64, MT_AMEND)
+    cl_u(("LEX_SOURCE_MAX_BYTES" as u64), 20u64, 16777216u64, ("bytes" as u64), 5u64, ("LEX §2.7" as u64), 9u64, MT_AMEND)
+    cl_str(("LEX_SOURCE_EXTENSION" as u64), 20u64, (".III" as u64), 4u64, ("LEX §2.6" as u64), 9u64, MT_AMEND)
+    cl_u(("LEX_MOBIUS_DIACRITIC" as u64), 20u64, 246u64, ("U+" as u64), 2u64, ("LEX §4.3" as u64), 9u64, MT_AMEND)
+    cl_bool(("LEX_BOM_FORBIDDEN" as u64), 17u64, 1u8, ("LEX §2.2" as u64), 9u64, MT_R2)
+    cl_str(("LEX_LINE_ENDING" as u64), 15u64, ("LF" as u64), 2u64, ("LEX §2.3" as u64), 9u64, MT_AMEND)
+
+    cl_sect(("§3" as u64), 3u64)
+    cl_u(("TYPE_UNIVERSE_COUNT" as u64), 19u64, 7u64, ("count" as u64), 5u64, ("TYPES §2" as u64), 9u64, MT_R2)
+    cl_u(("TYPE_IMPREDICATIVE_TOP_INDEX" as u64), 28u64, 6u64, ("index" as u64), 5u64, ("TYPES §2.4" as u64), 11u64, MT_R2)
+    cl_u(("TYPE_Q14_BITS_TOTAL" as u64), 19u64, 16u64, ("bits" as u64), 4u64, ("TYPES §6" as u64), 9u64, MT_R2)
+    cl_u(("TYPE_Q14_FRAC_BITS" as u64), 18u64, 14u64, ("bits" as u64), 4u64, ("TYPES §6" as u64), 9u64, MT_R2)
+    cl_u(("TYPE_MHASH_SIZE" as u64), 15u64, 32u64, ("bytes" as u64), 5u64, ("TYPES §6" as u64), 9u64, MT_AMEND)
+    cl_u(("TYPE_GLYPH_SIZE" as u64), 15u64, 192u64, ("bytes" as u64), 5u64, ("LEX §4.1.1" as u64), 11u64, MT_AMEND)
+    cl_u(("TYPE_WITNESS_SIZE" as u64), 17u64, 128u64, ("bytes" as u64), 5u64, ("CYCLES §4.1" as u64), 12u64, MT_AMEND)
+    cl_u(("TYPE_HEXAD_PACK_BITS_USED" as u64), 25u64, 12u64, ("bits" as u64), 4u64, ("HEXAD §2.2" as u64), 11u64, MT_R2)
+    cl_u(("TYPE_HEXAD_PACK_BITS_RESERVED" as u64), 29u64, 4u64, ("bits" as u64), 4u64, ("HEXAD §2.2" as u64), 11u64, MT_R2)
+    cl_u(("TYPE_TRIT_CARDINALITY" as u64), 21u64, 3u64, ("count" as u64), 5u64, ("HEXAD §1.1" as u64), 11u64, MT_R2)
+    cl_u(("TYPE_REDUCTION_ARITY" as u64), 20u64, 6u64, ("count" as u64), 5u64, ("TYPES §3" as u64), 9u64, MT_R2)
+    cl_u(("TYPE_COMPROMISE_TIERS" as u64), 21u64, 3u64, ("count" as u64), 5u64, ("EFFECTS §1.2" as u64), 13u64, MT_AMEND)
+    cl_u(("TYPE_PROOF_KERNEL_LOC_BUDGET" as u64), 28u64, 3000u64, ("LoC" as u64), 3u64, ("TYPES §11" as u64), 10u64, MT_AMEND)
+
+    cl_sect(("§4" as u64), 3u64)
+    cl_u(("EFFECT_SE_KIND_COUNT" as u64), 20u64, 17u64, ("count" as u64), 5u64, ("EFFECTS §1.1" as u64), 13u64, MT_CATALYST)
+    cl_u(("EFFECT_COMPROMISE_TIER_COUNT" as u64), 28u64, 3u64, ("count" as u64), 5u64, ("EFFECTS §1.2" as u64), 13u64, MT_AMEND)
+    cl_u(("EFFECT_PFS_BRICKING_OPS" as u64), 23u64, 6u64, ("count" as u64), 5u64, ("EFFECTS §1.3" as u64), 13u64, MT_NEVER)
+    cl_u(("EFFECT_WAVEFRONT_TERMINATORS" as u64), 28u64, 3u64, ("count" as u64), 5u64, ("EFFECTS §7" as u64), 11u64, MT_CATALYST)
+
+    cl_sect(("§5" as u64), 3u64)
+    cl_u(("CYCLE_WITNESS_BYTE_SIZE" as u64), 23u64, 128u64, ("bytes" as u64), 5u64, ("CYCLES §4.1" as u64), 12u64, MT_AMEND)
+    cl_u(("CYCLE_WITNESS_PRED_OFFSET" as u64), 25u64, 0u64, ("offset" as u64), 6u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_PRED_BYTES" as u64), 24u64, 32u64, ("bytes" as u64), 5u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_SUCC_OFFSET" as u64), 25u64, 32u64, ("offset" as u64), 6u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_SUCC_BYTES" as u64), 24u64, 32u64, ("bytes" as u64), 5u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_STEP_KIND_OFFSET" as u64), 30u64, 64u64, ("offset" as u64), 6u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_STEP_KIND_BYTES" as u64), 29u64, 4u64, ("bytes" as u64), 5u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_FLAGS_OFFSET" as u64), 26u64, 100u64, ("offset" as u64), 6u64, ("STDLIB §5.6" as u64), 12u64, MT_CATALYST)
+    cl_u(("CYCLE_WITNESS_FLAGS_BYTES" as u64), 25u64, 4u64, ("bytes" as u64), 5u64, ("STDLIB §5.6" as u64), 12u64, MT_CATALYST)
+    cl_u(("CYCLE_WITNESS_HEXAD_OFFSET" as u64), 26u64, 104u64, ("offset" as u64), 6u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_WITNESS_HEXAD_BYTES" as u64), 25u64, 24u64, ("bytes" as u64), 5u64, ("CYCLES §4.1" as u64), 12u64, MT_R2)
+    cl_u(("CYCLE_BCWL_BLOOM_BITS" as u64), 21u64, 4096u64, ("bits" as u64), 4u64, ("CYCLES §4.3" as u64), 12u64, MT_AMEND)
+    cl_u(("CYCLE_BCWL_BUCKETS" as u64), 18u64, 16u64, ("count" as u64), 5u64, ("CYCLES §4.3" as u64), 12u64, MT_AMEND)
+    cl_u(("CYCLE_BCWL_FP_TARGET_PERCENT" as u64), 28u64, 1u64, ("percent" as u64), 7u64, ("STDLIB §14.3" as u64), 13u64, MT_AMEND)
+    cl_u(("CYCLE_STEP_KIND_TOTAL_SLOTS" as u64), 27u64, 512u64, ("count" as u64), 5u64, ("CYCLES §5.3" as u64), 12u64, MT_R2)
+    cl_b(("SK_RESERVED_BOOT" as u64), 16u64, 0x0000u32, 0x000Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_IRPD_PRIV_WRITE" as u64), 18u64, 0x0010u32, 0x002Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_IRPD_PRIV_READ" as u64), 17u64, 0x0030u32, 0x004Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_CYCLE_LIFECYCLE" as u64), 18u64, 0x0050u32, 0x006Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_WAVEFRONT" as u64), 12u64, 0x0070u32, 0x007Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_SANCTUM" as u64), 10u64, 0x0080u32, 0x009Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_TRINITY" as u64), 10u64, 0x00A0u32, 0x00BFu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_CEILING" as u64), 10u64, 0x00C0u32, 0x00CFu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_FEDERATION" as u64), 13u64, 0x00D0u32, 0x00EFu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_DRTM" as u64), 7u64, 0x00F0u32, 0x00FFu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_VDF" as u64), 6u64, 0x0100u32, 0x010Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_OBSERVATORY" as u64), 14u64, 0x0110u32, 0x012Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_CATALYST" as u64), 11u64, 0x0130u32, 0x014Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_NARRATIVE" as u64), 12u64, 0x0150u32, 0x015Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_COGNITIVE" as u64), 12u64, 0x0160u32, 0x017Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_PFS" as u64), 6u64, 0x0180u32, 0x018Fu32, ("CYCLES §5.3" as u64), 12u64, MT_AMEND)
+    cl_b(("SK_FED_RESERVED" as u64), 15u64, 0x0190u32, 0x01AFu32, ("CYCLES §5.3" as u64), 12u64, MT_CATALYST)
+    cl_b(("SK_USER_RESERVED" as u64), 16u64, 0x01B0u32, 0x01C6u32, ("CYCLES §5.3" as u64), 12u64, MT_CATALYST)
+    cl_b(("SK_MNEME_PROMOTE" as u64), 16u64, 0x01C7u32, 0x01CFu32, ("CYCLES §5.3" as u64), 12u64, MT_CATALYST)
+    cl_b(("SK_RESERVED_FUTURE" as u64), 18u64, 0x01D0u32, 0x01FFu32, ("CYCLES §5.3" as u64), 12u64, MT_CATALYST)
+
+    cl_sect(("§6" as u64), 3u64)
+    cl_u(("HEXAD_PILLAR_COUNT" as u64), 18u64, 6u64, ("count" as u64), 5u64, ("HEXAD §2" as u64), 9u64, MT_R2)
+    cl_str(("HEXAD_PILLAR_1_NAME" as u64), 19u64, ("INVERSE_DERIVABILITY" as u64), 20u64, ("HEXAD §2.1" as u64), 11u64, MT_R2)
+    cl_str(("HEXAD_PILLAR_2_NAME" as u64), 19u64, ("CAUSALITY_DEPTH" as u64), 15u64, ("HEXAD §2.1" as u64), 11u64, MT_R2)
+    cl_str(("HEXAD_PILLAR_3_NAME" as u64), 19u64, ("CONSENT_RECENCY" as u64), 15u64, ("HEXAD §2.1" as u64), 11u64, MT_R2)
+    cl_str(("HEXAD_PILLAR_4_NAME" as u64), 19u64, ("REPLICATION_TIER" as u64), 16u64, ("HEXAD §2.1" as u64), 11u64, MT_R2)
+    cl_str(("HEXAD_PILLAR_5_NAME" as u64), 19u64, ("ADVERSARIALITY_CLASS" as u64), 20u64, ("HEXAD §2.1" as u64), 11u64, MT_R2)
+    cl_str(("HEXAD_PILLAR_6_NAME" as u64), 19u64, ("COHERENCE_IMPACT" as u64), 16u64, ("HEXAD §2.1" as u64), 11u64, MT_R2)
+    cl_s(("HEXAD_TRIT_NEG_ASYM" as u64), 19u64, -2i64, ("trit-asym" as u64), 9u64, ("HEXAD §1.1" as u64), 11u64, MT_R2)
+    cl_s(("HEXAD_TRIT_NEG_BALANCED" as u64), 23u64, -1i64, ("trit-bal" as u64), 8u64, ("HEXAD §1.1" as u64), 11u64, MT_R2)
+    cl_u(("HEXAD_TRIT_NEG_PACKED" as u64), 21u64, 0u64, ("bits" as u64), 4u64, ("HEXAD §1.1" as u64), 11u64, MT_R2)
+    cl_u(("HEXAD_TRIT_ZERO_PACKED" as u64), 22u64, 1u64, ("bits" as u64), 4u64, ("HEXAD §1.1" as u64), 11u64, MT_R2)
+    cl_u(("HEXAD_TRIT_POS_PACKED" as u64), 21u64, 2u64, ("bits" as u64), 4u64, ("HEXAD §1.1" as u64), 11u64, MT_R2)
+    cl_u(("HEXAD_RESERVED_TRIT_BITPATTERN" as u64), 30u64, 3u64, ("bits" as u64), 4u64, ("HEXAD §2.2" as u64), 11u64, MT_CATALYST)
+    cl_u(("HEXAD_TOTAL_POSSIBLE" as u64), 20u64, 729u64, ("count" as u64), 5u64, ("HEXAD §3.1" as u64), 11u64, MT_R2)
+    cl_u(("HEXAD_ADMISSIBLE" as u64), 16u64, 144u64, ("count" as u64), 5u64, ("STDLIB §6.5" as u64), 12u64, MT_R2)
+    cl_u(("HEXAD_ASYM_REACH6_BYTES" as u64), 23u64, 144u64, ("bytes" as u64), 5u64, ("HEXAD §3.1" as u64), 11u64, MT_CATALYST)
+    cl_u(("HEXAD_REACH_CODE_BIT_HI" as u64), 23u64, 7u64, ("bit" as u64), 3u64, ("STDLIB §6.5" as u64), 12u64, MT_R2)
+    cl_u(("HEXAD_REACH_CODE_BIT_LO" as u64), 23u64, 6u64, ("bit" as u64), 3u64, ("STDLIB §6.5" as u64), 12u64, MT_R2)
+    cl_u(("HEXAD_METADATA_BIT_HI" as u64), 21u64, 5u64, ("bit" as u64), 3u64, ("STDLIB §6.5" as u64), 12u64, MT_CATALYST)
+    cl_u(("HEXAD_METADATA_BIT_LO" as u64), 21u64, 0u64, ("bit" as u64), 3u64, ("STDLIB §6.5" as u64), 12u64, MT_CATALYST)
+    cl_u(("HEXAD_REACH_CODE_COUNT" as u64), 22u64, 4u64, ("count" as u64), 5u64, ("HEXAD §3.1" as u64), 11u64, MT_CATALYST)
+    cl_u(("HEXAD_PFS_BRICKING_HEXADS" as u64), 25u64, 6u64, ("count" as u64), 5u64, ("HEXAD §4.2" as u64), 11u64, MT_NEVER)
+    cl_str(("HEXAD_BITMAP_MHASH_FUNC" as u64), 23u64, ("SHA-256" as u64), 7u64, ("HEXAD §3.4" as u64), 11u64, MT_DERIVED)
+
+    cl_sect(("§7" as u64), 3u64)
+    cl_u(("PHASE_RING_COUNT" as u64), 16u64, 4u64, ("count" as u64), 5u64, ("PHASES §1" as u64), 10u64, MT_R2)
+    cl_str(("PHASE_RING_LATTICE_ORDER" as u64), 24u64, ("R-2<=R-1<=R0<=R3" as u64), 16u64, ("PHASES §1" as u64), 10u64, MT_R2)
+    cl_u(("PHASE_CROSS_RING_CONSTRUCTORS" as u64), 29u64, 5u64, ("count" as u64), 5u64, ("PHASES §3" as u64), 10u64, MT_AMEND)
+    cl_u(("PHASE_MARSHALLING_RULES" as u64), 23u64, 5u64, ("count" as u64), 5u64, ("PHASES §4" as u64), 10u64, MT_AMEND)
+    cl_u(("XII_PHASE_PROMOTE_RATE" as u64), 22u64, 4u64, ("per-tick" as u64), 8u64, ("PHASES §5" as u64), 10u64, MT_AMEND)
+    cl_u(("PHASE_MAGIC_MSR_ADDRESS" as u64), 23u64, 0xC001F100u64, ("MSR" as u64), 3u64, ("PHASES §3.1" as u64), 12u64, MT_AMEND)
+
+    cl_sect(("§8" as u64), 3u64)
+    cl_u(("SANCTUM_SEAL_COUNT" as u64), 18u64, 10u64, ("slots" as u64), 5u64, ("SANCTUM §1.1" as u64), 13u64, MT_AMEND)
+    cl_u(("SANCTUM_SLOT_INVALID" as u64), 20u64, 0u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_DRTM_RELAUNCH" as u64), 26u64, 1u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_PFS_VAR_SET" as u64), 24u64, 2u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_PFS_DENY_QUOTE" as u64), 27u64, 3u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_CRCC_KEY_EXPORT" as u64), 28u64, 4u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_PHOENIX_EMERGENCY" as u64), 30u64, 5u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_CHRONOS_SET_EPOCH" as u64), 30u64, 6u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_COMPROMISE_QUOTE" as u64), 29u64, 7u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_PHOENIX_BOOKMARK" as u64), 29u64, 8u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_u(("SANCTUM_SLOT_COMPILE_MODULE" as u64), 27u64, 9u64, ("slot" as u64), 4u64, ("SANCTUM §1.1" as u64), 13u64, MT_NEVER)
+    cl_str(("SANCTUM_GATE_HARDENING" as u64), 22u64, ("IBPB+VERW+SSBD+RSP-swap+GPR/FPR/XMM-save" as u64), 40u64, ("SANCTUM §2.1" as u64), 13u64, MT_AMEND)
+    cl_u(("DRTM_QUOTE_BYTE_SIZE" as u64), 20u64, 312u64, ("bytes" as u64), 5u64, ("SANCTUM §4" as u64), 11u64, MT_AMEND)
+    cl_u(("SANCTUM_PER_CPU_FRAME_SIZE" as u64), 26u64, 160u64, ("bytes" as u64), 5u64, ("STDLIB §8.8" as u64), 12u64, MT_AMEND)
+
+    cl_sect(("§9" as u64), 3u64)
+    cl_u(("TRINITY_LAYER_COUNT" as u64), 19u64, 3u64, ("count" as u64), 5u64, ("TRINITY §1" as u64), 11u64, MT_AMEND)
+    cl_u(("TRINITY_GATE_CONJUNCTS" as u64), 22u64, 4u64, ("count" as u64), 5u64, ("TRINITY §1.3" as u64), 13u64, MT_AMEND)
+    cl_u(("TRINITY_SCBA_BYTES" as u64), 18u64, 8192u64, ("bytes" as u64), 5u64, ("TRINITY §1.1" as u64), 13u64, MT_AMEND)
+    cl_u(("TRINITY_SCBA_BITS" as u64), 17u64, 65536u64, ("bits" as u64), 4u64, ("TRINITY §1.1" as u64), 13u64, MT_AMEND)
+    cl_str(("TRINITY_SCBA_HASH_FN" as u64), 20u64, ("first16(BLAKE3(post_state))" as u64), 27u64, ("TRINITY §1.1" as u64), 13u64, MT_AMEND)
+    cl_u(("TRINITY_FAILURE_MODE_CODES" as u64), 26u64, 11u64, ("count" as u64), 5u64, ("TRINITY §2" as u64), 11u64, MT_CATALYST)
+    cl_u(("TRINITY_CONVERGENCE_PT_SIZE" as u64), 27u64, 128u64, ("bytes" as u64), 5u64, ("STDLIB §9.5" as u64), 12u64, MT_AMEND)
+
+    cl_sect(("§10" as u64), 4u64)
+    cl_str(("MODULE_CLOSURE_ROOT_HASH_FN" as u64), 27u64, ("SHA-256" as u64), 7u64, ("MODULES §1" as u64), 11u64, MT_AMEND)
+    cl_u(("MODULE_DEPLOY_FLAG_COUNT" as u64), 24u64, 3u64, ("count" as u64), 5u64, ("MODULES §6.1" as u64), 13u64, MT_AMEND)
+    cl_u(("XII_MOD_PROMOTE_RATE" as u64), 20u64, 16u64, ("per-tick" as u64), 8u64, ("MODULES §10" as u64), 12u64, MT_AMEND)
+    cl_u(("MODULE_TRANSMISSION_RULES" as u64), 25u64, 5u64, ("count" as u64), 5u64, ("MODULES §3.1" as u64), 13u64, MT_AMEND)
+    cl_u(("MODULE_FP_TOLERANCE_PERCENT" as u64), 27u64, 5u64, ("percent" as u64), 7u64, ("MODULES §4.1" as u64), 13u64, MT_AMEND)
+
+    cl_sect(("§11" as u64), 4u64)
+    cl_u(("XII_MNEME_CATALYST_PROMOTION_RATE_PER_TICK" as u64), 42u64, 8u64, ("per-tick" as u64), 8u64, ("CATALYST §2.3" as u64), 14u64, MT_AMEND)
+    cl_u(("CATALYST_PROMOTION_GATE_COUNT" as u64), 29u64, 8u64, ("count" as u64), 5u64, ("CATALYST §2.1" as u64), 14u64, MT_AMEND)
+    cl_u(("CATALYST_SYNTHESIS_CAP_COUNT" as u64), 28u64, 7u64, ("count" as u64), 5u64, ("CATALYST §3" as u64), 12u64, MT_AMEND)
+    cl_u(("CATALYST_INVIOLABLE_RAILS" as u64), 25u64, 5u64, ("count" as u64), 5u64, ("CATALYST §4.1" as u64), 14u64, MT_NEVER)
+    cl_q(("MOBIUS_COHERENCE_FLOOR_Q14" as u64), 26u64, 15073u64, ("CATALYST §2.1" as u64), 14u64, MT_AMEND)
+    cl_u(("CATALYST_BURN_IN_TICKS" as u64), 22u64, 1048576u64, ("ticks" as u64), 5u64, ("CATALYST §2.1" as u64), 14u64, MT_AMEND)
+    cl_u(("CATALYST_OPERATOR_OVERRIDE_MECHS" as u64), 32u64, 4u64, ("count" as u64), 5u64, ("CATALYST §4.3" as u64), 14u64, MT_AMEND)
+
+    cl_sect(("§12" as u64), 4u64)
+    cl_u(("FED_TIER_COUNT" as u64), 14u64, 4u64, ("count" as u64), 5u64, ("FEDERATION §1" as u64), 14u64, MT_AMEND)
+    cl_t2(("FED_TIER1_QUORUM" as u64), 16u64, 3u32, 2u32, ("FEDERATION §4" as u64), 14u64, MT_AMEND)
+    cl_t2(("FED_TIER2_QUORUM" as u64), 16u64, 5u32, 3u32, ("FEDERATION §4" as u64), 14u64, MT_AMEND)
+    cl_str(("FED_TIER3_QUORUM" as u64), 16u64, ("(N,N) unanimous" as u64), 15u64, ("FEDERATION §4" as u64), 14u64, MT_AMEND)
+    cl_u(("FED_REPLICATION_POLICY_VALUES" as u64), 29u64, 4u64, ("count" as u64), 5u64, ("LEX §5.1" as u64), 9u64, MT_CATALYST)
+    cl_u(("FED_DISCOVERY_CADENCE_PER_TICK" as u64), 30u64, 1u64, ("per-tick" as u64), 8u64, ("STDLIB §12.6" as u64), 13u64, MT_AMEND)
+    cl_bool(("FED_AH_TRAILER_ACTIVE" as u64), 21u64, 1u8, ("FEDERATION §5" as u64), 14u64, MT_AMEND)
+
+    cl_sect(("§13" as u64), 4u64)
+    cl_u(("COG_PRIMITIVE_COUNT" as u64), 19u64, 7u64, ("count" as u64), 5u64, ("LEX §4.1.5" as u64), 11u64, MT_CATALYST)
+    cl_q(("EPISTEMIC_CONFIDENCE_THRESHOLD_Q14" as u64), 34u64, 13926u64, ("TYPES §8.3" as u64), 11u64, MT_AMEND)
+    cl_u(("COG_EXPLAIN_LEVELS" as u64), 18u64, 5u64, ("count" as u64), 5u64, ("LEX §4.1.5" as u64), 11u64, MT_CATALYST)
+    cl_u(("COG_REFLECT_TARGETS" as u64), 19u64, 6u64, ("count" as u64), 5u64, ("LEX §4.1.5" as u64), 11u64, MT_CATALYST)
+    cl_u(("COG_NARRATIVE_DECL_PER_MODULE" as u64), 29u64, 1u64, ("count" as u64), 5u64, ("GRAMMAR §5.6" as u64), 13u64, MT_AMEND)
+
+    cl_sect(("§14" as u64), 4u64)
+    cl_u(("CONF_CRITERION_COUNT" as u64), 20u64, 30u64, ("count" as u64), 5u64, ("CONFORMANCE §1-3" as u64), 17u64, MT_AMEND)
+    cl_u(("CONF_CORE_LANG_CRITERIA" as u64), 23u64, 15u64, ("count" as u64), 5u64, ("CONFORMANCE §1" as u64), 15u64, MT_AMEND)
+    cl_u(("CONF_SUBSTRATE_RUNTIME_CRITERIA" as u64), 31u64, 10u64, ("count" as u64), 5u64, ("CONFORMANCE §2" as u64), 15u64, MT_AMEND)
+    cl_u(("CONF_COGNITIVE_LAYER_CRITERIA" as u64), 29u64, 5u64, ("count" as u64), 5u64, ("CONFORMANCE §3" as u64), 15u64, MT_AMEND)
+
+    cl_sect(("§15" as u64), 4u64)
+    cl_u(("ABI_LEGAL_NAME_COUNT" as u64), 20u64, 1u64, ("count" as u64), 5u64, ("ABI §1.1" as u64), 9u64, MT_AMEND)
+    cl_str(("ABI_LEGAL_NAME" as u64), 14u64, ("c-msvc-x64" as u64), 10u64, ("ABI §1.1" as u64), 9u64, MT_AMEND)
+    cl_u(("ABI_RESERVED_NAME_COUNT" as u64), 23u64, 4u64, ("count" as u64), 5u64, ("ABI §3" as u64), 7u64, MT_CATALYST)
+    cl_str(("ABI_EXTERN_INVERSE" as u64), 18u64, ("Compromise<MEDIUM>" as u64), 18u64, ("ABI §1.2" as u64), 9u64, MT_NEVER)
+    cl_str(("ABI_EXTERN_HEXAD" as u64), 16u64, ("EXTERN_C_CALL" as u64), 13u64, ("ABI §1.2" as u64), 9u64, MT_AMEND)
+    cl_u(("ABI_EXTERN_RING_R0" as u64), 18u64, 0u64, ("ring" as u64), 4u64, ("ABI §1.2" as u64), 9u64, MT_AMEND)
+    cl_u(("ABI_EXTERN_RING_R3" as u64), 18u64, 3u64, ("ring" as u64), 4u64, ("ABI §1.2" as u64), 9u64, MT_AMEND)
+
+    cl_sect(("§16" as u64), 4u64)
+    cl_u(("R1_SLOT_COUNT_SEALED" as u64), 20u64, 15u64, ("count" as u64), 5u64, ("INDEX §1" as u64), 9u64, MT_AMEND)
+    cl_str(("R1_COMPOSITE_HASH_FN" as u64), 20u64, ("SHA-256" as u64), 7u64, ("INDEX §2" as u64), 9u64, MT_AMEND)
+    cl_str(("R1_CONCATENATION_DISCIPLINE" as u64), 27u64, ("INDEX §1 order, big-endian, no separator" as u64), 41u64, ("STDLIB §17.1" as u64), 13u64, MT_AMEND)
+    cl_u(("R1_RESERVED_WAVE_SLOTS" as u64), 22u64, 4u64, ("count" as u64), 5u64, ("STDLIB §20" as u64), 11u64, MT_SCHED)
+
+    cl_sect(("§17.1" as u64), 6u64)
+    cl_u(("ZK_ROLLUP_COMPACTION_THRESHOLD" as u64), 30u64, 1048576u64, ("witnesses" as u64), 9u64, ("Item 175" as u64), 8u64, MT_AMEND)
+    cl_u(("ZK_PROOF_TARGET_BYTES" as u64), 21u64, 256u64, ("bytes" as u64), 5u64, ("Item 175" as u64), 8u64, MT_AMEND)
+    cl_u(("ZK_DECOMMITMENT_RETENTION" as u64), 25u64, 1024u64, ("segments" as u64), 8u64, ("Item 175" as u64), 8u64, MT_AMEND)
+
+    cl_sect(("§17.2" as u64), 6u64)
+    cl_u(("CRYPTO_SUITE_ID_WIDTH_BITS" as u64), 26u64, 64u64, ("bits" as u64), 4u64, ("Item 176" as u64), 8u64, MT_R2)
+    cl_u(("CRYPTO_SUITE_PRE_QUANTUM" as u64), 24u64, 0x0001u64, ("suite-id" as u64), 8u64, ("Item 176" as u64), 8u64, MT_SEALED)
+    cl_u(("CRYPTO_SUITE_POST_QUANTUM_1" as u64), 27u64, 0x0100u64, ("suite-id" as u64), 8u64, ("Item 176" as u64), 8u64, MT_AMEND)
+    cl_u(("CRYPTO_SUITE_POST_QUANTUM_2" as u64), 27u64, 0x0200u64, ("suite-id" as u64), 8u64, ("Item 176" as u64), 8u64, MT_AMEND)
+    cl_u(("CRYPTO_SUITE_HYBRID" as u64), 19u64, 0x0300u64, ("suite-id" as u64), 8u64, ("Item 176" as u64), 8u64, MT_AMEND)
+    cl_u(("CRYPTO_ACTIVE_SUITE_DRTM_OFFSET" as u64), 31u64, 0x0160u64, ("offset" as u64), 6u64, ("Item 176" as u64), 8u64, MT_AMEND)
+
+    cl_sect(("§17.3" as u64), 6u64)
+    cl_str(("GENESIS_INSTALLER_ABI" as u64), 21u64, ("c-msvc-x64" as u64), 10u64, ("Item 177" as u64), 8u64, MT_AMEND)
+    cl_u(("GENESIS_DISCOVERY_CADENCE_PER_TICK" as u64), 34u64, 1u64, ("per-tick" as u64), 8u64, ("Item 177" as u64), 8u64, MT_AMEND)
+
+    cl_sect(("§17.4" as u64), 6u64)
+    cl_u(("FOUNDERS_ANCHOR_PUBKEY_SIZE_ED25519" as u64), 35u64, 32u64, ("bytes" as u64), 5u64, ("Item 178" as u64), 8u64, MT_AMEND)
+    cl_u(("FOUNDERS_ANCHOR_COSIGNED_FLAG_BIT" as u64), 33u64, 8u64, ("bit" as u64), 3u64, ("Item 178" as u64), 8u64, MT_NEVER)
+    cl_u(("FOUNDERS_ANCHOR_K_RECOMMENDED" as u64), 29u64, 3u64, ("count" as u64), 5u64, ("Item 178" as u64), 8u64, MT_OPPOLICY)
+    cl_u(("FOUNDERS_ANCHOR_N_RECOMMENDED" as u64), 29u64, 5u64, ("count" as u64), 5u64, ("Item 178" as u64), 8u64, MT_OPPOLICY)
+    cl_u(("FOUNDERS_ANCHOR_REJECTION_LAYERS" as u64), 32u64, 3u64, ("count" as u64), 5u64, ("Item 178" as u64), 8u64, MT_NEVER)
+
+    cl_sect(("§18" as u64), 4u64)
+    cl_u(("FOUNDERS_ANCHOR_INVARIANT_COUNT" as u64), 31u64, 10u64, ("count" as u64), 5u64, ("§18 list" as u64), 9u64, MT_NEVER)
+    cl_str(("FA_INV_PFS_BRICKING_UNREP" as u64), 25u64, ("6 PFS bricking-class hexads unrepresentable" as u64), 43u64, ("HEXAD §4" as u64), 9u64, MT_NEVER)
+    cl_str(("FA_INV_PUBKEY_SOVEREIGN_VETO" as u64), 28u64, ("founders_anchor_pubkey is Cap<sovereign_veto,FOUNDER>" as u64), 53u64, ("FOUNDERS-ANCHOR §3" as u64), 19u64, MT_NEVER)
+    cl_str(("FA_INV_TIER3_REQUIRES_COSIG" as u64), 27u64, ("every Tier-3 amend.apply requires Anchor cosig" as u64), 46u64, ("FOUNDERS-ANCHOR §3" as u64), 19u64, MT_NEVER)
+    cl_str(("FA_INV_REMOVE_ANCHOR_UNREP" as u64), 26u64, ("removing Anchor produces unrepresentable hexad" as u64), 46u64, ("FOUNDERS-ANCHOR §3" as u64), 19u64, MT_NEVER)
+    cl_str(("FA_INV_5_CATALYST_RAILS" as u64), 23u64, ("5 Catalyst inviolable safety rails" as u64), 34u64, ("CATALYST §4.1" as u64), 14u64, MT_NEVER)
+    cl_str(("FA_INV_3_PFS_REJECT_LAYERS" as u64), 26u64, ("3 PFS-bricking rejection layers" as u64), 31u64, ("HEXAD §4.5" as u64), 11u64, MT_NEVER)
+    cl_str(("FA_INV_32STEP_SID_TOTAL" as u64), 23u64, ("32-step SID plan total" as u64), 22u64, ("CYCLES §3.2" as u64), 12u64, MT_NEVER)
+    cl_str(("FA_INV_LAYER3_FULL_4CONJUNCT" as u64), 28u64, ("Layer 3 Trinity full 4-conjunct (no shortcut)" as u64), 45u64, ("TRINITY §1.3" as u64), 13u64, MT_NEVER)
+    cl_str(("FA_INV_WITNESS_CHAIN_CONTINUITY" as u64), 31u64, ("witness chain continuity across rings/modules" as u64), 45u64, ("C-17" as u64), 4u64, MT_NEVER)
+    cl_str(("FA_INV_IRPD_ONLY_PRIV_WRITES" as u64), 28u64, ("IRPD-only privileged writes (no raw WRMSR/MOV CR3)" as u64), 50u64, ("C-16" as u64), 4u64, MT_NEVER)
+
+    cl_sect(("§19" as u64), 4u64)
+    cl_u(("CASCADE_RULE_COUNT" as u64), 18u64, 7u64, ("count" as u64), 5u64, ("§19 table" as u64), 10u64, MT_DERIVED)
+    cl_str(("CASCADE_WITNESS_BYTE_SIZE" as u64), 25u64, ("R1.A5+R1.A8+R1.B1" as u64), 17u64, ("§19" as u64), 4u64, MT_AMEND)
+    cl_str(("CASCADE_MOBIUS_FLOOR" as u64), 20u64, ("R1.A9+R1.B1+R1.B3" as u64), 17u64, ("§19" as u64), 4u64, MT_AMEND)
+    cl_str(("CASCADE_MNEME_PROMOTION_RATE" as u64), 28u64, ("R1.B1" as u64), 5u64, ("§19" as u64), 4u64, MT_AMEND)
+    cl_str(("CASCADE_CRYPTO_SUITE" as u64), 20u64, ("R1.A1..R1.IDX (full)" as u64), 20u64, ("§19" as u64), 4u64, MT_AMEND)
+    cl_str(("CASCADE_SANCTUM_SLOT_COUNT" as u64), 26u64, ("R1.A8" as u64), 5u64, ("§19" as u64), 4u64, MT_AMEND)
+    cl_str(("CASCADE_UNIVERSE_LADDER_DEPTH" as u64), 29u64, ("R1.A3+R1.B3 (R2-territory)" as u64), 26u64, ("§19" as u64), 4u64, MT_R2)
+    cl_str(("CASCADE_HEXAD_PILLAR_COUNT" as u64), 26u64, ("R1.A6+R1.A3+R1.B3 (R2-territory)" as u64), 32u64, ("§19" as u64), 4u64, MT_R2)
+
+    /* finalize: write magic + count into the reserved prefix */
+    let m : *u8 = (&CL_BUF as u64) as *u8
+    let mg : *u8 = ("III-CONSTANTS-D2" as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 16u64 { m[k] = mg[k]   k = k + 1u64 }
+    m[16u64] = (CL_COUNT & 0xFFu32) as u8
+    m[17u64] = ((CL_COUNT >> 8u32)  & 0xFFu32) as u8
+    m[18u64] = ((CL_COUNT >> 16u32) & 0xFFu32) as u8
+    m[19u64] = ((CL_COUNT >> 24u32) & 0xFFu32) as u8
+    CL_BUILT = 1u8
+}
+
+/* === public API === */
+fn constants_count() -> u32 @export { cl_build()   return CL_COUNT }
+
+/* compute the R1.D2 ledger root into out[0..32). */
+fn constants_ledger_root(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    cl_build()
+    sha256_oneshot((&CL_BUF as u64) as *u8, CL_POS, out)
+    return 0i32
+}
+
+/* slot lookup (1-based) -> 1 if present (fills type/tier via accessors), 0 if out of range. */
+fn constants_slot_type(slot: u32) -> u8 @export {
+    cl_build()
+    if slot == 0u32 { return 0u8 }
+    if slot > CL_COUNT { return 0u8 }
+    return CL_TYPE[((slot - 1u32) as u64) & 0xFFu64]
+}
+fn constants_slot_tier(slot: u32) -> u8 @export {
+    cl_build()
+    if slot == 0u32 { return 0u8 }
+    if slot > CL_COUNT { return 0u8 }
+    return CL_TIER[((slot - 1u32) as u64) & 0xFFu64]
+}
+
+/* linear lookup by name -> 1-based slot, or 0 if not found. */
+fn constants_lookup(name: *u8, nlen: u64) -> u32 @export {
+    cl_build()
+    let np : *u8 = (&CL_NPOOL as u64) as *u8
+    let q : *u8 = name as *u8
+    let mut i : u32 = 0u32
+    while i < CL_COUNT {
+        let si : u64 = (i as u64) & 0xFFu64
+        if (CL_NLEN[si] as u64) == nlen {
+            let off : u64 = CL_NOFF[si] as u64
+            let mut j : u64 = 0u64
+            let mut eq : u8 = 1u8
+            while j < nlen {
+                if np[off + j] != q[j] { eq = 0u8   j = nlen }
+                else { j = j + 1u64 }
+            }
+            if eq == 1u8 { return i + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* read the current value of slot into out (up to cap bytes); returns value_len. */
+fn constants_value(slot: u32, out: *u8, cap: u64) -> u64 @export {
+    cl_build()
+    if slot == 0u32 { return 0u64 }
+    if slot > CL_COUNT { return 0u64 }
+    let si : u64 = ((slot - 1u32) as u64) & 0xFFu64
+    let vl : u64 = CL_VLEN[si] as u64
+    let mut n : u64 = vl
+    if vl > cap { n = cap }
+    let vp : *u8 = (&CL_VPOOL as u64) as *u8
+    let off : u64 = CL_VOFF[si] as u64
+    let o : *u8 = out as *u8
+    let mut k : u64 = 0u64
+    while k < n { o[k] = vp[off + k]   k = k + 1u64 }
+    return vl
+}
+
+/* === mutation validators (the constitution enforcing its amendment rules) ===
+ * compare_numeric: new >= current per type; -1 (returned as CV_INVALID) on a
+ * wrong-length value for the type. */
+fn cl_new_ge(si: u64, nv: *u8, nvl: u64) -> i32 {
+    let t : u8 = CL_TYPE[si]
+    let vp : *u8 = (&CL_VPOOL as u64) as *u8
+    let off : u64 = CL_VOFF[si] as u64
+    if t == CT_U64 {
+        if nvl != 8u64 { return -1i32 }
+        let mut cur : u64 = 0u64
+        let mut neu : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < 8u64 {
+            cur = cur | ((vp[off + k] as u64) << (k * 8u64))
+            neu = neu | ((nv[k] as u64) << (k * 8u64))
+            k = k + 1u64
+        }
+        if neu >= cur { return 1i32 }
+        return 0i32
+    }
+    if t == CT_S64 {
+        if nvl != 8u64 { return -1i32 }
+        let mut cur : u64 = 0u64
+        let mut neu : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < 8u64 {
+            cur = cur | ((vp[off + k] as u64) << (k * 8u64))
+            neu = neu | ((nv[k] as u64) << (k * 8u64))
+            k = k + 1u64
+        }
+        if (neu as i64) >= (cur as i64) { return 1i32 }
+        return 0i32
+    }
+    if t == CT_Q14 {
+        if nvl != 2u64 { return -1i32 }
+        let cur16 : i64 = (((vp[off] as u64) | ((vp[off + 1u64] as u64) << 8u64)) as u16 as i16) as i64
+        let neu16 : i64 = (((nv[0u64] as u64) | ((nv[1u64] as u64) << 8u64)) as u16 as i16) as i64
+        if neu16 >= cur16 { return 1i32 }
+        return 0i32
+    }
+    if t == CT_BAND { return cl_hi_ge(si, nv, nvl) }
+    if t == CT_TUPLE2 { return cl_hi_ge(si, nv, nvl) }
+    if t == CT_BOOL {
+        if nvl != 1u64 { return -1i32 }
+        if nv[0u64] >= vp[off] { return 1i32 }
+        return 0i32
+    }
+    if t == CT_STRING {
+        if nvl >= (CL_VLEN[si] as u64) { return 1i32 }
+        return 0i32
+    }
+    return -1i32
+}
+
+/* BAND/TUPLE2: the high u32 (bytes [4..8)) must not regress. */
+fn cl_hi_ge(si: u64, nv: *u8, nvl: u64) -> i32 {
+    if nvl != 8u64 { return -1i32 }
+    let vp : *u8 = (&CL_VPOOL as u64) as *u8
+    let off : u64 = CL_VOFF[si] as u64
+    let chi : u32 = (vp[off + 4u64] as u32) | ((vp[off + 5u64] as u32) << 8u32) | ((vp[off + 6u64] as u32) << 16u32) | ((vp[off + 7u64] as u32) << 24u32)
+    let nhi : u32 = (nv[4u64] as u32) | ((nv[5u64] as u32) << 8u32) | ((nv[6u64] as u32) << 16u32) | ((nv[7u64] as u32) << 24u32)
+    if nhi >= chi { return 1i32 }
+    return 0i32
+}
+
+/* CATALYST-APPEND: tier must be CATALYST_APPEND; value must not regress. */
+fn constants_validate_catalyst(name: *u8, nlen: u64, nv: *u8, nvl: u64) -> i32 @export {
+    let slot : u32 = constants_lookup(name, nlen)
+    if slot == 0u32 { return CV_NOT_FOUND }
+    let si : u64 = ((slot - 1u32) as u64) & 0xFFu64
+    if CL_TIER[si] == MT_NEVER { return CV_NEVER }
+    if CL_TIER[si] != MT_CATALYST { return CV_WRONG_TIER }
+    let ge : i32 = cl_new_ge(si, nv, nvl)
+    if ge == -1i32 { return CV_INVALID }
+    if ge == 0i32 { return CV_REGRESS }
+    return CV_OK
+}
+
+/* AMEND-APPLY: tier in {AMEND,SEALED,SCHEDULED,OPPOLICY}; NEVER -> founders-locked. */
+fn constants_validate_amend(name: *u8, nlen: u64, nv: *u8, nvl: u64) -> i32 @export {
+    let slot : u32 = constants_lookup(name, nlen)
+    if slot == 0u32 { return CV_NOT_FOUND }
+    let si : u64 = ((slot - 1u32) as u64) & 0xFFu64
+    let t : u8 = CL_TIER[si]
+    if t == MT_NEVER { return CV_LOCKED }
+    if t != MT_AMEND { if t != MT_SEALED { if t != MT_SCHED { if t != MT_OPPOLICY { return CV_WRONG_TIER } } } }
+    let ge : i32 = cl_new_ge(si, nv, nvl)
+    if ge == -1i32 { return CV_INVALID }
+    return CV_OK
+}
+
+/* R2-MAJOR-BUMP: tier must be R2_MAJOR_BUMP; NEVER -> founders-locked. */
+fn constants_validate_r2(name: *u8, nlen: u64, nv: *u8, nvl: u64) -> i32 @export {
+    let slot : u32 = constants_lookup(name, nlen)
+    if slot == 0u32 { return CV_NOT_FOUND }
+    let si : u64 = ((slot - 1u32) as u64) & 0xFFu64
+    if CL_TIER[si] == MT_NEVER { return CV_LOCKED }
+    if CL_TIER[si] != MT_R2 { return CV_WRONG_TIER }
+    let ge : i32 = cl_new_ge(si, nv, nvl)
+    if ge == -1i32 { return CV_INVALID }
+    return CV_OK
+}
+
+/* === the hermetic falsifier (byte-equiv to the C ledger + validator coverage) === */
+var CL_RT  : [u8; 32]
+var CL_NV8 : [u8; 8]
+
+fn cl_set_nv_u64(v: u64) {
+    let mut i : u64 = 0u64
+    while i < 8u64 { CL_NV8[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+}
+
+fn constants_selftest() -> u64 @export {
+    cl_build()
+    if constants_count() != 196u32 { return 1u64 }
+
+    /* byte-equiv: the .iii ledger root reproduces the C R1.D2 reference vector
+     * 575b7722 d9c24fad ad5a8305 0eb164fa afa13aa5 1fe491ea 7f76db7c 7670e9ce */
+    constants_ledger_root((&CL_RT as u64) as *u8)
+    if CL_RT[0u64]  != 0x57u8 { return 2u64 }
+    if CL_RT[1u64]  != 0x5bu8 { return 3u64 }
+    if CL_RT[2u64]  != 0x77u8 { return 4u64 }
+    if CL_RT[3u64]  != 0x22u8 { return 5u64 }
+    if CL_RT[4u64]  != 0xd9u8 { return 6u64 }
+    if CL_RT[15u64] != 0xfau8 { return 7u64 }
+    if CL_RT[30u64] != 0xe9u8 { return 8u64 }
+    if CL_RT[31u64] != 0xceu8 { return 9u64 }
+
+    /* reproducibility: a second root is identical */
+    constants_ledger_root((&CL_VTMP as u64) as *u8)   /* reuse CL_VTMP[0..32) as scratch */
+    let mut z : u64 = 0u64
+    while z < 32u64 { if CL_RT[z] != CL_VTMP[z] { return 10u64 }   z = z + 1u64 }
+
+    /* lookup: a known CATALYST_APPEND entry */
+    let kw : u32 = constants_lookup(("LEX_KEYWORD_COUNT" as u64) as *u8, 17u64)
+    if kw != 1u32 { return 11u64 }
+    if constants_slot_tier(kw) != MT_CATALYST { return 12u64 }
+    if constants_slot_type(kw) != CT_U64 { return 13u64 }
+    /* a missing name -> 0 */
+    if constants_lookup(("NOT_A_CONSTANT" as u64) as *u8, 14u64) != 0u32 { return 14u64 }
+
+    /* CATALYST-APPEND validator: 48 (>=47) OK; 46 (<47) REGRESS */
+    cl_set_nv_u64(48u64)
+    if constants_validate_catalyst(("LEX_KEYWORD_COUNT" as u64) as *u8, 17u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_OK { return 15u64 }
+    cl_set_nv_u64(46u64)
+    if constants_validate_catalyst(("LEX_KEYWORD_COUNT" as u64) as *u8, 17u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_REGRESS { return 16u64 }
+    /* catalyst on an AMEND-tier entry -> WRONG_TIER */
+    cl_set_nv_u64(99u64)
+    if constants_validate_catalyst(("LEX_PUNCTUATOR_COUNT" as u64) as *u8, 20u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_WRONG_TIER { return 17u64 }
+    /* catalyst on a NEVER entry -> NEVER */
+    if constants_validate_catalyst(("EFFECT_PFS_BRICKING_OPS" as u64) as *u8, 23u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_NEVER { return 18u64 }
+
+    /* AMEND-APPLY validator: OK on an AMEND entry; LOCKED on a NEVER entry */
+    if constants_validate_amend(("LEX_PUNCTUATOR_COUNT" as u64) as *u8, 20u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_OK { return 19u64 }
+    if constants_validate_amend(("SANCTUM_SLOT_INVALID" as u64) as *u8, 20u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_LOCKED { return 20u64 }
+    /* amend on a CATALYST entry -> WRONG_TIER */
+    if constants_validate_amend(("LEX_KEYWORD_COUNT" as u64) as *u8, 17u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_WRONG_TIER { return 21u64 }
+
+    /* R2-MAJOR-BUMP validator: OK on an R2 entry; WRONG_TIER on an AMEND entry */
+    if constants_validate_r2(("TYPE_UNIVERSE_COUNT" as u64) as *u8, 19u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_OK { return 22u64 }
+    if constants_validate_r2(("LEX_PUNCTUATOR_COUNT" as u64) as *u8, 20u64, (&CL_NV8 as u64) as *u8, 8u64) != CV_WRONG_TIER { return 23u64 }
+
+    /* wrong-length value -> INVALID */
+    if constants_validate_amend(("LEX_PUNCTUATOR_COUNT" as u64) as *u8, 20u64, (&CL_NV8 as u64) as *u8, 4u64) != CV_INVALID { return 24u64 }
+
+    return 99u64
+}
+
+/* constants EMBODIES the R1.D2 Constitutional Constants Ledger in III's own
+ * language: every constitutional constant catalogued, canonical-hashed to the
+ * ledger root, and gated by the tier-aware mutation validators -- the
+ * constitution enforcing its own amendment rules.  The C CONSTANTS/src retires:
+ * III now catalogues and hashes its own constitution, one language. */

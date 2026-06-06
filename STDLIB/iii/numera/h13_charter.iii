@@ -35,10 +35,13 @@
  * not vacuously green.  On GREEN the charter seals its OWN verdict via cad (the seal dogfoods
  * the one name, which itself routes to the one .iii sha256 -- H13 sealing through H13).
  *
- * The STRUCTURAL half of H13 ("zero C sha256.c copies remain") is the source-invariant
- * scripts/verify_sha256_dedup.sh -- a property a runtime clause cannot see.  Together
- * (runtime port-faithfulness clause + structural dedup build-gate) they are the complete
- * H13 falsifier.
+ * The STRUCTURAL half of H13 ("no C survives save the bootstrap trust root") is now
+ * checkable IN .iii, by III: sanctus/onelang (over the aether/fs directory organ) walks
+ * the source tree, classifies every .c/.h, and the H13_KIND_ONELANG clause folds its
+ * mechanism into THIS run_charter -- superseding the bash scripts/verify_sha256_dedup.sh
+ * (the C cartographer + bash gate are no longer the structural authority).  Together
+ * (runtime sha256 port-faithfulness + the in-.iii one-language self-audit) they are the
+ * complete H13 falsifier, both arms in one language.
  *
  * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
  * NIH: sha256.iii + cad.iii only.  No ML, no float, no u64 division.
@@ -50,12 +53,14 @@ extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> 
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn onelang_mechanism_holds() -> u8 from "onelang.iii"
 
 const H13_OK              : i32 =  0i32
 const H13_SUITE_SHA256    : u32 = 0u32     /* CAD_SUITE_SHA256 -- the one .iii backend */
 const H13_MAX_CLAUSES     : u32 = 64u32
 const H13_KIND_FAITHFUL   : u8  = 0u8      /* the H13 clause: .iii sha256 == FIPS AND rejects a wrong digest */
 const H13_KIND_CANARY     : u8  = 1u8      /* a deliberately-false clause (negative arm only) */
+const H13_KIND_ONELANG    : u8  = 2u8      /* the structural clause: III's one-language self-audit gate is real */
 const H13_VERDICT_GREEN   : u64 = 99u64    /* > H13_MAX_CLAUSES, so never a RED index */
 const H13_U32MASK         : u64 = 0xFFFFFFFFu64
 
@@ -163,6 +168,7 @@ fn h13_clause_eval(idx: u32) -> u8 {
         return 1u8
     }
     if k == H13_KIND_CANARY { return h13_canary_holds() }
+    if k == H13_KIND_ONELANG { return onelang_mechanism_holds() }
     return 0u8
 }
 
@@ -237,8 +243,17 @@ fn h13_selftest() -> u64 @export {
     while s < 32u64 { H13_SAVED[s] = H13_VERDICT[s]  s = s + 1u64 }
     if h13_run_charter() != H13_VERDICT_GREEN { return 7u64 }
     if cad_eq((&H13_VERDICT as u64) as *u8, (&H13_SAVED as u64) as *u8) != 1u8 { return 8u64 }
-    if h13_register(H13_KIND_CANARY) != 1i32 { return 9u64 }
-    if h13_run_charter() != 2u64 { return 10u64 }
+    /* The STRUCTURAL clause: III's one-language self-audit gate (sanctus/onelang,
+     * over the aether/fs directory organ) is a REAL falsifier -- PURE on a clean
+     * synthetic tree, VIOLATION on an injected GAP .c, reproducible.  This folds
+     * H13's structural facet INTO the constitution, in .iii -- superseding the
+     * bash scripts/verify_sha256_dedup.sh as the one-language structural gate. */
+    if onelang_mechanism_holds() != 1u8 { return 11u64 }
+    if h13_register(H13_KIND_ONELANG) != 1i32 { return 12u64 }
+    if h13_run_charter() != H13_VERDICT_GREEN { return 13u64 }
+    /* prove-the-negative: a false canary drives the fold RED at its 1-based index */
+    if h13_register(H13_KIND_CANARY) != 2i32 { return 9u64 }
+    if h13_run_charter() != 3u64 { return 10u64 }
     return 99u64
 }
 

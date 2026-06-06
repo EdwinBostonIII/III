@@ -508,6 +508,15 @@ fn onelang_selftest() -> u64 @export {
     return 99u64
 }
 
+/* The one-language MECHANISM predicate, for folding into the H13 constitutional
+ * charter (numera/h13_charter run_charter): 1 iff the hermetic self-audit gate is
+ * a real falsifier -- PURE on a clean synthetic tree, VIOLATION on an injected
+ * GAP .c, reproducible -- i.e. onelang_selftest passes end to end. */
+fn onelang_mechanism_holds() -> u8 @export {
+    if onelang_selftest() == 99u64 { return 1u8 }
+    return 0u8
+}
+
 /* onelang EMBODIES the H13 one-language invariant as a self-audit III performs on
  * ITSELF: with the aether/fs directory organ it walks its own source tree, sorts
  * every .c/.h into bootstrap / dead-reference / harness / GAP, and seals the

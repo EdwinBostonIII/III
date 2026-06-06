@@ -1,0 +1,15 @@
+/* 1126 -- numera/founders_anchor: the R-3 structural veto, ported to .iii (H13).
+ *
+ * fa_selftest exercises the full Anchor surface BY III, IN III: the SHA-256
+ * fingerprint; Ed25519 sign/verify of the Tier-3 amend-apply cosignature
+ * (accept on valid + unanimous, reject on no-quorum, FNDR-VETO-MISSING on a
+ * tampered signature -- the gate is a real falsifier); the drtm-reset directive
+ * (accept exact, reject altered timestamp); the catalyst-halt authority driving
+ * the halt/resume runtime; the §18 un-amendability invariant; and Shamir 2-of-3
+ * custody (split -> reconstruct from two shares round-trips).  The C
+ * FOUNDERS-ANCHOR/src retires to this port.  rc 99 = pass; 1..21 = which step. */
+module corpus_1126
+
+extern @abi(c-msvc-x64) fn fa_selftest() -> u64 from "founders_anchor.iii"
+
+fn main() -> u64 { return fa_selftest() }

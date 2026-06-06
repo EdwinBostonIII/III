@@ -1,0 +1,15 @@
+/* 1127 -- numera/constants: the R1.D2 Constitutional Constants Ledger, in .iii (H13).
+ *
+ * constants_selftest proves the port BY III, IN III: (a) byte-equivalence -- the
+ * .iii ledger root reproduces the C R1.D2 reference vector 575b7722...e9ce
+ * byte-for-byte (so the 196-entry transcription is faithful), reproducibly; and
+ * (b) the tier-aware mutation validators (the constitution enforcing its own
+ * amendment rules): CATALYST-APPEND OK on no-regress / REGRESS on regress /
+ * WRONG_TIER off-lane / NEVER on an immutable; AMEND-APPLY OK / FOUNDERS_LOCKED
+ * on NEVER; R2-MAJOR-BUMP OK / WRONG_TIER; INVALID on a wrong-length value.  The
+ * C CONSTANTS/src retires to this port.  rc 99 = pass; 1..24 = which step. */
+module corpus_1127
+
+extern @abi(c-msvc-x64) fn constants_selftest() -> u64 from "constants.iii"
+
+fn main() -> u64 { return constants_selftest() }

@@ -87,3 +87,19 @@ compiler's lexer/parser; build-excluded) → **RETIRE**. Convergence target: `ga
   discipline, 4-bucket classify, cad-sealed census); corpus **1125**=99 (PURE/ACCOUNTED/VIOLATION +
   injected-GAP falsifier + reproducible seal). `onelang_gate` ran on the real tree (census above).
   Regression: 37/38/687/1124/1125 all =99 after the handle fix.
+- **2026-06-06 · Phase 4a DONE** — retired LEXICON + GRAMMAR (83 files); `dead` 68→0.
+- **2026-06-06 · Phase 4b/c DONE — the two PORTS (port-then-retire, no skips):**
+  - `numera/founders_anchor.iii` — the R-3 veto in `.iii`: Ed25519 sign/verify of the 7 authorities
+    (faithful directive encodings), SHA-256 fingerprint, Shamir GF(2^8) custody (reuses `galois` —
+    same 0x1B poly as the C), invariant, halt/resume runtime. corpus **1126**=99. C `src/` retired;
+    the operator's **key material (`SEALED_OPERATOR_SECRET/`, `*.bin`) PRESERVED** — keys are not code.
+  - `numera/constants.iii` — the R1.D2 Constitutional Constants Ledger in `.iii`: all **196** entries,
+    canonical-hashed to the ledger root, + tier-gated mutation validators. corpus **1127**=99, and the
+    `.iii` root reproduces the C R1.D2 reference **`575b7722…e9ce` byte-for-byte** (the faithfulness
+    oracle; the dead C — its `sha256` dep was retired in M24 — was rebuilt with a self-tested FIPS
+    SHA-256 verifier purely to capture the reference vector, then discarded). C `CONSTANTS/` retired.
+  - `STDLIB/include/iii/stdlib.h` + `test_stdlib.c` (orphaned, no impl) + `INTEGRATION/` (dead test) retired.
+- **2026-06-06 · PURE REACHED** — `onelang_gate` on the retired tree: `files=54 boot=51 harn=3 dead=0
+  gap=0 verdict=0 (PURE)`. The only surviving C is the irreducible bootstrap trust root (`COMPILER/BOOT`
+  + `SANCTUM_WRAP` = 51) + test harness (KATABASIS deploy clients + scratch = 3). **H13 is thorough:
+  III proves its own one-language property, in III, and the verdict is PURE.**

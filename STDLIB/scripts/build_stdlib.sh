@@ -355,6 +355,8 @@ MODULES=(
     "numera/fe25519"
     "numera/ed_scalar_modl"
     "numera/crypt_ed25519"
+    "numera/founders_anchor"
+    "numera/constants"
     "numera/aes"
     "numera/aes_gcm"
     "numera/aes_siv"
@@ -852,6 +854,8 @@ MODULES=(
     "omnia/proof_bisimulation"
     "forcefield/cg_surgical_strike"
     "forcefield/daemon_scythe"
+    "forcefield/scythe_census"
+    "forcefield/sovereign_optimizer"
     # The verification missile on III's LIVE rules: drives the real xii_canonicalise
     # engine over the trit fragment and verifies it against an INDEPENDENT Kleene spec
     # (non-tautological, unlike corpus 670).  Externs only the live XII engine.

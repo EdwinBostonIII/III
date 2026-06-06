@@ -1,0 +1,449 @@
+/* STDLIB/iii/numera/founders_anchor.iii -- the R-3 Founder's-Anchor structural
+ * veto, ported to .iii (H13 one-language; the C FOUNDERS-ANCHOR/src retires here).
+ *
+ * The Anchor is the operator's permanent unilateral veto over Tier-3 amendments --
+ * "the structural Skynet-prevention layer," architecturally binding on every
+ * Wave-0+ implementation (DOCS/III-FOUNDERS-ANCHOR.md).  Until now its runtime
+ * verification lived in C (FOUNDERS-ANCHOR/src/founders_anchor.c); for H13 "one
+ * language" III must verify its own founder's authority in its own language.
+ *
+ * This is a FAITHFUL port of the C: identical Ed25519 directive encodings (the
+ * same domain-prefix bytes + little-endian field layouts), the same SHA-256
+ * fingerprint, and the same Shamir-over-GF(2^8) custody (the C's gf_mul/gf_inv
+ * fold 0x1B -- byte-identical to numera/galois gf8_mul/gf8_inv, reused here so
+ * the two impls cannot diverge).  Crypto is NIH .iii: crypt_ed25519 (RFC 8032,
+ * NIST-KAT-proven), sha256, galois.
+ *
+ * §2 the seven authorities -- each builds a directive and verifies the Anchor's
+ * Ed25519 signature: amend-apply (Tier-3 cosign), drtm-reset, pfs-deny-quote,
+ * witness-inject, catalyst-halt, revoke-promotion (+ resume).  §6 Shamir 3-of-3
+ * key custody (split/reconstruct).  §18 the un-amendability invariant.
+ *
+ * Hexad: kind_origin.  Ring: R-3 (Founder's-Anchor).  K: 1.00.
+ * NIH: crypt_ed25519 + sha256 + galois only.  No ML, no float, no u64 division.
+ * Discipline: flag loops (no break); params -> locals; module-global scratch
+ * (never function-local runtime-indexed); length-explicit literal reads.
+ */
+module numera_founders_anchor
+
+extern @abi(c-msvc-x64) fn ed25519_keypair_from_seed(seed_32: *u8, pubkey_32: *u8, privkey_64: *u8) -> u32 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn gf8_add(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
+
+/* §2 authority ids (mirror iii_anchor_authority_t) */
+const FA_AA_NONE             : u8 = 0u8
+const FA_AA_TIER3_VETO       : u8 = 1u8
+const FA_AA_DRTM_RESET       : u8 = 2u8
+const FA_AA_PFS_DENY_QUOTE   : u8 = 3u8
+const FA_AA_SUITE_SWAP       : u8 = 4u8
+const FA_AA_WITNESS_INJECT   : u8 = 5u8
+const FA_AA_CATALYST_HALT    : u8 = 6u8
+const FA_AA_REVOKE_PROMOTION : u8 = 7u8
+
+/* amend status (mirror iii_anchor_amend_status_t) */
+const FA_AMEND_OK              : i32 = 0i32
+const FA_AMEND_NO_QUORUM       : i32 = 1i32
+const FA_AMEND_VETO_MISSING    : i32 = 2i32
+const FA_AMEND_INVALID         : i32 = 3i32
+
+const FA_SHARES_MAX : u32 = 16u32
+
+/* §1.2 -- the committed Founder's-Anchor public key (Phase XII-zeta Omega12;
+ * the matching seed is operator-held off-repo).  Byte-identical to the C
+ * III_FOUNDERS_ANCHOR_PUBLIC_KEY_DEFAULT. */
+var FA_PUB_DEFAULT : [u8; 32]
+
+/* scratch (single-threaded R-3; deterministic reuse) */
+var FA_DIR    : [u8; 128]    /* directive build buffer (max ~70 bytes) */
+var FA_FP     : [u8; 32]     /* fingerprint scratch */
+var FA_MIX    : [u8; 34]     /* shamir coeff-derivation: secret||i||b */
+var FA_HASH   : [u8; 32]     /* shamir coeff hash */
+var FA_COEFFS : [u8; 16]     /* shamir polynomial coefficients (one secret byte) */
+
+/* §runtime state (module-static; mirrors iii_anchor_runtime) */
+var FA_RT_PUB    : [u8; 32]
+var FA_RT_SET    : u8  = 0u8
+var FA_RT_HALT   : u64 = 0u64    /* 0 = not halted; 0xFFFF..FF = indefinite */
+var FA_RT_WCOUNT : u64 = 0u64
+
+fn fa_init_default_pub() {
+    FA_PUB_DEFAULT[0u64]  = 0x20u8   FA_PUB_DEFAULT[1u64]  = 0xbdu8
+    FA_PUB_DEFAULT[2u64]  = 0xf0u8   FA_PUB_DEFAULT[3u64]  = 0xd4u8
+    FA_PUB_DEFAULT[4u64]  = 0x16u8   FA_PUB_DEFAULT[5u64]  = 0xceu8
+    FA_PUB_DEFAULT[6u64]  = 0x03u8   FA_PUB_DEFAULT[7u64]  = 0x5au8
+    FA_PUB_DEFAULT[8u64]  = 0xcbu8   FA_PUB_DEFAULT[9u64]  = 0x57u8
+    FA_PUB_DEFAULT[10u64] = 0x34u8   FA_PUB_DEFAULT[11u64] = 0x92u8
+    FA_PUB_DEFAULT[12u64] = 0x3eu8   FA_PUB_DEFAULT[13u64] = 0x82u8
+    FA_PUB_DEFAULT[14u64] = 0x20u8   FA_PUB_DEFAULT[15u64] = 0x21u8
+    FA_PUB_DEFAULT[16u64] = 0x0cu8   FA_PUB_DEFAULT[17u64] = 0x6bu8
+    FA_PUB_DEFAULT[18u64] = 0x05u8   FA_PUB_DEFAULT[19u64] = 0x96u8
+    FA_PUB_DEFAULT[20u64] = 0x19u8   FA_PUB_DEFAULT[21u64] = 0x22u8
+    FA_PUB_DEFAULT[22u64] = 0xfcu8   FA_PUB_DEFAULT[23u64] = 0xd4u8
+    FA_PUB_DEFAULT[24u64] = 0xb0u8   FA_PUB_DEFAULT[25u64] = 0x52u8
+    FA_PUB_DEFAULT[26u64] = 0x83u8   FA_PUB_DEFAULT[27u64] = 0x1bu8
+    FA_PUB_DEFAULT[28u64] = 0xb1u8   FA_PUB_DEFAULT[29u64] = 0xd0u8
+    FA_PUB_DEFAULT[30u64] = 0xc2u8   FA_PUB_DEFAULT[31u64] = 0x1du8
+}
+
+/* === byte primitives === */
+
+/* FA_DIR[off..off+n) <- literal/byte-array src[0..n) (length-explicit). */
+fn fa_dir_put(off: u64, src_addr: u64, n: u64) {
+    let d : *u8 = (&FA_DIR as u64) as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[off + i] = s[i]   i = i + 1u64 }
+}
+
+/* FA_DIR[off..off+8) <- v little-endian. */
+fn fa_dir_u64(off: u64, v: u64) {
+    FA_DIR[off]        = (v & 0xFFu64) as u8
+    FA_DIR[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    FA_DIR[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    FA_DIR[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    FA_DIR[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    FA_DIR[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    FA_DIR[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    FA_DIR[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+}
+
+/* FA_DIR[off..off+4) <- v little-endian. */
+fn fa_dir_u32(off: u64, v: u32) {
+    FA_DIR[off]        = (v & 0xFFu32) as u8
+    FA_DIR[off + 1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    FA_DIR[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    FA_DIR[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+}
+
+/* === §1 identity === */
+
+/* fingerprint = SHA-256(public_key[32]) -> out[32]. */
+fn fa_fingerprint(pubkey: *u8, out: *u8) -> i32 @export {
+    if (pubkey as u64) == 0u64 { return -1i32 }
+    if (out as u64) == 0u64 { return -1i32 }
+    sha256_oneshot(pubkey, 32u64, out)
+    return 0i32
+}
+
+/* === §2 sign / verify === */
+
+/* Sign `directive[0..dlen)` with the Anchor seed -> sig_out[64].  1 on success. */
+fn fa_sign(seed: *u8, pk: *u8, directive: *u8, dlen: u64, sig_out: *u8) -> u8 @export {
+    return ed25519_sign(seed, pk, directive, dlen, sig_out)
+}
+
+/* Verify `directive[0..dlen)` against the Anchor pubkey.  1 = valid. */
+fn fa_verify(pubkey: *u8, directive: *u8, dlen: u64, sig: *u8) -> u8 @export {
+    return ed25519_verify(pubkey, directive, dlen, sig)
+}
+
+/* === §2.1..§2.7 the seven authorities (build directive, verify Anchor sig) === */
+
+/* §2.1 Tier-3 amendment cosignature.  directive = target_mhash[32] || new_value_mhash[32].
+ * Returns OK / NO_QUORUM / VETO_MISSING / INVALID (mirrors iii_anchor_amend_apply). */
+fn fa_amend_apply(pubkey: *u8, target_mhash: *u8, newval_mhash: *u8, fed_unanimous: u8, sig: *u8) -> i32 @export {
+    if (pubkey as u64) == 0u64 { return FA_AMEND_INVALID }
+    if (sig as u64) == 0u64 { return FA_AMEND_INVALID }
+    if fed_unanimous != 1u8 { return FA_AMEND_NO_QUORUM }
+    fa_dir_put(0u64,  target_mhash as u64, 32u64)
+    fa_dir_put(32u64, newval_mhash as u64, 32u64)
+    if fa_verify(pubkey, (&FA_DIR as u64) as *u8, 64u64, sig) != 1u8 { return FA_AMEND_VETO_MISSING }
+    return FA_AMEND_OK
+}
+
+/* §2.2 DRTM reset: "III-FOUNDERS-DRTM-RESET-V1"(26) || nonce[32] || ts(8 LE) || reason(4 LE). */
+fn fa_drtm_reset_verify(pubkey: *u8, nonce: *u8, timestamp: u64, reason_code: u32, sig: *u8) -> u8 @export {
+    fa_dir_put(0u64, ("III-FOUNDERS-DRTM-RESET-V1" as u64), 26u64)
+    fa_dir_put(26u64, nonce as u64, 32u64)
+    fa_dir_u64(58u64, timestamp)
+    fa_dir_u32(66u64, reason_code)
+    return fa_verify(pubkey, (&FA_DIR as u64) as *u8, 70u64, sig)
+}
+
+/* §2.3 PFS deny: "III-FOUNDERS-PFS-DENY-V1"(24) || kind(1) || id(8 LE) || reason(1). */
+fn fa_pfs_deny_verify(pubkey: *u8, target_kind: u8, target_id: u64, reason: u8, sig: *u8) -> u8 @export {
+    fa_dir_put(0u64, ("III-FOUNDERS-PFS-DENY-V1" as u64), 24u64)
+    FA_DIR[24u64] = target_kind
+    fa_dir_u64(25u64, target_id)
+    FA_DIR[33u64] = reason
+    return fa_verify(pubkey, (&FA_DIR as u64) as *u8, 34u64, sig)
+}
+
+/* §2.5 witness inject: cycle_kind(2 LE) || payload_mhash[32] || ts(8 LE) || flags(4 LE). */
+fn fa_witness_inject_verify(pubkey: *u8, cycle_kind: u32, payload_mhash: *u8, timestamp: u64, flags: u32, sig: *u8) -> u8 @export {
+    FA_DIR[0u64] = (cycle_kind & 0xFFu32) as u8
+    FA_DIR[1u64] = ((cycle_kind >> 8u32) & 0xFFu32) as u8
+    fa_dir_put(2u64, payload_mhash as u64, 32u64)
+    fa_dir_u64(34u64, timestamp)
+    fa_dir_u32(42u64, flags)
+    return fa_verify(pubkey, (&FA_DIR as u64) as *u8, 46u64, sig)
+}
+
+/* §2.6 catalyst halt: "III-FOUNDERS-CATALYST-HALT-V1"(29) || halt_until(8 LE). */
+fn fa_catalyst_halt_verify(pubkey: *u8, halt_until: u64, sig: *u8) -> u8 @export {
+    fa_dir_put(0u64, ("III-FOUNDERS-CATALYST-HALT-V1" as u64), 29u64)
+    fa_dir_u64(29u64, halt_until)
+    return fa_verify(pubkey, (&FA_DIR as u64) as *u8, 37u64, sig)
+}
+
+/* §2.7 revoke: "III-FOUNDERS-REVOKE-V1"(22) || promotion_id(8 LE) || cascade(1). */
+fn fa_revoke_verify(pubkey: *u8, promotion_id: u64, cascade: u8, sig: *u8) -> u8 @export {
+    fa_dir_put(0u64, ("III-FOUNDERS-REVOKE-V1" as u64), 22u64)
+    fa_dir_u64(22u64, promotion_id)
+    FA_DIR[30u64] = cascade
+    return fa_verify(pubkey, (&FA_DIR as u64) as *u8, 31u64, sig)
+}
+
+/* === §18 the un-amendability invariant === */
+
+/* 1 (holds) iff NO forbidden self-modification is attempted (mirror
+ * iii_anchor_invariant_holds: pubkey/fingerprint/amend-req/pfk/synth-substitute). */
+fn fa_invariant_holds(mod_pubkey: u8, mod_fp: u8, rm_amend_req: u8, disable_pfk: u8, synth_sub: u8) -> u8 @export {
+    if mod_pubkey != 0u8 { return 0u8 }
+    if mod_fp != 0u8 { return 0u8 }
+    if rm_amend_req != 0u8 { return 0u8 }
+    if disable_pfk != 0u8 { return 0u8 }
+    if synth_sub != 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* === §6 Shamir over GF(2^8) (custody; same poly 0x1B as the C, via galois) === */
+
+/* Split secret[32] into `total` shares (threshold-of-total).  out_shares is
+ * total*33 bytes: each share = index(1) || bytes(32).  Coefficients are
+ * deterministic: coeff[i] = SHA-256(secret || i || b)[0] (matches the C). 1 ok. */
+fn fa_shamir_split(secret: *u8, total: u32, threshold: u32, out_shares: *u8) -> u8 @export {
+    if (secret as u64) == 0u64 { return 0u8 }
+    if (out_shares as u64) == 0u64 { return 0u8 }
+    if threshold == 0u32 { return 0u8 }
+    if threshold > total { return 0u8 }
+    if total > FA_SHARES_MAX { return 0u8 }
+    let os : *u8 = out_shares as *u8
+    let sec : *u8 = secret as *u8
+    /* write share indices (1..total) at each share's byte 0 */
+    let mut s : u32 = 0u32
+    while s < total {
+        let so : u64 = (s as u64) * 33u64
+        os[so] = (s + 1u32) as u8
+        s = s + 1u32
+    }
+    /* for each secret byte b, build the polynomial and evaluate at each x */
+    let mut b : u64 = 0u64
+    while b < 32u64 {
+        FA_COEFFS[0u64] = sec[b]
+        /* coeff[1..threshold) = sha256(secret || i || b)[0] */
+        let mut i : u32 = 1u32
+        while i < threshold {
+            let mut k : u64 = 0u64
+            while k < 32u64 { FA_MIX[k] = sec[k]   k = k + 1u64 }
+            FA_MIX[32u64] = i as u8
+            FA_MIX[33u64] = b as u8
+            sha256_oneshot((&FA_MIX as u64) as *u8, 34u64, (&FA_HASH as u64) as *u8)
+            FA_COEFFS[i as u64] = FA_HASH[0u64]
+            i = i + 1u32
+        }
+        /* evaluate poly at x = (share index) for each share (Horner over GF(2^8)) */
+        let mut sh : u32 = 0u32
+        while sh < total {
+            let x : u32 = sh + 1u32
+            let mut y : u32 = FA_COEFFS[(threshold - 1u32) as u64] as u32
+            let mut jj : u32 = threshold - 1u32
+            while jj > 0u32 {
+                jj = jj - 1u32
+                let mul : u32 = gf8_mul(y, x)
+                y = gf8_add(mul, FA_COEFFS[jj as u64] as u32)
+            }
+            let so : u64 = (sh as u64) * 33u64
+            os[so + 1u64 + b] = (y & 0xFFu32) as u8
+            sh = sh + 1u32
+        }
+        b = b + 1u64
+    }
+    return 1u8
+}
+
+/* Reconstruct secret[32] from `count` shares (Lagrange at x=0 over GF(2^8)).
+ * shares is count*33 bytes (index || 32). 1 ok. */
+fn fa_shamir_reconstruct(shares: *u8, count: u32, secret_out: *u8) -> u8 @export {
+    if (shares as u64) == 0u64 { return 0u8 }
+    if (secret_out as u64) == 0u64 { return 0u8 }
+    if count == 0u32 { return 0u8 }
+    if count > FA_SHARES_MAX { return 0u8 }
+    let sh : *u8 = shares as *u8
+    let out : *u8 = secret_out as *u8
+    let mut b : u64 = 0u64
+    while b < 32u64 {
+        let mut result : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < count {
+            let xi : u32 = sh[(i as u64) * 33u64] as u32
+            let mut num : u32 = 1u32
+            let mut den : u32 = 1u32
+            let mut j : u32 = 0u32
+            while j < count {
+                if j != i {
+                    let xj : u32 = sh[(j as u64) * 33u64] as u32
+                    num = gf8_mul(num, xj)
+                    den = gf8_mul(den, gf8_add(xi, xj))
+                }
+                j = j + 1u32
+            }
+            if den == 0u32 { return 0u8 }
+            let lagrange : u32 = gf8_mul(num, gf8_inv(den))
+            let yi : u32 = sh[(i as u64) * 33u64 + 1u64 + b] as u32
+            result = gf8_add(result, gf8_mul(yi, lagrange))
+            i = i + 1u32
+        }
+        out[b] = (result & 0xFFu32) as u8
+        b = b + 1u64
+    }
+    return 1u8
+}
+
+/* === §runtime (module-static; halt/resume + witness count) === */
+
+fn fa_runtime_init(pubkey: *u8) -> i32 @export {
+    let p : *u8 = pubkey as *u8
+    let mut i : u64 = 0u64
+    if (p as u64) == 0u64 {
+        fa_init_default_pub()
+        while i < 32u64 { FA_RT_PUB[i] = FA_PUB_DEFAULT[i]   i = i + 1u64 }
+    }
+    if (p as u64) != 0u64 {
+        while i < 32u64 { FA_RT_PUB[i] = p[i]   i = i + 1u64 }
+    }
+    FA_RT_HALT = 0u64
+    FA_RT_WCOUNT = 0u64
+    FA_RT_SET = 1u8
+    return 0i32
+}
+
+fn fa_runtime_is_halted(now: u64) -> u8 @export {
+    if FA_RT_HALT == 0u64 { return 0u8 }
+    if FA_RT_HALT == 0xFFFFFFFFFFFFFFFFu64 { return 1u8 }
+    if now < FA_RT_HALT { return 1u8 }
+    return 0u8
+}
+
+fn fa_runtime_apply_halt(halt_until: u64, sig: *u8) -> u8 @export {
+    if FA_RT_SET != 1u8 { return 0u8 }
+    if fa_catalyst_halt_verify((&FA_RT_PUB as u64) as *u8, halt_until, sig) != 1u8 { return 0u8 }
+    FA_RT_HALT = halt_until
+    FA_RT_WCOUNT = FA_RT_WCOUNT + 1u64
+    return 1u8
+}
+
+fn fa_runtime_resume(sig: *u8) -> u8 @export {
+    if FA_RT_SET != 1u8 { return 0u8 }
+    /* resume directive = "III-FOUNDERS-CATALYST-RESUME-V1" (31 bytes) */
+    fa_dir_put(0u64, ("III-FOUNDERS-CATALYST-RESUME-V1" as u64), 31u64)
+    if fa_verify((&FA_RT_PUB as u64) as *u8, (&FA_DIR as u64) as *u8, 31u64, sig) != 1u8 { return 0u8 }
+    FA_RT_HALT = 0u64
+    FA_RT_WCOUNT = FA_RT_WCOUNT + 1u64
+    return 1u8
+}
+
+fn fa_runtime_witness_count() -> u64 @export { return FA_RT_WCOUNT }
+
+fn fa_default_pubkey(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    fa_init_default_pub()
+    let mut i : u64 = 0u64
+    while i < 32u64 { out[i] = FA_PUB_DEFAULT[i]   i = i + 1u64 }
+    return 0i32
+}
+
+/* === the hermetic falsifier === */
+
+var FA_SEED  : [u8; 32]
+var FA_PK    : [u8; 32]
+var FA_SK64  : [u8; 64]
+var FA_SIG   : [u8; 64]
+var FA_M1    : [u8; 32]
+var FA_M2    : [u8; 32]
+var FA_NONCE : [u8; 32]
+var FA_SECRET: [u8; 32]
+var FA_SHARES: [u8; 99]   /* 3 shares * 33 bytes */
+var FA_REC   : [u8; 32]
+
+fn fa_selftest() -> u64 @export {
+    /* a deterministic test keypair (seed = 0x01 repeated; NOT the real Anchor) */
+    let mut i : u64 = 0u64
+    while i < 32u64 { FA_SEED[i] = 0x01u8   i = i + 1u64 }
+    if ed25519_keypair_from_seed((&FA_SEED as u64) as *u8, (&FA_PK as u64) as *u8, (&FA_SK64 as u64) as *u8) != 0u32 { return 1u64 }
+
+    /* fingerprint = sha256(pubkey); recompute must reproduce */
+    fa_fingerprint((&FA_PK as u64) as *u8, (&FA_FP as u64) as *u8)
+    sha256_oneshot((&FA_PK as u64) as *u8, 32u64, (&FA_HASH as u64) as *u8)
+    let mut j : u64 = 0u64
+    while j < 32u64 { if FA_FP[j] != FA_HASH[j] { return 2u64 }   j = j + 1u64 }
+
+    /* §2.1 amend-apply: build the cosign directive, sign it, expect OK */
+    let mut k : u64 = 0u64
+    while k < 32u64 { FA_M1[k] = (0xA0u64 + k) as u8   FA_M2[k] = (0x50u64 + k) as u8   k = k + 1u64 }
+    fa_dir_put(0u64, (&FA_M1 as u64), 32u64)
+    fa_dir_put(32u64, (&FA_M2 as u64), 32u64)
+    fa_sign((&FA_SEED as u64) as *u8, (&FA_PK as u64) as *u8, (&FA_DIR as u64) as *u8, 64u64, (&FA_SIG as u64) as *u8)
+    if fa_amend_apply((&FA_PK as u64) as *u8, (&FA_M1 as u64) as *u8, (&FA_M2 as u64) as *u8, 1u8, (&FA_SIG as u64) as *u8) != FA_AMEND_OK { return 3u64 }
+    /* no quorum -> rejected without even checking the sig */
+    if fa_amend_apply((&FA_PK as u64) as *u8, (&FA_M1 as u64) as *u8, (&FA_M2 as u64) as *u8, 0u8, (&FA_SIG as u64) as *u8) != FA_AMEND_NO_QUORUM { return 4u64 }
+    /* tamper the signature -> VETO_MISSING (the gate is real, not vacuous) */
+    FA_SIG[0u64] = FA_SIG[0u64] ^ 0x01u8
+    if fa_amend_apply((&FA_PK as u64) as *u8, (&FA_M1 as u64) as *u8, (&FA_M2 as u64) as *u8, 1u8, (&FA_SIG as u64) as *u8) != FA_AMEND_VETO_MISSING { return 5u64 }
+    FA_SIG[0u64] = FA_SIG[0u64] ^ 0x01u8   /* restore */
+
+    /* §2.2 drtm-reset: sign the exact directive, verify accept; tamper reject */
+    let mut n : u64 = 0u64
+    while n < 32u64 { FA_NONCE[n] = (0x11u64 + n) as u8   n = n + 1u64 }
+    fa_drtm_reset_verify((&FA_PK as u64) as *u8, (&FA_NONCE as u64) as *u8, 0x0102030405060708u64, 0x11223344u32, (&FA_SIG as u64) as *u8)  /* builds FA_DIR */
+    fa_sign((&FA_SEED as u64) as *u8, (&FA_PK as u64) as *u8, (&FA_DIR as u64) as *u8, 70u64, (&FA_SIG as u64) as *u8)
+    if fa_drtm_reset_verify((&FA_PK as u64) as *u8, (&FA_NONCE as u64) as *u8, 0x0102030405060708u64, 0x11223344u32, (&FA_SIG as u64) as *u8) != 1u8 { return 6u64 }
+    if fa_drtm_reset_verify((&FA_PK as u64) as *u8, (&FA_NONCE as u64) as *u8, 0x0102030405060709u64, 0x11223344u32, (&FA_SIG as u64) as *u8) != 0u8 { return 7u64 }
+
+    /* §2.6 catalyst-halt + runtime (sign halt, apply, is-halted, resume) */
+    fa_runtime_init((&FA_PK as u64) as *u8)
+    fa_catalyst_halt_verify((&FA_PK as u64) as *u8, 1000u64, (&FA_SIG as u64) as *u8)  /* builds FA_DIR */
+    fa_sign((&FA_SEED as u64) as *u8, (&FA_PK as u64) as *u8, (&FA_DIR as u64) as *u8, 37u64, (&FA_SIG as u64) as *u8)
+    if fa_runtime_apply_halt(1000u64, (&FA_SIG as u64) as *u8) != 1u8 { return 8u64 }
+    if fa_runtime_is_halted(500u64) != 1u8 { return 9u64 }
+    if fa_runtime_is_halted(1500u64) != 0u8 { return 10u64 }
+    /* resume */
+    fa_dir_put(0u64, ("III-FOUNDERS-CATALYST-RESUME-V1" as u64), 31u64)
+    fa_sign((&FA_SEED as u64) as *u8, (&FA_PK as u64) as *u8, (&FA_DIR as u64) as *u8, 31u64, (&FA_SIG as u64) as *u8)
+    if fa_runtime_resume((&FA_SIG as u64) as *u8) != 1u8 { return 11u64 }
+    if fa_runtime_is_halted(500u64) != 0u8 { return 12u64 }
+    if fa_runtime_witness_count() != 2u64 { return 13u64 }
+
+    /* §18 invariant: clean holds; any forbidden self-mod fails */
+    if fa_invariant_holds(0u8, 0u8, 0u8, 0u8, 0u8) != 1u8 { return 14u64 }
+    if fa_invariant_holds(1u8, 0u8, 0u8, 0u8, 0u8) != 0u8 { return 15u64 }
+    if fa_invariant_holds(0u8, 0u8, 0u8, 1u8, 0u8) != 0u8 { return 16u64 }
+
+    /* §6 Shamir 2-of-3: split, reconstruct from shares 0+2, round-trip */
+    let mut q : u64 = 0u64
+    while q < 32u64 { FA_SECRET[q] = (0x7Au64 + q) as u8   q = q + 1u64 }
+    if fa_shamir_split((&FA_SECRET as u64) as *u8, 3u32, 2u32, (&FA_SHARES as u64) as *u8) != 1u8 { return 17u64 }
+    /* reconstruct from shares 0 and 2 (drop the middle) -> compact into FA_SHARES[0..66) */
+    let mut t : u64 = 0u64
+    while t < 33u64 { FA_SHARES[33u64 + t] = FA_SHARES[66u64 + t]   t = t + 1u64 }
+    if fa_shamir_reconstruct((&FA_SHARES as u64) as *u8, 2u32, (&FA_REC as u64) as *u8) != 1u8 { return 18u64 }
+    let mut r : u64 = 0u64
+    while r < 32u64 { if FA_REC[r] != FA_SECRET[r] { return 19u64 }   r = r + 1u64 }
+
+    /* default pubkey accessor reproduces the committed Anchor key */
+    fa_default_pubkey((&FA_HASH as u64) as *u8)
+    if FA_HASH[0u64] != 0x20u8 { return 20u64 }
+    if FA_HASH[31u64] != 0x1du8 { return 21u64 }
+
+    return 99u64
+}
+
+/* founders_anchor EMBODIES the R-3 structural veto in III's own language: the
+ * Anchor's Ed25519 authority over the seven Tier-3 actions, its SHA-256
+ * fingerprint, its Shamir-over-GF(2^8) custody, and its un-amendability
+ * invariant -- all verified BY III, IN III.  The C FOUNDERS-ANCHOR/src retires:
+ * III now guards its own founder, one language. */

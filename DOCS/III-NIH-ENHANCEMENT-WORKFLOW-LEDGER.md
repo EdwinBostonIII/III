@@ -135,9 +135,19 @@ and slipped past, a latent greenwash. FOUND + FIXED in `lzss` (its KAT failure c
 (its negative arm). Audited all other landed modules: they compare STATUS codes by EQUALITY (`!= OK`),
 which is safe. Rule going forward: never `i32 < 0`/`>= 0` — use the sign bit (`(x as u32) >> 31`).
 
-**Aggregate-wiring `1221–1223` (hamming/gf_poly/rscode_ec) IN FLIGHT (full build+corpus). Queued next:
-`1224_lzss` + `1225_cas_blob`** (one more full build, same surgical pattern). Then all 11 modules are
-committed corpus citizens.
+| 10 | **crt** — Chinese Remainder Theorem (Garner). Multi-modular / RSA-CRT foundation. NIH u64/i64, product-overflow guarded. | C | `crt_kat`=**99**: 300 random reconstructions over coprime subsets, each re-verified `x≡rᵢ mod mᵢ`; non-coprime rejected. | committed |
+| 11 | **bitio** — MSB-first bit reader/writer. Substrate for entropy coding / DEFLATE. NIH, no externs. | C | `bitio_kat`=**99**: bit round-trip identity, 50 random sequences + 64-bit edges. | committed |
+| 12 | **elias** — Elias γ/δ universal integer codes. **HARMONY**: first consumer of `bitio`. | C | `elias_kat`=**99**: delimiter-free stream round-trip (prefix-free), 200 values + edges, δ≤γ. | committed |
+| 13 | **base32** — RFC 4648 binary↔text codec. Identifiers/TOTP/DNS-safe. NIH, no externs. | C | `base32_kat`=**99**: RFC vector (foobar→MZXW6YTBOI) + 200 round-trips + invalid-char rejected. | committed |
+
+**AGGREGATE INTEGRATION:** `1217–1220` committed corpus citizens (822/0). `1221–1223` validated `825/0`
+and IN FLIGHT for the surgical commit. `1224_lzss`/`1225_cas_blob`/`1226_crt` wired + validating in the
+SAME final build now. Queued next batch: `1227_bitio` + `1228_elias` + `1229_base32`.
+
+**Compression track emerging:** `lzss` (LZ77) + `bitio` (bit substrate) + `elias` (universal codes) →
+the pieces for a verified Huffman/DEFLATE-class compressor (next focused capstone). Crypto/coding/storage
+track: full Reed-Solomon (erasure + error-correct) + `erasure_store` + `shamir` + `threshold_vault` +
+`cas_blob` + `hamming` + `gf_poly` + `crt` — a complete resilient-data substrate.
 
 **NEXT candidates (disjoint, self-checkable, bold):** rateless/fountain codes; CRT/Garner; further
 harmony capstones tying the resilient-data layer to III's witness/content-address spine. Kernel/optimizer

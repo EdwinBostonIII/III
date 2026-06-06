@@ -1,0 +1,14 @@
+/* 1220_threshold_vault.iii -- verified threshold-recoverable, loss-tolerant, tamper-evident
+ * encrypted vault. Drives numera::threshold_vault::tv_kat: 99 = EXHAUSTIVE over the PRODUCT of both
+ * loss spaces -- every C(6,3)=20 ciphertext-shard quorum x every C(4,2)=6 guardian quorum = 120
+ * combinations recover the blob EXACTLY + 2 short-quorum negatives REJECTED + tamper-evidence.
+ * The CAPSTONE HARMONY: chacha20 x erasure_store(=rscode+keccak256+merkle) x shamir. */
+module corpus_1220
+
+extern @abi(c-msvc-x64) fn tv_kat() -> u64 from "threshold_vault.iii"
+
+fn main() -> u64 {
+    let r : u64 = tv_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,13 @@
+/* 1219_shamir.iii -- verified (k,n) threshold secret sharing over GF(2^8).
+ * Drives numera::shamir::shamir_kat: 99 = EXACT recovery over ALL C(5,3)=10 quorums + too-few
+ * REJECTED + SECRECY demonstrated (the same k-1 shares are consistent with two distinct secrets).
+ * Foundational for M-of-N governance; built on III's own numera::galois. */
+module corpus_1219
+
+extern @abi(c-msvc-x64) fn shamir_kat() -> u64 from "shamir.iii"
+
+fn main() -> u64 {
+    let r : u64 = shamir_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

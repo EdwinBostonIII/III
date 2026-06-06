@@ -1,0 +1,14 @@
+/* 1218_erasure_store.iii -- verified erasure-coded, content-addressed, tamper-evident storage.
+ * Drives numera::erasure_store::es_kat: 99 = systematic + every shard self-authenticates by its
+ * keccak256 content address + Merkle root non-vacuous & deterministic + ALL C(7,3)=35 three-shard
+ * losses of RS(7,4) reconstruct the blob EXACTLY + tamper REJECTED + too-few REJECTED + regenerating
+ * single-shard repair (byte-exact). HARMONY of numera rscode + keccak256 + merkle. */
+module corpus_1218
+
+extern @abi(c-msvc-x64) fn es_kat() -> u64 from "erasure_store.iii"
+
+fn main() -> u64 {
+    let r : u64 = es_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

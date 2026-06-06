@@ -1,0 +1,14 @@
+/* 1217_rscode.iii -- verified Reed-Solomon erasure coding (MDS RS(n,k) over GF(2^8)).
+ * Drives numera::rscode::rscode_kat: 99 = EXHAUSTIVE all C(10,4)=210 four-erasure patterns of
+ * RS(10,6) reconstruct EXACTLY + systematic property + over-determined + RS(16,10) + invert-once/
+ * apply-many + 2 rejected negatives (m<k -> RS_E_FEW; repeated row -> rank-deficient -> RS_E_SING).
+ * Built on III's own numera::galois (module harmony). */
+module corpus_1217
+
+extern @abi(c-msvc-x64) fn rscode_kat() -> u64 from "rscode.iii"
+
+fn main() -> u64 {
+    let r : u64 = rscode_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

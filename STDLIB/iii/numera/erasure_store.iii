@@ -68,6 +68,7 @@ var ES_SCA    : [u8; 32]     /* scratch content address (verify)           */
 var ES_BLOB   : [u8; 1024]
 var ES_PIDX   : [u8; 16]
 var ES_ROOT2  : [u8; 32]
+var ES_RPR    : [u8; 64]     /* repaired-shard scratch */
 
 fn es_n() -> u32 @export { return ES_PN[0u32] }
 fn es_k() -> u32 @export { return ES_PN[1u32] }
@@ -174,6 +175,32 @@ fn es_reconstruct(present_idx_ptr: u64, m_present: u32) -> i32 @export {
             ES_RECON[d * slen + off] = ES_DIN[d]
             d = d + 1u32
         }
+        off = off + 1u32
+    }
+    return ES_OK
+}
+
+/* REGENERATING REPAIR: rebuild a single lost shard from any m_present>=k survivors, byte-exact,
+ * without exposing the blob to the caller -- recover the data shards, then re-encode ONLY the lost
+ * shard's column at each offset. out_ptr receives shard_len bytes. ES_OK / ES_E_FEW / ES_E_DIM. */
+fn es_repair_shard(lost_idx: u32, present_idx_ptr: u64, m_present: u32, out_ptr: u64) -> i32 @export {
+    let n : u32 = ES_PN[0u32]
+    let k : u32 = ES_PN[1u32]
+    let slen : u32 = ES_PN[2u32]
+    if lost_idx >= n { return ES_E_DIM }
+    if m_present < k { return ES_E_FEW }
+    let op : *u8 = out_ptr as *u8
+    let rc : i32 = es_reconstruct(present_idx_ptr, m_present)   /* data shards -> ES_RECON */
+    if rc != ES_OK { return rc }
+    let mut off : u32 = 0u32
+    while off < slen {
+        let mut d : u32 = 0u32
+        while d < k {
+            ES_DIN[d] = ES_RECON[d * slen + off]
+            d = d + 1u32
+        }
+        if rs_encode(&ES_DIN as u64, &ES_DOUT as u64) != 0i32 { return ES_E_RS }
+        op[off as u64] = ES_DOUT[lost_idx]
         off = off + 1u32
     }
     return ES_OK
@@ -290,6 +317,18 @@ fn es_kat() -> u64 @export {
     ES_PIDX[1u32] = 1u8
     ES_PIDX[2u32] = 2u8
     if es_reconstruct(&ES_PIDX as u64, k - 1u32) != ES_E_FEW { return 11u64 }
+
+    /* (7) REGENERATING REPAIR: rebuild lost shard 5 from k survivors {0,1,2,3}, byte-exact */
+    ES_PIDX[0u32] = 0u8
+    ES_PIDX[1u32] = 1u8
+    ES_PIDX[2u32] = 2u8
+    ES_PIDX[3u32] = 3u8
+    if es_repair_shard(5u32, &ES_PIDX as u64, k, &ES_RPR as u64) != ES_OK { return 12u64 }
+    let mut rp : u32 = 0u32
+    while rp < slen {
+        if ES_RPR[rp] != ES_SHARDS[5u32 * slen + rp] { return 13u64 }
+        rp = rp + 1u32
+    }
 
     return 99u64
 }

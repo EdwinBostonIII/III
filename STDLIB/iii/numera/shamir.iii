@@ -1,0 +1,296 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\shamir.iii
+ *
+ * III STDLIB - numera::shamir
+ *
+ * Shamir (k,n) THRESHOLD SECRET SHARING over GF(2^8) -- the foundational primitive for
+ * M-of-N governance (e.g. a constitution amendable only by a qualified founder quorum;
+ * see numera::founders_anchor). A secret of arbitrary length is split into n shares such
+ * that ANY k shares reconstruct it EXACTLY, while FEWER than k shares reveal NOTHING about
+ * it (information-theoretic secrecy -- the k-1 shares are consistent with every possible
+ * secret).
+ *
+ * NIH / harmony: built on III's own numera::galois GF(2^8) (gf8_mul / gf8_inv); GF addition
+ * is XOR (the field definition), inlined. The byte-wise GF(256) construction is the standard
+ * one (each secret byte is the constant term of an independent degree-(k-1) polynomial; share
+ * i at offset o is P_o(x_i) for distinct nonzero x_i = i+1; reconstruction is Lagrange
+ * interpolation at x = 0). Coefficients above the constant term are caller-supplied entropy
+ * (this module is PURE: no in-tree RNG -- the caller owns the randomness source).
+ *
+ * Lagrange-at-0 weights depend only on the present x-coordinates, so they are computed ONCE
+ * per present set and applied per byte offset (invert-once / apply-many -- the same shape as
+ * numera::rscode and the right one for multi-byte secrets).
+ *
+ * All working buffers are MODULE-GLOBAL (runtime-indexed). Caps: n <= SH_MAX_N, k <= SH_MAX_K,
+ * secret length <= SH_MAX_SLEN.
+ *
+ * Public API:
+ *   shamir_split(secret_ptr, slen, k, n, coeff_ptr, shares_out, xs_out) -> i32
+ *       coeff_ptr supplies slen*(k-1) entropy bytes (offset-major: coeff[o*(k-1)+(j-1)] is the
+ *       degree-j coefficient for byte o). shares_out = n*slen bytes (share-major); xs_out = n
+ *       bytes (the x-coordinates 1..n).
+ *   shamir_reconstruct(shares_ptr, xs_ptr, k, m_present, slen, secret_out) -> i32
+ *       shares_ptr = m_present*slen bytes (the present shares, share-major) in the same order
+ *       as xs_ptr (their x-coordinates). Uses the first k. SH_OK / SH_E_FEW / SH_E_DIM.
+ *   gf8_lagrange_eval(xs_ptr, ys_ptr, k, eval_x) -> u32
+ *       value at eval_x of the unique degree-(k-1) GF(2^8) polynomial through (xs[j], ys[j]).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_shamir
+
+extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
+
+const SH_MAX_N    : u32 = 16u32
+const SH_MAX_K    : u32 = 16u32
+const SH_MAX_SLEN : u32 = 64u32
+
+const SH_OK    : i32 =  0i32
+const SH_E_DIM : i32 = -1i32     /* bad (k,n) / slen over cap / x out of range */
+const SH_E_FEW : i32 = -2i32     /* fewer than k shares supplied               */
+
+var SH_W  : [u8; 16]     /* Lagrange-at-0 weights for the current present set */
+var SH_C  : [u8; 16]     /* per-offset polynomial coefficients (constant..deg) */
+
+/* P(x) over GF(2^8) by Horner from SH_C[0..deg] (SH_C[0] = constant term). */
+fn sh_poly_eval(deg: u32, x: u32) -> u32 {
+    let mut acc : u32 = SH_C[deg] as u32
+    let mut i : u32 = deg
+    while i > 0u32 {
+        i = i - 1u32
+        acc = gf8_mul(acc, x) ^ (SH_C[i] as u32)
+    }
+    return acc
+}
+
+fn shamir_split(secret_ptr: u64, slen: u32, k: u32, n: u32, coeff_ptr: u64, shares_out: u64, xs_out: u64) -> i32 @export {
+    if k < 1u32 { return SH_E_DIM }
+    if n < k { return SH_E_DIM }
+    if n > SH_MAX_N { return SH_E_DIM }
+    if k > SH_MAX_K { return SH_E_DIM }
+    if slen > SH_MAX_SLEN { return SH_E_DIM }
+    let sp : *u8 = secret_ptr as *u8
+    let cp : *u8 = coeff_ptr as *u8
+    let shp : *u8 = shares_out as *u8
+    let xp : *u8 = xs_out as *u8
+
+    /* x-coordinates 1..n (distinct, nonzero; secret lives at x = 0) */
+    let mut xi : u32 = 0u32
+    while xi < n {
+        xp[xi as u64] = (xi + 1u32) as u8
+        xi = xi + 1u32
+    }
+
+    let deg : u32 = k - 1u32
+    let mut o : u32 = 0u32
+    while o < slen {
+        /* poly for byte o: constant term = secret[o]; higher coeffs = caller entropy */
+        SH_C[0u32] = sp[o as u64]
+        let mut j : u32 = 1u32
+        while j < k {
+            SH_C[j] = cp[(o * deg + (j - 1u32)) as u64]
+            j = j + 1u32
+        }
+        let mut i : u32 = 0u32
+        while i < n {
+            let xv : u32 = (i + 1u32)
+            shp[(i * slen + o) as u64] = sh_poly_eval(deg, xv) as u8
+            i = i + 1u32
+        }
+        o = o + 1u32
+    }
+    return SH_OK
+}
+
+/* Lagrange-at-0 weights L_j for k present x-coordinates xs[0..k-1]:
+ *   L_j = prod_{m != j} x_m / (x_j XOR x_m)   (over GF(2^8); -x = x, subtraction = XOR).
+ * Secret = sum_j L_j * y_j. Depends only on the x-coords -> computed once per present set. */
+fn sh_weights0(xp: *u8, k: u32) -> i32 {
+    let mut j : u32 = 0u32
+    while j < k {
+        let xj : u32 = xp[j as u64] as u32
+        let mut num : u32 = 1u32
+        let mut den : u32 = 1u32
+        let mut m : u32 = 0u32
+        while m < k {
+            if m != j {
+                let xm : u32 = xp[m as u64] as u32
+                num = gf8_mul(num, xm)
+                den = gf8_mul(den, xj ^ xm)
+            }
+            m = m + 1u32
+        }
+        SH_W[j] = gf8_mul(num, gf8_inv(den)) as u8
+        j = j + 1u32
+    }
+    return SH_OK
+}
+
+fn shamir_reconstruct(shares_ptr: u64, xs_ptr: u64, k: u32, m_present: u32, slen: u32, secret_out: u64) -> i32 @export {
+    if k < 1u32 { return SH_E_DIM }
+    if k > SH_MAX_K { return SH_E_DIM }
+    if slen > SH_MAX_SLEN { return SH_E_DIM }
+    if m_present < k { return SH_E_FEW }
+    let shp : *u8 = shares_ptr as *u8
+    let xp : *u8 = xs_ptr as *u8
+    let op : *u8 = secret_out as *u8
+    sh_weights0(xp, k)
+    let mut o : u32 = 0u32
+    while o < slen {
+        let mut acc : u32 = 0u32
+        let mut j : u32 = 0u32
+        while j < k {
+            let y : u32 = shp[(j * slen + o) as u64] as u32
+            acc = acc ^ gf8_mul(SH_W[j] as u32, y)
+            j = j + 1u32
+        }
+        op[o as u64] = acc as u8
+        o = o + 1u32
+    }
+    return SH_OK
+}
+
+/* General Lagrange: value at eval_x of the degree-(k-1) poly through (xs[j], ys[j]). Used to
+ * DEMONSTRATE secrecy (the same k-1 shares are consistent with distinct secrets). */
+fn gf8_lagrange_eval(xs_ptr: u64, ys_ptr: u64, k: u32, eval_x: u32) -> u32 @export {
+    let xp : *u8 = xs_ptr as *u8
+    let yp : *u8 = ys_ptr as *u8
+    let mut acc : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < k {
+        let xj : u32 = xp[j as u64] as u32
+        let yj : u32 = yp[j as u64] as u32
+        let mut num : u32 = 1u32
+        let mut den : u32 = 1u32
+        let mut m : u32 = 0u32
+        while m < k {
+            if m != j {
+                let xm : u32 = xp[m as u64] as u32
+                num = gf8_mul(num, eval_x ^ xm)
+                den = gf8_mul(den, xj ^ xm)
+            }
+            m = m + 1u32
+        }
+        let lj : u32 = gf8_mul(num, gf8_inv(den))
+        acc = acc ^ gf8_mul(lj, yj)
+        j = j + 1u32
+    }
+    return acc
+}
+
+/* KAT scratch */
+var SH_SECRET : [u8; 64]
+var SH_COEFF  : [u8; 960]      /* SH_MAX_SLEN * (SH_MAX_K-1) = 64*15 */
+var SH_SHARES : [u8; 1024]     /* SH_MAX_N * SH_MAX_SLEN */
+var SH_XS     : [u8; 16]
+var SH_REC    : [u8; 64]
+var SH_PSH    : [u8; 1024]     /* gathered present shares */
+var SH_PXS    : [u8; 16]
+var SH_DXS    : [u8; 3]        /* secrecy-demo interpolation x-coords (0,x0,x1) */
+var SH_DYA    : [u8; 3]        /* secrecy-demo y for secret A */
+var SH_DYB    : [u8; 3]        /* secrecy-demo y for secret B */
+
+fn sh_popcount(x: u32) -> u32 {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 { c = c + (v & 1u32) ; v = v >> 1u32 }
+    return c
+}
+
+/* =====================================================================================
+ * shamir_kat -- 99 = the full threshold claim, self-checked (no external oracle):
+ *   (1) EXACT recovery: EVERY k-of-n share set (all C(5,3)=10) reconstructs the secret EXACTLY;
+ *   (2) NEGATIVE too-few: < k shares are refused (SH_E_FEW);
+ *   (3) SECRECY: the SAME k-1 shares are consistent with TWO DISTINCT secrets -- the unique
+ *       degree-(k-1) polynomials through {(0,A), shares} and {(0,B), shares} agree on the
+ *       shares yet differ elsewhere (and at 0), so k-1 shares determine nothing.
+ * ===================================================================================== */
+fn shamir_kat() -> u64 @export {
+    let slen : u32 = 8u32
+    let k : u32 = 3u32
+    let n : u32 = 5u32
+    let deg : u32 = k - 1u32
+
+    /* secret + deterministic "entropy" coefficients */
+    let mut f : u32 = 0u32
+    while f < slen {
+        SH_SECRET[f] = ((f * 73u32 + 29u32) & 0xFFu32) as u8
+        f = f + 1u32
+    }
+    let mut g : u32 = 0u32
+    while g < slen * deg {
+        SH_COEFF[g] = ((g * 101u32 + 13u32) & 0xFFu32) as u8
+        g = g + 1u32
+    }
+
+    if shamir_split(&SH_SECRET as u64, slen, k, n, &SH_COEFF as u64, &SH_SHARES as u64, &SH_XS as u64) != SH_OK { return 1u64 }
+
+    /* (1) EXACT recovery over every C(5,3)=10 quorum */
+    let lim : u32 = 1u32 << n
+    let mut tested : u64 = 0u64
+    let mut mask : u32 = 0u32
+    while mask < lim {
+        if sh_popcount(mask) == k {
+            /* gather the k shares whose bit is set, with their x-coords */
+            let mut cnt : u32 = 0u32
+            let mut i : u32 = 0u32
+            while i < n {
+                if ((mask >> i) & 1u32) == 1u32 {
+                    if cnt < k {
+                        SH_PXS[cnt] = SH_XS[i]
+                        let mut o : u32 = 0u32
+                        while o < slen {
+                            SH_PSH[cnt * slen + o] = SH_SHARES[i * slen + o]
+                            o = o + 1u32
+                        }
+                        cnt = cnt + 1u32
+                    }
+                }
+                i = i + 1u32
+            }
+            if cnt != k { return 2u64 }
+            if shamir_reconstruct(&SH_PSH as u64, &SH_PXS as u64, k, k, slen, &SH_REC as u64) != SH_OK { return 2000u64 + tested }
+            let mut c : u32 = 0u32
+            while c < slen {
+                if SH_REC[c] != SH_SECRET[c] { return 3000u64 + tested }
+                c = c + 1u32
+            }
+            tested = tested + 1u64
+        }
+        mask = mask + 1u32
+    }
+    if tested != 10u64 { return 3u64 }   /* C(5,3) = 10 */
+
+    /* (2) NEGATIVE: fewer than k shares refused */
+    if shamir_reconstruct(&SH_PSH as u64, &SH_PXS as u64, k, k - 1u32, slen, &SH_REC as u64) != SH_E_FEW { return 4u64 }
+
+    /* (3) SECRECY: two distinct secrets A,B are BOTH consistent with the same k-1 shares.
+     * Use byte offset 0, shares at x = SH_XS[0], SH_XS[1] (values SH_SHARES[0*slen], [1*slen]).
+     * Interpolate the unique degree-(k-1)=2 poly through {(0,A),(x0,y0),(x1,y1)} and the same
+     * with B; both pass through (x0,y0),(x1,y1); evaluate each at a THIRD point x2 -- they must
+     * DIFFER (genuine remaining freedom) -- and at 0 must return A resp. B. */
+    let x0 : u8 = SH_XS[0u32]
+    let x1 : u8 = SH_XS[1u32]
+    let y0 : u8 = SH_SHARES[0u32]            /* share 0, offset 0 */
+    let y1 : u8 = SH_SHARES[1u32 * slen]     /* share 1, offset 0 */
+    let secA : u8 = 0x11u8
+    let secB : u8 = 0xE7u8                     /* != secA */
+    SH_DXS[0u32] = 0u8 ; SH_DXS[1u32] = x0 ; SH_DXS[2u32] = x1
+    SH_DYA[0u32] = secA ; SH_DYA[1u32] = y0 ; SH_DYA[2u32] = y1
+    SH_DYB[0u32] = secB ; SH_DYB[1u32] = y0 ; SH_DYB[2u32] = y1
+    /* both interpolations reproduce the secret at x=0 (sanity) */
+    if gf8_lagrange_eval(&SH_DXS as u64, &SH_DYA as u64, k, 0u32) != (secA as u32) { return 5u64 }
+    if gf8_lagrange_eval(&SH_DXS as u64, &SH_DYB as u64, k, 0u32) != (secB as u32) { return 6u64 }
+    /* both agree on the two known shares (consistency) */
+    if gf8_lagrange_eval(&SH_DXS as u64, &SH_DYA as u64, k, x0 as u32) != (y0 as u32) { return 7u64 }
+    if gf8_lagrange_eval(&SH_DXS as u64, &SH_DYB as u64, k, x0 as u32) != (y0 as u32) { return 8u64 }
+    if gf8_lagrange_eval(&SH_DXS as u64, &SH_DYA as u64, k, x1 as u32) != (y1 as u32) { return 9u64 }
+    if gf8_lagrange_eval(&SH_DXS as u64, &SH_DYB as u64, k, x1 as u32) != (y1 as u32) { return 10u64 }
+    /* yet they DIFFER at a third x-coordinate -> the k-1 shares leave genuine freedom (no leak) */
+    let x2 : u32 = SH_XS[2u32] as u32
+    let va : u32 = gf8_lagrange_eval(&SH_DXS as u64, &SH_DYA as u64, k, x2)
+    let vb : u32 = gf8_lagrange_eval(&SH_DXS as u64, &SH_DYB as u64, k, x2)
+    if va == vb { return 11u64 }
+
+    return 99u64
+}

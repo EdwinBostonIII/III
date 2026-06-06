@@ -197,6 +197,7 @@ fn iii_cg_r0_sha_snapshot_c(out32: u64) -> u32 { cgsha_snapshot(&R0_SHA as u64, 
 
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_tc_expr_is_u64(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
 extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
 
 /* Tier-2 Inc-1: module-level data decl accessors (GAP-5), copied verbatim from cg_r3. */
@@ -851,35 +852,10 @@ fn r0_expr_is_u32(node: u32) -> u32 {
     return 0u32
 }
 
-fn r0_tref_is_u64(tn: u32) -> u32 {
-    if tn == 0u32 { return 0u32 }
-    if iii_ast_node_kind(R0_G_AST, tn) != R0_K_TYPE_REF { return 0u32 }
-    let len: u32 = iii_ast_type_ref_name_len(R0_G_AST, tn)
-    if len != 3u32 { return 0u32 }
-    let off: u32 = iii_ast_type_ref_name_off(R0_G_AST, tn)
-    let src: u64 = iii_ast_source_buf(R0_G_AST)
-    if iii_emit_memcmp_c(src + (off as u64), &R0_TY_U64 as u64, 3u64) == 0i32 { return 1u32 }
-    return 0u32
-}
-
-fn r0_expr_is_u64(node: u32) -> u32 {
-    if node == 0u32 { return 0u32 }
-    let nk: u32 = iii_ast_node_kind(R0_G_AST, node)
-    if nk == R0_K_EXPR_PAREN { return r0_expr_is_u64(iii_ast_paren_inner(R0_G_AST, node)) }
-    if nk == R0_K_EXPR_CAST { return r0_tref_is_u64(iii_ast_cast_target_type(R0_G_AST, node)) }
-    if nk == R0_K_EXPR_BINARY { return r0_expr_is_u64(iii_ast_binary_lhs(R0_G_AST, node)) }
-    if nk == R0_K_EXPR_UNARY { return r0_expr_is_u64(iii_ast_unary_operand(R0_G_AST, node)) }
-    if nk == R0_K_EXPR_IDENT {
-        let bid: u32 = iii_ast_node_binder_id(R0_G_AST, node)
-        if bid == 0u32 { return 0u32 }
-        let bk: u32 = iii_ast_node_kind(R0_G_AST, bid)
-        if bk == R0_K_STMT_LET { return r0_tref_is_u64(iii_ast_let_type(R0_G_AST, bid)) }
-        if bk == R0_K_PARAM { return r0_tref_is_u64(iii_ast_param_type(R0_G_AST, bid)) }
-        if bk == R0_K_VAR_DECL { return r0_tref_is_u64(iii_ast_var_decl_type(R0_G_AST, bid)) }
-        if bk == R0_K_CONST_DECL { return r0_tref_is_u64(iii_ast_const_decl_type(R0_G_AST, bid)) }
-    }
-    return 0u32
-}
+/* R2 (cg_typeclass.iii): the per-backend u64 walk is now the ONE shared resolver. cg_r0's policy is
+   "unsigned setcc iff operand class is u64/usize" (8-byte-uniform: only u64/usize clean values carry
+   bit 63). Replaces the former r0_tref_is_u64 + r0_expr_is_u64 (folded into iii_tc_expr_is_u64). */
+fn r0_expr_is_u64(node: u32) -> u32 { return iii_tc_expr_is_u64(R0_G_AST, node) }
 
 /* Ordering-compare signedness: emit UNSIGNED setcc iff either operand is provably u64 -- the only type
    whose clean values can carry bit 63 (exceed i64-max). u32/u8/u16 clean values are < 2^63 so the signed

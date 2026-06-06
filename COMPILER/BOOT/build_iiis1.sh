@@ -62,7 +62,7 @@ DO_CLEAN=0
 
 # TUs ported from C to .iii.  Each entry maps "name.c" -> compile name.iii
 # via iiis-0 instead of gcc.  Keep this list LC_ALL=C sorted.
-PORTED_TUS=( acc affine_audit ast ceiling cg_r0 cg_r3 cg_rm1 cg_rm2 cg_sha emit emit_sanctum hexad_check jit_emit lex lex_rt link main parse proof sema sid witness_alloc )
+PORTED_TUS=( acc affine_audit ast ceiling cg_r0 cg_r3 cg_rm1 cg_rm2 cg_sha cg_typeclass emit emit_sanctum hexad_check jit_emit lex lex_rt link main parse proof sema sid witness_alloc )
 
 usage() {
     cat <<'EOF' >&2

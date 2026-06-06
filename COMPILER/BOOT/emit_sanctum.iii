@@ -185,6 +185,7 @@ fn sv_fwrite_c(out_handle: u64, addr: u64, n: u64) -> i32 {
 
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_tc_expr_is_u64(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
 extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_write_u8_c(addr: u64, val: u32) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_write_u32_be_c(addr: u64, val: u32) -> u32 from "emit_accessors.c"
@@ -567,34 +568,10 @@ fn emit_movabs_rcx(v: u64) -> u32 { cg_emit_arr(&SV_STR_MOVABSQ_OPEN as u64,SV_S
 fn emit_load_slot(slot: u32, reg: u64, regn: u64) -> u32 { cg_emit_arr(&SV_STR_DASH_OPEN as u64,SV_STR_DASH_OPEN_LEN); cg_emit_dec(((slot+1u32)*8u32) as u64); cg_emit_arr(&SV_STR_PCT_RBP_NL as u64,6u64); cg_emit_arr(&SV_STR_COMMA_SP as u64,SV_STR_COMMA_SP_LEN); cg_emit_ch(37u32); cg_emit_bytes(reg,regn); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); return SV_OK }
 fn emit_store_rax_slot(slot: u32) -> u32 { cg_emit_arr(&SV_STR_MOVQRAX_DASH as u64,SV_STR_MOVQRAX_DASH_LEN); cg_emit_dec(((slot+1u32)*8u32) as u64); cg_emit_arr(&SV_STR_BPCMA_RAX as u64,6u64); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); return SV_OK }   /* [codegen] emit 6 = "(%rbp)" + NL (was 13 -> dangling ", %rax" 3-operand movq -- invalid; mirrors the emit_store_rcx_slot fix) */
 fn emit_store_rcx_slot(slot: u32) -> u32 { cg_emit_arr(&SV_STR_MOVQ_PCT as u64,SV_STR_MOVQ_PCT_LEN); cg_emit_arr(&SV_REG_RCX as u64,SV_REG_RCX_LEN); cg_emit_arr(&SV_STR_COMMA_SP as u64,SV_STR_COMMA_SP_LEN); cg_emit_ch(45u32); cg_emit_dec(((slot+1u32)*8u32) as u64); cg_emit_arr(&SV_STR_BPCMA_RCX as u64,6u64); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); return SV_OK }   /* [codegen] emit 6 = "(%rbp)" (was 7 -> dangling comma "(%rbp)," from the load-tail const -> invalid store) */
-fn sv_tref_is_u64(tn: u32) -> u32 {
-    if tn == 0u32 { return 0u32 }
-    if iii_ast_node_kind(SV_G_AST, tn) != SV_K_TYPE_REF { return 0u32 }
-    let len: u32 = iii_ast_type_ref_name_len(SV_G_AST, tn)
-    if len != 3u32 { return 0u32 }
-    let off: u32 = iii_ast_type_ref_name_off(SV_G_AST, tn)
-    let src: u64 = iii_ast_source_buf(SV_G_AST)
-    if iii_emit_memcmp_c(src + (off as u64), &SV_TY_U64 as u64, 3u64) == 0i32 { return 1u32 }
-    return 0u32
-}
-fn sv_expr_is_u64(node: u32) -> u32 {
-    if node == 0u32 { return 0u32 }
-    let nk: u32 = iii_ast_node_kind(SV_G_AST, node)
-    if nk == SV_K_EXPR_PAREN { return sv_expr_is_u64(iii_ast_paren_inner(SV_G_AST, node)) }
-    if nk == SV_K_EXPR_CAST { return sv_tref_is_u64(iii_ast_cast_target_type(SV_G_AST, node)) }
-    if nk == SV_K_EXPR_BINARY { return sv_expr_is_u64(iii_ast_binary_lhs(SV_G_AST, node)) }
-    if nk == SV_K_EXPR_UNARY { return sv_expr_is_u64(iii_ast_unary_operand(SV_G_AST, node)) }
-    if nk == SV_K_EXPR_IDENT {
-        let bid: u32 = iii_ast_node_binder_id(SV_G_AST, node)
-        if bid == 0u32 { return 0u32 }
-        let bk: u32 = iii_ast_node_kind(SV_G_AST, bid)
-        if bk == SV_K_STMT_LET { return sv_tref_is_u64(iii_ast_let_type(SV_G_AST, bid)) }
-        if bk == SV_K_PARAM { return sv_tref_is_u64(iii_ast_param_type(SV_G_AST, bid)) }
-        if bk == SV_K_VAR_DECL { return sv_tref_is_u64(iii_ast_var_decl_type(SV_G_AST, bid)) }
-        if bk == SV_K_CONST_DECL { return sv_tref_is_u64(iii_ast_const_decl_type(SV_G_AST, bid)) }
-    }
-    return 0u32
-}
+/* R2 (cg_typeclass.iii): the sanctum u64 walk is now the ONE shared resolver -- emit_sanctum's policy
+   matches cg_r0's (8-byte-uniform sanctum: unsigned setcc iff operand class is u64/usize). Replaces the
+   former sv_tref_is_u64 + sv_expr_is_u64 (the reseal-b copy that the review flagged as drift-prone). */
+fn sv_expr_is_u64(node: u32) -> u32 { return iii_tc_expr_is_u64(SV_G_AST, node) }
 /* emit UNSIGNED setcc iff either operand is provably u64 (the only type whose clean values carry bit 63);
    u32/u8/u16 clean values are < 2^63 so signed setcc is already correct, and signed i* keeps signed setcc.
    Unknown -> 0 (signed, the prior behavior): only ever FIXES u64 ordering, never regresses signed/u32. */

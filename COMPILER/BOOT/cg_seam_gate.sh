@@ -62,6 +62,12 @@ sp ord_u64_bit63  'fn probe()->u32 @export { let a:u64=0x8000000000000001u64  le
 sp ord_u64_lt63   'fn probe()->u32 @export { let a:u64=0x8000000000000001u64  let b:u64=2u64  if a < b { return 1u32 }  return 99u32 }'
 sp ord_i64_neg    'fn probe()->u32 @export { let a:i64=0i64-1i64  let b:i64=2i64  if a > b { return 1u32 }  return 99u32 }'
 sp ord_u32_bit31  'fn probe()->u32 @export { let a:u32=0x80000001u32  let b:u32=2u32  if a > b { return 99u32 }  return 1u32 }'
+# R2 (cg_typeclass shared resolver): a u64 ordering whose operand is a TYPED BINARY with an unclassifiable
+# literal lhs but a u64 rhs. The OLD cg_r0 r0_expr_is_u64 walked BINARY->lhs ONLY (literal -> unknown ->
+# signed setcc -> 0x8..01 > 2 FALSE -> 1); cg_r3 already ordered unsigned (-> 99). The shared lhs-ELSE-rhs
+# resolver classifies via the u64 rhs -> unsigned on cg_r0 too (== cg_r3). Prove-the-negative: this probe
+# REDDENS the seam gate on the pre-R2 compiler and PASSES post-R2.
+sp ord_u64_binop_lhs 'fn probe()->u32 @export { let a:u64=0x8000000000000001u64  let b:u64=2u64  if (0u64 + a) > (0u64 + b) { return 99u32 }  return 1u32 }'
 # Narrowing-cast truncation: K3 fixed cg_r0's EXPR_CAST pass-through -> it now truncates sub-word targets
 # like cg_r3 (`456 as u8` = 200, not 456). Gated as RAW cross-backend differential (return the cast result,
 # no semantic assertion -- the gate asserts only cg_r0 == cg_r3, not which value is "right").

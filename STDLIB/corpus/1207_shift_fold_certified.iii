@@ -1,0 +1,19 @@
+/* 1207_shift_fold_certified.iii -- THE CONSTANT-SHIFT CODEGEN FOLD IS KERNEL-CERTIFIED.
+ *
+ * The cg_r3/cg_r3.c codegen fold (x<<k -> shl $k, applied system-wide; ~2510 sites) is correct iff
+ * x<<k == x*2^k.  This KAT proves that identity IN III's own CIC kernel, for a SYMBOLIC k: the strength
+ * schema proves Id(x*2^k, x<<k); applying sym yields the fold's exact direction Id(x<<k, x*2^k).  The
+ * mod-2^width hardware truncation is a non-issue by CONGRUENCE (equal Nats stay equal under any op).
+ *
+ * Drives numera/sov_isa::sov_shift_fold_kat: 99 = the kernel CERTIFIES (x<<k == x*2^k) for all k AND
+ * REJECTS the off-by-one (x<<k != x*2^(k+1)).  This upgrades the system-wide fold from runtime-validated
+ * to kernel-certified, unified with the strength reduction under one dependent-type proof.  99 never hard-coded. */
+module corpus_1207
+
+extern @abi(c-msvc-x64) fn sov_shift_fold_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_shift_fold_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

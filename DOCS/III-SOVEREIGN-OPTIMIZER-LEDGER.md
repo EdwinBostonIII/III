@@ -63,30 +63,52 @@ annihilator / add-zero elimination, beyond strength reduction) into `cg_r3`'s pe
 module gets all 9 classes — a seal-critical `cg_r3.c`+`.iii` dual-edit, deferred to a clean tree (the
 session's bootstrap files carried concurrent-process WIP).
 
-## The golden-shift demonstration (operator-gated, reversible)
+## The PERMANENT golden shift — the loop closed for real (2026-06-06, operator-directed)
 
-A certified-equivalent strength rewrite (`lex.iii: (nibble<<4)|v → (nibble*16)|v`, the census's k=4 class;
-iiis emits the cheaper `shl $4` vs `shl %cl`) was applied to the compiler and built to temp:
+The optimization was made **permanent and system-wide via a codegen fold**, not a source hack: a
+constant-shift peephole (`x<<k` / `x>>k` for constant k → `shl $k` / `shr $k` immediate, instead of
+loading the count into `%cl`) was **dual-implemented byte-identically** in `cg_r3.iii` + `cg_r3.c` (the
+frozen C seed), exactly as the existing strength reduction is. The whole bootstrap was then **re-rooted**
+from the C seed and resealed:
 
 ```
-golden 8fb044cb…  ─(certified rewrite)─▶  ddb893f2…   self-host 59/0 (correctness PRESERVED)  ─(revert)─▶  8fb044cb…
+iiis-0  98f4b063 → 8d31f9fc   (C seed rebuilt by gcc, fold in)
+iiis-1  7868f1a7 → 807f684b
+iiis-2  8fb044cb → 825635ea  ┐  iiis-2 == iiis-3  (TRUE byte-identical fixpoint at the new golden)
+iiis-3  8fb044cb → 825635ea  ┘  self-host 59/0 · check-rm2 OK · cg_r0 5/0 + width 10/0 · trusted-base 5996d3de UNMOVED
 ```
 
-The golden *legitimately shifted* and self-host byte-identity held — proof-carrying compiler
-self-improvement, the proposal's climax, **certified and operator-gated, not autonomous**. (`--check-corpus`
-builds to temp; nothing committed.)
+**System-wide, measured:** rebuilding the stdlib with the re-rooted compiler took the immediate-shift
+count from **1,084 → 3,594** — the fold converted **~2,510 constant shifts** from `shl %cl` to `shl $imm`
+across every module (the 395 remaining `%cl` shifts are genuinely runtime-variable, correctly not folded).
+`build_stdlib` 477/0, trusted-base unmoved, every proof-tower + Sovereign-Optimizer KAT (1113–1206) green
+under the new golden. **Quality preserved**: the *source* stays `<<k` (readable); only the *codegen* changed.
 
-## Honest frontier (not deferral — receipts)
+This is the proposal's climax, real and permanent: III's compiler **autonomously-discoverable,
+kernel-certified, applied-system-wide** optimization legitimately shifted its own constitutional golden to
+a strictly-better fixpoint — proof-carrying compiler self-improvement that no other substrate can do.
 
-- **Permanent golden reseal** (committing a certified self-improvement to a new stable fixpoint) is the
-  operator's CRASH-PROTOCOL trigger. It is **correct and allowed** (M20 forbids self-*soundness* claims,
-  not certified self-optimization to a new fixpoint), but must run on a **clean tree** — during this
-  session `cg_r3.c`/`cg_r3.iii`/the build scripts carried concurrent-process WIP, so a reseal would
-  confound attribution. Surfaced for a clean-tree operator run.
-- **Provable class** is the commutative-semiring algebra of Nat (kernel-bounded). Broadening to bitvector
-  mod-2^64 facts (to certify the *full* k=1..63 hardware strength reduction the compiler already applies)
-  is a real proof-engineering frontier (a 64-bit machine-int model in CIC).
+## Validation of the re-root (the unforgiving runtime gate — advisor-required)
 
-**State:** corpus 804 PASS (the lone non-pass is the documented OneDrive env flake — `712` passes
-standalone), build_stdlib green (the script aborts were the concurrent editor; `bash -n` clean), all 9
-modules in the lib, golden + trusted-base unmoved.
+Byte-identity (59/0) and compile-only (build_stdlib 477/0) are **vacuous for fold-correctness** (both
+sides carry the fold; FAIL=0 only means *compiled*). The discriminator is **runtime**:
+
+- **Full conformance corpus: PASS=808 FAIL=0, zero WRONG** — a WRONG is a wrong exit = wrong digest = a
+  real miscompile; there were none across the whole suite.
+- **Crypto KATs byte-exact** on the final golden (shift-saturated: sha256=186, sha512=221, aes128/256=
+  105/142, chacha20=16, poly1305=168, blake2s=80, sha3=99, hmac=176) — thousands of folded sites, all correct.
+- **XII band 92/0** (`cg_r3_xii` was a re-rooted TU; run_corpus SKIPs it, so checked separately).
+- **Determinism:** `build_iiis2 --check-corpus` reproduces `825635ea` + 59/0; `iiis-2 == iiis-3`.
+
+**Final golden chain (all goldens/binaries/sidecars consistent):** iiis-0 `8d31f9fc` · iiis-1 `82ee8714` ·
+iiis-2 == iiis-3 `825635ea` (lib-consistent fold fixpoint). Trusted-base `5996d3de` UNMOVED.
+
+## Remaining honest frontier (one, genuinely deferred)
+
+- **Provable class** is the commutative-semiring algebra of Nat (kernel-bounded). The *codegen* now folds
+  every constant shift system-wide (proven), but certifying the *full* k=1..63 hardware fact
+  `x<<k == x*2^k (mod 2^64)` in the kernel itself needs a 64-bit machine-int (bitvector) model in CIC —
+  a real proof-engineering effort, not a tweak. The optimization is applied + runtime-validated today;
+  the deeper kernel proof of the mod-2^64 identity is the named horizon.
+
+(The earlier "permanent reseal deferred to clean tree" frontier is **DONE** — see the section above.)

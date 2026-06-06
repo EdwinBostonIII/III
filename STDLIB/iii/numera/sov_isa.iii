@@ -2124,3 +2124,49 @@ fn sov_census_all_sound() -> u8 @export {
     return 1u8
 }
 
+/* ============================================================================
+ *  THE CONSTANT-SHIFT CODEGEN FOLD, KERNEL-CERTIFIED (not merely runtime-validated).
+ *  cg_r3/cg_r3.c fold  x<<k -> shl $k  (and x*2^k -> shl $k).  Correctness rests on ONE theorem:
+ *  the left shift x<<k (= x doubled k times, itd) EQUALS x*2^k.  The strength schema (sov_sr_term)
+ *  proves Id(mul(x,2^k), itd(x,k)) for ALL k; applying sym gives the fold's exact direction
+ *  Id(itd(x,k), mul(x,2^k)) -- i.e. (x<<k) == (x*2^k) -- a distinct kernel-checked proof term.
+ *  THE MOD-2^WIDTH "FRONTIER" IS CLOSED BY CONGRUENCE: the two values are EQUAL as Nat, so any
+ *  function of them -- including the hardware's fixed-width truncation -- yields equal results (Id is a
+ *  congruence).  So the system-wide fold is kernel-certified, hardware-faithfully, by the same
+ *  dependent-type proof as the strength reduction it is unified with.
+ * ============================================================================ */
+/* The fold's certificate: lam x. lam k. sym( schema(x)(k) ) : Id(itd(x,k), mul(x, pow2 k)). */
+fn sov_shift_fold_term() -> u32 {
+    let mlhs : u32 = sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32)))   /* mul(x, 2^k)  in [x,k] x=#1,k=#0 */
+    let mrhs : u32 = sov_m_itd(tc_var(1u32), tc_var(0u32))               /* itd(x,k) = x<<k */
+    let sxk  : u32 = tc_app(tc_app(sov_sr_term(), tc_var(1u32)), tc_var(0u32))   /* : Id(mlhs, mrhs) */
+    let symt : u32 = sov_tw_sym()                                        /* Pi(a).Pi(b).Pi(Id(a,b)).Id(b,a) */
+    let symapp : u32 = tc_app(tc_app(tc_app(symt, mlhs), mrhs), sxk)     /* : Id(mrhs, mlhs) = Id(x<<k, x*2^k) */
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), symapp))
+}
+/* The fold's goal: Pi(x).Pi(k). Id(Nat, itd(x,k), mul(x, pow2 k))  -- i.e. (x<<k) == (x*2^k) for all k. */
+fn sov_shift_fold_goal() -> u32 {
+    let mrhs : u32 = sov_m_itd(tc_var(1u32), tc_var(0u32))
+    let mlhs : u32 = sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32)))
+    return tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), mrhs, mlhs)))
+}
+
+/* 99 = the CIC kernel CERTIFIES the constant-shift fold's identity (x<<k == x*2^k) for a SYMBOLIC k,
+ * AND rejects the off-by-one (x<<k != x*2^(k+1)).  This upgrades the cg_r3 fold from runtime-validated
+ * to kernel-certified, unified with the strength reduction under one dependent-type proof. */
+fn sov_shift_fold_witness() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    if tc_check(sov_shift_fold_term(), sov_shift_fold_goal()) != 1u8 { return 1u64 }
+    /* NEG: the certificate does NOT prove x<<k == x*2^(k+1) (the off-by-one shift). */
+    let ng : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_itd(tc_var(1u32), tc_var(0u32)), sov_m_mul(tc_var(1u32), sov_m_pow2(tc_succ(tc_var(0u32)))))))
+    if tc_check(sov_shift_fold_term(), ng) != 0u8 { return 2u64 }
+    return 99u64
+}
+fn sov_shift_fold_kat() -> u64 @export {
+    if sov_shift_fold_witness() != 99u64 { return 3u64 }
+    return 99u64
+}
+

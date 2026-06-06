@@ -1,0 +1,143 @@
+/* cg_typeclass.iii -- the ONE shared integer-type-class resolver for ALL codegen backends.
+ *
+ * Architecture-Review R2 (DOCS/III-ARCHITECTURE-REVIEW.md): the SIGNEDNESS sub-class of the backend
+ * seam came from THREE independent AST walks that each re-derived an operand's integer type --
+ * cg_r0 `r0_expr_is_u64`, emit_sanctum `sv_expr_is_u64`, cg_r3 `r3_expr_is_signed` (the sanctum copy
+ * was *added* by reseal-b, the exact "fix one / forget another" drift the review warned of). This
+ * module makes the WALK single-source: every backend resolves an expression's integer type-class HERE,
+ * then applies its OWN width-model policy (cg_r0/sanctum are 8-byte-uniform -> emit unsigned setcc iff
+ * the class is u64/usize; cg_r3 is width-aware -> emit signed setcc iff the class is a signed i*). The
+ * walk becomes impossible-to-diverge; the policy stays legitimately per-backend (each is correct for its
+ * own compare width). One agreed improvement over the prior copies: BINARY resolves lhs ELSE rhs (a safe
+ * superset of cg_r0's lhs-only) so `(0 + a_u64) < b` orders unsigned on every backend (the cg_r0 latent
+ * gap the seam gate's `ord_u64_binop_lhs` probe now reddens-then-proves).
+ *
+ * Pure leaf: takes (ast, node) so it is backend-global-agnostic and uses only canonical iii_ast_*
+ * accessors. Written in the iiis-0-safe subset (recursion + kind-dispatch + memcmp -- the exact idioms
+ * r0_expr_is_u64 already compiled under the frozen C seed). No module state, no arrays-by-runtime-index. */
+module cg_typeclass
+
+const TC_UNK   : u32 = 0u32
+const TC_U8    : u32 = 1u32
+const TC_I8    : u32 = 2u32
+const TC_U16   : u32 = 3u32
+const TC_I16   : u32 = 4u32
+const TC_U32   : u32 = 5u32
+const TC_I32   : u32 = 6u32
+const TC_U64   : u32 = 7u32
+const TC_I64   : u32 = 8u32
+const TC_USIZE : u32 = 9u32
+const TC_ISIZE : u32 = 10u32
+const TC_BOOL  : u32 = 11u32
+
+/* canonical AST node kinds (== ast.c values; every backend mirrors these as R*_K_* / SV_K_*) */
+const TC_K_CONST_DECL  : u32 = 6u32
+const TC_K_PARAM       : u32 = 12u32
+const TC_K_TYPE_REF    : u32 = 15u32
+const TC_K_STMT_LET    : u32 = 20u32
+const TC_K_EXPR_IDENT  : u32 = 45u32
+const TC_K_EXPR_BINARY : u32 = 49u32
+const TC_K_EXPR_UNARY  : u32 = 50u32
+const TC_K_EXPR_PAREN  : u32 = 53u32
+const TC_K_EXPR_CAST   : u32 = 72u32
+const TC_K_VAR_DECL    : u32 = 74u32
+
+var TC_TY_U8    : [u8; 2] = [117u8, 56u8]                        /* "u8"    */
+var TC_TY_I8    : [u8; 2] = [105u8, 56u8]                        /* "i8"    */
+var TC_TY_U16   : [u8; 3] = [117u8, 49u8, 54u8]                  /* "u16"   */
+var TC_TY_I16   : [u8; 3] = [105u8, 49u8, 54u8]                  /* "i16"   */
+var TC_TY_U32   : [u8; 3] = [117u8, 51u8, 50u8]                  /* "u32"   */
+var TC_TY_I32   : [u8; 3] = [105u8, 51u8, 50u8]                  /* "i32"   */
+var TC_TY_U64   : [u8; 3] = [117u8, 54u8, 52u8]                  /* "u64"   */
+var TC_TY_I64   : [u8; 3] = [105u8, 54u8, 52u8]                  /* "i64"   */
+var TC_TY_USIZE : [u8; 5] = [117u8, 115u8, 105u8, 122u8, 101u8]  /* "usize" */
+var TC_TY_ISIZE : [u8; 5] = [105u8, 115u8, 105u8, 122u8, 101u8]  /* "isize" */
+var TC_TY_BOOL  : [u8; 4] = [98u8, 111u8, 111u8, 108u8]          /* "bool"  */
+
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_binder_id(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cast_target_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
+
+fn tc_name_eq(src: u64, off: u32, len: u32, lit: u64, litlen: u64) -> u32 {
+    if (len as u64) != litlen { return 0u32 }
+    if iii_emit_memcmp_c(src + (off as u64), lit, litlen) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+/* classify a TYPE_REF node by its name -> TC_* (TC_UNK if not a primitive int/bool type). */
+fn iii_tref_typeclass(ast: u64, tn: u32) -> u32 {
+    if tn == 0u32 { return TC_UNK }
+    if iii_ast_node_kind(ast, tn) != TC_K_TYPE_REF { return TC_UNK }
+    let len: u32 = iii_ast_type_ref_name_len(ast, tn)
+    if len == 0u32 { return TC_UNK }
+    if len > 5u32 { return TC_UNK }
+    let off: u32 = iii_ast_type_ref_name_off(ast, tn)
+    let src: u64 = iii_ast_source_buf(ast)
+    if tc_name_eq(src, off, len, &TC_TY_U64 as u64, 3u64) == 1u32 { return TC_U64 }
+    if tc_name_eq(src, off, len, &TC_TY_I64 as u64, 3u64) == 1u32 { return TC_I64 }
+    if tc_name_eq(src, off, len, &TC_TY_U32 as u64, 3u64) == 1u32 { return TC_U32 }
+    if tc_name_eq(src, off, len, &TC_TY_I32 as u64, 3u64) == 1u32 { return TC_I32 }
+    if tc_name_eq(src, off, len, &TC_TY_U16 as u64, 3u64) == 1u32 { return TC_U16 }
+    if tc_name_eq(src, off, len, &TC_TY_I16 as u64, 3u64) == 1u32 { return TC_I16 }
+    if tc_name_eq(src, off, len, &TC_TY_U8 as u64, 2u64) == 1u32 { return TC_U8 }
+    if tc_name_eq(src, off, len, &TC_TY_I8 as u64, 2u64) == 1u32 { return TC_I8 }
+    if tc_name_eq(src, off, len, &TC_TY_USIZE as u64, 5u64) == 1u32 { return TC_USIZE }
+    if tc_name_eq(src, off, len, &TC_TY_ISIZE as u64, 5u64) == 1u32 { return TC_ISIZE }
+    if tc_name_eq(src, off, len, &TC_TY_BOOL as u64, 4u64) == 1u32 { return TC_BOOL }
+    return TC_UNK
+}
+
+/* The ONE walk: resolve an expression's integer type-class. PAREN->inner, CAST->target,
+ * BINARY->lhs ELSE rhs, UNARY->operand, IDENT->binder decl-type. Unclassifiable -> TC_UNK. */
+fn iii_expr_typeclass(ast: u64, node: u32) -> u32 {
+    if node == 0u32 { return TC_UNK }
+    let nk: u32 = iii_ast_node_kind(ast, node)
+    if nk == TC_K_EXPR_PAREN { return iii_expr_typeclass(ast, iii_ast_paren_inner(ast, node)) }
+    if nk == TC_K_EXPR_CAST { return iii_tref_typeclass(ast, iii_ast_cast_target_type(ast, node)) }
+    if nk == TC_K_EXPR_BINARY {
+        let lc: u32 = iii_expr_typeclass(ast, iii_ast_binary_lhs(ast, node))
+        if lc != TC_UNK { return lc }
+        return iii_expr_typeclass(ast, iii_ast_binary_rhs(ast, node))
+    }
+    if nk == TC_K_EXPR_UNARY { return iii_expr_typeclass(ast, iii_ast_unary_operand(ast, node)) }
+    if nk == TC_K_EXPR_IDENT {
+        let bid: u32 = iii_ast_node_binder_id(ast, node)
+        if bid == 0u32 { return TC_UNK }
+        let bk: u32 = iii_ast_node_kind(ast, bid)
+        if bk == TC_K_STMT_LET { return iii_tref_typeclass(ast, iii_ast_let_type(ast, bid)) }
+        if bk == TC_K_PARAM { return iii_tref_typeclass(ast, iii_ast_param_type(ast, bid)) }
+        if bk == TC_K_VAR_DECL { return iii_tref_typeclass(ast, iii_ast_var_decl_type(ast, bid)) }
+        if bk == TC_K_CONST_DECL { return iii_tref_typeclass(ast, iii_ast_const_decl_type(ast, bid)) }
+    }
+    return TC_UNK
+}
+
+/* Public predicates the backends consume. Each backend maps the shared class through its OWN
+ * width-model policy -- these two cover the policies the three backends actually need today. */
+fn iii_tc_expr_is_u64(ast: u64, node: u32) -> u32 @export {
+    let c: u32 = iii_expr_typeclass(ast, node)
+    if c == TC_U64 { return 1u32 }
+    if c == TC_USIZE { return 1u32 }
+    return 0u32
+}
+fn iii_tc_expr_is_signed(ast: u64, node: u32) -> u32 @export {
+    let c: u32 = iii_expr_typeclass(ast, node)
+    if c == TC_I8 { return 1u32 }
+    if c == TC_I16 { return 1u32 }
+    if c == TC_I32 { return 1u32 }
+    if c == TC_I64 { return 1u32 }
+    if c == TC_ISIZE { return 1u32 }
+    return 0u32
+}

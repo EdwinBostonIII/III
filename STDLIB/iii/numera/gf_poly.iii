@@ -1,0 +1,250 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\gf_poly.iii
+ *
+ * III STDLIB - numera::gf_poly
+ *
+ * General polynomial arithmetic over GF(2^8): add, scale, multiply, Euclidean divide-with-
+ * remainder, and Horner evaluation. The reusable algebraic primitive beneath error-correcting
+ * codes (Reed-Solomon / BCH decoders), algebraic interpolation, and field-extension constructions.
+ *
+ * NIH / harmony: built on III's own numera::galois (gf8_mul / gf8_inv); GF addition is XOR (the
+ * field definition), inlined. numera::galois already provides scalar GF(2^8), Lagrange EVALUATION,
+ * and Berlekamp-Massey; this module adds the missing COEFFICIENT-level polynomial algebra.
+ *
+ * Representation: a polynomial is a coefficient buffer (u64 base, *u8) with coeff[0] the constant
+ * term and coeff[len-1] the leading term; len is its length (degree = len-1). The zero polynomial
+ * is length 1, [0]. Callers own input/output buffers; outputs must NOT alias inputs. Lengths from
+ * divmod are returned in GPOLY_QLEN / GPOLY_RLEN. All work uses caller buffers; the KAT uses module
+ * globals (runtime-indexed, hence module scope).
+ *
+ * Public API:
+ *   gpoly_trim(a, len) -> u32                          drop trailing zero coeffs (>=1)
+ *   gpoly_eval(a, len, x) -> u32                        Horner evaluation P(x)
+ *   gpoly_add(a, alen, b, blen, out) -> u32            out = a + b (XOR); returns trimmed length
+ *   gpoly_scale(a, alen, s, out) -> u32                out = s * a
+ *   gpoly_mul(a, alen, b, blen, out) -> u32            out = a * b (convolution)
+ *   gpoly_divmod(a, alen, b, blen, q, r) -> i32        a = q*b + r, deg(r)<deg(b); GPOLY_QLEN/GPOLY_RLEN
+ *                                                     set; returns GPOLY_OK or GPOLY_E_DIV0.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_gf_poly
+
+extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
+
+const GPOLY_OK     : i32 =  0i32
+const GPOLY_E_DIV0 : i32 = -1i32
+
+var GPOLY_QLEN : [u32; 1]
+var GPOLY_RLEN : [u32; 1]
+
+fn gpoly_trim(a: u64, len: u32) -> u32 @export {
+    let ap : *u8 = a as *u8
+    let mut l : u32 = len
+    while l > 1u32 {
+        if ap[(l - 1u32) as u64] != 0u8 { return l }
+        l = l - 1u32
+    }
+    return l
+}
+
+fn gpoly_eval(a: u64, len: u32, x: u32) -> u32 @export {
+    let ap : *u8 = a as *u8
+    if len == 0u32 { return 0u32 }
+    let mut acc : u32 = ap[(len - 1u32) as u64] as u32
+    let mut i : u32 = len - 1u32
+    while i > 0u32 {
+        i = i - 1u32
+        acc = gf8_mul(acc, x) ^ (ap[i as u64] as u32)
+    }
+    return acc
+}
+
+fn gpoly_add(a: u64, alen: u32, b: u64, blen: u32, out: u64) -> u32 @export {
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let op : *u8 = out as *u8
+    let mut n : u32 = alen
+    if blen > n { n = blen }
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut va : u32 = 0u32
+        let mut vb : u32 = 0u32
+        if i < alen { va = ap[i as u64] as u32 }
+        if i < blen { vb = bp[i as u64] as u32 }
+        op[i as u64] = (va ^ vb) as u8
+        i = i + 1u32
+    }
+    return gpoly_trim(out, n)
+}
+
+fn gpoly_scale(a: u64, alen: u32, s: u32, out: u64) -> u32 @export {
+    let ap : *u8 = a as *u8
+    let op : *u8 = out as *u8
+    let mut i : u32 = 0u32
+    while i < alen {
+        op[i as u64] = gf8_mul(ap[i as u64] as u32, s) as u8
+        i = i + 1u32
+    }
+    return gpoly_trim(out, alen)
+}
+
+fn gpoly_mul(a: u64, alen: u32, b: u64, blen: u32, out: u64) -> u32 @export {
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let op : *u8 = out as *u8
+    let olen : u32 = alen + blen - 1u32
+    let mut z : u32 = 0u32
+    while z < olen { op[z as u64] = 0u8 ; z = z + 1u32 }
+    let mut i : u32 = 0u32
+    while i < alen {
+        let av : u32 = ap[i as u64] as u32
+        if av != 0u32 {
+            let mut j : u32 = 0u32
+            while j < blen {
+                let prod : u32 = gf8_mul(av, bp[j as u64] as u32)
+                let k : u32 = i + j
+                op[k as u64] = (op[k as u64] as u32 ^ prod) as u8
+                j = j + 1u32
+            }
+        }
+        i = i + 1u32
+    }
+    return gpoly_trim(out, olen)
+}
+
+/* Euclidean division: a = q*b + r with deg(r) < deg(b). q -> q buffer (GPOLY_QLEN), r -> r buffer
+ * (GPOLY_RLEN). r is computed in place from a copy of a; q from the leading-coefficient eliminations. */
+fn gpoly_divmod(a: u64, alen: u32, b: u64, blen: u32, q: u64, r: u64) -> i32 @export {
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let qp : *u8 = q as *u8
+    let rp : *u8 = r as *u8
+    let bl : u32 = gpoly_trim(b, blen)
+    if bl == 1u32 { if bp[0u64] == 0u8 { return GPOLY_E_DIV0 } }
+    let al : u32 = gpoly_trim(a, alen)
+    /* r := a (copy) */
+    let mut c : u32 = 0u32
+    while c < al { rp[c as u64] = ap[c as u64] ; c = c + 1u32 }
+    let db : u32 = bl - 1u32
+    if al < bl {
+        /* quotient 0, remainder = a */
+        qp[0u64] = 0u8
+        GPOLY_QLEN[0u32] = 1u32
+        GPOLY_RLEN[0u32] = al
+        return GPOLY_OK
+    }
+    let da : u32 = al - 1u32
+    let qlen : u32 = da - db + 1u32
+    let mut zq : u32 = 0u32
+    while zq < qlen { qp[zq as u64] = 0u8 ; zq = zq + 1u32 }
+    let binv : u32 = gf8_inv(bp[db as u64] as u32)
+    /* eliminate from the top degree down */
+    let mut step : u32 = 0u32
+    while step < qlen {
+        let i : u32 = (qlen - 1u32) - step          /* i = da-db .. 0 */
+        let coef : u32 = gf8_mul(rp[(i + db) as u64] as u32, binv)
+        qp[i as u64] = coef as u8
+        if coef != 0u32 {
+            let mut j : u32 = 0u32
+            while j <= db {
+                let prod : u32 = gf8_mul(coef, bp[j as u64] as u32)
+                let kk : u32 = i + j
+                rp[kk as u64] = (rp[kk as u64] as u32 ^ prod) as u8
+                j = j + 1u32
+            }
+        }
+        step = step + 1u32
+    }
+    GPOLY_QLEN[0u32] = gpoly_trim(q, qlen)
+    /* remainder occupies degrees 0..db-1 */
+    if db == 0u32 {
+        rp[0u64] = 0u8
+        GPOLY_RLEN[0u32] = 1u32
+    } else {
+        GPOLY_RLEN[0u32] = gpoly_trim(r, db)
+    }
+    return GPOLY_OK
+}
+
+/* ===== KAT ===== */
+var GPOLY_A   : [u8; 64]
+var GPOLY_B   : [u8; 64]
+var GPOLY_O   : [u8; 160]
+var GPOLY_Q   : [u8; 160]
+var GPOLY_R   : [u8; 64]
+var GPOLY_QB  : [u8; 160]     /* q*b */
+var GPOLY_REC : [u8; 160]     /* q*b + r */
+var GPOLY_RNG : [u64; 1]
+
+fn gpoly_rng() -> u64 {
+    let mut x : u64 = GPOLY_RNG[0u64]
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    GPOLY_RNG[0u64] = x
+    return x
+}
+fn gpoly_fill(p: u64, len: u32, force_lead: u32) -> i32 {
+    let pp : *u8 = p as *u8
+    let mut i : u32 = 0u32
+    while i < len {
+        pp[i as u64] = (gpoly_rng() & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    if force_lead == 1u32 {
+        if pp[(len - 1u32) as u64] == 0u8 { pp[(len - 1u32) as u64] = 1u8 }   /* nonzero leading */
+    }
+    return 0i32
+}
+
+/* =====================================================================================
+ * gpoly_kat -- 99 = the polynomial ring laws, self-checked against the EVALUATION homomorphism
+ * (an independent oracle): for random polynomials over GF(2^8) and random points x,
+ *   eval(a+b,x) == eval(a,x) ^ eval(b,x);  eval(s*a,x) == s . eval(a,x);
+ *   eval(a*b,x) == eval(a,x) . eval(b,x);  and divmod's identity a == q*b + r with deg(r)<deg(b).
+ * 400 seeded trials. No external oracle -- evaluation cross-checks the coefficient algebra.
+ * ===================================================================================== */
+fn gpoly_kat() -> u64 @export {
+    GPOLY_RNG[0u64] = 0x243F6A8885A308D3u64
+    let mut t : u32 = 0u32
+    while t < 400u32 {
+        let alen : u32 = 1u32 + (gpoly_rng() % 20u64) as u32      /* 1..20 */
+        let blen : u32 = 1u32 + (gpoly_rng() % 12u64) as u32      /* 1..12 */
+        gpoly_fill(&GPOLY_A as u64, alen, 1u32)
+        gpoly_fill(&GPOLY_B as u64, blen, 1u32)
+        let x : u32 = (gpoly_rng() & 0xFFu64) as u32
+        let ea : u32 = gpoly_eval(&GPOLY_A as u64, alen, x)
+        let eb : u32 = gpoly_eval(&GPOLY_B as u64, blen, x)
+
+        /* add */
+        let ol : u32 = gpoly_add(&GPOLY_A as u64, alen, &GPOLY_B as u64, blen, &GPOLY_O as u64)
+        if gpoly_eval(&GPOLY_O as u64, ol, x) != (ea ^ eb) { return 1000u64 + (t as u64) }
+
+        /* scale */
+        let s : u32 = (gpoly_rng() & 0xFFu64) as u32
+        let sl : u32 = gpoly_scale(&GPOLY_A as u64, alen, s, &GPOLY_O as u64)
+        if gpoly_eval(&GPOLY_O as u64, sl, x) != gf8_mul(s, ea) { return 1200u64 + (t as u64) }
+
+        /* mul: eval homomorphism */
+        let ml : u32 = gpoly_mul(&GPOLY_A as u64, alen, &GPOLY_B as u64, blen, &GPOLY_O as u64)
+        if gpoly_eval(&GPOLY_O as u64, ml, x) != gf8_mul(ea, eb) { return 2000u64 + (t as u64) }
+
+        /* divmod: a == q*b + r and deg(r) < deg(b) */
+        if gpoly_divmod(&GPOLY_A as u64, alen, &GPOLY_B as u64, blen, &GPOLY_Q as u64, &GPOLY_R as u64) != GPOLY_OK { return 3000u64 + (t as u64) }
+        let ql : u32 = GPOLY_QLEN[0u32]
+        let rl : u32 = GPOLY_RLEN[0u32]
+        let btrim : u32 = gpoly_trim(&GPOLY_B as u64, blen)
+        /* deg(r) < deg(b): rl <= btrim-1, i.e. rl < btrim (unless b is a nonzero constant -> r=0) */
+        if btrim > 1u32 { if rl >= btrim { return 4000u64 + (t as u64) } }
+        /* reconstruct q*b + r and compare to a (by evaluation at x, and a 2nd independent point) */
+        let qbl : u32 = gpoly_mul(&GPOLY_Q as u64, ql, &GPOLY_B as u64, blen, &GPOLY_QB as u64)
+        let recl : u32 = gpoly_add(&GPOLY_QB as u64, qbl, &GPOLY_R as u64, rl, &GPOLY_REC as u64)
+        if gpoly_eval(&GPOLY_REC as u64, recl, x) != ea { return 5000u64 + (t as u64) }
+        let x2 : u32 = (x ^ 0x5Au32) & 0xFFu32
+        if gpoly_eval(&GPOLY_REC as u64, recl, x2) != gpoly_eval(&GPOLY_A as u64, alen, x2) { return 6000u64 + (t as u64) }
+
+        t = t + 1u32
+    }
+    return 99u64
+}

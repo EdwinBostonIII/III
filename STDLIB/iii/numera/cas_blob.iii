@@ -1,0 +1,127 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\cas_blob.iii
+ *
+ * III STDLIB - numera::cas_blob
+ *
+ * COMPRESSED + ERASURE-CODED + CONTENT-ADDRESSED blob storage -- another verified capability that
+ * emerges only from COMPOSING III's own modules:
+ *
+ *   numera::lzss           -- the blob is losslessly COMPRESSED first (smaller footprint)
+ *   numera::erasure_store  -- the compressed bytes are sharded with MDS Reed-Solomon: any k of n
+ *        (= rscode +          shards reconstruct exactly, every shard self-authenticates by its
+ *           keccak256 +        keccak256 content address, a Merkle root commits the set
+ *           merkle)
+ *
+ * Result: a blob is stored compressed AND durably (survives loss of any n-k shards) AND tamper-
+ * evidently, recovered byte-exact. The verified property is roundtrip-through-loss:
+ * decompress(reconstruct_any_k(shards)) == original blob. NIH; pure orchestration of gated parts.
+ *
+ * Public API:
+ *   cas_seal(blob_ptr, blen, k, n) -> i32              compress -> erasure-code (in erasure_store)
+ *   cas_open(shard_idx_ptr, m, blob_out, out_cap) -> i32   reconstruct -> decompress -> blob_out
+ *                                                          returns the recovered length, or <0.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_cas_blob
+
+extern @abi(c-msvc-x64) fn lzss_compress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+extern @abi(c-msvc-x64) fn lzss_decompress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+extern @abi(c-msvc-x64) fn es_encode(blob_ptr: u64, dlen: u32, k: u32, n: u32) -> i32 from "erasure_store.iii"
+extern @abi(c-msvc-x64) fn es_reconstruct(present_idx_ptr: u64, m_present: u32) -> i32 from "erasure_store.iii"
+extern @abi(c-msvc-x64) fn es_recon_ptr() -> u64 from "erasure_store.iii"
+extern @abi(c-msvc-x64) fn es_dlen() -> u32 from "erasure_store.iii"
+
+const CAS_OK    : i32 =  0i32
+const CAS_E_CMP : i32 = -1i32     /* compression failed / output cap hit */
+const CAS_E_DIM : i32 = -2i32     /* compressed size exceeds k*64 (erasure_store shard cap) */
+const CAS_E_SUB : i32 = -3i32     /* a composed module failed */
+
+var CAS_C : [u8; 1200]    /* compressed staging */
+
+/* 1 iff x < 0 -- via the sign bit, NOT i32 `<`/`>=` (which compile UNSIGNED in this toolchain). */
+fn cas_is_neg(x: i32) -> u32 { return (x as u32) >> 31u32 }
+
+fn cas_seal(blob_ptr: u64, blen: u32, k: u32, n: u32) -> i32 @export {
+    let cl : i32 = lzss_compress(blob_ptr, blen, &CAS_C as u64, 1200u32)
+    if cas_is_neg(cl) == 1u32 { return CAS_E_CMP }
+    let clen : u32 = cl as u32
+    /* erasure_store shards at most k*ES_MAX_SLEN(=64) bytes */
+    if clen > (k * 64u32) { return CAS_E_DIM }
+    if es_encode(&CAS_C as u64, clen, k, n) != 0i32 { return CAS_E_SUB }
+    return CAS_OK
+}
+
+fn cas_open(shard_idx_ptr: u64, m_present: u32, blob_out: u64, out_cap: u32) -> i32 @export {
+    if es_reconstruct(shard_idx_ptr, m_present) != 0i32 { return CAS_E_SUB }
+    let clen : u32 = es_dlen()
+    return lzss_decompress(es_recon_ptr(), clen, blob_out, out_cap)
+}
+
+/* ===== KAT ===== */
+var CAS_BLOB : [u8; 256]
+var CAS_OUT  : [u8; 256]
+var CAS_PIDX : [u8; 16]
+
+fn cas_popcount(x: u32) -> u32 {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 { c = c + (v & 1u32) ; v = v >> 1u32 }
+    return c
+}
+
+/* =====================================================================================
+ * cas_kat -- 99 = compressed + erasure-coded + content-addressed storage, self-checked:
+ *   (1) seal a compressible 200-byte blob as RS(7,4);
+ *   (2) EXHAUSTIVE over all C(7,3)=35 three-shard losses: reconstruct -> decompress recovers the
+ *       blob EXACTLY (byte-for-byte) and at the original length;
+ *   (3) NEGATIVE: fewer than k shards is refused (CAS_E_SUB from the erasure layer).
+ * ===================================================================================== */
+fn cas_kat() -> u64 @export {
+    let blen : u32 = 200u32
+    let k : u32 = 4u32
+    let n : u32 = 7u32
+    /* compressible blob: a 10-byte phrase repeated */
+    let mut i : u32 = 0u32
+    while i < blen {
+        CAS_BLOB[i] = (0x41u32 + (i % 10u32)) as u8
+        i = i + 1u32
+    }
+    if cas_seal(&CAS_BLOB as u64, blen, k, n) != CAS_OK { return 1u64 }
+
+    /* (2) EXHAUSTIVE 3-shard loss recovery */
+    let erase : u32 = n - k
+    let lim : u32 = 1u32 << n
+    let mut tested : u64 = 0u64
+    let mut mask : u32 = 0u32
+    while mask < lim {
+        if cas_popcount(mask) == erase {
+            let mut cnt : u32 = 0u32
+            let mut s : u32 = 0u32
+            while s < n {
+                if ((mask >> s) & 1u32) == 0u32 {
+                    if cnt < k { CAS_PIDX[cnt] = s as u8 ; cnt = cnt + 1u32 }
+                }
+                s = s + 1u32
+            }
+            if cnt != k { return 2u64 }
+            let dl : i32 = cas_open(&CAS_PIDX as u64, k, &CAS_OUT as u64, 256u32)
+            if cas_is_neg(dl) == 1u32 { return 2000u64 + tested }
+            if (dl as u32) != blen { return 3000u64 + tested }
+            let mut c : u32 = 0u32
+            while c < blen {
+                if CAS_OUT[c] != CAS_BLOB[c] { return 4000u64 + tested }
+                c = c + 1u32
+            }
+            tested = tested + 1u64
+        }
+        mask = mask + 1u32
+    }
+    if tested != 35u64 { return 5u64 }   /* C(7,3) = 35 */
+
+    /* (3) NEGATIVE: fewer than k shards refused -- the result MUST be negative (an error) */
+    CAS_PIDX[0u32] = 0u8 ; CAS_PIDX[1u32] = 1u8 ; CAS_PIDX[2u32] = 2u8
+    let neg : i32 = cas_open(&CAS_PIDX as u64, k - 1u32, &CAS_OUT as u64, 256u32)
+    if cas_is_neg(neg) != 1u32 { return 6u64 }
+
+    return 99u64
+}

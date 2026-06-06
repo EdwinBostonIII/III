@@ -1,0 +1,407 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\rscode.iii
+ *
+ * III STDLIB - numera::rscode
+ *
+ * Reed-Solomon ERASURE coding over GF(2^8): a Maximum-Distance-Separable (MDS) code
+ * RS(n, k) that splits k data symbols into n >= k coded symbols such that ANY k of the n
+ * suffice to reconstruct the original k EXACTLY -- i.e. it tolerates the loss (erasure) of
+ * any n-k symbols. Systematic: the first k coded symbols ARE the data (readable with no
+ * decode when nothing is lost); the last n-k are parity.
+ *
+ * NIH / harmony: built ENTIRELY on III's own finite-field module numera::galois
+ *   gf8_mul / gf8_pow / gf8_inv (GF(2^8), reduction poly x^8+x^4+x^3+x+1 = 0x11B).
+ * GF(2^8) addition is XOR (the field definition), inlined. No third-party code; no table
+ * duplication of galois -- rscode COMPOSES galois rather than re-rolling it.
+ *
+ * The MDS guarantee is structural, not statistical: the coding matrix is a Vandermonde
+ * V[i][j] = x_i^j over the DISTINCT points x_i = i (i in 0..n-1). Every square submatrix of
+ * such a Vandermonde (rows = any k distinct points) is invertible (det = product of
+ * (x_b - x_a) over a<b, nonzero iff points distinct), so EVERY k-of-n choice decodes. The
+ * code is made systematic by right-multiplying V by the inverse of its top k x k block A:
+ * G = V * A^(-1); then the top k rows of G are the identity and the bottom n-k are parity.
+ * Decode of a present set S (|S| = k) solves c_S = G_S * d for d by inverting the k x k
+ * G_S (Gauss-Jordan over GF(2^8)); G_S is invertible because V_S is.
+ *
+ * All working matrices are MODULE-GLOBAL (a function-local array indexed by a runtime value
+ * is unsafe in this toolchain; module globals are the established remedy -- cf. sha256 SHA_W).
+ * Buffers are passed as u64 base addresses and cast to *u8 internally (the merkle idiom).
+ *
+ * Public API (value/address-typed; total; results in low byte of u32 where applicable):
+ *   rs_init(n, k) -> i32
+ *       Build the systematic n x k coding matrix for RS(n,k). RS_OK, or RS_E_DIM if
+ *       !(1 <= k <= n <= RS_MAX_N) or k > RS_MAX_K. Must precede encode/decode.
+ *   rs_encode(data_ptr, cw_out) -> i32
+ *       cw_out[0..n-1] = G * data_ptr[0..k-1]. RS_OK. (Uses the params from rs_init.)
+ *   rs_decode(present_idx, present_sym, m_present, data_out) -> i32
+ *       present_idx[t] = coded-symbol index (0..n-1) of the t-th surviving symbol;
+ *       present_sym[t] = its value. Recovers data_out[0..k-1] from the first k survivors.
+ *       RS_OK; RS_E_FEW if m_present < k; RS_E_SING if the chosen rows are rank-deficient
+ *       (e.g. a repeated index) -- a detected failure, never silent garbage.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure arithmetic; no allocation).
+ */
+module numera_rscode
+
+extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_pow(base: u32, exp: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
+
+const RS_MAX_N : u32 = 32u32
+const RS_MAX_K : u32 = 32u32
+
+const RS_OK     : i32 =  0i32
+const RS_E_DIM  : i32 = -1i32     /* bad (n,k) dimensions                                  */
+const RS_E_SING : i32 = -2i32     /* chosen decode rows are rank-deficient (not invertible) */
+const RS_E_FEW  : i32 = -3i32     /* fewer than k surviving symbols supplied                */
+
+/* systematic n x k coding matrix G (row-major, stride k)  -- 32*32 = 1024 */
+var RS_G   : [u8; 1024]
+/* raw Vandermonde scratch used only during rs_init (row-major, stride k)   */
+var RS_V   : [u8; 1024]
+/* Gauss-Jordan augmentation [ M | I ], k rows x (2k) cols -- 32*64 = 2048   */
+var RS_AUG : [u8; 2048]
+/* saved code parameters: [0] = n, [1] = k */
+var RS_PN  : [u32; 2]
+
+/* KAT scratch (module scope -- see file header on runtime-indexed arrays) */
+var RS_KD   : [u8; 32]     /* original data            */
+var RS_KCW  : [u8; 32]     /* codeword (n symbols)     */
+var RS_KIDX : [u8; 32]     /* present-symbol indices   */
+var RS_KSYM : [u8; 32]     /* present-symbol values    */
+var RS_KOUT : [u8; 32]     /* recovered data           */
+
+/* ---- GF(2^8) helpers: addition is XOR (field definition); mul/inv reuse galois ---- */
+
+/* population count of a 32-bit word (used by the KAT's exhaustive erasure sweep). */
+fn rs_popcount(x: u32) -> u32 {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 {
+        c = c + (v & 1u32)
+        v = v >> 1u32
+    }
+    return c
+}
+
+/* Invert the dim x dim matrix held in the LEFT half of RS_AUG (stride 2*dim) by Gauss-Jordan
+ * over GF(2^8). The RIGHT half MUST be preset to the identity on entry; on RS_OK it holds the
+ * inverse. RS_E_SING if a pivot column has no nonzero entry at/below the diagonal (rank < dim). */
+fn rs_gj_invert(dim: u32) -> i32 {
+    let w : u32 = 2u32 * dim
+    let mut p : u32 = 0u32
+    while p < dim {
+        /* locate a pivot row r in [p, dim) with a nonzero entry in column p */
+        let mut piv : u32 = p
+        let mut found : u32 = 0u32
+        let mut r : u32 = p
+        while r < dim {
+            if found == 0u32 {
+                if RS_AUG[r * w + p] != 0u8 {
+                    piv = r
+                    found = 1u32
+                }
+            }
+            r = r + 1u32
+        }
+        if found == 0u32 { return RS_E_SING }
+        /* swap the pivot row up to row p (full 2*dim width) */
+        if piv != p {
+            let mut cs : u32 = 0u32
+            while cs < w {
+                let t : u8 = RS_AUG[p * w + cs]
+                RS_AUG[p * w + cs] = RS_AUG[piv * w + cs]
+                RS_AUG[piv * w + cs] = t
+                cs = cs + 1u32
+            }
+        }
+        /* normalize row p so the pivot becomes 1: row_p *= inv(pivot) */
+        let pivval : u32 = RS_AUG[p * w + p] as u32
+        let ipv : u32 = gf8_inv(pivval)
+        let mut cn : u32 = 0u32
+        while cn < w {
+            RS_AUG[p * w + cn] = gf8_mul(RS_AUG[p * w + cn] as u32, ipv) as u8
+            cn = cn + 1u32
+        }
+        /* eliminate column p from every other row: row_r ^= f * row_p */
+        let mut r2 : u32 = 0u32
+        while r2 < dim {
+            if r2 != p {
+                let f : u32 = RS_AUG[r2 * w + p] as u32
+                if f != 0u32 {
+                    let mut c3 : u32 = 0u32
+                    while c3 < w {
+                        let prod : u32 = gf8_mul(f, RS_AUG[p * w + c3] as u32)
+                        RS_AUG[r2 * w + c3] = (RS_AUG[r2 * w + c3] as u32 ^ prod) as u8
+                        c3 = c3 + 1u32
+                    }
+                }
+            }
+            r2 = r2 + 1u32
+        }
+        p = p + 1u32
+    }
+    return RS_OK
+}
+
+/* Set the RIGHT half of an entry-region of RS_AUG (k rows, stride 2k) to the k x k identity,
+ * having already placed the k x k matrix to invert in the LEFT half. */
+fn rs_aug_set_identity_right(k: u32) -> i32 {
+    let w : u32 = 2u32 * k
+    let mut r : u32 = 0u32
+    while r < k {
+        let mut c : u32 = 0u32
+        while c < k {
+            if c == r {
+                RS_AUG[r * w + (k + c)] = 1u8
+            } else {
+                RS_AUG[r * w + (k + c)] = 0u8
+            }
+            c = c + 1u32
+        }
+        r = r + 1u32
+    }
+    return RS_OK
+}
+
+fn rs_init(n: u32, k: u32) -> i32 @export {
+    if k < 1u32 { return RS_E_DIM }
+    if n < k { return RS_E_DIM }
+    if n > RS_MAX_N { return RS_E_DIM }
+    if k > RS_MAX_K { return RS_E_DIM }
+    RS_PN[0u32] = n
+    RS_PN[1u32] = k
+
+    /* raw Vandermonde V[i][j] = (i)^j over GF(2^8), distinct points x_i = i */
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = 0u32
+        while j < k {
+            RS_V[i * k + j] = gf8_pow(i, j) as u8
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+
+    /* invert the top k x k block A (rows 0..k-1 of V): RS_AUG left = A, right = I */
+    let w : u32 = 2u32 * k
+    let mut r : u32 = 0u32
+    while r < k {
+        let mut c : u32 = 0u32
+        while c < k {
+            RS_AUG[r * w + c] = RS_V[r * k + c]
+            c = c + 1u32
+        }
+        r = r + 1u32
+    }
+    rs_aug_set_identity_right(k)
+    let rc : i32 = rs_gj_invert(k)
+    if rc != RS_OK { return rc }    /* A is Vandermonde over distinct points -> always invertible */
+
+    /* systematic G = V * A^(-1); A^(-1)[m][j] = RS_AUG[m*w + (k+j)] */
+    let mut ii : u32 = 0u32
+    while ii < n {
+        let mut jj : u32 = 0u32
+        while jj < k {
+            let mut acc : u32 = 0u32
+            let mut m : u32 = 0u32
+            while m < k {
+                let prod : u32 = gf8_mul(RS_V[ii * k + m] as u32, RS_AUG[m * w + (k + jj)] as u32)
+                acc = acc ^ prod
+                m = m + 1u32
+            }
+            RS_G[ii * k + jj] = acc as u8
+            jj = jj + 1u32
+        }
+        ii = ii + 1u32
+    }
+    return RS_OK
+}
+
+fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 @export {
+    let n : u32 = RS_PN[0u32]
+    let k : u32 = RS_PN[1u32]
+    let dp : *u8 = data_ptr as *u8
+    let op : *u8 = cw_out as *u8
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut acc : u32 = 0u32
+        let mut j : u32 = 0u32
+        while j < k {
+            let dval : u32 = dp[j as u64] as u32
+            let prod : u32 = gf8_mul(RS_G[i * k + j] as u32, dval)
+            acc = acc ^ prod
+            j = j + 1u32
+        }
+        op[i as u64] = acc as u8
+        i = i + 1u32
+    }
+    return RS_OK
+}
+
+fn rs_decode(present_idx: u64, present_sym: u64, m_present: u32, data_out: u64) -> i32 @export {
+    let n : u32 = RS_PN[0u32]
+    let k : u32 = RS_PN[1u32]
+    if m_present < k { return RS_E_FEW }
+    let idxp : *u8 = present_idx as *u8
+    let symp : *u8 = present_sym as *u8
+    let dop  : *u8 = data_out as *u8
+    let w : u32 = 2u32 * k
+
+    /* build G_S (the first k present rows of G) into RS_AUG left half; right = I */
+    let mut r : u32 = 0u32
+    while r < k {
+        let row : u32 = idxp[r as u64] as u32
+        if row >= n { return RS_E_DIM }
+        let mut c : u32 = 0u32
+        while c < k {
+            RS_AUG[r * w + c] = RS_G[row * k + c]
+            c = c + 1u32
+        }
+        r = r + 1u32
+    }
+    rs_aug_set_identity_right(k)
+    let rc : i32 = rs_gj_invert(k)
+    if rc != RS_OK { return rc }    /* rank-deficient choice (e.g. repeated index) -> RS_E_SING */
+
+    /* d = G_S^(-1) * c_S; G_S^(-1)[j][t] = RS_AUG[j*w + (k+t)] */
+    let mut j : u32 = 0u32
+    while j < k {
+        let mut acc : u32 = 0u32
+        let mut t : u32 = 0u32
+        while t < k {
+            let sval : u32 = symp[t as u64] as u32
+            let prod : u32 = gf8_mul(RS_AUG[j * w + (k + t)] as u32, sval)
+            acc = acc ^ prod
+            t = t + 1u32
+        }
+        dop[j as u64] = acc as u8
+        j = j + 1u32
+    }
+    return RS_OK
+}
+
+/* =====================================================================================
+ * rscode_kat -- the falsifiable self-test. 99 = every arm holds; a distinct code localises
+ * any break (bite-proven). This is NOT a proxy: it ENUMERATES every erasure pattern for
+ * RS(10,6) (all C(10,4) = 210 four-symbol losses) and asserts EXACT reconstruction in each,
+ * plus the systematic property, an over-determined recovery, a larger RS(16,10), and two
+ * negatives the solver must REJECT (too few survivors; a rank-deficient repeated-index set).
+ * The exhaustive arm is the real MDS claim: ANY k-of-n recovers the original exactly.
+ * ===================================================================================== */
+fn rscode_kat() -> u64 @export {
+    let n : u32 = 10u32
+    let k : u32 = 6u32
+    if rs_init(n, k) != RS_OK { return 1u64 }
+
+    /* fixed nontrivial data */
+    let mut jf : u32 = 0u32
+    while jf < k {
+        RS_KD[jf] = ((jf * 53u32 + 17u32) & 0xFFu32) as u8
+        jf = jf + 1u32
+    }
+    if rs_encode(&RS_KD as u64, &RS_KCW as u64) != RS_OK { return 2u64 }
+
+    /* systematic property: the first k coded symbols ARE the data */
+    let mut js : u32 = 0u32
+    while js < k {
+        if RS_KCW[js] != RS_KD[js] { return 3u64 }
+        js = js + 1u32
+    }
+
+    /* EXHAUSTIVE: every (n-k)=4-symbol erasure -> exact recovery from the surviving k */
+    let erase : u32 = n - k
+    let lim : u32 = 1u32 << n
+    let mut tested : u64 = 0u64
+    let mut mask : u32 = 0u32
+    while mask < lim {
+        if rs_popcount(mask) == erase {
+            let mut cnt : u32 = 0u32
+            let mut i : u32 = 0u32
+            while i < n {
+                if ((mask >> i) & 1u32) == 0u32 {
+                    if cnt < k {
+                        RS_KIDX[cnt] = i as u8
+                        RS_KSYM[cnt] = RS_KCW[i]
+                        cnt = cnt + 1u32
+                    }
+                }
+                i = i + 1u32
+            }
+            if cnt != k { return 5u64 }
+            if rs_decode(&RS_KIDX as u64, &RS_KSYM as u64, k, &RS_KOUT as u64) != RS_OK { return 2000u64 + tested }
+            let mut c2 : u32 = 0u32
+            while c2 < k {
+                if RS_KOUT[c2] != RS_KD[c2] { return 3000u64 + tested }
+                c2 = c2 + 1u32
+            }
+            tested = tested + 1u64
+        }
+        mask = mask + 1u32
+    }
+    /* non-vacuity: C(10,4) = 210 distinct erasure patterns must have been certified */
+    if tested != 210u64 { return 4u64 }
+
+    /* OVER-DETERMINED: erase only rows 3 and 7 (8 survive); decode from the first k survivors */
+    let emask : u32 = (1u32 << 3u32) | (1u32 << 7u32)
+    let mut cc : u32 = 0u32
+    let mut ii2 : u32 = 0u32
+    while ii2 < n {
+        if ((emask >> ii2) & 1u32) == 0u32 {
+            if cc < k {
+                RS_KIDX[cc] = ii2 as u8
+                RS_KSYM[cc] = RS_KCW[ii2]
+                cc = cc + 1u32
+            }
+        }
+        ii2 = ii2 + 1u32
+    }
+    if rs_decode(&RS_KIDX as u64, &RS_KSYM as u64, k, &RS_KOUT as u64) != RS_OK { return 11u64 }
+    let mut c4 : u32 = 0u32
+    while c4 < k {
+        if RS_KOUT[c4] != RS_KD[c4] { return 12u64 }
+        c4 = c4 + 1u32
+    }
+
+    /* NEGATIVE 1: fewer than k survivors must be REFUSED (RS_E_FEW), not guessed */
+    if rs_decode(&RS_KIDX as u64, &RS_KSYM as u64, k - 1u32, &RS_KOUT as u64) != RS_E_FEW { return 13u64 }
+
+    /* NEGATIVE 2: k indices but with a repeated row -> rank-deficient -> RS_E_SING (detected) */
+    RS_KIDX[0u32] = 0u8
+    RS_KIDX[1u32] = 0u8        /* duplicate of row 0 */
+    RS_KIDX[2u32] = 2u8
+    RS_KIDX[3u32] = 3u8
+    RS_KIDX[4u32] = 4u8
+    RS_KIDX[5u32] = 5u8
+    RS_KSYM[0u32] = RS_KCW[0u32]
+    RS_KSYM[1u32] = RS_KCW[0u32]
+    RS_KSYM[2u32] = RS_KCW[2u32]
+    RS_KSYM[3u32] = RS_KCW[3u32]
+    RS_KSYM[4u32] = RS_KCW[4u32]
+    RS_KSYM[5u32] = RS_KCW[5u32]
+    if rs_decode(&RS_KIDX as u64, &RS_KSYM as u64, k, &RS_KOUT as u64) != RS_E_SING { return 14u64 }
+
+    /* LARGER CODE: RS(16,10), lose the last 6; recover from rows 0..9 */
+    let n2 : u32 = 16u32
+    let k2 : u32 = 10u32
+    if rs_init(n2, k2) != RS_OK { return 15u64 }
+    let mut jg : u32 = 0u32
+    while jg < k2 {
+        RS_KD[jg] = ((jg * 97u32 + 5u32) & 0xFFu32) as u8
+        jg = jg + 1u32
+    }
+    if rs_encode(&RS_KD as u64, &RS_KCW as u64) != RS_OK { return 15u64 }
+    let mut jr : u32 = 0u32
+    while jr < k2 {
+        RS_KIDX[jr] = jr as u8
+        RS_KSYM[jr] = RS_KCW[jr]
+        jr = jr + 1u32
+    }
+    if rs_decode(&RS_KIDX as u64, &RS_KSYM as u64, k2, &RS_KOUT as u64) != RS_OK { return 16u64 }
+    let mut cg : u32 = 0u32
+    while cg < k2 {
+        if RS_KOUT[cg] != RS_KD[cg] { return 17u64 }
+        cg = cg + 1u32
+    }
+
+    return 99u64
+}

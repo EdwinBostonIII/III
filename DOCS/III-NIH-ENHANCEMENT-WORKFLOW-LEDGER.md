@@ -138,7 +138,14 @@ which is safe. Rule going forward: never `i32 < 0`/`>= 0` — use the sign bit (
 | 10 | **crt** — Chinese Remainder Theorem (Garner). Multi-modular / RSA-CRT foundation. NIH u64/i64, product-overflow guarded. | C | `crt_kat`=**99**: 300 random reconstructions over coprime subsets, each re-verified `x≡rᵢ mod mᵢ`; non-coprime rejected. | committed |
 | 11 | **bitio** — MSB-first bit reader/writer. Substrate for entropy coding / DEFLATE. NIH, no externs. | C | `bitio_kat`=**99**: bit round-trip identity, 50 random sequences + 64-bit edges. | committed |
 | 12 | **elias** — Elias γ/δ universal integer codes. **HARMONY**: first consumer of `bitio`. | C | `elias_kat`=**99**: delimiter-free stream round-trip (prefix-free), 200 values + edges, δ≤γ. | committed |
-| 13 | **base32** — RFC 4648 binary↔text codec. Identifiers/TOTP/DNS-safe. NIH, no externs. | C | `base32_kat`=**99**: RFC vector (foobar→MZXW6YTBOI) + 200 round-trips + invalid-char rejected. | committed |
+| ~~13~~ | ~~base32~~ — **REMOVED**: duplicated the pre-existing `verba/base32` (same `base32_encode/decode` @exports). The carto architectural-invariant gate caught the export collision (a Trap-2 link bomb). NIH/no-bloat: one base32, in `verba`. (`317c0a2`) | — | (a pointer-API variant, if needed, belongs in `verba/base32`) | dropped |
+
+**⚠ LESSON (carto gate + don't-duplicate):** before adding a `numera/*` module, grep ALL of `STDLIB/iii/`
+(incl. `verba/`, `aether/`, `omnia/`, `sanctus/`) for the capability AND for @export symbol collisions.
+The carto gate rejects duplicate @exports tree-wide (it caught `bitio::bw_init` vs `aether/
+bisimulation_witness::bw_init`, fixed by renaming to `bitw_*`/`bitr_*`, AND the `verba/base32` dup). The
+full-aggregate `build_stdlib` runs carto BEFORE the corpus, so a collision fails fast — but checking first
+avoids the wasted build. The `bw_`/`br_` prefix is taken (aether bisim-witness).
 
 **AGGREGATE INTEGRATION:** `1217–1220` committed corpus citizens (822/0). `1221–1223` validated `825/0`
 and IN FLIGHT for the surgical commit. `1224_lzss`/`1225_cas_blob`/`1226_crt` wired + validating in the

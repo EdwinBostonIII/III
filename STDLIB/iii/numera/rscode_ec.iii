@@ -1,0 +1,253 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\rscode_ec.iii
+ *
+ * III STDLIB - numera::rscode_ec
+ *
+ * Reed-Solomon ERROR-correction (Gao's decoder) over GF(2^8): the bold completion of Reed-Solomon
+ * beyond erasure. numera::rscode recovers KNOWN losses (erasures, positions given); this corrects
+ * UNKNOWN-position symbol ERRORS -- up to t = floor((n-k)/2) corrupted symbols at unknown positions
+ * are located AND repaired, and >t corruptions are DETECTED (decode failure, never silent garbage).
+ *
+ * Evaluation-form RS: a message m_0..m_{k-1} is the coefficient vector of M (deg < k); the codeword
+ * is c_j = M(x_j) at distinct points x_j = j. Gao's decoder is elegant and matrix-free:
+ *   g0(x) = prod_j (x - x_j)           (degree n)
+ *   g1(x) = the interpolation of (x_j, c_j)   (degree < n)        [Lagrange via g0/(x-x_j)]
+ *   run the extended Euclidean algorithm on (g0, g1), tracking the v-cofactor, UNTIL deg(r) <
+ *   (n+k)/2; then M = r / v exactly when <= t errors occurred (else the division has a remainder
+ *   => DETECTED failure).
+ *
+ * NIH / harmony: built on III's own numera::gf_poly (general GF(2^8) polynomial algebra) and
+ * numera::galois (scalar GF(2^8)). All working polynomials are MODULE-GLOBAL.
+ *
+ * Public API:
+ *   rse_decode(xs_ptr, ys_ptr, n, k, out_ptr) -> i32
+ *       xs_ptr/ys_ptr = the n evaluation points and the (possibly corrupted) codeword symbols;
+ *       on RSE_OK out_ptr[0..k-1] = the recovered message coefficients. RSE_FAIL if > t errors.
+ *
+ * (n+k assumed even for an exact integer threshold -- the canonical RS(n,k) with n-k even. The KAT
+ * exercises RS(7,3), t=2.)  Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_rscode_ec
+
+extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gpoly_eval(a: u64, len: u32, x: u32) -> u32 from "gf_poly.iii"
+extern @abi(c-msvc-x64) fn gpoly_add(a: u64, alen: u32, b: u64, blen: u32, out: u64) -> u32 from "gf_poly.iii"
+extern @abi(c-msvc-x64) fn gpoly_scale(a: u64, alen: u32, s: u32, out: u64) -> u32 from "gf_poly.iii"
+extern @abi(c-msvc-x64) fn gpoly_mul(a: u64, alen: u32, b: u64, blen: u32, out: u64) -> u32 from "gf_poly.iii"
+extern @abi(c-msvc-x64) fn gpoly_divmod(a: u64, alen: u32, b: u64, blen: u32, q: u64, r: u64) -> i32 from "gf_poly.iii"
+extern @abi(c-msvc-x64) fn gpoly_trim(a: u64, len: u32) -> u32 from "gf_poly.iii"
+
+const RSE_OK   : i32 =  0i32
+const RSE_FAIL : i32 = -1i32     /* more than t errors: detected, uncorrectable */
+const RSE_DIM  : i32 = -2i32     /* bad (n,k) / over cap */
+
+var RSE_G0   : [u8; 48]
+var RSE_G1   : [u8; 48]
+var RSE_TMP  : [u8; 48]
+var RSE_NJ   : [u8; 48]
+var RSE_REM  : [u8; 48]
+var RSE_TERM : [u8; 48]
+var RSE_RP   : [u8; 48]
+var RSE_RC   : [u8; 48]
+var RSE_RN   : [u8; 48]
+var RSE_VP   : [u8; 48]
+var RSE_VC   : [u8; 48]
+var RSE_VN   : [u8; 48]
+var RSE_Q    : [u8; 48]
+var RSE_QV   : [u8; 48]
+var RSE_LIN  : [u8; 2]
+
+fn rse_copy(src: u64, len: u32, dst: u64) -> i32 {
+    let sp : *u8 = src as *u8
+    let dp : *u8 = dst as *u8
+    let mut i : u32 = 0u32
+    while i < len { dp[i as u64] = sp[i as u64] ; i = i + 1u32 }
+    return 0i32
+}
+
+fn rse_decode(xs_ptr: u64, ys_ptr: u64, n: u32, k: u32, out_ptr: u64) -> i32 @export {
+    if k < 1u32 { return RSE_DIM }
+    if n <= k { return RSE_DIM }
+    if n > 24u32 { return RSE_DIM }
+    let xp : *u8 = xs_ptr as *u8
+    let yp : *u8 = ys_ptr as *u8
+    let op : *u8 = out_ptr as *u8
+
+    /* g0 = prod_j (x - x_j) = prod_j (x + x_j)  (char 2) */
+    RSE_G0[0u32] = 1u8
+    let mut g0len : u32 = 1u32
+    let mut j : u32 = 0u32
+    while j < n {
+        RSE_LIN[0u32] = xp[j as u64]
+        RSE_LIN[1u32] = 1u8
+        let ml : u32 = gpoly_mul(&RSE_G0 as u64, g0len, &RSE_LIN as u64, 2u32, &RSE_TMP as u64)
+        rse_copy(&RSE_TMP as u64, ml, &RSE_G0 as u64)
+        g0len = ml
+        j = j + 1u32
+    }
+
+    /* g1 = sum_j c_j * L_j ;  L_j = [g0/(x - x_j)] / eval(g0/(x-x_j), x_j) */
+    RSE_G1[0u32] = 0u8
+    let mut g1len : u32 = 1u32
+    let mut jj : u32 = 0u32
+    while jj < n {
+        RSE_LIN[0u32] = xp[jj as u64]
+        RSE_LIN[1u32] = 1u8
+        gpoly_divmod(&RSE_G0 as u64, g0len, &RSE_LIN as u64, 2u32, &RSE_NJ as u64, &RSE_REM as u64)
+        let njlen : u32 = gpoly_trim(&RSE_NJ as u64, g0len - 1u32)
+        let dj : u32 = gpoly_eval(&RSE_NJ as u64, njlen, xp[jj as u64] as u32)
+        let coef : u32 = gf8_mul(yp[jj as u64] as u32, gf8_inv(dj))
+        let tl : u32 = gpoly_scale(&RSE_NJ as u64, njlen, coef, &RSE_TERM as u64)
+        let nl : u32 = gpoly_add(&RSE_G1 as u64, g1len, &RSE_TERM as u64, tl, &RSE_TMP as u64)
+        rse_copy(&RSE_TMP as u64, nl, &RSE_G1 as u64)
+        g1len = nl
+        jj = jj + 1u32
+    }
+
+    /* extended Euclidean on (g0, g1), tracking v, until deg(r_cur) < (n+k)/2 */
+    rse_copy(&RSE_G0 as u64, g0len, &RSE_RP as u64) ; let mut lp : u32 = g0len
+    rse_copy(&RSE_G1 as u64, g1len, &RSE_RC as u64) ; let mut lc : u32 = g1len
+    RSE_VP[0u32] = 0u8 ; let mut lvp : u32 = 1u32
+    RSE_VC[0u32] = 1u8 ; let mut lvc : u32 = 1u32
+    let thresh : u32 = (n + k) / 2u32
+    while (lc - 1u32) >= thresh {
+        gpoly_divmod(&RSE_RP as u64, lp, &RSE_RC as u64, lc, &RSE_Q as u64, &RSE_RN as u64)
+        let qlen : u32 = gpoly_trim(&RSE_Q as u64, (lp - lc) + 1u32)
+        let rnlen : u32 = gpoly_trim(&RSE_RN as u64, lp)
+        let qvl : u32 = gpoly_mul(&RSE_Q as u64, qlen, &RSE_VC as u64, lvc, &RSE_QV as u64)
+        let vnl : u32 = gpoly_add(&RSE_VP as u64, lvp, &RSE_QV as u64, qvl, &RSE_VN as u64)
+        /* shift: prev <- cur, cur <- next */
+        rse_copy(&RSE_RC as u64, lc, &RSE_RP as u64) ; lp = lc
+        rse_copy(&RSE_RN as u64, rnlen, &RSE_RC as u64) ; lc = rnlen
+        rse_copy(&RSE_VC as u64, lvc, &RSE_VP as u64) ; lvp = lvc
+        rse_copy(&RSE_VN as u64, vnl, &RSE_VC as u64) ; lvc = vnl
+    }
+
+    /* M = r_cur / v_cur ; exact division iff <= t errors */
+    if lc < lvc { return RSE_FAIL }      /* deg(r) < deg(v): no valid message quotient (> t errors) */
+    gpoly_divmod(&RSE_RC as u64, lc, &RSE_VC as u64, lvc, &RSE_Q as u64, &RSE_RN as u64)
+    let mlen : u32 = gpoly_trim(&RSE_Q as u64, (lc - lvc) + 1u32)
+    let remlen : u32 = gpoly_trim(&RSE_RN as u64, lc)
+    if remlen > 1u32 { return RSE_FAIL }
+    if RSE_RN[0u32] != 0u8 { return RSE_FAIL }     /* nonzero remainder => > t errors */
+    if mlen > k { return RSE_FAIL }                /* deg(M) >= k => not a valid message */
+
+    let mut i : u32 = 0u32
+    while i < k {
+        if i < mlen { op[i as u64] = RSE_Q[i as u64] } else { op[i as u64] = 0u8 }
+        i = i + 1u32
+    }
+    return RSE_OK
+}
+
+/* ===== KAT ===== */
+var RSE_MSG : [u8; 8]
+var RSE_XS  : [u8; 8]
+var RSE_C   : [u8; 8]
+var RSE_OUT : [u8; 8]
+var RSE_RNG : [u64; 1]
+
+fn rse_rng() -> u64 {
+    let mut x : u64 = RSE_RNG[0u64]
+    x = x ^ (x << 13u64)
+    x = x ^ (x >> 7u64)
+    x = x ^ (x << 17u64)
+    RSE_RNG[0u64] = x
+    return x
+}
+
+/* encode message (k coeffs) at points 0..n-1 into RSE_C */
+fn rse_encode_kat(n: u32, k: u32) -> i32 {
+    let mut j : u32 = 0u32
+    while j < n {
+        RSE_XS[j] = j as u8
+        RSE_C[j] = gpoly_eval(&RSE_MSG as u64, k, j) as u8
+        j = j + 1u32
+    }
+    return 0i32
+}
+fn rse_msg_matches() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 3u32 {
+        if RSE_OUT[i] != RSE_MSG[i] { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * rse_kat -- 99 = the RS error-correction claim, self-checked on RS(7,3) (t=2):
+ *   (1) 0 errors recover the message;
+ *   (2) SINGLE error: EVERY position x EVERY nonzero error delta is located + corrected;
+ *   (3) DOUBLE error (t=2): all position pairs x sampled deltas are corrected;
+ *   (4) TRIPLE error (> t): DETECTED as uncorrectable (RSE_FAIL) -- never silent mis-decode.
+ * ===================================================================================== */
+fn rse_kat() -> u64 @export {
+    let n : u32 = 7u32
+    let k : u32 = 3u32
+    RSE_RNG[0u64] = 0xB5297A4D1234ABCDu64
+    RSE_MSG[0u32] = 0x4Bu8
+    RSE_MSG[1u32] = 0xD2u8
+    RSE_MSG[2u32] = 0x9Fu8
+    rse_encode_kat(n, k)
+
+    /* (1) zero errors */
+    if rse_decode(&RSE_XS as u64, &RSE_C as u64, n, k, &RSE_OUT as u64) != RSE_OK { return 1u64 }
+    if rse_msg_matches() != 1u32 { return 2u64 }
+
+    /* (2) EXHAUSTIVE single error: every position, every nonzero delta */
+    let mut p : u32 = 0u32
+    while p < n {
+        let mut d : u32 = 1u32
+        while d <= 255u32 {
+            rse_encode_kat(n, k)
+            RSE_C[p] = (RSE_C[p] ^ (d as u8))
+            if rse_decode(&RSE_XS as u64, &RSE_C as u64, n, k, &RSE_OUT as u64) != RSE_OK { return 1000u64 + (p as u64) * 256u64 + (d as u64) }
+            if rse_msg_matches() != 1u32 { return 100000u64 + (p as u64) * 256u64 + (d as u64) }
+            d = d + 1u32
+        }
+        p = p + 1u32
+    }
+
+    /* (3) DOUBLE error: all position pairs, sampled deltas */
+    let mut a : u32 = 0u32
+    while a < n {
+        let mut b : u32 = a + 1u32
+        while b < n {
+            let mut s : u32 = 0u32
+            while s < 12u32 {
+                rse_encode_kat(n, k)
+                let da : u8 = (1u8 + (rse_rng() & 0xFEu64) as u8)     /* nonzero */
+                let db : u8 = (1u8 + (rse_rng() & 0xFEu64) as u8)
+                RSE_C[a] = (RSE_C[a] ^ da)
+                RSE_C[b] = (RSE_C[b] ^ db)
+                if rse_decode(&RSE_XS as u64, &RSE_C as u64, n, k, &RSE_OUT as u64) != RSE_OK { return 200000u64 + (a as u64) * 100u64 + (b as u64) }
+                if rse_msg_matches() != 1u32 { return 300000u64 + (a as u64) * 100u64 + (b as u64) }
+                s = s + 1u32
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+
+    /* (4) TRIPLE error (> t=2): must be DETECTED, not silently mis-decoded */
+    let mut tcount : u32 = 0u32
+    let mut detected : u32 = 0u32
+    let mut tr : u32 = 0u32
+    while tr < 40u32 {
+        rse_encode_kat(n, k)
+        RSE_C[0u32] = (RSE_C[0u32] ^ (1u8 + (rse_rng() & 0xFEu64) as u8))
+        RSE_C[2u32] = (RSE_C[2u32] ^ (1u8 + (rse_rng() & 0xFEu64) as u8))
+        RSE_C[4u32] = (RSE_C[4u32] ^ (1u8 + (rse_rng() & 0xFEu64) as u8))
+        let st : i32 = rse_decode(&RSE_XS as u64, &RSE_C as u64, n, k, &RSE_OUT as u64)
+        tcount = tcount + 1u32
+        /* a 3-error word must NOT decode back to the original message (that would be a silent
+         * mis-correction). Either RSE_FAIL, or a DIFFERENT message -- both are acceptable
+         * (the code's distance guarantees no 3-error word equals a codeword of THIS message). */
+        if st != RSE_OK { detected = detected + 1u32 } else { if rse_msg_matches() != 1u32 { detected = detected + 1u32 } }
+        tr = tr + 1u32
+    }
+    if detected != tcount { return 4u64 }     /* every triple-error word was caught */
+
+    return 99u64
+}

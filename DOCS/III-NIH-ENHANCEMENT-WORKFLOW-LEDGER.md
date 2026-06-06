@@ -106,12 +106,21 @@ concurrent writer's uncommitted edits — their `build_stdlib +1` references unc
   + a tiny driver; link `gcc drv.o <mods>.o -Wl,--whole-archive <SIDE_EFFECT_OBJS> -Wl,--no-whole-archive
   STDLIB/build/iii/libiii_native.a -lws2_32 -lkernel32`; stage exe in /tmp; exit code = KAT (99).
 
-**Pending harness wiring (forced wait, NOT a deferral):** `rscode` is complete + proven + committed
-as a standalone new file. Adding it to the aggregate build is a 3-line mechanical follow-up —
-`build_stdlib.sh` MODULES (after `numera/galois`), `run_corpus.sh` EXPECTED (`[1217_rscode]=99`),
-and a thin `corpus/1217_rscode.iii` driver — all held ONLY because the concurrent writer has
-`build_stdlib.sh`/`run_corpus.sh` uncommitted (their `bv_dispose` line references an uncommitted
-module, so co-committing would break the build). Apply the instant those files are clean.
+| 5 | **hamming_secded** — verified Hamming SEC-DED ECC over a 64-bit word (the ECC-DRAM code). Corrects UNKNOWN-position bit flips (complements the erasure layer's known-loss recovery). NIH binary parity. | C | `ham_kat`=**99** standalone (no lib): clean roundtrip + EXHAUSTIVE all 72 single-bit errors corrected ×4 words + double-error detection. | `1cf0d63` |
+| 6 | **gf_poly** — verified general GF(2⁸) polynomial algebra (`gpoly_*`: add/scale/mul/divmod/eval). Reusable primitive beneath RS/BCH error-correction + interpolation. On `galois`. | C | `gpoly_kat`=**99** standalone: 400 trials of the add/scale/mul EVALUATION HOMOMORPHISM (independent oracle) + the `a=q·b+r` divmod identity. | `9de0038` |
+
+**AGGREGATE INTEGRATION DONE (`a006579`, 822/0):** `rscode`/`shamir`/`erasure_store`/`threshold_vault`
+are now committed **corpus citizens** — wired into `build_stdlib` MODULES + `run_corpus` EXPECTED +
+`corpus/1217–1220` drivers, PROVEN in the FULL aggregate (build_stdlib 483/0; run_all_corpora →
+1217–1220 all exit=99, STDLIB **PASS=822 FAIL=0**, Stage-1 57/0, Overall ALL CORPORA PASSED). The
+surgical commit excluded the concurrent writer's untracked `bv_dispose`/`1211–1216` lines (restored to
+the working tree), keeping HEAD buildable. **Pending wiring (batch):** `hamming_secded` (`1221`) +
+`gf_poly` (`1222`) — wire + one full build, same surgical pattern, next aggregate pass.
+
+**NEXT (ambitious, queued):** Reed-Solomon ERROR-correction (`rscode_ec`, Gao's decoder over GF(2⁸) on
+`gf_poly`) — corrects unknown-position symbol errors, the bold completion of RS beyond erasure.
+Prereq: expose `gpoly_qlen()`/`gpoly_rlen()` from `gf_poly` (divmod length accessors) or re-derive via
+`gpoly_trim`. KAT: exhaustive single+double error correction on RS(7,3), t+1 detected.
 
 ## IN PROGRESS
 

@@ -1,0 +1,13 @@
+/* 1226_crt.iii -- verified Chinese Remainder Theorem (Garner's algorithm).
+ * Drives numera::crt::crt_kat: 99 = 300 random secrets over random coprime modulus subsets (2..6
+ * moduli) each reconstructed EXACTLY and independently re-verified to satisfy x=r_i (mod m_i) for
+ * every i; non-coprime moduli rejected. The foundation of multi-modular / RSA-CRT arithmetic. */
+module corpus_1226
+
+extern @abi(c-msvc-x64) fn crt_kat() -> u64 from "crt.iii"
+
+fn main() -> u64 {
+    let r : u64 = crt_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

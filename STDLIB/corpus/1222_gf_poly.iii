@@ -1,0 +1,13 @@
+/* 1222_gf_poly.iii -- verified general GF(2^8) polynomial arithmetic.
+ * Drives numera::gf_poly::gpoly_kat: 99 = 400 seeded trials checking the add/scale/mul EVALUATION
+ * HOMOMORPHISM (eval is an independent oracle for the coefficient algebra) + the a=q*b+r divmod
+ * identity with deg(r)<deg(b). The reusable primitive beneath RS/BCH error-correction. */
+module corpus_1222
+
+extern @abi(c-msvc-x64) fn gpoly_kat() -> u64 from "gf_poly.iii"
+
+fn main() -> u64 {
+    let r : u64 = gpoly_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

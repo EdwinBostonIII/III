@@ -1,0 +1,13 @@
+/* 1221_hamming_secded.iii -- verified Hamming SEC-DED ECC over a 64-bit word.
+ * Drives numera::hamming_secded::ham_kat: 99 = clean roundtrip + EXHAUSTIVE all 72 single-bit
+ * errors corrected across 4 data words + double-error detection (adjacent sweep + wide pairs).
+ * Corrects UNKNOWN-position bit flips (complements the rscode/erasure_store known-loss layer). */
+module corpus_1221
+
+extern @abi(c-msvc-x64) fn ham_kat() -> u64 from "hamming_secded.iii"
+
+fn main() -> u64 {
+    let r : u64 = ham_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

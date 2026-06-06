@@ -1,0 +1,13 @@
+/* 1225_cas_blob.iii -- verified compressed + erasure-coded + content-addressed blob storage.
+ * Drives numera::cas_blob::cas_kat: 99 = seal a 200-byte compressible blob as RS(7,4); EXHAUSTIVE
+ * over all C(7,3)=35 three-shard losses, reconstruct->decompress recovers the blob EXACTLY at the
+ * original length; too-few shards refused. HARMONY of numera lzss + erasure_store. */
+module corpus_1225
+
+extern @abi(c-msvc-x64) fn cas_kat() -> u64 from "cas_blob.iii"
+
+fn main() -> u64 {
+    let r : u64 = cas_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

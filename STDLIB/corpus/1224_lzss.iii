@@ -1,0 +1,13 @@
+/* 1224_lzss.iii -- verified LZSS lossless compression.
+ * Drives numera::lzss::lzss_kat: 99 = ROUNDTRIP IDENTITY decompress(compress(x))==x on random/
+ * constant/periodic/text/empty inputs + 100 seeded random length/content inputs, plus the
+ * compression-ratio check (repetitive data compresses). Honest failure detection (sign-bit). */
+module corpus_1224
+
+extern @abi(c-msvc-x64) fn lzss_kat() -> u64 from "lzss.iii"
+
+fn main() -> u64 {
+    let r : u64 = lzss_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,13 @@
+/* 1223_rscode_ec.iii -- verified Reed-Solomon error-correction (Gao decoder over GF(2^8)).
+ * Drives numera::rscode_ec::rse_kat: 99 on RS(7,3,t=2) = 0-error recovery + EXHAUSTIVE single error
+ * (all 7 positions x all 255 deltas = 1785) corrected + all 21 double-error pairs corrected + all 40
+ * triple-error words DETECTED (never silent mis-decode). Completes RS beyond erasure (rscode). */
+module corpus_1223
+
+extern @abi(c-msvc-x64) fn rse_kat() -> u64 from "rscode_ec.iii"
+
+fn main() -> u64 {
+    let r : u64 = rse_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

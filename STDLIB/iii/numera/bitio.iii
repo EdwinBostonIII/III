@@ -1,0 +1,157 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bitio.iii
+ *
+ * III STDLIB - numera::bitio
+ *
+ * A verified MSB-first bit writer / reader -- the substrate beneath entropy coding (Huffman,
+ * arithmetic / range coding), bit-packed wire formats, and a real DEFLATE-class compressor built
+ * on top of numera::lzss. Bits are packed into bytes most-significant-bit first (bit 7 of byte 0
+ * is the first bit written); a value of width n is written high bit first and read back identically.
+ *
+ * The verified property is ROUND-TRIP IDENTITY: a sequence of (value, width) pairs written then read
+ * back with the same widths reproduces every value exactly. NIH / self-contained: pure byte/bit
+ * arithmetic, no externs. Single writer + single reader state (module-global; sequential use).
+ *
+ * Public API:
+ *   bw_init(buf_ptr, cap) -> i32          begin writing into a zeroed cap-byte buffer
+ *   bw_put(v, n) -> i32                    append the low n bits of v (n<=64), MSB first; BIO_E_OVF on overflow
+ *   bw_bytelen() -> u32                    bytes used so far (ceil(bits/8))
+ *   br_init(buf_ptr, len) -> i32           begin reading a len-byte buffer
+ *   br_get(n) -> u64                       read the next n bits as a value (MSB first)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_bitio
+
+const BIO_OK    : i32 =  0i32
+const BIO_E_OVF : i32 = -1i32
+
+var BIO_WBUF : [u64; 1]
+var BIO_WCAP : [u32; 1]
+var BIO_WPOS : [u32; 1]
+var BIO_RBUF : [u64; 1]
+var BIO_RLEN : [u32; 1]
+var BIO_RPOS : [u32; 1]
+
+fn bw_init(buf_ptr: u64, cap: u32) -> i32 @export {
+    let bp : *u8 = buf_ptr as *u8
+    let mut i : u32 = 0u32
+    while i < cap { bp[i as u64] = 0u8 ; i = i + 1u32 }
+    BIO_WBUF[0u64] = buf_ptr
+    BIO_WCAP[0u64] = cap
+    BIO_WPOS[0u64] = 0u32
+    return BIO_OK
+}
+
+fn bw_put(v: u64, n: u32) -> i32 @export {
+    let bp : *u8 = BIO_WBUF[0u64] as *u8
+    let cap : u32 = BIO_WCAP[0u64]
+    let mut i : u32 = n
+    while i > 0u32 {
+        i = i - 1u32
+        let bit : u32 = ((v >> (i as u64)) & 1u64) as u32     /* MSB first */
+        let p : u32 = BIO_WPOS[0u64]
+        let byte : u32 = p >> 3u32
+        if byte >= cap { return BIO_E_OVF }
+        if bit == 1u32 {
+            let bitpos : u32 = 7u32 - (p & 7u32)
+            bp[byte as u64] = (bp[byte as u64] | ((1u32 << bitpos) as u8))
+        }
+        BIO_WPOS[0u64] = p + 1u32
+    }
+    return BIO_OK
+}
+
+fn bw_bytelen() -> u32 @export { return (BIO_WPOS[0u64] + 7u32) >> 3u32 }
+
+fn br_init(buf_ptr: u64, len: u32) -> i32 @export {
+    BIO_RBUF[0u64] = buf_ptr
+    BIO_RLEN[0u64] = len
+    BIO_RPOS[0u64] = 0u32
+    return BIO_OK
+}
+
+fn br_get(n: u32) -> u64 @export {
+    let bp : *u8 = BIO_RBUF[0u64] as *u8
+    let mut v : u64 = 0u64
+    let mut c : u32 = 0u32
+    while c < n {
+        let p : u32 = BIO_RPOS[0u64]
+        let byte : u32 = p >> 3u32
+        let bitpos : u32 = 7u32 - (p & 7u32)
+        let bit : u64 = (((bp[byte as u64] as u32) >> bitpos) & 1u32) as u64
+        v = (v << 1u64) | bit
+        BIO_RPOS[0u64] = p + 1u32
+        c = c + 1u32
+    }
+    return v
+}
+
+/* ===== KAT ===== */
+var BIO_BUF  : [u8; 1024]
+var BIO_VALS : [u64; 200]
+var BIO_WID  : [u32; 200]
+var BIO_RNG  : [u64; 1]
+
+fn bio_rng() -> u64 {
+    let mut z : u64 = BIO_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    BIO_RNG[0u64] = z
+    return z
+}
+
+/* =====================================================================================
+ * bitio_kat -- 99 = ROUND-TRIP IDENTITY: a sequence of (value, width) pairs written then read back
+ * with the same widths reproduces every value exactly, across 50 seeded random sequences of mixed
+ * widths (1..32), plus explicit edge widths (1, 8, 32, 64) and a full 64-bit value.
+ * ===================================================================================== */
+fn bitio_kat() -> u64 @export {
+    BIO_RNG[0u64] = 0x6A09E667F3BCC908u64
+    let mut seq : u32 = 0u32
+    while seq < 50u32 {
+        let r0 : u64 = bio_rng()
+        let m : u32 = 1u32 + (r0 % 150u64) as u32        /* 1..150 items, <= 150*32=4800 bits < 8192 */
+        bw_init(&BIO_BUF as u64, 1024u32)
+        let mut i : u32 = 0u32
+        while i < m {
+            let rw : u64 = bio_rng()
+            let w : u32 = 1u32 + (rw % 32u64) as u32     /* width 1..32 */
+            let rv : u64 = bio_rng()
+            let mask : u64 = (1u64 << (w as u64)) - 1u64  /* w<=32 -> 1<<w well-defined */
+            let v : u64 = rv & mask
+            BIO_WID[i] = w
+            BIO_VALS[i] = v
+            if bw_put(v, w) != BIO_OK { return 1000u64 + (seq as u64) }
+            i = i + 1u32
+        }
+        let blen : u32 = bw_bytelen()
+        br_init(&BIO_BUF as u64, blen)
+        let mut j : u32 = 0u32
+        while j < m {
+            let got : u64 = br_get(BIO_WID[j])
+            if got != BIO_VALS[j] { return 2000u64 + (seq as u64) * 200u64 + (j as u64) }
+            j = j + 1u32
+        }
+        seq = seq + 1u32
+    }
+
+    /* explicit edge cases incl. full 64-bit values */
+    bw_init(&BIO_BUF as u64, 1024u32)
+    bw_put(1u64, 1u32)
+    bw_put(0u64, 1u32)
+    bw_put(0xABu64, 8u32)
+    bw_put(0x89ABCDEFu64, 32u32)
+    bw_put(0xFFFFFFFFFFFFFFFFu64, 64u32)
+    bw_put(0x0123456789ABCDEFu64, 64u32)
+    let el : u32 = bw_bytelen()
+    br_init(&BIO_BUF as u64, el)
+    if br_get(1u32) != 1u64 { return 3u64 }
+    if br_get(1u32) != 0u64 { return 4u64 }
+    if br_get(8u32) != 0xABu64 { return 5u64 }
+    if br_get(32u32) != 0x89ABCDEFu64 { return 6u64 }
+    if br_get(64u32) != 0xFFFFFFFFFFFFFFFFu64 { return 7u64 }
+    if br_get(64u32) != 0x0123456789ABCDEFu64 { return 8u64 }
+
+    return 99u64
+}

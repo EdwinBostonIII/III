@@ -117,10 +117,31 @@ surgical commit excluded the concurrent writer's untracked `bv_dispose`/`1211–
 the working tree), keeping HEAD buildable. **Pending wiring (batch):** `hamming_secded` (`1221`) +
 `gf_poly` (`1222`) — wire + one full build, same surgical pattern, next aggregate pass.
 
-**NEXT (ambitious, queued):** Reed-Solomon ERROR-correction (`rscode_ec`, Gao's decoder over GF(2⁸) on
-`gf_poly`) — corrects unknown-position symbol errors, the bold completion of RS beyond erasure.
-Prereq: expose `gpoly_qlen()`/`gpoly_rlen()` from `gf_poly` (divmod length accessors) or re-derive via
-`gpoly_trim`. KAT: exhaustive single+double error correction on RS(7,3), t+1 detected.
+| 7 | **rscode_ec** — verified Reed-Solomon ERROR-correction (Gao's decoder over GF(2⁸) on `gf_poly`). Corrects UNKNOWN-position symbol errors (≤t), detects >t. Completes RS beyond erasure. | C | `rse_kat`=**99** standalone (RS(7,3,t=2)): 0-error recovery + EXHAUSTIVE single error (7 pos × 255 deltas = 1785) corrected + all 21 double-error pairs + all 40 triple-error words DETECTED. | `cba5295` |
+
+**REED-SOLOMON COMPLETE in III:** `rscode` (erasure / known losses) + `rscode_ec` (error-correction /
+unknown positions) span both fault models — built on `gf_poly` + `galois`, fully verified.
+
+**Aggregate-wiring `1221–1223` (hamming/gf_poly/rscode_ec) IN FLIGHT** (full build_stdlib + run_all_corpora,
+same surgical-commit pattern on green). After that the whole resilient-data + coding + crypto cluster is
+committed corpus citizens.
+
+| 8 | **lzss** — verified LZSS lossless compression (LZ77 family). ROUNDTRIP IDENTITY decompress(compress(x))==x. NIH binary, no externs. | C | `lzss_kat`=**99** standalone (no lib): roundtrip on random/constant/periodic/text/empty + 100 seeded inputs + compression-ratio check. (`8c…` base + honesty fix.) | committed |
+| 9 | **cas_blob** — verified compressed + erasure-coded + content-addressed blob storage. **HARMONY**: `lzss` + `erasure_store`. Stored smaller AND durably AND tamper-evidently, recovered byte-exact. | C/harmony | `cas_kat`=**99** standalone: EXHAUSTIVE all C(7,3)=35 three-shard losses → compress→shard→reconstruct→decompress recovers the blob EXACTLY + too-few refused. | committed |
+
+**⚠ HONESTY AUDIT (i32 ordering is UNSIGNED in this toolchain):** modules that returned a *length* as
+`i32` and checked `<0`/`>=0` had vacuous failure-detection — a negative (failure) return read as huge ≥0
+and slipped past, a latent greenwash. FOUND + FIXED in `lzss` (its KAT failure checks) and `cas_blob`
+(its negative arm). Audited all other landed modules: they compare STATUS codes by EQUALITY (`!= OK`),
+which is safe. Rule going forward: never `i32 < 0`/`>= 0` — use the sign bit (`(x as u32) >> 31`).
+
+**Aggregate-wiring `1221–1223` (hamming/gf_poly/rscode_ec) IN FLIGHT (full build+corpus). Queued next:
+`1224_lzss` + `1225_cas_blob`** (one more full build, same surgical pattern). Then all 11 modules are
+committed corpus citizens.
+
+**NEXT candidates (disjoint, self-checkable, bold):** rateless/fountain codes; CRT/Garner; further
+harmony capstones tying the resilient-data layer to III's witness/content-address spine. Kernel/optimizer
+frontier items remain the concurrent writer's territory until their tree stabilizes.
 
 ## IN PROGRESS
 

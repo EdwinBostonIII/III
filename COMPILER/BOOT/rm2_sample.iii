@@ -11,3 +11,21 @@ sealed_call do_thing(x: u64) @seal_id(1) {
     let b: u64 = a + x
     return b
 }
+
+/* De-vacuum the gate against the unsigned-ordering setcc bug: a UNSIGNED u64 ordering with the high bit
+ * set. x=0x4000000000000000 -> x+x=0x8000000000000000; x < (x+x) is TRUE unsigned (-> 1) but FALSE under
+ * the old signed setl (+0x4e18 < INT64_MIN). do_ord(0x4000000000000000) must be 1. */
+sealed_call do_ord(x: u64) @seal_id(2) {
+    iii_cap_revoke(x)
+    let r: u64 = x < (x + x)
+    return r
+}
+
+/* No-regression: a SIGNED i64 ordering must STAY signed. neg=-7; neg < 5 is TRUE signed (-> 1) but FALSE
+ * if it wrongly went unsigned (0xFFFF...F9 < 5). do_sord(_) must be 1. */
+sealed_call do_sord(x: u64) @seal_id(3) {
+    iii_cap_revoke(x)
+    let neg: i64 = 0i64 - 7i64
+    let r: u64 = neg < 5i64
+    return r
+}

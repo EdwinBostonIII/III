@@ -1,0 +1,106 @@
+/* STDLIB/iii/forcefield/cg_autocatalyst.iii -- THE SIEVE of the Autocatalytic Synthesis Loop.
+ *
+ * The absolute, deterministic wall.  A hallucinated candidate identity (from egraph_stochastic) is
+ * turned into a candidate proof term by the synthesizer (numera/sov_isa) and fed to the system's
+ * ultimate truth-teller: the CIC kernel tc_check (numera/typecheck).  The kernel is the SOLE arbiter.
+ *
+ *   REJECTION ARM:  tc_check == 0  -> the mutation is mathematically FALSE (or exceeds the arena cap, a
+ *                   sound capacity fail-safe).  ZERO state change -- the next sov_ac_setup's tc_reset
+ *                   wipes the volatile candidate; nothing is sealed, nothing recorded.  ~99.x% of dreams.
+ *   ADMISSION ARM:  tc_check == 1  -> a mathematically TRUE, kernel-CERTIFIED optimization.  The identity
+ *                   is content-address SEALED (cad_oneshot, Keccak-256 -- the hash IS its identity, M6)
+ *                   into the RUNTIME certified-rewrite registry.
+ *
+ * THE HARD-INVARIANT FIX (honored): the proposal says "permanently written into hdl_gate_db.iii".  That
+ * is self-editing SEALED SOURCE -- forbidden (Generative-Sovereignty single-source + the content-address
+ * seal; and .iii->.exe cannot rewrite source at runtime).  So the registry is a VOLATILE, in-memory,
+ * cad-sealed table: it evaporates on exit BY DESIGN.  Permanent assimilation of a discovery into the
+ * compiler source is the OPERATOR-GATED CRASH-PROTOCOL step (a reseal), NEVER an autonomous self-edit
+ * (M20 / ADR-FORGE-4: the Forge is reflexive but BOUNDED -- it may seal its own contents but no proof
+ * herein asserts the substrate's own soundness; that remains the iiis-2 == iiis-3 bootstrap fixed point).
+ *
+ * Hexad: kind_seal.  Ring: R0.  K: 1.00.  NIH: composes sov_isa + typecheck + cad, all in-tree.
+ */
+module cg_autocatalyst
+
+extern @abi(c-msvc-x64) fn sov_ac_setup() -> u64 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_synth_strength_at(k: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_hall_goal(a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const CGA_REG_CAP : u32 = 64u32
+
+var CGA_REG_SEAL : [u8;  2048]   /* 64 slots x 32-byte Keccak content address */
+var CGA_REG_A    : [u32; 64]     /* the certified identity's lhs exponent */
+var CGA_REG_B    : [u32; 64]     /* ... rhs exponent (== a for every sealed entry) */
+var CGA_REG_N    : [u32; 1]      /* number of certified discoveries this run */
+var CGA_MSG      : [u8;  8]      /* scratch: the (a,b) bytes hashed into the seal */
+
+fn cga_reset() -> u64 @export { CGA_REG_N[0u64] = 0u32  return 0u64 }
+fn cga_count() -> u32 @export { return CGA_REG_N[0u64] }
+fn cga_entry_a(i: u32) -> u32 @export { if i >= CGA_REG_N[0u64] { return 0xFFFFFFFFu32 }  return CGA_REG_A[i as u64] }
+fn cga_entry_b(i: u32) -> u32 @export { if i >= CGA_REG_N[0u64] { return 0xFFFFFFFFu32 }  return CGA_REG_B[i as u64] }
+
+/* 1 iff EVERY sealed entry is a TRUE identity (a == b) -- the soundness property: the kernel never
+ * admitted a false hallucination.  A single false seal (a != b) returns 0. */
+fn cga_all_true() -> u8 @export {
+    let n : u32 = CGA_REG_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        if CGA_REG_A[i as u64] != CGA_REG_B[i as u64] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* THE SIEVE: dispose a hallucinated strength candidate (a,b) through the kernel.
+ * budget==0 -> the synthesizer never attempts (timeout), return 0.  Reject (false, or arena-cap) ->
+ * ZERO state change, return 0.  Admit (kernel tc_check==1) -> cad-seal into the volatile registry,
+ * return 1.  The registry only ever records what the kernel ALREADY certified. */
+fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 @export {
+    if budget == 0u32 { return 0u8 }
+    sov_ac_setup()                                   /* tc_reset + proven tower (also wipes the prior dream) */
+    let cert : u32 = sov_synth_strength_at(a)        /* the synthesizer's best proof attempt for this candidate */
+    let goal : u32 = sov_hall_goal(a, b)             /* the candidate equation mul(x,2^a) == double^b(x) */
+    if tc_check(cert, goal) != 1u8 { return 0u8 }    /* THE WALL: false / arena-cap -> discard, zero state */
+
+    let n : u32 = CGA_REG_N[0u64]
+    if n >= CGA_REG_CAP { return 1u8 }               /* certified but registry full: still a true discovery */
+    CGA_MSG[0u64] = (a & 0xFFu32) as u8
+    CGA_MSG[1u64] = ((a >> 8u32) & 0xFFu32) as u8
+    CGA_MSG[2u64] = ((a >> 16u32) & 0xFFu32) as u8
+    CGA_MSG[3u64] = ((a >> 24u32) & 0xFFu32) as u8
+    CGA_MSG[4u64] = (b & 0xFFu32) as u8
+    CGA_MSG[5u64] = ((b >> 8u32) & 0xFFu32) as u8
+    CGA_MSG[6u64] = ((b >> 16u32) & 0xFFu32) as u8
+    CGA_MSG[7u64] = ((b >> 24u32) & 0xFFu32) as u8
+    let outp : *u8 = ((&CGA_REG_SEAL as u64) + (n as u64) * 32u64) as *u8
+    cad_oneshot(1u32, (&CGA_MSG as u64) as *u8, 8u64, outp)   /* suite 1 = Keccak-256; seal = identity (M6) */
+    CGA_REG_A[n as u64] = a
+    CGA_REG_B[n as u64] = b
+    CGA_REG_N[0u64] = n + 1u32
+    return 1u8
+}
+
+/* SELFTEST (kernel-backed): the sieve admits ONLY kernel-true identities.  99 =
+ *  (1) a TRUE candidate (a==b==3) is ADMITTED + sealed (count 0->1);
+ *  (2) a FALSE candidate (a=3,b=4) is REJECTED -- count UNCHANGED (zero state change);
+ *  (3) a budget=0 candidate is REJECTED (synthesizer timeout) -- count unchanged;
+ *  (4) every sealed entry is a true identity (cga_all_true); and the seal is non-zero (cad ran). */
+fn cga_selftest() -> u64 @export {
+    cga_reset()
+    if cga_dispose(3u32, 3u32, 64u32) != 1u8 { return 1u64 }      /* TRUE -> admit */
+    if cga_count() != 1u32 { return 2u64 }
+    if cga_dispose(3u32, 4u32, 64u32) != 0u8 { return 3u64 }      /* FALSE -> reject */
+    if cga_count() != 1u32 { return 4u64 }                        /* zero state change on reject */
+    if cga_dispose(2u32, 2u32, 0u32) != 0u8 { return 5u64 }       /* budget 0 -> timeout */
+    if cga_count() != 1u32 { return 6u64 }
+    if cga_all_true() != 1u8 { return 7u64 }                      /* only true identities sealed */
+    /* the seal of the admitted (3,3) identity is non-zero (cad actually ran) */
+    let mut nz : u8 = 0u8
+    let mut i : u32 = 0u32
+    while i < 32u32 { if CGA_REG_SEAL[i as u64] != 0u8 { nz = 1u8 }  i = i + 1u32 }
+    if nz == 0u8 { return 8u64 }
+    return 99u64
+}

@@ -98,7 +98,7 @@ chk_const() { # $1 human label, $2 ERE that MUST match a line in census.iii
 }
 chk_const "array dimension"  "var[[:space:]]+KCEN_FACTS[[:space:]]*:[[:space:]]*\[u64;[[:space:]]*${N}\]"
 chk_const "fact_count"       "katabasis_census_fact_count\(\)[^{]*\{[[:space:]]*return[[:space:]]+${N}u64"
-chk_const "hash byte-length" "sha256_oneshot\(&KCEN_FACTS as \*u8, ${HASHLEN}u64,"
+chk_const "hash byte-length" "sha256_oneshot_packed\(&KCEN_FACTS as \*u8, ${HASHLEN}u64,"
 
 NEW="$(mktemp)"
 awk -v b="$BEGIN_MARK" -v e="$END_MARK" -v blk="$GEN_BLOCK" '

@@ -98,7 +98,7 @@ fn cg_r0_probe() -> u32 @export {
 #     slotted "abc" probe above passes even when byte-packed hashing over-reads 8x, because the
 #     corruption only shows across block boundaries on NON-slotted input.  Absolute FIPS, not a
 #     peer differential (cg_r3 shares index defects -> a differential agrees on a wrong answer). ---
-probe cad_packed_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_packed_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 var OUT: [u8; 32]
 var EXP: [u8; 32]
@@ -117,7 +117,7 @@ fn cg_r0_probe() -> u32 @export {
 #     within the buffer (a trailing PAGE_NOACCESS page faults the process if it over-reads).  This
 #     is the exact mechanism of the BSOD (the .text self-measure walked off the image); zero-filled
 #     VirtualAlloc memory means no cg_r0 byte-STORE is needed to set it up. ---
-probe cad_packed_guard STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_packed_guard STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn VirtualAlloc(addr: u64, size: u64, typ: u32, prot: u32) -> u64 from "kernel32"
 extern @abi(c-msvc-x64) fn VirtualProtect(addr: u64, size: u64, newprot: u32, oldprot: u64) -> u32 from "kernel32"
@@ -139,13 +139,29 @@ fn cg_r0_probe() -> u32 @export {
 #     read byte-packed and mismatched, 2026-06-04).  Reading the output as *u64 here is the
 #     prove-the-negative: a regression to slotted output yields u64[0]=0x..00..00d0 != the packed
 #     EXPW and the gate reddens. ---
-probe cad_packed_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_packed_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 var OUT: [u8; 64]
 var EXPW: [u64; 4]
 fn cg_r0_probe() -> u32 @export {
     EXPW[0u64]=0xb83806d2616a8d24u64 EXPW[1u64]=0x39603e0c9326c0e5u64 EXPW[2u64]=0x6721ff6459e43ca3u64 EXPW[3u64]=0xc106db19d4edecf6u64
     cad_oneshot_packed_bp(0u32, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq" as *u8, 56u64, (&OUT as u64) as *u8)
+    let mut q : u64 = 0u64
+    while q < 4u64 { if (&OUT as *u64)[q] != EXPW[q] { return (q as u32) + 1u32 } q = q + 1u64 }
+    return 99u32
+}'
+
+# --- cad_oneshot_packed_bp(KECCAK256): byte-packed keccak OUTPUT must equal keccak256("abc") read
+#     byte-packed (4 u64s LE = 4e03657a...).  Prove-the-negative for the cg_r0 KECCAK ENGINE: the
+#     _kk_load_lane/_kk_store_lane mixed-units defect gave a10df1f9 (every lane>0 shifted), so q=0
+#     mismatched and this returns 1 -> the gate reddens. SHA-256 alone never exercised the keccak path. ---
+probe cad_keccak_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+extern @abi(c-msvc-x64) fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
+var OUT: [u8; 64]
+var EXPW: [u64; 4]
+fn cg_r0_probe() -> u32 @export {
+    EXPW[0u64]=0x4fa945ea7a65034eu64 EXPW[1u64]=0x67d6c826a87bd4c7u64 EXPW[2u64]=0x36a0643ae3e6d1c0u64 EXPW[3u64]=0x456c2da18ff544ecu64
+    cad_oneshot_packed_bp(1u32, "abc" as *u8, 3u64, (&OUT as u64) as *u8)
     let mut q : u64 = 0u64
     while q < 4u64 { if (&OUT as *u64)[q] != EXPW[q] { return (q as u32) + 1u32 } q = q + 1u64 }
     return 99u32

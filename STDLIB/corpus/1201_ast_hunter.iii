@@ -1,0 +1,16 @@
+/* 1201_ast_hunter.iii -- TARGET ACQUISITION: the cheap concrete-input pre-filter (kernel refl).
+ *
+ * Drives numera/ast_hunter::hunter_selftest: 99 = (1) a matching legacy/optimal pair (mul(X,2^3) vs
+ * double^3(X)) passes the heuristic over seeded concrete X samples (the kernel's DEFINITIONAL equality);
+ * (2) a non-matching pair (8X vs 16X) ABORTS on the first sample (the fast kill); (3) the hunt finds the
+ * correct optimal exponent (b==a) for legacies a=3 and a=2; (4) a legacy whose match lies outside the
+ * scan range yields no candidate.  Seeded -> reproducible (M2).  99 never hard-coded. */
+module corpus_1201
+
+extern @abi(c-msvc-x64) fn hunter_selftest() -> u64 from "ast_hunter.iii"
+
+fn main() -> u64 {
+    let r : u64 = hunter_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

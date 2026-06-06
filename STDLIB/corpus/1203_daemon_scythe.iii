@@ -1,0 +1,25 @@
+/* 1203_daemon_scythe.iii -- THE ISOMORPHIC SCYTHE, END TO END: autonomous certified obsolescence.
+ *
+ * The headline: the Scythe sweeps legacy logic, and for each function hunts an optimal match, PROVES
+ * universal equivalence + strict cost improvement (the CIC kernel), and records the certified rewrite --
+ * surfacing the set of legacy functions MATHEMATICALLY PROVEN redundant (the basis for negative tech debt).
+ *
+ * Drives forcefield/daemon_scythe::daemon_scythe_kat: 99 =
+ *   (1) every legacy multiply mul(x,2^a) for a in [1,4] is PROVEN obsolete vs the optimal double^a(x) and
+ *       recorded (4 culls -- kernel-certified, not heuristic);
+ *   (2) every recorded cull is a kernel-certified equivalence (nothing unproven culled);
+ *   (3) DETERMINISM (M2): the same seed yields the same cull set (replayable/auditable);
+ *   (4) NEGATIVE: a legacy whose optimal match lies OUTSIDE the scan range is NOT culled (the Scythe
+ *       never amputates a function it has not PROVEN redundant).
+ *
+ * The "Golden Shift" -- deleting the obsolete source + reseal -- is OPERATOR-gated (M20 / ADR-FORGE-4),
+ * never autonomous.  The hunter PROPOSES; the CIC kernel DISPOSES.  99 never hard-coded. */
+module corpus_1203
+
+extern @abi(c-msvc-x64) fn daemon_scythe_kat() -> u64 from "daemon_scythe.iii"
+
+fn main() -> u64 {
+    let r : u64 = daemon_scythe_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

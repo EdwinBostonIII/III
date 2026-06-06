@@ -64,6 +64,10 @@ const SV_K_EXPR_BLOCK: u32 = 51u32
 const SV_K_EXPR_MATCH: u32 = 52u32
 const SV_K_EXPR_PAREN: u32 = 53u32
 const SV_K_EXPR_RAW_ASM: u32 = 54u32
+const SV_K_TYPE_REF: u32 = 15u32
+const SV_K_CONST_DECL: u32 = 6u32
+const SV_K_VAR_DECL: u32 = 74u32
+const SV_K_EXPR_CAST: u32 = 72u32
 const SV_K_ARG: u32 = 57u32
 
 extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
@@ -94,6 +98,15 @@ extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "
 extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+/* type-resolution accessors -- for unsigned-ordering setcc selection (mirror cg_r0/cg_r3) */
+extern @abi(c-msvc-x64) fn iii_ast_node_binder_id(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cast_target_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast_accessors.c"
@@ -428,6 +441,18 @@ var SV_STR_SETG : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 103u8
 const SV_STR_SETG_LEN : u64 = 34u64
 var SV_STR_SETGE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 103u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const SV_STR_SETGE_LEN : u64 = 35u64
+var SV_TY_U64 : [u8; 3] = [117u8, 54u8, 52u8]   /* "u64" -- drives unsigned-ordering setcc selection */
+const SV_TY_U64_LEN : u64 = 3u64
+/* UNSIGNED ordering setcc (setb/setbe/seta/setae) -- emitted for u64 ordering compares so a u64 with bit
+   63 set compares correctly. Same bytes as setl/setle/setg/setge with the mnemonic letter swapped. */
+var SV_STR_SETB : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 98u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const SV_STR_SETB_LEN : u64 = 34u64
+var SV_STR_SETBE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 98u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const SV_STR_SETBE_LEN : u64 = 35u64
+var SV_STR_SETA : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 97u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const SV_STR_SETA_LEN : u64 = 34u64
+var SV_STR_SETAE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 97u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const SV_STR_SETAE_LEN : u64 = 35u64
 var SV_STR_INDEX_LD : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const SV_STR_INDEX_LD_LEN : u64 = 29u64
 var SV_STR_INDEX_ST : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 10u8]
@@ -542,7 +567,43 @@ fn emit_movabs_rcx(v: u64) -> u32 { cg_emit_arr(&SV_STR_MOVABSQ_OPEN as u64,SV_S
 fn emit_load_slot(slot: u32, reg: u64, regn: u64) -> u32 { cg_emit_arr(&SV_STR_DASH_OPEN as u64,SV_STR_DASH_OPEN_LEN); cg_emit_dec(((slot+1u32)*8u32) as u64); cg_emit_arr(&SV_STR_PCT_RBP_NL as u64,6u64); cg_emit_arr(&SV_STR_COMMA_SP as u64,SV_STR_COMMA_SP_LEN); cg_emit_ch(37u32); cg_emit_bytes(reg,regn); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); return SV_OK }
 fn emit_store_rax_slot(slot: u32) -> u32 { cg_emit_arr(&SV_STR_MOVQRAX_DASH as u64,SV_STR_MOVQRAX_DASH_LEN); cg_emit_dec(((slot+1u32)*8u32) as u64); cg_emit_arr(&SV_STR_BPCMA_RAX as u64,6u64); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); return SV_OK }   /* [codegen] emit 6 = "(%rbp)" + NL (was 13 -> dangling ", %rax" 3-operand movq -- invalid; mirrors the emit_store_rcx_slot fix) */
 fn emit_store_rcx_slot(slot: u32) -> u32 { cg_emit_arr(&SV_STR_MOVQ_PCT as u64,SV_STR_MOVQ_PCT_LEN); cg_emit_arr(&SV_REG_RCX as u64,SV_REG_RCX_LEN); cg_emit_arr(&SV_STR_COMMA_SP as u64,SV_STR_COMMA_SP_LEN); cg_emit_ch(45u32); cg_emit_dec(((slot+1u32)*8u32) as u64); cg_emit_arr(&SV_STR_BPCMA_RCX as u64,6u64); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); return SV_OK }   /* [codegen] emit 6 = "(%rbp)" (was 7 -> dangling comma "(%rbp)," from the load-tail const -> invalid store) */
-fn emit_bool_setcc(op: u32) -> u32 { cg_emit_arr(&SV_STR_CMP_RCX_RAX as u64,SV_STR_CMP_RCX_RAX_LEN); if op == 11u32 { cg_emit_arr(&SV_STR_SETE as u64,SV_STR_SETE_LEN) }; if op == 12u32 { cg_emit_arr(&SV_STR_SETNE as u64,SV_STR_SETNE_LEN) }; if op == 13u32 { cg_emit_arr(&SV_STR_SETL as u64,SV_STR_SETL_LEN) }; if op == 14u32 { cg_emit_arr(&SV_STR_SETLE as u64,SV_STR_SETLE_LEN) }; if op == 15u32 { cg_emit_arr(&SV_STR_SETG as u64,SV_STR_SETG_LEN) }; if op == 16u32 { cg_emit_arr(&SV_STR_SETGE as u64,SV_STR_SETGE_LEN) }; return SV_OK }
+fn sv_tref_is_u64(tn: u32) -> u32 {
+    if tn == 0u32 { return 0u32 }
+    if iii_ast_node_kind(SV_G_AST, tn) != SV_K_TYPE_REF { return 0u32 }
+    let len: u32 = iii_ast_type_ref_name_len(SV_G_AST, tn)
+    if len != 3u32 { return 0u32 }
+    let off: u32 = iii_ast_type_ref_name_off(SV_G_AST, tn)
+    let src: u64 = iii_ast_source_buf(SV_G_AST)
+    if iii_emit_memcmp_c(src + (off as u64), &SV_TY_U64 as u64, 3u64) == 0i32 { return 1u32 }
+    return 0u32
+}
+fn sv_expr_is_u64(node: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let nk: u32 = iii_ast_node_kind(SV_G_AST, node)
+    if nk == SV_K_EXPR_PAREN { return sv_expr_is_u64(iii_ast_paren_inner(SV_G_AST, node)) }
+    if nk == SV_K_EXPR_CAST { return sv_tref_is_u64(iii_ast_cast_target_type(SV_G_AST, node)) }
+    if nk == SV_K_EXPR_BINARY { return sv_expr_is_u64(iii_ast_binary_lhs(SV_G_AST, node)) }
+    if nk == SV_K_EXPR_UNARY { return sv_expr_is_u64(iii_ast_unary_operand(SV_G_AST, node)) }
+    if nk == SV_K_EXPR_IDENT {
+        let bid: u32 = iii_ast_node_binder_id(SV_G_AST, node)
+        if bid == 0u32 { return 0u32 }
+        let bk: u32 = iii_ast_node_kind(SV_G_AST, bid)
+        if bk == SV_K_STMT_LET { return sv_tref_is_u64(iii_ast_let_type(SV_G_AST, bid)) }
+        if bk == SV_K_PARAM { return sv_tref_is_u64(iii_ast_param_type(SV_G_AST, bid)) }
+        if bk == SV_K_VAR_DECL { return sv_tref_is_u64(iii_ast_var_decl_type(SV_G_AST, bid)) }
+        if bk == SV_K_CONST_DECL { return sv_tref_is_u64(iii_ast_const_decl_type(SV_G_AST, bid)) }
+    }
+    return 0u32
+}
+/* emit UNSIGNED setcc iff either operand is provably u64 (the only type whose clean values carry bit 63);
+   u32/u8/u16 clean values are < 2^63 so signed setcc is already correct, and signed i* keeps signed setcc.
+   Unknown -> 0 (signed, the prior behavior): only ever FIXES u64 ordering, never regresses signed/u32. */
+fn sv_ord_is_unsigned(node: u32) -> u32 {
+    if sv_expr_is_u64(iii_ast_binary_lhs(SV_G_AST, node)) == 1u32 { return 1u32 }
+    if sv_expr_is_u64(iii_ast_binary_rhs(SV_G_AST, node)) == 1u32 { return 1u32 }
+    return 0u32
+}
+fn emit_bool_setcc(op: u32, unsigned: u32) -> u32 { cg_emit_arr(&SV_STR_CMP_RCX_RAX as u64,SV_STR_CMP_RCX_RAX_LEN); if op == 11u32 { cg_emit_arr(&SV_STR_SETE as u64,SV_STR_SETE_LEN) }; if op == 12u32 { cg_emit_arr(&SV_STR_SETNE as u64,SV_STR_SETNE_LEN) }; if op == 13u32 { if unsigned == 1u32 { cg_emit_arr(&SV_STR_SETB as u64,SV_STR_SETB_LEN) } if unsigned == 0u32 { cg_emit_arr(&SV_STR_SETL as u64,SV_STR_SETL_LEN) } }; if op == 14u32 { if unsigned == 1u32 { cg_emit_arr(&SV_STR_SETBE as u64,SV_STR_SETBE_LEN) } if unsigned == 0u32 { cg_emit_arr(&SV_STR_SETLE as u64,SV_STR_SETLE_LEN) } }; if op == 15u32 { if unsigned == 1u32 { cg_emit_arr(&SV_STR_SETA as u64,SV_STR_SETA_LEN) } if unsigned == 0u32 { cg_emit_arr(&SV_STR_SETG as u64,SV_STR_SETG_LEN) } }; if op == 16u32 { if unsigned == 1u32 { cg_emit_arr(&SV_STR_SETAE as u64,SV_STR_SETAE_LEN) } if unsigned == 0u32 { cg_emit_arr(&SV_STR_SETGE as u64,SV_STR_SETGE_LEN) } }; return SV_OK }
 fn pack_hexad_expr(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_expr_hexad_trit_at(SV_G_AST,node,i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
 fn pack_hexad_pat(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_pat_hexad_trit_at(SV_G_AST,node,i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
 
@@ -559,7 +620,7 @@ fn emit_expr(node: u32) -> u32 {
     if k == SV_K_EXPR_IDENT { let no: u32 = iii_ast_ident_name_offset(SV_G_AST,node); let nl: u32 = iii_ast_ident_name_length(SV_G_AST,node); let s: i32 = local_slot(no,nl); if s >= 0i32 { emit_load_slot(s as u32,&SV_REG_RAX as u64,SV_REG_RAX_LEN); push_rax(); return SV_OK }; let l: u32 = build_mangled(no,nl); let e: u32 = emit_sym_address(&SV_TMPNAME as u64,l,&SV_REG_RAX as u64,SV_REG_RAX_LEN); if e != SV_OK { return e }; push_rax(); return SV_OK }
     if k == SV_K_EXPR_PAREN { return emit_expr(iii_ast_paren_inner(SV_G_AST,node)) }
     if k == SV_K_EXPR_UNARY { let e0: u32 = emit_expr(iii_ast_unary_operand(SV_G_AST,node)); if e0 != SV_OK { return e0 }; pop_reg(&SV_REG_RAX as u64,SV_REG_RAX_LEN); let op: u32 = iii_ast_unary_op(SV_G_AST,node); if op == 1u32 { cg_emit_arr(&SV_STR_NEGQ as u64,SV_STR_NEGQ_LEN) }; if op == 2u32 { cg_emit_arr(&SV_STR_TESTRSTE as u64,SV_STR_TESTRSTE_LEN) }; if op == 3u32 { cg_emit_arr(&SV_STR_NOTQ as u64,SV_STR_NOTQ_LEN) }; if op == 4u32 { cg_emit_arr(&SV_STR_DEREF_RAX as u64,SV_STR_DEREF_RAX_LEN) }; push_rax(); return SV_OK }
-    if k == SV_K_EXPR_BINARY { let e1: u32 = emit_expr(iii_ast_binary_lhs(SV_G_AST,node)); if e1 != SV_OK { return e1 }; let e2: u32 = emit_expr(iii_ast_binary_rhs(SV_G_AST,node)); if e2 != SV_OK { return e2 }; pop_reg(&SV_REG_RCX as u64,SV_REG_RCX_LEN); pop_reg(&SV_REG_RAX as u64,SV_REG_RAX_LEN); let op: u32 = iii_ast_binary_op(SV_G_AST,node); if op == 1u32 { cg_emit_arr(&SV_STR_ADDQ as u64,SV_STR_ADDQ_LEN) }; if op == 2u32 { cg_emit_arr(&SV_STR_SUBQ as u64,SV_STR_SUBQ_LEN) }; if op == 3u32 { cg_emit_arr(&SV_STR_IMULQ as u64,SV_STR_IMULQ_LEN) }; if op == 4u32 { cg_emit_arr(&SV_STR_IDIV as u64,SV_STR_IDIV_LEN) }; if op == 5u32 { cg_emit_arr(&SV_STR_IDIVMOD as u64,SV_STR_IDIVMOD_LEN) }; if op == 6u32 { cg_emit_arr(&SV_STR_ANDQ as u64,SV_STR_ANDQ_LEN) }; if op == 7u32 { cg_emit_arr(&SV_STR_ORQ as u64,SV_STR_ORQ_LEN) }; if op == 8u32 { cg_emit_arr(&SV_STR_XORQ as u64,SV_STR_XORQ_LEN) }; if op == 9u32 { cg_emit_arr(&SV_STR_SHLQ as u64,SV_STR_SHLQ_LEN) }; if op == 10u32 { cg_emit_arr(&SV_STR_SHRQ as u64,SV_STR_SHRQ_LEN) }; if op >= 11u32 { if op <= 16u32 { emit_bool_setcc(op) } }; if op == 17u32 { cg_emit_arr(&SV_STR_LAND_P1 as u64,SV_STR_LAND_P1_LEN); cg_emit_arr(&SV_STR_LAND_P2 as u64,SV_STR_LAND_P2_LEN); cg_emit_arr(&SV_STR_LAND_AND as u64,SV_STR_LAND_AND_LEN) }; if op == 18u32 { cg_emit_arr(&SV_STR_LOR_LINE as u64,SV_STR_LOR_LINE_LEN) }; push_rax(); return SV_OK }
+    if k == SV_K_EXPR_BINARY { let e1: u32 = emit_expr(iii_ast_binary_lhs(SV_G_AST,node)); if e1 != SV_OK { return e1 }; let e2: u32 = emit_expr(iii_ast_binary_rhs(SV_G_AST,node)); if e2 != SV_OK { return e2 }; pop_reg(&SV_REG_RCX as u64,SV_REG_RCX_LEN); pop_reg(&SV_REG_RAX as u64,SV_REG_RAX_LEN); let op: u32 = iii_ast_binary_op(SV_G_AST,node); if op == 1u32 { cg_emit_arr(&SV_STR_ADDQ as u64,SV_STR_ADDQ_LEN) }; if op == 2u32 { cg_emit_arr(&SV_STR_SUBQ as u64,SV_STR_SUBQ_LEN) }; if op == 3u32 { cg_emit_arr(&SV_STR_IMULQ as u64,SV_STR_IMULQ_LEN) }; if op == 4u32 { cg_emit_arr(&SV_STR_IDIV as u64,SV_STR_IDIV_LEN) }; if op == 5u32 { cg_emit_arr(&SV_STR_IDIVMOD as u64,SV_STR_IDIVMOD_LEN) }; if op == 6u32 { cg_emit_arr(&SV_STR_ANDQ as u64,SV_STR_ANDQ_LEN) }; if op == 7u32 { cg_emit_arr(&SV_STR_ORQ as u64,SV_STR_ORQ_LEN) }; if op == 8u32 { cg_emit_arr(&SV_STR_XORQ as u64,SV_STR_XORQ_LEN) }; if op == 9u32 { cg_emit_arr(&SV_STR_SHLQ as u64,SV_STR_SHLQ_LEN) }; if op == 10u32 { cg_emit_arr(&SV_STR_SHRQ as u64,SV_STR_SHRQ_LEN) }; if op >= 11u32 { if op <= 16u32 { emit_bool_setcc(op, sv_ord_is_unsigned(node)) } }; if op == 17u32 { cg_emit_arr(&SV_STR_LAND_P1 as u64,SV_STR_LAND_P1_LEN); cg_emit_arr(&SV_STR_LAND_P2 as u64,SV_STR_LAND_P2_LEN); cg_emit_arr(&SV_STR_LAND_AND as u64,SV_STR_LAND_AND_LEN) }; if op == 18u32 { cg_emit_arr(&SV_STR_LOR_LINE as u64,SV_STR_LOR_LINE_LEN) }; push_rax(); return SV_OK }
     if k == SV_K_EXPR_CALL { return emit_call(node) }
     if k == SV_K_EXPR_BLOCK { return emit_block(node) }
     if k == SV_K_EXPR_FIELD { let obj: u32 = iii_ast_field_object(SV_G_AST,node); if iii_ast_node_kind(SV_G_AST,obj) != SV_K_EXPR_IDENT { SV_G_LAST_ERROR=SV_E_UNSUPPORTED; return SV_E_UNSUPPORTED }; cg_emit_arr(&SV_STR_LEAQ as u64,SV_STR_LEAQ_LEN); emit_field_label(obj,iii_ast_field_name_offset(SV_G_AST,node),iii_ast_field_name_length(SV_G_AST,node)); cg_emit_arr(&SV_STR_RIPCM_PCT as u64,SV_STR_RIPCM_PCT_LEN); cg_emit_arr(&SV_REG_RAX as u64,SV_REG_RAX_LEN); cg_emit_arr(&SV_STR_NL as u64,SV_STR_NL_LEN); push_rax(); return SV_OK }

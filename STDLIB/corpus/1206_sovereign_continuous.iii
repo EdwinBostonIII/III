@@ -1,0 +1,24 @@
+/* 1206_sovereign_continuous.iii -- THE CONSTANTLY-RUNNING OPTIMIZER: non-impairing, enhancing, convergent.
+ *
+ * The Sovereign Optimizer is meant to run CONTINUOUSLY during idle compute.  This KAT proves the
+ * production discipline that makes that safe and beneficial -- it composes, it does not tax the system.
+ *
+ * Drives forcefield/sovereign_optimizer::sopt_continuous_kat: 99 =
+ *   (1) MONOTONE: across a 300-tick session the certified-discovery count never decreases (never degrades);
+ *   (2) NON-IMPAIRING: the census catalog is byte-unchanged afterward -- the loop touches NO sealed state
+ *       (golden / trusted-base / lib / catalog), so running it constantly cannot perturb the deterministic
+ *       system's speed, efficiency, or quality -- it is purely additive discovery in a volatile arena;
+ *   (3) CONVERGENT: it discovers the complete distinct optimization space, then a further 100 ticks find
+ *       NOTHING new -- a fixpoint; it runs harmlessly forever, no churn, no unbounded growth;
+ *   (4) ENHANCING: it discovered >= 1 real optimization (non-vacuous);
+ *   (5) DETERMINISTIC: a fresh session with the same seed reaches the same fixpoint.
+ * The egraph PROPOSES; the CIC kernel DISPOSES; the loop never impairs.  99 never hard-coded. */
+module corpus_1206
+
+extern @abi(c-msvc-x64) fn sopt_continuous_kat() -> u64 from "sovereign_optimizer.iii"
+
+fn main() -> u64 {
+    let r : u64 = sopt_continuous_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

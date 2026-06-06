@@ -1,0 +1,16 @@
+/* 1122_cg_autocatalyst.iii -- THE SIEVE admits ONLY kernel-certified truth; reject = zero state change.
+ *
+ * Drives forcefield/cg_autocatalyst::cga_selftest: 99 = (1) a TRUE candidate (a==b) is ADMITTED and
+ * cad-sealed (count 0->1); (2) a FALSE candidate (a!=b) is REJECTED with ZERO state change (count
+ * unchanged); (3) a budget=0 candidate is REJECTED (synthesizer timeout, count unchanged); (4) every
+ * sealed registry entry is a true identity AND the cad seal is non-zero (the kernel is the sole arbiter,
+ * the content-address seal actually ran).  The registry is VOLATILE -- no self-edit of sealed source. */
+module corpus_1122
+
+extern @abi(c-msvc-x64) fn cga_selftest() -> u64 from "cg_autocatalyst.iii"
+
+fn main() -> u64 {
+    let r : u64 = cga_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

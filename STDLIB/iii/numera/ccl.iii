@@ -257,7 +257,19 @@ fn ccl_eta_contract(body: u32) -> u32 {
     let bb : u32 = CCL_B[body]
     if CCL_TAG[bb] != CCL_PAIR { return CCL_SENT }
     if CCL_TAG[CCL_B[bb]] != CCL_SND { return CCL_SENT }
-    return ccl_strengthen(CCL_A[bb])
+    let v : u32 = ccl_strengthen(CCL_A[bb])
+    if v == CCL_SENT { return CCL_SENT }
+    /* SOUNDNESS (the closed-lambda / tc_natrec IH-shift fix): do NOT eta-contract  lam x. (C x) -> C
+     * when the head C is a data constructor or eliminator (tag >= CCL_TRUE).  Such a C is NEVER a
+     * standalone function in this kernel -- succ/inl/inr/iter/... are valid only as App o <C, arg> --
+     * so the contracted bare C fails to typecheck as a function.  Concretely (lam n:Nat. succ n) :
+     * Nat->Nat would eta-collapse to bare succ, which tc_shift_k then mangles, so tc_natrec's IH-type
+     * shift (tc_ctx_lookup -> tc_shift_k(ih_ty,k+1)) diverges from the reconstructed step type and the
+     * induction STEP fails tc_check -- the pinned blocker of ALL nat-induction.  Keeping the lambda
+     * form loses NO valid conversion: a bare constructor never legitimately appears standalone, and a
+     * genuine function constant (CCL_ATOM, tag 8) is still eta-contracted (v < CCL_TRUE). */
+    if CCL_TAG[v] >= CCL_TRUE { return CCL_SENT }
+    return v
 }
 
 /* unwind an App o Pair spine: t = App o <App o <... <head, a0> ...>, a_{k-1}>.

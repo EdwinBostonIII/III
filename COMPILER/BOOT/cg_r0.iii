@@ -445,6 +445,52 @@ const R0_TY_U32_LEN : u64 = 3u64
 var R0_TY_U64 : [u8; 3] = [117u8, 54u8, 52u8]   /* "u64" -- drives unsigned-ordering setcc selection */
 var R0_TY_I32 : [u8; 3] = [105u8, 51u8, 50u8]   /* "i32" */
 const R0_TY_I32_LEN : u64 = 3u64
+/* K3 (DOCS/III-ARCHITECTURE-REVIEW.md): cg_r0's EXPR_CAST was a pure pass-through ("narrows nowhere"), so a
+   narrowing cast whose VALUE exceeds the target width did not truncate (`456 as u8` = 456, vs cg_r3's 200).
+   Element-model 8-byte-uniform is about array LAYOUT, not value truncation -- a sub-word cast must truncate
+   (a register op) on ANY backend. r0_emit_cast_extend below mirrors the reverted cg_r3 u64-uniform: u8/i8/
+   bool -> movzbq, u16/i16 -> movzwq, u32/i32 -> movl (zero-extend/truncate; same as cg_r3, so seam-clean). */
+var R0_TY_U8 : [u8; 2] = [117u8, 56u8]   /* "u8" */
+const R0_TY_U8_LEN : u64 = 2u64
+var R0_TY_I8 : [u8; 2] = [105u8, 56u8]   /* "i8" */
+const R0_TY_I8_LEN : u64 = 2u64
+var R0_TY_U16 : [u8; 3] = [117u8, 49u8, 54u8]   /* "u16" */
+const R0_TY_U16_LEN : u64 = 3u64
+var R0_TY_I16 : [u8; 3] = [105u8, 49u8, 54u8]   /* "i16" */
+const R0_TY_I16_LEN : u64 = 3u64
+var R0_TY_BOOL : [u8; 4] = [98u8, 111u8, 111u8, 108u8]   /* "bool" */
+const R0_TY_BOOL_LEN : u64 = 4u64
+var R0_STR_CX_MOVZBQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "    movzbq %al, %rax\n" */
+const R0_STR_CX_MOVZBQ_LEN : u64 = 21u64
+var R0_STR_CX_MOVZWQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 119u8, 113u8, 32u8, 37u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "    movzwq %ax, %rax\n" */
+const R0_STR_CX_MOVZWQ_LEN : u64 = 21u64
+fn r0_tn_eq(a: u64, alen: u32, b: u64, blen: u64) -> u32 {
+    if (alen as u64) != blen { return 0u32 }
+    if iii_emit_memcmp_c(a, b, blen) == 0i32 { return 1u32 }
+    return 0u32
+}
+/* K3: truncate+zero-extend a narrowing cast's result (top of stack) to the target sub-word width.
+   Mirrors the reverted cg_r3 u64-uniform: u8/i8/bool -> movzbq, u16/i16 -> movzwq, u32/i32 -> movl.
+   u64/i64/usize/isize/pointer/unknown -> no-op (the 64-bit value passes through, preserving the
+   Tier-2 BSOD fix where `&X as *u8` / `X as u64` must NOT emit a truncation). emit pushes the value,
+   so pop -> extend -> push for sub-word targets only. */
+fn r0_emit_cast_extend(rt: u32) -> u32 {
+    if rt == 0u32 { return R0_OK }
+    if iii_ast_node_kind(R0_G_AST, rt) != R0_K_TYPE_REF { return R0_OK }
+    let len: u32 = iii_ast_type_ref_name_len(R0_G_AST, rt)
+    if len == 0u32 { return R0_OK }
+    if len > 4u32 { return R0_OK }
+    let off: u32 = iii_ast_type_ref_name_off(R0_G_AST, rt)
+    let a: u64 = iii_ast_source_buf(R0_G_AST) + (off as u64)
+    if r0_tn_eq(a, len, &R0_TY_U8 as u64, R0_TY_U8_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZBQ as u64, R0_STR_CX_MOVZBQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_I8 as u64, R0_TY_I8_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZBQ as u64, R0_STR_CX_MOVZBQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_BOOL as u64, R0_TY_BOOL_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZBQ as u64, R0_STR_CX_MOVZBQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_U16 as u64, R0_TY_U16_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZWQ as u64, R0_STR_CX_MOVZWQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_I16 as u64, R0_TY_I16_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_CX_MOVZWQ as u64, R0_STR_CX_MOVZWQ_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_U32 as u64, R0_TY_U32_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN); r0_push_rax(); return R0_OK }
+    if r0_tn_eq(a, len, &R0_TY_I32 as u64, R0_TY_I32_LEN) == 1u32 { r0_pop_rax(); r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN); r0_push_rax(); return R0_OK }
+    return R0_OK
+}
 var R0_STR_BPCMA_RCX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
 const R0_STR_BPCMA_RCX_LEN : u64 = 13u64
 var R0_STR_DEREF_RAX : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
@@ -871,10 +917,11 @@ fn r0_emit_expr(node: u32) -> u32 {
         r0_push_rax(); return R0_OK
     }
     if k == R0_K_EXPR_PAREN { return r0_emit_expr(iii_ast_paren_inner(R0_G_AST, node)) }
-    /* Tier-2 crash #2 fix: cg_r0 is 8-byte-uniform (narrows nowhere), so a cast is a value
-       pass-through on the uniform 64-bit representation -- mirror PAREN. Missing this case made
-       `&X as *u8` / `X as u64` emit NOTHING, shifting call-argument registers (BSOD: out_ptr=0x30). */
-    if k == R0_K_EXPR_CAST { return r0_emit_expr(iii_ast_cast_value(R0_G_AST, node)) }
+    /* Tier-2 crash #2 fix: a cast MUST emit its value (missing it made `&X as *u8` / `X as u64` emit
+       NOTHING -> shifted call-arg registers -> BSOD out_ptr=0x30). K3: AND truncate sub-word targets --
+       r0_emit_cast_extend zero-extends u8/i8/bool/u16/i16/u32/i32 to match cg_r3 (`456 as u8` = 200, not
+       456); pointer/u64/i64/unknown targets stay a pass-through (the BSOD-fix path, no truncation). */
+    if k == R0_K_EXPR_CAST { let cv: u32 = r0_emit_expr(iii_ast_cast_value(R0_G_AST, node)); if cv != R0_OK { return cv }; return r0_emit_cast_extend(iii_ast_cast_target_type(R0_G_AST, node)) }
     if k == R0_K_EXPR_BLOCK { return r0_emit_block(node) }
     if k == R0_K_EXPR_IDENT {
         let off: u32 = iii_ast_ident_name_offset(R0_G_AST, node)

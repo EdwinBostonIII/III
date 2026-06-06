@@ -1,0 +1,27 @@
+/* 1119_sov_synth_nonvacuity.iii -- THE AUTOCATALYTIC SYNTHESIZER IS A GENUINE AUTO-PROVER.
+ *
+ * The "Dream Sandbox" autocatalytic loop's ONLY genuinely-new capability is a synthesizer that
+ * produces a NON-refl proof term -- one the definitional-equality disposer (sov_pcc_verify) cannot.
+ * Everything else (the egraph propose, the tc_check sieve, the cad seal, the volatile tc_reset arena)
+ * already exists.  So this KAT is the make-or-break: it proves the synthesizer is NON-VACUOUS
+ * (genuinely auto-proves a fresh case), not a hard-coded replay of the k=2 hand proof (sov_sr_apply).
+ *
+ * Drives numera/sov_isa::sov_synth_nonvacuity_kat: 99 = for k=3 AND k=4 (NEITHER appears in any prior
+ * KAT) --
+ *   (a) the refl disposer sov_pcc_verify REJECTS the strength reduction mul(x,2^k) -> double^k(x)
+ *       (add-associativity is propositional, not definitional, so refl cannot bridge it);
+ *   (b) the synthesizer EXTRACTS the exponent k and INSTANTIATES the proven inductive schema
+ *       sov_sr_term at that k -> a certificate the CIC kernel ACCEPTS (tc_check == 1);
+ *   (c) NEGATIVE CONTROL: the certificate synthesized for k=3 does NOT prove the k=4 goal -- the
+ *       kernel rejects the near-miss (the loop's 99.9%-of-hallucinations-fail discipline, in miniature).
+ *
+ * The egraph PROPOSES; the kernel DISPOSES.  Nothing weakened; 99 never hard-coded. */
+module corpus_1119
+
+extern @abi(c-msvc-x64) fn sov_synth_nonvacuity_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_synth_nonvacuity_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

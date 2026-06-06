@@ -130,6 +130,21 @@ correct); corpus 781/0, stage1 59/0, cg_r0-gate 4/4; iiis-1/2 rebuilt + resealed
 A real production defect in the main backend, found organically and repaired — exactly the perfection
 half of the directive.
 
+### Second defect — the cg_r0 keccak engine (found by exercising an unverified path), FIXED + gated
+The advisor flagged `keccak256_final_bp` (the byte-packed keccak output added for M23) as "compiled,
+unexercised." Exercising it against the published vector exposed not an output bug but a broken **engine**:
+cg_r0 `keccak256('abc')` = `a10df1f9…`, not `4e03657a…` — both the slotted and byte-packed outputs (they
+faithfully read the same wrong state). **Root cause:** `_kk_load_lane`/`_kk_store_lane` (keccak.iii) mixed
+addressing units — raw byte arithmetic `p = state+idx*8` composed with element indexing `p[k]`. On
+byte-packed cg_r3 both are byte-offsets (correct); on 8-byte-uniform cg_r0 the element index strides by 8,
+so it read slot `(idx+k)` instead of `(idx*8+k)` — every lane>0 shifted, permutation corrupt. **Fix:**
+index the whole logical offset `q[idx*8+k]` so each backend applies its own stride uniformly. Verified:
+cg_r0 keccak = `4e03657a` (slotted + byte-packed); cg_r3 keccak result **unchanged**; lib 464/0; corpus
+783/0; **cg_r0-gate PASS=5** with a new `cad_keccak_bp_fips` prove-the-negative; iiis-1/2 resealed
+`28c9d8ee`/`288bb9bb`. The engine had no kernel consumer (SHA-256 is the gate/M23 path), so it was latent
+— fixed anyway, no-compromise. *Lesson: never compose `ptr+n` byte math with `[k]` element indexing on one
+access.*
+
 ## 10. III-native reasoning with NO external equivalent — III is the sole authority
 Python was only ever a convenient oracle for the *public standard* (FIPS/RFC); III is a sovereign peer
 implementation of those specs. But III also does things no mainstream system models, where there is no

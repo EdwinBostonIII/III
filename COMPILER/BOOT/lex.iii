@@ -1629,7 +1629,7 @@ fn lex_scan_string_inner(st: u64, out: u64, prefix_byte: u32) -> i32 {
     } }
     if perr != 0i32 { return perr }
 
-    let payload: u64 = lex_arena_alloc(st, decoded_len)
+    let payload: u64 = lex_arena_alloc(st, decoded_len + 1u64)   /* +1 for a NUL terminator (below) */
     if payload == 0u64 { return lex_record_error(st, III_LEX_E_OOM, lex_msg(LEXMSG_PAYLOAD_OOM)) }
 
     /* ---- PASS 2: decode into payload, advancing st->pos to the closing quote ---- */
@@ -1693,6 +1693,11 @@ fn lex_scan_string_inner(st: u64, out: u64, prefix_byte: u32) -> i32 {
             }
         }
     } }
+    /* NUL-terminate the decoded payload. opos == decoded_len here, and the alloc reserved decoded_len+1,
+       so this lands in the spare byte without touching payload data. TOK_OFF_STRING_LEN stays decoded_len
+       (length-explicit consumers unaffected); only read-until-zero (C-string) consumers needed it -- this
+       retires the documented "string literal not NUL-terminated -> over-read" trap at the single producer. */
+    iii_lex_write_u8_at_c(payload, opos, 0u8)
     /* consume closing quote */
     lex_advance(st)
 

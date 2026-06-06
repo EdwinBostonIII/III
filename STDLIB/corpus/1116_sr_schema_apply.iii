@@ -1,0 +1,29 @@
+/* 1116_sr_schema_apply.iii -- PROOF-CARRYING OPTIMIZATION BEYOND DEFINITIONAL EQUALITY (the harmony).
+ *
+ * Demonstrates that III's inductive proof tower makes the optimizer's DISPOSER strictly more powerful:
+ * it can certify strength reductions that the refl-only (definitional-equality) disposer CANNOT.
+ *
+ * The live proof-carrying disposer numera/sov_isa::sov_pcc_verify certifies an egraph-proposed rewrite
+ * by REFL -- it proves input == output by definitional equality.  That suffices for rewrites like
+ * (x*1)+(x*0) -> x (which iota-reduce to the same normal form).  BUT a strength reduction
+ * mul(x, 2^k) -> double^k(x) is NOT definitional even at a CONCRETE k for a SYMBOLIC x:  mul(x,4)
+ * normalizes to x+(x+(x+x)) while double^2(x) normalizes to (x+x)+(x+x) -- equal only up to add-
+ * ASSOCIATIVITY, which is PROPOSITIONAL (proven by induction, not definitional).  So refl FAILS.
+ *
+ * The inductive strength schema (corpus 1115, sov_sr_term), instantiated at the concrete k, SUPPLIES
+ * the missing associativity proof and CERTIFIES the rewrite.  This is uniquely-III: an optimizer whose
+ * trusted disposer certifies INDUCTIVE optimization schemas, not merely definitional ones -- the egraph
+ * may PROPOSE strength reductions over symbolic operands, and the CIC kernel DISPOSES with a real proof.
+ *
+ * Drives numera/sov_isa::sov_sr_apply_kat: 99 = (a) sov_pcc_verify REJECTS the SOUND rewrite mul(x,4) ->
+ * double^2(x) (refl cannot bridge associativity) AND (b) the schema certificate (lam x. schema(x)(2))
+ * tc_checks against Pi(x). Id(mul(x, pow2 2), itd(x, 2)).  Nothing weakened; 99 never hard-coded. */
+module corpus_1116
+
+extern @abi(c-msvc-x64) fn sov_sr_apply_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_sr_apply_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

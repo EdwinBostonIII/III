@@ -30,6 +30,6 @@ sed -E 's/\.section \.xii_sanctum\.text[^\n]*/.text/; s/\.section \.xii_sanctum\
 gcc -c "$TMP/c.s" -o "$TMP/s.o"        >/dev/null 2>&1 || { echo "[check-rm2] FAIL: assemble (invalid emitted instruction?)"; exit 1; }
 gcc "$TMP/s.o" "$DRV" -o "$TMP/r$SFX"  >/dev/null 2>&1 || { echo "[check-rm2] FAIL: link"; exit 1; }
 "$TMP/r$SFX" >/dev/null 2>&1; ec=$?
-[ "$ec" = "21" ] || { echo "[check-rm2] FAIL: do_thing(7)=$ec expected 21 (wrong codegen)"; exit 1; }
-echo "[check-rm2] OK: Ring -2 sanctum do_thing(7)=21"
+[ "$ec" = "21" ] || { echo "[check-rm2] FAIL: rc=$ec (1=do_thing!=21 arithmetic; 2=u64 high-bit ordering took SIGNED setcc -- the cg_rm2 signedness bug; 3=i64 ordering REGRESSED to unsigned); expected 21 (all three pass)"; exit 1; }
+echo "[check-rm2] OK: Ring -2 sanctum do_thing(7)=21 + u64-ordering(0x4..<0x8..)=1 (unsigned) + i64-ordering(-7<5)=1 (signed)"
 exit 0

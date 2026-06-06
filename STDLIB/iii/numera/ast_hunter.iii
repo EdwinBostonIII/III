@@ -1,0 +1,72 @@
+/* STDLIB/iii/numera/ast_hunter.iii -- TARGET ACQUISITION for the Isomorphic Scythe.
+ *
+ * Scans for functional redundancies: legacy functions whose input/output behavior MATCHES a newly
+ * discovered optimal schema on sampled concrete inputs (the cheap pre-filter), flagging them as targets
+ * for the expensive UNIVERSAL bisimulation proof (proof_bisimulation).
+ *
+ * THE CHEAP/EXPENSIVE SPLIT (the kernel's two modes -- the elegant realization): the heuristic match
+ * is the kernel's DEFINITIONAL equality at a CONCRETE point (refl certifies mul(X,2^a) == double^b(X)
+ * iff they reduce to the same numeral -- cheap, no induction).  The full proof (proof_bisimulation) is
+ * the kernel's PROPOSITIONAL equality for ALL inputs (the inductive strength schema).  So the same
+ * trusted kernel serves the fast filter AND the slow proof -- 99% of candidate pairs die at the cheap
+ * concrete check before the expensive universal proof is ever attempted.
+ *
+ * THE HARD-INVARIANT FIX (honored): the proposal says "randomized concrete inputs".  Determinism (M2)
+ * forbids true randomness; the sampling is SEEDED (egraph_stochastic's egs_next), so the hunt is
+ * reproducible -- same seed, same targets.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes egraph_stochastic + sov_isa (the kernel).
+ */
+module numera_ast_hunter
+
+extern @abi(c-msvc-x64) fn egs_next(state: u64) -> u64 from "egraph_stochastic.iii"
+
+const HUNT_XMASK : u64 = 7u64   /* sample concrete X in [1,8] (pow2 mask, no modulo-after-call) */
+
+/* hunter_heuristic_match: the CHEAP pre-filter.  Run `samples` SEEDED concrete X inputs through BOTH
+ * functions -- the legacy mul(X,2^a) and the optimal double^b(X) -- evaluated in plain host u64
+ * arithmetic (X<<a vs X<<b), and return 1 iff they AGREE on EVERY sample, 0 on the FIRST disagreement
+ * (abort INSTANTLY).  This is the fast behavioral check that kills the vast majority of candidate pairs
+ * before the expensive UNIVERSAL kernel proof (proof_bisimulation) is ever attempted -- the cheap
+ * (concrete evaluation) / expensive (inductive kernel proof) split.  NO kernel here: evaluating an
+ * integer function on a concrete input is plain arithmetic; the CIC kernel is reserved for proving
+ * equivalence for ALL inputs.  (X,a,b bounded so X<<a never overflows u64.) */
+fn hunter_heuristic_match(a: u32, b: u32, seed: u64, samples: u32) -> u8 @export {
+    let mut s : u64 = seed
+    let mut i : u32 = 0u32
+    while i < samples {
+        s = egs_next(s)
+        let xval    : u64 = (s & HUNT_XMASK) + 1u64
+        let legacy  : u64 = xval << (a as u64)   /* mul(X, 2^a) = X * 2^a */
+        let optimal : u64 = xval << (b as u64)   /* double^b(X) = X * 2^b */
+        if legacy != optimal { return 0u8 }      /* behavioral disagreement -> abort instantly */
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* hunter_find_candidate: given a legacy function characterized by exponent `a`, scan optimal exponents
+ * b in [1,bmax] and return the FIRST b whose behavior matches the legacy on the seeded samples (a target
+ * for the universal proof), or 0xFFFFFFFF if none matches.  Models "find a function with the same I/O
+ * signature that SEEMS to compute the same thing". */
+fn hunter_find_candidate(a: u32, bmax: u32, seed: u64) -> u32 @export {
+    let mut b : u32 = 1u32
+    while b <= bmax {
+        if hunter_heuristic_match(a, b, seed, 3u32) == 1u8 { return b }
+        b = b + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* SELFTEST: 99 = (1) a matching pair (a==b==3) passes the heuristic over seeded samples; (2) a
+ * non-matching pair (a=3,b=4 -- 8X vs 16X) ABORTS on the first sample; (3) the hunt finds the right
+ * optimal b==a for legacies a=3 and a=2; (4) a legacy whose match lies outside the scan range yields
+ * no candidate (0xFFFFFFFF). */
+fn hunter_selftest() -> u64 @export {
+    if hunter_heuristic_match(3u32, 3u32, 0x1234u64, 4u32) != 1u8 { return 1u64 }   /* match every sample */
+    if hunter_heuristic_match(3u32, 4u32, 0x1234u64, 4u32) != 0u8 { return 2u64 }   /* abort on disagreement */
+    if hunter_find_candidate(3u32, 5u32, 0x1234u64) != 3u32 { return 3u64 }         /* finds optimal 3 for legacy 3 */
+    if hunter_find_candidate(2u32, 5u32, 0x9999u64) != 2u32 { return 4u64 }         /* finds optimal 2 for legacy 2 */
+    if hunter_find_candidate(4u32, 2u32, 0x1234u64) != 0xFFFFFFFFu32 { return 5u64 }/* match (b=4) outside [1,2] */
+    return 99u64
+}

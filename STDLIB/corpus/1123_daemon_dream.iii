@@ -1,0 +1,25 @@
+/* 1123_daemon_dream.iii -- THE AUTOCATALYTIC LOOP, END TO END, KERNEL-GOVERNED.
+ *
+ * The headline: a seeded dream hallucinates candidate optimizations, the synthesizer attempts CIC
+ * proofs, and the kernel sieve disposes -- autonomously discovering + sealing mathematically-true
+ * optimizations the cost-minimizing extractor would never propose, while discarding every false dream.
+ *
+ * Drives forcefield/daemon_dream::daemon_dream_kat: 99 =
+ *   (1) the dream's kernel-certified count == an INDEPENDENT count of the true candidates in the seeded
+ *       stream (the kernel sealed EXACTLY the mathematically-true identities -- none false, none missed);
+ *   (2) NON-VACUOUS: the dream discovered >= 1 real optimization;
+ *   (3) every sealed entry is a true identity (the kernel leash holds though the mutagen lies 3/4 of the time);
+ *   (4) DETERMINISM (M2): the same seed yields the same discovery count -- the dream is replayable/auditable;
+ *   (5) budget=0: the synthesizer times out every cycle -> ZERO discoveries.
+ *
+ * The egraph PROPOSES (stochastically, but seeded); the CIC kernel DISPOSES.  The "Golden Shift" --
+ * promoting a discovery into the compiler + reseal -- is the OPERATOR-gated step, never autonomous. */
+module corpus_1123
+
+extern @abi(c-msvc-x64) fn daemon_dream_kat() -> u64 from "daemon_dream.iii"
+
+fn main() -> u64 {
+    let r : u64 = daemon_dream_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -2043,7 +2043,12 @@ fn iiip_prim_lparen(st: u64) -> u32 {
         lparen_pos(lp_s, iii_lex_read_u32_c(iiip_peek(st), TOK_START), lp_l, lp_c)
         return iiip_alloc_node(st, PA_AST_EXPR_UNIT, &NP_A as u64)
     }
-    if iiip_prim_is_trit_start(iiip_peek(st)) == 1u32 {
+    /* A 6-trit hexad ALWAYS has a comma after its first trit ( t , t , ... ).
+     * Require that 2-token lookahead before committing to the no-backtrack hexad
+     * branch, so a valid parenthesised expression whose first token is a trit-start
+     * (0, 1, +, -) -- e.g. (0), (1), (1<<n), (0+x), (-1) -- falls through to the
+     * ordinary expression parse below instead of being hard-rejected. */
+    if iiip_prim_is_trit_start(iiip_peek(st)) == 1u32 { if iiip_peek2_kind(st) == III_TOK_COMMA_P {
         if iiip_parse_hexad_trits(st, &PRIM_TRITS as u64, 0u32) == 1u32 {
             if iiip_expect(st, III_TOK_RPAREN_P, 0u64) == 0u32 {
                 iiip_record_error(st, 8u32, &PRIM_TOK as u64, "hexad must contain exactly 6 trits" as u64, III_TOK_RPAREN_P)
@@ -2055,7 +2060,7 @@ fn iiip_prim_lparen(st: u64) -> u32 {
         }
         iiip_record_error(st, 5u32, iiip_peek(st), "ambiguous parenthesised expression after partial hexad" as u64, PARSE_TOK_INVALID)
         return 0u32
-    }
+    } }
     let inner: u32 = iiip_parse_expr(st)
     iiip_expect(st, III_TOK_RPAREN_P, &PRIM_CLOSE as u64)
     iiip_pos_of(&PRIM_CLOSE as u64, &NP_B as u64)

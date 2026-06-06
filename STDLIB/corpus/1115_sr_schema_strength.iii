@@ -1,0 +1,32 @@
+/* 1115_sr_schema_strength.iii -- THE SR-SCHEMA INDUCTION TOWER: STRENGTH-REDUCTION SCHEMA (the headline).
+ *
+ * Proves III's OWN canonical strength reduction, kernel-certified for a SYMBOLIC exponent:
+ *
+ *     Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), itd(x, k))     where pow2 k = 2^k, itd(x,k) = double^k(x)
+ *
+ * i.e. "multiplying by a power of two equals k repeated doublings" -- mul(x, 2^k) == double^k(x) -- the
+ * exact rewrite the sov_isa "Path C" optimizer wants to apply, PROVED CORRECT for ALL k (not just
+ * concrete unrolls) by III's in-house CIC kernel.  This is proof-carrying optimization at its sharpest:
+ * the (untrusted) egraph PROPOSES the strength reduction; the (trusted) kernel DISPOSES by exhibiting a
+ * dependent-type proof of the equality for every k.  No mainstream compiler proves its strength
+ * reductions sound for all inputs via dependent types -- this is uniquely-III.
+ *
+ * The proof is induction on k:  base mul(x,2^0)=mul(x,1)=x=double^0(x) (refl-definitional);  step uses
+ * L6 (mul-over-double, proven by 1114) at m=pow2 k + ap_double applied to the IH, since
+ * pow2(succ k)=double(pow2 k) and itd(x,succ k)=double(itd(x,k)) hold definitionally.  Built on the SAME
+ * shared additive Peano tower (numera/sov_isa.iii::sov_tw_* + sov_l6_build_tower + sov_sr_term).
+ *
+ * This KAT drives numera/sov_isa::sov_sr_strength_kat, which asks the kernel to DISPOSE:
+ * tc_check(schema_term, schema_goal)==1 (ACCEPT) AND tc_check(schema_term, off-by-double-goal)==0
+ * (REJECT).  PROPOSE/DISPOSE: the positive is sound ONLY because the kernel accepts it; the negative
+ * control proves non-vacuity; nothing is weakened, no refl substitutes for the symbolic-k schema, and
+ * 99 is never hard-coded.  99 = the kernel PROVED its own strength-reduction schema. */
+module corpus_1115
+
+extern @abi(c-msvc-x64) fn sov_sr_strength_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_sr_strength_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

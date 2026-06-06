@@ -1,6 +1,10 @@
 # M23 9b behavioral quine-seal MISMATCH — investigation (2026-06-04)
 
-Status: **RESOLVED + PROVEN ON METAL (2026-06-04, .sys a91b667b).** quine_attest_client.exe exit 99:
+Status: **RESOLVED + PROVEN ON METAL — RE-PROVEN 2026-06-04 on .sys `3555362c`** after the perfection
+audit campaign (6 cg_r0/cg_r3 defects + the SHA-NI-dispatch kernel integration; see
+`project_iii_perfection_audit_campaign`): all 4 gate verdicts correct + M23 SUCCESS + clean DriverUnload,
+on iiis-1 `cdd0a55d` / iiis-2 `086053ba`. The original proof (.sys a91b667b) below stands; this confirms
+the audit fixes hold on metal. quine_attest_client.exe exit 99:
 "M23 SUCCESS (capability 11) - the running driver's below-OS .text measurement EQUALS the
 independently-recomputed on-disk seal." All 4 gate verdicts also correct; no BSOD; clean DriverUnload.
 Root cause was NOT a byte difference (live==file over the code is real) — it was cg_r0's **slotted

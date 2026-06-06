@@ -1,0 +1,81 @@
+/* STDLIB/iii/forcefield/daemon_dream.iii -- THE ENGINE of the Autocatalytic Synthesis Loop.
+ *
+ * Orchestrates the full propose -> synthesize -> dispose -> seal pipeline without disturbing the
+ * system's primary deterministic obligations.  Each cycle: the mutagen HALLUCINATES a candidate
+ * identity (egraph_stochastic), the synthesizer attempts a proof, and the kernel sieve DISPOSES
+ * (cg_autocatalyst).  Kernel-certified discoveries accumulate in the volatile registry.
+ *
+ * THE HARD-INVARIANT FIX (honored): the proposal's "asynchronous background daemon that triggers
+ * build_iiis2 so the Golden Fixpoint autonomously shifts" is REFUTED -- two reasons, both fatal:
+ *   (1) III has NO exposed scheduler/threading and a compiled .iii -> .exe CANNOT invoke the build
+ *       system to reseal itself; an "infinite background loop triggering build_iiis2" is not expressible.
+ *   (2) An AUTONOMOUS golden shift violates M20 / ADR-FORGE-4 (the substrate may not assert its own
+ *       soundness / re-root its own trust) AND the determinism contract (a self-mutating golden is not a
+ *       fixed point -- it breaks federation R1 identity + reproducibility) AND the seal-critical CRASH-
+ *       PROTOCOL (a compiler reseal demands a surfaced operator checkpoint).
+ * So this is a BOUNDED, SYNCHRONOUS driver: it DISCOVERS + kernel-CERTIFIES + SEALS optimizations and
+ * SURFACES the certified-rewrite set (the return value + the registry).  Promoting a discovery into the
+ * compiler source + reseal is the OPERATOR-GATED step under CRASH PROTOCOL -- the human pulls the trigger.
+ * "Background / idle" is the operator's invocation cadence, not a runtime thread.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes egraph_stochastic + cg_autocatalyst.
+ */
+module daemon_dream
+
+extern @abi(c-msvc-x64) fn egs_hallucinate(state: u64, out_a: *u32, out_b: *u32) -> u64 from "egraph_stochastic.iii"
+extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_all_true() -> u8 from "cg_autocatalyst.iii"
+
+var DD_A : [u32; 1]
+var DD_B : [u32; 1]
+
+/* THE DREAM: run n_cycles seeded dream cycles; return the count of kernel-CERTIFIED discoveries (the
+ * surfaced certified-rewrite set lives in the cg_autocatalyst registry).  Deterministic in the seed. */
+fn daemon_dream_run(seed: u64, n_cycles: u32, budget: u32) -> u32 @export {
+    cga_reset()
+    let mut s : u64 = seed
+    let mut i : u32 = 0u32
+    while i < n_cycles {
+        s = egs_hallucinate(s, (&DD_A as u64) as *u32, (&DD_B as u64) as *u32)
+        cga_dispose(DD_A[0u64], DD_B[0u64], budget)
+        i = i + 1u32
+    }
+    return cga_count()
+}
+
+/* Independent oracle: replay the same seed and count how many cycles propose a TRUE identity (a==b),
+ * WITHOUT the kernel -- so the KAT can assert the kernel sealed EXACTLY the true ones (no more, no less). */
+fn dd_count_true(seed: u64, n_cycles: u32) -> u32 {
+    let mut s : u64 = seed
+    let mut i : u32 = 0u32
+    let mut c : u32 = 0u32
+    while i < n_cycles {
+        s = egs_hallucinate(s, (&DD_A as u64) as *u32, (&DD_B as u64) as *u32)
+        if DD_A[0u64] == DD_B[0u64] { c = c + 1u32 }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* THE HEADLINE KAT -- the whole loop, end to end, kernel-governed.  99 =
+ *  (1) the dream's certified count == the independent true-candidate count (the kernel sealed EXACTLY
+ *      the mathematically-true identities -- no false hallucination admitted, no true one missed);
+ *  (2) NON-VACUOUS: the dream discovered >= 1 real optimization;
+ *  (3) every sealed entry is a true identity (cga_all_true -- the leash holds even though the mutagen lies);
+ *  (4) DETERMINISM (M2): the same seed yields the same discovery count -- the dream is replayable;
+ *  (5) budget=0: the synthesizer times out every cycle -> ZERO discoveries (the sieve seals nothing). */
+fn daemon_dream_kat() -> u64 @export {
+    let seed : u64 = 0x0C0FFEE123456789u64
+    let n : u32 = 16u32
+    let certified : u32 = daemon_dream_run(seed, n, 64u32)
+    let expected : u32 = dd_count_true(seed, n)
+    if certified != expected { return 1u64 }       /* kernel sealed EXACTLY the true identities */
+    if certified < 1u32 { return 2u64 }            /* non-vacuous: at least one real discovery */
+    if cga_all_true() != 1u8 { return 3u64 }       /* no false hallucination sealed */
+    let again : u32 = daemon_dream_run(seed, n, 64u32)
+    if again != certified { return 4u64 }          /* determinism: replayable dream */
+    if daemon_dream_run(seed, n, 0u32) != 0u32 { return 5u64 }   /* budget 0 -> zero discoveries */
+    return 99u64
+}

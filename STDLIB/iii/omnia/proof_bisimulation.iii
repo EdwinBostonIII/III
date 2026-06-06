@@ -1,0 +1,61 @@
+/* STDLIB/iii/omnia/proof_bisimulation.iii -- THE EQUIVALENCE ENGINE of the Isomorphic Scythe.
+ *
+ * The hunter (ast_hunter) only knows two functions SEEM to do the same thing (they agree on a few
+ * concrete inputs).  This module uses the CIC kernel to PROVE they are identical across ALL possible
+ * inputs -- the bisimulation the whole Scythe rests on.
+ *
+ * THE DEEP vs SHALLOW equivalence (the harmony): aether/bisimulation_witness.iii already produces a
+ * SHALLOW, runtime bisimulation witness (op_id / in_commit / out_commit field-window equality of two
+ * computation-graph fragments -- W41).  THIS module is the DEEP, universal version: a CIC kernel proof
+ * of  Pi(x). Id(legacy(x), optimal(x))  -- equivalence for EVERY input, not just the witnessed run.
+ * The two compose: a deep kernel proof is the strongest possible bisimulation witness.
+ *
+ * Realized for the canonical strength-reduction class the Dream Sandbox discovers: the LEGACY function
+ * is the multiply-based  mul(x, 2^a)  and the OPTIMAL is the shift-based  double^b(x).  The synthesizer
+ * (numera/sov_isa) PROPOSES the proof term (the strength schema at a); the kernel tc_check DISPOSES.
+ *
+ *   bisim_construct_theorem  ==  sov_hall_goal(a,b)      (the universal-equivalence Id goal)
+ *   bisim_prove              ==  sov_synth_strength_at(a) (synthesize the candidate proof term)
+ *   bisim_dispose            ==  tc_check                 (the kernel -- the SOLE arbiter)
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes sov_isa + typecheck.
+ */
+module omnia_proof_bisimulation
+
+extern @abi(c-msvc-x64) fn sov_ac_setup() -> u64 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_synth_strength_at(k: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_hall_goal(a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_strength_cheaper() -> u8 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+/* THE UNIVERSAL-EQUIVALENCE PROOF: prove the legacy mul(x,2^a) is identical to the optimal double^b(x)
+ * for ALL x.  The synthesizer proposes the strength schema at a; the kernel disposes (holds iff a==b).
+ * The kernel is the SOLE arbiter: a subtle edge-case difference (a != b) -> 0 -> the legacy is LEFT ALONE
+ * (the Scythe never amputates a function that is not PROVEN redundant). */
+fn bisim_prove_equiv(a: u32, b: u32) -> u8 @export {
+    sov_ac_setup()                               /* bisim_construct: arena + the proven tower */
+    let cert : u32 = sov_synth_strength_at(a)    /* bisim_prove:     synthesize the candidate proof term */
+    let goal : u32 = sov_hall_goal(a, b)         /* bisim_construct_theorem: Pi(x). Id(mul(x,2^a), double^b x) */
+    return tc_check(cert, goal)                  /* bisim_dispose:   the CIC kernel decides */
+}
+
+/* THE OBSOLESCENCE VERDICT: the legacy mul(x,2^a) is PROVABLY OBSOLETE iff (1) the kernel PROVES it
+ * universally equivalent to the optimal double^b(x), AND (2) the optimal is STRICTLY cheaper (data-driven
+ * cost gradient).  Both proven -> safe AND beneficial to cull.  Either fails -> NOT obsolete (never on doubt). */
+fn bisim_is_obsolete(a: u32, b: u32) -> u8 @export {
+    if bisim_prove_equiv(a, b) != 1u8 { return 0u8 }   /* not PROVEN equivalent -> never cull */
+    if sov_strength_cheaper() != 1u8 { return 0u8 }    /* not cheaper -> not worth culling */
+    return 1u8
+}
+
+/* SELFTEST: 99 = (1) a TRUE pair (a==b==3) is proven universally equivalent AND obsolete; (2) a FALSE
+ * pair (a=3,b=4) is NOT proven equivalent -> NOT obsolete (the edge-case-difference SAFETY: left alone);
+ * (3) the optimal is strictly cheaper (the cost gradient is real). */
+fn bisim_selftest() -> u64 @export {
+    if bisim_prove_equiv(3u32, 3u32) != 1u8 { return 1u64 }   /* universally equivalent (kernel) */
+    if bisim_is_obsolete(3u32, 3u32) != 1u8 { return 2u64 }   /* obsolete = equivalent + cheaper */
+    if bisim_prove_equiv(3u32, 4u32) != 0u8 { return 3u64 }   /* a!=b -> NOT equivalent */
+    if bisim_is_obsolete(3u32, 4u32) != 0u8 { return 4u64 }   /* -> NOT obsolete (legacy left alone) */
+    if sov_strength_cheaper() != 1u8 { return 5u64 }          /* optimal strictly cheaper than legacy */
+    return 99u64
+}

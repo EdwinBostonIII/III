@@ -1,0 +1,17 @@
+/* 1200_proof_bisimulation.iii -- THE DEEP (KERNEL) BISIMULATION: legacy ≡ optimal for ALL inputs.
+ *
+ * Drives omnia/proof_bisimulation::bisim_selftest: 99 = (1) the CIC kernel PROVES the legacy mul(x,2^3)
+ * universally equivalent to the optimal double^3(x) (bisimulation over every input, not just sampled);
+ * (2) that pair is therefore OBSOLETE (equivalent AND the optimal is strictly cheaper); (3) a FALSE pair
+ * (mul(x,2^3) vs double^4(x)) is NOT proven equivalent -> NOT obsolete (the edge-case-difference safety:
+ * the legacy is LEFT ALONE); (4) the cost gradient is real (optimal strictly cheaper, data-driven).
+ * The synthesizer PROPOSES the proof; the kernel DISPOSES.  Nothing weakened; 99 never hard-coded. */
+module corpus_1200
+
+extern @abi(c-msvc-x64) fn bisim_selftest() -> u64 from "proof_bisimulation.iii"
+
+fn main() -> u64 {
+    let r : u64 = bisim_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

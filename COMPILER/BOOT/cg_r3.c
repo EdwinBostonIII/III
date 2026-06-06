@@ -1131,7 +1131,9 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
          * preserving no-op for same-width types and a narrowing
          * truncation for u8/u16/u32 (movzbq/movzwq/movl-implicit-zero).
          * We inspect the target type's name to decide; unknown types
-         * pass through unchanged (Stage-1+ width tracking adds rigor). */
+         * pass through unchanged (Stage-1+ width tracking adds rigor).
+         * LOAD-BEARING: a sign-aware variant (tried + reverted 2026-06-04) reddened corpus
+         * 1113/1114 via the compiler's own bit-31 `as i32` self-host sites.  Keep zero-extend. */
         case III_AST_EXPR_CAST: {
             if (emit_expr(cg, n->u.cast_.value_expr) != 0) return -1;
             stack_pop_reg(cg, "rax");

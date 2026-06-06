@@ -1,0 +1,15 @@
+/* 1121_egraph_stochastic.iii -- THE MUTAGEN is seeded-DETERMINISTIC (M2-safe alien exploration).
+ *
+ * Drives numera/egraph_stochastic::egs_selftest: 99 = (1) the xorshift64* PRNG is deterministic (same
+ * seed -> same hallucinated (a,b)); (2) every candidate exponent is in range [1,KMAX]; (3) over a seeded
+ * sweep the mutagen produces BOTH true (a==b) and false (a!=b) candidate identities -- the exploration
+ * is real, but reproducible (no entropy, no non-determinism, passes the no-ML differential). */
+module corpus_1121
+
+extern @abi(c-msvc-x64) fn egs_selftest() -> u64 from "egraph_stochastic.iii"
+
+fn main() -> u64 {
+    let r : u64 = egs_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

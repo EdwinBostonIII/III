@@ -67,8 +67,8 @@ done
 
 echo "[xii] step 2: verify Manifest mhash against golden"
 if [ -f "$BOOT/xii_manifest.bin" ] && [ -f "$BOOT/xii_manifest.mhash.golden" ]; then
-    expected="$(cat $BOOT/xii_manifest.mhash.golden | tr -d '[:space:]')"
-    actual="$(sha256sum $BOOT/xii_manifest.bin | cut -d' ' -f1)"
+    expected="$(cat "$BOOT/xii_manifest.mhash.golden" | tr -d '[:space:]')"
+    actual="$(sha256sum "$BOOT/xii_manifest.bin" | cut -d' ' -f1)"
     if [ "$expected" != "$actual" ]; then
         echo "[xii] manifest mhash MISMATCH"
         echo "  expected: $expected"
@@ -84,8 +84,8 @@ fi
 
 echo "[xii] step 4: verify iiis-1 mhash (if golden present)"
 if [ -f "$BOOT/iiis-1.mhash" ] && [ -x "$COMPILED/iiis-1.exe" ]; then
-    expected1="$(cat $BOOT/iiis-1.mhash | tr -d '[:space:]')"
-    actual1="$(sha256sum $COMPILED/iiis-1.exe | cut -d' ' -f1)"
+    expected1="$(cat "$BOOT/iiis-1.mhash" | tr -d '[:space:]')"
+    actual1="$(sha256sum "$COMPILED/iiis-1.exe" | cut -d' ' -f1)"
     if [ "$expected1" != "$actual1" ]; then
         echo "[xii] iiis-1 mhash MISMATCH"
         exit 3
@@ -126,12 +126,12 @@ fi
 
 echo "[xii] BUILD COMPLETE"
 if [ -x "$COMPILED/iiis-2.exe" ]; then
-    echo "  iiis-2.exe:       $(sha256sum $COMPILED/iiis-2.exe | cut -d' ' -f1)"
+    echo "  iiis-2.exe:       $(sha256sum "$COMPILED/iiis-2.exe" | cut -d' ' -f1)"
 fi
 if [ -f "$COMPILED/xii_lattice.bin" ]; then
-    echo "  xii_lattice.bin:  $(sha256sum $COMPILED/xii_lattice.bin | cut -d' ' -f1)"
+    echo "  xii_lattice.bin:  $(sha256sum "$COMPILED/xii_lattice.bin" | cut -d' ' -f1)"
 fi
 if [ -f "$BOOT/xii_manifest.bin" ]; then
-    echo "  xii_manifest.bin: $(sha256sum $BOOT/xii_manifest.bin | cut -d' ' -f1)"
+    echo "  xii_manifest.bin: $(sha256sum "$BOOT/xii_manifest.bin" | cut -d' ' -f1)"
 fi
 exit 0

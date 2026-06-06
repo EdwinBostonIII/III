@@ -30,6 +30,9 @@
 module omnia_xii_term
 
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
 
 /* ------------------------------------------------------------------ */
 /* Kind enum (0..23)                                                   */
@@ -444,9 +447,19 @@ fn xii_term_mhash(idx: u32, out_32: *u8) -> i32 @export {
         return 0i32
     }
     if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    /* cg_r0-safe: feed the node's 32 bytes by ELEMENT-indexing the global arena (XII_TERM_ARENA[off+k]
+       -> slot off+k == logical byte off+k under both backends), NOT by raw `(&arena + off*1)` byte math
+       handed to a *u8-element-indexing hash. The old `(p + base) as *u8` composed raw byte arithmetic
+       with sha256_oneshot's element indexing -- correct on byte-packed cg_r3 but on cg_r0 it read slot
+       (off + k*8)/8 i.e. the wrong 8x-strided bytes. Streaming via sha256_update_byte is the same idiom
+       as sha256_feed_packed / _kk_load_lane and is byte-identical to the prior cg_r3 result. */
     let off : u32 = idx * XII_TERM_BYTES
-    let p : *u8 = &XII_TERM_ARENA as *u8
-    let base : u64 = off as u64
-    sha256_oneshot((p + base) as *u8, 32u64, out_32)
+    sha256_init()
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        sha256_update_byte(XII_TERM_ARENA[(off + k) as u64] as u32)
+        k = k + 1u32
+    }
+    sha256_final(out_32)
     return 0i32
 }

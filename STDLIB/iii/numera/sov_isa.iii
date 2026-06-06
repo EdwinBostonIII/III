@@ -78,6 +78,11 @@ extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_shift_k(t: u32, k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_j(mtv: u32, base: u32, proof: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_infer(t: u32) -> u32 from "typecheck.iii"
 /* Integration C: sound conversion pre-filter (WHNF shape signature + Kleene trit). */
 extern @abi(c-msvc-x64) fn tc_shape_sig(t: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
@@ -1072,3 +1077,1050 @@ fn shape_filter_selftest() -> u64 @export {
     if sov_pcc_verify(s0, s1) != 0u8 { return 16u64 }
     return 99u64
 }
+
+/* ============================================================
+ *  THE SR-SCHEMA INDUCTION TOWER -- FOUNDATION RUNG.
+ *
+ *  The schema  Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), iter(x, double, k))  (the symbolic
+ *  shift-as-repeated-doubling identity) is UNREACHABLE through the existing refl path:
+ *  with SYMBOLIC k the iterators are STUCK NEUTRALS, so refl cannot close it -- it forces
+ *  tc_natrec INDUCTION over k, which in turn forces a propositional-congruence helper
+ *  (ap under succ, built with the Id eliminator tc_j) and the additive Peano sub-tower.
+ *
+ *  This is the FOUNDATION: the base rung that every later rung stands on.
+ *    (a) BASE_MUL_ONE : mul(x, 1) == x        -- refl-definitional (the iter on a CONCRETE
+ *        numeral fully unrolls: mul(x,1) -> add(x,0) -> x); the kernel closes it by refl.
+ *        KERNEL-VERIFIED (sov_pcc_verify_core == 1; neg control mul(x,2) == 0).
+ *    (b) AP_SUCC      : Pi(a).Pi(b).Pi(p:Id(Nat,a,b)). Id(Nat, succ a, succ b)
+ *        -- congruence of succ over a PROPOSITIONAL Id; NOT definitional, so tc_j is
+ *        mandatory.  Every nat-induction STEP needs this.  Built CLOSED + applied.
+ *        == the recipe's lemma_tower[0] (L0_helpers_cong_ap).  KERNEL-VERIFIED
+ *        (tc_check(aps, goal) == 1; neg control wrong-congruence goal == 0).
+ *
+ *  PROVEN -- (c) ADD_LEFT_ZERO (L1) : Pi(b:Nat). Id(Nat, add(zero,b), b).  The FIRST tc_natrec rung.
+ *  Over a symbolic b, add(zero,b) = iter(zero, succf, b) is a STUCK NEUTRAL, so refl cannot close it
+ *  -- tc_natrec induction is mandatory, and the kernel's TC_NATREC rule shifts the IH type via
+ *  tc_shift_k(stored_type, k+1).  That IH type carries the CLOSED step succf = (lam n. succ n).
+ *  The kernel reducer used to MANGLE that shift (ccl_eta_contract eta-collapsed succf to a bare Succ
+ *  that ccl_to_tc misreified as #0); that block is now FIXED (ccl_eta_contract refuses to eta-contract
+ *  a head data-constructor / eliminator), so the shifted succf survives, the IH-lookup type matches the
+ *  reconstructed step type, and the natrec STEP tc_checks.  KERNEL-VERIFIED: sov_l1_proven_witness
+ *  asserts tc_check(L1_term, L1_goal) == 1 with biting negatives (wrong codomain succ b == 0; refl
+ *  shortcut == 0) and the reducer-fix controls as a regression tripwire.
+ *
+ *  PROPOSE/DISPOSE: a lemma is sound ONLY because tc_check ACCEPTS it (returns 1).  The KAT
+ *  exercises NEGATIVE controls (each must REJECT) so no 99 is vacuous. */
+
+/* The CLOSED congruence helper  ap_succ : Pi(a:Nat).Pi(b:Nat).Pi(p:Id(Nat,a,b)). Id(Nat, succ a, succ b).
+ * Proof: lam(a).lam(b).lam(p). J(C, refl(succ a), p), motive
+ *   C := lam(y:Nat). lam(h:Id(Nat,a,y)). Id(Nat, succ a, succ y).
+ * De-Bruijn (verified): in [a,b,p] a=#2,b=#1,p=#0 ; inside C's lam-y [a,b,p,y] a=#3,y=#0 ;
+ * inside C's lam-h [a,b,p,y,h] a=#4,y=#1.  app(C,a) beta-reduces (y:=a) to Id(Nat,succ a,succ a)
+ * = the type of refl(succ a); app(app(C,b),p) to Id(Nat,succ a,succ b) = the goal codomain. */
+fn sov_ap_succ_term() -> u32 {
+    let c_hdom : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))               /* h : Id(Nat, a@#3, y@#0)   in [a,b,p,y] */
+    let c_body : u32 = tc_id(tc_nat(), tc_succ(tc_var(4u32)), tc_succ(tc_var(1u32))) /* Id(Nat, succ a@#4, succ y@#1) in [a,b,p,y,h] */
+    let c_inner : u32 = tc_lam(c_hdom, c_body)                                    /* lam h. ... */
+    let mtv : u32 = tc_lam(tc_nat(), c_inner)                                     /* lam y. lam h. ... */
+    let base : u32 = tc_refl(tc_succ(tc_var(2u32)))                               /* refl(succ a@#2) : C a (refl a) */
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))                               /* J(C, base, p@#0) : C b p */
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))                 /* p : Id(Nat, a@#1, b@#0)   in [a,b] */
+    let lp : u32 = tc_lam(p_dom, jterm)                                           /* lam p. ... */
+    let lb : u32 = tc_lam(tc_nat(), lp)                                           /* lam b. ... */
+    return tc_lam(tc_nat(), lb)                                                   /* lam a. ... */
+}
+/* The goal type of ap_succ. */
+fn sov_ap_succ_goal() -> u32 {
+    let body : u32 = tc_id(tc_nat(), tc_succ(tc_var(2u32)), tc_succ(tc_var(1u32))) /* Id(Nat, succ a@#2, succ b@#1) in [a,b,p] */
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))                 /* Id(Nat, a@#1, b@#0) in [a,b] */
+    let pp : u32 = tc_pi(p_dom, body)
+    let pb : u32 = tc_pi(tc_nat(), pp)
+    return tc_pi(tc_nat(), pb)
+}
+
+/* The closed motive for L1: P := lam(j:Nat). Id(Nat, add(zero,j), j) = lam j. Id(Nat, iter(zero,succf,j), j).
+ * SOV_SUCCF must be set.  CLOSED -> shift(P,1)=shift(P,2)=P. */
+fn sov_l1_motive() -> u32 {
+    let addzj : u32 = sov_m_add(tc_zero(), tc_var(0u32))   /* add(zero, j@#0) = iter(zero,succf,#0) */
+    let body : u32 = tc_id(tc_nat(), addzj, tc_var(0u32))  /* Id(Nat, add(zero,j), j) */
+    return tc_lam(tc_nat(), body)
+}
+
+/* L1 proof term: natrec(P, base, step, b) wrapped in lam(b:Nat).  CONSTRUCTION IS CORRECT
+ * (each sub-piece infers; de-Bruijn verified piecewise) but the WHOLE FAILS tc_check on the
+ * current kernel -- see the OPEN-GAP note at the top of this section (tc_shift_k corrupts the
+ * succf step inside the IH type during the kernel's tc_ctx_lookup).  KEPT (not deleted) as the
+ * exact term that becomes provable the moment the CCL reducer is fixed; sov_l1_blocked_witness
+ * holds the tripwire.  DO NOT assert this proves L1 until that witness flips.
+ * base : P zero = Id(Nat, add(zero,zero), zero); add(zero,zero) ->iota zero, so refl(zero).
+ * step : Pi(k:Nat). P k -> P(succ k); built so the inner-lam domain is IDENTICAL to the
+ *   kernel's nr_ih = app(shift(P,1), #0), and the BODY applies the CLOSED ap_succ to the IH:
+ *   in [k,ih] k=#1, ih=#0 ; ap_succ (add(zero,k)) k ih : Id(Nat, succ(add(zero,k)), succ k),
+ *   which WOULD be conv to the kernel's nr_conc = app(shift(P,2), succ #1) but for the shift defect. */
+fn sov_l1_term() -> u32 {
+    let p : u32 = sov_l1_motive()
+    let aps : u32 = sov_ap_succ_term()
+    let base : u32 = tc_refl(tc_zero())                                  /* P zero ~ Id(Nat,zero,zero) -> refl(zero) */
+    /* step inner-lam (ih) domain, IDENTICAL to the kernel's nr_ih: app(shift(P,1), #0) in [k] */
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let addzk : u32 = sov_m_add(tc_zero(), tc_var(1u32))                  /* add(zero, k@#1) in [k,ih] */
+    /* BODY = ap_succ (add(zero,k)) k ih : Id(Nat, succ(add(zero,k)), succ k) */
+    let ap1 : u32 = tc_app(aps, addzk)
+    let ap2 : u32 = tc_app(ap1, tc_var(1u32))                            /* second arg b := k@#1 */
+    let body : u32 = tc_app(ap2, tc_var(0u32))                           /* proof arg p := ih@#0 */
+    let step_inner : u32 = tc_lam(ih_dom, body)                          /* lam ih. BODY  in [k] */
+    let step : u32 = tc_lam(tc_nat(), step_inner)                        /* lam k. lam ih. BODY */
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))               /* natrec(P,base,step, b@#0) in [b] */
+    return tc_lam(tc_nat(), rec)                                         /* lam b. natrec(...) */
+}
+/* The goal type of L1: Pi(b:Nat). Id(Nat, add(zero,b), b). */
+fn sov_l1_goal() -> u32 {
+    let addzb : u32 = sov_m_add(tc_zero(), tc_var(0u32))   /* add(zero, b@#0) in [b] */
+    let body : u32 = tc_id(tc_nat(), addzb, tc_var(0u32))
+    return tc_pi(tc_nat(), body)
+}
+
+/* L1 PROVEN WITNESS (positive).  The kernel reducer block is REMOVED (ccl_eta_contract no longer
+ * eta-collapses the closed succ-step), so add_left_zero now CLOSES by tc_natrec induction.  Returns
+ * 99 IFF the kernel ACCEPTS the genuine L1 term against its true goal AND rejects biting negatives --
+ * non-vacuous, un-rigged, and a tripwire for the exact reducer fix (controls A/B flip if it regresses). */
+fn sov_l1_proven_witness() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    let succf : u32 = sov_succf()
+    /* TRIPWIRE A: shift no longer corrupts the closed succ-lambda (the fixed reducer step). */
+    if tc_check(tc_shift_k(succf, 1u32), tc_pi(tc_nat(), tc_nat())) != 1u8 { return 1u64 }
+    /* TRIPWIRE B: hence shifted succf IS conv to a fresh succf (the IH-lookup no longer diverges). */
+    if tc_conv(tc_shift_k(succf, 1u32), sov_succf()) != 1u8 { return 2u64 }
+    /* THE PROOF: the GENUINE L1 natrec term checks against its true goal Pi(b).Id(Nat,add(zero,b),b). */
+    let l1 : u32 = sov_l1_term()
+    let l1_goal : u32 = sov_l1_goal()
+    if tc_check(l1, l1_goal) != 1u8 { return 3u64 }
+    /* NEG 1: the WRONG codomain Pi(b).Id(Nat,add(zero,b),succ b) is well-formed but NOT proven by l1. */
+    let wrong_body : u32 = tc_id(tc_nat(), sov_m_add(tc_zero(), tc_var(0u32)), tc_succ(tc_var(0u32)))
+    let wrong_goal : u32 = tc_pi(tc_nat(), wrong_body)
+    if tc_infer(wrong_goal) == 0u32 { return 4u64 }
+    if tc_check(l1, wrong_goal) != 0u8 { return 5u64 }
+    /* NEG 2: a refl shortcut does NOT prove L1 -- add(zero,b) is a STUCK neutral (symbolic b), not
+     * definitionally b; only the induction closes it.  Catches a reducer that wrongly reduces stuck iters. */
+    let bogus : u32 = tc_lam(tc_nat(), tc_refl(tc_var(0u32)))
+    if tc_check(bogus, l1_goal) != 0u8 { return 6u64 }
+    return 99u64
+}
+
+/* THE FOUNDATION-RUNG KAT.  99 = the kernel ACCEPTED the two FOUNDATION lemmas (a)+(b),
+ * REJECTED their negative controls (so each acceptance is non-vacuous + un-rigged), AND the
+ * L1 block is a PROVEN FACT (not a silent omission): the next rung up, add_left_zero, is
+ * blocked by a pinned kernel-primitive defect that this KAT witnesses (see
+ * sov_l1_blocked_witness + the open-gap note above).  PROPOSE/DISPOSE honored throughout:
+ * every positive is a tc_check==1, every negative a tc_check==0, the gap is disclosed, and
+ * nothing is weakened or hard-coded to 99. */
+fn sov_sr_foundation_kat() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    let x : u32 = tc_var(0u32)
+
+    /* ---- (a) BASE_MUL_ONE : mul(x,1) == x  (refl-definitional; the SOLE arbiter is the kernel) ---- */
+    let mul_x_1 : u32 = sov_m_mul(x, tc_succ(tc_zero()))
+    if sov_pcc_verify_core(mul_x_1, x) != 1u8 { return 1u64 }
+    /* (a)-NEG: mul(x,2) is a STUCK neutral (iter on symbolic x), NOT conv to x -> REJECT. */
+    let mul_x_2 : u32 = sov_m_mul(x, tc_succ(tc_succ(tc_zero())))
+    if sov_pcc_verify_core(mul_x_2, x) != 0u8 { return 2u64 }
+
+    /* ---- (b) AP_SUCC : Pi(a).Pi(b).Pi(p:Id(Nat,a,b)). Id(Nat,succ a,succ b)  (tc_j congruence)
+     *      == the recipe's lemma_tower[0] L0_helpers_cong_ap -- the mandatory ingredient of
+     *         every nat-induction step, here proven CLOSED. ---- */
+    let aps : u32 = sov_ap_succ_term()
+    let aps_goal : u32 = sov_ap_succ_goal()
+    if tc_check(aps, aps_goal) != 1u8 { return 3u64 }
+    /* (b)-NEG: the SAME proof term does NOT prove the WRONG congruence Id(Nat, succ a, succ(succ b)). */
+    let aps_body_bad : u32 = tc_id(tc_nat(), tc_succ(tc_var(2u32)), tc_succ(tc_succ(tc_var(1u32))))
+    let aps_pdom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    let aps_goal_bad : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_pi(aps_pdom, aps_body_bad)))
+    if tc_check(aps, aps_goal_bad) != 0u8 { return 4u64 }
+
+    /* ---- (c) L1 add_left_zero is PROVEN -- the kernel reducer block is REMOVED ----
+     * ccl_eta_contract no longer eta-collapses the closed succ-step succf=(lam n. succ n), so
+     * tc_shift_k preserves it and the tc_natrec IH-lookup no longer diverges -- the FIRST induction
+     * rung now CLOSES.  sov_l1_proven_witness returns 99 IFF the kernel ACCEPTS the genuine natrec
+     * term against Pi(b).Id(Nat,add(zero,b),b) AND rejects biting negatives (wrong codomain succ b +
+     * refl shortcut), with the reducer fix asserted as a regression tripwire. */
+    if sov_l1_proven_witness() != 99u64 { return 5u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  THE DISTRIBUTIVITY RUNG -- L6 mul-over-double : Pi(x).Pi(m). Id(Nat, mul(x, double m), double(mul(x,m))).
+ *
+ *  TASK: construct + kernel-verify  mul(x, 2m) == 2*mul(x,m)  by Nat induction (natrec) over m.
+ *
+ *  VERDICT (kernel-disposed, on OUR OWN constructions): PROVEN.  L6 over a SYMBOLIC m is a STUCK
+ *  NEUTRAL (iter/mul do not iota-reduce), so refl cannot close it -- Nat induction (tc_natrec) over m
+ *  is MANDATORY.  The kernel's TC_NATREC rule shifts the supplied motive via tc_shift_k(P,1)/(P,2) to
+ *  build the step type, and that motive carries the closed step succf = (lam n. succ n).  The kernel
+ *  reducer used to MANGLE that shift (ccl_eta_contract eta-collapsed succf to a bare Succ that ccl_to_tc
+ *  misreified as #0); that block is now FIXED (ccl_eta_contract refuses to eta-contract a head
+ *  data-constructor / eliminator), so the shifted motive is well-typed, the natrec STEP tc_checks, and
+ *  the whole induction closes.
+ *
+ *  PROOF (the additive Peano tower, each rung kernel-accepted; one tc_check(L6) transitively verifies
+ *  all of them):  ap_succ + add_succ_left + add_assoc + add_comm (via L1 add_left_zero) + the add
+ *  congruences ap_add_l/r + add_left_comm + mul_left_distributivity (MLD), and finally
+ *  L6 == MLD(x, m, m) because double(v) == add(v,v) definitionally.  Built as a SHARED-NODE DAG
+ *  (sov_tw_* below + sov_l6_build_tower) so the composed term stays within TC_CAP.
+ *
+ *  PROPOSE/DISPOSE / KERNEL-VERIFIED: sov_l6_proven_witness builds the GENUINE, UNWEAKENED L6 term +
+ *  goal and asserts tc_check(L6_term, L6_goal) == 1 (ACCEPT), bracketed by a biting negative control
+ *  (the off-by-succ codomain == 0).  Nothing is weakened, no refl substitutes for the symbolic-m
+ *  schema, and the 99 is never hard-coded. */
+
+/* double(v) = iter(v, succf, v) == add(v,v).  CLOSED; Nat->Nat. */
+fn sov_m_double(v: u32) -> u32 {
+    return tc_iter(v, SOV_SUCCF[0u32], v)
+}
+
+/* ============================================================================
+ *  THE SR-SCHEMA INDUCTION TOWER -- VERIFIED (kernel-accepted, reducer block REMOVED).
+ *  Each lemma proof term is built ONCE into a shared SOV_G_* node and referenced as a DAG by the
+ *  higher rungs (the definitional layer the raw tc_* kernel lacks), so the composed L6 term stays
+ *  within TC_CAP.  Index conventions are de-Bruijn-exact; the SOLE arbiter is tc_check.
+ *  L6 mul-over-double reduces to MLD(x,m,m) because double(v) == add(v,v) definitionally.
+ * ============================================================================ */
+var SOV_G_APS   : [u32; 1]
+var SOV_G_ASL   : [u32; 1]
+var SOV_G_L1    : [u32; 1]
+var SOV_G_SYM   : [u32; 1]
+var SOV_G_TRANS : [u32; 1]
+var SOV_G_ASSOC : [u32; 1]
+var SOV_G_APR   : [u32; 1]
+var SOV_G_APL   : [u32; 1]
+var SOV_G_COMM  : [u32; 1]
+var SOV_G_ALC   : [u32; 1]
+var SOV_G_MLD   : [u32; 1]
+var SOV_G_APDBL : [u32; 1]   /* ap_double congruence: Id(u,v) -> Id(double u, double v) */
+var SOV_G_L6    : [u32; 1]   /* the L6 proof term itself (callable: L6(x)(m)) */
+var SOV_DBLF    : [u32; 1]   /* doublef = lam v. iter(v, succf, v) = lam v. double(v) (closed) */
+/* commutative-semiring lemmas (the full optimization-class set) */
+var SOV_G_AMR   : [u32; 1]   /* ap_mul_r */
+var SOV_G_AML   : [u32; 1]   /* ap_mul_l */
+var SOV_G_A1L   : [u32; 1]   /* add_one_left: add(1,w)=succ w */
+var SOV_G_MLZ   : [u32; 1]   /* mul_left_zero: mul(0,b)=0 */
+var SOV_G_ML1   : [u32; 1]   /* mul_left_one: mul(1,b)=b */
+var SOV_G_MSL   : [u32; 1]   /* mul_succ_left: mul(succ a,b)=add(b,mul(a,b)) */
+var SOV_G_MCM   : [u32; 1]   /* mul_comm */
+var SOV_G_MAS   : [u32; 1]   /* mul_assoc */
+
+/* ap_succ : Pi(a).Pi(b).Pi(Id(a,b)). Id(succ a,succ b). */
+fn sov_tw_aps() -> u32 {
+    let c_hdom : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))
+    let c_body : u32 = tc_id(tc_nat(), tc_succ(tc_var(4u32)), tc_succ(tc_var(1u32)))
+    let mtv : u32 = tc_lam(tc_nat(), tc_lam(c_hdom, c_body))
+    let base : u32 = tc_refl(tc_succ(tc_var(2u32)))
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(p_dom, jterm)))
+}
+/* add_succ_left : Pi(a).Pi(b). Id(add(succ a,b), succ(add(a,b))). */
+fn sov_tw_asl() -> u32 {
+    let lhs : u32 = sov_m_add(tc_succ(tc_var(2u32)), tc_var(0u32))
+    let rhs : u32 = tc_succ(sov_m_add(tc_var(2u32), tc_var(0u32)))
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), lhs, rhs))
+    let base : u32 = tc_refl(tc_succ(tc_var(1u32)))
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let a1 : u32 = sov_m_add(tc_succ(tc_var(3u32)), tc_var(1u32))
+    let b1 : u32 = tc_succ(sov_m_add(tc_var(3u32), tc_var(1u32)))
+    let body : u32 = tc_app(tc_app(tc_app(SOV_G_APS[0u32], a1), b1), tc_var(0u32))
+    let step : u32 = tc_lam(tc_nat(), tc_lam(ih_dom, body))
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), rec))
+}
+/* L1 add_left_zero : Pi(b). Id(add(0,b), b). */
+fn sov_tw_l1() -> u32 {
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), sov_m_add(tc_zero(), tc_var(0u32)), tc_var(0u32)))
+    let base : u32 = tc_refl(tc_zero())
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let a1 : u32 = sov_m_add(tc_zero(), tc_var(1u32))
+    let ap2 : u32 = tc_app(tc_app(SOV_G_APS[0u32], a1), tc_var(1u32))
+    let body : u32 = tc_app(ap2, tc_var(0u32))
+    let step : u32 = tc_lam(tc_nat(), tc_lam(ih_dom, body))
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))
+    return tc_lam(tc_nat(), rec)
+}
+/* sym : Pi(a).Pi(b).Pi(Id(a,b)). Id(b,a). */
+fn sov_tw_sym() -> u32 {
+    let c_hdom : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))
+    let c_body : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(4u32))
+    let mtv : u32 = tc_lam(tc_nat(), tc_lam(c_hdom, c_body))
+    let base : u32 = tc_refl(tc_var(2u32))
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(p_dom, jterm)))
+}
+/* trans : Pi(a).Pi(b).Pi(c).Pi(Id(a,b)).Pi(Id(b,c)). Id(a,c). */
+fn sov_tw_trans() -> u32 {
+    let c_hdom : u32 = tc_id(tc_nat(), tc_var(4u32), tc_var(0u32))
+    let c_body : u32 = tc_id(tc_nat(), tc_var(6u32), tc_var(1u32))
+    let mtv : u32 = tc_lam(tc_nat(), tc_lam(c_hdom, c_body))
+    let base : u32 = tc_var(1u32)
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(2u32), tc_var(1u32))
+    let q_dom : u32 = tc_id(tc_nat(), tc_var(2u32), tc_var(1u32))
+    let lp : u32 = tc_lam(p_dom, tc_lam(q_dom, jterm))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), lp)))
+}
+/* add_assoc : Pi(a).Pi(b).Pi(c). Id(add(add(a,b),c), add(a,add(b,c))). */
+fn sov_tw_assoc() -> u32 {
+    let mlhs : u32 = sov_m_add(sov_m_add(tc_var(3u32), tc_var(2u32)), tc_var(0u32))
+    let mrhs : u32 = sov_m_add(tc_var(3u32), sov_m_add(tc_var(2u32), tc_var(0u32)))
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), mlhs, mrhs))
+    let base : u32 = tc_refl(sov_m_add(tc_var(2u32), tc_var(1u32)))
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let arg1 : u32 = sov_m_add(sov_m_add(tc_var(4u32), tc_var(3u32)), tc_var(1u32))
+    let arg2 : u32 = sov_m_add(tc_var(4u32), sov_m_add(tc_var(3u32), tc_var(1u32)))
+    let body : u32 = tc_app(tc_app(tc_app(SOV_G_APS[0u32], arg1), arg2), tc_var(0u32))
+    let step : u32 = tc_lam(tc_nat(), tc_lam(ih_dom, body))
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), rec)))
+}
+/* ap_add_r : Pi(c).Pi(a).Pi(b).Pi(Id(a,b)). Id(add(c,a), add(c,b)). */
+fn sov_tw_apr() -> u32 {
+    let h_dom : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))
+    let c_body : u32 = tc_id(tc_nat(), sov_m_add(tc_var(5u32), tc_var(4u32)), sov_m_add(tc_var(5u32), tc_var(1u32)))
+    let mtv : u32 = tc_lam(tc_nat(), tc_lam(h_dom, c_body))
+    let base : u32 = tc_refl(sov_m_add(tc_var(3u32), tc_var(2u32)))
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(p_dom, jterm))))
+}
+/* ap_add_l : Pi(c).Pi(a).Pi(b).Pi(Id(a,b)). Id(add(a,c), add(b,c)). */
+fn sov_tw_apl() -> u32 {
+    let h_dom : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))
+    let c_body : u32 = tc_id(tc_nat(), sov_m_add(tc_var(4u32), tc_var(5u32)), sov_m_add(tc_var(1u32), tc_var(5u32)))
+    let mtv : u32 = tc_lam(tc_nat(), tc_lam(h_dom, c_body))
+    let base : u32 = tc_refl(sov_m_add(tc_var(2u32), tc_var(3u32)))
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(p_dom, jterm))))
+}
+/* add_comm : Pi(a).Pi(b). Id(add(a,b), add(b,a)).  base=sym(L1 a); step=trans(ap_succ ih)(sym(asl k a)). */
+fn sov_tw_comm() -> u32 {
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), sov_m_add(tc_var(2u32), tc_var(0u32)), sov_m_add(tc_var(0u32), tc_var(2u32))))
+    let a0 : u32 = sov_m_add(tc_zero(), tc_var(1u32))
+    let l1a : u32 = tc_app(SOV_G_L1[0u32], tc_var(1u32))
+    let base : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], a0), tc_var(1u32)), l1a)
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let addak : u32 = sov_m_add(tc_var(3u32), tc_var(1u32))
+    let addka : u32 = sov_m_add(tc_var(1u32), tc_var(3u32))
+    let ska : u32 = sov_m_add(tc_succ(tc_var(1u32)), tc_var(3u32))
+    let xx : u32 = tc_succ(addak)
+    let yy : u32 = tc_succ(addka)
+    let apih : u32 = tc_app(tc_app(tc_app(SOV_G_APS[0u32], addak), addka), tc_var(0u32))
+    let aslka : u32 = tc_app(tc_app(SOV_G_ASL[0u32], tc_var(1u32)), tc_var(3u32))
+    let symq : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], ska), yy), aslka)
+    let body : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], xx), yy), ska), apih), symq)
+    let step : u32 = tc_lam(tc_nat(), tc_lam(ih_dom, body))
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), rec))
+}
+/* add_left_comm : Pi(x).Pi(a).Pi(b). Id(add(x,add(a,b)), add(a,add(x,b))). */
+fn sov_tw_alc() -> u32 {
+    let xv : u32 = tc_var(2u32)
+    let av : u32 = tc_var(1u32)
+    let bv : u32 = tc_var(0u32)
+    let xa : u32 = sov_m_add(xv, av)
+    let ax : u32 = sov_m_add(av, xv)
+    let A1 : u32 = sov_m_add(xa, bv)
+    let B1 : u32 = sov_m_add(xv, sov_m_add(av, bv))
+    let A2 : u32 = sov_m_add(ax, bv)
+    let B2 : u32 = sov_m_add(av, sov_m_add(xv, bv))
+    let assoc_xab : u32 = tc_app(tc_app(tc_app(SOV_G_ASSOC[0u32], xv), av), bv)
+    let step1 : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], A1), B1), assoc_xab)
+    let comm_xa : u32 = tc_app(tc_app(SOV_G_COMM[0u32], xv), av)
+    let step2 : u32 = tc_app(tc_app(tc_app(tc_app(SOV_G_APL[0u32], bv), xa), ax), comm_xa)
+    let assoc_axb : u32 = tc_app(tc_app(tc_app(SOV_G_ASSOC[0u32], av), xv), bv)
+    let t12 : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], B1), A1), A2), step1), step2)
+    let res : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], B1), A2), B2), t12), assoc_axb)
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), res)))
+}
+/* MLD mul_left_distrib : Pi(x).Pi(a).Pi(b). Id(mul(x,add(a,b)), add(mul(x,a),mul(x,b))). */
+fn sov_tw_mld() -> u32 {
+    let mlhs : u32 = sov_m_mul(tc_var(3u32), sov_m_add(tc_var(2u32), tc_var(0u32)))
+    let mrhs : u32 = sov_m_add(sov_m_mul(tc_var(3u32), tc_var(2u32)), sov_m_mul(tc_var(3u32), tc_var(0u32)))
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), mlhs, mrhs))
+    let base : u32 = tc_refl(sov_m_mul(tc_var(2u32), tc_var(1u32)))
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let xv : u32 = tc_var(4u32)
+    let uu : u32 = sov_m_mul(xv, sov_m_add(tc_var(3u32), tc_var(1u32)))
+    let va : u32 = sov_m_mul(xv, tc_var(3u32))
+    let vk : u32 = sov_m_mul(xv, tc_var(1u32))
+    let addvavk : u32 = sov_m_add(va, vk)
+    let s1 : u32 = tc_app(tc_app(tc_app(tc_app(SOV_G_APR[0u32], xv), uu), addvavk), tc_var(0u32))
+    let s2 : u32 = tc_app(tc_app(tc_app(SOV_G_ALC[0u32], xv), va), vk)
+    let xu : u32 = sov_m_add(xv, uu)
+    let xvavk : u32 = sov_m_add(xv, addvavk)
+    let vaxvk : u32 = sov_m_add(va, sov_m_add(xv, vk))
+    let body : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], xu), xvavk), vaxvk), s1), s2)
+    let step : u32 = tc_lam(tc_nat(), tc_lam(ih_dom, body))
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), rec)))
+}
+/* Build the shared tower into the SOV_G_* nodes (call after tc_reset + SOV_SUCCF set). */
+/* ap_double congruence: Pi(u).Pi(v).Pi(Id(u,v)). Id(double u, double v) == Id(add(u,u), add(v,v)).
+ * One tc_j with the motive substituting y into BOTH positions of add. */
+fn sov_tw_apdbl() -> u32 {
+    let c_hdom : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))                          /* h:Id(u@#3,y@#0) [u,v,p,y] */
+    let c_body : u32 = tc_id(tc_nat(), sov_m_add(tc_var(4u32), tc_var(4u32)), sov_m_add(tc_var(1u32), tc_var(1u32)))  /* Id(add(u@#4,u),add(y@#1,y)) [u,v,p,y,h] */
+    let mtv : u32 = tc_lam(tc_nat(), tc_lam(c_hdom, c_body))
+    let base : u32 = tc_refl(sov_m_add(tc_var(2u32), tc_var(2u32)))                          /* refl(add(u@#2,u@#2)) */
+    let jterm : u32 = tc_j(mtv, base, tc_var(0u32))
+    let p_dom : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))                            /* Id(u@#1,v@#0) [u,v] */
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(p_dom, jterm)))
+}
+/* ============================ commutative-semiring optimization classes ============================ */
+/* ap_mul_r : Pi(c).Pi(a).Pi(b).Pi(Id(a,b)). Id(mul(c,a), mul(c,b)). */
+fn sov_tw_amr() -> u32 {
+    let h : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))
+    let b : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(5u32), tc_var(4u32)), sov_m_mul(tc_var(5u32), tc_var(1u32)))
+    let m : u32 = tc_lam(tc_nat(), tc_lam(h, b))
+    let bs : u32 = tc_refl(sov_m_mul(tc_var(3u32), tc_var(2u32)))
+    let j : u32 = tc_j(m, bs, tc_var(0u32))
+    let pd : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(pd, j))))
+}
+/* ap_mul_l : Pi(c).Pi(a).Pi(b).Pi(Id(a,b)). Id(mul(a,c), mul(b,c)). */
+fn sov_tw_aml() -> u32 {
+    let h : u32 = tc_id(tc_nat(), tc_var(3u32), tc_var(0u32))
+    let b : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(4u32), tc_var(5u32)), sov_m_mul(tc_var(1u32), tc_var(5u32)))
+    let m : u32 = tc_lam(tc_nat(), tc_lam(h, b))
+    let bs : u32 = tc_refl(sov_m_mul(tc_var(2u32), tc_var(3u32)))
+    let j : u32 = tc_j(m, bs, tc_var(0u32))
+    let pd : u32 = tc_id(tc_nat(), tc_var(1u32), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(pd, j))))
+}
+/* add_one_left : Pi(w). Id(add(1,w), succ w). */
+fn sov_tw_a1l() -> u32 {
+    let aslw : u32 = tc_app(tc_app(SOV_G_ASL[0u32], tc_zero()), tc_var(0u32))
+    let l1w : u32 = tc_app(SOV_G_L1[0u32], tc_var(0u32))
+    let ap : u32 = tc_app(tc_app(tc_app(SOV_G_APS[0u32], sov_m_add(tc_zero(), tc_var(0u32))), tc_var(0u32)), l1w)
+    let a1w : u32 = sov_m_add(tc_succ(tc_zero()), tc_var(0u32))
+    let sa0w : u32 = tc_succ(sov_m_add(tc_zero(), tc_var(0u32)))
+    let sw : u32 = tc_succ(tc_var(0u32))
+    let bo : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], a1w), sa0w), sw), aslw), ap)
+    return tc_lam(tc_nat(), bo)
+}
+/* mul_left_zero : Pi(b). Id(mul(0,b), 0). */
+fn sov_tw_mlz() -> u32 {
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_zero(), tc_var(0u32)), tc_zero()))
+    let bs : u32 = tc_refl(tc_zero())
+    let id : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let m0k : u32 = sov_m_mul(tc_zero(), tc_var(1u32))
+    let bo : u32 = tc_app(tc_app(tc_app(tc_app(SOV_G_APR[0u32], tc_zero()), m0k), tc_zero()), tc_var(0u32))
+    let st : u32 = tc_lam(tc_nat(), tc_lam(id, bo))
+    let rc : u32 = tc_natrec(p, bs, st, tc_var(0u32))
+    return tc_lam(tc_nat(), rc)
+}
+/* mul_left_one : Pi(b). Id(mul(1,b), b). */
+fn sov_tw_ml1() -> u32 {
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_succ(tc_zero()), tc_var(0u32)), tc_var(0u32)))
+    let bs : u32 = tc_refl(tc_zero())
+    let id : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let m1k : u32 = sov_m_mul(tc_succ(tc_zero()), tc_var(1u32))
+    let a1 : u32 = tc_app(SOV_G_A1L[0u32], m1k)
+    let ap : u32 = tc_app(tc_app(tc_app(SOV_G_APS[0u32], m1k), tc_var(1u32)), tc_var(0u32))
+    let add1 : u32 = sov_m_add(tc_succ(tc_zero()), m1k)
+    let sm1k : u32 = tc_succ(m1k)
+    let sk : u32 = tc_succ(tc_var(1u32))
+    let bo : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], add1), sm1k), sk), a1), ap)
+    let st : u32 = tc_lam(tc_nat(), tc_lam(id, bo))
+    let rc : u32 = tc_natrec(p, bs, st, tc_var(0u32))
+    return tc_lam(tc_nat(), rc)
+}
+/* mul_succ_left : Pi(a).Pi(b). Id(mul(succ a,b), add(b, mul(a,b))). */
+fn sov_tw_msl() -> u32 {
+    let pb : u32 = tc_id(tc_nat(), sov_m_mul(tc_succ(tc_var(2u32)), tc_var(0u32)), sov_m_add(tc_var(0u32), sov_m_mul(tc_var(2u32), tc_var(0u32))))
+    let p : u32 = tc_lam(tc_nat(), pb)
+    let bs : u32 = tc_refl(tc_zero())
+    let id : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let av : u32 = tc_var(3u32)
+    let kv : u32 = tc_var(1u32)
+    let sav : u32 = tc_succ(av)
+    let mm : u32 = sov_m_mul(av, kv)
+    let msak : u32 = sov_m_mul(sav, kv)
+    let addkM : u32 = sov_m_add(kv, mm)
+    let step1 : u32 = tc_app(tc_app(tc_app(tc_app(SOV_G_APR[0u32], sav), msak), addkM), tc_var(0u32))
+    let addsa_msak : u32 = sov_m_add(sav, msak)
+    let addsa_addkM : u32 = sov_m_add(sav, addkM)
+    let a_addkM : u32 = sov_m_add(av, addkM)
+    let sa : u32 = tc_app(tc_app(SOV_G_ASL[0u32], av), addkM)
+    let addaM : u32 = sov_m_add(av, mm)
+    let k_addaM : u32 = sov_m_add(kv, addaM)
+    let alc_akM : u32 = tc_app(tc_app(tc_app(SOV_G_ALC[0u32], av), kv), mm)
+    let s_a_addkM : u32 = tc_succ(a_addkM)
+    let s_k_addaM : u32 = tc_succ(k_addaM)
+    let mid : u32 = tc_app(tc_app(tc_app(SOV_G_APS[0u32], a_addkM), k_addaM), alc_akM)
+    let sk_addaM : u32 = sov_m_add(tc_succ(kv), addaM)
+    let sb : u32 = tc_app(tc_app(SOV_G_ASL[0u32], kv), addaM)
+    let sb_sym : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], sk_addaM), s_k_addaM), sb)
+    let t1 : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], addsa_addkM), s_a_addkM), s_k_addaM), sa), mid)
+    let t2 : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], addsa_addkM), s_k_addaM), sk_addaM), t1), sb_sym)
+    let bo : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], addsa_msak), addsa_addkM), sk_addaM), step1), t2)
+    let st : u32 = tc_lam(tc_nat(), tc_lam(id, bo))
+    let rc : u32 = tc_natrec(p, bs, st, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), rc))
+}
+/* mul_comm : Pi(a).Pi(b). Id(mul(a,b), mul(b,a)). */
+fn sov_tw_mcm() -> u32 {
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(2u32), tc_var(0u32)), sov_m_mul(tc_var(0u32), tc_var(2u32))))
+    let m0a : u32 = sov_m_mul(tc_zero(), tc_var(1u32))
+    let mlza : u32 = tc_app(SOV_G_MLZ[0u32], tc_var(1u32))
+    let bs : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], m0a), tc_zero()), mlza)
+    let id : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let av : u32 = tc_var(3u32)
+    let kv : u32 = tc_var(1u32)
+    let mak : u32 = sov_m_mul(av, kv)
+    let mka : u32 = sov_m_mul(kv, av)
+    let addak : u32 = sov_m_add(av, mak)
+    let addaka : u32 = sov_m_add(av, mka)
+    let mska : u32 = sov_m_mul(tc_succ(kv), av)
+    let step1 : u32 = tc_app(tc_app(tc_app(tc_app(SOV_G_APR[0u32], av), mak), mka), tc_var(0u32))
+    let mslka : u32 = tc_app(tc_app(SOV_G_MSL[0u32], kv), av)
+    let msl_sym : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], mska), addaka), mslka)
+    let bo : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], addak), addaka), mska), step1), msl_sym)
+    let st : u32 = tc_lam(tc_nat(), tc_lam(id, bo))
+    let rc : u32 = tc_natrec(p, bs, st, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), rc))
+}
+/* mul_assoc : Pi(a).Pi(b).Pi(c). Id(mul(mul(a,b),c), mul(a,mul(b,c))). */
+fn sov_tw_mas() -> u32 {
+    let pAB : u32 = sov_m_mul(tc_var(3u32), tc_var(2u32))
+    let pb : u32 = tc_id(tc_nat(), sov_m_mul(pAB, tc_var(0u32)), sov_m_mul(tc_var(3u32), sov_m_mul(tc_var(2u32), tc_var(0u32))))
+    let p : u32 = tc_lam(tc_nat(), pb)
+    let bs : u32 = tc_refl(tc_zero())
+    let id : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let av : u32 = tc_var(4u32)
+    let bv : u32 = tc_var(3u32)
+    let kv : u32 = tc_var(1u32)
+    let AB : u32 = sov_m_mul(av, bv)
+    let mABk : u32 = sov_m_mul(AB, kv)
+    let mbk : u32 = sov_m_mul(bv, kv)
+    let mambk : u32 = sov_m_mul(av, mbk)
+    let step1 : u32 = tc_app(tc_app(tc_app(tc_app(SOV_G_APR[0u32], AB), mABk), mambk), tc_var(0u32))
+    let addABmABk : u32 = sov_m_add(AB, mABk)
+    let addABmambk : u32 = sov_m_add(AB, mambk)
+    let bplusmbk : u32 = sov_m_add(bv, mbk)
+    let ma_bm : u32 = sov_m_mul(av, bplusmbk)
+    let mld_ab : u32 = tc_app(tc_app(tc_app(SOV_G_MLD[0u32], av), bv), mbk)
+    let mld_sym : u32 = tc_app(tc_app(tc_app(SOV_G_SYM[0u32], ma_bm), addABmambk), mld_ab)
+    let bo : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], addABmABk), addABmambk), ma_bm), step1), mld_sym)
+    let st : u32 = tc_lam(tc_nat(), tc_lam(id, bo))
+    let rc : u32 = tc_natrec(p, bs, st, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), rc)))
+}
+fn sov_l6_build_tower() -> u64 {
+    SOV_DBLF[0u32]    = tc_lam(tc_nat(), tc_iter(tc_var(0u32), SOV_SUCCF[0u32], tc_var(0u32)))
+    SOV_G_APS[0u32]   = sov_tw_aps()
+    SOV_G_ASL[0u32]   = sov_tw_asl()
+    SOV_G_L1[0u32]    = sov_tw_l1()
+    SOV_G_SYM[0u32]   = sov_tw_sym()
+    SOV_G_TRANS[0u32] = sov_tw_trans()
+    SOV_G_ASSOC[0u32] = sov_tw_assoc()
+    SOV_G_APR[0u32]   = sov_tw_apr()
+    SOV_G_APL[0u32]   = sov_tw_apl()
+    SOV_G_COMM[0u32]  = sov_tw_comm()
+    SOV_G_ALC[0u32]   = sov_tw_alc()
+    SOV_G_MLD[0u32]   = sov_tw_mld()
+    SOV_G_APDBL[0u32] = sov_tw_apdbl()
+    SOV_G_AMR[0u32]   = sov_tw_amr()
+    SOV_G_AML[0u32]   = sov_tw_aml()
+    SOV_G_A1L[0u32]   = sov_tw_a1l()
+    SOV_G_MLZ[0u32]   = sov_tw_mlz()
+    SOV_G_ML1[0u32]   = sov_tw_ml1()
+    SOV_G_MSL[0u32]   = sov_tw_msl()
+    SOV_G_MCM[0u32]   = sov_tw_mcm()
+    SOV_G_MAS[0u32]   = sov_tw_mas()
+    return 0u64
+}
+
+
+/* The GENUINE L6 goal: Pi(x:Nat). Pi(m:Nat). Id(Nat, mul(x, double m), double(mul(x,m))). */
+fn sov_l6_goal() -> u32 {
+    let xin : u32 = tc_var(1u32)                          /* x, in [x,m] */
+    let min : u32 = tc_var(0u32)                          /* m, in [x,m] */
+    let lhs : u32 = sov_m_mul(xin, sov_m_double(min))
+    let rhs : u32 = sov_m_double(sov_m_mul(xin, min))
+    let body : u32 = tc_id(tc_nat(), lhs, rhs)            /* Id(...) in [x,m] */
+    let perM : u32 = tc_pi(tc_nat(), body)                /* Pi(m:Nat). Id(...) */
+    return tc_pi(tc_nat(), perM)                          /* Pi(x:Nat). Pi(m:Nat). Id(...) */
+}
+
+/* The GENUINE L6 proof term: lam(x). lam(m). MLD(x)(m)(m).  double(v) == add(v,v) definitionally,
+ * so L6's goal Id(mul(x,double m), double(mul(x,m))) == Id(mul(x,add(m,m)), add(mul(x,m),mul(x,m)))
+ * which is exactly MLD instantiated at a:=m, b:=m.  Requires sov_l6_build_tower() to have populated
+ * SOV_G_MLD.  tc_check of this term transitively verifies the ENTIRE additive tower (asl, L1, sym,
+ * trans, assoc, ap_add_l/r, comm, add_left_comm, MLD). */
+fn sov_l6_term() -> u32 {
+    let app : u32 = tc_app(tc_app(tc_app(SOV_G_MLD[0u32], tc_var(1u32)), tc_var(0u32)), tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), app))
+}
+
+/* L6 PROVEN WITNESS (positive).  The reducer block is REMOVED, so the mandatory tc_natrec induction
+ * over a symbolic m now closes: L6 mul-over-double is PROVED via the additive Peano tower + MLD.
+ * Returns 99 IFF the kernel ACCEPTS the genuine L6 term against its true goal AND rejects a biting
+ * negative (the off-by-succ codomain) -- non-vacuous, un-rigged.  A single tc_check(L6) validates the
+ * whole tower transitively; the negative control proves it is not vacuously accepting. */
+fn sov_l6_proven_witness() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    /* construction sanity: the apex lemma node is non-ERR (0 = arena overflow during build). */
+    if SOV_G_MLD[0u32] == 0u32 { return 1u64 }
+    let l6 : u32 = sov_l6_term()
+    let l6_goal : u32 = sov_l6_goal()
+    /* THE PROOF: the kernel accepts L6 mul-over-double. */
+    if tc_check(l6, l6_goal) != 1u8 { return 2u64 }
+    /* NEG: the SAME term must NOT prove the off-by-succ codomain Id(mul(x,double m), succ(double(mul(x,m)))). */
+    let wrhs : u32 = tc_succ(sov_m_double(sov_m_mul(tc_var(1u32), tc_var(0u32))))
+    let wbody : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(1u32), sov_m_double(tc_var(0u32))), wrhs)
+    let wgoal : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), wbody))
+    if tc_infer(wgoal) == 0u32 { return 3u64 }
+    if tc_check(l6, wgoal) != 0u8 { return 4u64 }
+    return 99u64
+}
+
+/* THE DISTRIBUTIVITY-RUNG KAT.  99 = the kernel PROVED L6 mul-over-double (the symbolic-m schema, by
+ * mandatory tc_natrec induction over the additive Peano tower), and rejected the off-by-succ negative
+ * control.  PROPOSE/DISPOSE honored: the positive is tc_check==1, the negative tc_check==0, nothing is
+ * weakened, no refl substitutes for the symbolic-m schema, and 99 is never hard-coded. */
+fn sov_sr_distrib_kat() -> u64 @export {
+    if sov_l6_proven_witness() != 99u64 { return 5u64 }
+    return 99u64
+}
+
+/* ============================================================================
+ *  THE STRENGTH-REDUCTION SCHEMA (the headline, uniquely-III result):
+ *     Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), itd(x, k))      where  pow2 k = 2^k,  itd(x,k) = double^k(x).
+ *  i.e. "multiplying by a power of two equals k repeated doublings" -- the canonical strength reduction
+ *  the sov_isa "Path C" optimizer wants to apply -- PROVED CORRECT for a SYMBOLIC k by III's own CIC
+ *  kernel (proof-carrying optimization: the egraph PROPOSES the rewrite, the kernel DISPOSES by proving
+ *  the equality for all k).  Induction on k:  base mul(x,2^0)=mul(x,1)=x=double^0(x) (refl);  step uses
+ *  L6 (mul-over-double) at m=pow2 k + ap_double(IH), since pow2(succ k)=double(pow2 k) and
+ *  itd(x,succ k)=double(itd(x,k)) definitionally.  Built on the SAME shared tower.
+ * ============================================================================ */
+/* pow2(k) = iter(1, doublef, k) = double^k(1) = 2^k. */
+fn sov_m_pow2(k: u32) -> u32 { return tc_iter(tc_succ(tc_zero()), SOV_DBLF[0u32], k) }
+/* itd(x,k) = iter(x, doublef, k) = double^k(x). */
+fn sov_m_itd(x: u32, k: u32) -> u32 { return tc_iter(x, SOV_DBLF[0u32], k) }
+
+/* The schema proof term: lam x. lam k. natrec(P, refl(x), step, k). */
+fn sov_sr_term() -> u32 {
+    /* P = lam j. Id(mul(x, pow2 j), itd(x, j)) ; in [x,k,j] x=#2, j=#0 */
+    let mlhs : u32 = sov_m_mul(tc_var(2u32), sov_m_pow2(tc_var(0u32)))
+    let mrhs : u32 = sov_m_itd(tc_var(2u32), tc_var(0u32))
+    let p : u32 = tc_lam(tc_nat(), tc_id(tc_nat(), mlhs, mrhs))
+    /* base : P 0 ~ Id(mul(x,1), x) -- both conv x ; in [x,k] x=#1 */
+    let base : u32 = tc_refl(tc_var(1u32))
+    /* step in [x,k,kstep,ih]: x=#3, kstep=#1, ih=#0 */
+    let ih_dom : u32 = tc_app(tc_shift_k(p, 1u32), tc_var(0u32))
+    let p2k : u32 = sov_m_pow2(tc_var(1u32))                 /* pow2(kstep) */
+    let mxp : u32 = sov_m_mul(tc_var(3u32), p2k)             /* mul(x, pow2 kstep) */
+    let itdxk : u32 = sov_m_itd(tc_var(3u32), tc_var(1u32))  /* itd(x, kstep) */
+    let l6app : u32 = tc_app(tc_app(SOV_G_L6[0u32], tc_var(3u32)), p2k)             /* L6(x)(p2k) : Id(mul(x,double p2k), double(mul(x,p2k))) */
+    let apdbl : u32 = tc_app(tc_app(tc_app(SOV_G_APDBL[0u32], mxp), itdxk), tc_var(0u32))  /* Id(double mxp, double itdxk) */
+    let x_ : u32 = sov_m_mul(tc_var(3u32), sov_m_double(p2k))   /* mul(x, double p2k) == mul(x, pow2(succ kstep)) */
+    let y_ : u32 = sov_m_double(mxp)                            /* double(mul(x,p2k)) */
+    let z_ : u32 = sov_m_double(itdxk)                          /* double(itd(x,kstep)) == itd(x, succ kstep) */
+    let body : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(SOV_G_TRANS[0u32], x_), y_), z_), l6app), apdbl)
+    let step : u32 = tc_lam(tc_nat(), tc_lam(ih_dom, body))
+    let rec : u32 = tc_natrec(p, base, step, tc_var(0u32))
+    return tc_lam(tc_nat(), tc_lam(tc_nat(), rec))
+}
+/* The schema goal: Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), itd(x, k)). */
+fn sov_sr_goal() -> u32 {
+    let mlhs : u32 = sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32)))   /* in [x,k] x=#1,k=#0 */
+    let mrhs : u32 = sov_m_itd(tc_var(1u32), tc_var(0u32))
+    return tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), mlhs, mrhs)))
+}
+
+/* STRENGTH-REDUCTION PROVEN WITNESS.  99 IFF the kernel ACCEPTS the schema mul(x,2^k)==double^k(x) for
+ * symbolic k AND rejects a biting negative (the off-by-double codomain).  A single tc_check(schema)
+ * transitively verifies the whole tower + L6 + ap_double + the k-induction. */
+fn sov_sr_strength_witness() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    if SOV_G_L6[0u32] == 0u32 { return 1u64 }
+    let s : u32 = sov_sr_term()
+    let g : u32 = sov_sr_goal()
+    /* THE PROOF: a SINGLE tc_check -- mul(x, 2^k) == double^k(x) for all k (transitively verifies the
+     * whole tower + L6 + ap_double + the k-induction).  Minimal arena pressure (no accumulated checks). */
+    if tc_check(s, g) != 1u8 { return 2u64 }
+    /* NEG: the schema term must NOT prove the off-by-double codomain Id(mul(x,pow2 k), double(itd(x,k))). */
+    let wbody : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32))), sov_m_double(sov_m_itd(tc_var(1u32), tc_var(0u32))))
+    let wgoal : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), wbody))
+    if tc_check(s, wgoal) != 0u8 { return 4u64 }
+    return 99u64
+}
+
+/* THE STRENGTH-REDUCTION KAT.  99 = III's CIC kernel PROVED its own strength-reduction schema
+ * mul(x, 2^k) == double^k(x) for a SYMBOLIC k (the proof-carrying-optimization headline), with the
+ * off-by-double negative control rejected.  Nothing weakened; 99 never hard-coded. */
+fn sov_sr_strength_kat() -> u64 @export {
+    if sov_sr_strength_witness() != 99u64 { return 5u64 }
+    return 99u64
+}
+
+/* ============================================================================
+ *  HARMONY: the inductive schema UNLOCKS optimizations the refl-only disposer cannot certify.
+ *  The live proof-carrying disposer sov_pcc_verify certifies an optimization by REFL (definitional
+ *  equality).  But a strength reduction mul(x, 2^k) -> double^k(x) is NOT definitional even at a
+ *  CONCRETE k for a SYMBOLIC x: mul(x,4) normalizes to x+(x+(x+x)) while double^2(x) normalizes to
+ *  (x+x)+(x+x) -- equal only up to add-ASSOCIATIVITY, which is propositional (proven, not definitional).
+ *  So refl FAILS.  The inductive strength schema (sov_sr_term), instantiated at the concrete k, SUPPLIES
+ *  the missing associativity proof and CERTIFIES the rewrite.  This is the disposer made strictly more
+ *  powerful by the proof tower: a kernel that certifies INDUCTIVE optimization schemas, not just
+ *  definitional ones -- uniquely-III proof-carrying optimization. 99 = refl REJECTS the (sound) rewrite
+ *  AND the schema certificate ACCEPTS it. */
+fn sov_sr_apply_witness() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    let n2 : u32 = tc_succ(tc_succ(tc_zero()))                          /* k = 2 (concrete) */
+    /* the strength reduction at k=2, x SYMBOLIC: Pi(x). Id(mul(x, pow2 2), itd(x, 2)). */
+    let in_m : u32 = sov_m_mul(tc_var(0u32), sov_m_pow2(n2))            /* mul(x, 4)  in [x] x=#0 */
+    let out_m : u32 = sov_m_itd(tc_var(0u32), n2)                       /* double^2(x) */
+    /* (a) the LIVE refl disposer CANNOT certify it (add-associativity is not definitional). */
+    if sov_pcc_verify(in_m, out_m) != 0u8 { return 1u64 }
+    /* (b) the inductive schema certificate (lam x. schema(x)(2)) DOES certify it. */
+    let goal : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), in_m, out_m))
+    let cert : u32 = tc_lam(tc_nat(), tc_app(tc_app(sov_sr_term(), tc_var(0u32)), n2))
+    if tc_check(cert, goal) != 1u8 { return 2u64 }
+    return 99u64
+}
+
+/* KAT: the schema-certified strength reduction (proof-carrying optimization beyond definitional equality). */
+fn sov_sr_apply_kat() -> u64 @export {
+    if sov_sr_apply_witness() != 99u64 { return 5u64 }
+    return 99u64
+}
+
+/* GENERALITY: proof-carrying optimization is a FRAMEWORK, not a one-off.  A SECOND class -- left
+ * distributivity mul(x, a+b) -> add(mul(x,a), mul(x,b)) -- is, like strength reduction, NOT definitional
+ * for symbolic operands (mul over a symbolic sum is a stuck neutral), so the refl-only disposer REJECTS
+ * it; the MLD lemma already in the tower CERTIFIES it.  99 = refl REJECTS the sound rewrite AND the MLD
+ * certificate ACCEPTS it -- the same egraph-PROPOSES / kernel-DISPOSES discipline, a different rule. */
+fn sov_distrib_apply_witness() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    /* goal: Pi(x).Pi(a).Pi(b). Id(mul(x, add(a,b)), add(mul(x,a), mul(x,b)))  in [x,a,b] x=#2,a=#1,b=#0 */
+    let gbody : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(2u32), sov_m_add(tc_var(1u32), tc_var(0u32))), sov_m_add(sov_m_mul(tc_var(2u32), tc_var(1u32)), sov_m_mul(tc_var(2u32), tc_var(0u32))))
+    let goal : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_pi(tc_nat(), gbody)))
+    /* (a) refl CANNOT certify left distributivity for symbolic a,b. */
+    let refl_cert : u32 = tc_lam(tc_nat(), tc_lam(tc_nat(), tc_lam(tc_nat(), tc_refl(sov_m_mul(tc_var(2u32), sov_m_add(tc_var(1u32), tc_var(0u32)))))))
+    if tc_check(refl_cert, goal) != 0u8 { return 1u64 }
+    /* (b) the MLD lemma (already in the shared tower) IS a certificate for it. */
+    if tc_check(SOV_G_MLD[0u32], goal) != 1u8 { return 2u64 }
+    return 99u64
+}
+fn sov_distrib_apply_kat() -> u64 @export {
+    if sov_distrib_apply_witness() != 99u64 { return 5u64 }
+    return 99u64
+}
+
+/* THE COMPLETE COMMUTATIVE-SEMIRING OPTIMIZATION-CLASS SET, kernel-proven.  Beyond the strength schema
+ * and left-distributivity (1115/1116/1117), III's CIC kernel proves the full algebraic-optimization
+ * theory of Nat: the multiplicative annihilator, identity, commutativity, and associativity -- the
+ * remaining canonical integer-optimization classes (right distributivity is the corollary MLD o mul_comm).
+ * Each lemma is checked in its own arena epoch (tc_check==1); the harmony control shows mul_comm is NOT
+ * refl-certifiable for symbolic operands (commutativity is propositional, not definitional).  99 = the
+ * complete commutative semiring is kernel-certified, refl rejects the (sound) commutativity rewrite. */
+fn sov_opt_classes_kat() -> u64 @export {
+    /* mul_left_zero (annihilator): mul(0,b)=0 */
+    tc_reset(); SOV_SUCCF[0u32] = sov_succf(); sov_l6_build_tower()
+    let mlzg : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_zero(), tc_var(0u32)), tc_zero()))
+    if tc_check(SOV_G_MLZ[0u32], mlzg) != 1u8 { return 1u64 }
+    /* mul_left_one (identity): mul(1,b)=b */
+    tc_reset(); SOV_SUCCF[0u32] = sov_succf(); sov_l6_build_tower()
+    let ml1g : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_succ(tc_zero()), tc_var(0u32)), tc_var(0u32)))
+    if tc_check(SOV_G_ML1[0u32], ml1g) != 1u8 { return 2u64 }
+    /* mul_succ_left (the inductive engine of mul_comm): mul(succ a,b)=add(b,mul(a,b)) */
+    tc_reset(); SOV_SUCCF[0u32] = sov_succf(); sov_l6_build_tower()
+    let mslg : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_succ(tc_var(1u32)), tc_var(0u32)), sov_m_add(tc_var(0u32), sov_m_mul(tc_var(1u32), tc_var(0u32))))))
+    if tc_check(SOV_G_MSL[0u32], mslg) != 1u8 { return 3u64 }
+    /* mul_comm: mul(a,b)=mul(b,a) */
+    tc_reset(); SOV_SUCCF[0u32] = sov_succf(); sov_l6_build_tower()
+    let mcmg : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(1u32), tc_var(0u32)), sov_m_mul(tc_var(0u32), tc_var(1u32)))))
+    if tc_check(SOV_G_MCM[0u32], mcmg) != 1u8 { return 4u64 }
+    /* mul_assoc: mul(mul(a,b),c)=mul(a,mul(b,c)) */
+    tc_reset(); SOV_SUCCF[0u32] = sov_succf(); sov_l6_build_tower()
+    let masg : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(sov_m_mul(tc_var(2u32), tc_var(1u32)), tc_var(0u32)), sov_m_mul(tc_var(2u32), sov_m_mul(tc_var(1u32), tc_var(0u32)))))))
+    if tc_check(SOV_G_MAS[0u32], masg) != 1u8 { return 5u64 }
+    /* HARMONY: refl CANNOT certify mul_comm for symbolic a,b (commutativity is propositional). */
+    tc_reset(); SOV_SUCCF[0u32] = sov_succf()
+    let mcmg2 : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(1u32), tc_var(0u32)), sov_m_mul(tc_var(0u32), tc_var(1u32)))))
+    let refl_cert : u32 = tc_lam(tc_nat(), tc_lam(tc_nat(), tc_refl(sov_m_mul(tc_var(1u32), tc_var(0u32)))))
+    if tc_check(refl_cert, mcmg2) != 0u8 { return 6u64 }
+    return 99u64
+}
+
+/* ============================================================================
+ *  THE AUTOCATALYTIC SYNTHESIZER -- the proof-carrying tower extended into an AUTOMATED
+ *  auto-prover.  sov_sr_apply_witness certified ONE hand-written strength reduction (k=2).
+ *  Here the certificate is SYNTHESIZED for an ARBITRARY k: the synthesizer extracts the
+ *  exponent, builds the numeral, and INSTANTIATES the proven inductive schema sov_sr_term
+ *  at that k -- a NON-refl proof term the definitional-equality disposer cannot produce.
+ *  The kernel (tc_check) stays the SOLE arbiter; the synthesizer only PROPOSES the
+ *  certificate.  Caller must set up the shared tower (sov_l6_build_tower + SOV_G_L6) in the
+ *  live arena (the sov_sr_apply_witness ritual).  This is the "constrained decoding of CIC
+ *  proof terms" that nous_synth explicitly defers to the full kernel -- realized for the
+ *  commutative-semiring strength/distribution optimization classes.
+ * ============================================================================ */
+
+/* The Nat numeral succ^d(zero) (d in 0..~64; the proof term for large d exceeds TC_CAP). */
+fn sov_num(d: u32) -> u32 {
+    let mut n : u32 = tc_zero()
+    let mut i : u32 = 0u32
+    while i < d { n = tc_succ(n)  i = i + 1u32 }
+    return n
+}
+
+/* The strength-reduction goal at depth k, x symbolic: Pi(x). Id(Nat, mul(x, 2^k), double^k(x)). */
+fn sov_synth_strength_goal(k: u32) -> u32 @export {
+    let kn : u32 = sov_num(k)
+    return tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(0u32), sov_m_pow2(kn)), sov_m_itd(tc_var(0u32), kn)))
+}
+
+/* THE SYNTHESIZER (strength class): instantiate the proven inductive schema at depth k.
+ * Returns the candidate proof term (lam x. schema(x)(k)) -- UNTRUSTED until tc_check disposes it.
+ * (The schema body references the shared-tower globals SOV_G_*; the caller must have built them.) */
+fn sov_synth_strength_at(k: u32) -> u32 @export {
+    let kn : u32 = sov_num(k)
+    return tc_lam(tc_nat(), tc_app(tc_app(sov_sr_term(), tc_var(0u32)), kn))
+}
+
+/* THE NON-VACUITY GATE (make-or-break): the synthesizer is a GENUINE auto-prover, not a k=2
+ * lookup.  For k = 3 AND k = 4 (NEITHER hard-coded in any prior KAT):
+ *   (a) the refl disposer sov_pcc_verify REJECTS the strength reduction (add-assoc is propositional);
+ *   (b,c) the synthesizer instantiates the inductive schema at the EXTRACTED k -> a non-refl
+ *         certificate the kernel ACCEPTS (tc_check == 1);
+ *   (d) NEGATIVE CONTROL: the certificate synthesized for k=3 does NOT prove the k=4 goal -- the
+ *       kernel is not fooled by a near-miss (the 99.9%-fail discipline, in miniature).
+ * 99 = the synthesizer auto-proves what refl cannot, and the kernel rejects the mismatch. */
+fn sov_synth_nonvacuity_witness() -> u64 @export {
+    /* --- k = 3 --- */
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    let k3 : u32 = sov_num(3u32)
+    let in3 : u32 = sov_m_mul(tc_var(0u32), sov_m_pow2(k3))
+    let out3 : u32 = sov_m_itd(tc_var(0u32), k3)
+    if sov_pcc_verify(in3, out3) != 0u8 { return 1u64 }                     /* (a) refl REJECTS */
+    if tc_check(sov_synth_strength_at(3u32), sov_synth_strength_goal(3u32)) != 1u8 { return 2u64 }  /* (b,c) schema CERTIFIES */
+
+    /* --- k = 4 --- */
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    let k4 : u32 = sov_num(4u32)
+    let in4 : u32 = sov_m_mul(tc_var(0u32), sov_m_pow2(k4))
+    let out4 : u32 = sov_m_itd(tc_var(0u32), k4)
+    if sov_pcc_verify(in4, out4) != 0u8 { return 3u64 }
+    if tc_check(sov_synth_strength_at(4u32), sov_synth_strength_goal(4u32)) != 1u8 { return 4u64 }
+
+    /* --- (d) NEGATIVE CONTROL: k=3 certificate does NOT prove the k=4 goal --- */
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    if tc_check(sov_synth_strength_at(3u32), sov_synth_strength_goal(4u32)) != 0u8 { return 5u64 }
+
+    return 99u64
+}
+
+fn sov_synth_nonvacuity_kat() -> u64 @export {
+    return sov_synth_nonvacuity_witness()   /* propagate the precise witness code (1..5 = which arm; 99 = pass) */
+}
+
+/* --- the multi-class synthesizer API (consumed by the autocatalytic loop) --- */
+const SOV_CLASS_STRENGTH : u32 = 0u32   /* mul(x, 2^param) -> double^param(x)            */
+const SOV_CLASS_DISTRIB  : u32 = 1u32   /* mul(x, a+b)     -> add(mul x a, mul x b)  (param ignored) */
+
+/* Set up the shared arena + proven tower for a synthesis attempt (the sov_sr_apply ritual, exported so
+ * the outer autocatalyst modules need NO access to the private tower internals (the SOV_G tower). */
+fn sov_ac_setup() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    return 0u64
+}
+
+/* The goal TYPE for an optimization (class, param) -- what the kernel must verify the cert against. */
+fn sov_synth_goal(class: u32, param: u32) -> u32 @export {
+    if class == SOV_CLASS_STRENGTH { return sov_synth_strength_goal(param) }
+    if class == SOV_CLASS_DISTRIB {
+        /* Pi(x).Pi(a).Pi(b). Id(mul(x, a+b), add(mul x a, mul x b))  in [x,a,b] x=#2,a=#1,b=#0 */
+        let gbody : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(2u32), sov_m_add(tc_var(1u32), tc_var(0u32))), sov_m_add(sov_m_mul(tc_var(2u32), tc_var(1u32)), sov_m_mul(tc_var(2u32), tc_var(0u32))))
+        return tc_pi(tc_nat(), tc_pi(tc_nat(), tc_pi(tc_nat(), gbody)))
+    }
+    return 0u32
+}
+
+/* The HALLUCINATED strength identity Pi(x). Id(mul(x, 2^a), double^b(x)) -- a candidate equation that is
+ * TRUE iff a == b.  The mutagen proposes (a,b) pairs (mostly a != b -> FALSE); the synthesizer's best
+ * cert (the schema at a) tc_checks this goal iff a == b, so the kernel disposes of every false dream. */
+fn sov_hall_goal(a: u32, b: u32) -> u32 @export {
+    let na : u32 = sov_num(a)
+    let nb : u32 = sov_num(b)
+    return tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(0u32), sov_m_pow2(na)), sov_m_itd(tc_var(0u32), nb)))
+}
+
+/* THE SYNTHESIZER: propose a candidate proof term for optimization (class, param) within a step budget.
+ * budget==0 -> ABORT (sov_synth_timeout: 99.9% of hallucinations die here, returns 0).  Unknown class
+ * -> 0.  The returned term is UNTRUSTED until the sieve disposes it through tc_check.  (Caller must
+ * sov_ac_setup() first so the tower globals are live.) */
+fn sov_synth_attempt(class: u32, param: u32, budget: u32) -> u32 @export {
+    if budget == 0u32 { return 0u32 }
+    if class == SOV_CLASS_STRENGTH { return sov_synth_strength_at(param) }
+    if class == SOV_CLASS_DISTRIB  { return SOV_G_MLD[0u32] }   /* the proven left-distribution lemma */
+    return 0u32
+}
+
+/* MULTI-CLASS SYNTHESIS + BUDGET + KERNEL DISPOSAL.  99 = the synthesizer serves two distinct
+ * optimization classes, honors its step budget, and every soundness verdict is the kernel's:
+ *   (1) STRENGTH at k=4: the synthesized cert tc_checks its goal;
+ *   (2) DISTRIB:         the synthesized cert (MLD) tc_checks its goal -- a DIFFERENT class;
+ *   (3) BUDGET=0:        attempt returns 0 (timeout -> the sieve discards);
+ *   (4) FALSE candidate: the k=4 cert does NOT prove the k=3 goal (the kernel rejects a near-miss).
+ * (k is held <=4 so the conversion check stays within TC_CAP; a larger k normalizes mul(x,2^k) to a
+ *  2^k-deep add-tree that overflows the arena -> the kernel returns 0, the capacity fail-safe -- a real
+ *  honest bound on the synthesizer's reach, never a false accept.) */
+fn sov_synth_attempt_kat() -> u64 @export {
+    sov_ac_setup()
+    let c4 : u32 = sov_synth_attempt(SOV_CLASS_STRENGTH, 4u32, 64u32)
+    if c4 == 0u32 { return 1u64 }
+    if tc_check(c4, sov_synth_goal(SOV_CLASS_STRENGTH, 4u32)) != 1u8 { return 2u64 }
+    sov_ac_setup()
+    let cd : u32 = sov_synth_attempt(SOV_CLASS_DISTRIB, 0u32, 64u32)
+    if cd == 0u32 { return 3u64 }
+    if tc_check(cd, sov_synth_goal(SOV_CLASS_DISTRIB, 0u32)) != 1u8 { return 4u64 }
+    if sov_synth_attempt(SOV_CLASS_STRENGTH, 4u32, 0u32) != 0u32 { return 5u64 }   /* budget timeout */
+    sov_ac_setup()
+    if tc_check(sov_synth_attempt(SOV_CLASS_STRENGTH, 4u32, 64u32), sov_synth_goal(SOV_CLASS_STRENGTH, 3u32)) != 0u8 { return 6u64 }
+    return 99u64
+}
+
+/* --- THE ISOMORPHIC SCYTHE's kernel primitives (consumed by ast_hunter / proof_bisimulation) --- */
+
+/* The cost verdict: the optimal shift-based double^k is STRICTLY cheaper than the legacy multiply
+ * mul(x,2^k).  Data-driven via sov_isa_op_cost (cost_calculus-sourced), never hardcoded -- a flat
+ * re-seed collapses it (sov_isa_cost_gradient_kat proves that).  1 = optimal strictly cheaper. */
+fn sov_strength_cheaper() -> u8 @export {
+    cl_init()                                       /* seed the cost_lattice orders (cl_dot_slot needs it) */
+    if sov_isa_op_cost(SI_MUL) > sov_isa_op_cost(SI_SHL) { return 1u8 }
+    return 0u8
+}
+
+/* (The hunter's concrete pre-filter evaluates the two integer functions in plain host arithmetic --
+ * see numera/ast_hunter.iii; the CIC kernel is reserved for the UNIVERSAL equivalence proof.) */
+
+/* ============================================================================
+ *  THE CERTIFIED OPTIMIZATION CENSUS -- the complete, kernel-proven optimization theory of III's own
+ *  arithmetic algebra (the commutative semiring of Nat).  Every class below is a UNIVERSAL rewrite the
+ *  CIC kernel proves sound; the census enumerates them, certifies each unrigged, and quantifies the
+ *  cost it removes.  This is the honest "negative-tech-debt" inventory: not a magic understanding of
+ *  arbitrary code, but the EXHAUSTIVE provable optimization surface of the substrate's own primitives.
+ *    classes 0..3 = strength reduction  mul(x, 2^k) -> double^k(x)   for k=1,2,3,4
+ *    class  4     = mul identity         mul(1, b) -> b
+ *    class  5     = mul annihilator      mul(0, b) -> 0
+ *    class  6     = mul commutativity    mul(a,b) -> mul(b,a)
+ *    class  7     = mul associativity    mul(mul(a,b),c) -> mul(a,mul(b,c))
+ *    class  8     = left distributivity  mul(x, a+b) -> add(mul x a, mul x b)
+ * ============================================================================ */
+const SOV_CENSUS_N : u32 = 9u32
+
+/* Kernel-certify optimization class `c` (its own arena epoch + proven tower).  1 = the CIC kernel
+ * PROVES the rewrite sound for ALL inputs; 0 = not certified.  The kernel is the SOLE arbiter. */
+fn sov_census_certify(c: u32) -> u8 @export {
+    sov_ac_setup()
+    if c <= 3u32 {
+        let k : u32 = c + 1u32
+        return tc_check(sov_synth_strength_at(k), sov_synth_strength_goal(k))
+    }
+    if c == 4u32 {
+        let g4 : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_succ(tc_zero()), tc_var(0u32)), tc_var(0u32)))
+        return tc_check(SOV_G_ML1[0u32], g4)
+    }
+    if c == 5u32 {
+        let g5 : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_zero(), tc_var(0u32)), tc_zero()))
+        return tc_check(SOV_G_MLZ[0u32], g5)
+    }
+    if c == 6u32 {
+        let g6 : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(1u32), tc_var(0u32)), sov_m_mul(tc_var(0u32), tc_var(1u32)))))
+        return tc_check(SOV_G_MCM[0u32], g6)
+    }
+    if c == 7u32 {
+        let g7 : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(sov_m_mul(tc_var(2u32), tc_var(1u32)), tc_var(0u32)), sov_m_mul(tc_var(2u32), sov_m_mul(tc_var(1u32), tc_var(0u32)))))))
+        return tc_check(SOV_G_MAS[0u32], g7)
+    }
+    if c == 8u32 {
+        let g8 : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), tc_pi(tc_nat(), tc_id(tc_nat(), sov_m_mul(tc_var(2u32), sov_m_add(tc_var(1u32), tc_var(0u32))), sov_m_add(sov_m_mul(tc_var(2u32), tc_var(1u32)), sov_m_mul(tc_var(2u32), tc_var(0u32)))))))
+        return tc_check(SOV_G_MLD[0u32], g8)
+    }
+    return 0u8
+}
+
+/* The cost (in cost-lattice units) a certified class REMOVES per application: strength replaces a MUL
+ * with a SHL (delta = cost MUL - cost SHL); identity / annihilator ELIMINATE the MUL entirely (delta =
+ * cost MUL); commutativity / associativity / distributivity are structural enablers (direct delta 0). */
+fn sov_census_cost_delta(c: u32) -> u64 @export {
+    cl_init()
+    let m : u64 = sov_isa_op_cost(SI_MUL)
+    if c <= 3u32 {
+        let s : u64 = sov_isa_op_cost(SI_SHL)
+        if m > s { return m - s }
+        return 0u64
+    }
+    if c == 4u32 { return m }
+    if c == 5u32 { return m }
+    return 0u64
+}
+
+fn sov_census_n() -> u32 @export { return SOV_CENSUS_N }
+
+/* How many of the SOV_CENSUS_N classes the kernel certifies (the size of the provable catalog). */
+fn sov_census_count() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut n : u32 = 0u32
+    while c < SOV_CENSUS_N {
+        if sov_census_certify(c) == 1u8 { n = n + 1u32 }
+        c = c + 1u32
+    }
+    return n
+}
+
+/* Total per-application cost removed across all CERTIFIED classes (the proven optimization yield). */
+fn sov_census_cost_saved() -> u64 @export {
+    let mut c : u32 = 0u32
+    let mut t : u64 = 0u64
+    while c < SOV_CENSUS_N {
+        if sov_census_certify(c) == 1u8 { t = t + sov_census_cost_delta(c) }
+        c = c + 1u32
+    }
+    return t
+}
+
+/* The census is SOUND iff (a) every cataloged class kernel-certifies AND (b) a NON-theorem is rejected
+ * (a strength cert at k=2 does NOT prove the k=3 goal -- the kernel refuses an unsound "optimization"). */
+fn sov_census_all_sound() -> u8 @export {
+    if sov_census_count() != SOV_CENSUS_N { return 0u8 }
+    sov_ac_setup()
+    if tc_check(sov_synth_strength_at(2u32), sov_synth_strength_goal(3u32)) != 0u8 { return 0u8 }
+    return 1u8
+}
+

@@ -1,0 +1,29 @@
+/* 1117_sr_schema_distrib_apply.iii -- PROOF-CARRYING OPTIMIZATION IS A GENERAL FRAMEWORK (2nd class).
+ *
+ * Demonstrates that the kernel-certified-optimization discipline of 1116 is NOT a one-off for strength
+ * reduction: a SECOND, distinct optimization class -- left distributivity
+ *
+ *     mul(x, a+b)  ->  add(mul(x,a), mul(x,b))
+ *
+ * -- is, exactly like strength reduction, NOT definitional for symbolic operands (mul over a symbolic sum
+ * is a STUCK NEUTRAL), so the refl-only live disposer sov_pcc_verify REJECTS it.  The MLD lemma
+ * (mul_left_distributivity) already proven inside the shared additive Peano tower (numera/sov_isa.iii::
+ * sov_tw_mld, verified transitively by 1114/1115) IS a certificate the kernel accepts for it.
+ *
+ * Same egraph-PROPOSES / CIC-kernel-DISPOSES discipline, a different rule.  Two distinct optimization
+ * classes (strength reduction 1116 + distributivity 1117), each certified by an INDUCTIVE proof the
+ * refl disposer cannot supply, establish proof-carrying optimization as a GENERAL framework -- uniquely
+ * achievable on III's substrate (a self-hosting compiler with an in-house dependent-type kernel).
+ *
+ * Drives numera/sov_isa::sov_distrib_apply_kat: 99 = (a) refl REJECTS the sound rewrite AND (b) the MLD
+ * certificate tc_checks against Pi(x).Pi(a).Pi(b). Id(mul(x,add(a,b)), add(mul(x,a),mul(x,b))).
+ * Nothing weakened; 99 never hard-coded. */
+module corpus_1117
+
+extern @abi(c-msvc-x64) fn sov_distrib_apply_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_distrib_apply_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

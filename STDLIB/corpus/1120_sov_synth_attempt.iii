@@ -1,0 +1,20 @@
+/* 1120_sov_synth_attempt.iii -- THE MULTI-CLASS AUTOCATALYTIC SYNTHESIZER API.
+ *
+ * The synthesizer (numera/sov_isa::sov_synth_attempt) is what the Dream-Sandbox loop calls to turn a
+ * hallucinated optimization (class, param) into a candidate CIC proof term.  This KAT proves the API is
+ * a genuine, multi-class auto-prover whose every soundness verdict is the kernel's:
+ *   (1) STRENGTH at k=5 (fresh, not in any prior KAT): the synthesized cert tc_checks its goal;
+ *   (2) DISTRIB (left distributivity): the synthesized cert tc_checks its goal -- a DIFFERENT class;
+ *   (3) BUDGET=0: the attempt returns 0 (sov_synth_timeout -- 99.9% of hallucinations die here);
+ *   (4) FALSE candidate: the k=5 cert does NOT prove the k=6 goal -- the kernel rejects a near-miss.
+ *
+ * The synthesizer PROPOSES; tc_check DISPOSES.  Nothing weakened; 99 never hard-coded. */
+module corpus_1120
+
+extern @abi(c-msvc-x64) fn sov_synth_attempt_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_synth_attempt_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

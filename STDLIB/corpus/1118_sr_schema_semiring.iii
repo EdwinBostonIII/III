@@ -1,0 +1,32 @@
+/* 1118_sr_schema_semiring.iii -- THE COMPLETE COMMUTATIVE-SEMIRING OPTIMIZATION CLASSES, kernel-proven.
+ *
+ * Completes the proof-carrying-optimization framework: beyond left-distributivity (1114/1117) and the
+ * strength-reduction schema (1115/1116), III's CIC kernel now proves the FULL algebraic-optimization
+ * theory of Nat -- every canonical integer-optimization class:
+ *
+ *   mul_left_zero  : mul(0,b) = 0           (multiplicative annihilator)
+ *   mul_left_one   : mul(1,b) = b           (multiplicative identity)
+ *   mul_succ_left  : mul(succ a,b) = add(b, mul(a,b))   (the inductive engine of commutativity)
+ *   mul_comm       : mul(a,b) = mul(b,a)    (multiplicative commutativity)
+ *   mul_assoc      : mul(mul(a,b),c) = mul(a, mul(b,c)) (multiplicative associativity)
+ *
+ * together with the already-proven add_comm / add_assoc / add_left_zero (1113) / mul_left_distributivity
+ * (1114) and the strength schema (1115) -- the complete commutative-semiring axioms.  (Right
+ * distributivity mul(a+b,c) = mul(a,c)+mul(b,c) is the corollary MLD o mul_comm of two proven primitives.)
+ *
+ * Each lemma is built as a shared-node DAG over the additive Peano tower and DISPOSED by the kernel
+ * (tc_check==1) in its own arena epoch; the harmony control proves mul_comm is NOT refl-certifiable for
+ * symbolic operands (commutativity is propositional, not definitional) -- so these classes are reachable
+ * ONLY through the inductive proof tower, uniquely-III proof-carrying optimization.
+ *
+ * Drives numera/sov_isa::sov_opt_classes_kat: 99 = every semiring class kernel-certified AND the refl
+ * disposer rejects the (sound) commutativity rewrite.  Nothing weakened; 99 never hard-coded. */
+module corpus_1118
+
+extern @abi(c-msvc-x64) fn sov_opt_classes_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_opt_classes_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

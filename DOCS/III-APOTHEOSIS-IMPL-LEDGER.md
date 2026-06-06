@@ -1006,3 +1006,101 @@ per-lib-state and legitimately moved. Lesson refines the det-memory: a compiler-
 still move the golden via archive layout (a rename does not) — so reseal is gate-driven, never asserted. Goldens updated
 to 78b793eb: `COMPILER/BOOT/iiis-2.mhash`, `COMPILED/iiis-2.mhash`/`iiis-3.mhash`/`.exe.mhash`. **78b793eb is the
 authoritative final compiler.** (Every `4e81714d` above = the mid-session pre-final-lib state; superseded here.)
+
+---
+
+**⟶ RESEAL 2026-06-04(b) — compiler golden `78b793eb → 8fb044cb` (codegen-driven, NOT archive-layout).** A
+coherent codegen-correctness frontier landed in the ported `.iii` compiler TUs and was driven to a fresh TRUE
+FIXPOINT. The seed state at HEAD (`78b793eb`) had STALE, non-converged working-tree binaries (iiis-1 `cfe8ad30`,
+iiis-2 `8fb044cb`, iiis-3 `0b9e4c13` — iiis-2≠iiis-3, never re-run to convergence). Re-running the full chain from
+the unchanged C bootstrap (iiis-0 `98f4b063`, golden-clean) produced, deterministically:
+
+* **iiis-1 = `7868f1a7d442d335ad769f54978b38008d2cb1b61b8b0fbafeaa57f9929c3dfc`** (×2 identical; bootstrap-codegen seed).
+* **iiis-2 == iiis-3 == `8fb044cba9bf00ef3306c9db2542be0265f06357828c149238781756d1874b3a`** (byte-identical TRUE FIXPOINT).
+
+Unlike the `78b793eb` reseal (pure `libiii_native.a` archive reshuffle), this golden move is **real compiler code**:
+the touched modules ARE in the compiler's link closure and change emitted machine code. Source frontier (all gated,
+non-vacuous):
+
+* `cg_r0.iii` — K3: `EXPR_CAST` now truncates narrowing sub-word targets (`r0_emit_cast_extend`: u8/i8/bool→movzbq,
+  u16/i16→movzwq, u32/i32→movl); pointer/u64 stay pass-through (preserves the Tier-2 BSOD fix). `456 as u8` = 200, not 456.
+* `emit_sanctum.iii` — u64 UNSIGNED-ordering setcc (setb/setbe/seta/setae) selected iff either operand is provably
+  u64, so a u64 with bit 63 set orders correctly; signed/u32 keep signed setcc (never regressed).
+* `cg_r3.iii` — K1: `r3_local_lookup` scans newest-first to agree with sema's shadowed-binder load-width selection.
+* `lex.iii` — string-literal payloads now NUL-terminated (alloc+1) — retires the documented C-string over-read trap.
+* `lex_rt.iii` — K2: SOURCE_DATE_EPOCH overflow boundary at exact floor(i64max/10) (final digit 8..9 rejected).
+* `parse.iii` — `(0)`/`(1)`/`(-1)`/`(1<<n)` no longer mis-committed to the no-backtrack hexad branch (2-token
+  comma lookahead) — a valid parenthesised expr whose first token is a trit-start now parses as an expression.
+* `rm2_sample.iii` — adds `do_ord` de-vacuum gate (unsigned u64 high-bit ordering) wired into check_rm2.
+
+Validation (all GREEN with `8fb044cb`): `build_iiis2 --check-corpus` self-host corpus 59/0; Ring-−2 sanctum
+`do_thing(7)=21` + **u64-ordering(0x4..<0x8..)=1 (unsigned)** + i64-ordering(-7<5)=1 (signed); cg_r0 crypto 5/0
+(sha256/cad FIPS vectors) + width 10/0 (cg_r0==cg_r3 on shr/shl/add/ult/ule/div/mod/gt); `build_stdlib` 465/0 with
+Forge closure meta-gate OK + trusted-base seal OK (lib `98af55f3ed6a7734ca14b6be786f94e0eaa9af2d0c20096040588e9fe68db00b`);
+`run_corpus` 786/0; `run_xii_corpus` 92/0. Goldens/sidecars updated to the new fixpoint: `COMPILER/BOOT/iiis-1.mhash`
+(`7868f1a7`), `COMPILER/BOOT/iiis-2.mhash` + `iiis-3.mhash` (`8fb044cb`), `COMPILED/iiis-{1,2,3}.exe.mhash` +
+`COMPILED/iiis-2.mhash`/`iiis-3.mhash` + all three witness JSONs. **`8fb044cb` is the authoritative final compiler.**
+
+---
+
+**⟶ K5 CLOSED 2026-06-04(c) — the sr-schema dependent-type proof tower is KERNEL-PROVEN (lib `db71fbf9`).**
+The last open architecture-review frontier (K5) was the "Path C" CIC proof kernel in `numera/sov_isa.iii`,
+whose L1/L6 rungs were quarantined (`corpus 1113/1114 .iii.wip`) behind a since-fixed reducer defect. The
+fix already lived in the working tree (`ccl.iii::ccl_eta_contract` refuses to eta-contract `lam x.(C x) -> C`
+when head `C` is a data-constructor/eliminator, so the closed succ-step `succf=(lam n.succ n)` survives
+`tc_shift_k` and the mandatory `tc_natrec` IH-shift no longer diverges). This session DROVE the tower to a
+genuine kernel-accepted proof:
+
+* **L1 add_left_zero** `Pi(b).Id(add(zero,b),b)` — `sov_l1_proven_witness` = 99 (tc_check==1; wrong codomain
+  `succ b` and refl shortcut both rejected). Wired into `sov_sr_foundation_kat` (1113).
+* **L6 mul-over-double** `Pi(x).Pi(m).Id(mul(x,double m),double(mul(x,m)))` — `sov_l6_proven_witness` = 99.
+  Proved via the full additive Peano tower (`sov_tw_*`: ap_succ, add_succ_left, add_assoc, add_comm [via L1],
+  ap_add_l/r, add_left_comm, mul_left_distributivity), then **L6 == MLD(x,m,m)** because `double(v)==add(v,v)`
+  definitionally. Built as a SHARED-NODE DAG (`sov_l6_build_tower`) so the composed term stays within
+  `TC_CAP=16384` (a single `tc_check(L6)` transitively verifies the whole tower). Wired into
+  `sov_sr_distrib_kat` (1114). Negative control (off-by-succ codomain) rejected.
+
+Cleanup: removed the now-false `sov_l1_blocked_witness`/`sov_l6_blocked_witness`/`sov_doublef` + the temp probe,
+and rewrote every "blocked by a kernel defect" narrative (sov_isa.iii, 1113/1114 headers, run_corpus.sh,
+DOCS/III-ARCHITECTURE-REVIEW.md K5) to the proven reality — no green-wash. Un-quarantined 1113/1114 into the
+always-run corpus. Validation: `run_corpus` **788/0** (was 786 + the 2 un-quarantined), `run_xii_corpus` 92/0,
+`build_stdlib` 465/0 (forge OK, trusted-base `5996d3de` UNCHANGED — the tower is in `sov_isa`, not the sealed
+kernel). The compiler golden is UNMOVED (`8fb044cb`): `sov_isa.iii.o` is not in the compiler link closure and
+the archive-layout change did not perturb referenced members; iiis-2==iiis-3==`8fb044cb` fixpoint re-verified.
+
+---
+
+**⟶ STRENGTH-REDUCTION SCHEMA PROVEN 2026-06-04(d) — proof-carrying optimization, the uniquely-III headline (lib `4d302356`).**
+Building on the K5 tower, III's CIC kernel now PROVES its own canonical strength reduction for a SYMBOLIC
+exponent: **`Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), itd(x, k))`** — i.e. `mul(x, 2^k) == double^k(x)`,
+"multiplying by a power of two equals k repeated doublings." This is the exact rewrite the sov_isa "Path C"
+optimizer wants to apply, certified correct for ALL k (not just concrete unrolls): the untrusted egraph
+PROPOSES, the trusted kernel DISPOSES with a dependent-type proof. New `sov_tw_apdbl` (ap_double
+congruence) + `sov_m_pow2`/`sov_m_itd` (model) + `sov_sr_term` (induction on k: base mul(x,1)=x refl;
+step = trans(L6(x, pow2 k), ap_double(IH)) since pow2(succ k)≡double(pow2 k) and itd(x,succ k)≡double(itd(x,k))
+definitionally).  `sov_sr_strength_witness` = 99 (tc_check==1 + off-by-double negative control rejected);
+wired into corpus **1115_sr_schema_strength** (run_corpus 789/0).
+
+**Kernel enhancement (necessary + sufficient, sound):** the schema's normalized proof term exceeds the old
+`TC_CAP=16384`, so the kernel arena was raised 8x to **131072** (typecheck.iii TC_CAP + the 7 arena arrays).
+This is capacity-only — it CANNOT make a false term check (soundness preserved) — and is OUTSIDE `tc_to_ccl`,
+so `TRUSTED_BASE_ROOT` is UNMOVED (`5996d3de`).  It permanently deepens the kernel's proving reach.
+Validation: build_stdlib 465/0 (forge OK, trusted-base unchanged), run_corpus **789/0**, run_xii 92/0,
+stage1 57/0.  Compiler golden UNMOVED `8fb044cb` (typecheck.o not in the compiler link closure);
+iiis-1=`7868f1a7`, iiis-2==iiis-3==`8fb044cb` fixpoint re-verified.  No green-wash: a single
+`tc_check(schema)` transitively verifies the entire tower + L6 + ap_double + the k-induction.
+
+**⟶ HARMONY: the proof tower makes the optimizer's disposer STRICTLY MORE POWERFUL (corpus 1116).** The
+live proof-carrying disposer `sov_pcc_verify` certifies an egraph-proposed rewrite by REFL (definitional
+equality).  A strength reduction `mul(x, 2^k) -> double^k(x)` is NOT definitional even at a CONCRETE k for
+a SYMBOLIC x: `mul(x,4)` normalizes to `x+(x+(x+x))` while `double^2(x)` normalizes to `(x+x)+(x+x)` --
+equal only up to add-ASSOCIATIVITY (propositional, proven by induction).  So `sov_pcc_verify` REJECTS the
+sound rewrite.  The inductive strength schema, instantiated at the concrete k (`lam x. sov_sr_term(x)(2)`),
+SUPPLIES the missing associativity proof and CERTIFIES it.  `sov_sr_apply_kat` = 99 (refl rejects AND the
+schema certificate `tc_check`s).  This is uniquely-III: a trusted optimization disposer that certifies
+INDUCTIVE schemas, not just definitional equalities -- the egraph may propose strength reductions over
+symbolic operands and the CIC kernel disposes with a real proof.  run_corpus **790/0**; xii 92/0; compiler
+golden UNMOVED `8fb044cb`; trusted-base `5996d3de` unchanged.
+
+
+

@@ -1,0 +1,36 @@
+/* 1113_sr_schema_foundation.iii -- THE SR-SCHEMA INDUCTION TOWER: FOUNDATION RUNG.
+ *
+ * The strength-reduction schema  Pi(x).Pi(k). Id(Nat, mul(x, pow2 k), iter(x, double, k))
+ * is UNREACHABLE through the existing refl-based optimizer path: with a SYMBOLIC shift k the
+ * iterators are STUCK NEUTRALS, so refl cannot close them -- the schema FORCES tc_natrec
+ * induction over k, which in turn forces a propositional-congruence helper (ap under succ,
+ * built with the Id eliminator tc_j) and the additive Peano sub-tower.
+ *
+ * This KAT lays the FOUNDATION rung.  No logic here -- it drives
+ * numera/sov_isa::sov_sr_foundation_kat, which BUILDS the kernel proof terms and asks III's
+ * CIC kernel (tc_check / sov_pcc_verify_core) to DISPOSE of them:
+ *   (a) BASE_MUL_ONE  : mul(x, 1) == x   -- refl-definitional (concrete-k unroll).  PROVEN
+ *                          (kernel accepted; neg control mul(x,2) rejected).
+ *   (b) AP_SUCC       : Pi(a).Pi(b).Pi(p:Id(Nat,a,b)). Id(Nat, succ a, succ b)
+ *                          -- congruence of succ over a PROPOSITIONAL Id (tc_j); the recipe's
+ *                          lemma_tower[0] (L0_helpers_cong_ap), the mandatory ingredient of
+ *                          every nat-induction step.  PROVEN (kernel accepted; wrong-congruence
+ *                          neg control rejected).
+ *   (c) L1 ADD_LEFT_ZERO : Pi(b:Nat). Id(Nat, add(zero,b), b)  -- the FIRST tc_natrec rung.
+ *                          PROVEN (kernel accepted the genuine natrec induction term; the wrong
+ *                          codomain succ b and a refl shortcut are both rejected).  The kernel
+ *                          reducer block (ccl_eta_contract eta-collapsing the closed succ-step)
+ *                          is FIXED, so the IH-shift no longer diverges and the induction closes.
+ *
+ * PROPOSE/DISPOSE: every positive lemma is sound ONLY because the kernel ACCEPTS it
+ * (tc_check == 1); every negative control is REJECTED (tc_check == 0).  99 = the kernel proved
+ * the foundation rung (a)+(b)+(c).  The distributivity rung L6 is proven separately by 1114. */
+module corpus_1113
+
+extern @abi(c-msvc-x64) fn sov_sr_foundation_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_sr_foundation_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -14,10 +14,18 @@ root. Any edit to the reducer or the translation MOVES the root, reddening the b
 explicit reseal acknowledges that the trusted base changed.
 
 ```
-TRUSTED_BASE_ROOT = 40209d80c5f67626cdc4392d8ca62500c1f4127f426ecd0b73d8d2bd27421135
+TRUSTED_BASE_ROOT = 5996d3dedc730d3bafb3378b99f1bdce6e921f3ca466a7e89d488b06816c2915
 ```
 
 > **Reseal log:**
+> - `40209d80…` → `5996d3de…` (2026-06-04, induction keystone): `ccl_eta_contract` no longer
+>   eta-contracts `lam x. C x → C` when the head `C` is a data constructor / eliminator (tag ≥
+>   `CCL_TRUE`). A bare constructor is not a standalone function in this kernel, so the contracted form
+>   failed `tc_check` as a function — concretely `(lam n. succ n) : Nat→Nat` mangled to bare `succ`
+>   under `tc_shift_k`, diverging `tc_natrec`'s IH-type shift from the reconstructed step type and
+>   blocking ALL nat-induction. Sound + complete-for-well-typed (a bare constructor never legitimately
+>   appears standalone; a genuine function constant `CCL_ATOM` still eta-contracts). Unblocks the
+>   inductive frontier. Full proof corpus re-verified green.
 > - `b6cadb51…` → `d6802ce2…` (2026-05-31, production-readiness audit): `ccl_to_tc` gained a reserved-INVALID
 >   node guard — `if c == 0u32 { return tc_var(0u32) }`. `ccl_reduce`/`ccl_mk` return node 0 on `CCL_CAP`
 >   overflow (II-CCL-2); without the guard `ccl_to_tc(0)` misread `CCL_TAG[0]` and self-recursed (`CCL_A[0]==0`)

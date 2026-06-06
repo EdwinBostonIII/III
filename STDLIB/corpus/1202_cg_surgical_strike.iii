@@ -1,0 +1,16 @@
+/* 1202_cg_surgical_strike.iii -- THE REWRITER records ONLY kernel-certified rewrites.
+ *
+ * Drives forcefield/cg_surgical_strike::css_selftest: 99 = (1) a kernel-proven-obsolete pair (3,3) is
+ * recorded into the in-memory rewrite registry; (2) an unproven pair (3,4) is REJECTED with zero state
+ * change (the Scythe never rewires on doubt); (3) every recorded rewrite is a kernel-certified
+ * equivalence.  No source touched -- in-memory only; the compiler applies the mapping at next build.
+ * 99 never hard-coded. */
+module corpus_1202
+
+extern @abi(c-msvc-x64) fn css_selftest() -> u64 from "cg_surgical_strike.iii"
+
+fn main() -> u64 {
+    let r : u64 = css_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

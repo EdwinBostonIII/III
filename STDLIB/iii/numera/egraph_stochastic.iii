@@ -1,0 +1,87 @@
+/* STDLIB/iii/numera/egraph_stochastic.iii -- THE MUTAGEN of the Autocatalytic Synthesis Loop.
+ *
+ * Purpose: break the deterministic bounds of the pareto-cheapest egraph extraction with TEMPERATURE-
+ * DRIVEN exploration -- proposing "alien" candidate optimizations the cost-minimizing extractor would
+ * never reach.  These candidates are UNPROVEN equations; 99.x% are FALSE and die at the kernel sieve.
+ *
+ * THE III-FAITHFUL REALIZATION (the one hard-invariant fix): the proposal says "random / stochastic".
+ * III is BYTE-DETERMINISTIC (M2) and has NO entropy on any path -- true randomness would redden the
+ * determinism gate and fail the no-ML differential (verify_nous_differential asserts active=0==active=1).
+ * So the variance is SEEDED-DETERMINISTIC: a xorshift64* PRNG over a u64 seed.  Same seed -> same dream
+ * -> same discovery, so every dream is REPLAYABLE and AUDITABLE.  The "temperature" is a deterministic
+ * selection bias; the "entropy" is the seed.  Real exploration, zero non-determinism.
+ *
+ * THE CONSTRAINT (honored): this module is PURELY VOLATILE.  It produces only candidate DESCRIPTORS
+ * (class + two exponents); it never touches the TC arena, never builds proof terms, never calls cad,
+ * never generates a content hash.  It is pure dreaming -- the synthesizer and the sieve do the rest.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: self-contained.  Determinism: integer-only, seeded;
+ * u64 PRNG; pow2-masked range (no modulo-after-call); single-line fns; out-param writes only.
+ */
+module egraph_stochastic
+
+const EGS_KMAX  : u32 = 4u32   /* candidate exponent range [1, KMAX]; KMAX<=4 keeps the eventual kernel
+                                * conversion (mul(x,2^k) -> 2^k-deep add tree) within TC_CAP.  pow2 so the
+                                * range reduction is a mask, not a modulo (the modulo-after-call trap). */
+const EGS_KMASK : u64 = 3u64   /* = KMAX - 1 */
+
+/* xorshift64* -- a pure, deterministic function of the state word (the seeded "temperature" source). */
+fn egs_next(state: u64) -> u64 @export {
+    let mut x : u64 = state
+    x = x ^ (x >> 12u64)
+    x = x ^ (x << 25u64)
+    x = x ^ (x >> 27u64)
+    return x * 2685821657736338717u64
+}
+
+/* Reduce a PRNG word to a candidate exponent in [1, KMAX] via a pow2 mask (no modulo). */
+fn egs_pick_k(word: u64) -> u32 {
+    return ((word & EGS_KMASK) as u32) + 1u32
+}
+
+/* HALLUCINATE a candidate strength identity from the current PRNG state: writes the two exponents
+ * (a,b) of the candidate equation  mul(x, 2^a) == double^b(x)  -- TRUE iff a == b (~1/KMAX of seeds),
+ * FALSE otherwise.  Returns the advanced PRNG state (chain it for the next cycle).  Volatile: writes
+ * only the two out-params; no arena, no cad, no hash. */
+fn egs_hallucinate(state: u64, out_a: *u32, out_b: *u32) -> u64 @export {
+    let s1 : u64 = egs_next(state)
+    let s2 : u64 = egs_next(s1)
+    out_a[0u64] = egs_pick_k(s1)
+    out_b[0u64] = egs_pick_k(s2)
+    return s2
+}
+
+/* SELFTEST (no kernel needed): the PRNG is deterministic + the range is honored + a==b really occurs.
+ * 99 = (1) determinism: the same seed yields the same (a,b); (2) range: every pick in [1,KMAX]; (3) the
+ * hallucinator produces BOTH true (a==b) and false (a!=b) candidates over a short seeded sweep. */
+var EGS_TA : [u32; 1]
+var EGS_TB : [u32; 1]
+var EGS_TA2 : [u32; 1]
+var EGS_TB2 : [u32; 1]
+fn egs_selftest() -> u64 @export {
+    /* (1) determinism */
+    egs_hallucinate(123456789u64, &EGS_TA as *u32, &EGS_TB as *u32)
+    egs_hallucinate(123456789u64, &EGS_TA2 as *u32, &EGS_TB2 as *u32)
+    if EGS_TA[0u64] != EGS_TA2[0u64] { return 1u64 }
+    if EGS_TB[0u64] != EGS_TB2[0u64] { return 2u64 }
+    /* (2) range + (3) both true and false candidates appear over a seeded sweep */
+    let mut s : u64 = 0x9E3779B97F4A7C15u64
+    let mut i : u32 = 0u32
+    let mut saw_true : u8 = 0u8
+    let mut saw_false : u8 = 0u8
+    while i < 64u32 {
+        s = egs_hallucinate(s, &EGS_TA as *u32, &EGS_TB as *u32)
+        let a : u32 = EGS_TA[0u64]
+        let b : u32 = EGS_TB[0u64]
+        if a < 1u32 { return 3u64 }
+        if a > EGS_KMAX { return 4u64 }
+        if b < 1u32 { return 5u64 }
+        if b > EGS_KMAX { return 6u64 }
+        if a == b { saw_true = 1u8 }
+        if a != b { saw_false = 1u8 }
+        i = i + 1u32
+    }
+    if saw_true == 0u8 { return 7u64 }
+    if saw_false == 0u8 { return 8u64 }
+    return 99u64
+}

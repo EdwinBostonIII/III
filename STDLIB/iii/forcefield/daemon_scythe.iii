@@ -1,0 +1,72 @@
+/* STDLIB/iii/forcefield/daemon_scythe.iii -- THE EXECUTIONER of the Isomorphic Scythe.
+ *
+ * Sweeps the legacy logic, and for each function HUNTS an optimal match (ast_hunter), PROVES universal
+ * equivalence + obsolescence (proof_bisimulation, the CIC kernel), and RECORDS the certified rewrite
+ * (cg_surgical_strike).  The surfaced cull set is the set of legacy functions MATHEMATICALLY PROVEN
+ * redundant -- the basis for "negative tech debt": the codebase distils toward absolute density.
+ *
+ * THE HARD-INVARIANT FIX (honored -- REFUTED to operator-gated, NOT autonomous):
+ *   - scythe_cull_source (delete the obsolete function's .iii source lines): SELF-EDITING SEALED SOURCE,
+ *     forbidden (Generative-Sovereignty single-source + the content-address seal; a compiled .iii -> .exe
+ *     cannot rewrite source at runtime).
+ *   - scythe_rehash_domain + scythe_trigger_fixpoint (recompute cad of edited files + autonomously run
+ *     build_iiis2 so the golden shifts): M20 / ADR-FORGE-4 -- the Forge is reflexive but BOUNDED; the
+ *     substrate may not assert its own soundness / autonomously re-root its trust.  An autonomous golden
+ *     shift breaks the determinism contract (a self-mutating fixed point is not a fixed point -> breaks
+ *     federation R1 identity + reproducibility) and the seal-critical CRASH-PROTOCOL surfaced-checkpoint.
+ * So the Scythe DISCOVERS + PROVES + SURFACES the cull set (the return value + the cg_surgical_strike
+ * registry).  Applying the cull (source deletion) + reseal is the OPERATOR-GATED CRASH-PROTOCOL step.
+ * "Negative tech debt" is REAL -- mathematically certified, operator-applied, never a blind self-amputation.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes ast_hunter + cg_surgical_strike (the kernel).
+ */
+module forcefield_daemon_scythe
+
+extern @abi(c-msvc-x64) fn hunter_find_candidate(a: u32, bmax: u32, seed: u64) -> u32 from "ast_hunter.iii"
+extern @abi(c-msvc-x64) fn cg_redirect_record(a: u32, b: u32) -> u8 from "cg_surgical_strike.iii"
+extern @abi(c-msvc-x64) fn css_reset() -> u64 from "cg_surgical_strike.iii"
+extern @abi(c-msvc-x64) fn css_count() -> u32 from "cg_surgical_strike.iii"
+extern @abi(c-msvc-x64) fn css_all_proven() -> u8 from "cg_surgical_strike.iii"
+
+const SCY_NONE : u32 = 0xFFFFFFFFu32
+
+/* scythe_hunt_cycle: for a legacy function characterized by exponent `a`, HUNT for an optimal match
+ * (the cheap heuristic), then PROVE universal equivalence + obsolescence and RECORD the certified
+ * rewrite (the kernel decides).  Returns 1 iff the legacy was proven obsolete and the rewrite recorded. */
+fn scythe_hunt_cycle(a: u32, bmax: u32, seed: u64) -> u8 @export {
+    let b : u32 = hunter_find_candidate(a, bmax, seed)
+    if b == SCY_NONE { return 0u8 }            /* nothing even passes the cheap heuristic -> no target */
+    return cg_redirect_record(a, b)            /* PROVE obsolescence (kernel) + record, or reject */
+}
+
+/* THE EXECUTIONER (bounded sweep): for each legacy exponent a in [1,amax], hunt + prove + record.
+ * Returns the count of certified culls (the surfaced cull set lives in the cg_surgical_strike registry).
+ * Bounded + synchronous: "background / idle" is the operator's invocation cadence, not a runtime thread. */
+fn scythe_run(amax: u32, bmax: u32, seed: u64) -> u32 @export {
+    css_reset()
+    let mut a : u32 = 1u32
+    while a <= amax {
+        scythe_hunt_cycle(a, bmax, seed)
+        a = a + 1u32
+    }
+    return css_count()
+}
+
+/* THE HEADLINE KAT -- autonomous, mathematically-certified obsolescence, end to end.  99 =
+ *   (1) every legacy multiply mul(x,2^a) for a in [1,4] is PROVEN obsolete vs the optimal double^a(x)
+ *       and recorded (4 culls -- the negative-tech-debt event, kernel-certified);
+ *   (2) every recorded cull is a kernel-certified equivalence (css_all_proven -- nothing unproven culled);
+ *   (3) DETERMINISM (M2): the same seed yields the same cull set;
+ *   (4) NEGATIVE: a legacy (a=4) whose optimal match lies OUTSIDE the scan range [1,2] is NOT culled
+ *       (the Scythe never amputates a function it has not PROVEN redundant). */
+fn daemon_scythe_kat() -> u64 @export {
+    let culled : u32 = scythe_run(4u32, 4u32, 0x0BEEFu64)
+    if culled != 4u32 { return 1u64 }              /* all 4 legacy multiplies proven obsolete + recorded */
+    if css_all_proven() != 1u8 { return 2u64 }     /* every cull kernel-certified */
+    let again : u32 = scythe_run(4u32, 4u32, 0x0BEEFu64)
+    if again != culled { return 3u64 }             /* determinism: replayable cull set */
+    css_reset()
+    if scythe_hunt_cycle(4u32, 2u32, 0x0BEEFu64) != 0u8 { return 4u64 }   /* optimal b=4 outside [1,2] -> no cull */
+    if css_count() != 0u32 { return 5u64 }                                /* unproven -> never culled */
+    return 99u64
+}

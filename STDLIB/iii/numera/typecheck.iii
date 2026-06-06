@@ -125,19 +125,24 @@ const TC_REACH  : u8 = 35u8
 const TC_LEK    : u8 = 36u8  /* mig2: LEK(cs,bs):Bool -- A,B = cost/budget registry slots; iota-reduces iff cl_le_product */  /* mig2: REACH(h):Bool -- A=hexad literal u16; iota-reduces (via CCL) iff iii_hexad_reachable(h) */  /* wrec(P,s,w): A=motive P:W->U, B=step, C=scrutinee w */
 
 const TC_ERR     : u32 = 0u32           /* the null / error node id (reserved) */
-const TC_CAP     : u32 = 16384u32       /* arena capacity (nodes)              */
+const TC_CAP     : u32 = 131072u32      /* arena capacity (nodes) -- raised 16384->131072 (8x) so the
+                                         * kernel can dispose of DEEPER proof terms (e.g. the strength-
+                                         * reduction schema mul(x,2^k)==double^k(x), whose normalized
+                                         * form over the additive Peano tower + L6 + k-induction exceeds
+                                         * 16384 nodes).  Capacity-only: sound (cannot make a false term
+                                         * check), and OUTSIDE tc_to_ccl so the trusted-base seal is unmoved. */
 const TC_CTX_MAX : u32 = 256u32         /* max context depth                   */
 const TC_NOSORT  : u32 = 0xFFFFFFFFu32  /* "not a universe" sentinel           */
 const TC_FUEL    : u32 = 1000000u32     /* whnf step bound (hang guard)        */
 
 /* --- the arena: parallel arrays, one row per node.  Node 0 is reserved ERR. --- */
-var TC_TAG : [u8;  16384]
-var TC_A   : [u32; 16384]
-var TC_B   : [u32; 16384]
-var TC_C   : [u32; 16384]   /* third child: ID/J/IF need 3 fields (0 for the rest) */
-var TC_D   : [u32; 16384]   /* fourth child: NATREC needs 4 (0 for the rest)      */
-var TC_MULT : [u32; 16384]  /* QTT binder multiplicity code per PI/LAM node: 0=unmarked->omega, 1=erased, 2=linear, 3=omega; 0 for all other nodes */
-var SOV_COST : [u32; 16384] /* Sovereign Calculus: the weighted runtime-cost FIELD per node (sov_cost_q), materialized over the spine by sov_field_fill; 0 until filled */
+var TC_TAG : [u8;  131072]
+var TC_A   : [u32; 131072]
+var TC_B   : [u32; 131072]
+var TC_C   : [u32; 131072]   /* third child: ID/J/IF need 3 fields (0 for the rest) */
+var TC_D   : [u32; 131072]   /* fourth child: NATREC needs 4 (0 for the rest)      */
+var TC_MULT : [u32; 131072]  /* QTT binder multiplicity code per PI/LAM node: 0=unmarked->omega, 1=erased, 2=linear, 3=omega; 0 for all other nodes */
+var SOV_COST : [u32; 131072] /* Sovereign Calculus: the weighted runtime-cost FIELD per node (sov_cost_q), materialized over the spine by sov_field_fill; 0 until filled */
 var IU_V1 : [u32; 16]       /* inductive anti-unification: left value of each (v1,v2)->var pair */
 var IU_V2 : [u32; 16]       /* ... right value */
 var IU_N  : [u32; 1]        /* ... number of generalization variables introduced */

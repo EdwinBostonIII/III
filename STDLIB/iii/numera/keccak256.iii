@@ -19,7 +19,14 @@ extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: 
 extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
 extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
 
-var KK256_STATE : [u64; 25]    /* one-shot sponge state */
+var KK256_STATE : [u8; 200]    /* one-shot sponge state. MUST be [u8;200] not [u64;25]: keccak.iii drives
+                                  it purely via *u8 element indexing over byte offsets 0..199, so under
+                                  cg_r0 (8-byte-uniform: each *u8 slot = 8 bytes) it needs 200 SLOTS =
+                                  1600 bytes. [u64;25] reserved only 200 bytes -> keccak_state_zero's
+                                  200x slot-stride-8 stores overran 1400 bytes -> SIGSEGV at Ring 0.
+                                  [u8;200] is size-identical (200 bytes) under cg_r3, so no cg_r3 change.
+                                  Matches the convention of every other keccak state (KK256_SST below,
+                                  MLDSA/MLKEM/SHA3/SHAKE/SLH all [u8;200]). */
 var KK256_MP    : [u64; 1]     /* msg ptr (call-clobber-safe) */
 var KK256_ML    : [u64; 1]     /* msg len */
 var KK256_OP    : [u64; 1]     /* out ptr */

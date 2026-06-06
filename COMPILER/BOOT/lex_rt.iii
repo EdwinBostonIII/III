@@ -176,6 +176,7 @@ fn iii_lex_getenv_sde_c() -> i64 @export {
         if ch < 48u32 { return 0i64 }
         if ch > 57u32 { return 0i64 }
         if v > 922337203685477580i64 { return 0i64 }    /* [overflow] SOURCE_DATE_EPOCH > i64max/10 -> reject (epoch 0) instead of wrapping */
+        if v == 922337203685477580i64 { if (ch - 48u32) > 7u32 { return 0i64 } }   /* [K2] at the exact floor(i64max/10) boundary, i64max%10==7, so a final digit 8..9 would overflow v*10+d -> reject (NOT `>=`, which false-rejects valid epochs up to i64max) */
         v = v * 10i64 + ((ch - 48u32) as i64)
         i = i + 1u64
         let pn: *u8 = (s + i) as *u8

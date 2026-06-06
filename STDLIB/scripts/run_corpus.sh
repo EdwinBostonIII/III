@@ -793,6 +793,7 @@ declare -A EXPECTED=(
     [1207_shift_fold_certified]=99
     [1208_theorem_commons]=99
     [1209_theorem_commons_distinct]=99
+    [1210_commons_feed]=99
     [1124_fs_dir_enum]=99
     [1125_onelang_audit]=99
     [1126_founders_anchor]=99

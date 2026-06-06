@@ -1,0 +1,28 @@
+/* 1210_commons_feed.iii -- THE OPTIMIZER FEEDS THE THEOREM COMMONS (loop -> commons harmony).
+ *
+ * sov_isa's kernel-certified strength-reduction schema (mul(x,2^k)==double^k(x), proven for symbolic k --
+ * the proof-carrying-optimization headline) is ADMITTED into the Theorem Commons via sov_feed_commons, which
+ * reuses the exact (proof, goal) the strength witness verifies. tcom_admit re-runs tc_check at registration,
+ * so the schema enters ONLY because the CIC kernel re-accepts it. Afterwards the system's REAL proven theorem
+ * is citable by content-address -- the autocatalytic loop's discovery is now a persistent, citable lemma.
+ *
+ * (1) empty commons; (2) feed admits the schema (sov_feed_commons==99 -> kernel re-verified + stored);
+ * (3) size==1; (4) the schema is citable by its content-address. 99 = all hold. */
+module corpus_1210
+
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn sov_feed_commons() -> u64 from "sov_isa.iii"
+
+/* must byte-match sov_isa's SOV_THM_STRENGTH: "thm:strength_schema\n" */
+var ST : [u8; 20] = [116u8, 104u8, 109u8, 58u8, 115u8, 116u8, 114u8, 101u8, 110u8, 103u8, 116u8, 104u8, 95u8, 115u8, 99u8, 104u8, 101u8, 109u8, 97u8, 10u8]
+
+fn main() -> u64 {
+    tcom_init()
+    if tcom_size() != 0u64 { return 1u64 }
+    if sov_feed_commons() != 99u64 { return 2u64 }
+    if tcom_size() != 1u64 { return 3u64 }
+    if tcom_cite((&ST as u64), 20u64) != 0i32 { return 4u64 }
+    return 99u64
+}

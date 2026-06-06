@@ -68,6 +68,7 @@ extern @abi(c-msvc-x64) fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: 
  * egraph's (untrusted) optimization proposals -- proof-carrying optimization. */
 extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
 extern @abi(c-msvc-x64) fn tc_iter(z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_id(ity: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
@@ -1760,6 +1761,26 @@ fn sov_sr_strength_witness() -> u64 @export {
     let wbody : u32 = tc_id(tc_nat(), sov_m_mul(tc_var(1u32), sov_m_pow2(tc_var(0u32))), sov_m_double(sov_m_itd(tc_var(1u32), tc_var(0u32))))
     let wgoal : u32 = tc_pi(tc_nat(), tc_pi(tc_nat(), wbody))
     if tc_check(s, wgoal) != 0u8 { return 4u64 }
+    return 99u64
+}
+
+/* THE LOOP -> COMMONS FEED (T9): admit III's kernel-certified strength-reduction schema into the Theorem
+ * Commons so the optimizer can later CITE it by content-address instead of re-proving. Reuses the EXACT
+ * (proof s, goal g) the strength witness verifies; tcom_admit re-runs tc_check, so only a kernel-accepted
+ * theorem is registered (nothing trusted). The autocatalytic loop's discoveries thereby become a persistent,
+ * content-addressed, citable lemma library -- the harmony unique to III (cad x CIC kernel x the loop).
+ * 99 = the schema is admitted (and, by tcom_admit's gate, kernel-re-verified at registration). */
+var SOV_THM_STRENGTH : [u8; 20] = [116u8, 104u8, 109u8, 58u8, 115u8, 116u8, 114u8, 101u8, 110u8, 103u8, 116u8, 104u8, 95u8, 115u8, 99u8, 104u8, 101u8, 109u8, 97u8, 10u8]   /* "thm:strength_schema\n" */
+const SOV_THM_STRENGTH_LEN : u64 = 20u64
+fn sov_feed_commons() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    sov_l6_build_tower()
+    SOV_G_L6[0u32] = sov_l6_term()
+    if SOV_G_L6[0u32] == 0u32 { return 1u64 }
+    let s : u32 = sov_sr_term()
+    let g : u32 = sov_sr_goal()
+    if tcom_admit((&SOV_THM_STRENGTH as u64), SOV_THM_STRENGTH_LEN, s, g) != 0i32 { return 2u64 }
     return 99u64
 }
 

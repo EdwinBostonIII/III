@@ -1,0 +1,199 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\hamming_secded.iii
+ *
+ * III STDLIB - numera::hamming_secded
+ *
+ * Hamming SEC-DED (Single-Error-Correct, Double-Error-Detect) over a 64-bit data word -- the code
+ * every server ECC-DRAM channel runs. Where numera::rscode / erasure_store recover KNOWN losses
+ * (erasures), this corrects UNKNOWN-position bit FLIPS: any single flipped bit in the 72-bit
+ * codeword is located + corrected; any double flip is detected as uncorrectable (never silently
+ * mis-decoded). Together they span the two fault models a resilient substrate must master.
+ *
+ * Construction (classic, table-free): a 72-bit codeword over positions 1..72. The 7 Hamming check
+ * bits sit at the power-of-2 positions {1,2,4,8,16,32,64}; the 64 data bits fill the remaining
+ * non-power-of-2 positions of 1..71 in order; position 72 is the overall parity (the DED bit). The
+ * syndrome of a single error EQUALS its position in binary (the defining Hamming property), so
+ * correction is O(1) once located. NIH / self-contained: pure XOR parity, no field, no tables.
+ *
+ * Codeword state is MODULE-GLOBAL (HAM_BITS, one byte per bit -- safe runtime indexing).
+ *
+ * Public API:
+ *   ham_encode(data: u64) -> i32        fill HAM_BITS with the SEC-DED codeword of `data`
+ *   ham_flip(pos: u32) -> i32           flip codeword bit at position pos in 1..72 (fault injection)
+ *   ham_decode() -> i32                 syndrome-decode in place: 0 = clean, 1 = single corrected,
+ *                                       2 = DOUBLE detected (uncorrectable). Corrects HAM_BITS on 1.
+ *   ham_get_data() -> u64               extract the 64 data bits from HAM_BITS (post-decode)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_hamming_secded
+
+const HAM_OK     : i32 = 0i32   /* no error detected            */
+const HAM_FIX1   : i32 = 1i32   /* single error corrected       */
+const HAM_DETECT2: i32 = 2i32   /* double error detected (uncorrectable) */
+
+var HAM_BITS : [u8; 72]    /* position p in 1..72 -> HAM_BITS[p-1] */
+
+/* 1 iff q is a power of two (a Hamming check position). */
+fn ham_is_pow2(q: u32) -> u32 {
+    if q == 0u32 { return 0u32 }
+    if (q & (q - 1u32)) == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* even-parity over positions 1..71 whose index ANDs the given check-bit mask p. */
+fn ham_parity_for(p: u32) -> u32 {
+    let mut acc : u32 = 0u32
+    let mut q : u32 = 1u32
+    while q <= 71u32 {
+        if (q & p) != 0u32 {
+            acc = acc ^ (HAM_BITS[q - 1u32] as u32)
+        }
+        q = q + 1u32
+    }
+    return acc & 1u32
+}
+
+fn ham_encode(data: u64) -> i32 @export {
+    /* place the 64 data bits into the non-power-of-2 positions of 1..71 */
+    let mut q : u32 = 1u32
+    let mut di : u32 = 0u32
+    while q <= 71u32 {
+        if ham_is_pow2(q) == 0u32 {
+            let bit : u32 = ((data >> (di as u64)) & 1u64) as u32
+            HAM_BITS[q - 1u32] = bit as u8
+            di = di + 1u32
+        } else {
+            HAM_BITS[q - 1u32] = 0u8   /* check positions start at 0 */
+        }
+        q = q + 1u32
+    }
+    /* set each check bit so its covered set has even parity */
+    HAM_BITS[0u32]  = ham_parity_for(1u32) as u8
+    HAM_BITS[1u32]  = ham_parity_for(2u32) as u8
+    HAM_BITS[3u32]  = ham_parity_for(4u32) as u8
+    HAM_BITS[7u32]  = ham_parity_for(8u32) as u8
+    HAM_BITS[15u32] = ham_parity_for(16u32) as u8
+    HAM_BITS[31u32] = ham_parity_for(32u32) as u8
+    HAM_BITS[63u32] = ham_parity_for(64u32) as u8
+    /* overall parity (position 72) over positions 1..71 -> total parity even */
+    let mut op : u32 = 0u32
+    let mut r : u32 = 1u32
+    while r <= 71u32 {
+        op = op ^ (HAM_BITS[r - 1u32] as u32)
+        r = r + 1u32
+    }
+    HAM_BITS[71u32] = (op & 1u32) as u8
+    return HAM_OK
+}
+
+fn ham_flip(pos: u32) -> i32 @export {
+    if pos < 1u32 { return -1i32 }
+    if pos > 72u32 { return -1i32 }
+    HAM_BITS[pos - 1u32] = (HAM_BITS[pos - 1u32] ^ 1u8)
+    return HAM_OK
+}
+
+fn ham_decode() -> i32 @export {
+    /* syndrome = OR of check masks whose covered parity is odd = the error position (Hamming) */
+    let mut s : u32 = 0u32
+    if ham_parity_for(1u32)  == 1u32 { s = s + 1u32 }
+    if ham_parity_for(2u32)  == 1u32 { s = s + 2u32 }
+    if ham_parity_for(4u32)  == 1u32 { s = s + 4u32 }
+    if ham_parity_for(8u32)  == 1u32 { s = s + 8u32 }
+    if ham_parity_for(16u32) == 1u32 { s = s + 16u32 }
+    if ham_parity_for(32u32) == 1u32 { s = s + 32u32 }
+    if ham_parity_for(64u32) == 1u32 { s = s + 64u32 }
+    /* overall parity across ALL 72 positions */
+    let mut op : u32 = 0u32
+    let mut q : u32 = 1u32
+    while q <= 72u32 {
+        op = op ^ (HAM_BITS[q - 1u32] as u32)
+        q = q + 1u32
+    }
+    op = op & 1u32
+
+    if op == 1u32 {
+        /* odd total parity => odd number of errors => a single (correctable) error */
+        if s == 0u32 {
+            HAM_BITS[71u32] = (HAM_BITS[71u32] ^ 1u8)   /* the parity bit itself flipped; data intact */
+        } else {
+            HAM_BITS[s - 1u32] = (HAM_BITS[s - 1u32] ^ 1u8)   /* correct the single error at position s */
+        }
+        return HAM_FIX1
+    }
+    /* even total parity */
+    if s != 0u32 { return HAM_DETECT2 }   /* nonzero syndrome + even parity => DOUBLE error */
+    return HAM_OK
+}
+
+fn ham_get_data() -> u64 @export {
+    let mut out : u64 = 0u64
+    let mut q : u32 = 1u32
+    let mut di : u32 = 0u32
+    while q <= 71u32 {
+        if ham_is_pow2(q) == 0u32 {
+            if HAM_BITS[q - 1u32] != 0u8 {
+                out = out | (1u64 << (di as u64))
+            }
+            di = di + 1u32
+        }
+        q = q + 1u32
+    }
+    return out
+}
+
+/* =====================================================================================
+ * ham_kat -- 99 = the full SEC-DED claim, self-checked exhaustively (no external oracle):
+ *   (1) clean roundtrip: encode->decode = HAM_OK and data preserved;
+ *   (2) SINGLE-ERROR CORRECTION: for several data words, EVERY one of the 72 single-bit flips is
+ *       located + corrected (HAM_FIX1) and the original data recovered EXACTLY;
+ *   (3) DOUBLE-ERROR DETECTION: a representative set of two-bit flips is DETECTED (HAM_DETECT2),
+ *       never silently mis-corrected.
+ * ===================================================================================== */
+var HAM_SEEDS : [u64; 4]
+
+fn ham_kat() -> u64 @export {
+    HAM_SEEDS[0u64] = 0x0000000000000000u64
+    HAM_SEEDS[1u64] = 0xFFFFFFFFFFFFFFFFu64
+    HAM_SEEDS[2u64] = 0x0123456789ABCDEFu64
+    HAM_SEEDS[3u64] = 0xA5A5A5A55A5A5A5Au64
+
+    let mut si : u32 = 0u32
+    while si < 4u32 {
+        let data : u64 = HAM_SEEDS[si as u64]
+
+        /* (1) clean roundtrip */
+        ham_encode(data)
+        if ham_decode() != HAM_OK { return 1000u64 + (si as u64) }
+        if ham_get_data() != data { return 1100u64 + (si as u64) }
+
+        /* (2) EXHAUSTIVE single-error correction over all 72 positions */
+        let mut p : u32 = 1u32
+        while p <= 72u32 {
+            ham_encode(data)
+            ham_flip(p)
+            let st : i32 = ham_decode()
+            if st != HAM_FIX1 { return 2000u64 + (p as u64) }
+            if ham_get_data() != data { return 3000u64 + (p as u64) }
+            p = p + 1u32
+        }
+
+        /* (3) DOUBLE-error DETECTION over a representative set: flip positions a and a+1 for a
+         *     sweep, plus a few wide-separation pairs -- all must be DETECTED as uncorrectable. */
+        let mut a : u32 = 1u32
+        while a <= 71u32 {
+            ham_encode(data)
+            ham_flip(a)
+            ham_flip(a + 1u32)
+            if ham_decode() != HAM_DETECT2 { return 4000u64 + (a as u64) }
+            a = a + 1u32
+        }
+        /* wide pairs */
+        ham_encode(data) ; ham_flip(1u32)  ; ham_flip(72u32) ; if ham_decode() != HAM_DETECT2 { return 5001u64 }
+        ham_encode(data) ; ham_flip(3u32)  ; ham_flip(40u32) ; if ham_decode() != HAM_DETECT2 { return 5002u64 }
+        ham_encode(data) ; ham_flip(7u32)  ; ham_flip(64u32) ; if ham_decode() != HAM_DETECT2 { return 5003u64 }
+
+        si = si + 1u32
+    }
+    return 99u64
+}

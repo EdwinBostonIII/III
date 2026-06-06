@@ -1,0 +1,13 @@
+/* 1228_elias.iii -- verified Elias gamma/delta universal integer codes (on bitio).
+ * Drives numera::elias::elias_kat: 99 = ROUND-TRIP IDENTITY of a DELIMITER-FREE integer stream under
+ * both codes (200 random 1..2^20 values decoded in order recover exactly, proving prefix-freeness) +
+ * edges + delta<=gamma. HARMONY: the first real consumer of numera::bitio. */
+module corpus_1228
+
+extern @abi(c-msvc-x64) fn elias_kat() -> u64 from "elias.iii"
+
+fn main() -> u64 {
+    let r : u64 = elias_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

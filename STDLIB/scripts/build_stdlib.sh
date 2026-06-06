@@ -669,6 +669,8 @@ MODULES=(
     "numera/lzss"
     "numera/cas_blob"
     "numera/crt"
+    "numera/bitio"
+    "numera/elias"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,13 @@
+/* 1227_bitio.iii -- verified MSB-first bit reader/writer.
+ * Drives numera::bitio::bitio_kat: 99 = ROUND-TRIP IDENTITY of (value,width) sequences (50 seeded
+ * random sequences of mixed widths 1..32 + explicit edges incl. full 64-bit values). The substrate
+ * beneath entropy coding and a real DEFLATE-class compressor atop numera::lzss. */
+module corpus_1227
+
+extern @abi(c-msvc-x64) fn bitio_kat() -> u64 from "bitio.iii"
+
+fn main() -> u64 {
+    let r : u64 = bitio_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

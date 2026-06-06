@@ -1,0 +1,170 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\crt.iii
+ *
+ * III STDLIB - numera::crt
+ *
+ * Chinese Remainder Theorem reconstruction via Garner's algorithm: given pairwise-coprime moduli
+ * m_0..m_{k-1} and residues r_i, recover the unique x in [0, prod m_i) with x = r_i (mod m_i).
+ * The foundation of multi-modular arithmetic (RSA-CRT signing, residue-number-system bigint, NTT
+ * coefficient recombination) -- a small primitive that unlocks large speedups elsewhere.
+ *
+ * Constraints: each modulus <= 2^32 (so products fit u64 in the inner steps) and the full product
+ * < 2^64 (checked -- CRT_E_DIM if it would overflow). NIH / self-contained: pure integer arithmetic,
+ * no field, no externs. Signed steps use i64 (i64 ordering is well-defined here; only i32 `<`/`>=`
+ * is the unsigned trap, deliberately avoided).
+ *
+ * Public API:
+ *   crt_gcd(a, b) -> u64
+ *   crt_modinv(a, m) -> u64        a^{-1} mod m in [0,m), or m as a not-invertible sentinel
+ *   crt_solve(mod_ptr, res_ptr, k, out_ptr) -> i32   writes x to *out_ptr; CRT_OK / CRT_E_COPRIME /
+ *                                                    CRT_E_DIM (k<1, modulus>2^32, or product>=2^64)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_crt
+
+const CRT_OK       : i32 =  0i32
+const CRT_E_DIM    : i32 = -1i32     /* bad k / modulus too large / product overflow */
+const CRT_E_COPRIME: i32 = -2i32     /* moduli not pairwise coprime */
+const CRT_U64MAX   : u64 = 0xFFFFFFFFFFFFFFFFu64
+const CRT_2P32     : u64 = 0x100000000u64
+
+fn crt_gcd(a: u64, b: u64) -> u64 @export {
+    let mut x : u64 = a
+    let mut y : u64 = b
+    while y != 0u64 {
+        let t : u64 = x % y
+        x = y
+        y = t
+    }
+    return x
+}
+
+/* a^{-1} mod m via extended Euclid (i64). m > 1, gcd(a,m)=1 -> inverse in [0,m).
+ * Returns m (an out-of-range sentinel) if a is not invertible mod m. */
+fn crt_modinv(a: u64, m: u64) -> u64 @export {
+    let mut old_r : i64 = a as i64
+    let mut r : i64 = m as i64
+    let mut old_s : i64 = 1i64
+    let mut s : i64 = 0i64
+    while r != 0i64 {
+        let q : i64 = old_r / r
+        let tr : i64 = old_r - q * r
+        old_r = r
+        r = tr
+        let ts : i64 = old_s - q * s
+        old_s = s
+        s = ts
+    }
+    if old_r != 1i64 { return m }     /* gcd != 1 -> not invertible */
+    let mm : i64 = m as i64
+    let mut inv : i64 = old_s % mm
+    if inv < 0i64 { inv = inv + mm }  /* i64 ordering is fine (only i32 ordering is the unsigned trap) */
+    return inv as u64
+}
+
+fn crt_solve(mod_ptr: u64, res_ptr: u64, k: u32, out_ptr: u64) -> i32 @export {
+    if k < 1u32 { return CRT_E_DIM }
+    let mp : *u64 = mod_ptr as *u64
+    let rp : *u64 = res_ptr as *u64
+    let op : *u64 = out_ptr as *u64
+    if mp[0u64] >= CRT_2P32 { return CRT_E_DIM }
+    let mut x : u64 = rp[0u64] % mp[0u64]
+    let mut bigp : u64 = mp[0u64]
+    let mut i : u32 = 1u32
+    while i < k {
+        let mi : u64 = mp[i as u64]
+        if mi >= CRT_2P32 { return CRT_E_DIM }
+        if bigp > (CRT_U64MAX / mi) { return CRT_E_DIM }   /* product would overflow u64 -- guard FIRST */
+        /* coprimality with the running product */
+        if crt_gcd(bigp % mi, mi) != 1u64 { return CRT_E_COPRIME }
+        let invp : u64 = crt_modinv(bigp % mi, mi)
+        if invp == mi { return CRT_E_COPRIME }
+        let ri : u64 = rp[i as u64] % mi
+        let xmod : u64 = x % mi
+        let diff : u64 = (ri + mi - xmod) % mi      /* (r_i - x) mod m_i, underflow-safe */
+        let t : u64 = (diff * invp) % mi             /* < mi*mi <= 2^64 */
+        x = x + bigp * t                             /* < bigp*mi <= 2^64-1 (guarded above) */
+        bigp = bigp * mi
+        i = i + 1u32
+    }
+    op[0u64] = x
+    return CRT_OK
+}
+
+/* ===== KAT ===== */
+var CRT_M   : [u64; 8]
+var CRT_R   : [u64; 8]
+var CRT_X   : [u64; 1]
+var CRT_RNG : [u64; 1]
+/* a fixed pool of distinct primes (pairwise coprime); products of any subset fit u64. */
+var CRT_PRIMES : [u64; 8]
+
+fn crt_rng() -> u64 {
+    let mut z : u64 = CRT_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    CRT_RNG[0u64] = z
+    return z
+}
+
+/* =====================================================================================
+ * crt_kat -- 99 = Garner CRT reconstruction, self-checked:
+ *   (1) for many random secrets x over coprime modulus subsets, the reconstruction equals x mod P
+ *       AND satisfies x = r_i (mod m_i) for every i (the defining property);
+ *   (2) NEGATIVE: non-coprime moduli are rejected (CRT_E_COPRIME).
+ * ===================================================================================== */
+fn crt_kat() -> u64 @export {
+    /* distinct primes, products of up to 6 fit comfortably in u64 */
+    CRT_PRIMES[0u64] = 1009u64
+    CRT_PRIMES[1u64] = 1013u64
+    CRT_PRIMES[2u64] = 1019u64
+    CRT_PRIMES[3u64] = 1021u64
+    CRT_PRIMES[4u64] = 1031u64
+    CRT_PRIMES[5u64] = 1033u64
+    CRT_PRIMES[6u64] = 1039u64
+    CRT_PRIMES[7u64] = 1049u64
+    CRT_RNG[0u64] = 0xC0FFEE1234567890u64
+
+    let mut trial : u32 = 0u32
+    while trial < 300u32 {
+        /* k in 2..6 moduli from the prime pool */
+        let rk : u64 = crt_rng()
+        let k : u32 = 2u32 + (rk % 5u64) as u32      /* 2..6 */
+        let mut bigp : u64 = 1u64
+        let mut i : u32 = 0u32
+        while i < k {
+            CRT_M[i] = CRT_PRIMES[i as u64]          /* first k distinct primes (pairwise coprime) */
+            bigp = bigp * CRT_PRIMES[i as u64]
+            i = i + 1u32
+        }
+        /* a random secret x in [0, bigp) */
+        let xs : u64 = crt_rng() % bigp
+        /* residues */
+        let mut j : u32 = 0u32
+        while j < k {
+            CRT_R[j] = xs % CRT_M[j]
+            j = j + 1u32
+        }
+        if crt_solve(&CRT_M as u64, &CRT_R as u64, k, &CRT_X as u64) != CRT_OK { return 1000u64 + (trial as u64) }
+        if CRT_X[0u64] != xs { return 2000u64 + (trial as u64) }
+        /* independently re-verify the defining property */
+        let mut v : u32 = 0u32
+        while v < k {
+            if (CRT_X[0u64] % CRT_M[v]) != CRT_R[v] { return 3000u64 + (trial as u64) }
+            v = v + 1u32
+        }
+        trial = trial + 1u32
+    }
+
+    /* (2) NEGATIVE: non-coprime moduli (gcd 2) -> rejected */
+    CRT_M[0u64] = 6u64 ; CRT_R[0u64] = 1u64
+    CRT_M[1u64] = 10u64 ; CRT_R[1u64] = 3u64       /* gcd(6,10)=2 */
+    if crt_solve(&CRT_M as u64, &CRT_R as u64, 2u32, &CRT_X as u64) != CRT_E_COPRIME { return 4u64 }
+
+    /* gcd sanity */
+    if crt_gcd(6u64, 10u64) != 2u64 { return 5u64 }
+    if crt_gcd(1000003u64, 1000033u64) != 1u64 { return 6u64 }
+
+    return 99u64
+}

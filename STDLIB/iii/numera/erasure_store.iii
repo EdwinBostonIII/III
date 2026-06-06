@@ -1,0 +1,295 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\erasure_store.iii
+ *
+ * III STDLIB - numera::erasure_store
+ *
+ * VERIFIED ERASURE-CODED, CONTENT-ADDRESSED, TAMPER-EVIDENT STORAGE -- a capability that
+ * emerges from COMPOSING three of III's own verified modules, not from any single one:
+ *
+ *     numera::rscode      -- MDS Reed-Solomon RS(n,k): any k of n shards reconstruct exactly
+ *     numera::keccak256   -- each shard's 32-byte content address (self-authentication)
+ *     numera::merkle      -- a Merkle root over the n content addresses (set commitment)
+ *
+ * Result: a blob is stored as n shards such that (1) the loss of ANY n-k shards is fully
+ * recoverable, (2) every surviving shard PROVES its own integrity against its content address
+ * (a single flipped byte is detected), and (3) one 32-byte root commits the entire shard set.
+ * No other substrate offers this as a single VERIFIED primitive whose recovery + tamper claims
+ * are machine-checked end to end. This is module HARMONY: the whole exceeds the parts.
+ *
+ * Striping: shard_len = ceil(dlen/k). The (zero-padded) blob fills k data shards; for each
+ * byte offset the k data bytes are RS-encoded across the n shards (systematic: shards 0..k-1
+ * are the data, k..n-1 are parity). Decode inverts the present-set generator ONCE
+ * (rs_decode_prepare) and applies it per byte offset (rs_decode_apply) -- the efficient path.
+ *
+ * All buffers are MODULE-GLOBAL (runtime-indexed). Caps: n <= ES_MAX_N, k <= ES_MAX_K,
+ * shard_len <= ES_MAX_SLEN.
+ *
+ * Public API:
+ *   es_encode(blob_ptr, dlen, k, n) -> i32     build n shards + content addresses + root
+ *   es_shard_ptr(i) -> u64                      address of shard i (shard_len bytes)
+ *   es_shard_len() -> u32 ; es_n() -> u32 ; es_k() -> u32 ; es_dlen() -> u32
+ *   es_ca_ptr(i) -> u64                         address of shard i's 32-byte content address
+ *   es_root_ptr() -> u64                        address of the 32-byte Merkle root
+ *   es_verify_shard(i) -> u8                    1 iff shard i hashes to its stored address
+ *   es_reconstruct(present_idx_ptr, m) -> i32   recover the blob into ES_RECON from m>=k shards
+ *   es_recon_ptr() -> u64                       address of the reconstructed blob (dlen bytes)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_erasure_store
+
+extern @abi(c-msvc-x64) fn rs_init(n: u32, k: u32) -> i32 from "rscode.iii"
+extern @abi(c-msvc-x64) fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 from "rscode.iii"
+extern @abi(c-msvc-x64) fn rs_decode_prepare(present_idx: u64, m_present: u32) -> i32 from "rscode.iii"
+extern @abi(c-msvc-x64) fn rs_decode_apply(present_sym: u64, data_out: u64) -> i32 from "rscode.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+
+const ES_MAX_N    : u32 = 16u32
+const ES_MAX_K    : u32 = 16u32
+const ES_MAX_SLEN : u32 = 64u32
+
+const ES_OK    : i32 =  0i32
+const ES_E_DIM : i32 = -1i32     /* bad (k,n) or shard_len > cap or dlen=0 */
+const ES_E_FEW : i32 = -2i32     /* fewer than k shards supplied to reconstruct */
+const ES_E_RS  : i32 = -3i32     /* underlying RS init/encode/decode failure */
+
+var ES_SHARDS : [u8; 1024]   /* n shards, stride shard_len (16*64)         */
+var ES_RECON  : [u8; 1024]   /* reconstructed data shards (= the blob)     */
+var ES_CA     : [u8; 512]    /* n content addresses, stride 32 (16*32)     */
+var ES_ROOT   : [u8; 32]     /* Merkle root over the n content addresses   */
+var ES_PN     : [u32; 3]     /* [0]=n [1]=k [2]=shard_len                  */
+var ES_DLEN   : [u32; 1]
+var ES_DIN    : [u8; 16]     /* per-offset data column (k bytes)           */
+var ES_DOUT   : [u8; 16]     /* per-offset codeword column (n bytes)       */
+var ES_PSYM   : [u8; 16]     /* per-offset present-symbol column           */
+var ES_SCA    : [u8; 32]     /* scratch content address (verify)           */
+
+/* KAT scratch */
+var ES_BLOB   : [u8; 1024]
+var ES_PIDX   : [u8; 16]
+var ES_ROOT2  : [u8; 32]
+
+fn es_n() -> u32 @export { return ES_PN[0u32] }
+fn es_k() -> u32 @export { return ES_PN[1u32] }
+fn es_shard_len() -> u32 @export { return ES_PN[2u32] }
+fn es_dlen() -> u32 @export { return ES_DLEN[0u32] }
+fn es_shard_ptr(i: u32) -> u64 @export { let off : u64 = (i * ES_PN[2u32]) as u64 ; return (&ES_SHARDS as u64) + off }
+fn es_recon_ptr() -> u64 @export { return &ES_RECON as u64 }
+fn es_ca_ptr(i: u32) -> u64 @export { let off : u64 = (i * 32u32) as u64 ; return (&ES_CA as u64) + off }
+fn es_root_ptr() -> u64 @export { return &ES_ROOT as u64 }
+
+fn es_encode(blob_ptr: u64, dlen: u32, k: u32, n: u32) -> i32 @export {
+    if dlen == 0u32 { return ES_E_DIM }
+    if k < 1u32 { return ES_E_DIM }
+    if n < k { return ES_E_DIM }
+    if n > ES_MAX_N { return ES_E_DIM }
+    if k > ES_MAX_K { return ES_E_DIM }
+    let slen : u32 = (dlen + k - 1u32) / k
+    if slen > ES_MAX_SLEN { return ES_E_DIM }
+    ES_PN[0u32] = n
+    ES_PN[1u32] = k
+    ES_PN[2u32] = slen
+    ES_DLEN[0u32] = dlen
+    if rs_init(n, k) != 0i32 { return ES_E_RS }
+
+    let bp : *u8 = blob_ptr as *u8
+
+    /* lay the (zero-padded) blob into the k data shards (shards 0..k-1) */
+    let mut di : u32 = 0u32
+    while di < k {
+        let mut j : u32 = 0u32
+        while j < slen {
+            let src : u32 = di * slen + j
+            let mut bv : u8 = 0u8
+            if src < dlen { bv = bp[src as u64] }
+            ES_SHARDS[di * slen + j] = bv
+            j = j + 1u32
+        }
+        di = di + 1u32
+    }
+
+    /* per byte offset: RS-encode the k data bytes into n shard bytes (systematic) */
+    let mut off : u32 = 0u32
+    while off < slen {
+        let mut d : u32 = 0u32
+        while d < k {
+            ES_DIN[d] = ES_SHARDS[d * slen + off]
+            d = d + 1u32
+        }
+        if rs_encode(&ES_DIN as u64, &ES_DOUT as u64) != 0i32 { return ES_E_RS }
+        let mut i : u32 = 0u32
+        while i < n {
+            ES_SHARDS[i * slen + off] = ES_DOUT[i]
+            i = i + 1u32
+        }
+        off = off + 1u32
+    }
+
+    /* content-address every shard, then commit the set with a Merkle root */
+    let mut s : u32 = 0u32
+    while s < n {
+        keccak256_oneshot(es_shard_ptr(s), slen as u64, es_ca_ptr(s))
+        s = s + 1u32
+    }
+    merkle_compute_root(&ES_CA as u64, n, 32u64, &ES_ROOT as u64)
+    return ES_OK
+}
+
+/* 1 iff shard i hashes (keccak256 over its shard_len bytes) to its stored content address. */
+fn es_verify_shard(i: u32) -> u8 @export {
+    let slen : u32 = ES_PN[2u32]
+    keccak256_oneshot(es_shard_ptr(i), slen as u64, &ES_SCA as u64)
+    let mut b : u32 = 0u32
+    while b < 32u32 {
+        if ES_SCA[b] != ES_CA[i * 32u32 + b] { return 0u8 }
+        b = b + 1u32
+    }
+    return 1u8
+}
+
+/* Reconstruct the blob from m_present shards (indices in present_idx_ptr as bytes). The present
+ * shards must be intact in ES_SHARDS at their indices. Inverts the present-set generator ONCE,
+ * applies it per byte offset. Result lands in ES_RECON (es_recon_ptr, first dlen bytes). */
+fn es_reconstruct(present_idx_ptr: u64, m_present: u32) -> i32 @export {
+    let n : u32 = ES_PN[0u32]
+    let k : u32 = ES_PN[1u32]
+    let slen : u32 = ES_PN[2u32]
+    if m_present < k { return ES_E_FEW }
+    let pidx : *u8 = present_idx_ptr as *u8
+    if rs_decode_prepare(present_idx_ptr, m_present) != 0i32 { return ES_E_RS }
+    let mut off : u32 = 0u32
+    while off < slen {
+        /* gather the k present shards' byte at this offset, in present-index order */
+        let mut t : u32 = 0u32
+        while t < k {
+            let row : u32 = pidx[t as u64] as u32
+            if row >= n { return ES_E_DIM }
+            ES_PSYM[t] = ES_SHARDS[row * slen + off]
+            t = t + 1u32
+        }
+        if rs_decode_apply(&ES_PSYM as u64, &ES_DIN as u64) != 0i32 { return ES_E_RS }
+        /* scatter the recovered k data bytes into the reconstructed data shards */
+        let mut d : u32 = 0u32
+        while d < k {
+            ES_RECON[d * slen + off] = ES_DIN[d]
+            d = d + 1u32
+        }
+        off = off + 1u32
+    }
+    return ES_OK
+}
+
+fn es_popcount(x: u32) -> u32 {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 {
+        c = c + (v & 1u32)
+        v = v >> 1u32
+    }
+    return c
+}
+
+/* =====================================================================================
+ * es_kat -- 99 = the full verified-storage claim, self-checked end to end (no external oracle):
+ *   (1) systematic: data shards 0..k-1 ARE the blob;
+ *   (2) self-authentication: every shard verifies against its content address;
+ *   (3) commitment: the Merkle root is non-vacuous and DETERMINISTIC over the content addresses;
+ *   (4) MDS recovery: EVERY (n-k)-shard loss (all C(7,3)=35 patterns) reconstructs the blob EXACTLY;
+ *   (5) NEGATIVE tamper-evidence: a single flipped byte makes es_verify_shard REJECT that shard;
+ *   (6) NEGATIVE too-few: reconstructing from < k shards is refused (ES_E_FEW).
+ * ===================================================================================== */
+fn es_kat() -> u64 @export {
+    let dlen : u32 = 23u32
+    let k : u32 = 4u32
+    let n : u32 = 7u32
+    let mut f : u32 = 0u32
+    while f < dlen {
+        ES_BLOB[f] = ((f * 41u32 + 7u32) & 0xFFu32) as u8
+        f = f + 1u32
+    }
+    if es_encode(&ES_BLOB as u64, dlen, k, n) != ES_OK { return 1u64 }
+    let slen : u32 = es_shard_len()
+    if slen != 6u32 { return 2u64 }   /* ceil(23/4) = 6 */
+
+    /* (1) systematic: data shards 0..k-1 (first dlen bytes) == blob */
+    let mut di : u32 = 0u32
+    while di < k {
+        let mut j : u32 = 0u32
+        while j < slen {
+            let src : u32 = di * slen + j
+            if src < dlen {
+                if ES_SHARDS[di * slen + j] != ES_BLOB[src] { return 3u64 }
+            }
+            j = j + 1u32
+        }
+        di = di + 1u32
+    }
+
+    /* (2) self-authentication: every shard verifies */
+    let mut s : u32 = 0u32
+    while s < n {
+        if es_verify_shard(s) != 1u8 { return 4u64 }
+        s = s + 1u32
+    }
+
+    /* (3) commitment: root non-vacuous + deterministic over the content addresses */
+    let mut nz : u32 = 0u32
+    let mut rb : u32 = 0u32
+    while rb < 32u32 {
+        if ES_ROOT[rb] != 0u8 { nz = 1u32 }
+        rb = rb + 1u32
+    }
+    if nz != 1u32 { return 5u64 }
+    merkle_compute_root(&ES_CA as u64, n, 32u64, &ES_ROOT2 as u64)
+    let mut rc2 : u32 = 0u32
+    while rc2 < 32u32 {
+        if ES_ROOT2[rc2] != ES_ROOT[rc2] { return 6u64 }
+        rc2 = rc2 + 1u32
+    }
+
+    /* (4) MDS recovery: EVERY (n-k)=3-shard loss reconstructs the blob EXACTLY */
+    let erase : u32 = n - k
+    let lim : u32 = 1u32 << n
+    let mut tested : u64 = 0u64
+    let mut mask : u32 = 0u32
+    while mask < lim {
+        if es_popcount(mask) == erase {
+            let mut cnt : u32 = 0u32
+            let mut i : u32 = 0u32
+            while i < n {
+                if ((mask >> i) & 1u32) == 0u32 {
+                    if cnt < k {
+                        ES_PIDX[cnt] = i as u8
+                        cnt = cnt + 1u32
+                    }
+                }
+                i = i + 1u32
+            }
+            if cnt != k { return 7u64 }
+            if es_reconstruct(&ES_PIDX as u64, k) != ES_OK { return 2000u64 + tested }
+            let mut c : u32 = 0u32
+            while c < dlen {
+                if ES_RECON[c] != ES_BLOB[c] { return 3000u64 + tested }
+                c = c + 1u32
+            }
+            tested = tested + 1u64
+        }
+        mask = mask + 1u32
+    }
+    if tested != 35u64 { return 8u64 }   /* C(7,3) = 35 */
+
+    /* (5) NEGATIVE tamper-evidence: flip one byte of shard 2 -> verify must REJECT; then restore */
+    let orig : u8 = ES_SHARDS[2u32 * slen + 0u32]
+    ES_SHARDS[2u32 * slen + 0u32] = (orig ^ 0x5Au8)
+    if es_verify_shard(2u32) != 0u8 { return 9u64 }
+    ES_SHARDS[2u32 * slen + 0u32] = orig
+    if es_verify_shard(2u32) != 1u8 { return 10u64 }   /* restored -> verifies again */
+
+    /* (6) NEGATIVE too-few: reconstructing from k-1 shards is refused */
+    ES_PIDX[0u32] = 0u8
+    ES_PIDX[1u32] = 1u8
+    ES_PIDX[2u32] = 2u8
+    if es_reconstruct(&ES_PIDX as u64, k - 1u32) != ES_E_FEW { return 11u64 }
+
+    return 99u64
+}

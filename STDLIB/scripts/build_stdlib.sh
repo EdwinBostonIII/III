@@ -839,6 +839,10 @@ MODULES=(
     # the cost-field, wiring egraph (saturate) + cost_lattice (cost) into a proof-
     # preserving min-cost optimizer.  Externs egraph + cost_lattice (built above).
     "numera/sov_isa"
+    # The Theorem Commons: a content-addressed registry of kernel-VERIFIED statements (tc_check-gated admit).
+    # Persists what the autocatalytic loop proves so the optimizer can CITE by hash, not re-prove.  Externs
+    # cad + typecheck (built above).
+    "numera/theorem_commons"
     # The Autocatalytic Synthesis Loop ("Dream Sandbox"): a seeded-deterministic mutagen proposes alien
     # candidate optimizations, the sov_isa synthesizer attempts a CIC proof, and the tc_check kernel
     # disposes -- only kernel-certified discoveries are cad-sealed.  Additive consumers of sov_isa /

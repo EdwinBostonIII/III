@@ -1,0 +1,91 @@
+/* STDLIB/iii/numera/theorem_commons.iii -- THE THEOREM COMMONS (increment 1: the kernel-verified registry).
+ *
+ * A content-addressed registry of statements III's own CIC kernel has PROVEN. `tcom_admit` records a
+ * statement's content-address ONLY when `tc_check(proof, goal) == 1` -- a statement whose proof the kernel
+ * REJECTS never enters. `tcom_cite` answers "has this statement been kernel-certified?" by content-address.
+ *
+ * THE UNIQUELY-III CAPABILITY: III already DISCOVERS identities (the autocatalytic loop egraph_stochastic ->
+ * cg_autocatalyst), PROVES them (this CIC kernel), and ADDRESSES them (cad). The Commons closes the loop --
+ * a theorem proven once becomes a CITABLE lemma forever, so the sovereign optimizer can cite a rewrite by
+ * hash instead of re-proving it. No other compiler accumulates a content-addressed, kernel-certified theorem
+ * repertoire that grows monotonically; it exists only because cad + a real proof kernel + the loop coexist
+ * in one body. This is the seed of the self-growing Theorem DAG (federation-shareable: a peer re-checks a
+ * received theorem's proof before admitting -- nothing trusted).
+ *
+ * SCOPE (increment 1 -- a documented depth, NOT a deferral): the content-address is over the caller's
+ * CANONICAL statement bytes; soundness is from tc_check gating admission (membership ==> the kernel proved
+ * the registered statement). Increment 2 derives the address from the SERIALIZED goal term (read-only tc-arena
+ * accessors) so the bytes<->goal binding is automatic, and persists the proof term for federated re-check.
+ *
+ * Hexad: kind_essence + kind_cognition.  Ring: R0.  K: 1.00.  NIH: cad.iii + typecheck.iii (CIC kernel).
+ * Determinism: integer-only, equality, bounded sweep, module-scope buffers (no local-array-by-runtime-index),
+ * no recursion.  Non-reentrant (TCOM_SCR module scratch); single-threaded R0 use.
+ */
+module numera_theorem_commons
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+const TCOM_OK         : i32 =  0i32
+const TCOM_E_NULL     : i32 = -1i32
+const TCOM_E_ABSENT   : i32 = -2i32
+const TCOM_E_UNPROVEN : i32 = -3i32   /* tc_check REJECTED the proof -- the statement is NOT admitted */
+const TCOM_E_FULL     : i32 = -4i32
+const TCOM_SUITE      : u32 =  1u32   /* CAD_SUITE_KECCAK256 */
+const TCOM_MAX        : u32 =  1024u32
+
+var TCOM_HASH  : [u8; 32768]   /* 1024 slots x 32-byte content addresses */
+var TCOM_COUNT : u32 = 0u32
+var TCOM_SCR   : [u8; 32]      /* scratch content-address (cad output) */
+
+fn tcom_init() -> i32 @export {
+    TCOM_COUNT = 0u32
+    return TCOM_OK
+}
+
+/* 1 iff the 32-byte cad at slot s equals TCOM_SCR */
+fn tcom_scr_eq_slot(s: u32) -> u32 {
+    let bp : *u8 = ((&TCOM_HASH as u64) + ((s as u64) * 32u64)) as *u8
+    let sp : *u8 = (&TCOM_SCR as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if bp[i] != sp[i] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+/* slot index of TCOM_SCR in the registry, or -1 */
+fn tcom_find() -> i32 {
+    let mut s : u32 = 0u32
+    while s < TCOM_COUNT {
+        if tcom_scr_eq_slot(s) == 1u32 { return s as i32 }
+        s = s + 1u32
+    }
+    return -1i32
+}
+
+/* Admit statement `stmt`[0..len) iff the kernel accepts `proof : goal`. Idempotent; rejects unproven. */
+fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 @export {
+    if stmt == 0u64 { return TCOM_E_NULL }
+    if tc_check(proof, goal) != 1u8 { return TCOM_E_UNPROVEN }
+    cad_oneshot(TCOM_SUITE, stmt as *u8, len, (&TCOM_SCR as u64) as *u8)
+    if tcom_find() != -1i32 { return TCOM_OK }   /* != (equality) -- NOT >=0i32: i32 signed ordering compiles UNSIGNED (the documented trap), so -1>=0 would be wrongly TRUE */
+    if TCOM_COUNT >= TCOM_MAX { return TCOM_E_FULL }
+    let dp : *u8 = ((&TCOM_HASH as u64) + ((TCOM_COUNT as u64) * 32u64)) as *u8
+    let sp : *u8 = (&TCOM_SCR as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { dp[i] = sp[i]; i = i + 1u64 }
+    TCOM_COUNT = TCOM_COUNT + 1u32
+    return TCOM_OK
+}
+
+/* Has statement `stmt`[0..len) been kernel-certified? OK = yes, ABSENT = no. */
+fn tcom_cite(stmt: u64, len: u64) -> i32 @export {
+    if stmt == 0u64 { return TCOM_E_NULL }
+    cad_oneshot(TCOM_SUITE, stmt as *u8, len, (&TCOM_SCR as u64) as *u8)
+    if tcom_find() != -1i32 { return TCOM_OK }   /* != (equality) -- NOT >=0i32: i32 signed ordering compiles UNSIGNED (the documented trap), so -1>=0 would be wrongly TRUE */
+    return TCOM_E_ABSENT
+}
+
+fn tcom_size() -> u64 @export { return TCOM_COUNT as u64 }

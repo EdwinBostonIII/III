@@ -791,6 +791,7 @@ declare -A EXPECTED=(
     [1205_sovereign_optimizer]=99
     [1206_sovereign_continuous]=99
     [1207_shift_fold_certified]=99
+    [1208_theorem_commons]=99
     [1124_fs_dir_enum]=99
     [1125_onelang_audit]=99
     [1126_founders_anchor]=99

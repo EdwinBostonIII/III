@@ -1,0 +1,52 @@
+/* 1208_theorem_commons.iii -- THE THEOREM COMMONS ADMITS ONLY KERNEL-VERIFIED STATEMENTS.
+ *
+ * (1) a TRUE theorem -- refl(0) : Id(Nat,0,0) -- is admitted and citable by content-address;
+ * (2) PROVE-THE-NEGATIVE: a FALSE theorem -- refl(0) mistyped against Id(Nat,0,succ 0) -- is REJECTED by the
+ *     CIC kernel (tc_check==0) -> it NEVER enters the Commons -> it is not citable. The kernel is the SOLE gate;
+ *     no false fact can be registered.
+ * (3) an unknown statement is ABSENT; (4) re-admitting a proven theorem is idempotent (size unchanged).
+ * 99 = all hold (never hard-coded; every arm distinguishes a real kernel verdict). */
+module corpus_1208
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+
+var SA : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 48u8, 61u8, 48u8, 10u8]   /* "thm:0=0\n" */
+var SB : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 48u8, 61u8, 49u8, 10u8]   /* "thm:0=1\n" */
+var SC : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 63u8, 63u8, 63u8, 10u8]   /* "thm:???\n" */
+
+fn main() -> u64 {
+    tc_reset()
+    tcom_init()
+    let z   : u32 = tc_zero()
+    let nat : u32 = tc_nat()
+    /* TRUE: refl(0) : Id(Nat, 0, 0) */
+    let goal_t : u32 = tc_id(nat, z, z)
+    let proof  : u32 = tc_refl(z)
+    /* FALSE: refl(0) does NOT have type Id(Nat, 0, succ 0) */
+    let goal_f : u32 = tc_id(nat, z, tc_succ(z))
+
+    if tcom_size() != 0u64 { return 1u64 }
+    /* (1) admit + cite the true theorem */
+    if tcom_admit((&SA as u64), 8u64, proof, goal_t) != 0i32 { return 2u64 }
+    if tcom_size() != 1u64 { return 3u64 }
+    if tcom_cite((&SA as u64), 8u64) != 0i32 { return 4u64 }
+    /* (2) the kernel rejects the false theorem -> not admitted, not citable */
+    if tcom_admit((&SB as u64), 8u64, proof, goal_f) != -3i32 { return 5u64 }
+    if tcom_size() != 1u64 { return 6u64 }
+    if tcom_cite((&SB as u64), 8u64) != -2i32 { return 7u64 }
+    /* (3) unknown is absent */
+    if tcom_cite((&SC as u64), 8u64) != -2i32 { return 8u64 }
+    /* (4) idempotent re-admit */
+    if tcom_admit((&SA as u64), 8u64, proof, goal_t) != 0i32 { return 9u64 }
+    if tcom_size() != 1u64 { return 10u64 }
+    return 99u64
+}

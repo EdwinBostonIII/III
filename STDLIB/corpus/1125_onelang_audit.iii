@@ -1,0 +1,15 @@
+/* 1125 -- sanctus/onelang: the H13 one-language self-audit, proven in III.
+ *
+ * onelang walks a source tree (via the new aether/fs directory organ), classifies
+ * every .c/.h into bootstrap / dead-reference / harness / GAP, and issues the
+ * verdict itself -- the .iii supersession of the bash verify_sha256_dedup + the C
+ * cartographer.  onelang_selftest builds a hermetic synthetic tree exercising all
+ * four buckets and proves the gate is a REAL falsifier: VIOLATION on an injected
+ * GAP .c, then ACCOUNTED, then PURE once the gap+dead-ref are retired, with a
+ * reproducible census seal -- all under CWD, fully cleaned up.  rc 99 = pass;
+ * 1..45 = which selftest assertion failed. */
+module corpus_1125
+
+extern @abi(c-msvc-x64) fn onelang_selftest() -> u64 from "onelang.iii"
+
+fn main() -> u64 { return onelang_selftest() }

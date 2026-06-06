@@ -1,0 +1,516 @@
+/* STDLIB/iii/sanctus/onelang.iii -- the H13 "one language" structural self-audit,
+ * performed BY III, IN III, with no bash and no C cartographer.
+ *
+ * H13 ("one language"): no C survives save the bootstrap trust root; everything
+ * else is corpus-green .iii.  Until now H13's STRUCTURAL half lived in a bash
+ * script (scripts/verify_sha256_dedup.sh) and a C fact-extractor (the sibling
+ * III-CARTOGRAPHER/carto.c) -- exactly the external "rigging" the one-language
+ * mandate forbids.  This module closes that seam: given the new aether/fs
+ * directory organ (fs_dir_open/read/close), III walks its OWN source tree,
+ * classifies every .c/.h file, and issues the verdict itself.
+ *
+ * THE WALK is an explicit module-global work-stack (NOT recursion + NOT a
+ * function-local array -- both would hit the .iii local-array-runtime-index
+ * trap, and recursion would collide on the single FS_FIND buffer).  It obeys
+ * the one-active-search discipline: enumerate ALL of a directory's entries
+ * (copying child dir paths onto the stack), CLOSE the search, THEN pop+open the
+ * next dir -- so at most one Find* search is live at any instant.
+ *
+ * CLASSIFICATION (priority order; by directory path + filename):
+ *   1 BOOTSTRAP  -- "COMPILER"+"BOOT" or "SANCTUM" : the irreducible C trust
+ *                   root (every self-hosting language has one C seed).
+ *   2 DEAD_REF   -- "LEXICON" or "GRAMMAR"          : the original C lexer/parser,
+ *                   superseded by COMPILER/BOOT/{lex,parse,ast}.iii; an M24/H13
+ *                   retirement target (proof-gated cull).
+ *   3 HARNESS    -- "test_" prefix, or "/tests/" /"/tools/", "KATABASIS",
+ *                   "audit_scratch" : test/deploy tooling, not the III artifact
+ *                   (doctrinally like III-CARTOGRAPHER & verify_reach_remote).
+ *   4 GAP        -- anything else : an unaccounted C file.  This is the HONEST
+ *                   falsifier output -- a .c with no bootstrap/dead/harness
+ *                   account is a genuine one-language hole (port it, never hide).
+ *
+ * VERDICT:  PURE       = only BOOTSTRAP + HARNESS C remain (dead==0 & gap==0).
+ *           ACCOUNTED  = every C classified, no GAP (dead may be >0 = retire targets).
+ *           VIOLATION  = a GAP file exists (or the work-stack overflowed -> cannot certify).
+ *
+ * The census (files,boot,harn,dead,gap,dirs as 6 u64 LE) is cad-sealed -- the
+ * seal dogfoods the one content-address (-> the one .iii sha256), so H13 seals
+ * through H13.  onelang_selftest() is the hermetic falsifier: it builds a
+ * synthetic tree exercising all four buckets, proves the verdict goes VIOLATION
+ * on an injected GAP .c (the gate is no rubber stamp), then ACCOUNTED, then PURE
+ * once the gap+dead are removed, and that the seal reproduces -- all under CWD,
+ * fully cleaned up (no residue), exactly like corpus 38's fs round-trip.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: aether/fs + capability + cad only.  No ML, no float, no u64 division.
+ * Discipline: flag-driven loops (no break); params -> locals; module-global
+ * arrays (never function-local runtime-indexed); length-explicit literal reads.
+ */
+module sanctus_onelang
+
+/* --- the directory organ (aether/fs Phase D) --- */
+extern @abi(c-msvc-x64) fn fs_dir_open(cap: u64, path: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_read(h: u64) -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name_len() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_is_dir() -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const OL_PURE        : u32 = 0u32
+const OL_ACCOUNTED   : u32 = 1u32
+const OL_VIOLATION   : u32 = 2u32
+const OL_SUITE_SHA256 : u32 = 0u32
+
+const OL_PATH_MAX    : u64 = 512u64
+const OL_STACK_MAX   : u64 = 2048u64
+const OL_FS_MODE_WRITE : u32 = 2u32
+
+/* --- audit state (all module-global: walked across the iterative stack) --- */
+var OL_STACK    : [u8; 1048576]   /* OL_STACK_MAX * OL_PATH_MAX work-stack of dir paths */
+var OL_SP       : u64 = 0u64
+var OL_OVERFLOW : u8  = 0u8
+var OL_DIRBUF   : [u8; 512]        /* the directory currently being enumerated */
+var OL_CHILDBUF : [u8; 512]        /* child path scratch (dir + "/" + name) */
+
+var OL_N_FILES  : u64 = 0u64       /* total .c/.h classified */
+var OL_N_BOOT   : u64 = 0u64
+var OL_N_HARN   : u64 = 0u64
+var OL_N_DEAD   : u64 = 0u64
+var OL_N_GAP    : u64 = 0u64
+var OL_N_DIRS   : u64 = 0u64       /* directories visited */
+
+var OL_CENSUS   : [u8; 48]         /* 6 u64 LE, for the seal */
+var OL_SEAL     : [u8; 32]
+var OL_SEAL2    : [u8; 32]         /* selftest: reproducibility compare */
+var OL_ONEBYTE  : [u8; 4]          /* file-create payload */
+
+/* === byte / string primitives (NIH; length-explicit where a literal is read) === */
+
+/* Length of a NUL-terminated string at `p`, bounded by OL_PATH_MAX. */
+fn ol_strlen(p_addr: u64) -> u64 {
+    let p : *u8 = p_addr as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= OL_PATH_MAX { go = 0u8 }
+        if go == 1u8 { if p[i] == 0u8 { go = 0u8 } }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return i
+}
+
+/* Copy the NUL-terminated string at src into dst, NUL-terminated, bounded by
+ * OL_PATH_MAX-1.  Returns the copied length. */
+fn ol_strcpy(dst_addr: u64, src_addr: u64) -> u64 {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= (OL_PATH_MAX - 1u64) { go = 0u8 }
+        if go == 1u8 { if s[i] == 0u8 { go = 0u8 } }
+        if go == 1u8 { d[i] = s[i]   i = i + 1u64 }
+    }
+    d[i] = 0u8
+    return i
+}
+
+/* 1 iff `needle[0..nlen)` occurs as a substring of `hay[0..hlen)` (O(h*n) scan).
+ * needle is a (non-NUL-terminated) string literal read by explicit length. */
+fn ol_contains(hay_addr: u64, hlen: u64, needle_addr: u64, nlen: u64) -> u8 {
+    if nlen == 0u64 { return 0u8 }
+    if nlen > hlen { return 0u8 }
+    let h : *u8 = hay_addr as *u8
+    let n : *u8 = needle_addr as *u8
+    let last : u64 = hlen - nlen
+    let mut i : u64 = 0u64
+    let mut found : u8 = 0u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i > last { go = 0u8 }
+        if go == 1u8 {
+            let mut j : u64 = 0u64
+            let mut match_j : u8 = 1u8
+            let mut jg : u8 = 1u8
+            while jg == 1u8 {
+                if j >= nlen { jg = 0u8 }
+                if jg == 1u8 { if h[i + j] != n[j] { match_j = 0u8   jg = 0u8 } }
+                if jg == 1u8 { j = j + 1u64 }
+            }
+            if match_j == 1u8 { found = 1u8   go = 0u8 }
+        }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return found
+}
+
+/* 1 iff name[0..len) equals "." or "..". */
+fn ol_is_dot(name_addr: u64, len: u64) -> u8 {
+    let p : *u8 = name_addr as *u8
+    if len == 1u64 { if p[0u64] == 0x2Eu8 { return 1u8 } }
+    if len == 2u64 { if p[0u64] == 0x2Eu8 { if p[1u64] == 0x2Eu8 { return 1u8 } } }
+    return 0u8
+}
+
+/* 1 iff the directory `name` must NOT be descended into: ".git", ".claude",
+ * "build" (the .git object store, agent worktrees, and the regenerable build
+ * scratch -- the carto 10000-file/.claude-collision lesson, baked in from line 1). */
+fn ol_is_skip_dir(name_addr: u64, len: u64) -> u8 {
+    if ol_contains(name_addr, len, (".git" as u64), 4u64) == 1u8 { return 1u8 }
+    if ol_contains(name_addr, len, (".claude" as u64), 7u64) == 1u8 { return 1u8 }
+    if len == 5u64 { if ol_contains(name_addr, len, ("build" as u64), 5u64) == 1u8 { return 1u8 } }
+    return 0u8
+}
+
+/* 1 iff name ends in ".c" or ".h" (a C source/header). */
+fn ol_is_c_or_h(name_addr: u64, len: u64) -> u8 {
+    if len < 2u64 { return 0u8 }
+    let p : *u8 = name_addr as *u8
+    if p[len - 2u64] != 0x2Eu8 { return 0u8 }   /* '.' */
+    let last : u8 = p[len - 1u64]
+    if last == 0x63u8 { return 1u8 }            /* 'c' */
+    if last == 0x68u8 { return 1u8 }            /* 'h' */
+    return 0u8
+}
+
+/* 1 iff name[0..plen) is a prefix of name (used for the "test_" filename rule). */
+fn ol_has_prefix(name_addr: u64, len: u64, pre_addr: u64, plen: u64) -> u8 {
+    if plen > len { return 0u8 }
+    let p : *u8 = name_addr as *u8
+    let q : *u8 = pre_addr as *u8
+    let mut i : u64 = 0u64
+    let mut ok : u8 = 1u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= plen { go = 0u8 }
+        if go == 1u8 { if p[i] != q[i] { ok = 0u8   go = 0u8 } }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return ok
+}
+
+/* === the work-stack === */
+
+fn ol_push(src_addr: u64) -> u8 {
+    if OL_SP >= OL_STACK_MAX { OL_OVERFLOW = 1u8   return 0u8 }
+    let dst : u64 = (&OL_STACK as u64) + OL_SP * OL_PATH_MAX
+    ol_strcpy(dst, src_addr)
+    OL_SP = OL_SP + 1u64
+    return 1u8
+}
+
+/* Pop the top dir path into OL_DIRBUF; 0 if the stack is empty. */
+fn ol_pop() -> u8 {
+    if OL_SP == 0u64 { return 0u8 }
+    OL_SP = OL_SP - 1u64
+    let src : u64 = (&OL_STACK as u64) + OL_SP * OL_PATH_MAX
+    ol_strcpy((&OL_DIRBUF as u64), src)
+    return 1u8
+}
+
+/* OL_CHILDBUF = OL_DIRBUF + "/" + name[0..name_len). */
+fn ol_make_child(name_addr: u64, name_len: u64) {
+    let d : u64 = ol_strcpy((&OL_CHILDBUF as u64), (&OL_DIRBUF as u64))
+    let cb : *u8 = (&OL_CHILDBUF as u64) as *u8
+    let nm : *u8 = name_addr as *u8
+    let mut k : u64 = d
+    if k < (OL_PATH_MAX - 2u64) { cb[k] = 0x2Fu8   k = k + 1u64 }   /* '/' */
+    let mut j : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if j >= name_len { go = 0u8 }
+        if go == 1u8 { if k >= (OL_PATH_MAX - 1u64) { go = 0u8 } }
+        if go == 1u8 { cb[k] = nm[j]   k = k + 1u64   j = j + 1u64 }
+    }
+    cb[k] = 0u8
+}
+
+/* === classification === */
+
+/* Classify one C file living in directory OL_DIRBUF, named name[0..name_len). */
+fn ol_classify(name_addr: u64, name_len: u64) {
+    OL_N_FILES = OL_N_FILES + 1u64
+    let dlen : u64 = ol_strlen((&OL_DIRBUF as u64))
+    let da : u64 = (&OL_DIRBUF as u64)
+    /* 1 -- BOOTSTRAP (COMPILER/BOOT or SANCTUM): the irreducible C trust root. */
+    if ol_contains(da, dlen, ("COMPILER" as u64), 8u64) == 1u8 {
+        if ol_contains(da, dlen, ("BOOT" as u64), 4u64) == 1u8 { OL_N_BOOT = OL_N_BOOT + 1u64   return }
+    }
+    if ol_contains(da, dlen, ("SANCTUM" as u64), 7u64) == 1u8 { OL_N_BOOT = OL_N_BOOT + 1u64   return }
+    /* 2 -- DEAD_REF (whole LEXICON/GRAMMAR subtree): the retired C lexer/parser. */
+    if ol_contains(da, dlen, ("LEXICON" as u64), 7u64) == 1u8 { OL_N_DEAD = OL_N_DEAD + 1u64   return }
+    if ol_contains(da, dlen, ("GRAMMAR" as u64), 7u64) == 1u8 { OL_N_DEAD = OL_N_DEAD + 1u64   return }
+    /* 3 -- HARNESS (tests/tools/deploy/scratch): not part of the III artifact. */
+    if ol_has_prefix(name_addr, name_len, ("test_" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
+    if ol_contains(da, dlen, ("tests" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
+    if ol_contains(da, dlen, ("tools" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
+    if ol_contains(da, dlen, ("KATABASIS" as u64), 9u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
+    if ol_contains(da, dlen, ("audit_scratch" as u64), 13u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
+    /* 4 -- GAP: an unaccounted C file (the honest falsifier output). */
+    OL_N_GAP = OL_N_GAP + 1u64
+}
+
+/* === the audit === */
+
+fn onelang_reset() @export {
+    OL_SP = 0u64
+    OL_OVERFLOW = 0u8
+    OL_N_FILES = 0u64
+    OL_N_BOOT = 0u64
+    OL_N_HARN = 0u64
+    OL_N_DEAD = 0u64
+    OL_N_GAP = 0u64
+    OL_N_DIRS = 0u64
+}
+
+/* Walk the tree rooted at `root_addr` (a NUL-terminated path) and classify every
+ * .c/.h file.  Returns OL_N_FILES.  Caller supplies a cap with FS_READ. */
+fn onelang_audit(cap_id: u64, root_addr: u64) -> u64 @export {
+    let cap : u64 = cap_id
+    onelang_reset()
+    ol_push(root_addr)
+    let mut more : u8 = ol_pop()
+    while more == 1u8 {
+        OL_N_DIRS = OL_N_DIRS + 1u64
+        let dh : u64 = fs_dir_open(cap, (&OL_DIRBUF as u64))
+        if dh != 0u64 {
+            while fs_dir_read(dh) == 1u8 {
+                let nm  : u64 = fs_dir_name()
+                let ln  : u64 = fs_dir_name_len()
+                let isd : u8  = fs_dir_is_dir()
+                if ol_is_dot(nm, ln) == 0u8 {
+                    if isd == 1u8 {
+                        if ol_is_skip_dir(nm, ln) == 0u8 {
+                            ol_make_child(nm, ln)
+                            ol_push((&OL_CHILDBUF as u64))
+                        }
+                    }
+                    if isd == 0u8 {
+                        if ol_is_c_or_h(nm, ln) == 1u8 { ol_classify(nm, ln) }
+                    }
+                }
+            }
+            fs_dir_close(dh)
+        }
+        more = ol_pop()
+    }
+    return OL_N_FILES
+}
+
+/* === verdict + accessors + seal === */
+
+fn onelang_verdict() -> u32 @export {
+    if OL_OVERFLOW == 1u8 { return OL_VIOLATION }
+    if OL_N_GAP != 0u64 { return OL_VIOLATION }
+    if OL_N_DEAD != 0u64 { return OL_ACCOUNTED }
+    return OL_PURE
+}
+
+fn onelang_n_files() -> u64 @export { return OL_N_FILES }
+fn onelang_n_bootstrap() -> u64 @export { return OL_N_BOOT }
+fn onelang_n_harness() -> u64 @export { return OL_N_HARN }
+fn onelang_n_dead() -> u64 @export { return OL_N_DEAD }
+fn onelang_n_gap() -> u64 @export { return OL_N_GAP }
+fn onelang_n_dirs() -> u64 @export { return OL_N_DIRS }
+fn onelang_overflow() -> u8 @export { return OL_OVERFLOW }
+
+/* Store a u64 little-endian into OL_CENSUS at byte offset off. */
+fn ol_put_u64(off: u64, v: u64) {
+    OL_CENSUS[off]        = (v & 0xFFu64) as u8
+    OL_CENSUS[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    OL_CENSUS[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    OL_CENSUS[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    OL_CENSUS[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    OL_CENSUS[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    OL_CENSUS[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    OL_CENSUS[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+}
+
+/* Seal the census (files,boot,harn,dead,gap,dirs as 6 u64 LE) into out[0..32)
+ * via cad -> the one .iii sha256 (H13 sealing through H13). */
+fn onelang_seal(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    ol_put_u64(0u64,  OL_N_FILES)
+    ol_put_u64(8u64,  OL_N_BOOT)
+    ol_put_u64(16u64, OL_N_HARN)
+    ol_put_u64(24u64, OL_N_DEAD)
+    ol_put_u64(32u64, OL_N_GAP)
+    ol_put_u64(40u64, OL_N_DIRS)
+    cad_oneshot(OL_SUITE_SHA256, (&OL_CENSUS as u64) as *u8, 48u64, out)
+    return 0i32
+}
+
+/* The CWD gate: audit ".", returning 0 (PURE), 1 (ACCOUNTED), or 2 (VIOLATION) --
+ * the .iii replacement for scripts/verify_sha256_dedup.sh, run from the repo root. */
+var OL_DOT : [u8; 4]
+fn onelang_gate_cwd(cap_id: u64) -> u32 @export {
+    let cap : u64 = cap_id
+    OL_DOT[0u64] = 0x2Eu8   /* '.' */
+    OL_DOT[1u64] = 0u8
+    onelang_audit(cap, (&OL_DOT as u64))
+    return onelang_verdict()
+}
+
+/* === the hermetic falsifier (build a synthetic tree, prove the gate is real) ===
+ *
+ * Synthetic tree under CWD (./iii_ol_kat):
+ *   COMPILER/BOOT/seed.c   -> BOOTSTRAP
+ *   LEXICON/src/old.c      -> DEAD_REF
+ *   STDLIB/tests/test_x.c  -> HARNESS
+ *   feature/gap.c          -> GAP        (the injected falsifier)
+ *   feature/keep.iii       -> ignored (.iii is not C)
+ * Audit #1 (all present): boot=1 dead=1 harn=1 gap=1 -> VIOLATION (catches the gap).
+ * Audit #2 (gap removed):                 gap=0 dead=1 -> ACCOUNTED.
+ * Audit #3 (dead removed too):     boot=1 harn=1 dead=0 gap=0 -> PURE (reachable),
+ *   sealed twice -> identical (reproducible).  rc 99 = pass. */
+
+var A_ROOT : [u8; 64]
+var A_COMP : [u8; 64]
+var A_BOOT : [u8; 64]
+var A_SEED : [u8; 64]
+var A_LEX  : [u8; 64]
+var A_LEXS : [u8; 64]
+var A_OLD  : [u8; 64]
+var A_STD  : [u8; 64]
+var A_TST  : [u8; 64]
+var A_TESTX: [u8; 64]
+var A_FEAT : [u8; 64]
+var A_GAP  : [u8; 64]
+var A_KEEP : [u8; 64]
+
+/* dst <- literal src[0..n); NUL-terminated (length-explicit literal read). */
+fn ol_setlit(dst_addr: u64, src_addr: u64, n: u64) {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]   i = i + 1u64 }
+    d[n] = 0u8
+}
+
+/* dst <- (NUL-term a) ++ (literal b[0..bn)); NUL-terminated. */
+fn ol_cat(dst_addr: u64, a_addr: u64, b_addr: u64, bn: u64) {
+    let alen : u64 = ol_strcpy(dst_addr, a_addr)
+    let d : *u8 = dst_addr as *u8
+    let b : *u8 = b_addr as *u8
+    let mut i : u64 = 0u64
+    while i < bn { d[alen + i] = b[i]   i = i + 1u64 }
+    d[alen + bn] = 0u8
+}
+
+fn ol_mkfile(cap: u64, path_addr: u64) -> i32 {
+    let h : u64 = fs_open(cap, path_addr, OL_FS_MODE_WRITE)
+    if h == 0u64 { return -1i32 }
+    OL_ONEBYTE[0u64] = 0x78u8
+    fs_write(h, (&OL_ONEBYTE as u64), 1u64)
+    fs_close(h)
+    return 0i32
+}
+
+/* Best-effort teardown (deepest first); rc ignored -- pre-clean + final cleanup. */
+fn ol_kat_teardown(cap: u64) {
+    fs_delete(cap, (&A_SEED as u64))
+    fs_delete(cap, (&A_OLD as u64))
+    fs_delete(cap, (&A_TESTX as u64))
+    fs_delete(cap, (&A_GAP as u64))
+    fs_delete(cap, (&A_KEEP as u64))
+    fs_rmdir(cap, (&A_BOOT as u64))
+    fs_rmdir(cap, (&A_COMP as u64))
+    fs_rmdir(cap, (&A_LEXS as u64))
+    fs_rmdir(cap, (&A_LEX as u64))
+    fs_rmdir(cap, (&A_TST as u64))
+    fs_rmdir(cap, (&A_STD as u64))
+    fs_rmdir(cap, (&A_FEAT as u64))
+    fs_rmdir(cap, (&A_ROOT as u64))
+}
+
+fn onelang_selftest() -> u64 @export {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)   /* read|write|create */
+
+    /* paths (root literal once; short, verifiable suffixes thereafter) */
+    ol_setlit((&A_ROOT as u64), ("./iii_ol_kat" as u64), 12u64)
+    ol_cat((&A_COMP  as u64), (&A_ROOT as u64), ("/COMPILER"  as u64), 9u64)
+    ol_cat((&A_BOOT  as u64), (&A_COMP as u64), ("/BOOT"      as u64), 5u64)
+    ol_cat((&A_SEED  as u64), (&A_BOOT as u64), ("/seed.c"    as u64), 7u64)
+    ol_cat((&A_LEX   as u64), (&A_ROOT as u64), ("/LEXICON"   as u64), 8u64)
+    ol_cat((&A_LEXS  as u64), (&A_LEX  as u64), ("/src"       as u64), 4u64)
+    ol_cat((&A_OLD   as u64), (&A_LEXS as u64), ("/old.c"     as u64), 6u64)
+    ol_cat((&A_STD   as u64), (&A_ROOT as u64), ("/STDLIB"    as u64), 7u64)
+    ol_cat((&A_TST   as u64), (&A_STD  as u64), ("/tests"     as u64), 6u64)
+    ol_cat((&A_TESTX as u64), (&A_TST  as u64), ("/test_x.c"  as u64), 9u64)
+    ol_cat((&A_FEAT  as u64), (&A_ROOT as u64), ("/feature"   as u64), 8u64)
+    ol_cat((&A_GAP   as u64), (&A_FEAT as u64), ("/gap.c"     as u64), 6u64)
+    ol_cat((&A_KEEP  as u64), (&A_FEAT as u64), ("/keep.iii"  as u64), 9u64)
+
+    /* pre-clean any residue from a prior crashed run (rc ignored) */
+    ol_kat_teardown(cap)
+
+    /* build the tree */
+    if fs_mkdir(cap, (&A_ROOT as u64)) != 0i32 { return 1u64 }
+    if fs_mkdir(cap, (&A_COMP as u64)) != 0i32 { return 2u64 }
+    if fs_mkdir(cap, (&A_BOOT as u64)) != 0i32 { return 3u64 }
+    if fs_mkdir(cap, (&A_LEX  as u64)) != 0i32 { return 4u64 }
+    if fs_mkdir(cap, (&A_LEXS as u64)) != 0i32 { return 5u64 }
+    if fs_mkdir(cap, (&A_STD  as u64)) != 0i32 { return 6u64 }
+    if fs_mkdir(cap, (&A_TST  as u64)) != 0i32 { return 7u64 }
+    if fs_mkdir(cap, (&A_FEAT as u64)) != 0i32 { return 8u64 }
+    if ol_mkfile(cap, (&A_SEED  as u64)) != 0i32 { return 9u64 }
+    if ol_mkfile(cap, (&A_OLD   as u64)) != 0i32 { return 10u64 }
+    if ol_mkfile(cap, (&A_TESTX as u64)) != 0i32 { return 11u64 }
+    if ol_mkfile(cap, (&A_GAP   as u64)) != 0i32 { return 12u64 }
+    if ol_mkfile(cap, (&A_KEEP  as u64)) != 0i32 { return 13u64 }
+
+    /* AUDIT #1 -- all four buckets present; the gate MUST go VIOLATION on the gap */
+    onelang_audit(cap, (&A_ROOT as u64))
+    if onelang_n_files() != 4u64 { ol_kat_teardown(cap)   return 20u64 }
+    if onelang_n_bootstrap() != 1u64 { ol_kat_teardown(cap)   return 21u64 }
+    if onelang_n_dead() != 1u64 { ol_kat_teardown(cap)   return 22u64 }
+    if onelang_n_harness() != 1u64 { ol_kat_teardown(cap)   return 23u64 }
+    if onelang_n_gap() != 1u64 { ol_kat_teardown(cap)   return 24u64 }
+    if onelang_overflow() != 0u8 { ol_kat_teardown(cap)   return 25u64 }
+    if onelang_verdict() != OL_VIOLATION { ol_kat_teardown(cap)   return 26u64 }
+
+    /* AUDIT #2 -- remove the gap; every C now accounted -> ACCOUNTED (dead remains) */
+    fs_delete(cap, (&A_GAP as u64))
+    onelang_audit(cap, (&A_ROOT as u64))
+    if onelang_n_gap() != 0u64 { ol_kat_teardown(cap)   return 30u64 }
+    if onelang_n_dead() != 1u64 { ol_kat_teardown(cap)   return 31u64 }
+    if onelang_verdict() != OL_ACCOUNTED { ol_kat_teardown(cap)   return 32u64 }
+
+    /* AUDIT #3 -- retire the dead ref too -> PURE (only bootstrap + harness) */
+    fs_delete(cap, (&A_OLD as u64))
+    fs_rmdir(cap, (&A_LEXS as u64))
+    fs_rmdir(cap, (&A_LEX as u64))
+    onelang_audit(cap, (&A_ROOT as u64))
+    if onelang_n_dead() != 0u64 { ol_kat_teardown(cap)   return 40u64 }
+    if onelang_n_gap() != 0u64 { ol_kat_teardown(cap)   return 41u64 }
+    if onelang_n_bootstrap() != 1u64 { ol_kat_teardown(cap)   return 42u64 }
+    if onelang_n_harness() != 1u64 { ol_kat_teardown(cap)   return 43u64 }
+    if onelang_verdict() != OL_PURE { ol_kat_teardown(cap)   return 44u64 }
+    onelang_seal((&OL_SEAL as u64) as *u8)
+
+    /* reproducibility -- same tree, same seal */
+    onelang_audit(cap, (&A_ROOT as u64))
+    onelang_seal((&OL_SEAL2 as u64) as *u8)
+    if cad_eq((&OL_SEAL as u64) as *u8, (&OL_SEAL2 as u64) as *u8) != 1u8 { ol_kat_teardown(cap)   return 45u64 }
+
+    ol_kat_teardown(cap)
+    return 99u64
+}
+
+/* onelang EMBODIES the H13 one-language invariant as a self-audit III performs on
+ * ITSELF: with the aether/fs directory organ it walks its own source tree, sorts
+ * every .c/.h into bootstrap / dead-reference / harness / GAP, and seals the
+ * census through the one content-address.  The verdict is PURE iff only the
+ * irreducible C trust root (plus harness) survives -- the bash verify_sha256_dedup
+ * and the C cartographer are superseded by III auditing itself, in III. */

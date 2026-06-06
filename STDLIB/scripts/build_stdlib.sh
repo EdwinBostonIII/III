@@ -454,6 +454,7 @@ MODULES=(
     "numera/algebraic_time"
     "aether/witness_hook"
     "sanctus/observe"
+    "sanctus/onelang"
     "aether/hotstuff"
     "aether/hotstuff_predict"
     # APOTHEOSIS C.11: the tier-aware certified-monotone pacemaker -- constitutional-constant
@@ -836,6 +837,21 @@ MODULES=(
     # the cost-field, wiring egraph (saturate) + cost_lattice (cost) into a proof-
     # preserving min-cost optimizer.  Externs egraph + cost_lattice (built above).
     "numera/sov_isa"
+    # The Autocatalytic Synthesis Loop ("Dream Sandbox"): a seeded-deterministic mutagen proposes alien
+    # candidate optimizations, the sov_isa synthesizer attempts a CIC proof, and the tc_check kernel
+    # disposes -- only kernel-certified discoveries are cad-sealed.  Additive consumers of sov_isa /
+    # typecheck / cad; NOT in the compiler link closure (golden + trusted-base unmoved).
+    "numera/egraph_stochastic"
+    "forcefield/cg_autocatalyst"
+    "forcefield/daemon_dream"
+    # The Isomorphic Scythe (Autonomous Semantic Refactoring): hunts legacy logic, kernel-PROVES it
+    # universally equivalent to a cheaper optimal (bisimulation via the CIC kernel), records the certified
+    # rewrite, and SURFACES the cull set (operator-gated reseal -- no autonomous golden shift / source edit).
+    # Additive consumers of sov_isa / typecheck; NOT in the compiler link closure (golden + TB unmoved).
+    "numera/ast_hunter"
+    "omnia/proof_bisimulation"
+    "forcefield/cg_surgical_strike"
+    "forcefield/daemon_scythe"
     # The verification missile on III's LIVE rules: drives the real xii_canonicalise
     # engine over the trit fragment and verifies it against an INDEPENDENT Kleene spec
     # (non-tautological, unlike corpus 670).  Externs only the live XII engine.

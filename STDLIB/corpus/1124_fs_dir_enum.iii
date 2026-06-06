@@ -1,0 +1,126 @@
+/* 1124 -- aether/fs Phase-D directory enumeration KAT.
+ *
+ * Proves the new fs.iii directory organ -- the substrate of the H13 one-language
+ * self-audit (sanctus/onelang.iii): mkdir / rmdir, dir_open / dir_read /
+ * dir_close, and the name / name_len / is_dir accessors over WIN32_FIND_DATAA.
+ * Hermetic: builds a temp tree under the CWD, enumerates it, verifies the entry
+ * set (3 non-dot entries: 1 dir `sub`, 1 `.c`, 1 `.iii`), and fully cleans up --
+ * no residue -- exactly like corpus 38's fs round-trip.  rc 99 = pass; a distinct
+ * small code marks each failed step. */
+module corpus_1124
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_open(cap: u64, path: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_read(h: u64) -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name_len() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_is_dir() -> u8 from "fs.iii"
+
+var P_TMP   : [u8; 64]
+var P_SUB   : [u8; 64]
+var P_AC    : [u8; 64]
+var P_BIII  : [u8; 64]
+var PAYLOAD : [u8; 8]
+
+/* Copy n bytes src->dst and NUL-terminate at dst[n].  n is explicit so the
+ * (non-NUL-terminated) string literal source is read safely -- a length-explicit
+ * byte op, immune to the string-literal-not-NUL-terminated trap. */
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]   i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+/* 1 if the entry name is "." or ".." (the self / parent links to skip). */
+fn is_dot(name: u64, len: u64) -> u8 {
+    let p : *u8 = name as *u8
+    if len == 1u64 { if p[0u64] == 0x2Eu8 { return 1u8 } }
+    if len == 2u64 { if p[0u64] == 0x2Eu8 { if p[1u64] == 0x2Eu8 { return 1u8 } } }
+    return 0u8
+}
+
+/* 1 if name ends in the 2-byte suffix ".c". */
+fn ends_c(name: u64, len: u64) -> u8 {
+    if len < 2u64 { return 0u8 }
+    let p : *u8 = name as *u8
+    if p[len - 2u64] != 0x2Eu8 { return 0u8 }   /* '.' */
+    if p[len - 1u64] != 0x63u8 { return 0u8 }   /* 'c' */
+    return 1u8
+}
+
+/* 1 if name ends in the 4-byte suffix ".iii". */
+fn ends_iii(name: u64, len: u64) -> u8 {
+    if len < 4u64 { return 0u8 }
+    let p : *u8 = name as *u8
+    if p[len - 4u64] != 0x2Eu8 { return 0u8 }   /* '.' */
+    if p[len - 3u64] != 0x69u8 { return 0u8 }   /* 'i' */
+    if p[len - 2u64] != 0x69u8 { return 0u8 }
+    if p[len - 1u64] != 0x69u8 { return 0u8 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)   /* read|write|create */
+
+    bcopy((&P_TMP as u64),  ("./iii_dir_kat_tmp" as u64),       17u64)
+    bcopy((&P_SUB as u64),  ("./iii_dir_kat_tmp/sub" as u64),   21u64)
+    bcopy((&P_AC as u64),   ("./iii_dir_kat_tmp/a.c" as u64),   21u64)
+    bcopy((&P_BIII as u64), ("./iii_dir_kat_tmp/b.iii" as u64), 23u64)
+    PAYLOAD[0u64] = 0x78u8   /* 'x' */
+
+    /* Build the hermetic tree: tmp/, tmp/sub/, tmp/a.c, tmp/b.iii */
+    if fs_mkdir(cap, (&P_TMP as u64)) != 0i32 { return 1u64 }
+    if fs_mkdir(cap, (&P_SUB as u64)) != 0i32 { return 2u64 }
+    let h1 : u64 = fs_open(cap, (&P_AC as u64), 2u32)
+    if h1 == 0u64 { return 3u64 }
+    if fs_write(h1, (&PAYLOAD as u64), 1u64) != 1u64 { return 4u64 }
+    fs_close(h1)
+    let h2 : u64 = fs_open(cap, (&P_BIII as u64), 2u32)
+    if h2 == 0u64 { return 5u64 }
+    if fs_write(h2, (&PAYLOAD as u64), 1u64) != 1u64 { return 6u64 }
+    fs_close(h2)
+
+    /* Enumerate tmp/: expect ., .., sub(dir), a.c(file), b.iii(file). */
+    let dh : u64 = fs_dir_open(cap, (&P_TMP as u64))
+    if dh == 0u64 { return 7u64 }
+    let mut n_ent : u64 = 0u64
+    let mut n_dir : u64 = 0u64
+    let mut n_c   : u64 = 0u64
+    let mut n_iii : u64 = 0u64
+    while fs_dir_read(dh) == 1u8 {
+        let nm  : u64 = fs_dir_name()
+        let ln  : u64 = fs_dir_name_len()
+        let isd : u8  = fs_dir_is_dir()
+        if is_dot(nm, ln) == 0u8 {
+            n_ent = n_ent + 1u64
+            if isd == 1u8 { n_dir = n_dir + 1u64 }
+            if ends_c(nm, ln) == 1u8 { n_c = n_c + 1u64 }
+            if ends_iii(nm, ln) == 1u8 { n_iii = n_iii + 1u64 }
+        }
+    }
+    fs_dir_close(dh)
+
+    /* Cleanup first, so no early-return below can leak residue. */
+    fs_delete(cap, (&P_AC as u64))
+    fs_delete(cap, (&P_BIII as u64))
+    fs_rmdir(cap, (&P_SUB as u64))
+    fs_rmdir(cap, (&P_TMP as u64))
+
+    if n_ent != 3u64 { return 10u64 }
+    if n_dir != 1u64 { return 11u64 }
+    if n_c   != 1u64 { return 12u64 }
+    if n_iii != 1u64 { return 13u64 }
+    return 99u64
+}

@@ -16,7 +16,13 @@
  * Win32 BOOL returns are nonzero=success (the inverse of the CRT calls).
  *
  * Phase C scope: open / close / read / write / seek / tell / size / delete.
- * Phase D adds directory ops, stat, atomic-rename.
+ * Phase D (landed): directory enumeration (dir_open / dir_read / dir_close +
+ * name / name_len / is_dir accessors) and directory create / remove (mkdir /
+ * rmdir), all over the Win32 FindFirstFileA / FindNextFileA / FindClose +
+ * CreateDirectoryA / RemoveDirectoryA API (kernel32, no C runtime).  These give
+ * III the organ to walk its OWN source tree -- the substrate of the H13
+ * one-language self-audit (sanctus/onelang.iii), which audits the tree in .iii,
+ * by III, with no bash and no C cartographer.
  *
  * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
  */
@@ -31,6 +37,19 @@ extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u
 extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
 extern @abi(c-msvc-x64) fn SetFilePointerEx(h: u64, dist: i64, newptr: u64, method: u32) -> i32 from "kernel32"
 extern @abi(c-msvc-x64) fn DeleteFileA(name: *u8) -> i32 from "kernel32"
+
+/* Win32 directory enumeration + creation (kernel32) -- Phase D.  FindFirstFileA
+ * returns a SEARCH handle (released with FindClose, NOT CloseHandle) and loads
+ * the first matching entry into the WIN32_FIND_DATAA out-param; FindNextFileA
+ * advances it (BOOL 0 == no-more, like every Win32 BOOL).  The find_data param
+ * is passed as a raw u64 address of FS_FIND (the same by-pointer idiom as the
+ * FS_NXFER / FS_NEWPOS out-params below). */
+extern @abi(c-msvc-x64) fn FindFirstFileA(pattern: *u8, find_data: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn FindNextFileA(h: u64, find_data: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn FindClose(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CreateDirectoryA(name: *u8, sec: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn RemoveDirectoryA(name: *u8) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetLastError() -> u32 from "kernel32"
 
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
@@ -73,10 +92,33 @@ const FS_RIGHT_READ   : u64 = 0x0002u64
 const FS_RIGHT_WRITE  : u64 = 0x0004u64
 const FS_RIGHT_CREATE : u64 = 0x0008u64
 
+/* Phase D directory enumeration.  WIN32_FIND_DATAA is 320 bytes; the two fields
+ * we read are dwFileAttributes (DWORD @ 0) and cFileName (CHAR[260], NUL-term
+ * @ 44).  FILE_ATTRIBUTE_DIRECTORY = 0x10.  FindFirstFile failure returns
+ * INVALID_HANDLE_VALUE (-1 == FS_INVALID_HANDLE), never 0 -- so a failed search
+ * never aliases handle id 0.  ERROR_ALREADY_EXISTS (183) makes mkdir idempotent. */
+const FS_FIND_SIZE      : u64 = 320u64
+const FS_FIND_NAME_OFF  : u64 = 44u64
+const FS_ATTR_DIRECTORY : u32 = 0x00000010u32
+const FS_DIR_KIND       : u8  = 5u8        /* handle kind: dir search (FindClose path) */
+const FS_PAT_MAX        : u64 = 1024u64    /* "<dir>\*\0" search-pattern bound (W8) */
+const FS_NAME_MAX       : u64 = 260u64     /* MAX_PATH cFileName bound */
+const FS_ERROR_ALREADY_EXISTS : u32 = 183u32
+
 /* --- by-pointer out-param scratch (single-threaded; deterministic reuse) --- */
 
 var FS_NXFER  : [u8; 8]    /* ReadFile/WriteFile lpNumberOfBytesTransferred (DWORD) */
 var FS_NEWPOS : [u8; 8]    /* SetFilePointerEx lpNewFilePointer (LARGE_INTEGER)     */
+
+/* Phase D directory-search scratch (single active search; the same single-
+ * threaded, deterministic-reuse contract as FS_NXFER / FS_NEWPOS).  The
+ * one-active-search discipline -- read ALL entries of a directory, close it,
+ * THEN recurse -- keeps one FS_FIND + one FS_FIND_PENDING correct: FS_FIND is
+ * fully drained into the caller's own storage before any nested fs_dir_open,
+ * and at most one search handle is live at a time (bounded handle table). */
+var FS_FIND         : [u8; 320]   /* WIN32_FIND_DATAA */
+var FS_DIRPAT       : [u8; 1024]  /* "<dir>\*\0" search pattern */
+var FS_FIND_PENDING : u8 = 0u8    /* 1 = the FindFirstFile entry is loaded, not yet consumed */
 
 fn fs_xfer_count() -> u32 {
     let b0 : u32 = FS_NXFER[0] as u32
@@ -144,7 +186,12 @@ fn fs_delete(cap_id: u64, path: u64) -> i32 @export {
 fn fs_close(handle_id: u64) -> i32 @export {
     let h : u64 = handle_fd(handle_id)
     let rc : i32 = CloseHandle(h)        /* Win32 BOOL: 0 = failure */
-    handle_close(handle_id)
+    /* FREE the handle-table slot (not merely mark-closed): handle_close retains
+     * the slot "for audit" but nothing ever reaps it, so a program opening >64
+     * files/dirs would exhaust the 64-slot table (the onelang tree-walk hit this
+     * at the 65th directory).  handle_drop is the reaper; the OS handle is already
+     * closed, so re-querying the id is meaningless -- dropping is strictly correct. */
+    handle_drop(handle_id)
     if rc == 0i32 { return FS_E_IO }
     return FS_OK
 }
@@ -207,4 +254,125 @@ fn fs_size(handle_id: u64) -> u64 @export {
     let ok3 : i32 = SetFilePointerEx(h, sd, 0u64, FS_SEEK_SET)
     if ok3 == 0i32 { return 0xFFFFFFFFFFFFFFFFu64 }
     return sz
+}
+
+/* === Phase D: directory enumeration (FindFirstFileA / FindNextFileA / FindClose) ===
+ *
+ * The one-active-search contract (obeyed by sanctus/onelang.iii's tree walk):
+ *   let h : u64 = fs_dir_open(cap, dirpath)      -- opens "<dirpath>\*"; 0 on failure
+ *   while fs_dir_read(h) == 1u8 {                -- 1 => FS_FIND holds a valid entry
+ *       let name : u64  = fs_dir_name()          -- *u8 into FS_FIND (transient: copy NOW)
+ *       let isdir : u8  = fs_dir_is_dir()        -- 1 if FILE_ATTRIBUTE_DIRECTORY
+ *       ... copy `name` into caller storage BEFORE the next fs_dir_read ...
+ *   }
+ *   fs_dir_close(h)                              -- FindClose + handle_close
+ * Every entry (incl. "." and "..") is returned; the caller filters them. */
+
+/* Open a directory search.  Copies `path` (NUL-terminated) into FS_DIRPAT,
+ * appends "\*\0", FindFirstFileA's it, and -- on success -- latches the first
+ * entry as pending.  Returns a dir handle (kind FS_DIR_KIND) or 0 on cap-deny,
+ * open-failure, or a full handle table. */
+fn fs_dir_open(cap_id: u64, path: u64) -> u64 @export {
+    let cap : u64 = cap_id
+    if cap_verify_rights(cap, FS_RIGHT_READ) == 0u8 { return 0u64 }
+    let p : *u8 = path as *u8
+    /* copy the path up to its NUL; reserve 3 bytes for the "\*\0" suffix (W8 bound) */
+    let mut n : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let c : u8 = p[n]
+        if c == 0u8 { go = 0u8 }
+        if go == 1u8 { if n >= (FS_PAT_MAX - 4u64) { go = 0u8 } }
+        if go == 1u8 { FS_DIRPAT[n] = c   n = n + 1u64 }
+    }
+    FS_DIRPAT[n]        = 0x5Cu8   /* '\' */
+    FS_DIRPAT[n + 1u64] = 0x2Au8   /* '*' */
+    FS_DIRPAT[n + 2u64] = 0x00u8
+    let h : u64 = FindFirstFileA((&FS_DIRPAT as u64) as *u8, (&FS_FIND as u64))
+    if h == FS_INVALID_HANDLE { return 0u64 }   /* INVALID_HANDLE_VALUE = -1, never 0 */
+    FS_FIND_PENDING = 1u8
+    return handle_alloc(FS_DIR_KIND, h, cap)
+}
+
+/* Advance the search.  1 if FS_FIND now holds a valid entry, 0 if exhausted or
+ * the cap was revoked.  The FIRST call returns the entry FindFirstFileA already
+ * loaded (pending); subsequent calls FindNextFileA into FS_FIND. */
+fn fs_dir_read(handle_id: u64) -> u8 @export {
+    if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0u8 }
+    if FS_FIND_PENDING == 1u8 { FS_FIND_PENDING = 0u8   return 1u8 }
+    let h : u64 = handle_fd(handle_id)
+    let ok : i32 = FindNextFileA(h, (&FS_FIND as u64))
+    if ok == 0i32 { return 0u8 }
+    return 1u8
+}
+
+/* Pointer (as u64) to the current entry's cFileName (NUL-terminated) inside
+ * FS_FIND.  Transient: valid only until the next fs_dir_read / fs_dir_close. */
+fn fs_dir_name() -> u64 @export {
+    return (&FS_FIND as u64) + FS_FIND_NAME_OFF
+}
+
+/* Length of the current entry's cFileName (excluding the NUL), bounded by 260. */
+fn fs_dir_name_len() -> u64 @export {
+    let bp : *u8 = ((&FS_FIND as u64) + FS_FIND_NAME_OFF) as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= FS_NAME_MAX { go = 0u8 }
+        if go == 1u8 { if bp[i] == 0u8 { go = 0u8 } }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return i
+}
+
+/* 1 if the current entry is a directory (FILE_ATTRIBUTE_DIRECTORY set in the
+ * dwFileAttributes DWORD at FS_FIND[0..4), little-endian). */
+fn fs_dir_is_dir() -> u8 @export {
+    let b0 : u32 = FS_FIND[0] as u32
+    let b1 : u32 = FS_FIND[1] as u32
+    let b2 : u32 = FS_FIND[2] as u32
+    let b3 : u32 = FS_FIND[3] as u32
+    let attr : u32 = b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+    if (attr & FS_ATTR_DIRECTORY) != 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* Close a directory search.  Uses FindClose (NOT CloseHandle -- a search handle
+ * is not a file handle) then releases the handle-table slot and clears pending. */
+fn fs_dir_close(handle_id: u64) -> i32 @export {
+    let h : u64 = handle_fd(handle_id)
+    let rc : i32 = FindClose(h)
+    /* FREE the slot (dir search handles are ephemeral): a tree walk opens one
+     * search per directory, so retaining slots would exhaust the 64-slot table on
+     * any tree with >64 directories.  Drop reclaims it -> at most one search slot
+     * live at a time under the read-all-then-close-then-recurse discipline. */
+    handle_drop(handle_id)
+    FS_FIND_PENDING = 0u8
+    if rc == 0i32 { return FS_E_IO }
+    return FS_OK
+}
+
+/* Create a directory.  Requires the CREATE right (a directory is a created
+ * name).  An already-existing directory is treated as success (idempotent
+ * mkdir), so deterministic test-tree setup is safely re-runnable. */
+fn fs_mkdir(cap_id: u64, path: u64) -> i32 @export {
+    let cap : u64 = cap_id
+    if cap_verify_rights(cap, FS_RIGHT_CREATE) == 0u8 { return FS_E_DENIED }
+    let p : *u8 = path as *u8
+    let rc : i32 = CreateDirectoryA(p, 0u64)
+    if rc != 0i32 { return FS_OK }
+    let e : u32 = GetLastError()
+    if e == FS_ERROR_ALREADY_EXISTS { return FS_OK }
+    return FS_E_IO
+}
+
+/* Remove an (empty) directory.  Removal is a write-class mutation -> the WRITE
+ * right (mirrors fs_delete, which maps file deletion onto WRITE). */
+fn fs_rmdir(cap_id: u64, path: u64) -> i32 @export {
+    let cap : u64 = cap_id
+    if cap_verify_rights(cap, FS_RIGHT_WRITE) == 0u8 { return FS_E_DENIED }
+    let p : *u8 = path as *u8
+    let rc : i32 = RemoveDirectoryA(p)
+    if rc == 0i32 { return FS_E_IO }
+    return FS_OK
 }

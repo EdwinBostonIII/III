@@ -766,6 +766,29 @@ declare -A EXPECTED=(
     [1052_sov_morphism]=99
     [1053_xii_morphism]=99
     [1112_opt_certified]=99
+    # K5 CLOSED: the sov_isa "Path C" dependent-type kernel sr-schema tower is kernel-PROVEN.
+    # The ccl_eta_contract reducer block was fixed (closed succ-step survives tc_shift_k), so the
+    # mandatory tc_natrec induction over a symbolic var closes: 1113 proves the foundation
+    # (mul_one + ap_succ + L1 add_left_zero) and 1114 proves L6 mul-over-double distributivity via
+    # the additive Peano tower (add_succ_left/assoc/comm/left_comm + ap_add congruences + MLD).
+    # Each positive is a tc_check==1; each negative control a tc_check==0; nothing green-washed.
+    [1113_sr_schema_foundation]=99
+    [1114_sr_schema_distrib]=99
+    [1115_sr_schema_strength]=99
+    [1116_sr_schema_apply]=99
+    [1117_sr_schema_distrib_apply]=99
+    [1118_sr_schema_semiring]=99
+    [1119_sov_synth_nonvacuity]=99
+    [1120_sov_synth_attempt]=99
+    [1121_egraph_stochastic]=99
+    [1122_cg_autocatalyst]=99
+    [1123_daemon_dream]=99
+    [1200_proof_bisimulation]=99
+    [1201_ast_hunter]=99
+    [1202_cg_surgical_strike]=99
+    [1203_daemon_scythe]=99
+    [1124_fs_dir_enum]=99
+    [1125_onelang_audit]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

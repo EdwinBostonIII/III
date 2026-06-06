@@ -22,11 +22,11 @@
  */
 module numera_elias
 
-extern @abi(c-msvc-x64) fn bw_init(buf_ptr: u64, cap: u32) -> i32 from "bitio.iii"
-extern @abi(c-msvc-x64) fn bw_put(v: u64, n: u32) -> i32 from "bitio.iii"
-extern @abi(c-msvc-x64) fn bw_bytelen() -> u32 from "bitio.iii"
-extern @abi(c-msvc-x64) fn br_init(buf_ptr: u64, len: u32) -> i32 from "bitio.iii"
-extern @abi(c-msvc-x64) fn br_get(n: u32) -> u64 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitw_init(buf_ptr: u64, cap: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitw_put(v: u64, n: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitw_bytelen() -> u32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitr_init(buf_ptr: u64, len: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitr_get(n: u32) -> u64 from "bitio.iii"
 
 fn elias_bitlen(n: u64) -> u32 @export {
     let mut b : u32 = 0u32
@@ -37,18 +37,18 @@ fn elias_bitlen(n: u64) -> u32 @export {
 
 fn elias_gamma_put(n: u64) -> i32 @export {
     let b : u32 = elias_bitlen(n)
-    if b > 1u32 { bw_put(0u64, b - 1u32) }    /* b-1 leading zeros */
-    bw_put(n, b)                              /* n in b bits (MSB = 1) */
+    if b > 1u32 { bitw_put(0u64, b - 1u32) }    /* b-1 leading zeros */
+    bitw_put(n, b)                              /* n in b bits (MSB = 1) */
     return 0i32
 }
 
 fn elias_gamma_get() -> u64 @export {
     let mut z : u32 = 0u32
-    while br_get(1u32) == 0u64 { z = z + 1u32 }   /* count zeros; the 1 we read is the value's MSB */
+    while bitr_get(1u32) == 0u64 { z = z + 1u32 }   /* count zeros; the 1 we read is the value's MSB */
     let mut v : u64 = 1u64
     let mut i : u32 = 0u32
     while i < z {
-        v = (v << 1u64) | br_get(1u32)
+        v = (v << 1u64) | bitr_get(1u32)
         i = i + 1u32
     }
     return v
@@ -57,7 +57,7 @@ fn elias_gamma_get() -> u64 @export {
 fn elias_delta_put(n: u64) -> i32 @export {
     let b : u32 = elias_bitlen(n)
     elias_gamma_put(b as u64)                 /* encode the bit-length via gamma (b >= 1) */
-    if b > 1u32 { bw_put(n, b - 1u32) }       /* the low b-1 bits of n (the MSB is implicit) */
+    if b > 1u32 { bitw_put(n, b - 1u32) }       /* the low b-1 bits of n (the MSB is implicit) */
     return 0i32
 }
 
@@ -66,7 +66,7 @@ fn elias_delta_get() -> u64 @export {
     let mut v : u64 = 1u64                     /* implicit leading 1 */
     let mut i : u32 = 0u32
     while i < (b - 1u32) {
-        v = (v << 1u64) | br_get(1u32)
+        v = (v << 1u64) | bitr_get(1u32)
         i = i + 1u32
     }
     return v
@@ -105,11 +105,11 @@ fn elias_kat() -> u64 @export {
     }
 
     /* (1) gamma stream round-trip */
-    bw_init(&EL_BUF as u64, 2048u32)
+    bitw_init(&EL_BUF as u64, 2048u32)
     let mut g : u32 = 0u32
     while g < m { elias_gamma_put(EL_VALS[g]) ; g = g + 1u32 }
-    let glen : u32 = bw_bytelen()
-    br_init(&EL_BUF as u64, glen)
+    let glen : u32 = bitw_bytelen()
+    bitr_init(&EL_BUF as u64, glen)
     let mut gg : u32 = 0u32
     while gg < m {
         if elias_gamma_get() != EL_VALS[gg] { return 1000u64 + (gg as u64) }
@@ -117,11 +117,11 @@ fn elias_kat() -> u64 @export {
     }
 
     /* (2) delta stream round-trip */
-    bw_init(&EL_BUF as u64, 2048u32)
+    bitw_init(&EL_BUF as u64, 2048u32)
     let mut d : u32 = 0u32
     while d < m { elias_delta_put(EL_VALS[d]) ; d = d + 1u32 }
-    let dlen : u32 = bw_bytelen()
-    br_init(&EL_BUF as u64, dlen)
+    let dlen : u32 = bitw_bytelen()
+    bitr_init(&EL_BUF as u64, dlen)
     let mut dd : u32 = 0u32
     while dd < m {
         if elias_delta_get() != EL_VALS[dd] { return 2000u64 + (dd as u64) }
@@ -132,10 +132,10 @@ fn elias_kat() -> u64 @export {
     if elias_bitlen(1u64) != 1u32 { return 3u64 }
     if elias_bitlen(2u64) != 2u32 { return 4u64 }
     if elias_bitlen(1048576u64) != 21u32 { return 5u64 }   /* 2^20 has 21 bits */
-    bw_init(&EL_BUF as u64, 2048u32)
+    bitw_init(&EL_BUF as u64, 2048u32)
     elias_gamma_put(1u64) ; elias_delta_put(2u64) ; elias_gamma_put(1048576u64) ; elias_delta_put(1048576u64)
-    let el : u32 = bw_bytelen()
-    br_init(&EL_BUF as u64, el)
+    let el : u32 = bitw_bytelen()
+    bitr_init(&EL_BUF as u64, el)
     if elias_gamma_get() != 1u64 { return 6u64 }
     if elias_delta_get() != 2u64 { return 7u64 }
     if elias_gamma_get() != 1048576u64 { return 8u64 }

@@ -101,5 +101,24 @@ compiler's lexer/parser; build-excluded) → **RETIRE**. Convergence target: `ga
   - `STDLIB/include/iii/stdlib.h` + `test_stdlib.c` (orphaned, no impl) + `INTEGRATION/` (dead test) retired.
 - **2026-06-06 · PURE REACHED** — `onelang_gate` on the retired tree: `files=54 boot=51 harn=3 dead=0
   gap=0 verdict=0 (PURE)`. The only surviving C is the irreducible bootstrap trust root (`COMPILER/BOOT`
-  + `SANCTUM_WRAP` = 51) + test harness (KATABASIS deploy clients + scratch = 3). **H13 is thorough:
-  III proves its own one-language property, in III, and the verdict is PURE.**
+  + `SANCTUM_WRAP` = 51) + test harness. **H13 is thorough: III proves its own one-language property,
+  in III, and the verdict is PURE.**
+
+## §4 · Hardening (the advisor's completion checklist)
+
+- **founders_anchor independent oracle** — added a directive-byte vector assertion to `fa_selftest`
+  (expected bytes read off the C `build_directive` layout: domain prefix + LE field order), catching a
+  uniform encoding error the sign/verify round-trip cannot. corpus 1126=99.
+- **scratch honesty** — `_audit_scratch` is untracked local scratch (not in git); onelang now SKIPS it
+  (like `.git`/`.claude`/`build`) rather than classifying it harness. Re-audit: `files=53 boot=51
+  **harn=2** dead=0 gap=0 verdict=0` — `harn=2` is exactly the two KATABASIS deploy clients (genuine
+  out-of-scope deploy tooling). No scratch-as-harness reclassification.
+- **corpus** — full regression **PASS=808 FAIL=0** (699/700/1124–1127 all =99; zero WRONG/FAIL).
+- **structural gate** — `verify_sha256_dedup.sh` still OK (exit 0) post-retirement; onelang (in .iii)
+  is now the broader structural authority (all non-bootstrap C, not just sha256.c).
+- **determinism** — STDLIB-only change; `nm COMPILED/iiis-2.exe` shows NONE of the new modules
+  (onelang/founders_anchor/constants/fs_dir) in the compiler's symbol closure → functionally inert to
+  the compiler. Any golden move is pure archive-layout reshuffle (the tp_morphism precedent), which is
+  **operator-gated**: `build_iiis2.sh` rebuilds+overwrites the pinned `COMPILED/iiis-2.exe` from the
+  working tree, which currently holds the operator's active codegen WIP — running it here would clobber
+  their live domain. The reseal rides the operator's next seal-gated `build_iiisN.sh` (gate-driven).

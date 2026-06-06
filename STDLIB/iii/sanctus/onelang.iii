@@ -22,9 +22,11 @@
  *   2 DEAD_REF   -- "LEXICON" or "GRAMMAR"          : the original C lexer/parser,
  *                   superseded by COMPILER/BOOT/{lex,parse,ast}.iii; an M24/H13
  *                   retirement target (proof-gated cull).
- *   3 HARNESS    -- "test_" prefix, or "/tests/" /"/tools/", "KATABASIS",
- *                   "audit_scratch" : test/deploy tooling, not the III artifact
- *                   (doctrinally like III-CARTOGRAPHER & verify_reach_remote).
+ *   3 HARNESS    -- "test_" prefix, or "/tests/" /"/tools/", "KATABASIS" :
+ *                   test/deploy tooling, not the III artifact (doctrinally like
+ *                   III-CARTOGRAPHER & verify_reach_remote).  (Non-artifact scratch
+ *                   dirs -- .git, .claude, build, _audit_scratch -- are SKIPPED, not
+ *                   classified: they are not the tree under audit.)
  *   4 GAP        -- anything else : an unaccounted C file.  This is the HONEST
  *                   falsifier output -- a .c with no bootstrap/dead/harness
  *                   account is a genuine one-language hole (port it, never hide).
@@ -169,6 +171,9 @@ fn ol_is_skip_dir(name_addr: u64, len: u64) -> u8 {
     if ol_contains(name_addr, len, (".git" as u64), 4u64) == 1u8 { return 1u8 }
     if ol_contains(name_addr, len, (".claude" as u64), 7u64) == 1u8 { return 1u8 }
     if len == 5u64 { if ol_contains(name_addr, len, ("build" as u64), 5u64) == 1u8 { return 1u8 } }
+    /* non-artifact scratch dirs (untracked working files) are skipped, NOT
+     * classified -- the honest treatment (like build/): they are not the artifact. */
+    if ol_contains(name_addr, len, ("_audit_scratch" as u64), 14u64) == 1u8 { return 1u8 }
     return 0u8
 }
 
@@ -255,7 +260,6 @@ fn ol_classify(name_addr: u64, name_len: u64) {
     if ol_contains(da, dlen, ("tests" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
     if ol_contains(da, dlen, ("tools" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
     if ol_contains(da, dlen, ("KATABASIS" as u64), 9u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
-    if ol_contains(da, dlen, ("audit_scratch" as u64), 13u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
     /* 4 -- GAP: an unaccounted C file (the honest falsifier output). */
     OL_N_GAP = OL_N_GAP + 1u64
 }

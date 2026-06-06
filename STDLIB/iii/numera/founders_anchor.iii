@@ -400,6 +400,17 @@ fn fa_selftest() -> u64 @export {
     let mut n : u64 = 0u64
     while n < 32u64 { FA_NONCE[n] = (0x11u64 + n) as u8   n = n + 1u64 }
     fa_drtm_reset_verify((&FA_PK as u64) as *u8, (&FA_NONCE as u64) as *u8, 0x0102030405060708u64, 0x11223344u32, (&FA_SIG as u64) as *u8)  /* builds FA_DIR */
+    /* INDEPENDENT directive-layout oracle -- expected bytes read off the C
+     * build_directive ("III-FOUNDERS-DRTM-RESET-V1"(26) || nonce(32) || ts(8 LE)
+     * || reason(4 LE)), NOT from this port; catches a uniform encoding error the
+     * sign/verify round-trip cannot (it would sign AND verify the same wrong layout). */
+    if FA_DIR[0u64]  != 0x49u8 { return 30u64 }   /* 'I' (domain prefix start) */
+    if FA_DIR[25u64] != 0x31u8 { return 31u64 }   /* '1' (prefix byte 26, 0-based 25) */
+    if FA_DIR[26u64] != 0x11u8 { return 32u64 }   /* nonce[0] at offset 26 */
+    if FA_DIR[58u64] != 0x08u8 { return 33u64 }   /* timestamp LE byte 0 at offset 58 */
+    if FA_DIR[65u64] != 0x01u8 { return 34u64 }   /* timestamp LE byte 7 at offset 65 */
+    if FA_DIR[66u64] != 0x44u8 { return 35u64 }   /* reason LE byte 0 at offset 66 */
+    if FA_DIR[69u64] != 0x11u8 { return 36u64 }   /* reason LE byte 3 at offset 69 */
     fa_sign((&FA_SEED as u64) as *u8, (&FA_PK as u64) as *u8, (&FA_DIR as u64) as *u8, 70u64, (&FA_SIG as u64) as *u8)
     if fa_drtm_reset_verify((&FA_PK as u64) as *u8, (&FA_NONCE as u64) as *u8, 0x0102030405060708u64, 0x11223344u32, (&FA_SIG as u64) as *u8) != 1u8 { return 6u64 }
     if fa_drtm_reset_verify((&FA_PK as u64) as *u8, (&FA_NONCE as u64) as *u8, 0x0102030405060709u64, 0x11223344u32, (&FA_SIG as u64) as *u8) != 0u8 { return 7u64 }

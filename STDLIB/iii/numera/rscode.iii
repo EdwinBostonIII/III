@@ -62,6 +62,12 @@ var RS_V   : [u8; 1024]
 var RS_AUG : [u8; 2048]
 /* saved code parameters: [0] = n, [1] = k */
 var RS_PN  : [u32; 2]
+/* cached k x k inverse of the current present-set (row-major, stride k), produced by
+ * rs_decode_prepare and consumed by rs_decode_apply -- invert ONCE, apply to MANY symbol
+ * vectors (the striped-erasure-coding workload: one prepared inverse, shard_len applies). */
+var RS_INV : [u8; 1024]
+/* prepared-state guard: holds k when RS_INV is valid for the current code, else 0 */
+var RS_PREP : [u32; 1]
 
 /* KAT scratch (module scope -- see file header on runtime-indexed arrays) */
 var RS_KD   : [u8; 32]     /* original data            */
@@ -69,6 +75,8 @@ var RS_KCW  : [u8; 32]     /* codeword (n symbols)     */
 var RS_KIDX : [u8; 32]     /* present-symbol indices   */
 var RS_KSYM : [u8; 32]     /* present-symbol values    */
 var RS_KOUT : [u8; 32]     /* recovered data           */
+var RS_KD2  : [u8; 32]     /* 2nd dataset (apply-many) */
+var RS_KCW2 : [u8; 32]     /* 2nd codeword             */
 
 /* ---- GF(2^8) helpers: addition is XOR (field definition); mul/inv reuse galois ---- */
 
@@ -238,20 +246,19 @@ fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 @export {
     return RS_OK
 }
 
-fn rs_decode(present_idx: u64, present_sym: u64, m_present: u32, data_out: u64) -> i32 @export {
+/* PREPARE: build G_S (the first k present rows of G) and invert it ONCE, caching the inverse
+ * in RS_INV for repeated rs_decode_apply calls. RS_OK; RS_E_FEW if m_present < k; RS_E_SING if
+ * the chosen rows are rank-deficient. On any error the prepared-state is cleared. */
+fn rs_decode_prepare(present_idx: u64, m_present: u32) -> i32 @export {
     let n : u32 = RS_PN[0u32]
     let k : u32 = RS_PN[1u32]
-    if m_present < k { return RS_E_FEW }
+    if m_present < k { RS_PREP[0u32] = 0u32 ; return RS_E_FEW }
     let idxp : *u8 = present_idx as *u8
-    let symp : *u8 = present_sym as *u8
-    let dop  : *u8 = data_out as *u8
     let w : u32 = 2u32 * k
-
-    /* build G_S (the first k present rows of G) into RS_AUG left half; right = I */
     let mut r : u32 = 0u32
     while r < k {
         let row : u32 = idxp[r as u64] as u32
-        if row >= n { return RS_E_DIM }
+        if row >= n { RS_PREP[0u32] = 0u32 ; return RS_E_DIM }
         let mut c : u32 = 0u32
         while c < k {
             RS_AUG[r * w + c] = RS_G[row * k + c]
@@ -261,16 +268,36 @@ fn rs_decode(present_idx: u64, present_sym: u64, m_present: u32, data_out: u64) 
     }
     rs_aug_set_identity_right(k)
     let rc : i32 = rs_gj_invert(k)
-    if rc != RS_OK { return rc }    /* rank-deficient choice (e.g. repeated index) -> RS_E_SING */
+    if rc != RS_OK { RS_PREP[0u32] = 0u32 ; return rc }
+    /* cache the inverse (right half of RS_AUG) into RS_INV (stride k) */
+    let mut ri : u32 = 0u32
+    while ri < k {
+        let mut ci : u32 = 0u32
+        while ci < k {
+            RS_INV[ri * k + ci] = RS_AUG[ri * w + (k + ci)]
+            ci = ci + 1u32
+        }
+        ri = ri + 1u32
+    }
+    RS_PREP[0u32] = k
+    return RS_OK
+}
 
-    /* d = G_S^(-1) * c_S; G_S^(-1)[j][t] = RS_AUG[j*w + (k+t)] */
+/* APPLY: d = G_S^(-1) * c_S using the cached inverse from rs_decode_prepare. The present_sym
+ * order MUST match the present_idx order given to prepare. RS_OK; RS_E_SING if not prepared
+ * for the current code's k. Cheap (one k x k mat-vec) -- call once per stripe/byte-offset. */
+fn rs_decode_apply(present_sym: u64, data_out: u64) -> i32 @export {
+    let k : u32 = RS_PN[1u32]
+    if RS_PREP[0u32] != k { return RS_E_SING }
+    let symp : *u8 = present_sym as *u8
+    let dop  : *u8 = data_out as *u8
     let mut j : u32 = 0u32
     while j < k {
         let mut acc : u32 = 0u32
         let mut t : u32 = 0u32
         while t < k {
             let sval : u32 = symp[t as u64] as u32
-            let prod : u32 = gf8_mul(RS_AUG[j * w + (k + t)] as u32, sval)
+            let prod : u32 = gf8_mul(RS_INV[j * k + t] as u32, sval)
             acc = acc ^ prod
             t = t + 1u32
         }
@@ -278,6 +305,14 @@ fn rs_decode(present_idx: u64, present_sym: u64, m_present: u32, data_out: u64) 
         j = j + 1u32
     }
     return RS_OK
+}
+
+/* one-shot decode = prepare(present rows) then apply(present symbols). Contract unchanged:
+ * RS_OK; RS_E_FEW (m_present < k); RS_E_SING (rank-deficient row choice). */
+fn rs_decode(present_idx: u64, present_sym: u64, m_present: u32, data_out: u64) -> i32 @export {
+    let pr : i32 = rs_decode_prepare(present_idx, m_present)
+    if pr != RS_OK { return pr }
+    return rs_decode_apply(present_sym, data_out)
 }
 
 /* =====================================================================================
@@ -379,6 +414,28 @@ fn rscode_kat() -> u64 @export {
     RS_KSYM[4u32] = RS_KCW[4u32]
     RS_KSYM[5u32] = RS_KCW[5u32]
     if rs_decode(&RS_KIDX as u64, &RS_KSYM as u64, k, &RS_KOUT as u64) != RS_E_SING { return 14u64 }
+
+    /* INVERT-ONCE / APPLY-MANY: prepare ONE nontrivial present set {4,5,6,7,8,9} (mixed
+     * data+parity rows -> G_S != I, a real inverse), then apply the SAME cached inverse to
+     * TWO distinct datasets and recover both exactly. This is the striped-erasure workload. */
+    let mut pi : u32 = 0u32
+    while pi < k { RS_KIDX[pi] = (pi + 4u32) as u8 ; pi = pi + 1u32 }   /* rows 4..9 */
+    if rs_decode_prepare(&RS_KIDX as u64, k) != RS_OK { return 18u64 }
+    /* dataset 1 (already in RS_KCW): present symbols = RS_KCW[4..9] */
+    let mut s1 : u32 = 0u32
+    while s1 < k { RS_KSYM[s1] = RS_KCW[s1 + 4u32] ; s1 = s1 + 1u32 }
+    if rs_decode_apply(&RS_KSYM as u64, &RS_KOUT as u64) != RS_OK { return 19u64 }
+    let mut v1 : u32 = 0u32
+    while v1 < k { if RS_KOUT[v1] != RS_KD[v1] { return 20u64 } ; v1 = v1 + 1u32 }
+    /* dataset 2: different data, re-encode, apply the SAME prepared inverse (no re-invert) */
+    let mut d2 : u32 = 0u32
+    while d2 < k { RS_KD2[d2] = ((d2 * 31u32 + 200u32) & 0xFFu32) as u8 ; d2 = d2 + 1u32 }
+    if rs_encode(&RS_KD2 as u64, &RS_KCW2 as u64) != RS_OK { return 21u64 }
+    let mut s2 : u32 = 0u32
+    while s2 < k { RS_KSYM[s2] = RS_KCW2[s2 + 4u32] ; s2 = s2 + 1u32 }
+    if rs_decode_apply(&RS_KSYM as u64, &RS_KOUT as u64) != RS_OK { return 22u64 }
+    let mut v2 : u32 = 0u32
+    while v2 < k { if RS_KOUT[v2] != RS_KD2[v2] { return 23u64 } ; v2 = v2 + 1u32 }
 
     /* LARGER CODE: RS(16,10), lose the last 6; recover from rows 0..9 */
     let n2 : u32 = 16u32

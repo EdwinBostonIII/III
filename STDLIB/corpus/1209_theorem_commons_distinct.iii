@@ -1,0 +1,50 @@
+/* 1209_theorem_commons_distinct.iii -- THE THEOREM COMMONS IS A SOUND MULTI-THEOREM REGISTRY.
+ *
+ * Deepens 1208 (single admit/reject) to the registry's structural soundness:
+ *  - ACCUMULATION: three DISTINCT kernel-proven theorems (refl 0=0, 1=1, 2=2) all admit -> size 3.
+ *  - CONTENT-ADDRESS DISTINCTNESS: each is citable; a fourth distinct statement (never admitted) is ABSENT
+ *    -- no false-merge / cad collision across similar statements.
+ *  - TAMPER-REJECTION: refl(0) does NOT prove Id(Nat,1,1); the kernel rejects it -> not admitted, size
+ *    unchanged, still absent. The kernel is the sole gate; no mislabeled proof slips in.
+ * 99 = all hold; each arm distinguishes a real kernel verdict + a real registry state. */
+module corpus_1209
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+
+var S0 : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 48u8, 61u8, 48u8, 10u8]   /* "thm:0=0\n" */
+var S1 : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 49u8, 61u8, 49u8, 10u8]   /* "thm:1=1\n" */
+var S2 : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 50u8, 61u8, 50u8, 10u8]   /* "thm:2=2\n" */
+var S3 : [u8; 8] = [116u8, 104u8, 109u8, 58u8, 51u8, 61u8, 51u8, 10u8]   /* "thm:3=3\n" -- never admitted */
+
+fn main() -> u64 {
+    tc_reset()
+    tcom_init()
+    let nat : u32 = tc_nat()
+    let z   : u32 = tc_zero()
+    let one : u32 = tc_succ(z)
+    let two : u32 = tc_succ(one)
+    /* ACCUMULATION: three distinct kernel-proven theorems */
+    if tcom_admit((&S0 as u64), 8u64, tc_refl(z),   tc_id(nat, z, z))     != 0i32 { return 1u64 }
+    if tcom_admit((&S1 as u64), 8u64, tc_refl(one), tc_id(nat, one, one)) != 0i32 { return 2u64 }
+    if tcom_admit((&S2 as u64), 8u64, tc_refl(two), tc_id(nat, two, two)) != 0i32 { return 3u64 }
+    if tcom_size() != 3u64 { return 4u64 }
+    /* DISTINCTNESS: each citable; an unadmitted distinct statement is ABSENT (no false-merge) */
+    if tcom_cite((&S0 as u64), 8u64) != 0i32 { return 5u64 }
+    if tcom_cite((&S1 as u64), 8u64) != 0i32 { return 6u64 }
+    if tcom_cite((&S2 as u64), 8u64) != 0i32 { return 7u64 }
+    if tcom_cite((&S3 as u64), 8u64) != -2i32 { return 8u64 }
+    /* TAMPER-REJECTION: refl(0) does NOT prove 1=1 -> kernel rejects -> not admitted */
+    if tcom_admit((&S3 as u64), 8u64, tc_refl(z), tc_id(nat, one, one)) != -3i32 { return 9u64 }
+    if tcom_size() != 3u64 { return 10u64 }
+    if tcom_cite((&S3 as u64), 8u64) != -2i32 { return 11u64 }
+    return 99u64
+}

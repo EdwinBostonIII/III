@@ -861,6 +861,7 @@ MODULES=(
     # typecheck / cad; NOT in the compiler link closure (golden + trusted-base unmoved).
     "numera/egraph_stochastic"
     "forcefield/cg_autocatalyst"
+    "forcefield/bv_dispose"
     "forcefield/daemon_dream"
     # The Isomorphic Scythe (Autonomous Semantic Refactoring): hunts legacy logic, kernel-PROVES it
     # universally equivalent to a cheaper optimal (bisimulation via the CIC kernel), records the certified

@@ -15,14 +15,18 @@ extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_c
 extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
 extern @abi(c-msvc-x64) fn sov_feed_commons() -> u64 from "sov_isa.iii"
 
-/* must byte-match sov_isa's SOV_THM_STRENGTH: "thm:strength_schema\n" */
+/* must byte-match sov_isa's SOV_THM_STRENGTH "thm:strength_schema\n" + SOV_THM_FOLD "thm:shift_fold\n" */
 var ST : [u8; 20] = [116u8, 104u8, 109u8, 58u8, 115u8, 116u8, 114u8, 101u8, 110u8, 103u8, 116u8, 104u8, 95u8, 115u8, 99u8, 104u8, 101u8, 109u8, 97u8, 10u8]
+var SF : [u8; 15] = [116u8, 104u8, 109u8, 58u8, 115u8, 104u8, 105u8, 102u8, 116u8, 95u8, 102u8, 111u8, 108u8, 100u8, 10u8]
 
 fn main() -> u64 {
     tcom_init()
     if tcom_size() != 0u64 { return 1u64 }
+    /* the optimizer feeds BOTH headline proof-carrying-optimization theorems (each kernel-re-verified at admit) */
     if sov_feed_commons() != 99u64 { return 2u64 }
-    if tcom_size() != 1u64 { return 3u64 }
+    if tcom_size() != 2u64 { return 3u64 }
+    /* both of the system's REAL proven theorems are now citable by content-address */
     if tcom_cite((&ST as u64), 20u64) != 0i32 { return 4u64 }
+    if tcom_cite((&SF as u64), 15u64) != 0i32 { return 5u64 }
     return 99u64
 }

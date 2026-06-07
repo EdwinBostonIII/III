@@ -1,0 +1,167 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\verified_search.iii
+ *
+ * III STDLIB - numera::verified_search  --  STOCHASTIC SEARCH DISCIPLINED BY THE FROZEN REFEREE.
+ *
+ * The fusion of Phase 2 (numera::mcmc_egraph -- annealed stochastic search) and Phase 3 (numera::k0_referee
+ * -- the frozen verification gate).  A stochastic daemon explores a bank of candidate kernels over a
+ * deceptive microarchitectural cost landscape, but EVERY adoption is gated through K_0: the search may only
+ * move to a candidate K_0 certifies observably-correct.  The consequence is the central safety property of
+ * any self-improving search: the chain WANTS the globally-cheapest candidate, but that candidate is a WRONG
+ * kernel; the K_0 gate confines the walk to the correct subspace, so it converges to the cheapest CORRECT
+ * kernel (the verified frontier) instead of the cheaper trap.  An ungated search falls straight into the
+ * trap.  Stochastic imagination, disciplined by the unhackable anchor.
+ *
+ * The bank (12 real candidates computing S(n) = n(n-1)/2): v0 the anchor; v1..v5 CORRECT alternatives over a
+ * deceptive cost landscape with a local minimum (so the annealing is exercised), v5 the cheapest correct
+ * (cost 10); v6..v11 WRONG (return S(n)+1) at ever-lower costs, v11 the global minimum (cost 1) -- the trap.
+ *
+ * Verified (verified_search_kat): the K_0-gated annealed search converges to the correct frontier v5 (cost
+ * 10) -- never the cheaper wrong trap; the UNGATED search falls into the wrong trap v11 (cost 1); the gate
+ * is load-bearing; the result is deterministic under seed; the chosen correct kernel agrees with the anchor
+ * while the trap does not.  NIH; composes k0_referee.
+ *
+ * Public API:
+ *   vs_setup() ; vs_run(v,n) -> u32 ; vs_ok(v) -> u32 ; vs_search(seed, iters, gated) -> u32 (best candidate)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_verified_search
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+
+const VS_M    : u32 = 12u32
+const VS_D    : u32 = 16u32
+const VS_TMAX : u32 = 50u32
+const VS_TMIN : u32 = 1u32
+
+var VS_COST : [u32; 12]
+var VS_EXP  : [u32; 16]
+var VS_RNG  : [u64; 1]
+
+/* the real candidate kernels: S(n)=n(n-1)/2 for the correct ones (v<=5), S(n)+1 for the wrong ones. */
+fn vs_run(v: u32, n: u32) -> u32 @export {
+    let s : u32 = (n * (n - 1u32)) / 2u32
+    if v <= 5u32 { return s }
+    return s + 1u32
+}
+
+fn vs_setup() -> i32 @export {
+    /* deceptive cost landscape: correct subspace v0..v5 has a local min at v1; wrong subspace v6..v11
+     * descends to the global trap at v11 (cost 1). */
+    VS_COST[0u64]=100u32 ; VS_COST[1u64]=50u32 ; VS_COST[2u64]=80u32 ; VS_COST[3u64]=30u32
+    VS_COST[4u64]=60u32  ; VS_COST[5u64]=10u32 ; VS_COST[6u64]=9u32  ; VS_COST[7u64]=8u32
+    VS_COST[8u64]=7u32   ; VS_COST[9u64]=6u32  ; VS_COST[10u64]=5u32 ; VS_COST[11u64]=1u32
+    /* Boltzmann table EXP[k] ~ 65536*exp(-k/2) */
+    VS_EXP[0u64]=65536u32 ; VS_EXP[1u64]=39749u32 ; VS_EXP[2u64]=24109u32 ; VS_EXP[3u64]=14624u32
+    VS_EXP[4u64]=8869u32  ; VS_EXP[5u64]=5380u32  ; VS_EXP[6u64]=3263u32  ; VS_EXP[7u64]=1979u32
+    VS_EXP[8u64]=1200u32  ; VS_EXP[9u64]=728u32   ; VS_EXP[10u64]=441u32  ; VS_EXP[11u64]=268u32
+    VS_EXP[12u64]=162u32  ; VS_EXP[13u64]=98u32   ; VS_EXP[14u64]=60u32   ; VS_EXP[15u64]=36u32
+    /* register the bank in K_0 (real costs), populate behaviors by REAL execution, freeze v0 as anchor */
+    k0_reset()
+    let mut v : u32 = 0u32
+    while v < VS_M { k0_register(VS_COST[v as u64]) ; v = v + 1u32 }
+    let mut w : u32 = 0u32
+    while w < VS_M {
+        let mut x : u32 = 0u32
+        while x < VS_D { k0_set_behav(w, x, vs_run(w, x)) ; x = x + 1u32 }
+        w = w + 1u32
+    }
+    k0_freeze_anchor()
+    return 0i32
+}
+
+/* a candidate is acceptable iff it is the anchor or K_0 certifies it correct. */
+fn vs_ok(v: u32) -> u32 @export {
+    if v == 0u32 { return 1u32 }
+    return k0_verify(v)
+}
+
+fn vs_rng() -> u64 {
+    let mut z : u64 = VS_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    VS_RNG[0u64] = z
+    return z
+}
+
+/* annealed Metropolis walk over the candidate bank; if gated, only ever moves to a K_0-verified candidate.
+ * returns the cheapest acceptable candidate found. */
+fn vs_search(seed: u64, iters: u32, gated: u32) -> u32 @export {
+    VS_RNG[0u64] = seed
+    let mut cur : u32 = 0u32
+    let mut best_v : u32 = 0u32
+    let mut best_cost : u32 = VS_COST[0u64]
+    let mut it : u32 = 0u32
+    while it < iters {
+        let span : u64 = ((VS_TMAX - VS_TMIN) as u64) * (it as u64)
+        let mut t : u32 = VS_TMAX - ((span / (iters as u64)) as u32)
+        if t < VS_TMIN { t = VS_TMIN }
+        /* propose a neighbour */
+        let r : u64 = vs_rng()
+        let mut nxt : u32 = cur
+        if (r & 1u64) == 1u64 { if cur < (VS_M - 1u32) { nxt = cur + 1u32 } }
+        else { if cur > 0u32 { nxt = cur - 1u32 } }
+        /* the K_0 GATE: when gated, never move to an unverified candidate */
+        let mut allowed : u32 = 1u32
+        if gated == 1u32 { if vs_ok(nxt) == 0u32 { allowed = 0u32 } }
+        if allowed == 1u32 {
+            let cc : u32 = VS_COST[cur as u64]
+            let cn : u32 = VS_COST[nxt as u64]
+            if cn <= cc { cur = nxt }
+            else {
+                let de : u32 = cn - cc
+                let mut k : u32 = (de * 2u32) / t
+                if k > 15u32 { k = 15u32 }
+                let pr : u64 = vs_rng()
+                if (pr & 0xFFFFu64) < (VS_EXP[k as u64] as u64) { cur = nxt }
+            }
+        }
+        /* track the cheapest acceptable candidate seen */
+        if VS_COST[cur as u64] < best_cost {
+            best_cost = VS_COST[cur as u64]
+            best_v = cur
+        }
+        it = it + 1u32
+    }
+    return best_v
+}
+
+/* =====================================================================================
+ * verified_search_kat -- 99 = stochastic search gated by K_0 is safe, self-checked:
+ *   (1) the K_0-GATED annealed search converges to the CORRECT frontier v5 (cost 10) -- escaping the local
+ *       minimum at v1 but NEVER entering the wrong subspace;
+ *   (2) the UNGATED search falls into the cheaper WRONG trap v11 (cost 1) -- proving the gate is load-bearing;
+ *   (3) DETERMINISM: same seed => same result;
+ *   (4) the gated result is observably correct (agrees with the anchor) while the trap does not.
+ * ===================================================================================== */
+fn verified_search_kat() -> u64 @export {
+    vs_setup()
+
+    /* (1) gated search -> correct frontier v5 */
+    let g : u32 = vs_search(0x1357924680ABCDEFu64, 30000u32, 1u32)
+    if g != 5u32 { return 1u64 }
+    if VS_COST[g as u64] != 10u32 { return 2u64 }
+    if vs_ok(g) != 1u32 { return 3u64 }
+
+    /* (2) ungated search -> wrong trap v11 (the gate is load-bearing) */
+    let u : u32 = vs_search(0x1357924680ABCDEFu64, 30000u32, 0u32)
+    if u != 11u32 { return 4u64 }
+    if VS_COST[u as u64] != 1u32 { return 5u64 }
+    if vs_ok(u) != 0u32 { return 6u64 }                /* the trap is NOT correct */
+
+    /* (3) determinism */
+    let g2 : u32 = vs_search(0x1357924680ABCDEFu64, 30000u32, 1u32)
+    if g2 != g { return 7u64 }
+
+    /* (4) the gated result is observably correct; the trap is not */
+    if vs_run(g, 50u32) != vs_run(0u32, 50u32) { return 8u64 }    /* v5 agrees with the anchor */
+    if vs_run(g, 50u32) != 1225u32 { return 9u64 }                /* S(50)=1225 */
+    if vs_run(u, 50u32) == vs_run(0u32, 50u32) { return 10u64 }   /* v11 disagrees (it is wrong) */
+
+    return 99u64
+}

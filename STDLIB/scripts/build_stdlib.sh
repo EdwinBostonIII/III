@@ -693,6 +693,7 @@ MODULES=(
     "numera/verified_ripple"
     "numera/optimality_cert"
     "numera/logic_synth"
+    "numera/contract_gate"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

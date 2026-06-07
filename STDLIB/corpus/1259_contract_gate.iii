@@ -1,0 +1,14 @@
+/* 1259_contract_gate.iii -- the zero-trust contract admission gate (kernel-checked spec compliance).
+ * Drives numera::contract_gate::contract_gate_kat: 99 = a correct guarded transfer is ADMITTED (conservation
+ * of value proven exhaustively); a MINT bug (credit without debit) and a DUP-CREDIT bug are REJECTED with a
+ * witnessing (src,to,amount) counterexample before they could run on-chain; the correct contract conserves
+ * the total on a concrete transfer. Smart contracts admitted only with proof of spec compliance. */
+module corpus_1259
+
+extern @abi(c-msvc-x64) fn contract_gate_kat() -> u64 from "contract_gate.iii"
+
+fn main() -> u64 {
+    let r : u64 = contract_gate_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

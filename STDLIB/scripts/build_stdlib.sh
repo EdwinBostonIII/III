@@ -711,6 +711,7 @@ MODULES=(
     "numera/reg_alloc"
     "numera/list_schedule"
     "numera/isel"
+    "numera/dominators"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,14 @@
+/* 1277_dominators.iii -- the dominator tree: foundational CFG analysis, verified.
+ * Drives numera::dominators::dominators_kat: 99 = on a diamond CFG (1 -> {2,3} -> 4), block 1 dominates the
+ * join 4 (every path goes through it) but NEITHER branch 2 nor 3 dominates 4; 0,1,4,5 all dominate 5 while
+ * 2,3 do not; the immediate dominators are idom(5)=4, idom(4)=1, idom(2)=1, idom(1)=0. The dataflow least
+ * fixpoint dom(n) = {n} union intersection of dom(preds), the bedrock of SSA and code motion. */
+module corpus_1277
+
+extern @abi(c-msvc-x64) fn dominators_kat() -> u64 from "dominators.iii"
+
+fn main() -> u64 {
+    let r : u64 = dominators_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

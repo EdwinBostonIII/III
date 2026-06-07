@@ -1,0 +1,14 @@
+/* 1255_pareto_frontier.iii -- multi-objective verified optimization: the verified Pareto frontier.
+ * Drives numera::pareto_frontier::pareto_frontier_kat: 99 = the K_0-verified non-dominated set is exactly
+ * {v1,v2,v3}; the anchor, a dominated kernel, and the WRONG-but-cost-dominant vbad are off the frontier;
+ * latency-heavy weights select v1, energy-heavy v2, balanced v3 (the genuine trade-off); the wrong kernel
+ * is never scalarized. Multi-objective optimization disciplined by verification. */
+module corpus_1255
+
+extern @abi(c-msvc-x64) fn pareto_frontier_kat() -> u64 from "pareto_frontier.iii"
+
+fn main() -> u64 {
+    let r : u64 = pareto_frontier_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -834,6 +834,7 @@ declare -A EXPECTED=(
     [1250_self_engine]=99
     [1253_verified_search]=99
     [1254_omega_engine]=99
+    [1255_pareto_frontier]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

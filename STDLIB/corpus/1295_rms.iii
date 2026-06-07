@@ -1,0 +1,15 @@
+/* 1295_rms.iii -- rate-monotonic schedulability by response-time analysis, verified.
+ * Drives numera::rms::rms_kat: 99 = periodic tasks (period 4 compute 1)(6,2)(8,2) under rate-monotonic
+ * priority have worst-case response times exactly 1/3/6 (the least fixpoint of R = C + sum of ceil(R/Tj)*Cj
+ * over higher-priority tasks), all within deadline, so the set is schedulable; raising the third task's
+ * compute to 4 makes its response time exceed its period 8 and the set is correctly rejected; ceil-division
+ * is exact. The deterministic exhaustive deadline guarantee embedded software needs. */
+module corpus_1295
+
+extern @abi(c-msvc-x64) fn rms_kat() -> u64 from "rms.iii"
+
+fn main() -> u64 {
+    let r : u64 = rms_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

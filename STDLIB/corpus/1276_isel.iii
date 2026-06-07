@@ -1,0 +1,14 @@
+/* 1276_isel.iii -- instruction selection by verified maximal-munch tree tiling.
+ * Drives numera::isel::isel_kat: 99 = maximal munch with FMA tiles the IR tree a*b+c in 1 instruction while
+ * naive selection costs 2 (MUL then ADD); fusion is strictly cheaper; both tilings cover every internal node
+ * (nothing left uncomputed); and the tiled code computes a*b+c (3*4+5=17). The codegen front: select ->
+ * allocate (reg_alloc) -> schedule (list_schedule). */
+module corpus_1276
+
+extern @abi(c-msvc-x64) fn isel_kat() -> u64 from "isel.iii"
+
+fn main() -> u64 {
+    let r : u64 = isel_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -710,6 +710,7 @@ MODULES=(
     "numera/loop_pipeline"
     "numera/reg_alloc"
     "numera/list_schedule"
+    "numera/isel"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

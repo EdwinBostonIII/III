@@ -691,6 +691,7 @@ MODULES=(
     "numera/omega_engine"
     "numera/pareto_frontier"
     "numera/verified_ripple"
+    "numera/optimality_cert"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

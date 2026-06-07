@@ -1,0 +1,14 @@
+/* 1257_optimality_cert.iii -- the provable-optimality certificate (verified silicon-ceiling saturation).
+ * Drives numera::optimality_cert::optimality_cert_kat: 99 = the certified kernel is the verified cost floor
+ * v2 (cost 10); oc_is_optimal is sound (true only for v2, false for pricier verified kernels, the anchor,
+ * and the wrong-cheaper vbad); the certificate holds DESPITE vbad costing only 5 (a cheaper WRONG kernel
+ * does not lower the floor); forged claims are rejected. Optimization that proves it has reached the floor. */
+module corpus_1257
+
+extern @abi(c-msvc-x64) fn optimality_cert_kat() -> u64 from "optimality_cert.iii"
+
+fn main() -> u64 {
+    let r : u64 = optimality_cert_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

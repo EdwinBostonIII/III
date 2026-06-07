@@ -1,0 +1,14 @@
+/* 1264_rewrite_schedule.iii -- verified phase-ordering: dependency-respecting rewrite schedule.
+ * Drives numera::rewrite_schedule::rewrite_schedule_kat: 99 = the acyclic rewrite-dependency DAG yields a
+ * topological order (Kahn) proven to place every prerequisite before its dependent, and a genuine
+ * permutation of all rewrites; the cyclic graph yields no order (toposort=0); a concrete precedence holds.
+ * The phase-ordering problem, solved with a verified schedule or a proof that none exists. */
+module corpus_1264
+
+extern @abi(c-msvc-x64) fn rewrite_schedule_kat() -> u64 from "rewrite_schedule.iii"
+
+fn main() -> u64 {
+    let r : u64 = rewrite_schedule_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

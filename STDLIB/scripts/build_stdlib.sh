@@ -698,6 +698,7 @@ MODULES=(
     "numera/matrix_ring"
     "numera/bft_quorum"
     "numera/affine_check"
+    "numera/rewrite_schedule"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

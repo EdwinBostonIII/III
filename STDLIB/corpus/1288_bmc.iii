@@ -1,0 +1,14 @@
+/* 1288_bmc.iii -- bounded model checking: reachability safety, verified.
+ * Drives numera::bmc::bmc_kat: 99 = on a 6-state transition system, the shortest distance to the bad state 5
+ * is 4; state 5 is reachable within bound 4 but NOT within bound 3; the system is SAFE up to depth 3 and
+ * VIOLATED at depth 4 (a depth-4 counterexample); intermediate distances are correct (state 3 at depth 2).
+ * Trades completeness for a decidable exhaustive search of all behaviours within the horizon. */
+module corpus_1288
+
+extern @abi(c-msvc-x64) fn bmc_kat() -> u64 from "bmc.iii"
+
+fn main() -> u64 {
+    let r : u64 = bmc_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

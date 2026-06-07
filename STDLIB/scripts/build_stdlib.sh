@@ -722,6 +722,7 @@ MODULES=(
     "numera/liveness"
     "numera/proof_replay"
     "numera/merkle_log"
+    "numera/bmc"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

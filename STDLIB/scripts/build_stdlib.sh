@@ -725,6 +725,7 @@ MODULES=(
     "numera/dijkstra"
     "numera/safety_prover"
     "numera/value_range_prover"
+    "numera/loop_bounds_prover"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

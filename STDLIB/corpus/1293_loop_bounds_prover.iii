@@ -1,0 +1,15 @@
+/* 1293_loop_bounds_prover.iii -- family-wide memory-safety proof via monotonicity (composition).
+ * Drives numera::loop_bounds_prover::loop_bounds_prover_kat: 99 = a safe family of loops (A[2*i+1], all trip
+ * counts n<=12, size 32) is proven memory-safe and the exhaustive family agrees; an unsafe family (A[3*i+2],
+ * n<=8, size 16) contains an out-of-bounds trip count and is rejected; for five parameterizations the single
+ * in-bounds check at n=N equals the whole-family verdict (monotonicity verified), so one abstract check
+ * certifies the entire trip-count family. Composes affine_check; parameterized over families. */
+module corpus_1293
+
+extern @abi(c-msvc-x64) fn loop_bounds_prover_kat() -> u64 from "loop_bounds_prover.iii"
+
+fn main() -> u64 {
+    let r : u64 = loop_bounds_prover_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

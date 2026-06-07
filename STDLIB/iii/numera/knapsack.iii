@@ -1,0 +1,120 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\knapsack.iii
+ *
+ * III STDLIB - numera::knapsack  --  0/1 KNAPSACK, VERIFIED AGAINST BRUTE FORCE.
+ *
+ * Given items with weights and values and a capacity, choose a subset of maximum total value whose total
+ * weight fits.  The pseudo-polynomial DP keeps dp[w] = the best value achievable with weight budget w and,
+ * crucially, sweeps the capacity DOWNWARD for each item so that item can contribute at most once (an upward
+ * sweep would be the UNBOUNDED knapsack -- the same recurrence, a different problem).  That direction is the
+ * single most error-prone line, so the III discipline VERIFIES the DP against the exact brute force over all
+ * 2^n subsets, for EVERY capacity, not one.
+ *
+ * Items (weight, value): (2,3) (3,4) (4,5) (5,6).  At capacity 8 the optimum is 10 (items {3,5}: weight
+ * 3+5=8, value 4+6=10).
+ *
+ * Verified (knapsack_kat): the DP optimum at capacity 8 is 10 and equals brute force; the DP equals brute
+ * force at every capacity 0..16 (the parameterized equivalence proof); max2 is correct.  NIH/self-contained.
+ *
+ * Public API:
+ *   knap_setup() ; knap_max2(a,b) -> u32 ; knap_dp(cap) -> u32 ; knap_brute(cap) -> u32 ; knap_agree() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_knapsack
+
+const KNAP_N : u32 = 4u32
+
+var KNAP_W  : [u32; 4]
+var KNAP_V  : [u32; 4]
+var KNAP_DP : [u32; 17]            /* dp[0..16] */
+
+fn knap_setup() -> i32 @export {
+    KNAP_W[0u64]=2u32 ; KNAP_W[1u64]=3u32 ; KNAP_W[2u64]=4u32 ; KNAP_W[3u64]=5u32
+    KNAP_V[0u64]=3u32 ; KNAP_V[1u64]=4u32 ; KNAP_V[2u64]=5u32 ; KNAP_V[3u64]=6u32
+    return 0i32
+}
+
+fn knap_max2(a: u32, b: u32) -> u32 @export {
+    if a > b { return a }
+    return b
+}
+
+/* the pseudo-polynomial DP: dp[w] best value within weight w; capacity swept downward per item. */
+fn knap_dp(cap: u32) -> u32 @export {
+    let mut z : u32 = 0u32
+    while z <= cap { KNAP_DP[z as u64] = 0u32 ; z = z + 1u32 }
+    let mut i : u32 = 0u32
+    while i < KNAP_N {
+        let wi : u32 = KNAP_W[i as u64]
+        let vi : u32 = KNAP_V[i as u64]
+        let mut w : u32 = cap
+        while w >= wi {
+            let cand : u32 = KNAP_DP[(w - wi) as u64] + vi
+            if cand > KNAP_DP[w as u64] { KNAP_DP[w as u64] = cand }
+            w = w - 1u32
+        }
+        i = i + 1u32
+    }
+    return KNAP_DP[cap as u64]
+}
+
+/* the exact reference: brute force over all 2^n subsets. */
+fn knap_brute(cap: u32) -> u32 @export {
+    let mut best : u32 = 0u32
+    let limit : u32 = 1u32 << KNAP_N
+    let mut mask : u32 = 0u32
+    while mask < limit {
+        let mut tw : u32 = 0u32
+        let mut tv : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < KNAP_N {
+            if ((mask >> i) & 1u32) == 1u32 {
+                tw = tw + KNAP_W[i as u64]
+                tv = tv + KNAP_V[i as u64]
+            }
+            i = i + 1u32
+        }
+        if tw <= cap { if tv > best { best = tv } }
+        mask = mask + 1u32
+    }
+    return best
+}
+
+/* the DP equals brute force at EVERY capacity 0..16. */
+fn knap_agree() -> u32 @export {
+    let mut cap : u32 = 0u32
+    while cap <= 16u32 {
+        if knap_dp(cap) != knap_brute(cap) { return 0u32 }
+        cap = cap + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * knapsack_kat -- 99 = the 0/1 knapsack DP is correct, verified against brute force:
+ *   (1) at capacity 8 the optimum is 10 (items {3,5}) and equals brute force;
+ *   (2) the DP equals brute force at every capacity 0..16 (the parameterized equivalence);
+ *   (3) a couple of small capacities are exactly right (0 -> 0, 4 -> 5);
+ *   (4) max2 is correct.
+ * ===================================================================================== */
+fn knapsack_kat() -> u64 @export {
+    knap_setup()
+
+    /* (1) the headline optimum */
+    if knap_dp(8u32) != 10u32 { return 1u64 }
+    if knap_brute(8u32) != 10u32 { return 2u64 }
+
+    /* (2) the parameterized equivalence proof */
+    if knap_agree() != 1u32 { return 3u64 }
+
+    /* (3) small capacities */
+    if knap_dp(0u32) != 0u32 { return 4u64 }
+    if knap_dp(4u32) != 5u32 { return 5u64 }              /* best item fitting in 4 is (4,5) */
+    if knap_dp(5u32) != 7u32 { return 6u64 }              /* {(2,3),(3,4)} = weight 5, value 7 */
+
+    /* (4) max2 */
+    if knap_max2(3u32, 9u32) != 9u32 { return 7u64 }
+    if knap_max2(6u32, 2u32) != 6u32 { return 8u64 }
+
+    return 99u64
+}

@@ -1,0 +1,292 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\congruence_closure.iii
+ *
+ * III STDLIB - numera::congruence_closure  --  PROOF-PRODUCING CONGRUENCE CLOSURE.
+ *
+ * When the stochastic synthesizer (Phase 2) hallucinates a massive algorithmic leap, the CIC kernel must
+ * bridge the gap with an unbroken trail of intermediate equalities.  This module is that bridge: a
+ * congruence closure that, for any derived equality a = b, EXPLAINS it -- emitting the exact sequence of
+ * input equalities (and congruence steps) that justify it.  Without explanations a solver can only ANSWER
+ * "equal?"; with them it can PROVE it, which is what the kernel needs to admit a rewrite into theorem_commons.
+ *
+ * It maintains (1) a union-find for O(~1) "are these equal?" and (2) a MERGE GRAPH (every union records an
+ * edge labelled with its justifying reason) for explanations.  Congruence is closed to fixpoint: if
+ * f(x..) and f(y..) have pairwise-equal arguments, the applications are merged (reason = CONGRUENCE).
+ * pcc_explain(a,b) does a breadth-first search of the merge graph and returns the labelled path a..b.
+ *
+ * Distinct from numera::congruence (cgr_*, the e-graph's COST-aware certified union for extraction): this
+ * one is EXPLANATION-producing (the proof trail), the complementary half the synthesis kernel consumes.
+ *
+ * Verified (congruence_closure_kat): transitive closure correctness; explanation STRUCTURAL VALIDITY (the
+ * returned path is a real chain of labelled edges from a to b); explanation COMPLETENESS (equal => a path
+ * exists); congruence (equal arguments make the applications equal, recursively); and the NEGATIVE
+ * (unrelated terms are not equal and have NO explanation path).  NIH/self-contained.
+ *
+ * Public API:
+ *   pcc_init() ; pcc_leaf() -> u32 ; pcc_app1(fn,a) -> u32 ; pcc_app2(fn,a,b) -> u32
+ *   pcc_merge(a,b,reason) ; pcc_eq(a,b) -> u32 ; pcc_explain(a,b) -> u32   (1=connected; fills PCC_EXPL/PATH)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_congruence_closure
+
+const PCC_NT_MAX : u32 = 64u32
+const PCC_NE_MAX : u32 = 256u32
+const PCC_LEAF   : u32 = 0u32
+const PCC_CONG   : u32 = 100000u32      /* reason marker: "by congruence" */
+const PCC_NONE   : u32 = 0xFFFFFFFFu32
+
+/* terms */
+var PCC_FN   : [u32; 64]
+var PCC_A0   : [u32; 64]
+var PCC_A1   : [u32; 64]
+var PCC_NARG : [u32; 64]
+var PCC_NT   : [u32; 1]
+/* union-find */
+var PCC_PAR  : [u32; 64]
+/* merge graph */
+var PCC_EU   : [u32; 256]
+var PCC_EV   : [u32; 256]
+var PCC_ER   : [u32; 256]
+var PCC_NE   : [u32; 1]
+/* BFS scratch + outputs */
+var PCC_VIS   : [u32; 64]
+var PCC_BPAR  : [u32; 64]
+var PCC_BEDGE : [u32; 64]
+var PCC_Q     : [u32; 64]
+var PCC_PATH  : [u32; 64]
+var PCC_PLEN  : [u32; 1]
+var PCC_EXPL  : [u32; 64]
+var PCC_ELEN  : [u32; 1]
+var PCC_TMPN  : [u32; 64]
+var PCC_TMPR  : [u32; 64]
+
+fn pcc_init() -> i32 @export { PCC_NT[0u32] = 0u32 ; PCC_NE[0u32] = 0u32 ; return 0i32 }
+
+fn pcc_new(fn_: u32, a0: u32, a1: u32, narg: u32) -> u32 {
+    let t : u32 = PCC_NT[0u32]
+    if t >= PCC_NT_MAX { return PCC_NONE }
+    PCC_NT[0u32] = t + 1u32
+    PCC_FN[t as u64] = fn_
+    PCC_A0[t as u64] = a0
+    PCC_A1[t as u64] = a1
+    PCC_NARG[t as u64] = narg
+    PCC_PAR[t as u64] = t
+    return t
+}
+fn pcc_leaf() -> u32 @export { return pcc_new(PCC_LEAF, 0u32, 0u32, 0u32) }
+fn pcc_app1(fn_: u32, a: u32) -> u32 @export { return pcc_new(fn_, a, 0u32, 1u32) }
+fn pcc_app2(fn_: u32, a: u32, b: u32) -> u32 @export { return pcc_new(fn_, a, b, 2u32) }
+
+fn pcc_find(t: u32) -> u32 {
+    let mut x : u32 = t
+    while PCC_PAR[x as u64] != x { x = PCC_PAR[x as u64] }
+    return x
+}
+fn pcc_eq(a: u32, b: u32) -> u32 @export {
+    if pcc_find(a) == pcc_find(b) { return 1u32 }
+    return 0u32
+}
+fn pcc_link(a: u32, b: u32) {
+    let ra : u32 = pcc_find(a)
+    let rb : u32 = pcc_find(b)
+    if ra != rb { PCC_PAR[ra as u64] = rb }
+}
+fn pcc_add_edge(a: u32, b: u32, r: u32) {
+    let e : u32 = PCC_NE[0u32]
+    if e >= PCC_NE_MAX { return }
+    PCC_EU[e as u64] = a
+    PCC_EV[e as u64] = b
+    PCC_ER[e as u64] = r
+    PCC_NE[0u32] = e + 1u32
+}
+
+/* close congruence to fixpoint: equal arguments => equal applications. */
+fn pcc_congruence_close() {
+    let nt : u32 = PCC_NT[0u32]
+    let mut changed : u32 = 1u32
+    while changed == 1u32 {
+        changed = 0u32
+        let mut s : u32 = 0u32
+        while s < nt {
+            if PCC_NARG[s as u64] > 0u32 {
+                let mut t : u32 = s + 1u32
+                while t < nt {
+                    if PCC_FN[s as u64] == PCC_FN[t as u64] {
+                        if PCC_NARG[s as u64] == PCC_NARG[t as u64] {
+                            if pcc_eq(s, t) == 0u32 {
+                                let mut args_eq : u32 = 0u32
+                                if PCC_NARG[s as u64] == 1u32 {
+                                    if pcc_eq(PCC_A0[s as u64], PCC_A0[t as u64]) == 1u32 { args_eq = 1u32 }
+                                } else {
+                                    if pcc_eq(PCC_A0[s as u64], PCC_A0[t as u64]) == 1u32 {
+                                        if pcc_eq(PCC_A1[s as u64], PCC_A1[t as u64]) == 1u32 { args_eq = 1u32 }
+                                    }
+                                }
+                                if args_eq == 1u32 {
+                                    pcc_add_edge(s, t, PCC_CONG)
+                                    pcc_link(s, t)
+                                    changed = 1u32
+                                }
+                            }
+                        }
+                    }
+                    t = t + 1u32
+                }
+            }
+            s = s + 1u32
+        }
+    }
+}
+
+fn pcc_merge(a: u32, b: u32, reason: u32) -> i32 @export {
+    if pcc_eq(a, b) == 1u32 { return 0i32 }
+    pcc_add_edge(a, b, reason)
+    pcc_link(a, b)
+    pcc_congruence_close()
+    return 0i32
+}
+
+/* BFS the merge graph (undirected) from a to b; fill PCC_PATH (nodes) + PCC_EXPL (edge reasons).
+ * returns 1 iff connected (a proof exists), 0 otherwise. */
+fn pcc_explain(a: u32, b: u32) -> u32 @export {
+    let nt : u32 = PCC_NT[0u32]
+    let mut i : u32 = 0u32
+    while i < nt { PCC_VIS[i as u64] = 0u32 ; i = i + 1u32 }
+    let ne : u32 = PCC_NE[0u32]
+    let mut head : u32 = 0u32
+    let mut tail : u32 = 0u32
+    PCC_Q[tail as u64] = a ; tail = tail + 1u32
+    PCC_VIS[a as u64] = 1u32
+    PCC_BPAR[a as u64] = a
+    let mut found : u32 = 0u32
+    while head < tail {
+        let u : u32 = PCC_Q[head as u64]
+        head = head + 1u32
+        if u == b { found = 1u32 ; head = tail }     /* stop scanning */
+        else {
+            let mut e : u32 = 0u32
+            while e < ne {
+                let eu : u32 = PCC_EU[e as u64]
+                let ev : u32 = PCC_EV[e as u64]
+                let mut nb : u32 = PCC_NONE
+                if eu == u { nb = ev } else { if ev == u { nb = eu } }
+                if nb != PCC_NONE {
+                    if PCC_VIS[nb as u64] == 0u32 {
+                        PCC_VIS[nb as u64] = 1u32
+                        PCC_BPAR[nb as u64] = u
+                        PCC_BEDGE[nb as u64] = PCC_ER[e as u64]
+                        PCC_Q[tail as u64] = nb ; tail = tail + 1u32
+                    }
+                }
+                e = e + 1u32
+            }
+        }
+    }
+    if a == b { PCC_PLEN[0u32] = 1u32 ; PCC_PATH[0u64] = a ; PCC_ELEN[0u32] = 0u32 ; return 1u32 }
+    if PCC_VIS[b as u64] == 0u32 { PCC_PLEN[0u32] = 0u32 ; PCC_ELEN[0u32] = 0u32 ; return 0u32 }
+    /* reconstruct path b -> a via BPAR, then reverse into PCC_PATH/PCC_EXPL */
+    let mut cnt : u32 = 0u32
+    let mut x : u32 = b
+    while x != a {
+        PCC_TMPN[cnt as u64] = x
+        PCC_TMPR[cnt as u64] = PCC_BEDGE[x as u64]
+        cnt = cnt + 1u32
+        x = PCC_BPAR[x as u64]
+    }
+    /* path = a, then reversed tmpn; reasons = reversed tmpr */
+    PCC_PATH[0u64] = a
+    let mut k : u32 = 0u32
+    while k < cnt {
+        PCC_PATH[(k + 1u32) as u64] = PCC_TMPN[(cnt - 1u32 - k) as u64]
+        PCC_EXPL[k as u64] = PCC_TMPR[(cnt - 1u32 - k) as u64]
+        k = k + 1u32
+    }
+    PCC_PLEN[0u32] = cnt + 1u32
+    PCC_ELEN[0u32] = cnt
+    return 1u32
+}
+
+/* ===== KAT ===== */
+
+/* structurally validate the last pcc_explain output: PATH[0]==a, PATH[last]==b, and every consecutive
+ * pair is joined by a real merge-graph edge carrying the reported reason. */
+fn pcc_path_valid(a: u32, b: u32) -> u32 {
+    let plen : u32 = PCC_PLEN[0u32]
+    if plen == 0u32 { return 0u32 }
+    if PCC_PATH[0u64] != a { return 0u32 }
+    if PCC_PATH[(plen - 1u32) as u64] != b { return 0u32 }
+    let ne : u32 = PCC_NE[0u32]
+    let mut i : u32 = 0u32
+    while i < (plen - 1u32) {
+        let u : u32 = PCC_PATH[i as u64]
+        let v : u32 = PCC_PATH[(i + 1u32) as u64]
+        let r : u32 = PCC_EXPL[i as u64]
+        /* find an edge {u,v} with reason r */
+        let mut ok : u32 = 0u32
+        let mut e : u32 = 0u32
+        while e < ne {
+            if PCC_ER[e as u64] == r {
+                if PCC_EU[e as u64] == u { if PCC_EV[e as u64] == v { ok = 1u32 } }
+                if PCC_EU[e as u64] == v { if PCC_EV[e as u64] == u { ok = 1u32 } }
+            }
+            e = e + 1u32
+        }
+        if ok == 0u32 { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * congruence_closure_kat -- 99 = proof-producing congruence closure is sound, self-checked:
+ *   (1) transitive closure: a=b, b=c => eq(a,c)=1; eq(a,d)=0;
+ *   (2) explanation STRUCTURAL VALIDITY: explain(a,c) returns a real labelled path a..c;
+ *   (3) explanation COMPLETENESS: eq(x,y)=1 => explain(x,y)=1 (connected);
+ *   (4) CONGRUENCE: eq(a,c) makes eq(f(a),f(c))=1 and eq(g(a,d),g(c,e))=1 (recursive), each explainable;
+ *   (5) NEGATIVE: an unrelated term is not equal and explain returns 0 (no proof path).
+ * ===================================================================================== */
+fn congruence_closure_kat() -> u64 @export {
+    pcc_init()
+    let a : u32 = pcc_leaf()
+    let b : u32 = pcc_leaf()
+    let c : u32 = pcc_leaf()
+    let d : u32 = pcc_leaf()
+    let e : u32 = pcc_leaf()
+    let fa : u32 = pcc_app1(1u32, a)        /* f(a) */
+    let fc : u32 = pcc_app1(1u32, c)        /* f(c) */
+    let gad : u32 = pcc_app2(2u32, a, d)    /* g(a,d) */
+    let gce : u32 = pcc_app2(2u32, c, e)    /* g(c,e) */
+
+    pcc_merge(a, b, 1u32)
+    pcc_merge(b, c, 2u32)
+    pcc_merge(d, e, 3u32)
+
+    /* (1) transitive closure */
+    if pcc_eq(a, c) != 1u32 { return 1u64 }
+    if pcc_eq(a, d) != 0u32 { return 2u64 }
+    if pcc_eq(d, e) != 1u32 { return 3u64 }
+
+    /* (2) explanation structural validity for a..c */
+    if pcc_explain(a, c) != 1u32 { return 4u64 }
+    if pcc_path_valid(a, c) != 1u32 { return 5u64 }
+    if PCC_ELEN[0u32] == 0u32 { return 6u64 }        /* a non-trivial proof exists */
+
+    /* (3) completeness: every equal pair is connected */
+    if pcc_explain(a, b) != 1u32 { return 7u64 }
+    if pcc_explain(d, e) != 1u32 { return 8u64 }
+
+    /* (4) congruence: equal args => equal applications, recursively */
+    if pcc_eq(fa, fc) != 1u32 { return 9u64 }        /* f(a)=f(c) since a=c */
+    if pcc_explain(fa, fc) != 1u32 { return 10u64 }
+    if pcc_path_valid(fa, fc) != 1u32 { return 11u64 }
+    if pcc_eq(gad, gce) != 1u32 { return 12u64 }     /* g(a,d)=g(c,e) since a=c and d=e */
+    if pcc_explain(gad, gce) != 1u32 { return 13u64 }
+
+    /* (5) NEGATIVE: an unrelated fresh term has no proof */
+    let z : u32 = pcc_leaf()
+    if pcc_eq(a, z) != 0u32 { return 14u64 }
+    if pcc_explain(a, z) != 0u32 { return 15u64 }
+    if pcc_eq(fa, gad) != 0u32 { return 16u64 }      /* different functions never congruent */
+
+    return 99u64
+}

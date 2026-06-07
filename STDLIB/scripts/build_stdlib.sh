@@ -692,6 +692,7 @@ MODULES=(
     "numera/pareto_frontier"
     "numera/verified_ripple"
     "numera/optimality_cert"
+    "numera/logic_synth"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

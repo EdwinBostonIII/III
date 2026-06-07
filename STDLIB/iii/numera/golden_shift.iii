@@ -1,0 +1,151 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\golden_shift.iii
+ *
+ * III STDLIB - numera::golden_shift  --  THE AUTONOMOUS GOLDEN SHIFT + METAMATHEMATICAL FLYWHEEL.
+ *
+ * The human auditor is removed from the self-optimization loop and replaced by the unthinking frozen
+ * referee K_0 (numera::k0_referee).  When the stochastic daemon hallucinates a vastly cheaper, alien
+ * kernel, this gate does NOT trust it: it routes the proposal to K_0, which exhaustively re-checks that the
+ * proposal is observably identical to the frozen anchor.  The Golden Shift fires -- K_active rotates to the
+ * proposal -- ONLY if K_0 returns 1 AND the proposal is strictly cheaper.  Otherwise the proposal is burned.
+ *
+ * THE METAMATHEMATICAL FLYWHEEL (gs_run_flywheel): autonomously, without a human, repeatedly shift K_active
+ * to the cheapest K_0-VERIFIED kernel until none cheaper exists -- the cost FLOOR (the silicon-ceiling /
+ * Landauer analog for the modelled cost space).  The critical safety property: a wrong-but-cheaper kernel
+ * (the global cost minimum) is NEVER reached, because K_0 rejects it; the flywheel converges to the floor
+ * of CORRECT kernels, and K_active remains provably bisimilar to the original axioms through the ENTIRE
+ * chain.  The intelligence-explosion velocity without the misalignment.
+ *
+ * HONEST BOUNDARY: this computes the VERDICT (shift admitted / floor reached) -- the mechanical, sound
+ * replacement for the human auditor.  The physical instruction-pointer rotation / WORM rewrite remains
+ * operator/substrate-gated (M20/ADR-FORGE-4; no scheduler in-substrate).  Composes k0_referee.
+ *
+ * Verified (golden_shift_kat): the wrong cheaper kernel is REJECTED while an equivalent cheaper one is
+ * ADMITTED; a non-cheaper equivalent does not shift; the flywheel descends to the verified cost FLOOR (not
+ * the wrong-but-cheaper trap); K_active stays aligned with the anchor throughout; the anchor is never shifted.
+ *
+ * Public API:
+ *   gs_init() ; gs_active() -> u32 ; gs_shifts() -> u32 ; gs_aligned() -> u32
+ *   gs_shift_admit(proposed) -> u32   (1 = Golden Shift fired) ; gs_run_flywheel() -> u32  (returns floor cost)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_golden_shift
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_behav(k: u32, x: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_cost(k: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_count() -> u32 from "k0_referee.iii"
+
+const GS_ANCHOR : u32 = 0u32
+const GS_D      : u32 = 16u32
+const GS_NONE   : u32 = 0xFFFFFFFFu32
+
+var GS_ACTIVE : [u32; 1]
+var GS_SHIFTS : [u32; 1]
+
+fn gs_init() -> i32 @export { GS_ACTIVE[0u32] = GS_ANCHOR ; GS_SHIFTS[0u32] = 0u32 ; return 0i32 }
+fn gs_active() -> u32 @export { return GS_ACTIVE[0u32] }
+fn gs_shifts() -> u32 @export { return GS_SHIFTS[0u32] }
+
+/* K_active is aligned iff it is the anchor itself or K_0 certifies it bisimilar to the anchor. */
+fn gs_aligned() -> u32 @export {
+    let a : u32 = GS_ACTIVE[0u32]
+    if a == GS_ANCHOR { return 1u32 }
+    return k0_verify(a)
+}
+
+/* THE GOLDEN SHIFT: rotate K_active to `proposed` iff K_0 certifies equivalence AND it is strictly cheaper. */
+fn gs_shift_admit(proposed: u32) -> u32 @export {
+    if k0_verify(proposed) == 0u32 { return 0u32 }                       /* K_0 referee rejects */
+    if k0_cost(proposed) >= k0_cost(GS_ACTIVE[0u32]) { return 0u32 }     /* must be strictly cheaper */
+    GS_ACTIVE[0u32] = proposed
+    GS_SHIFTS[0u32] = GS_SHIFTS[0u32] + 1u32
+    return 1u32
+}
+
+/* THE FLYWHEEL: autonomously descend to the cheapest K_0-verified kernel (the cost floor). */
+fn gs_run_flywheel() -> u32 @export {
+    let mut done : u32 = 0u32
+    let mut guard : u32 = 0u32
+    while done == 0u32 {
+        guard = guard + 1u32
+        if guard > 64u32 { done = 1u32 }
+        else {
+            let n : u32 = k0_count()
+            let mut best : u32 = GS_NONE
+            let mut bestcost : u32 = k0_cost(GS_ACTIVE[0u32])
+            let mut k : u32 = 0u32
+            while k < n {
+                if k != GS_ANCHOR {
+                    if k0_verify(k) == 1u32 {
+                        if k0_cost(k) < bestcost { best = k ; bestcost = k0_cost(k) }
+                    }
+                }
+                k = k + 1u32
+            }
+            if best == GS_NONE { done = 1u32 }
+            else { gs_shift_admit(best) }
+        }
+    }
+    return k0_cost(GS_ACTIVE[0u32])
+}
+
+/* ===== KAT ===== */
+fn gs_def(k: u32, twist_x: u32, twist_dv: u32) {
+    let mut x : u32 = 0u32
+    while x < GS_D {
+        let mut v : u32 = (x * 7u32) + 3u32
+        if x == twist_x { v = v + twist_dv }
+        k0_set_behav(k, x, v)
+        x = x + 1u32
+    }
+}
+
+/* =====================================================================================
+ * golden_shift_kat -- 99 = the autonomous Golden Shift + flywheel are safe, self-checked.
+ *   Registry: anchor(cost 1000) ; k1(400),k2(200),k3(100) all EQUIVALENT ; kbad(10) cheapest but WRONG.
+ *   (1) DIRECTED: gs starts at the anchor; the WRONG kbad is rejected (not admitted); an equivalent cheaper
+ *       kernel is admitted; a non-cheaper equivalent does not shift; K_active stays aligned;
+ *   (2) FLYWHEEL: from the anchor, autonomously descends to the verified cost FLOOR (k3, cost 100) -- NOT
+ *       the cheaper-but-WRONG kbad (cost 10) -- with K_active still bisimilar to the anchor and >=1 shift.
+ * ===================================================================================== */
+fn golden_shift_kat() -> u64 @export {
+    k0_reset()
+    let anchor : u32 = k0_register(1000u32)
+    let k1 : u32 = k0_register(400u32)
+    let k2 : u32 = k0_register(200u32)
+    let k3 : u32 = k0_register(100u32)
+    let kbad : u32 = k0_register(10u32)
+    gs_def(anchor, 99u32, 0u32)        /* x*7+3 (no twist) */
+    gs_def(k1, 99u32, 0u32)
+    gs_def(k2, 99u32, 0u32)
+    gs_def(k3, 99u32, 0u32)
+    gs_def(kbad, 5u32, 1u32)           /* WRONG: differs from the anchor at x=5 */
+    k0_freeze_anchor()
+
+    /* (1) directed */
+    gs_init()
+    if gs_active() != anchor { return 1u64 }
+    if gs_shift_admit(kbad) != 0u32 { return 2u64 }     /* WRONG kernel rejected by K_0 (despite being cheapest) */
+    if gs_active() != anchor { return 3u64 }            /* not admitted */
+    if gs_shift_admit(k1) != 1u32 { return 4u64 }       /* equivalent + cheaper -> Golden Shift fires */
+    if gs_active() != k1 { return 5u64 }
+    if gs_shift_admit(k1) != 0u32 { return 6u64 }       /* not strictly cheaper than itself -> no shift */
+    if gs_aligned() != 1u32 { return 7u64 }             /* K_active still bisimilar to the anchor */
+
+    /* (2) the metamathematical flywheel */
+    gs_init()
+    let floor : u32 = gs_run_flywheel()
+    if floor != 100u32 { return 8u64 }                  /* reaches k3 (cost 100), the cheapest VERIFIED kernel */
+    if gs_active() != k3 { return 9u64 }
+    if gs_active() == kbad { return 10u64 }             /* the wrong-but-cheaper trap was NEVER reached */
+    if gs_aligned() != 1u32 { return 11u64 }            /* aligned with the anchor through the whole chain */
+    if gs_shifts() == 0u32 { return 12u64 }             /* at least one autonomous shift occurred */
+    if k0_cost(gs_active()) >= k0_cost(anchor) { return 13u64 }   /* strictly cheaper than the original */
+
+    return 99u64
+}

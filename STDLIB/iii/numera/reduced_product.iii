@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\reduced_product.iii
+ *
+ * III STDLIB - numera::reduced_product  --  EMERGENT PRECISION FROM DOMAIN INTERSECTION.
+ *
+ * Two abstract domains tracking the same value know different things; the REDUCED PRODUCT lets each refine
+ * the other, so the pair is strictly more precise than either alone -- higher precision emerging from the
+ * intersection of two granular analyses.  This couples numera::interval_lattice (a range [lo,hi]) with a
+ * parity domain (even / odd / any): an interval [2,9] knows 8 values, parity "even" knows infinitely many,
+ * but their reduced product knows exactly {2,4,6,8} -- four.  The REDUCTION tightens the interval to the
+ * extremal values of the right parity, and transfer functions (here addition) carry both dimensions and
+ * re-reduce, so the product stays as sharp as the information allows while remaining sound.
+ *
+ * Verified (reduced_product_kat): the reduction tightens an interval to its parity-extremal bounds; the
+ * product's value count is strictly below the interval's (proof of emergent precision); addition carries
+ * interval and parity together and re-reduces; and the product SOUNDLY contains every concrete sum.  NIH;
+ * composes interval_lattice.
+ *
+ * Public API:
+ *   rp_reduce_lo(lo,p) -> u32 ; rp_reduce_hi(hi,p) -> u32 ; rp_count(lo,hi,p) -> u32 ;
+ *   rp_add_parity(p1,p2) -> u32 ; rp_add(lo1,hi1,p1,lo2,hi2,p2) ; rp_lo()/rp_hi()/rp_par() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_reduced_product
+
+extern @abi(c-msvc-x64) fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+
+const RP_EVEN : u32 = 0u32
+const RP_ODD  : u32 = 1u32
+const RP_ANY  : u32 = 2u32
+
+var RP_LO  : [u32; 1]
+var RP_HI  : [u32; 1]
+var RP_PAR : [u32; 1]
+
+/* reduce the lower bound up to the smallest value >= lo with parity p. */
+fn rp_reduce_lo(lo: u32, p: u32) -> u32 @export {
+    if p >= RP_ANY { return lo }
+    if (lo & 1u32) == p { return lo }
+    return lo + 1u32
+}
+/* reduce the upper bound down to the largest value <= hi with parity p. */
+fn rp_reduce_hi(hi: u32, p: u32) -> u32 @export {
+    if p >= RP_ANY { return hi }
+    if (hi & 1u32) == p { return hi }
+    if hi == 0u32 { return 0u32 }                /* no value <= 0 of the other parity -> empty (rp_count guards rlo>rhi) */
+    return hi - 1u32
+}
+
+/* the exact number of concrete values in the reduced product [lo,hi] with parity p. */
+fn rp_count(lo: u32, hi: u32, p: u32) -> u32 @export {
+    if p >= RP_ANY { return (hi - lo) + 1u32 }
+    let rlo : u32 = rp_reduce_lo(lo, p)
+    let rhi : u32 = rp_reduce_hi(hi, p)
+    if rlo > rhi { return 0u32 }
+    return ((rhi - rlo) >> 1u32) + 1u32          /* step 2 between same-parity values */
+}
+
+/* parity transfer for addition: even+even=even, even+odd=odd, odd+odd=even; any is absorbing. */
+fn rp_add_parity(p1: u32, p2: u32) -> u32 @export {
+    if p1 >= RP_ANY { return RP_ANY }
+    if p2 >= RP_ANY { return RP_ANY }
+    return (p1 + p2) & 1u32
+}
+
+/* product addition: add the intervals (via interval_lattice), add the parities, then re-reduce. */
+fn rp_add(lo1: u32, hi1: u32, p1: u32, lo2: u32, hi2: u32, p2: u32) -> i32 @export {
+    il_add(lo1, hi1, lo2, hi2)
+    let alo : u32 = il_lo() ; let ahi : u32 = il_hi()
+    let p : u32 = rp_add_parity(p1, p2)
+    RP_LO[0u64] = rp_reduce_lo(alo, p)
+    RP_HI[0u64] = rp_reduce_hi(ahi, p)
+    RP_PAR[0u64] = p
+    return 0i32
+}
+fn rp_lo() -> u32 @export { return RP_LO[0u64] }
+fn rp_hi() -> u32 @export { return RP_HI[0u64] }
+fn rp_par() -> u32 @export { return RP_PAR[0u64] }
+
+/* =====================================================================================
+ * reduced_product_kat -- 99 = the reduced product yields sound, emergent precision, self-checked:
+ *   (1) reduction tightens [3,8] even -> [4,8]; [3,8] odd -> [3,7];
+ *   (2) PRECISION: the product [2,9]+even has 4 values, strictly below the interval's 8;
+ *   (3) addition carries both dimensions: [2,4]even + [1,3]odd = [3,7] odd = {3,5,7};
+ *   (4) SOUNDNESS: every concrete x+y (x in {2,4}, y in {1,3}) lands in the product {3,5,7}.
+ * ===================================================================================== */
+fn reduced_product_kat() -> u64 @export {
+    /* (1) reduction */
+    if rp_reduce_lo(3u32, RP_EVEN) != 4u32 { return 1u64 }
+    if rp_reduce_hi(8u32, RP_EVEN) != 8u32 { return 2u64 }
+    if rp_reduce_lo(3u32, RP_ODD) != 3u32 { return 3u64 }
+    if rp_reduce_hi(8u32, RP_ODD) != 7u32 { return 4u64 }
+
+    /* (2) emergent precision: product count < interval count */
+    let prod : u32 = rp_count(2u32, 9u32, RP_EVEN)        /* {2,4,6,8} = 4 */
+    let intv : u32 = rp_count(2u32, 9u32, RP_ANY)         /* [2,9] = 8 */
+    if prod != 4u32 { return 5u64 }
+    if intv != 8u32 { return 6u64 }
+    if prod >= intv { return 7u64 }                       /* strictly more precise */
+
+    /* (3) product addition carries interval and parity */
+    rp_add(2u32, 4u32, RP_EVEN, 1u32, 3u32, RP_ODD)       /* [3,7], even+odd=odd */
+    if rp_lo() != 3u32 { return 8u64 }
+    if rp_hi() != 7u32 { return 9u64 }
+    if rp_par() != RP_ODD { return 10u64 }
+    if rp_count(rp_lo(), rp_hi(), rp_par()) != 3u32 { return 11u64 }   /* {3,5,7} */
+
+    /* (4) soundness: every concrete sum lands in the product */
+    let mut bad : u32 = 0u32
+    let mut xi : u32 = 0u32
+    while xi < 2u32 {
+        let x : u32 = 2u32 + (xi * 2u32)                  /* x in {2,4} */
+        let mut yi : u32 = 0u32
+        while yi < 2u32 {
+            let y : u32 = 1u32 + (yi * 2u32)              /* y in {1,3} */
+            let s : u32 = x + y
+            if s < rp_lo() { bad = 1u32 }
+            if s > rp_hi() { bad = 1u32 }
+            if (s & 1u32) != rp_par() { bad = 1u32 }      /* and matches the parity */
+            yi = yi + 1u32
+        }
+        xi = xi + 1u32
+    }
+    if bad != 0u32 { return 12u64 }
+
+    return 99u64
+}

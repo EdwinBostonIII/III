@@ -1,0 +1,13 @@
+/* 1237_csl.iii -- Concurrent Separation Logic: non-interference (state layer S6 CAPSTONE).
+ * Drives numera::csl::csl_kat: 99 = disjoint memory footprints (F_A * F_B via heaplet hl_disjoint) imply
+ * INTERLEAVING-INDEPENDENT execution -- every interleaving agrees ("Thread A cannot break Thread B"); and
+ * the negative -- overlapping footprints make interleavings disagree (a load races a store). */
+module corpus_1237
+
+extern @abi(c-msvc-x64) fn csl_kat() -> u64 from "csl.iii"
+
+fn main() -> u64 {
+    let r : u64 = csl_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

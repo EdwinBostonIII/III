@@ -1,0 +1,13 @@
+/* 1235_ptr_provenance.iii -- pointer provenance + the aliasing DECISION PROCEDURE (state layer S4).
+ * Drives numera::ptr_provenance::prov_provenance_kat: 99 = directed alias cases; chain-of-custody bounds
+ * (incl. off+width==size); use-after-free detection; and SOUNDNESS+PRECISION over 500 random access pairs
+ * cross-checked against ground-truth byte overlap (never a false no-alias). */
+module corpus_1235
+
+extern @abi(c-msvc-x64) fn prov_provenance_kat() -> u64 from "ptr_provenance.iii"
+
+fn main() -> u64 {
+    let r : u64 = prov_provenance_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

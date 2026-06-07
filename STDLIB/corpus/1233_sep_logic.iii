@@ -1,0 +1,13 @@
+/* 1233_sep_logic.iii -- separation logic + the FRAME RULE (state layer S2).
+ * Drives numera::sep_logic::sep_logic_kat: 99 = sl_sat correctness; * commutative/associative/emp-identity;
+ * the FRAME THEOREM c(hP uplus hR)=c(hP) uplus hR over 200 random splits (STORE+SWAP); and the negative
+ * (a command overlapping the frame provably modifies it). */
+module corpus_1233
+
+extern @abi(c-msvc-x64) fn sep_logic_kat() -> u64 from "sep_logic.iii"
+
+fn main() -> u64 {
+    let r : u64 = sep_logic_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

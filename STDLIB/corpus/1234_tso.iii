@@ -1,0 +1,13 @@
+/* 1234_tso.iii -- the x86-TSO weak memory model (state layer S3).
+ * Drives numera::tso::tso_kat: 99 = the canonical litmus spec verified by exhaustive interleaving:
+ * SB allows r0=r1=0 (the TSO relaxation); SB+MFENCE forbids it (sequential consistency restored);
+ * MP forbids r0=1 & r1=0 (store order + load order preserved). */
+module corpus_1234
+
+extern @abi(c-msvc-x64) fn tso_kat() -> u64 from "tso.iii"
+
+fn main() -> u64 {
+    let r : u64 = tso_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

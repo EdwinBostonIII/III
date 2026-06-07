@@ -1,0 +1,12 @@
+/* 1232_heaplet.iii -- the separation algebra (state layer S1).
+ * Drives numera::heaplet::heaplet_kat: 99 = the disjoint-union monoid laws (commutative + associative +
+ * emp-identity + per-cell value preservation) over the model space, plus the overlap-undefined negative. */
+module corpus_1232
+
+extern @abi(c-msvc-x64) fn heaplet_kat() -> u64 from "heaplet.iii"
+
+fn main() -> u64 {
+    let r : u64 = heaplet_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

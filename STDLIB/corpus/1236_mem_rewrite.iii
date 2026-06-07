@@ -1,0 +1,13 @@
+/* 1236_mem_rewrite.iii -- the propose/dispose memory-layout loop (state layer S5).
+ * Drives numera::mem_rewrite::mem_rewrite_kat: 99 = AoS/SoA/reversed-packing layouts are trace-equivalent
+ * (the rewrite preserves observable behaviour); the disposer accepts the injective ones; the colliding
+ * layout is REJECTED and demonstrably corrupts the trace; 50 random programs AoS<->SoA trace-equivalent. */
+module corpus_1236
+
+extern @abi(c-msvc-x64) fn mem_rewrite_kat() -> u64 from "mem_rewrite.iii"
+
+fn main() -> u64 {
+    let r : u64 = mem_rewrite_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

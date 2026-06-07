@@ -869,6 +869,7 @@ declare -A EXPECTED=(
     [1289_kinduction]=99
     [1290_dijkstra]=99
     [1291_safety_prover]=99
+    [1292_value_range_prover]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

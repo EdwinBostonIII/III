@@ -1,0 +1,16 @@
+/* 1292_value_range_prover.iii -- universal overflow proof over a parameter family (composition).
+ * Drives numera::value_range_prover::value_range_prover_kat: 99 = one abstract check proves NO member of an
+ * entire family of loop programs (acc = sum of a over n iterations, parameterized by n in [0,N], a in [0,A])
+ * overflows the type bound; the abstract bound equals N*A and dominates every concrete acc over the whole
+ * family (soundness cross-checked exhaustively, not one fixture); (10,5) vs u8 255 is proven safe and (10,30)
+ * has a concrete overflow witness. Composes interval_lattice + range_check -- abstract interpretation's
+ * one-check-covers-many power. */
+module corpus_1292
+
+extern @abi(c-msvc-x64) fn value_range_prover_kat() -> u64 from "value_range_prover.iii"
+
+fn main() -> u64 {
+    let r : u64 = value_range_prover_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,104 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bce.iii
+ *
+ * III STDLIB - numera::bce  --  VERIFIED BOUNDS-CHECK ELIMINATION.
+ *
+ * A bounds check on every array access is the price of memory safety; eliminating the ones that can never
+ * fail is one of the highest-value optimizations a compiler performs -- and one of the easiest to get
+ * wrong (eliminate a needed check and safety is gone).  This makes it VERIFIED: a check on the affine
+ * access A[a*i+b] over i in [0,n) is removed ONLY when numera::affine_check proves the whole stream stays
+ * below the array size, and it is KEPT whenever some iteration can exceed it.  Soundness is two-sided: an
+ * eliminated check provably never fires, and a kept check provably CAN fire (so it was genuinely needed).
+ *
+ * The model is a loop body with several affine accesses into an array of one size; the pass eliminates
+ * exactly the provably-in-bounds checks and counts them.
+ *
+ * Verified (bce_kat): a provably-in-bounds access has its check eliminated and the check provably never
+ * fires; an out-of-bounds access keeps its check and that check provably CAN fire; over a mixed loop body
+ * exactly the safe checks are removed and the count is correct.  NIH; composes affine_check.
+ *
+ * Public API:
+ *   bce_redundant(a,b,n,size) -> u32 ; bce_eliminated_never_fires(a,b,n,size) -> u32 ;
+ *   bce_kept_can_fire(a,b,n,size) -> u32 ; bce_eliminate_count() -> u32 ; bce_setup()
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_bce
+
+extern @abi(c-msvc-x64) fn ac_max_access(a: u32, b: u32, n: u32) -> u32 from "affine_check.iii"
+extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
+
+const BCE_K : u32 = 4u32          /* accesses in the loop body */
+
+var BCE_A    : [u32; 4]
+var BCE_B    : [u32; 4]
+var BCE_N    : [u32; 1]
+var BCE_SIZE : [u32; 1]
+
+/* a check is redundant iff the maximum access of the affine stream is below the array size. */
+fn bce_redundant(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
+    if ac_max_access(a, b, n) < size { return 1u32 }
+    return 0u32
+}
+
+/* an eliminated check provably NEVER fires (affine_check confirms in-bounds over the whole stream). */
+fn bce_eliminated_never_fires(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
+    if bce_redundant(a, b, n, size) == 0u32 { return 0u32 }   /* not eliminated -> N/A */
+    return ac_in_bounds(a, b, n, size)                        /* must be exhaustively in-bounds */
+}
+
+/* a KEPT check provably CAN fire (some iteration is out of bounds, so the check was needed). */
+fn bce_kept_can_fire(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
+    if bce_redundant(a, b, n, size) == 1u32 { return 0u32 }   /* was eliminated -> not kept */
+    if ac_in_bounds(a, b, n, size) == 0u32 { return 1u32 }    /* an iteration really exceeds the bound */
+    return 0u32
+}
+
+fn bce_setup() -> i32 @export {
+    /* a loop body, n=8 into an array of size 32: two safe accesses, two that overflow */
+    BCE_A[0u64] = 2u32 ; BCE_B[0u64] = 1u32       /* max 2*7+1=15 < 32 -> safe */
+    BCE_A[1u64] = 3u32 ; BCE_B[1u64] = 0u32       /* max 3*7+0=21 < 32 -> safe */
+    BCE_A[2u64] = 5u32 ; BCE_B[2u64] = 0u32       /* max 5*7+0=35 >= 32 -> needs check */
+    BCE_A[3u64] = 4u32 ; BCE_B[3u64] = 10u32      /* max 4*7+10=38 >= 32 -> needs check */
+    BCE_N[0u64] = 8u32 ; BCE_SIZE[0u64] = 32u32
+    return 0i32
+}
+
+/* how many checks the pass eliminates over the loop body. */
+fn bce_eliminate_count() -> u32 @export {
+    let n : u32 = BCE_N[0u64]
+    let size : u32 = BCE_SIZE[0u64]
+    let mut cnt : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < BCE_K {
+        if bce_redundant(BCE_A[k as u64], BCE_B[k as u64], n, size) == 1u32 { cnt = cnt + 1u32 }
+        k = k + 1u32
+    }
+    return cnt
+}
+
+/* =====================================================================================
+ * bce_kat -- 99 = verified bounds-check elimination is two-sided sound, self-checked:
+ *   (1) a provably-in-bounds access (A[2*i+1], n=5, size=16) is REDUNDANT and its check never fires;
+ *   (2) an out-of-bounds access (A[3*i+2], n=8, size=16) is NOT redundant and its check CAN fire (kept);
+ *   (3) over the loop body exactly the two safe checks are eliminated (count = 2);
+ *   (4) elimination and keep are mutually exclusive (no access is both).
+ * ===================================================================================== */
+fn bce_kat() -> u64 @export {
+    /* (1) in-bounds access: eliminate + never fires */
+    if bce_redundant(2u32, 1u32, 5u32, 16u32) != 1u32 { return 1u64 }
+    if bce_eliminated_never_fires(2u32, 1u32, 5u32, 16u32) != 1u32 { return 2u64 }
+
+    /* (2) out-of-bounds access: keep + can fire */
+    if bce_redundant(3u32, 2u32, 8u32, 16u32) != 0u32 { return 3u64 }
+    if bce_kept_can_fire(3u32, 2u32, 8u32, 16u32) != 1u32 { return 4u64 }
+
+    /* (3) loop body: exactly two checks eliminated */
+    bce_setup()
+    if bce_eliminate_count() != 2u32 { return 5u64 }
+
+    /* (4) mutual exclusion: the safe access is eliminated-not-kept; the unsafe is kept-not-eliminated */
+    if bce_kept_can_fire(2u32, 1u32, 5u32, 16u32) != 0u32 { return 6u64 }
+    if bce_eliminated_never_fires(3u32, 2u32, 8u32, 16u32) != 0u32 { return 7u64 }
+
+    return 99u64
+}

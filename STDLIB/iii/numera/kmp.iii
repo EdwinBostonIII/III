@@ -1,0 +1,146 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\kmp.iii
+ *
+ * III STDLIB - numera::kmp  --  KNUTH-MORRIS-PRATT STRING MATCHING, VERIFIED AGAINST NAIVE.
+ *
+ * KMP finds a pattern in a text in O(n+m) by precomputing a FAILURE FUNCTION (the longest proper prefix of
+ * the pattern that is also a suffix of each prefix), so on a mismatch it never re-examines text it has
+ * already matched.  The subtlety -- the failure function and the skip logic -- is exactly where hand-written
+ * matchers go wrong, so the III discipline is to VERIFY the fast matcher against the naive O(n*m) reference
+ * for every pattern: same first-match index, same not-found, across distinct match positions and a no-match
+ * case.  The equivalence is the proof the skip table is right.
+ *
+ * Text: A B A B C A B A B (encoded 0,1,0,1,2,0,1,0,1).  Patterns: ABAB (first match at 0), ABC (at 2),
+ * CAB (at 4), and XYZ (absent).
+ *
+ * Verified (kmp_kat): each pattern's first match index from KMP equals the naive reference's; the absent
+ * pattern returns the not-found sentinel from both; and the failure function of ABAB is [0,0,1,2].  NIH/self-contained.
+ *
+ * Public API:
+ *   kmp_setup(mode) ; kmp_build_fail() ; kmp_naive() -> u32 ; kmp_search() -> u32 ; kmp_fail(i) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_kmp
+
+const KMP_TLEN : u32 = 9u32
+const KMP_NONE : u32 = 0xFFFFFFFFu32
+
+var KMP_TEXT : [u32; 9]
+var KMP_PAT  : [u32; 4]
+var KMP_PLEN : [u32; 1]
+var KMP_FAIL : [u32; 4]
+
+fn kmp_setup(mode: u32) -> i32 @export {
+    KMP_TEXT[0u64]=0u32 ; KMP_TEXT[1u64]=1u32 ; KMP_TEXT[2u64]=0u32 ; KMP_TEXT[3u64]=1u32
+    KMP_TEXT[4u64]=2u32 ; KMP_TEXT[5u64]=0u32 ; KMP_TEXT[6u64]=1u32 ; KMP_TEXT[7u64]=0u32 ; KMP_TEXT[8u64]=1u32
+    if mode == 0u32 {                                  /* ABAB */
+        KMP_PAT[0u64]=0u32 ; KMP_PAT[1u64]=1u32 ; KMP_PAT[2u64]=0u32 ; KMP_PAT[3u64]=1u32 ; KMP_PLEN[0u64]=4u32
+    }
+    if mode == 1u32 {                                  /* ABC */
+        KMP_PAT[0u64]=0u32 ; KMP_PAT[1u64]=1u32 ; KMP_PAT[2u64]=2u32 ; KMP_PLEN[0u64]=3u32
+    }
+    if mode == 2u32 {                                  /* CAB */
+        KMP_PAT[0u64]=2u32 ; KMP_PAT[1u64]=0u32 ; KMP_PAT[2u64]=1u32 ; KMP_PLEN[0u64]=3u32
+    }
+    if mode == 3u32 {                                  /* XYZ (absent) */
+        KMP_PAT[0u64]=7u32 ; KMP_PAT[1u64]=8u32 ; KMP_PAT[2u64]=9u32 ; KMP_PLEN[0u64]=3u32
+    }
+    return 0i32
+}
+
+/* build the KMP failure function for the current pattern. */
+fn kmp_build_fail() -> i32 @export {
+    let m : u32 = KMP_PLEN[0u64]
+    KMP_FAIL[0u64] = 0u32
+    let mut i : u32 = 1u32
+    while i < m {
+        let mut k : u32 = KMP_FAIL[(i - 1u32) as u64]
+        let mut go : u32 = 1u32
+        while go == 1u32 {
+            if k == 0u32 { go = 0u32 }
+            if go == 1u32 { if KMP_PAT[i as u64] == KMP_PAT[k as u64] { go = 0u32 } }
+            if go == 1u32 { k = KMP_FAIL[(k - 1u32) as u64] }
+        }
+        if KMP_PAT[i as u64] == KMP_PAT[k as u64] { k = k + 1u32 }
+        KMP_FAIL[i as u64] = k
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* the naive O(n*m) reference: first index where the pattern matches, or NONE. */
+fn kmp_naive() -> u32 @export {
+    let m : u32 = KMP_PLEN[0u64]
+    let mut s : u32 = 0u32
+    while (s + m) <= KMP_TLEN {
+        let mut j : u32 = 0u32
+        let mut ok : u32 = 1u32
+        while j < m {
+            if KMP_TEXT[(s + j) as u64] != KMP_PAT[j as u64] { ok = 0u32 }
+            j = j + 1u32
+        }
+        if ok == 1u32 { return s }
+        s = s + 1u32
+    }
+    return KMP_NONE
+}
+
+/* the O(n+m) KMP search using the failure function. */
+fn kmp_search() -> u32 @export {
+    kmp_build_fail()
+    let m : u32 = KMP_PLEN[0u64]
+    let mut q : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < KMP_TLEN {
+        let mut go : u32 = 1u32
+        while go == 1u32 {
+            if q == 0u32 { go = 0u32 }
+            if go == 1u32 { if KMP_TEXT[i as u64] == KMP_PAT[q as u64] { go = 0u32 } }
+            if go == 1u32 { q = KMP_FAIL[(q - 1u32) as u64] }
+        }
+        if KMP_TEXT[i as u64] == KMP_PAT[q as u64] { q = q + 1u32 }
+        if q == m { return (i + 1u32) - m }
+        i = i + 1u32
+    }
+    return KMP_NONE
+}
+
+fn kmp_fail(i: u32) -> u32 @export { return KMP_FAIL[i as u64] }
+
+/* =====================================================================================
+ * kmp_kat -- 99 = KMP matching is correct, verified against the naive reference:
+ *   (1) ABAB: KMP first match at index 0, equal to naive;
+ *   (2) ABC at 2, CAB at 4, each KMP == naive;
+ *   (3) the absent pattern XYZ returns the not-found sentinel from both;
+ *   (4) the failure function of ABAB is [0,0,1,2].
+ * ===================================================================================== */
+fn kmp_kat() -> u64 @export {
+    /* (1) ABAB */
+    kmp_setup(0u32)
+    if kmp_search() != 0u32 { return 1u64 }
+    if kmp_search() != kmp_naive() { return 2u64 }
+
+    /* (2) ABC and CAB at distinct positions */
+    kmp_setup(1u32)
+    if kmp_search() != 2u32 { return 3u64 }
+    if kmp_search() != kmp_naive() { return 4u64 }
+    kmp_setup(2u32)
+    if kmp_search() != 4u32 { return 5u64 }
+    if kmp_search() != kmp_naive() { return 6u64 }
+
+    /* (3) absent pattern */
+    kmp_setup(3u32)
+    if kmp_search() != KMP_NONE { return 7u64 }
+    if kmp_naive() != KMP_NONE { return 8u64 }
+    if kmp_search() != kmp_naive() { return 9u64 }
+
+    /* (4) the failure function of ABAB */
+    kmp_setup(0u32)
+    kmp_build_fail()
+    if kmp_fail(0u32) != 0u32 { return 10u64 }
+    if kmp_fail(1u32) != 0u32 { return 11u64 }
+    if kmp_fail(2u32) != 1u32 { return 12u64 }
+    if kmp_fail(3u32) != 2u32 { return 13u64 }
+
+    return 99u64
+}

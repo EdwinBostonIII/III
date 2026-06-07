@@ -1,0 +1,138 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\conjecture_refute.iii
+ *
+ * III STDLIB - numera::conjecture_refute  --  THE DEDUCTIVE/INDUCTIVE BRIDGE (Popperian science).
+ *
+ * To move from a Perfect Oracle toward genuine scientific reasoning, III must form HYPOTHESES about the
+ * world (the inductive, creative move) -- but it is forbidden from "learning" them statistically (no
+ * count-and-promote, no observe-and-adapt; that is ML in disguise).  The rigorous bridge is Popperian:
+ * III makes a BOLD CONJECTURE -- a universally-quantified claim -- and adjudicates it ONLY by
+ *   (a) EXHAUSTIVE PROOF over the claimed domain  =>  THEOREM, or
+ *   (b) a SINGLE COUNTEREXAMPLE                    =>  REFUTED (with the witness recorded).
+ * It NEVER promotes a conjecture because it "held many times."  Accumulated confirmations carry zero
+ * epistemic weight; one counterexample is fatal.  This is induction (hypothesis generation) disciplined by
+ * deduction (proof or refutation) -- science without statistical belief.
+ *
+ * The canonical witness is Euler's prime-generating polynomial n = x^2 + x + 41: PRIME for x = 0..39 (forty
+ * straight confirmations) yet COMPOSITE at x = 40 (= 41^2).  A statistical learner would "believe" it after
+ * 40 hits; III REFUTES it at x = 40.  The conjecture engine also adjudicates true laws (x^2+x is always
+ * even) and bisimulation conjectures (the equivalence verdicts that feed golden_shift / algo_synth).
+ *
+ * Verified (conjecture_refute_kat): the prime conjecture is a THEOREM over [0,40) and REFUTED over [0,100)
+ * at the witness x=40; the even-law is a THEOREM over a large domain; a true equivalence is a THEOREM and a
+ * one-point-different one is REFUTED at its witness.  NIH/self-contained.
+ *
+ * Public API:
+ *   cr_is_prime(n) -> u32 ; cr_euler(x) -> u32
+ *   cr_adjudicate_prime(domain) -> u32   (CR_THEOREM / CR_REFUTED) ; cr_adjudicate_even(domain) -> u32
+ *   cr_adjudicate_equiv(which_b, domain) -> u32 ; cr_witness() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_conjecture_refute
+
+const CR_REFUTED : u32 = 0u32
+const CR_THEOREM : u32 = 1u32
+const CR_NONE    : u32 = 0xFFFFFFFFu32
+
+var CR_WITNESS : [u32; 1]      /* the refuting counterexample (CR_NONE if proven) */
+
+fn cr_is_prime(n: u32) -> u32 @export {
+    let v : u32 = n
+    if v < 2u32 { return 0u32 }
+    let mut d : u32 = 2u32
+    while (d * d) <= v {
+        if (v % d) == 0u32 { return 0u32 }
+        d = d + 1u32
+    }
+    return 1u32
+}
+
+fn cr_euler(x: u32) -> u32 @export { return ((x * x) + x) + 41u32 }   /* Euler's prime polynomial */
+
+/* CONJECTURE: "for all x in [0,domain), euler(x) is prime."  THEOREM iff exhaustively true; else REFUTED. */
+fn cr_adjudicate_prime(domain: u32) -> u32 @export {
+    CR_WITNESS[0u32] = CR_NONE
+    let mut x : u32 = 0u32
+    while x < domain {
+        if cr_is_prime(cr_euler(x)) == 0u32 {
+            CR_WITNESS[0u32] = x                /* the fatal counterexample */
+            return CR_REFUTED
+        }
+        x = x + 1u32
+    }
+    return CR_THEOREM
+}
+
+/* CONJECTURE: "for all x in [0,domain), x^2 + x is even."  (A true law -> THEOREM.) */
+fn cr_adjudicate_even(domain: u32) -> u32 @export {
+    CR_WITNESS[0u32] = CR_NONE
+    let mut x : u32 = 0u32
+    while x < domain {
+        if ((((x * x) + x)) & 1u32) == 1u32 {
+            CR_WITNESS[0u32] = x
+            return CR_REFUTED
+        }
+        x = x + 1u32
+    }
+    return CR_THEOREM
+}
+
+fn cr_f(x: u32) -> u32 { return ((x * 3u32) + 7u32) & 0xFFu32 }
+fn cr_g(x: u32) -> u32 { return ((x * 3u32) + 7u32) & 0xFFu32 }              /* identical to f */
+fn cr_h(x: u32) -> u32 {
+    let mut v : u32 = ((x * 3u32) + 7u32) & 0xFFu32
+    if x == 7u32 { v = v + 1u32 }                                           /* differs from f at x=7 */
+    return v
+}
+
+/* CONJECTURE: "for all x in [0,domain), f(x) == b(x)" where b = g (which_b=0) or h (which_b=1). */
+fn cr_adjudicate_equiv(which_b: u32, domain: u32) -> u32 @export {
+    CR_WITNESS[0u32] = CR_NONE
+    let mut x : u32 = 0u32
+    while x < domain {
+        let a : u32 = cr_f(x)
+        let mut b : u32 = 0u32
+        if which_b == 0u32 { b = cr_g(x) } else { b = cr_h(x) }
+        if a != b {
+            CR_WITNESS[0u32] = x
+            return CR_REFUTED
+        }
+        x = x + 1u32
+    }
+    return CR_THEOREM
+}
+
+fn cr_witness() -> u32 @export { return CR_WITNESS[0u32] }
+
+/* =====================================================================================
+ * conjecture_refute_kat -- 99 = the Popperian deductive/inductive bridge is sound, self-checked:
+ *   (1) THEOREM by exhaustion: euler(x) prime for all x in [0,40);
+ *   (2) the EPISTEMOLOGY: over [0,100) the SAME conjecture is REFUTED -- despite 40 prior confirmations --
+ *       at the single counterexample x=40 (40^2+40+41 = 41^2).  Accumulation never promotes;
+ *   (3) a true law (x^2+x even) is a THEOREM over a large domain;
+ *   (4) a bisimulation conjecture: f==g is a THEOREM; f==h is REFUTED at its witness x=7;
+ *   (5) the witness is correctly recorded (CR_NONE when proven, the counterexample when refuted).
+ * ===================================================================================== */
+fn conjecture_refute_kat() -> u64 @export {
+    /* (1) prime conjecture is a theorem over [0,40) */
+    if cr_adjudicate_prime(40u32) != CR_THEOREM { return 1u64 }
+    if cr_witness() != CR_NONE { return 2u64 }
+
+    /* (2) THE EPISTEMOLOGY: refuted over [0,100) at x=40 despite 40 confirmations */
+    if cr_adjudicate_prime(100u32) != CR_REFUTED { return 3u64 }
+    if cr_witness() != 40u32 { return 4u64 }
+    /* confirm the counterexample really is composite and the predecessor really is prime */
+    if cr_is_prime(cr_euler(40u32)) != 0u32 { return 5u64 }     /* euler(40)=1681=41^2 composite */
+    if cr_is_prime(cr_euler(39u32)) != 1u32 { return 6u64 }     /* euler(39)=1601 prime */
+
+    /* (3) a true law -> theorem over a large domain */
+    if cr_adjudicate_even(1000u32) != CR_THEOREM { return 7u64 }
+    if cr_witness() != CR_NONE { return 8u64 }
+
+    /* (4) bisimulation conjectures */
+    if cr_adjudicate_equiv(0u32, 64u32) != CR_THEOREM { return 9u64 }    /* f==g proven */
+    if cr_adjudicate_equiv(1u32, 64u32) != CR_REFUTED { return 10u64 }   /* f==h refuted */
+    if cr_witness() != 7u32 { return 11u64 }                            /* at the witness x=7 */
+
+    return 99u64
+}

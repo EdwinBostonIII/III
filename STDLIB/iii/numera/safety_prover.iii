@@ -1,0 +1,144 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\safety_prover.iii
+ *
+ * III STDLIB - numera::safety_prover  --  THE COMPLETE k-INDUCTION VERDICT (verified).
+ *
+ * The two verification ideas unified into the actual algorithm: numera::bmc proves the BASE (no bad state
+ * reachable within the bound) and numera::kinduction proves the STEP (the property is preserved by every
+ * transition).  Together they yield a three-way verdict that a real verifier must produce:
+ *   - SAFE    : base holds AND the property is inductive -> safe for ALL time;
+ *   - UNSAFE  : a bad state is reachable within the bound -> a genuine counterexample;
+ *   - UNKNOWN : base holds but the step fails -> the property is too weak to be 1-inductive (it may still be
+ *               a true invariant, but needs strengthening or a larger k).
+ * The UNKNOWN verdict is the heart of why verification is hard -- a property can be TRUE yet not provable by
+ * simple induction, and an honest prover says so rather than claiming false safety.
+ *
+ * Three systems over 7 states (bad = 6, P(s) = s != 6): SAFE (6 isolated, the property inductive); UNSAFE
+ * (a path 0->...->6); UNKNOWN (6 unreachable from the entry, but an UNREACHABLE state 5 transitions to 6,
+ * so the syntactic step fails though the system is really safe).
+ *
+ * Verified (safety_prover_kat): the SAFE system is certified SAFE; the UNSAFE system is UNSAFE; the UNKNOWN
+ * system yields UNKNOWN (base passes, step fails); the underlying base/step checks agree with the verdict.
+ * NIH/self-contained; the union of bmc and kinduction.
+ *
+ * Public API:
+ *   sp_setup(mode) ; sp_reachable(target,k) -> u32 ; sp_p(s) -> u32 ; sp_step() -> u32 ; sp_verdict(k) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_safety_prover
+
+const SP_N   : u32 = 7u32
+const SP_BAD : u32 = 6u32
+const SP_UNSAFE  : u32 = 0u32
+const SP_UNKNOWN : u32 = 1u32
+const SP_SAFE    : u32 = 2u32
+
+var SP_SUCC : [u32; 7]
+
+fn sp_setup(mode: u32) -> i32 @export {
+    if mode == 2u32 {
+        /* UNKNOWN: cycle 0->1->2->3->4->0 (6 unreachable); state 5 -> 6 (5 itself unreachable) */
+        SP_SUCC[0u64]=1u32<<1u32 ; SP_SUCC[1u64]=1u32<<2u32 ; SP_SUCC[2u64]=1u32<<3u32
+        SP_SUCC[3u64]=1u32<<4u32 ; SP_SUCC[4u64]=1u32<<0u32 ; SP_SUCC[5u64]=1u32<<6u32
+        SP_SUCC[6u64]=0u32
+        return 0i32
+    }
+    if mode == 1u32 {
+        /* UNSAFE: 0->1->2->3->4->5->6 (the bad state is reachable) */
+        SP_SUCC[0u64]=1u32<<1u32 ; SP_SUCC[1u64]=1u32<<2u32 ; SP_SUCC[2u64]=1u32<<3u32
+        SP_SUCC[3u64]=1u32<<4u32 ; SP_SUCC[4u64]=1u32<<5u32 ; SP_SUCC[5u64]=1u32<<6u32
+        SP_SUCC[6u64]=0u32
+        return 0i32
+    }
+    /* SAFE: cycle 0->1->2->3->4->5->0; 6 isolated (no incoming edge) */
+    SP_SUCC[0u64]=1u32<<1u32 ; SP_SUCC[1u64]=1u32<<2u32 ; SP_SUCC[2u64]=1u32<<3u32
+    SP_SUCC[3u64]=1u32<<4u32 ; SP_SUCC[4u64]=1u32<<5u32 ; SP_SUCC[5u64]=1u32<<0u32
+    SP_SUCC[6u64]=0u32
+    return 0i32
+}
+
+fn sp_succ_of(set: u32) -> u32 {
+    let mut out : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < SP_N {
+        if ((set >> s) & 1u32) == 1u32 { out = out | SP_SUCC[s as u64] }
+        s = s + 1u32
+    }
+    return out
+}
+
+/* base: is the target reachable from the entry 0 within k steps? */
+fn sp_reachable(target: u32, k: u32) -> u32 @export {
+    let mut reach : u32 = 1u32 << 0u32
+    let mut depth : u32 = 0u32
+    while depth <= k {
+        if ((reach >> target) & 1u32) == 1u32 { return 1u32 }
+        reach = reach | sp_succ_of(reach)
+        depth = depth + 1u32
+    }
+    return 0u32
+}
+
+/* the safety predicate P(s) = s is not the bad state. */
+fn sp_p(s: u32) -> u32 @export {
+    if s == SP_BAD { return 0u32 }
+    return 1u32
+}
+
+/* the inductive STEP: does every transition from a P-state land in a P-state? */
+fn sp_step() -> u32 @export {
+    let mut s : u32 = 0u32
+    while s < SP_N {
+        if sp_p(s) == 1u32 {
+            let mut t : u32 = 0u32
+            while t < SP_N {
+                if ((SP_SUCC[s as u64] >> t) & 1u32) == 1u32 {
+                    if sp_p(t) == 0u32 { return 0u32 }      /* a P-state steps to a non-P state */
+                }
+                t = t + 1u32
+            }
+        }
+        s = s + 1u32
+    }
+    return 1u32
+}
+
+/* the three-way verdict combining base (bmc) and step (k-induction). */
+fn sp_verdict(k: u32) -> u32 @export {
+    if sp_reachable(SP_BAD, k) == 1u32 { return SP_UNSAFE }   /* counterexample within k */
+    if sp_step() == 1u32 { return SP_SAFE }                   /* base + inductive -> safe forever */
+    return SP_UNKNOWN                                         /* base ok but not inductive */
+}
+
+/* =====================================================================================
+ * safety_prover_kat -- 99 = the complete k-induction verdict is correct, self-checked:
+ *   (1) the SAFE system: bad unreachable and the property inductive -> SAFE;
+ *   (2) the UNSAFE system: bad reachable within bound -> UNSAFE (counterexample);
+ *   (3) the UNKNOWN system: bad unreachable but the step fails -> UNKNOWN (not 1-inductive);
+ *   (4) the base/step components agree with each verdict.
+ * ===================================================================================== */
+fn safety_prover_kat() -> u64 @export {
+    /* (1) SAFE */
+    sp_setup(0u32)
+    if sp_verdict(10u32) != SP_SAFE { return 1u64 }
+    if sp_reachable(SP_BAD, 10u32) != 0u32 { return 2u64 }   /* base: bad unreachable */
+    if sp_step() != 1u32 { return 3u64 }                     /* step: inductive */
+
+    /* (2) UNSAFE */
+    sp_setup(1u32)
+    if sp_verdict(10u32) != SP_UNSAFE { return 4u64 }
+    if sp_reachable(SP_BAD, 10u32) != 1u32 { return 5u64 }   /* the bad state really is reachable */
+    if sp_reachable(SP_BAD, 5u32) != 0u32 { return 6u64 }    /* but not within 5 steps (it is at depth 6) */
+
+    /* (3) UNKNOWN */
+    sp_setup(2u32)
+    if sp_verdict(10u32) != SP_UNKNOWN { return 7u64 }
+    if sp_reachable(SP_BAD, 10u32) != 0u32 { return 8u64 }   /* base passes: bad unreachable from entry */
+    if sp_step() != 0u32 { return 9u64 }                     /* but the step fails (state 5 -> 6) */
+
+    /* (4) the predicate is correct */
+    if sp_p(6u32) != 0u32 { return 10u64 }
+    if sp_p(5u32) != 1u32 { return 11u64 }
+
+    return 99u64
+}

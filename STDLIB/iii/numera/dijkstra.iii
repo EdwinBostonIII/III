@@ -1,0 +1,115 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\dijkstra.iii
+ *
+ * III STDLIB - numera::dijkstra  --  SINGLE-SOURCE SHORTEST PATHS (verified).
+ *
+ * The foundational graph algorithm: from a source, the least-cost distance to every node over a weighted
+ * graph with non-negative edges.  Dijkstra's method repeatedly settles the nearest unsettled node and
+ * relaxes its out-edges; because edge weights are non-negative, a node's distance is final the moment it is
+ * settled.  The hallmark of a correct shortest-path search is that it prefers a cheaper INDIRECT route over
+ * a costlier direct edge -- here the edge 0->1 costs 4 but 0->2->1 costs only 2, and the algorithm reports 2.
+ *
+ * Graph: 0->1(4) 0->2(1) 2->1(1) 1->3(1) 2->3(5) 3->4(3).  Shortest distances from 0: [0,2,1,3,6].
+ *
+ * Verified (dijkstra_kat): the distances are exactly [0,2,1,3,6]; the indirect route to 1 (cost 2) beats the
+ * direct edge (cost 4); the distance to 3 takes the 0->2->1->3 path (3) not 0->2->3 (6); a node with no path
+ * is left at infinity.  NIH/self-contained.
+ *
+ * Public API:
+ *   dij_setup() ; dij_edge(u,v) -> u32 ; dij_compute(src) ; dij_dist(node) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_dijkstra
+
+const DIJ_N   : u32 = 5u32
+const DIJ_INF : u32 = 65535u32
+
+var DIJ_W    : [u32; 25]           /* DIJ_W[u*N+v] = edge weight (INF if no edge) */
+var DIJ_DIST : [u32; 5]
+var DIJ_VIS  : [u32; 5]
+
+fn dij_setup() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 25u32 { DIJ_W[i as u64] = DIJ_INF ; i = i + 1u32 }
+    DIJ_W[(0u32*DIJ_N + 1u32) as u64] = 4u32
+    DIJ_W[(0u32*DIJ_N + 2u32) as u64] = 1u32
+    DIJ_W[(2u32*DIJ_N + 1u32) as u64] = 1u32
+    DIJ_W[(1u32*DIJ_N + 3u32) as u64] = 1u32
+    DIJ_W[(2u32*DIJ_N + 3u32) as u64] = 5u32
+    DIJ_W[(3u32*DIJ_N + 4u32) as u64] = 3u32
+    return 0i32
+}
+
+fn dij_edge(u: u32, v: u32) -> u32 @export { return DIJ_W[((u * DIJ_N) + v) as u64] }
+
+/* compute shortest distances from src by repeatedly settling the nearest unsettled node. */
+fn dij_compute(src: u32) -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < DIJ_N { DIJ_DIST[i as u64] = DIJ_INF ; DIJ_VIS[i as u64] = 0u32 ; i = i + 1u32 }
+    DIJ_DIST[src as u64] = 0u32
+    let mut iter : u32 = 0u32
+    while iter < DIJ_N {
+        /* pick the unsettled node with the smallest tentative distance */
+        let mut u : u32 = DIJ_N
+        let mut best : u32 = DIJ_INF
+        let mut k : u32 = 0u32
+        while k < DIJ_N {
+            if DIJ_VIS[k as u64] == 0u32 {
+                if DIJ_DIST[k as u64] < best { u = k ; best = DIJ_DIST[k as u64] }
+            }
+            k = k + 1u32
+        }
+        if u < DIJ_N {                            /* a reachable unsettled node exists */
+            DIJ_VIS[u as u64] = 1u32
+            let mut v : u32 = 0u32
+            while v < DIJ_N {
+                let w : u32 = dij_edge(u, v)
+                if w < DIJ_INF {
+                    let cand : u32 = DIJ_DIST[u as u64] + w
+                    if cand < DIJ_DIST[v as u64] { DIJ_DIST[v as u64] = cand }
+                }
+                v = v + 1u32
+            }
+        }
+        iter = iter + 1u32
+    }
+    return 0i32
+}
+
+fn dij_dist(node: u32) -> u32 @export { return DIJ_DIST[node as u64] }
+
+/* =====================================================================================
+ * dijkstra_kat -- 99 = single-source shortest paths are correct, self-checked:
+ *   (1) the distances from 0 are exactly [0,2,1,3,6];
+ *   (2) the indirect route to node 1 (0->2->1 = 2) beats the direct edge 0->1 (4);
+ *   (3) the distance to node 3 takes 0->2->1->3 (3), not 0->2->3 (6);
+ *   (4) from a different source (node 2) the distances shift accordingly.
+ * ===================================================================================== */
+fn dijkstra_kat() -> u64 @export {
+    dij_setup()
+    dij_compute(0u32)
+
+    /* (1) full distance vector */
+    if dij_dist(0u32) != 0u32 { return 1u64 }
+    if dij_dist(1u32) != 2u32 { return 2u64 }
+    if dij_dist(2u32) != 1u32 { return 3u64 }
+    if dij_dist(3u32) != 3u32 { return 4u64 }
+    if dij_dist(4u32) != 6u32 { return 5u64 }
+
+    /* (2) the indirect route wins over the direct edge */
+    if dij_edge(0u32, 1u32) != 4u32 { return 6u64 }       /* the direct edge really costs 4 */
+    if dij_dist(1u32) >= dij_edge(0u32, 1u32) { return 7u64 }   /* but the shortest path is cheaper */
+
+    /* (3) the cheaper multi-hop path to 3 */
+    if dij_dist(3u32) != 3u32 { return 8u64 }             /* via 0->2->1->3, not 0->2->3 (6) */
+
+    /* (4) shortest paths from node 2 */
+    dij_compute(2u32)
+    if dij_dist(2u32) != 0u32 { return 9u64 }
+    if dij_dist(1u32) != 1u32 { return 10u64 }            /* 2->1 directly */
+    if dij_dist(3u32) != 2u32 { return 11u64 }            /* 2->1->3 = 2, not 2->3 (5) */
+    if dij_dist(4u32) != 5u32 { return 12u64 }            /* 2->1->3->4 = 5 */
+    if dij_dist(0u32) != 65535u32 { return 13u64 }        /* 0 is unreachable from 2 */
+
+    return 99u64
+}

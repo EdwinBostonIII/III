@@ -1,0 +1,14 @@
+/* 1261_matrix_ring.iii -- a non-commutative matrix ring + verified fast exponentiation.
+ * Drives numera::matrix_ring::matrix_ring_kat: 99 = fast (O(log n)) matrix power == naive (O(n)) for
+ * n in {4,8,10,16}; the fast multiply-count (5) is strictly below naive (15) for n=16; M^10 of the
+ * Fibonacci matrix is [[89,55],[55,34]]; matrix multiply is associative, the identity is a unit, and
+ * multiply is non-commutative (A*B != B*A). Higher-order ring algebra, optimized and proven. */
+module corpus_1261
+
+extern @abi(c-msvc-x64) fn matrix_ring_kat() -> u64 from "matrix_ring.iii"
+
+fn main() -> u64 {
+    let r : u64 = matrix_ring_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

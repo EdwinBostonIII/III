@@ -864,6 +864,7 @@ declare -A EXPECTED=(
     [1282_taint_analysis]=99
     [1283_range_check]=99
     [1284_translation_validation]=99
+    [1285_liveness]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

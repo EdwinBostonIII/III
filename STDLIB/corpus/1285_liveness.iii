@@ -1,0 +1,14 @@
+/* 1285_liveness.iii -- backward dataflow liveness analysis, verified.
+ * Drives numera::liveness::liveness_kat: 99 = on the CFG b0->b1->b2->b3 over x,y,z, variable x is live at the
+ * exit of b0 (computed early, used late) while y is not; live-in of b2 is {x,y} (bits 0,1) and live-out is
+ * {x,z} (bits 0,2); z is not live before its definition; the fixpoint is idempotent. The backward dataflow
+ * (live_in = use union (live_out minus def)) that reg_alloc consumes to build live ranges. */
+module corpus_1285
+
+extern @abi(c-msvc-x64) fn liveness_kat() -> u64 from "liveness.iii"
+
+fn main() -> u64 {
+    let r : u64 = liveness_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

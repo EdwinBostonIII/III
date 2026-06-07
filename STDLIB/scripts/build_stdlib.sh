@@ -719,6 +719,7 @@ MODULES=(
     "numera/taint_analysis"
     "numera/range_check"
     "numera/translation_validation"
+    "numera/liveness"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

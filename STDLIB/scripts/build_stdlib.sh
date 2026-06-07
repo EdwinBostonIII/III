@@ -728,6 +728,7 @@ MODULES=(
     "numera/loop_bounds_prover"
     "numera/branch_elim"
     "numera/rms"
+    "numera/binary_search"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

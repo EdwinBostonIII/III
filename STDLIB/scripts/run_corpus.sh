@@ -873,6 +873,7 @@ declare -A EXPECTED=(
     [1293_loop_bounds_prover]=99
     [1294_branch_elim]=99
     [1295_rms]=99
+    [1296_binary_search]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

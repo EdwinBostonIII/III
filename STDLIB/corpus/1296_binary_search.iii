@@ -1,0 +1,14 @@
+/* 1296_binary_search.iii -- logarithmic search verified against its linear reference.
+ * Drives numera::binary_search::binary_search_kat: 99 = present keys are found at their correct indices
+ * (2->0, 13->3, 55->6), absent keys return the not-found sentinel, and the O(log n) binary search AGREES
+ * with the O(n) linear reference for ALL 60 queries over the key domain (the equivalence proof, not a
+ * spot-check); the midpoint lo+(hi-lo)/2 is overflow-safe. The fast path proven correct, not trusted. */
+module corpus_1296
+
+extern @abi(c-msvc-x64) fn binary_search_kat() -> u64 from "binary_search.iii"
+
+fn main() -> u64 {
+    let r : u64 = binary_search_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

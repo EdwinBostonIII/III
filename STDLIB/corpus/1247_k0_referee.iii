@@ -1,0 +1,14 @@
+/* 1247_k0_referee.iii -- K_0 the immutable base kernel: frozen bisimulation referee (Phase 3 T1).
+ * Drives numera::k0_referee::k0_referee_kat: 99 = pre-freeze nothing verifies; post-freeze an observably-
+ * equivalent kernel verifies (1) and one differing on a single input is rejected (0); the anchor-as-target
+ * is refused (firewall, no self-re-rooting); a post-freeze anchor mutation is REFUSED so the content-address
+ * fingerprint never drifts. The unhackable trust anchor of autonomous recursive self-improvement. */
+module corpus_1247
+
+extern @abi(c-msvc-x64) fn k0_referee_kat() -> u64 from "k0_referee.iii"
+
+fn main() -> u64 {
+    let r : u64 = k0_referee_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

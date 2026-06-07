@@ -1,0 +1,14 @@
+/* 1248_golden_shift.iii -- the autonomous Golden Shift + metamathematical flywheel (Phase 3 T2).
+ * Drives numera::golden_shift::golden_shift_kat: 99 = the wrong-but-cheaper kernel is REJECTED by K_0 while
+ * an equivalent cheaper one is admitted (the Golden Shift fires); a non-cheaper equivalent does not shift;
+ * the flywheel autonomously descends K_active to the verified cost FLOOR (k3@100), NEVER the wrong-cheaper
+ * trap (kbad@10), staying provably bisimilar to the anchor through the whole chain. The auditor, fired. */
+module corpus_1248
+
+extern @abi(c-msvc-x64) fn golden_shift_kat() -> u64 from "golden_shift.iii"
+
+fn main() -> u64 {
+    let r : u64 = golden_shift_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

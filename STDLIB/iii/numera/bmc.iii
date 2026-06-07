@@ -1,0 +1,106 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bmc.iii
+ *
+ * III STDLIB - numera::bmc  --  BOUNDED MODEL CHECKING (reachability safety, verified).
+ *
+ * The engine under hardware and protocol verification: given a transition system and a BAD state, explore
+ * the reachable states out to a bound k and decide whether the bad state can be reached.  If it can, the
+ * depth at which it first appears is the length of a counterexample trace; if it cannot within k, the safety
+ * property holds up to that bound.  Boundedness is the point -- model checking trades completeness for a
+ * decidable, exhaustive search of all behaviours within the horizon, the same discipline numera::tso applies
+ * to memory interleavings.
+ *
+ * Transition system (6 states): 0->{1,2}, 1->3, 2->3, 3->4, 4->5.  The bad state 5 is first reachable at
+ * depth 4 (e.g. 0->1->3->4->5), so the system is safe to depth 3 and violated at depth 4.
+ *
+ * Verified (bmc_kat): the shortest distance to the bad state is 4; it is reachable within bound 4 but not 3;
+ * the property holds (safe) up to depth 3 and fails at depth 4 with a depth-4 counterexample; intermediate
+ * reachability depths are correct (state 3 at depth 2).  NIH/self-contained.
+ *
+ * Public API:
+ *   bmc_setup() ; bmc_succ_of(set) -> u32 ; bmc_shortest(target) -> u32 ; bmc_reachable(target,k) -> u32 ;
+ *   bmc_safe(bad,k) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_bmc
+
+const BMC_N    : u32 = 6u32
+const BMC_NONE : u32 = 7u32        /* unreachable sentinel (> any real depth) */
+
+var BMC_TRANS : [u32; 6]           /* BMC_TRANS[s] = bitset of successor states */
+
+fn bmc_setup() -> i32 @export {
+    BMC_TRANS[0u64]=(1u32<<1u32)|(1u32<<2u32)    /* 0 -> 1,2 */
+    BMC_TRANS[1u64]=1u32<<3u32                    /* 1 -> 3 */
+    BMC_TRANS[2u64]=1u32<<3u32                    /* 2 -> 3 */
+    BMC_TRANS[3u64]=1u32<<4u32                    /* 3 -> 4 */
+    BMC_TRANS[4u64]=1u32<<5u32                    /* 4 -> 5 (bad) */
+    BMC_TRANS[5u64]=0u32                          /* 5 -> {} */
+    return 0i32
+}
+
+/* the union of successors of every state in the given set. */
+fn bmc_succ_of(set: u32) -> u32 @export {
+    let mut out : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < BMC_N {
+        if ((set >> s) & 1u32) == 1u32 { out = out | BMC_TRANS[s as u64] }
+        s = s + 1u32
+    }
+    return out
+}
+
+/* shortest distance from the initial state 0 to target (BMC_NONE if unreachable within N steps). */
+fn bmc_shortest(target: u32) -> u32 @export {
+    let mut reach : u32 = 1u32 << 0u32           /* {0} */
+    let mut depth : u32 = 0u32
+    while depth <= BMC_N {
+        if ((reach >> target) & 1u32) == 1u32 { return depth }
+        reach = reach | bmc_succ_of(reach)
+        depth = depth + 1u32
+    }
+    return BMC_NONE
+}
+
+/* is the target reachable within k steps? */
+fn bmc_reachable(target: u32, k: u32) -> u32 @export {
+    let d : u32 = bmc_shortest(target)
+    if d == BMC_NONE { return 0u32 }
+    if d <= k { return 1u32 }
+    return 0u32
+}
+
+/* is the system safe (bad state NOT reachable) within bound k? */
+fn bmc_safe(bad: u32, k: u32) -> u32 @export {
+    if bmc_reachable(bad, k) == 1u32 { return 0u32 }
+    return 1u32
+}
+
+/* =====================================================================================
+ * bmc_kat -- 99 = bounded model checking is correct, self-checked:
+ *   (1) the shortest distance to the bad state 5 is 4;
+ *   (2) state 5 is reachable within bound 4 but NOT within bound 3;
+ *   (3) the system is SAFE up to depth 3 and VIOLATED at depth 4 (a depth-4 counterexample);
+ *   (4) intermediate distances are correct: state 0 at 0, state 3 at depth 2.
+ * ===================================================================================== */
+fn bmc_kat() -> u64 @export {
+    bmc_setup()
+
+    /* (1) shortest distance to the bad state */
+    if bmc_shortest(5u32) != 4u32 { return 1u64 }
+
+    /* (2) bounded reachability */
+    if bmc_reachable(5u32, 4u32) != 1u32 { return 2u64 }
+    if bmc_reachable(5u32, 3u32) != 0u32 { return 3u64 }
+
+    /* (3) safety verdict at each bound */
+    if bmc_safe(5u32, 3u32) != 1u32 { return 4u64 }
+    if bmc_safe(5u32, 4u32) != 0u32 { return 5u64 }
+
+    /* (4) intermediate distances */
+    if bmc_shortest(0u32) != 0u32 { return 6u64 }
+    if bmc_shortest(3u32) != 2u32 { return 7u64 }
+    if bmc_shortest(4u32) != 3u32 { return 8u64 }
+
+    return 99u64
+}

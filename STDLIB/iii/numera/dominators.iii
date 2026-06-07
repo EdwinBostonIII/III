@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\dominators.iii
+ *
+ * III STDLIB - numera::dominators  --  THE DOMINATOR TREE (foundational CFG analysis, verified).
+ *
+ * The analysis nearly every optimization and SSA construction rests on.  Block A dominates block B iff every
+ * path from the entry to B passes through A.  The dominator sets are the least fixpoint of the dataflow
+ * equation dom(entry) = {entry} and dom(n) = {n} union (intersection of dom(p) over predecessors p of n) --
+ * computed here as bitset iteration to convergence.  The IMMEDIATE dominator (the closest strict dominator)
+ * forms the dominator tree that drives loop detection, code motion, and phi-node placement.
+ *
+ * CFG (entry 0): 0->1 ; 1->2 ; 1->3 ; 2->4 ; 3->4 ; 4->5  (a diamond 1 -> {2,3} -> 4 with a tail).  Block 1
+ * dominates the join 4 (every path goes through it) but neither branch 2 nor 3 does.
+ *
+ * Verified (dominators_kat): the computed dominator sets give 0 dom 5, 1 dom 4, 4 dom 5, but NOT 2 dom 4 and
+ * NOT 3 dom 4 (the diamond branches do not dominate the join); the immediate dominators are idom(5)=4,
+ * idom(4)=1, idom(2)=1, idom(1)=0.  NIH/self-contained.
+ *
+ * Public API:
+ *   dom_setup() ; dom_compute() ; dom_dominates(a,b) -> u32 ; dom_idom(n) -> u32 ; dom_set(n) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_dominators
+
+const DOM_N    : u32 = 6u32
+const DOM_FULL : u32 = 63u32      /* (1<<6)-1 : all six blocks */
+
+var DOM      : [u32; 6]           /* DOM[n] = bitset of blocks that dominate n */
+var DOM_PRED : [u32; 6]           /* DOM_PRED[n] = bitset of predecessors of n */
+
+fn dom_popcount(x: u32) -> u32 {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 { c = c + (v & 1u32) ; v = v >> 1u32 }
+    return c
+}
+
+fn dom_setup() -> i32 @export {
+    DOM_PRED[0u64] = 0u32                          /* entry: no predecessors */
+    DOM_PRED[1u64] = 1u32 << 0u32                  /* 1 <- 0 */
+    DOM_PRED[2u64] = 1u32 << 1u32                  /* 2 <- 1 */
+    DOM_PRED[3u64] = 1u32 << 1u32                  /* 3 <- 1 */
+    DOM_PRED[4u64] = (1u32 << 2u32) | (1u32 << 3u32)   /* 4 <- 2,3 */
+    DOM_PRED[5u64] = 1u32 << 4u32                  /* 5 <- 4 */
+    return 0i32
+}
+
+/* iterate the dominator dataflow to convergence (N passes suffice for N blocks). */
+fn dom_compute() -> i32 @export {
+    DOM[0u64] = 1u32 << 0u32                       /* dom(entry) = {entry} */
+    let mut i : u32 = 1u32
+    while i < DOM_N { DOM[i as u64] = DOM_FULL ; i = i + 1u32 }
+    let mut pass : u32 = 0u32
+    while pass < DOM_N {
+        let mut n : u32 = 1u32
+        while n < DOM_N {
+            let mut inter : u32 = DOM_FULL
+            let mut p : u32 = 0u32
+            while p < DOM_N {
+                if ((DOM_PRED[n as u64] >> p) & 1u32) == 1u32 { inter = inter & DOM[p as u64] }
+                p = p + 1u32
+            }
+            DOM[n as u64] = (1u32 << n) | inter
+            n = n + 1u32
+        }
+        pass = pass + 1u32
+    }
+    return 0i32
+}
+
+/* a dominates b iff a is in b's dominator set. */
+fn dom_dominates(a: u32, b: u32) -> u32 @export {
+    if ((DOM[b as u64] >> a) & 1u32) == 1u32 { return 1u32 }
+    return 0u32
+}
+
+/* the immediate dominator of n: the strict dominator with the most dominators (deepest in the dom tree). */
+fn dom_idom(n: u32) -> u32 @export {
+    let mut best : u32 = n
+    let mut bestc : u32 = 0u32
+    let mut d : u32 = 0u32
+    while d < DOM_N {
+        if d != n {
+            if dom_dominates(d, n) == 1u32 {
+                let c : u32 = dom_popcount(DOM[d as u64])
+                if c > bestc { best = d ; bestc = c }
+            }
+        }
+        d = d + 1u32
+    }
+    return best
+}
+
+fn dom_set(n: u32) -> u32 @export { return DOM[n as u64] }
+
+/* =====================================================================================
+ * dominators_kat -- 99 = dominator analysis is correct, self-checked:
+ *   (1) entry 0 dominates everything; each node dominates itself;
+ *   (2) block 1 dominates the join 4, but NEITHER diamond branch (2,3) dominates 4;
+ *   (3) the dominator chain to 5: 0,1,4,5 all dominate 5; 2 and 3 do not;
+ *   (4) immediate dominators: idom(5)=4, idom(4)=1, idom(2)=1, idom(1)=0.
+ * ===================================================================================== */
+fn dominators_kat() -> u64 @export {
+    dom_setup()
+    dom_compute()
+
+    /* (1) entry dominates all; reflexive */
+    if dom_dominates(0u32, 5u32) != 1u32 { return 1u64 }
+    if dom_dominates(0u32, 3u32) != 1u32 { return 2u64 }
+    if dom_dominates(4u32, 4u32) != 1u32 { return 3u64 }
+
+    /* (2) the join's dominators exclude the branches */
+    if dom_dominates(1u32, 4u32) != 1u32 { return 4u64 }
+    if dom_dominates(2u32, 4u32) != 0u32 { return 5u64 }   /* path 0->1->3->4 avoids 2 */
+    if dom_dominates(3u32, 4u32) != 0u32 { return 6u64 }   /* path 0->1->2->4 avoids 3 */
+
+    /* (3) the dominator chain to 5 */
+    if dom_dominates(4u32, 5u32) != 1u32 { return 7u64 }
+    if dom_dominates(2u32, 5u32) != 0u32 { return 8u64 }
+    if dom_set(5u32) != 51u32 { return 9u64 }              /* {0,1,4,5} = bits 0,1,4,5 = 51 */
+
+    /* (4) immediate dominators */
+    if dom_idom(5u32) != 4u32 { return 10u64 }
+    if dom_idom(4u32) != 1u32 { return 11u64 }
+    if dom_idom(2u32) != 1u32 { return 12u64 }
+    if dom_idom(1u32) != 0u32 { return 13u64 }
+
+    return 99u64
+}

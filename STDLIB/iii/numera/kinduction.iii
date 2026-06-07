@@ -1,0 +1,94 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\kinduction.iii
+ *
+ * III STDLIB - numera::kinduction  --  UNBOUNDED SAFETY BY INDUCTION (verified).
+ *
+ * numera::bmc proves safety up to a BOUND; induction proves it for ALL time.  A property P is an inductive
+ * invariant when (base) it holds in the initial state and (step) every transition from a P-state lands in
+ * another P-state -- then P holds along every reachable path, with no bound.  When the step FAILS, the
+ * property is true near the start but not preserved, and the failing transition is the reason a larger k or
+ * a strengthened invariant is needed.  This is the bridge from bounded checking to unbounded proof.
+ *
+ * Two counters with invariant P(s) = "s <= 3": a CAPPED counter (succ saturates at 3) is inductive -- every
+ * P-state steps to a P-state -- so P holds forever; an UNCAPPED counter (succ = s+1) breaks the step at
+ * s=3 (it steps to 4, violating P), so induction correctly refuses to certify it.
+ *
+ * Verified (kinduction_kat): the capped counter's step holds and P is proven an invariant; the uncapped
+ * counter's step fails at s=3 (witnessed) and is not certified; the base case and the transition values are
+ * correct.  NIH; the unbounded complement of bmc.
+ *
+ * Public API:
+ *   ki_succ(s,mode) -> u32 ; ki_p(s) -> u32 ; ki_step(mode) -> u32 ; ki_invariant(mode) -> u32 ;
+ *   ki_step_witness() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_kinduction
+
+const KI_BOUND : u32 = 3u32        /* the invariant P(s) = s <= 3 */
+const KI_MAXS  : u32 = 8u32        /* state space to quantify the inductive step over */
+
+var KI_WIT : [u32; 1]              /* state at which the inductive step fails */
+
+/* the transition: mode 0 saturates at the bound (capped); mode 1 increments unboundedly. */
+fn ki_succ(s: u32, mode: u32) -> u32 @export {
+    if mode == 0u32 {
+        if s < KI_BOUND { return s + 1u32 }
+        return KI_BOUND
+    }
+    return s + 1u32
+}
+
+/* the invariant predicate P(s) = s <= bound. */
+fn ki_p(s: u32) -> u32 @export {
+    if s <= KI_BOUND { return 1u32 }
+    return 0u32
+}
+
+/* the inductive STEP: every P-state transitions to a P-state.  0 with a witness if some transition breaks it. */
+fn ki_step(mode: u32) -> u32 @export {
+    let mut s : u32 = 0u32
+    while s < KI_MAXS {
+        if ki_p(s) == 1u32 {
+            let ns : u32 = ki_succ(s, mode)
+            if ki_p(ns) == 0u32 { KI_WIT[0u64] = s ; return 0u32 }
+        }
+        s = s + 1u32
+    }
+    return 1u32
+}
+
+/* P is an inductive invariant iff it holds initially (base) and the step holds. */
+fn ki_invariant(mode: u32) -> u32 @export {
+    if ki_p(0u32) == 0u32 { return 0u32 }      /* base case: P(initial) */
+    return ki_step(mode)
+}
+
+fn ki_step_witness() -> u32 @export { return KI_WIT[0u64] }
+
+/* =====================================================================================
+ * kinduction_kat -- 99 = unbounded safety by induction is correct, self-checked:
+ *   (1) the capped counter's inductive step holds, so P is proven an invariant (unbounded safe);
+ *   (2) the uncapped counter's step FAILS at s=3 (it steps to 4) and is NOT certified;
+ *   (3) the transition values are correct: capped succ(3)=3, uncapped succ(3)=4;
+ *   (4) the predicate boundary is correct: P(3) holds, P(4) does not.
+ * ===================================================================================== */
+fn kinduction_kat() -> u64 @export {
+    /* (1) capped counter: inductive invariant */
+    if ki_step(0u32) != 1u32 { return 1u64 }
+    if ki_invariant(0u32) != 1u32 { return 2u64 }
+
+    /* (2) uncapped counter: step fails, not certified */
+    if ki_step(1u32) != 0u32 { return 3u64 }
+    if ki_step_witness() != 3u32 { return 4u64 }           /* P(3) holds but succ(3)=4 violates it */
+    if ki_invariant(1u32) != 0u32 { return 5u64 }
+
+    /* (3) transition values */
+    if ki_succ(3u32, 0u32) != 3u32 { return 6u64 }         /* capped: stays at the bound */
+    if ki_succ(3u32, 1u32) != 4u32 { return 7u64 }         /* uncapped: overshoots */
+
+    /* (4) predicate boundary */
+    if ki_p(3u32) != 1u32 { return 8u64 }
+    if ki_p(4u32) != 0u32 { return 9u64 }
+
+    return 99u64
+}

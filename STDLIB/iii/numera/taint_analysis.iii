@@ -1,0 +1,120 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\taint_analysis.iii
+ *
+ * III STDLIB - numera::taint_analysis  --  INFORMATION-FLOW SECURITY (taint tracking, verified).
+ *
+ * A security analysis the same dataflow machinery powers: data from an untrusted SOURCE is TAINTED, taint
+ * spreads through any operation that consumes it, a SANITIZER is the trusted boundary that clears it, and a
+ * privileged SINK that receives still-tainted data is a VIOLATION.  Proving the absence of unsanitized flows
+ * from source to sink is exactly what stops injection and privilege-escalation bugs -- and III can make that
+ * proof a build-time gate rather than a runtime hope.
+ *
+ * Flow: v0=source (tainted), v1=const (clean), v2=v0 op v1 (taint spreads), v3=sanitize(v2) (cleared),
+ * v4=sink(v2) (VIOLATION -- tainted reaches the sink), v5=sink(v3) (safe -- sanitized first).
+ *
+ * Verified (taint_analysis_kat): the source is tainted and a constant is clean; taint spreads through the
+ * operation; the sanitizer clears it; a sink on the tainted value is a violation while a sink on the
+ * sanitized value is safe; the total violation count is exactly 1.  NIH/self-contained.
+ *
+ * Public API:
+ *   taint_setup() ; taint_propagate() ; taint_tainted(i) -> u32 ; taint_sink_violates(i) -> u32 ;
+ *   taint_violations() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_taint_analysis
+
+const TNT_N : u32 = 6u32
+const TNT_SOURCE   : u32 = 0u32      /* untrusted input */
+const TNT_IMM      : u32 = 1u32      /* trusted constant */
+const TNT_OP       : u32 = 2u32      /* a computation over operands */
+const TNT_SANITIZE : u32 = 3u32      /* the trusted boundary -- clears taint */
+const TNT_SINK     : u32 = 4u32      /* a privileged use */
+
+var TNT_OP_   : [u32; 6]
+var TNT_A     : [u32; 6]
+var TNT_B     : [u32; 6]
+var TNT_TAINT : [u32; 6]
+
+fn taint_setup() -> i32 @export {
+    TNT_OP_[0u64]=TNT_SOURCE   ; TNT_A[0u64]=0u32 ; TNT_B[0u64]=0u32      /* v0 = untrusted input */
+    TNT_OP_[1u64]=TNT_IMM      ; TNT_A[1u64]=0u32 ; TNT_B[1u64]=0u32      /* v1 = constant */
+    TNT_OP_[2u64]=TNT_OP       ; TNT_A[2u64]=0u32 ; TNT_B[2u64]=1u32      /* v2 = v0 op v1 */
+    TNT_OP_[3u64]=TNT_SANITIZE ; TNT_A[3u64]=2u32 ; TNT_B[3u64]=0u32      /* v3 = sanitize(v2) */
+    TNT_OP_[4u64]=TNT_SINK     ; TNT_A[4u64]=2u32 ; TNT_B[4u64]=0u32      /* v4 = sink(v2)  -- tainted! */
+    TNT_OP_[5u64]=TNT_SINK     ; TNT_A[5u64]=3u32 ; TNT_B[5u64]=0u32      /* v5 = sink(v3)  -- safe */
+    return 0i32
+}
+
+fn taint_step(i: u32) -> i32 {
+    let op : u32 = TNT_OP_[i as u64]
+    let mut t : u32 = 0u32
+    if op == TNT_SOURCE { t = 1u32 }
+    if op == TNT_IMM { t = 0u32 }
+    if op == TNT_OP {
+        let a : u32 = TNT_A[i as u64] ; let b : u32 = TNT_B[i as u64]
+        t = TNT_TAINT[a as u64] | TNT_TAINT[b as u64]      /* taint spreads through the operation */
+    }
+    if op == TNT_SANITIZE { t = 0u32 }                     /* the trusted boundary clears taint */
+    if op == TNT_SINK { t = TNT_TAINT[TNT_A[i as u64] as u64] }   /* a sink carries its input's taint */
+    TNT_TAINT[i as u64] = t
+    return 0i32
+}
+
+/* propagate taint to a fixpoint (N passes for the acyclic flow graph). */
+fn taint_propagate() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < TNT_N { TNT_TAINT[i as u64] = 0u32 ; i = i + 1u32 }
+    let mut pass : u32 = 0u32
+    while pass < TNT_N {
+        let mut n : u32 = 0u32
+        while n < TNT_N { taint_step(n) ; n = n + 1u32 }
+        pass = pass + 1u32
+    }
+    return 0i32
+}
+
+fn taint_tainted(i: u32) -> u32 @export { return TNT_TAINT[i as u64] }
+
+/* a sink is a violation iff the value it consumes is still tainted. */
+fn taint_sink_violates(i: u32) -> u32 @export {
+    if TNT_OP_[i as u64] == TNT_SINK {
+        if TNT_TAINT[TNT_A[i as u64] as u64] == 1u32 { return 1u32 }
+    }
+    return 0u32
+}
+
+fn taint_violations() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < TNT_N { c = c + taint_sink_violates(i) ; i = i + 1u32 }
+    return c
+}
+
+/* =====================================================================================
+ * taint_analysis_kat -- 99 = information-flow taint tracking is correct, self-checked:
+ *   (1) the source is tainted; the constant is clean;
+ *   (2) taint spreads through the operation (v2 tainted); the sanitizer clears it (v3 clean);
+ *   (3) a sink on the tainted value v2 is a VIOLATION; a sink on the sanitized value v3 is SAFE;
+ *   (4) the total number of unsanitized source-to-sink flows is exactly 1.
+ * ===================================================================================== */
+fn taint_analysis_kat() -> u64 @export {
+    taint_setup()
+    taint_propagate()
+
+    /* (1) source/const */
+    if taint_tainted(0u32) != 1u32 { return 1u64 }
+    if taint_tainted(1u32) != 0u32 { return 2u64 }
+
+    /* (2) spread + sanitize */
+    if taint_tainted(2u32) != 1u32 { return 3u64 }
+    if taint_tainted(3u32) != 0u32 { return 4u64 }
+
+    /* (3) sink violations */
+    if taint_sink_violates(4u32) != 1u32 { return 5u64 }   /* tainted reaches the sink */
+    if taint_sink_violates(5u32) != 0u32 { return 6u64 }   /* sanitized first -- safe */
+
+    /* (4) exactly one violation */
+    if taint_violations() != 1u32 { return 7u64 }
+
+    return 99u64
+}

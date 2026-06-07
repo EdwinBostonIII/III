@@ -1,0 +1,95 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\range_check.iii
+ *
+ * III STDLIB - numera::range_check  --  INTEGER-OVERFLOW PROOF via the interval domain (verified).
+ *
+ * Silent integer overflow is among the most dangerous classes of bug; this turns it into a STATIC proof.
+ * Given the value ranges of an operation's operands (from numera::interval_lattice), the abstract result is
+ * an interval that SOUNDLY contains every concrete result, so if that interval's maximum fits the type
+ * bound, the operation provably cannot overflow -- for ANY runtime values in range.  When the abstract
+ * maximum exceeds the bound, overflow is possible and is flagged.  Because interval_lattice's transfer
+ * functions are sound, a "cannot overflow" verdict is a genuine guarantee, not a sample.
+ *
+ * Verified (range_check_kat): a small-range add and a small-range multiply are proven NOT to overflow a u8
+ * bound (255); a large-range add (max 260) and multiply (max 300) ARE flagged; and for a proven-safe case
+ * an exhaustive scan confirms every concrete result really is within the bound (soundness of the proof).
+ * NIH; composes interval_lattice.
+ *
+ * Public API:
+ *   rc_max(lo1,hi1,lo2,hi2,op) -> u32 ; rc_overflows(lo1,hi1,lo2,hi2,op,bound) -> u32 ;
+ *   rc_proven_safe(lo1,hi1,lo2,hi2,op,bound) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_range_check
+
+extern @abi(c-msvc-x64) fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_mul(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+
+const RC_ADD : u32 = 0u32
+const RC_MUL : u32 = 1u32
+
+/* the abstract maximum of (op) over the operand ranges, via the interval transfer functions. */
+fn rc_max(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32) -> u32 @export {
+    if op == RC_ADD { il_add(lo1, hi1, lo2, hi2) }
+    if op == RC_MUL { il_mul(lo1, hi1, lo2, hi2) }
+    return il_hi()
+}
+
+/* 1 iff the operation MIGHT overflow the type bound (abstract max exceeds it). */
+fn rc_overflows(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 @export {
+    if rc_max(lo1, hi1, lo2, hi2, op) > bound { return 1u32 }
+    return 0u32
+}
+
+/* 1 iff the operation is PROVEN not to overflow (the sound abstract maximum is within the bound). */
+fn rc_proven_safe(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 @export {
+    if rc_overflows(lo1, hi1, lo2, hi2, op, bound) == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* exhaustive soundness witness: every concrete x op y over the operand ranges is within the bound. */
+fn rc_concretely_safe(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 {
+    let mut x : u32 = lo1
+    while x <= hi1 {
+        let mut y : u32 = lo2
+        while y <= hi2 {
+            let mut r : u32 = 0u32
+            if op == RC_ADD { r = x + y }
+            if op == RC_MUL { r = x * y }
+            if r > bound { return 0u32 }
+            y = y + 1u32
+        }
+        x = x + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * range_check_kat -- 99 = interval-based overflow proof is correct and sound, self-checked:
+ *   (1) a small-range add [10,20]+[5,8] (max 28) and multiply [2,3]*[4,5] (max 15) are PROVEN safe vs u8 255;
+ *   (2) a large-range add [100,200]+[50,60] (max 260) and multiply [10,20]*[10,15] (max 300) ARE flagged;
+ *   (3) the abstract maxima match the closed values;
+ *   (4) SOUNDNESS: for the proven-safe add, every concrete result is genuinely within the bound.
+ * ===================================================================================== */
+fn range_check_kat() -> u64 @export {
+    /* (1) proven safe */
+    if rc_proven_safe(10u32, 20u32, 5u32, 8u32, RC_ADD, 255u32) != 1u32 { return 1u64 }
+    if rc_proven_safe(2u32, 3u32, 4u32, 5u32, RC_MUL, 255u32) != 1u32 { return 2u64 }
+
+    /* (2) overflow flagged */
+    if rc_overflows(100u32, 200u32, 50u32, 60u32, RC_ADD, 255u32) != 1u32 { return 3u64 }
+    if rc_overflows(10u32, 20u32, 10u32, 15u32, RC_MUL, 255u32) != 1u32 { return 4u64 }
+
+    /* (3) abstract maxima */
+    if rc_max(10u32, 20u32, 5u32, 8u32, RC_ADD) != 28u32 { return 5u64 }
+    if rc_max(10u32, 20u32, 10u32, 15u32, RC_MUL) != 300u32 { return 6u64 }
+
+    /* (4) soundness: the proof covers every concrete value */
+    if rc_concretely_safe(10u32, 20u32, 5u32, 8u32, RC_ADD, 255u32) != 1u32 { return 7u64 }
+    if rc_concretely_safe(2u32, 3u32, 4u32, 5u32, RC_MUL, 255u32) != 1u32 { return 8u64 }
+    /* and the flagged multiply really does exceed the bound for some concrete pair */
+    if rc_concretely_safe(10u32, 20u32, 10u32, 15u32, RC_MUL, 255u32) != 0u32 { return 9u64 }
+
+    return 99u64
+}

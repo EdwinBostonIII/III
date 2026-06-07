@@ -1,0 +1,12 @@
+/* 1244_relational_ematch.iii -- semantic (relational) e-matching (Phase 2 T3).
+ * Drives numera::relational_ematch::relational_ematch_kat: 99 = O(n^2) nested-loop == O(n) hash-join
+ * recognized semantically (nested_loop==relational_join), plus fold/filter equivalences and the negatives. */
+module corpus_1244
+
+extern @abi(c-msvc-x64) fn relational_ematch_kat() -> u64 from "relational_ematch.iii"
+
+fn main() -> u64 {
+    let r : u64 = relational_ematch_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

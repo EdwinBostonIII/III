@@ -1,0 +1,13 @@
+/* 1245_algo_synth.iii -- asymptotic algorithm synthesis with proof (Phase 2 CAPSTONE).
+ * Drives numera::algo_synth::algo_synth_kat: 99 = O(n)->O(1) (loop sum -> closed form) and O(n^2)->O(n)
+ * (nested loop -> hash join) synthesized, each PROVEN equivalent + recorded in the proof CC + strictly
+ * cheaper, and the off-by-one WRONG leap REJECTED by the dispose. The end of phase-ordering, with proof. */
+module corpus_1245
+
+extern @abi(c-msvc-x64) fn algo_synth_kat() -> u64 from "algo_synth.iii"
+
+fn main() -> u64 {
+    let r : u64 = algo_synth_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

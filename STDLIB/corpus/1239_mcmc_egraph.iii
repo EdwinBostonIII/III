@@ -1,0 +1,12 @@
+/* 1239_mcmc_egraph.iii -- stochastic MCMC search over the equivalence space (Phase 2 T2).
+ * Drives numera::mcmc_egraph::mcmc_egraph_kat: 99 = annealed Metropolis-Hastings escapes a local-minimum
+ * trap that greedy descent is stuck in (cost 20 -> 0), strictly beating greedy, deterministic under seed. */
+module corpus_1239
+
+extern @abi(c-msvc-x64) fn mcmc_egraph_kat() -> u64 from "mcmc_egraph.iii"
+
+fn main() -> u64 {
+    let r : u64 = mcmc_egraph_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

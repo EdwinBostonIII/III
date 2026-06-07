@@ -1,0 +1,12 @@
+/* 1238_congruence_closure.iii -- proof-producing congruence closure (Phase 2 T1).
+ * Drives numera::congruence_closure::congruence_closure_kat: 99 = transitive closure; explanation
+ * structural validity + completeness; congruence f(a)=f(c), g(a,d)=g(c,e); the no-proof negative. */
+module corpus_1238
+
+extern @abi(c-msvc-x64) fn congruence_closure_kat() -> u64 from "congruence_closure.iii"
+
+fn main() -> u64 {
+    let r : u64 = congruence_closure_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

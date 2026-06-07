@@ -1,0 +1,14 @@
+/* 1299_fenwick.iii -- Fenwick tree / binary indexed tree, verified against naive.
+ * Drives numera::fenwick::fenwick_kat: 99 = after building [3,1,4,1,5,9,2,6] the O(log n) prefix sums are
+ * 3/9/31; the binary indexed tree agrees with the naive O(n) prefix sum at every index; range [2,5]=19; a
+ * point update (+10 at index 2) is reflected immediately (range becomes 29) and the tree still agrees with
+ * naive everywhere; the lowbit helper is correct. A genuine data-structure gap, verified against reference. */
+module corpus_1299
+
+extern @abi(c-msvc-x64) fn fenwick_kat() -> u64 from "fenwick.iii"
+
+fn main() -> u64 {
+    let r : u64 = fenwick_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

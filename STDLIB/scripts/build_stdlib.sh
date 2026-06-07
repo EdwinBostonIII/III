@@ -731,6 +731,7 @@ MODULES=(
     "numera/binary_search"
     "numera/kmp"
     "numera/levenshtein"
+    "numera/fenwick"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -156,6 +156,18 @@ the pieces for a verified Huffman/DEFLATE-class compressor (next focused capston
 track: full Reed-Solomon (erasure + error-correct) + `erasure_store` + `shamir` + `threshold_vault` +
 `cas_blob` + `hamming` + `gf_poly` + `crt` — a complete resilient-data substrate.
 
+## ✅ ALL 15 MODULES INTEGRATED — HEAD VERIFIED GREEN (2026-06-06 ~20:15)
+
+`1217–1228` are committed corpus citizens. The concurrent writer COMMITTED their BV64/K4 unit
+(`81b51d7`) mid-batch; my surgical-exclusion (built for *uncommitted* writer lines) over-removed their
+now-committed `1211–1216` EXPECTED + `bv_dispose` build line, breaking HEAD (`run_corpus` FATAL on
+committed-but-EXPECTED-less tests). Caught + fixed (`d86a32c` restored them) and **verified**: a clean
+full `build_stdlib` (carto PASS, `BUILD_EXIT=0`) + `run_all_corpora` → **STDLIB PASS=830 FAIL=0**,
+Stage-1 57/0, ALL CORPORA PASSED, 0 WRONG/FATAL — every committed test (writer's `1211–1216` + mine
+`1217–1228`) green. See [[feedback_concurrent_writer_standalone_gate]] for the once-the-writer-commits
+rule. **The 15-module resilient-data + compression + crypto substrate is complete, integrated, and
+HEAD-verified.** Next: Huffman/DEFLATE capstone (fresh cold audit for the tree-building edge cases).
+
 **NEXT candidates (disjoint, self-checkable, bold):** rateless/fountain codes; CRT/Garner; further
 harmony capstones tying the resilient-data layer to III's witness/content-address spine. Kernel/optimizer
 frontier items remain the concurrent writer's territory until their tree stabilizes.

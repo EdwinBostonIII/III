@@ -1,0 +1,170 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\reg_alloc.iii
+ *
+ * III STDLIB - numera::reg_alloc  --  OPTIMAL REGISTER ALLOCATION (verified interval-graph coloring).
+ *
+ * The codegen backend the optimizer feeds into.  After the analysis stack decides WHAT to compute, the
+ * values must be placed in a finite set of registers.  Two values that are live at the same time interfere
+ * and must get different registers -- graph coloring.  In general coloring is NP-hard, but the live ranges
+ * of straight-line code are INTERVALS, whose interference graph is an interval graph, and interval graphs
+ * are optimally coloured by the left-edge algorithm (sort by start, give each value the lowest register
+ * free at its start).  The minimum number of registers needed equals the MAX OVERLAP (the largest set of
+ * simultaneously-live values) -- a tight lower bound this module both achieves and proves.  If that exceeds
+ * the available registers, the surplus must SPILL.
+ *
+ * Verified (reg_alloc_kat): the colouring is VALID (interfering values get distinct registers); it is
+ * OPTIMAL (uses exactly max-overlap registers, the lower bound); and with fewer registers than the max
+ * overlap the required number of spills is reported.  NIH/self-contained.
+ *
+ * Public API:
+ *   ra_overlaps(i,j) -> u32 ; ra_max_overlap() -> u32 ; ra_color() ; ra_valid() -> u32 ;
+ *   ra_regs_used() -> u32 ; ra_spills(k) -> u32 ; ra_reg(i) -> u32 ; ra_setup()
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_reg_alloc
+
+const RA_N   : u32 = 4u32
+const RA_BIG : u32 = 0xFFFFFFFFu32
+
+var RA_START : [u32; 4]
+var RA_END   : [u32; 4]
+var RA_REG   : [u32; 4]
+var RA_DONE  : [u32; 4]
+var RA_USED  : [u32; 1]
+
+fn ra_setup() -> i32 @export {
+    /* four live ranges; max overlap 3 at time 2 (v0,v1,v3 all live) */
+    RA_START[0u64]=0u32 ; RA_END[0u64]=2u32       /* v0 [0,2] */
+    RA_START[1u64]=1u32 ; RA_END[1u64]=3u32       /* v1 [1,3] */
+    RA_START[2u64]=4u32 ; RA_END[2u64]=6u32       /* v2 [4,6] */
+    RA_START[3u64]=2u32 ; RA_END[3u64]=5u32       /* v3 [2,5] */
+    return 0i32
+}
+
+/* two ranges interfere iff they overlap in time. */
+fn ra_overlaps(i: u32, j: u32) -> u32 @export {
+    if RA_START[i as u64] > RA_END[j as u64] { return 0u32 }
+    if RA_START[j as u64] > RA_END[i as u64] { return 0u32 }
+    return 1u32
+}
+
+/* the largest set of simultaneously-live values = the minimum registers needed (the clique number). */
+fn ra_max_overlap() -> u32 @export {
+    let mut best : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < RA_N {
+        let s : u32 = RA_START[i as u64]
+        let mut cnt : u32 = 0u32
+        let mut j : u32 = 0u32
+        while j < RA_N {
+            if RA_START[j as u64] <= s {
+                if s <= RA_END[j as u64] { cnt = cnt + 1u32 }
+            }
+            j = j + 1u32
+        }
+        if cnt > best { best = cnt }
+        i = i + 1u32
+    }
+    return best
+}
+
+/* the left-edge algorithm: process values in start order, assign the lowest free register. */
+fn ra_color() -> i32 @export {
+    let mut v : u32 = 0u32
+    while v < RA_N { RA_DONE[v as u64] = 0u32 ; v = v + 1u32 }
+    let mut used : u32 = 0u32
+    let mut step : u32 = 0u32
+    while step < RA_N {
+        /* pick the unprocessed value with the smallest start */
+        let mut best : u32 = RA_N
+        let mut bestStart : u32 = RA_BIG
+        let mut k : u32 = 0u32
+        while k < RA_N {
+            if RA_DONE[k as u64] == 0u32 {
+                if RA_START[k as u64] < bestStart { best = k ; bestStart = RA_START[k as u64] }
+            }
+            k = k + 1u32
+        }
+        /* assign the lowest register not used by an already-placed interfering value */
+        let mut reg : u32 = 0u32
+        let mut placed : u32 = 0u32
+        while placed == 0u32 {
+            let mut conflict : u32 = 0u32
+            let mut w : u32 = 0u32
+            while w < RA_N {
+                if RA_DONE[w as u64] == 1u32 {
+                    if ra_overlaps(best, w) == 1u32 {
+                        if RA_REG[w as u64] == reg { conflict = 1u32 }
+                    }
+                }
+                w = w + 1u32
+            }
+            if conflict == 0u32 { placed = 1u32 }
+            if conflict == 1u32 { reg = reg + 1u32 }
+        }
+        RA_REG[best as u64] = reg
+        if (reg + 1u32) > used { used = reg + 1u32 }
+        RA_DONE[best as u64] = 1u32
+        step = step + 1u32
+    }
+    RA_USED[0u64] = used
+    return 0i32
+}
+
+fn ra_regs_used() -> u32 @export { return RA_USED[0u64] }
+fn ra_reg(i: u32) -> u32 @export { return RA_REG[i as u64] }
+
+/* the colouring is valid iff every interfering pair has distinct registers. */
+fn ra_valid() -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < RA_N {
+        let mut j : u32 = i + 1u32
+        while j < RA_N {
+            if ra_overlaps(i, j) == 1u32 {
+                if RA_REG[i as u64] == RA_REG[j as u64] { return 0u32 }
+            }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* with k available registers, how many values must spill (0 if k suffices). */
+fn ra_spills(k: u32) -> u32 @export {
+    let need : u32 = ra_max_overlap()
+    if need <= k { return 0u32 }
+    return need - k
+}
+
+/* =====================================================================================
+ * reg_alloc_kat -- 99 = optimal register allocation is correct, self-checked:
+ *   (1) the max overlap (minimum registers) is 3;
+ *   (2) the left-edge colouring uses exactly 3 registers -- optimal (meets the lower bound);
+ *   (3) the colouring is VALID: every interfering pair has distinct registers;
+ *   (4) with 2 registers, exactly 1 value must spill; with 3, none.
+ * ===================================================================================== */
+fn reg_alloc_kat() -> u64 @export {
+    ra_setup()
+
+    /* (1) minimum registers = max overlap = 3 */
+    if ra_max_overlap() != 3u32 { return 1u64 }
+
+    /* (2) colouring is optimal */
+    ra_color()
+    if ra_regs_used() != 3u32 { return 2u64 }
+
+    /* (3) colouring is valid */
+    if ra_valid() != 1u32 { return 3u64 }
+    /* a concrete interference: v0 and v1 overlap, so differ; v0 and v2 don't overlap */
+    if ra_overlaps(0u32, 1u32) != 1u32 { return 4u64 }
+    if ra_reg(0u32) == ra_reg(1u32) { return 5u64 }
+    if ra_overlaps(0u32, 2u32) != 0u32 { return 6u64 }
+
+    /* (4) spilling */
+    if ra_spills(2u32) != 1u32 { return 7u64 }
+    if ra_spills(3u32) != 0u32 { return 8u64 }
+    if ra_spills(1u32) != 2u32 { return 9u64 }
+
+    return 99u64
+}

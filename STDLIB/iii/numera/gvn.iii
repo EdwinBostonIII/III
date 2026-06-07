@@ -1,0 +1,137 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\gvn.iii
+ *
+ * III STDLIB - numera::gvn  --  GLOBAL VALUE NUMBERING (redundancy elimination, verified).
+ *
+ * The SSA optimization that removes redundant computation.  Two expressions compute the same VALUE iff they
+ * apply the same operator to operands of the same value -- so assign each expression a VALUE NUMBER, and an
+ * operation whose (op, value-number-of-left, value-number-of-right) key has been seen reuses that number
+ * instead of recomputing.  This is congruence at the IR level (the same relation numera::congruence_closure
+ * decides over terms), turned into a pass that flags every redundant instruction for elimination while
+ * keeping genuinely distinct computations apart.
+ *
+ * Expressions: e0=a, e1=b, e2=a+b, e3=a+b (redundant with e2), e4=a*b, e5=a*b (redundant with e4),
+ * e6=(a+b)+(a*b) (distinct).  Value numbering assigns e2 and e3 the same number, e4 and e5 the same number,
+ * and a fresh one to e6, flagging exactly e3 and e5 as redundant.
+ *
+ * Verified (gvn_kat): congruent expressions share a value number (a+b twice, a*b twice); non-congruent ones
+ * differ (a+b vs a*b); exactly the two redundant instructions are flagged; and a compound expression built
+ * on the numbered operands is itself distinct.  NIH/self-contained.
+ *
+ * Public API:
+ *   gvn_setup() ; gvn_number() ; gvn_vn(i) -> u32 ; gvn_redundant(i) -> u32 ; gvn_redundant_count() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_gvn
+
+const GVN_N    : u32 = 7u32
+const GVN_LEAF : u32 = 0u32
+const GVN_ADD  : u32 = 1u32
+const GVN_MUL  : u32 = 2u32
+
+var GVN_OP  : [u32; 7]
+var GVN_A   : [u32; 7]
+var GVN_B   : [u32; 7]
+var GVN_VN  : [u32; 7]
+var GVN_RED : [u32; 7]        /* 1 = redundant (reused an existing value number) */
+
+/* value-number table: key (op, vn_left, vn_right) -> value number */
+var GVN_TOP  : [u32; 7]
+var GVN_TA   : [u32; 7]
+var GVN_TB   : [u32; 7]
+var GVN_TVN  : [u32; 7]
+var GVN_TSZ  : [u32; 1]
+
+fn gvn_setup() -> i32 @export {
+    GVN_OP[0u64]=GVN_LEAF ; GVN_A[0u64]=0u32 ; GVN_B[0u64]=0u32      /* a */
+    GVN_OP[1u64]=GVN_LEAF ; GVN_A[1u64]=0u32 ; GVN_B[1u64]=0u32      /* b */
+    GVN_OP[2u64]=GVN_ADD  ; GVN_A[2u64]=0u32 ; GVN_B[2u64]=1u32      /* a+b */
+    GVN_OP[3u64]=GVN_ADD  ; GVN_A[3u64]=0u32 ; GVN_B[3u64]=1u32      /* a+b (redundant) */
+    GVN_OP[4u64]=GVN_MUL  ; GVN_A[4u64]=0u32 ; GVN_B[4u64]=1u32      /* a*b */
+    GVN_OP[5u64]=GVN_MUL  ; GVN_A[5u64]=0u32 ; GVN_B[5u64]=1u32      /* a*b (redundant) */
+    GVN_OP[6u64]=GVN_ADD  ; GVN_A[6u64]=2u32 ; GVN_B[6u64]=4u32      /* (a+b)+(a*b) */
+    return 0i32
+}
+
+/* assign value numbers; an operation reuses a number when its (op, vn_left, vn_right) key recurs. */
+fn gvn_number() -> i32 @export {
+    GVN_TSZ[0u64] = 0u32
+    let mut nextvn : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < GVN_N {
+        if GVN_OP[i as u64] == GVN_LEAF {
+            GVN_VN[i as u64] = nextvn ; nextvn = nextvn + 1u32 ; GVN_RED[i as u64] = 0u32
+        }
+        if GVN_OP[i as u64] != GVN_LEAF {
+            let va : u32 = GVN_VN[GVN_A[i as u64] as u64]
+            let vb : u32 = GVN_VN[GVN_B[i as u64] as u64]
+            let mut hit : u32 = 0u32
+            let mut fvn : u32 = 0u32
+            let sz : u32 = GVN_TSZ[0u64]
+            let mut t : u32 = 0u32
+            while t < sz {
+                if GVN_TOP[t as u64] == GVN_OP[i as u64] {
+                    if GVN_TA[t as u64] == va {
+                        if GVN_TB[t as u64] == vb { hit = 1u32 ; fvn = GVN_TVN[t as u64] }
+                    }
+                }
+                t = t + 1u32
+            }
+            if hit == 1u32 {
+                GVN_VN[i as u64] = fvn ; GVN_RED[i as u64] = 1u32          /* redundant */
+            }
+            if hit == 0u32 {
+                GVN_VN[i as u64] = nextvn ; GVN_RED[i as u64] = 0u32
+                GVN_TOP[sz as u64] = GVN_OP[i as u64] ; GVN_TA[sz as u64] = va ; GVN_TB[sz as u64] = vb
+                GVN_TVN[sz as u64] = nextvn
+                GVN_TSZ[0u64] = sz + 1u32
+                nextvn = nextvn + 1u32
+            }
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn gvn_vn(i: u32) -> u32 @export { return GVN_VN[i as u64] }
+fn gvn_redundant(i: u32) -> u32 @export { return GVN_RED[i as u64] }
+fn gvn_redundant_count() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < GVN_N { c = c + GVN_RED[i as u64] ; i = i + 1u32 }
+    return c
+}
+
+/* =====================================================================================
+ * gvn_kat -- 99 = global value numbering is correct, self-checked:
+ *   (1) congruent expressions share a value number: e2 and e3 (a+b), e4 and e5 (a*b);
+ *   (2) non-congruent expressions differ: a+b vs a*b;
+ *   (3) exactly the two redundant instructions (e3, e5) are flagged, and originals (e2,e4) are not;
+ *   (4) the compound (a+b)+(a*b) gets a fresh, distinct value number.
+ * ===================================================================================== */
+fn gvn_kat() -> u64 @export {
+    gvn_setup()
+    gvn_number()
+
+    /* (1) congruent share a number */
+    if gvn_vn(2u32) != gvn_vn(3u32) { return 1u64 }       /* a+b == a+b */
+    if gvn_vn(4u32) != gvn_vn(5u32) { return 2u64 }       /* a*b == a*b */
+
+    /* (2) non-congruent differ */
+    if gvn_vn(2u32) == gvn_vn(4u32) { return 3u64 }       /* a+b != a*b */
+    if gvn_vn(0u32) == gvn_vn(1u32) { return 4u64 }       /* a != b */
+
+    /* (3) exactly the redundant instructions are flagged */
+    if gvn_redundant(3u32) != 1u32 { return 5u64 }
+    if gvn_redundant(5u32) != 1u32 { return 6u64 }
+    if gvn_redundant(2u32) != 0u32 { return 7u64 }        /* the first occurrence is not redundant */
+    if gvn_redundant(4u32) != 0u32 { return 8u64 }
+    if gvn_redundant_count() != 2u32 { return 9u64 }
+
+    /* (4) the compound is fresh and distinct */
+    if gvn_redundant(6u32) != 0u32 { return 10u64 }
+    if gvn_vn(6u32) == gvn_vn(2u32) { return 11u64 }
+    if gvn_vn(6u32) == gvn_vn(4u32) { return 12u64 }
+
+    return 99u64
+}

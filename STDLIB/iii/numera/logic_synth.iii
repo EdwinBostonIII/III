@@ -1,0 +1,179 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\logic_synth.iii
+ *
+ * III STDLIB - numera::logic_synth  --  VERIFIED LOGIC SYNTHESIS (the source-to-silicon stage).
+ *
+ * The verification + cost-optimization stage of the source-to-silicon pipeline.  numera::hdl_compiler
+ * LOWERS a combinator expression to a gate netlist with physical costs; this module decides WHICH netlist
+ * to ship: given a target boolean function, it selects the cheapest gate netlist PROVEN to compute the
+ * exact same truth table over EVERY input -- "rewrite its own logic gates," disciplined by the frozen
+ * referee (numera::k0_referee).  A smaller netlist that computes a DIFFERENT function is rejected, however
+ * few gates it uses.
+ *
+ * A netlist is a small straight-line gate graph over 3 primary inputs (a,b,c); operand refs 0/1/2 are
+ * inputs, >=3 are prior gates; the output is the last gate.  Cost = gate count (a real silicon proxy).
+ * Target: 3-input MAJORITY.  Candidates: n0 the canonical 5-gate MAJ (anchor); n1 a 4-gate MAJ
+ * (a&b)|(c&(a^b)); nbad a 2-gate XOR3 -- cheapest but the WRONG function.  The synthesizer verifies each
+ * truth table against the anchor and ships n1 (4 gates), never nbad (2 gates).
+ *
+ * Verified (logic_synth_kat): the synthesized netlist is n1; its truth table is exactly MAJORITY (232) and
+ * equals the anchor's; nbad is XOR3 (150), rejected despite fewer gates; the chosen cost (4) beats the
+ * anchor (5) but the wrong cheaper netlist is excluded.  NIH; composes k0_referee.
+ *
+ * Public API:
+ *   ls_setup() ; ls_eval(net,a,b,c) -> u32 ; ls_truth(net) -> u32 ; ls_gates(net) -> u32 ;
+ *   ls_synthesize() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_logic_synth
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_cost(k: u32) -> u32 from "k0_referee.iii"
+
+const LS_NETS : u32 = 3u32
+const LS_GMAX : u32 = 5u32       /* max gates per netlist */
+const LS_AND  : u32 = 0u32
+const LS_OR   : u32 = 1u32
+const LS_XOR  : u32 = 2u32
+
+var LS_OP : [u32; 15]            /* 3 nets * 5 gates */
+var LS_A  : [u32; 15]
+var LS_B  : [u32; 15]
+var LS_NG : [u32; 3]
+var LS_GV : [u32; 5]             /* gate-value scratch */
+
+fn ls_gate(op: u32, av: u32, bv: u32) -> u32 {
+    if op == LS_AND { return av & bv }
+    if op == LS_OR  { return av | bv }
+    return av ^ bv                                /* LS_XOR */
+}
+fn ls_operand(ref: u32, a: u32, b: u32, c: u32) -> u32 {
+    if ref == 0u32 { return a }
+    if ref == 1u32 { return b }
+    if ref == 2u32 { return c }
+    return LS_GV[(ref - 3u32) as u64]
+}
+
+fn ls_eval(net: u32, a: u32, b: u32, c: u32) -> u32 @export {
+    let base : u32 = net * LS_GMAX
+    let ng : u32 = LS_NG[net as u64]
+    let mut j : u32 = 0u32
+    while j < ng {
+        let op : u32 = LS_OP[(base + j) as u64]
+        let av : u32 = ls_operand(LS_A[(base + j) as u64], a, b, c)
+        let bv : u32 = ls_operand(LS_B[(base + j) as u64], a, b, c)
+        LS_GV[j as u64] = ls_gate(op, av, bv)
+        j = j + 1u32
+    }
+    return LS_GV[(ng - 1u32) as u64]
+}
+
+/* the full truth table over all 8 input combinations, packed bit c=combo. */
+fn ls_truth(net: u32) -> u32 @export {
+    let mut tt : u32 = 0u32
+    let mut combo : u32 = 0u32
+    while combo < 8u32 {
+        let a : u32 = combo & 1u32
+        let b : u32 = (combo >> 1u32) & 1u32
+        let c : u32 = (combo >> 2u32) & 1u32
+        let bit : u32 = ls_eval(net, a, b, c)
+        tt = tt | (bit << combo)
+        combo = combo + 1u32
+    }
+    return tt
+}
+
+fn ls_gates(net: u32) -> u32 @export { return LS_NG[net as u64] }
+
+fn ls_put(idx: u32, op: u32, a: u32, b: u32) {
+    LS_OP[idx as u64] = op ; LS_A[idx as u64] = a ; LS_B[idx as u64] = b
+}
+
+fn ls_setup() -> i32 @export {
+    /* n0: canonical MAJORITY, 5 gates -- (a&b)|(b&c)|(a&c) */
+    ls_put(0u32, LS_AND, 0u32, 1u32)      /* g0 = a&b */
+    ls_put(1u32, LS_AND, 1u32, 2u32)      /* g1 = b&c */
+    ls_put(2u32, LS_AND, 0u32, 2u32)      /* g2 = a&c */
+    ls_put(3u32, LS_OR,  3u32, 4u32)      /* g3 = g0|g1 */
+    ls_put(4u32, LS_OR,  6u32, 5u32)      /* g4 = g3|g2 */
+    LS_NG[0u64] = 5u32
+    /* n1: optimized MAJORITY, 4 gates -- (a&b)|(c&(a^b)) */
+    ls_put(5u32, LS_XOR, 0u32, 1u32)      /* g0 = a^b */
+    ls_put(6u32, LS_AND, 2u32, 3u32)      /* g1 = c & g0 */
+    ls_put(7u32, LS_AND, 0u32, 1u32)      /* g2 = a&b */
+    ls_put(8u32, LS_OR,  5u32, 4u32)      /* g3 = g2|g1 */
+    LS_NG[1u64] = 4u32
+    /* nbad: XOR3, 2 gates -- a^b^c (WRONG: not majority) */
+    ls_put(10u32, LS_XOR, 0u32, 1u32)     /* g0 = a^b */
+    ls_put(11u32, LS_XOR, 3u32, 2u32)     /* g1 = g0^c */
+    LS_NG[2u64] = 2u32
+    /* register in K_0 with gate-count cost; behaviour = the truth table; freeze the anchor (n0) */
+    k0_reset()
+    k0_register(LS_NG[0u64])
+    k0_register(LS_NG[1u64])
+    k0_register(LS_NG[2u64])
+    let mut net : u32 = 0u32
+    while net < LS_NETS {
+        let mut combo : u32 = 0u32
+        while combo < 8u32 {
+            let a : u32 = combo & 1u32
+            let b : u32 = (combo >> 1u32) & 1u32
+            let c : u32 = (combo >> 2u32) & 1u32
+            k0_set_behav(net, combo, ls_eval(net, a, b, c))
+            combo = combo + 1u32
+        }
+        net = net + 1u32
+    }
+    k0_freeze_anchor()
+    return 0i32
+}
+
+/* synthesize: the cheapest K_0-verified (truth-table-equivalent) netlist. */
+fn ls_synthesize() -> u32 @export {
+    let mut best : u32 = 0u32
+    let mut bestcost : u32 = k0_cost(0u32)
+    let mut k : u32 = 1u32
+    while k < LS_NETS {
+        if k0_verify(k) == 1u32 {
+            if k0_cost(k) < bestcost { best = k ; bestcost = k0_cost(k) }
+        }
+        k = k + 1u32
+    }
+    return best
+}
+
+/* =====================================================================================
+ * logic_synth_kat -- 99 = verified logic synthesis is correct, self-checked:
+ *   (1) the synthesized netlist is n1 (the 4-gate MAJORITY), not the cheaper-but-wrong nbad;
+ *   (2) the synthesized truth table is exactly MAJORITY (232) and equals the anchor's;
+ *   (3) nbad is XOR3 (150) -- a different function -- and is K_0-rejected despite using fewer gates;
+ *   (4) the chosen cost (4 gates) beats the anchor (5); the wrong 2-gate netlist is excluded.
+ * ===================================================================================== */
+fn logic_synth_kat() -> u64 @export {
+    ls_setup()
+
+    /* (1) synthesize -> n1 */
+    let s : u32 = ls_synthesize()
+    if s != 1u32 { return 1u64 }
+
+    /* (2) the truth table is MAJORITY and equals the anchor */
+    if ls_truth(0u32) != 232u32 { return 2u64 }        /* canonical MAJ */
+    if ls_truth(1u32) != 232u32 { return 3u64 }        /* optimized MAJ -- identical truth table */
+    if ls_truth(s) != ls_truth(0u32) { return 4u64 }
+
+    /* (3) nbad is a different function and rejected */
+    if ls_truth(2u32) != 150u32 { return 5u64 }        /* XOR3 */
+    if k0_verify(2u32) != 0u32 { return 6u64 }         /* rejected: wrong truth table */
+    if k0_verify(1u32) != 1u32 { return 7u64 }         /* n1 verified */
+
+    /* (4) cost */
+    if ls_gates(1u32) >= ls_gates(0u32) { return 8u64 }  /* 4 < 5 */
+    if ls_gates(2u32) != 2u32 { return 9u64 }            /* nbad really is cheapest (2 gates) */
+    if s == 2u32 { return 10u64 }                        /* but never synthesized */
+
+    return 99u64
+}

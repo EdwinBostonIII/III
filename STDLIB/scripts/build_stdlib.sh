@@ -948,6 +948,7 @@ MODULES=(
     "forcefield/ripple_search"
     "forcefield/ripple_synthesizer"
     "forcefield/ripple_journal"
+    "numera/costed_cat"
     # Sovereign Enhancement G5: the inductive bridge (sample -> forall via tc_natrec; false universal rejected).
     "numera/induct"
     # Structural-Audit Wave 0 / W0.1 (COMBINE-7): the boundary-trust organ -- the single source of

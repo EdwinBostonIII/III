@@ -1,0 +1,16 @@
+/* 1242_costed_cat.iii -- cost-accumulating category composition falsifier.
+ * Drives numera::costed_cat::cc_selftest: 99 = composing f(A->B,cost[3]) then g(B->C,cost[2])
+ * accumulates cost [5] within budget (positive); composing two [600000]-cost arrows (each admitted
+ * individually) is REFUSED because the accumulated [1200000] exceeds the [1000000] budget (biting
+ * negative: over-budget pipeline refusal); re-declaring the SAME arrow with a different cost is
+ * refused while an identical re-declaration is idempotent (biting negative: cost coherence).
+ * category (X) cost_lattice: every arrow carries a 6-vector cost; composition is cost-aware. */
+module corpus_1242
+
+extern @abi(c-msvc-x64) fn cc_selftest() -> u64 from "costed_cat.iii"
+
+fn main() -> u64 {
+    let r : u64 = cc_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -812,6 +812,7 @@ declare -A EXPECTED=(
     [1226_crt]=99
     [1240_certified_morphism]=99
     [1241_ripple_journal]=99
+    [1242_costed_cat]=99
     [1227_bitio]=99
     [1228_elias]=99
     [1230_huffman]=99

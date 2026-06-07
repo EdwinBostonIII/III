@@ -1,0 +1,210 @@
+module costed_cat
+
+/* ============================================================================
+ * costed_cat -- COST-ACCUMULATING CATEGORY COMPOSITION  (category (X) cost_lattice).
+ *
+ * numera/category.iii composes morphisms with ZERO cost awareness; numera/
+ * cost_lattice.iii has the 6-vector cost algebra but never attaches a cost to a
+ * category arrow.  costed_cat fuses them: every arrow carries a 6-dim cost, and
+ * COMPOSITION accumulates cost by per-dimension SATURATING ADD (sequential-pipeline
+ * semantics, not the lub cl_join used for parallel values).  A composition whose
+ * accumulated cost exceeds a declared budget ceiling is REFUSED before the
+ * composite arrow is created -- the first over-budget-pipeline refusal in the
+ * system.  A cost-coherence invariant holds: re-declaring the SAME arrow (same
+ * src,dst,op-word -> same category slot) with a DIFFERENT cost is refused (an
+ * arrow's behavioral identity binds exactly one cost).
+ *
+ * This is the foundational cost-on-composition layer the multi-objective transform
+ * planner needs.  Own lean registry (256 entries keyed to category slots), so it
+ * does not bloat a table across all 16384 category slots.  NIH (libc + III).
+ * Falsifier: 1242_costed_cat (positive accumulate within budget; biting negatives:
+ * over-budget refusal, incoherent re-declaration).
+ * ========================================================================== */
+
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cl_le_product(c: *u64, cp: *u64) -> u8 from "cost_lattice.iii"
+
+const CC_DIM     : u64 = 6u64
+const CC_MAX     : u64 = 256u64
+const CC_SAT     : u64 = 0xFFFFFFFFFFFFFFFFu64   /* saturating-add ceiling */
+const CC_CATSENT : u32 = 0xFFFFFFFFu32           /* mirror of category.iii CATEGORY_SENT */
+const CC_SENT    : u32 = 0xFFFFFFFFu32           /* our refusal sentinel */
+const CC_BUDGET_DEFAULT : u64 = 1000000u64
+
+var CC_CATSLOT : [u32; 256]      /* the category morphism slot for own-entry i */
+var CC_COST    : [u64; 1536]     /* CC_MAX * CC_DIM, per-entry 6-vector cost */
+var CC_LIVE    : [u8; 256]
+var CC_N       : [u32; 1]
+var CC_BUDGET  : [u64; 6]
+var CC_ACC     : [u64; 6]        /* scratch: accumulated cost during compose */
+
+fn cc_init() -> i32 @export {
+    cat_init()
+    let mut i : u64 = 0u64
+    while i < CC_MAX { CC_LIVE[i] = 0u8  i = i + 1u64 }
+    CC_N[0u64] = 0u32
+    let mut k : u64 = 0u64
+    while k < CC_DIM { CC_BUDGET[k] = CC_BUDGET_DEFAULT  k = k + 1u64 }
+    return 0i32
+}
+
+/* set a per-dimension budget ceiling (caller-controlled). */
+fn cc_set_budget(b: *u64) -> i32 @export {
+    if (b as u64) == 0u64 { return -1i32 }
+    let mut k : u64 = 0u64
+    while k < CC_DIM { CC_BUDGET[k] = b[k]  k = k + 1u64 }
+    return 0i32
+}
+
+/* find the own-entry whose category slot == cat_slot, or CC_SENT. */
+fn cc_find(cat_slot: u32) -> u32 {
+    let n : u64 = CC_N[0u64] as u64
+    let mut i : u64 = 0u64
+    let mut found : u32 = CC_SENT
+    while i < n {
+        if found == CC_SENT {
+            if CC_LIVE[i] == 1u8 {
+                if CC_CATSLOT[i] == cat_slot { found = i as u32 }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* register a costed arrow src --op--> dst.  Returns the own-entry slot, or CC_SENT.
+ * Idempotent for an identical (arrow, cost); REFUSES a different cost for the same arrow. */
+fn pcat_add(src: u32, dst: u32, op: *u8, cost: *u64, out_id: *u8) -> u32 @export {
+    if (op as u64) == 0u64 { return CC_SENT }
+    if (out_id as u64) == 0u64 { return CC_SENT }
+    if (cost as u64) == 0u64 { return CC_SENT }
+    let cs : u32 = cat_add_morphism(src, dst, op, out_id)     /* category arrow + dedup */
+    if cs == CC_CATSENT { return CC_SENT }
+    let ex : u32 = cc_find(cs)
+    if ex != CC_SENT {
+        let exoff : u64 = (ex as u64) * CC_DIM
+        let mut k : u64 = 0u64
+        while k < CC_DIM {
+            if CC_COST[exoff + k] != cost[k] { return CC_SENT }   /* COHERENCE: same arrow, different cost -> refuse */
+            k = k + 1u64
+        }
+        return ex
+    }
+    let n : u64 = CC_N[0u64] as u64
+    if n >= CC_MAX { return CC_SENT }
+    CC_CATSLOT[n] = cs
+    let noff : u64 = n * CC_DIM
+    let mut k2 : u64 = 0u64
+    while k2 < CC_DIM { CC_COST[noff + k2] = cost[k2]  k2 = k2 + 1u64 }
+    CC_LIVE[n] = 1u8
+    CC_N[0u64] = (n + 1u64) as u32
+    return n as u32
+}
+
+/* copy own-entry slot's 6-vector cost into out (>=6 u64). 0 ok / -1 bad. */
+fn pcat_cost(own: u32, out: *u64) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    if (own as u64) >= CC_MAX { return -1i32 }
+    if CC_LIVE[own as u64] != 1u8 { return -1i32 }
+    let off : u64 = (own as u64) * CC_DIM
+    let mut k : u64 = 0u64
+    while k < CC_DIM { out[k] = CC_COST[off + k]  k = k + 1u64 }
+    return 0i32
+}
+
+/* compose two costed arrows (f then g): accumulate cost (saturating per-dim add), REFUSE if the
+ * accumulated cost exceeds the budget (BEFORE creating the composite), else create the category
+ * composite arrow and register it with the accumulated cost.  Returns the composite own-entry or CC_SENT. */
+fn pcat_compose(f_own: u32, g_own: u32, out_id: *u8) -> u32 @export {
+    if (out_id as u64) == 0u64 { return CC_SENT }
+    if (f_own as u64) >= CC_MAX { return CC_SENT }
+    if (g_own as u64) >= CC_MAX { return CC_SENT }
+    if CC_LIVE[f_own as u64] != 1u8 { return CC_SENT }
+    if CC_LIVE[g_own as u64] != 1u8 { return CC_SENT }
+    let foff : u64 = (f_own as u64) * CC_DIM
+    let goff : u64 = (g_own as u64) * CC_DIM
+    let mut k : u64 = 0u64
+    while k < CC_DIM {
+        let a : u64 = CC_COST[foff + k]
+        let b : u64 = CC_COST[goff + k]
+        let mut s : u64 = a + b
+        if s < a { s = CC_SAT }                          /* overflow -> saturate */
+        CC_ACC[k] = s
+        k = k + 1u64
+    }
+    if cl_le_product((&CC_ACC as u64) as *u64, (&CC_BUDGET as u64) as *u64) != 1u8 { return CC_SENT }   /* OVER-BUDGET -> refuse, no composite */
+    let cs : u32 = cat_compose(CC_CATSLOT[f_own as u64], CC_CATSLOT[g_own as u64], out_id)
+    if cs == CC_CATSENT { return CC_SENT }
+    let ex : u32 = cc_find(cs)
+    if ex != CC_SENT {
+        let exoff : u64 = (ex as u64) * CC_DIM
+        let mut k3 : u64 = 0u64
+        while k3 < CC_DIM { if CC_COST[exoff + k3] != CC_ACC[k3] { return CC_SENT }  k3 = k3 + 1u64 }
+        return ex
+    }
+    let n : u64 = CC_N[0u64] as u64
+    if n >= CC_MAX { return CC_SENT }
+    CC_CATSLOT[n] = cs
+    let noff : u64 = n * CC_DIM
+    let mut k4 : u64 = 0u64
+    while k4 < CC_DIM { CC_COST[noff + k4] = CC_ACC[k4]  k4 = k4 + 1u64 }
+    CC_LIVE[n] = 1u8
+    CC_N[0u64] = (n + 1u64) as u32
+    return n as u32
+}
+
+/* ---- falsifier (positive accumulate-within-budget; biting negatives: over-budget, incoherent) ---- */
+var CC_IDA : [u8; 32]
+var CC_IDB : [u8; 32]
+var CC_IDC : [u8; 32]
+var CC_OP1 : [u8; 32]
+var CC_OP2 : [u8; 32]
+var CC_OP3 : [u8; 32]
+var CC_OP4 : [u8; 32]
+var CC_OUT : [u8; 32]
+var CC_C_LO  : [u64; 6]
+var CC_C2    : [u64; 6]
+var CC_C_HI  : [u64; 6]
+var CC_C_BAD : [u64; 6]
+var CC_GOT   : [u64; 6]
+
+fn cc_selftest() -> u64 @export {
+    cc_init()
+    CC_IDA[0u64] = 0x41u8  CC_IDB[0u64] = 0x42u8  CC_IDC[0u64] = 0x43u8
+    CC_OP1[0u64] = 0x31u8  CC_OP2[0u64] = 0x32u8  CC_OP3[0u64] = 0x33u8  CC_OP4[0u64] = 0x34u8
+    CC_C_LO[0u64]  = 3u64
+    CC_C2[0u64]    = 2u64
+    CC_C_HI[0u64]  = 600000u64
+    CC_C_BAD[0u64] = 99u64
+    let a : u32 = cat_add_object((&CC_IDA as u64) as *u8)
+    let b : u32 = cat_add_object((&CC_IDB as u64) as *u8)
+    let c : u32 = cat_add_object((&CC_IDC as u64) as *u8)
+    if a == CC_CATSENT { return 1u64 }
+    if b == CC_CATSENT { return 2u64 }
+    if c == CC_CATSENT { return 3u64 }
+    /* f: A->B cost [3], g: B->C cost [2] */
+    let f : u32 = pcat_add(a, b, (&CC_OP1 as u64) as *u8, (&CC_C_LO as u64) as *u64, (&CC_OUT as u64) as *u8)
+    if f == CC_SENT { return 4u64 }
+    let g : u32 = pcat_add(b, c, (&CC_OP2 as u64) as *u8, (&CC_C2 as u64) as *u64, (&CC_OUT as u64) as *u8)
+    if g == CC_SENT { return 5u64 }
+    /* POSITIVE: compose accumulates [3]+[2]=[5], within budget. */
+    let h : u32 = pcat_compose(f, g, (&CC_OUT as u64) as *u8)
+    if h == CC_SENT { return 6u64 }
+    if pcat_cost(h, (&CC_GOT as u64) as *u64) != 0i32 { return 7u64 }
+    if CC_GOT[0u64] != 5u64 { return 8u64 }
+    if CC_GOT[1u64] != 0u64 { return 9u64 }
+    /* NEGATIVE 1 (over-budget BITES): [600000]+[600000]=[1200000] > budget [1000000] -> refuse, no composite. */
+    let f2 : u32 = pcat_add(a, b, (&CC_OP3 as u64) as *u8, (&CC_C_HI as u64) as *u64, (&CC_OUT as u64) as *u8)
+    if f2 == CC_SENT { return 10u64 }                 /* each admitted individually (within budget) */
+    let g2 : u32 = pcat_add(b, c, (&CC_OP4 as u64) as *u8, (&CC_C_HI as u64) as *u64, (&CC_OUT as u64) as *u8)
+    if g2 == CC_SENT { return 11u64 }
+    if pcat_compose(f2, g2, (&CC_OUT as u64) as *u8) != CC_SENT { return 12u64 }   /* over-budget MUST refuse */
+    /* NEGATIVE 2 (coherence BITES): same arrow op1 re-declared with same cost is idempotent; different cost is refused. */
+    let fdup : u32 = pcat_add(a, b, (&CC_OP1 as u64) as *u8, (&CC_C_LO as u64) as *u64, (&CC_OUT as u64) as *u8)
+    if fdup != f { return 13u64 }                     /* idempotent: same arrow + same cost -> same entry */
+    if pcat_add(a, b, (&CC_OP1 as u64) as *u8, (&CC_C_BAD as u64) as *u64, (&CC_OUT as u64) as *u8) != CC_SENT { return 14u64 }
+    return 99u64
+}

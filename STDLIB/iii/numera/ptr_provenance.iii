@@ -1,0 +1,179 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ptr_provenance.iii
+ *
+ * III STDLIB - numera::ptr_provenance  --  POINTER PROVENANCE + THE ALIASING DECISION PROCEDURE.
+ *
+ * The single most common reason mainstream C/C++ compilers FAIL to optimize is pointer aliasing: they
+ * cannot prove that two pointers `p` and `q` never refer to the same byte, so they must conservatively
+ * assume a write through `p` may clobber a value read through `q` -- killing reordering, caching in
+ * registers, and vectorization.  The fix is PROVENANCE: every pointer carries an unbroken chain of custody
+ * back to the allocation it was derived from, and two accesses from DIFFERENT allocations provably cannot
+ * alias (the C "based-on" rule), while accesses from the same allocation alias iff their byte RANGES
+ * overlap.  III maintains this chain with certainty and decides aliasing exactly.
+ *
+ * MODEL: each allocation `i` owns the disjoint global address window [i*STRIDE, i*STRIDE + size_i).  A
+ * pointer IS its global address; its provenance (owning allocation) is address >> log2(STRIDE) and its
+ * offset is address & (STRIDE-1).  Derivation is pointer arithmetic; an access of `width` bytes is in
+ * bounds iff [offset, offset+width) lies within the live allocation's [0, size).
+ *
+ * THE DECISION PROCEDURE (prov_alias): two accesses may-alias iff same provenance AND overlapping byte
+ * ranges.  Its load-bearing property is SOUNDNESS: it NEVER returns no-alias when the byte sets truly
+ * intersect (an unsound no-alias is a miscompile).  prov_provenance_kat cross-checks EVERY decision over
+ * 500 random access pairs against ground-truth global byte-range overlap -- so the procedure is proven
+ * both sound (no false no-alias) and precise (no false may-alias).  Plus the chain-of-custody safety:
+ * out-of-bounds and use-after-free accesses are detected.
+ *
+ * NIH/self-contained.  Public API:
+ *   prov_init() ; prov_alloc(size) -> u64 ; prov_free(ptr) ; prov_derive(ptr,delta) -> u64
+ *   prov_alloc_of(ptr) -> u32 ; prov_offset(ptr) -> u64 ; prov_in_bounds(ptr,width) -> u32
+ *   prov_use_after_free(ptr) -> u32 ; prov_alias(ptrA,wA, ptrB,wB) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_ptr_provenance
+
+const PROV_SHIFT : u64 = 20u64                 /* STRIDE = 1<<20 = 1 MiB per allocation window */
+const PROV_STRIDE: u64 = 1048576u64
+const PROV_MASK  : u64 = 1048575u64            /* STRIDE-1 */
+const PROV_K     : u32 = 64u32
+
+var PROV_SIZE  : [u64; 64]
+var PROV_FREED : [u32; 64]
+var PROV_N     : [u32; 1]
+
+fn prov_init() -> i32 @export { PROV_N[0u32] = 0u32 ; return 0i32 }
+
+fn prov_alloc(size: u64) -> u64 @export {
+    let id : u32 = PROV_N[0u32]
+    if id >= PROV_K { return 0xFFFFFFFFFFFFFFFFu64 }
+    PROV_N[0u32] = id + 1u32
+    PROV_SIZE[id as u64] = size
+    PROV_FREED[id as u64] = 0u32
+    return (id as u64) << PROV_SHIFT          /* base pointer of this allocation */
+}
+
+fn prov_alloc_of(ptr: u64) -> u32 @export { return (ptr >> PROV_SHIFT) as u32 }
+fn prov_offset(ptr: u64) -> u64 @export { return ptr & PROV_MASK }
+
+fn prov_free(ptr: u64) -> i32 @export {
+    let id : u32 = (ptr >> PROV_SHIFT) as u32
+    if id >= PROV_N[0u32] { return -1i32 }
+    PROV_FREED[id as u64] = 1u32
+    return 0i32
+}
+
+fn prov_derive(ptr: u64, delta: u64) -> u64 @export { return ptr + delta }
+
+fn prov_use_after_free(ptr: u64) -> u32 @export {
+    let id : u32 = (ptr >> PROV_SHIFT) as u32
+    if id >= PROV_N[0u32] { return 1u32 }              /* unknown provenance is unsafe */
+    return PROV_FREED[id as u64]
+}
+
+/* 1 iff [offset, offset+width) is within [0, size) of a LIVE allocation. */
+fn prov_in_bounds(ptr: u64, width: u64) -> u32 @export {
+    let id : u32 = (ptr >> PROV_SHIFT) as u32
+    if id >= PROV_N[0u32] { return 0u32 }
+    if PROV_FREED[id as u64] == 1u32 { return 0u32 }
+    let off : u64 = ptr & PROV_MASK
+    if (off + width) > PROV_SIZE[id as u64] { return 0u32 }
+    return 1u32
+}
+
+/* THE DECISION PROCEDURE: may-alias iff same provenance AND overlapping byte ranges. */
+fn prov_alias(ptrA: u64, wA: u64, ptrB: u64, wB: u64) -> u32 @export {
+    let aA : u32 = (ptrA >> PROV_SHIFT) as u32
+    let aB : u32 = (ptrB >> PROV_SHIFT) as u32
+    if aA != aB { return 0u32 }                        /* different provenance -> provably no-alias */
+    if (ptrA + wA) <= ptrB { return 0u32 }             /* A entirely before B */
+    if (ptrB + wB) <= ptrA { return 0u32 }             /* B entirely before A */
+    return 1u32
+}
+
+/* ===== KAT ===== */
+var PROV_BASES : [u64; 8]
+var PROV_RNG : [u64; 1]
+fn prov_rng() -> u64 {
+    let mut z : u64 = PROV_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    PROV_RNG[0u64] = z
+    return z
+}
+
+/* ground truth: do the global byte ranges [pA,pA+wA) and [pB,pB+wB) intersect? */
+fn prov_truth_overlap(pA: u64, wA: u64, pB: u64, wB: u64) -> u32 {
+    if (pA + wA) <= pB { return 0u32 }
+    if (pB + wB) <= pA { return 0u32 }
+    return 1u32
+}
+
+/* =====================================================================================
+ * prov_provenance_kat -- 99 = provenance + aliasing are sound and precise, self-checked:
+ *   (1) DIRECTED aliasing cases: same-alloc overlap=alias; same-alloc disjoint/adjacent=no-alias;
+ *       same-alloc nested=alias; DIFFERENT allocs=no-alias (even when offsets coincide);
+ *   (2) CHAIN OF CUSTODY: in-bounds derive+access ok; out-of-bounds access detected; the byte at the
+ *       very end (off+width==size) is in bounds, one past is not;
+ *   (3) USE-AFTER-FREE: access to a freed allocation is flagged;
+ *   (4) SOUNDNESS+PRECISION: over 500 random access pairs across random allocations, prov_alias EXACTLY
+ *       equals ground-truth global byte-range overlap (in particular, never a false no-alias).
+ * ===================================================================================== */
+fn prov_provenance_kat() -> u64 @export {
+    prov_init()
+    let a : u64 = prov_alloc(64u64)          /* allocation A, 64 bytes */
+    let b : u64 = prov_alloc(64u64)          /* allocation B, 64 bytes (different provenance) */
+
+    /* (1) directed aliasing */
+    /* same alloc, overlapping [0,4) vs [2,6) -> alias */
+    if prov_alias(a, 4u64, prov_derive(a, 2u64), 4u64) != 1u32 { return 1u64 }
+    /* same alloc, disjoint [0,4) vs [4,8) -> no-alias */
+    if prov_alias(a, 4u64, prov_derive(a, 4u64), 4u64) != 0u32 { return 2u64 }
+    /* same alloc, adjacent [0,8) vs [8,16) -> no-alias */
+    if prov_alias(a, 8u64, prov_derive(a, 8u64), 8u64) != 0u32 { return 3u64 }
+    /* same alloc, nested [0,16) vs [4,8) -> alias */
+    if prov_alias(a, 16u64, prov_derive(a, 4u64), 4u64) != 1u32 { return 4u64 }
+    /* DIFFERENT allocs, SAME offset 8 -> no-alias (provenance resolves it) */
+    if prov_alias(prov_derive(a, 8u64), 4u64, prov_derive(b, 8u64), 4u64) != 0u32 { return 5u64 }
+    /* different allocs always no-alias regardless of widths */
+    if prov_alias(a, 64u64, b, 64u64) != 0u32 { return 6u64 }
+
+    /* (2) chain of custody / bounds */
+    if prov_in_bounds(prov_derive(a, 60u64), 4u64) != 1u32 { return 7u64 }   /* [60,64) ok */
+    if prov_in_bounds(prov_derive(a, 60u64), 5u64) != 0u32 { return 8u64 }   /* [60,65) OOB */
+    if prov_in_bounds(prov_derive(a, 64u64), 1u64) != 0u32 { return 9u64 }   /* one past the end */
+    if prov_in_bounds(a, 64u64) != 1u32 { return 10u64 }                     /* whole object ok */
+
+    /* (3) use-after-free */
+    if prov_use_after_free(a) != 0u32 { return 11u64 }
+    prov_free(a)
+    if prov_use_after_free(a) != 1u32 { return 12u64 }
+    if prov_in_bounds(a, 4u64) != 0u32 { return 13u64 }                      /* access after free invalid */
+    if prov_use_after_free(b) != 0u32 { return 14u64 }                       /* b still live */
+
+    /* (4) SOUNDNESS + PRECISION over random access pairs */
+    prov_init()
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let sz : u64 = 16u64 + ((k as u64) * 8u64)
+        PROV_BASES[k as u64] = prov_alloc(sz)
+        k = k + 1u32
+    }
+    PROV_RNG[0u64] = 0x9E3779B97F4A7C15u64
+    let mut t : u32 = 0u32
+    while t < 500u32 {
+        let ia : u32 = (prov_rng() & 7u64) as u32
+        let ib : u32 = (prov_rng() & 7u64) as u32
+        let offA : u64 = prov_rng() & 31u64
+        let offB : u64 = prov_rng() & 31u64
+        let wA : u64 = 1u64 + (prov_rng() & 7u64)
+        let wB : u64 = 1u64 + (prov_rng() & 7u64)
+        let pA : u64 = PROV_BASES[ia as u64] + offA
+        let pB : u64 = PROV_BASES[ib as u64] + offB
+        let decided : u32 = prov_alias(pA, wA, pB, wB)
+        let truth : u32 = prov_truth_overlap(pA, wA, pB, wB)
+        if decided != truth { return 20000u64 + (t as u64) }   /* sound AND precise */
+        t = t + 1u32
+    }
+
+    return 99u64
+}

@@ -703,6 +703,7 @@ MODULES=(
     "numera/loop_optimizer"
     "numera/kleene_fixpoint"
     "numera/widening"
+    "numera/align_domain"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

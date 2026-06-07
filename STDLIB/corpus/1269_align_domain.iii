@@ -1,0 +1,14 @@
+/* 1269_align_domain.iii -- alignment analysis: the legal SIMD width for vectorization.
+ * Drives numera::align_domain::align_domain_kat: 99 = the maximum vector width is the largest power of two
+ * dividing gcd(base,stride) ((16,8)->8, (16,12)->4, (15,8)->1); ad_loop_aligned agrees with an exhaustive
+ * per-iteration scan; an over-wide claim (width 16 on stride 8) is rejected. The alignment input
+ * loop_optimizer needs to widen strength-reduction into vectorization. */
+module corpus_1269
+
+extern @abi(c-msvc-x64) fn align_domain_kat() -> u64 from "align_domain.iii"
+
+fn main() -> u64 {
+    let r : u64 = align_domain_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

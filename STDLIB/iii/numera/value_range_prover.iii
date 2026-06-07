@@ -1,0 +1,116 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\value_range_prover.iii
+ *
+ * III STDLIB - numera::value_range_prover  --  UNIVERSAL OVERFLOW PROOF OVER A PARAMETER FAMILY.
+ *
+ * This is the payoff of abstract interpretation, and it CONSUMES the granular pieces rather than re-deriving
+ * them: numera::interval_lattice bounds a value, numera::range_check turns that bound into an overflow
+ * verdict, and this prover lifts the verdict from a single concrete run to an ENTIRE FAMILY of runs at once.
+ * The program is a loop acc = sum of `a` over `n` iterations (acc = n*a) parameterized by n in [0,N] and
+ * a in [0,A].  A single abstract check -- does N*A fit the type bound? -- proves NO member of the family
+ * overflows, for every one of the (N+1)*(A+1) concrete programs simultaneously.  That one-check-covers-many
+ * is the power no test suite has: tests sample, this PROVES the universal.
+ *
+ * The KAT does not hardcode one input and one expected output; it cross-checks the abstract bound against
+ * the WHOLE concrete family (soundness as a universally-quantified claim) and confirms the no-overflow
+ * verdict is correct for every member.
+ *
+ * Verified (value_range_prover_kat): the abstract bound equals N*A and soundly dominates every concrete
+ * acc over the family; for (N=10,A=5) vs a u8 bound (255) NO member overflows (proven universally, and the
+ * exhaustive family agrees); for (N=10,A=30) overflow is possible and a concrete witness exceeding the bound
+ * exists.  NIH; composes interval_lattice + range_check.
+ *
+ * Public API:
+ *   vrp_loop_result(n,a) -> u32 ; vrp_abstract_max(cn,ca) -> u32 ; vrp_sound(cn,ca) -> u32 ;
+ *   vrp_no_overflow(cn,ca,bound) -> u32 ; vrp_family_has_overflow(cn,ca,bound) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_value_range_prover
+
+extern @abi(c-msvc-x64) fn il_mul(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn rc_overflows(l1: u32, h1: u32, l2: u32, h2: u32, op: u32, bound: u32) -> u32 from "range_check.iii"
+
+const VRP_MUL : u32 = 1u32         /* range_check's MUL opcode */
+
+/* the concrete loop: acc = a added n times = n*a (run as a real loop, not the closed form). */
+fn vrp_loop_result(n: u32, a: u32) -> u32 @export {
+    let mut acc : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        acc = acc + a
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* the abstract upper bound on acc over the family n in [0,cn], a in [0,ca], via the interval product. */
+fn vrp_abstract_max(cn: u32, ca: u32) -> u32 @export {
+    il_mul(0u32, cn, 0u32, ca)         /* [0,cn] * [0,ca] = [0, cn*ca] */
+    return il_hi()
+}
+
+/* SOUNDNESS as a universal claim: every concrete acc over the WHOLE family is within the abstract bound. */
+fn vrp_sound(cn: u32, ca: u32) -> u32 @export {
+    let bound : u32 = vrp_abstract_max(cn, ca)
+    let mut n : u32 = 0u32
+    while n <= cn {
+        let mut a : u32 = 0u32
+        while a <= ca {
+            if vrp_loop_result(n, a) > bound { return 0u32 }
+            a = a + 1u32
+        }
+        n = n + 1u32
+    }
+    return 1u32
+}
+
+/* UNIVERSAL no-overflow: one abstract check proves no member of the family overflows the type bound. */
+fn vrp_no_overflow(cn: u32, ca: u32, bound: u32) -> u32 @export {
+    if rc_overflows(0u32, cn, 0u32, ca, VRP_MUL, bound) == 1u32 { return 0u32 }   /* abstract overflow possible */
+    return 1u32                                                                   /* proven safe for all n,a */
+}
+
+/* does some concrete member actually exceed the bound? (the converse witness). */
+fn vrp_family_has_overflow(cn: u32, ca: u32, bound: u32) -> u32 @export {
+    let mut n : u32 = 0u32
+    while n <= cn {
+        let mut a : u32 = 0u32
+        while a <= ca {
+            if vrp_loop_result(n, a) > bound { return 1u32 }
+            a = a + 1u32
+        }
+        n = n + 1u32
+    }
+    return 0u32
+}
+
+/* =====================================================================================
+ * value_range_prover_kat -- 99 = the universal overflow proof is sound, self-checked over the family:
+ *   (1) the abstract bound equals N*A and dominates EVERY concrete acc over the whole family (soundness);
+ *   (2) for (N=10,A=5) vs u8 bound 255: proven NO member overflows, and exhaustively the family agrees;
+ *   (3) for (N=10,A=30): overflow is possible (abstract) AND a concrete member genuinely exceeds 255;
+ *   (4) the loop really computes n*a (a few concrete points).
+ * ===================================================================================== */
+fn value_range_prover_kat() -> u64 @export {
+    /* (1) soundness over the family + the bound is N*A */
+    if vrp_abstract_max(10u32, 5u32) != 50u32 { return 1u64 }
+    if vrp_sound(10u32, 5u32) != 1u32 { return 2u64 }
+    if vrp_sound(7u32, 9u32) != 1u32 { return 3u64 }       /* a different family, still sound */
+
+    /* (2) universal no-overflow proven AND the exhaustive family confirms it */
+    if vrp_no_overflow(10u32, 5u32, 255u32) != 1u32 { return 4u64 }
+    if vrp_family_has_overflow(10u32, 5u32, 255u32) != 0u32 { return 5u64 }
+
+    /* (3) when the abstract bound exceeds the type bound, a real overflow witness exists */
+    if vrp_no_overflow(10u32, 30u32, 255u32) != 0u32 { return 6u64 }   /* abstract: not provably safe */
+    if vrp_family_has_overflow(10u32, 30u32, 255u32) != 1u32 { return 7u64 }   /* concrete witness exists */
+    if vrp_abstract_max(10u32, 30u32) != 300u32 { return 8u64 }
+
+    /* (4) the loop computes n*a */
+    if vrp_loop_result(10u32, 5u32) != 50u32 { return 9u64 }
+    if vrp_loop_result(7u32, 9u32) != 63u32 { return 10u64 }
+    if vrp_loop_result(0u32, 99u32) != 0u32 { return 11u64 }
+
+    return 99u64
+}

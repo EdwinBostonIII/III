@@ -1,0 +1,14 @@
+/* 1283_range_check.iii -- integer-overflow proof via the interval domain, verified.
+ * Drives numera::range_check::range_check_kat: 99 = a small-range add [10,20]+[5,8] (max 28) and multiply
+ * [2,3]*[4,5] (max 15) are PROVEN not to overflow a u8 bound (255); a large-range add (max 260) and multiply
+ * (max 300) ARE flagged; the abstract maxima match the closed values; and an exhaustive scan confirms the
+ * proven-safe cases really are within bound (soundness of the proof). Overflow as a static guarantee. */
+module corpus_1283
+
+extern @abi(c-msvc-x64) fn range_check_kat() -> u64 from "range_check.iii"
+
+fn main() -> u64 {
+    let r : u64 = range_check_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

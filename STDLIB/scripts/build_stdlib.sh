@@ -717,6 +717,7 @@ MODULES=(
     "numera/dce"
     "numera/sccp"
     "numera/taint_analysis"
+    "numera/range_check"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

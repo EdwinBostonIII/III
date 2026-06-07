@@ -671,6 +671,8 @@ MODULES=(
     "numera/crt"
     "numera/bitio"
     "numera/elias"
+    "numera/huffman"
+    "numera/lzh"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"
@@ -945,6 +947,7 @@ MODULES=(
     # Sovereign Enhancement G3: the real argmax M-search (value-maximal selection + s0-in-M abstention).
     "forcefield/ripple_search"
     "forcefield/ripple_synthesizer"
+    "forcefield/ripple_journal"
     # Sovereign Enhancement G5: the inductive bridge (sample -> forall via tc_natrec; false universal rejected).
     "numera/induct"
     # Structural-Audit Wave 0 / W0.1 (COMBINE-7): the boundary-trust organ -- the single source of

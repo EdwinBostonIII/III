@@ -1,0 +1,16 @@
+/* 1241_ripple_journal.iii -- content-addressed, order-sealed ripple run-history falsifier.
+ * Drives forcefield::ripple_journal::rj_selftest: 99 = record two move crystals, recover each by
+ * content-address byte-exact (positive round-trip), the order-sensitive run-root self-verifies
+ * (positive), a PERMUTED address list is rejected (biting negative: same root, swapped order ->
+ * verify 0), and a corrupted arena byte surfaces as a GAP not a wrong value (biting negative:
+ * tamper-evidence), restored afterward.  ripple/rn_* content store (X) cad: the optimizer's
+ * ephemeral checkpoint becomes a permanent, recoverable, sequentially-sealed run-history. */
+module corpus_1241
+
+extern @abi(c-msvc-x64) fn rj_selftest() -> u64 from "ripple_journal.iii"
+
+fn main() -> u64 {
+    let r : u64 = rj_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

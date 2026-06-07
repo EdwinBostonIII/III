@@ -1,0 +1,138 @@
+module ripple_journal
+
+/* ============================================================================
+ * ripple_journal -- CONTENT-ADDRESSED, ORDER-SEALED RUN-HISTORY for the ripple
+ * optimizer  (a cross-module compound: ripple/rn_* content store (X) cad).
+ *
+ * Today the ripple optimizer's checkpoint (forcefield/ripple_synthesizer.iii
+ * RSY_CKPT, a 32-byte move crystal) is EPHEMERAL -- overwritten every pass, with
+ * no persistent, verifiable record of the optimization run.  ripple_journal
+ * publishes each admitted move crystal into the rn_* content-addressed store and
+ * appends its 32-byte content-address to an ORDERED table.  This yields three
+ * properties NEITHER subsystem has alone:
+ *   1. PERMANENCE + RECOVERY: any pass's crystal bytes are recoverable by content-
+ *      address (rj_resolve) -- bare cad has no value store; rn_resolve does.
+ *   2. SEQUENTIAL INTEGRITY: rj_run_root is the order-sensitive Merkle root over
+ *      the recorded address sequence -- any permutation/truncation of the run is
+ *      a different root and is detectably forged (rj_verify).
+ *   3. TAMPER-EVIDENCE: rn_resolve re-hashes the stored bytes and compares, so a
+ *      corrupted arena byte surfaces as a GAP, not a silent wrong value.
+ *
+ * NIH (libc + III).  Deterministic.  Falsifier: 1241_ripple_journal (positive
+ * round-trip + root self-verify; biting negatives: order-permutation -> verify 0,
+ * arena tamper -> resolve GAP).
+ * ========================================================================== */
+
+extern @abi(c-msvc-x64) fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_graph_root(ncells: u64, cell_addr: *u8, out: *u8) -> u64 from "ripple.iii"
+
+const RJ_CAP       : u64 = 128u64                    /* slot count -- power of two, load factor <= 0.5 at RJ_MAX */
+const RJ_ARENA_CAP : u64 = 2048u64                   /* 64 unique 32-byte crystals */
+const RJ_MAX       : u64 = 64u64                     /* max recorded passes */
+const RJ_GAP       : u64 = 0xFFFFFFFFFFFFFFFFu64     /* mirror of ripple.iii RN_GAP */
+
+var RJ_META  : [u8; 32]
+var RJ_SLOTS : [u8; 8192]    /* RJ_CAP * 64 */
+var RJ_ARENA : [u8; 2048]    /* RJ_ARENA_CAP */
+var RJ_ADDRS : [u8; 2048]    /* RJ_MAX * 32 -- ordered content-addresses */
+var RJ_N     : [u64; 1]
+
+fn rj_init() -> i32 @export {
+    let rc : u64 = rn_store_init((&RJ_META as u64) as *u8, (&RJ_SLOTS as u64) as *u8, RJ_CAP, RJ_ARENA_CAP)
+    if rc != 0u64 { return -1i32 }
+    RJ_N[0u64] = 0u64
+    return 0i32
+}
+
+fn rj_count() -> u64 @export { return RJ_N[0u64] }
+
+/* record a 32-byte checkpoint (e.g. an admitted optimizer move crystal); appends its
+ * content-address to the ordered table.  0 ok / -1 null / -2 journal full / -3 store full. */
+fn rj_record(ckpt: *u8) -> i32 @export {
+    if (ckpt as u64) == 0u64 { return -1i32 }
+    let n : u64 = RJ_N[0u64]
+    if n >= RJ_MAX { return -2i32 }
+    let addrp : u64 = (&RJ_ADDRS as u64) + n * 32u64
+    let rc : u64 = rn_publish((&RJ_META as u64) as *u8, (&RJ_SLOTS as u64) as *u8, (&RJ_ARENA as u64) as *u8, ckpt, 0u64, 32u64, addrp as *u8, 0u64)
+    if rc != 0u64 { return -3i32 }
+    RJ_N[0u64] = n + 1u64
+    return 0i32
+}
+
+/* the order-sensitive run-root over all recorded addresses (32 bytes -> out). */
+fn rj_run_root(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    rn_graph_root(RJ_N[0u64], (&RJ_ADDRS as u64) as *u8, out)
+    return 0i32
+}
+
+/* resolve the original 32-byte checkpoint at index idx (tamper-evident).
+ * returns 32 on success, or RJ_GAP if out of range / absent / tampered. */
+fn rj_resolve(idx: u64, out: *u8, vbuf: *u8) -> u64 @export {
+    if idx >= RJ_N[0u64] { return RJ_GAP }
+    let addrp : u64 = (&RJ_ADDRS as u64) + idx * 32u64
+    return rn_resolve((&RJ_META as u64) as *u8, (&RJ_SLOTS as u64) as *u8, (&RJ_ARENA as u64) as *u8, addrp as *u8, 0u64, out, 0u64, 32u64, vbuf)
+}
+
+/* 32-byte equality (1 equal / 0 differ). */
+fn rj_eq32(a: *u8, b: *u8) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if a[i] != b[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* verify a claimed run-root over a claimed ordered address list (n addresses): recompute the
+ * root and byte-compare.  1 ok / 0 mismatch.  Order-sensitive -- any permutation/truncation
+ * of the list yields a different root and returns 0. */
+fn rj_verify(root: *u8, addr_list: *u8, n: u64, scratch: *u8) -> u8 @export {
+    rn_graph_root(n, addr_list, scratch)
+    return rj_eq32(scratch, root)
+}
+
+/* ---- falsifier (positive round-trip + root; biting negatives: order, tamper) ---- */
+var RJ_C0      : [u8; 32]
+var RJ_C1      : [u8; 32]
+var RJ_OUT     : [u8; 32]
+var RJ_VBUF    : [u8; 32]
+var RJ_ROOT    : [u8; 32]
+var RJ_SCRATCH : [u8; 32]
+var RJ_SWAP    : [u8; 64]
+
+fn rj_selftest() -> u64 @export {
+    if rj_init() != 0i32 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < 32u64 { RJ_C0[i] = 0xAAu8  RJ_C1[i] = 0xBBu8  i = i + 1u64 }
+    if rj_record((&RJ_C0 as u64) as *u8) != 0i32 { return 2u64 }
+    if rj_record((&RJ_C1 as u64) as *u8) != 0i32 { return 3u64 }
+    if rj_count() != 2u64 { return 4u64 }
+    /* POSITIVE round-trip: recover each checkpoint by content-address, byte-exact. */
+    if rj_resolve(0u64, (&RJ_OUT as u64) as *u8, (&RJ_VBUF as u64) as *u8) != 32u64 { return 5u64 }
+    if rj_eq32((&RJ_OUT as u64) as *u8, (&RJ_C0 as u64) as *u8) != 1u8 { return 6u64 }
+    if rj_resolve(1u64, (&RJ_OUT as u64) as *u8, (&RJ_VBUF as u64) as *u8) != 32u64 { return 7u64 }
+    if rj_eq32((&RJ_OUT as u64) as *u8, (&RJ_C1 as u64) as *u8) != 1u8 { return 8u64 }
+    /* POSITIVE root self-consistency. */
+    if rj_run_root((&RJ_ROOT as u64) as *u8) != 0i32 { return 9u64 }
+    if rj_verify((&RJ_ROOT as u64) as *u8, (&RJ_ADDRS as u64) as *u8, 2u64, (&RJ_SCRATCH as u64) as *u8) != 1u8 { return 10u64 }
+    /* NEGATIVE 1 (order BITES -- same root, swapped order -> opposite verdict): swap the two
+     * 32-byte addresses; rj_verify against the ORIGINAL root must FAIL. */
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        RJ_SWAP[k] = RJ_ADDRS[32u64 + k]
+        RJ_SWAP[32u64 + k] = RJ_ADDRS[k]
+        k = k + 1u64
+    }
+    if rj_verify((&RJ_ROOT as u64) as *u8, (&RJ_SWAP as u64) as *u8, 2u64, (&RJ_SCRATCH as u64) as *u8) != 0u8 { return 11u64 }
+    /* NEGATIVE 2 (tamper BITES -- same index/store, one flipped arena byte -> GAP): corrupt the
+     * stored bytes of checkpoint 0; rj_resolve must return RJ_GAP, then succeed again once restored. */
+    let orig : u8 = RJ_ARENA[0u64]
+    RJ_ARENA[0u64] = orig ^ 0xFFu8
+    if rj_resolve(0u64, (&RJ_OUT as u64) as *u8, (&RJ_VBUF as u64) as *u8) != RJ_GAP { return 12u64 }
+    RJ_ARENA[0u64] = orig
+    if rj_resolve(0u64, (&RJ_OUT as u64) as *u8, (&RJ_VBUF as u64) as *u8) != 32u64 { return 13u64 }
+    return 99u64
+}

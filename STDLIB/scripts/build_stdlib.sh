@@ -686,6 +686,7 @@ MODULES=(
     "numera/k0_referee"
     "numera/golden_shift"
     "numera/conjecture_refute"
+    "numera/self_engine"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

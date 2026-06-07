@@ -1,0 +1,14 @@
+/* 1250_self_engine.iii -- the self-driving optimization loop made REAL (conjecture->prove->verify->shift).
+ * Drives numera::self_engine::self_engine_kat: 99 = the engine autonomously shifts from the O(n) original
+ * to the O(1) kernel; REAL self-dispatch through the active kernel computes S(50)=1225, IDENTICAL to the
+ * original (alignment), at a real 1000->1 operation speedup; the WRONG kernel is NEVER selected; aligned
+ * with the anchor; >=1 autonomous shift. Real recursive self-optimization over the substrate's own code. */
+module corpus_1250
+
+extern @abi(c-msvc-x64) fn self_engine_kat() -> u64 from "self_engine.iii"
+
+fn main() -> u64 {
+    let r : u64 = self_engine_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

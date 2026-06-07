@@ -1,0 +1,115 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\proof_replay.iii
+ *
+ * III STDLIB - numera::proof_replay  --  LCF-STYLE PROOF CHECKING (trust the kernel, verified).
+ *
+ * The foundation of trustworthy theorem proving, and the dual of numera::translation_validation: a proof is
+ * a SEQUENCE of derivation steps, and a tiny CHECKER re-verifies that each step legitimately follows from
+ * earlier ones by a sound inference rule.  No matter how the proof was found -- by a huge untrusted search,
+ * a heuristic, or an oracle -- its validity rests only on the small, auditable step-checker.  A forged step
+ * (a conclusion the cited rule does not actually license) is rejected.
+ *
+ * Logic: atoms A,B,C,D (0..3) with implications A->B, B->C, C->D.  The valid proof derives D from the axiom
+ * A by three modus-ponens steps; each MP step is checked by demanding the cited implication's antecedent
+ * equal the premise fact and its consequent equal the step's conclusion.  A forged step that cites C->D from
+ * the fact A is caught (antecedent C does not match A).
+ *
+ * Verified (proof_replay_kat): each step of the genuine proof checks and the whole proof is valid; forging
+ * the last step (deriving D from A via C->D) makes that step fail the checker and invalidates the proof; an
+ * illegitimate axiom (asserting B as an axiom) is rejected.  NIH/self-contained.
+ *
+ * Public API:
+ *   prf_setup() ; prf_forge_last() ; prf_check_step(i) -> u32 ; prf_valid() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_proof_replay
+
+const PRF_N    : u32 = 4u32
+const PRF_NIMP : u32 = 3u32
+const PRF_AXIOM : u32 = 0u32
+const PRF_MP    : u32 = 1u32
+
+/* the implications of the theory (fixed): A->B, B->C, C->D */
+var PRF_IMP_ANT : [u32; 3]
+var PRF_IMP_CON : [u32; 3]
+
+/* the proof steps */
+var PRF_RULE  : [u32; 4]      /* AXIOM or MP */
+var PRF_CONCL : [u32; 4]      /* the atom this step concludes */
+var PRF_PREM  : [u32; 4]      /* premise step index (for MP) */
+var PRF_IMP   : [u32; 4]      /* implication index (for MP) */
+
+fn prf_setup() -> i32 @export {
+    PRF_IMP_ANT[0u64]=0u32 ; PRF_IMP_CON[0u64]=1u32      /* A->B */
+    PRF_IMP_ANT[1u64]=1u32 ; PRF_IMP_CON[1u64]=2u32      /* B->C */
+    PRF_IMP_ANT[2u64]=2u32 ; PRF_IMP_CON[2u64]=3u32      /* C->D */
+    /* the genuine proof: A ; B by MP(A,A->B) ; C by MP(B,B->C) ; D by MP(C,C->D) */
+    PRF_RULE[0u64]=PRF_AXIOM ; PRF_CONCL[0u64]=0u32 ; PRF_PREM[0u64]=0u32 ; PRF_IMP[0u64]=0u32
+    PRF_RULE[1u64]=PRF_MP    ; PRF_CONCL[1u64]=1u32 ; PRF_PREM[1u64]=0u32 ; PRF_IMP[1u64]=0u32
+    PRF_RULE[2u64]=PRF_MP    ; PRF_CONCL[2u64]=2u32 ; PRF_PREM[2u64]=1u32 ; PRF_IMP[2u64]=1u32
+    PRF_RULE[3u64]=PRF_MP    ; PRF_CONCL[3u64]=3u32 ; PRF_PREM[3u64]=2u32 ; PRF_IMP[3u64]=2u32
+    return 0i32
+}
+
+/* forge the last step: derive D from the axiom A via C->D (antecedent C does not match fact A). */
+fn prf_forge_last() -> i32 @export {
+    PRF_PREM[3u64] = 0u32      /* premise becomes step0 (fact A) instead of step2 (fact C) */
+    return 0i32
+}
+
+/* check one step against the inference rules.  Only atom A (0) is a legitimate axiom. */
+fn prf_check_step(i: u32) -> u32 @export {
+    if PRF_RULE[i as u64] == PRF_AXIOM {
+        if PRF_CONCL[i as u64] == 0u32 { return 1u32 }     /* A is the sole admissible axiom */
+        return 0u32
+    }
+    /* modus ponens: antecedent of the cited implication must equal the premise fact, consequent the conclusion */
+    let p : u32 = PRF_PREM[i as u64]
+    let pfact : u32 = PRF_CONCL[p as u64]
+    let imp : u32 = PRF_IMP[i as u64]
+    if PRF_IMP_ANT[imp as u64] != pfact { return 0u32 }
+    if PRF_IMP_CON[imp as u64] != PRF_CONCL[i as u64] { return 0u32 }
+    return 1u32
+}
+
+/* the whole proof is valid iff every step checks. */
+fn prf_valid() -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < PRF_N {
+        if prf_check_step(i) == 0u32 { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * proof_replay_kat -- 99 = LCF proof checking is sound, self-checked:
+ *   (1) every step of the genuine proof checks and the proof is valid;
+ *   (2) forging the last step (D from A via C->D) makes that step fail and invalidates the proof;
+ *   (3) the antecedent mismatch is precisely what is caught (C != A);
+ *   (4) an illegitimate axiom (asserting B) is rejected.
+ * ===================================================================================== */
+fn proof_replay_kat() -> u64 @export {
+    prf_setup()
+
+    /* (1) the genuine proof is valid */
+    if prf_check_step(1u32) != 1u32 { return 1u64 }
+    if prf_check_step(3u32) != 1u32 { return 2u64 }
+    if prf_valid() != 1u32 { return 3u64 }
+
+    /* (2)+(3) forging the last step is caught */
+    prf_forge_last()
+    if prf_check_step(3u32) != 0u32 { return 4u64 }        /* C->D cited but premise fact is A */
+    if prf_valid() != 0u32 { return 5u64 }
+
+    /* restore and confirm validity returns */
+    prf_setup()
+    if prf_valid() != 1u32 { return 6u64 }
+
+    /* (4) an illegitimate axiom is rejected */
+    PRF_RULE[1u64] = PRF_AXIOM ; PRF_CONCL[1u64] = 1u32    /* assert B as an axiom */
+    if prf_check_step(1u32) != 0u32 { return 7u64 }        /* B is not an admissible axiom */
+    if prf_valid() != 0u32 { return 8u64 }
+
+    return 99u64
+}

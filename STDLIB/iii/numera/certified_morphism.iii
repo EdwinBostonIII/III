@@ -1,0 +1,103 @@
+module certified_morphism
+
+/* ============================================================================
+ * certified_morphism -- PROOF-GATED MORPHISM ADMISSION  (a cross-module compound)
+ *
+ * Today numera/category.iii admits ANY op-word as an arrow (cat_add_morphism: no
+ * proof required), while numera/theorem_commons.iii admits a theorem only if a
+ * CIC-kernel proof clears tc_check -- but the two are UNCONNECTED.  This module
+ * fuses them: an arrow enters the category ONLY IF a companion CIC-kernel proof
+ * of its behavioral specification clears tc_check, and that very proof is
+ * SIMULTANEOUSLY registered in the Theorem Commons keyed by the morphism's
+ * content-address.  The result is a category in which EVERY morphism is
+ * proof-carrying: its admission IS a persistent, citable theorem; an op whose
+ * behavioral claim the kernel REJECTS produces NO arrow and records NO theorem.
+ *
+ * Harmony: category (structure) (X) typecheck / CIC kernel (proof) (X)
+ * theorem_commons (content-addressed attestation) -- a capability none of the
+ * three has alone.  NIH (libc + III only).  Deterministic; the discipline made
+ * literal: propose(op, proof) -> dispose(tc_check) -> seal(tcom by cad).
+ * Falsifier: 1240_certified_morphism (positive admit+cite, negative refuse).
+ * ========================================================================== */
+
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_find_morphism(mor_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+
+const CM_REFUSED  : u32 = 0xFFFFFFFFu32   /* admission refused (kernel rejected / category full / commons full) */
+const CM_CAT_SENT : u32 = 0xFFFFFFFFu32   /* mirror of category.iii CATEGORY_SENT */
+const CM_TCOM_OK  : i32 = 0i32            /* mirror of theorem_commons.iii TCOM_OK */
+
+/* Admit (src --op--> dst) into the category IFF the CIC proof `proof` establishes
+ * the behavioral goal `goal` (tc_check), then register that proof as a citable
+ * theorem keyed by the morphism's content-address (out_id, written by category).
+ * Returns the morphism slot on success, or CM_REFUSED.  On refusal NO arrow and
+ * NO theorem are added -- the kernel gate precedes every mutation.
+ * BOUNDARY (honest, never silent): if the commons is at capacity AFTER a valid
+ * proof + arrow, the arrow remains but its theorem is unregistered and CM_REFUSED
+ * is returned; the caller sees the refusal. */
+fn cmorph_add(src: u32, dst: u32, op: *u8, proof: u32, goal: u32, out_id: *u8) -> u32 @export {
+    if (op as u64) == 0u64 { return CM_REFUSED }
+    if (out_id as u64) == 0u64 { return CM_REFUSED }
+    if tc_check(proof, goal) != 1u8 { return CM_REFUSED }              /* DISPOSE: no kernel proof -> no arrow */
+    let slot : u32 = cat_add_morphism(src, dst, op, out_id)
+    if slot == CM_CAT_SENT { return CM_REFUSED }
+    let rc : i32 = tcom_admit(out_id as u64, 32u64, proof, goal)       /* SEAL: citable theorem by content-address */
+    if rc != CM_TCOM_OK { return CM_REFUSED }
+    return slot
+}
+
+/* ---- falsifier (positive admit+cite arm + biting negative refuse arm) ---- */
+var CM_IDA  : [u8; 32]
+var CM_IDB  : [u8; 32]
+var CM_OPP  : [u8; 32]
+var CM_OPN  : [u8; 32]
+var CM_MIDP : [u8; 32]
+var CM_MIDN : [u8; 32]
+
+fn cm_selftest() -> u64 @export {
+    tc_reset()
+    cat_init()
+    tcom_init()
+    CM_IDA[0u64] = 0x41u8    /* 'A' object id (distinct first byte; rest BSS-zero) */
+    CM_IDB[0u64] = 0x42u8    /* 'B' */
+    CM_OPP[0u64] = 0x50u8    /* 'P' positive op label */
+    CM_OPN[0u64] = 0x4Eu8    /* 'N' negative op label (distinct) */
+    let a : u32 = cat_add_object((&CM_IDA as u64) as *u8)
+    let b : u32 = cat_add_object((&CM_IDB as u64) as *u8)
+    if a == CM_CAT_SENT { return 1u64 }
+    if b == CM_CAT_SENT { return 2u64 }
+    let nat : u32 = tc_nat()
+    let z   : u32 = tc_zero()
+    let one : u32 = tc_succ(z)
+    /* POSITIVE: refl(0) : Id(Nat,0,0) is a valid proof -> arrow admitted + theorem citable. */
+    let goal_ok : u32 = tc_id(nat, z, z)
+    let pf_ok   : u32 = tc_refl(z)
+    let sP : u32 = cmorph_add(a, b, (&CM_OPP as u64) as *u8, pf_ok, goal_ok, (&CM_MIDP as u64) as *u8)
+    if sP == CM_REFUSED { return 3u64 }                                       /* positive arm MUST admit */
+    if tcom_cite((&CM_MIDP as u64), 32u64) != CM_TCOM_OK { return 4u64 }      /* theorem MUST be citable */
+    if tcom_size() != 1u64 { return 5u64 }                                    /* exactly one theorem so far */
+    /* NEGATIVE (biting): refl(0) : Id(Nat,0,1) -- refl(0) does NOT prove 0=1 -> REFUSED, no arrow, no theorem. */
+    let goal_bad : u32 = tc_id(nat, z, one)
+    let pf_bad   : u32 = tc_refl(z)
+    let sN : u32 = cmorph_add(a, b, (&CM_OPN as u64) as *u8, pf_bad, goal_bad, (&CM_MIDN as u64) as *u8)
+    if sN != CM_REFUSED { return 6u64 }                                       /* a wrong proof MUST be refused */
+    if tcom_size() != 1u64 { return 7u64 }                                    /* still one -- no theorem for the bad op */
+    /* THE GATE BITES (isolates OUR tc_check gate from tcom_admit's redundant one): CM_MIDN is left
+     * unwritten (BSS-zero) because cmorph_add refuses BEFORE cat_add_morphism, so NO bad arrow exists.
+     * Remove the tc_check gate and cat_add_morphism would add the arrow + write CM_MIDN -> found here. */
+    if cat_find_morphism((&CM_MIDN as u64) as *u8) != CM_CAT_SENT { return 8u64 }
+    return 99u64
+}

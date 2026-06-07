@@ -1,0 +1,15 @@
+/* 1240_certified_morphism.iii -- proof-gated morphism admission falsifier.
+ * Drives numera::certified_morphism::cm_selftest: 99 = a morphism enters the category ONLY when a
+ * CIC-kernel proof clears tc_check, and is then a citable theorem keyed by its content-address
+ * (positive arm: refl(0):Id(Nat,0,0) -> admitted + cited + commons size 1); a wrong proof is REFUSED
+ * with no arrow and no theorem (biting negative: refl(0):Id(Nat,0,1) -> CM_REFUSED + size stays 1).
+ * The compound category (X) CIC-kernel (X) theorem_commons: every arrow is proof-carrying. */
+module corpus_1240
+
+extern @abi(c-msvc-x64) fn cm_selftest() -> u64 from "certified_morphism.iii"
+
+fn main() -> u64 {
+    let r : u64 = cm_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

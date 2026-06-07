@@ -192,3 +192,25 @@ frontier items remain the concurrent writer's territory until their tree stabili
 ## GAP STATEMENTS (Class F items, recorded as they are reached)
 
 _(none yet)_
+
+## STATE/MEMORY LAYER (S1-S6) + STOCHASTIC EQUALITY SATURATION (P2) -- COMPLETE (2026-06-06)
+
+Two user-specified phases, built as NIH `numera/*.iii` modules that COMPOSE with the kernel (shallow
+embedding + decision procedures), NOT by editing the writer's CIC spine. All 10 gated standalone =99 and
+**direct-validated as corpus drivers** (the aggregate board is writer-blocked; see note).
+
+**S1-S6 (corpus 1232-1237):** heaplet (separation algebra) · sep_logic (frame rule) · tso (x86-TSO litmus
+model checker) · ptr_provenance (aliasing decision procedure, sound+precise) · mem_rewrite (AoS->SoA layout
+dispose) · csl (non-interference: disjoint footprints => interleaving-independent). The bridge from pure
+arithmetic to stateful/concurrent memory reasoning.
+
+**P2 (corpus 1238/1239/1244/1245):** congruence_closure (proof-producing, pcc_*) · mcmc_egraph (annealed
+Metropolis-Hastings escapes a local-min trap, seeded/deterministic) · relational_ematch (O(n^2) nested-loop
+== O(n) hash-join, semantic) · algo_synth (CAPSTONE: synthesizes O(n)->O(1) & O(n^2)->O(n), PROVEN +
+recorded in the proof CC + strictly cheaper; wrong leap REJECTED). Whole-algorithm synthesis with proof.
+
+Commits bd7610a..5aeaa13 + wiring 53d8fed/d7c944e. Each module pre-flight collision-swept clean.
+
+**BOARD-RED (not mine):** full build_stdlib carto gate FAILS on the concurrent writer's `costed_cat.iii`
+(63b0c3f) duplicating `cc_init`/`cc_selftest` from pre-existing `cost_calculus.iii`. Their fix (rename
+costed_cat's cc_*). My 10 modules proven via direct corpus-driver builds meanwhile.

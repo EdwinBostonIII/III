@@ -1,0 +1,14 @@
+/* 1287_merkle_log.iii -- authenticated append-only log (Merkle inclusion proofs), verified.
+ * Drives numera::merkle_log::merkle_log_kat: 99 = the Merkle root is deterministic; every genuine leaf's
+ * inclusion proof (its sibling leaf + the opposite subtree hash) recomputes the published root; a tampered
+ * value fails verification for left and right leaves alike; the left/right combination order is respected (a
+ * value at the wrong index does not verify). The tamper-evident structure under certificate transparency. */
+module corpus_1287
+
+extern @abi(c-msvc-x64) fn merkle_log_kat() -> u64 from "merkle_log.iii"
+
+fn main() -> u64 {
+    let r : u64 = merkle_log_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

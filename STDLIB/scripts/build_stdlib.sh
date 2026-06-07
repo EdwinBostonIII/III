@@ -721,6 +721,7 @@ MODULES=(
     "numera/translation_validation"
     "numera/liveness"
     "numera/proof_replay"
+    "numera/merkle_log"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

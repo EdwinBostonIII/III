@@ -723,6 +723,7 @@ MODULES=(
     "numera/proof_replay"
     "numera/merkle_log"
     "numera/bmc"
+    "numera/kinduction"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

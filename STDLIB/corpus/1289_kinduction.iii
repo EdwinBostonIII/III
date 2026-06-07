@@ -1,0 +1,14 @@
+/* 1289_kinduction.iii -- unbounded safety by induction, the unbounded complement of bmc.
+ * Drives numera::kinduction::kinduction_kat: 99 = a CAPPED counter (succ saturates at 3) is inductive, so
+ * P(s)=s<=3 is proven an invariant for all time; an UNCAPPED counter breaks the inductive step at s=3 (it
+ * steps to 4, violating P) and is correctly NOT certified, witnessed at s=3; the transition values and the
+ * predicate boundary are correct. The bridge from bounded checking to unbounded proof. */
+module corpus_1289
+
+extern @abi(c-msvc-x64) fn kinduction_kat() -> u64 from "kinduction.iii"
+
+fn main() -> u64 {
+    let r : u64 = kinduction_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

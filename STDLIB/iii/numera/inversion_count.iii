@@ -1,0 +1,122 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\inversion_count.iii
+ *
+ * III STDLIB - numera::inversion_count  --  ARRAY INVERSIONS VIA FENWICK (composition, verified).
+ *
+ * The number of inversions -- pairs (i,j) with i<j and A[i]>A[j] -- measures how far an array is from sorted
+ * (it is the count of swaps a bubble sort would make).  Computing it naively is O(n^2); the elegant O(n log n)
+ * way CONSUMES a Fenwick tree (numera::fenwick): sweep left to right, and for each element ask the BIT "how
+ * many already-seen values are <= me" -- the rest of the seen elements are greater, and each is an inversion
+ * this element closes.  This is the substrate's "consumed by a real caller" shape: a data structure put to
+ * work by an algorithm, the whole verified against the brute-force reference.
+ *
+ * Arrays: [3,1,4,1,5] (3 inversions); [5,4,3,2,1] (10, fully reversed); [1,2,3,4,5] (0, sorted); [2,2,2]
+ * (0, equal elements -- no strict inversion).
+ *
+ * Verified (inversion_count_kat): each array's Fenwick inversion count equals its known value AND the
+ * brute-force O(n^2) reference, across sorted/reversed/duplicate inputs.  NIH; composes fenwick.
+ *
+ * Public API:
+ *   inv_setup(mode) ; inv_fenwick() -> u32 ; inv_brute() -> u32 ; inv_agree() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_inversion_count
+
+extern @abi(c-msvc-x64) fn fen_init() -> i32 from "fenwick.iii"
+extern @abi(c-msvc-x64) fn fen_update(i: u32, delta: u32) -> i32 from "fenwick.iii"
+extern @abi(c-msvc-x64) fn fen_prefix(i: u32) -> u32 from "fenwick.iii"
+
+var INV_A : [u32; 8]
+var INV_N : [u32; 1]
+
+fn inv_setup(mode: u32) -> i32 @export {
+    if mode == 0u32 {
+        INV_A[0u64]=3u32 ; INV_A[1u64]=1u32 ; INV_A[2u64]=4u32 ; INV_A[3u64]=1u32 ; INV_A[4u64]=5u32 ; INV_N[0u64]=5u32
+        return 0i32
+    }
+    if mode == 1u32 {
+        INV_A[0u64]=5u32 ; INV_A[1u64]=4u32 ; INV_A[2u64]=3u32 ; INV_A[3u64]=2u32 ; INV_A[4u64]=1u32 ; INV_N[0u64]=5u32
+        return 0i32
+    }
+    if mode == 2u32 {
+        INV_A[0u64]=1u32 ; INV_A[1u64]=2u32 ; INV_A[2u64]=3u32 ; INV_A[3u64]=4u32 ; INV_A[4u64]=5u32 ; INV_N[0u64]=5u32
+        return 0i32
+    }
+    /* mode 3: equal elements */
+    INV_A[0u64]=2u32 ; INV_A[1u64]=2u32 ; INV_A[2u64]=2u32 ; INV_N[0u64]=3u32
+    return 0i32
+}
+
+/* O(n log n) via the Fenwick tree over the value domain. */
+fn inv_fenwick() -> u32 @export {
+    fen_init()
+    let n : u32 = INV_N[0u64]
+    let mut inv : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < n {
+        let aj : u32 = INV_A[j as u64]
+        let seen_le : u32 = fen_prefix(aj)         /* already-seen values <= aj */
+        inv = inv + (j - seen_le)                  /* the rest of the j seen are greater -> inversions */
+        fen_update(aj, 1u32)
+        j = j + 1u32
+    }
+    return inv
+}
+
+/* the O(n^2) reference. */
+fn inv_brute() -> u32 @export {
+    let n : u32 = INV_N[0u64]
+    let mut inv : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut k : u32 = i + 1u32
+        while k < n {
+            if INV_A[i as u64] > INV_A[k as u64] { inv = inv + 1u32 }
+            k = k + 1u32
+        }
+        i = i + 1u32
+    }
+    return inv
+}
+
+/* the Fenwick count equals brute force on every configured array. */
+fn inv_agree() -> u32 @export {
+    let mut m : u32 = 0u32
+    while m <= 3u32 {
+        inv_setup(m)
+        if inv_fenwick() != inv_brute() { return 0u32 }
+        m = m + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * inversion_count_kat -- 99 = inversion counting via Fenwick is correct, verified against brute:
+ *   (1) [3,1,4,1,5] has 3 inversions (Fenwick and brute agree);
+ *   (2) [5,4,3,2,1] has 10 (fully reversed = n(n-1)/2);
+ *   (3) [1,2,3,4,5] has 0 (sorted); [2,2,2] has 0 (no strict inversion among equals);
+ *   (4) Fenwick equals brute on all configured arrays.
+ * ===================================================================================== */
+fn inversion_count_kat() -> u64 @export {
+    /* (1) */
+    inv_setup(0u32)
+    if inv_fenwick() != 3u32 { return 1u64 }
+    if inv_brute() != 3u32 { return 2u64 }
+
+    /* (2) reversed */
+    inv_setup(1u32)
+    if inv_fenwick() != 10u32 { return 3u64 }
+    if inv_brute() != 10u32 { return 4u64 }
+
+    /* (3) sorted and equal */
+    inv_setup(2u32)
+    if inv_fenwick() != 0u32 { return 5u64 }
+    inv_setup(3u32)
+    if inv_fenwick() != 0u32 { return 6u64 }
+    if inv_brute() != 0u32 { return 7u64 }
+
+    /* (4) the equivalence over all arrays */
+    if inv_agree() != 1u32 { return 8u64 }
+
+    return 99u64
+}

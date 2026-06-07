@@ -1,0 +1,14 @@
+/* 1297_kmp.iii -- Knuth-Morris-Pratt string matching verified against naive.
+ * Drives numera::kmp::kmp_kat: 99 = on text ABABCABAB the pattern ABAB matches first at index 0, ABC at 2,
+ * CAB at 4, and XYZ is absent; the O(n+m) KMP search equals the naive O(n*m) reference in every case (same
+ * first-match index, same not-found sentinel); and the failure function of ABAB is [0,0,1,2]. The fast
+ * matcher proven equivalent to the reference, not trusted. */
+module corpus_1297
+
+extern @abi(c-msvc-x64) fn kmp_kat() -> u64 from "kmp.iii"
+
+fn main() -> u64 {
+    let r : u64 = kmp_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -729,6 +729,7 @@ MODULES=(
     "numera/branch_elim"
     "numera/rms"
     "numera/binary_search"
+    "numera/kmp"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

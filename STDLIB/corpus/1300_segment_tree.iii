@@ -1,0 +1,14 @@
+/* 1300_segment_tree.iii -- range-minimum segment tree, verified against naive.
+ * Drives numera::segment_tree::segment_tree_kat: 99 = on [5,2,8,1,9,3,7,4] the range minima are correct
+ * (global [0,7]->1, [4,5]->3, [6,7]->4, [0,0]->5); the segment tree agrees with the naive O(n) minimum over
+ * EVERY interval; a point update (element 3 -> 0) changes the right minima and the tree still agrees
+ * everywhere. The associative range query (minimum) a Fenwick tree cannot do, verified against reference. */
+module corpus_1300
+
+extern @abi(c-msvc-x64) fn segment_tree_kat() -> u64 from "segment_tree.iii"
+
+fn main() -> u64 {
+    let r : u64 = segment_tree_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

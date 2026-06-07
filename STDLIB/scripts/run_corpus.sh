@@ -877,6 +877,7 @@ declare -A EXPECTED=(
     [1297_kmp]=99
     [1298_levenshtein]=99
     [1299_fenwick]=99
+    [1300_segment_tree]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

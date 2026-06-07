@@ -732,6 +732,7 @@ MODULES=(
     "numera/kmp"
     "numera/levenshtein"
     "numera/fenwick"
+    "numera/segment_tree"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,160 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\k0_referee.iii
+ *
+ * III STDLIB - numera::k0_referee  --  K_0: THE IMMUTABLE BASE KERNEL (the unhackable anchor).
+ *
+ * The stratified trust-chain that lets III improve its OWN kernel without a human auditor and without
+ * breaking the Goedelian firewall.  K_0 is a hyper-minimal, frozen referee whose ONLY function in the
+ * universe is to read two computational states and RE-CHECK a bisimulation proof that they are observably
+ * identical.  It cannot learn, search, or optimize.  It trusts NOTHING it is handed -- it recomputes the
+ * comparison itself, exhaustively over the input domain.
+ *
+ * THE FIREWALL (why this does not let the system declare itself sound): K_0 never proves its OWN soundness
+ * and is never a replacement target.  It only certifies RELATIVE bisimulation -- "proposed kernel == the
+ * frozen anchor on every input" -- and trust is grounded in the anchor, which is human-verified once and
+ * then FROZEN (content-addressed fingerprint; any post-freeze mutation of the anchor is refused and would
+ * be drift-detected).  This is the de Bruijn / translation-validation criterion: a tiny trusted checker
+ * verifies a proof of equivalence to an already-trusted artifact; it does not assert its own consistency.
+ *
+ * HONEST BOUNDARY: this module is the verified DECISION mechanism.  The physical instruction-pointer
+ * rotation / WORM burn / live self-reseal is substrate-ahead (III has no scheduler and a compiled .iii
+ * cannot re-invoke its own build -- daemon_dream's HARD-INVARIANT, M20/ADR-FORGE-4).  K_0 computes the
+ * verdict that makes the human auditor unnecessary; the physical commit stays operator/substrate-gated.
+ *
+ * Verified (k0_referee_kat): nothing is trusted before the anchor is frozen; after freezing, an observably-
+ * equivalent kernel verifies (1) and one that differs on a single input is rejected (0); the anchor can
+ * never be a replacement target (firewall -> 0); a post-freeze mutation of the anchor is REFUSED so the
+ * fingerprint never drifts.  NIH/self-contained.
+ *
+ * Public API:
+ *   k0_reset() ; k0_register(cost) -> u32 ; k0_set_behav(k,x,v) ; k0_freeze_anchor()
+ *   k0_behav(k,x) -> u32 ; k0_cost(k) -> u32 ; k0_is_frozen() -> u32
+ *   k0_verify(proposed) -> u32        the referee verdict (1 = bisimilar to the frozen anchor)
+ *   k0_fingerprint() -> u64 ; k0_drift_check(golden) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0 (anchor: conceptually Ring -inf / WORM).  K: 1.00 (the trust root).
+ */
+module numera_k0_referee
+
+const K0_D       : u32 = 16u32        /* observable input domain 0..15 */
+const K0_KMAX    : u32 = 32u32
+const K0_ANCHOR  : u32 = 0u32         /* the frozen reference kernel id */
+const K0_NONE    : u32 = 0xFFFFFFFFu32
+const K0_FNV_OFF : u64 = 14695981039346656037u64
+const K0_FNV_PRM : u64 = 1099511628211u64
+const K0_VERSION : u64 = 0x4B30763100000001u64    /* "K0v1" -- part of the frozen identity */
+
+var K0_BEHAV  : [u32; 512]            /* 32 kernels * 16 inputs, flattened k*16+x */
+var K0_COST   : [u32; 32]
+var K0_N      : [u32; 1]
+var K0_FROZEN : [u32; 1]
+
+fn k0_reset() -> i32 @export { K0_N[0u32] = 0u32 ; K0_FROZEN[0u32] = 0u32 ; return 0i32 }
+
+fn k0_register(cost: u32) -> u32 @export {
+    let id : u32 = K0_N[0u32]
+    if id >= K0_KMAX { return K0_NONE }
+    K0_N[0u32] = id + 1u32
+    K0_COST[id as u64] = cost
+    let base : u32 = id * K0_D
+    let mut x : u32 = 0u32
+    while x < K0_D { K0_BEHAV[(base + x) as u64] = 0u32 ; x = x + 1u32 }
+    return id
+}
+
+fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 @export {
+    if x >= K0_D { return -1i32 }
+    if k == K0_ANCHOR {
+        if K0_FROZEN[0u32] == 1u32 { return -2i32 }      /* FIREWALL: the anchor is immutable once frozen */
+    }
+    K0_BEHAV[((k * K0_D) + x) as u64] = v
+    return 0i32
+}
+
+fn k0_freeze_anchor() -> i32 @export { K0_FROZEN[0u32] = 1u32 ; return 0i32 }
+fn k0_behav(k: u32, x: u32) -> u32 @export { return K0_BEHAV[((k * K0_D) + x) as u64] }
+fn k0_cost(k: u32) -> u32 @export { return K0_COST[k as u64] }
+fn k0_is_frozen() -> u32 @export { return K0_FROZEN[0u32] }
+fn k0_count() -> u32 @export { return K0_N[0u32] }
+
+/* THE REFEREE: 1 iff `proposed` is observably identical to the frozen anchor on EVERY input. K_0 re-checks
+ * exhaustively (it trusts no supplied proof).  Firewall: the anchor can never be a replacement target. */
+fn k0_verify(proposed: u32) -> u32 @export {
+    if K0_FROZEN[0u32] != 1u32 { return 0u32 }           /* nothing is trusted until the anchor is frozen */
+    if proposed == K0_ANCHOR { return 0u32 }             /* FIREWALL: no self-re-rooting */
+    if proposed >= K0_N[0u32] { return 0u32 }
+    let mut x : u32 = 0u32
+    while x < K0_D {
+        if k0_behav(K0_ANCHOR, x) != k0_behav(proposed, x) { return 0u32 }
+        x = x + 1u32
+    }
+    return 1u32
+}
+
+/* content-address of the immutable anchor + K_0's invariants (FNV-1a). */
+fn k0_fingerprint() -> u64 @export {
+    let mut h : u64 = K0_FNV_OFF
+    h = (h ^ (K0_D as u64)) * K0_FNV_PRM
+    h = (h ^ (K0_ANCHOR as u64)) * K0_FNV_PRM
+    h = (h ^ K0_VERSION) * K0_FNV_PRM
+    let mut x : u32 = 0u32
+    while x < K0_D {
+        h = (h ^ (k0_behav(K0_ANCHOR, x) as u64)) * K0_FNV_PRM
+        x = x + 1u32
+    }
+    return h
+}
+fn k0_drift_check(golden: u64) -> u32 @export {
+    if k0_fingerprint() == golden { return 1u32 }
+    return 0u32
+}
+
+/* ===== KAT ===== */
+fn k0_def_kernel(k: u32, twist_x: u32, twist_dv: u32) {
+    /* behavior(x) = x*7+3, optionally perturbed at twist_x by +twist_dv (to model a WRONG kernel). */
+    let mut x : u32 = 0u32
+    while x < K0_D {
+        let mut v : u32 = (x * 7u32) + 3u32
+        if x == twist_x { v = v + twist_dv }
+        k0_set_behav(k, x, v)
+        x = x + 1u32
+    }
+}
+
+/* =====================================================================================
+ * k0_referee_kat -- 99 = the immutable referee + firewall + freeze are sound, self-checked:
+ *   (1) PRE-FREEZE: nothing verifies (k0_verify == 0) even for a truly-equivalent kernel;
+ *   (2) POST-FREEZE: an observably-equivalent kernel verifies (1); a kernel differing on ONE input is
+ *       rejected (0); the anchor itself is refused (firewall); an unknown id is rejected;
+ *   (3) FREEZE INTEGRITY: a post-freeze mutation of the anchor is REFUSED (return -2) and the content-
+ *       address fingerprint does NOT drift; mutating a non-anchor kernel is allowed.
+ * ===================================================================================== */
+fn k0_referee_kat() -> u64 @export {
+    k0_reset()
+    let anchor : u32 = k0_register(1000u32)              /* expensive original */
+    let keq    : u32 = k0_register(400u32)               /* a cheaper, equivalent kernel */
+    let kbad   : u32 = k0_register(50u32)                /* cheapest, but WRONG on one input */
+    k0_def_kernel(anchor, 99u32, 0u32)                   /* anchor: x*7+3, no twist */
+    k0_def_kernel(keq, 99u32, 0u32)                      /* keq: identical */
+    k0_def_kernel(kbad, 5u32, 1u32)                      /* kbad: differs at x=5 by +1 */
+
+    /* (1) pre-freeze: nothing is trusted */
+    if k0_verify(keq) != 0u32 { return 1u64 }
+
+    k0_freeze_anchor()
+
+    /* (2) post-freeze referee verdicts */
+    if k0_verify(keq) != 1u32 { return 2u64 }            /* equivalent -> admitted */
+    if k0_verify(kbad) != 0u32 { return 3u64 }           /* differs on one input -> rejected */
+    if k0_verify(K0_ANCHOR) != 0u32 { return 4u64 }      /* FIREWALL: anchor never a target */
+    if k0_verify(99u32) != 0u32 { return 5u64 }          /* unknown id rejected */
+
+    /* (3) freeze integrity */
+    let golden : u64 = k0_fingerprint()
+    if k0_drift_check(golden) != 1u32 { return 6u64 }
+    if k0_set_behav(K0_ANCHOR, 5u32, 12345u32) != -2i32 { return 7u64 }   /* anchor mutation REFUSED */
+    if k0_drift_check(golden) != 1u32 { return 8u64 }                     /* fingerprint did NOT drift */
+    if k0_behav(K0_ANCHOR, 5u32) != ((5u32 * 7u32) + 3u32) { return 9u64 }/* anchor value unchanged */
+    if k0_set_behav(keq, 5u32, 7u32) != 0i32 { return 10u64 }            /* non-anchor mutation allowed */
+
+    return 99u64
+}

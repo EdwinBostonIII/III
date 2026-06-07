@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\list_schedule.iii
+ *
+ * III STDLIB - numera::list_schedule  --  INSTRUCTION SCHEDULING (critical-path timing, verified).
+ *
+ * numera::rewrite_schedule decides the ORDER of operations; this adds the TIMING.  Each instruction has a
+ * latency, and an instruction cannot start until every input it depends on has finished.  The earliest start
+ * of each instruction is the LONGEST latency-weighted path of dependencies reaching it, and the schedule's
+ * makespan is bounded below by the CRITICAL PATH -- the longest dependency chain through the whole graph.
+ * The as-soon-as-possible schedule computed here (longest-path relaxation over the dependency DAG) achieves
+ * that bound and is proven to respect every dependency: no instruction starts before its inputs are ready.
+ *
+ * Example DAG (latencies in brackets): i0[2] -> i1[1], i0[2] -> i2[3], i1 & i2 -> i3[1], i3 -> i4[2].  The
+ * critical path is i0 -> i2 -> i3 -> i4 = 2+3+1+2 = 8 cycles, which the schedule reaches exactly.
+ *
+ * Verified (list_schedule_kat): the as-soon-as-possible schedule respects every dependency; the makespan
+ * equals the critical path (8); the start cycles match the hand-computed values; and a deliberately-early
+ * start is detected as invalid.  NIH/self-contained.
+ *
+ * Public API:
+ *   lsch_setup() ; lsch_schedule() ; lsch_makespan() -> u32 ; lsch_valid() -> u32 ; lsch_start(i) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_list_schedule
+
+const LSCH_N : u32 = 5u32
+
+var LSCH_LAT   : [u32; 5]
+var LSCH_DEP   : [u32; 25]     /* LSCH_DEP[i*N+j] = 1 iff instruction i depends on instruction j */
+var LSCH_START : [u32; 5]
+
+fn lsch_setup() -> i32 @export {
+    let mut k : u32 = 0u32
+    while k < 25u32 { LSCH_DEP[k as u64] = 0u32 ; k = k + 1u32 }
+    LSCH_LAT[0u64]=2u32 ; LSCH_LAT[1u64]=1u32 ; LSCH_LAT[2u64]=3u32 ; LSCH_LAT[3u64]=1u32 ; LSCH_LAT[4u64]=2u32
+    LSCH_DEP[(1u32 * LSCH_N + 0u32) as u64] = 1u32    /* i1 <- i0 */
+    LSCH_DEP[(2u32 * LSCH_N + 0u32) as u64] = 1u32    /* i2 <- i0 */
+    LSCH_DEP[(3u32 * LSCH_N + 1u32) as u64] = 1u32    /* i3 <- i1 */
+    LSCH_DEP[(3u32 * LSCH_N + 2u32) as u64] = 1u32    /* i3 <- i2 */
+    LSCH_DEP[(4u32 * LSCH_N + 3u32) as u64] = 1u32    /* i4 <- i3 */
+    return 0i32
+}
+
+/* as-soon-as-possible schedule: each start = longest (start+latency) over its dependencies.
+ * N relaxation passes converge for a DAG of N nodes. */
+fn lsch_schedule() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < LSCH_N { LSCH_START[i as u64] = 0u32 ; i = i + 1u32 }
+    let mut pass : u32 = 0u32
+    while pass < LSCH_N {
+        let mut a : u32 = 0u32
+        while a < LSCH_N {
+            let mut b : u32 = 0u32
+            while b < LSCH_N {
+                if LSCH_DEP[((a * LSCH_N) + b) as u64] == 1u32 {
+                    let ready : u32 = LSCH_START[b as u64] + LSCH_LAT[b as u64]
+                    if ready > LSCH_START[a as u64] { LSCH_START[a as u64] = ready }
+                }
+                b = b + 1u32
+            }
+            a = a + 1u32
+        }
+        pass = pass + 1u32
+    }
+    return 0i32
+}
+
+/* the makespan: the latest completion time over all instructions. */
+fn lsch_makespan() -> u32 @export {
+    let mut m : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < LSCH_N {
+        let done : u32 = LSCH_START[i as u64] + LSCH_LAT[i as u64]
+        if done > m { m = done }
+        i = i + 1u32
+    }
+    return m
+}
+
+/* valid iff every instruction starts no earlier than each dependency's completion. */
+fn lsch_valid() -> u32 @export {
+    let mut a : u32 = 0u32
+    while a < LSCH_N {
+        let mut b : u32 = 0u32
+        while b < LSCH_N {
+            if LSCH_DEP[((a * LSCH_N) + b) as u64] == 1u32 {
+                if LSCH_START[a as u64] < (LSCH_START[b as u64] + LSCH_LAT[b as u64]) { return 0u32 }
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u32
+}
+
+fn lsch_start(i: u32) -> u32 @export { return LSCH_START[i as u64] }
+
+/* =====================================================================================
+ * list_schedule_kat -- 99 = critical-path instruction scheduling is correct, self-checked:
+ *   (1) the ASAP schedule respects every dependency (valid);
+ *   (2) the makespan equals the critical path = 8 cycles;
+ *   (3) the start cycles match the hand-computed values (i3 at 5, i4 at 6, i0 at 0);
+ *   (4) a deliberately-early start for i4 is detected as INVALID.
+ * ===================================================================================== */
+fn list_schedule_kat() -> u64 @export {
+    lsch_setup()
+    lsch_schedule()
+
+    /* (1) valid */
+    if lsch_valid() != 1u32 { return 1u64 }
+
+    /* (2) makespan = critical path */
+    if lsch_makespan() != 8u32 { return 2u64 }
+
+    /* (3) start cycles */
+    if lsch_start(0u32) != 0u32 { return 3u64 }
+    if lsch_start(2u32) != 2u32 { return 4u64 }    /* after i0[2] */
+    if lsch_start(3u32) != 5u32 { return 5u64 }    /* max(i1 done 3, i2 done 5) = 5 */
+    if lsch_start(4u32) != 6u32 { return 6u64 }    /* after i3 done 5+1 */
+
+    /* (4) a too-early start is invalid */
+    LSCH_START[4u64] = 0u32                         /* corrupt i4 to start before i3 finishes */
+    if lsch_valid() != 0u32 { return 7u64 }
+    lsch_schedule()                                 /* recompute: back to valid */
+    if lsch_valid() != 1u32 { return 8u64 }
+    if lsch_makespan() != 8u32 { return 9u64 }
+
+    return 99u64
+}

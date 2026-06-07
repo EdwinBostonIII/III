@@ -734,6 +734,7 @@ MODULES=(
     "numera/fenwick"
     "numera/segment_tree"
     "numera/knapsack"
+    "numera/inversion_count"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,14 @@
+/* 1302_inversion_count.iii -- array inversions via Fenwick tree, verified against brute (composition).
+ * Drives numera::inversion_count::inversion_count_kat: 99 = the O(n log n) inversion count (which CONSUMES
+ * numera::fenwick -- sweep left to right, ask the BIT how many seen values are <= the current, the rest are
+ * inversions) equals brute force on [3,1,4,1,5]=3, [5,4,3,2,1]=10 (reversed), [1,2,3,4,5]=0 (sorted), and
+ * [2,2,2]=0 (equal elements). A data structure put to work by an algorithm, verified. */
+module corpus_1302
+
+extern @abi(c-msvc-x64) fn inversion_count_kat() -> u64 from "inversion_count.iii"
+
+fn main() -> u64 {
+    let r : u64 = inversion_count_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

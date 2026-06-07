@@ -726,6 +726,7 @@ MODULES=(
     "numera/safety_prover"
     "numera/value_range_prover"
     "numera/loop_bounds_prover"
+    "numera/branch_elim"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

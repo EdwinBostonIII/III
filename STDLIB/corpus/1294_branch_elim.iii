@@ -1,0 +1,15 @@
+/* 1294_branch_elim.iii -- dead-branch elimination from value ranges (composition).
+ * Drives numera::branch_elim::branch_elim_kat: 99 = the value range of a condition (from interval_lattice)
+ * proves a branch THEN-only (else arm dead), ELSE-only (then arm dead), or BOTH-live (not eliminable):
+ * (2*x)<c with 2*x in [0,10] vs 20 is THEN-only; in [20,40] vs 15 ELSE-only; in [0,20] vs 10 BOTH; and every
+ * verdict is cross-checked against the exhaustive concrete condition across several parameterizations. The
+ * emergent payoff of combining range analysis with control flow -- conditional constant propagation. */
+module corpus_1294
+
+extern @abi(c-msvc-x64) fn branch_elim_kat() -> u64 from "branch_elim.iii"
+
+fn main() -> u64 {
+    let r : u64 = branch_elim_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

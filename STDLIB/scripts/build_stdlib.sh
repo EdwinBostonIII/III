@@ -724,6 +724,7 @@ MODULES=(
     "numera/merkle_log"
     "numera/bmc"
     "numera/kinduction"
+    "numera/dijkstra"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

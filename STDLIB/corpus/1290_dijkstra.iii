@@ -1,0 +1,14 @@
+/* 1290_dijkstra.iii -- single-source shortest paths, verified.
+ * Drives numera::dijkstra::dijkstra_kat: 99 = shortest distances from node 0 are exactly [0,2,1,3,6]; the
+ * indirect route 0->2->1 (cost 2) beats the direct edge 0->1 (cost 4); the distance to node 3 takes
+ * 0->2->1->3 (3) not 0->2->3 (6); from source 2 the distances shift accordingly and node 0 is unreachable
+ * (infinity). The foundational non-negative-weight shortest-path algorithm. */
+module corpus_1290
+
+extern @abi(c-msvc-x64) fn dijkstra_kat() -> u64 from "dijkstra.iii"
+
+fn main() -> u64 {
+    let r : u64 = dijkstra_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

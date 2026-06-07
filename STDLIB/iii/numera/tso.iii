@@ -1,0 +1,295 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\tso.iii
+ *
+ * III STDLIB - numera::tso  --  THE x86-TSO WEAK MEMORY MODEL.
+ *
+ * Compilers target physical silicon, and modern CPUs do NOT execute memory operations in program order.
+ * x86-TSO (Total Store Order; Sewell et al.) is the mathematically precise model of what an x86 actually
+ * guarantees: each hardware thread has a private FIFO STORE BUFFER; a store lands in the buffer (invisible
+ * to other threads) and drains to shared memory nondeterministically in FIFO order; a load reads the
+ * thread's own newest buffered store to that address if present (store forwarding), else shared memory;
+ * an MFENCE (or any LOCK'd op) blocks until the buffer is empty.  This single mechanism is the source of
+ * essentially all "impossible" concurrency bugs on x86.
+ *
+ * This module is an EXHAUSTIVE explicit-state model checker for x86-TSO over small litmus programs: it
+ * enumerates EVERY interleaving of thread steps and buffer flushes (with a visited set for termination)
+ * and collects the full set of reachable final (r0,r1) outcomes.  It is verified against the canonical
+ * litmus tests whose outcomes define the model:
+ *   - SB  (store buffering): TSO ALLOWS r0=r1=0  (the famous relaxation -- both loads see stale memory)
+ *   - SB+MFENCE:             TSO FORBIDS r0=r1=0  (the fence restores sequential consistency)
+ *   - MP  (message passing): TSO FORBIDS r0=1 ∧ r1=0 (store order + load order are preserved)
+ * If III's optimizer is to reorder/eliminate memory operations soundly, THIS is the model under which the
+ * kernel must prove the transformation preserves observable behaviour.  numera::csl builds on it.
+ *
+ * NIH / self-contained: the whole model checker (state encode/decode, interleaving expansion, visited set)
+ * is hand-rolled over bounded module-global arrays.
+ *
+ * Public API:
+ *   tso_run_sb(fence) -> u32      explore Store-Buffering (fence=1 inserts MFENCE); returns outcome bitset
+ *   tso_run_mp() -> u32           explore Message-Passing; returns outcome bitset
+ *   (outcome bitset: bit (r0*2+r1) set iff that final (r0,r1) is reachable)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_tso
+
+const T_STORE  : u32 = 0u32
+const T_LOAD   : u32 = 1u32
+const T_MFENCE : u32 = 2u32
+
+/* program: op/arga/argv indexed by (thread*8 + pc); plen per thread */
+var TSO_OP   : [u32; 16]
+var TSO_ARGA : [u32; 16]
+var TSO_ARGV : [u32; 16]
+var TSO_PLEN : [u32; 2]
+
+/* working (decoded) state: 12 fields.
+ * 0 memx,1 memy,2 pc0,3 pc1,4 r0,5 r1,6 b0len,7 b0e0,8 b0e1,9 b1len,10 b1e0,11 b1e1
+ * register value: 0,1 real; 2 = unset.   buffer entry e = (addr<<1)|val. */
+var CUR : [u32; 12]
+
+var TSO_SK  : [u32; 65536]      /* DFS stack of state codes */
+var TSO_VIS : [u64; 262144]     /* visited bitmap over the 24-bit code space (2^24 bits) */
+var TSO_OUT : [u32; 1]          /* reachable-outcome bitset */
+
+fn tso_prog_set(t: u32, pc: u32, op: u32, arga: u32, argv: u32) {
+    let i : u32 = (t * 8u32) + pc
+    TSO_OP[i as u64] = op
+    TSO_ARGA[i as u64] = arga
+    TSO_ARGV[i as u64] = argv
+}
+
+fn tso_encode() -> u32 {
+    let mut c : u32 = CUR[0u32]
+    c = c | (CUR[1u32] << 1u32)
+    c = c | (CUR[2u32] << 2u32)
+    c = c | (CUR[3u32] << 5u32)
+    c = c | (CUR[4u32] << 8u32)
+    c = c | (CUR[5u32] << 10u32)
+    c = c | (CUR[6u32] << 12u32)
+    c = c | (CUR[7u32] << 14u32)
+    c = c | (CUR[8u32] << 16u32)
+    c = c | (CUR[9u32] << 18u32)
+    c = c | (CUR[10u32] << 20u32)
+    c = c | (CUR[11u32] << 22u32)
+    return c
+}
+
+fn tso_decode(c: u32) {
+    CUR[0u32] = c & 1u32
+    CUR[1u32] = (c >> 1u32) & 1u32
+    CUR[2u32] = (c >> 2u32) & 7u32
+    CUR[3u32] = (c >> 5u32) & 7u32
+    CUR[4u32] = (c >> 8u32) & 3u32
+    CUR[5u32] = (c >> 10u32) & 3u32
+    CUR[6u32] = (c >> 12u32) & 3u32
+    CUR[7u32] = (c >> 14u32) & 3u32
+    CUR[8u32] = (c >> 16u32) & 3u32
+    CUR[9u32] = (c >> 18u32) & 3u32
+    CUR[10u32] = (c >> 20u32) & 3u32
+    CUR[11u32] = (c >> 22u32) & 3u32
+}
+
+fn tso_seen(c: u32) -> u32 {
+    let w : u32 = c >> 6u32
+    let b : u32 = c & 63u32
+    if ((TSO_VIS[w as u64] >> (b as u64)) & 1u64) != 0u64 { return 1u32 }
+    return 0u32
+}
+fn tso_mark(c: u32) {
+    let w : u32 = c >> 6u32
+    let b : u32 = c & 63u32
+    TSO_VIS[w as u64] = TSO_VIS[w as u64] | (1u64 << (b as u64))
+}
+
+/* read address a for thread t under store-forwarding (newest buffered store to a, else memory). */
+fn tso_read(t: u32, a: u32) -> u32 {
+    let lenIdx : u32 = 6u32 + (t * 3u32)
+    let e0Idx  : u32 = 7u32 + (t * 3u32)
+    let len : u32 = CUR[lenIdx as u64]
+    let mut val : u32 = CUR[a as u64]      /* memory: CUR[0]=memx, CUR[1]=memy */
+    let mut i : u32 = 0u32
+    while i < len {
+        let e : u32 = CUR[(e0Idx + i) as u64]
+        if (e >> 1u32) == a { val = e & 1u32 }   /* newer entries overwrite -> newest wins */
+        i = i + 1u32
+    }
+    return val
+}
+
+/* push the current CUR state if unseen. */
+fn tso_push(topbox: u32) -> u32 {
+    let c : u32 = tso_encode()
+    if tso_seen(c) == 1u32 { return topbox }
+    tso_mark(c)
+    TSO_SK[topbox as u64] = c
+    return topbox + 1u32
+}
+
+/* explore all interleavings of the loaded 2-thread program; fill TSO_OUT bitset. */
+fn tso_explore() -> i32 {
+    /* reset visited + outcomes */
+    let mut w : u32 = 0u32
+    while w < 262144u32 { TSO_VIS[w as u64] = 0u64 ; w = w + 1u32 }
+    TSO_OUT[0u32] = 0u32
+    /* initial state: mem 0,0 ; pc 0,0 ; regs unset(2) ; empty buffers */
+    let mut f : u32 = 0u32
+    while f < 12u32 { CUR[f as u64] = 0u32 ; f = f + 1u32 }
+    CUR[4u32] = 2u32 ; CUR[5u32] = 2u32
+    let c0 : u32 = tso_encode()
+    tso_mark(c0)
+    TSO_SK[0u64] = c0
+    let mut top : u32 = 1u32
+
+    while top > 0u32 {
+        top = top - 1u32
+        let code : u32 = TSO_SK[top as u64]
+
+        /* final? both threads at end and both buffers empty -> record outcome */
+        tso_decode(code)
+        if CUR[2u32] >= TSO_PLEN[0u64] {
+            if CUR[3u32] >= TSO_PLEN[1u64] {
+                if CUR[6u32] == 0u32 {
+                    if CUR[9u32] == 0u32 {
+                        let r0 : u32 = CUR[4u32]
+                        let r1 : u32 = CUR[5u32]
+                        if r0 < 2u32 {
+                            if r1 < 2u32 {
+                                let o : u32 = (r0 * 2u32) + r1
+                                TSO_OUT[0u32] = TSO_OUT[0u32] | (1u32 << o)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /* generate successors: for each thread, an instruction step and/or a buffer flush */
+        let mut t : u32 = 0u32
+        while t < 2u32 {
+            let pcIdx  : u32 = 2u32 + t
+            let lenIdx : u32 = 6u32 + (t * 3u32)
+            let e0Idx  : u32 = 7u32 + (t * 3u32)
+
+            /* (A) instruction step */
+            tso_decode(code)
+            let pc : u32 = CUR[pcIdx as u64]
+            if pc < TSO_PLEN[t as u64] {
+                let ii : u32 = (t * 8u32) + pc
+                let op : u32 = TSO_OP[ii as u64]
+                if op == T_STORE {
+                    let a : u32 = TSO_ARGA[ii as u64]
+                    let v : u32 = TSO_ARGV[ii as u64]
+                    let len : u32 = CUR[lenIdx as u64]
+                    if len < 2u32 {                    /* room in the FIFO store buffer */
+                        CUR[(e0Idx + len) as u64] = (a << 1u32) | v
+                        CUR[lenIdx as u64] = len + 1u32
+                        CUR[pcIdx as u64] = pc + 1u32
+                        top = tso_push(top)
+                    }
+                } else {
+                    if op == T_LOAD {
+                        let a : u32 = TSO_ARGA[ii as u64]
+                        let reg : u32 = TSO_ARGV[ii as u64]
+                        let rv : u32 = tso_read(t, a)
+                        CUR[(4u32 + reg) as u64] = rv
+                        CUR[pcIdx as u64] = pc + 1u32
+                        top = tso_push(top)
+                    } else {
+                        /* MFENCE: only enabled when this thread's buffer is empty */
+                        if CUR[lenIdx as u64] == 0u32 {
+                            CUR[pcIdx as u64] = pc + 1u32
+                            top = tso_push(top)
+                        }
+                    }
+                }
+            }
+
+            /* (B) flush the head of this thread's store buffer to memory */
+            tso_decode(code)
+            let flen : u32 = CUR[lenIdx as u64]
+            if flen > 0u32 {
+                let head : u32 = CUR[e0Idx as u64]
+                let ha : u32 = head >> 1u32
+                let hv : u32 = head & 1u32
+                CUR[ha as u64] = hv                       /* write to memory */
+                CUR[e0Idx as u64] = CUR[(e0Idx + 1u32) as u64]   /* shift FIFO */
+                CUR[(e0Idx + 1u32) as u64] = 0u32
+                CUR[lenIdx as u64] = flen - 1u32
+                top = tso_push(top)
+            }
+
+            t = t + 1u32
+        }
+    }
+    return 0i32
+}
+
+fn tso_clear_prog() {
+    let mut i : u32 = 0u32
+    while i < 16u32 { TSO_OP[i as u64] = 0u32 ; TSO_ARGA[i as u64] = 0u32 ; TSO_ARGV[i as u64] = 0u32 ; i = i + 1u32 }
+}
+
+/* Store Buffering. x=addr0, y=addr1. fence=1 inserts MFENCE between each store and load. */
+fn tso_run_sb(fence: u32) -> u32 @export {
+    tso_clear_prog()
+    if fence == 1u32 {
+        tso_prog_set(0u32, 0u32, T_STORE,  0u32, 1u32)   /* x := 1 */
+        tso_prog_set(0u32, 1u32, T_MFENCE, 0u32, 0u32)
+        tso_prog_set(0u32, 2u32, T_LOAD,   1u32, 0u32)   /* r0 := y */
+        tso_prog_set(1u32, 0u32, T_STORE,  1u32, 1u32)   /* y := 1 */
+        tso_prog_set(1u32, 1u32, T_MFENCE, 0u32, 0u32)
+        tso_prog_set(1u32, 2u32, T_LOAD,   0u32, 1u32)   /* r1 := x */
+        TSO_PLEN[0u64] = 3u32 ; TSO_PLEN[1u64] = 3u32
+    } else {
+        tso_prog_set(0u32, 0u32, T_STORE, 0u32, 1u32)    /* x := 1 */
+        tso_prog_set(0u32, 1u32, T_LOAD,  1u32, 0u32)    /* r0 := y */
+        tso_prog_set(1u32, 0u32, T_STORE, 1u32, 1u32)    /* y := 1 */
+        tso_prog_set(1u32, 1u32, T_LOAD,  0u32, 1u32)    /* r1 := x */
+        TSO_PLEN[0u64] = 2u32 ; TSO_PLEN[1u64] = 2u32
+    }
+    tso_explore()
+    return TSO_OUT[0u32]
+}
+
+/* Message Passing. Writer: x:=1; y:=1.  Reader: r0:=y; r1:=x. */
+fn tso_run_mp() -> u32 @export {
+    tso_clear_prog()
+    tso_prog_set(0u32, 0u32, T_STORE, 0u32, 1u32)   /* x := 1 */
+    tso_prog_set(0u32, 1u32, T_STORE, 1u32, 1u32)   /* y := 1 */
+    tso_prog_set(1u32, 0u32, T_LOAD,  1u32, 0u32)   /* r0 := y */
+    tso_prog_set(1u32, 1u32, T_LOAD,  0u32, 1u32)   /* r1 := x */
+    TSO_PLEN[0u64] = 2u32 ; TSO_PLEN[1u64] = 2u32
+    tso_explore()
+    return TSO_OUT[0u32]
+}
+
+/* =====================================================================================
+ * tso_kat -- 99 = the x86-TSO litmus outcomes match the model spec, self-checked.
+ *   Outcome bit o = (r0*2 + r1).   bit0=(0,0) bit1=(0,1) bit2=(1,0) bit3=(1,1).
+ *   (1) SB: (0,0) REACHABLE (the TSO relaxation) AND (1,1) reachable (non-vacuous);
+ *   (2) SB+MFENCE: (0,0) NOT reachable (fence forbids the reordering);
+ *   (3) MP: (1,0) NOT reachable (store+load order preserved) AND (0,0)+(1,1) reachable.
+ * ===================================================================================== */
+fn tso_kat() -> u64 @export {
+    /* (1) SB without fence -- TSO allows both-see-stale */
+    let sb : u32 = tso_run_sb(0u32)
+    if (sb & (1u32 << 0u32)) == 0u32 { return 1u64 }      /* (0,0) MUST be reachable */
+    if (sb & (1u32 << 3u32)) == 0u32 { return 2u64 }      /* (1,1) reachable -> not vacuous */
+    if (sb & (1u32 << 1u32)) == 0u32 { return 3u64 }      /* (0,1) reachable */
+    if (sb & (1u32 << 2u32)) == 0u32 { return 4u64 }      /* (1,0) reachable */
+
+    /* (2) SB with MFENCE -- sequential consistency restored, (0,0) impossible */
+    let sbf : u32 = tso_run_sb(1u32)
+    if (sbf & (1u32 << 0u32)) != 0u32 { return 5u64 }     /* (0,0) MUST be forbidden */
+    if (sbf & (1u32 << 3u32)) == 0u32 { return 6u64 }     /* (1,1) still reachable */
+    if (sbf & (1u32 << 1u32)) == 0u32 { return 7u64 }     /* (0,1) still reachable */
+    if (sbf & (1u32 << 2u32)) == 0u32 { return 8u64 }     /* (1,0) still reachable */
+
+    /* (3) MP -- the message-passing violation (r0=1,r1=0) is impossible */
+    let mp : u32 = tso_run_mp()
+    if (mp & (1u32 << 2u32)) != 0u32 { return 9u64 }      /* (1,0) MUST be forbidden */
+    if (mp & (1u32 << 0u32)) == 0u32 { return 10u64 }     /* (0,0) reachable (reader runs first) */
+    if (mp & (1u32 << 3u32)) == 0u32 { return 11u64 }     /* (1,1) reachable (reader runs last) */
+
+    return 99u64
+}

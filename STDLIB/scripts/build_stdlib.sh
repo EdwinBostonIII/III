@@ -694,6 +694,7 @@ MODULES=(
     "numera/optimality_cert"
     "numera/logic_synth"
     "numera/contract_gate"
+    "numera/ring_opt"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,14 @@
+/* 1260_ring_opt.iii -- verified ring-algebra optimization (Horner == naive, fewer multiplies).
+ * Drives numera::ring_opt::ring_opt_kat: 99 = the ring identity Horner ((a*x+b)*x+c)*x+d == naive
+ * a*x^3+b*x^2+c*x+d holds for every coefficient set and input over Z/2^32; the Horner multiply count (3) is
+ * strictly below the naive count (5); a concrete eval is 194; a wrong off-by-one rewrite is not value-
+ * identical. The optimizer's strength reduction lifted from bitvectors to higher-order ring structure. */
+module corpus_1260
+
+extern @abi(c-msvc-x64) fn ring_opt_kat() -> u64 from "ring_opt.iii"
+
+fn main() -> u64 {
+    let r : u64 = ring_opt_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

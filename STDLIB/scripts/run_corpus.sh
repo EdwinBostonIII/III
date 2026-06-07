@@ -839,6 +839,7 @@ declare -A EXPECTED=(
     [1257_optimality_cert]=99
     [1258_logic_synth]=99
     [1259_contract_gate]=99
+    [1260_ring_opt]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

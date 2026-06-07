@@ -214,3 +214,20 @@ Commits bd7610a..5aeaa13 + wiring 53d8fed/d7c944e. Each module pre-flight collis
 **BOARD-RED (not mine):** full build_stdlib carto gate FAILS on the concurrent writer's `costed_cat.iii`
 (63b0c3f) duplicating `cc_init`/`cc_selftest` from pre-existing `cost_calculus.iii`. Their fix (rename
 costed_cat's cc_*). My 10 modules proven via direct corpus-driver builds meanwhile.
+
+## STRATIFIED TRUST-CHAIN (P3) + DEDUCTIVE/INDUCTIVE BRIDGE (Step 4) -- COMPLETE (2026-06-06)
+
+**P3 (corpus 1247/1248):** k0_referee (K_0 the immutable frozen bisimulation referee -- re-checks everything,
+trusts nothing, FIREWALL: never re-roots itself, anchor frozen+content-addressed) + golden_shift (the
+autonomous Golden Shift + metamathematical flywheel -- descends K_active to the verified cost FLOOR, never
+the wrong-but-cheaper trap, staying anchor-aligned through the chain). The human auditor replaced by a sound
+mechanism; the Goedelian firewall intact (relative bisimulation, not self-soundness). Honest boundary: the
+verdict is computed; the physical reseal stays operator/substrate-gated per M20/no-scheduler.
+
+**Step 4 (corpus 1249):** conjecture_refute -- the Popperian deductive/inductive bridge. Bold conjectures
+adjudicated ONLY by exhaustive proof (THEOREM) or a single counterexample (REFUTED); accumulation never
+promotes (honors no-observational-learning). Euler's x^2+x+41: prime for x=0..39 yet REFUTED at x=40 -- 40
+confirmations carry zero weight. Feeds the equivalence verdicts of golden_shift/algo_synth.
+
+All 3 gated standalone =99 and direct-validated as corpus drivers (aggregate board still writer-blocked on
+the costed_cat/cost_calculus cc_* collision). Commits d355296/4c44577/7e8f0e8 + wiring 6e38223/7b9f877.

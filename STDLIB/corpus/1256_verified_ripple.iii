@@ -1,0 +1,14 @@
+/* 1256_verified_ripple.iii -- the verified ripple: equivalence-preserving change propagation.
+ * Drives numera::verified_ripple::verified_ripple_kat: 99 = an equivalent stage rewrite is ACCEPTED at any
+ * stage incl. the earliest (rippling through all five stages); a WRONG rewrite is rejected (K_0 fails it and
+ * its change is not preserved); the propagation is real and amplifying (+1 at stage 0 becomes +16 at the
+ * output). A ripple that carries a proof obligation, discharged at the observable boundary. */
+module corpus_1256
+
+extern @abi(c-msvc-x64) fn verified_ripple_kat() -> u64 from "verified_ripple.iii"
+
+fn main() -> u64 {
+    let r : u64 = verified_ripple_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

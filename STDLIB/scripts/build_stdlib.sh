@@ -690,6 +690,7 @@ MODULES=(
     "numera/verified_search"
     "numera/omega_engine"
     "numera/pareto_frontier"
+    "numera/verified_ripple"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

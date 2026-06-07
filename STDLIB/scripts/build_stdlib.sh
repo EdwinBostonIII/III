@@ -713,6 +713,7 @@ MODULES=(
     "numera/isel"
     "numera/dominators"
     "numera/ssa"
+    "numera/gvn"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

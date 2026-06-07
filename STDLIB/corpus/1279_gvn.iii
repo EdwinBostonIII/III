@@ -1,0 +1,14 @@
+/* 1279_gvn.iii -- global value numbering: redundancy elimination, verified.
+ * Drives numera::gvn::gvn_kat: 99 = congruent expressions share a value number (a+b computed twice; a*b
+ * computed twice), non-congruent ones differ (a+b != a*b, a != b), exactly the two redundant instructions
+ * are flagged while the originals are not, and the compound (a+b)+(a*b) gets a fresh distinct number.
+ * Congruence at the IR level -- the same relation congruence_closure decides over terms. */
+module corpus_1279
+
+extern @abi(c-msvc-x64) fn gvn_kat() -> u64 from "gvn.iii"
+
+fn main() -> u64 {
+    let r : u64 = gvn_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

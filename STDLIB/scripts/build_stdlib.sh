@@ -696,6 +696,7 @@ MODULES=(
     "numera/contract_gate"
     "numera/ring_opt"
     "numera/matrix_ring"
+    "numera/bft_quorum"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

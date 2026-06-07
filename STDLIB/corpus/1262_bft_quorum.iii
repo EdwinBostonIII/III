@@ -1,0 +1,14 @@
+/* 1262_bft_quorum.iii -- the Byzantine quorum-intersection safety theorem (verified).
+ * Drives numera::bft_quorum::bft_quorum_kat: 99 = with N=3f+1 nodes and 2f+1 quorums, any two quorums share
+ * >=f+1 nodes (>=1 honest) for f=1 (N=4) and f=2 (N=7) -- verified exhaustively over the subsets; a smaller
+ * quorum (2 at N=4, 4 at N=7) FAILS the honest-intersection requirement, so 2f+1 is necessary; the closed-
+ * form min overlap 2q-N matches and the bound is tight. The consensus core of a zero-trust ledger. */
+module corpus_1262
+
+extern @abi(c-msvc-x64) fn bft_quorum_kat() -> u64 from "bft_quorum.iii"
+
+fn main() -> u64 {
+    let r : u64 = bft_quorum_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

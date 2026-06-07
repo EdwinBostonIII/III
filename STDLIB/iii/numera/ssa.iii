@@ -1,0 +1,119 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ssa.iii
+ *
+ * III STDLIB - numera::ssa  --  SSA PHI-NODE PLACEMENT (dominance frontiers, verified).
+ *
+ * Static Single Assignment is the IR every serious optimizer speaks; building it hinges on one question --
+ * where do phi nodes go?  The answer is the DOMINANCE FRONTIER: a variable defined in block n needs a phi in
+ * every block m where n's dominance "ends", i.e. n dominates a predecessor of m but does not strictly
+ * dominate m itself.  That is exactly the join point where two definitions can reach.  This module computes
+ * dominance frontiers on top of numera::dominators and decides phi placement for a set of definition blocks.
+ *
+ * On the diamond CFG (1 -> {2,3} -> 4, tail 5), a variable assigned in both branches 2 and 3 has dominance
+ * frontier {4} for each, so exactly ONE phi is placed -- at the join 4 -- and none at 5 or the branches.
+ *
+ * Verified (ssa_kat): the dominance frontier of each branch is the join; a variable defined in both branches
+ * needs a phi at 4 and nowhere else; a variable defined only at the entry needs no phi at all; the placement
+ * is exactly the dominance frontier (the join, never the branches or the tail).  NIH; composes dominators.
+ *
+ * Public API:
+ *   ssa_setup() ; ssa_in_df(n,m) -> u32 ; ssa_needs_phi(def_blocks_mask, m) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_ssa
+
+extern @abi(c-msvc-x64) fn dom_setup() -> i32 from "dominators.iii"
+extern @abi(c-msvc-x64) fn dom_compute() -> i32 from "dominators.iii"
+extern @abi(c-msvc-x64) fn dom_dominates(a: u32, b: u32) -> u32 from "dominators.iii"
+
+const SSA_N : u32 = 6u32
+
+var SSA_PRED : [u32; 6]       /* same diamond CFG as dominators, for the frontier computation */
+
+fn ssa_setup() -> i32 @export {
+    SSA_PRED[0u64] = 0u32
+    SSA_PRED[1u64] = 1u32 << 0u32
+    SSA_PRED[2u64] = 1u32 << 1u32
+    SSA_PRED[3u64] = 1u32 << 1u32
+    SSA_PRED[4u64] = (1u32 << 2u32) | (1u32 << 3u32)
+    SSA_PRED[5u64] = 1u32 << 4u32
+    dom_setup()
+    dom_compute()
+    return 0i32
+}
+
+/* m is in the dominance frontier of n iff n dominates a predecessor of m but does NOT strictly dominate m. */
+fn ssa_in_df(n: u32, m: u32) -> u32 @export {
+    let mut has_dominated_pred : u32 = 0u32
+    let mut p : u32 = 0u32
+    while p < SSA_N {
+        if ((SSA_PRED[m as u64] >> p) & 1u32) == 1u32 {
+            if dom_dominates(n, p) == 1u32 { has_dominated_pred = 1u32 }
+        }
+        p = p + 1u32
+    }
+    if has_dominated_pred == 0u32 { return 0u32 }
+    /* strictly dominates m?  (dominates and is not m itself) */
+    if n != m {
+        if dom_dominates(n, m) == 1u32 { return 0u32 }    /* strict dominance -> not on the frontier */
+    }
+    return 1u32
+}
+
+/* does block m need a phi for a variable defined in the given set of blocks?
+ * (m is in the dominance frontier of at least one definition block.) */
+fn ssa_needs_phi(def_blocks_mask: u32, m: u32) -> u32 @export {
+    let mut n : u32 = 0u32
+    while n < SSA_N {
+        if ((def_blocks_mask >> n) & 1u32) == 1u32 {
+            if ssa_in_df(n, m) == 1u32 { return 1u32 }
+        }
+        n = n + 1u32
+    }
+    return 0u32
+}
+
+/* =====================================================================================
+ * ssa_kat -- 99 = SSA phi placement via dominance frontiers is correct, self-checked:
+ *   (1) the dominance frontier of each branch (2,3) is the join {4};
+ *   (2) a variable defined in both branches needs a phi at 4 and nowhere else (not 5, not the branches);
+ *   (3) a variable defined only at entry needs no phi anywhere;
+ *   (4) the join 4 is the unique phi site for the diamond.
+ * ===================================================================================== */
+fn ssa_kat() -> u64 @export {
+    ssa_setup()
+
+    /* (1) dominance frontier of the branches is the join */
+    if ssa_in_df(2u32, 4u32) != 1u32 { return 1u64 }
+    if ssa_in_df(3u32, 4u32) != 1u32 { return 2u64 }
+    if ssa_in_df(2u32, 5u32) != 0u32 { return 3u64 }   /* the tail is dominated by 4, not on 2's frontier */
+    if ssa_in_df(2u32, 3u32) != 0u32 { return 4u64 }
+
+    /* (2) phi for a variable defined in both branches: at 4, nowhere else */
+    let defs : u32 = (1u32 << 2u32) | (1u32 << 3u32)    /* defined in blocks 2 and 3 */
+    if ssa_needs_phi(defs, 4u32) != 1u32 { return 5u64 }
+    if ssa_needs_phi(defs, 5u32) != 0u32 { return 6u64 }
+    if ssa_needs_phi(defs, 2u32) != 0u32 { return 7u64 }
+    if ssa_needs_phi(defs, 1u32) != 0u32 { return 8u64 }
+
+    /* (3) a variable defined only at entry needs no phi (entry dominates everything) */
+    let entry_def : u32 = 1u32 << 0u32
+    let mut b : u32 = 0u32
+    let mut phi_found : u32 = 0u32
+    while b < SSA_N {
+        if ssa_needs_phi(entry_def, b) == 1u32 { phi_found = 1u32 }
+        b = b + 1u32
+    }
+    if phi_found != 0u32 { return 9u64 }
+
+    /* (4) the join is the unique phi site for the diamond definitions */
+    let mut sites : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < SSA_N {
+        if ssa_needs_phi(defs, k) == 1u32 { sites = sites + 1u32 }
+        k = k + 1u32
+    }
+    if sites != 1u32 { return 10u64 }
+
+    return 99u64
+}

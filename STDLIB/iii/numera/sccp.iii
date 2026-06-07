@@ -1,0 +1,158 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sccp.iii
+ *
+ * III STDLIB - numera::sccp  --  CONSTANT PROPAGATION over the constant lattice (verified).
+ *
+ * The constant-folding heart of sparse conditional constant propagation.  Each SSA value carries a lattice
+ * element: UNDEF (bottom, not yet known), a CONSTANT, or VARYING (top, runtime-dependent).  Transfer
+ * functions fold operations of constants (const + const = const), poison anything touching a runtime input
+ * to VARYING, and a phi node takes the MEET of its inputs -- equal constants stay constant, differing ones
+ * collapse to VARYING.  Iterating the transfers to a fixpoint propagates every statically-known value as far
+ * as it can go and proves which values are genuinely runtime-dependent.
+ *
+ * Value graph: v0=2, v1=3, v2=v0+v1, v3=input, v4=v0+v3, v5=v0*v1, v6=phi(v2,v5), v7=phi(v2,v2).
+ *
+ * Verified (sccp_kat): v2 folds to constant 5, v5 to 6; v4 is VARYING (a constant plus a runtime input);
+ * phi of differing constants v6 is VARYING while phi of equal constants v7 is the constant 5; UNDEF never
+ * leaks into a result.  NIH/self-contained.
+ *
+ * Public API:
+ *   sccp_setup() ; sccp_solve() ; sccp_state(i) -> u32 ; sccp_const(i) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_sccp
+
+const SCCP_N : u32 = 8u32
+/* lattice states */
+const SCCP_UNDEF : u32 = 0u32
+const SCCP_CONST : u32 = 1u32
+const SCCP_VARY  : u32 = 2u32
+/* opcodes */
+const SCCP_IMM   : u32 = 0u32      /* a constant immediate (in the A field) */
+const SCCP_INPUT : u32 = 1u32      /* a runtime input */
+const SCCP_ADD   : u32 = 2u32
+const SCCP_MUL   : u32 = 3u32
+const SCCP_PHI   : u32 = 4u32
+
+var SCCP_OP    : [u32; 8]
+var SCCP_A     : [u32; 8]
+var SCCP_B     : [u32; 8]
+var SCCP_STATE : [u32; 8]
+var SCCP_VAL   : [u32; 8]
+
+fn sccp_setup() -> i32 @export {
+    SCCP_OP[0u64]=SCCP_IMM   ; SCCP_A[0u64]=2u32 ; SCCP_B[0u64]=0u32      /* v0 = 2 */
+    SCCP_OP[1u64]=SCCP_IMM   ; SCCP_A[1u64]=3u32 ; SCCP_B[1u64]=0u32      /* v1 = 3 */
+    SCCP_OP[2u64]=SCCP_ADD   ; SCCP_A[2u64]=0u32 ; SCCP_B[2u64]=1u32      /* v2 = v0+v1 = 5 */
+    SCCP_OP[3u64]=SCCP_INPUT ; SCCP_A[3u64]=0u32 ; SCCP_B[3u64]=0u32      /* v3 = input */
+    SCCP_OP[4u64]=SCCP_ADD   ; SCCP_A[4u64]=0u32 ; SCCP_B[4u64]=3u32      /* v4 = v0+v3 = varying */
+    SCCP_OP[5u64]=SCCP_MUL   ; SCCP_A[5u64]=0u32 ; SCCP_B[5u64]=1u32      /* v5 = v0*v1 = 6 */
+    SCCP_OP[6u64]=SCCP_PHI   ; SCCP_A[6u64]=2u32 ; SCCP_B[6u64]=5u32      /* v6 = phi(5,6) = varying */
+    SCCP_OP[7u64]=SCCP_PHI   ; SCCP_A[7u64]=2u32 ; SCCP_B[7u64]=2u32      /* v7 = phi(5,5) = 5 */
+    return 0i32
+}
+
+/* one transfer step for value i, writing SCCP_STATE[i]/SCCP_VAL[i]. */
+fn sccp_transfer(i: u32) -> i32 {
+    let op : u32 = SCCP_OP[i as u64]
+    let mut ns : u32 = SCCP_UNDEF
+    let mut nv : u32 = 0u32
+    if op == SCCP_IMM   { ns = SCCP_CONST ; nv = SCCP_A[i as u64] }
+    if op == SCCP_INPUT { ns = SCCP_VARY }
+    if op == SCCP_ADD {
+        let a : u32 = SCCP_A[i as u64] ; let b : u32 = SCCP_B[i as u64]
+        let sa : u32 = SCCP_STATE[a as u64] ; let sb : u32 = SCCP_STATE[b as u64]
+        let mut vary : u32 = 0u32
+        if sa == SCCP_VARY { vary = 1u32 }
+        if sb == SCCP_VARY { vary = 1u32 }
+        let mut bothc : u32 = 0u32
+        if sa == SCCP_CONST { if sb == SCCP_CONST { bothc = 1u32 } }
+        if vary == 1u32 { ns = SCCP_VARY }
+        if vary == 0u32 { if bothc == 1u32 { ns = SCCP_CONST ; nv = SCCP_VAL[a as u64] + SCCP_VAL[b as u64] } }
+    }
+    if op == SCCP_MUL {
+        let a : u32 = SCCP_A[i as u64] ; let b : u32 = SCCP_B[i as u64]
+        let sa : u32 = SCCP_STATE[a as u64] ; let sb : u32 = SCCP_STATE[b as u64]
+        let mut vary : u32 = 0u32
+        if sa == SCCP_VARY { vary = 1u32 }
+        if sb == SCCP_VARY { vary = 1u32 }
+        let mut bothc : u32 = 0u32
+        if sa == SCCP_CONST { if sb == SCCP_CONST { bothc = 1u32 } }
+        if vary == 1u32 { ns = SCCP_VARY }
+        if vary == 0u32 { if bothc == 1u32 { ns = SCCP_CONST ; nv = SCCP_VAL[a as u64] * SCCP_VAL[b as u64] } }
+    }
+    if op == SCCP_PHI {
+        let a : u32 = SCCP_A[i as u64] ; let b : u32 = SCCP_B[i as u64]
+        let sa : u32 = SCCP_STATE[a as u64] ; let sb : u32 = SCCP_STATE[b as u64]
+        let va : u32 = SCCP_VAL[a as u64] ; let vb : u32 = SCCP_VAL[b as u64]
+        /* meet: UNDEF is the identity; VARYING is absorbing; equal constants meet to themselves */
+        if sa == SCCP_UNDEF { ns = sb ; nv = vb }
+        if sb == SCCP_UNDEF { ns = sa ; nv = va }
+        let mut bothd : u32 = 0u32
+        if sa != SCCP_UNDEF { if sb != SCCP_UNDEF { bothd = 1u32 } }
+        if bothd == 1u32 {
+            let mut vary : u32 = 0u32
+            if sa == SCCP_VARY { vary = 1u32 }
+            if sb == SCCP_VARY { vary = 1u32 }
+            if vary == 1u32 { ns = SCCP_VARY }
+            if vary == 0u32 {
+                if va == vb { ns = SCCP_CONST ; nv = va }
+                if va != vb { ns = SCCP_VARY }
+            }
+        }
+    }
+    SCCP_STATE[i as u64] = ns ; SCCP_VAL[i as u64] = nv
+    return 0i32
+}
+
+/* iterate the transfers to a fixpoint (N passes converge for this acyclic value graph). */
+fn sccp_solve() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < SCCP_N { SCCP_STATE[i as u64] = SCCP_UNDEF ; SCCP_VAL[i as u64] = 0u32 ; i = i + 1u32 }
+    let mut pass : u32 = 0u32
+    while pass < SCCP_N {
+        let mut n : u32 = 0u32
+        while n < SCCP_N { sccp_transfer(n) ; n = n + 1u32 }
+        pass = pass + 1u32
+    }
+    return 0i32
+}
+
+fn sccp_state(i: u32) -> u32 @export { return SCCP_STATE[i as u64] }
+fn sccp_const(i: u32) -> u32 @export { return SCCP_VAL[i as u64] }
+
+/* =====================================================================================
+ * sccp_kat -- 99 = constant propagation over the lattice is correct, self-checked:
+ *   (1) v2 = v0+v1 folds to constant 5; v5 = v0*v1 to constant 6;
+ *   (2) v4 = v0 + input is VARYING (a constant plus a runtime value);
+ *   (3) v6 = phi of differing constants (5,6) is VARYING; v7 = phi of equal constants (5,5) is constant 5;
+ *   (4) the runtime input v3 is VARYING and no value is left UNDEF.
+ * ===================================================================================== */
+fn sccp_kat() -> u64 @export {
+    sccp_setup()
+    sccp_solve()
+
+    /* (1) constant folding */
+    if sccp_state(2u32) != SCCP_CONST { return 1u64 }
+    if sccp_const(2u32) != 5u32 { return 2u64 }
+    if sccp_state(5u32) != SCCP_CONST { return 3u64 }
+    if sccp_const(5u32) != 6u32 { return 4u64 }
+
+    /* (2) constant + input = varying */
+    if sccp_state(4u32) != SCCP_VARY { return 5u64 }
+
+    /* (3) phi meets */
+    if sccp_state(6u32) != SCCP_VARY { return 6u64 }       /* phi(5,6) -> varying */
+    if sccp_state(7u32) != SCCP_CONST { return 7u64 }      /* phi(5,5) -> 5 */
+    if sccp_const(7u32) != 5u32 { return 8u64 }
+
+    /* (4) the input is varying, nothing left undef */
+    if sccp_state(3u32) != SCCP_VARY { return 9u64 }
+    let mut i : u32 = 0u32
+    while i < SCCP_N {
+        if sccp_state(i) == SCCP_UNDEF { return 10u64 }
+        i = i + 1u32
+    }
+
+    return 99u64
+}

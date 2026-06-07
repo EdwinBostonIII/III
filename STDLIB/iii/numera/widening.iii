@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\widening.iii
+ *
+ * III STDLIB - numera::widening  --  THE WIDENING OPERATOR (termination on unbounded lattices).
+ *
+ * numera::kleene_fixpoint converges because its lattice is bounded; real programs have UNbounded ranges
+ * (i = 0; while true: i = i+1) whose ascending chain [0,0] < [0,1] < [0,2] < ... never stabilizes.  The
+ * WIDENING operator (Cousot's nabla) restores termination: where a bound is still GROWING it jumps that
+ * bound straight to infinity, so the chain leaps to a stable over-approximation in a couple of steps.  It
+ * is deliberately imprecise but always SOUND (the widened result contains the join) and always TERMINATING
+ * -- the trade that makes abstract interpretation decidable on infinite domains.
+ *
+ * Here +infinity is the saturating value WD_INF; widening [a,b] by a successor [a',b'] keeps a stable bound
+ * and sends a growing bound to its limit (b' > b -> +inf, a' < a -> 0).  The unbounded counter widens to
+ * [0,+inf] in two steps.
+ *
+ * Verified (widening_kat): a growing upper bound widens to +inf and a shrinking lower bound to 0, while a
+ * stable interval is left UNWIDENED (precision kept where safe); the widened iteration of the unbounded
+ * counter TERMINATES at [0,+inf]; widening is SOUND -- the result always contains the lattice join (checked
+ * via interval_lattice); and [0,+inf] contains every concrete counter value.  NIH; composes interval_lattice.
+ *
+ * Public API:
+ *   wd_widen(l1,h1,l2,h2) ; wd_lo() -> u32 ; wd_hi() -> u32 ; wd_iterate() -> u32 ;
+ *   wd_contains_join(l1,h1,l2,h2) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_widening
+
+extern @abi(c-msvc-x64) fn il_join(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+
+const WD_INF : u32 = 0xFFFFFFFFu32       /* +infinity (saturating) */
+const WD_CAP : u32 = 16u32               /* iteration bound: convergence must occur within this */
+
+var WD_LO : [u32; 1]
+var WD_HI : [u32; 1]
+var WD_ITERS : [u32; 1]
+
+/* widen the previous interval [l1,h1] by the new [l2,h2]: send any growing bound to its limit. */
+fn wd_widen(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
+    let mut nlo : u32 = l1
+    if l2 < l1 { nlo = 0u32 }             /* lower bound decreased -> widen down to 0 */
+    let mut nhi : u32 = h1
+    if h2 > h1 { nhi = WD_INF }           /* upper bound increased -> widen up to +inf */
+    WD_LO[0u64] = nlo ; WD_HI[0u64] = nhi
+    return 0i32
+}
+fn wd_lo() -> u32 @export { return WD_LO[0u64] }
+fn wd_hi() -> u32 @export { return WD_HI[0u64] }
+
+/* the successor transfer of `i = i+1` (saturating at +inf). */
+fn wd_succ_hi(hi: u32) -> u32 {
+    if hi >= WD_INF { return WD_INF }
+    return hi + 1u32
+}
+
+/* widened Kleene iteration for the UNBOUNDED counter i=0; while true: i=i+1.
+ * x_{k+1} = x_k  nabla  f(x_k);  terminates at [0,+inf]. */
+fn wd_iterate() -> u32 @export {
+    WD_LO[0u64] = 0u32 ; WD_HI[0u64] = 0u32
+    let mut iters : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let plo : u32 = WD_LO[0u64]
+        let phi : u32 = WD_HI[0u64]
+        /* f(x) = [plo, succ(phi)] joined with x = [plo, succ(phi)] (lo stays 0) */
+        let flo : u32 = plo
+        let fhi : u32 = wd_succ_hi(phi)
+        wd_widen(plo, phi, flo, fhi)       /* x_new = x nabla f(x) */
+        iters = iters + 1u32
+        if WD_LO[0u64] == plo {
+            if WD_HI[0u64] == phi { go = 0u32 }    /* stable */
+        }
+        if iters >= WD_CAP { go = 0u32 }
+    }
+    WD_ITERS[0u64] = iters
+    return iters
+}
+
+/* SOUNDNESS: the widened result of [l1,h1] by [l2,h2] contains their lattice join. */
+fn wd_contains_join(l1: u32, h1: u32, l2: u32, h2: u32) -> u32 @export {
+    wd_widen(l1, h1, l2, h2)
+    let wlo : u32 = wd_lo() ; let whi : u32 = wd_hi()
+    il_join(l1, h1, l2, h2)
+    let jlo : u32 = il_lo() ; let jhi : u32 = il_hi()
+    if wlo > jlo { return 0u32 }            /* widened lo must be <= join lo */
+    if whi < jhi { return 0u32 }            /* widened hi must be >= join hi */
+    return 1u32
+}
+
+/* =====================================================================================
+ * widening_kat -- 99 = the widening operator is sound and terminating, self-checked:
+ *   (1) a growing upper bound widens to +inf; a shrinking lower bound to 0;
+ *   (2) a stable interval is left UNWIDENED (precision kept where safe);
+ *   (3) the unbounded counter's widened iteration TERMINATES at [0,+inf] within the bound;
+ *   (4) widening always contains the join (soundness), and [0,+inf] contains a sampled concrete value.
+ * ===================================================================================== */
+fn widening_kat() -> u64 @export {
+    /* (1) growing/shrinking bounds widen */
+    wd_widen(0u32, 0u32, 0u32, 1u32)               /* hi grew 0->1 */
+    if wd_lo() != 0u32 { return 1u64 }
+    if wd_hi() != WD_INF { return 2u64 }
+    wd_widen(2u32, 5u32, 1u32, 5u32)               /* lo shrank 2->1 */
+    if wd_lo() != 0u32 { return 3u64 }
+    if wd_hi() != 5u32 { return 4u64 }
+
+    /* (2) stable interval not widened */
+    wd_widen(0u32, 5u32, 0u32, 5u32)
+    if wd_lo() != 0u32 { return 5u64 }
+    if wd_hi() != 5u32 { return 6u64 }
+
+    /* (3) the unbounded counter terminates at [0,+inf] */
+    let iters : u32 = wd_iterate()
+    if wd_lo() != 0u32 { return 7u64 }
+    if wd_hi() != WD_INF { return 8u64 }
+    if iters > 4u32 { return 9u64 }                /* converges in a couple of steps */
+    if iters == 0u32 { return 10u64 }
+
+    /* (4) soundness: widening contains the join */
+    if wd_contains_join(0u32, 0u32, 0u32, 1u32) != 1u32 { return 11u64 }
+    if wd_contains_join(2u32, 5u32, 1u32, 8u32) != 1u32 { return 12u64 }
+    /* [0,+inf] contains a sampled concrete counter value */
+    wd_iterate()
+    if 1000u32 > wd_hi() { return 13u64 }          /* 1000 <= +inf */
+    if 0u32 < wd_lo() { return 14u64 }             /* 0 >= lo(0) */
+
+    return 99u64
+}

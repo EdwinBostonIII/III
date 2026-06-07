@@ -725,6 +725,7 @@ MODULES=(
     "numera/bmc"
     "numera/kinduction"
     "numera/dijkstra"
+    "numera/safety_prover"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

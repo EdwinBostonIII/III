@@ -1,0 +1,15 @@
+/* 1291_safety_prover.iii -- the complete k-induction verdict: SAFE/UNSAFE/UNKNOWN, verified.
+ * Drives numera::safety_prover::safety_prover_kat: 99 = a SAFE system (bad state isolated, property
+ * inductive) is certified SAFE; an UNSAFE system (a path to the bad state) is UNSAFE with the bad state at
+ * depth 6 (not within 5); an UNKNOWN system (bad unreachable from the entry but an unreachable state steps
+ * to it) yields UNKNOWN -- the 1-induction incompleteness case where a true invariant is not provable by
+ * simple induction. The union of bmc (base) and kinduction (step) into the real verifier verdict. */
+module corpus_1291
+
+extern @abi(c-msvc-x64) fn safety_prover_kat() -> u64 from "safety_prover.iii"
+
+fn main() -> u64 {
+    let r : u64 = safety_prover_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

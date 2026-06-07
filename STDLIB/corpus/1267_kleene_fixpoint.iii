@@ -1,0 +1,15 @@
+/* 1267_kleene_fixpoint.iii -- ripple to convergence: the least-fixpoint engine of static analysis.
+ * Drives numera::kleene_fixpoint::kleene_fixpoint_kat: 99 = Kleene's ascending iteration ripples [0,0] up to
+ * the least fixpoint [0,10] for the program i=0; while i<10: i=i+1; the fixpoint is STABLE (re-applying the
+ * transfer changes nothing); it converges within the bound (monotone on a bounded lattice => terminates);
+ * and it SOUNDLY contains every concrete value of the loop variable. The engine that makes interval_lattice
+ * a whole-program analysis -- ripple-to-convergence. */
+module corpus_1267
+
+extern @abi(c-msvc-x64) fn kleene_fixpoint_kat() -> u64 from "kleene_fixpoint.iii"
+
+fn main() -> u64 {
+    let r : u64 = kleene_fixpoint_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

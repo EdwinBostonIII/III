@@ -701,6 +701,7 @@ MODULES=(
     "numera/rewrite_schedule"
     "numera/interval_lattice"
     "numera/loop_optimizer"
+    "numera/kleene_fixpoint"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

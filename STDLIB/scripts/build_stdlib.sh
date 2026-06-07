@@ -700,6 +700,7 @@ MODULES=(
     "numera/affine_check"
     "numera/rewrite_schedule"
     "numera/interval_lattice"
+    "numera/loop_optimizer"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

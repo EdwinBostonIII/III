@@ -1,0 +1,15 @@
+/* 1266_loop_optimizer.iii -- the harmony: two analyses authorize one verified loop rewrite.
+ * Drives numera::loop_optimizer::loop_optimizer_kat: 99 = for an in-bounds affine loop the interval-lattice
+ * bound (9) equals the affine_check max access (9), both certify safe, the strength reduction is value-
+ * identical, and the loop is OPTIMIZED; for an out-of-bounds loop both analyses flag it (same bound 23) and
+ * the optimization is REFUSED while the analyses still agree. A capability only possible by composing
+ * interval_lattice with affine_check -- independent witnesses agreeing. */
+module corpus_1266
+
+extern @abi(c-msvc-x64) fn loop_optimizer_kat() -> u64 from "loop_optimizer.iii"
+
+fn main() -> u64 {
+    let r : u64 = loop_optimizer_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

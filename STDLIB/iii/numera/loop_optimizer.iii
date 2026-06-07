@@ -1,0 +1,114 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\loop_optimizer.iii
+ *
+ * III STDLIB - numera::loop_optimizer  --  THE HARMONY: two analyses authorize one verified rewrite.
+ *
+ * A capability that exists only because modules COMPOSE.  To safely strength-reduce a loop A[a*i+b] = f(i)
+ * (replacing the per-iteration multiply a*i with a running accumulator), the optimizer must first PROVE the
+ * loop never steps out of bounds.  Here TWO independent analyses must agree before the rewrite is admitted:
+ *   - numera::interval_lattice abstractly executes the index expression to bound the touched address;
+ *   - numera::affine_check exhaustively scans the affine access set for an out-of-bounds iteration.
+ * Only when BOTH certify safety is the strength reduction applied -- and the reduction itself is proven
+ * value-identical to the direct computation for every iteration.  Independent witnesses agreeing is stronger
+ * than either alone; a disagreement would itself be a bug signal.
+ *
+ * Verified (loop_optimizer_kat): for an in-bounds affine loop the interval bound equals the affine max
+ * access, both certify safe, the strength reduction is value-identical, and the loop is OPTIMIZED; for an
+ * out-of-bounds loop both analyses flag it and the optimization is REFUSED.  NIH; composes interval_lattice
+ * and affine_check.
+ *
+ * Public API:
+ *   lo_access_max(a,b,n) -> u32 ; lo_safe(a,b,n,size) -> u32 ; lo_strength_reduce_ok(a,b,n) -> u32 ;
+ *   lo_analyses_agree(a,b,n,size) -> u32 ; lo_optimize(a,b,n,size) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_loop_optimizer
+
+extern @abi(c-msvc-x64) fn il_mul(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
+extern @abi(c-msvc-x64) fn ac_max_access(a: u32, b: u32, n: u32) -> u32 from "affine_check.iii"
+
+/* the interval-domain bound on the maximum touched address of A[a*i+b], i in [0,n). */
+fn lo_access_max(a: u32, b: u32, n: u32) -> u32 @export {
+    if n == 0u32 { return 0u32 }
+    il_mul(a, a, 0u32, n - 1u32)             /* a*i over i in [0,n-1] -> [0, a*(n-1)] */
+    let ml : u32 = il_lo() ; let mh : u32 = il_hi()
+    il_add(ml, mh, b, b)                      /* + b -> [b, a*(n-1)+b] */
+    return il_hi()
+}
+
+/* both analyses must agree the loop is in bounds. */
+fn lo_safe_interval(a: u32, b: u32, n: u32, size: u32) -> u32 {
+    if lo_access_max(a, b, n) < size { return 1u32 }
+    return 0u32
+}
+fn lo_safe(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
+    let interval_ok : u32 = lo_safe_interval(a, b, n, size)
+    let affine_ok : u32 = ac_in_bounds(a, b, n, size)
+    if interval_ok == 1u32 {
+        if affine_ok == 1u32 { return 1u32 }
+    }
+    return 0u32
+}
+
+/* the two independent analyses reach the SAME verdict (and the same bound). */
+fn lo_analyses_agree(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
+    if lo_access_max(a, b, n) != ac_max_access(a, b, n) { return 0u32 }
+    if lo_safe_interval(a, b, n, size) != ac_in_bounds(a, b, n, size) { return 0u32 }
+    return 1u32
+}
+
+/* the strength reduction (running accumulator) equals a*i+b for every iteration. */
+fn lo_strength_reduce_ok(a: u32, b: u32, n: u32) -> u32 @export {
+    let mut acc : u32 = b                     /* accumulator starts at a*0+b = b */
+    let mut i : u32 = 0u32
+    while i < n {
+        if acc != (a * i) + b { return 0u32 } /* the reduced value matches the direct multiply */
+        acc = acc + a                          /* advance by the stride, no multiply */
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* admit the optimization iff both analyses certify safety AND the reduction is value-identical. */
+fn lo_optimize(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
+    if lo_safe(a, b, n, size) == 0u32 { return 0u32 }
+    if lo_strength_reduce_ok(a, b, n) == 0u32 { return 0u32 }
+    return 1u32
+}
+
+/* =====================================================================================
+ * loop_optimizer_kat -- 99 = the composed loop optimization is correct, self-checked:
+ *   (1) for the in-bounds loop A[2*i+1], i in [0,5), size 16: the interval bound (9) equals the affine max
+ *       access (9), and the analyses agree;
+ *   (2) both certify safe, the strength reduction is value-identical, and the loop is OPTIMIZED;
+ *   (3) for the out-of-bounds loop A[3*i+2], i in [0,8), size 16: both flag unsafe and the optimization is
+ *       REFUSED, yet the analyses still AGREE (same bound 23, same unsafe verdict);
+ *   (4) the strength reduction stands alone as value-identical on a sampled loop.
+ * ===================================================================================== */
+fn loop_optimizer_kat() -> u64 @export {
+    /* (1) the two analyses agree on the bound */
+    if lo_access_max(2u32, 1u32, 5u32) != 9u32 { return 1u64 }
+    if ac_max_access(2u32, 1u32, 5u32) != 9u32 { return 2u64 }
+    if lo_analyses_agree(2u32, 1u32, 5u32, 16u32) != 1u32 { return 3u64 }
+
+    /* (2) safe -> optimized */
+    if lo_safe(2u32, 1u32, 5u32, 16u32) != 1u32 { return 4u64 }
+    if lo_strength_reduce_ok(2u32, 1u32, 5u32) != 1u32 { return 5u64 }
+    if lo_optimize(2u32, 1u32, 5u32, 16u32) != 1u32 { return 6u64 }
+
+    /* (3) out of bounds -> refused, analyses still agree */
+    if lo_access_max(3u32, 2u32, 8u32) != 23u32 { return 7u64 }
+    if ac_max_access(3u32, 2u32, 8u32) != 23u32 { return 8u64 }
+    if lo_safe(3u32, 2u32, 8u32, 16u32) != 0u32 { return 9u64 }
+    if lo_optimize(3u32, 2u32, 8u32, 16u32) != 0u32 { return 10u64 }
+    if lo_analyses_agree(3u32, 2u32, 8u32, 16u32) != 1u32 { return 11u64 }   /* both say unsafe, same bound */
+
+    /* (4) strength reduction value-identical on a sampled loop */
+    if lo_strength_reduce_ok(5u32, 3u32, 10u32) != 1u32 { return 12u64 }
+
+    return 99u64
+}

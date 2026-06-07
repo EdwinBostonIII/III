@@ -166,7 +166,19 @@ full `build_stdlib` (carto PASS, `BUILD_EXIT=0`) + `run_all_corpora` → **STDLI
 Stage-1 57/0, ALL CORPORA PASSED, 0 WRONG/FATAL — every committed test (writer's `1211–1216` + mine
 `1217–1228`) green. See [[feedback_concurrent_writer_standalone_gate]] for the once-the-writer-commits
 rule. **The 15-module resilient-data + compression + crypto substrate is complete, integrated, and
-HEAD-verified.** Next: Huffman/DEFLATE capstone (fresh cold audit for the tree-building edge cases).
+HEAD-verified.**
+
+## COMPRESSION TRACK COMPLETE — `huffman` + `lzh` (the gzip recipe)
+
+| 14 | **huffman** — verified canonical Huffman entropy coder on `bitio`. Codes ≤64 bits (Fibonacci-bounded, guarded), canonical (256-length header). | C | `huff_kat`=**99** standalone: round-trip identity incl. empty/single/two-symbol edges + high-entropy + skewed-compresses + 60 random. First try. | `67c4446` |
+| 15 | **lzh** — verified 2-stage LZ77+Huffman compressor (= gzip/DEFLATE recipe) with STORED fallback (never expands >+1). **CAPSTONE** fusing `lzss`+`huffman`+`bitio`. | C/harmony | `lzh_kat`=**99** standalone: round-trip identity + compressible shrinks + incompressible stored + 50 random; every case compressed ≤ raw+1. First try. | `f6d4c65` |
+
+**17 verified modules total.** Compression stack: `lzss`(LZ77) + `bitio`(bit I/O) + `elias`(universal
+codes) + `huffman`(entropy) + `lzh`(2-stage capstone) = a real general-purpose compressor, all III's own.
+`huffman`+`lzh` aggregate-wired (`1230`/`1231`) + validating; both gated standalone first-try (the
+cold-audit + exhaustive-gate + pre-flight-collision-check discipline held even for the most complex
+module). Note: once the writer commits, the harness reflects ALL committed work — wire + commit normally,
+no surgical exclusion.
 
 **NEXT candidates (disjoint, self-checkable, bold):** rateless/fountain codes; CRT/Garner; further
 harmony capstones tying the resilient-data layer to III's witness/content-address spine. Kernel/optimizer

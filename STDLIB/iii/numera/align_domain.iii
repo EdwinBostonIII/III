@@ -1,0 +1,98 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\align_domain.iii
+ *
+ * III STDLIB - numera::align_domain  --  ALIGNMENT ANALYSIS (the legal SIMD width).
+ *
+ * The abstract domain that decides VECTORIZATION.  numera::loop_optimizer can strength-reduce a loop once
+ * it is proven in-bounds; to VECTORIZE it (process w elements per step with one SIMD instruction) the
+ * optimizer must also prove every access is w-aligned.  An affine stream base + i*stride is w-aligned for
+ * every i exactly when w divides BOTH base and stride, and the largest legal power-of-two width is the
+ * lowest set bit of gcd(base,stride).  This is the congruence/alignment lattice: join is gcd, and a
+ * vectorizing rewrite is sound only up to the width this domain certifies.
+ *
+ * Verified (align_domain_kat): gcd by subtractive Euclid; the maximum vector width is the largest power of
+ * two dividing gcd(base,stride); a loop is w-aligned iff base and stride both are, cross-checked against an
+ * exhaustive per-iteration scan; and an over-wide claim is correctly rejected.  NIH/self-contained;
+ * the alignment input numera::loop_optimizer needs to widen strength-reduction into vectorization.
+ *
+ * Public API:
+ *   ad_gcd(a,b) -> u32 ; ad_aligned(x,w) -> u32 ; ad_max_vector_width(base,stride) -> u32 ;
+ *   ad_loop_aligned(base,stride,w) -> u32 ; ad_loop_aligned_scan(base,stride,w,n) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_align_domain
+
+/* gcd by subtractive Euclid (no modulo -- avoids the modulo-after-call family entirely). */
+fn ad_gcd(a0: u32, b0: u32) -> u32 @export {
+    let mut a : u32 = a0
+    let mut b : u32 = b0
+    if a == 0u32 { return b }
+    if b == 0u32 { return a }
+    while a != b {
+        if a > b { a = a - b }
+        if a < b { b = b - a }
+    }
+    return a
+}
+
+/* is x aligned to the power-of-two width w?  (x mod w == 0, via mask since w is a power of two). */
+fn ad_aligned(x: u32, w: u32) -> u32 @export {
+    if (x & (w - 1u32)) == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* the largest power-of-two width dividing gcd(base,stride) = the lowest set bit of the gcd. */
+fn ad_max_vector_width(base: u32, stride: u32) -> u32 @export {
+    let g : u32 = ad_gcd(base, stride)
+    return g & (0u32 - g)                        /* isolate the lowest set bit */
+}
+
+/* is the affine stream base + i*stride w-aligned for EVERY i?  iff w | base and w | stride. */
+fn ad_loop_aligned(base: u32, stride: u32, w: u32) -> u32 @export {
+    if ad_aligned(base, w) == 0u32 { return 0u32 }
+    if ad_aligned(stride, w) == 0u32 { return 0u32 }
+    return 1u32
+}
+
+/* ground truth: exhaustively scan the first n iterations for a misaligned access. */
+fn ad_loop_aligned_scan(base: u32, stride: u32, w: u32, n: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < n {
+        if ((base + (i * stride)) & (w - 1u32)) != 0u32 { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * align_domain_kat -- 99 = alignment analysis is correct, self-checked:
+ *   (1) gcd(16,8)=8, gcd(16,12)=4, gcd(15,8)=1;
+ *   (2) the max vector width is the largest power of two dividing the gcd: (16,8)->8, (16,12)->4, (15,8)->1;
+ *   (3) ad_loop_aligned agrees with the exhaustive scan: base 16 stride 8 is 8-aligned but base 16 stride 12
+ *       is NOT 8-aligned (28 & 7 = 4);
+ *   (4) at the certified max width the loop IS aligned, and a width one power-of-two larger is rejected.
+ * ===================================================================================== */
+fn align_domain_kat() -> u64 @export {
+    /* (1) gcd */
+    if ad_gcd(16u32, 8u32) != 8u32 { return 1u64 }
+    if ad_gcd(16u32, 12u32) != 4u32 { return 2u64 }
+    if ad_gcd(15u32, 8u32) != 1u32 { return 3u64 }
+
+    /* (2) max vector width = largest power of two dividing the gcd */
+    if ad_max_vector_width(16u32, 8u32) != 8u32 { return 4u64 }
+    if ad_max_vector_width(16u32, 12u32) != 4u32 { return 5u64 }
+    if ad_max_vector_width(15u32, 8u32) != 1u32 { return 6u64 }
+
+    /* (3) loop alignment agrees with the exhaustive scan */
+    if ad_loop_aligned(16u32, 8u32, 8u32) != 1u32 { return 7u64 }
+    if ad_loop_aligned_scan(16u32, 8u32, 8u32, 32u32) != 1u32 { return 8u64 }
+    if ad_loop_aligned(16u32, 12u32, 8u32) != 0u32 { return 9u64 }       /* stride 12 not 8-aligned */
+    if ad_loop_aligned_scan(16u32, 12u32, 8u32, 32u32) != 0u32 { return 10u64 }
+
+    /* (4) the certified max width is aligned; a wider claim is rejected */
+    let w : u32 = ad_max_vector_width(16u32, 8u32)                       /* = 8 */
+    if ad_loop_aligned(16u32, 8u32, w) != 1u32 { return 11u64 }
+    if ad_loop_aligned(16u32, 8u32, w * 2u32) != 0u32 { return 12u64 }   /* width 16: stride 8 not 16-aligned */
+
+    return 99u64
+}

@@ -720,6 +720,7 @@ MODULES=(
     "numera/range_check"
     "numera/translation_validation"
     "numera/liveness"
+    "numera/proof_replay"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

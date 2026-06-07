@@ -1,0 +1,14 @@
+/* 1286_proof_replay.iii -- LCF-style proof checking: trust the kernel, verified.
+ * Drives numera::proof_replay::proof_replay_kat: 99 = the genuine proof (axiom A; then B,C,D by modus ponens
+ * over A->B, B->C, C->D) is valid step by step; forging the last step (deriving D from A via C->D) makes that
+ * step fail the checker (antecedent C != fact A) and invalidates the proof; an illegitimate axiom (asserting
+ * B) is rejected. A proof's validity rests only on a small auditable step-checker, however it was found. */
+module corpus_1286
+
+extern @abi(c-msvc-x64) fn proof_replay_kat() -> u64 from "proof_replay.iii"
+
+fn main() -> u64 {
+    let r : u64 = proof_replay_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,14 @@
+/* 1301_knapsack.iii -- 0/1 knapsack verified against brute force.
+ * Drives numera::knapsack::knapsack_kat: 99 = items (2,3)(3,4)(4,5)(5,6) give optimum value 10 at capacity 8
+ * (items {3,5}: weight 8, value 10); the pseudo-polynomial DP (capacity swept downward so each item is used
+ * at most once) equals the exact brute force over all 2^n subsets at EVERY capacity 0..16; small capacities
+ * exact. The optimization DP proven equivalent to its exhaustive reference. */
+module corpus_1301
+
+extern @abi(c-msvc-x64) fn knapsack_kat() -> u64 from "knapsack.iii"
+
+fn main() -> u64 {
+    let r : u64 = knapsack_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

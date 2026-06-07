@@ -1,0 +1,246 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\heaplet.iii
+ *
+ * III STDLIB - numera::heaplet  --  THE SEPARATION ALGEBRA.
+ *
+ * The foundational STATE object on which all of III's memory reasoning is built. A heaplet is a FINITE
+ * partial map from cell (address) to byte value over a 64-cell model space -- represented as a footprint
+ * bitmap (bit c set iff cell c is in the domain) plus a 64-byte value array. This is the carrier of a
+ * PARTIAL COMMUTATIVE MONOID (a "separation algebra"): the partial operation `hl_union` is the disjoint
+ * union `⊎`, defined ONLY when the two footprints are disjoint, with the empty heaplet as identity.
+ *
+ * WHY THIS, WHY NOW: arithmetic (the BV64 kernel work) is pure -- 2+2=4 regardless of the world.  Memory
+ * is a hostile, shared, stateful environment.  To reason about a program that READS a pointer, III must
+ * reason about WHICH cells a computation owns and that two computations own DISJOINT cells.  The disjoint-
+ * union monoid is exactly the structure that makes "owns disjoint memory" a first-class, composable fact.
+ * numera::sep_logic builds the frame rule on it; numera::csl builds non-interference on it.
+ *
+ * The verified properties (heaplet_kat) are the SEPARATION-ALGEBRA LAWS: ⊎ is commutative and associative,
+ * emp is its identity, it is defined IFF footprints are disjoint, and it preserves every cell's value.
+ * Pure / NIH / self-contained (no externs): a heaplet is just a u64 bitmap + 64 bytes.
+ *
+ * Public API (handles index a reusable pool; hl_init resets it):
+ *   hl_init()                       reset the heaplet pool
+ *   hl_empty() -> u32               a fresh empty heaplet (emp)
+ *   hl_singleton(a,v) -> u32        the heaplet { a ↦ v }
+ *   hl_set(h,a,v)                   add/overwrite cell a := v in heaplet h
+ *   hl_has(h,a) -> u32              1 iff cell a ∈ dom(h)
+ *   hl_get(h,a) -> u32              value at a, or HL_NONE if a ∉ dom(h)
+ *   hl_disjoint(h1,h2) -> u32       1 iff dom(h1) ∩ dom(h2) = ∅
+ *   hl_union(h1,h2) -> u32          h1 ⊎ h2 (a NEW heaplet), or HL_NONE if not disjoint
+ *   hl_equal(h1,h2) -> u32          1 iff same domain and same values
+ *   hl_footprint(h) -> u64          the domain bitmap
+ *   hl_size(h) -> u32               |dom(h)|
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; bounded pool, no allocation).
+ */
+module numera_heaplet
+
+const HL_CELLS : u32 = 64u32
+const HL_POOL  : u32 = 256u32
+const HL_NONE  : u32 = 0xFFFFFFFFu32
+
+var HL_FP   : [u64; 256]        /* footprint bitmap per heaplet */
+var HL_VAL  : [u8; 16384]       /* 256 heaplets * 64 cells, flattened: HL_VAL[h*64 + a] */
+var HL_NEXT : [u32; 1]          /* next free pool slot */
+
+fn hl_init() -> i32 @export {
+    HL_NEXT[0u32] = 0u32
+    return 0i32
+}
+
+fn hl_alloc() -> u32 {
+    let h : u32 = HL_NEXT[0u32]
+    if h >= HL_POOL { return HL_NONE }
+    HL_NEXT[0u32] = h + 1u32
+    HL_FP[h as u64] = 0u64
+    let base : u32 = h * HL_CELLS
+    let mut a : u32 = 0u32
+    while a < HL_CELLS { HL_VAL[(base + a) as u64] = 0u8 ; a = a + 1u32 }
+    return h
+}
+
+fn hl_empty() -> u32 @export { return hl_alloc() }
+
+fn hl_has(h: u32, a: u32) -> u32 @export {
+    if a >= HL_CELLS { return 0u32 }
+    if (HL_FP[h as u64] & (1u64 << (a as u64))) != 0u64 { return 1u32 }
+    return 0u32
+}
+
+fn hl_get(h: u32, a: u32) -> u32 @export {
+    if hl_has(h, a) == 0u32 { return HL_NONE }
+    return HL_VAL[((h * HL_CELLS) + a) as u64] as u32
+}
+
+fn hl_set(h: u32, a: u32, v: u32) -> i32 @export {
+    if a >= HL_CELLS { return -1i32 }
+    HL_FP[h as u64] = HL_FP[h as u64] | (1u64 << (a as u64))
+    HL_VAL[((h * HL_CELLS) + a) as u64] = (v & 0xFFu32) as u8
+    return 0i32
+}
+
+fn hl_singleton(a: u32, v: u32) -> u32 @export {
+    let h : u32 = hl_alloc()
+    if h == HL_NONE { return HL_NONE }
+    hl_set(h, a, v)
+    return h
+}
+
+fn hl_footprint(h: u32) -> u64 @export { return HL_FP[h as u64] }
+
+fn hl_size(h: u32) -> u32 @export {
+    let mut fp : u64 = HL_FP[h as u64]
+    let mut n : u32 = 0u32
+    while fp != 0u64 { n = n + ((fp & 1u64) as u32) ; fp = fp >> 1u64 }
+    return n
+}
+
+fn hl_disjoint(h1: u32, h2: u32) -> u32 @export {
+    if (HL_FP[h1 as u64] & HL_FP[h2 as u64]) == 0u64 { return 1u32 }
+    return 0u32
+}
+
+/* h1 ⊎ h2 : a NEW heaplet, defined ONLY when disjoint (else HL_NONE). */
+fn hl_union(h1: u32, h2: u32) -> u32 @export {
+    if hl_disjoint(h1, h2) == 0u32 { return HL_NONE }
+    let h : u32 = hl_alloc()
+    if h == HL_NONE { return HL_NONE }
+    let mut a : u32 = 0u32
+    while a < HL_CELLS {
+        if hl_has(h1, a) == 1u32 { hl_set(h, a, hl_get(h1, a)) }
+        else { if hl_has(h2, a) == 1u32 { hl_set(h, a, hl_get(h2, a)) } }
+        a = a + 1u32
+    }
+    return h
+}
+
+fn hl_equal(h1: u32, h2: u32) -> u32 @export {
+    if HL_FP[h1 as u64] != HL_FP[h2 as u64] { return 0u32 }
+    let mut a : u32 = 0u32
+    while a < HL_CELLS {
+        if hl_has(h1, a) == 1u32 {
+            if hl_get(h1, a) != hl_get(h2, a) { return 0u32 }
+        }
+        a = a + 1u32
+    }
+    return 1u32
+}
+
+/* ===== KAT ===== */
+var HL_RNG : [u64; 1]
+fn hl_rng() -> u64 {
+    let mut z : u64 = HL_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    HL_RNG[0u64] = z
+    return z
+}
+
+/* build a heaplet over the cells of `mask` (subset of 0..63), value = cell*3+7 (deterministic). */
+fn hl_build(mask: u64) -> u32 {
+    let h : u32 = hl_alloc()
+    let mut a : u32 = 0u32
+    while a < HL_CELLS {
+        if (mask & (1u64 << (a as u64))) != 0u64 { hl_set(h, a, (a * 3u32) + 7u32) }
+        a = a + 1u32
+    }
+    return h
+}
+
+/* =====================================================================================
+ * heaplet_kat -- 99 = the SEPARATION-ALGEBRA LAWS hold, self-checked over the model space:
+ *   (1) singleton + lookup correctness (incl. a cell NOT in the domain reads HL_NONE);
+ *   (2) ⊎ COMMUTATIVE: h1 ⊎ h2 == h2 ⊎ h1 for disjoint operands (even/odd split), 200 trials;
+ *   (3) emp IDENTITY: h ⊎ emp == h and emp ⊎ h == h;
+ *   (4) ⊎ ASSOCIATIVE: (h1 ⊎ h2) ⊎ h3 == h1 ⊎ (h2 ⊎ h3) for pairwise-disjoint triples, 200 trials;
+ *   (5) ⊎ preserves every cell value: get(h1⊎h2, a) == (a∈h1 ? get(h1,a) : get(h2,a));
+ *   (6) NEGATIVE: overlapping footprints are NOT disjoint and ⊎ is UNDEFINED (HL_NONE).
+ * ===================================================================================== */
+fn heaplet_kat() -> u64 @export {
+    /* (1) singleton + lookup */
+    hl_init()
+    let s : u32 = hl_singleton(5u32, 200u32)
+    if hl_has(s, 5u32) != 1u32 { return 1u64 }
+    if hl_get(s, 5u32) != 200u32 { return 2u64 }
+    if hl_has(s, 6u32) != 0u32 { return 3u64 }
+    if hl_get(s, 6u32) != HL_NONE { return 4u64 }
+    if hl_size(s) != 1u32 { return 5u64 }
+
+    /* (2) commutativity over disjoint even/odd subsets */
+    HL_RNG[0u64] = 0x243F6A8885A308D3u64
+    let mut t : u32 = 0u32
+    while t < 200u32 {
+        hl_init()
+        let m1 : u64 = hl_rng() & 0x5555555555555555u64    /* even cells */
+        let m2 : u64 = hl_rng() & 0xAAAAAAAAAAAAAAAAu64    /* odd cells -> disjoint from m1 */
+        let h1 : u32 = hl_build(m1)
+        let h2 : u32 = hl_build(m2)
+        if hl_disjoint(h1, h2) != 1u32 { return 1000u64 + (t as u64) }
+        let u12 : u32 = hl_union(h1, h2)
+        let u21 : u32 = hl_union(h2, h1)
+        if u12 == HL_NONE { return 2000u64 + (t as u64) }
+        if u21 == HL_NONE { return 2100u64 + (t as u64) }
+        if hl_equal(u12, u21) != 1u32 { return 3000u64 + (t as u64) }
+        /* (5) value preservation on this union */
+        let mut a : u32 = 0u32
+        while a < HL_CELLS {
+            if hl_has(u12, a) == 1u32 {
+                let expect : u32 = (a * 3u32) + 7u32
+                if hl_get(u12, a) != expect { return 4000u64 + (a as u64) }
+            }
+            a = a + 1u32
+        }
+        t = t + 1u32
+    }
+
+    /* (3) emp identity */
+    hl_init()
+    let g : u32 = hl_build(0x0102040810204080u64)
+    let e : u32 = hl_empty()
+    let ge : u32 = hl_union(g, e)
+    let eg : u32 = hl_union(e, g)
+    if hl_equal(ge, g) != 1u32 { return 6u64 }
+    if hl_equal(eg, g) != 1u32 { return 7u64 }
+
+    /* (4) associativity over pairwise-disjoint triples (cells mod 3) */
+    HL_RNG[0u64] = 0xB7E151628AED2A6Bu64
+    let mut t3 : u32 = 0u32
+    while t3 < 200u32 {
+        hl_init()
+        let r : u64 = hl_rng()
+        /* assign each present cell to one of three disjoint classes by (cell mod 3) */
+        let mut ma : u64 = 0u64
+        let mut mb : u64 = 0u64
+        let mut mc : u64 = 0u64
+        let mut a : u32 = 0u32
+        while a < HL_CELLS {
+            if (r & (1u64 << (a as u64))) != 0u64 {
+                let cls : u32 = a % 3u32
+                if cls == 0u32 { ma = ma | (1u64 << (a as u64)) }
+                else { if cls == 1u32 { mb = mb | (1u64 << (a as u64)) } else { mc = mc | (1u64 << (a as u64)) } }
+            }
+            a = a + 1u32
+        }
+        let h1 : u32 = hl_build(ma)
+        let h2 : u32 = hl_build(mb)
+        let h3 : u32 = hl_build(mc)
+        let l1 : u32 = hl_union(h1, h2)
+        let left : u32 = hl_union(l1, h3)
+        let r1 : u32 = hl_union(h2, h3)
+        let right : u32 = hl_union(h1, r1)
+        if left == HL_NONE { return 5000u64 + (t3 as u64) }
+        if right == HL_NONE { return 5100u64 + (t3 as u64) }
+        if hl_equal(left, right) != 1u32 { return 6000u64 + (t3 as u64) }
+        t3 = t3 + 1u32
+    }
+
+    /* (6) NEGATIVE: overlap -> not disjoint, union undefined */
+    hl_init()
+    let o1 : u32 = hl_singleton(9u32, 11u32)
+    let o2 : u32 = hl_singleton(9u32, 22u32)     /* shares cell 9 */
+    if hl_disjoint(o1, o2) != 0u32 { return 8u64 }
+    if hl_union(o1, o2) != HL_NONE { return 9u64 }
+
+    return 99u64
+}

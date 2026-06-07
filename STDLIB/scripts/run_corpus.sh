@@ -847,6 +847,7 @@ declare -A EXPECTED=(
     [1265_interval_lattice]=99
     [1266_loop_optimizer]=99
     [1267_kleene_fixpoint]=99
+    [1268_widening]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

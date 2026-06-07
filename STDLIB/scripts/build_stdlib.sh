@@ -702,6 +702,7 @@ MODULES=(
     "numera/interval_lattice"
     "numera/loop_optimizer"
     "numera/kleene_fixpoint"
+    "numera/widening"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

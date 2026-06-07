@@ -1,0 +1,14 @@
+/* 1268_widening.iii -- the widening operator: termination of abstract interpretation on unbounded domains.
+ * Drives numera::widening::widening_kat: 99 = a growing upper bound widens to +inf and a shrinking lower
+ * bound to 0, while a stable interval is left precise; the unbounded counter i=0; while true: i=i+1 widens
+ * to [0,+inf] in two steps (terminates); widening always contains the lattice join (soundness); and [0,+inf]
+ * contains every concrete value. The trade that makes abstract interpretation decidable on infinite domains. */
+module corpus_1268
+
+extern @abi(c-msvc-x64) fn widening_kat() -> u64 from "widening.iii"
+
+fn main() -> u64 {
+    let r : u64 = widening_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

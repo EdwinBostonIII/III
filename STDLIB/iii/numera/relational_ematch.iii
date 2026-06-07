@@ -1,0 +1,171 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\relational_ematch.iii
+ *
+ * III STDLIB - numera::relational_ematch  --  SEMANTIC (RELATIONAL) E-MATCHING.
+ *
+ * To invent an algorithm rather than tweak an instruction, the e-graph cannot match SYNTAX (x*2 -> x<<1).
+ * It must recognize that two structurally different programs compute the SAME mathematical fixpoint -- that
+ * a nested for-loop over an array and a relational JOIN over a table are the same relation, that an
+ * accumulate-loop and a fold are the same reduction.  Only then can the synthesizer propose replacing one
+ * whole algorithm with another, even across an ASYMPTOTIC gap.
+ *
+ * This module matches on SEMANTICS: it executes two candidate forms over many seeded random inputs and
+ * declares them equivalent iff their observable results coincide on ALL of them.  The headline pair is
+ * NESTED-LOOP pair-count (O(n^2)) vs HASH-JOIN pair-count (O(n)) -- syntactically and asymptotically
+ * different, semantically identical -- exactly the "nested_for_loop == relational_join" recognition the
+ * synthesizer needs.  Also: left-fold sum == tree-fold sum (associativity), and loop-filter == relational
+ * selection.  The negative: genuinely different reductions (sum vs product) are NOT matched.
+ *
+ * Verified (relational_ematch_kat): the three equivalences are recognized and the inequivalence rejected.
+ * NIH/self-contained.  Public API:
+ *   rem_exec(form, param) -> u32        run a form over REM_DATA[REM_N]
+ *   rem_equiv(formA, formB, param) -> u32   1 iff the two forms agree on all seeded random inputs
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_relational_ematch
+
+const F_LEFTFOLD     : u32 = 0u32      /* sum, left-associated */
+const F_TREEFOLD     : u32 = 1u32      /* sum, pairwise tree-associated */
+const F_NESTED_JOIN  : u32 = 2u32      /* O(n^2) count of ordered pairs summing to param */
+const F_HASH_JOIN    : u32 = 3u32      /* O(n) count of ordered pairs summing to param */
+const F_PRODUCT      : u32 = 4u32      /* product of (a[i]+1) */
+const F_FILTER_COUNT : u32 = 5u32      /* count a[i] > param, by loop */
+const F_SELECT_COUNT : u32 = 6u32      /* count a[i] > param, by relational selection */
+
+var REM_DATA : [u32; 64]
+var REM_N    : [u32; 1]
+var REM_BUF  : [u32; 64]
+var REM_CNT  : [u32; 256]
+var REM_SEL  : [u32; 64]
+var REM_RNG  : [u64; 1]
+
+fn rem_rng() -> u64 {
+    let mut z : u64 = REM_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    REM_RNG[0u64] = z
+    return z
+}
+
+fn rem_exec(form: u32, param: u32) -> u32 @export {
+    let n : u32 = REM_N[0u32]
+    if form == F_LEFTFOLD {
+        let mut acc : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < n { acc = acc + REM_DATA[i as u64] ; i = i + 1u32 }
+        return acc
+    }
+    if form == F_TREEFOLD {
+        let mut m : u32 = n
+        let mut i : u32 = 0u32
+        while i < n { REM_BUF[i as u64] = REM_DATA[i as u64] ; i = i + 1u32 }
+        while m > 1u32 {
+            let half : u32 = m / 2u32
+            let mut k : u32 = 0u32
+            while k < half {
+                REM_BUF[k as u64] = REM_BUF[(2u32 * k) as u64] + REM_BUF[((2u32 * k) + 1u32) as u64]
+                k = k + 1u32
+            }
+            if (m & 1u32) == 1u32 { REM_BUF[half as u64] = REM_BUF[(m - 1u32) as u64] ; m = half + 1u32 }
+            else { m = half }
+        }
+        if n == 0u32 { return 0u32 }
+        return REM_BUF[0u64]
+    }
+    if form == F_NESTED_JOIN {
+        let mut count : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < n {
+            let mut j : u32 = 0u32
+            while j < n {
+                if (REM_DATA[i as u64] + REM_DATA[j as u64]) == param { count = count + 1u32 }
+                j = j + 1u32
+            }
+            i = i + 1u32
+        }
+        return count
+    }
+    if form == F_HASH_JOIN {
+        let mut c : u32 = 0u32
+        while c < 256u32 { REM_CNT[c as u64] = 0u32 ; c = c + 1u32 }
+        let mut i : u32 = 0u32
+        while i < n { REM_CNT[REM_DATA[i as u64] as u64] = REM_CNT[REM_DATA[i as u64] as u64] + 1u32 ; i = i + 1u32 }
+        let mut count : u32 = 0u32
+        let mut t : u32 = 0u32
+        while t < n {
+            let v : u32 = REM_DATA[t as u64]
+            if param >= v {
+                let need : u32 = param - v
+                if need < 256u32 { count = count + REM_CNT[need as u64] }
+            }
+            t = t + 1u32
+        }
+        return count
+    }
+    if form == F_PRODUCT {
+        let mut prod : u32 = 1u32
+        let mut i : u32 = 0u32
+        while i < n { prod = prod * (REM_DATA[i as u64] + 1u32) ; i = i + 1u32 }
+        return prod
+    }
+    if form == F_FILTER_COUNT {
+        let mut count : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < n { if REM_DATA[i as u64] > param { count = count + 1u32 } ; i = i + 1u32 }
+        return count
+    }
+    /* F_SELECT_COUNT: relational selection then count (different shape, same result as FILTER_COUNT) */
+    let mut m : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n { if REM_DATA[i as u64] > param { REM_SEL[m as u64] = i ; m = m + 1u32 } ; i = i + 1u32 }
+    return m
+}
+
+/* fill REM_DATA with a random dataset of length n, values 0..63. */
+fn rem_gen(n: u32) {
+    REM_N[0u32] = n
+    let mut i : u32 = 0u32
+    while i < n { REM_DATA[i as u64] = (rem_rng() & 63u64) as u32 ; i = i + 1u32 }
+}
+
+/* 1 iff formA and formB agree on 100 seeded random datasets (semantic equivalence). */
+fn rem_equiv(form_a: u32, form_b: u32, param: u32) -> u32 @export {
+    REM_RNG[0u64] = 0x6C078965F6A1D2E3u64
+    let mut tr : u32 = 0u32
+    while tr < 100u32 {
+        let nn : u32 = 8u32 + ((rem_rng() & 15u64) as u32)     /* length 8..23 */
+        rem_gen(nn)
+        let ra : u32 = rem_exec(form_a, param)
+        let rb : u32 = rem_exec(form_b, param)
+        if ra != rb { return 0u32 }
+        tr = tr + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * relational_ematch_kat -- 99 = semantic equivalence recognized across syntactic/asymptotic gaps:
+ *   (1) NESTED-LOOP pair-count (O(n^2)) == HASH-JOIN pair-count (O(n)) -- the nested_loop==join match;
+ *   (2) left-fold sum == tree-fold sum (associativity, different shape);
+ *   (3) loop-filter count == relational-selection count;
+ *   (4) NEGATIVE: sum (left-fold) is NOT equivalent to product; nested-join is NOT product.
+ * ===================================================================================== */
+fn relational_ematch_kat() -> u64 @export {
+    /* (1) the headline: O(n^2) nested loop == O(n) hash join, semantically */
+    if rem_equiv(F_NESTED_JOIN, F_HASH_JOIN, 40u32) != 1u32 { return 1u64 }
+    if rem_equiv(F_NESTED_JOIN, F_HASH_JOIN, 64u32) != 1u32 { return 2u64 }   /* a second target */
+
+    /* (2) associativity: left-fold == tree-fold */
+    if rem_equiv(F_LEFTFOLD, F_TREEFOLD, 0u32) != 1u32 { return 3u64 }
+
+    /* (3) loop filter == relational selection */
+    if rem_equiv(F_FILTER_COUNT, F_SELECT_COUNT, 30u32) != 1u32 { return 4u64 }
+
+    /* (4) NEGATIVE: distinct reductions are NOT matched */
+    if rem_equiv(F_LEFTFOLD, F_PRODUCT, 0u32) != 0u32 { return 5u64 }
+    if rem_equiv(F_NESTED_JOIN, F_PRODUCT, 40u32) != 0u32 { return 6u64 }
+    if rem_equiv(F_FILTER_COUNT, F_LEFTFOLD, 30u32) != 0u32 { return 7u64 }
+
+    return 99u64
+}

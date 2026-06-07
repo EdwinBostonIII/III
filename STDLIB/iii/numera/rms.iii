@@ -1,0 +1,114 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\rms.iii
+ *
+ * III STDLIB - numera::rms  --  RATE-MONOTONIC SCHEDULABILITY (response-time analysis, verified).
+ *
+ * Real-time systems must PROVE every task meets its deadline, not hope so.  Under rate-monotonic priority
+ * (shorter period = higher priority), the exact schedulability test is response-time analysis: a task's
+ * worst-case response time is the least fixpoint of R = C + sum over higher-priority tasks of
+ * ceil(R / T_j) * C_j -- its own work plus every preemption by a faster task during its busy period.  The
+ * task is schedulable iff that response time is within its period; the whole set is schedulable iff every
+ * task is.  This is the deterministic, exhaustive guarantee embedded software needs, with no observed-and-
+ * averaged slack (the no-ML discipline).
+ *
+ * Tasks (period, compute), priority-ordered by ascending period: (4,1) (6,2) (8,C2).  With C2=2 the set is
+ * schedulable (response times 1, 3, 6 all within period); with C2=4 the third task's response time exceeds
+ * its period and the set is NOT schedulable.
+ *
+ * Verified (rms_kat): the schedulable set's response times are exactly 1/3/6 and within deadline; raising
+ * the third task's compute time makes its response time exceed its period and the set is rejected; ceil-
+ * division is exact.  NIH/self-contained.
+ *
+ * Public API:
+ *   rms_setup(mode) ; rms_ceil_div(a,b) -> u32 ; rms_response_time(i) -> u32 ; rms_schedulable() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_rms
+
+const RMS_N : u32 = 3u32
+
+var RMS_T : [u32; 3]          /* periods (priority-ordered: ascending) */
+var RMS_C : [u32; 3]          /* worst-case compute times */
+
+fn rms_setup(mode: u32) -> i32 @export {
+    RMS_T[0u64]=4u32 ; RMS_C[0u64]=1u32
+    RMS_T[1u64]=6u32 ; RMS_C[1u64]=2u32
+    RMS_T[2u64]=8u32
+    if mode == 0u32 { RMS_C[2u64]=2u32 } else { RMS_C[2u64]=4u32 }
+    return 0i32
+}
+
+/* exact ceiling division ceil(a/b) for b > 0. */
+fn rms_ceil_div(a: u32, b: u32) -> u32 @export {
+    return ((a + b) - 1u32) / b
+}
+
+/* the preemption a task i suffers in a window of length r, from all higher-priority tasks. */
+fn rms_interference(i: u32, r: u32) -> u32 {
+    let mut sum : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < i {
+        sum = sum + (rms_ceil_div(r, RMS_T[j as u64]) * RMS_C[j as u64])
+        j = j + 1u32
+    }
+    return sum
+}
+
+/* worst-case response time = least fixpoint of R = C_i + interference(i, R). */
+fn rms_response_time(i: u32) -> u32 @export {
+    let ci : u32 = RMS_C[i as u64]
+    let mut r : u32 = ci
+    let mut go : u32 = 1u32
+    let mut guard : u32 = 0u32
+    while go == 1u32 {
+        let interf : u32 = rms_interference(i, r)
+        let nr : u32 = ci + interf
+        if nr == r { go = 0u32 }
+        if nr > 1000u32 { go = 0u32 }            /* diverged -> over-utilized, unschedulable */
+        if go == 1u32 { r = nr }
+        guard = guard + 1u32
+        if guard > 200u32 { go = 0u32 }
+    }
+    return r
+}
+
+/* the task set is schedulable iff every task's response time is within its period. */
+fn rms_schedulable() -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < RMS_N {
+        if rms_response_time(i) > RMS_T[i as u64] { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * rms_kat -- 99 = rate-monotonic response-time analysis is correct, self-checked:
+ *   (1) the schedulable set's response times are exactly 1, 3, 6, each within its period;
+ *   (2) the set is schedulable;
+ *   (3) raising the third task's compute to 4 makes its response time exceed its period 8;
+ *   (4) the heavier set is NOT schedulable, and ceil-division is exact.
+ * ===================================================================================== */
+fn rms_kat() -> u64 @export {
+    /* (1) response times of the schedulable set */
+    rms_setup(0u32)
+    if rms_response_time(0u32) != 1u32 { return 1u64 }
+    if rms_response_time(1u32) != 3u32 { return 2u64 }
+    if rms_response_time(2u32) != 6u32 { return 3u64 }
+
+    /* (2) schedulable */
+    if rms_schedulable() != 1u32 { return 4u64 }
+
+    /* (3) the heavier task overruns its period */
+    rms_setup(1u32)
+    if rms_response_time(2u32) <= 8u32 { return 5u64 }   /* response time now exceeds the period */
+
+    /* (4) not schedulable; ceil-division exact */
+    if rms_schedulable() != 0u32 { return 6u64 }
+    if rms_ceil_div(7u32, 4u32) != 2u32 { return 7u64 }   /* ceil(7/4)=2 */
+    if rms_ceil_div(8u32, 4u32) != 2u32 { return 8u64 }   /* exact: 8/4=2 */
+    if rms_ceil_div(9u32, 4u32) != 3u32 { return 9u64 }   /* ceil(9/4)=3 */
+    if rms_ceil_div(0u32, 4u32) != 0u32 { return 10u64 }
+
+    return 99u64
+}

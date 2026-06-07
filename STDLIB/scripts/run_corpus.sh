@@ -849,6 +849,7 @@ declare -A EXPECTED=(
     [1267_kleene_fixpoint]=99
     [1268_widening]=99
     [1269_align_domain]=99
+    [1270_vectorizer]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

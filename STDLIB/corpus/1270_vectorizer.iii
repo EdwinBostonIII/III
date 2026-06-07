@@ -1,0 +1,15 @@
+/* 1270_vectorizer.iii -- verified vectorization: four modules compose into one SIMD rewrite.
+ * Drives numera::vectorizer::vectorizer_kat: 99 = an in-bounds 8-strided loop vectorizes at width 8; a
+ * base-misaligned variant (b=4) drops to width 4; an odd-stride loop (a=3) stays scalar (width 1); an
+ * out-of-bounds loop is refused (0); and the width-W grouping is proven to cover exactly the scalar
+ * iteration space. Safety (loop_optimizer -> interval_lattice + affine_check) and alignment (align_domain)
+ * together license the rewrite -- a harmony no single module could authorize. */
+module corpus_1270
+
+extern @abi(c-msvc-x64) fn vectorizer_kat() -> u64 from "vectorizer.iii"
+
+fn main() -> u64 {
+    let r : u64 = vectorizer_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -704,6 +704,7 @@ MODULES=(
     "numera/kleene_fixpoint"
     "numera/widening"
     "numera/align_domain"
+    "numera/vectorizer"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

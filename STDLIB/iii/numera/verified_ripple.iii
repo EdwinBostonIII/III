@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\verified_ripple.iii
+ *
+ * III STDLIB - numera::verified_ripple  --  THE VERIFIED RIPPLE (equivalence that propagates).
+ *
+ * A ripple is a change that propagates through dependent computation.  III's deepest use of the ripple is
+ * to carry a PROOF OBLIGATION: when the optimizer rewrites one stage of a pipeline, the change ripples to
+ * every downstream stage that consumes it, and the ripple may be ADMITTED only if the rewrite is observably
+ * equivalent -- so the propagation provably preserves the final output.  A wrong rewrite's change does not
+ * vanish: it AMPLIFIES as it ripples downstream, and is caught at the observable boundary.
+ *
+ * Model: a 5-stage pipeline over an input, each stage v -> v*2+1.  A stage can be rewritten three ways:
+ * kind0 the original; kind1 an equivalent ((v<<1)+1); kind2 a WRONG variant (v*2+2).  The frozen referee
+ * (numera::k0_referee) verifies the rewrite's stage-behaviour against the original; the ripple is accepted
+ * iff K_0 certifies it AND the pipeline output is unchanged across the whole input domain after the change
+ * propagates through every downstream stage.
+ *
+ * Verified (verified_ripple_kat): an equivalent rewrite at any stage (even the earliest, propagating through
+ * all five) is ACCEPTED; a wrong rewrite is REJECTED -- K_0 fails it AND its change amplifies downstream so
+ * the output differs; the propagation is real (a +1 at stage 0 becomes +16 at the output).  NIH; composes
+ * k0_referee.
+ *
+ * Public API:
+ *   vr_setup() ; vr_apply(kind,v) -> u32 ; vr_run(input, opt_stage, opt_kind) -> u32 ;
+ *   vr_kernel_verified(kind) -> u32 ; vr_ripple_preserves(opt_stage, opt_kind) -> u32 ;
+ *   vr_ripple_accept(opt_stage, opt_kind) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_verified_ripple
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+
+const VR_STAGES : u32 = 5u32
+const VR_D      : u32 = 16u32
+
+fn vr_apply(kind: u32, v: u32) -> u32 @export {
+    if kind == 0u32 { return (v * 2u32) + 1u32 }       /* original */
+    if kind == 1u32 { return (v << 1u32) + 1u32 }      /* equivalent: v<<1 == v*2 */
+    return (v * 2u32) + 2u32                            /* kind2: WRONG */
+}
+
+/* run the pipeline; stage `opt_stage` uses variant `opt_kind`, all others the original. */
+fn vr_run(input: u32, opt_stage: u32, opt_kind: u32) -> u32 @export {
+    let mut v : u32 = input
+    let mut s : u32 = 0u32
+    while s < VR_STAGES {
+        let mut kind : u32 = 0u32
+        if s == opt_stage { kind = opt_kind }
+        v = vr_apply(kind, v)
+        s = s + 1u32
+    }
+    return v
+}
+
+fn vr_setup() -> i32 @export {
+    /* register the three stage variants in K_0 (kernel id == kind), behaviours = vr_apply over the domain */
+    k0_reset()
+    k0_register(2u32)      /* kind0 anchor */
+    k0_register(2u32)      /* kind1 equivalent */
+    k0_register(2u32)      /* kind2 wrong */
+    let mut k : u32 = 0u32
+    while k < 3u32 {
+        let mut x : u32 = 0u32
+        while x < VR_D { k0_set_behav(k, x, vr_apply(k, x)) ; x = x + 1u32 }
+        k = k + 1u32
+    }
+    k0_freeze_anchor()     /* the original stage IS the anchor */
+    return 0i32
+}
+
+/* is a rewrite variant K_0-certified equivalent to the original stage? */
+fn vr_kernel_verified(kind: u32) -> u32 @export {
+    if kind == 0u32 { return 1u32 }       /* the original is trivially itself */
+    return k0_verify(kind)
+}
+
+/* does the rewrite at opt_stage preserve the pipeline output across the WHOLE input domain
+ * (i.e. after the change ripples through every downstream stage)? */
+fn vr_ripple_preserves(opt_stage: u32, opt_kind: u32) -> u32 @export {
+    let mut input : u32 = 0u32
+    while input < VR_D {
+        if vr_run(input, opt_stage, opt_kind) != vr_run(input, opt_stage, 0u32) { return 0u32 }
+        input = input + 1u32
+    }
+    return 1u32
+}
+
+/* the ripple verdict: admit iff K_0 certifies the rewrite AND the propagated output is unchanged. */
+fn vr_ripple_accept(opt_stage: u32, opt_kind: u32) -> u32 @export {
+    if vr_kernel_verified(opt_kind) == 0u32 { return 0u32 }
+    return vr_ripple_preserves(opt_stage, opt_kind)
+}
+
+/* =====================================================================================
+ * verified_ripple_kat -- 99 = the verified ripple is sound, self-checked:
+ *   (1) an EQUIVALENT rewrite is accepted at the latest stage AND at the EARLIEST stage (where it ripples
+ *       through all five stages);
+ *   (2) a WRONG rewrite is rejected -- K_0 fails it and its change is not preserved through the ripple;
+ *   (3) the propagation is REAL and amplifying: a +1 wrong at stage 0 becomes +16 at the output;
+ *   (4) K_0 verdicts: the equivalent variant verifies, the wrong one does not.
+ * ===================================================================================== */
+fn verified_ripple_kat() -> u64 @export {
+    vr_setup()
+
+    /* (1) equivalent rewrite accepted at a late stage and the earliest stage */
+    if vr_ripple_accept(4u32, 1u32) != 1u32 { return 1u64 }
+    if vr_ripple_accept(0u32, 1u32) != 1u32 { return 2u64 }   /* ripples through all 5 stages, still preserved */
+    if vr_ripple_accept(2u32, 1u32) != 1u32 { return 3u64 }
+
+    /* (2) wrong rewrite rejected */
+    if vr_ripple_accept(2u32, 2u32) != 0u32 { return 4u64 }
+    if vr_ripple_accept(0u32, 2u32) != 0u32 { return 5u64 }
+    if vr_ripple_preserves(2u32, 2u32) != 0u32 { return 6u64 }   /* the wrong change is NOT preserved */
+
+    /* (3) the propagation is real and amplifying */
+    if vr_run(5u32, 0u32, 0u32) != 191u32 { return 7u64 }        /* original: 5->11->23->47->95->191 */
+    if vr_run(5u32, 0u32, 2u32) != 207u32 { return 8u64 }        /* +1 at stage 0 -> +16 at output */
+
+    /* (4) K_0 verdicts */
+    if vr_kernel_verified(1u32) != 1u32 { return 9u64 }
+    if vr_kernel_verified(2u32) != 0u32 { return 10u64 }
+    if k0_verify(2u32) != 0u32 { return 11u64 }
+
+    return 99u64
+}

@@ -718,6 +718,7 @@ MODULES=(
     "numera/sccp"
     "numera/taint_analysis"
     "numera/range_check"
+    "numera/translation_validation"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

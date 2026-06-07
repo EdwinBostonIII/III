@@ -1,0 +1,14 @@
+/* 1284_translation_validation.iii -- trust the checker, not the optimizer (output validation).
+ * Drives numera::translation_validation::translation_validation_kat: 99 = for the source a*2, the strength-
+ * reduced a<<1, the doubling a+a, and the identity a*2 are all VALIDATED equivalent over the input domain;
+ * the WRONG a<<2 is rejected with a witnessing input (a=1, where a*2=2 but a<<2=4); equivalence is checked
+ * over every input, not sampled. A bug in the untrusted optimizer is caught by the trusted checker. */
+module corpus_1284
+
+extern @abi(c-msvc-x64) fn translation_validation_kat() -> u64 from "translation_validation.iii"
+
+fn main() -> u64 {
+    let r : u64 = translation_validation_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

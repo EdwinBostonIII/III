@@ -708,6 +708,7 @@ MODULES=(
     "numera/bce"
     "numera/reduced_product"
     "numera/loop_pipeline"
+    "numera/reg_alloc"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

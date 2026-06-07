@@ -1,0 +1,14 @@
+/* 1274_reg_alloc.iii -- optimal register allocation by verified interval-graph coloring.
+ * Drives numera::reg_alloc::reg_alloc_kat: 99 = the max overlap (minimum registers) is 3; the left-edge
+ * colouring uses exactly 3 registers (optimal, meets the lower bound); the colouring is VALID (every
+ * interfering pair gets distinct registers); with 2 registers exactly 1 value must spill, with 3 none, with
+ * 1 two. The codegen backend the optimizer feeds -- live ranges are intervals, optimally colourable. */
+module corpus_1274
+
+extern @abi(c-msvc-x64) fn reg_alloc_kat() -> u64 from "reg_alloc.iii"
+
+fn main() -> u64 {
+    let r : u64 = reg_alloc_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

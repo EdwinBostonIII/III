@@ -4,11 +4,17 @@ A self-contained, machine-checked computing substrate built entirely in self-hos
 time, each carrying a KAT that exits `99` and each validated **in-aggregate** linked against the real
 `STDLIB/build/iii/libiii_native.a`.
 
-**Aggregate evidence (2026-06-07):** clean build `PASS=545 FAIL=0 BUILD_EXIT=0`; complete corpus lib-link
-validation `56/56 exit=99 ALL GREEN` (ids `1232`–`1286`). Per-module: each gated standalone via
-`iiis-2 --compile-only` + `gcc … -lkernel32` → `99`, collision-swept (`@export` names unique tree-wide),
-cold-audited against the `.iii` trap list, then wired into `build_stdlib.sh` MODULES + `run_corpus.sh`
-EXPECTED. NIH throughout (libc + III BOOT headers only).
+**Aggregate evidence (2026-06-07):** clean build `PASS=557 FAIL=0 BUILD_EXIT=0`; recent-batch lib-link
+validation `8/8 exit=99 ALL GREEN` (ids `1290`–`1297`), earlier `56/56` (ids `1232`–`1286`). Per-module:
+each gated standalone via `iiis-2 --compile-only` + `gcc … -lkernel32` → `99`, **capability-swept** (grep
+the CONCEPT, not just the prefix — see retirements below) and collision-swept (`@export` names unique
+tree-wide), cold-audited against the `.iii` trap list, then wired into `build_stdlib.sh` MODULES +
+`run_corpus.sh` EXPECTED. NIH throughout (libc + III BOOT headers only).
+
+**Retirements (NIH-spirit, capability-audit):** `merkle_log` (duplicated the real SHA-256 `numera/merkle.iii`),
+`logic_synth` (duplicated the `hdl.iii`/`hdl_optimize.iii`/`hdl_compiler.iii` HDL subsystem), and `sat_dpll`
+(pre-commit, duplicated the CDCL `numera/sat.iii`) were removed: a green KAT on a hardcoded toy is not value
+when a real, corpus-tested III subsystem already does it better. Pre-flight now greps the *capability*.
 
 ## Layers
 
@@ -47,14 +53,27 @@ EXPECTED. NIH throughout (libc + III BOOT headers only).
 
 ### Codegen backend
 - `isel` (1276) maximal-munch tiling · `reg_alloc` (1274) interval-graph coloring ·
-  `list_schedule` (1275) critical-path timing · `rewrite_schedule` (1264) verified phase-ordering ·
-  `logic_synth` (1258) verified gate netlist
+  `list_schedule` (1275) critical-path timing · `rewrite_schedule` (1264) verified phase-ordering
 
 ### Security, verification, trust
 - `taint_analysis` (1282) information-flow · `translation_validation` (1284) trust-the-checker ·
   `proof_replay` (1286) LCF proof checking · `bmc` (1288) bounded model checking ·
-  `bft_quorum` (1262) Byzantine quorum intersection · `contract_gate` (1259) zero-trust admission ·
-  `merkle_log` (1287) authenticated append-only log
+  `kinduction` (1289) unbounded induction · `safety_prover` (1291) the complete k-induction verdict
+  (SAFE/UNSAFE/UNKNOWN, unifying base + step) · `bft_quorum` (1262) Byzantine quorum intersection ·
+  `contract_gate` (1259) zero-trust admission
+
+### Family-proofs & abstract-interpretation payoffs (continuation arc)
+- `value_range_prover` (1292) one abstract check proves a whole parameter family overflow-free
+  (consumes `interval_lattice` + `range_check`) · `loop_bounds_prover` (1293) family-wide memory safety via
+  monotonicity (consumes `affine_check`) · `branch_elim` (1294) dead-branch elimination from value ranges
+  (consumes `interval_lattice`) — conditional constant propagation's emergent payoff
+
+### Verified algorithms & data structures (verified against a reference)
+- `dijkstra` (1290) single-source shortest paths · `rms` (1295) rate-monotonic schedulability
+  (response-time analysis) · `binary_search` (1296) ≡ linear over all queries · `kmp` (1297) ≡ naive
+  string match · `levenshtein` (1298) edit-distance DP · `knapsack` (1301) 0/1 DP ≡ brute force ·
+  `fenwick` (1299) BIT ≡ naive prefix sums · `segment_tree` (1300) range-min ≡ naive ·
+  `inversion_count` (1302) ≡ brute (consumes `fenwick` — a data structure put to work by an algorithm)
 
 ## Operating notes
 - The repo lives under OneDrive; long builds were corrupted by sync-down until the **fresh-copy** technique
@@ -64,3 +83,12 @@ EXPECTED. NIH throughout (libc + III BOOT headers only).
 - The whole arc composes: independent analyses must AGREE before a rewrite is admitted (`loop_optimizer`,
   `vectorizer`); proofs and transforms are re-checked by tiny kernels (`translation_validation`,
   `proof_replay`, `k0_referee`); higher precision emerges from domain intersection (`reduced_product`).
+- **Two verification disciplines run throughout.** (1) *Verify-against-reference*: a fast/clever path is
+  proven equivalent to an obvious one for the WHOLE input space, not spot-checked — `binary_search`≡linear,
+  `kmp`≡naive, `knapsack`/`fenwick`/`segment_tree`/`inversion_count`≡their O(n)/O(n²) references, exhaustively.
+  (2) *Family proofs*: a single abstract check certifies an unbounded family of concrete programs at once
+  (`value_range_prover`, `loop_bounds_prover`, `branch_elim`) — abstract interpretation's one-check-covers-many.
+- **Capability-audit before building** (lesson, 2026-06-07): pre-flight greps the CONCEPT (e.g. `merkle`,
+  `crc-32`, `segment tree`), not just the symbol prefix — name-collision checks let shadow-reimplementations
+  through. This caught `crc32` (already present) and `union_find` (in `ripple_unify`) before writing them, and
+  found the three retired duplicates above. Genuine gaps confirmed and filled: Fenwick/segment tree.

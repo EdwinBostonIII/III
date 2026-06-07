@@ -1,0 +1,235 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\mem_rewrite.iii
+ *
+ * III STDLIB - numera::mem_rewrite  --  THE PROPOSE/DISPOSE MEMORY-LAYOUT LOOP.
+ *
+ * The stochastic optimizer doesn't only rewrite arithmetic; it rewrites MEMORY LAYOUT.  Given a poorly
+ * laid-out structure it HALLUCINATES a denser one -- array-of-structs -> struct-of-arrays, cache-aligned
+ * packing, field reordering -- and the kernel DISPOSES: it proves the new layout preserves the program's
+ * OBSERVABLE behaviour before the optimizer is allowed to apply it.
+ *
+ * A layout is an injective map  logical (element, field) -> physical cell.  The observable behaviour of a
+ * memory program is the VALUE TRACE of its loads at LOGICAL locations -- never the physical addresses.  The
+ * disposer's verdict is exactly: is the proposed layout INJECTIVE and IN BOUNDS?  If yes, every logical
+ * cell still has its own private physical cell, so any sequence of logical loads/stores yields the same
+ * value trace under the new layout as the old one -- the rewrite is observationally equivalent and SOUND.
+ * If the layout COLLIDES two logical cells, a store to one corrupts the other: the disposer must reject it.
+ *
+ * Verified (mem_rewrite_kat): a directed program run under AoS, SoA and a reversed-packing layout produces
+ * IDENTICAL value traces (the rewrite preserves observable behaviour); over 50 RANDOM programs the AoS->SoA
+ * rewrite is trace-equivalent; and the NEGATIVE -- a colliding layout is REJECTED by the disposer AND
+ * demonstrably produces a corrupted (different) trace, proving the injectivity check is load-bearing.
+ *
+ * NIH/self-contained.  Public API:
+ *   mrw_build_layouts() ; mrw_select(sel) ; mrw_dispose() -> u32 (1=sound layout)
+ *   mrw_run() -> u32 (executes the loaded program under the selected layout into the value trace)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_mem_rewrite
+
+const MRW_NE  : u32 = 4u32           /* elements */
+const MRW_NF  : u32 = 3u32           /* fields per element */
+const MRW_NC  : u32 = 12u32          /* logical cells = NE*NF */
+const MRW_CAP : u32 = 16u32          /* physical capacity */
+const MR_STORE : u32 = 0u32
+const MR_LOAD  : u32 = 1u32
+
+var MRW_AOS    : [u32; 12]
+var MRW_SOA    : [u32; 12]
+var MRW_PACKED : [u32; 12]
+var MRW_BAD    : [u32; 12]
+var MRW_CUR    : [u32; 12]           /* the selected layout */
+
+var MRW_OP : [u32; 64]
+var MRW_E  : [u32; 64]
+var MRW_F  : [u32; 64]
+var MRW_V  : [u32; 64]
+var MRW_PL : [u32; 1]
+
+var MRW_PHYS  : [u32; 16]
+var MRW_TRACE : [u32; 64]
+var MRW_TLEN  : [u32; 1]
+var MRW_REF   : [u32; 64]            /* saved reference trace */
+var MRW_SEEN  : [u32; 16]
+
+fn mrw_build_layouts() -> i32 @export {
+    let mut e : u32 = 0u32
+    while e < MRW_NE {
+        let mut f : u32 = 0u32
+        while f < MRW_NF {
+            let cell : u32 = (e * MRW_NF) + f
+            MRW_AOS[cell as u64] = (e * MRW_NF) + f         /* element-major (identity) */
+            MRW_SOA[cell as u64] = (f * MRW_NE) + e         /* field-major (a permutation) */
+            MRW_PACKED[cell as u64] = (MRW_NC - 1u32) - cell /* reversed packing */
+            MRW_BAD[cell as u64] = (e * MRW_NF) + f
+            f = f + 1u32
+        }
+        e = e + 1u32
+    }
+    MRW_BAD[4u64] = 0u32      /* force a collision: cell 4 (elem1,field1) -> phys 0 (= cell 0) */
+    return 0i32
+}
+
+fn mrw_select(sel: u32) -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < MRW_NC {
+        if sel == 0u32 { MRW_CUR[i as u64] = MRW_AOS[i as u64] }
+        else {
+            if sel == 1u32 { MRW_CUR[i as u64] = MRW_SOA[i as u64] }
+            else {
+                if sel == 2u32 { MRW_CUR[i as u64] = MRW_PACKED[i as u64] }
+                else { MRW_CUR[i as u64] = MRW_BAD[i as u64] }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* THE DISPOSER: a layout is sound iff injective (no two logical cells share a physical cell) + in bounds. */
+fn mrw_dispose() -> u32 @export {
+    let mut s : u32 = 0u32
+    while s < MRW_CAP { MRW_SEEN[s as u64] = 0u32 ; s = s + 1u32 }
+    let mut i : u32 = 0u32
+    while i < MRW_NC {
+        let a : u32 = MRW_CUR[i as u64]
+        if a >= MRW_CAP { return 0u32 }
+        if MRW_SEEN[a as u64] == 1u32 { return 0u32 }    /* collision -> unsound */
+        MRW_SEEN[a as u64] = 1u32
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* execute the loaded program under MRW_CUR; loads append to MRW_TRACE; returns trace length. */
+fn mrw_run() -> u32 @export {
+    let mut p : u32 = 0u32
+    while p < MRW_CAP { MRW_PHYS[p as u64] = 0u32 ; p = p + 1u32 }
+    let pl : u32 = MRW_PL[0u32]
+    let mut ti : u32 = 0u32
+    let mut op : u32 = 0u32
+    while op < pl {
+        let cell : u32 = (MRW_E[op as u64] * MRW_NF) + MRW_F[op as u64]
+        let a : u32 = MRW_CUR[cell as u64]
+        if MRW_OP[op as u64] == MR_STORE { MRW_PHYS[a as u64] = MRW_V[op as u64] }
+        else { MRW_TRACE[ti as u64] = MRW_PHYS[a as u64] ; ti = ti + 1u32 }
+        op = op + 1u32
+    }
+    MRW_TLEN[0u32] = ti
+    return ti
+}
+
+fn mrw_save_ref() {
+    let n : u32 = MRW_TLEN[0u32]
+    let mut i : u32 = 0u32
+    while i < n { MRW_REF[i as u64] = MRW_TRACE[i as u64] ; i = i + 1u32 }
+}
+fn mrw_cmp_ref() -> u32 {
+    let n : u32 = MRW_TLEN[0u32]
+    let mut i : u32 = 0u32
+    while i < n { if MRW_TRACE[i as u64] != MRW_REF[i as u64] { return 0u32 } ; i = i + 1u32 }
+    return 1u32
+}
+
+/* ===== KAT ===== */
+var MRW_RNG : [u64; 1]
+fn mrw_rng() -> u64 {
+    let mut z : u64 = MRW_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    MRW_RNG[0u64] = z
+    return z
+}
+
+/* directed program: store every logical cell a distinct value, then load every cell in order. */
+fn mrw_prog_directed() {
+    let mut pl : u32 = 0u32
+    let mut e : u32 = 0u32
+    while e < MRW_NE {
+        let mut f : u32 = 0u32
+        while f < MRW_NF {
+            MRW_OP[pl as u64] = MR_STORE ; MRW_E[pl as u64] = e ; MRW_F[pl as u64] = f
+            MRW_V[pl as u64] = ((e * MRW_NF) + f) + 1u32
+            pl = pl + 1u32
+            f = f + 1u32
+        }
+        e = e + 1u32
+    }
+    let mut e2 : u32 = 0u32
+    while e2 < MRW_NE {
+        let mut f2 : u32 = 0u32
+        while f2 < MRW_NF {
+            MRW_OP[pl as u64] = MR_LOAD ; MRW_E[pl as u64] = e2 ; MRW_F[pl as u64] = f2
+            MRW_V[pl as u64] = 0u32
+            pl = pl + 1u32
+            f2 = f2 + 1u32
+        }
+        e2 = e2 + 1u32
+    }
+    MRW_PL[0u32] = pl
+}
+
+fn mrw_prog_random() {
+    let r0 : u64 = mrw_rng()
+    let pl : u32 = 12u32 + ((r0 & 31u64) as u32)
+    let mut i : u32 = 0u32
+    while i < pl {
+        let ro : u64 = mrw_rng()
+        MRW_OP[i as u64] = (ro & 1u64) as u32
+        let re : u64 = mrw_rng()
+        MRW_E[i as u64] = (re & 3u64) as u32             /* 0..3 = NE-1 */
+        let rf : u64 = mrw_rng()
+        let mut f : u32 = (rf & 3u64) as u32
+        if f == 3u32 { f = 2u32 }                        /* clamp to 0..2 = NF-1 (no modulo-after-call) */
+        MRW_F[i as u64] = f
+        let rv : u64 = mrw_rng()
+        MRW_V[i as u64] = (rv & 0xFFu64) as u32
+        i = i + 1u32
+    }
+    MRW_PL[0u32] = pl
+}
+
+/* =====================================================================================
+ * mem_rewrite_kat -- 99 = the memory-layout rewrite is observationally sound, self-checked:
+ *   (1) DIRECTED: AoS run trace saved as reference; SoA and reversed-PACKED runs produce the IDENTICAL
+ *       trace (the AoS->SoA / AoS->packed rewrite preserves observable behaviour);
+ *   (2) DISPOSER accepts AoS/SoA/packed (all injective+in-bounds);
+ *   (3) NEGATIVE: the colliding BAD layout is REJECTED by the disposer AND its run produces a DIFFERENT
+ *       (corrupted) trace -- so the injectivity check is load-bearing, not decoration;
+ *   (4) over 50 RANDOM programs, AoS and SoA runs agree (the rewrite is sound for arbitrary programs).
+ * ===================================================================================== */
+fn mem_rewrite_kat() -> u64 @export {
+    mrw_build_layouts()
+    mrw_prog_directed()
+
+    mrw_select(0u32) ; mrw_run() ; mrw_save_ref()                    /* AoS = reference */
+    if mrw_dispose() != 1u32 { return 1u64 }
+    mrw_select(1u32)                                                 /* SoA rewrite */
+    if mrw_dispose() != 1u32 { return 2u64 }
+    mrw_run()
+    if mrw_cmp_ref() != 1u32 { return 3u64 }                         /* SoA trace == AoS trace */
+    mrw_select(2u32)                                                 /* packed rewrite */
+    if mrw_dispose() != 1u32 { return 4u64 }
+    mrw_run()
+    if mrw_cmp_ref() != 1u32 { return 5u64 }
+
+    /* (3) NEGATIVE: colliding layout */
+    mrw_select(3u32)
+    if mrw_dispose() != 0u32 { return 6u64 }                         /* disposer MUST reject */
+    mrw_run()
+    if mrw_cmp_ref() == 1u32 { return 7u64 }                         /* and it MUST corrupt the trace */
+
+    /* (4) random programs: AoS vs SoA agree */
+    MRW_RNG[0u64] = 0xA5A5F0F03C3C6969u64
+    let mut t : u32 = 0u32
+    while t < 50u32 {
+        mrw_prog_random()
+        mrw_select(0u32) ; mrw_run() ; mrw_save_ref()
+        mrw_select(1u32) ; mrw_run()
+        if mrw_cmp_ref() != 1u32 { return 9000u64 + (t as u64) }
+        t = t + 1u32
+    }
+
+    return 99u64
+}

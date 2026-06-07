@@ -1,0 +1,14 @@
+/* 1263_affine_check.iii -- affine (polyhedral) memory-safety analysis: the witness turned inward.
+ * Drives numera::affine_check::affine_check_kat: 99 = an in-bounds affine stream A[2*i+1] (size 16) is SAFE
+ * (max access 9); an out-of-bounds stream A[3*i+2] is flagged UNSAFE at the first offending iteration i=5
+ * (access 17); even (2*i) vs odd (2*j+1) streams are proven NON-aliasing; overlapping streams collide at
+ * (i=3,j=0); the closed-form max access a*(n-1)+b matches the exhaustive scan. The polyhedral model. */
+module corpus_1263
+
+extern @abi(c-msvc-x64) fn affine_check_kat() -> u64 from "affine_check.iii"
+
+fn main() -> u64 {
+    let r : u64 = affine_check_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

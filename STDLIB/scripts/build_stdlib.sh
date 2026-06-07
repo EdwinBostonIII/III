@@ -699,6 +699,7 @@ MODULES=(
     "numera/bft_quorum"
     "numera/affine_check"
     "numera/rewrite_schedule"
+    "numera/interval_lattice"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

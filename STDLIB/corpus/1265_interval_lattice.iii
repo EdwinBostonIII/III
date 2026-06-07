@@ -1,0 +1,14 @@
+/* 1265_interval_lattice.iii -- the interval abstract domain: a sound lattice for value-range analysis.
+ * Drives numera::interval_lattice::interval_lattice_kat: 99 = lattice laws (join commutative/idempotent,
+ * order matches join); SOUNDNESS of the add and multiply transfer functions over the full concrete product
+ * (every x+y, x*y lands in the abstract result); a multi-step bound -- (x+1)*2 over x in [0,10] abstracts to
+ * [2,22], containing every concrete value. Abstract interpretation, the engine behind proving bounds. */
+module corpus_1265
+
+extern @abi(c-msvc-x64) fn interval_lattice_kat() -> u64 from "interval_lattice.iii"
+
+fn main() -> u64 {
+    let r : u64 = interval_lattice_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,146 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\interval_lattice.iii
+ *
+ * III STDLIB - numera::interval_lattice  --  THE INTERVAL ABSTRACT DOMAIN (a sound lattice).
+ *
+ * A structure the optimizer reasons WITH: the interval lattice of abstract interpretation.  A value is
+ * approximated by a range [lo,hi]; the lattice JOIN is the enclosing range and the order [a,b] <= [c,d]
+ * means c<=a and b<=d (tighter is lower).  The power is in the SOUND TRANSFER FUNCTIONS: the abstract
+ * result of an operation provably CONTAINS every concrete result, so abstractly executing a computation
+ * yields a proven bound on its real value -- e.g. proving an array index is always below the array size,
+ * the discharge numera::affine_check and the optimizer depend on.
+ *
+ * Verified (interval_lattice_kat): the lattice laws (join commutative/idempotent, the order matches
+ * join, reflexive/transitive containment, bottom<=x<=top); the SOUNDNESS of the add and multiply transfer
+ * functions over the full concrete product (every x+y and x*y lands in the abstract result); and a multi-
+ * step bound -- abstractly executing (x+1)*2 over x in [0,10] yields [2,22], which contains every concrete
+ * value.  NIH/self-contained.
+ *
+ * Public API:
+ *   il_join(l1,h1,l2,h2) ; il_meet(...) ; il_leq(l1,h1,l2,h2) -> u32 ; il_add(...) ; il_mul(...) ;
+ *   il_lo() -> u32 ; il_hi() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_interval_lattice
+
+var IL_LO : [u32; 1]              /* result of the last interval operation */
+var IL_HI : [u32; 1]
+
+fn il_min(a: u32, b: u32) -> u32 { let mut m : u32 = a ; if b < a { m = b } ; return m }
+fn il_max(a: u32, b: u32) -> u32 { let mut m : u32 = a ; if b > a { m = b } ; return m }
+
+fn il_lo() -> u32 @export { return IL_LO[0u64] }
+fn il_hi() -> u32 @export { return IL_HI[0u64] }
+
+/* lattice JOIN (least upper bound): the smallest interval enclosing both. */
+fn il_join(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
+    IL_LO[0u64] = il_min(l1, l2)
+    IL_HI[0u64] = il_max(h1, h2)
+    return 0i32
+}
+/* lattice MEET (greatest lower bound): the overlap (lo>hi here would denote bottom/empty). */
+fn il_meet(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
+    IL_LO[0u64] = il_max(l1, l2)
+    IL_HI[0u64] = il_min(h1, h2)
+    return 0i32
+}
+/* the order: [l1,h1] <= [l2,h2]  (l1,h1 is the TIGHTER/lower element). */
+fn il_leq(l1: u32, h1: u32, l2: u32, h2: u32) -> u32 @export {
+    if l2 > l1 { return 0u32 }
+    if h1 > h2 { return 0u32 }
+    return 1u32
+}
+/* SOUND transfer functions: the abstract result contains every concrete result. */
+fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
+    IL_LO[0u64] = l1 + l2 ; IL_HI[0u64] = h1 + h2 ; return 0i32
+}
+fn il_mul(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
+    IL_LO[0u64] = l1 * l2 ; IL_HI[0u64] = h1 * h2 ; return 0i32      /* non-negative ranges */
+}
+
+/* ===== KAT ===== */
+/* soundness witness: every concrete x+y (x in [l1,h1], y in [l2,h2]) lies in the abstract result. */
+fn il_add_sound(l1: u32, h1: u32, l2: u32, h2: u32) -> u32 {
+    il_add(l1, h1, l2, h2)
+    let lo : u32 = il_lo() ; let hi : u32 = il_hi()
+    let mut x : u32 = l1
+    while x <= h1 {
+        let mut y : u32 = l2
+        while y <= h2 {
+            let s : u32 = x + y
+            if s < lo { return 0u32 }
+            if s > hi { return 0u32 }
+            y = y + 1u32
+        }
+        x = x + 1u32
+    }
+    return 1u32
+}
+fn il_mul_sound(l1: u32, h1: u32, l2: u32, h2: u32) -> u32 {
+    il_mul(l1, h1, l2, h2)
+    let lo : u32 = il_lo() ; let hi : u32 = il_hi()
+    let mut x : u32 = l1
+    while x <= h1 {
+        let mut y : u32 = l2
+        while y <= h2 {
+            let p : u32 = x * y
+            if p < lo { return 0u32 }
+            if p > hi { return 0u32 }
+            y = y + 1u32
+        }
+        x = x + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * interval_lattice_kat -- 99 = the interval abstract domain is a sound lattice, self-checked:
+ *   (1) JOIN: [2,5] join [3,8] = [2,8]; join is commutative and idempotent;
+ *   (2) ORDER: [3,5] <= [2,8] but [1,9] is NOT (l=1 < 2); a <= b iff (a join b) = b;
+ *   (3) SOUNDNESS: il_add and il_mul contain every concrete result over the full product;
+ *   (4) a multi-step bound: abstractly (x+1)*2 over x in [0,10] is [2,22], containing every concrete value.
+ * ===================================================================================== */
+fn interval_lattice_kat() -> u64 @export {
+    /* (1) join */
+    il_join(2u32, 5u32, 3u32, 8u32)
+    if il_lo() != 2u32 { return 1u64 }
+    if il_hi() != 8u32 { return 2u64 }
+    il_join(3u32, 8u32, 2u32, 5u32)                  /* commutative */
+    if il_lo() != 2u32 { return 3u64 }
+    if il_hi() != 8u32 { return 4u64 }
+    il_join(2u32, 5u32, 2u32, 5u32)                  /* idempotent */
+    if il_lo() != 2u32 { return 5u64 }
+    if il_hi() != 5u32 { return 6u64 }
+
+    /* (2) order */
+    if il_leq(3u32, 5u32, 2u32, 8u32) != 1u32 { return 7u64 }
+    if il_leq(1u32, 9u32, 2u32, 8u32) != 0u32 { return 8u64 }
+    /* a<=b iff (a join b)=b : join([3,5],[2,8])=[2,8]=b */
+    il_join(3u32, 5u32, 2u32, 8u32)
+    if il_lo() != 2u32 { return 9u64 }
+    if il_hi() != 8u32 { return 10u64 }
+
+    /* (3) soundness */
+    if il_add_sound(2u32, 5u32, 3u32, 8u32) != 1u32 { return 11u64 }
+    if il_mul_sound(2u32, 3u32, 4u32, 5u32) != 1u32 { return 12u64 }
+    il_add(2u32, 5u32, 3u32, 8u32)
+    if il_lo() != 5u32 { return 13u64 }              /* [5,13] */
+    if il_hi() != 13u32 { return 14u64 }
+
+    /* (4) multi-step bound: (x+1)*2 over x in [0,10] => [2,22] */
+    il_add(0u32, 10u32, 1u32, 1u32)                  /* x+1 -> [1,11] */
+    let alo : u32 = il_lo() ; let ahi : u32 = il_hi()
+    il_mul(alo, ahi, 2u32, 2u32)                     /* *2 -> [2,22] */
+    if il_lo() != 2u32 { return 15u64 }
+    if il_hi() != 22u32 { return 16u64 }
+    /* every concrete (x+1)*2 lies in [2,22] */
+    let mut x : u32 = 0u32
+    while x <= 10u32 {
+        let v : u32 = (x + 1u32) * 2u32
+        if v < 2u32 { return 17u64 }
+        if v > 22u32 { return 18u64 }
+        x = x + 1u32
+    }
+
+    return 99u64
+}

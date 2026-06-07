@@ -715,6 +715,7 @@ MODULES=(
     "numera/ssa"
     "numera/gvn"
     "numera/dce"
+    "numera/sccp"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

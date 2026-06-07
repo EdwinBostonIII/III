@@ -855,6 +855,7 @@ MODULES=(
     # Persists what the autocatalytic loop proves so the optimizer can CITE by hash, not re-prove.  Externs
     # cad + typecheck (built above).
     "numera/theorem_commons"
+    "numera/certified_morphism"
     # The Autocatalytic Synthesis Loop ("Dream Sandbox"): a seeded-deterministic mutagen proposes alien
     # candidate optimizations, the sov_isa synthesizer attempts a CIC proof, and the tc_check kernel
     # disposes -- only kernel-certified discoveries are cad-sealed.  Additive consumers of sov_isa /

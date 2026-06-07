@@ -810,6 +810,7 @@ declare -A EXPECTED=(
     [1224_lzss]=99
     [1225_cas_blob]=99
     [1226_crt]=99
+    [1240_certified_morphism]=99
     [1227_bitio]=99
     [1228_elias]=99
     [1124_fs_dir_enum]=99

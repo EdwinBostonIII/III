@@ -1,0 +1,14 @@
+/* 1280_dce.iii -- dead code elimination: mark-and-sweep liveness, verified.
+ * Drives numera::dce::dce_kat: 99 = the store and its transitive inputs (e2,e0,e1) are LIVE; the unused
+ * multiply chain (e3,e4) is DEAD (count 2); marking e4 side-effecting revives e4 and its input e3 (dead count
+ * drops to 0); restoring e4 returns the original dead set. Two-sided sound -- never deletes a side-effecting
+ * instruction, deletes a chain whose only consumer is itself dead. */
+module corpus_1280
+
+extern @abi(c-msvc-x64) fn dce_kat() -> u64 from "dce.iii"
+
+fn main() -> u64 {
+    let r : u64 = dce_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

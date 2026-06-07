@@ -714,6 +714,7 @@ MODULES=(
     "numera/dominators"
     "numera/ssa"
     "numera/gvn"
+    "numera/dce"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,318 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\huffman.iii
+ *
+ * III STDLIB - numera::huffman
+ *
+ * Verified canonical Huffman entropy coder over the 256-byte alphabet, on III's own numera::bitio.
+ * The optimal prefix-free symbol code: each byte is replaced by a variable-length code whose length
+ * is inversely related to the byte's frequency, so skewed data shrinks. Together with numera::lzss
+ * (LZ77) this is the DEFLATE recipe (LZ77 + Huffman).
+ *
+ * CANONICAL form: only the 256 code LENGTHS are serialized (the codes themselves are reconstructed
+ * from the lengths in a fixed canonical order), so the header is a flat 256-byte length table + a
+ * 4-byte original length, followed by the bit-packed codes. Codes are at most 64 bits (the Fibonacci
+ * bound makes any input under ~10 TB fit -- guarded), so bitio's bitw_put handles them directly with
+ * no length-limiting needed for this standalone (non-DEFLATE-interop) coder.
+ *
+ * The verified property is ROUND-TRIP IDENTITY huff_decode(huff_encode(x)) == x for ALL x (incl. the
+ * single-symbol and empty edge cases), plus that skewed data compresses. NIH; consumes bitio (HARMONY).
+ *
+ * Public API:
+ *   huff_encode(in_ptr, in_len, out_ptr, out_cap) -> i32   compressed length, or <0 on error
+ *   huff_decode(in_ptr, in_len, out_ptr, out_cap) -> i32   decompressed length, or <0 on error
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_huffman
+
+extern @abi(c-msvc-x64) fn bitw_init(buf_ptr: u64, cap: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitw_put(v: u64, n: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitw_bytelen() -> u32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitr_init(buf_ptr: u64, len: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitr_get(n: u32) -> u64 from "bitio.iii"
+
+const HF_OK     : i32 =  0i32
+const HF_E_LEN  : i32 = -1i32     /* a code length exceeded 64 (input > ~10 TB) */
+const HF_E_CAP  : i32 = -2i32     /* output capacity too small */
+const HF_E_DEC  : i32 = -3i32     /* malformed bitstream during decode */
+const HF_SENT   : u32 = 0xFFFFFFFFu32
+
+var HF_FREQ : [u32; 256]
+var HF_LEN  : [u32; 256]
+var HF_CODE : [u64; 256]
+/* tree: nodes 0..255 leaves, 256..510 internal */
+var HF_NF   : [u64; 512]
+var HF_NPAR : [u32; 512]
+var HF_NA   : [u8; 512]
+/* canonical decode tables (index 1..64 by length) */
+var HF_BL    : [u32; 65]
+var HF_NEXT  : [u64; 65]
+var HF_FIRST : [u64; 65]
+var HF_OFF   : [u32; 65]
+var HF_SORTED: [u32; 256]
+var HF_ML    : [u32; 1]     /* max code length */
+
+/* Build the Huffman tree from HF_FREQ into HF_LEN (code length per symbol; 0 if unused).
+ * Returns the max code length (0 if no symbols), or HF_SENT-style large value never used. */
+fn hf_build_tree() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 256u32 {
+        HF_NF[i as u64] = HF_FREQ[i] as u64
+        HF_NPAR[i as u64] = HF_SENT
+        if HF_FREQ[i] > 0u32 { HF_NA[i as u64] = 1u8 } else { HF_NA[i as u64] = 0u8 }
+        HF_LEN[i] = 0u32
+        i = i + 1u32
+    }
+    /* count active leaves */
+    let mut na : u32 = 0u32
+    let mut c : u32 = 0u32
+    while c < 256u32 { if HF_NA[c as u64] == 1u8 { na = na + 1u32 } ; c = c + 1u32 }
+    if na == 0u32 { return 0u32 }
+    if na == 1u32 {
+        /* single distinct symbol -> length 1 */
+        let mut s : u32 = 0u32
+        while s < 256u32 { if HF_FREQ[s] > 0u32 { HF_LEN[s] = 1u32 } ; s = s + 1u32 }
+        return 1u32
+    }
+    /* merge until one active node remains */
+    let mut nn : u32 = 256u32           /* next internal node index */
+    let mut act : u32 = na
+    while act > 1u32 {
+        /* find the two min-freq active nodes among 0..nn-1 */
+        let mut a : u32 = HF_SENT
+        let mut b : u32 = HF_SENT
+        let mut k : u32 = 0u32
+        while k < nn {
+            if HF_NA[k as u64] == 1u8 {
+                if a == HF_SENT { a = k }
+                else {
+                    if HF_NF[k as u64] < HF_NF[a as u64] { b = a ; a = k }
+                    else {
+                        if b == HF_SENT { b = k }
+                        else { if HF_NF[k as u64] < HF_NF[b as u64] { b = k } }
+                    }
+                }
+            }
+            k = k + 1u32
+        }
+        /* merge a,b into nn */
+        HF_NF[nn as u64] = HF_NF[a as u64] + HF_NF[b as u64]
+        HF_NPAR[nn as u64] = HF_SENT
+        HF_NA[nn as u64] = 1u8
+        HF_NPAR[a as u64] = nn
+        HF_NPAR[b as u64] = nn
+        HF_NA[a as u64] = 0u8
+        HF_NA[b as u64] = 0u8
+        nn = nn + 1u32
+        act = act - 1u32
+    }
+    /* depth of each leaf = code length */
+    let mut maxl : u32 = 0u32
+    let mut sym : u32 = 0u32
+    while sym < 256u32 {
+        if HF_FREQ[sym] > 0u32 {
+            let mut d : u32 = 0u32
+            let mut p : u32 = sym
+            while HF_NPAR[p as u64] != HF_SENT { p = HF_NPAR[p as u64] ; d = d + 1u32 }
+            HF_LEN[sym] = d
+            if d > maxl { maxl = d }
+        }
+        sym = sym + 1u32
+    }
+    return maxl
+}
+
+/* From HF_LEN, compute canonical codes (HF_CODE) + the decode tables (HF_BL/HF_FIRST/HF_OFF/HF_SORTED)
+ * + HF_ML (max length). Deterministic from the lengths alone (so encoder + decoder agree). */
+fn hf_canon() -> i32 {
+    let mut maxl : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < 256u32 { if HF_LEN[s] > maxl { maxl = HF_LEN[s] } ; s = s + 1u32 }
+    HF_ML[0u32] = maxl
+    let mut L : u32 = 0u32
+    while L <= 64u32 { HF_BL[L] = 0u32 ; L = L + 1u32 }
+    let mut s2 : u32 = 0u32
+    while s2 < 256u32 { if HF_LEN[s2] > 0u32 { HF_BL[HF_LEN[s2]] = HF_BL[HF_LEN[s2]] + 1u32 } ; s2 = s2 + 1u32 }
+    /* first code per length (canonical) */
+    let mut code : u64 = 0u64
+    let mut bL : u32 = 1u32
+    while bL <= maxl {
+        code = (code + (HF_BL[bL - 1u32] as u64)) << 1u64
+        HF_NEXT[bL] = code
+        HF_FIRST[bL] = code
+        bL = bL + 1u32
+    }
+    /* assign codes in symbol order (canonical) */
+    let mut s3 : u32 = 0u32
+    while s3 < 256u32 {
+        if HF_LEN[s3] > 0u32 {
+            HF_CODE[s3] = HF_NEXT[HF_LEN[s3]]
+            HF_NEXT[HF_LEN[s3]] = HF_NEXT[HF_LEN[s3]] + 1u64
+        }
+        s3 = s3 + 1u32
+    }
+    /* decode order table: symbols grouped by length, in symbol order */
+    let mut idx : u32 = 0u32
+    let mut L2 : u32 = 1u32
+    while L2 <= maxl {
+        HF_OFF[L2] = idx
+        let mut s4 : u32 = 0u32
+        while s4 < 256u32 { if HF_LEN[s4] == L2 { HF_SORTED[idx] = s4 ; idx = idx + 1u32 } ; s4 = s4 + 1u32 }
+        L2 = L2 + 1u32
+    }
+    return HF_OK
+}
+
+fn huff_encode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 @export {
+    if out_cap < 260u32 { return HF_E_CAP }
+    let ip : *u8 = in_ptr as *u8
+    let op : *u8 = out_ptr as *u8
+    let mut i : u32 = 0u32
+    while i < 256u32 { HF_FREQ[i] = 0u32 ; i = i + 1u32 }
+    let mut j : u32 = 0u32
+    while j < in_len { HF_FREQ[ip[j as u64] as u32] = HF_FREQ[ip[j as u64] as u32] + 1u32 ; j = j + 1u32 }
+    let ml : u32 = hf_build_tree()
+    if ml > 64u32 { return HF_E_LEN }
+    hf_canon()
+    /* header: 256 length bytes + 4-byte LE original length */
+    let mut s : u32 = 0u32
+    while s < 256u32 { op[s as u64] = HF_LEN[s] as u8 ; s = s + 1u32 }
+    op[256u64] = (in_len & 0xFFu32) as u8
+    op[257u64] = ((in_len >> 8u32) & 0xFFu32) as u8
+    op[258u64] = ((in_len >> 16u32) & 0xFFu32) as u8
+    op[259u64] = ((in_len >> 24u32) & 0xFFu32) as u8
+    /* bit-packed codes after the header */
+    bitw_init((out_ptr + 260u64), out_cap - 260u32)
+    let mut k : u32 = 0u32
+    while k < in_len {
+        let sym : u32 = ip[k as u64] as u32
+        if bitw_put(HF_CODE[sym], HF_LEN[sym]) != 0i32 { return HF_E_CAP }
+        k = k + 1u32
+    }
+    return (260u32 + bitw_bytelen()) as i32
+}
+
+fn huff_decode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 @export {
+    if in_len < 260u32 { return HF_E_DEC }
+    let ip : *u8 = in_ptr as *u8
+    let op : *u8 = out_ptr as *u8
+    let mut s : u32 = 0u32
+    while s < 256u32 { HF_LEN[s] = ip[s as u64] as u32 ; s = s + 1u32 }
+    let orig : u32 = (ip[256u64] as u32) | ((ip[257u64] as u32) << 8u32) | ((ip[258u64] as u32) << 16u32) | ((ip[259u64] as u32) << 24u32)
+    if orig > out_cap { return HF_E_CAP }
+    hf_canon()
+    let maxl : u32 = HF_ML[0u32]
+    bitr_init((in_ptr + 260u64), in_len - 260u32)
+    let mut i : u32 = 0u32
+    while i < orig {
+        /* read bits until the accumulated code falls in a length's canonical range */
+        let mut code : u64 = 0u64
+        let mut found : u32 = 0u32
+        let mut L : u32 = 1u32
+        while L <= maxl {
+            if found == 0u32 {
+                code = (code << 1u64) | bitr_get(1u32)
+                if HF_BL[L] > 0u32 {
+                    if code >= HF_FIRST[L] {
+                        if code < (HF_FIRST[L] + (HF_BL[L] as u64)) {
+                            let off : u32 = (code - HF_FIRST[L]) as u32
+                            op[i as u64] = HF_SORTED[HF_OFF[L] + off] as u8
+                            found = 1u32
+                        }
+                    }
+                }
+            }
+            L = L + 1u32
+        }
+        if found == 0u32 { return HF_E_DEC }
+        i = i + 1u32
+    }
+    return orig as i32
+}
+
+/* ===== KAT ===== */
+var HF_IN  : [u8; 512]
+var HF_ENC : [u8; 1400]
+var HF_OUT : [u8; 512]
+var HF_RNG : [u64; 1]
+var HF_CLEN: [u32; 1]
+
+fn hf_rng() -> u64 {
+    let mut z : u64 = HF_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    HF_RNG[0u64] = z
+    return z
+}
+fn hf_isneg(x: i32) -> u32 { return (x as u32) >> 31u32 }
+
+/* roundtrip HF_IN[0..n); returns 0 on success (HF_CLEN set), else nonzero error code. */
+fn hf_roundtrip(n: u32) -> u32 {
+    let cl : i32 = huff_encode(&HF_IN as u64, n, &HF_ENC as u64, 1400u32)
+    if hf_isneg(cl) == 1u32 { return 10u32 }
+    HF_CLEN[0u32] = cl as u32
+    let dl : i32 = huff_decode(&HF_ENC as u64, cl as u32, &HF_OUT as u64, 512u32)
+    if hf_isneg(dl) == 1u32 { return 20u32 }
+    if (dl as u32) != n { return 30u32 }
+    let mut i : u32 = 0u32
+    while i < n { if HF_OUT[i] != HF_IN[i] { return 40u32 } ; i = i + 1u32 }
+    return 0u32
+}
+
+/* =====================================================================================
+ * huff_kat -- 99 = ROUND-TRIP IDENTITY huff_decode(huff_encode(x))==x, self-checked:
+ *   (1) empty; (2) single distinct symbol (len-1 edge); (3) two symbols; (4) high-entropy random;
+ *   (5) SKEWED (must compress -- the payload, excluding the 260-byte header, is smaller than the
+ *       data); (6) 60 seeded random inputs of mixed length and alphabet.
+ * ===================================================================================== */
+fn huff_kat() -> u64 @export {
+    /* (1) empty */
+    if hf_roundtrip(0u32) != 0u32 { return 1u64 }
+
+    /* (2) single distinct symbol */
+    let mut a : u32 = 0u32
+    while a < 200u32 { HF_IN[a] = 0x5Au8 ; a = a + 1u32 }
+    if hf_roundtrip(200u32) != 0u32 { return 2u64 }
+
+    /* (3) two symbols */
+    let mut b : u32 = 0u32
+    while b < 200u32 { if (b & 1u32) == 0u32 { HF_IN[b] = 0x41u8 } else { HF_IN[b] = 0x42u8 } ; b = b + 1u32 }
+    if hf_roundtrip(200u32) != 0u32 { return 3u64 }
+
+    /* (4) high-entropy random 300 */
+    HF_RNG[0u64] = 0x510E527FADE682D1u64
+    let mut c : u32 = 0u32
+    while c < 300u32 { HF_IN[c] = (hf_rng() & 0xFFu64) as u8 ; c = c + 1u32 }
+    if hf_roundtrip(300u32) != 0u32 { return 4u64 }
+
+    /* (5) SKEWED: 480 bytes, 90% one symbol -> the bitstream payload must beat the raw size */
+    let mut d : u32 = 0u32
+    while d < 480u32 {
+        let r : u64 = hf_rng()
+        if (r % 10u64) == 0u64 { HF_IN[d] = (r & 0x07u64) as u8 } else { HF_IN[d] = 0x20u8 }
+        d = d + 1u32
+    }
+    if hf_roundtrip(480u32) != 0u32 { return 5u64 }
+    /* payload = compressed - 260-byte header; must be < the 480 raw bytes (entropy < 8 bits/sym) */
+    if (HF_CLEN[0u32] - 260u32) >= 480u32 { return 6u64 }
+
+    /* (6) 60 seeded random inputs, mixed length 0..480 and alphabet */
+    HF_RNG[0u64] = 0x9B05688C2B3E6C1Fu64
+    let mut t : u32 = 0u32
+    while t < 60u32 {
+        let r0 : u64 = hf_rng()
+        let n : u32 = (r0 % 481u64) as u32
+        let r1 : u64 = hf_rng()
+        let alpha : u32 = 1u32 + (r1 % 16u64) as u32     /* alphabet size 1..16 -> exercises skew + edges */
+        let mut z : u32 = 0u32
+        while z < n {
+            let rv : u64 = hf_rng()
+            HF_IN[z] = (rv % (alpha as u64)) as u8
+            z = z + 1u32
+        }
+        if hf_roundtrip(n) != 0u32 { return 9000u64 + (t as u64) }
+        t = t + 1u32
+    }
+
+    return 99u64
+}

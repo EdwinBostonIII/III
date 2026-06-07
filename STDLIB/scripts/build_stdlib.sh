@@ -687,6 +687,7 @@ MODULES=(
     "numera/golden_shift"
     "numera/conjecture_refute"
     "numera/self_engine"
+    "numera/verified_search"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"
@@ -834,6 +835,7 @@ MODULES=(
     "omnia/xii_strategy_det"
     "omnia/xii_discharge"
     "omnia/xii_conf_cert"
+    "omnia/xii_cap_preserve"
     # The Reach (DOCS/III-THE-REACH-ARCHITECTURE.md), Phase 1: the content-addressed transport spine.
     # reach_store (L1 disk content-store) -> reach_core (resolver + emit; verifies the returned value
     # re-hashes to its address = tamper-evident; an absent/corrupt address = a typed GAP, never an

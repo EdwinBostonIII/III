@@ -1,0 +1,14 @@
+/* 1253_verified_search.iii -- stochastic search disciplined by the frozen referee (mcmc x k0).
+ * Drives numera::verified_search::verified_search_kat: 99 = the K_0-gated annealed search converges to the
+ * CORRECT frontier v5 (cost 10), escaping the local minimum but NEVER the wrong subspace; the UNGATED search
+ * falls into the cheaper WRONG trap v11 (cost 1) -- the gate is load-bearing; deterministic under seed; the
+ * chosen kernel agrees with the anchor while the trap does not. Stochastic imagination, disciplined. */
+module corpus_1253
+
+extern @abi(c-msvc-x64) fn verified_search_kat() -> u64 from "verified_search.iii"
+
+fn main() -> u64 {
+    let r : u64 = verified_search_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

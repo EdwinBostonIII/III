@@ -1,0 +1,14 @@
+/* 1254_omega_engine.iii -- the grand unification: trace-verified self-driving optimizer over memory kernels.
+ * Drives numera::omega_engine::omega_engine_kat: 99 = the engine autonomously adopts kv1 (4-op vectorized,
+ * trace-equal to the 16-op scalar anchor) not the cheaper WRONG kbad; the chosen kernel's REAL memory is
+ * byte-identical to the anchor (observable-trace equivalence); anchor==chosen is recorded in the proof CC;
+ * cost 4<16; deterministic; kbad's trace really differs. The whole session composed into one engine. */
+module corpus_1254
+
+extern @abi(c-msvc-x64) fn omega_engine_kat() -> u64 from "omega_engine.iii"
+
+fn main() -> u64 {
+    let r : u64 = omega_engine_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

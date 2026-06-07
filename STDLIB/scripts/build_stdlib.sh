@@ -688,6 +688,7 @@ MODULES=(
     "numera/conjecture_refute"
     "numera/self_engine"
     "numera/verified_search"
+    "numera/omega_engine"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

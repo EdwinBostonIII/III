@@ -1,0 +1,14 @@
+/* 1278_ssa.iii -- SSA phi-node placement via dominance frontiers, verified.
+ * Drives numera::ssa::ssa_kat: 99 = on the diamond CFG (1 -> {2,3} -> 4), the dominance frontier of each
+ * branch is the join {4}; a variable defined in both branches needs a phi at block 4 and NOWHERE else (not
+ * the tail 5, not the branches); a variable defined only at the entry needs no phi anywhere; the join 4 is
+ * the unique phi site. The dominance-frontier rule that makes SSA construction precise. */
+module corpus_1278
+
+extern @abi(c-msvc-x64) fn ssa_kat() -> u64 from "ssa.iii"
+
+fn main() -> u64 {
+    let r : u64 = ssa_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -712,6 +712,7 @@ MODULES=(
     "numera/list_schedule"
     "numera/isel"
     "numera/dominators"
+    "numera/ssa"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

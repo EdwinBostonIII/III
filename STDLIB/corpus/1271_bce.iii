@@ -1,0 +1,15 @@
+/* 1271_bce.iii -- verified bounds-check elimination (two-sided sound).
+ * Drives numera::bce::bce_kat: 99 = an in-bounds affine access (A[2*i+1], n=5, size=16) has its check
+ * eliminated and the check provably never fires; an out-of-bounds access (A[3*i+2], n=8, size=16) keeps its
+ * check and that check provably CAN fire; over a mixed loop body exactly the two safe checks are removed
+ * (count=2); elimination and keep are mutually exclusive. Remove a check only when affine_check proves it
+ * can never fail -- a top-tier optimization made verified. */
+module corpus_1271
+
+extern @abi(c-msvc-x64) fn bce_kat() -> u64 from "bce.iii"
+
+fn main() -> u64 {
+    let r : u64 = bce_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

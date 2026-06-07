@@ -705,6 +705,7 @@ MODULES=(
     "numera/widening"
     "numera/align_domain"
     "numera/vectorizer"
+    "numera/bce"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

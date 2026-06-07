@@ -1,0 +1,14 @@
+/* 1275_list_schedule.iii -- instruction scheduling: critical-path timing, verified.
+ * Drives numera::list_schedule::list_schedule_kat: 99 = the as-soon-as-possible schedule respects every data
+ * dependency; the makespan equals the critical path (8 cycles); the start cycles match hand computation
+ * (i3@5, i4@6, i0@0); and a deliberately-early start for i4 is detected as invalid, with rescheduling
+ * restoring validity. The timing dimension atop rewrite_schedule's ordering. */
+module corpus_1275
+
+extern @abi(c-msvc-x64) fn list_schedule_kat() -> u64 from "list_schedule.iii"
+
+fn main() -> u64 {
+    let r : u64 = list_schedule_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

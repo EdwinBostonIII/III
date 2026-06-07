@@ -709,6 +709,7 @@ MODULES=(
     "numera/reduced_product"
     "numera/loop_pipeline"
     "numera/reg_alloc"
+    "numera/list_schedule"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

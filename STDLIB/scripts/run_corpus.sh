@@ -854,6 +854,7 @@ declare -A EXPECTED=(
     [1272_reduced_product]=99
     [1273_loop_pipeline]=99
     [1274_reg_alloc]=99
+    [1275_list_schedule]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

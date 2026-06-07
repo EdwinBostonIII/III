@@ -1,0 +1,117 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\dce.iii
+ *
+ * III STDLIB - numera::dce  --  DEAD CODE ELIMINATION (mark-and-sweep liveness, verified).
+ *
+ * The optimization that deletes computation nobody observes.  An instruction is LIVE iff it has a side
+ * effect (a store, a call) or its result is consumed by a live instruction; everything else is DEAD and may
+ * be removed.  Liveness is the least set containing the side-effecting ROOTS and closed under "an operand of
+ * a live instruction is live" -- a backward mark from the roots through the operand edges, then a sweep of
+ * the unmarked.  Crucially the analysis is two-sided sound: it never deletes a side-effecting instruction,
+ * and it deletes a chain of values whose only consumer is itself dead.
+ *
+ * Instructions: e0=a, e1=b, e2=a+b, e3=a*b, e4=e3+b, e5=store(e2).  Only e5 has a side effect; it keeps e2
+ * (hence e0,e1) alive, while e3 and e4 feed nothing observable and are dead.
+ *
+ * Verified (dce_kat): the store and its transitive inputs are live; the unused multiply chain (e3,e4) is
+ * dead (count 2); marking e4 as side-effecting revives e4 and its input e3 (dead count drops to 0); restoring
+ * returns the original dead set.  NIH/self-contained.
+ *
+ * Public API:
+ *   dce_setup() ; dce_analyze() ; dce_live(i) -> u32 ; dce_dead_count() -> u32 ; dce_set_side(i,v)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_dce
+
+const DCE_N     : u32 = 6u32
+const DCE_LEAF  : u32 = 0u32
+const DCE_BIN   : u32 = 1u32
+const DCE_STORE : u32 = 2u32
+
+var DCE_OP   : [u32; 6]
+var DCE_A    : [u32; 6]
+var DCE_B    : [u32; 6]
+var DCE_SIDE : [u32; 6]       /* 1 = has a side effect (a root of liveness) */
+var DCE_LIVE : [u32; 6]
+
+fn dce_setup() -> i32 @export {
+    DCE_OP[0u64]=DCE_LEAF  ; DCE_A[0u64]=0u32 ; DCE_B[0u64]=0u32 ; DCE_SIDE[0u64]=0u32   /* a */
+    DCE_OP[1u64]=DCE_LEAF  ; DCE_A[1u64]=0u32 ; DCE_B[1u64]=0u32 ; DCE_SIDE[1u64]=0u32   /* b */
+    DCE_OP[2u64]=DCE_BIN   ; DCE_A[2u64]=0u32 ; DCE_B[2u64]=1u32 ; DCE_SIDE[2u64]=0u32   /* a+b */
+    DCE_OP[3u64]=DCE_BIN   ; DCE_A[3u64]=0u32 ; DCE_B[3u64]=1u32 ; DCE_SIDE[3u64]=0u32   /* a*b (unused) */
+    DCE_OP[4u64]=DCE_BIN   ; DCE_A[4u64]=3u32 ; DCE_B[4u64]=1u32 ; DCE_SIDE[4u64]=0u32   /* e3+b (unused) */
+    DCE_OP[5u64]=DCE_STORE ; DCE_A[5u64]=2u32 ; DCE_B[5u64]=2u32 ; DCE_SIDE[5u64]=1u32   /* store(a+b) */
+    return 0i32
+}
+
+fn dce_set_side(i: u32, v: u32) -> i32 @export { DCE_SIDE[i as u64] = v ; return 0i32 }
+
+/* mark-and-sweep liveness: start from the side-effecting roots, propagate to operands to a fixpoint. */
+fn dce_analyze() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < DCE_N { DCE_LIVE[i as u64] = DCE_SIDE[i as u64] ; i = i + 1u32 }
+    let mut pass : u32 = 0u32
+    while pass < DCE_N {
+        let mut n : u32 = 0u32
+        while n < DCE_N {
+            if DCE_LIVE[n as u64] == 1u32 {
+                if DCE_OP[n as u64] != DCE_LEAF {
+                    DCE_LIVE[DCE_A[n as u64] as u64] = 1u32       /* operands of a live instruction are live */
+                    DCE_LIVE[DCE_B[n as u64] as u64] = 1u32
+                }
+            }
+            n = n + 1u32
+        }
+        pass = pass + 1u32
+    }
+    return 0i32
+}
+
+fn dce_live(i: u32) -> u32 @export { return DCE_LIVE[i as u64] }
+fn dce_dead_count() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < DCE_N {
+        if DCE_LIVE[i as u64] == 0u32 { c = c + 1u32 }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* =====================================================================================
+ * dce_kat -- 99 = dead code elimination is two-sided sound, self-checked:
+ *   (1) the store e5 and its transitive inputs (e2,e0,e1) are LIVE;
+ *   (2) the unused multiply chain (e3,e4) is DEAD; dead count is 2;
+ *   (3) making e4 side-effecting revives e4 and its input e3 (dead count drops to 0);
+ *   (4) restoring e4 returns the original dead set (count 2).
+ * ===================================================================================== */
+fn dce_kat() -> u64 @export {
+    dce_setup()
+    dce_analyze()
+
+    /* (1) the store keeps its inputs alive */
+    if dce_live(5u32) != 1u32 { return 1u64 }
+    if dce_live(2u32) != 1u32 { return 2u64 }
+    if dce_live(0u32) != 1u32 { return 3u64 }
+    if dce_live(1u32) != 1u32 { return 4u64 }
+
+    /* (2) the unused chain is dead */
+    if dce_live(3u32) != 0u32 { return 5u64 }
+    if dce_live(4u32) != 0u32 { return 6u64 }
+    if dce_dead_count() != 2u32 { return 7u64 }
+
+    /* (3) a side effect on e4 revives e4 and e3 */
+    dce_set_side(4u32, 1u32)
+    dce_analyze()
+    if dce_live(4u32) != 1u32 { return 8u64 }
+    if dce_live(3u32) != 1u32 { return 9u64 }
+    if dce_dead_count() != 0u32 { return 10u64 }
+
+    /* (4) restoring returns the original dead set */
+    dce_set_side(4u32, 0u32)
+    dce_analyze()
+    if dce_dead_count() != 2u32 { return 11u64 }
+    if dce_live(3u32) != 0u32 { return 12u64 }
+
+    return 99u64
+}

@@ -1,0 +1,14 @@
+/* 1230_huffman.iii -- verified canonical Huffman entropy coder (on bitio).
+ * Drives numera::huffman::huff_kat: 99 = ROUND-TRIP IDENTITY huff_decode(huff_encode(x))==x incl.
+ * the empty, single-distinct-symbol (len-1), and two-symbol EDGES + high-entropy + a SKEWED input
+ * that compresses + 60 seeded random inputs (length 0..480, alphabet 1..16). With numera::lzss this
+ * is the DEFLATE recipe. */
+module corpus_1230
+
+extern @abi(c-msvc-x64) fn huff_kat() -> u64 from "huffman.iii"
+
+fn main() -> u64 {
+    let r : u64 = huff_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

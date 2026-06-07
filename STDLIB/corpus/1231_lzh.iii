@@ -1,0 +1,14 @@
+/* 1231_lzh.iii -- verified 2-stage LZ77+Huffman compressor (the gzip/DEFLATE recipe).
+ * Drives numera::lzh::lzh_kat: 99 = ROUND-TRIP IDENTITY lzh_decompress(lzh_compress(x))==x incl.
+ * empty/single-symbol edges + periodic & text inputs that SHRINK + high-entropy random that takes
+ * the STORED fallback (no expansion) + 50 seeded random inputs; every case asserts identity AND
+ * compressed <= raw+1. The capstone fusing the whole compression track (lzss+huffman+bitio). */
+module corpus_1231
+
+extern @abi(c-msvc-x64) fn lzh_kat() -> u64 from "lzh.iii"
+
+fn main() -> u64 {
+    let r : u64 = lzh_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

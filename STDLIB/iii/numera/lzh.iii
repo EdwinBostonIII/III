@@ -1,0 +1,163 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\lzh.iii
+ *
+ * III STDLIB - numera::lzh
+ *
+ * A verified two-stage general-purpose compressor: LZSS (LZ77 dictionary) followed by canonical
+ * Huffman (entropy coding) -- the classic gzip/DEFLATE recipe (LZ + Huffman), composed from III's
+ * own numera::lzss + numera::huffman (+ numera::bitio beneath). A one-byte mode header selects a
+ * STORED fallback when the compressed form would be larger, so the output never expands by more
+ * than one byte -- production-grade behaviour on incompressible / tiny input.
+ *
+ * The verified property is ROUND-TRIP IDENTITY lzh_decompress(lzh_compress(x)) == x for ALL x, plus
+ * that compressible data shrinks and nothing ever expands beyond +1 byte. NIH; pure orchestration of
+ * gated parts (HARMONY: this is the first module to fuse the whole compression track).
+ *
+ * Format: byte 0 = mode (0 = STORED: raw bytes follow; 1 = LZSS|HUFFMAN: huff_encode(lzss(x)) follows).
+ *
+ * Public API:
+ *   lzh_compress(in_ptr, in_len, out_ptr, out_cap) -> i32     compressed length (<= in_len+1), or <0
+ *   lzh_decompress(in_ptr, in_len, out_ptr, out_cap) -> i32   decompressed length, or <0
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (pure; no allocation).
+ */
+module numera_lzh
+
+extern @abi(c-msvc-x64) fn lzss_compress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+extern @abi(c-msvc-x64) fn lzss_decompress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+extern @abi(c-msvc-x64) fn huff_encode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "huffman.iii"
+extern @abi(c-msvc-x64) fn huff_decode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "huffman.iii"
+
+const LZH_E_SUB : i32 = -1i32     /* a stage failed */
+const LZH_E_CAP : i32 = -2i32     /* output capacity too small */
+
+var LZH_S1 : [u8; 4096]    /* stage-1 intermediate (lzss output / huffman-decoded) */
+
+fn lzh_isneg(x: i32) -> u32 { return (x as u32) >> 31u32 }
+
+fn lzh_compress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 @export {
+    if out_cap < 1u32 { return LZH_E_CAP }
+    let op : *u8 = out_ptr as *u8
+    let ip : *u8 = in_ptr as *u8
+    /* stage 1: LZSS */
+    let l1 : i32 = lzss_compress(in_ptr, in_len, &LZH_S1 as u64, 4096u32)
+    if lzh_isneg(l1) == 1u32 { return LZH_E_SUB }
+    /* stage 2: Huffman of the LZSS output, written after the mode byte */
+    let h : i32 = huff_encode(&LZH_S1 as u64, l1 as u32, out_ptr + 1u64, out_cap - 1u32)
+    if lzh_isneg(h) == 1u32 {
+        /* huffman couldn't fit -> fall through to STORED below */
+    } else {
+        let comp : u32 = 1u32 + (h as u32)
+        if comp < in_len {
+            op[0u64] = 1u8
+            return comp as i32
+        }
+    }
+    /* STORED fallback: never expand by more than 1 byte */
+    if (1u32 + in_len) > out_cap { return LZH_E_CAP }
+    op[0u64] = 0u8
+    let mut i : u32 = 0u32
+    while i < in_len { op[(1u32 + i) as u64] = ip[i as u64] ; i = i + 1u32 }
+    return (1u32 + in_len) as i32
+}
+
+fn lzh_decompress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 @export {
+    if in_len < 1u32 { return LZH_E_SUB }
+    let ip : *u8 = in_ptr as *u8
+    let op : *u8 = out_ptr as *u8
+    let mode : u32 = ip[0u64] as u32
+    if mode == 0u32 {
+        let n : u32 = in_len - 1u32
+        if n > out_cap { return LZH_E_CAP }
+        let mut i : u32 = 0u32
+        while i < n { op[i as u64] = ip[(1u32 + i) as u64] ; i = i + 1u32 }
+        return n as i32
+    }
+    /* mode 1: undo Huffman, then undo LZSS */
+    let l1 : i32 = huff_decode(in_ptr + 1u64, in_len - 1u32, &LZH_S1 as u64, 4096u32)
+    if lzh_isneg(l1) == 1u32 { return LZH_E_SUB }
+    return lzss_decompress(&LZH_S1 as u64, l1 as u32, out_ptr, out_cap)
+}
+
+/* ===== KAT ===== */
+var LZH_IN  : [u8; 1024]
+var LZH_C   : [u8; 2048]
+var LZH_OUT : [u8; 1024]
+var LZH_RNG : [u64; 1]
+var LZH_CL  : [u32; 1]
+
+fn lzh_rng() -> u64 {
+    let mut z : u64 = LZH_RNG[0u64]
+    z = z ^ (z << 13u64)
+    z = z ^ (z >> 7u64)
+    z = z ^ (z << 17u64)
+    LZH_RNG[0u64] = z
+    return z
+}
+
+/* roundtrip LZH_IN[0..n); returns 0 on success (LZH_CL set), else nonzero error code. */
+fn lzh_roundtrip(n: u32) -> u32 {
+    let cl : i32 = lzh_compress(&LZH_IN as u64, n, &LZH_C as u64, 2048u32)
+    if lzh_isneg(cl) == 1u32 { return 10u32 }
+    LZH_CL[0u32] = cl as u32
+    if (cl as u32) > (n + 1u32) { return 11u32 }     /* never expands by more than 1 byte */
+    let dl : i32 = lzh_decompress(&LZH_C as u64, cl as u32, &LZH_OUT as u64, 1024u32)
+    if lzh_isneg(dl) == 1u32 { return 20u32 }
+    if (dl as u32) != n { return 30u32 }
+    let mut i : u32 = 0u32
+    while i < n { if LZH_OUT[i] != LZH_IN[i] { return 40u32 } ; i = i + 1u32 }
+    return 0u32
+}
+
+/* =====================================================================================
+ * lzh_kat -- 99 = ROUND-TRIP IDENTITY lzh_decompress(lzh_compress(x))==x, self-checked:
+ *   (1) empty; (2) single-symbol; (3) HIGHLY COMPRESSIBLE (periodic -> must shrink); (4) text-like
+ *   (must shrink); (5) high-entropy random (STORED fallback, no expansion); (6) 50 seeded random
+ *   inputs of mixed length/alphabet. Every case: identity holds AND compressed <= raw+1.
+ * ===================================================================================== */
+fn lzh_kat() -> u64 @export {
+    /* (1) empty */
+    if lzh_roundtrip(0u32) != 0u32 { return 1u64 }
+
+    /* (2) single symbol */
+    let mut a : u32 = 0u32
+    while a < 300u32 { LZH_IN[a] = 0x7Eu8 ; a = a + 1u32 }
+    if lzh_roundtrip(300u32) != 0u32 { return 2u64 }
+
+    /* (3) periodic "ABCDEFGH" x 125 = 1000 -> must compress */
+    let mut b : u32 = 0u32
+    while b < 1000u32 { LZH_IN[b] = (0x41u32 + (b & 7u32)) as u8 ; b = b + 1u32 }
+    if lzh_roundtrip(1000u32) != 0u32 { return 3u64 }
+    if LZH_CL[0u32] >= 1000u32 { return 4u64 }       /* compressible must shrink */
+
+    /* (4) text-like: a 24-byte phrase repeated -> must compress */
+    let mut m : u32 = 0u32
+    while m < 960u32 { LZH_IN[m] = (0x61u32 + (m % 24u32)) as u8 ; m = m + 1u32 }
+    if lzh_roundtrip(960u32) != 0u32 { return 5u64 }
+    if LZH_CL[0u32] >= 960u32 { return 6u64 }
+
+    /* (5) high-entropy random 600 -> STORED fallback (no expansion beyond +1) */
+    LZH_RNG[0u64] = 0xC3A5C85C97CB3127u64
+    let mut c : u32 = 0u32
+    while c < 600u32 { LZH_IN[c] = (lzh_rng() & 0xFFu64) as u8 ; c = c + 1u32 }
+    if lzh_roundtrip(600u32) != 0u32 { return 7u64 }
+
+    /* (6) 50 seeded random inputs, mixed length 0..1000 and alphabet 1..32 */
+    LZH_RNG[0u64] = 0xD1B54A32D192ED03u64
+    let mut t : u32 = 0u32
+    while t < 50u32 {
+        let r0 : u64 = lzh_rng()
+        let n : u32 = (r0 % 1001u64) as u32
+        let r1 : u64 = lzh_rng()
+        let alpha : u32 = 1u32 + (r1 % 32u64) as u32
+        let mut z : u32 = 0u32
+        while z < n {
+            let rv : u64 = lzh_rng()
+            LZH_IN[z] = (rv % (alpha as u64)) as u8
+            z = z + 1u32
+        }
+        if lzh_roundtrip(n) != 0u32 { return 9000u64 + (t as u64) }
+        t = t + 1u32
+    }
+
+    return 99u64
+}

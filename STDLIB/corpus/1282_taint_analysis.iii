@@ -1,0 +1,14 @@
+/* 1282_taint_analysis.iii -- information-flow security: taint tracking, verified.
+ * Drives numera::taint_analysis::taint_analysis_kat: 99 = the untrusted source is tainted and a constant is
+ * clean; taint spreads through the operation (v2 tainted); the sanitizer clears it (v3 clean); a sink on the
+ * tainted value v2 is a VIOLATION while a sink on the sanitized value v3 is SAFE; the total number of
+ * unsanitized source-to-sink flows is exactly 1. Injection/privilege-escalation prevention as a build gate. */
+module corpus_1282
+
+extern @abi(c-msvc-x64) fn taint_analysis_kat() -> u64 from "taint_analysis.iii"
+
+fn main() -> u64 {
+    let r : u64 = taint_analysis_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

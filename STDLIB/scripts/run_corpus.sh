@@ -861,6 +861,7 @@ declare -A EXPECTED=(
     [1279_gvn]=99
     [1280_dce]=99
     [1281_sccp]=99
+    [1282_taint_analysis]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

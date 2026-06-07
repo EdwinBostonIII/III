@@ -1,0 +1,15 @@
+/* 1273_loop_pipeline.iii -- the full verified optimizing pass: six modules, one certificate.
+ * Drives numera::loop_pipeline::loop_pipeline_kat: 99 = a clean aligned in-bounds loop (a=8,b=0,n=16,size=256)
+ * is driven through the entire sequence -- safe, bounds-check removed, strength-reduced, vectorized at width
+ * 8, end-to-end certified; an odd-stride loop is optimized but stays scalar (width 1); an out-of-bounds loop
+ * is REFUSED with nothing applied; the optimized iteration space equals the scalar one. The whole analysis
+ * substrate (loop_optimizer + bce + vectorizer, transitively interval + affine + align) acting as one. */
+module corpus_1273
+
+extern @abi(c-msvc-x64) fn loop_pipeline_kat() -> u64 from "loop_pipeline.iii"
+
+fn main() -> u64 {
+    let r : u64 = loop_pipeline_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

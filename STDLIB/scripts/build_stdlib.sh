@@ -707,6 +707,7 @@ MODULES=(
     "numera/vectorizer"
     "numera/bce"
     "numera/reduced_product"
+    "numera/loop_pipeline"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,141 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\rewrite_schedule.iii
+ *
+ * III STDLIB - numera::rewrite_schedule  --  VERIFIED PHASE-ORDERING (dependency-respecting schedule).
+ *
+ * The phase-ordering problem in one module: when rewrite B is only valid AFTER rewrite A has fired, the
+ * optimizer needs a schedule that applies every rewrite after its prerequisites -- a topological order of
+ * the dependency DAG.  This computes one by Kahn's algorithm and VERIFIES it respects every dependency, and
+ * it detects the impossible case: if the dependencies are CYCLIC (A needs B, B needs A) no schedule exists
+ * and the scheduler reports it rather than looping or producing a wrong order.  (Equality-saturation
+ * dissolves phase-ordering by keeping all forms at once; where a strict pipeline is still used, this gives
+ * the provably-correct order.)
+ *
+ * Verified (rewrite_schedule_kat): for an acyclic rewrite-dependency graph a topological order is found and
+ * proven to place every prerequisite before its dependent; adding a back-edge makes the graph cyclic and the
+ * scheduler returns "no order" (count < N); the found order is a genuine permutation of all rewrites.
+ * NIH/self-contained.
+ *
+ * Public API:
+ *   rs_setup(add_cycle) ; rs_toposort() -> u32 (1=ok,0=cycle) ; rs_order_valid() -> u32 ; rs_order(k) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_rewrite_schedule
+
+const RS_N : u32 = 6u32
+
+var RS_DEP   : [u32; 36]      /* RS_DEP[i*N+j] = 1 iff rewrite i depends on rewrite j (j before i) */
+var RS_INDEG : [u32; 6]
+var RS_QUEUE : [u32; 6]
+var RS_ORDER : [u32; 6]
+var RS_POS   : [u32; 6]       /* position of each rewrite in the schedule */
+var RS_CNT   : [u32; 1]
+
+fn rs_setup(add_cycle: u32) -> i32 @export {
+    let mut k : u32 = 0u32
+    while k < 36u32 { RS_DEP[k as u64] = 0u32 ; k = k + 1u32 }
+    /* an acyclic rewrite-dependency DAG: 1<-0, 2<-1, 3<-0, 4<-3, 5<-2, 5<-4 */
+    RS_DEP[(1u32 * RS_N + 0u32) as u64] = 1u32
+    RS_DEP[(2u32 * RS_N + 1u32) as u64] = 1u32
+    RS_DEP[(3u32 * RS_N + 0u32) as u64] = 1u32
+    RS_DEP[(4u32 * RS_N + 3u32) as u64] = 1u32
+    RS_DEP[(5u32 * RS_N + 2u32) as u64] = 1u32
+    RS_DEP[(5u32 * RS_N + 4u32) as u64] = 1u32
+    if add_cycle == 1u32 { RS_DEP[(0u32 * RS_N + 5u32) as u64] = 1u32 }   /* back-edge 0<-5 closes a cycle */
+    return 0i32
+}
+
+/* Kahn's algorithm: returns 1 and fills RS_ORDER/RS_POS if a topological order exists, else 0 (a cycle). */
+fn rs_toposort() -> u32 @export {
+    /* in-degrees */
+    let mut i : u32 = 0u32
+    while i < RS_N {
+        let mut deg : u32 = 0u32
+        let mut j : u32 = 0u32
+        while j < RS_N { deg = deg + RS_DEP[((i * RS_N) + j) as u64] ; j = j + 1u32 }
+        RS_INDEG[i as u64] = deg
+        i = i + 1u32
+    }
+    /* seed the queue with the zero-in-degree rewrites */
+    let mut head : u32 = 0u32
+    let mut tail : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < RS_N {
+        if RS_INDEG[s as u64] == 0u32 { RS_QUEUE[tail as u64] = s ; tail = tail + 1u32 }
+        s = s + 1u32
+    }
+    let mut cnt : u32 = 0u32
+    while head < tail {
+        let u : u32 = RS_QUEUE[head as u64]
+        head = head + 1u32
+        RS_ORDER[cnt as u64] = u
+        RS_POS[u as u64] = cnt
+        cnt = cnt + 1u32
+        /* relax every rewrite that depended on u */
+        let mut w : u32 = 0u32
+        while w < RS_N {
+            if RS_DEP[((w * RS_N) + u) as u64] == 1u32 {
+                RS_INDEG[w as u64] = RS_INDEG[w as u64] - 1u32
+                if RS_INDEG[w as u64] == 0u32 { RS_QUEUE[tail as u64] = w ; tail = tail + 1u32 }
+            }
+            w = w + 1u32
+        }
+    }
+    RS_CNT[0u32] = cnt
+    if cnt == RS_N { return 1u32 }
+    return 0u32                                  /* a cycle: not all rewrites could be scheduled */
+}
+
+/* verify the computed order places every prerequisite strictly before its dependent. */
+fn rs_order_valid() -> u32 @export {
+    if RS_CNT[0u32] != RS_N { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < RS_N {
+        let mut j : u32 = 0u32
+        while j < RS_N {
+            if RS_DEP[((i * RS_N) + j) as u64] == 1u32 {
+                if RS_POS[j as u64] >= RS_POS[i as u64] { return 0u32 }   /* prerequisite j must precede i */
+            }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+fn rs_order(k: u32) -> u32 @export { return RS_ORDER[k as u64] }
+
+/* =====================================================================================
+ * rewrite_schedule_kat -- 99 = verified phase-ordering is correct, self-checked:
+ *   (1) the acyclic DAG yields a topological order (toposort=1) that respects every dependency (valid=1);
+ *   (2) the order is a genuine permutation: each rewrite appears exactly once;
+ *   (3) the CYCLIC graph yields NO order (toposort=0) -- the scheduler reports impossibility;
+ *   (4) a concrete precedence holds (rewrite 0 precedes rewrite 5 in the schedule).
+ * ===================================================================================== */
+fn rewrite_schedule_kat() -> u64 @export {
+    /* (1) acyclic -> valid schedule */
+    rs_setup(0u32)
+    if rs_toposort() != 1u32 { return 1u64 }
+    if rs_order_valid() != 1u32 { return 2u64 }
+
+    /* (2) the order is a permutation: every rewrite present exactly once */
+    let mut seen : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < RS_N {
+        seen = seen | (1u32 << rs_order(k))
+        k = k + 1u32
+    }
+    if seen != 63u32 { return 3u64 }            /* bits 0..5 all set = (1<<6)-1 = 63 */
+
+    /* (3) cyclic -> no schedule */
+    rs_setup(1u32)
+    if rs_toposort() != 0u32 { return 4u64 }
+    if rs_order_valid() != 0u32 { return 5u64 }
+
+    /* (4) a concrete precedence in the acyclic schedule: 0 before 5 */
+    rs_setup(0u32)
+    rs_toposort()
+    if RS_POS[0u64] >= RS_POS[5u64] { return 6u64 }
+
+    return 99u64
+}

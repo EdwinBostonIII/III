@@ -1,0 +1,142 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\self_engine.iii
+ *
+ * III STDLIB - numera::self_engine  --  THE SELF-DRIVING OPTIMIZATION LOOP (made REAL).
+ *
+ * This closes conjecture -> prove -> verify -> shift into ONE autonomous engine that runs over REAL III
+ * functions, not models.  There is no behavior table set by hand: the engine EXECUTES real kernels, COUNTS
+ * real operations for cost, VERIFIES equivalence by real exhaustive execution through the frozen referee
+ * K_0, SHIFTS via the Golden-Shift flywheel, and then REALLY DISPATCHES subsequent computation through the
+ * kernel it selected.  It is a genuine recursive self-optimizer over real artifacts.
+ *
+ * The target computation is S(n) = sum of 0..n-1, with three REAL implementations:
+ *   KV0  : the O(n) loop          (the expensive original / anchor)
+ *   KV1  : the O(1) closed form    n*(n-1)/2   (faster, provably equal)
+ *   KBAD : a WRONG closed form     n*(n+1)/2   (faster, but observably different)
+ * The engine measures each by running it, registers them in K_0 with their REAL costs, freezes the original
+ * as the anchor, and lets the flywheel autonomously descend to the cheapest K_0-VERIFIED kernel.  It then
+ * computes through gs_active() -- proving it really uses what it chose, with identical results to the
+ * original (alignment) at strictly lower real cost.  KBAD is never chosen.
+ *
+ * This is the real "autonomous Golden Shift" over the substrate's own code.  The ONLY thing NOT done here
+ * is autonomously resealing the LIVE production compiler -- not because it is fictional, but because that
+ * swap is irreversible and shared with a concurrent writer; the engine is complete and operates on its own
+ * real kernel set.  Composes k0_referee + golden_shift.
+ *
+ * Public API:
+ *   se_run(kid,n) -> u32 ; se_cost_of(kid) -> u32 ; se_run_cycle() -> u32 (final active kid) ;
+ *   se_dispatch(n) -> u32 (compute through the live active kernel)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_self_engine
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn gs_init() -> i32 from "golden_shift.iii"
+extern @abi(c-msvc-x64) fn gs_run_flywheel() -> u32 from "golden_shift.iii"
+extern @abi(c-msvc-x64) fn gs_active() -> u32 from "golden_shift.iii"
+extern @abi(c-msvc-x64) fn gs_aligned() -> u32 from "golden_shift.iii"
+extern @abi(c-msvc-x64) fn gs_shifts() -> u32 from "golden_shift.iii"
+
+const SE_D    : u32 = 16u32          /* verification domain [0,16) -- exhaustively re-checked by K_0 */
+const SE_BIG  : u32 = 1000u32        /* the input used to MEASURE asymptotic cost */
+const SE_KV0  : u32 = 0u32
+const SE_KV1  : u32 = 1u32
+const SE_KBAD : u32 = 2u32
+
+var SE_OPS : [u64; 1]                /* the REAL operation counter */
+
+/* REAL kernels for S(n) = sum of 0..n-1, each counting its real operations. */
+fn se_run(kid: u32, n: u32) -> u32 @export {
+    if kid == SE_KV0 {
+        let mut acc : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < n {
+            acc = acc + i
+            SE_OPS[0u64] = SE_OPS[0u64] + 1u64       /* O(n): one op per element */
+            i = i + 1u32
+        }
+        return acc
+    }
+    if kid == SE_KV1 {
+        SE_OPS[0u64] = SE_OPS[0u64] + 1u64           /* O(1): one op total */
+        return (n * (n - 1u32)) / 2u32
+    }
+    SE_OPS[0u64] = SE_OPS[0u64] + 1u64               /* KBAD: O(1) but WRONG (n*(n+1)/2) */
+    return (n * (n + 1u32)) / 2u32
+}
+
+/* the REAL cost of a kernel = operations to compute it at SE_BIG. */
+fn se_cost_of(kid: u32) -> u32 @export {
+    SE_OPS[0u64] = 0u64
+    se_run(kid, SE_BIG)
+    return SE_OPS[0u64] as u32
+}
+
+/* populate K_0's behavior row for `kid` by REALLY EXECUTING it over the verification domain. */
+fn se_measure(kid: u32) {
+    let mut x : u32 = 0u32
+    while x < SE_D {
+        k0_set_behav(kid, x, se_run(kid, x))
+        x = x + 1u32
+    }
+}
+
+/* THE CLOSED CYCLE: measure real kernels -> register with real costs -> freeze the original as anchor ->
+ * conjecture/prove/verify (K_0 exhaustive re-check) -> shift (flywheel).  Returns the final active kernel. */
+fn se_run_cycle() -> u32 @export {
+    k0_reset()
+    k0_register(se_cost_of(SE_KV0))      /* id 0 = KV0, the expensive original */
+    k0_register(se_cost_of(SE_KV1))      /* id 1 = KV1, O(1) */
+    k0_register(se_cost_of(SE_KBAD))     /* id 2 = KBAD, O(1) but wrong */
+    se_measure(SE_KV0)
+    se_measure(SE_KV1)
+    se_measure(SE_KBAD)
+    k0_freeze_anchor()                   /* the original IS the anchor: its behavior is the axiom */
+    gs_init()
+    gs_run_flywheel()                    /* autonomously descend to the cheapest K_0-verified kernel */
+    return gs_active()
+}
+
+/* REAL self-dispatch: compute S(n) through whatever kernel the engine is currently running on. */
+fn se_dispatch(n: u32) -> u32 @export { return se_run(gs_active(), n) }
+
+/* =====================================================================================
+ * self_engine_kat -- 99 = the real self-driving optimization loop works, self-checked:
+ *   (1) the engine autonomously shifts FROM the O(n) original TO the O(1) kernel (active becomes KV1);
+ *   (2) REAL self-dispatch through the active kernel computes the correct result (S(50)=1225), IDENTICAL
+ *       to the original O(n) kernel (alignment with the axiom preserved);
+ *   (3) the shift is a REAL speedup: cost(KV1) is strictly less than cost(KV0) by the real op-count;
+ *   (4) SAFETY: the WRONG kernel (KBAD) is NEVER selected, and gs_aligned()=1, with >=1 autonomous shift.
+ * ===================================================================================== */
+fn self_engine_kat() -> u64 @export {
+    /* (1) run the closed cycle; the engine should adopt KV1 */
+    let active : u32 = se_run_cycle()
+    if active != SE_KV1 { return 1u64 }
+
+    /* (2) real self-dispatch == correct == the original's result */
+    let viaActive : u32 = se_dispatch(50u32)
+    let viaOriginal : u32 = se_run(SE_KV0, 50u32)
+    if viaActive != viaOriginal { return 2u64 }
+    if viaActive != 1225u32 { return 3u64 }            /* S(50) = 50*49/2 = 1225 */
+
+    /* (3) real speedup */
+    let c0 : u32 = se_cost_of(SE_KV0)
+    let c1 : u32 = se_cost_of(SE_KV1)
+    if c0 <= c1 { return 4u64 }                        /* O(n) strictly costlier than O(1) */
+    if c1 != 1u32 { return 5u64 }                      /* O(1) really is one op */
+    if c0 != SE_BIG { return 6u64 }                    /* O(n) really is SE_BIG ops */
+
+    /* (4) safety + alignment */
+    if gs_active() == SE_KBAD { return 7u64 }          /* the wrong kernel was NEVER selected */
+    if gs_aligned() != 1u32 { return 8u64 }            /* active is bisimilar to the anchor */
+    if gs_shifts() == 0u32 { return 9u64 }             /* a real autonomous shift occurred */
+
+    /* and the wrong kernel really is observably wrong (so the rejection was meaningful) */
+    if se_run(SE_KBAD, 50u32) == 1225u32 { return 10u64 }   /* KBAD(50)=50*51/2=1275 != 1225 */
+
+    return 99u64
+}

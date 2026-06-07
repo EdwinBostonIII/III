@@ -829,6 +829,7 @@ declare -A EXPECTED=(
     [1245_algo_synth]=99
     [1247_k0_referee]=99
     [1248_golden_shift]=99
+    [1249_conjecture_refute]=99
     [1124_fs_dir_enum]=99
     [1125_onelang_audit]=99
     [1126_founders_anchor]=99

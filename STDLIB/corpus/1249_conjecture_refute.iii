@@ -1,0 +1,14 @@
+/* 1249_conjecture_refute.iii -- the deductive/inductive bridge: Popperian science (Step 4).
+ * Drives numera::conjecture_refute::conjecture_refute_kat: 99 = Euler's x^2+x+41 is a THEOREM over [0,40)
+ * but REFUTED at the single counterexample x=40 over [0,100) despite 40 prior confirmations (accumulation
+ * never promotes); the x^2+x-even law is a THEOREM; bisimulation conjectures f==g (THEOREM) and f==h
+ * (REFUTED at x=7). Induction disciplined by deduction -- science without statistical belief. */
+module corpus_1249
+
+extern @abi(c-msvc-x64) fn conjecture_refute_kat() -> u64 from "conjecture_refute.iii"
+
+fn main() -> u64 {
+    let r : u64 = conjecture_refute_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

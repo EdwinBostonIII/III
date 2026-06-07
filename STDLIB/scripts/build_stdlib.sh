@@ -730,6 +730,7 @@ MODULES=(
     "numera/rms"
     "numera/binary_search"
     "numera/kmp"
+    "numera/levenshtein"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

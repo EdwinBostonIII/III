@@ -875,6 +875,7 @@ declare -A EXPECTED=(
     [1295_rms]=99
     [1296_binary_search]=99
     [1297_kmp]=99
+    [1298_levenshtein]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

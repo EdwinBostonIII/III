@@ -1,0 +1,13 @@
+/* 1298_levenshtein.iii -- edit distance by verified dynamic programming.
+ * Drives numera::levenshtein::levenshtein_kat: 99 = kitten->sitting has edit distance 3 (substitute k->s,
+ * e->i, insert g); ABC->ABC=0; ABC->ABD=1 (one substitution); ABC->empty=3 (the length, the boundary
+ * condition); min3 is correct. The exact textbook DP recurrence, no heuristic. */
+module corpus_1298
+
+extern @abi(c-msvc-x64) fn levenshtein_kat() -> u64 from "levenshtein.iii"
+
+fn main() -> u64 {
+    let r : u64 = levenshtein_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

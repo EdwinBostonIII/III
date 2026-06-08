@@ -46,6 +46,8 @@ const NOUS_CMP_TRIT_VAL  : u8  = 24u8
 const NOUS_CMP_TRIT_AND  : u8  = 26u8
 const NOUS_CMP_TRIT_OR   : u8  = 27u8
 const NOUS_CMP_TRIT_NOT  : u8  = 25u8
+const NOUS_CMP_TRIT_SUM  : u8  = 28u8
+const NOUS_CMP_TRIT_MUL  : u8  = 29u8
 const NOUS_CMP_CAD_KECCAK : u32 = 1u32
 
 var NOUS_CMP_CERT : [u8; 32]   /* cad-sealed SATURATED convergence certificate */
@@ -209,10 +211,23 @@ fn cmp_absorb_joins(op: u8, dual: u8, a: i32, b: i32) -> u8 {
     return xii_rewrite_struct_eq(r1, r2)
 }
 
-/* the number of LIVE-enumerated critical-pair overlaps spanning the FULL trit-op (De Morgan) algebra: 18
- * commutativity + 6 idempotence + 6 identity + 6 annihilator + 3 negation-eval + 3 double-negation + 18 De
- * Morgan + 54 associativity (2 ops x 27) + 54 distributivity (2 forms x 27) + 18 absorption (2 forms x 9) = 186. */
-fn nous_live_pair_count() -> u32 @export { return 186u32 }
+/* additive-inverse overlap: SUM(a, NOT(a)) canonicalises to 0 (NOT(a) = -a is the SUM-inverse of a -- the only
+ * SUM law beyond commutativity/identity that holds, since SUM is SATURATING and hence NOT associative). */
+fn cmp_addinv_joins(a: i32) -> u8 {
+    xii_term_arena_reset()
+    let sm : u32 = xii_term_make_fusion2(NOUS_CMP_TRIT_SUM, cmp_mkval(a), cmp_mknot(a))
+    let r1 : u32 = xii_canonicalise(sm)
+    let r2 : u32 = xii_canonicalise(cmp_mkval(0i32))
+    return xii_rewrite_struct_eq(r1, r2)
+}
+
+/* the number of LIVE-enumerated critical-pair overlaps spanning the COMPLETE trit algebra (all 6 ops --
+ * VAL/NOT/AND/OR/SUM/MUL).  De Morgan sub-algebra (186): 18 commutativity + 6 idempotence + 6 identity + 6
+ * annihilator + 3 neg-eval + 3 double-neg + 18 De Morgan + 54 assoc + 54 distrib + 18 absorption.  SUM/MUL
+ * arithmetic (84, ONLY the universally-holding laws -- SUM-associativity is EXCLUDED, it fails under saturation):
+ * 18 SUM/MUL commutativity + 9 (SUM-identity-0, MUL-identity-1, MUL-annihilator-0) + 27 MUL-associativity +
+ * 27 MUL-distributivity-over-SUM + 3 additive-inverse.  Total = 270. */
+fn nous_live_pair_count() -> u32 @export { return 270u32 }
 
 /* [M14 B-8] LIVE DYNAMIC critical-pair enumeration -- the increment that lifts nous_complete from
  * hand-constructed SYNTHETIC pairs to the trit-op algebra's critical pairs DERIVED on the fly: for every
@@ -370,6 +385,79 @@ fn nous_complete_live(budget: u32) -> u8 @export {
         }
         s = s + 1u32
     }
+    /* ===== SUM/MUL ARITHMETIC algebra -- ONLY the universally-holding laws (SUM is saturating => no assoc) ===== */
+    /* SUM & MUL commutativity: 2 ops x 9 = 18 */
+    let mut t : u32 = 0u32
+    while t < 2u32 {
+        let mut mop : u8 = NOUS_CMP_TRIT_SUM
+        if t == 1u32 { mop = NOUS_CMP_TRIT_MUL }
+        let mut a6 : i32 = -1i32
+        while a6 <= 1i32 {
+            let mut b6 : i32 = -1i32
+            while b6 <= 1i32 {
+                if checked >= budget { return NOUS_CMP_GAP }
+                if cmp_pair_joins(mop, a6, b6, mop, b6, a6) != 1u8 { return NOUS_CMP_REFUTED }
+                checked = checked + 1u32
+                b6 = b6 + 1i32
+            }
+            a6 = a6 + 1i32
+        }
+        t = t + 1u32
+    }
+    /* SUM identity 0 + MUL identity 1 + MUL annihilator 0: 3 x 3 = 9 */
+    let mut a7 : i32 = -1i32
+    while a7 <= 1i32 {
+        if checked >= budget { return NOUS_CMP_GAP }
+        if cmp_law_joins(NOUS_CMP_TRIT_SUM, a7, 0i32, a7) != 1u8 { return NOUS_CMP_REFUTED }
+        checked = checked + 1u32
+        if checked >= budget { return NOUS_CMP_GAP }
+        if cmp_law_joins(NOUS_CMP_TRIT_MUL, a7, 1i32, a7) != 1u8 { return NOUS_CMP_REFUTED }
+        checked = checked + 1u32
+        if checked >= budget { return NOUS_CMP_GAP }
+        if cmp_law_joins(NOUS_CMP_TRIT_MUL, a7, 0i32, 0i32) != 1u8 { return NOUS_CMP_REFUTED }
+        checked = checked + 1u32
+        a7 = a7 + 1i32
+    }
+    /* MUL associativity: 27 */
+    let mut a8 : i32 = -1i32
+    while a8 <= 1i32 {
+        let mut b8 : i32 = -1i32
+        while b8 <= 1i32 {
+            let mut c8 : i32 = -1i32
+            while c8 <= 1i32 {
+                if checked >= budget { return NOUS_CMP_GAP }
+                if cmp_assoc_joins(NOUS_CMP_TRIT_MUL, a8, b8, c8) != 1u8 { return NOUS_CMP_REFUTED }
+                checked = checked + 1u32
+                c8 = c8 + 1i32
+            }
+            b8 = b8 + 1i32
+        }
+        a8 = a8 + 1i32
+    }
+    /* MUL distributivity over SUM: MUL(a,SUM(b,c)) = SUM(MUL(a,b),MUL(a,c)) -- 27 (holds despite SUM saturation) */
+    let mut a9 : i32 = -1i32
+    while a9 <= 1i32 {
+        let mut b9 : i32 = -1i32
+        while b9 <= 1i32 {
+            let mut c9 : i32 = -1i32
+            while c9 <= 1i32 {
+                if checked >= budget { return NOUS_CMP_GAP }
+                if cmp_distrib_joins(NOUS_CMP_TRIT_MUL, NOUS_CMP_TRIT_SUM, a9, b9, c9) != 1u8 { return NOUS_CMP_REFUTED }
+                checked = checked + 1u32
+                c9 = c9 + 1i32
+            }
+            b9 = b9 + 1i32
+        }
+        a9 = a9 + 1i32
+    }
+    /* additive inverse: SUM(a, NOT a) = 0 -- 3 */
+    let mut aa : i32 = -1i32
+    while aa <= 1i32 {
+        if checked >= budget { return NOUS_CMP_GAP }
+        if cmp_addinv_joins(aa) != 1u8 { return NOUS_CMP_REFUTED }
+        checked = checked + 1u32
+        aa = aa + 1i32
+    }
     return NOUS_CMP_SATURATED
 }
 
@@ -405,10 +493,10 @@ fn nous_completion_selftest() -> u64 @export {
     /* [M14 B-8] LIVE dynamic critical-pair enumeration: the trit-op commutativity + idempotence overlaps over
      * the WHOLE operand domain (24 overlaps), enumerated dynamically and ALL joining -> SATURATED (vs the
      * single synthetic witness above); the safety property holds (a partial enumeration never certifies). */
-    if nous_live_pair_count() != 186u32 { return 20u64 }
-    if nous_complete_live(186u32) != NOUS_CMP_SATURATED { return 21u64 }   /* all 10 law classes join exhaustively */
-    if nous_complete_live(200u32) != NOUS_CMP_SATURATED { return 22u64 }   /* generous budget -> still SATURATED */
-    if nous_complete_live(185u32) != NOUS_CMP_GAP { return 23u64 }         /* one overlap unchecked -> GAP */
+    if nous_live_pair_count() != 270u32 { return 20u64 }
+    if nous_complete_live(270u32) != NOUS_CMP_SATURATED { return 21u64 }   /* all 6 ops' critical pairs join */
+    if nous_complete_live(300u32) != NOUS_CMP_SATURATED { return 22u64 }   /* generous budget -> still SATURATED */
+    if nous_complete_live(269u32) != NOUS_CMP_GAP { return 23u64 }         /* one overlap unchecked -> GAP */
     if nous_complete_live(0u32) != NOUS_CMP_GAP { return 24u64 }
     return 99u64
 }

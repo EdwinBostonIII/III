@@ -741,6 +741,7 @@ MODULES=(
     "numera/sieve"
     "numera/gray_code"
     "numera/catalan"
+    "numera/goldbach"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

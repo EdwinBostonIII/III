@@ -1,0 +1,14 @@
+/* 1309_goldbach.iii -- Goldbach's conjecture empirically verified via the sieve (composition).
+ * Drives numera::goldbach::goldbach_kat: 99 = consuming numera::sieve as a primality oracle, every even
+ * integer 4..50 is found to be a sum of two primes (4=2+2, 10=3+7, 28=5+23 with smallest witnesses 2/3/5);
+ * the witness for 28 really is 5+23 with both prime. A 280-year-old open conjecture exhaustively checked atop
+ * a sieve cross-verified against trial division -- a primality structure put to work by a conjecture-checker. */
+module corpus_1309
+
+extern @abi(c-msvc-x64) fn goldbach_kat() -> u64 from "goldbach.iii"
+
+fn main() -> u64 {
+    let r : u64 = goldbach_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

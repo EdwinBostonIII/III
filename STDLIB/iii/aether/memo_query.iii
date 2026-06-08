@@ -46,6 +46,12 @@ extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.
 extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
 extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
 extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+/* CONSUMED the constitutional admissibility-PREDICATE VM (numera::constitution): memo admission is gated today
+ * only by clause PRESENCE (cons_find); this adds DYNAMIC, fine-grained predicate-level governance over the
+ * operation view (e.g. "only memoize when phase>=1"), a ratifiable/revocable, witness-auditable policy. */
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_eval_predicate(slot: u32, opv: *u8, ante_ids: *u8, n_ante: u32) -> u8 from "constitution.iii"
 extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
 extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
 extern @abi(c-msvc-x64) fn ml_mark_stale(key: *u8) -> i32 from "memo_lattice.iii"
@@ -99,6 +105,13 @@ var MQ_QUERY_CHAIN  : [u8; 32]
  * bytes) + the cons_ratify request buffer (out_cid sink at byte 64, past req). */
 var MQ_CLAUSE_LABEL : [u8; 13]
 var MQ_RATIFY_BUF   : [u64; 16]
+
+/* predicate-gate scratch: a 2-byte predicate bytecode, a 13-byte gating-clause label, a 68-byte op-view, a
+ * never-ratified junk clause id. */
+var MQ_PG_PRED  : [u8; 3]
+var MQ_PG_LABEL : [u8; 13]
+var MQ_PG_OPV   : [u8; 68]
+var MQ_PG_JUNK  : [u8; 32]
 
 /* selftest scratch */
 var MQ_ST_PRODUCER  : [u8; 32]
@@ -429,4 +442,81 @@ fn mq_selftest() -> u64 @export {
     if r == 0i32 { return 99u64 }
     let neg : i32 = 0i32 - r
     return neg as u64
+}
+
+/* ============================================================================
+ *  CONSTITUTIONAL PREDICATE-GATED MEMO ADMISSION -- dynamic, witness-auditable memoization policy.
+ *  Memo admission is gated today only by clause PRESENCE (ml_admit's cons_find of cp_memo_admit) + M17 chain
+ *  verification.  This composes constitution's verified admissibility-predicate VM (cons_eval_predicate over a
+ *  ratified clause's bytecode) with the admission path: a ratified clause can express fine-grained policy over
+ *  the operation view -- "only memoize when phase>=1" (COP_PHASE_GE), "only producer X" (COP_PRODUCER_EQ),
+ *  "only read ops" (COP_REVTAG_EQ), etc.  The predicate gate is strictly ADDITIONAL governance -- on pass it
+ *  delegates to ml_admit, which STILL enforces its own clause gate + chain verification (no bypass).  numera
+ *  constitution -> aether memo: memoization policy becomes a ratifiable/revocable substrate object. */
+fn mq_admit_predicate_gated(key: *u8, out_commit: *u8, chain_id: *u8, clause_id: *u8, opv: *u8, ante_ids: *u8, n_ante: u32) -> i32 @export {
+    if (key as u64) == 0u64 { return -1i32 }
+    if (out_commit as u64) == 0u64 { return -1i32 }
+    if (chain_id as u64) == 0u64 { return -1i32 }
+    if (clause_id as u64) == 0u64 { return -1i32 }
+    if (opv as u64) == 0u64 { return -1i32 }
+    let slot : u32 = cons_find(clause_id)
+    if slot == 0xFFFFFFFFu32 { return -2i32 }                               /* CONS_SENT -> gating clause absent */
+    if cons_eval_predicate(slot, opv, ante_ids, n_ante) == 0u8 { return -3i32 }  /* predicate false -> reject */
+    return ml_admit(key, out_commit, chain_id)                             /* gate passed -> the existing admission door */
+}
+
+/* THE PREDICATE-GATE KAT -- 99 = constitution's admissibility-predicate VM genuinely gates memo admission, all
+ * arms proven (prove-the-negative):
+ *   (1) PREDICATE FALSE: a ratified clause [COP_PHASE_GE 1] over an op-view with phase=0 REJECTS at the gate (-3);
+ *   (2) PREDICATE TRUE: the SAME clause over phase=1 PASSES the gate and reaches ml_admit, whose own
+ *       cp_memo_admit clause gate then fires (-6 = MEMOL_E_CLAUSE_ABSENT) -- proving the predicate gate is
+ *       additional, not a bypass, and that it distinguishes the two op-views;
+ *   (3) an UNKNOWN gating clause -> CLAUSE_ABSENT (-2); (4) a null arg -> E_NULL (-1). */
+fn mq_predicate_gate_kat() -> u64 @export {
+    wh_init(0u64)        /* cons_ratify witnesses the clause -> needs the witness hook + spine up (per mq_kat_lattice) */
+    ws_init()
+    cons_init()
+    ml_init()
+    /* predicate bytecode [const_count=0][COP_PHASE_GE, 1]: admit only when the op-view phase >= 1.
+     * Layout per cons_eval_predicate: u8 const_count, const_count*32 const-ids, then instructions. */
+    MQ_PG_PRED[0u64] = 0x00u8   /* const_count = 0 (no const-id operands) */
+    MQ_PG_PRED[1u64] = 0x13u8   /* COP_PHASE_GE */
+    MQ_PG_PRED[2u64] = 0x01u8   /* operand: phase >= 1 */
+    /* a distinct 13-byte clause label "mq_phase_gate" */
+    MQ_PG_LABEL[0u64]=0x6Du8  MQ_PG_LABEL[1u64]=0x71u8  MQ_PG_LABEL[2u64]=0x5Fu8  MQ_PG_LABEL[3u64]=0x70u8
+    MQ_PG_LABEL[4u64]=0x68u8  MQ_PG_LABEL[5u64]=0x61u8  MQ_PG_LABEL[6u64]=0x73u8  MQ_PG_LABEL[7u64]=0x65u8
+    MQ_PG_LABEL[8u64]=0x5Fu8  MQ_PG_LABEL[9u64]=0x67u8  MQ_PG_LABEL[10u64]=0x61u8 MQ_PG_LABEL[11u64]=0x74u8
+    MQ_PG_LABEL[12u64]=0x65u8
+    /* ratify the gating clause (req layout per memo_query's cp_memo_admit ratify: out_cid@0 textual@8 len@16
+     * ltl@24 ltl_len@32 pred@40 pred_len@48; out_cid sink at byte 64 of the buffer). */
+    let reqbase : u64 = &MQ_RATIFY_BUF as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = &MQ_PG_LABEL as u64
+    rqp[2u64] = 13u64
+    rqp[3u64] = &MQ_PG_LABEL as u64
+    rqp[4u64] = 0u64
+    rqp[5u64] = &MQ_PG_PRED as u64
+    rqp[6u64] = 3u64
+    if cons_ratify(reqbase as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    let cid : *u8 = (reqbase + 64u64) as *u8
+    let kp : *u8 = (&MQ_ST_KEY as u64) as *u8
+    let cp : *u8 = (&MQ_ST_COMMIT as u64) as *u8
+    let hp : *u8 = (&MQ_ST_CHAIN as u64) as *u8
+    let ov : *u8 = (&MQ_PG_OPV as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 68u64 { ov[z] = 0u8 ; z = z + 1u64 }
+    /* (1) predicate false: phase=0 -> rejected at the gate */
+    ov[64u64] = 0u8
+    if mq_admit_predicate_gated(kp, cp, hp, cid, ov, ov, 0u32) != -3i32 { return 2u64 }
+    /* (2) predicate true: phase=1 -> gate passes, ml_admit runs and its cp_memo_admit gate fires (-6) */
+    ov[64u64] = 1u8
+    if mq_admit_predicate_gated(kp, cp, hp, cid, ov, ov, 0u32) != -6i32 { return 3u64 }
+    /* (3) unknown gating clause -> CLAUSE_ABSENT */
+    let mut j : u64 = 0u64
+    while j < 32u64 { MQ_PG_JUNK[j] = 0x5Au8 ; j = j + 1u64 }
+    if mq_admit_predicate_gated(kp, cp, hp, (&MQ_PG_JUNK as u64) as *u8, ov, ov, 0u32) != -2i32 { return 4u64 }
+    /* (4) null guard */
+    if mq_admit_predicate_gated(0u64 as *u8, cp, hp, cid, ov, ov, 0u32) != -1i32 { return 5u64 }
+    return 99u64
 }

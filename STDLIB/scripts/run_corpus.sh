@@ -902,6 +902,7 @@ declare -A EXPECTED=(
     [1322_reg_alloc_liveness]=99
     [1323_aes_gcm_taint]=99
     [1324_hotstuff_liveness]=99
+    [1325_memo_predicate_gate]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

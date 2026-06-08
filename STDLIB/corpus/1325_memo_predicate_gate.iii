@@ -1,0 +1,17 @@
+/* 1325_memo_predicate_gate.iii -- constitutional predicate-gating of memo admission (constitution into aether memo).
+ * Drives aether::memo_query::mq_predicate_gate_kat: 99 = memo admission now CONSUMES numera::constitution's
+ * verified admissibility-PREDICATE VM (cons_eval_predicate over a ratified clause's stack-machine bytecode), not
+ * just clause PRESENCE. A ratified gating clause carrying [COP_PHASE_GE 1] over the operation view: phase=0
+ * REJECTS at the gate (-3), phase=1 PASSES and reaches ml_admit whose own cp_memo_admit gate then fires (-6,
+ * proving the predicate gate is ADDITIONAL governance, not a bypass, and distinguishes the two op-views); an
+ * unknown gating clause is CLAUSE_ABSENT (-2); a null arg is E_NULL (-1). Memoization policy becomes a
+ * ratifiable/revocable, witness-auditable substrate object expressing dynamic admission rules. numera -> aether. */
+module corpus_1325
+
+extern @abi(c-msvc-x64) fn mq_predicate_gate_kat() -> u64 from "memo_query.iii"
+
+fn main() -> u64 {
+    let r : u64 = mq_predicate_gate_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

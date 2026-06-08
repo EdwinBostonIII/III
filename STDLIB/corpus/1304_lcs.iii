@@ -1,0 +1,14 @@
+/* 1304_lcs.iii -- longest common subsequence verified against brute force.
+ * Drives numera::lcs::lcs_kat: 99 = the LCS dynamic program gives ABCBDAB vs BDCAB=4, ABC vs ABC=3, ABC vs
+ * DEF=0, AAB vs ABA=2, and equals the exhaustive brute force (enumerate every 2^m subsequence of the first
+ * string and test whether it embeds in the second) on all pairs. The kernel of diff/merge/alignment, proven
+ * equivalent to its exhaustive reference. */
+module corpus_1304
+
+extern @abi(c-msvc-x64) fn lcs_kat() -> u64 from "lcs.iii"
+
+fn main() -> u64 {
+    let r : u64 = lcs_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

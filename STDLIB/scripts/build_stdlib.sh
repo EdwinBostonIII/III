@@ -736,6 +736,7 @@ MODULES=(
     "numera/knapsack"
     "numera/inversion_count"
     "numera/coin_change"
+    "numera/lcs"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

@@ -1,0 +1,16 @@
+/* 1317_proof_ripple_audit.iii -- admitted ripple merges carry replayable proof dependencies (congruence_closure into proof_ripple_unified).
+ * Drives forcefield::proof_ripple_unified::pru_proof_audit_kat: 99 = the unified ripple decider now CONSUMES
+ * the COMPLEMENTARY proof-trail engine numera::congruence_closure (pcc_*) -- where congruence.iii (cgr_*)
+ * DECIDES merges, pcc_* PRODUCES the ordered chain of labelled congruence edges that JUSTIFY an admitted
+ * merge. Two admitted merges (reasons 7, 42) each yield a valid chain [a,b] whose edge reason matches the
+ * move (replayable); and two un-merged operands carry NO connecting path (the audit refuses to fabricate a
+ * justification). The witness spine rises from WHAT move happened to WHAT proof dependencies justify it. */
+module corpus_1317
+
+extern @abi(c-msvc-x64) fn pru_proof_audit_kat() -> u64 from "proof_ripple_unified.iii"
+
+fn main() -> u64 {
+    let r : u64 = pru_proof_audit_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -206,6 +206,12 @@ fn pcc_explain(a: u32, b: u32) -> u32 @export {
     return 1u32
 }
 
+/* ---- explanation-buffer readers (for proof-carrying consumers, e.g. forcefield::proof_ripple_unified):
+ * expose the labelled path PCC_PATH / edge reasons PCC_EXPL / length filled by pcc_explain. */
+fn pcc_plen() -> u32 @export { return PCC_PLEN[0u32] }
+fn pcc_path(i: u32) -> u32 @export { return PCC_PATH[i as u64] }
+fn pcc_expl(i: u32) -> u32 @export { return PCC_EXPL[i as u64] }
+
 /* ===== KAT ===== */
 
 /* structurally validate the last pcc_explain output: PATH[0]==a, PATH[last]==b, and every consecutive

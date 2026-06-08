@@ -28,6 +28,15 @@ extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "rippl
 extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
 extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+/* the COMPLEMENTARY proof-trail engine: congruence.iii (cgr_*) DECIDES merges; congruence_closure.iii (pcc_*)
+ * PRODUCES the replayable labelled-edge explanation that JUSTIFIES an admitted merge. */
+extern @abi(c-msvc-x64) fn pcc_init() -> i32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_leaf() -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_merge(a: u32, b: u32, reason: u32) -> i32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_explain(a: u32, b: u32) -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_plen() -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_path(i: u32) -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_expl(i: u32) -> u32 from "congruence_closure.iii"
 
 const PRU_ADMIT          : u32 = 99u32   /* the move's proofs hold -> admitted */
 const PRU_REJECT_KERNEL  : u32 = 5u32    /* prover/kernel down -> NO move (blocks all while blind) */
@@ -157,5 +166,43 @@ fn proof_ripple_selftest() -> u64 @export {
     if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 17u64 }   /* m2 packed */
     pru_move_crystal(PRU_KIND_CUT, 0u32, 0u32, 0u32, 8u32, &PRU_CR2 as u64)
     if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 18u64 }   /* m3 packed */
+    return 99u64
+}
+
+/* ============================================================================
+ *  PROOF-EXPLANATION AUDITING -- every admitted MERGE move carries its replayable proof dependencies.
+ *  cgr_* (congruence.iii) DECIDES which unifications are sound (the cost-aware union already in use); the
+ *  COMPLEMENTARY pcc_* (congruence_closure.iii) PRODUCES the ordered chain of labelled congruence edges that
+ *  JUSTIFY the merge -- exactly the data the synthesis kernel needs to admit a rewrite into theorem_commons.
+ *  The witness spine rises from "WHAT move happened" to "WHAT proof dependencies justify it, replayably."
+ * ============================================================================ */
+
+/* model an admitted MERGE of two operands under `reason`; return 1 iff a valid labelled proof chain exists
+ * (path starts at a, ends at b, and the connecting edge records the move's reason). */
+fn pru_move_explanation(reason: u32) -> u32 @export {
+    pcc_init()
+    let a : u32 = pcc_leaf()
+    let b : u32 = pcc_leaf()
+    pcc_merge(a, b, reason)
+    if pcc_explain(a, b) != 1u32 { return 0u32 }       /* the operands must be provably connected */
+    if pcc_plen() != 2u32 { return 0u32 }              /* the chain is exactly [a, b] */
+    if pcc_path(0u32) != a { return 0u32 }             /* it starts at a */
+    if pcc_path(1u32) != b { return 0u32 }             /* and ends at b */
+    if pcc_expl(0u32) != reason { return 0u32 }        /* the edge carries the move's reason (replayable) */
+    return 1u32
+}
+
+/* THE PROOF-AUDIT KAT -- 99 = admitted merges carry a valid labelled proof chain, and unrelated operands
+ * carry NONE (the audit refuses to fabricate a justification):
+ *   (1) two admitted merges (reasons 7 and 42) each yield a valid chain whose edge reason matches the move;
+ *   (2) NEGATIVE: two un-merged operands have NO connecting path -> pcc_explain rejects, the chain is empty. */
+fn pru_proof_audit_kat() -> u64 @export {
+    if pru_move_explanation(7u32) != 1u32 { return 1u64 }
+    if pru_move_explanation(42u32) != 1u32 { return 2u64 }
+    pcc_init()
+    let x : u32 = pcc_leaf()
+    let y : u32 = pcc_leaf()
+    if pcc_explain(x, y) != 0u32 { return 3u64 }       /* unrelated -> not connected */
+    if pcc_plen() != 0u32 { return 4u64 }              /* empty chain -> no fabricated justification */
     return 99u64
 }

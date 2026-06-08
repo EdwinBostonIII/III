@@ -133,6 +133,20 @@ path as non-additive and applied two primary-source honesty corrections):
 The discriminator before adding any module: name the EXISTING subsystem that will call it. A green KAT on a
 self-contained algorithm verified against a co-designed reference is a fixture; value is in the connection.
 
+### Module enhancements (documented-gap fills, not gold-plating)
+Beyond connections, a 4th discovery workflow (reframed onto the enhancement axis) strengthened two modules to
+fulfil their OWN documented promises — additive, full-corpus-gated, each proving the old path could not:
+- **`safety_prover` → arbitrary-k k-induction**: it advertised "THE COMPLETE k-INDUCTION VERDICT" but only
+  implemented k=1; `sp_step_k`/`sp_verdict_k`/`sp_pstates` now PROVE invariants too weak to be 1-inductive
+  (the mode-2 system: UNKNOWN at k=1 → SAFE at k=2), additive (`sp_step` byte-identical, `sp_step_k(1)≡sp_step`),
+  sound (k-induction without the simple-path restriction is sound) (`1326`).
+- **`memo_lattice` → `ml_lookup_verified`**: internalizes the documented M17 caller-verify footgun (a lookup
+  hit means present + not-stale, NOT trusted) into one chain-verified call — an unregistered chain now yields
+  `E_VERIFY_FAIL` in-module instead of being abdicated to every caller (`646` strengthened).
+
+Across four discovery workflows the genuine-find rate ran 12→4→1→2: the substrate's discoverable
+interconnection + enhancement surface is essentially saturated — 15 connections + 2 enhancements, corpus 911→926.
+
 ## Operating notes
 - The repo lives under OneDrive; long builds were corrupted by sync-down until the **fresh-copy** technique
   (`cp build_stdlib.sh _arc_build.sh && bash _arc_build.sh`) gave the first clean `545/0`. Never

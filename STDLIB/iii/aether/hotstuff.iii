@@ -38,6 +38,10 @@ extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out: *u8) -> i32
 extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
 extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
 extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+/* CONSUMED safety theorems: Byzantine quorum-intersection (numera::bft_quorum) + the vote-count no-overflow
+ * family proof (numera::value_range_prover) -- machine-checked, bound to the LIVE configuration. */
+extern @abi(c-msvc-x64) fn bq_safe(f: u32) -> u32 from "bft_quorum.iii"
+extern @abi(c-msvc-x64) fn vrp_no_overflow(cn: u32, ca: u32, bound: u32) -> u32 from "value_range_prover.iii"
 
 const HS_OK                  : i32 =  0i32
 const HS_E_NULL              : i32 = -1i32
@@ -578,6 +582,44 @@ fn hs_selftest() -> u64 @export {
     if HS_VIEW != nv { return 33u64 }                        /* f+1 -> view adopted */
     if HS_PHASE != HS_PHASE_PREPARE { return 34u64 }
     /* duplicate sender after reset is a fresh count, not a dup error (bitmap cleared on adopt) */
+
+    return 99u64
+}
+
+/* ============================================================================
+ *  CONSUMED SAFETY CERTIFICATES -- the consensus core carries its own machine-checked proofs.
+ *  HotStuff's correctness rests on the Byzantine quorum-intersection assumption (any two 2f+1 quorums in
+ *  3f+1 nodes share >= 1 honest node) and on vote counts never exceeding the peer set.  These were
+ *  asserted-and-trusted; now they are CONSUMED, exhaustively-proven facts bound to the engine's LIVE
+ *  configuration (HS_FAULT / HS_PEER_COUNT set by hs_init), tracking reconfiguration rather than a literal.
+ *  Cross-subsystem numera -> aether: the granular safety theorems feed the consensus core.
+ * ============================================================================ */
+var HS_SP_BUF : [u8; 2048]    /* scratch peer-key buffer for the safety-proof init (key bytes do not affect the proof) */
+
+/* the live Byzantine-safety verdict for the configured fault tolerance f (2f+1 quorums always honest-intersect). */
+fn hs_quorum_safety_verify() -> u32 @export { return bq_safe(HS_FAULT) }
+
+/* the live vote-count-fits-the-peer-set verdict: every tally (n in 0..PEER_COUNT, times 1) fits PEER_COUNT. */
+fn hs_verify_vote_count_bounds() -> u32 @export { return vrp_no_overflow(HS_PEER_COUNT, 1u32, HS_PEER_COUNT) }
+
+/* THE CONSENSUS SAFETY-PROOF KAT -- 99 = the quorum-intersection + vote-bound proofs hold for the LIVE
+ * configuration after hs_init, tracking the configured params (not a hard-coded f):
+ *   (1) a 4-peer federation (f = 1): quorum intersection safe AND vote counts bounded;
+ *   (2) a 7-peer federation (f = 2): both STILL hold -- the proofs follow the reconfigured f, not a literal;
+ *   (3) the proofs read the LIVE HS_FAULT / HS_PEER_COUNT that hs_init set (sanity-bound to the engine state). */
+fn hs_safety_proofs_kat() -> u64 @export {
+    /* (1) 4 peers -> f = 1 (init reads the buffer + count; key bytes are irrelevant to the safety proof) */
+    hs_init(1u32, (&HS_SP_BUF as u64) as *u8, 4u32)
+    if HS_PEER_COUNT != 4u32 { return 1u64 }
+    if HS_FAULT != 1u32 { return 2u64 }
+    if hs_quorum_safety_verify() != 1u32 { return 3u64 }
+    if hs_verify_vote_count_bounds() != 1u32 { return 4u64 }
+
+    /* (2) 7 peers -> f = 2 : the proofs track the reconfigured fault tolerance, not a hard-coded value */
+    hs_init(1u32, (&HS_SP_BUF as u64) as *u8, 7u32)
+    if HS_FAULT != 2u32 { return 5u64 }
+    if hs_quorum_safety_verify() != 1u32 { return 6u64 }
+    if hs_verify_vote_count_bounds() != 1u32 { return 7u64 }
 
     return 99u64
 }

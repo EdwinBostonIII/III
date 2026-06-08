@@ -1,0 +1,16 @@
+/* 1314_hotstuff_safety.iii -- HotStuff consensus carries its own machine-checked safety certificate.
+ * Drives aether::hotstuff::hs_safety_proofs_kat: 99 = the consensus core now CONSUMES the Byzantine
+ * quorum-intersection theorem (numera::bft_quorum::bq_safe) and the vote-count no-overflow family proof
+ * (numera::value_range_prover::vrp_no_overflow) bound to its LIVE configuration: a 4-peer federation (f=1)
+ * and a 7-peer federation (f=2) both prove quorum-intersection safe (any two 2f+1 quorums share >=1 honest
+ * node) AND vote counts bounded by the peer set -- the proofs track the reconfigured f (HS_FAULT/HS_PEER_COUNT
+ * that hs_init set), not a hard-coded literal. numera -> aether: granular safety theorems feed consensus. */
+module corpus_1314
+
+extern @abi(c-msvc-x64) fn hs_safety_proofs_kat() -> u64 from "hotstuff.iii"
+
+fn main() -> u64 {
+    let r : u64 = hs_safety_proofs_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,14 @@
+/* 1310_collatz.iii -- the 3n+1 (Collatz) conjecture empirically verified to 100.
+ * Drives numera::collatz::collatz_kat: 99 = iterating n->n/2 (even) or n->3n+1 (odd) gives exact stopping
+ * times (1->0, 6->8, 7->16, 27->111); the trajectory of 27 peaks at 9232; every starting value 1..100 reaches
+ * 1; the single-step rule is correct. A still-open conjecture exhaustively checked, parity by bit-AND and
+ * halving by shift (no modulo/division). */
+module corpus_1310
+
+extern @abi(c-msvc-x64) fn collatz_kat() -> u64 from "collatz.iii"
+
+fn main() -> u64 {
+    let r : u64 = collatz_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

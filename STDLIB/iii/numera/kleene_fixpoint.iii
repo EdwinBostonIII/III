@@ -26,9 +26,15 @@ extern @abi(c-msvc-x64) fn il_meet(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 fr
 extern @abi(c-msvc-x64) fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
 extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
 extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+/* the WIDENING operator (numera::widening) -- nabla: sends a growing bound to +inf, forcing convergence on
+ * UNBOUNDED domains the bounded Kleene join cannot reach. */
+extern @abi(c-msvc-x64) fn wd_widen(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "widening.iii"
+extern @abi(c-msvc-x64) fn wd_lo() -> u32 from "widening.iii"
+extern @abi(c-msvc-x64) fn wd_hi() -> u32 from "widening.iii"
 
 const KF_BOUND : u32 = 10u32       /* the loop guard: while i < 10 */
 const KF_CAP   : u32 = 32u32       /* iteration bound (convergence must occur within this) */
+const KF_WD_INF : u32 = 0xFFFFFFFFu32   /* +infinity for the widened (unbounded) strategy */
 
 var KF_LO    : [u32; 1]
 var KF_HI    : [u32; 1]
@@ -69,6 +75,56 @@ fn kf_fixpoint() -> u32 @export {
 fn kf_lo() -> u32 @export { return KF_LO[0u64] }
 fn kf_hi() -> u32 @export { return KF_HI[0u64] }
 fn kf_iters() -> u32 @export { return KF_ITERS[0u64] }
+
+/* ---- THE WIDENED STRATEGY: ONE engine for BOTH bounded lattices (kf_fixpoint, above) and UNBOUNDED domains.
+ * For `i = 0; while true: i = i+1` the interval [0,hi] grows without bound, so the plain Kleene join never
+ * converges (kf_fixpoint would hit KF_CAP).  Replacing the join with the WIDENING operator nabla (numera::
+ * widening) sends the unstable upper bound to +inf in one step, so the iteration reaches the unbounded least
+ * fixpoint [0,+inf] in a handful of steps -- Cousot's Kleene + nabla pairing, now a single organ. */
+fn kf_fixpoint_widened() -> u32 @export {
+    KF_LO[0u64] = 0u32 ; KF_HI[0u64] = 0u32            /* entry: i = 0 */
+    let mut iters : u32 = 0u32
+    let mut stable : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let plo : u32 = KF_LO[0u64]
+        let phi : u32 = KF_HI[0u64]
+        let mut nhi : u32 = phi + 1u32                 /* the unbounded transfer i++ advances the upper */
+        if phi >= KF_WD_INF { nhi = KF_WD_INF }        /* saturating succ (avoid wrap at the top) */
+        wd_widen(plo, phi, plo, nhi)                   /* x_{k+1} = x_k nabla f(x_k): a growing upper -> +inf */
+        KF_LO[0u64] = wd_lo()
+        KF_HI[0u64] = wd_hi()
+        iters = iters + 1u32
+        if KF_LO[0u64] == plo {
+            if KF_HI[0u64] == phi { stable = 1u32 ; go = 0u32 }   /* reached the widened fixpoint */
+        }
+        if iters >= KF_CAP { go = 0u32 }
+    }
+    KF_ITERS[0u64] = iters
+    return stable
+}
+
+/* =====================================================================================
+ * kf_fixpoint_widened_kat -- 99 = the unified engine handles the UNBOUNDED domain correctly:
+ *   (a) the widened iteration reaches the unbounded least fixpoint [0,+inf];
+ *   (c) it is a TRUE fixpoint (stable), reached fast (<= 4 iters) -- not the cap;
+ *   (b) SOUNDNESS: the widened result OVER-APPROXIMATES the bounded fixpoint [0,10] (contains it), and the
+ *       widening is GENUINE (the bounded upper 10 is strictly below +inf -- no vacuous "already infinite").
+ * ===================================================================================== */
+fn kf_fixpoint_widened_kat() -> u64 @export {
+    let stable : u32 = kf_fixpoint_widened()
+    if stable != 1u32 { return 1u64 }                  /* (c) a true fixpoint, not the cap */
+    if kf_lo() != 0u32 { return 2u64 }                 /* (a) reached [0,+inf] */
+    if kf_hi() != KF_WD_INF { return 3u64 }
+    if kf_iters() > 4u32 { return 4u64 }               /* fast convergence via widening */
+    let whi : u32 = kf_hi()                            /* +inf */
+    /* (b) soundness: re-run the BOUNDED path and assert [0,10] subset of [0,+inf] */
+    kf_fixpoint()
+    if kf_lo() != 0u32 { return 5u64 }                 /* bounded lo is 0 */
+    if whi < kf_hi() { return 6u64 }                   /* widened upper (+inf) >= bounded upper (10) -> contains */
+    if kf_hi() >= whi { return 7u64 }                  /* GENUINE widening: bounded 10 strictly < +inf */
+    return 99u64
+}
 
 /* =====================================================================================
  * kleene_fixpoint_kat -- 99 = the least-fixpoint engine is correct, self-checked:

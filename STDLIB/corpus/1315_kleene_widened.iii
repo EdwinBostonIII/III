@@ -1,0 +1,16 @@
+/* 1315_kleene_widened.iii -- one fixpoint engine for BOTH bounded lattices and unbounded domains.
+ * Drives numera::kleene_fixpoint::kf_fixpoint_widened_kat: 99 = kleene_fixpoint now CONSUMES the widening
+ * operator (numera::widening, nabla) so its OWN iteration converges on an UNBOUNDED domain (i=0; while true:
+ * i=i+1) that the plain Kleene join cannot reach: the widened iteration reaches the least fixpoint [0,+inf]
+ * in <=4 steps, is a true (stable) fixpoint, and SOUNDLY over-approximates the bounded fixpoint [0,10]
+ * (contains it, with genuine widening -- the bounded upper 10 strictly below +inf). Cousot's Kleene+nabla
+ * pairing made one organ: two siloed analysis-stack engines unified. */
+module corpus_1315
+
+extern @abi(c-msvc-x64) fn kf_fixpoint_widened_kat() -> u64 from "kleene_fixpoint.iii"
+
+fn main() -> u64 {
+    let r : u64 = kf_fixpoint_widened_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

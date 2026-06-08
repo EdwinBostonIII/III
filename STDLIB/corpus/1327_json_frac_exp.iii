@@ -1,0 +1,87 @@
+/* 1327_json_frac_exp.iii -- verba::json RFC 8259 fractional/exponential numbers (the headline integer-only deferral).
+ * Drives json_parse/json_emit/json_number_text: 99 = the parser now accepts the full RFC 8259 number grammar that
+ * json.iii:13 deferred ("integer-only; fractional/exp deferred"). A fractional/exponent token becomes a
+ * JSON_KIND_FRAC node storing its VERBATIM text span (no float value computed -> no precision/magnitude limit):
+ *   (1) '3.14','1e10','-0.5','2.5e-3' parse to FRAC nodes whose text == the input AND round-trip byte-exact via
+ *       json_emit (the sign-inclusive span: -0.5 must NOT round-trip as 0.5);
+ *   (2) '3.','1e','3.e5','.5' are REJECTED (JSON_INVALID) -- each needs >=1 digit after '.'/exponent (the
+ *       negative falsifiers proving the grammar is strict, not a blanket accept);
+ *   (3) '42' still parses as JSON_KIND_NUM (integer path byte-identical, FRAC is a distinct kind). */
+module corpus_1327
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, base: u64, len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_emit(builder_id: u64, value_id: u64) -> i32 from "json.iii"
+extern @abi(c-msvc-x64) fn json_kind(id: u64) -> u8 from "json.iii"
+extern @abi(c-msvc-x64) fn json_number_text(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_number_text_len(id: u64) -> u64 from "json.iii"
+
+var N_PI      : [u8; 4] = [0x33u8, 0x2Eu8, 0x31u8, 0x34u8]                /* 3.14   */
+var N_E10     : [u8; 4] = [0x31u8, 0x65u8, 0x31u8, 0x30u8]                /* 1e10   */
+var N_NEGHALF : [u8; 4] = [0x2Du8, 0x30u8, 0x2Eu8, 0x35u8]                /* -0.5   */
+var N_SCI     : [u8; 6] = [0x32u8, 0x2Eu8, 0x35u8, 0x65u8, 0x2Du8, 0x33u8] /* 2.5e-3 */
+var N_INT     : [u8; 2] = [0x34u8, 0x32u8]                                /* 42     */
+var B_DOT     : [u8; 2] = [0x33u8, 0x2Eu8]                                /* 3.     */
+var B_E       : [u8; 2] = [0x31u8, 0x65u8]                                /* 1e     */
+var B_DE      : [u8; 4] = [0x33u8, 0x2Eu8, 0x65u8, 0x35u8]                /* 3.e5   */
+var B_LEAD    : [u8; 2] = [0x2Eu8, 0x35u8]                                /* .5     */
+
+/* parse `s` (n bytes): assert FRAC kind + text == input + round-trip emit byte-exact. 1 = ok. */
+fn chk_frac(a: u64, s: u64, n: u64) -> u8 {
+    let root : u64 = json_parse(a, s, n)
+    if root == 0u64 { return 0u8 }
+    if json_kind(root) != 8u8 { return 0u8 }            /* JSON_KIND_FRAC */
+    if json_number_text_len(root) != n { return 0u8 }
+    let tp : *u8 = json_number_text(root) as *u8
+    let sp : *u8 = s as *u8
+    let mut i : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while i < n {
+        if tp[i] != sp[i] { ok = 0u8 }
+        i = i + 1u64
+    }
+    if ok == 0u8 { return 0u8 }
+    let b : u64 = builder_new(a, 64u64)
+    if json_emit(b, root) != 0i32 { return 0u8 }
+    if builder_len(b) != n { return 0u8 }
+    let bp : *u8 = builder_seal(b) as *u8
+    let mut j : u64 = 0u64
+    while j < n {
+        if bp[j] != sp[j] { ok = 0u8 }
+        j = j + 1u64
+    }
+    builder_drop(b)
+    return ok
+}
+
+/* parse `s`: assert JSON_INVALID (rejected). 1 = correctly rejected. */
+fn chk_invalid(a: u64, s: u64, n: u64) -> u8 {
+    let root : u64 = json_parse(a, s, n)
+    if root == 0u64 { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* (1) valid fractional/exponential, with byte-exact round-trip */
+    if chk_frac(a, &N_PI as u64,      4u64) != 1u8 { return 1u64 }
+    if chk_frac(a, &N_E10 as u64,     4u64) != 1u8 { return 2u64 }
+    if chk_frac(a, &N_NEGHALF as u64, 4u64) != 1u8 { return 3u64 }   /* sign preserved */
+    if chk_frac(a, &N_SCI as u64,     6u64) != 1u8 { return 4u64 }
+    /* (2) malformed -> rejected */
+    if chk_invalid(a, &B_DOT as u64,  2u64) != 1u8 { return 5u64 }
+    if chk_invalid(a, &B_E as u64,    2u64) != 1u8 { return 6u64 }
+    if chk_invalid(a, &B_DE as u64,   4u64) != 1u8 { return 7u64 }
+    if chk_invalid(a, &B_LEAD as u64, 2u64) != 1u8 { return 8u64 }
+    /* (3) integer path preserved: "42" -> NUM (kind 4), not FRAC */
+    let r42 : u64 = json_parse(a, &N_INT as u64, 2u64)
+    if r42 == 0u64 { return 9u64 }
+    if json_kind(r42) != 4u8 { return 10u64 }
+    arena_drop(a)
+    return 99u64
+}

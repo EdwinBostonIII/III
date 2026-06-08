@@ -53,6 +53,7 @@ const JSON_KIND_NUM   : u8 = 4u8
 const JSON_KIND_STR   : u8 = 5u8
 const JSON_KIND_ARR   : u8 = 6u8
 const JSON_KIND_OBJ   : u8 = 7u8
+const JSON_KIND_FRAC  : u8 = 8u8     /* RFC 8259 fractional/exponential number, stored as its verbatim text span */
 
 const JSON_INVALID : u64 = 0u64
 
@@ -230,8 +231,11 @@ fn json_parse_false() -> u64 {
     return id
 }
 
-/* Parse signed integer.  Returns slot id or JSON_INVALID. */
+/* Parse an RFC 8259 number.  An integer-only token -> JSON_KIND_NUM (i64 value); a token with a fractional
+ * '.' digit+ or exponent [eE][+-]?digit+ part -> JSON_KIND_FRAC storing the VERBATIM text span (no float value
+ * is computed, so there is no precision or magnitude limit).  Returns slot id or JSON_INVALID. */
 fn json_parse_number() -> u64 {
+    let token_start : u64 = JSON_INPUT_POS   /* capture BEFORE the sign: a FRAC span must include the '-' */
     let mut neg : u8 = 0u8
     let p : *u8 = JSON_INPUT_BASE as *u8
     if json_peek() == 0x2Du32 {       /* '-' */
@@ -266,6 +270,71 @@ fn json_parse_number() -> u64 {
         }
     }
     if digits == 0u64 { return JSON_INVALID }
+    /* Fractional / exponential extension: a '.' or [eE] after the integer part makes this a FRAC token. */
+    let nc : u32 = json_peek()
+    let mut is_frac : u8 = 0u8
+    if nc == 0x2Eu32 { is_frac = 1u8 }   /* '.' */
+    if nc == 0x65u32 { is_frac = 1u8 }   /* 'e' */
+    if nc == 0x45u32 { is_frac = 1u8 }   /* 'E' */
+    if is_frac == 1u8 {
+        /* optional fractional part: '.' digit+ */
+        if json_peek() == 0x2Eu32 {
+            json_advance()
+            let mut fd : u64 = 0u64
+            let mut fdone : u8 = 0u8
+            while fdone == 0u8 {
+                let fc : u32 = json_peek()
+                if fc < 0x30u32 { fdone = 1u8 }
+                if fc > 0x39u32 { fdone = 1u8 }
+                if fdone == 0u8 {
+                    json_advance()
+                    fd = fd + 1u64
+                }
+            }
+            if fd == 0u64 { return JSON_INVALID }   /* '3.' / '3.e5' -> need >=1 fractional digit */
+        }
+        /* optional exponent part: [eE] [+-]? digit+ */
+        let ec : u32 = json_peek()
+        let mut has_exp : u8 = 0u8
+        if ec == 0x65u32 { has_exp = 1u8 }
+        if ec == 0x45u32 { has_exp = 1u8 }
+        if has_exp == 1u8 {
+            json_advance()                          /* consume e/E */
+            let sc : u32 = json_peek()
+            if sc == 0x2Bu32 { json_advance() }     /* '+' */
+            if sc == 0x2Du32 { json_advance() }     /* '-' */
+            let mut ed : u64 = 0u64
+            let mut edone : u8 = 0u8
+            while edone == 0u8 {
+                let exc : u32 = json_peek()
+                if exc < 0x30u32 { edone = 1u8 }
+                if exc > 0x39u32 { edone = 1u8 }
+                if edone == 0u8 {
+                    json_advance()
+                    ed = ed + 1u64
+                }
+            }
+            if ed == 0u64 { return JSON_INVALID }   /* '1e' / '2.5e' -> need >=1 exponent digit */
+        }
+        /* store the contiguous token byte span verbatim (no value computed -> no precision/overflow risk) */
+        let flen : u64 = JSON_INPUT_POS - token_start
+        let fbuf : u64 = arena_alloc1(JSON_ARENA, flen)
+        if fbuf == 0u64 { return JSON_INVALID }
+        let fdp : *u8 = fbuf as *u8
+        let mut fk : u64 = 0u64
+        while fk < flen {
+            fdp[fk] = p[token_start + fk]
+            fk = fk + 1u64
+        }
+        let fid : u64 = json_alloc_slot()
+        if fid == 0u64 { return JSON_INVALID }
+        let fs : u32 = json_slot_of(fid)
+        JSON_KIND[fs]  = JSON_KIND_FRAC
+        JSON_PAY_A[fs] = fbuf
+        JSON_PAY_B[fs] = flen
+        return fid
+    }
+    /* integer-only token -> JSON_KIND_NUM (the i64 value; the original path, unchanged) */
     if overflowed == 1u8 { return JSON_INVALID }
     if neg == 1u8 { value = 0i64 - value }
     let id : u64 = json_alloc_slot()
@@ -274,6 +343,21 @@ fn json_parse_number() -> u64 {
     JSON_KIND[s]  = JSON_KIND_NUM
     JSON_PAY_A[s] = value as u64
     return id
+}
+
+/* FRAC accessors: the verbatim number text and its length (0 if the node is not a FRAC). */
+fn json_number_text(id: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_FRAC { return 0u64 }
+    return JSON_PAY_A[s]
+}
+
+fn json_number_text_len(id: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_FRAC { return 0u64 }
+    return JSON_PAY_B[s]
 }
 
 /* Parse a JSON string starting at the current "; copy escaped bytes
@@ -921,6 +1005,14 @@ fn json_object_get(id: u64, key_base: u64, key_len: u64) -> u64 @export {
 /* dispatch by node kind. The leaf emitters call builder_push_byte without checking each return
  * (an OOM there leaves a TRUNCATED buffer); the public json_emit wrapper below surfaces that via the
  * builder's sticky error latch -- one check covers the whole emitter family AND every recursion level. */
+/* Emit a FRAC node: push its stored verbatim text span back out unchanged (a round-trip identity). */
+fn json_emit_frac(builder_id: u64, value_id: u64) -> i32 {
+    let s : u32 = json_slot_of(value_id)
+    if s == 0xFFFFFFFFu32 { return JSON_E_BADID }
+    builder_push_bytes(builder_id, JSON_PAY_A[s], JSON_PAY_B[s])
+    return JSON_OK
+}
+
 fn json_emit_dispatch(builder_id: u64, value_id: u64) -> i32 {
     let s : u32 = json_slot_of(value_id)
     if s == 0xFFFFFFFFu32 { return JSON_E_BADID }
@@ -929,6 +1021,7 @@ fn json_emit_dispatch(builder_id: u64, value_id: u64) -> i32 {
     if k == JSON_KIND_FALSE { return json_emit_false(builder_id) }
     if k == JSON_KIND_TRUE  { return json_emit_true(builder_id) }
     if k == JSON_KIND_NUM   { return json_emit_number(builder_id, value_id) }
+    if k == JSON_KIND_FRAC  { return json_emit_frac(builder_id, value_id) }
     if k == JSON_KIND_STR   { return json_emit_string(builder_id, value_id) }
     if k == JSON_KIND_ARR   { return json_emit_array(builder_id, value_id) }
     if k == JSON_KIND_OBJ   { return json_emit_object(builder_id, value_id) }

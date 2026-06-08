@@ -78,10 +78,10 @@ when a real, corpus-tested III subsystem already does it better. Pre-flight now 
 ## Interconnection — the analyses feed the named subsystems (not islands)
 
 The verified-analysis stack is not a parallel library; it is wired into III's existing production subsystems
-as the substrate's "intelligence from the intersection." FOURTEEN connections (A/B by hand; 1–8 from a first
-adversarial-verified discovery workflow — 48 agents, 37→12 genuine→8 executed; c1–c4 from a second — 42 agents,
-31→4 genuine→4 executed), each ADDITIVE, each gated on its named corpus tests + the FULL corpus (911→924,
-FAIL=0 throughout):
+as the substrate's "intelligence from the intersection." FIFTEEN connections (A/B by hand; 1–8 from a first
+adversarial-verified discovery workflow — 48 agents, 37→12 genuine→8; c1–c4 from a second — 42 agents, 31→4;
+c5 from a third — 19 agents, 8→1, the connection space thinning as it fills), each ADDITIVE, each gated on its
+named corpus tests + the FULL corpus (911→925, FAIL=0 throughout):
 
 - **`forcefield/sovereign_optimizer` consumes the analyses (the SECOND LEASH).** `sov_pcc` proves an
   optimization is meaning-preserving; the analysis stack (`range_check` / `branch_elim` / `value_range_prover`
@@ -126,6 +126,9 @@ path as non-additive and applied two primary-source honesty corrections):
   through the AES encryption boundary, never as raw plaintext — a key-recovery-bug guard (`1323`).
 - **c4. `liveness` → `reg_alloc`**: register allocation over a COMPUTED interference graph from the verified
   backward-dataflow liveness analysis, optimally colored (chromatic = max-overlap), not synthetic intervals (`1322`).
+- **c5. `constitution` (predicate VM) → `memo_query`**: memo admission gains DYNAMIC predicate-level governance
+  — a ratified clause's admissibility bytecode (`cons_eval_predicate`, e.g. `COP_PHASE_GE`) gates each
+  admission over the op-view, strictly additional to the existing clause-presence + chain checks (`1325`).
 
 The discriminator before adding any module: name the EXISTING subsystem that will call it. A green KAT on a
 self-contained algorithm verified against a co-designed reference is a fixture; value is in the connection.

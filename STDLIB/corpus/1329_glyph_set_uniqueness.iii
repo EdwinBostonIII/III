@@ -1,0 +1,36 @@
+/* 1329_glyph_set_uniqueness.iii -- verba::glyph_set in-form uniqueness verification (the stage-0 deferral).
+ * Drives glyph_set_pack + glyph_set_validate_uniqueness: 99 = the new export enforces the set invariant
+ * (pairwise-distinct elements) that the module deferred to the caller ("stage-0 does not enforce uniqueness").
+ * glyph_set_pack stores arbitrary bytes (it does NOT dedup), so each case packs a set then asserts the verdict,
+ * paired positive/negative:
+ *   (1) 3 distinct 2-byte elements           -> 1 (a genuine set);
+ *   (2) 3 elements with a duplicate (e0==e2)  -> 0 (the negative falsifier -- the invariant is checked, not assumed);
+ *   (3) a single element                      -> 1 (trivially unique);
+ *   (4) a null glyph                          -> 0.
+ * The element size is derived from the form, so the caller passes no size. */
+module corpus_1329
+
+extern @abi(c-msvc-x64) fn glyph_set_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_validate_uniqueness(in_192: u64) -> u8 from "glyph_set.iii"
+
+var GLYPH : [u8; 192]
+
+var SRC_DISTINCT : [u8; 6] = [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]   /* 3 distinct 2-byte elements */
+var SRC_DUP      : [u8; 6] = [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x01u8, 0x02u8]   /* element 2 duplicates element 0 */
+var SRC_ONE      : [u8; 2] = [0xAAu8, 0xBBu8]                                   /* 1 element */
+
+/* pack `count` elements of `esize` bytes from `src`, then return glyph_set_validate_uniqueness (2 = pack failed). */
+fn build_check(src: u64, count: u32, esize: u32) -> u8 {
+    let meta : u64 = glyph_set_pack_meta(0x10u32, count, esize)
+    if glyph_set_pack(meta, src, &GLYPH as u64) != 0i32 { return 2u8 }
+    return glyph_set_validate_uniqueness(&GLYPH as u64)
+}
+
+fn main() -> u64 {
+    if build_check(&SRC_DISTINCT as u64, 3u32, 2u32) != 1u8 { return 1u64 }   /* distinct -> unique */
+    if build_check(&SRC_DUP as u64,      3u32, 2u32) != 0u8 { return 2u64 }   /* duplicate -> not unique */
+    if build_check(&SRC_ONE as u64,      1u32, 2u32) != 1u8 { return 3u64 }   /* single -> trivially unique */
+    if glyph_set_validate_uniqueness(0u64) != 0u8 { return 4u64 }             /* null -> 0 */
+    return 99u64
+}

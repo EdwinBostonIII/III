@@ -133,3 +133,44 @@ fn glyph_set_validate(in_192: u64) -> u8 @export {
     if gv3_form_id(i_l) != GV3_FORM_SET { return 0u8 }
     return gv3_validate(i_l)
 }
+
+/* In-form set UNIQUENESS verification -- closes the stage-0 deferral ("does not enforce uniqueness").
+ * glyph_set_validate proves STRUCTURE (form_id + mhash); this additionally proves the set INVARIANT: every
+ * element is pairwise-distinct.  The element size is DERIVED from the form ((payload_len - 8) / count), never
+ * taken from the caller -- so it REMOVES the caller-reliance rather than relocating it.  Returns 1 iff a
+ * structurally valid GV3_FORM_SET whose `count` elements are all distinct (a 0- or 1-element set is trivially
+ * unique), else 0.  Bounded: payload <=144 bytes -> O(count^2) byte compares, trivial in-session. */
+fn glyph_set_validate_uniqueness(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_SET { return 0u8 }
+    if gv3_validate(i_l) != 1u8 { return 0u8 }
+    let count : u32 = gv3_read_u32_le(i_l + 12u64)
+    if count <= 1u32 { return 1u8 }                  /* 0 or 1 element -> trivially unique */
+    let plen : u32 = gv3_payload_len(i_l)
+    if plen < 8u32 { return 0u8 }
+    if plen > 152u32 { return 0u8 }
+    let total : u32 = plen - 8u32
+    let esize : u32 = total / count                  /* count is multi-use (loop bounds) -> spilled, no after-call trap */
+    if esize == 0u32 { return 0u8 }                  /* degenerate geometry */
+    let base : u64 = i_l + 16u64
+    let es64 : u64 = (esize as u64) & 0xFFFFFFFFu64
+    let mut a : u32 = 0u32
+    while a < count {
+        let mut b : u32 = a + 1u32
+        while b < count {
+            let pa : *u8 = (base + (a as u64) * es64) as *u8
+            let pb : *u8 = (base + (b as u64) * es64) as *u8
+            let mut k : u64 = 0u64
+            let mut same : u8 = 1u8
+            while k < es64 {
+                if pa[k] != pb[k] { same = 0u8 }
+                k = k + 1u64
+            }
+            if same == 1u8 { return 0u8 }            /* a duplicate pair -> not a valid set */
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}

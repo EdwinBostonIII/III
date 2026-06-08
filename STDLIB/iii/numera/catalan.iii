@@ -1,0 +1,90 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\catalan.iii
+ *
+ * III STDLIB - numera::catalan  --  CATALAN NUMBERS, TWO RECURRENCES CROSS-VERIFIED.
+ *
+ * The Catalan numbers 1,1,2,5,14,42,132,... count balanced parenthesizations, binary search trees on n keys,
+ * triangulations of a polygon, and monotone lattice paths.  This module computes them TWICE by independent
+ * recurrences and proves agreement (differential verification): the O(n^2) CONVOLUTION C(n+1)=sum_{i} C(i)
+ * C(n-i) (pure multiplication) and the O(n) PRODUCT formula C(n)=C(n-1)*(4n-2)/(n+1) (one exact integer
+ * division per step -- exact precisely because the Catalan numbers are integers).  Agreement also guards the
+ * `.iii` division-order trap.
+ *
+ * Verified (catalan_kat): the convolution values match the known sequence through C(10)=16796; the product
+ * formula equals the convolution at every n 0..10; both match the textbook values.  NIH/self-contained.
+ *
+ * Public API:
+ *   catalan_conv(n) -> u32 ; catalan_formula(n) -> u32 ; catalan_agree() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_catalan
+
+var CATALAN_C : [u32; 12]
+
+/* the O(n^2) convolution recurrence (multiplication only). */
+fn catalan_conv(n: u32) -> u32 @export {
+    CATALAN_C[0u64] = 1u32
+    let mut k : u32 = 1u32
+    while k <= n {
+        let mut s : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < k {
+            s = s + (CATALAN_C[i as u64] * CATALAN_C[((k - 1u32) - i) as u64])
+            i = i + 1u32
+        }
+        CATALAN_C[k as u64] = s
+        k = k + 1u32
+    }
+    return CATALAN_C[n as u64]
+}
+
+/* the O(n) product formula C(k) = C(k-1) * (4k-2) / (k+1) (one exact division per step). */
+fn catalan_formula(n: u32) -> u32 @export {
+    CATALAN_C[0u64] = 1u32
+    let mut k : u32 = 1u32
+    while k <= n {
+        let num : u32 = CATALAN_C[(k - 1u32) as u64] * ((4u32 * k) - 2u32)
+        CATALAN_C[k as u64] = num / (k + 1u32)
+        k = k + 1u32
+    }
+    return CATALAN_C[n as u64]
+}
+
+/* the two recurrences agree at every n 0..10. */
+fn catalan_agree() -> u32 @export {
+    let mut n : u32 = 0u32
+    while n <= 10u32 {
+        if catalan_conv(n) != catalan_formula(n) { return 0u32 }
+        n = n + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * catalan_kat -- 99 = the Catalan numbers are correct by two cross-verified recurrences:
+ *   (1) the convolution gives 1,1,2,5,14,42 for n=0..5;
+ *   (2) C(10) = 16796 from convolution;
+ *   (3) the product formula equals convolution at every n 0..10;
+ *   (4) spot-checks of the product formula (C(6)=132, C(9)=4862).
+ * ===================================================================================== */
+fn catalan_kat() -> u64 @export {
+    /* (1) the small values */
+    if catalan_conv(0u32) != 1u32 { return 1u64 }
+    if catalan_conv(1u32) != 1u32 { return 2u64 }
+    if catalan_conv(2u32) != 2u32 { return 3u64 }
+    if catalan_conv(3u32) != 5u32 { return 4u64 }
+    if catalan_conv(4u32) != 14u32 { return 5u64 }
+    if catalan_conv(5u32) != 42u32 { return 6u64 }
+
+    /* (2) a larger value */
+    if catalan_conv(10u32) != 16796u32 { return 7u64 }
+
+    /* (3) the cross-verification */
+    if catalan_agree() != 1u32 { return 8u64 }
+
+    /* (4) product-formula spot checks */
+    if catalan_formula(6u32) != 132u32 { return 9u64 }
+    if catalan_formula(9u32) != 4862u32 { return 10u64 }
+
+    return 99u64
+}

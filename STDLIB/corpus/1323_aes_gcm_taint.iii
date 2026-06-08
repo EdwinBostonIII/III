@@ -1,0 +1,18 @@
+/* 1323_aes_gcm_taint.iii -- key/nonce -> ciphertext information-flow isolation proof for AES-GCM (taint into crypto).
+ * Drives numera::aes_gcm::aes_gcm_taint_kat: 99 = AES-GCM now CONSUMES numera::taint_analysis for a build-time
+ * proof that the secret key and nonce reach the ciphertext output ONLY through the AES encryption boundary,
+ * never as raw plaintext. The flow is modelled as a taint graph -- key + nonce = untrusted SOURCES, the AES
+ * encryption (key schedule H + counter J0 derivation) = the SANITIZER, the ciphertext = the SINK: the derived
+ * key material was tainted, the AES boundary cleared it, and no unsanitized source-to-sink path exists (zero
+ * violations). NEGATIVE: a mis-wired output that emits the raw key material directly is caught as exactly 1
+ * violation -- a key-recovery bug becomes a build-time KAT failure, a security property distinct from
+ * cap_handshake's capability-derivation ordering. numera analysis -> numera crypto. */
+module corpus_1323
+
+extern @abi(c-msvc-x64) fn aes_gcm_taint_kat() -> u64 from "aes_gcm.iii"
+
+fn main() -> u64 {
+    let r : u64 = aes_gcm_taint_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

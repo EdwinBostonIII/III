@@ -327,6 +327,18 @@ fn ml_lookup(key: *u8, out_commit: *u8, out_chain_id: *u8, out_k_memo: *u8) -> i
     return MEMOL_OK
 }
 
+/* TRUSTED single-call read: ml_lookup returns "present, not stale" but NOT "trusted" -- the M17 invariant
+ * requires the caller to chain-verify out_chain_id before consuming out_commit (header lines 20-22).  This
+ * INTERNALIZES that discipline: present + not-stale + M17 chain-verified in ONE call, so a caller cannot forget
+ * the verify and propagate an unverified result.  Purely additive over the already-exported ws_lookup_id;
+ * ml_lookup itself is byte-identical, so every existing path is unaffected. */
+fn ml_lookup_verified(key: *u8, out_commit: *u8, out_chain_id: *u8, out_k_memo: *u8) -> i32 @export {
+    let r : i32 = ml_lookup(key, out_commit, out_chain_id, out_k_memo)
+    if r != MEMOL_OK { return r }                                            /* absent / stale / null propagate */
+    if ws_lookup_id(out_chain_id, (&MEMOL_SCR_WSIDX as u64) as *u64) != 0i32 { return MEMOL_E_VERIFY_FAIL }
+    return MEMOL_OK
+}
+
 /* Mark slot stale (makes it invisible to lookup; M9: reversible by revalidate).
  * Emits STALE fragment (M6 witness continuity). */
 fn ml_mark_stale(key: *u8) -> i32 @export {
@@ -580,6 +592,69 @@ fn ml_st_phase3() -> u64 {
     return 0u64
 }
 
+/* ml_st_phase4: the M17 single-call TRUSTED read (ml_lookup_verified).  POSITIVE: an entry whose chain IS
+ * registered in the spine -> MEMOL_OK.  NEGATIVE (prove-the-gap): a LIVE, non-stale entry whose chain was NEVER
+ * ws_register'd -> ml_lookup ALONE returns OK (present, not stale), but ml_lookup_verified catches the
+ * untrusted chain and returns MEMOL_E_VERIFY_FAIL -- the footgun the header warns about, now removed. */
+fn ml_st_phase4() -> u64 {
+    wh_init(0u64)
+    ws_init()
+    MEMOL_INITED = 0u8
+    ml_init()
+    let mut zz : u64 = 0u64
+    while zz < 32u64 { MEMOL_SCR_ZEROSLOT[zz] = 0u8  zz = zz + 1u64 }
+    let zp : *u8 = (&MEMOL_SCR_ZEROSLOT as u64) as *u8
+    /* CH0 published AND registered (trusted); CH1 published but NOT registered (untrusted). */
+    let fa : u64 = wh_publish(zp, zp, zp, (&MEMOL_T_C0 as u64) as *u8, 0u8, 0u8, 0xEu16, zp, 0u32, zp, 0u32, (&MEMOL_T_CH0 as u64) as *u8)
+    if fa == 0xFFFFFFFFFFFFFFFFu64 { return 40u64 }
+    ws_register(fa)
+    let fb : u64 = wh_publish(zp, zp, zp, (&MEMOL_T_C1 as u64) as *u8, 0u8, 0u8, 0xEu16, zp, 0u32, zp, 0u32, (&MEMOL_T_CH1 as u64) as *u8)
+    if fb == 0xFFFFFFFFFFFFFFFFu64 { return 41u64 }
+    /* entry A: K0 with the registered chain CH0 -> trusted */
+    let sa64 : i64 = ml_slot_alloc((&MEMOL_T_K0 as u64) as *u8)
+    if sa64 == -1i64 { return 42u64 }
+    let sa : u64 = sa64 as u64
+    let mut dw : u64 = 0u64
+    while dw < 32u64 {
+        let kp : *u8 = (&MEMOL_KEYS as u64 + sa * 32u64 + dw) as *u8
+        let ocp : *u8 = (&MEMOL_OUT_COMMITS as u64 + sa * 32u64 + dw) as *u8
+        let chp : *u8 = (&MEMOL_CHAIN_IDS as u64 + sa * 32u64 + dw) as *u8
+        kp[0u64] = MEMOL_T_K0[dw]
+        ocp[0u64] = MEMOL_T_C0[dw]
+        chp[0u64] = MEMOL_T_CH0[dw]
+        dw = dw + 1u64
+    }
+    let lp : *u8 = (&MEMOL_LIVE as u64 + sa) as *u8
+    let stp : *u8 = (&MEMOL_STALE as u64 + sa) as *u8
+    let kmp : *u8 = (&MEMOL_K_MEMO as u64 + sa) as *u8
+    lp[0u64] = 1u8  stp[0u64] = 0u8  kmp[0u64] = MEMOL_K_FULL
+    MEMOL_COUNT = MEMOL_COUNT + 1u64
+    if ml_lookup_verified((&MEMOL_T_K0 as u64) as *u8, (&MEMOL_T_OC as u64) as *u8, (&MEMOL_T_OCH as u64) as *u8, (&MEMOL_T_KM as u64) as *u8) != MEMOL_OK { return 43u64 }
+    /* entry B: K1 with the UNREGISTERED chain CH1 -> untrusted */
+    let sb64 : i64 = ml_slot_alloc((&MEMOL_T_K1 as u64) as *u8)
+    if sb64 == -1i64 { return 44u64 }
+    let sb : u64 = sb64 as u64
+    let mut ew : u64 = 0u64
+    while ew < 32u64 {
+        let kp2 : *u8 = (&MEMOL_KEYS as u64 + sb * 32u64 + ew) as *u8
+        let ocp2 : *u8 = (&MEMOL_OUT_COMMITS as u64 + sb * 32u64 + ew) as *u8
+        let chp2 : *u8 = (&MEMOL_CHAIN_IDS as u64 + sb * 32u64 + ew) as *u8
+        kp2[0u64] = MEMOL_T_K1[ew]
+        ocp2[0u64] = MEMOL_T_C1[ew]
+        chp2[0u64] = MEMOL_T_CH1[ew]
+        ew = ew + 1u64
+    }
+    let lp2 : *u8 = (&MEMOL_LIVE as u64 + sb) as *u8
+    let stp2 : *u8 = (&MEMOL_STALE as u64 + sb) as *u8
+    let kmp2 : *u8 = (&MEMOL_K_MEMO as u64 + sb) as *u8
+    lp2[0u64] = 1u8  stp2[0u64] = 0u8  kmp2[0u64] = MEMOL_K_FULL
+    MEMOL_COUNT = MEMOL_COUNT + 1u64
+    /* ml_lookup ALONE says OK (present, not stale) -- the footgun; ml_lookup_verified catches the untrusted chain */
+    if ml_lookup((&MEMOL_T_K1 as u64) as *u8, (&MEMOL_T_OC as u64) as *u8, (&MEMOL_T_OCH as u64) as *u8, (&MEMOL_T_KM as u64) as *u8) != MEMOL_OK { return 45u64 }
+    if ml_lookup_verified((&MEMOL_T_K1 as u64) as *u8, (&MEMOL_T_OC as u64) as *u8, (&MEMOL_T_OCH as u64) as *u8, (&MEMOL_T_KM as u64) as *u8) != MEMOL_E_VERIFY_FAIL { return 46u64 }
+    return 0u64
+}
+
 fn ml_selftest() -> u64 @export {
     /* Reset lattice and witness subsystems. */
     wh_init(0u64)
@@ -601,6 +676,8 @@ fn ml_selftest() -> u64 @export {
     if r2 != 0u64 { return r2 }
     let r3 : u64 = ml_st_phase3()
     if r3 != 0u64 { return r3 }
+    let r4 : u64 = ml_st_phase4()
+    if r4 != 0u64 { return r4 }
     return 99u64
 }
 

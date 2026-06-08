@@ -4,9 +4,11 @@
  * A candidate equation u = v is a VALID LEMMA iff u and v are JOINABLE (reach a common term) under the
  * current rewrite system -- a sound decision procedure (congruence closure), never observation. The
  * proposer ENUMERATES candidate equations; the disposer (joinability) decides each. `ld_discover`
- * surfaces the theory's equalities systematically, including NON-OBVIOUS ones not stated as rules:
- * from `a->c, b->c` it discovers `a=b`, and -- because joinability is a congruence -- the structured
- * lemma `f(a,d)=f(b,d)`. The leap is proposing the equation; the soundness is the joinability check.
+ * surfaces the LEAF equalities (the non-obvious `a=b` from `a->c, b->c`, not stated as a rule);
+ * `ld_discover_struct` surfaces the STRUCTURED congruence lemmas over the depth-1 ground term algebra --
+ * because joinability is a congruence, `a=b` lifts to `f(a,d)=f(b,d)` -- by enumerating every leaf/f-term
+ * equation and gating each through the same closure. The leap is proposing the equation; the soundness is
+ * the joinability check (the disposer is unchanged; the proposer's reach grows from leaves to f-terms).
  *
  * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: nous_conjecture_term only.  Determinism: u32 only;
  * no recursion; single writer (the underlying engine's state is driven via nr_reset/nr_add).
@@ -14,6 +16,7 @@
 module nous_conjecture_lemma
 
 extern @abi(c-msvc-x64) fn ntm_leaf(s: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_f(p: u32, q: u32) -> u32 from "nous_conjecture_term.iii"
 extern @abi(c-msvc-x64) fn ntm_joins(u: u32, v: u32) -> u8 from "nous_conjecture_term.iii"
 
 const LD_OK : i32 = 0i32
@@ -41,6 +44,87 @@ fn ld_discover(n: u32, out: *u32, cap: u32) -> u32 @export {
             v = v + 1u32
         }
         u = u + 1u32
+    }
+    return cnt
+}
+
+/* STRUCTURED discovery -- delivers the header-promised f(a,d)=f(b,d) lemmas that ld_discover provably cannot
+ * emit (it only ever calls ntm_leaf).  Enumerates EVERY candidate equation over the depth-1 ground term algebra
+ * {leaves 0..n-1} u {f(a,b): a,b<n} and gates each through the UNCHANGED sound disposer (ntm_joins, a congruence
+ * closure).  Records the joinable ones as the two PACKED u32 term values (out[cnt*2], out[cnt*2+1]); returns the
+ * count (records up to `cap` pairs).  Ground-scope; composes only the proven-sound ntm_leaf/ntm_f/ntm_joins.
+ * Three phases of nested u32 loops, terms built INLINE (no local term array -- runtime-indexed local arrays
+ * segfault), no modulo (modulo-after-call trap).  u<v: leaves carry the symbol value (leaf<f-term always since
+ * ntm_f sets NTM_FBIT), so (a) uses symbol order, (b) needs no check (leaf<f-term), (c) compares packed values. */
+fn ld_discover_struct(n: u32, out: *u32, cap: u32) -> u32 @export {
+    let mut cnt : u32 = 0u32
+    /* (a) leaf-leaf: leaf(s1) = leaf(s2), s1<s2 */
+    let mut s1 : u32 = 0u32
+    while s1 < n {
+        let mut s2 : u32 = s1 + 1u32
+        while s2 < n {
+            let ua : u32 = ntm_leaf(s1)
+            let va : u32 = ntm_leaf(s2)
+            if ntm_joins(ua, va) == 1u8 {
+                if cnt < cap {
+                    out[(cnt * 2u32) as u64] = ua
+                    out[(cnt * 2u32 + 1u32) as u64] = va
+                }
+                cnt = cnt + 1u32
+            }
+            s2 = s2 + 1u32
+        }
+        s1 = s1 + 1u32
+    }
+    /* (b) leaf-fterm: leaf(s) = f(fa,fb) -- leaf < f-term always (no order check needed) */
+    let mut s : u32 = 0u32
+    while s < n {
+        let mut fa : u32 = 0u32
+        while fa < n {
+            let mut fb : u32 = 0u32
+            while fb < n {
+                let ub : u32 = ntm_leaf(s)
+                let vb : u32 = ntm_f(fa, fb)
+                if ntm_joins(ub, vb) == 1u8 {
+                    if cnt < cap {
+                        out[(cnt * 2u32) as u64] = ub
+                        out[(cnt * 2u32 + 1u32) as u64] = vb
+                    }
+                    cnt = cnt + 1u32
+                }
+                fb = fb + 1u32
+            }
+            fa = fa + 1u32
+        }
+        s = s + 1u32
+    }
+    /* (c) fterm-fterm: f(a1,b1) = f(a2,b2), keep only the packed-value order u<v (each unordered pair once) */
+    let mut a1 : u32 = 0u32
+    while a1 < n {
+        let mut b1 : u32 = 0u32
+        while b1 < n {
+            let mut a2 : u32 = 0u32
+            while a2 < n {
+                let mut b2 : u32 = 0u32
+                while b2 < n {
+                    let uc : u32 = ntm_f(a1, b1)
+                    let vc : u32 = ntm_f(a2, b2)
+                    if uc < vc {
+                        if ntm_joins(uc, vc) == 1u8 {
+                            if cnt < cap {
+                                out[(cnt * 2u32) as u64] = uc
+                                out[(cnt * 2u32 + 1u32) as u64] = vc
+                            }
+                            cnt = cnt + 1u32
+                        }
+                    }
+                    b2 = b2 + 1u32
+                }
+                a2 = a2 + 1u32
+            }
+            b1 = b1 + 1u32
+        }
+        a1 = a1 + 1u32
     }
     return cnt
 }

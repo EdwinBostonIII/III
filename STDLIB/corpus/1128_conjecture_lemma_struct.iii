@@ -1,0 +1,66 @@
+/* 1128_conjecture_lemma_struct.iii -- STRUCTURED lemma discovery (nous_conjecture_lemma increment).
+ * Drives ld_discover_struct: 99 = the proposer now surfaces the header-promised STRUCTURED congruence lemmas
+ * f(a,d)=f(b,d) that ld_discover (leaf-only) provably cannot emit. With rules a->c, b->c (0->2, 1->2) over
+ * n=4, leaves {0,1,2} collapse and {3} is inert:
+ *   (1) ld_discover_struct finds STRICTLY MORE lemmas than the leaf-only ld_discover (structured lemmas exist);
+ *   (2) the discovered set CONTAINS the congruence lemma f(0,3)=f(1,3) (a=b lifts through the constructor);
+ *   (3) the set EXCLUDES the structured NON-lemma f(0,3)=f(3,3) (3 inert: f(3,3) reaches only itself) -- the
+ *       negative falsifier proving the disposer genuinely discriminates, not a blanket accept;
+ *   (4) per-pair soundness: EVERY emitted (u,v) re-passes the joinability disposer (guards an index/packing bug).
+ * The proposer's reach grows from leaves to the depth-1 ground term algebra; the sound disposer is unchanged. */
+module corpus_1128
+
+extern @abi(c-msvc-x64) fn nr_reset() -> i32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn nr_add(lhs: u32, rhs: u32) -> i32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_leaf(s: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_f(p: u32, q: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ld_is_lemma(u: u32, v: u32) -> u8 from "nous_conjecture_lemma.iii"
+extern @abi(c-msvc-x64) fn ld_discover(n: u32, out: *u32, cap: u32) -> u32 from "nous_conjecture_lemma.iii"
+extern @abi(c-msvc-x64) fn ld_discover_struct(n: u32, out: *u32, cap: u32) -> u32 from "nous_conjecture_lemma.iii"
+
+var OUT  : [u32; 128]   /* structured lemmas (45 for this system) -- sized > the full set so the scans cannot miss */
+var OUTL : [u32; 64]    /* leaf-only lemmas (separate buffer) */
+
+fn main() -> u64 {
+    /* rewrite system: a->c, b->c (0->2, 1->2) */
+    nr_reset()
+    nr_add(ntm_leaf(0u32), ntm_leaf(2u32))
+    nr_add(ntm_leaf(1u32), ntm_leaf(2u32))
+
+    /* (1) structured discovery finds STRICTLY MORE than leaf-only discovery */
+    let nleaf : u32 = ld_discover(4u32, &OUTL as *u32, 32u32)
+    let nstruct : u32 = ld_discover_struct(4u32, &OUT as *u32, 64u32)
+    if nstruct <= nleaf { return 1u64 }
+
+    /* (2) the set CONTAINS the congruence lemma f(0,3)=f(1,3) */
+    let cu : u32 = ntm_f(0u32, 3u32)
+    let cv : u32 = ntm_f(1u32, 3u32)
+    let mut found : u8 = 0u8
+    let mut i : u32 = 0u32
+    while i < nstruct {
+        if OUT[(i * 2u32) as u64] == cu { if OUT[(i * 2u32 + 1u32) as u64] == cv { found = 1u8 } }
+        i = i + 1u32
+    }
+    if found != 1u8 { return 2u64 }
+
+    /* (3) the set EXCLUDES the structured non-lemma f(0,3)=f(3,3) (checked in both packed orders) */
+    let xu : u32 = ntm_f(0u32, 3u32)
+    let xv : u32 = ntm_f(3u32, 3u32)
+    let mut bad : u8 = 0u8
+    let mut j : u32 = 0u32
+    while j < nstruct {
+        if OUT[(j * 2u32) as u64] == xu { if OUT[(j * 2u32 + 1u32) as u64] == xv { bad = 1u8 } }
+        if OUT[(j * 2u32) as u64] == xv { if OUT[(j * 2u32 + 1u32) as u64] == xu { bad = 1u8 } }
+        j = j + 1u32
+    }
+    if bad != 0u8 { return 3u64 }
+
+    /* (4) per-pair soundness: every emitted pair re-passes the unchanged joinability disposer */
+    let mut k : u32 = 0u32
+    while k < nstruct {
+        if ld_is_lemma(OUT[(k * 2u32) as u64], OUT[(k * 2u32 + 1u32) as u64]) != 1u8 { return 4u64 }
+        k = k + 1u32
+    }
+
+    return 99u64
+}

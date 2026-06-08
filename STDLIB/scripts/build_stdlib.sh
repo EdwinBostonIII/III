@@ -738,6 +738,7 @@ MODULES=(
     "numera/coin_change"
     "numera/lcs"
     "numera/lis"
+    "numera/sieve"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

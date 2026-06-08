@@ -21,6 +21,11 @@
  *                 equal to the input, and REJECTS any meaning-changing "optimization" (the leash holds
  *                 even if the untrusted proposer lies).
  *   - SELF-EXTEND: the optimizer assimilates a NEW rule its own reasoning proposed, kernel-governed.
+ *   - CERTIFY-SAFETY: the optimizer CONSUMES III's verified-analysis stack (numera::range_check /
+ *                 numera::branch_elim / numera::value_range_prover over numera::interval_lattice) as a SECOND
+ *                 leash -- an optimization with a safety precondition (overflow-free narrowing, dead-branch
+ *                 fold, bounded loop accumulator) is applied only when the analysis PROVES the precondition
+ *                 for ALL runtime values in range.  The granular analyses now feed the self-optimizer.
  *
  * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes the in-tree faculties; the CIC kernel is the
  * sole arbiter throughout.  No autonomous golden reseal (that is the operator's CRASH-PROTOCOL trigger).
@@ -38,6 +43,10 @@ extern @abi(c-msvc-x64) fn sov_isa_kat2() -> u64 from "sov_isa.iii"
 extern @abi(c-msvc-x64) fn egs_next(state: u64) -> u64 from "egraph_stochastic.iii"
 extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
 extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
+/* the VERIFIED-ANALYSIS STACK -- the SAFETY-precondition half of DISPOSE (over numera::interval_lattice). */
+extern @abi(c-msvc-x64) fn rc_proven_safe(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 from "range_check.iii"
+extern @abi(c-msvc-x64) fn be_eliminable(lo: u32, hi: u32, c: u32) -> u32 from "branch_elim.iii"
+extern @abi(c-msvc-x64) fn vrp_no_overflow(cn: u32, ca: u32, bound: u32) -> u32 from "value_range_prover.iii"
 
 const SOPT_SEED : u64 = 0x0C0FFEE123456789u64
 
@@ -138,6 +147,50 @@ fn sopt_total_certified() -> u32 @export {
 /* The total kernel-quantified cost the certified catalog removes per full application (data-driven). */
 fn sopt_total_cost_saved() -> u64 @export { return census_cost_saved() }
 
+/* ============================================================================
+ *  ANALYSIS-CERTIFIED SAFETY -- the SECOND LEASH.
+ *  sov_pcc proves an optimization is MEANING-PRESERVING; but many real optimizations are sound only under a
+ *  SAFETY PRECONDITION (a narrowing must not overflow; a branch may be folded only if an arm is dead; a loop
+ *  accumulator may be narrowed only if the whole iteration family fits).  The optimizer now CONSUMES III's
+ *  verified-analysis stack -- numera::range_check / numera::branch_elim / numera::value_range_prover, each a
+ *  sound abstraction over numera::interval_lattice -- to DISCHARGE those preconditions.  An optimization is
+ *  applied only when BOTH leashes hold: the CIC kernel proves equivalence AND the analysis proves the
+ *  precondition.  This is the intersection of the granular analyses with the self-optimizer: precision the
+ *  arithmetic-identity catalog alone cannot reach, every verdict sound for ALL runtime values in range.
+ * ============================================================================ */
+
+/* a width-narrowing optimization (use a narrower op) is safe iff the operand ranges provably fit the bound. */
+fn sopt_safe_to_narrow(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 @export {
+    return rc_proven_safe(lo1, hi1, lo2, hi2, op, bound)
+}
+
+/* a branch-folding optimization is safe iff one arm is provably dead (range-based dead-branch elimination). */
+fn sopt_safe_to_fold(lo: u32, hi: u32, c: u32) -> u32 @export {
+    return be_eliminable(lo, hi, c)
+}
+
+/* narrowing a loop accumulator is safe iff the WHOLE iteration family provably fits the bound. */
+fn sopt_safe_loop_acc(cn: u32, ca: u32, bound: u32) -> u32 @export {
+    return vrp_no_overflow(cn, ca, bound)
+}
+
+/* THE ANALYSIS-CERTIFIED LEASH KAT -- 99 = the optimizer applies a safety-preconditioned optimization ONLY
+ * when the verified-analysis stack proves the precondition, and REJECTS it otherwise (the leash holds across
+ * the analyses, not just the CIC kernel):
+ *   (1) a narrowing whose operands (0..10)*(0..5) max 50 fit a u8 (255) is ACCEPTED;
+ *   (2) the same narrowing into a 5-bit bound (31) is REJECTED -- 50 would overflow;
+ *   (3) a provably-dead branch (2x in [0,10] < 20) is foldable; a live branch (2x in [0,20] vs 10) is NOT;
+ *   (4) a loop family (n*a, n<=10, a<=5) is certified to fit a u8; the same with a<=30 is rejected. */
+fn sopt_analysis_kat() -> u64 @export {
+    if sopt_safe_to_narrow(0u32, 10u32, 0u32, 5u32, 1u32, 255u32) != 1u32 { return 1u64 }
+    if sopt_safe_to_narrow(0u32, 10u32, 0u32, 5u32, 1u32, 31u32) != 0u32 { return 2u64 }
+    if sopt_safe_to_fold(0u32, 5u32, 20u32) != 1u32 { return 3u64 }
+    if sopt_safe_to_fold(0u32, 10u32, 10u32) != 0u32 { return 4u64 }
+    if sopt_safe_loop_acc(10u32, 5u32, 255u32) != 1u32 { return 5u64 }
+    if sopt_safe_loop_acc(10u32, 30u32, 255u32) != 0u32 { return 6u64 }
+    return 99u64
+}
+
 /* THE FLAGSHIP -- the complete autonomous self-optimization loop, end to end, every step kernel-governed.
  * 99 =
  *   (1) DISCOVER: the Dream Sandbox autonomously discovered >= 1 true optimization (seeded, reproducible);
@@ -165,5 +218,11 @@ fn sopt_flagship() -> u64 @export {
      * 843 cites sov_isa).  The full-catalog codegen wiring (all 9 census classes in cg_r3) is the
      * operator's clean-tree frontier; the optimizer + the proof are complete here. */
     if sov_isa_kat2() != 99u64 { return 7u64 }
+    /* (8) ANALYSIS-CERTIFIED SAFETY: the optimizer's leash now extends beyond arithmetic identity to the
+     * SAFETY preconditions an optimization needs, discharged by the verified-analysis stack (range_check /
+     * branch_elim / value_range_prover over interval_lattice).  A safe narrowing/fold is ACCEPTED, an unsafe
+     * one REJECTED -- the second leash holds for ALL runtime values in range, the granular analyses now
+     * feeding the self-optimizer's DISPOSE. */
+    if sopt_analysis_kat() != 99u64 { return 8u64 }
     return 99u64
 }

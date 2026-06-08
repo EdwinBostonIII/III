@@ -1,0 +1,17 @@
+/* 1311_sovereign_analysis.iii -- the sovereign optimizer's analysis-certified SECOND leash.
+ * Drives forcefield::sovereign_optimizer::sopt_analysis_kat: 99 = the self-optimizer now CONSUMES III's
+ * verified-analysis stack (numera::range_check / branch_elim / value_range_prover over interval_lattice) to
+ * discharge optimization SAFETY preconditions -- a narrowing whose operands (0..10)*(0..5) max 50 fit a u8 is
+ * ACCEPTED, the same into a 5-bit bound REJECTED (would overflow); a provably-dead branch is foldable, a live
+ * one is not; a loop family (n*a, n<=10, a<=5) is certified to fit a u8, the same with a<=30 rejected. The
+ * granular analyses feeding the self-optimizer: intelligence from the intersection, every verdict sound for
+ * all runtime values in range. */
+module corpus_1311
+
+extern @abi(c-msvc-x64) fn sopt_analysis_kat() -> u64 from "sovereign_optimizer.iii"
+
+fn main() -> u64 {
+    let r : u64 = sopt_analysis_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

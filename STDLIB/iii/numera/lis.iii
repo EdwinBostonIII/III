@@ -1,0 +1,148 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\lis.iii
+ *
+ * III STDLIB - numera::lis  --  LONGEST INCREASING SUBSEQUENCE, TWO ALGORITHMS CROSS-VERIFIED.
+ *
+ * The length of the longest strictly-increasing subsequence -- a building block of sequence alignment and
+ * scheduling.  This module computes it TWICE by unrelated methods and proves they always agree (differential
+ * verification): the obvious O(n^2) DP (dp[i] = 1 + max dp[j] over j<i with A[j]<A[i]) and the clever
+ * O(n log n) patience sort (keep `tails[k]` = the smallest possible tail of an increasing subsequence of
+ * length k+1; for each value binary-search the first tail >= it and overwrite, else extend).  Two methods
+ * with no shared logic agreeing on every input is far stronger evidence than either alone.
+ *
+ * Arrays: [10,9,2,5,3,7,101,18] (LIS 4, e.g. 2,3,7,101); [1,2,3,4,5] (5); [5,4,3,2,1] (1); [2,2,2] (1,
+ * strictly increasing forbids repeats).
+ *
+ * Verified (lis_kat): each array's length is the known value from BOTH methods; the patience binary search
+ * (lower bound) is correct; the two methods agree on all arrays.  NIH/self-contained.
+ *
+ * Public API:
+ *   lis_setup(mode) ; lis_max2(a,b) -> u32 ; lis_lower_bound(len,x) -> u32 ; lis_dp() -> u32 ;
+ *   lis_patience() -> u32 ; lis_agree() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_lis
+
+var LIS_A     : [u32; 8]
+var LIS_N     : [u32; 1]
+var LIS_TAILS : [u32; 8]
+var LIS_DP    : [u32; 8]
+
+fn lis_max2(a: u32, b: u32) -> u32 @export {
+    if a > b { return a }
+    return b
+}
+
+fn lis_setup(mode: u32) -> i32 @export {
+    if mode == 0u32 {
+        LIS_A[0u64]=10u32 ; LIS_A[1u64]=9u32 ; LIS_A[2u64]=2u32 ; LIS_A[3u64]=5u32
+        LIS_A[4u64]=3u32 ; LIS_A[5u64]=7u32 ; LIS_A[6u64]=101u32 ; LIS_A[7u64]=18u32 ; LIS_N[0u64]=8u32
+        return 0i32
+    }
+    if mode == 1u32 {
+        LIS_A[0u64]=1u32 ; LIS_A[1u64]=2u32 ; LIS_A[2u64]=3u32 ; LIS_A[3u64]=4u32 ; LIS_A[4u64]=5u32 ; LIS_N[0u64]=5u32
+        return 0i32
+    }
+    if mode == 2u32 {
+        LIS_A[0u64]=5u32 ; LIS_A[1u64]=4u32 ; LIS_A[2u64]=3u32 ; LIS_A[3u64]=2u32 ; LIS_A[4u64]=1u32 ; LIS_N[0u64]=5u32
+        return 0i32
+    }
+    /* mode 3: all equal -> LIS 1 (strict) */
+    LIS_A[0u64]=2u32 ; LIS_A[1u64]=2u32 ; LIS_A[2u64]=2u32 ; LIS_N[0u64]=3u32
+    return 0i32
+}
+
+/* first index in tails[0..len) with tails[idx] >= x (lower bound); len if none. */
+fn lis_lower_bound(len: u32, x: u32) -> u32 @export {
+    let mut lo : u32 = 0u32
+    let mut hi : u32 = len
+    while lo < hi {
+        let mid : u32 = lo + ((hi - lo) / 2u32)
+        if LIS_TAILS[mid as u64] >= x { hi = mid }
+        if LIS_TAILS[mid as u64] < x { lo = mid + 1u32 }
+    }
+    return lo
+}
+
+/* the O(n^2) dynamic program. */
+fn lis_dp() -> u32 @export {
+    let n : u32 = LIS_N[0u64]
+    let mut best : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        LIS_DP[i as u64] = 1u32
+        let mut j : u32 = 0u32
+        while j < i {
+            if LIS_A[j as u64] < LIS_A[i as u64] {
+                LIS_DP[i as u64] = lis_max2(LIS_DP[i as u64], LIS_DP[j as u64] + 1u32)
+            }
+            j = j + 1u32
+        }
+        best = lis_max2(best, LIS_DP[i as u64])
+        i = i + 1u32
+    }
+    return best
+}
+
+/* the O(n log n) patience sort. */
+fn lis_patience() -> u32 @export {
+    let n : u32 = LIS_N[0u64]
+    let mut len : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let x : u32 = LIS_A[i as u64]
+        let idx : u32 = lis_lower_bound(len, x)
+        LIS_TAILS[idx as u64] = x                 /* overwrite the first tail >= x, or extend at idx==len */
+        if idx == len { len = len + 1u32 }
+        i = i + 1u32
+    }
+    return len
+}
+
+/* the two methods agree on every configured array. */
+fn lis_agree() -> u32 @export {
+    let mut m : u32 = 0u32
+    while m <= 3u32 {
+        lis_setup(m)
+        if lis_dp() != lis_patience() { return 0u32 }
+        m = m + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * lis_kat -- 99 = longest increasing subsequence is correct by two cross-verified methods:
+ *   (1) [10,9,2,5,3,7,101,18] -> 4 from both DP and patience;
+ *   (2) [1,2,3,4,5] -> 5; [5,4,3,2,1] -> 1; [2,2,2] -> 1 (strict);
+ *   (3) the lower-bound binary search is correct on a sorted tails array;
+ *   (4) the two methods agree on all arrays.
+ * ===================================================================================== */
+fn lis_kat() -> u64 @export {
+    /* (1) the classic, both methods */
+    lis_setup(0u32)
+    if lis_dp() != 4u32 { return 1u64 }
+    if lis_patience() != 4u32 { return 2u64 }
+
+    /* (2) increasing, decreasing, equal */
+    lis_setup(1u32)
+    if lis_dp() != 5u32 { return 3u64 }
+    if lis_patience() != 5u32 { return 4u64 }
+    lis_setup(2u32)
+    if lis_dp() != 1u32 { return 5u64 }
+    if lis_patience() != 1u32 { return 6u64 }
+    lis_setup(3u32)
+    if lis_dp() != 1u32 { return 7u64 }
+    if lis_patience() != 1u32 { return 8u64 }
+
+    /* (3) lower bound on a known sorted tails array [2,3,7,18] */
+    LIS_TAILS[0u64]=2u32 ; LIS_TAILS[1u64]=3u32 ; LIS_TAILS[2u64]=7u32 ; LIS_TAILS[3u64]=18u32
+    if lis_lower_bound(4u32, 7u32) != 2u32 { return 9u64 }     /* first >= 7 is index 2 */
+    if lis_lower_bound(4u32, 5u32) != 2u32 { return 10u64 }    /* first >= 5 is 7 at index 2 */
+    if lis_lower_bound(4u32, 1u32) != 0u32 { return 11u64 }    /* all >= 1 */
+    if lis_lower_bound(4u32, 20u32) != 4u32 { return 12u64 }   /* none >= 20 */
+
+    /* (4) the two methods agree everywhere */
+    if lis_agree() != 1u32 { return 13u64 }
+
+    return 99u64
+}

@@ -1,0 +1,166 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\lcs.iii
+ *
+ * III STDLIB - numera::lcs  --  LONGEST COMMON SUBSEQUENCE, VERIFIED AGAINST BRUTE FORCE.
+ *
+ * The length of the longest order-preserving subsequence common to two sequences -- the kernel of `diff`,
+ * version control merges, and DNA alignment.  Distinct from edit distance: it counts shared structure rather
+ * than operations.  The DP is D[i][j] = D[i-1][j-1]+1 when the characters match, else max(D[i-1][j],
+ * D[i][j-1]).  The III discipline VERIFIES the DP against an exhaustive brute force: enumerate every one of
+ * the 2^m subsequences of the first string and ask whether it embeds (as a subsequence) in the second,
+ * keeping the longest that does.
+ *
+ * Cases: ABCBDAB vs BDCAB (LCS 4, e.g. BCAB); ABC vs ABC (3); ABC vs DEF (0); AAB vs ABA (2).
+ *
+ * Verified (lcs_kat): each pair's DP length equals the known value AND the brute-force reference; the DP
+ * equals brute force on all configured pairs.  NIH/self-contained.
+ *
+ * Public API:
+ *   lcs_setup(mode) ; lcs_max2(a,b) -> u32 ; lcs_dp() -> u32 ; lcs_subseq_len(mask) -> u32 ;
+ *   lcs_brute() -> u32 ; lcs_agree() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_lcs
+
+const LCS_W : u32 = 8u32
+
+var LCS_S  : [u32; 8]
+var LCS_T  : [u32; 8]
+var LCS_SM : [u32; 1]
+var LCS_TN : [u32; 1]
+var LCS_D  : [u32; 64]
+
+fn lcs_max2(a: u32, b: u32) -> u32 @export {
+    if a > b { return a }
+    return b
+}
+
+fn lcs_setup(mode: u32) -> i32 @export {
+    if mode == 0u32 {                  /* ABCBDAB vs BDCAB ; A=0 B=1 C=2 D=3 */
+        LCS_S[0u64]=0u32 ; LCS_S[1u64]=1u32 ; LCS_S[2u64]=2u32 ; LCS_S[3u64]=1u32 ; LCS_S[4u64]=3u32 ; LCS_S[5u64]=0u32 ; LCS_S[6u64]=1u32 ; LCS_SM[0u64]=7u32
+        LCS_T[0u64]=1u32 ; LCS_T[1u64]=3u32 ; LCS_T[2u64]=2u32 ; LCS_T[3u64]=0u32 ; LCS_T[4u64]=1u32 ; LCS_TN[0u64]=5u32
+        return 0i32
+    }
+    if mode == 1u32 {                  /* ABC vs ABC */
+        LCS_S[0u64]=0u32 ; LCS_S[1u64]=1u32 ; LCS_S[2u64]=2u32 ; LCS_SM[0u64]=3u32
+        LCS_T[0u64]=0u32 ; LCS_T[1u64]=1u32 ; LCS_T[2u64]=2u32 ; LCS_TN[0u64]=3u32
+        return 0i32
+    }
+    if mode == 2u32 {                  /* ABC vs DEF (D=3 E=4 F=5) */
+        LCS_S[0u64]=0u32 ; LCS_S[1u64]=1u32 ; LCS_S[2u64]=2u32 ; LCS_SM[0u64]=3u32
+        LCS_T[0u64]=3u32 ; LCS_T[1u64]=4u32 ; LCS_T[2u64]=5u32 ; LCS_TN[0u64]=3u32
+        return 0i32
+    }
+    /* mode 3: AAB vs ABA */
+    LCS_S[0u64]=0u32 ; LCS_S[1u64]=0u32 ; LCS_S[2u64]=1u32 ; LCS_SM[0u64]=3u32
+    LCS_T[0u64]=0u32 ; LCS_T[1u64]=1u32 ; LCS_T[2u64]=0u32 ; LCS_TN[0u64]=3u32
+    return 0i32
+}
+
+/* the LCS dynamic program. */
+fn lcs_dp() -> u32 @export {
+    let sm : u32 = LCS_SM[0u64]
+    let tn : u32 = LCS_TN[0u64]
+    let mut i : u32 = 0u32
+    while i <= sm { LCS_D[((i * LCS_W) + 0u32) as u64] = 0u32 ; i = i + 1u32 }
+    let mut j : u32 = 0u32
+    while j <= tn { LCS_D[((0u32 * LCS_W) + j) as u64] = 0u32 ; j = j + 1u32 }
+    let mut a : u32 = 1u32
+    while a <= sm {
+        let mut b : u32 = 1u32
+        while b <= tn {
+            if LCS_S[(a - 1u32) as u64] == LCS_T[(b - 1u32) as u64] {
+                LCS_D[((a * LCS_W) + b) as u64] = LCS_D[(((a - 1u32) * LCS_W) + (b - 1u32)) as u64] + 1u32
+            }
+            if LCS_S[(a - 1u32) as u64] != LCS_T[(b - 1u32) as u64] {
+                LCS_D[((a * LCS_W) + b) as u64] = lcs_max2(LCS_D[(((a - 1u32) * LCS_W) + b) as u64], LCS_D[((a * LCS_W) + (b - 1u32)) as u64])
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return LCS_D[((sm * LCS_W) + tn) as u64]
+}
+
+/* length of the masked subsequence of S iff it embeds in T as a subsequence (else 0). */
+fn lcs_subseq_len(mask: u32) -> u32 @export {
+    let sm : u32 = LCS_SM[0u64]
+    let tn : u32 = LCS_TN[0u64]
+    let mut ti : u32 = 0u32
+    let mut matched : u32 = 0u32
+    let mut total : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < sm {
+        if ((mask >> i) & 1u32) == 1u32 {
+            total = total + 1u32
+            let x : u32 = LCS_S[i as u64]
+            let mut go : u32 = 1u32
+            while go == 1u32 {
+                if ti >= tn { go = 0u32 }
+                if go == 1u32 {
+                    if LCS_T[ti as u64] == x { matched = matched + 1u32 ; ti = ti + 1u32 ; go = 0u32 }
+                    if go == 1u32 { ti = ti + 1u32 }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    if matched == total { return total }
+    return 0u32
+}
+
+/* the exhaustive reference: the longest subsequence of S that embeds in T. */
+fn lcs_brute() -> u32 @export {
+    let sm : u32 = LCS_SM[0u64]
+    let limit : u32 = 1u32 << sm
+    let mut best : u32 = 0u32
+    let mut mask : u32 = 0u32
+    while mask < limit {
+        let l : u32 = lcs_subseq_len(mask)
+        if l > best { best = l }
+        mask = mask + 1u32
+    }
+    return best
+}
+
+/* the DP equals brute force on every configured pair. */
+fn lcs_agree() -> u32 @export {
+    let mut m : u32 = 0u32
+    while m <= 3u32 {
+        lcs_setup(m)
+        if lcs_dp() != lcs_brute() { return 0u32 }
+        m = m + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * lcs_kat -- 99 = longest common subsequence is correct, verified against brute force:
+ *   (1) ABCBDAB vs BDCAB = 4 (DP and brute agree);
+ *   (2) ABC vs ABC = 3; ABC vs DEF = 0; AAB vs ABA = 2;
+ *   (3) the DP equals brute force on all configured pairs;
+ *   (4) max2 is correct.
+ * ===================================================================================== */
+fn lcs_kat() -> u64 @export {
+    /* (1) the classic */
+    lcs_setup(0u32)
+    if lcs_dp() != 4u32 { return 1u64 }
+    if lcs_brute() != 4u32 { return 2u64 }
+
+    /* (2) identical, disjoint, repeated */
+    lcs_setup(1u32)
+    if lcs_dp() != 3u32 { return 3u64 }
+    lcs_setup(2u32)
+    if lcs_dp() != 0u32 { return 4u64 }
+    lcs_setup(3u32)
+    if lcs_dp() != 2u32 { return 5u64 }
+
+    /* (3) the equivalence over all pairs */
+    if lcs_agree() != 1u32 { return 6u64 }
+
+    /* (4) max2 */
+    if lcs_max2(3u32, 9u32) != 9u32 { return 7u64 }
+    if lcs_max2(6u32, 2u32) != 6u32 { return 8u64 }
+
+    return 99u64
+}

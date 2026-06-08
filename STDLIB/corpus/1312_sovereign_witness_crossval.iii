@@ -1,0 +1,16 @@
+/* 1312_sovereign_witness_crossval.iii -- the sovereign witness turned INWARD against III's own analyzer.
+ * Drives sanctus::sovereign_witness::sw_crossval_affine_kat: 99 = the closed-form u64 witness (sw_prove_affine,
+ * wrap-aware, over external traces) and III's exhaustive u32 in-line analyzer (numera::affine_check::ac_in_bounds)
+ * AGREE on affine-access safety (a*i+b < size, i in [0,n)) for every in-range access -- (2,1,12,32) safe,
+ * (3,2,8,16) refuted, (1,0,31,32) safe, (5,3,10,64) safe, (4,0,20,50) refuted -- and the witness genuinely
+ * distinguishes safe from unsafe. Differential verification: two sound procedures with no shared code agreeing,
+ * the granular analyzer validating the sovereign. */
+module corpus_1312
+
+extern @abi(c-msvc-x64) fn sw_crossval_affine_kat() -> u64 from "sovereign_witness.iii"
+
+fn main() -> u64 {
+    let r : u64 = sw_crossval_affine_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

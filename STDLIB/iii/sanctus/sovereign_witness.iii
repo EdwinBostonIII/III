@@ -26,6 +26,8 @@ extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8)
 extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+/* III's OWN in-line affine-safety analyzer -- the inward cross-validation oracle. */
+extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
 
 /* verdicts */
 const SW_PROVEN         : u32 = 0u32
@@ -280,4 +282,41 @@ fn sw_prove_aligned(base: u64, stride: u64, count: u64, align: u64, out_ce: u64)
         if count > 1u64 { cep[0u64] = 1u64 ; return SW_REFUTED_ALIGN }        /* access 1 (= base+stride) is the first misaligned */
     }
     return SW_PROVEN
+}
+
+/* ============================================================================
+ *  INWARD CROSS-VALIDATION -- the external-trace witness checked against III's OWN in-line analyzer.
+ *  sw_prove_affine decides affine-access safety in CLOSED FORM over external traces (u64, wrap-aware);
+ *  numera::affine_check::ac_in_bounds decides the SAME property for an in-line access by EXHAUSTIVE u32 scan.
+ *  Two sound procedures with NO shared code must agree on PROVEN-vs-REFUTED for every in-range affine access
+ *  -- differential verification that turns the witness inward against the substrate's own analysis (the
+ *  vulnerability class scans 5/6 hardened in III's own body), the granular analyzer validating the sovereign.
+ * ============================================================================ */
+
+/* 1 iff the closed-form witness verdict and the exhaustive affine_check agree on a*i+b < size, i in [0,n). */
+fn sw_xv_agree(a: u32, b: u32, n: u32, size: u32) -> u64 @export {
+    let ce : u64 = 0u64
+    let v : u32 = sw_prove_affine(b as u64, a as u64, n as u64, size as u64, &ce as u64)   /* base=b, stride=a */
+    let mut witness_safe : u32 = 0u32
+    if v == SW_PROVEN { witness_safe = 1u32 }
+    let inline_safe : u32 = ac_in_bounds(a, b, n, size)
+    if witness_safe == inline_safe { return 1u64 }
+    return 0u64
+}
+
+/* THE INWARD CROSS-VALIDATION KAT -- 99 = the closed-form witness and the exhaustive affine_check agree on
+ * affine-access safety for every in-range access (a*i+b < size), PROVEN and REFUTED alike, AND the witness
+ * genuinely distinguishes safe from unsafe (never a vacuous all-PROVEN):
+ *   (2,1,12,32) safe ; (3,2,8,16) refuted ; (1,0,31,32) safe ; (5,3,10,64) safe ; (4,0,20,50) refuted. */
+fn sw_crossval_affine_kat() -> u64 @export {
+    if sw_xv_agree(2u32, 1u32, 12u32, 32u32) != 1u64 { return 1u64 }
+    if sw_xv_agree(3u32, 2u32, 8u32, 16u32) != 1u64 { return 2u64 }
+    if sw_xv_agree(1u32, 0u32, 31u32, 32u32) != 1u64 { return 3u64 }
+    if sw_xv_agree(5u32, 3u32, 10u32, 64u32) != 1u64 { return 4u64 }
+    if sw_xv_agree(4u32, 0u32, 20u32, 50u32) != 1u64 { return 5u64 }
+    /* the witness genuinely distinguishes: a safe access is PROVEN, an unsafe one is not */
+    let ce : u64 = 0u64
+    if sw_prove_affine(1u64, 2u64, 12u64, 32u64, &ce as u64) != SW_PROVEN { return 6u64 }
+    if sw_prove_affine(2u64, 3u64, 8u64, 16u64, &ce as u64) == SW_PROVEN { return 7u64 }
+    return 99u64
 }

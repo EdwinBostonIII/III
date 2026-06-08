@@ -1,0 +1,14 @@
+/* 1307_gray_code.iii -- reflected binary Gray code verified by its defining property.
+ * Drives numera::gray_code::gray_code_kat: 99 = gray(i)=i^(i>>1) produces 0,1,3,2,6,7,5,4; every adjacent
+ * code (cyclically) differs in exactly one bit (checked by popcount of the XOR); the map is a genuine
+ * bijection on 0..15 (decode inverts encode, all outputs distinct); popcount correct. The structural
+ * invariant verified exhaustively, not sampled. */
+module corpus_1307
+
+extern @abi(c-msvc-x64) fn gray_code_kat() -> u64 from "gray_code.iii"
+
+fn main() -> u64 {
+    let r : u64 = gray_code_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

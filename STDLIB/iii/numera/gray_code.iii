@@ -1,0 +1,108 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\gray_code.iii
+ *
+ * III STDLIB - numera::gray_code  --  REFLECTED BINARY GRAY CODE (verified by its defining property).
+ *
+ * A Gray code orders the integers 0..2^n so that consecutive codes differ in exactly ONE bit -- the basis of
+ * rotary encoders, Karnaugh maps, and glitch-free state machines.  The encoding is the elegant
+ * gray(i) = i XOR (i>>1), with an inverse that XORs the running prefix.  Rather than check sample values, the
+ * III discipline verifies the STRUCTURAL invariants exhaustively: every adjacent pair (and the wraparound)
+ * differs by one bit, and the map is a genuine bijection (decode inverts encode, all 2^n outputs distinct).
+ *
+ * Verified (gray_code_kat): the sequence is 0,1,3,2,6,7,5,4,... ; every adjacent code (cyclically) differs
+ * in exactly one bit; encode/decode round-trips for all i; the 16 codes are a permutation of 0..15; popcount
+ * is correct.  NIH/self-contained.
+ *
+ * Public API:
+ *   gray_encode(i) -> u32 ; gray_decode(g) -> u32 ; gray_popcount(x) -> u32 ; gray_adjacent_ok() -> u32 ;
+ *   gray_bijection() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_gray_code
+
+const GRAY_SIZE : u32 = 16u32       /* 2^4 */
+
+var GRAY_SEEN : [u32; 16]
+
+fn gray_encode(i: u32) -> u32 @export { return i ^ (i >> 1u32) }
+
+fn gray_decode(g: u32) -> u32 @export {
+    let mut x : u32 = g
+    let mut m : u32 = g >> 1u32
+    while m != 0u32 {
+        x = x ^ m
+        m = m >> 1u32
+    }
+    return x
+}
+
+fn gray_popcount(x: u32) -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut v : u32 = x
+    while v != 0u32 {
+        c = c + (v & 1u32)
+        v = v >> 1u32
+    }
+    return c
+}
+
+/* every adjacent code (cyclically) differs in exactly one bit. */
+fn gray_adjacent_ok() -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < (GRAY_SIZE - 1u32) {
+        let a : u32 = gray_encode(i)
+        let b : u32 = gray_encode(i + 1u32)
+        if gray_popcount(a ^ b) != 1u32 { return 0u32 }
+        i = i + 1u32
+    }
+    let lo : u32 = gray_encode(GRAY_SIZE - 1u32)
+    let hi : u32 = gray_encode(0u32)
+    if gray_popcount(lo ^ hi) != 1u32 { return 0u32 }      /* wraparound */
+    return 1u32
+}
+
+/* the map is a bijection: decode inverts encode, and every output is distinct. */
+fn gray_bijection() -> u32 @export {
+    let mut k : u32 = 0u32
+    while k < GRAY_SIZE { GRAY_SEEN[k as u64] = 0u32 ; k = k + 1u32 }
+    let mut i : u32 = 0u32
+    while i < GRAY_SIZE {
+        let g : u32 = gray_encode(i)
+        if gray_decode(g) != i { return 0u32 }             /* round-trip */
+        if GRAY_SEEN[g as u64] == 1u32 { return 0u32 }     /* collision -> not injective */
+        GRAY_SEEN[g as u64] = 1u32
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * gray_code_kat -- 99 = the Gray code is correct by its defining properties:
+ *   (1) the first codes are 0,1,3,2,6,7,5,4;
+ *   (2) every adjacent code (cyclically) differs in exactly one bit;
+ *   (3) the map is a bijection on 0..15 (decode inverts encode, all distinct);
+ *   (4) popcount is correct.
+ * ===================================================================================== */
+fn gray_code_kat() -> u64 @export {
+    /* (1) the sequence */
+    if gray_encode(0u32) != 0u32 { return 1u64 }
+    if gray_encode(1u32) != 1u32 { return 2u64 }
+    if gray_encode(2u32) != 3u32 { return 3u64 }
+    if gray_encode(3u32) != 2u32 { return 4u64 }
+    if gray_encode(6u32) != 5u32 { return 5u64 }
+    if gray_encode(7u32) != 4u32 { return 6u64 }
+
+    /* (2) the one-bit-difference invariant */
+    if gray_adjacent_ok() != 1u32 { return 7u64 }
+
+    /* (3) the bijection */
+    if gray_bijection() != 1u32 { return 8u64 }
+
+    /* (4) decode + popcount */
+    if gray_decode(2u32) != 3u32 { return 9u64 }           /* decode(gray(3)) = 3 */
+    if gray_decode(4u32) != 7u32 { return 10u64 }
+    if gray_popcount(7u32) != 3u32 { return 11u64 }
+    if gray_popcount(8u32) != 1u32 { return 12u64 }
+
+    return 99u64
+}

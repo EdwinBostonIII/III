@@ -78,7 +78,9 @@ when a real, corpus-tested III subsystem already does it better. Pre-flight now 
 ## Interconnection — the analyses feed the named subsystems (not islands)
 
 The verified-analysis stack is not a parallel library; it is wired into III's existing production subsystems
-as the substrate's "intelligence from the intersection." Two connections, each ADDITIVE and FULL-corpus-gated:
+as the substrate's "intelligence from the intersection." TEN connections (A/B by hand; 1–8 from an exhaustive
+adversarial-verified discovery workflow — 48 agents, 37 candidates → 12 genuine → 8 executed), each ADDITIVE,
+each gated on its named corpus tests + the FULL corpus (911→920, FAIL=0 throughout):
 
 - **`forcefield/sovereign_optimizer` consumes the analyses (the SECOND LEASH).** `sov_pcc` proves an
   optimization is meaning-preserving; the analysis stack (`range_check` / `branch_elim` / `value_range_prover`
@@ -89,6 +91,27 @@ as the substrate's "intelligence from the intersection." Two connections, each A
   safety in closed form over external traces; `affine_check` decides the same property in-line by exhaustive
   scan. `sw_crossval_affine_kat` proves the two sound procedures agree on PROVEN-vs-REFUTED for every in-range
   access (corpus `1312`). Full corpus `912/0`.
+
+Eight more from the discovery workflow (each names a real pre-existing consumer; capability-audited; the
+verifier even *rejected* two vacuous candidates — `sccp→dce` as a category error, `interval_lattice→snapshot_
+lattice` as already structurally enforced):
+1. **`reduced_product` → `sovereign_optimizer`** (parity-refined leash): the interval×parity reduced product
+   tightens the second-leash preconditions by known parity, so strictly MORE optimizations pass, still sound
+   (`sopt_refined_kat`, flagship step 9; corpus `1313`).
+2. **`bft_quorum` + `value_range_prover` → `hotstuff`**: the consensus core carries its own machine-checked
+   Byzantine quorum-intersection + vote-bound safety certificate, bound to the LIVE `f` (`1314`).
+3. **`widening` → `kleene_fixpoint`**: one fixpoint engine for bounded lattices AND unbounded domains via the
+   nabla operator — Cousot's Kleene+widening unified (`1315`).
+4. **`dijkstra` → `topology_atlas`**: the federation atlas lifts from unweighted BFS to verified cost-aware
+   shortest paths (unit weights ≡ BFS; weighted finds cheaper indirect routes) (`1316`).
+5. **`congruence_closure` → `proof_ripple_unified`**: every admitted ripple MERGE carries a replayable
+   labelled-edge proof chain (the data the synthesis kernel needs) (`1317`).
+6. **`sccp` → `bce`**: a statically-constant array index discharges its bounds check in O(1); a VARYING index
+   falls back to affine analysis — two dataflow analyses compose (`1318`).
+7. **`taint_analysis` → `cap_handshake`**: a missing verify between untrusted wire input and capability
+   derivation becomes a build-time KAT failure, not a runtime privilege-escalation (`1319`).
+8. **`branch_elim` (`be_sound`) → `sovereign_optimizer`**: a dead-branch fold is admitted only when the
+   abstract verdict AND an exhaustive concrete walkback agree — defense-in-depth (flagship step 10; `1320`).
 
 The discriminator before adding any module: name the EXISTING subsystem that will call it. A green KAT on a
 self-contained algorithm verified against a co-designed reference is a fixture; value is in the connection.

@@ -147,6 +147,29 @@ fulfil their OWN documented promises — additive, full-corpus-gated, each provi
 Across four discovery workflows the genuine-find rate ran 12→4→1→2: the substrate's discoverable
 interconnection + enhancement surface is essentially saturated — 15 connections + 2 enhancements, corpus 911→926.
 
+### Substantial feature: the live-XII confluence certificate (`nous_completion`)
+Beyond additive interconnection, one DEFERRED feature the substrate had marked (`nous_completion`'s "live dynamic
+critical-pair enumeration … the M14 wiring (B-8)") was realized in full, in five gated increments. The module
+had run Knuth-Bendix completion over a single hand-constructed SYNTHETIC critical pair; `nous_complete_live` now
+DERIVES the trit term language's critical pairs **dynamically and exhaustively** and checks each JOINS under
+`xii_canonicalise` — **270 overlaps across all six trit ops** (VAL/NOT/AND/OR/SUM/MUL):
+- the De Morgan sub-algebra (186): commutativity, idempotence, identity, annihilator, negation-eval,
+  double-negation, De Morgan (both directions), associativity, distributivity, absorption;
+- the SUM/MUL arithmetic (84): SUM/MUL commutativity, SUM-identity-0, MUL-identity-1, MUL-annihilator-0, MUL
+  associativity, MUL distributivity over SUM, additive-inverse `SUM(a,NOT a)=0`.
+
+By Knuth-Bendix (a terminating system is confluent iff all critical pairs join) the 270 joining pairs constitute
+a complete, dynamic CONFLUENCE CERTIFICATE for the canonicaliser. It is also an HONEST one: SUM-associativity is
+deliberately EXCLUDED because SUM is a *saturating* (Łukasiewicz) sum and hence not associative — enumerating it
+would falsely REFUTE a genuinely-confluent system. The enumerator carries the same safety property as the
+synthetic completion (a budget that checks only some overlaps yields GAP, never SATURATED). NOT-terms are built
+via the low-level `xii_term` alloc/set_kind/set_child_a API — no change to the load-bearing term core.
+
+The remaining marked features are genuinely substrate-ahead: unification-based critical pairs (needs a term-core
+variable kind), the R3 IOCTL gate (kernel mode), the eval-gap fallback (the C trust root), real sockets,
+machine-code patching, Unicode/SMT. The corpus-gateable additive surface — interconnection, enhancement, and
+this deferred feature — is comprehensively realized at corpus 926/0.
+
 ## Operating notes
 - The repo lives under OneDrive; long builds were corrupted by sync-down until the **fresh-copy** technique
   (`cp build_stdlib.sh _arc_build.sh && bash _arc_build.sh`) gave the first clean `545/0`. Never

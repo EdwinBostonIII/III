@@ -30,6 +30,9 @@ module nous_completion
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_alloc() -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_kind(idx: u32, kind: u8) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
 extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
@@ -42,6 +45,7 @@ const NOUS_CMP_REFUTED   : u8  = 2u8
 const NOUS_CMP_TRIT_VAL  : u8  = 24u8
 const NOUS_CMP_TRIT_AND  : u8  = 26u8
 const NOUS_CMP_TRIT_OR   : u8  = 27u8
+const NOUS_CMP_TRIT_NOT  : u8  = 25u8
 const NOUS_CMP_CAD_KECCAK : u32 = 1u32
 
 var NOUS_CMP_CERT : [u8; 32]   /* cad-sealed SATURATED convergence certificate */
@@ -127,9 +131,52 @@ fn cmp_law_joins(op: u8, a: i32, b: i32, r: i32) -> u8 {
     return xii_rewrite_struct_eq(r1, r2)
 }
 
-/* the number of LIVE-enumerated critical-pair overlaps: 18 commutativity (2 ops x 3 x 3) + 6 idempotence
- * (2 ops x 3) + 6 identity (AND(a,1)=a, OR(a,-1)=a) + 6 annihilator (AND(a,-1)=-1, OR(a,1)=1) = 36. */
-fn nous_live_pair_count() -> u32 @export { return 36u32 }
+/* NOT (unary) construction via the low-level term API (no xii_term change needed): alloc + kind=TRIT_NOT +
+ * child_a = the operand. */
+fn cmp_mknot(a: i32) -> u32 {
+    let n : u32 = xii_term_alloc()
+    xii_term_set_kind(n, NOUS_CMP_TRIT_NOT)
+    xii_term_set_child_a(n, cmp_mkval(a))
+    return n
+}
+
+/* negation-evaluation overlap: NOT(a) canonicalises to the trit negation -a. */
+fn cmp_negeval_joins(a: i32) -> u8 {
+    xii_term_arena_reset()
+    let t1 : u32 = cmp_mknot(a)
+    let t2 : u32 = cmp_mkval(0i32 - a)
+    let r1 : u32 = xii_canonicalise(t1)
+    let r2 : u32 = xii_canonicalise(t2)
+    return xii_rewrite_struct_eq(r1, r2)
+}
+
+/* double-negation overlap: NOT(NOT(a)) canonicalises to a (the involution law). */
+fn cmp_dneg_joins(a: i32) -> u8 {
+    xii_term_arena_reset()
+    let outer : u32 = xii_term_alloc()
+    xii_term_set_kind(outer, NOUS_CMP_TRIT_NOT)
+    xii_term_set_child_a(outer, cmp_mknot(a))
+    let r1 : u32 = xii_canonicalise(outer)
+    let r2 : u32 = xii_canonicalise(cmp_mkval(a))
+    return xii_rewrite_struct_eq(r1, r2)
+}
+
+/* De Morgan overlap: NOT(op(a,b)) canonicalises to dual(NOT a, NOT b) (dual(AND)=OR, dual(OR)=AND). */
+fn cmp_demorgan_joins(op: u8, dual: u8, a: i32, b: i32) -> u8 {
+    xii_term_arena_reset()
+    let inner : u32 = xii_term_make_fusion2(op, cmp_mkval(a), cmp_mkval(b))
+    let not_inner : u32 = xii_term_alloc()
+    xii_term_set_kind(not_inner, NOUS_CMP_TRIT_NOT)
+    xii_term_set_child_a(not_inner, inner)
+    let dual_side : u32 = xii_term_make_fusion2(dual, cmp_mknot(a), cmp_mknot(b))
+    let r1 : u32 = xii_canonicalise(not_inner)
+    let r2 : u32 = xii_canonicalise(dual_side)
+    return xii_rewrite_struct_eq(r1, r2)
+}
+
+/* the number of LIVE-enumerated critical-pair overlaps: 18 commutativity + 6 idempotence + 6 identity +
+ * 6 annihilator + 3 negation-eval + 3 double-negation + 18 De Morgan (2 dirs x 3 x 3) = 60. */
+fn nous_live_pair_count() -> u32 @export { return 60u32 }
 
 /* [M14 B-8] LIVE DYNAMIC critical-pair enumeration -- the increment that lifts nous_complete from
  * hand-constructed SYNTHETIC pairs to the trit-op algebra's critical pairs DERIVED on the fly: for every
@@ -192,6 +239,37 @@ fn nous_complete_live(budget: u32) -> u8 @export {
         checked = checked + 1u32
         e = e + 1i32
     }
+    /* negation-evaluation overlaps: NOT(a) vs -a for all a */
+    let mut f : i32 = -1i32
+    while f <= 1i32 {
+        if checked >= budget { return NOUS_CMP_GAP }
+        if cmp_negeval_joins(f) != 1u8 { return NOUS_CMP_REFUTED }
+        checked = checked + 1u32
+        f = f + 1i32
+    }
+    /* double-negation overlaps: NOT(NOT(a)) vs a for all a */
+    let mut g : i32 = -1i32
+    while g <= 1i32 {
+        if checked >= budget { return NOUS_CMP_GAP }
+        if cmp_dneg_joins(g) != 1u8 { return NOUS_CMP_REFUTED }
+        checked = checked + 1u32
+        g = g + 1i32
+    }
+    /* De Morgan overlaps: NOT(AND(a,b)) vs OR(NOT a,NOT b) and NOT(OR(a,b)) vs AND(NOT a,NOT b), all (a,b) */
+    let mut h : i32 = -1i32
+    while h <= 1i32 {
+        let mut k : i32 = -1i32
+        while k <= 1i32 {
+            if checked >= budget { return NOUS_CMP_GAP }
+            if cmp_demorgan_joins(NOUS_CMP_TRIT_AND, NOUS_CMP_TRIT_OR, h, k) != 1u8 { return NOUS_CMP_REFUTED }
+            checked = checked + 1u32
+            if checked >= budget { return NOUS_CMP_GAP }
+            if cmp_demorgan_joins(NOUS_CMP_TRIT_OR, NOUS_CMP_TRIT_AND, h, k) != 1u8 { return NOUS_CMP_REFUTED }
+            checked = checked + 1u32
+            k = k + 1i32
+        }
+        h = h + 1i32
+    }
     return NOUS_CMP_SATURATED
 }
 
@@ -227,10 +305,10 @@ fn nous_completion_selftest() -> u64 @export {
     /* [M14 B-8] LIVE dynamic critical-pair enumeration: the trit-op commutativity + idempotence overlaps over
      * the WHOLE operand domain (24 overlaps), enumerated dynamically and ALL joining -> SATURATED (vs the
      * single synthetic witness above); the safety property holds (a partial enumeration never certifies). */
-    if nous_live_pair_count() != 36u32 { return 20u64 }
-    if nous_complete_live(36u32) != NOUS_CMP_SATURATED { return 21u64 }    /* all 4 law classes join exhaustively */
-    if nous_complete_live(50u32) != NOUS_CMP_SATURATED { return 22u64 }    /* generous budget -> still SATURATED */
-    if nous_complete_live(35u32) != NOUS_CMP_GAP { return 23u64 }          /* one overlap unchecked -> GAP */
+    if nous_live_pair_count() != 60u32 { return 20u64 }
+    if nous_complete_live(60u32) != NOUS_CMP_SATURATED { return 21u64 }    /* all 7 law classes join exhaustively */
+    if nous_complete_live(80u32) != NOUS_CMP_SATURATED { return 22u64 }    /* generous budget -> still SATURATED */
+    if nous_complete_live(59u32) != NOUS_CMP_GAP { return 23u64 }          /* one overlap unchecked -> GAP */
     if nous_complete_live(0u32) != NOUS_CMP_GAP { return 24u64 }
     return 99u64
 }

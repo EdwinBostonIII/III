@@ -1,0 +1,17 @@
+/* 1313_sovereign_refined.iii -- the optimizer's parity-refined safety leash (reduced product into the optimizer).
+ * Drives forcefield::sovereign_optimizer::sopt_refined_kat: 99 = the reduced product (numera::reduced_product,
+ * interval x parity) refines the second-leash safety preconditions, so the self-optimizer admits strictly MORE
+ * sound optimizations than the coarse interval alone: a narrowing of x in [0,21] into bound 20 is REJECTED
+ * coarsely (21>20) but ACCEPTED once x is known EVEN (hi->20); a branch fold over x in [0,5] straddles c=10
+ * (not foldable) but becomes THEN-only foldable once x is known EVEN (range->[0,4]); and the negatives hold
+ * (known-EVEN [0,23]->22>20 rejected, [0,6] stays BOTH, [0,100] even stays rejected -- never an unsound accept).
+ * Two granular analyses (interval + parity) intersect to sharpen DISPOSE -- intelligence from the intersection. */
+module corpus_1313
+
+extern @abi(c-msvc-x64) fn sopt_refined_kat() -> u64 from "sovereign_optimizer.iii"
+
+fn main() -> u64 {
+    let r : u64 = sopt_refined_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

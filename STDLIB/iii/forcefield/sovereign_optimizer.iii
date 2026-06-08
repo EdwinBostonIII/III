@@ -26,6 +26,9 @@
  *                 leash -- an optimization with a safety precondition (overflow-free narrowing, dead-branch
  *                 fold, bounded loop accumulator) is applied only when the analysis PROVES the precondition
  *                 for ALL runtime values in range.  The granular analyses now feed the self-optimizer.
+ *   - REFINE-PRECISION: the reduced product (numera::reduced_product, interval x parity) tightens those
+ *                 preconditions by KNOWN parity -- a narrowing/fold blocked only by a wrong-parity extremum is
+ *                 discharged once parity sharpens the range, so strictly MORE optimizations pass, still sound.
  *
  * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: composes the in-tree faculties; the CIC kernel is the
  * sole arbiter throughout.  No autonomous golden reseal (that is the operator's CRASH-PROTOCOL trigger).
@@ -47,6 +50,9 @@ extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
 extern @abi(c-msvc-x64) fn rc_proven_safe(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 from "range_check.iii"
 extern @abi(c-msvc-x64) fn be_eliminable(lo: u32, hi: u32, c: u32) -> u32 from "branch_elim.iii"
 extern @abi(c-msvc-x64) fn vrp_no_overflow(cn: u32, ca: u32, bound: u32) -> u32 from "value_range_prover.iii"
+/* the REDUCED PRODUCT (interval x parity) -- refines a coarse range by KNOWN parity to a tighter precondition. */
+extern @abi(c-msvc-x64) fn rp_reduce_lo(lo: u32, p: u32) -> u32 from "reduced_product.iii"
+extern @abi(c-msvc-x64) fn rp_reduce_hi(hi: u32, p: u32) -> u32 from "reduced_product.iii"
 
 const SOPT_SEED : u64 = 0x0C0FFEE123456789u64
 
@@ -174,6 +180,30 @@ fn sopt_safe_loop_acc(cn: u32, ca: u32, bound: u32) -> u32 @export {
     return vrp_no_overflow(cn, ca, bound)
 }
 
+/* ---- PARITY-REFINED preconditions (reduced product, interval x parity).  When a value's parity is known,
+ * the reduced product tightens its range to the parity-extremal bound, so a narrowing/fold blocked ONLY by a
+ * wrong-parity extremum becomes provably safe -- strictly MORE optimizations pass, every verdict still sound
+ * for all runtime values in range.  Parity: 0 = even, 1 = odd, 2 = any (no refinement). */
+const SOPT_EVEN : u32 = 0u32
+const SOPT_ODD  : u32 = 1u32
+const SOPT_ANY  : u32 = 2u32
+
+/* a narrowing is safe under known operand parities iff the PARITY-REFINED operand ranges fit the bound. */
+fn sopt_safe_to_narrow_refined(lo1: u32, hi1: u32, p1: u32, lo2: u32, hi2: u32, p2: u32, op: u32, bound: u32) -> u32 @export {
+    let rlo1 : u32 = rp_reduce_lo(lo1, p1)
+    let rhi1 : u32 = rp_reduce_hi(hi1, p1)
+    let rlo2 : u32 = rp_reduce_lo(lo2, p2)
+    let rhi2 : u32 = rp_reduce_hi(hi2, p2)
+    return rc_proven_safe(rlo1, rhi1, rlo2, rhi2, op, bound)
+}
+
+/* a branch fold is safe under known parity iff the PARITY-REFINED range makes an arm provably dead. */
+fn sopt_safe_to_fold_refined(lo: u32, hi: u32, p: u32, c: u32) -> u32 @export {
+    let rlo : u32 = rp_reduce_lo(lo, p)
+    let rhi : u32 = rp_reduce_hi(hi, p)
+    return be_eliminable(rlo, rhi, c)
+}
+
 /* THE ANALYSIS-CERTIFIED LEASH KAT -- 99 = the optimizer applies a safety-preconditioned optimization ONLY
  * when the verified-analysis stack proves the precondition, and REJECTS it otherwise (the leash holds across
  * the analyses, not just the CIC kernel):
@@ -188,6 +218,28 @@ fn sopt_analysis_kat() -> u64 @export {
     if sopt_safe_to_fold(0u32, 10u32, 10u32) != 0u32 { return 4u64 }
     if sopt_safe_loop_acc(10u32, 5u32, 255u32) != 1u32 { return 5u64 }
     if sopt_safe_loop_acc(10u32, 30u32, 255u32) != 0u32 { return 6u64 }
+    return 99u64
+}
+
+/* THE PARITY-REFINED LEASH KAT -- 99 = parity refinement (reduced product) lets the optimizer admit
+ * safety-preconditioned optimizations the coarse interval alone MUST reject, WITHOUT ever unsoundly admitting
+ * a real overflow or a live branch:
+ *   (1) NARROW: x in [0,21] is rejected for a bound of 20 (21>20), but KNOWN-EVEN it refines to hi=20 and is
+ *       ACCEPTED; known-EVEN [0,23] refines to 22>20 and stays REJECTED (the negative falsifier);
+ *   (2) FOLD: 2x over x in [0,5] straddles c=10 (not foldable), but known-EVEN x in {0,2,4} refines to [0,4]
+ *       so 2x in [0,8] < 10 is THEN-only and FOLDABLE; known-EVEN [0,6] stays BOTH and is NOT folded (negative);
+ *   (3) SOUNDNESS: a genuinely-overflowing narrow ([0,100] even, hi=100) stays REJECTED even refined. */
+fn sopt_refined_kat() -> u64 @export {
+    /* (1) narrowing admitted by parity that the coarse range rejects, with its negative */
+    if sopt_safe_to_narrow(0u32, 21u32, 0u32, 0u32, 0u32, 20u32) != 0u32 { return 1u64 }
+    if sopt_safe_to_narrow_refined(0u32, 21u32, SOPT_EVEN, 0u32, 0u32, SOPT_EVEN, 0u32, 20u32) != 1u32 { return 2u64 }
+    if sopt_safe_to_narrow_refined(0u32, 23u32, SOPT_EVEN, 0u32, 0u32, SOPT_EVEN, 0u32, 20u32) != 0u32 { return 3u64 }
+    /* (2) branch fold admitted by parity that the coarse range rejects, with its negative */
+    if sopt_safe_to_fold(0u32, 5u32, 10u32) != 0u32 { return 4u64 }
+    if sopt_safe_to_fold_refined(0u32, 5u32, SOPT_EVEN, 10u32) != 1u32 { return 5u64 }
+    if sopt_safe_to_fold_refined(0u32, 6u32, SOPT_EVEN, 10u32) != 0u32 { return 6u64 }
+    /* (3) refinement never UNSOUNDLY accepts a real overflow */
+    if sopt_safe_to_narrow_refined(0u32, 100u32, SOPT_EVEN, 0u32, 0u32, SOPT_EVEN, 0u32, 20u32) != 0u32 { return 7u64 }
     return 99u64
 }
 
@@ -224,5 +276,10 @@ fn sopt_flagship() -> u64 @export {
      * one REJECTED -- the second leash holds for ALL runtime values in range, the granular analyses now
      * feeding the self-optimizer's DISPOSE. */
     if sopt_analysis_kat() != 99u64 { return 8u64 }
+    /* (9) PARITY-REFINED LEASH: the reduced product (interval x parity) refines the safety preconditions, so
+     * the optimizer admits strictly MORE sound optimizations -- a narrowing/fold blocked only by a wrong-parity
+     * extremum is discharged once parity tightens the range, never admitting a real overflow or live branch.
+     * Two granular analyses (interval + parity) intersect to sharpen the self-optimizer's DISPOSE. */
+    if sopt_refined_kat() != 99u64 { return 9u64 }
     return 99u64
 }

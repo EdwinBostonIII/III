@@ -19,6 +19,19 @@ extern @abi(c-msvc-x64) fn sov_census_count() -> u32 from "sov_isa.iii"
 extern @abi(c-msvc-x64) fn sov_census_cost_saved() -> u64 from "sov_isa.iii"
 extern @abi(c-msvc-x64) fn sov_census_all_sound() -> u8 from "sov_isa.iii"
 extern @abi(c-msvc-x64) fn sov_census_certify(c: u32) -> u8 from "sov_isa.iii"
+/* the Theorem Commons (content-addressed registry of kernel-VERIFIED theorems) + the sov_isa feed that admits
+ * the two headline proof-carrying-optimization theorems into it. */
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn sov_feed_commons() -> u64 from "sov_isa.iii"
+
+/* the two headline theorem LABELS, byte-identical to sov_isa's SOV_THM_STRENGTH / SOV_THM_FOLD (sov_feed_commons
+ * admits by RAW LABEL BYTES, so citation must use the same bytes), + a never-admitted junk label for the
+ * non-vacuity negative arm. */
+var CC_THM_STRENGTH : [u8; 20] = [116u8,104u8,109u8,58u8,115u8,116u8,114u8,101u8,110u8,103u8,116u8,104u8,95u8,115u8,99u8,104u8,101u8,109u8,97u8,10u8]   /* "thm:strength_schema\n" */
+var CC_THM_FOLD     : [u8; 15] = [116u8,104u8,109u8,58u8,115u8,104u8,105u8,102u8,116u8,95u8,102u8,111u8,108u8,100u8,10u8]                                /* "thm:shift_fold\n" */
+var CC_THM_JUNK     : [u8; 12] = [122u8,122u8,58u8,110u8,101u8,118u8,101u8,114u8,95u8,97u8,100u8,10u8]                                                    /* "zz:never_ad\n" -- never admitted */
 
 /* Query surface (for display / operator inspection). */
 fn census_class_total() -> u32 @export { return sov_census_n() }
@@ -40,5 +53,36 @@ fn census_kat() -> u64 @export {
     if sov_census_all_sound() != 1u8 { return 3u64 }          /* sound: all certify + non-theorem rejected */
     if sov_census_certify(0u32) != 1u8 { return 4u64 }        /* strength k=1 certified */
     if sov_census_certify(8u32) != 1u8 { return 5u64 }        /* left distributivity certified */
+    return 99u64
+}
+
+/* ============================================================================
+ *  DISCOVERY (+) REGISTRATION (+) CITATION, closed in the census module.
+ *  sov_isa ENUMERATES the provable optimization classes (the census) and FEEDS the two headline theorems into
+ *  the content-addressed Theorem Commons (sov_feed_commons -> tcom_admit).  The census module now CONSUMES
+ *  both: it triggers the feed, asserts the headline proof-carrying-optimization theorems are content-address
+ *  CITABLE from the Commons, and cross-checks that those citable theorems correspond to census-CERTIFIED
+ *  classes -- discovery, registration, and citation verified mutually consistent at build time. */
+fn census_commons_consistent() -> u32 @export {
+    if sov_feed_commons() != 99u64 { return 0u32 }                          /* the feed admits both theorems */
+    if tcom_size() != 2u64 { return 0u32 }                                  /* exactly the two headline theorems */
+    if tcom_cite((&CC_THM_STRENGTH as u64), 20u64) != 0i32 { return 0u32 }  /* the strength schema is citable */
+    if tcom_cite((&CC_THM_FOLD as u64), 15u64) != 0i32 { return 0u32 }      /* the shift-fold is citable */
+    if sov_census_certify(0u32) != 1u8 { return 0u32 }                      /* its class (strength) is census-certified */
+    if sov_census_certify(8u32) != 1u8 { return 0u32 }                      /* and distributivity is census-certified */
+    return 1u32
+}
+
+/* THE CENSUS<->COMMONS CONSISTENCY KAT -- 99 = discovery/registration/citation are mutually consistent, and
+ * the audit is not vacuous:
+ *   (1) a fresh Commons is empty; the census itself is unchanged (count == total still holds);
+ *   (2) after the feed, both headline theorems are content-address-citable AND their classes census-certified;
+ *   (3) NEGATIVE: a never-admitted label is ABSENT (the citation check discriminates, not a vacuous pass). */
+fn census_commons_kat() -> u64 @export {
+    tcom_init()
+    if tcom_size() != 0u64 { return 1u64 }                                  /* fresh Commons is empty */
+    if census_certified() != census_class_total() { return 2u64 }          /* census soundness unchanged */
+    if census_commons_consistent() != 1u32 { return 3u64 }                 /* feed + cite + class cross-check */
+    if tcom_cite((&CC_THM_JUNK as u64), 12u64) == 0i32 { return 4u64 }      /* a never-admitted label is NOT citable */
     return 99u64
 }

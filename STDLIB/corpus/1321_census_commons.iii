@@ -1,0 +1,17 @@
+/* 1321_census_commons.iii -- the optimization census cite-verifies the Theorem Commons (discovery+registration+citation closed).
+ * Drives forcefield::scythe_census::census_commons_kat: 99 = the operator-facing optimization census now CONSUMES
+ * both the content-addressed Theorem Commons (numera::theorem_commons) and the sov_isa feed that admits the two
+ * headline proof-carrying-optimization theorems into it. A fresh Commons is empty; the census itself is unchanged
+ * (certified == total); after sov_feed_commons the strength-reduction schema and the const-shift fold are both
+ * content-address CITABLE from the Commons AND their classes (strength, distributivity) are census-certified;
+ * and a never-admitted label is correctly ABSENT (the citation check discriminates, not a vacuous pass).
+ * Discovery (sov_isa enumeration), registration (Commons admit), and citation verified mutually consistent. */
+module corpus_1321
+
+extern @abi(c-msvc-x64) fn census_commons_kat() -> u64 from "scythe_census.iii"
+
+fn main() -> u64 {
+    let r : u64 = census_commons_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

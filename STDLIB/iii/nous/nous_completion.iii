@@ -105,6 +105,62 @@ fn nous_complete_cert(n_pairs: u32, budget: u32, out32: *u8) -> i32 @export {
     return 0i32
 }
 
+/* idempotence overlap: op(a,a) canonicalises to the basis a (a confluent canonicaliser with the idempotence
+ * rule joins op(a,a) with a). fusion-vs-basis normal-form comparison. */
+fn cmp_idem_joins(op: u8, a: i32) -> u8 {
+    xii_term_arena_reset()
+    let t1 : u32 = xii_term_make_fusion2(op, cmp_mkval(a), cmp_mkval(a))
+    let t2 : u32 = cmp_mkval(a)
+    let r1 : u32 = xii_canonicalise(t1)
+    let r2 : u32 = xii_canonicalise(t2)
+    return xii_rewrite_struct_eq(r1, r2)
+}
+
+/* the number of LIVE-enumerated critical-pair overlaps: 18 commutativity (2 ops x 3 x 3 operands) + 6
+ * idempotence (2 ops x 3 operands). */
+fn nous_live_pair_count() -> u32 @export { return 24u32 }
+
+/* [M14 B-8] LIVE DYNAMIC critical-pair enumeration -- the increment that lifts nous_complete from
+ * hand-constructed SYNTHETIC pairs to the trit-op algebra's critical pairs DERIVED on the fly: for every
+ * commutative op (AND=min, OR=max) it walks the WHOLE operand domain and checks the commutativity overlap
+ * op(a,b) vs op(b,a) and the idempotence overlap op(a,a) vs a -- every one a critical pair a confluent
+ * canonicaliser MUST join.  Same trichotomy + safety property as nous_complete: a budget that checks only some
+ * overlaps yields GAP, never SATURATED (a partial enumeration can never masquerade as a proven-confluent one). */
+fn nous_complete_live(budget: u32) -> u8 @export {
+    let mut checked : u32 = 0u32
+    let mut oi : u32 = 0u32
+    while oi < 2u32 {
+        let mut op : u8 = NOUS_CMP_TRIT_AND
+        if oi == 1u32 { op = NOUS_CMP_TRIT_OR }
+        let mut a : i32 = -1i32
+        while a <= 1i32 {
+            let mut b : i32 = -1i32
+            while b <= 1i32 {
+                if checked >= budget { return NOUS_CMP_GAP }
+                if cmp_pair_joins(op, a, b, op, b, a) != 1u8 { return NOUS_CMP_REFUTED }
+                checked = checked + 1u32
+                b = b + 1i32
+            }
+            a = a + 1i32
+        }
+        oi = oi + 1u32
+    }
+    let mut oj : u32 = 0u32
+    while oj < 2u32 {
+        let mut op2 : u8 = NOUS_CMP_TRIT_AND
+        if oj == 1u32 { op2 = NOUS_CMP_TRIT_OR }
+        let mut c : i32 = -1i32
+        while c <= 1i32 {
+            if checked >= budget { return NOUS_CMP_GAP }
+            if cmp_idem_joins(op2, c) != 1u8 { return NOUS_CMP_REFUTED }
+            checked = checked + 1u32
+            c = c + 1i32
+        }
+        oj = oj + 1u32
+    }
+    return NOUS_CMP_SATURATED
+}
+
 fn nous_completion_selftest() -> u64 @export {
     /* all 3 joinable pairs, generous budget -> SATURATED */
     if nous_complete(3u32, 5u32, 0u8) != NOUS_CMP_SATURATED { return 1u64 }
@@ -134,5 +190,13 @@ fn nous_completion_selftest() -> u64 @export {
     if cad_eq(c, c2) != 0u8 { return 15u64 }                          /* different n_pairs -> DIFFERENT cert */
     if nous_complete_cert(3u32, 4u32, c2) != 0i32 { return 16u64 }
     if cad_eq(c, c2) != 0u8 { return 17u64 }                          /* different budget -> DIFFERENT cert */
+    /* [M14 B-8] LIVE dynamic critical-pair enumeration: the trit-op commutativity + idempotence overlaps over
+     * the WHOLE operand domain (24 overlaps), enumerated dynamically and ALL joining -> SATURATED (vs the
+     * single synthetic witness above); the safety property holds (a partial enumeration never certifies). */
+    if nous_live_pair_count() != 24u32 { return 20u64 }
+    if nous_complete_live(24u32) != NOUS_CMP_SATURATED { return 21u64 }
+    if nous_complete_live(30u32) != NOUS_CMP_SATURATED { return 22u64 }    /* generous budget -> still SATURATED */
+    if nous_complete_live(23u32) != NOUS_CMP_GAP { return 23u64 }          /* one overlap unchecked -> GAP */
+    if nous_complete_live(0u32) != NOUS_CMP_GAP { return 24u64 }
     return 99u64
 }

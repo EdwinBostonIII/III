@@ -5,7 +5,7 @@
  * Shell-style pattern matching, restricted subset:
  *   *      matches any run of characters
  *   ?      matches exactly one character
- *   [...]  character class (no negation, no ranges -- explicit chars only)
+ *   [...]  character class: explicit chars, 'a-z' ranges, and '[^...]' negation
  *   any other byte matches literally
  *
  * Iterative; flat dispatch via helper functions to avoid hitting the
@@ -35,16 +35,46 @@ var GLOB_RESULT: u8  = 0u8
  * malformed (no ']'). */
 fn glob_class_match(pat: *u8, pat_len: u64, p_off: u64, c: u8) -> u64 {
     let mut i : u64 = p_off
+    let mut negate : u8 = 0u8
+    if i < pat_len {
+        if pat[i] == 94u8 {                       /* leading '^' -> negated class */
+            negate = 1u8
+            i = i + 1u64
+        }
+    }
     let mut matched : u8 = 0u8
     let mut going : u8 = 1u8
     while going == 1u8 {
-        if i >= pat_len { return GLOB_NIL }
+        if i >= pat_len { return GLOB_NIL }        /* no closing ']' -> malformed */
         let pb : u8 = pat[i]
-        if pb == 93u8 { going = 0u8 }
-        if going == 1u8 {
-            if pb == c { matched = 1u8 }
+        if pb == 93u8 {
+            going = 0u8
+            i = i + 1u64                            /* consume ']' */
         }
-        i = i + 1u64
+        if going == 1u8 {
+            /* a 'lo-hi' range is pb, then '-', then a byte that is NOT ']' (a trailing '-' is a literal). */
+            let mut is_range : u8 = 0u8
+            if (i + 2u64) < pat_len {
+                if pat[i + 1u64] == 45u8 {
+                    if pat[i + 2u64] != 93u8 {
+                        is_range = 1u8
+                    }
+                }
+            }
+            if is_range == 1u8 {
+                let hi : u8 = pat[i + 2u64]         /* inclusive pb..hi; an inverted range (pb>hi) matches nothing */
+                if pb <= c {
+                    if c <= hi { matched = 1u8 }
+                }
+                i = i + 3u64
+            } else {
+                if pb == c { matched = 1u8 }        /* literal byte (including a leading or trailing '-') */
+                i = i + 1u64
+            }
+        }
+    }
+    if negate == 1u8 {                              /* a negated class inverts membership (caller still consumes one txt char) */
+        if matched == 1u8 { matched = 0u8 } else { matched = 1u8 }
     }
     if matched == 1u8 { return i }
     return 0u64

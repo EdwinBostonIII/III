@@ -23,6 +23,13 @@
  */
 module numera_reg_alloc
 
+/* CONSUMED backward-dataflow liveness (numera::liveness): derive REAL live ranges -- an interference graph
+ * computed from the dataflow fixpoint -- instead of hardcoded synthetic intervals. */
+extern @abi(c-msvc-x64) fn lv_setup() -> i32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_solve() -> i32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_in(b: u32) -> u32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_out(b: u32) -> u32 from "liveness.iii"
+
 const RA_N   : u32 = 4u32
 const RA_BIG : u32 = 0xFFFFFFFFu32
 
@@ -31,6 +38,9 @@ var RA_END   : [u32; 4]
 var RA_REG   : [u32; 4]
 var RA_DONE  : [u32; 4]
 var RA_USED  : [u32; 1]
+const RA_LV_BLOCKS : u32 = 4u32      /* liveness::LV_N -- the CFG block count */
+var RA_LV_START : [u32; 4]           /* live ranges DERIVED from the liveness dataflow (separate from synthetic RA_START) */
+var RA_LV_END   : [u32; 4]
 
 fn ra_setup() -> i32 @export {
     /* four live ranges; max overlap 3 at time 2 (v0,v1,v3 all live) */
@@ -166,5 +176,65 @@ fn reg_alloc_kat() -> u64 @export {
     if ra_spills(3u32) != 0u32 { return 8u64 }
     if ra_spills(1u32) != 2u32 { return 9u64 }
 
+    return 99u64
+}
+
+/* ---- LIVENESS-DERIVED RANGES: build the interference graph from REAL live ranges computed by the verified
+ * backward-dataflow liveness analysis (numera::liveness), bridging its block-bitset model to instruction-
+ * interval ranges: a variable's range is [first block it is live .. last block it is live]. */
+fn ra_ranges_from_liveness() -> i32 @export {
+    lv_setup()
+    lv_solve()
+    let mut v : u32 = 0u32
+    while v < RA_N {
+        let mut first : u32 = RA_BIG
+        let mut last : u32 = 0u32
+        let mut found : u32 = 0u32
+        let mut b : u32 = 0u32
+        while b < RA_LV_BLOCKS {
+            let live : u32 = ((lv_in(b) >> v) & 1u32) | ((lv_out(b) >> v) & 1u32)
+            if live == 1u32 {
+                if found == 0u32 { first = b ; found = 1u32 }
+                last = b
+            }
+            b = b + 1u32
+        }
+        let mut s : u32 = first
+        let mut e : u32 = last
+        if found == 0u32 { s = 0u32 ; e = 0u32 }    /* a never-live slot -> trivial point range */
+        RA_LV_START[v as u64] = s
+        RA_LV_END[v as u64] = e
+        v = v + 1u32
+    }
+    return 0i32
+}
+
+/* THE reg_alloc<-liveness KAT -- 99 = register allocation over REAL liveness-derived ranges (not synthetic):
+ *   (1) the left-edge coloring over the derived interference graph is VALID (no interfering pair shares a reg);
+ *   (2) it is OPTIMAL -- exactly the chromatic number = max overlap (the interval-graph coloring theorem) over
+ *       the liveness-DERIVED ranges, whatever they are;
+ *   (3) non-vacuity: the liveness analysis produced at least one REAL (non-point) live range AND a genuine
+ *       interference -- the allocation is over a real graph, not a trivial one. */
+fn reg_alloc_liveness_kat() -> u64 @export {
+    ra_ranges_from_liveness()
+    let mut v : u32 = 0u32
+    while v < RA_N { RA_START[v as u64] = RA_LV_START[v as u64] ; RA_END[v as u64] = RA_LV_END[v as u64] ; v = v + 1u32 }
+    ra_color()
+    if ra_valid() != 1u32 { return 1u64 }                  /* valid over the derived graph */
+    if ra_regs_used() != ra_max_overlap() { return 2u64 }  /* OPTIMAL: chromatic number = max overlap */
+    let mut nontrivial : u32 = 0u32
+    let mut interfere : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < RA_N {
+        if RA_LV_END[i as u64] > RA_LV_START[i as u64] { nontrivial = 1u32 }
+        let mut j : u32 = i + 1u32
+        while j < RA_N {
+            if ra_overlaps(i, j) == 1u32 { interfere = 1u32 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    if nontrivial != 1u32 { return 3u64 }                  /* a real (non-point) live range exists */
+    if interfere != 1u32 { return 4u64 }                   /* a genuine interference exists */
     return 99u64
 }

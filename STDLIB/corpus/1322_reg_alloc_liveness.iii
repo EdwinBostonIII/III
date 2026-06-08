@@ -1,0 +1,17 @@
+/* 1322_reg_alloc_liveness.iii -- register allocation over REAL liveness-derived ranges (liveness into reg_alloc).
+ * Drives numera::reg_alloc::reg_alloc_liveness_kat: 99 = register allocation now CONSUMES numera::liveness's
+ * verified backward-dataflow analysis to build a COMPUTED interference graph (each variable's range = [first
+ * block live .. last block live]) instead of hardcoded synthetic intervals -- closing the documented
+ * liveness->reg_alloc consumer link. The left-edge coloring over the derived graph (x[0,3], y[1,2], z[2,3]) is
+ * VALID (no interfering pair shares a register) and OPTIMAL (uses exactly the chromatic number = max overlap =
+ * 3, the interval-graph coloring theorem); non-vacuity holds (real non-point ranges + a genuine interference).
+ * Two compiler analyses compose: dataflow liveness feeds graph coloring. */
+module corpus_1322
+
+extern @abi(c-msvc-x64) fn reg_alloc_liveness_kat() -> u64 from "reg_alloc.iii"
+
+fn main() -> u64 {
+    let r : u64 = reg_alloc_liveness_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,17 @@
+/* 1319_cap_handshake_taint.iii -- build-time information-flow proof for the capability handshake (taint into aether).
+ * Drives aether::cap_handshake::cap_handshake_taint_kat: 99 = cap_handshake's runtime ordering invariant (an
+ * offer must pass babel_wire_verify_crc + babel_wire_verify_seal BEFORE cap_negotiate_session consumes it) is
+ * lifted to a STATIC proof. The flow is modelled as a taint graph (untrusted offer buffer = SOURCE, the verify =
+ * SANITIZER boundary, cap_negotiate = privileged SINK) and numera::taint_analysis proves NO unsanitized
+ * source-to-sink path exists (the derived value was tainted, the verify cleared it, zero violations). NEGATIVE:
+ * with the verify removed the sink consumes the tainted offer directly -> exactly 1 violation, so a missing
+ * sanitizer is a build-time KAT failure rather than a production privilege-escalation bug. numera -> aether. */
+module corpus_1319
+
+extern @abi(c-msvc-x64) fn cap_handshake_taint_kat() -> u64 from "cap_handshake.iii"
+
+fn main() -> u64 {
+    let r : u64 = cap_handshake_taint_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

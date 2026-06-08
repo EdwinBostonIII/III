@@ -23,19 +23,21 @@
  */
 module numera_taint_analysis
 
-const TNT_N : u32 = 6u32
+var TNT_N : u32 = 6u32               /* configurable flow-graph size (default 6 = the built-in demo; settable up to 64) */
+const TNT_CAP      : u32 = 64u32     /* maximum configurable nodes */
 const TNT_SOURCE   : u32 = 0u32      /* untrusted input */
 const TNT_IMM      : u32 = 1u32      /* trusted constant */
 const TNT_OP       : u32 = 2u32      /* a computation over operands */
 const TNT_SANITIZE : u32 = 3u32      /* the trusted boundary -- clears taint */
 const TNT_SINK     : u32 = 4u32      /* a privileged use */
 
-var TNT_OP_   : [u32; 6]
-var TNT_A     : [u32; 6]
-var TNT_B     : [u32; 6]
-var TNT_TAINT : [u32; 6]
+var TNT_OP_   : [u32; 64]
+var TNT_A     : [u32; 64]
+var TNT_B     : [u32; 64]
+var TNT_TAINT : [u32; 64]
 
 fn taint_setup() -> i32 @export {
+    TNT_N = 6u32                                                          /* the built-in demo is 6 nodes */
     TNT_OP_[0u64]=TNT_SOURCE   ; TNT_A[0u64]=0u32 ; TNT_B[0u64]=0u32      /* v0 = untrusted input */
     TNT_OP_[1u64]=TNT_IMM      ; TNT_A[1u64]=0u32 ; TNT_B[1u64]=0u32      /* v1 = constant */
     TNT_OP_[2u64]=TNT_OP       ; TNT_A[2u64]=0u32 ; TNT_B[2u64]=1u32      /* v2 = v0 op v1 */
@@ -44,6 +46,24 @@ fn taint_setup() -> i32 @export {
     TNT_OP_[5u64]=TNT_SINK     ; TNT_A[5u64]=3u32 ; TNT_B[5u64]=0u32      /* v5 = sink(v3)  -- safe */
     return 0i32
 }
+
+/* ---- CONFIGURABLE FLOW-GRAPH API (for external consumers, e.g. aether::cap_handshake build-time flow proof):
+ * clear to a fresh n-node clean graph, then declare each node's role.  taint_setup (the built-in demo) remains
+ * the verbatim 6-node graph the 1282 KAT checks; these setters let any subsystem model its OWN untrusted flow. */
+fn taint_reset(n: u32) -> i32 @export {
+    TNT_N = n
+    let mut i : u32 = 0u32
+    while i < TNT_CAP {
+        TNT_OP_[i as u64]=TNT_IMM ; TNT_A[i as u64]=0u32 ; TNT_B[i as u64]=0u32 ; TNT_TAINT[i as u64]=0u32
+        i = i + 1u32
+    }
+    return 0i32
+}
+fn taint_set_source(i: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_SOURCE ; return 0i32 }
+fn taint_set_imm(i: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_IMM ; return 0i32 }
+fn taint_set_op(i: u32, a: u32, b: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_OP ; TNT_A[i as u64]=a ; TNT_B[i as u64]=b ; return 0i32 }
+fn taint_set_sanitize(i: u32, a: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_SANITIZE ; TNT_A[i as u64]=a ; return 0i32 }
+fn taint_set_sink(i: u32, a: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_SINK ; TNT_A[i as u64]=a ; return 0i32 }
 
 fn taint_step(i: u32) -> i32 {
     let op : u32 = TNT_OP_[i as u64]

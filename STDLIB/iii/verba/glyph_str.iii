@@ -26,6 +26,7 @@ extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core
 extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
 extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
 extern @abi(c-msvc-x64) fn gv3_payload_len(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 from "rune.iii"
 
 const GV3_FORM_STR : u32 = 0x20u32
 
@@ -84,4 +85,38 @@ fn glyph_str_validate(in_192: u64) -> u8 @export {
     if i_l == 0u64 { return 0u8 }
     if gv3_form_id(i_l) != GV3_FORM_STR { return 0u8 }
     return gv3_validate(i_l)
+}
+
+/* UTF-8 WELL-FORMEDNESS validation -- the stage-0 deferral (header: "does not validate UTF-8 well-formedness")
+ * closed.  glyph_str_validate proves STRUCTURE (form_id + mhash); this additionally proves the PAYLOAD is a
+ * sequence of well-formed UTF-8 scalar values by walking it through the proven-sound rune_utf8_decode (which
+ * rejects invalid lead bytes, overlong encodings, lone surrogates, and multibyte sequences truncated by the
+ * payload end -- the avail bound is load-bearing).  Returns 1 iff the glyph is a GV3_FORM_STR whose entire
+ * payload is well-formed UTF-8, else 0.  Additive: soundness is inherited from rune_utf8_decode, not re-derived;
+ * no existing function is touched. */
+fn glyph_str_validate_utf8(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_STR { return 0u8 }
+    if gv3_validate(i_l) != 1u8 { return 0u8 }
+    let n : u32 = gv3_payload_len(i_l)
+    if n > 152u32 { return 0u8 }                              /* untrusted header len; payload region is 152 bytes */
+    let nn : u64 = (n as u64) & 0xFFFFFFFFu64
+    let mut off : u64 = 0u64
+    let mut ok : u8 = 1u8
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if off >= nn { done = 1u8 }
+        if done == 0u8 {
+            let consumed : u32 = rune_utf8_decode(i_l + 8u64 + off, nn - off, 0u64)   /* out_cp=0: validity only */
+            if consumed == 0u32 {
+                ok = 0u8
+                done = 1u8
+            }
+            if done == 0u8 {
+                off = off + (consumed as u64)
+            }
+        }
+    }
+    return ok
 }

@@ -914,6 +914,7 @@ declare -A EXPECTED=(
     [1127_constants_ledger]=99
     [1128_conjecture_lemma_struct]=99
     [1129_regex_phase_c]=99
+    [1130_glyph_str_validate_utf8]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

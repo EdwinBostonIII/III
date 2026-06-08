@@ -1,0 +1,42 @@
+/* 1130_glyph_str_validate_utf8.iii -- verba::glyph_str UTF-8 well-formedness validation (the stage-0 deferral).
+ * Drives glyph_str_pack + glyph_str_validate_utf8: 99 = the new export rejects ill-formed UTF-8 inside a
+ * GV3_FORM_STR glyph that the structural glyph_str_validate (form_id + mhash only) accepts. glyph_str_pack
+ * packs arbitrary bytes (it does NOT validate), so each case packs a payload then asserts the validator's
+ * verdict, paired positive/negative so it is not tautological:
+ *   (1) valid 2-byte 'e-acute' (U+00E9 = C3 A9)   -> 1;
+ *   (2) truncated lead (C3 28: 0x28 is not a continuation byte) -> 0;
+ *   (3) overlong (C0 80: overlong encoding of U+0000)           -> 0;
+ *   (4) lone surrogate (ED A0 80 = U+D800)                       -> 0;
+ *   (5) plain ASCII ('Hi' = 48 69)                               -> 1;
+ *   (6) a null glyph                                             -> 0.
+ * Soundness is inherited from the proven rune_utf8_decode. */
+module corpus_1130
+
+extern @abi(c-msvc-x64) fn glyph_str_pack(src_ptr: u64, src_len: u32, out_192: u64) -> i32 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_str_validate_utf8(in_192: u64) -> u8 from "glyph_str.iii"
+
+var GLYPH : [u8; 192]
+
+var S_EACUTE    : [u8; 2] = [0xC3u8, 0xA9u8]            /* U+00E9 e-acute */
+var S_TRUNC     : [u8; 2] = [0xC3u8, 0x28u8]            /* 2-byte lead then a non-continuation */
+var S_OVERLONG  : [u8; 2] = [0xC0u8, 0x80u8]            /* overlong U+0000 */
+var S_SURROGATE : [u8; 3] = [0xEDu8, 0xA0u8, 0x80u8]    /* U+D800 lone surrogate */
+var S_ASCII     : [u8; 2] = [0x48u8, 0x69u8]            /* "Hi" */
+
+/* pack `len` bytes from `src` into the glyph, then assert glyph_str_validate_utf8 == `want` (1 = ok). */
+fn vchk(src: u64, len: u32, want: u8) -> u8 {
+    if glyph_str_pack(src, len, &GLYPH as u64) != 0i32 { return 0u8 }
+    let v : u8 = glyph_str_validate_utf8(&GLYPH as u64)
+    if v == want { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    if vchk(&S_EACUTE as u64,    2u32, 1u8) != 1u8 { return 1u64 }   /* valid multibyte */
+    if vchk(&S_TRUNC as u64,     2u32, 0u8) != 1u8 { return 2u64 }   /* truncated/bad continuation */
+    if vchk(&S_OVERLONG as u64,  2u32, 0u8) != 1u8 { return 3u64 }   /* overlong */
+    if vchk(&S_SURROGATE as u64, 3u32, 0u8) != 1u8 { return 4u64 }   /* lone surrogate */
+    if vchk(&S_ASCII as u64,     2u32, 1u8) != 1u8 { return 5u64 }   /* ascii */
+    if glyph_str_validate_utf8(0u64) != 0u8 { return 6u64 }         /* null -> 0 */
+    return 99u64
+}

@@ -1,0 +1,17 @@
+/* 1320_sovereign_branch_crossval.iii -- branch-fold defense-in-depth in the optimizer leash (branch_elim be_sound).
+ * Drives forcefield::sovereign_optimizer::sopt_branch_crossval_kat: 99 = before applying a dead-branch fold the
+ * self-optimizer now demands BOTH the abstract range verdict (numera::branch_elim::be_eliminable) AND an
+ * independent EXHAUSTIVE concrete walkback (be_sound) agree -- it refuses the fold if they ever diverge, so a
+ * bug in either analysis cannot silently admit an unsound fold (mirroring connection B's affine cross-validation).
+ * A then-only branch (2x in [0,10]<20) and an else-only branch (2x in [20,40]>=15) are foldable under the
+ * conjunction; a straddling branch (2x in [0,20] vs 10) is not; each verdict is confirmed sound; and the
+ * production sopt_safe_to_fold now IS that conjunction. */
+module corpus_1320
+
+extern @abi(c-msvc-x64) fn sopt_branch_crossval_kat() -> u64 from "sovereign_optimizer.iii"
+
+fn main() -> u64 {
+    let r : u64 = sopt_branch_crossval_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

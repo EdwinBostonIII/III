@@ -49,6 +49,7 @@ extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
 /* the VERIFIED-ANALYSIS STACK -- the SAFETY-precondition half of DISPOSE (over numera::interval_lattice). */
 extern @abi(c-msvc-x64) fn rc_proven_safe(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 from "range_check.iii"
 extern @abi(c-msvc-x64) fn be_eliminable(lo: u32, hi: u32, c: u32) -> u32 from "branch_elim.iii"
+extern @abi(c-msvc-x64) fn be_sound(lo: u32, hi: u32, c: u32) -> u32 from "branch_elim.iii"
 extern @abi(c-msvc-x64) fn vrp_no_overflow(cn: u32, ca: u32, bound: u32) -> u32 from "value_range_prover.iii"
 /* the REDUCED PRODUCT (interval x parity) -- refines a coarse range by KNOWN parity to a tighter precondition. */
 extern @abi(c-msvc-x64) fn rp_reduce_lo(lo: u32, p: u32) -> u32 from "reduced_product.iii"
@@ -170,9 +171,19 @@ fn sopt_safe_to_narrow(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u
     return rc_proven_safe(lo1, hi1, lo2, hi2, op, bound)
 }
 
-/* a branch-folding optimization is safe iff one arm is provably dead (range-based dead-branch elimination). */
+/* DEFENSE-IN-DEPTH: a branch fold is admitted only when the abstract range verdict (be_eliminable) AND an
+ * independent EXHAUSTIVE concrete walkback (be_sound) AGREE -- the optimizer refuses the fold if they ever
+ * diverge, so a bug in either analysis cannot silently admit an unsound fold (mirrors connection B's crossval). */
+fn sopt_verify_branch_dead(lo: u32, hi: u32, c: u32) -> u32 @export {
+    if be_eliminable(lo, hi, c) == 1u32 {
+        if be_sound(lo, hi, c) == 1u32 { return 1u32 }
+    }
+    return 0u32
+}
+
+/* a branch-folding optimization is safe iff one arm is provably dead AND the concrete walkback confirms it. */
 fn sopt_safe_to_fold(lo: u32, hi: u32, c: u32) -> u32 @export {
-    return be_eliminable(lo, hi, c)
+    return sopt_verify_branch_dead(lo, hi, c)
 }
 
 /* narrowing a loop accumulator is safe iff the WHOLE iteration family provably fits the bound. */
@@ -218,6 +229,25 @@ fn sopt_analysis_kat() -> u64 @export {
     if sopt_safe_to_fold(0u32, 10u32, 10u32) != 0u32 { return 4u64 }
     if sopt_safe_loop_acc(10u32, 5u32, 255u32) != 1u32 { return 5u64 }
     if sopt_safe_loop_acc(10u32, 30u32, 255u32) != 0u32 { return 6u64 }
+    return 99u64
+}
+
+/* THE BRANCH-FOLD DEFENSE-IN-DEPTH KAT -- 99 = a dead-branch fold is admitted only when the abstract range
+ * verdict AND the exhaustive concrete walkback BOTH agree, and they never disagree on a verdict:
+ *   (1) a then-only branch (2x in [0,10] < 20) and an else-only branch (2x in [20,40] >= 15) are foldable
+ *       under the conjunction; a straddling branch (2x in [0,20] vs 10) is NOT;
+ *   (2) for each, be_eliminable and be_sound agree (the BOTH verdict is itself sound);
+ *   (3) sopt_safe_to_fold now IS the conjunction (matches sopt_verify_branch_dead). */
+fn sopt_branch_crossval_kat() -> u64 @export {
+    if sopt_verify_branch_dead(0u32, 5u32, 20u32) != 1u32 { return 1u64 }
+    if sopt_verify_branch_dead(10u32, 20u32, 15u32) != 1u32 { return 2u64 }
+    if sopt_verify_branch_dead(0u32, 10u32, 10u32) != 0u32 { return 3u64 }
+    if be_eliminable(0u32, 5u32, 20u32) != 1u32 { return 4u64 }
+    if be_sound(0u32, 5u32, 20u32) != 1u32 { return 5u64 }
+    if be_eliminable(0u32, 10u32, 10u32) != 0u32 { return 6u64 }
+    if be_sound(0u32, 10u32, 10u32) != 1u32 { return 7u64 }
+    if sopt_safe_to_fold(0u32, 5u32, 20u32) != sopt_verify_branch_dead(0u32, 5u32, 20u32) { return 8u64 }
+    if sopt_safe_to_fold(0u32, 10u32, 10u32) != sopt_verify_branch_dead(0u32, 10u32, 10u32) { return 9u64 }
     return 99u64
 }
 
@@ -281,5 +311,9 @@ fn sopt_flagship() -> u64 @export {
      * extremum is discharged once parity tightens the range, never admitting a real overflow or live branch.
      * Two granular analyses (interval + parity) intersect to sharpen the self-optimizer's DISPOSE. */
     if sopt_refined_kat() != 99u64 { return 9u64 }
+    /* (10) BRANCH-FOLD DEFENSE-IN-DEPTH: a dead-branch fold is admitted only when the abstract range verdict
+     * AND an independent exhaustive concrete walkback agree -- the second analysis confirms the first before
+     * the optimizer acts, refusing the fold if they ever diverge. */
+    if sopt_branch_crossval_kat() != 99u64 { return 10u64 }
     return 99u64
 }

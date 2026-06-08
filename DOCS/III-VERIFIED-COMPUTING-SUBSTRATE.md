@@ -75,6 +75,24 @@ when a real, corpus-tested III subsystem already does it better. Pre-flight now 
   `fenwick` (1299) BIT ≡ naive prefix sums · `segment_tree` (1300) range-min ≡ naive ·
   `inversion_count` (1302) ≡ brute (consumes `fenwick` — a data structure put to work by an algorithm)
 
+## Interconnection — the analyses feed the named subsystems (not islands)
+
+The verified-analysis stack is not a parallel library; it is wired into III's existing production subsystems
+as the substrate's "intelligence from the intersection." Two connections, each ADDITIVE and FULL-corpus-gated:
+
+- **`forcefield/sovereign_optimizer` consumes the analyses (the SECOND LEASH).** `sov_pcc` proves an
+  optimization is meaning-preserving; the analysis stack (`range_check` / `branch_elim` / `value_range_prover`
+  over `interval_lattice`) proves its SAFETY PRECONDITION (overflow-free narrowing, dead-branch fold, bounded
+  loop accumulator). An optimization applies only when BOTH leashes hold — `sopt_analysis_kat`, wired into the
+  production `sopt_flagship` step 8 (corpus `1311`). Full corpus `911/0`.
+- **`sanctus/sovereign_witness` consumes `affine_check` (turned INWARD).** The witness decides affine-access
+  safety in closed form over external traces; `affine_check` decides the same property in-line by exhaustive
+  scan. `sw_crossval_affine_kat` proves the two sound procedures agree on PROVEN-vs-REFUTED for every in-range
+  access (corpus `1312`). Full corpus `912/0`.
+
+The discriminator before adding any module: name the EXISTING subsystem that will call it. A green KAT on a
+self-contained algorithm verified against a co-designed reference is a fixture; value is in the connection.
+
 ## Operating notes
 - The repo lives under OneDrive; long builds were corrupted by sync-down until the **fresh-copy** technique
   (`cp build_stdlib.sh _arc_build.sh && bash _arc_build.sh`) gave the first clean `545/0`. Never

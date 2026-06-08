@@ -1,0 +1,57 @@
+/* 1129_regex_phase_c.iii -- verba::regex Phase C (escape, grouping, classes/ranges, +/? quantifiers).
+ * Drives regex_compile/regex_match: 99 = the parser now accepts the grammar the header (regex.iii:25-26)
+ * deferred to "Phase C", all desugaring to the EXISTING derivative-engine node KINDs (no engine change):
+ *   (1) escape:   'a\.b' matches "a.b" (literal dot) but NOT "axb";
+ *   (2) class:    '[a-c]*' (range-expanded ALT under star) matches "abcabc" but NOT "abd" (d out of class);
+ *   (3) grouping: '(ab)+' (forward-recursive sub-expr, one-or-more) matches "abab" but NOT "aba";
+ *   (4) '?':      'colou?r' (zero-or-one) matches both "color" and "colour";
+ *   (5) '+':      '[0-9]+' (class one-or-more) matches "42" but NOT "" (needs >=1).
+ * Each arm pairs a positive and a negative input so it is not tautological. */
+module corpus_1129
+
+extern @abi(c-msvc-x64) fn regex_compile(pattern: u64, len: u64) -> u32 from "regex.iii"
+extern @abi(c-msvc-x64) fn regex_match(root: u32, input: u64, len: u64) -> u8 from "regex.iii"
+
+var PAT_ESC   : [u8; 4] = [0x61u8, 0x5Cu8, 0x2Eu8, 0x62u8]                        /* a\.b   */
+var PAT_CLS   : [u8; 6] = [0x5Bu8, 0x61u8, 0x2Du8, 0x63u8, 0x5Du8, 0x2Au8]        /* [a-c]* */
+var PAT_GRP   : [u8; 5] = [0x28u8, 0x61u8, 0x62u8, 0x29u8, 0x2Bu8]                /* (ab)+  */
+var PAT_OPT   : [u8; 7] = [0x63u8, 0x6Fu8, 0x6Cu8, 0x6Fu8, 0x75u8, 0x3Fu8, 0x72u8] /* colou?r */
+var PAT_PLUS  : [u8; 6] = [0x5Bu8, 0x30u8, 0x2Du8, 0x39u8, 0x5Du8, 0x2Bu8]        /* [0-9]+ */
+
+var IN_ADOTB  : [u8; 3] = [0x61u8, 0x2Eu8, 0x62u8]                                /* a.b    */
+var IN_AXB    : [u8; 3] = [0x61u8, 0x78u8, 0x62u8]                                /* axb    */
+var IN_ABCABC : [u8; 6] = [0x61u8, 0x62u8, 0x63u8, 0x61u8, 0x62u8, 0x63u8]        /* abcabc */
+var IN_ABD    : [u8; 3] = [0x61u8, 0x62u8, 0x64u8]                                /* abd    */
+var IN_ABAB   : [u8; 4] = [0x61u8, 0x62u8, 0x61u8, 0x62u8]                        /* abab   */
+var IN_ABA    : [u8; 3] = [0x61u8, 0x62u8, 0x61u8]                                /* aba    */
+var IN_COLOR  : [u8; 5] = [0x63u8, 0x6Fu8, 0x6Cu8, 0x6Fu8, 0x72u8]                /* color  */
+var IN_COLOUR : [u8; 6] = [0x63u8, 0x6Fu8, 0x6Cu8, 0x6Fu8, 0x75u8, 0x72u8]        /* colour */
+var IN_42     : [u8; 2] = [0x34u8, 0x32u8]                                        /* 42     */
+
+/* compile `pat` then assert regex_match against `inp` equals `want` (1 = ok). */
+fn chk(patp: u64, patl: u64, inp: u64, inl: u64, want: u8) -> u8 {
+    let r : u32 = regex_compile(patp, patl)
+    if r == 0xFFFFFFFFu32 { return 0u8 }              /* unexpected compile failure */
+    let m : u8 = regex_match(r, inp, inl)
+    if m == want { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    /* (1) escape: a\.b matches "a.b", not "axb" */
+    if chk(&PAT_ESC as u64, 4u64, &IN_ADOTB as u64, 3u64, 1u8) != 1u8 { return 1u64 }
+    if chk(&PAT_ESC as u64, 4u64, &IN_AXB as u64,   3u64, 0u8) != 1u8 { return 2u64 }
+    /* (2) class+range under star: [a-c]* matches "abcabc", not "abd" */
+    if chk(&PAT_CLS as u64, 6u64, &IN_ABCABC as u64, 6u64, 1u8) != 1u8 { return 3u64 }
+    if chk(&PAT_CLS as u64, 6u64, &IN_ABD as u64,    3u64, 0u8) != 1u8 { return 4u64 }
+    /* (3) grouping + one-or-more: (ab)+ matches "abab", not "aba" */
+    if chk(&PAT_GRP as u64, 5u64, &IN_ABAB as u64, 4u64, 1u8) != 1u8 { return 5u64 }
+    if chk(&PAT_GRP as u64, 5u64, &IN_ABA as u64,  3u64, 0u8) != 1u8 { return 6u64 }
+    /* (4) zero-or-one: colou?r matches both "color" and "colour" */
+    if chk(&PAT_OPT as u64, 7u64, &IN_COLOR as u64,  5u64, 1u8) != 1u8 { return 7u64 }
+    if chk(&PAT_OPT as u64, 7u64, &IN_COLOUR as u64, 6u64, 1u8) != 1u8 { return 8u64 }
+    /* (5) class one-or-more: [0-9]+ matches "42", not "" (needs >=1) */
+    if chk(&PAT_PLUS as u64, 6u64, &IN_42 as u64, 2u64, 1u8) != 1u8 { return 9u64 }
+    if chk(&PAT_PLUS as u64, 6u64, &IN_42 as u64, 0u64, 0u8) != 1u8 { return 10u64 }
+    return 99u64
+}

@@ -253,13 +253,75 @@ fn rx_advance() -> u32 {
     return 0u32
 }
 
-/* parse_atom: '.' | byte */
+/* parse_class: '[' (byte | byte '-' byte)+ ']'  (Phase C) -> an ALT chain of literals; ranges expanded at
+ * compile time.  '[^...]' negation is NOT supported (would need the full byte alphabet).  Returns RX_INVALID
+ * on an unterminated, empty, or descending-range class. */
+fn rx_parse_class() -> u32 {
+    rx_advance()                                 /* consume '[' */
+    let mut acc : u32 = RX_NULL_IDX              /* empty set; rx_make_alt(NULL,X)=X so the first literal seeds it */
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let c : u32 = rx_peek_byte()
+        if c == 0x100u32 { return RX_INVALID_IDX }   /* unterminated class */
+        if c == 0x5Du32 {                            /* ']' closes */
+            rx_advance()
+            done = 1u8
+        }
+        if done == 0u8 {
+            rx_advance()                             /* consume the low byte */
+            let d : u32 = rx_peek_byte()
+            if d == 0x2Du32 {                        /* 'lo-hi' range */
+                rx_advance()                         /* consume '-' */
+                let hi : u32 = rx_peek_byte()
+                if hi == 0x100u32 { return RX_INVALID_IDX }
+                if hi == 0x5Du32 { return RX_INVALID_IDX }   /* 'a-' ']' malformed */
+                if hi < c { return RX_INVALID_IDX }          /* descending range */
+                rx_advance()                         /* consume the hi byte */
+                let mut b : u32 = c
+                let mut rdone : u8 = 0u8
+                while rdone == 0u8 {
+                    acc = rx_make_alt(acc, rx_make_literal(b))
+                    if b == hi { rdone = 1u8 }
+                    if rdone == 0u8 { b = b + 1u32 }
+                }
+            } else {
+                acc = rx_make_alt(acc, rx_make_literal(c))
+            }
+        }
+    }
+    if acc == RX_NULL_IDX { return RX_INVALID_IDX }   /* '[]' empty class is invalid */
+    return acc
+}
+
+/* parse_atom: '.' | '\' byte | '(' regex ')' | '[' class ']' | byte   (Phase C adds escape/grouping/class) */
 fn rx_parse_atom() -> u32 {
     let c : u32 = rx_peek_byte()
     if c == 0x100u32 { return RX_INVALID_IDX }
     if c == 0x2Au32 { return RX_INVALID_IDX }   /* '*' is postfix only      */
+    if c == 0x2Bu32 { return RX_INVALID_IDX }   /* '+' is postfix only      */
+    if c == 0x3Fu32 { return RX_INVALID_IDX }   /* '?' is postfix only      */
     if c == 0x7Cu32 { return RX_INVALID_IDX }   /* '|' is separator         */
     if c == 0x29u32 { return RX_INVALID_IDX }   /* ')' reserved             */
+    if c == 0x5Du32 { return RX_INVALID_IDX }   /* ']' reserved (class close)*/
+    if c == 0x5Cu32 {                            /* '\' escape -> next byte as a literal */
+        rx_advance()
+        let e : u32 = rx_peek_byte()
+        if e == 0x100u32 { return RX_INVALID_IDX }   /* trailing backslash */
+        rx_advance()
+        return rx_make_literal(e)
+    }
+    if c == 0x28u32 {                            /* '(' grouping (forward-recurses into rx_parse_regex) */
+        rx_advance()
+        let inner : u32 = rx_parse_regex()
+        if inner == RX_INVALID_IDX { return RX_INVALID_IDX }
+        let close : u32 = rx_peek_byte()
+        if close != 0x29u32 { return RX_INVALID_IDX }   /* require matching ')' */
+        rx_advance()
+        return inner
+    }
+    if c == 0x5Bu32 {                            /* '[' character class */
+        return rx_parse_class()
+    }
     if c == 0x2Eu32 {
         rx_advance()
         return rx_make_any()
@@ -268,14 +330,22 @@ fn rx_parse_atom() -> u32 {
     return rx_make_literal(c)
 }
 
-/* parse_factor: atom ('*')? */
+/* parse_factor: atom ('*' | '+' | '?')?   (Phase C adds '+' one-or-more and '?' zero-or-one) */
 fn rx_parse_factor() -> u32 {
     let a : u32 = rx_parse_atom()
     if a == RX_INVALID_IDX { return RX_INVALID_IDX }
     let c : u32 = rx_peek_byte()
-    if c == 0x2Au32 {
+    if c == 0x2Au32 {                            /* '*' zero-or-more */
         rx_advance()
         return rx_make_star(a)
+    }
+    if c == 0x2Bu32 {                            /* '+' one-or-more = a · a*  (node a shared; derivative only reads) */
+        rx_advance()
+        return rx_make_concat(a, rx_make_star(a))
+    }
+    if c == 0x3Fu32 {                            /* '?' zero-or-one = a | ε */
+        rx_advance()
+        return rx_make_alt(a, RX_EPS_IDX)
     }
     return a
 }

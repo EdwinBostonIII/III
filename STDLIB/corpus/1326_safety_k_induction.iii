@@ -1,0 +1,20 @@
+/* 1326_safety_k_induction.iii -- arbitrary-k k-induction fulfils safety_prover's "COMPLETE k-INDUCTION" title.
+ * Drives numera::safety_prover externally: 99 = the SAME transition system that the prover abstains on with
+ * UNKNOWN under 1-induction (sp_verdict, k=1) is PROVEN SAFE under 2-induction (sp_verdict_k, k=2). The module
+ * advertised the complete k-induction verdict and its own UNKNOWN comment said a property "needs a larger k",
+ * yet only k=1 was implemented; this closes that gap. The unreachable state 5 (whose 5->6 edge breaks
+ * 1-induction) is not on any P-only path of length 1 from a P-state, so the 2-inductive step holds -- sound
+ * (k-induction without the simple-path restriction is sound). The prover now PROVES true invariants too weak
+ * to be 1-inductive instead of abstaining. */
+module corpus_1326
+
+extern @abi(c-msvc-x64) fn sp_setup(mode: u32) -> i32 from "safety_prover.iii"
+extern @abi(c-msvc-x64) fn sp_verdict(k: u32) -> u32 from "safety_prover.iii"
+extern @abi(c-msvc-x64) fn sp_verdict_k(k: u32) -> u32 from "safety_prover.iii"
+
+fn main() -> u64 {
+    sp_setup(2u32)                                   /* the UNKNOWN system (true invariant, not 1-inductive) */
+    if sp_verdict(10u32) != 1u32 { return 1u64 }     /* SP_UNKNOWN under 1-induction */
+    if sp_verdict_k(2u32) != 2u32 { return 2u64 }    /* SP_SAFE under 2-induction -- the headline */
+    return 99u64
+}

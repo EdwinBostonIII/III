@@ -1,0 +1,16 @@
+/* 1316_topology_weighted.iii -- the topology atlas lifts to verified weighted routing (dijkstra into aether).
+ * Drives aether::topology_atlas::topoa_distance_weighted_kat: 99 = the atlas now CONSUMES numera::dijkstra for
+ * globally-optimal cost-aware routing. On a 5-region atlas (edges 0-1,0-2,2-1,1-3,3-4) the verified Dijkstra
+ * with unit weights reproduces the atlas BFS hop count EXACTLY for every node (d(1)=1,d(3)=2,d(4)=3 -- so the
+ * verified routing subsumes the existing unweighted answer); and with heterogeneous link latencies it
+ * certifies a cheaper INDIRECT route (direct 0->1 cost 4 vs indirect 0->2->1 cost 2 -> picks 2) that the
+ * 1-hop BFS view cannot. numera -> aether: federation routing delegates correctness to dijkstra_kat. */
+module corpus_1316
+
+extern @abi(c-msvc-x64) fn topoa_distance_weighted_kat() -> u64 from "topology_atlas.iii"
+
+fn main() -> u64 {
+    let r : u64 = topoa_distance_weighted_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

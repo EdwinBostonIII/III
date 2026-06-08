@@ -42,6 +42,20 @@ fn dij_setup() -> i32 @export {
 
 fn dij_edge(u: u32, v: u32) -> u32 @export { return DIJ_W[((u * DIJ_N) + v) as u64] }
 
+/* ---- mutable-graph API (for external consumers, e.g. aether::topology_atlas weighted routing): clear to a
+ * fresh all-INF matrix, then set individual directed edge weights.  dij_setup (the baked example graph) and
+ * dijkstra_kat are UNTOUCHED, so the 1290 corpus citizen stays 99. */
+fn dij_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 25u32 { DIJ_W[i as u64] = DIJ_INF ; i = i + 1u32 }
+    return 0i32
+}
+fn dij_set_edge(u: u32, v: u32, w: u32) -> i32 @export {
+    DIJ_W[((u * DIJ_N) + v) as u64] = w
+    return 0i32
+}
+fn dij_n() -> u32 @export { return DIJ_N }
+
 /* compute shortest distances from src by repeatedly settling the nearest unsettled node. */
 fn dij_compute(src: u32) -> i32 @export {
     let mut i : u32 = 0u32

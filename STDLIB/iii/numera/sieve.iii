@@ -1,0 +1,119 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sieve.iii
+ *
+ * III STDLIB - numera::sieve  --  SIEVE OF ERATOSTHENES, VERIFIED AGAINST TRIAL DIVISION.
+ *
+ * The classic bulk prime generator: start with every number 2..N marked prime, and for each prime i strike
+ * out its multiples starting at i*i (smaller multiples already struck by smaller primes).  Whereas
+ * `conjecture_refute`'s `cr_is_prime` TESTS one number, the sieve GENERATES all primes up to N in one pass.
+ * The III discipline VERIFIES the sieve's verdict for EVERY number against an independent trial-division
+ * reference -- two unrelated primality methods that must agree across the whole range.
+ *
+ * Up to 50 there are 15 primes (2,3,5,7,11,13,17,19,23,29,31,37,41,43,47).
+ *
+ * Verified (sieve_kat): the sieve marks specific numbers correctly (2,17 prime; 4,49 composite); it counts
+ * exactly 15 primes up to 50; and the sieve agrees with trial division at every number 0..50.  NIH/self-contained.
+ *
+ * Public API:
+ *   sieve_run() ; sieve_divides(d,n) -> u32 ; sieve_is_prime(n) -> u32 ; sieve_trial(n) -> u32 ;
+ *   sieve_count() -> u32 ; sieve_agree() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+module numera_sieve
+
+const SIEVE_N : u32 = 50u32
+
+var SIEVE_F : [u32; 51]            /* 1 = prime, 0 = composite */
+
+/* does d divide n? (subtraction-based, no modulo -- trap-immune). */
+fn sieve_divides(d: u32, n: u32) -> u32 @export {
+    let mut r : u32 = n
+    while r >= d { r = r - d }
+    if r == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* run the sieve: mark composites by striking multiples from i*i. */
+fn sieve_run() -> i32 @export {
+    SIEVE_F[0u64] = 0u32
+    SIEVE_F[1u64] = 0u32
+    let mut k : u32 = 2u32
+    while k <= SIEVE_N { SIEVE_F[k as u64] = 1u32 ; k = k + 1u32 }
+    let mut i : u32 = 2u32
+    while (i * i) <= SIEVE_N {
+        if SIEVE_F[i as u64] == 1u32 {
+            let mut j : u32 = i * i
+            while j <= SIEVE_N {
+                SIEVE_F[j as u64] = 0u32
+                j = j + i
+            }
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn sieve_is_prime(n: u32) -> u32 @export { return SIEVE_F[n as u64] }
+
+/* the independent reference: trial division. */
+fn sieve_trial(n: u32) -> u32 @export {
+    if n < 2u32 { return 0u32 }
+    let mut d : u32 = 2u32
+    while (d * d) <= n {
+        if sieve_divides(d, n) == 1u32 { return 0u32 }
+        d = d + 1u32
+    }
+    return 1u32
+}
+
+/* count primes up to N. */
+fn sieve_count() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut n : u32 = 2u32
+    while n <= SIEVE_N {
+        if SIEVE_F[n as u64] == 1u32 { c = c + 1u32 }
+        n = n + 1u32
+    }
+    return c
+}
+
+/* the sieve agrees with trial division at every number 0..N. */
+fn sieve_agree() -> u32 @export {
+    let mut n : u32 = 0u32
+    while n <= SIEVE_N {
+        if sieve_is_prime(n) != sieve_trial(n) { return 0u32 }
+        n = n + 1u32
+    }
+    return 1u32
+}
+
+/* =====================================================================================
+ * sieve_kat -- 99 = the sieve is correct, verified against trial division:
+ *   (1) specific verdicts: 2 and 17 prime, 4 and 49 (=7*7) composite, 1 not prime;
+ *   (2) exactly 15 primes up to 50;
+ *   (3) the sieve agrees with trial division at every number 0..50;
+ *   (4) the divisibility helper is correct.
+ * ===================================================================================== */
+fn sieve_kat() -> u64 @export {
+    sieve_run()
+
+    /* (1) specific verdicts */
+    if sieve_is_prime(2u32) != 1u32 { return 1u64 }
+    if sieve_is_prime(17u32) != 1u32 { return 2u64 }
+    if sieve_is_prime(4u32) != 0u32 { return 3u64 }
+    if sieve_is_prime(49u32) != 0u32 { return 4u64 }
+    if sieve_is_prime(1u32) != 0u32 { return 5u64 }
+
+    /* (2) the count */
+    if sieve_count() != 15u32 { return 6u64 }
+
+    /* (3) agreement with trial division everywhere */
+    if sieve_agree() != 1u32 { return 7u64 }
+
+    /* (4) divisibility */
+    if sieve_divides(7u32, 49u32) != 1u32 { return 8u64 }
+    if sieve_divides(3u32, 10u32) != 0u32 { return 9u64 }
+    if sieve_divides(5u32, 50u32) != 1u32 { return 10u64 }
+
+    return 99u64
+}

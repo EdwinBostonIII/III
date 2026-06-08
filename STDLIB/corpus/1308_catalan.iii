@@ -1,0 +1,14 @@
+/* 1308_catalan.iii -- Catalan numbers, two recurrences cross-verified.
+ * Drives numera::catalan::catalan_kat: 99 = the Catalan numbers computed two independent ways -- the O(n^2)
+ * convolution C(n+1)=sum C(i)C(n-i) and the O(n) product formula C(n)=C(n-1)*(4n-2)/(n+1) -- agree at every
+ * n 0..10, give 1,1,2,5,14,42 and C(10)=16796, and match textbook spot checks (C(6)=132, C(9)=4862).
+ * Differential verification of combinatorial numbers, also guarding the division-order trap. */
+module corpus_1308
+
+extern @abi(c-msvc-x64) fn catalan_kat() -> u64 from "catalan.iii"
+
+fn main() -> u64 {
+    let r : u64 = catalan_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

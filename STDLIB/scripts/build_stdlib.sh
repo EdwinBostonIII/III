@@ -740,6 +740,7 @@ MODULES=(
     "numera/lis"
     "numera/sieve"
     "numera/gray_code"
+    "numera/catalan"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

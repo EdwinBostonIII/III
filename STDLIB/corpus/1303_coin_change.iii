@@ -1,0 +1,14 @@
+/* 1303_coin_change.iii -- minimum-coin change (unbounded DP), verified against brute force.
+ * Drives numera::coin_change::coin_change_kat: 99 = with coins [1,3,4] the minimum-coin DP (amount swept
+ * UPWARD so each coin is reusable -- the mirror of knapsack's downward sweep) gives 6->2, 7->2, 11->3, 0->0,
+ * and equals the exhaustive brute force (every count of each coin) at every amount 0..20. The unbounded DP
+ * proven equivalent to its exhaustive reference. */
+module corpus_1303
+
+extern @abi(c-msvc-x64) fn coin_change_kat() -> u64 from "coin_change.iii"
+
+fn main() -> u64 {
+    let r : u64 = coin_change_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

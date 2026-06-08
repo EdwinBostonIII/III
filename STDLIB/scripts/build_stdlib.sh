@@ -735,6 +735,7 @@ MODULES=(
     "numera/segment_tree"
     "numera/knapsack"
     "numera/inversion_count"
+    "numera/coin_change"
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"

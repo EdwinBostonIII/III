@@ -895,6 +895,7 @@ declare -A EXPECTED=(
     [1315_kleene_widened]=99
     [1316_topology_weighted]=99
     [1317_proof_ripple_audit]=99
+    [1318_bce_sccp]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

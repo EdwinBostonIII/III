@@ -1,0 +1,16 @@
+/* 1318_bce_sccp.iii -- constant-index bounds-check shortcut: sccp feeds bce (two dataflow analyses compose).
+ * Drives numera::bce::bce_sccp_kat: 99 = bounds-check elimination now CONSUMES numera::sccp's constant
+ * propagation -- a bounds check on a STATICALLY-CONSTANT array index is trivially redundant when the constant
+ * is below the array size (no affine analysis needed). bce dispatches on sccp's lattice state: sccp node v2
+ * is CONST=5 so bce_constant_redundant(5,16)=1 / (5,4)=0; the via_sccp dispatch routes a CONST node through
+ * the O(1) check; sccp node v4 is VARYING so via_sccp falls back to the affine bce_redundant and agrees with
+ * it, soundly rejecting an out-of-bounds stream. sccp's constant VALUE becomes a data index into bce. */
+module corpus_1318
+
+extern @abi(c-msvc-x64) fn bce_sccp_kat() -> u64 from "bce.iii"
+
+fn main() -> u64 {
+    let r : u64 = bce_sccp_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

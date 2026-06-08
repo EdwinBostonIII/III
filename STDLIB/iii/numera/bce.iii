@@ -26,6 +26,11 @@ module numera_bce
 
 extern @abi(c-msvc-x64) fn ac_max_access(a: u32, b: u32, n: u32) -> u32 from "affine_check.iii"
 extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
+/* CONSUMED constant propagation (numera::sccp): a statically-CONSTANT array index needs no affine analysis. */
+extern @abi(c-msvc-x64) fn sccp_setup() -> i32 from "sccp.iii"
+extern @abi(c-msvc-x64) fn sccp_solve() -> i32 from "sccp.iii"
+extern @abi(c-msvc-x64) fn sccp_state(i: u32) -> u32 from "sccp.iii"
+extern @abi(c-msvc-x64) fn sccp_const(i: u32) -> u32 from "sccp.iii"
 
 const BCE_K : u32 = 4u32          /* accesses in the loop body */
 
@@ -99,6 +104,54 @@ fn bce_kat() -> u64 @export {
     /* (4) mutual exclusion: the safe access is eliminated-not-kept; the unsafe is kept-not-eliminated */
     if bce_kept_can_fire(2u32, 1u32, 5u32, 16u32) != 0u32 { return 6u64 }
     if bce_eliminated_never_fires(3u32, 2u32, 8u32, 16u32) != 0u32 { return 7u64 }
+
+    return 99u64
+}
+
+/* ---- CONSTANT-INDEX SHORTCUT (sccp feeds bce): a bounds check on a STATICALLY-CONSTANT array index is
+ * trivially redundant when the constant is below the array size -- no affine_check needed.  bce dispatches on
+ * sccp's lattice state: a CONST node uses the O(1) constant test, a VARYING node falls back to the affine
+ * stream analysis.  Two granular dataflow analyses compose: sccp's constant VALUE becomes a data index into bce. */
+const BCE_SCCP_CONST : u32 = 1u32          /* mirrors sccp's SCCP_CONST */
+const BCE_SCCP_VARY  : u32 = 2u32          /* mirrors sccp's SCCP_VARY */
+
+/* a constant array index is in-bounds (its check redundant) iff the constant is below the array size. */
+fn bce_constant_redundant(idx_val: u32, size: u32) -> u32 @export {
+    if idx_val < size { return 1u32 }
+    return 0u32
+}
+
+/* dispatch by sccp lattice state: CONST -> O(1) constant test; else -> the affine bce_redundant. */
+fn bce_redundant_via_sccp(node: u32, size: u32, a: u32, b: u32, n: u32) -> u32 @export {
+    if sccp_state(node) == BCE_SCCP_CONST { return bce_constant_redundant(sccp_const(node), size) }
+    return bce_redundant(a, b, n, size)
+}
+
+/* THE sccp-INTO-bce KAT -- 99 = the constant-index shortcut is correct + sound, dispatching on sccp's state:
+ *   (1) a CONST node (sccp v2 = 5): redundant iff 5 < size (5<16 -> 1, 5<4 -> 0, the negative);
+ *   (2) the via_sccp dispatch routes a CONST node to the O(1) check;
+ *   (3) a VARYING node (sccp v4): via_sccp falls back to the affine path AND agrees with bce_redundant;
+ *   (4) the fallback is sound -- an out-of-bounds affine stream is correctly NOT redundant. */
+fn bce_sccp_kat() -> u64 @export {
+    sccp_setup()
+    sccp_solve()
+
+    /* (1) CONST node v2 = 5 */
+    if sccp_state(2u32) != BCE_SCCP_CONST { return 1u64 }
+    if bce_constant_redundant(sccp_const(2u32), 16u32) != 1u32 { return 2u64 }   /* 5 < 16 redundant */
+    if bce_constant_redundant(sccp_const(2u32), 4u32) != 0u32 { return 3u64 }    /* 5 >= 4 NOT redundant */
+
+    /* (2) the dispatch routes a CONST node through the constant test */
+    if bce_redundant_via_sccp(2u32, 16u32, 1u32, 0u32, 3u32) != 1u32 { return 4u64 }
+    if bce_redundant_via_sccp(2u32, 4u32, 1u32, 0u32, 3u32) != 0u32 { return 5u64 }
+
+    /* (3) VARYING node v4 falls back to the affine path, agreeing with bce_redundant */
+    if sccp_state(4u32) != BCE_SCCP_VARY { return 6u64 }
+    if bce_redundant_via_sccp(4u32, 32u32, 2u32, 1u32, 12u32) != bce_redundant(2u32, 1u32, 12u32, 32u32) { return 7u64 }
+    if bce_redundant_via_sccp(4u32, 32u32, 2u32, 1u32, 12u32) != 1u32 { return 8u64 }   /* max 2*11+1=23 < 32 */
+
+    /* (4) the fallback is sound for an out-of-bounds stream */
+    if bce_redundant_via_sccp(4u32, 16u32, 3u32, 2u32, 8u32) != 0u32 { return 9u64 }    /* max 3*7+2=23 >= 16 */
 
     return 99u64
 }

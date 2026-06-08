@@ -882,6 +882,7 @@ declare -A EXPECTED=(
     [1302_inversion_count]=99
     [1303_coin_change]=99
     [1304_lcs]=99
+    [1305_lis]=99
     [1251_xii_cap_preserve]=99
     [1246_bv_canon_addr]=99
     [1247_induct_wj]=99

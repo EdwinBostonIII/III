@@ -1,0 +1,14 @@
+/* 1305_lis.iii -- longest increasing subsequence, two algorithms cross-verified.
+ * Drives numera::lis::lis_kat: 99 = the LIS length computed two independent ways -- the O(n^2) DP and the
+ * O(n log n) patience sort (binary-search the tails array) -- agree on [10,9,2,5,3,7,101,18]=4, [1,2,3,4,5]=5,
+ * [5,4,3,2,1]=1, [2,2,2]=1 (strict); the lower-bound binary search is correct. Differential verification:
+ * two methods with no shared logic agreeing everywhere. */
+module corpus_1305
+
+extern @abi(c-msvc-x64) fn lis_kat() -> u64 from "lis.iii"
+
+fn main() -> u64 {
+    let r : u64 = lis_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,14 @@
+/* 1330_fix_signed.iii -- numera::fixed signed Q31.32 fixed-point (the Phase C deferral, closed).
+ * Drives fix_signed_selftest: 99 = the new signed ops (from/to_i32_signed, add/sub/mul/div/eq/lt _signed) are
+ * correct across the sign tables -- negative round-trip, sign-crossover add/sub, the four mul/div sign quadrants,
+ * and i64-ordering lt (a negative compares < a positive, which the i32-unsigned-ordering trap would invert).
+ * mul/div use sign-magnitude over the existing unsigned 128-bit mul / long-division. */
+module corpus_1330
+
+extern @abi(c-msvc-x64) fn fix_signed_selftest() -> u64 from "fixed.iii"
+
+fn main() -> u64 {
+    let r : u64 = fix_signed_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

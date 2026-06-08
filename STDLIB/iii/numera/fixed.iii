@@ -111,3 +111,115 @@ fn fix_lt(a: u64, b: u64) -> u8 @export {
     if a < b { return 1u8 }
     return 0u8
 }
+
+/* === Signed Q31.32 (the Phase C deferral, closed): 1 sign + 31 int + 32 frac, stored as i64; value =
+ * bits / 2^32.  add/sub/eq are two's-complement bit-identical to the unsigned ops; lt uses i64 ordering
+ * (SOUND in iiis-2 -- unlike i32 ordering, which is unsigned); mul/div use SIGN-MAGNITUDE (run the unsigned
+ * 128-bit mul / long-division on the absolute values, then reapply the XOR of the operand signs).  The
+ * most-negative value (i64::MIN) has no positive magnitude and is outside the supported domain. === */
+
+fn fix_from_i32_signed(i: i32) -> i64 @export {
+    let v : i64 = i as i64
+    return v << 32i64
+}
+
+fn fix_to_i32_signed(q: i64) -> i32 @export {
+    let mut mag : u64 = q as u64
+    let mut neg : u8 = 0u8
+    if q < 0i64 {
+        neg = 1u8
+        let m : i64 = 0i64 - q
+        mag = m as u64
+    }
+    let int_mag : u64 = mag >> 32u64
+    let r : i64 = int_mag as i64
+    if neg == 1u8 { return (0i64 - r) as i32 }
+    return r as i32
+}
+
+fn fix_add_signed(a: i64, b: i64) -> i64 @export {
+    return a + b
+}
+
+fn fix_sub_signed(a: i64, b: i64) -> i64 @export {
+    return a - b
+}
+
+fn fix_eq_signed(a: i64, b: i64) -> u8 @export {
+    if a == b { return 1u8 }
+    return 0u8
+}
+
+fn fix_lt_signed(a: i64, b: i64) -> u8 @export {
+    if a < b { return 1u8 }
+    return 0u8
+}
+
+fn fix_mul_signed(a: i64, b: i64) -> i64 @export {
+    let mut ma : u64 = a as u64
+    let mut sa : u8 = 0u8
+    if a < 0i64 {
+        sa = 1u8
+        let na : i64 = 0i64 - a
+        ma = na as u64
+    }
+    let mut mb : u64 = b as u64
+    let mut sb : u8 = 0u8
+    if b < 0i64 {
+        sb = 1u8
+        let nb : i64 = 0i64 - b
+        mb = nb as u64
+    }
+    let m : u64 = fix_mul(ma, mb)
+    if sa != sb { return 0i64 - (m as i64) }
+    return m as i64
+}
+
+fn fix_div_signed(a: i64, b: i64) -> i64 @export {
+    let mut ma : u64 = a as u64
+    let mut sa : u8 = 0u8
+    if a < 0i64 {
+        sa = 1u8
+        let na : i64 = 0i64 - a
+        ma = na as u64
+    }
+    let mut mb : u64 = b as u64
+    let mut sb : u8 = 0u8
+    if b < 0i64 {
+        sb = 1u8
+        let nb : i64 = 0i64 - b
+        mb = nb as u64
+    }
+    let m : u64 = fix_div(ma, mb)
+    if sa != sb { return 0i64 - (m as i64) }
+    return m as i64
+}
+
+/* 99 = the signed Q31.32 ops are correct across the sign tables (compared to from_i32_signed references). */
+fn fix_signed_selftest() -> u64 @export {
+    /* round-trip (incl. negative) */
+    if fix_to_i32_signed(fix_from_i32_signed(0i32 - 5i32)) != (0i32 - 5i32) { return 1u64 }
+    if fix_to_i32_signed(fix_from_i32_signed(7i32)) != 7i32 { return 2u64 }
+    /* add (incl. sign crossover) */
+    if fix_add_signed(fix_from_i32_signed(0i32 - 3i32), fix_from_i32_signed(7i32)) != fix_from_i32_signed(4i32) { return 3u64 }
+    if fix_add_signed(fix_from_i32_signed(2i32), fix_from_i32_signed(0i32 - 5i32)) != fix_from_i32_signed(0i32 - 3i32) { return 4u64 }
+    /* sub */
+    if fix_sub_signed(fix_from_i32_signed(3i32), fix_from_i32_signed(8i32)) != fix_from_i32_signed(0i32 - 5i32) { return 5u64 }
+    /* mul sign table {-,+},{-,-},{+,-},{+,+} */
+    if fix_mul_signed(fix_from_i32_signed(0i32 - 2i32), fix_from_i32_signed(3i32)) != fix_from_i32_signed(0i32 - 6i32) { return 6u64 }
+    if fix_mul_signed(fix_from_i32_signed(0i32 - 2i32), fix_from_i32_signed(0i32 - 3i32)) != fix_from_i32_signed(6i32) { return 7u64 }
+    if fix_mul_signed(fix_from_i32_signed(4i32), fix_from_i32_signed(0i32 - 5i32)) != fix_from_i32_signed(0i32 - 20i32) { return 8u64 }
+    if fix_mul_signed(fix_from_i32_signed(4i32), fix_from_i32_signed(5i32)) != fix_from_i32_signed(20i32) { return 9u64 }
+    /* div sign table */
+    if fix_div_signed(fix_from_i32_signed(0i32 - 6i32), fix_from_i32_signed(3i32)) != fix_from_i32_signed(0i32 - 2i32) { return 10u64 }
+    if fix_div_signed(fix_from_i32_signed(6i32), fix_from_i32_signed(0i32 - 2i32)) != fix_from_i32_signed(0i32 - 3i32) { return 11u64 }
+    if fix_div_signed(fix_from_i32_signed(0i32 - 20i32), fix_from_i32_signed(0i32 - 4i32)) != fix_from_i32_signed(5i32) { return 12u64 }
+    /* lt (i64 ordering, SOUND) + the teeth: a negative is < a positive (the i32-unsigned trap would invert this) */
+    if fix_lt_signed(fix_from_i32_signed(0i32 - 1i32), fix_from_i32_signed(1i32)) != 1u8 { return 13u64 }
+    if fix_lt_signed(fix_from_i32_signed(1i32), fix_from_i32_signed(0i32 - 1i32)) != 0u8 { return 14u64 }
+    if fix_lt_signed(fix_from_i32_signed(0i32 - 5i32), fix_from_i32_signed(0i32 - 2i32)) != 1u8 { return 15u64 }
+    /* eq */
+    if fix_eq_signed(fix_from_i32_signed(0i32 - 5i32), fix_from_i32_signed(0i32 - 5i32)) != 1u8 { return 16u64 }
+    if fix_eq_signed(fix_from_i32_signed(0i32 - 5i32), fix_from_i32_signed(5i32)) != 0u8 { return 17u64 }
+    return 99u64
+}

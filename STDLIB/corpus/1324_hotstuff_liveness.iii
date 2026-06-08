@@ -1,0 +1,18 @@
+/* 1324_hotstuff_liveness.iii -- HotStuff consensus carries a formal LTL LIVENESS proof (temporal_logic into aether).
+ * Drives aether::hotstuff::hs_liveness_kat: 99 = the consensus core now CONSUMES numera::temporal_logic's LTL
+ * evaluator (over an explicit modeled pacemaker phase trace) to PROVE liveness -- G(quorum => F(advance)):
+ * whenever a quorum gathers in a phase, the protocol EVENTUALLY advances. This complements the machine-checked
+ * SAFETY theorems (Byzantine quorum-intersection + vote bounds, corpus 1314): safety says a bad thing never
+ * happens, liveness says a good thing eventually does. The proof distinguishes a HEALTHY run (quorum every
+ * phase, advance follows -> liveness HOLDS) from a STALLED run (quorum gathers but the protocol stops advancing
+ * after phase 0 -> liveness FAILS, the lost-liveness a pacemaker must rule out), a different trace so it is not
+ * tautological. The safety (+) liveness correctness picture completed. numera -> aether. */
+module corpus_1324
+
+extern @abi(c-msvc-x64) fn hs_liveness_kat() -> u64 from "hotstuff.iii"
+
+fn main() -> u64 {
+    let r : u64 = hs_liveness_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

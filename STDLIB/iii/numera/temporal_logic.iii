@@ -492,6 +492,15 @@ fn tl_kat_run(slot: u32, ll: u64) -> i32 {
     return TLOGIC_OK
 }
 
+/* === EXPLICIT-TRACE EVALUATION (production API; complements the witness-chain mode of tl_holds_on_segment) ===
+ * Evaluate an LTL formula over a caller-provided atom-truth trace, for a consumer proving a temporal property
+ * of a MODELED scenario (e.g. a consensus pacemaker phase sequence) rather than a captured witness chain: set
+ * each atom node's truth per position (tl_trace_set), evaluate the formula over [0,len) (tl_trace_eval), then
+ * read the root node's truth at a position (tl_trace_holds == 1 iff the formula holds there). */
+fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 @export { return tl_val_set(atom_node, pos, truth) }
+fn tl_trace_eval(formula_slot: u32, len: u64) -> i32 @export { return tl_kat_run(formula_slot, len) }
+fn tl_trace_holds(node: u64, pos: u64) -> u8 @export { return tl_val_get(node, pos) }
+
 /* KAT 1-2: F A0 and G A1. Returns 0 on pass, error code on fail. */
 fn tl_kat_fg() -> u64 {
     let a0p : *u8 = &TL_T_A0 as u64 as *u8

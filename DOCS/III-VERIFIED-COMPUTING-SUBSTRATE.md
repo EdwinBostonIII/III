@@ -78,9 +78,10 @@ when a real, corpus-tested III subsystem already does it better. Pre-flight now 
 ## Interconnection — the analyses feed the named subsystems (not islands)
 
 The verified-analysis stack is not a parallel library; it is wired into III's existing production subsystems
-as the substrate's "intelligence from the intersection." TEN connections (A/B by hand; 1–8 from an exhaustive
-adversarial-verified discovery workflow — 48 agents, 37 candidates → 12 genuine → 8 executed), each ADDITIVE,
-each gated on its named corpus tests + the FULL corpus (911→920, FAIL=0 throughout):
+as the substrate's "intelligence from the intersection." FOURTEEN connections (A/B by hand; 1–8 from a first
+adversarial-verified discovery workflow — 48 agents, 37→12 genuine→8 executed; c1–c4 from a second — 42 agents,
+31→4 genuine→4 executed), each ADDITIVE, each gated on its named corpus tests + the FULL corpus (911→924,
+FAIL=0 throughout):
 
 - **`forcefield/sovereign_optimizer` consumes the analyses (the SECOND LEASH).** `sov_pcc` proves an
   optimization is meaning-preserving; the analysis stack (`range_check` / `branch_elim` / `value_range_prover`
@@ -112,6 +113,19 @@ lattice` as already structurally enforced):
    derivation becomes a build-time KAT failure, not a runtime privilege-escalation (`1319`).
 8. **`branch_elim` (`be_sound`) → `sovereign_optimizer`**: a dead-branch fold is admitted only when the
    abstract verdict AND an exhaustive concrete walkback agree — defense-in-depth (flagship step 10; `1320`).
+
+Four more from the second discovery workflow (deeper subsystems; the verifier rejected the witness-chain LTL
+path as non-additive and applied two primary-source honesty corrections):
+- **c1. `theorem_commons` (+`sov_isa`) → `scythe_census`**: the optimization census cite-verifies the Theorem
+  Commons — discovery (sov_isa enumeration) ⊕ registration (Commons admit) ⊕ citation checked mutually
+  consistent at build time, the headline proof-carrying-optimization theorems citable AND census-certified (`1321`).
+- **c2. `temporal_logic` → `hotstuff`**: a formal LTL LIVENESS proof `G(quorum⇒F(advance))` beside the safety
+  theorems, via a new clean explicit-trace evaluator (the witness-chain path was infeasible); healthy trace
+  holds, stalled trace fails (`1324`).
+- **c3. `taint_analysis` → `aes_gcm`**: a build-time info-flow proof that key/nonce reach the ciphertext only
+  through the AES encryption boundary, never as raw plaintext — a key-recovery-bug guard (`1323`).
+- **c4. `liveness` → `reg_alloc`**: register allocation over a COMPUTED interference graph from the verified
+  backward-dataflow liveness analysis, optimally colored (chromatic = max-overlap), not synthetic intervals (`1322`).
 
 The discriminator before adding any module: name the EXISTING subsystem that will call it. A green KAT on a
 self-contained algorithm verified against a co-designed reference is a fixture; value is in the connection.

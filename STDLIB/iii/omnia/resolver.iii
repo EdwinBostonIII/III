@@ -87,6 +87,7 @@ const E_RESOLVE_REGISTRY_TAMPER: u32 = 0xE105u32
 const E_RESOLVE_INTENT_TAMPER  : u32 = 0xE106u32
 const E_RESOLVE_CTX_TAMPER     : u32 = 0xE107u32
 const E_RESOLVE_CAP_DENIED     : u32 = 0xE108u32
+const E_RESOLVE_UNIFY          : u32 = 0xE109u32   /* harmony 29: the winning pattern's unify_fn REFUSED */
 
 /* Externs */
 extern @abi(c-msvc-x64) fn pattern_set_verify(set: u64) -> u8 from "pattern_table.iii"
@@ -102,6 +103,8 @@ extern @abi(c-msvc-x64) fn pattern_guarantees_provided(p: u64) -> u32 from "patt
 extern @abi(c-msvc-x64) fn pattern_k_value(p: u64) -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_predicate_fn(p: u64) -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_unify_fn(p: u64) -> u64 from "pattern_table.iii"
+/* harmony item 29: the Robinson unification engine (Stage-2, now ACTIVATED in resolve()). */
+extern @abi(c-msvc-x64) fn unify_init(buf: u64) -> i32 from "unify.iii"
 extern @abi(c-msvc-x64) fn pattern_dispatch_fn(p: u64) -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_effects_mask(p: u64) -> u32 from "pattern_table.iii"
 
@@ -170,6 +173,9 @@ var RES_DIG      : [u8; 32]
 var RES_BIND_DIG : [u8; 32]
 var RES_BUF8     : [u8; 8]
 var RES_BUF4     : [u8; 4]
+/* harmony item 29: the per-resolve Robinson unification buffer (omnia/unify's documented
+ * 8720-byte layout: terms_used@0, substs_used@4, ...).  [u64; 1090] = 8720 bytes exactly. */
+var RES_UNIFY_BUF : [u64; 1090]
 
 /* Last-resolution event state (Phase B.3 -- reflect primitive).
  * Updated at the end of every successful resolve() invocation. The
@@ -447,6 +453,13 @@ fn write_u32_le_local(p: u64, v: u32) -> i32 {
 /* ── failure path ── */
 
 fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export {
+    /* [harmony 29 / latent-bug fix] params -> locals FIRST (the documented param-spill family):
+     * error_code's FINAL use is after the crystal_mint/witness_append_k calls below; an unspilled
+     * param read post-call returns garbage, so EVERY refusal path returned an odd-tagged GARBAGE
+     * payload instead of (error_code << 1) | 1.  Undetected for the whole resolver's life because
+     * no KAT ever DECODED a refusal payload (the corpus asserted only != 0, which garbage passes).
+     * KAT 1354 is the first decoder and caught it. */
+    let ec_l : u32 = error_code
     if call_context_verify(ctx) == 1u8 {
         call_context_digest(ctx, (&RES_DIG) as u64)
     }
@@ -457,30 +470,30 @@ fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export
 
     mhash_begin()
 
-    if error_code == E_RESOLVE_REGISTRY_TAMPER {
+    if ec_l == E_RESOLVE_REGISTRY_TAMPER {
         mhash_domain((&RESV_DOM_TAMPER) as u64, 16u64)
     }
-    if error_code == E_RESOLVE_INTENT_TAMPER {
+    if ec_l == E_RESOLVE_INTENT_TAMPER {
         mhash_domain((&RESV_DOM_TAMPER) as u64, 16u64)
     }
-    if error_code == E_RESOLVE_CTX_TAMPER {
+    if ec_l == E_RESOLVE_CTX_TAMPER {
         mhash_domain((&RESV_DOM_TAMPER) as u64, 16u64)
     }
-    if error_code == E_RESOLVE_AMBIGUOUS {
+    if ec_l == E_RESOLVE_AMBIGUOUS {
         mhash_domain((&RESV_DOM_AMBIG) as u64, 16u64)
     }
     /* E_RESOLVE_CAP_DENIED uses the default RESV_DOM_FAIL domain below
      * (privacy: external observer cannot distinguish CAP_DENIED from
      * NOMATCH — preserves AI safety property that callers cannot probe
      * pattern existence by capability exhaustion). */
-    if error_code == E_RESOLVE_K_UNDERFLOW {
+    if ec_l == E_RESOLVE_K_UNDERFLOW {
         mhash_domain((&RESV_DOM_KUF) as u64, 16u64)
     }
-    if error_code != E_RESOLVE_REGISTRY_TAMPER {
-        if error_code != E_RESOLVE_INTENT_TAMPER {
-            if error_code != E_RESOLVE_CTX_TAMPER {
-                if error_code != E_RESOLVE_AMBIGUOUS {
-                    if error_code != E_RESOLVE_K_UNDERFLOW {
+    if ec_l != E_RESOLVE_REGISTRY_TAMPER {
+        if ec_l != E_RESOLVE_INTENT_TAMPER {
+            if ec_l != E_RESOLVE_CTX_TAMPER {
+                if ec_l != E_RESOLVE_AMBIGUOUS {
+                    if ec_l != E_RESOLVE_K_UNDERFLOW {
                         mhash_domain((&RESV_DOM_FAIL) as u64, 16u64)
                     }
                 }
@@ -497,10 +510,10 @@ fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export
     }
     mhash_payload((&RES_BUF8) as u64, 8u64)
     mhash_payload((&RES_DIG) as u64, 32u64)
-    RES_BUF4[0] = (error_code & 0xFFu32) as u8
-    RES_BUF4[1] = ((error_code >> 8u32) & 0xFFu32) as u8
-    RES_BUF4[2] = ((error_code >> 16u32) & 0xFFu32) as u8
-    RES_BUF4[3] = ((error_code >> 24u32) & 0xFFu32) as u8
+    RES_BUF4[0] = (ec_l & 0xFFu32) as u8
+    RES_BUF4[1] = ((ec_l >> 8u32) & 0xFFu32) as u8
+    RES_BUF4[2] = ((ec_l >> 16u32) & 0xFFu32) as u8
+    RES_BUF4[3] = ((ec_l >> 24u32) & 0xFFu32) as u8
     mhash_payload((&RES_BUF4) as u64, 4u64)
     RES_BUF4[0] = 0u8
     RES_BUF4[1] = 0u8
@@ -515,12 +528,12 @@ fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export
     if call_context_verify(ctx) == 1u8 {
         k_now = kchain_current(call_context_kchain_id(ctx) as u64)
     }
-    let cid : u64 = crystal_mint(error_code, (&RES_MHASH) as u64, cap_id_v, iid)
+    let cid : u64 = crystal_mint(ec_l, (&RES_MHASH) as u64, cap_id_v, iid)
     crystal_edges_add(iid, cid)
     witness_append_k((&RES_MHASH) as u64, cap_id_v, k_now)
 
-    /* Encode as result_u64_err: tag bit 0 = 1, payload = error_code */
-    let payload : u64 = ((error_code as u64) & 0xFFFFFFFFu64) << 1u64
+    /* Encode as result_u64_err: tag bit 0 = 1, payload = ec_l */
+    let payload : u64 = ((ec_l as u64) & 0xFFFFFFFFu64) << 1u64
     return payload | 1u64
 }
 
@@ -757,6 +770,35 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
         return resolve_fail(E_RESOLVE_K_UNDERFLOW, set, intent, ctx)
     }
 
+    /* Step 6b (harmony item 29): THE ROBINSON UNIFICATION GATE -- Stage-2, activated.
+     * A pattern wired with a non-null unify_fn (offset 88, dormant since the FROZEN SPEC reserved
+     * it) makes a STRUCTURAL claim about the intents it serves; score routing alone cannot justify
+     * it.  The winner's unify_fn is invoked with a fresh omnia/unify buffer and the conventional
+     * 4-arg indirect signature  uf(unify_buf, pattern, intent, ctx) -> u64  (1 = its term pair
+     * unified; substitutions left in the buffer).  A failed unification REFUSES the resolution
+     * (E_RESOLVE_UNIFY) BEFORE dispatch -- a structural claim the pattern cannot justify must never
+     * produce side effects -- and refusals are never memoized, so the hot/memo paths (which only
+     * replay COLD-audited bindings, and unification is a pure function of the memo key) remain
+     * sound with NO asm change.  num_substs feeds the Step-8 binding digest (the spec's reserved
+     * field): null-unify patterns keep num_substs = 0, so every existing digest is BYTE-IDENTICAL. */
+    let unify_fp : u64 = pattern_unify_fn(p_win)
+    let mut num_substs : u32 = 0u32
+    if unify_fp != 0u64 {
+        unify_init((&RES_UNIFY_BUF) as u64)
+        let ufn : u64 = unify_fp
+        let uok : u64 = ufn((&RES_UNIFY_BUF) as u64, p_win, intent, ctx)
+        if uok != 1u64 {
+            return resolve_fail(E_RESOLVE_UNIFY, set, intent, ctx)
+        }
+        /* substs_used @4 (byte-assembled: the documented load-width discipline) */
+        let sb : *u8 = ((&RES_UNIFY_BUF) as u64 + 4u64) as *u8
+        let ns0 : u32 = (sb[0u64] as u32) & 0xFFu32
+        let ns1 : u32 = ((sb[1u64] as u32) & 0xFFu32) << 8u32
+        let ns2 : u32 = ((sb[2u64] as u32) & 0xFFu32) << 16u32
+        let ns3 : u32 = ((sb[3u64] as u32) & 0xFFu32) << 24u32
+        num_substs = ns0 | ns1 | ns2 | ns3
+    }
+
     /* Step 7: dispatch via indirect call through pattern.dispatch_fn.
      * iiis-0 supports indirect call via u64 fn-pointer per fold.iii's
      * established pattern: `let f : u64 = step; f(args)`. We load the
@@ -784,10 +826,10 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
 
     /* Step 8: binding_digest per FROZEN SPEC §6.8.
      * SHA256("III_RESOLVE_BIND" || pattern_id_le8 || intent_id_le8 ||
-     *        num_substs_le4 (=0) || dispatch_fp_le8 || value_le8).
-     * num_substs is 0 because the baseline resolver routes purely by score;
-     * unify is invoked when patterns are wired with non-null unify_fn (Stage-2).
-     * dispatch_fp and value are folded in so the digest reflects the actual
+     *        num_substs_le4 || dispatch_fp_le8 || value_le8).
+     * harmony item 29: num_substs is LIVE -- the Stage-2 Robinson gate (Step 6b) fills it for
+     * unify-wired patterns; score-routed (null-unify) patterns yield 0, byte-identical to the
+     * historical digests. dispatch_fp and value are folded in so the digest reflects the actual
      * binding produced -- same (set,intent,ctx) → same fp/value → same digest. */
     let pid_v : u64 = pattern_id(p_win)
     let iid_v : u64 = intent_id(intent)
@@ -805,7 +847,12 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
         bk = bk + 1u32
     }
     mhash_payload((&RES_BUF8) as u64, 8u64)
-    RES_BUF4[0] = 0u8; RES_BUF4[1] = 0u8; RES_BUF4[2] = 0u8; RES_BUF4[3] = 0u8
+    /* harmony item 29: num_substs is REAL now (the spec's reserved field).  Null-unify patterns
+     * yield 0 -- byte-identical to the historical constant for every existing pattern. */
+    RES_BUF4[0] = (num_substs & 0xFFu32) as u8
+    RES_BUF4[1] = ((num_substs >> 8u32) & 0xFFu32) as u8
+    RES_BUF4[2] = ((num_substs >> 16u32) & 0xFFu32) as u8
+    RES_BUF4[3] = ((num_substs >> 24u32) & 0xFFu32) as u8
     mhash_payload((&RES_BUF4) as u64, 4u64)
     bk = 0u32
     while bk < 8u32 {

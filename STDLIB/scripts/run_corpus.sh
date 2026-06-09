@@ -943,6 +943,7 @@ declare -A EXPECTED=(
     [1351_duration_cert]=99
     [1352_xii_denote]=99
     [1353_bv_discover_loop]=99
+    [1354_resolve_unify]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

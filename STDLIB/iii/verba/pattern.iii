@@ -15,7 +15,11 @@
  *   41   binding_kinds : [u8; 32]
  *   73   _pad
  *   80   predicate_fn : u64
- *   88   unify_fn : u64
+ *   88   unify_fn : u64    (harmony 29 -- ACTIVE: resolve() Step 6b invokes a non-null unify_fn as
+ *                           uf(unify_buf, pattern, intent, ctx) -> u64 with a fresh omnia/unify
+ *                           buffer; return 1 = unified (substitutions left in the buffer, their
+ *                           count feeds the spec 6.8 binding digest); anything else REFUSES the
+ *                           resolution (E_RESOLVE_UNIFY) before dispatch. 0 = score-only routing.)
  *   96   dispatch_fn : u64
  *  104   activation_base : u64
  *  112   guarantees_provided : u32

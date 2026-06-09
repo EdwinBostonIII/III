@@ -1,0 +1,169 @@
+/* STDLIB/iii/forcefield/ripple_apply.iii -- the Sovereign Ripple Calculus APPLIER, increment A1: the CUT
+ * applier's source tier.
+ *
+ * The Ripple Calculus's deciders (ripple_metric/unify/loop/cut/extract + proof_ripple_unified) certify WHICH
+ * moves are sound, and ripple_synthesizer drives propose->prove->seal; the one held frontier was the file-
+ * mutating APPLIER -- the tier that turns a certified move into an actual .iii edit.  This is its first, safe,
+ * verified piece: a PURE SOURCE TRANSFORMATION that, given a module's source bytes and the name of a top-level
+ * fn the cut decider certified DEAD, produces the edited source with exactly that fn excised -- as a CANDIDATE
+ * buffer, never a live-tree write (the commit of a candidate remains a separate human step, so this introduces
+ * no autonomous self-modification).
+ *
+ * NIH: a self-contained .iii-aware scanner (a state machine over CODE / nestable block-comment / line-comment /
+ * string, so a `fn` keyword or a brace inside a comment or string is never matched).  ra_find_fn locates the
+ * target top-level `fn NAME` in CODE (at a token boundary, NAME exact, followed by '(' or whitespace); a brace
+ * counter (also state-aware) walks its body to the matching '}'.  ra_cut_fn excises that span plus one trailing
+ * newline and copies the remainder.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00.  NIH: self-contained (no externs).  Determinism: u32/u64 only;
+ * ==/!= and UNSIGNED < ; pointer indexing (no runtime-indexed local array); single writer.
+ */
+
+module forcefield_ripple_apply
+
+const RA_NOT_FOUND : u64 = 0xFFFFFFFFFFFFFFFFu64
+const RA_E_NOTFOUND : i64 = -1i64
+const RA_E_CAP      : i64 = -2i64
+
+/* 1 iff src[i]==c0 && src[i+1]==c1 (bounds-checked). */
+fn ra_at(src: *u8, src_len: u64, i: u64, c0: u8, c1: u8) -> u8 {
+    if (i + 2u64) > src_len { return 0u8 }
+    if src[i] != c0 { return 0u8 }
+    if src[i + 1u64] != c1 { return 0u8 }
+    return 1u8
+}
+
+/* 1 iff a top-level `fn NAME` (in CODE) begins at i: a token boundary before `fn`, the keyword `fn`, whitespace,
+ * NAME exactly, then '(' or whitespace (so `fn deadly` does not match NAME "dead"). */
+fn ra_is_fn_here(src: *u8, src_len: u64, i: u64, fn_name: *u8, name_len: u64) -> u8 {
+    if i > 0u64 {
+        let prev : u8 = src[i - 1u64]
+        let mut okb : u8 = 0u8
+        if prev == 0x20u8 { okb = 1u8 }
+        if prev == 0x0Au8 { okb = 1u8 }
+        if prev == 0x09u8 { okb = 1u8 }
+        if prev == 0x0Du8 { okb = 1u8 }
+        if okb == 0u8 { return 0u8 }
+    }
+    if (i + 3u64) > src_len { return 0u8 }
+    if src[i] != 0x66u8 { return 0u8 }            /* 'f' */
+    if src[i + 1u64] != 0x6Eu8 { return 0u8 }     /* 'n' */
+    let c2 : u8 = src[i + 2u64]
+    if c2 != 0x20u8 { if c2 != 0x09u8 { return 0u8 } }
+    let mut j : u64 = i + 2u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if j >= src_len { return 0u8 }
+        let c : u8 = src[j]
+        if c == 0x20u8 { j = j + 1u64 }
+        else { if c == 0x09u8 { j = j + 1u64 } else { go = 0u8 } }
+    }
+    if (j + name_len) > src_len { return 0u8 }
+    let mut k : u64 = 0u64
+    while k < name_len {
+        if src[j + k] != fn_name[k] { return 0u8 }
+        k = k + 1u64
+    }
+    let nb : u64 = j + name_len
+    if nb >= src_len { return 0u8 }
+    let nc : u8 = src[nb]
+    if nc == 0x28u8 { return 1u8 }                /* '(' */
+    if nc == 0x20u8 { return 1u8 }
+    if nc == 0x09u8 { return 1u8 }
+    return 0u8
+}
+
+/* From fn_start, walk (state-aware) to the first CODE '{' then brace-match to its '}'.  Returns the packed
+ * (fn_start << 32 | end_exclusive), or RA_NOT_FOUND if braces never balance. */
+fn ra_match_fn_body(src: *u8, src_len: u64, fn_start: u64) -> u64 {
+    let mut i : u64 = fn_start
+    let mut state : u32 = 0u32       /* 0=code 1=block-comment 2=line-comment 3=string */
+    let mut bdepth : u32 = 0u32
+    let mut braces : u32 = 0u32
+    let mut seen_open : u8 = 0u8
+    while i < src_len {
+        if state == 0u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { state = 1u32  bdepth = 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Fu8, 0x2Fu8) == 1u8 { state = 2u32  i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 3u32  i = i + 1u64 }
+            else { if src[i] == 0x7Bu8 { braces = braces + 1u32  seen_open = 1u8  i = i + 1u64 }
+            else { if src[i] == 0x7Du8 {
+                       braces = braces - 1u32
+                       i = i + 1u64
+                       if seen_open == 1u8 { if braces == 0u32 { return (fn_start << 32u64) | (i & 0xFFFFFFFFu64) } }
+                   }
+            else { i = i + 1u64 } } } } }
+        }
+        else { if state == 1u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { bdepth = bdepth + 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Au8, 0x2Fu8) == 1u8 { bdepth = bdepth - 1u32  i = i + 2u64  if bdepth == 0u32 { state = 0u32 } }
+            else { i = i + 1u64 } }
+        }
+        else { if state == 2u32 {
+            if src[i] == 0x0Au8 { state = 0u32 }
+            i = i + 1u64
+        }
+        else {                               /* state 3: string */
+            if src[i] == 0x5Cu8 { i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 0u32  i = i + 1u64 } else { i = i + 1u64 } }
+        } } }
+    }
+    return RA_NOT_FOUND
+}
+
+/* Locate the top-level `fn NAME` and its body span.  Returns the packed (start<<32 | end) or RA_NOT_FOUND. */
+fn ra_find_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut state : u32 = 0u32
+    let mut bdepth : u32 = 0u32
+    while i < src_len {
+        if state == 0u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { state = 1u32  bdepth = 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Fu8, 0x2Fu8) == 1u8 { state = 2u32  i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 3u32  i = i + 1u64 }
+            else { if ra_is_fn_here(src, src_len, i, fn_name, name_len) == 1u8 { return ra_match_fn_body(src, src_len, i) }
+            else { i = i + 1u64 } } } }
+        }
+        else { if state == 1u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { bdepth = bdepth + 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Au8, 0x2Fu8) == 1u8 { bdepth = bdepth - 1u32  i = i + 2u64  if bdepth == 0u32 { state = 0u32 } }
+            else { i = i + 1u64 } }
+        }
+        else { if state == 2u32 {
+            if src[i] == 0x0Au8 { state = 0u32 }
+            i = i + 1u64
+        }
+        else {
+            if src[i] == 0x5Cu8 { i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 0u32  i = i + 1u64 } else { i = i + 1u64 } }
+        } } }
+    }
+    return RA_NOT_FOUND
+}
+
+/* Excise the top-level fn `fn_name` from `src`, writing the edited source to `out` (capacity out_cap).
+ * Returns the edited length, or RA_E_NOTFOUND if the fn is absent, RA_E_CAP if out is too small. */
+fn ra_cut_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64, out: *u8, out_cap: u64) -> i64 @export {
+    let packed : u64 = ra_find_fn(src, src_len, fn_name, name_len)
+    if packed == RA_NOT_FOUND { return RA_E_NOTFOUND }
+    let fstart : u64 = packed >> 32u64
+    let fend0  : u64 = packed & 0xFFFFFFFFu64
+    let mut fend : u64 = fend0
+    if fend < src_len { if src[fend] == 0x0Au8 { fend = fend + 1u64 } }   /* swallow the trailing newline */
+    let mut o : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < fstart {
+        if o >= out_cap { return RA_E_CAP }
+        out[o] = src[i]
+        o = o + 1u64
+        i = i + 1u64
+    }
+    i = fend
+    while i < src_len {
+        if o >= out_cap { return RA_E_CAP }
+        out[o] = src[i]
+        o = o + 1u64
+        i = i + 1u64
+    }
+    return o as i64
+}

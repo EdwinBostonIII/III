@@ -1020,6 +1020,7 @@ MODULES=(
     # Sovereign Enhancement G3: the real argmax M-search (value-maximal selection + s0-in-M abstention).
     "forcefield/ripple_search"
     "forcefield/ripple_synthesizer"
+    "forcefield/ripple_apply"
     "forcefield/ripple_journal"
     "numera/costed_cat"
     # Sovereign Enhancement G5: the inductive bridge (sample -> forall via tc_natrec; false universal rejected).

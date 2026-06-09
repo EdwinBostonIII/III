@@ -1,0 +1,68 @@
+/* 1333_ripple_apply.iii -- the Sovereign Ripple Calculus CUT applier's source tier (forcefield::ripple_apply).
+ * Drives ra_cut_fn: 99 = the applier excises exactly the named top-level fn from .iii source bytes, producing
+ * an edited candidate. Proven (prove-the-negative):
+ *   (1-2) cut the second / first fn -> the OTHER fn survives, the cut one is gone (handles a fn at the start);
+ *   (3)   cutting an ABSENT name -> RA_E_NOTFOUND (-1), not a corrupt edit;
+ *   (4)   NESTED braces in the body are matched -- cutting an outer fn with `{{}}` removes the WHOLE fn, the
+ *         following fn intact (the brace counter is correct, not first-`}`);
+ *   (5)   a `fn NAME` that occurs only inside a /* comment */ is NOT matched (the scanner skips comments) -> -1. */
+module corpus_1333
+
+extern @abi(c-msvc-x64) fn ra_cut_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64, out: *u8, out_cap: u64) -> i64 from "ripple_apply.iii"
+
+var OUT : [u8; 256]
+
+var SRC1 : [u8; 17] = [0x66u8,0x6Eu8,0x20u8,0x61u8,0x28u8,0x29u8,0x7Bu8,0x7Du8,0x20u8,0x66u8,0x6Eu8,0x20u8,0x62u8,0x28u8,0x29u8,0x7Bu8,0x7Du8]                                                   /* "fn a(){} fn b(){}"     */
+var SRC2 : [u8; 19] = [0x66u8,0x6Eu8,0x20u8,0x70u8,0x28u8,0x29u8,0x7Bu8,0x7Bu8,0x7Du8,0x7Du8,0x20u8,0x66u8,0x6Eu8,0x20u8,0x71u8,0x28u8,0x29u8,0x7Bu8,0x7Du8]                                  /* "fn p(){{}} fn q(){}"   */
+var SRC3 : [u8; 23] = [0x2Fu8,0x2Au8,0x20u8,0x66u8,0x6Eu8,0x20u8,0x67u8,0x28u8,0x29u8,0x7Bu8,0x7Du8,0x20u8,0x2Au8,0x2Fu8,0x20u8,0x66u8,0x6Eu8,0x20u8,0x72u8,0x28u8,0x29u8,0x7Bu8,0x7Du8]     /* "/* fn g(){} */ fn r(){}" */
+
+var NM_A : [u8; 1] = [0x61u8]
+var NM_B : [u8; 1] = [0x62u8]
+var NM_C : [u8; 1] = [0x63u8]
+var NM_P : [u8; 1] = [0x70u8]
+var NM_G : [u8; 1] = [0x67u8]
+var FN_A : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x61u8]   /* "fn a" */
+var FN_B : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x62u8]   /* "fn b" */
+var FN_P : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x70u8]   /* "fn p" */
+var FN_Q : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x71u8]   /* "fn q" */
+
+fn contains(buf: u64, len: u64, needle: u64, nlen: u64) -> u8 {
+    if nlen > len { return 0u8 }
+    let bp : *u8 = buf as *u8
+    let np : *u8 = needle as *u8
+    let lim : u64 = len - nlen
+    let mut i : u64 = 0u64
+    while i <= lim {
+        let mut k : u64 = 0u64
+        let mut m : u8 = 1u8
+        while k < nlen {
+            if bp[i + k] != np[k] { m = 0u8  k = nlen } else { k = k + 1u64 }
+        }
+        if m == 1u8 { return 1u8 }
+        i = i + 1u64
+    }
+    return 0u8
+}
+
+fn main() -> u64 {
+    /* (1) cut "b" -> "fn a" survives, "fn b" gone */
+    let n1 : i64 = ra_cut_fn(&SRC1 as *u8, 17u64, &NM_B as *u8, 1u64, &OUT as *u8, 256u64)
+    if n1 <= 0i64 { return 1u64 }
+    if contains(&OUT as u64, n1 as u64, &FN_A as u64, 4u64) != 1u8 { return 2u64 }
+    if contains(&OUT as u64, n1 as u64, &FN_B as u64, 4u64) != 0u8 { return 3u64 }
+    /* (2) cut "a" (the first fn) -> "fn b" survives, "fn a" gone */
+    let n2 : i64 = ra_cut_fn(&SRC1 as *u8, 17u64, &NM_A as *u8, 1u64, &OUT as *u8, 256u64)
+    if n2 <= 0i64 { return 4u64 }
+    if contains(&OUT as u64, n2 as u64, &FN_B as u64, 4u64) != 1u8 { return 5u64 }
+    if contains(&OUT as u64, n2 as u64, &FN_A as u64, 4u64) != 0u8 { return 6u64 }
+    /* (3) absent name -> -1 */
+    if ra_cut_fn(&SRC1 as *u8, 17u64, &NM_C as *u8, 1u64, &OUT as *u8, 256u64) != -1i64 { return 7u64 }
+    /* (4) nested braces: cut "p" -> "fn q" survives, "fn p" (whole nested body) gone */
+    let n4 : i64 = ra_cut_fn(&SRC2 as *u8, 19u64, &NM_P as *u8, 1u64, &OUT as *u8, 256u64)
+    if n4 <= 0i64 { return 8u64 }
+    if contains(&OUT as u64, n4 as u64, &FN_Q as u64, 4u64) != 1u8 { return 9u64 }
+    if contains(&OUT as u64, n4 as u64, &FN_P as u64, 4u64) != 0u8 { return 10u64 }
+    /* (5) comment-skip: "fn g" only in a /* */ comment -> not matched -> -1 */
+    if ra_cut_fn(&SRC3 as *u8, 23u64, &NM_G as *u8, 1u64, &OUT as *u8, 256u64) != -1i64 { return 11u64 }
+    return 99u64
+}

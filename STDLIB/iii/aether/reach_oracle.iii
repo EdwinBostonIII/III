@@ -79,3 +79,22 @@ fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u
 }
 
 var ROR_VBUF : [u8; 32]
+
+/* ===== harmony item 15: THE FOLD (the coordinated next step this header pre-declared) ============
+ * PROVISIONAL is now first-class in omnia/sovval's SV_STATUS (contagious through sv_op, committed
+ * into the witness).  reach_oracle_make_sovval is the typed entry: a (tier, value) pair becomes the
+ * one currency with the CORRECT provenance class -- CANONICAL builds an OK SovVal, PROVISIONAL
+ * builds a provisional one (the taint then travels by itself; no caller discipline needed), and an
+ * unknown/INVALID tier is DEFAULT-DENY (a refused SovVal, never a value).  The reach-level firewall
+ * (admit_canonical) remains for raw tiers; values that enter the currency carry the wall WITH them. */
+extern @abi(c-msvc-x64) fn sv_make(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_make_provisional(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_set_status(sv: *u8, s: u64) -> i32 from "sovval.iii"
+
+fn reach_oracle_make_sovval(tier: u32, payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return ROR_REFUSED }
+    if tier == ROR_TIER_CANONICAL { return sv_make(payload_cell, hexad, cost, out) }
+    if tier == ROR_TIER_PROVISIONAL { return sv_make_provisional(payload_cell, hexad, cost, out) }
+    sv_set_status(out, 1u64)                     /* SV_STATUS_REFUSED: unknown tier is default-deny */
+    return ROR_REFUSED
+}

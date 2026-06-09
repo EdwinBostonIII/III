@@ -9,7 +9,7 @@
  * Cell layout (112 bytes, u64-aligned to dodge sub-word pointer traps; by ptr):
  *   [  0.. 16) payload : M4 ucell (tag@0 KNOWN/GAP, i64 body@8)
  *   [ 16.. 24) hexad   : u64 (the 6-trit safety hexad, 0..728)
- *   [ 24.. 32) status  : u64 (SV_STATUS_OK=0 | SV_STATUS_REFUSED=1)
+ *   [ 24.. 32) status  : u64 (SV_STATUS_OK=0 | SV_STATUS_REFUSED=1 | SV_STATUS_PROVISIONAL=2)
  *   [ 32.. 64) witness : 32-byte cad content-address of the value's provenance
  *   [ 64..112) cost    : u64[6] six-dim microarch cost vector
  *
@@ -36,8 +36,16 @@ extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8)
 const SV_OK      : i32 = 0i32
 const SV_REFUSED : i32 = 1i32
 const SV_E_NULL  : i32 = -1i32
-const SV_STATUS_OK      : u64 = 0u64
-const SV_STATUS_REFUSED : u64 = 1u64
+/* harmony item 15: PROVISIONAL is now first-class in the one currency (the reach_oracle fold the
+ * oracle module's header pre-declared).  The status lattice is REFUSED(1) > PROVISIONAL(2) > OK(0)
+ * by AUTHORITY (not numeric order): composition takes the most-restrictive input status, so oracle
+ * taint is CONTAGIOUS -- once a value depends on a live oracle, everything computed from it says so
+ * forever, and a deterministic consumer (reach_oracle_admit_canonical / any status gate) refuses it
+ * at every later boundary, not just the first. */
+const SV_PROVISIONAL : i32 = 2i32
+const SV_STATUS_OK          : u64 = 0u64
+const SV_STATUS_REFUSED     : u64 = 1u64
+const SV_STATUS_PROVISIONAL : u64 = 2u64
 const SV_OFF_HEXAD   : u64 = 16u64
 const SV_OFF_STATUS  : u64 = 24u64
 const SV_OFF_WITNESS : u64 = 32u64
@@ -58,7 +66,7 @@ const SV_MUL : u32 = 2u32
 type SovVal = *u8 @sovereign_value
 
 var SV_BUDGET : [u64; 6]
-var SV_WBUF   : [u8; 72]
+var SV_WBUF   : [u8; 80]
 var SV_INITED : u8 = 0u8
 /* selftest scratch */
 var SV_A    : [u8; 112]
@@ -101,6 +109,11 @@ fn sv_is_refused(sv: *u8) -> u8 @export {
     if sv_status(sv) == SV_STATUS_REFUSED { return 1u8 }
     return 0u8
 }
+/* harmony item 15: 1 iff the value is oracle-dependent (non-reproducible provenance). */
+fn sv_is_provisional(sv: *u8) -> u8 @export {
+    if sv_status(sv) == SV_STATUS_PROVISIONAL { return 1u8 }
+    return 0u8
+}
 fn sv_cost_ptr(sv: *u8) -> *u64 @export {
     return (sv as u64 + SV_OFF_COST) as *u64
 }
@@ -117,14 +130,17 @@ fn sv_copy(dst: *u8, src: *u8, n: u64) -> i32 {
     return SV_OK
 }
 
-/* witness = cad(payload || hexad || cost) -- the M1 content-address commitment. */
+/* witness = cad(payload || hexad || STATUS || cost) -- the M1 content-address commitment.
+ * harmony item 15: STATUS is part of the commitment, so a PROVISIONAL value can never present the
+ * witness of its canonical twin (identical payload/hexad/cost, different provenance class) -- the
+ * determinism firewall holds at the commitment layer, not just the status field. */
 fn sv_witness_recompute(sv: *u8) -> i32 @export {
     let wb : *u8 = (&SV_WBUF as u64) as *u8
-    /* payload + hexad are contiguous at [0..24) */
-    sv_copy(wb, sv, 24u64)
-    /* cost [64..112) -> wbuf[24..72) */
-    sv_copy((wb as u64 + 24u64) as *u8, (sv as u64 + SV_OFF_COST) as *u8, 48u64)
-    cad_oneshot(0u32, wb, 72u64, sv_witness_ptr(sv))
+    /* payload + hexad + status are contiguous at [0..32) */
+    sv_copy(wb, sv, 32u64)
+    /* cost [64..112) -> wbuf[32..80) */
+    sv_copy((wb as u64 + 32u64) as *u8, (sv as u64 + SV_OFF_COST) as *u8, 48u64)
+    cad_oneshot(0u32, wb, 80u64, sv_witness_ptr(sv))
     return SV_OK
 }
 
@@ -152,12 +168,40 @@ fn sv_make(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 @export {
     return SV_OK
 }
 
+/* harmony item 15: the PROVISIONAL constructor -- the entry point for oracle-derived values.
+ * Identical gates to sv_make (an unreachable hexad or over-budget cost still REFUSES: refusal
+ * outranks provisionality), but a value that passes is typed PROVISIONAL, witness-committed as
+ * such, and returns SV_PROVISIONAL so the caller's rc mirrors the status. */
+fn sv_make_provisional(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 @export {
+    let rc : i32 = sv_make(payload_cell, hexad, cost, out)
+    if rc != SV_OK { return rc }
+    sv_set_status(out, SV_STATUS_PROVISIONAL)
+    sv_witness_recompute(out)
+    return SV_PROVISIONAL
+}
+
 /* ----------------------------- total compose ------------------------------ */
+/* harmony item 15: the status LATTICE is enforced through composition --
+ *   (a) a REFUSED input poisons the output immediately (garbage never flows: composing with a
+ *       refused value was previously silent data laundering);
+ *   (b) the facet gates (hexad reachability, cost budget) can still REFUSE the result;
+ *   (c) a PROVISIONAL input makes the (otherwise-OK) output PROVISIONAL -- oracle taint is
+ *       CONTAGIOUS, with the rc mirroring the status (SV_PROVISIONAL);
+ *   (d) only canonical inputs through passing gates yield SV_STATUS_OK. */
 fn sv_op(op: u32, a: *u8, b: *u8, out: *u8) -> i32 @export {
     sv_init()
     if (a as u64) == 0u64 { return SV_E_NULL }
     if (b as u64) == 0u64 { return SV_E_NULL }
     if (out as u64) == 0u64 { return SV_E_NULL }
+    /* (a) REFUSED contagion: a refused input can never launder into a live value */
+    if sv_is_refused(a) == 1u8 {
+        sv_set_status(out, SV_STATUS_REFUSED)
+        return SV_REFUSED
+    }
+    if sv_is_refused(b) == 1u8 {
+        sv_set_status(out, SV_STATUS_REFUSED)
+        return SV_REFUSED
+    }
     /* payload (M4): total + sound + precise */
     unc_apply(op, a, b, out)
     /* hexad (M3): compose; Refuse if non-reachable */
@@ -172,6 +216,15 @@ fn sv_op(op: u32, a: *u8, b: *u8, out: *u8) -> i32 @export {
     if cl_le_product(sv_cost_ptr(out), &SV_BUDGET as *u64) == 0u8 {
         sv_set_status(out, SV_STATUS_REFUSED)
         return SV_REFUSED
+    }
+    /* (c) PROVISIONAL contagion: oracle dependence survives every composition */
+    let mut prov : u8 = 0u8
+    if sv_is_provisional(a) == 1u8 { prov = 1u8 }
+    if sv_is_provisional(b) == 1u8 { prov = 1u8 }
+    if prov == 1u8 {
+        sv_set_status(out, SV_STATUS_PROVISIONAL)
+        sv_witness_recompute(out)
+        return SV_PROVISIONAL
     }
     sv_set_status(out, SV_STATUS_OK)
     sv_witness_recompute(out)

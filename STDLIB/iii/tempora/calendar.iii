@@ -50,12 +50,45 @@ fn cal_days_from_civil(y_in: u32, m: u32, d: u32) -> u64 {
     return days_since_0 - 719468u64
 }
 
+/* ===== harmony item 28: MONTH-EXACT VALIDITY (the injective accept-domain) ======================
+ * The old guard was day <= 31 for EVERY month, so 2026-02-31 / 2026-04-31 / non-leap 02-29 were
+ * ACCEPTED and silently NORMALIZED by the Hinnant arithmetic into the next month -- the accept-
+ * domain was not injective (both "Feb 31" and "Mar 3" named one instant: a calendar that accepts
+ * lies).  cal_days_in_month is the exact Gregorian month length (century/400-year leap rule);
+ * cal_civil_valid is the exact accept-domain predicate; cal_civil_to_unix now REFUSES everything
+ * outside it, making the accepted civil triples exactly the image of cal_decompose_unix --
+ * a bijection between accepted names and instants. */
+fn cal_is_leap(year: u32) -> u8 @export {
+    if (year % 400u32) == 0u32 { return 1u8 }
+    if (year % 100u32) == 0u32 { return 0u8 }
+    if (year % 4u32) == 0u32 { return 1u8 }
+    return 0u8
+}
+fn cal_days_in_month(year: u32, month: u32) -> u32 @export {
+    if month < 1u32 { return 0u32 }
+    if month > 12u32 { return 0u32 }
+    if month == 2u32 {
+        if cal_is_leap(year) == 1u8 { return 29u32 }
+        return 28u32
+    }
+    if month == 4u32 { return 30u32 }
+    if month == 6u32 { return 30u32 }
+    if month == 9u32 { return 30u32 }
+    if month == 11u32 { return 30u32 }
+    return 31u32
+}
+/* 1 iff (year, month, day) is in the EXACT accept-domain (epoch-onward Gregorian). */
+fn cal_civil_valid(year: u32, month: u32, day: u32) -> u8 @export {
+    if year < 1970u32 { return 0u8 }
+    if month < 1u32 { return 0u8 }
+    if month > 12u32 { return 0u8 }
+    if day < 1u32 { return 0u8 }
+    if day > cal_days_in_month(year, month) { return 0u8 }
+    return 1u8
+}
+
 fn cal_civil_to_unix(year: u32, month: u32, day: u32) -> u64 @export {
-    if year < 1970u32 { return 0xFFFFFFFFFFFFFFFFu64 }   /* [overflow] pre-epoch: days_since_0 < 719468 -> unsigned underflow */
-    if month < 1u32 { return 0xFFFFFFFFFFFFFFFFu64 }
-    if month > 12u32 { return 0xFFFFFFFFFFFFFFFFu64 }
-    if day < 1u32 { return 0xFFFFFFFFFFFFFFFFu64 }
-    if day > 31u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if cal_civil_valid(year, month, day) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
     let days : u64 = cal_days_from_civil(year, month, day)
     return days * 86400u64
 }

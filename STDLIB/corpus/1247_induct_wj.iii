@@ -1,0 +1,69 @@
+/* 1247_induct_wj.iii -- COMPLETE THE INDUCTIVE BRIDGE (harmony item 3).
+ *
+ * induct.iii declared a Nat/W/Id contract but shipped only the Nat lift.  ind_forall_w (transfinite,
+ * well-founded-tree induction via wrec) and ind_forall_id (path induction via J) complete it: a universal
+ * over trees or paths is now KERNEL-CERTIFIED, not sampled.  Non-vacuous + biting:
+ *  W  POSITIVE: a Nat-as-W NODE-with-child (sup(true, lam _.zero)) with a dependent algebra that uses the
+ *     IH -> ind_forall_w == 1; NEGATIVE: an algebra that is not a function (tt) -> 0.
+ *  Id POSITIVE: the PATH-DEPENDENT symmetry motive C = λy.λ_:Id(Bool,true,y). Id(Bool,y,true) with base
+ *     refl(true) -> ind_forall_id == 1 (proves the property transports along EVERY equality);
+ *     NEGATIVE-1 (off-diagonal base): base = U0, not : C true (refl true) -> 0;
+ *     NEGATIVE-2 (wrong diagonal endpoint): goal built at y=false against a true-path -> 0.
+ * 99 = all five arms hold (the kernel stays SOLE arbiter; a false universal is REFUSED). */
+module corpus_1247
+
+extern @abi(c-msvc-x64) fn ind_forall_w(p: u32, s: u32, w: u32) -> u8 from "induct.iii"
+extern @abi(c-msvc-x64) fn ind_forall_id(motive: u32, base: u32, y: u32, proof: u32) -> u8 from "induct.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_unit() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_empty() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_tt() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sort(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_w(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sup(a: u32, f: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_absurd(mtv: u32, e: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_ann(t: u32, ty: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_if(c: u32, a: u32, b: u32) -> u32 from "typecheck.iii"
+
+fn main() -> u64 {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let ku : u32 = tc_unit()
+    let ke : u32 = tc_empty()
+    let tt : u32 = tc_true()
+
+    /* ---- W: Nat-as-W node-with-child (mirror p5_kat_wrec) ---- */
+    let arity : u32 = tc_if(tc_var(0u32), ku, ke)               /* true->Unit, false->Empty */
+    let wnat  : u32 = tc_w(kb, arity)
+    let zmot  : u32 = tc_lam(ke, wnat)
+    let zef   : u32 = tc_lam(ke, tc_absurd(zmot, tc_var(0u32)))
+    let zero  : u32 = tc_ann(tc_sup(tc_false(), zef), wnat)     /* sup(false, absurd) : WNat */
+    let fone  : u32 = tc_lam(ku, zero)                          /* lam _:Unit. zero */
+    let one   : u32 = tc_sup(tt, fone)                          /* sup(true, fone): a NODE with a child */
+    let npmot : u32 = tc_lam(wnat, kb)                          /* P = lam _:WNat. Bool */
+    let nft   : u32 = tc_pi(tc_if(tc_var(0u32), ku, ke), wnat)  /* f : arity[a] -> WNat */
+    let niht  : u32 = tc_pi(tc_if(tc_var(1u32), ku, ke), kb)    /* ih: arity[a] -> Bool (uses the IH) */
+    let nstep : u32 = tc_lam(kb, tc_lam(nft, tc_lam(niht, tt))) /* the dependent W-algebra */
+    let wscrut: u32 = tc_ann(one, wnat)
+    if ind_forall_w(npmot, nstep, wscrut) != 1u8 { return 1u64 }   /* POSITIVE: tree universal certified */
+    if ind_forall_w(npmot, tt, wscrut) != 0u8 { return 2u64 }      /* NEGATIVE: algebra not a function -> refused */
+
+    /* ---- Id: path-dependent symmetry motive ---- */
+    /* C = lam y:Bool. lam _:Id(Bool,true,y). Id(Bool, y, true)   (de Bruijn: y=#0 in the type, #1 in the body) */
+    let csym : u32 = tc_lam(kb, tc_lam(tc_id(kb, tt, tc_var(0u32)), tc_id(kb, tc_var(1u32), tt)))
+    let dpos : u32 = tc_refl(tt)                               /* d : C true (refl true) = Id(Bool,true,true) */
+    let pth  : u32 = tc_refl(tt)                               /* proof : Id(Bool,true,true), right endpoint true */
+    if ind_forall_id(csym, dpos, tt, pth) != 1u8 { return 3u64 }              /* POSITIVE: path universal certified */
+    if ind_forall_id(csym, tc_sort(0u32), tt, pth) != 0u8 { return 4u64 }     /* NEGATIVE-1: off-diagonal base -> refused */
+    if ind_forall_id(csym, dpos, tc_false(), pth) != 0u8 { return 5u64 }      /* NEGATIVE-2: wrong diagonal endpoint -> refused */
+
+    return 99u64
+}

@@ -17,9 +17,30 @@ module numera_induct
 extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_wrec(p: u32, s: u32, w: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_j(mtv: u32, base: u32, proof: u32) -> u32 from "typecheck.iii"
 
 /* certify ∀n. P(n) by Nat induction: 1 iff natrec(P,z,s,n) : P(n) type-checks (base z:P(0) and
  * step s:Πk.P(k)->P(succ k) both well-typed). 0 iff the induction is ill-typed -- a false universal. */
 fn ind_forall(p: u32, z: u32, s: u32, n: u32) -> u8 @export {
     return tc_check(tc_natrec(p, z, s, n), tc_app(p, n))
+}
+
+/* certify ∀w:W. P(w) by TRANSFINITE (well-founded tree) induction -- completes the W limb of the
+ * declared Nat/W/Id contract.  1 iff wrec(P, s, w) : P(w) type-checks, where s is the SINGLE W-algebra
+ * method (s : Πa. Πf:(B a -> W). (Πb:B a. P(f b)) -> P(sup a f) -- one method, NO separate base, the
+ * leaf case being the b:Empty branch of the same s).  0 iff the algebra is ill-typed (wrong dependent
+ * type / wrong IH arity) -- a false tree-universal is REFUSED. */
+fn ind_forall_w(p: u32, s: u32, w: u32) -> u8 @export {
+    return tc_check(tc_wrec(p, s, w), tc_app(p, w))
+}
+
+/* certify the identity/path universal by J -- completes the Id limb.  For a 2-place motive
+ * C : Πy:A. Id(A,a,y) -> U and a base d : C a (refl a), J(C, d, proof) : C y proof for ANY path
+ * proof : Id(A,a,y) -- i.e. the property transports along EVERY equality, not just refl.  `y` is the
+ * path's right endpoint (caller-supplied: the goal C y proof is built from it).  1 iff the certificate
+ * type-checks against C y proof; 0 iff d is off-diagonal (not : C a (refl a)) or the goal endpoint
+ * mismatches the path -- a false path-universal is REFUSED. */
+fn ind_forall_id(motive: u32, base: u32, y: u32, proof: u32) -> u8 @export {
+    return tc_check(tc_j(motive, base, proof), tc_app(tc_app(motive, y), proof))
 }

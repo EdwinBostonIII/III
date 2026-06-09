@@ -27,6 +27,18 @@ extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64 @sovereign_valu
 extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 from "net.iii"
 extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
 extern @abi(c-msvc-x64) fn hex_encode(src: u64, n: u64, out: u64) -> i32 from "hex.iii"
+/* harmony item 14: the RFC 7230 / 9112 response decoder (aether/http_client) replaces the naive
+ * find-CRLFCRLF body scan: Transfer-Encoding: chunked is DECODED (a chunked 200 used to hand raw
+ * chunk framing to the integrity gate -> unreachable content), Content-Length is HONORED (trailing
+ * keep-alive bytes used to be glued onto the body -> hash mismatch), and HTTP/1.0 EOF framing still
+ * works.  The parser is net-independent, so the decode path is corpus-testable byte-for-byte. */
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_status(id: u64) -> u32 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_base(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_len(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_drop(id: u64) -> i32 from "http_client.iii"
 
 const REMOTE_OK       : i32 = 0i32
 const REMOTE_OFFLINE  : i32 = 1i32     /* no endpoint, refused, or no DIAL right -> reach_core GAPs */
@@ -35,10 +47,11 @@ const REMOTE_E_TOOBIG : i32 = -1i32
 
 const REMOTE_ADDR_BYTES : u64 = 32u64
 const REMOTE_HEX_LEN    : u64 = 64u64
-const REMOTE_RESP_CAP   : u64 = 4096u64
+/* 64 KiB body + 4 KiB headers + 1 KiB chunk framing slack (was 4096: blobs > ~4 KiB were
+ * structurally unreachable over the wire -- a silent capacity wall on the internet leg). */
+const REMOTE_RESP_CAP   : u64 = 70656u64
 const REMOTE_SADDR_LEN  : u32 = 16u32
 const REMOTE_SIGN_BIT   : u32 = 0x80000000u32
-const REMOTE_NONE       : u64 = 0xFFFFFFFFFFFFFFFFu64
 
 var REMOTE_ON    : u8  = 0u8
 var REMOTE_IP    : u32 = 0u32
@@ -46,7 +59,9 @@ var REMOTE_PORT  : u32 = 0u32
 var REMOTE_SADDR : [u8; 16]
 var REMOTE_HEX   : [u8; 64]
 var REMOTE_REQ   : [u8; 256]
-var REMOTE_RESP  : [u8; 4096]
+/* [u64; bytes/8] (the u64-slot model: [u8; B] would reserve 8*B); all access is byte-pointer. */
+var REMOTE_RESP  : [u64; 8832]
+var REMOTE_ARENA : u64 = 0u64          /* lazy decode arena (chunked bodies decode into it) */
 
 /* configure the remote source (ip_packed as net_pack_sockaddr_ipv4 expects, e.g. 0x7F000001). */
 fn backend_remote_set_endpoint(ip_packed: u32, port: u32) -> i32 @export {
@@ -119,35 +134,66 @@ fn _remote_recv_all(h: u64) -> u64 {
     return total
 }
 
-/* locate the response body: require a "...2 0 0..." status (p[9..11]) and find the CRLFCRLF that
- * ends the headers; return the body offset, or REMOTE_NONE. */
-fn _remote_find_body(total: u64) -> u64 {
+/* the lazy decode arena: created on first use, RESET per decode (per-decision scratch --
+ * the parsed-response slot and any chunked-decode buffer live only until the next call). */
+fn _remote_arena() -> u64 {
+    if REMOTE_ARENA == 0u64 { REMOTE_ARENA = arena_new(262144u64) }
+    else { arena_reset(REMOTE_ARENA) }
+    return REMOTE_ARENA
+}
+
+/* harmony item 14: decode the `total` raw response bytes in REMOTE_RESP per RFC 7230 sec 3.3.3
+ * (chunked decode / Content-Length / EOF framing -- the http_client parser), copy the DECODED body
+ * (up to mx) into out, set *out_len.  REMOTE_OK / REMOTE_NOTFOUND (non-200 or unparseable) /
+ * REMOTE_E_TOOBIG.  Exported as the deterministic corpus seam: this IS the live path's decoder,
+ * byte-for-byte (backend_remote_get calls exactly this). */
+fn backend_remote_decode(total: u64, out: u64, mx: u64, out_len: u64) -> i32 @export {
     let t : u64 = total
-    if t < 12u64 { return REMOTE_NONE }
-    let p : *u8 = (&REMOTE_RESP as u64) as *u8
-    if p[9] != 50u8 { return REMOTE_NONE }
-    if p[10] != 48u8 { return REMOTE_NONE }
-    if p[11] != 48u8 { return REMOTE_NONE }
-    let mut i : u64 = 0u64
-    let mut go : u8 = 1u8
-    let mut body : u64 = REMOTE_NONE
-    while go == 1u8 {
-        if i + 4u64 > t { go = 0u8 }
-        if go == 1u8 {
-            if p[i] == 13u8 {
-                if p[i + 1u64] == 10u8 {
-                    if p[i + 2u64] == 13u8 {
-                        if p[i + 3u64] == 10u8 {
-                            body = i + 4u64
-                            go = 0u8
-                        }
-                    }
-                }
-            }
-            i = i + 1u64
-        }
+    let o : u64 = out
+    let m : u64 = mx
+    let ol : u64 = out_len
+    if t == 0u64 { return REMOTE_NOTFOUND }
+    let ar : u64 = _remote_arena()
+    if ar == 0u64 { return REMOTE_NOTFOUND }
+    let rid : u64 = http_parse_response(ar, (&REMOTE_RESP as u64), t)
+    if rid == 0u64 { return REMOTE_NOTFOUND }
+    if http_response_status(rid) != 200u32 {
+        http_response_drop(rid)
+        return REMOTE_NOTFOUND
     }
-    return body
+    let blen : u64 = http_response_body_len(rid)
+    if blen > m {
+        http_response_drop(rid)
+        return REMOTE_E_TOOBIG
+    }
+    let src : *u8 = http_response_body_base(rid) as *u8
+    let dst : *u8 = o as *u8
+    let mut i : u64 = 0u64
+    while i < blen {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    http_response_drop(rid)
+    let olp : *u64 = ol as *u64
+    olp[0] = blen
+    return REMOTE_OK
+}
+
+/* corpus seam: load a synthetic raw response into REMOTE_RESP (bounded).  Lets the corpus drive
+ * backend_remote_decode -- the exact live decode path -- without a socket peer (a single-process
+ * KAT cannot drive client AND server; see 829's note).  Returns the accepted byte count. */
+fn backend_remote_inject(src: u64, n: u64) -> u64 @export {
+    let s : u64 = src
+    let mut nn : u64 = n
+    if nn > REMOTE_RESP_CAP { nn = REMOTE_RESP_CAP }
+    let sp : *u8 = s as *u8
+    let dp : *u8 = (&REMOTE_RESP as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < nn {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    return nn
 }
 
 /* get(addr): fetch the content-addressed blob from the configured remote into out (up to max),
@@ -172,18 +218,6 @@ fn backend_remote_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> 
     }
     let total : u64 = _remote_recv_all(h)
     net_close(h)
-    let body : u64 = _remote_find_body(total)
-    if body == REMOTE_NONE { return REMOTE_NOTFOUND }
-    let bodylen : u64 = total - body
-    if bodylen > mx { return REMOTE_E_TOOBIG }
-    let src : *u8 = ((&REMOTE_RESP as u64) + body) as *u8
-    let dst : *u8 = o as *u8
-    let mut i : u64 = 0u64
-    while i < bodylen {
-        dst[i] = src[i]
-        i = i + 1u64
-    }
-    let olp : *u64 = ol as *u64
-    olp[0] = bodylen
-    return REMOTE_OK
+    /* harmony item 14: the RFC 7230 decoder IS the body path (chunked / Content-Length / EOF). */
+    return backend_remote_decode(total, o, mx, ol)
 }

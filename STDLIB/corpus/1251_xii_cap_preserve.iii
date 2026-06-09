@@ -1,0 +1,7 @@
+/* 1251_xii_cap_preserve.iii -- THE XII CAPABILITY-PRESERVATION GATE (harmony item 4).
+ * xcp_selftest: every live XII rewrite rule preserves the capability subset (RHS mints no authority absent
+ * from LHS -- the M3 bricking-exclusion analogue), AND the gate has teeth (a fabricated GRANT-leaf is
+ * correctly NOT cap-subset of a FORM-leaf). 99 = both. */
+module corpus_1251
+extern @abi(c-msvc-x64) fn xcp_selftest() -> u64 from "xii_cap_preserve.iii"
+fn main() -> u64 { return xcp_selftest() }

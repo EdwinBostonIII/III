@@ -1,0 +1,59 @@
+/* STDLIB/iii/omnia/xii_cap_preserve.iii -- THE CAPABILITY-PRESERVATION GATE (harmony item 4).
+ *
+ * xii_conf_cert's prose names "the K/cap/hexad preservation theorems" but never re-runs the CAPABILITY one
+ * as an executable gate.  This turns it into one: for EVERY live XII rewrite rule, the RHS must never MINT a
+ * capability that is absent from the LHS -- cap_set(RHS) is a SUBSET of cap_set(LHS).  This is the M3
+ * bricking-exclusion analogue for the XII optimizer band: an optimization may DROP or PRESERVE authority,
+ * NEVER CREATE it.  An optimizer that could synthesize a GRANT/GOVERN leaf out of thin air is a privilege-
+ * escalation; this gate forbids it, mechanically, across all rules.
+ *
+ * Composes only the already-exported XII organs (xii_rule_patterns + xii_joinability + xii_rewrite +
+ * xii_term).  Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_seal (a preservation gate).  Ring: R0.  NIH. */
+module omnia_xii_cap_preserve
+
+extern @abi(c-msvc-x64) fn xrp_rule_count() -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_rid_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xjn_build_rule_witness(slot: u32) -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_cap_set(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+
+const XCP_K_FORM  : u8 = 0u8    /* XRW_K01_FORM  -- a low-authority basis leaf (cap-light) */
+const XCP_K_GRANT : u8 = 9u8    /* XRW_K10_GRANT -- the GRANT capability class (cap bit 8) */
+
+/* THE GATE.  1 iff every rule that fires on its own joinability witness preserves the capability subset
+ * (RHS mints no cap absent from LHS).  cap_set is a bitset (bit = 1<<cap_class), so "RHS subset of LHS"
+ * is exactly (rcaps | lcaps) == lcaps.  The LHS cap-set is SNAPSHOTTED before apply (the arena mutates). */
+fn xcp_gate() -> u32 @export {
+    let n : u32 = xrp_rule_count()
+    let mut slot : u32 = 0u32
+    while slot < n {
+        let rid : u32 = xrp_rid_at(slot)
+        xii_term_arena_reset()
+        let lhs : u32 = xjn_build_rule_witness(slot)
+        let lcaps : u32 = xii_rewrite_cap_set(lhs)               /* SNAPSHOT before apply */
+        let rhs : u32 = xii_rewrite_apply_specific(rid, lhs)
+        if xii_rewrite_last_rule_fired() == rid {                /* only rules that actually fired */
+            let rcaps : u32 = xii_rewrite_cap_set(rhs)
+            if (rcaps | lcaps) != lcaps { return 0u32 }          /* VIOLATION: RHS minted a capability */
+        }
+        slot = slot + 1u32
+    }
+    return 1u32
+}
+
+/* SELFTEST.  99 iff (1) the gate passes on every live rule, AND (2) it has TEETH -- a fabricated GRANT-leaf
+ * RHS is correctly NOT a cap-subset of a GRANT-free FORM-leaf LHS (so a real escalation WOULD be caught). */
+fn xcp_selftest() -> u64 @export {
+    if xcp_gate() != 1u32 { return 1u64 }
+    xii_term_arena_reset()
+    let lhs_neg : u32 = xii_term_make_basis(XCP_K_FORM, 0u32)
+    let rhs_neg : u32 = xii_term_make_basis(XCP_K_GRANT, 0u32)
+    let lc : u32 = xii_rewrite_cap_set(lhs_neg)
+    let rc : u32 = xii_rewrite_cap_set(rhs_neg)
+    if (rc | lc) == lc { return 2u64 }                          /* must NOT be subset (GRANT was minted) */
+    if rc == lc { return 3u64 }                                 /* and they genuinely differ */
+    return 99u64
+}

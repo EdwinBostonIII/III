@@ -747,6 +747,8 @@ MODULES=(
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"
+    "numera/bv_bits"
+    "numera/barrett"
     "numera/egraph"
     "numera/cost_lattice"
     "omnia/sovval"
@@ -892,6 +894,9 @@ MODULES=(
     "omnia/xii_discharge"
     "omnia/xii_conf_cert"
     "omnia/xii_cap_preserve"
+    "omnia/xii_cost_monotone"
+    "omnia/xii_denote"
+    "tempora/duration_cert"
     # The Reach (DOCS/III-THE-REACH-ARCHITECTURE.md), Phase 1: the content-addressed transport spine.
     # reach_store (L1 disk content-store) -> reach_core (resolver + emit; verifies the returned value
     # re-hashes to its address = tamper-evident; an absent/corrupt address = a typed GAP, never an

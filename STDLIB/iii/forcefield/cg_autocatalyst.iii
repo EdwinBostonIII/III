@@ -104,3 +104,89 @@ fn cga_selftest() -> u64 @export {
     if nz == 0u8 { return 8u64 }
     return 99u64
 }
+
+/* ===== harmony item 17: THE WIDTH-FAITHFUL DREAM SIEVE ===========================================
+ * cga_dispose certifies IDEAL-integer strength identities (the sov_isa Peano tower).  The compiler's
+ * registers are NOT ideal integers: they are Z/2^64 with x86 count-mask shifts -- and an ideal truth
+ * can be a machine LIE: x*2^64 == x<<64 holds ideally, but on the metal the left wraps to 0 while
+ * the right count-masks to x.  cga_dispose_bv routes the SAME candidate class through the width-
+ * faithful two-tier disposer (bv_dispose: bv_ring soundly refutes, the kernel's BV64 iota -- count-
+ * mask exact -- is the sole arbiter), sealing admissions into a SEPARATE width-faithful registry.
+ * The autonomous discovery loop can therefore certify rewrites the code generator may actually apply
+ * to 64-bit registers; the (64,64) ideal-truth is REFUSED (the differential the selftest pins --
+ * bv_ring even AGREES at (64,64) because *2^64 wraps to *0 in the ring, and the KERNEL still vetoes:
+ * sovereignty demonstrated inside the sieve itself).  The registry only ever records what the
+ * width-faithful gate ALREADY certified; same volatile/by-design-evaporating contract as the Peano
+ * registry (assimilation into source stays operator-gated). */
+extern @abi(c-msvc-x64) fn bvd_admit(lhs_tc: u32, rhs_tc: u32, lhs_bv: u32, rhs_bv: u32) -> u8 from "bv_dispose.iii"
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(x: u32, y: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(x: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(x: u32, y: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(x: u32, y: u32) -> u32 from "typecheck.iii"
+
+var CGA_BV_SEAL : [u8;  2048]   /* 64 slots x 32-byte Keccak content address (width-faithful) */
+var CGA_BV_A    : [u32; 64]
+var CGA_BV_B    : [u32; 64]
+var CGA_BV_N    : [u32; 1]
+var CGA_BV_MSG  : [u8;  9]      /* domain byte 0xB5 || a(4 LE) || b(4 LE): never collides with the Peano seal */
+
+fn cga_bv_reset() -> u64 @export { CGA_BV_N[0u64] = 0u32  return 0u64 }
+fn cga_bv_count() -> u32 @export { return CGA_BV_N[0u64] }
+fn cga_bv_entry_a(i: u32) -> u32 @export { if i >= CGA_BV_N[0u64] { return 0xFFFFFFFFu32 }  return CGA_BV_A[i as u64] }
+fn cga_bv_entry_b(i: u32) -> u32 @export { if i >= CGA_BV_N[0u64] { return 0xFFFFFFFFu32 }  return CGA_BV_B[i as u64] }
+
+/* the width-faithful soundness property: every sealed entry is MACHINE-true.  The machine law for
+ * mul(x, 2^a) == shl(x, b) over Z/2^64 with the x86 COUNT-MASK shift is  a < 64 AND a == (b & 63):
+ * the multiply's 2^a wraps (a >= 64 -> the zero multiplier, never equal to a shift), while the
+ * shift's count masks (b = 64 behaves as b = 0 -- so (0, 64) is a TRUE machine identity the
+ * ideal-integer model would not even phrase, and the discovery loop, KAT 1353, finds it). */
+fn cga_bv_all_true() -> u8 @export {
+    let n : u32 = CGA_BV_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        if CGA_BV_A[i as u64] >= 64u32 { return 0u8 }
+        if CGA_BV_A[i as u64] != (CGA_BV_B[i as u64] & 63u32) { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* THE WIDTH-FAITHFUL SIEVE: dispose the strength candidate  mul(x, 2^a) == shl(x, b)  over Z/2^64.
+ * The 2^a literal WRAPS (the machine meaning of the ideal constant); the shift amount is the raw b
+ * (the kernel's iota count-masks it, exactly as the silicon does).  budget==0 -> never attempted.
+ * Reject -> ZERO state change.  Admit -> cad-sealed into the width-faithful registry. */
+fn cga_dispose_bv(a: u32, b: u32, budget: u32) -> u8 @export {
+    if budget == 0u32 { return 0u8 }
+    bv_reset()
+    tc_reset()
+    let mut pow : u64 = 0u64
+    if a < 64u32 { pow = 1u64 << (a as u64) }        /* a >= 64: 2^a mod 2^64 = 0 (the wrap IS the meaning) */
+    let b_l : u32 = bv_mul(bv_var(0u32), bv_const(pow))
+    let b_r : u32 = bv_shl(bv_var(0u32), b)
+    let t_l : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(pow))
+    let t_r : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(b as u64))
+    if bvd_admit(t_l, t_r, b_l, b_r) != 1u8 { return 0u8 }   /* THE WALL: width-unfaithful -> discard */
+    let n : u32 = CGA_BV_N[0u64]
+    if n >= CGA_REG_CAP { return 1u8 }               /* certified but registry full: still machine-true */
+    CGA_BV_MSG[0u64] = 0xB5u8
+    CGA_BV_MSG[1u64] = (a & 0xFFu32) as u8
+    CGA_BV_MSG[2u64] = ((a >> 8u32) & 0xFFu32) as u8
+    CGA_BV_MSG[3u64] = ((a >> 16u32) & 0xFFu32) as u8
+    CGA_BV_MSG[4u64] = ((a >> 24u32) & 0xFFu32) as u8
+    CGA_BV_MSG[5u64] = (b & 0xFFu32) as u8
+    CGA_BV_MSG[6u64] = ((b >> 8u32) & 0xFFu32) as u8
+    CGA_BV_MSG[7u64] = ((b >> 16u32) & 0xFFu32) as u8
+    CGA_BV_MSG[8u64] = ((b >> 24u32) & 0xFFu32) as u8
+    let outp : *u8 = ((&CGA_BV_SEAL as u64) + (n as u64) * 32u64) as *u8
+    cad_oneshot(1u32, (&CGA_BV_MSG as u64) as *u8, 9u64, outp)
+    CGA_BV_A[n as u64] = a
+    CGA_BV_B[n as u64] = b
+    CGA_BV_N[0u64] = n + 1u32
+    return 1u8
+}

@@ -121,6 +121,26 @@ fn cgr_union_certified(a: u32, b: u32, proof_ok: u32) -> u32 @export {
     return 1u32
 }
 
+/* ===== harmony item 16: THE KERNEL-GOVERNED RING MERGE ===========================================
+ * cgr_union_certified accepts a caller-LITERAL proof_ok: disciplined callers (ru_certify_unify_kernel,
+ * harmony 1) discharge it through the kernel, but the RING ITSELF could not refuse a caller that
+ * lies.  cgr_union_kernel removes the literal from the path entirely: the CIC kernel discharges the
+ * equality certificate (tc_check(proof, goal)) IN-MODULE, and only that verdict reaches the union --
+ * completing the kernel-disposal family across every merge surface III owns (ripple_unify harmony 1,
+ * e-graph harmony 7, the congruence ring here).  HONEST SCOPE (the standing convention): the ring
+ * stores content-ADDRESSES, so the goal's endpoints are caller-bound by convention; the kernel
+ * verifies the EQUALITY of the supplied endpoints.  Returns 1 iff already joined (auto-congruence is
+ * proof-free) or the kernel discharges the merge; else 0, classes UNTOUCHED. */
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+fn cgr_union_kernel(a: u32, b: u32, proof: u32, goal: u32) -> u32 @export {
+    if a >= CGR_MAX { return 0u32 }
+    if b >= CGR_MAX { return 0u32 }
+    if cgr_find(a) == cgr_find(b) { return 1u32 }       /* auto-congruence, proof-free */
+    let ok : u32 = tc_check(proof, goal) as u32
+    return cgr_union_certified(a, b, ok)
+}
+
 /* the cost-minimal representative cost of item's class */
 fn cgr_rep_cost(item: u32) -> u64 @export { if item >= CGR_MAX { return 0u64 } return CGR_COST[cgr_find(item) as u64] }
 

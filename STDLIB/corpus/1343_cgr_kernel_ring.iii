@@ -1,0 +1,84 @@
+/* 1343_cgr_kernel_ring.iii -- THE KERNEL-GOVERNED RING MERGE (harmony item 16).
+ *
+ * cgr_union_certified's caller-LITERAL proof_ok meant the ring could not refuse a lying caller.
+ * cgr_union_kernel discharges the equality through the CIC kernel in-module -- completing the
+ * kernel-disposal family across every merge surface (ripple_unify/1243, e-graph/1334, ring/here).
+ * Arms:
+ *  (1) POSITIVE -- two distinct-address ring classes merge under the kernel-checked beta-iota
+ *      equality Id(Bool, (lambda x:Bool. x) true, true) with proof refl(true): ONE ring after;
+ *  (2) FALSE-GOAL NEGATIVE -- Id(Bool, true, false) with refl(true) is REFUSED, classes untouched
+ *      (the lying-caller hole, closed: no literal exists on this path to lie with);
+ *  (3) AUTO-CONGRUENCE -- the already-merged pair re-merges proof-free (even with a false pair);
+ *  (4) OOB ids are refused;
+ *  (5) the cost-minimal representative survives the kernel-governed merge.
+ * Exit 99 = the RING merges only on kernel truth. */
+module corpus_1343
+
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_union_kernel(a: u32, b: u32, proof: u32, goal: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_rep_cost(item: u32) -> u64 from "congruence.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+
+var KA : [u8; 32]
+var KB : [u8; 32]
+
+fn fill32(p: *u8, b: u8) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        p[k] = b
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn main() -> u64 {
+    cgr_init()
+    tc_reset()
+    let pa : *u8 = (&KA as u64) as *u8
+    let pb : *u8 = (&KB as u64) as *u8
+    fill32(pa, 0xC1u8)
+    fill32(pb, 0xD2u8)
+    let i1 : u32 = cgr_intern(pa, 9u64)
+    let i2 : u32 = cgr_intern(pb, 4u64)
+    if cgr_find(i1) == cgr_find(i2) { return 10u64 }
+    if cgr_num_classes() != 2u32 { return 11u64 }
+
+    /* kernel terms */
+    let kb : u32 = tc_bool()
+    let app   : u32 = tc_app(tc_lam(kb, tc_var(0u32)), tc_true())
+    let good  : u32 = tc_id(kb, app, tc_true())
+    let bad   : u32 = tc_id(kb, tc_true(), tc_false())
+    let prf   : u32 = tc_refl(tc_true())
+
+    /* (2) FALSE-GOAL first: refused, classes untouched */
+    if cgr_union_kernel(i1, i2, prf, bad) != 0u32 { return 1u64 }
+    if cgr_find(i1) == cgr_find(i2) { return 2u64 }
+    if cgr_num_classes() != 2u32 { return 3u64 }
+
+    /* (1) POSITIVE: the kernel discharges the beta-iota equality -> ONE ring */
+    if cgr_union_kernel(i1, i2, prf, good) != 1u32 { return 4u64 }
+    if cgr_find(i1) != cgr_find(i2) { return 5u64 }
+    if cgr_num_classes() != 1u32 { return 6u64 }
+
+    /* (3) auto-congruence is proof-free (even handed the false pair) */
+    if cgr_union_kernel(i1, i2, prf, bad) != 1u32 { return 7u64 }
+
+    /* (4) OOB refused */
+    if cgr_union_kernel(0xFFFFFFFFu32, i2, prf, good) != 0u32 { return 8u64 }
+
+    /* (5) cost-minimal representative survives (4 < 9) */
+    if cgr_rep_cost(i1) != 4u64 { return 9u64 }
+
+    return 99u64
+}

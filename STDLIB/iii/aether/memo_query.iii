@@ -520,3 +520,68 @@ fn mq_predicate_gate_kat() -> u64 @export {
     if mq_admit_predicate_gated(0u64 as *u8, cp, hp, cid, ov, ov, 0u32) != -1i32 { return 5u64 }
     return 99u64
 }
+
+/* ============================================================================
+ *  harmony item 13: DISCHARGE THE MEMOIZATION OPTIMIZATION (the proof_memo_equiv differential).
+ *  Memoization is an OPTIMIZATION carrying a soundness obligation nobody discharged: a served hit is
+ *  TRUSTED to equal what recomputation would produce.  mq_attest_equiv is the differential gate that
+ *  discharges it per-entry: the caller recomputes the operation fresh, content-addresses the result,
+ *  and presents that commit against the stored entry (which is itself chain-verified + confidence-
+ *  cleared + non-stale by the W36/W50 lookup gate).
+ *    EQUAL    -> MQ_OK, and an EQUIV fragment (payload tag 0xE4, verdict 1) goes on the witness
+ *                spine: the optimization is DISCHARGED for this entry -- replayable, federable proof
+ *                that the cache told the truth.
+ *    DIVERGED -> the entry is provably unservable (wrong, or its producer non-deterministic --
+ *                either is disqualifying): ml_mark_stale EVICTS it (the lookup gate refuses stale,
+ *                so it can never be served again), a DIVERGENCE fragment (verdict 0) is published,
+ *                and MQ_E_DIVERGED is returned.
+ *  The memo lattice is thereby SELF-CORRECTING under spot-checks: any consumer converts ONE
+ *  recomputation into either a portable equivalence witness or a permanent eviction.  Composes the
+ *  existing organs only (lookup gate, lattice staleness, witness hook); no new authority. */
+const MQ_E_DIVERGED : i32 = -9i32
+const MQ_EQ_TAG     : u8  = 0xE4u8     /* witness payload family: equiv-attest (0xE3 = lookup) */
+
+var MQ_EQ_STORED : [u8; 32]
+var MQ_EQ_CHAIN  : [u8; 32]
+
+fn mq_attest_equiv(key: *u8, recomputed_commit: *u8) -> i32 @export {
+    if MQ_INITED == 0u8 { return MQ_E_NOT_INITED }
+    if (key as u64) == 0u64 { return MQ_E_NULL }
+    if (recomputed_commit as u64) == 0u64 { return MQ_E_NULL }
+    let nullk : *u8 = 0u64 as *u8
+    let rc : i32 = mq_lookup_verified_k(key, (&MQ_EQ_STORED as u64) as *u8, (&MQ_EQ_CHAIN as u64) as *u8, nullk)
+    if rc != MQ_OK { return rc }
+    /* the differential: stored commit vs the freshly recomputed commit (constant 32-byte sweep) */
+    let sp : *u8 = (&MQ_EQ_STORED as u64) as *u8
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        acc = acc | ((sp[i] as u32) ^ (recomputed_commit[i] as u32))
+        i = i + 1u64
+    }
+    let mut verdict : u8 = 1u8
+    if acc != 0u32 { verdict = 0u8 }
+    /* witness the verdict either way: payload = tag || verdict || 0*6 || key(32) || recomputed(32) */
+    MQ_WIT_PAYLOAD[0u64] = MQ_EQ_TAG
+    MQ_WIT_PAYLOAD[1u64] = verdict
+    MQ_WIT_PAYLOAD[2u64] = 0u8
+    MQ_WIT_PAYLOAD[3u64] = 0u8
+    MQ_WIT_PAYLOAD[4u64] = 0u8
+    MQ_WIT_PAYLOAD[5u64] = 0u8
+    MQ_WIT_PAYLOAD[6u64] = 0u8
+    MQ_WIT_PAYLOAD[7u64] = 0u8
+    let mut pi : u64 = 0u64
+    while pi < 32u64 {
+        MQ_WIT_PAYLOAD[8u64 + pi]  = key[pi]
+        MQ_WIT_PAYLOAD[40u64 + pi] = recomputed_commit[pi]
+        pi = pi + 1u64
+    }
+    ident_zero((&MQ_WIT_PRODUCER as u64) as *u8)
+    ident_zero((&MQ_WIT_OP as u64) as *u8)
+    ident_copy(key, (&MQ_WIT_INC as u64) as *u8)
+    ident_copy((&MQ_EQ_STORED as u64) as *u8, (&MQ_WIT_OUTC as u64) as *u8)
+    wh_publish((&MQ_WIT_PRODUCER as u64) as *u8, (&MQ_WIT_OP as u64) as *u8, (&MQ_WIT_INC as u64) as *u8, (&MQ_WIT_OUTC as u64) as *u8, 0u8, 0u8, MQ_WIT_PILLAR, (&MQ_WIT_PRODUCER as u64) as *u8, 0u32, (&MQ_WIT_PAYLOAD as u64) as *u8, 72u32, (&MQ_WIT_FID as u64) as *u8)
+    if verdict == 1u8 { return MQ_OK }
+    ml_mark_stale(key)
+    return MQ_E_DIVERGED
+}

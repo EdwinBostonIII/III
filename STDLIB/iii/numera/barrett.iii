@@ -1,0 +1,187 @@
+/* STDLIB/iii/numera/barrett.iii -- THE GENERAL BARRETT REDUCTION ORGAN (harmony item 20).
+ *
+ * III owned Barrett reduction once, hardcoded to one modulus (ed_scalar_modl's L, mu precomputed
+ * as source constants).  Every OTHER repeated-reduction consumer pays Knuth long division per call
+ * (quotient allocation + normalisation + per-limb qhat estimation).  This organ generalises the
+ * technique to ANY modulus m >= 2 -- odd or EVEN (unlike Montgomery, Barrett has no parity
+ * precondition, so it covers exactly the moduli mod_ctx_build must refuse):
+ *
+ *   BUILD once:   mu = floor(b^(2k) / m),  b = 2^64, k = limbs(m)   (one Knuth division, ever)
+ *   REDUCE:       HAC 14.42 -- q3 = floor( floor(a/b^(k-1)) * mu / b^(k+1) );
+ *                 r = (a mod b^(k+1)) - (q3*m mod b^(k+1));  r += b^(k+1) if negative;
+ *                 then at most TWO subtractions of m canonicalise r into [0, m)
+ *                 (we run a 3-iteration belt, mirroring ed_scalar_modl's discipline).
+ *
+ * Exact for every a < b^(2k) = m-width^2 -- precisely the product-reduction domain.  For wider a
+ * the organ FALLS BACK to the general Knuth bigint_mod (totality: a true drop-in, never silently
+ * truncating).  The UNIFICATION (KAT 1347): on the Ed25519 group order L, this general organ, the
+ * specialised ed_mod_l, and Knuth bigint_mod agree limb-for-limb on 512-bit inputs -- the
+ * hardcoded organ is now a (deliberately allocation-free, fixed-buffer) INSTANCE of the general
+ * law this module embodies, differentially pinned to it forever.
+ *
+ * Contexts are slots (mirroring MODCTX): the modulus handle is CALLER-owned and must outlive the
+ * ctx; mu is ctx-owned and dropped by bar_drop.  Per-reduce temporaries are dropped eagerly (the
+ * 64-slot bigint handle table is the binding constraint; steady-state live handles <= 6).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: bigint + bigint_div only.  Deterministic. */
+module numera_barrett
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shr_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+
+const BAR_SLOTS   : u32 = 8u32
+const BAR_INVALID : u64 = 0u64
+
+var BAR_LIVE : [u8;  8]
+var BAR_M    : [u64; 8]      /* caller-owned modulus handle */
+var BAR_MU   : [u64; 8]      /* ctx-owned mu = floor(b^(2k)/m) */
+var BAR_K    : [u64; 8]      /* limb count of m */
+
+fn bar_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (BAR_SLOTS as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if BAR_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* low n limbs of x as a fresh bigint (x mod b^n). */
+fn bar_lowlimbs(arena: u64, x: u64, n: u64) -> u64 {
+    let r : u64 = bigint_new(arena, n)
+    if r == 0u64 { return 0u64 }
+    let xl : u64 = bigint_len_limbs(x)
+    let mut cnt : u64 = n
+    if xl < cnt { cnt = xl }
+    let mut i : u64 = 0u64
+    while i < cnt {
+        bigint_set_limb(r, i, bigint_get_limb(x, i))
+        i = i + 1u64
+    }
+    bigint_set_len(r, cnt)
+    bigint_normalize(r)
+    return r
+}
+
+/* Build a Barrett context for modulus m (>= 2; ANY parity).  Returns ctx id or BAR_INVALID.
+ * `m` is the caller's handle and must outlive the ctx (the modpow-scope convention). */
+fn bar_ctx_build(arena: u64, m: u64) -> u64 @export {
+    let k : u64 = bigint_len_limbs(m)
+    if k == 0u64 { return BAR_INVALID }
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    if one == 0u64 { return BAR_INVALID }
+    if bigint_cmp(m, one) != 1i32 { bigint_drop(one) ; return BAR_INVALID }   /* m >= 2 */
+    let b2k : u64 = bigint_shl_bits(arena, one, 128u64 * k)
+    bigint_drop(one)
+    if b2k == 0u64 { return BAR_INVALID }
+    let mu : u64 = bigint_div_qr(arena, b2k, m)
+    let rem : u64 = bigint_remainder_take()
+    if rem != 0u64 { bigint_drop(rem) }
+    bigint_drop(b2k)
+    if mu == 0u64 { return BAR_INVALID }
+    let mut s : u32 = 0u32
+    while s < BAR_SLOTS {
+        if BAR_LIVE[s] == 0u8 {
+            BAR_LIVE[s] = 1u8
+            BAR_M[s]  = m
+            BAR_MU[s] = mu
+            BAR_K[s]  = k
+            return (s as u64) + 1u64
+        }
+        s = s + 1u32
+    }
+    bigint_drop(mu)
+    return BAR_INVALID
+}
+
+fn bar_drop(id: u64) -> i32 @export {
+    let si : u32 = bar_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return -2i32 }
+    bigint_drop(BAR_MU[si])
+    BAR_LIVE[si] = 0u8
+    BAR_M[si]  = 0u64
+    BAR_MU[si] = 0u64
+    BAR_K[si]  = 0u64
+    return 0i32
+}
+
+/* a mod m via the ctx: HAC 14.42 for a < b^(2k); Knuth fallback for wider a (totality).
+ * Returns a fresh bigint in `arena`, or 0 on a bad ctx / allocation failure. */
+fn bar_reduce(arena: u64, a: u64, id: u64) -> u64 @export {
+    let si : u32 = bar_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    let m : u64 = BAR_M[si]
+    let mu : u64 = BAR_MU[si]
+    let k : u64 = BAR_K[si]
+    if bigint_len_limbs(a) > 2u64 * k {
+        return bigint_mod(arena, a, m)                       /* totality: never silently truncate */
+    }
+    /* q3 = floor( floor(a / b^(k-1)) * mu / b^(k+1) ) */
+    let q1 : u64 = bigint_shr_bits(arena, a, 64u64 * (k - 1u64))
+    if q1 == 0u64 { return 0u64 }
+    let q2 : u64 = bigint_mul(arena, q1, mu)
+    bigint_drop(q1)
+    if q2 == 0u64 { return 0u64 }
+    let q3 : u64 = bigint_shr_bits(arena, q2, 64u64 * (k + 1u64))
+    bigint_drop(q2)
+    if q3 == 0u64 { return 0u64 }
+    /* r = (a mod b^(k+1)) - (q3*m mod b^(k+1)), lifted by b^(k+1) if negative */
+    let r1 : u64 = bar_lowlimbs(arena, a, k + 1u64)
+    if r1 == 0u64 { bigint_drop(q3) ; return 0u64 }
+    let q3m : u64 = bigint_mul(arena, q3, m)
+    bigint_drop(q3)
+    if q3m == 0u64 { bigint_drop(r1) ; return 0u64 }
+    let r2 : u64 = bar_lowlimbs(arena, q3m, k + 1u64)
+    bigint_drop(q3m)
+    if r2 == 0u64 { bigint_drop(r1) ; return 0u64 }
+    let mut rr : u64 = 0u64
+    if bigint_cmp(r1, r2) == -1i32 {
+        let one : u64 = bigint_from_u64(arena, 1u64)
+        let lift : u64 = bigint_shl_bits(arena, one, 64u64 * (k + 1u64))
+        bigint_drop(one)
+        if lift == 0u64 { bigint_drop(r1) ; bigint_drop(r2) ; return 0u64 }
+        let r1l : u64 = bigint_add(arena, r1, lift)
+        bigint_drop(lift)
+        bigint_drop(r1)
+        if r1l == 0u64 { bigint_drop(r2) ; return 0u64 }
+        rr = bigint_sub(arena, r1l, r2)
+        bigint_drop(r1l)
+    } else {
+        rr = bigint_sub(arena, r1, r2)
+        bigint_drop(r1)
+    }
+    bigint_drop(r2)
+    if rr == 0u64 { return 0u64 }
+    /* at most 2 subtractions canonicalise; 3-iteration belt (the ed_scalar_modl discipline) */
+    let mut belt : u32 = 0u32
+    while belt < 3u32 {
+        let c : i32 = bigint_cmp(rr, m)
+        let mut ge : u8 = 0u8
+        if c == 0i32 { ge = 1u8 }
+        if c == 1i32 { ge = 1u8 }
+        if ge == 1u8 {
+            let nr : u64 = bigint_sub(arena, rr, m)
+            bigint_drop(rr)
+            if nr == 0u64 { return 0u64 }
+            rr = nr
+        }
+        belt = belt + 1u32
+    }
+    return rr
+}

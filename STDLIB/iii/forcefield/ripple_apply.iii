@@ -29,6 +29,10 @@ const RA_E_CAP      : i64 = -2i64
 var RA_EXTERN_PRE : [u8; 24] = [0x65u8,0x78u8,0x74u8,0x65u8,0x72u8,0x6Eu8,0x20u8,0x40u8,0x61u8,0x62u8,0x69u8,0x28u8,0x63u8,0x2Du8,0x6Du8,0x73u8,0x76u8,0x63u8,0x2Du8,0x78u8,0x36u8,0x34u8,0x29u8,0x20u8] /* "extern @abi(c-msvc-x64) " */
 var RA_FROM       : [u8; 7]  = [0x20u8,0x66u8,0x72u8,0x6Fu8,0x6Du8,0x20u8,0x22u8]   /* " from \"" */
 var RA_EXPORT     : [u8; 7]  = [0x40u8,0x65u8,0x78u8,0x70u8,0x6Fu8,0x72u8,0x74u8]   /* "@export" */
+/* literal fragments for the EXTRACT applier's module synthesis */
+var RA_MODULE     : [u8; 7]  = [0x6Du8,0x6Fu8,0x64u8,0x75u8,0x6Cu8,0x65u8,0x20u8]   /* "module " */
+var RA_NL         : [u8; 1]  = [0x0Au8]                                              /* "\n" */
+var RA_EXPORT_INS : [u8; 9]  = [0x20u8,0x40u8,0x65u8,0x78u8,0x70u8,0x6Fu8,0x72u8,0x74u8,0x20u8] /* " @export " */
 
 /* 1 iff src[i]==c0 && src[i+1]==c1 (bounds-checked). */
 fn ra_at(src: *u8, src_len: u64, i: u64, c0: u8, c1: u8) -> u8 {
@@ -277,5 +281,39 @@ fn ra_merge_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64, canon: *u8, 
     o = o + 1u64
     i = fend
     while i < src_len { if o >= out_cap { return RA_E_CAP }  out[o] = src[i]  o = o + 1u64  i = i + 1u64 }
+    return o as i64
+}
+
+/* EXTRACT applier (increment A3): emit a NEW module `mod_name` wrapping the shared fn whose source is `fn_src`
+ * -- the destination half of an extract (each source module then takes an extern to it, via ra_merge_fn).  The
+ * fn is given `@export` if it lacks one (so the source modules can link it).  Output is
+ * `module <mod_name>\n\n<fn (with @export)>\n`.  Candidate buffer only; returns the edited length,
+ * RA_E_NOTFOUND if `fn_src` has no body brace, or RA_E_CAP if `out` is too small. */
+fn ra_extract_module(fn_src: *u8, fn_src_len: u64, mod_name: *u8, mod_name_len: u64, out: *u8, out_cap: u64) -> i64 @export {
+    let brace : u64 = ra_find_brace(fn_src, fn_src_len, 0u64)
+    if brace == RA_NOT_FOUND { return RA_E_NOTFOUND }
+    let exp : u64 = ra_find_export(fn_src, 0u64, brace)
+    let mut o : u64 = 0u64
+    o = ra_append_lit(out, o, out_cap, &RA_MODULE as u64, 7u64)
+    if o > out_cap { return RA_E_CAP }
+    let mut j : u64 = 0u64
+    while j < mod_name_len { if o >= out_cap { return RA_E_CAP }  out[o] = mod_name[j]  o = o + 1u64  j = j + 1u64 }
+    o = ra_append_lit(out, o, out_cap, &RA_NL as u64, 1u64)
+    if o > out_cap { return RA_E_CAP }
+    o = ra_append_lit(out, o, out_cap, &RA_NL as u64, 1u64)
+    if o > out_cap { return RA_E_CAP }
+    if exp == brace {
+        let mut i : u64 = 0u64
+        while i < brace { if o >= out_cap { return RA_E_CAP }  out[o] = fn_src[i]  o = o + 1u64  i = i + 1u64 }
+        o = ra_append_lit(out, o, out_cap, &RA_EXPORT_INS as u64, 9u64)
+        if o > out_cap { return RA_E_CAP }
+        i = brace
+        while i < fn_src_len { if o >= out_cap { return RA_E_CAP }  out[o] = fn_src[i]  o = o + 1u64  i = i + 1u64 }
+    } else {
+        let mut i : u64 = 0u64
+        while i < fn_src_len { if o >= out_cap { return RA_E_CAP }  out[o] = fn_src[i]  o = o + 1u64  i = i + 1u64 }
+    }
+    o = ra_append_lit(out, o, out_cap, &RA_NL as u64, 1u64)
+    if o > out_cap { return RA_E_CAP }
     return o as i64
 }

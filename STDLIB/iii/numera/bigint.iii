@@ -849,6 +849,46 @@ fn bigint_shr_bits(arena_id: u64, a: u64, bits: u64) -> u64 @export {
  * flag is DERIVED from nprime0 (single source of truth: nprime0 == 1 iff the
  * NIST-prime free reduction applies). */
 
+/* ===== harmony item 10: THE PROOF-CARRYING MONTGOMERY-CONSTANT REGISTRY =========================
+ * The REDC constant nprime0 (-n^-1 mod 2^32) is the single most leverage-laden constant in the
+ * crypto stack: a wrong value silently corrupts EVERY Montgomery product downstream (RSA, the four
+ * NIST fields).  It was computed by an audited Newton iteration and then TRUSTED.  Now it is
+ * CERTIFIED: mont_nprime_certified discharges  n0*np == -1 (mod 2^32)  through the BV64 two-tier
+ * gate -- bv_ring (the sound polynomial decider) AND the CIC kernel's native BV iota (sovereign) --
+ * by the lossless mod-2^64 lift  (n0*np + 1) * 2^32 == 0 (mod 2^64)   (x == 0 mod 2^32  iff
+ * x*2^32 == 0 mod 2^64; the kernel's BV model is exactly Z/2^64, so no truncation oracle is
+ * needed).  modctx_set_nprime gates STORAGE on this certificate, making the MODCTX slot table a
+ * proof-carrying registry: a LIVE mod-context structurally CANNOT hold an uncertified REDC
+ * constant -- the M3 "never mint authority" exclusion, transposed to crypto constants.
+ *
+ * ARENA CONTRACT (loud): the certificate RESETS the bv_ring and TC arenas (their documented
+ * per-decision-scratch scope).  Certify at context-BUILD time only -- never mid-proof. */
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+
+/* 1 iff the kernel certifies  n0*np == -1 (mod 2^32)  for the masked low words.  Two-tier:
+ * Tier-1 bv_ring refutation (cheap), Tier-2 kernel conversion (sole arbiter).  Resets both arenas. */
+fn mont_nprime_certified(n0: u64, np: u64) -> u8 @export {
+    let nl  : u64 = n0 & 0xFFFFFFFFu64
+    let npl : u64 = np & 0xFFFFFFFFu64
+    bv_reset()
+    let bl : u32 = bv_shl(bv_add(bv_mul(bv_const(nl), bv_const(npl)), bv_const(1u64)), 32u32)
+    if bv_equal(bl, bv_const(0u64)) != 1u8 { return 0u8 }
+    tc_reset()
+    let tl : u32 = tc_bvshl(tc_bvadd(tc_bvmul(tc_bvlit_u64(nl), tc_bvlit_u64(npl)), tc_bvlit_u64(1u64)), tc_bvlit_u64(32u64))
+    return tc_conv(tl, tc_bvlit_u64(0u64))
+}
+
 fn modctx_alloc_slot() -> u32 {
     let mut i : u32 = 0u32
     while i < MODCTX_SLOTS {
@@ -891,11 +931,16 @@ fn modctx_set_dims(id: u64, k: u64, s: u64) -> i32 @export {
     return 0i32
 }
 
-/* nprime0 = -n^-1 mod 2^32 (low word); free_reduction is derived. */
-fn modctx_set_nprime(id: u64, nprime0: u64) -> i32 @export {
+/* nprime0 = -n^-1 mod 2^32 (low word); free_reduction is derived.
+ * harmony item 10: PROOF-CARRYING -- storage is gated on the kernel certificate
+ * n0*nprime0 == -1 (mod 2^32) (mont_nprime_certified).  An uncertified pair is REFUSED (-3)
+ * and NOTHING is stored, so a live mod-context can never hold a wrong REDC constant.
+ * NOTE: the certificate resets the bv_ring/TC arenas -- ctx-BUILD time only, never mid-proof. */
+fn modctx_set_nprime(id: u64, nprime0: u64, n0: u64) -> i32 @export {
     let si : u32 = modctx_slot_of(id)
     if si == 0xFFFFFFFFu32 { return -2i32 }
     let np : u64 = nprime0 & 0xFFFFFFFFu64
+    if mont_nprime_certified(n0, np) != 1u8 { return -3i32 }
     MODCTX_NPRIME0[si] = np
     if np == 1u64 { MODCTX_FREE[si] = 1u8 }
     if np != 1u64 { MODCTX_FREE[si] = 0u8 }

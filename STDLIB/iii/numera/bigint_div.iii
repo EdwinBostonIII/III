@@ -40,7 +40,7 @@ extern @abi(c-msvc-x64) fn bigint_shr_bits(arena: u64, a: u64, bits: u64) -> u64
 /* modulus_ctx accessors (storage lives in bigint.iii; this module is the builder + consumer). */
 extern @abi(c-msvc-x64) fn modctx_new(arena: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn modctx_set_dims(id: u64, k: u64, s: u64) -> i32 from "bigint.iii"
-extern @abi(c-msvc-x64) fn modctx_set_nprime(id: u64, nprime0: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_set_nprime(id: u64, nprime0: u64, n0: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn modctx_set_handles(id: u64, n_id: u64, r2_id: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn modctx_drop(id: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn modctx_k(id: u64) -> u64 from "bigint.iii"
@@ -615,7 +615,10 @@ fn mod_ctx_build(arena: u64, n: u64) -> u64 @export {
     let ctx : u64 = modctx_new(arena)
     if ctx == 0u64 { bigint_drop(r2) ; return 0u64 }
     modctx_set_dims(ctx, k, s)
-    modctx_set_nprime(ctx, nprime)
+    /* harmony item 10: the REDC constant must carry its kernel certificate before storage.
+     * R2 is not yet handed to the ctx, so on refusal drop BOTH explicitly. */
+    let rcnp : i32 = modctx_set_nprime(ctx, nprime, n0)
+    if rcnp != 0i32 { modctx_drop(ctx) ; bigint_drop(r2) ; return 0u64 }
     modctx_set_handles(ctx, n, r2)
     return ctx
 }

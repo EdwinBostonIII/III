@@ -1,0 +1,77 @@
+/* 1337_mont_nprime_cert.iii -- THE PROOF-CARRYING MONTGOMERY-CONSTANT REGISTRY (harmony item 10).
+ *
+ * The REDC constant nprime0 (-n^-1 mod 2^32) silently corrupts EVERY downstream Montgomery product
+ * if wrong (RSA + all four NIST fields); it was Newton-computed and TRUSTED.  mont_nprime_certified
+ * now discharges  n0*np == -1 (mod 2^32)  through the BV64 two-tier gate (bv_ring AND the CIC
+ * kernel's native BV iota) via the lossless lift  (n0*np+1)*2^32 == 0 (mod 2^64);  and
+ * modctx_set_nprime gates STORAGE on that certificate, so a LIVE mod-context structurally cannot
+ * hold an uncertified constant.  Arms:
+ *  (1) POSITIVE  the Newton constant certifies for a spread of odd low-limbs (3, 0x10001,
+ *      0x7FFFFFFD, 0xF00DBABD) -- the audited iteration and the kernel agree;
+ *  (2) FREE-REDUCTION  the NIST all-0xFF limb pairs with np=1 and certifies;
+ *  (3) NEGATIVE  the off-by-one constant is REFUSED (kernel veto);
+ *  (4) NEGATIVE  an EVEN limb (no inverse mod 2^32 exists) is REFUSED for any np;
+ *  (5) REGISTRY POSITIVE  mod_ctx_build yields a live ctx whose stored nprime0 == the masked
+ *      Newton constant (the build path carries the certificate end-to-end);
+ *  (6) REGISTRY TEETH  storing a WRONG constant into that live ctx is REFUSED (-3) and the
+ *      stored value is UNTOUCHED -- the registry cannot be poisoned even by a direct setter call.
+ * Exit 99 = the crypto stack's most leverage-laden constant is now proof-carrying. */
+module corpus_1337
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn mont_nprime_certified(n0: u64, np: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_set_nprime(id: u64, nprime0: u64, n0: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_nprime0(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn mont_nprime64(n0: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mod_ctx_build(arena: u64, n: u64) -> u64 from "bigint_div.iii"
+
+var ODDS : [u64; 4] = [3u64, 0x10001u64, 0x7FFFFFFDu64, 0xF00DBABDu64]
+
+fn main() -> u64 {
+    /* (1) POSITIVE: Newton + kernel agree across the odd spread */
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let n0 : u64 = ODDS[i]
+        let np : u64 = mont_nprime64(n0)
+        if mont_nprime_certified(n0, np) != 1u8 { return 1u64 }
+        i = i + 1u64
+    }
+
+    /* (2) FREE-REDUCTION pair: n0 = 2^32-1, np = 1 */
+    if mont_nprime_certified(0xFFFFFFFFu64, 1u64) != 1u8 { return 2u64 }
+
+    /* (3) NEGATIVE: off-by-one constant refused */
+    let np3 : u64 = mont_nprime64(3u64)
+    if mont_nprime_certified(3u64, np3 + 1u64) != 0u8 { return 3u64 }
+
+    /* (4) NEGATIVE: even limb has no inverse mod 2^32 -- refused for representative np values */
+    if mont_nprime_certified(4u64, 1u64) != 0u8 { return 4u64 }
+    if mont_nprime_certified(4u64, 0xFFFFFFFFu64) != 0u8 { return 4u64 }
+
+    /* (5) REGISTRY POSITIVE: the build path carries the certificate end-to-end */
+    let arena : u64 = arena_new(65536u64)
+    if arena == 0u64 { return 9u64 }
+    let n : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(n, 0u64, 0xC3A5F00Du64)        /* odd low limb */
+    bigint_set_limb(n, 1u64, 0x1234ABCDu64)
+    bigint_set_len(n, 2u64)
+    let ctx : u64 = mod_ctx_build(arena, n)
+    if ctx == 0u64 { return 5u64 }
+    let want : u64 = mont_nprime64(0xC3A5F00Du64) & 0xFFFFFFFFu64
+    if modctx_nprime0(ctx) != want { return 6u64 }
+
+    /* (6) REGISTRY TEETH: a wrong constant cannot poison the live ctx */
+    if modctx_set_nprime(ctx, want + 1u64, 0xC3A5F00Du64) != -3i32 { return 7u64 }
+    if modctx_nprime0(ctx) != want { return 8u64 }
+
+    modctx_drop(ctx)
+    bigint_drop_arena(arena)
+    arena_drop(arena)
+    return 99u64
+}

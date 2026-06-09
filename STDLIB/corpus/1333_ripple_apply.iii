@@ -43,6 +43,10 @@ var FN_S       : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x73u8]                        
 var N_EXPORT2  : [u8; 7] = [0x40u8,0x65u8,0x78u8,0x70u8,0x6Fu8,0x72u8,0x74u8]   /* "@export" */
 var N_BODY5    : [u8; 3] = [0x7Bu8,0x35u8,0x7Du8]                               /* "{5}"     */
 
+extern @abi(c-msvc-x64) fn ra_apply(move_kind: u32, src: *u8, src_len: u64, fn_name: *u8, name_len: u64, aux: *u8, aux_len: u64, out: *u8, out_cap: u64) -> i64 from "ripple_apply.iii"
+extern @abi(c-msvc-x64) fn ra_check_balanced(src: *u8, src_len: u64) -> u8 from "ripple_apply.iii"
+var UNBAL : [u8; 7] = [0x66u8,0x6Eu8,0x20u8,0x78u8,0x28u8,0x29u8,0x7Bu8]        /* "fn x(){" (unbalanced) */
+
 fn contains(buf: u64, len: u64, needle: u64, nlen: u64) -> u8 {
     if nlen > len { return 0u8 }
     let bp : *u8 = buf as *u8
@@ -98,5 +102,18 @@ fn main() -> u64 {
     if contains(&OUT as u64, n8 as u64, &N_EXPORT2 as u64,  7u64) != 1u8 { return 21u64 }   /* @export inserted */
     if contains(&OUT as u64, n8 as u64, &FN_S as u64,       4u64) != 1u8 { return 22u64 }   /* the fn           */
     if contains(&OUT as u64, n8 as u64, &N_BODY5 as u64,    3u64) != 1u8 { return 23u64 }   /* the body kept    */
+    /* (9) A4 unified entry + structural self-check */
+    if ra_check_balanced(&SRC1 as *u8, 17u64) != 1u8 { return 24u64 }   /* balanced source accepted  */
+    if ra_check_balanced(&UNBAL as *u8, 7u64)  != 0u8 { return 25u64 }   /* unbalanced source refused */
+    let na : i64 = ra_apply(1u32, &SRC1 as *u8, 17u64, &NM_B as *u8, 1u64, &MOD_M as *u8, 1u64, &OUT as *u8, 256u64)
+    if na <= 0i64 { return 26u64 }
+    if contains(&OUT as u64, na as u64, &FN_A as u64, 4u64) != 1u8 { return 27u64 }       /* CUT dispatched     */
+    let nb : i64 = ra_apply(0u32, &SRC4 as *u8, 14u64, &NM_D as *u8, 1u64, &MOD_M as *u8, 1u64, &OUT as *u8, 256u64)
+    if nb <= 0i64 { return 28u64 }
+    if contains(&OUT as u64, nb as u64, &N_EXTERN as u64, 6u64) != 1u8 { return 29u64 }   /* MERGE dispatched   */
+    let nc : i64 = ra_apply(2u32, &SRC5 as *u8, 14u64, &NM_D as *u8, 1u64, &MOD_SHARED as *u8, 6u64, &OUT as *u8, 256u64)
+    if nc <= 0i64 { return 30u64 }
+    if contains(&OUT as u64, nc as u64, &N_MODULE as u64, 6u64) != 1u8 { return 31u64 }   /* EXTRACT dispatched */
+    if ra_apply(99u32, &SRC1 as *u8, 17u64, &NM_B as *u8, 1u64, &MOD_M as *u8, 1u64, &OUT as *u8, 256u64) != -1i64 { return 32u64 }  /* unknown kind -> error */
     return 99u64
 }

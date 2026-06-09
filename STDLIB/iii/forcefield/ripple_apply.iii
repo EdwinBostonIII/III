@@ -317,3 +317,63 @@ fn ra_extract_module(fn_src: *u8, fn_src_len: u64, mod_name: *u8, mod_name_len: 
     if o > out_cap { return RA_E_CAP }
     return o as i64
 }
+
+const RA_KIND_MERGE   : u32 = 0u32   /* == ripple_synthesizer RSY_KIND_MERGE */
+const RA_KIND_CUT     : u32 = 1u32   /* == RSY_KIND_CUT     */
+const RA_KIND_EXTRACT : u32 = 2u32   /* == RSY_KIND_EXTRACT */
+const RA_E_UNBALANCED : i64 = -3i64
+
+/* 1 iff the braces of `src` balance in CODE (a '}' before any '{' or a non-zero final depth -> 0), skipping
+ * comments and strings.  The applier's structural self-check on a candidate edit. */
+fn ra_check_balanced(src: *u8, src_len: u64) -> u8 @export {
+    let mut i : u64 = 0u64
+    let mut state : u32 = 0u32
+    let mut bdepth : u32 = 0u32
+    let mut braces : u32 = 0u32
+    let mut bad : u8 = 0u8
+    while i < src_len {
+        if state == 0u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { state = 1u32  bdepth = 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Fu8, 0x2Fu8) == 1u8 { state = 2u32  i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 3u32  i = i + 1u64 }
+            else { if src[i] == 0x7Bu8 { braces = braces + 1u32  i = i + 1u64 }
+            else { if src[i] == 0x7Du8 {
+                       if braces == 0u32 { bad = 1u8 } else { braces = braces - 1u32 }
+                       i = i + 1u64
+                   }
+            else { i = i + 1u64 } } } } }
+        }
+        else { if state == 1u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { bdepth = bdepth + 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Au8, 0x2Fu8) == 1u8 { bdepth = bdepth - 1u32  i = i + 2u64  if bdepth == 0u32 { state = 0u32 } }
+            else { i = i + 1u64 } }
+        }
+        else { if state == 2u32 {
+            if src[i] == 0x0Au8 { state = 0u32 }
+            i = i + 1u64
+        }
+        else {
+            if src[i] == 0x5Cu8 { i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 0u32  i = i + 1u64 } else { i = i + 1u64 } }
+        } } }
+    }
+    if bad == 1u8 { return 0u8 }
+    if braces == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* THE UNIFIED APPLIER ENTRY (increment A4): one apply per Ripple move, mirroring proof_ripple_unified (the one
+ * decider) and ripple_synthesizer (the one driver) -- so the self-optimizer's pipeline is propose->prove->APPLY
+ * with a single entry per stage.  Dispatches by the synthesizer's move kind (CUT/MERGE/EXTRACT), then SELF-CHECKS
+ * the candidate's brace balance: a structurally broken edit is refused (RA_E_UNBALANCED) before it can reach the
+ * operator's commit.  `fn_name` names the target fn (CUT/MERGE); `aux` is the canonical module (MERGE) or the new
+ * module name (EXTRACT).  Candidate buffer only.  Returns the edited length or a negative error. */
+fn ra_apply(move_kind: u32, src: *u8, src_len: u64, fn_name: *u8, name_len: u64, aux: *u8, aux_len: u64, out: *u8, out_cap: u64) -> i64 @export {
+    let mut r : i64 = RA_E_NOTFOUND
+    if move_kind == RA_KIND_CUT     { r = ra_cut_fn(src, src_len, fn_name, name_len, out, out_cap) }
+    if move_kind == RA_KIND_MERGE   { r = ra_merge_fn(src, src_len, fn_name, name_len, aux, aux_len, out, out_cap) }
+    if move_kind == RA_KIND_EXTRACT { r = ra_extract_module(src, src_len, aux, aux_len, out, out_cap) }
+    if r < 0i64 { return r }
+    if ra_check_balanced(out, r as u64) != 1u8 { return RA_E_UNBALANCED }
+    return r
+}

@@ -175,3 +175,25 @@ fn tcom_merkle_verify(addr32: u64, idx: u32, steps: u32, proof: u64, root: u64) 
     let meta : u64 = merkle_pack_verify_meta(32u32, idx, steps)
     return merkle_verify_proof(addr32, meta, proof, root)
 }
+
+/* ===== harmony item 19: THE FEDERATED RECEIVE (zero-trust admission of a peer's theorem) ========
+ * A peer ships (serialized goal, serialized proof) -- the item-5 injective encoding, the wire
+ * format the Commons already addresses by.  tcom_receive deserializes BOTH into the LOCAL arena
+ * (fresh nodes; fail-closed on any malformation) and runs the LOCAL kernel's full admission gate
+ * (tcom_admit_goal -> tc_check): the peer's claim is RE-PROVEN here, never trusted.  The goal's
+ * address is re-derived from the locally-rebuilt term, and the round-trip law (serialize o
+ * deserialize = id, KAT 1346) makes it byte-identical to the address the peer published -- so
+ * federated citation, Merkle membership (item 12), and local admission all agree on ONE name.
+ * A well-formed stream carrying FALSE mathematics is refused by the kernel (TCOM_E_UNPROVEN);
+ * a malformed stream is refused by the deserializer (TCOM_E_NULL).  Nothing is trusted. */
+extern @abi(c-msvc-x64) fn tc_deserialize(bytes: *u8, len: u64) -> u32 from "typecheck.iii"
+
+fn tcom_receive(goal_bytes: u64, goal_len: u64, proof_bytes: u64, proof_len: u64) -> i32 @export {
+    if goal_bytes == 0u64 { return TCOM_E_NULL }
+    if proof_bytes == 0u64 { return TCOM_E_NULL }
+    let g : u32 = tc_deserialize(goal_bytes as *u8, goal_len)
+    if g == 0u32 { return TCOM_E_NULL }
+    let p : u32 = tc_deserialize(proof_bytes as *u8, proof_len)
+    if p == 0u32 { return TCOM_E_NULL }
+    return tcom_admit_goal(p, g)
+}

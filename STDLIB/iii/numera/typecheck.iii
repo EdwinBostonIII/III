@@ -2190,6 +2190,68 @@ fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 @export {
     return TC_SER_POS
 }
 
+/* ===== harmony item 19: TC TERM DESERIALIZER (the wire-side inverse of tc_serialize) ============
+ * Parses the self-delimiting injective pre-order encoding back into the LOCAL arena -- fresh nodes
+ * only, so a received stream can never alias or reference pre-existing local terms.  Total and
+ * FAIL-CLOSED: an unknown tag, a truncated stream, a bad present-marker, arena overflow, or
+ * TRAILING GARBAGE all yield TC_ERR(0) -- a malformed wire payload can never half-build a term.
+ * Round-trip law (KAT 1346): tc_serialize(tc_deserialize(b)) == b for every well-formed b, so the
+ * goal ADDRESS a federated peer computed is exactly the address the local Commons re-derives.
+ * Like tc_serialize: a SIBLING of the kernel, OUTSIDE the sealed span (never called by
+ * check/conv/to_ccl) -- the trusted base is unmoved. */
+var TC_DS_PTR : u64 = 0u64
+var TC_DS_POS : u64 = 0u64
+var TC_DS_LEN : u64 = 0u64
+var TC_DS_ERR : u8  = 0u8
+fn tc_ds_byte() -> u8 {
+    if TC_DS_POS >= TC_DS_LEN { TC_DS_ERR = 1u8 ; return 0u8 }
+    let p : *u8 = TC_DS_PTR as *u8
+    let b : u8 = p[TC_DS_POS]
+    TC_DS_POS = TC_DS_POS + 1u64
+    return b
+}
+fn tc_ds_u32() -> u32 {
+    let b0 : u32 = tc_ds_byte() as u32
+    let b1 : u32 = tc_ds_byte() as u32
+    let b2 : u32 = tc_ds_byte() as u32
+    let b3 : u32 = tc_ds_byte() as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+fn tc_ds_walk() -> u32 {
+    if TC_DS_ERR == 1u8 { return 0u32 }
+    let m : u8 = tc_ds_byte()
+    if m == 0u8 { return 0u32 }                            /* null child */
+    if m != 1u8 { TC_DS_ERR = 1u8 ; return 0u32 }
+    let tag : u8 = tc_ds_byte()
+    if tag == 0u8 { TC_DS_ERR = 1u8 ; return 0u32 }
+    if tag > TC_BVMULOVF { TC_DS_ERR = 1u8 ; return 0u32 } /* unknown tag: fail closed */
+    if tag == TC_VAR   { let v0 : u32 = tc_ds_u32() ; return tc_mk(tag, v0, 0u32) }
+    if tag == TC_SORT  { let v1 : u32 = tc_ds_u32() ; return tc_mk(tag, v1, 0u32) }
+    if tag == TC_REACH { let v2 : u32 = tc_ds_u32() ; return tc_mk(tag, v2, 0u32) }
+    if tag == TC_LEK   { let a0 : u32 = tc_ds_u32() ; let b0 : u32 = tc_ds_u32() ; return tc_mk(tag, a0, b0) }
+    if tag == TC_BVLIT { let a1 : u32 = tc_ds_u32() ; let b1 : u32 = tc_ds_u32() ; return tc_mk(tag, a1, b1) }
+    let ca : u32 = tc_ds_walk()
+    let cb : u32 = tc_ds_walk()
+    let cc : u32 = tc_ds_walk()
+    let cd : u32 = tc_ds_walk()
+    if TC_DS_ERR == 1u8 { return 0u32 }
+    let n : u32 = tc_mk4(tag, ca, cb, cc, cd)
+    if n == 0u32 { TC_DS_ERR = 1u8 }
+    return n
+}
+fn tc_deserialize(bytes: *u8, len: u64) -> u32 @export {
+    if (bytes as u64) == 0u64 { return TC_ERR }
+    TC_DS_PTR = bytes as u64
+    TC_DS_POS = 0u64
+    TC_DS_LEN = len
+    TC_DS_ERR = 0u8
+    let t : u32 = tc_ds_walk()
+    if TC_DS_ERR == 1u8 { return TC_ERR }
+    if t == 0u32 { return TC_ERR }                         /* a top-level null is no term */
+    if TC_DS_POS != TC_DS_LEN { return TC_ERR }            /* trailing garbage refused */
+    return t
+}
+
 /* the CCL oracle agrees with NbE on (x,y). */
 /* the SINGULAR conversion verdict (the directed CCL oracle): 1 = convertible,
  * 0 = not.  Formerly `ccl_agrees`, a CCL-vs-NbE differential -- but NbE is

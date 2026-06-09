@@ -413,6 +413,7 @@ MODULES=(
     "omnia/ripple"
     "numera/bitops"
     "aether/inet"
+    "aether/inet6"
     "verba/semver"
     "omnia/proof_ripple"
     "verba/glob"

@@ -1,0 +1,93 @@
+/* 1332_inet6.iii -- aether::inet6 IPv6 parsing + RFC 5952 canonical formatting (closes inet.iii's IPv6 deferral).
+ * Drives inet6_parse + inet6_format: 99 = the parser accepts the RFC 4291 textual forms and the formatter emits
+ * the RFC 5952 canonical text. Each positive case parses a textual address into 16 bytes and re-formats it,
+ * asserting the canonical output byte-exact (so canonicalization is exercised: leading zeros stripped, uppercase
+ * lowercased, the longest >=2 zero-run compressed to '::', an embedded IPv4 tail rendered in hex). Negatives
+ * (prove-the-negative) assert malformed inputs are rejected. */
+module corpus_1332
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn inet6_parse(src: *u8, src_len: u64, out16: u64) -> i32 from "inet6.iii"
+extern @abi(c-msvc-x64) fn inet6_format(builder_id: u64, in16: u64) -> i32 from "inet6.iii"
+
+var ADDR : [u8; 16]
+
+/* positive: each input string with its canonical (RFC 5952) expected output */
+var S_DC   : [u8; 2]  = [0x3Au8, 0x3Au8]                                                                          /* ::            */
+var S_LB   : [u8; 3]  = [0x3Au8, 0x3Au8, 0x31u8]                                                                  /* ::1           */
+var S_DB   : [u8; 11] = [0x32u8,0x30u8,0x30u8,0x31u8,0x3Au8,0x64u8,0x62u8,0x38u8,0x3Au8,0x3Au8,0x31u8]            /* 2001:db8::1   */
+var S_FE   : [u8; 7]  = [0x66u8,0x65u8,0x38u8,0x30u8,0x3Au8,0x3Au8,0x31u8]                                        /* fe80::1       */
+var S_FULL : [u8; 15] = [0x31u8,0x3Au8,0x32u8,0x3Au8,0x33u8,0x3Au8,0x34u8,0x3Au8,0x35u8,0x3Au8,0x36u8,0x3Au8,0x37u8,0x3Au8,0x38u8] /* 1:2:3:4:5:6:7:8 */
+var S_TR   : [u8; 3]  = [0x31u8,0x3Au8,0x3Au8]                                                                    /* 1::          */
+var S_LZ   : [u8; 39] = [0x32u8,0x30u8,0x30u8,0x31u8,0x3Au8,0x30u8,0x64u8,0x62u8,0x38u8,0x3Au8,0x30u8,0x30u8,0x30u8,0x30u8,0x3Au8,0x30u8,0x30u8,0x30u8,0x30u8,0x3Au8,0x30u8,0x30u8,0x30u8,0x30u8,0x3Au8,0x30u8,0x30u8,0x30u8,0x30u8,0x3Au8,0x30u8,0x30u8,0x30u8,0x30u8,0x3Au8,0x30u8,0x30u8,0x30u8,0x31u8] /* 2001:0db8:0000:...:0001 */
+var S_UC   : [u8; 7]  = [0x46u8,0x45u8,0x38u8,0x30u8,0x3Au8,0x3Au8,0x31u8]                                        /* FE80::1       */
+var S_V4   : [u8; 16] = [0x3Au8,0x3Au8,0x66u8,0x66u8,0x66u8,0x66u8,0x3Au8,0x31u8,0x39u8,0x32u8,0x2Eu8,0x30u8,0x2Eu8,0x32u8,0x2Eu8,0x31u8] /* ::ffff:192.0.2.1 */
+var E_V4   : [u8; 15] = [0x3Au8,0x3Au8,0x66u8,0x66u8,0x66u8,0x66u8,0x3Au8,0x63u8,0x30u8,0x30u8,0x30u8,0x3Au8,0x32u8,0x30u8,0x31u8] /* ::ffff:c000:201 */
+
+/* negatives */
+var N_TRIP : [u8; 3]  = [0x3Au8,0x3Au8,0x3Au8]                                                                    /* :::          */
+var N_TWO  : [u8; 7]  = [0x31u8,0x3Au8,0x3Au8,0x32u8,0x3Au8,0x3Au8,0x33u8]                                        /* 1::2::3      */
+var N_HEX  : [u8; 4]  = [0x67u8,0x68u8,0x69u8,0x6Au8]                                                             /* ghij         */
+var N_MANY : [u8; 17] = [0x31u8,0x3Au8,0x32u8,0x3Au8,0x33u8,0x3Au8,0x34u8,0x3Au8,0x35u8,0x3Au8,0x36u8,0x3Au8,0x37u8,0x3Au8,0x38u8,0x3Au8,0x39u8] /* 1:2:3:4:5:6:7:8:9 */
+var N_5HEX : [u8; 7]  = [0x31u8,0x32u8,0x33u8,0x34u8,0x35u8,0x3Au8,0x3Au8]                                        /* 12345::      */
+var N_V4O  : [u8; 7]  = [0x31u8,0x2Eu8,0x32u8,0x2Eu8,0x33u8,0x2Eu8,0x34u8]                                        /* 1.2.3.4      */
+var N_LEAD : [u8; 2]  = [0x3Au8,0x31u8]                                                                           /* :1           */
+var N_TRAIL: [u8; 2]  = [0x31u8,0x3Au8]                                                                           /* 1:           */
+
+/* parse `in_str` then re-format; 1 iff the canonical output equals `exp_str`. */
+fn rt(a: u64, in_str: u64, in_len: u64, exp_str: u64, exp_len: u64) -> u8 {
+    if inet6_parse(in_str as *u8, in_len, &ADDR as u64) != 0i32 { return 0u8 }
+    let b : u64 = builder_new(a, 64u64)
+    if inet6_format(b, &ADDR as u64) != 0i32 { return 0u8 }
+    if builder_len(b) != exp_len { return 0u8 }
+    let bp : *u8 = builder_seal(b) as *u8
+    let ep : *u8 = exp_str as *u8
+    let mut i : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while i < exp_len {
+        if bp[i] != ep[i] { ok = 0u8 }
+        i = i + 1u64
+    }
+    builder_drop(b)
+    return ok
+}
+
+/* 1 iff `in_str` is correctly REJECTED by the parser. */
+fn bad(in_str: u64, in_len: u64) -> u8 {
+    if inet6_parse(in_str as *u8, in_len, &ADDR as u64) == 0i32 { return 0u8 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* canonical fixed points (input already canonical) */
+    if rt(a, &S_DC as u64,   2u64,  &S_DC as u64,   2u64)  != 1u8 { return 1u64 }
+    if rt(a, &S_LB as u64,   3u64,  &S_LB as u64,   3u64)  != 1u8 { return 2u64 }
+    if rt(a, &S_DB as u64,   11u64, &S_DB as u64,   11u64) != 1u8 { return 3u64 }
+    if rt(a, &S_FE as u64,   7u64,  &S_FE as u64,   7u64)  != 1u8 { return 4u64 }
+    if rt(a, &S_FULL as u64, 15u64, &S_FULL as u64, 15u64) != 1u8 { return 5u64 }
+    if rt(a, &S_TR as u64,   3u64,  &S_TR as u64,   3u64)  != 1u8 { return 6u64 }
+    /* canonicalization: leading zeros stripped + zero-run compressed -> "2001:db8::1" */
+    if rt(a, &S_LZ as u64,   39u64, &S_DB as u64,   11u64) != 1u8 { return 7u64 }
+    /* uppercase lowercased -> "fe80::1" */
+    if rt(a, &S_UC as u64,   7u64,  &S_FE as u64,   7u64)  != 1u8 { return 8u64 }
+    /* embedded IPv4 -> hex canonical "::ffff:c000:201" */
+    if rt(a, &S_V4 as u64,   16u64, &E_V4 as u64,   15u64) != 1u8 { return 9u64 }
+    /* negatives */
+    if bad(&S_DC as u64,    0u64)  != 1u8 { return 10u64 }   /* empty */
+    if bad(&N_TRIP as u64,  3u64)  != 1u8 { return 11u64 }   /* :::      */
+    if bad(&N_TWO as u64,   7u64)  != 1u8 { return 12u64 }   /* 1::2::3  */
+    if bad(&N_HEX as u64,   4u64)  != 1u8 { return 13u64 }   /* ghij     */
+    if bad(&N_MANY as u64,  17u64) != 1u8 { return 14u64 }   /* too many */
+    if bad(&N_5HEX as u64,  7u64)  != 1u8 { return 15u64 }   /* 5-digit hextet */
+    if bad(&N_V4O as u64,   7u64)  != 1u8 { return 16u64 }   /* pure v4  */
+    if bad(&N_LEAD as u64,  2u64)  != 1u8 { return 17u64 }   /* :1       */
+    if bad(&N_TRAIL as u64, 2u64)  != 1u8 { return 18u64 }   /* 1:       */
+    arena_drop(a)
+    return 99u64
+}

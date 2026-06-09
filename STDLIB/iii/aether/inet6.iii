@@ -1,0 +1,260 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\inet6.iii
+ *
+ * III STDLIB - aether::inet6 -- IPv6 address parsing and canonical formatting.
+ *
+ * The companion to aether::inet (IPv4), closing its documented deferral
+ * ("IPv6 lives in a separate module due to complexity").  NIH: composes
+ * only aether::inet (the IPv4 parser, reused for an embedded dotted-quad
+ * tail) and builder::builder_push_byte.
+ *
+ * A 128-bit address is carried as 16 network-order (big-endian) bytes in a
+ * caller-provided buffer.
+ *
+ *   inet6_parse(src:*u8, src_len:u64, out16:u64) -> i32
+ *      Parse an RFC 4291 textual address into the 16-byte buffer at out16.
+ *      Handles 8 colon-separated hextets, a single '::' zero-run, and an
+ *      embedded IPv4 tail (e.g. "::ffff:192.0.2.1").  Returns INET6_OK (0)
+ *      on success or INET6_E_PARSE (-1) on a malformed address (out16 is
+ *      left zeroed on failure).  inet6_last_error(): 0 ok, 1 fail.
+ *   inet6_format(builder_id:u64, in16:u64) -> i32
+ *      Emit the RFC 5952 canonical text: lowercase, no leading zeros in a
+ *      hextet, the LONGEST run of >=2 zero hextets compressed to '::' (the
+ *      first such run on a tie), no '::' for a single zero hextet.
+ *   inet6_last_error() -> u32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module aether_inet6
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn inet_parse_ipv4(src: *u8, src_len: u64) -> u32 from "inet.iii"
+extern @abi(c-msvc-x64) fn inet_last_error() -> u32 from "inet.iii"
+
+const INET6_OK      : i32 = 0i32
+const INET6_E_PARSE : i32 = -1i32
+const INET6_E_BUILD : i32 = -2i32
+
+var INET6_LAST_ERROR : u32 = 0u32
+var INET6_OFF        : u64 = 0u64        /* parse cursor, updated by inet6_parse_hex16 */
+var INET6_TMP        : [u8; 16]          /* scratch address bytes (module-global: indexed by a runtime var) */
+
+fn inet6_last_error() -> u32 @export { return INET6_LAST_ERROR }
+
+/* Parse one hextet (1-4 hex digits) at `start`; returns its value (0..0xFFFF) or 0x10000 on error,
+ * and sets INET6_OFF to the position just past the hextet. */
+fn inet6_parse_hex16(p: *u8, p_len: u64, start: u64) -> u32 {
+    INET6_OFF = start
+    let mut value : u32 = 0u32
+    let mut digits : u32 = 0u32
+    let mut i : u64 = start
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= p_len { going = 0u8 }
+        if going == 1u8 {
+            let c : u32 = p[i] as u32
+            let mut hv : u32 = 16u32
+            if c >= 48u32 { if c <= 57u32  { hv = c - 48u32 } }            /* 0-9 */
+            if c >= 97u32 { if c <= 102u32 { hv = c - 97u32 + 10u32 } }    /* a-f */
+            if c >= 65u32 { if c <= 70u32  { hv = c - 65u32 + 10u32 } }    /* A-F */
+            if hv == 16u32 { going = 0u8 }
+            if going == 1u8 {
+                value = (value << 4u32) | hv
+                digits = digits + 1u32
+                i = i + 1u64
+                if digits > 4u32 { return 0x10000u32 }
+            }
+        }
+    }
+    if digits == 0u32 { return 0x10000u32 }
+    INET6_OFF = i
+    return value
+}
+
+/* 1 iff a '.' occurs before the next ':' or end-of-string from `start` (an embedded IPv4 hextet). */
+fn inet6_has_dot(p: *u8, p_len: u64, start: u64) -> u8 {
+    let mut i : u64 = start
+    let mut found : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= p_len { going = 0u8 }
+        if going == 1u8 {
+            let c : u8 = p[i]
+            if c == 58u8 { going = 0u8 }              /* ':' -> hextet ends, no dot */
+            if going == 1u8 {
+                if c == 46u8 { found = 1u8  going = 0u8 }   /* '.' -> embedded IPv4 */
+                if going == 1u8 { i = i + 1u64 }
+            }
+        }
+    }
+    return found
+}
+
+fn inet6_copy_out(out16: u64) -> i32 {
+    let dp : *u8 = out16 as *u8
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        dp[i] = INET6_TMP[i]
+        i = i + 1u64
+    }
+    return INET6_OK
+}
+
+fn inet6_parse(src: *u8, src_len: u64, out16: u64) -> i32 @export {
+    INET6_LAST_ERROR = 1u32
+    let mut z : u64 = 0u64
+    while z < 16u64 { INET6_TMP[z] = 0u8  z = z + 1u64 }
+    if src_len == 0u64 { return INET6_E_PARSE }
+    let mut i : u64 = 0u64
+    let mut outp : u32 = 0u32             /* byte position in INET6_TMP (0..16) */
+    let mut gap : i32 = 0i32 - 1i32       /* byte position of the '::' zero-run, -1 = none */
+
+    /* leading ':' must be part of a leading '::' */
+    if src[0u64] == 58u8 {
+        if src_len < 2u64 { return INET6_E_PARSE }
+        if src[1u64] != 58u8 { return INET6_E_PARSE }
+        gap = 0i32
+        i = 2u64
+    }
+
+    let mut going : u8 = 1u8
+    if i >= src_len { going = 0u8 }       /* "::" alone -> all zeros */
+    while going == 1u8 {
+        if inet6_has_dot(src, src_len, i) == 1u8 {
+            /* embedded IPv4 tail: parse [i .. src_len] as dotted-quad (reuse aether::inet) */
+            let subp : *u8 = ((src as u64) + i) as *u8
+            let v4 : u32 = inet_parse_ipv4(subp, src_len - i)
+            if inet_last_error() != 0u32 { return INET6_E_PARSE }
+            if (outp + 4u32) > 16u32 { return INET6_E_PARSE }
+            INET6_TMP[outp as u64]            = ((v4 >> 24u32) & 0xFFu32) as u8
+            INET6_TMP[(outp + 1u32) as u64]  = ((v4 >> 16u32) & 0xFFu32) as u8
+            INET6_TMP[(outp + 2u32) as u64]  = ((v4 >>  8u32) & 0xFFu32) as u8
+            INET6_TMP[(outp + 3u32) as u64]  = (v4 & 0xFFu32) as u8
+            outp = outp + 4u32
+            going = 0u8                       /* the IPv4 tail is final */
+        } else {
+            let g : u32 = inet6_parse_hex16(src, src_len, i)
+            if g > 0xFFFFu32 { return INET6_E_PARSE }
+            if (outp + 2u32) > 16u32 { return INET6_E_PARSE }
+            INET6_TMP[outp as u64]           = ((g >> 8u32) & 0xFFu32) as u8
+            INET6_TMP[(outp + 1u32) as u64]  = (g & 0xFFu32) as u8
+            outp = outp + 2u32
+            i = INET6_OFF
+            if i >= src_len { going = 0u8 }
+            if going == 1u8 {
+                if src[i] != 58u8 { return INET6_E_PARSE }   /* hextets must be ':'-separated */
+                i = i + 1u64
+                if i >= src_len { return INET6_E_PARSE }      /* a single trailing ':' is malformed */
+                if src[i] == 58u8 {                            /* a second ':' -> the zero-run */
+                    if gap != (0i32 - 1i32) { return INET6_E_PARSE }   /* only one '::' permitted */
+                    gap = outp as i32
+                    i = i + 1u64
+                    if i >= src_len { going = 0u8 }            /* trailing '::' */
+                }
+            }
+        }
+    }
+
+    if gap == (0i32 - 1i32) {
+        if outp != 16u32 { return INET6_E_PARSE }             /* exactly 8 hextets when uncompressed */
+    } else {
+        if outp >= 16u32 { return INET6_E_PARSE }             /* '::' must compress >= 1 zero hextet */
+        let gp     : u32 = gap as u32
+        let nafter : u32 = outp - gp
+        /* slide the bytes after the gap to the buffer's tail (back-to-front; ranges may overlap) */
+        let mut k : u32 = 0u32
+        while k < nafter {
+            let s : u32 = outp - 1u32 - k
+            let d : u32 = 15u32 - k
+            INET6_TMP[d as u64] = INET6_TMP[s as u64]
+            k = k + 1u32
+        }
+        let zend : u32 = 16u32 - nafter
+        let mut m : u32 = gp
+        while m < zend {
+            INET6_TMP[m as u64] = 0u8
+            m = m + 1u32
+        }
+    }
+
+    inet6_copy_out(out16)
+    INET6_LAST_ERROR = 0u32
+    return INET6_OK
+}
+
+/* Emit one hextet in lowercase hex with no leading zeros (a zero hextet emits "0"). */
+fn inet6_emit_group(builder_id: u64, g: u32) -> i32 {
+    if g == 0u32 {
+        if builder_push_byte(builder_id, 48u32) != 0i32 { return INET6_E_BUILD }
+        return INET6_OK
+    }
+    let mut started : u8 = 0u8
+    let mut shift : u32 = 12u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let nib : u32 = (g >> shift) & 0xFu32
+        if nib != 0u32 { started = 1u8 }
+        if started == 1u8 {
+            let mut ch : u32 = 48u32 + nib
+            if nib >= 10u32 { ch = 97u32 + nib - 10u32 }
+            if builder_push_byte(builder_id, ch) != 0i32 { return INET6_E_BUILD }
+        }
+        if shift == 0u32 { going = 0u8 }
+        if going == 1u8 { shift = shift - 4u32 }
+    }
+    return INET6_OK
+}
+
+fn inet6_format(builder_id: u64, in16: u64) -> i32 @export {
+    let p : *u8 = in16 as *u8
+    /* longest run of consecutive zero hextets (first run wins a tie) */
+    let mut best_start : i32 = 0i32 - 1i32
+    let mut best_len   : u32 = 0u32
+    let mut cur_start  : i32 = 0i32 - 1i32
+    let mut cur_len    : u32 = 0u32
+    let mut gi : u32 = 0u32
+    while gi < 8u32 {
+        let hi : u32 = p[(gi * 2u32) as u64] as u32
+        let lo : u32 = p[(gi * 2u32 + 1u32) as u64] as u32
+        let g  : u32 = (hi << 8u32) | lo
+        if g == 0u32 {
+            if cur_start == (0i32 - 1i32) { cur_start = gi as i32  cur_len = 0u32 }
+            cur_len = cur_len + 1u32
+            if cur_len > best_len { best_len = cur_len  best_start = cur_start }
+        } else {
+            cur_start = 0i32 - 1i32
+            cur_len = 0u32
+        }
+        gi = gi + 1u32
+    }
+    if best_len < 2u32 { best_start = 0i32 - 1i32 }   /* RFC 5952: never compress a single zero hextet */
+
+    let mut j : u32 = 0u32
+    let mut need_colon : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= 8u32 { going = 0u8 }
+        if going == 1u8 {
+            let mut is_gap : u8 = 0u8
+            if best_start != (0i32 - 1i32) { if j == (best_start as u32) { is_gap = 1u8 } }
+            if is_gap == 1u8 {
+                /* the "::" supplies the colon on both sides of the compressed run */
+                if builder_push_byte(builder_id, 58u32) != 0i32 { return INET6_E_BUILD }
+                if builder_push_byte(builder_id, 58u32) != 0i32 { return INET6_E_BUILD }
+                j = j + best_len
+                need_colon = 0u8
+            } else {
+                if need_colon == 1u8 {
+                    if builder_push_byte(builder_id, 58u32) != 0i32 { return INET6_E_BUILD }
+                }
+                let hi : u32 = p[(j * 2u32) as u64] as u32
+                let lo : u32 = p[(j * 2u32 + 1u32) as u64] as u32
+                let g  : u32 = (hi << 8u32) | lo
+                if inet6_emit_group(builder_id, g) != 0i32 { return INET6_E_BUILD }
+                need_colon = 1u8
+                j = j + 1u32
+            }
+        }
+    }
+    return INET6_OK
+}

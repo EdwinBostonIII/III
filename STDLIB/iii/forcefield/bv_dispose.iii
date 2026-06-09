@@ -171,3 +171,28 @@ fn bvd_selftest() -> u64 @export {
     if bvd_admit(t_p2, t_p4, b_p2, b_p4) != 0u8 { return 11u64 }
     return 99u64
 }
+
+/* ===== harmony item 8: WIDTH-FAITHFUL PROOF-CARRYING E-GRAPH RULES =============================
+ * eg_register_rule admits any STRUCTURALLY well-formed rewrite rule -- the saturation engine then
+ * applies it to every matching class, so ONE meaning-changing rule poisons every class it touches.
+ * For MACHINE-ARITHMETIC rules (the strength-reduction / semiring family -- exactly the rules the
+ * autonomous optimizer wants to feed the e-graph), III already owns the gate that decides width-
+ * faithful equality: THIS disposer.  bvd_register_rule is the proof-carrying registration: the
+ * rule's two sides, denoted as bv_ring polynomials AND kernel BV terms with the rule's pattern
+ * variables ?k as bv_var(k)/tc_var(k) -- the denotations are SCHEMATIC, so one certificate covers
+ * EVERY instantiation the saturator will ever produce -- must pass the two-tier gate (Tier-1
+ * bv_ring refutation, Tier-2 kernel conversion, the kernel sovereign) BEFORE the rule enters the
+ * table.  A refused rule consumes NOTHING (no rule slot, no rule-buffer bytes).
+ *
+ * HONEST-SCOPE CALLER OBLIGATION (the standing convention: ru_certify_unify_kernel, eg_union_kernel,
+ * tcom_admit): the skeleton<->denotation binding is the caller's charge -- this gate certifies the
+ * EQUALITY of the supplied denotations; it cannot, in scope, parse the skeleton's symbols back into
+ * arithmetic.  The structural validation of the skeleton itself remains eg_register_rule's. */
+extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+
+const BVD_RULE_REFUSED : u32 = 0xFFFFFFFFu32   /* == EGRAPH_SENT: one sentinel for gate-veto and table-full */
+
+fn bvd_register_rule(rule: *u32, lhs_bv: u32, rhs_bv: u32, lhs_tc: u32, rhs_tc: u32) -> u32 @export {
+    if bvd_admit(lhs_tc, rhs_tc, lhs_bv, rhs_bv) != 1u8 { return BVD_RULE_REFUSED }
+    return eg_register_rule(rule)
+}

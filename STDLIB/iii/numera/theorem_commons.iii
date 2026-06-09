@@ -123,3 +123,55 @@ fn tcom_root(out: u64) -> i32 @export {
     if out == 0u64 { return TCOM_E_NULL }
     return cad_oneshot(TCOM_SUITE, (&TCOM_HASH as u64) as *u8, (TCOM_COUNT as u64) * 32u64, out as *u8)
 }
+
+/* ===== harmony item 12: MERKLE ATTESTATION + SUCCINCT MEMBERSHIP PROOFS ==========================
+ * tcom_root is a FLAT hash: proving one theorem's membership requires shipping the whole registry.
+ * These wrappers give the Commons a true authenticated structure by COMPOSING the existing numera
+ * merkle organ (whose 1024-leaf capacity equals TCOM_MAX exactly): the registry's 32-byte theorem
+ * addresses are the leaves; a peer holding only (goal term, slot, log2(n)*33-byte path, 32-byte
+ * root) verifies "this goal was kernel-certified by the attesting node" STATELESSLY -- recompute
+ * the address from the goal (tc_serialize + cad), then walk the path.  This is the federation
+ * primitive: roots are published, membership travels in O(log n), nothing is trusted (the receiving
+ * peer can still demand the proof term and re-check -- the Commons admission gate is unchanged).
+ * The membership tree uses the merkle organ's proof-complete default suite (SHA-256, domain-
+ * separated leaf/node); the flat keccak tcom_root remains byte-identical for existing consumers. */
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_proof_len_for(leaf_count: u32, leaf_index: u32) -> u32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+
+/* The Merkle attestation root over the admitted-theorem addresses (admission order). */
+fn tcom_merkle_root(out: u64) -> i32 @export {
+    if out == 0u64 { return TCOM_E_NULL }
+    if TCOM_COUNT == 0u32 { return TCOM_E_ABSENT }     /* an empty registry attests nothing */
+    return merkle_compute_root((&TCOM_HASH as u64), TCOM_COUNT, 32u64, out)
+}
+
+/* Registry slot of a goal term (address-derived), or -1 if never admitted. */
+fn tcom_goal_slot(goal: u32) -> i32 @export {
+    let len : u64 = tc_serialize(goal, (&TCOM_GBUF as u64) as *u8, 4096u64)
+    if len == 0xFFFFFFFFFFFFFFFFu64 { return -1i32 }
+    cad_oneshot(TCOM_SUITE, (&TCOM_GBUF as u64) as *u8, len, (&TCOM_SCR as u64) as *u8)
+    return tcom_find()
+}
+
+/* Inclusion proof for registry slot idx -> proof_out (steps * 33 bytes: direction byte + sibling
+ * hash per level).  Returns the step count (>= 1), or a negative TCOM_E_* refusal. */
+fn tcom_merkle_prove(idx: u32, proof_out: u64) -> i32 @export {
+    if proof_out == 0u64 { return TCOM_E_NULL }
+    if idx >= TCOM_COUNT { return TCOM_E_ABSENT }
+    let packed : u64 = merkle_pack_count_index(TCOM_COUNT, idx)
+    let rc : i32 = merkle_compute_proof((&TCOM_HASH as u64), 32u64, packed, proof_out)
+    if rc != 0i32 { return rc }
+    return merkle_proof_len_for(TCOM_COUNT, idx) as i32
+}
+
+/* STATELESS membership verification: 1 iff the 32-byte theorem address at addr32 sits at slot idx
+ * under `root` via the steps*33-byte path.  Needs NO registry -- the federation receive side. */
+fn tcom_merkle_verify(addr32: u64, idx: u32, steps: u32, proof: u64, root: u64) -> u8 @export {
+    if addr32 == 0u64 { return 0u8 }
+    let meta : u64 = merkle_pack_verify_meta(32u32, idx, steps)
+    return merkle_verify_proof(addr32, meta, proof, root)
+}

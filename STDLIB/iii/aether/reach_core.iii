@@ -135,3 +135,80 @@ fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) ->
     _reach_put_u32le(gid, og)
     return REACH_GAP
 }
+
+/* ===== harmony item 6: WITNESS THE REACH (the unbuilt Phase-2 of III-THE-REACH-ARCHITECTURE) ==========
+ * reach_core and the provenance spine (witness_hook) were disconnected: every reach/emit was supposed to
+ * leave a replayable, auditable fragment, but never did.  These wrappers wrap the existing plain ops and,
+ * AFTER the cap-gate AND AFTER the result is known, publish a DETERMINISTIC witness fragment binding ONLY
+ * reproducible facts -- op_id = cad(op name), in_commit / out_commit = content addresses.  A DENIED op
+ * records NOTHING (the cap-gate precedes witnessing: an unauthorized caller must not be able to append to
+ * -- or exhaust -- the provenance spine), and a GAP records a PROOF-OF-ABSENCE (out_commit = a fixed MISS
+ * sentinel that no cad output can equal).  Deterministic: identical sequences from an initialized spine
+ * publish identical fragments (the at-clock is a logical, deterministic counter).
+ *
+ * THE PROOF-CARRYING CONTRACT IS HONEST: wh_publish CAN fail (spine uninitialized, fragment table full,
+ * payload area exhausted).  A witnessed op whose fragment could NOT be published returns REACH_UNWITNESSED
+ * instead of its plain result -- the operation's effects STAND (emit is idempotent; reach's out/out_len/
+ * out_gid are already filled, so OK vs GAP remains recoverable from *out_gid), but the caller KNOWS the
+ * provenance claim failed and can wh_init / fail-stop.  Silently returning OK with no fragment would be
+ * exactly the half-built gate this increment exists to close.
+ * Composes only the already-exported reach + cad + witness_hook organs. */
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+
+const REACH_UNWITNESSED : i32 = 3i32                       /* op succeeded; provenance could NOT be recorded */
+const REACH_WH_FAIL     : u64 = 0xFFFFFFFFFFFFFFFFu64      /* wh_publish's refusal sentinel */
+
+var REACH_W_PROD : [u8; 32]    /* producer id  = cad("reach_core") */
+var REACH_W_OPID : [u8; 32]    /* operation id = cad(op name) */
+var REACH_W_MISS : [u8; 32]    /* proof-of-absence sentinel (out_commit for a GAP) */
+var REACH_W_FID  : [u8; 32]    /* scratch: the published fragment id */
+var REACH_W_PRODNAME : [u8; 10] = [114u8,101u8,97u8,99u8,104u8,95u8,99u8,111u8,114u8,101u8]   /* "reach_core" */
+var REACH_W_OPEMIT   : [u8; 10] = [114u8,101u8,97u8,99u8,104u8,46u8,101u8,109u8,105u8,116u8]   /* "reach.emit" */
+var REACH_W_OPGET    : [u8;  9] = [114u8,101u8,97u8,99u8,104u8,46u8,103u8,101u8,116u8]          /* "reach.get"  */
+
+/* the MISS sentinel = 0x4D ('M') x 32 -- a fixed non-address: it is the cad of nothing, so a GAP's
+ * out_commit is unambiguously "absent" and can never collide with a real content address. */
+fn _reach_w_miss() -> u64 {
+    let p : *u8 = (&REACH_W_MISS as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = 0x4Du8 ; i = i + 1u64 }
+    return 0u64
+}
+
+/* emit, then (iff OK) witness: in_commit = out_commit = out_addr (= cad(value)).
+ * REACH_UNWITNESSED if the fragment could not be published (effects stand; provenance missing). */
+fn reach_emit_witnessed(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 @export {
+    let rc : i32 = reach_emit(buf, len, cap, out_addr)
+    if rc != REACH_OK { return rc }                                  /* DENIED/GAP -> no provenance */
+    cad_oneshot(REACH_SUITE, (&REACH_W_PRODNAME as u64) as *u8, 10u64, (&REACH_W_PROD as u64) as *u8)
+    cad_oneshot(REACH_SUITE, (&REACH_W_OPEMIT as u64) as *u8, 10u64, (&REACH_W_OPID as u64) as *u8)
+    let widx : u64 = wh_publish((&REACH_W_PROD as u64) as *u8, (&REACH_W_OPID as u64) as *u8,
+               out_addr as *u8, out_addr as *u8,
+               0u8, 0u8, 0u16,
+               (&REACH_W_PROD as u64) as *u8, 0u32,
+               0u64 as *u8, 0u32,
+               (&REACH_W_FID as u64) as *u8)
+    if widx == REACH_WH_FAIL { return REACH_UNWITNESSED }            /* the proof-carrying contract is honest */
+    return rc
+}
+
+/* reach, then (iff NOT DENIED) witness: out_commit = addr if FOUND, else the MISS sentinel (proof-of-absence).
+ * REACH_UNWITNESSED if the fragment could not be published (out/out_len/out_gid already filled, so the
+ * caller still has the answer; the provenance claim is honestly reported failed). */
+fn reach_witnessed(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 @export {
+    let rc : i32 = reach(addr, cap, out, max, out_len, out_gid)
+    if rc == REACH_DENIED { return rc }                              /* cap-gate precedes witnessing */
+    _reach_w_miss()
+    cad_oneshot(REACH_SUITE, (&REACH_W_PRODNAME as u64) as *u8, 10u64, (&REACH_W_PROD as u64) as *u8)
+    cad_oneshot(REACH_SUITE, (&REACH_W_OPGET as u64) as *u8, 9u64, (&REACH_W_OPID as u64) as *u8)
+    let mut oc : u64 = addr
+    if rc != REACH_OK { oc = (&REACH_W_MISS as u64) }
+    let widx : u64 = wh_publish((&REACH_W_PROD as u64) as *u8, (&REACH_W_OPID as u64) as *u8,
+               addr as *u8, oc as *u8,
+               0u8, 0u8, 0u16,
+               (&REACH_W_PROD as u64) as *u8, 0u32,
+               0u64 as *u8, 0u32,
+               (&REACH_W_FID as u64) as *u8)
+    if widx == REACH_WH_FAIL { return REACH_UNWITNESSED }            /* the proof-carrying contract is honest */
+    return rc
+}

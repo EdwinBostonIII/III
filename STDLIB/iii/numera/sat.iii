@@ -4,9 +4,19 @@
  *
  * Deterministic CDCL SAT solver. Conflict-driven, clause learning,
  * non-chronological backjumping, two-watched literals, 1UIP conflict
- * analysis. No restarts; no randomness; no clause deletion; no
- * learned-from-data heuristic. Decision rule is a FIXED static order
- * (smallest unassigned variable, positive phase) -- M2/M3/M4 compliant.
+ * analysis.  Harmony item 18 completed the classic CDCL triad, all of it
+ * EXACTLY deterministic (no randomness, no learned-from-data heuristic --
+ * every quantity is an integer on a formula-derived schedule, M2/M3/M4):
+ *   - DETERMINISTIC VSIDS decisions (fixed +32 bump on 1UIP-touched vars,
+ *     halving decay each 256 conflicts, max-activity pick, smallest-id
+ *     tie-break -- which reproduces the old fixed order until the first
+ *     conflict);
+ *   - GEOMETRIC RESTARTS (128, then *1.5 -- learned clauses persist);
+ *   - LEARNED-CLAUSE REDUCTION at restart boundaries under lit-arena
+ *     pressure (keep all originals + learned size<=8; in-place compaction;
+ *     watch rebuild; level-0 re-propagation).
+ * Without these, structured equivalence miters (bv_bits) enumerated input
+ * cubes exponentially and exhausted the learned-lit arena.
  *
  * Public API:
  *   sat_init(n_vars: u32) -> i32
@@ -82,6 +92,18 @@ var SAT_OUT_LEARN  : [u32; 65537]
 var SAT_OUT_LEN    : u32 = 0u32
 var SAT_OUT_BJ     : u32 = 0u32
 
+/* DETERMINISTIC VSIDS (harmony item 18 re-instatement of the removed activity heuristic, done
+ * soundly): integer activities, a FIXED bump (+32) for every variable the 1UIP analysis touches,
+ * a periodic halving decay every 256 conflicts, and a max-activity / smallest-id-tie-break pick.
+ * Every quantity is an integer updated on a deterministic schedule -- same formula, same run,
+ * byte-for-byte, on any machine.  Without this the fixed smallest-id order enumerates input
+ * cubes on structured equivalence miters (exponential conflicts -> the learned-lit arena, not
+ * the answer, is what runs out).  Geometric restarts (every 128 + 64*restarts conflicts) pair
+ * with it -- both classic CDCL, both exactly reproducible. */
+var SAT_ACT        : [u32; 65537]
+const SAT_ACT_BUMP   : u32 = 32u32
+const SAT_DECAY_MASK : u64 = 255u64      /* decay when (conflicts & mask) == 0 */
+
 /* Clause-canonicalisation scratch (hoisted from local var; non-reentrant). */
 var SAT_SCRATCH    : [u32; 65537]
 var SAT_PACKED     : [u32; 65537]
@@ -121,6 +143,7 @@ fn sat_init(n_vars: u32) -> i32 @export {
         SAT_VAR_LEVEL[i]  = 0u32
         SAT_VAR_REASON[i] = SAT_NULL_CL
         SAT_VAR_POS[i]    = 0u32
+        SAT_ACT[i]        = 0u32
         i = i + 1u32
     }
     let nlit : u32 = 2u32 * (n_vars + 1u32)
@@ -407,6 +430,7 @@ fn sat_analyze(conflict_cl: u32) -> i32 {
                 if SAT_SEEN[qv] == 0u8 {
                     if SAT_VAR_LEVEL[qv] > 0u32 {
                         SAT_SEEN[qv] = 1u8
+                        SAT_ACT[qv] = SAT_ACT[qv] + SAT_ACT_BUMP    /* deterministic VSIDS bump */
                         if SAT_VAR_LEVEL[qv] >= SAT_LEVEL {
                             counter = counter + 1u32
                         }
@@ -506,28 +530,131 @@ fn sat_record_learned() -> u32 {
     return cl
 }
 
-/* --- FIXED structural decision rule: smallest unassigned variable (#1) --- */
-fn sat_pick_branching_variable() -> u32 {
-    let mut i : u32 = 1u32
-    while i <= SAT_NVAR {
-        if SAT_VAR_VAL[i] == 0u8 { return i }
-        i = i + 1u32
+/* --- Learned-clause REDUCTION (deterministic; harmony item 18) -------------------------------
+ * Without deletion, a long UNSAT proof exhausts the learned-LIT arena (the 2M block), not the
+ * search: the solver then reports TOO_BIG on formulas it could finish.  sat_reduce_db, called
+ * ONLY at a restart boundary (trail at level 0), keeps every ORIGINAL clause plus every SHORT
+ * learned clause (size <= 8 -- the deterministic power proxy), compacts the literal arena in
+ * place (kept offsets only ever move down), rebuilds all watch lists from the compacted db, and
+ * re-propagates the persistent level-0 trail.  Soundness: learned clauses are implied, so
+ * deleting any subset never changes SAT/UNSAT; completeness: originals are all kept.  Level-0
+ * reasons are nulled (clause ids moved); they are never dereferenced -- conflict analysis walks
+ * only current-level pivots, and a level-0 conflict returns UNSAT before analysis. --- */
+const SAT_REDUCE_TRIGGER : u32 = 1572864u32   /* reduce when the lit arena passes 1.5M of 2M */
+const SAT_KEEP_LEN       : u32 = 8u32
+
+fn sat_rebuild_watches() -> i32 {
+    let nlit : u32 = 2u32 * (SAT_NVAR + 1u32)
+    let mut j : u32 = 0u32
+    while j < nlit {
+        SAT_WATCH_HEAD[j] = 0u32
+        SAT_WATCH_LEN[j]  = 0u32
+        SAT_WATCH_CAP[j]  = 0u32
+        j = j + 1u32
     }
-    return 0u32
+    SAT_WATCH_USED = 0u32
+    let mut cl : u32 = 0u32
+    while cl < SAT_CL_USED {
+        if SAT_CL_LIVE[cl] == 1u8 {
+            let off : u32 = SAT_CL_OFF[cl]
+            sat_watch_add(SAT_LIT_BUF[off + 0u32], cl)
+            if SAT_CL_SIZE[cl] >= 2u32 {
+                sat_watch_add(SAT_LIT_BUF[off + 1u32], cl)
+            }
+        }
+        cl = cl + 1u32
+    }
+    return SAT_OK
 }
 
-/* --- Top-level solve --- */
+fn sat_reduce_db() -> i32 {
+    let mut w_cl : u32 = 0u32
+    let mut w_lit : u32 = 0u32
+    let mut cl : u32 = 0u32
+    while cl < SAT_CL_USED {
+        let mut keep : u8 = 0u8
+        if SAT_CL_LIVE[cl] == 1u8 {
+            if SAT_CL_LEARNED[cl] == 0u8 { keep = 1u8 }
+            if SAT_CL_SIZE[cl] <= SAT_KEEP_LEN { keep = 1u8 }
+        }
+        if keep == 1u8 {
+            let off : u32 = SAT_CL_OFF[cl]
+            let sz : u32 = SAT_CL_SIZE[cl]
+            let mut t : u32 = 0u32
+            while t < sz {
+                SAT_LIT_BUF[w_lit + t] = SAT_LIT_BUF[off + t]
+                t = t + 1u32
+            }
+            SAT_CL_OFF[w_cl]     = w_lit
+            SAT_CL_SIZE[w_cl]    = sz
+            SAT_CL_LIVE[w_cl]    = 1u8
+            SAT_CL_LEARNED[w_cl] = SAT_CL_LEARNED[cl]
+            w_lit = w_lit + sz
+            w_cl = w_cl + 1u32
+        }
+        cl = cl + 1u32
+    }
+    SAT_CL_USED = w_cl
+    SAT_LIT_USED = w_lit
+    let mut v : u32 = 0u32
+    while v <= SAT_NVAR {
+        SAT_VAR_REASON[v] = SAT_NULL_CL
+        v = v + 1u32
+    }
+    sat_rebuild_watches()
+    SAT_QHEAD = 0u32          /* re-scan the persistent level-0 trail against the new watches */
+    return SAT_OK
+}
+
+/* --- Decision rule: DETERMINISTIC VSIDS -- the unassigned variable of MAXIMUM activity,
+ *     ties broken by smallest id (which also reproduces the old fixed rule exactly while all
+ *     activities are zero, i.e. before the first conflict). --- */
+fn sat_pick_branching_variable() -> u32 {
+    let mut best : u32 = 0u32
+    let mut best_act : u32 = 0u32
+    let mut i : u32 = 1u32
+    while i <= SAT_NVAR {
+        if SAT_VAR_VAL[i] == 0u8 {
+            if best == 0u32 {
+                best = i
+                best_act = SAT_ACT[i]
+            } else {
+                if SAT_ACT[i] > best_act {
+                    best = i
+                    best_act = SAT_ACT[i]
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+/* halve every activity (the deterministic decay step). */
+fn sat_decay_activities() -> i32 {
+    let mut i : u32 = 1u32
+    while i <= SAT_NVAR {
+        SAT_ACT[i] = SAT_ACT[i] >> 1u32
+        i = i + 1u32
+    }
+    return SAT_OK
+}
+
+/* --- Top-level solve (deterministic VSIDS decay + geometric restarts) --- */
 fn sat_solve() -> i32 @export {
     if SAT_INITED == 0u8 { return SAT_E_NOT_INIT }
     let c0 : u32 = sat_propagate()
     if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
     if c0 != SAT_NULL_CL { return SAT_UNSAT }
+    let mut restart_lim : u64 = 128u64
+    let mut since_restart : u64 = 0u64
     let mut going : u8 = 1u8
     while going == 1u8 {
         let confl : u32 = sat_propagate()
         if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
         if confl != SAT_NULL_CL {
             SAT_CONFLICTS = SAT_CONFLICTS + 1u64
+            since_restart = since_restart + 1u64
             if SAT_LEVEL == 0u32 { return SAT_UNSAT }
             sat_analyze(confl)
             sat_undo_until(SAT_OUT_BJ)
@@ -535,6 +662,18 @@ fn sat_solve() -> i32 @export {
             if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
             if new_cl == SAT_NULL_CL { return SAT_E_TOO_BIG }
             sat_enqueue(SAT_OUT_LEARN[0], new_cl)
+            if (SAT_CONFLICTS & SAT_DECAY_MASK) == 0u64 { sat_decay_activities() }
+            let mut force_reduce : u8 = 0u8
+            if SAT_LIT_USED > SAT_REDUCE_TRIGGER { force_reduce = 1u8 }
+            if since_restart >= restart_lim { force_reduce = 1u8 }
+            if force_reduce == 1u8 {
+                /* deterministic restart (scheduled, or forced by lit-arena pressure):
+                 * learned clauses persist (subject to reduction); the trail unwinds */
+                sat_undo_until(0u32)
+                if SAT_LIT_USED > SAT_REDUCE_TRIGGER { sat_reduce_db() }
+                since_restart = 0u64
+                restart_lim = restart_lim + (restart_lim >> 1u64)
+            }
         }
         if confl == SAT_NULL_CL {
             let v : u32 = sat_pick_branching_variable()
@@ -659,3 +798,8 @@ fn sat_selftest() -> u64 @export {
 
     return 99u64
 }
+
+/* capacity observability (harmony item 18): which arena is under pressure, exactly. */
+fn sat_cl_used() -> u32 @export { return SAT_CL_USED }
+fn sat_lit_used() -> u32 @export { return SAT_LIT_USED }
+fn sat_watch_used() -> u32 @export { return SAT_WATCH_USED }

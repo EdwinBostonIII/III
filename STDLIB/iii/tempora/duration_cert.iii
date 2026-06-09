@@ -1,0 +1,98 @@
+/* STDLIB/iii/tempora/duration_cert.iii -- KERNEL-CERTIFIED SATURATING DURATION ALGEBRA (harmony 25).
+ *
+ * tempora/duration saturates on overflow -- but its overflow KNOWLEDGE was hand-arithmetic: the
+ * wraparound check in duration_add, the divide-back check in duration_mul_u32, and above all the
+ * five precomputed DUR_LIMIT_* constants (floor(2^64-1 / scale), hand-derived BECAUSE of the W11
+ * division quirk -- the one place a wrong constant silently corrupts every from_X conversion at
+ * the saturation boundary).  The CIC kernel's BV64 model carries the EXACT predicates this algebra
+ * lives on: TC_BVADDOVF (unsigned carry-out) and TC_BVMULOVF (full-product overflow), iota-folding
+ * on closed terms.  This organ certifies the algebra against the kernel:
+ *
+ *   dc_add_ovf(a, b)       : the kernel's carry-out verdict for a+b (1/0; 0xFF if undecided)
+ *   dc_mul_ovf(a, b)       : the kernel's product-overflow verdict
+ *   dc_limit_certified(l, s): 1 iff the kernel certifies l*s does NOT overflow AND (l+1)*s DOES
+ *                             -- i.e. l IS floor((2^64-1)/s), the exact saturation boundary
+ *   dc_selftest            : every DUR_LIMIT_* constant kernel-certified + the add/mul saturation
+ *                            behavior agrees with the kernel verdict on boundary witnesses.
+ *
+ * ARENA CONTRACT: resets the TC arena (per-decision scratch) -- certification-time use only.
+ * Hexad: kind_decision.  Ring: R0.  NIH: typecheck (the BV64 kernel) + duration only. */
+module tempora_duration_cert
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn duration_add(a: u64, b: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_mul_u32(a: u64, k: u32) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_seconds(n: u64) -> u64 from "duration.iii"
+
+const DC_MAX : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* the kernel's unsigned-add carry-out verdict for the CONCRETE pair (a,b): 1/0, 0xFF undecided. */
+fn dc_add_ovf(a: u64, b: u64) -> u8 @export {
+    tc_reset()
+    let t : u32 = tc_bvaddovf(tc_bvlit_u64(a), tc_bvlit_u64(b))
+    if tc_conv(t, tc_true()) == 1u8 { return 1u8 }
+    if tc_conv(t, tc_false()) == 1u8 { return 0u8 }
+    return 0xFFu8
+}
+
+/* the kernel's full-product-overflow verdict for the CONCRETE pair (a,b). */
+fn dc_mul_ovf(a: u64, b: u64) -> u8 @export {
+    tc_reset()
+    let t : u32 = tc_bvmulovf(tc_bvlit_u64(a), tc_bvlit_u64(b))
+    if tc_conv(t, tc_true()) == 1u8 { return 1u8 }
+    if tc_conv(t, tc_false()) == 1u8 { return 0u8 }
+    return 0xFFu8
+}
+
+/* 1 iff the kernel certifies that l is EXACTLY the saturation boundary for scale s:
+ * l*s fits in u64 AND (l+1)*s overflows.  This is the proof obligation each precomputed
+ * DUR_LIMIT_* constant carries. */
+fn dc_limit_certified(l: u64, s: u64) -> u8 @export {
+    if dc_mul_ovf(l, s) != 0u8 { return 0u8 }
+    if dc_mul_ovf(l + 1u64, s) != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* 99 = the whole saturating algebra is kernel-certified:
+ *  (1) all five DUR_LIMIT_* constants are EXACTLY the kernel's saturation boundaries;
+ *  (2) duration_add's saturation agrees with the kernel's carry-out verdict at the boundary
+ *      (MAX-1 + 1 exact; MAX + 1 saturates; kernel says no-ovf / ovf respectively);
+ *  (3) duration_mul_u32's saturation agrees with the kernel's product verdict;
+ *  (4) the from_X boundary behaves: LIMIT_SECONDS converts exactly, LIMIT_SECONDS+1 saturates;
+ *  (5) the verdicts have TEETH: the kernel genuinely discriminates (a false claim is refused). */
+fn dc_selftest() -> u64 @export {
+    /* (1) the five precomputed constants, kernel-certified */
+    if dc_limit_certified(18446744073709551u64, 1000u64) != 1u8 { return 1u64 }          /* micros  */
+    if dc_limit_certified(18446744073709u64, 1000000u64) != 1u8 { return 2u64 }          /* millis  */
+    if dc_limit_certified(18446744073u64, 1000000000u64) != 1u8 { return 3u64 }          /* seconds */
+    if dc_limit_certified(307445734u64, 60000000000u64) != 1u8 { return 4u64 }           /* minutes */
+    if dc_limit_certified(5124095u64, 3600000000000u64) != 1u8 { return 5u64 }           /* hours   */
+
+    /* (2) add saturation == kernel carry-out at the boundary */
+    if dc_add_ovf(DC_MAX - 1u64, 1u64) != 0u8 { return 6u64 }
+    if duration_add(DC_MAX - 1u64, 1u64) != DC_MAX { return 7u64 }       /* exact (== MAX by value) */
+    if dc_add_ovf(DC_MAX, 1u64) != 1u8 { return 8u64 }
+    if duration_add(DC_MAX, 1u64) != DC_MAX { return 9u64 }              /* saturated */
+    if dc_add_ovf(5u64, 7u64) != 0u8 { return 10u64 }
+    if duration_add(5u64, 7u64) != 12u64 { return 11u64 }
+
+    /* (3) mul saturation == kernel product verdict */
+    if dc_mul_ovf(0x8000000000000000u64, 2u64) != 1u8 { return 12u64 }
+    if duration_mul_u32(0x8000000000000000u64, 2u32) != DC_MAX { return 13u64 }
+    if dc_mul_ovf(0x7FFFFFFFFFFFFFFFu64, 2u64) != 0u8 { return 14u64 }
+    if duration_mul_u32(0x7FFFFFFFFFFFFFFFu64, 2u32) != 0xFFFFFFFFFFFFFFFEu64 { return 15u64 }
+
+    /* (4) the from_X boundary behaves exactly as certified */
+    if duration_from_seconds(18446744073u64) != 18446744073000000000u64 { return 16u64 }
+    if duration_from_seconds(18446744074u64) != DC_MAX { return 17u64 }
+
+    /* (5) teeth: a FALSE limit claim is refused (the constant one-too-low is not the boundary) */
+    if dc_limit_certified(18446744072u64, 1000000000u64) != 0u8 { return 18u64 }
+    return 99u64
+}

@@ -190,6 +190,65 @@ fn fed_seal_compute_chain_root(out_32_ptr: u64) -> i32 @export {
     return FED_SEAL_OK
 }
 
+/* ===== harmony item 23: WITNESS THE ANCHOR CHAIN (replayable cross-tier provenance) =============
+ * Anchors are append-only but left NO spine record: WHO anchored WHAT into WHICH tier was only
+ * reconstructible from the live table, not replayable from provenance.  The witnessed wrappers
+ * publish a deterministic fragment for every SUCCESSFUL anchor -- producer = cad("fed_seal"),
+ * op = cad("fed.anchor"), in_commit = the child root, out_commit = the parent root, payload =
+ * (child_tier, parent_tier) LE -- so the entire federation chain replays from the witness spine
+ * and any chain root can be re-derived from fragments alone.  REFUSALS record NOTHING (a refused
+ * anchor must not consume spine capacity).  The contract is HONEST (the item-6 convention): if
+ * the fragment cannot be published, FED_SEAL_UNWITNESSED is returned -- the anchor STANDS in the
+ * table, the missing provenance is reported, never silently dropped. */
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const FED_SEAL_UNWITNESSED : i32 = 1i32                    /* anchored; provenance could NOT be recorded */
+const FED_SEAL_WH_FAIL     : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var FSW_PROD     : [u8; 32]
+var FSW_OPID     : [u8; 32]
+var FSW_FID      : [u8; 32]
+var FSW_PAY      : [u8; 8]
+var FSW_PRODNAME : [u8; 8] = [102u8,101u8,100u8,95u8,115u8,101u8,97u8,108u8]   /* "fed_seal" */
+var FSW_OPNAME   : [u8; 10] = [102u8,101u8,100u8,46u8,97u8,110u8,99u8,104u8,111u8,114u8]   /* "fed.anchor" */
+
+fn fed_seal_anchor_witnessed(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 @export {
+    let rc : i32 = fed_seal_anchor(child_tier, child_root_ptr, parent_tier, parent_root_ptr)
+    if rc != FED_SEAL_OK { return rc }                     /* a refused anchor records NOTHING */
+    cad_oneshot(0u32, (&FSW_PRODNAME as u64) as *u8, 8u64, (&FSW_PROD as u64) as *u8)
+    cad_oneshot(0u32, (&FSW_OPNAME as u64) as *u8, 10u64, (&FSW_OPID as u64) as *u8)
+    FSW_PAY[0u64] = (child_tier & 0xFFu32) as u8
+    FSW_PAY[1u64] = ((child_tier >> 8u32) & 0xFFu32) as u8
+    FSW_PAY[2u64] = ((child_tier >> 16u32) & 0xFFu32) as u8
+    FSW_PAY[3u64] = ((child_tier >> 24u32) & 0xFFu32) as u8
+    FSW_PAY[4u64] = (parent_tier & 0xFFu32) as u8
+    FSW_PAY[5u64] = ((parent_tier >> 8u32) & 0xFFu32) as u8
+    FSW_PAY[6u64] = ((parent_tier >> 16u32) & 0xFFu32) as u8
+    FSW_PAY[7u64] = ((parent_tier >> 24u32) & 0xFFu32) as u8
+    let widx : u64 = wh_publish((&FSW_PROD as u64) as *u8, (&FSW_OPID as u64) as *u8,
+               child_root_ptr as *u8, parent_root_ptr as *u8,
+               0u8, 0u8, 0u16,
+               (&FSW_PROD as u64) as *u8, 0u32,
+               (&FSW_PAY as u64) as *u8, 8u32,
+               (&FSW_FID as u64) as *u8)
+    if widx == FED_SEAL_WH_FAIL { return FED_SEAL_UNWITNESSED }
+    return rc
+}
+
+/* the QC-gated witnessed anchor: the quorum gate first (refusal records nothing), then the
+ * witnessed append -- the Tier-3/Bedrock anchor decision AND its provenance in one motion. */
+fn fed_seal_anchor_with_qc_witnessed(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8, qc_len: u32) -> i32 @export {
+    if (qc_ptr as u64) == 0u64 { return FED_SEAL_E_NULL }
+    if qc_len < 44u32 { return FED_SEAL_E_QC }
+    let qp : *u8 = qc_ptr
+    let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
+    if n_sigs > FED_SEAL_QC_MAX_SIGS { return FED_SEAL_E_QC }
+    if qc_len < 44u32 + n_sigs * 64u32 { return FED_SEAL_E_QC }
+    if hs_verify_qc(qp, qc_len) != 1u8 { return FED_SEAL_E_QC }
+    return fed_seal_anchor_witnessed(child_tier, child_root_ptr, parent_tier, parent_root_ptr)
+}
+
 fn fed_seal_clear() -> i32 @export {
     let mut s : u32 = 0u32
     while s < FED_SEAL_SLOTS {

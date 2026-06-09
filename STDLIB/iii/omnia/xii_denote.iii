@@ -1,0 +1,129 @@
+/* STDLIB/iii/omnia/xii_denote.iii -- THE DENOTATIONAL GATE for the IF-lift / equal-branch family
+ * (harmony item 26: the third INDEPENDENT verification authority).
+ *
+ * The first authority is the rule guard (syntactic); the second is the live-engine struct-eq
+ * verification (xii_iflift_verify); this is the third and the only SEMANTIC one: an EVALUATOR.
+ * Terms denote values in a concrete model -- u64, with one injective-mixing function per fusion
+ * kind (distinct odd multipliers, non-commutative by construction) and F.IF denoting BRANCH
+ * CHOICE: the predicate's truth is taken from an explicit ENVIRONMENT bit, and the IF denotes
+ * its then- or else-arm accordingly.  The IF-lift law  X(a, if p then t else e) =
+ * if p then X(a,t) else X(a,e)  and the equal-branch law  if(p, x, x) = x  hold in EVERY
+ * branch-picking model -- so they must hold POINTWISE here, under BOTH predicate polarities and
+ * any leaf seeding; while a WRONG rewrite (swapped arms, dropped operand, wrong operator) breaks
+ * pointwise equality in some environment.  The evaluator never consults the rewrite engine, the
+ * guards, or struct-eq: it is computed meaning, end to end.
+ *
+ *   xdn_eval(t, env)        : the denotation of term t under environment env (env bit 0 = p's
+ *                             truth for subform-0 predicates, bit 1 for subform-1, ...)
+ *   xdn_equal_all_envs(a,b) : 1 iff a and b denote equally under ALL 2^XDN_PREDS environments
+ *   xdn_selftest            : the family laws hold pointwise + the model discriminates (teeth)
+ *
+ * NIH: xii_term accessors only.  Deterministic: FNV-style integer mixes, exhaustive environments.
+ * Hexad: kind_essence.  Ring: R0. */
+module omnia_xii_denote
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+
+const XDN_NULL  : u32 = 0xFFFFFFFFu32
+const XDN_FIF   : u8 = 22u8
+const XDN_PREDS : u32 = 2u32          /* exhaustive environments over 2 predicate slots = 4 envs */
+
+/* one odd-multiplier mix per fusion kind (18..23) -- non-commutative, kind-tagged */
+fn xdn_mix(kind: u8, da: u64, db: u64) -> u64 {
+    let k : u64 = kind as u64
+    let m : u64 = 0x9E3779B97F4A7C15u64 + k * 0x3243F6A8885A308Du64
+    let mut h : u64 = da * m + (db ^ (da >> 17u64)) * 0xC2B2AE3D27D4EB4Fu64
+    h = h ^ (h >> 29u64)
+    h = h * 0xBF58476D1CE4E5B9u64
+    h = h ^ (h >> 32u64)
+    h = h + k
+    return h
+}
+
+/* the denotation of term t under env (recursive; the arena is acyclic by construction). */
+fn xdn_eval(t: u32, env: u64) -> u64 @export {
+    if t == XDN_NULL { return 0x5151515151515151u64 }
+    let kind : u8 = xii_term_get_kind(t)
+    if kind == XDN_FIF {
+        /* BRANCH CHOICE: the predicate's truth comes from the environment, keyed by the
+         * predicate leaf's subform slot (so distinct predicates vary independently). */
+        let p : u32 = xii_term_get_child_a(t)
+        let slot : u64 = (xii_term_get_subform(p) as u64) & 63u64
+        let tv : u64 = (env >> slot) & 1u64
+        if tv == 1u64 { return xdn_eval(xii_term_get_child_b(t), env) }
+        return xdn_eval(xii_term_get_child_c(t), env)
+    }
+    if kind >= 18u8 {
+        let da : u64 = xdn_eval(xii_term_get_child_a(t), env)
+        let db : u64 = xdn_eval(xii_term_get_child_b(t), env)
+        return xdn_mix(kind, da, db)
+    }
+    /* basis leaf: an injective seed over (kind, subform) */
+    let kv : u64 = kind as u64
+    let sv : u64 = xii_term_get_subform(t) as u64
+    return (kv + 1u64) * 0x100000001B3u64 + sv * 0x1000193u64 + 0xCBF29CE484222325u64
+}
+
+/* 1 iff a and b denote equally under ALL environments (both polarities of every predicate slot). */
+fn xdn_equal_all_envs(a: u32, b: u32) -> u8 @export {
+    let mut env : u64 = 0u64
+    let envs : u64 = 1u64 << (XDN_PREDS as u64)
+    while env < envs {
+        if xdn_eval(a, env) != xdn_eval(b, env) { return 0u8 }
+        env = env + 1u64
+    }
+    return 1u8
+}
+
+const XDN_K01   : u8 = 0u8
+const XDN_K09   : u8 = 8u8            /* K09_QUERY: the predicate leaf kind */
+const XDN_FTHEN : u8 = 19u8
+const XDN_FWITH : u8 = 20u8
+const XDN_FUNDER : u8 = 21u8
+
+/* 99 = the IF-lift family + the equal-branch law hold POINTWISE in the model across both
+ * operand positions and all three fusion operators, AND the model has TEETH (a swapped-arm
+ * "lift", a dropped operand, and a wrong-operator hoist all denote DIFFERENTLY somewhere). */
+fn xdn_selftest() -> u64 @export {
+    xii_term_arena_reset()
+    let p  : u32 = xii_term_make_basis(XDN_K09, 0u32)
+    let a  : u32 = xii_term_make_basis(XDN_K01, 7u32)
+    let t  : u32 = xii_term_make_basis(XDN_K01, 8u32)
+    let e  : u32 = xii_term_make_basis(XDN_K01, 9u32)
+    /* the lift law, prefix and suffix, across FTHEN/FWITH/FUNDER */
+    let mut ki : u8 = XDN_FTHEN
+    while ki <= XDN_FUNDER {
+        let branched_pre : u32 = xii_term_make_if(p, xii_term_make_fusion2(ki, a, t), xii_term_make_fusion2(ki, a, e))
+        let hoisted_pre  : u32 = xii_term_make_fusion2(ki, a, xii_term_make_if(p, t, e))
+        if xdn_equal_all_envs(branched_pre, hoisted_pre) != 1u8 { return 1u64 }
+        let branched_suf : u32 = xii_term_make_if(p, xii_term_make_fusion2(ki, t, a), xii_term_make_fusion2(ki, e, a))
+        let hoisted_suf  : u32 = xii_term_make_fusion2(ki, xii_term_make_if(p, t, e), a)
+        if xdn_equal_all_envs(branched_suf, hoisted_suf) != 1u8 { return 2u64 }
+        ki = ki + 1u8
+    }
+    /* the equal-branch law: if(p, x, x) = x, regardless of p */
+    let eqb : u32 = xii_term_make_if(p, t, t)
+    if xdn_equal_all_envs(eqb, t) != 1u8 { return 3u64 }
+    /* TEETH 1: the swapped-arm hoist is NOT a lift (differs when p flips) */
+    let branched : u32 = xii_term_make_if(p, xii_term_make_fusion2(XDN_FTHEN, a, t), xii_term_make_fusion2(XDN_FTHEN, a, e))
+    let wrong_arm : u32 = xii_term_make_fusion2(XDN_FTHEN, a, xii_term_make_if(p, e, t))
+    if xdn_equal_all_envs(branched, wrong_arm) != 0u8 { return 4u64 }
+    /* TEETH 2: dropping the fixed operand is caught */
+    let dropped : u32 = xii_term_make_if(p, t, e)
+    if xdn_equal_all_envs(branched, dropped) != 0u8 { return 5u64 }
+    /* TEETH 3: hoisting under the WRONG operator is caught (FTHEN vs FWITH mixes differ) */
+    let wrong_op : u32 = xii_term_make_fusion2(XDN_FWITH, a, xii_term_make_if(p, t, e))
+    if xdn_equal_all_envs(branched, wrong_op) != 0u8 { return 6u64 }
+    /* TEETH 4: unequal branches do NOT collapse */
+    let neqb : u32 = xii_term_make_if(p, t, e)
+    if xdn_equal_all_envs(neqb, t) != 0u8 { return 7u64 }
+    return 99u64
+}

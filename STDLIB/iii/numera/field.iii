@@ -12,7 +12,10 @@
  * Phase D scope:
  *   - fp_add / fp_sub / fp_mul                (any modulus)
  *   - fp_pow                                  (square-and-multiply)
- *   - fp_inv_fermat                           (assumes p prime)
+ *   - fp_inv_fermat                           (assumes p prime; retained as the prime-path
+ *                                              differential oracle for fp_inv)
+ *   - fp_inv                                  (harmony item 11: extended Euclid, ANY modulus --
+ *                                              refuses gcd(a,m) != 1 instead of silently corrupting)
  *
  *
  * APOTHEOSIS S.3 (audit -- the generic escape hatch).  This is the arbitrary-
@@ -42,6 +45,8 @@ extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "b
 extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_take() -> u64 from "bigint_div.iii"
 
 const FIELD_INVALID : u64 = 0u64
 
@@ -119,9 +124,91 @@ fn fp_inv_fermat(arena: u64, a: u64, p: u64) -> u64 @export {
     return inv
 }
 
-/* a / b mod p (assumes p prime).  Returns FIELD_INVALID if b ≡ 0 mod p. */
+/* ===== harmony item 11: the COMPOSITE-SAFE modular inverse (extended Euclid, all-residue) ========
+ * fp_inv_fermat is sound ONLY for prime p: for composite m, a^(m-2) mod m is silently WRONG -- no
+ * error, no refusal, just corrupted downstream math.  fp_inv closes that soundness hole with the
+ * iterative extended Euclid whose Bezout coefficient is tracked MOD m, so no signed bigints are
+ * ever needed:  s' = old_s - q*s  ==  fp_sub(old_s, fp_mul(q, s, m), m),  every value in [0, m).
+ * The r-sequence is exact unsigned Euclid (r' = old_r mod r, straight from the Knuth divider's
+ * remainder).  Returns the unique inverse in [1, m) iff gcd(a, m) == 1; FIELD_INVALID otherwise
+ * (a == 0 mod m, m < 2, OOM, or gcd != 1) -- the non-invertible case is REFUSED, never silently
+ * wrong.  The guard bound 16384 >= 2*bits(max bigint)+2 (Fibonacci worst case) is defense-in-depth,
+ * not truncation.  Per-iteration temporaries are dropped eagerly (the 64-slot bigint handle table
+ * is the binding constraint); steady-state live handles: old_r, r, old_s, s. */
+fn fp_inv(arena: u64, a: u64, m: u64) -> u64 @export {
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    if two == 0u64 { return FIELD_INVALID }
+    let mlt : i32 = bigint_cmp(m, two)
+    bigint_drop(two)
+    if mlt == -1i32 { return FIELD_INVALID }
+    let am : u64 = bigint_mod(arena, a, m)
+    if am == 0u64 { return FIELD_INVALID }
+    if bigint_is_zero(am) == 1u8 { bigint_drop(am) return FIELD_INVALID }
+    let mut old_r : u64 = bigint_copy(arena, m)
+    if old_r == 0u64 { bigint_drop(am) return FIELD_INVALID }
+    let mut r : u64 = am
+    let mut old_s : u64 = bigint_from_u64(arena, 0u64)
+    if old_s == 0u64 { bigint_drop(old_r) bigint_drop(r) return FIELD_INVALID }
+    let mut s : u64 = bigint_from_u64(arena, 1u64)
+    if s == 0u64 { bigint_drop(old_r) bigint_drop(r) bigint_drop(old_s) return FIELD_INVALID }
+    let mut fail : u8 = 0u8
+    let mut live : u8 = 1u8
+    let mut guard : u64 = 0u64
+    while live == 1u8 {
+        if bigint_is_zero(r) == 1u8 { live = 0u8 }
+        else {
+            guard = guard + 1u64
+            if guard > 16384u64 { fail = 1u8 live = 0u8 }
+            else {
+                let q : u64 = bigint_div_qr(arena, old_r, r)      /* quotient; remainder parked */
+                let rn : u64 = bigint_remainder_take()            /* r' = old_r mod r (ownership taken) */
+                if q == 0u64 { fail = 1u8 live = 0u8 if rn != 0u64 { bigint_drop(rn) } }
+                else { if rn == 0u64 { bigint_drop(q) fail = 1u8 live = 0u8 }
+                else {
+                    let qs : u64 = fp_mul(arena, q, s, m)         /* q*s mod m */
+                    bigint_drop(q)
+                    if qs == 0u64 { bigint_drop(rn) fail = 1u8 live = 0u8 }
+                    else {
+                        let sn : u64 = fp_sub(arena, old_s, qs, m)  /* s' = old_s - q*s (mod m) */
+                        bigint_drop(qs)
+                        if sn == 0u64 { bigint_drop(rn) fail = 1u8 live = 0u8 }
+                        else {
+                            bigint_drop(old_r)
+                            old_r = r
+                            r = rn
+                            bigint_drop(old_s)
+                            old_s = s
+                            s = sn
+                        }
+                    }
+                } }
+            }
+        }
+    }
+    /* gcd(a, m) = old_r; invertible iff gcd == 1, and then old_s IS the inverse (already in [0,m)). */
+    let mut res : u64 = FIELD_INVALID
+    if fail == 0u8 {
+        let one : u64 = bigint_from_u64(arena, 1u64)
+        if one != 0u64 {
+            if bigint_eq(old_r, one) == 1u8 {
+                res = old_s                                       /* transfer ownership to the caller */
+                old_s = 0u64
+            }
+            bigint_drop(one)
+        }
+    }
+    bigint_drop(old_r)
+    bigint_drop(r)
+    if old_s != 0u64 { bigint_drop(old_s) }
+    bigint_drop(s)
+    return res
+}
+
+/* a / b mod m -- COMPOSITE-SAFE (harmony item 11): routed through fp_inv, so a non-invertible b
+ * (gcd(b,m) != 1, including b == 0 mod m) is REFUSED with FIELD_INVALID instead of the old
+ * Fermat path's silently-wrong value on composite m.  For prime m the result is unchanged. */
 fn fp_div(arena: u64, a: u64, b: u64, p: u64) -> u64 @export {
-    let inv_b : u64 = fp_inv_fermat(arena, b, p)
+    let inv_b : u64 = fp_inv(arena, b, p)
     if inv_b == FIELD_INVALID { return FIELD_INVALID }
     let r : u64 = fp_mul(arena, a, inv_b, p)
     bigint_drop(inv_b)

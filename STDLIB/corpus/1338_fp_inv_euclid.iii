@@ -1,0 +1,114 @@
+/* 1338_fp_inv_euclid.iii -- THE COMPOSITE-SAFE MODULAR INVERSE (harmony item 11).
+ *
+ * field.iii's only inverse was Fermat (a^(p-2) mod p): sound for prime p, SILENTLY WRONG for
+ * composite m -- no error, just corrupted math.  fp_inv (extended Euclid, Bezout coefficient
+ * tracked mod m, all-unsigned) closes the hole; fp_div now routes through it.  Arms:
+ *  (1) PRIME DIFFERENTIAL -- for p=101, a=2..7: fp_inv == fp_inv_fermat (the retained oracle)
+ *      AND a*inv == 1 (mod p);
+ *  (2) THE BITE -- m=91=7*13, a=2 (coprime): Fermat's 2^89 mod 91 is NOT an inverse
+ *      (2*fermat != 1) while fp_inv's IS (2*inv == 1) -- the exact soundness hole, demonstrated
+ *      and closed in one arm;
+ *  (3) REFUSAL -- m=91, a=7 (gcd 7): fp_inv refuses (FIELD_INVALID), never silently wrong;
+ *  (4) DEGENERATE -- a == 0 mod m refused; m < 2 refused;
+ *  (5) MULTI-LIMB -- m = 2^64+1 (composite: 274177 * 67280421310721), a=3 (coprime):
+ *      3*fp_inv(3) == 1 (mod m) across the limb boundary;
+ *  (6) DIV REWIRE -- fp_div(1, 7, 91) is REFUSED (the old path would return garbage).
+ * Exit 99 = inversion is now sound on EVERY modulus: correct value or honest refusal. */
+module corpus_1338
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn fp_inv(arena: u64, a: u64, m: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn fp_inv_fermat(arena: u64, a: u64, p: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn fp_mul(arena: u64, a: u64, b: u64, m: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn fp_div(arena: u64, a: u64, b: u64, p: u64) -> u64 from "field.iii"
+
+/* 1 iff a*x == 1 (mod m) -- the definitional inverse check. */
+fn is_inverse(arena: u64, a: u64, x: u64, m: u64) -> u8 {
+    let p : u64 = fp_mul(arena, a, x, m)
+    if p == 0u64 { return 0u8 }
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let ok : u8 = bigint_eq(p, one)
+    bigint_drop(p)
+    bigint_drop(one)
+    return ok
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(262144u64)
+    if arena == 0u64 { return 90u64 }
+
+    /* (1) PRIME DIFFERENTIAL: p=101, a=2..7 */
+    let p101 : u64 = bigint_from_u64(arena, 101u64)
+    let mut a : u64 = 2u64
+    while a < 8u64 {
+        let ba : u64 = bigint_from_u64(arena, a)
+        let ie : u64 = fp_inv(arena, ba, p101)
+        let iff : u64 = fp_inv_fermat(arena, ba, p101)
+        if ie == 0u64 { return 1u64 }
+        if iff == 0u64 { return 1u64 }
+        if bigint_eq(ie, iff) != 1u8 { return 2u64 }
+        if is_inverse(arena, ba, ie, p101) != 1u8 { return 3u64 }
+        bigint_drop(ba)
+        bigint_drop(ie)
+        bigint_drop(iff)
+        a = a + 1u64
+    }
+
+    /* (2) THE BITE: m=91 composite, a=2 coprime -- Fermat wrong, Euclid right */
+    let m91 : u64 = bigint_from_u64(arena, 91u64)
+    let b2  : u64 = bigint_from_u64(arena, 2u64)
+    let fer : u64 = fp_inv_fermat(arena, b2, m91)
+    if fer == 0u64 { return 4u64 }
+    if is_inverse(arena, b2, fer, m91) != 0u8 { return 5u64 }   /* Fermat's value is NOT an inverse */
+    let euc : u64 = fp_inv(arena, b2, m91)
+    if euc == 0u64 { return 6u64 }
+    if is_inverse(arena, b2, euc, m91) != 1u8 { return 7u64 }   /* Euclid's IS */
+    bigint_drop(fer)
+    bigint_drop(euc)
+
+    /* (3) REFUSAL: gcd(7, 91) = 7 -> FIELD_INVALID, never silently wrong */
+    let b7 : u64 = bigint_from_u64(arena, 7u64)
+    if fp_inv(arena, b7, m91) != 0u64 { return 8u64 }
+
+    /* (4) DEGENERATE: a == 0 mod m; m < 2 */
+    let b0 : u64 = bigint_from_u64(arena, 0u64)
+    if fp_inv(arena, b0, m91) != 0u64 { return 9u64 }
+    let m1 : u64 = bigint_from_u64(arena, 1u64)
+    if fp_inv(arena, b2, m1) != 0u64 { return 10u64 }
+    bigint_drop(b0)
+    bigint_drop(m1)
+
+    /* (5) MULTI-LIMB: m = 2^64 + 1 (composite), a = 3 (coprime) */
+    let mbig : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(mbig, 0u64, 1u64)
+    bigint_set_limb(mbig, 1u64, 1u64)
+    bigint_set_len(mbig, 2u64)
+    let b3 : u64 = bigint_from_u64(arena, 3u64)
+    let ibig : u64 = fp_inv(arena, b3, mbig)
+    if ibig == 0u64 { return 11u64 }
+    if is_inverse(arena, b3, ibig, mbig) != 1u8 { return 12u64 }
+    bigint_drop(ibig)
+    bigint_drop(b3)
+    bigint_drop(mbig)
+
+    /* (6) DIV REWIRE: fp_div with non-invertible divisor on composite m is REFUSED */
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    if fp_div(arena, one, b7, m91) != 0u64 { return 13u64 }
+    bigint_drop(one)
+    bigint_drop(b7)
+    bigint_drop(b2)
+    bigint_drop(m91)
+    bigint_drop(p101)
+
+    bigint_drop_arena(arena)
+    arena_drop(arena)
+    return 99u64
+}

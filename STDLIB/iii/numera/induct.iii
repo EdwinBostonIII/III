@@ -44,3 +44,61 @@ fn ind_forall_w(p: u32, s: u32, w: u32) -> u8 @export {
 fn ind_forall_id(motive: u32, base: u32, y: u32, proof: u32) -> u8 @export {
     return tc_check(tc_j(motive, base, proof), tc_app(tc_app(motive, y), proof))
 }
+
+/* ===== harmony item 9: THE LEARNED UNIVERSAL BECOMES CITABLE (inductive engine -> Theorem Commons) ====
+ * ind_forall / ind_forall_w / ind_forall_id certify a universal and then THROW THE CERTIFICATE AWAY --
+ * every consumer had to re-run the induction.  These wrappers close the loop with the Commons: the
+ * universal is Pi-CLOSED over its domain (proof = the eliminator under a lambda; goal = the Pi type),
+ * then admitted via tcom_admit_goal -- so the address IS the kernel-serialized goal (item-5 binding),
+ * the Commons re-runs tc_check (the kernel stays SOLE arbiter; soundness here is zero-trust), and a
+ * theorem proven ONCE is citable FOREVER (ind_forall_*_cite: no re-proof, no eliminator re-run).
+ * This is the inductive engine feeding the self-growing Theorem DAG: discovery (nous/conjecture) ->
+ * certification (this bridge) -> accumulation (the Commons) -> citation (every later consumer).
+ *
+ * HONEST-SCOPE CALLER OBLIGATION: the motive/base/step/W-type/endpoint terms must be CLOSED (they are
+ * placed under 1-2 binders un-shifted; a term with free de-Bruijn vars would capture).  The standing
+ * convention (ru_certify_unify_kernel / eg_union_kernel / tcom_admit) applies. */
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite_goal(goal: u32) -> i32 from "theorem_commons.iii"
+
+/* Nat limb: admit ∀n:Nat. P n  (proof = λn. natrec(P,z,s,n); goal = Πn:Nat. P n). */
+fn ind_forall_commons(p: u32, z: u32, s: u32) -> i32 @export {
+    let prf : u32 = tc_lam(tc_nat(), tc_natrec(p, z, s, tc_var(0u32)))
+    let gl  : u32 = tc_pi(tc_nat(), tc_app(p, tc_var(0u32)))
+    return tcom_admit_goal(prf, gl)
+}
+/* cite ∀n:Nat. P n without re-proving (the goal's address answers). */
+fn ind_forall_cite(p: u32) -> i32 @export {
+    return tcom_cite_goal(tc_pi(tc_nat(), tc_app(p, tc_var(0u32))))
+}
+
+/* W limb: admit ∀w:W. P w for the (closed) W-type `wty` (proof = λw. wrec(P,s,w); goal = Πw:wty. P w). */
+fn ind_forall_w_commons(p: u32, s: u32, wty: u32) -> i32 @export {
+    let prf : u32 = tc_lam(wty, tc_wrec(p, s, tc_var(0u32)))
+    let gl  : u32 = tc_pi(wty, tc_app(p, tc_var(0u32)))
+    return tcom_admit_goal(prf, gl)
+}
+fn ind_forall_w_cite(p: u32, wty: u32) -> i32 @export {
+    return tcom_cite_goal(tc_pi(wty, tc_app(p, tc_var(0u32))))
+}
+
+/* Id limb: admit the FULL transport universal  ∀y:A. ∀q:Id(A,a,y). C y q
+ * (proof = λy:A. λq:Id(A,a,y). J(C,d,q); the property transports along EVERY path from `lhs`,
+ * with BOTH the endpoint and the path universally quantified -- strictly stronger than the
+ * per-path ind_forall_id certificate). */
+fn ind_forall_id_commons(motive: u32, base: u32, a_ty: u32, lhs: u32) -> i32 @export {
+    let pdom : u32 = tc_id(a_ty, lhs, tc_var(0u32))
+    let prf  : u32 = tc_lam(a_ty, tc_lam(pdom, tc_j(motive, base, tc_var(0u32))))
+    let gdom : u32 = tc_id(a_ty, lhs, tc_var(0u32))
+    let gl   : u32 = tc_pi(a_ty, tc_pi(gdom, tc_app(tc_app(motive, tc_var(1u32)), tc_var(0u32))))
+    return tcom_admit_goal(prf, gl)
+}
+fn ind_forall_id_cite(motive: u32, a_ty: u32, lhs: u32) -> i32 @export {
+    let gdom : u32 = tc_id(a_ty, lhs, tc_var(0u32))
+    return tcom_cite_goal(tc_pi(a_ty, tc_pi(gdom, tc_app(tc_app(motive, tc_var(1u32)), tc_var(0u32)))))
+}

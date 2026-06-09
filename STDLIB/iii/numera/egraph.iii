@@ -1733,3 +1733,30 @@ fn eg_integrity_holds() -> u8 @export {
     if eg_integrity_selftest() == 99u64 { return 1u8 }
     return 0u8
 }
+
+/* ===== harmony item 7: KERNEL-DISPOSED CERTIFIED MERGE (the e-graph's external join goes proof-carrying) ==
+ * eg_union is the saturation engine's INTERNAL join -- driven by registered rules and congruence rebuilding,
+ * justified by the rule gate.  But as an EXPORTED surface it also let any caller assert "these two classes
+ * are equal" with NO proof obligation at all -- the e-graph analogue of the proof_ok-literal gap that
+ * ru_certify_unify_kernel closed for the congruence spine (harmony item 1).  eg_union_kernel is the
+ * proof-carrying external merge: the CIC kernel's conversion oracle (tc_conv: NbE-normalize both sides,
+ * compare) must DISCHARGE the equality of the two classes' denotations before the classes join.
+ *
+ * HONEST-SCOPE CALLER OBLIGATION (mirrors ru_certify_unify_kernel + tcom_admit): e-classes carry interned
+ * SYMBOLS, not TC term ids, so a_tc / b_tc -- the two classes' denotations as kernel terms -- are CALLER-
+ * SUPPLIED and bound to the classes only by caller convention.  This function verifies the kernel EQUALITY
+ * of the supplied denotations; the class<->term binding is the caller's charge (and the rule-gated internal
+ * path remains the only NON-caller-mediated way classes merge).
+ *
+ * Returns 1 IFF already joined (congruence is proof-free) OR the kernel discharges the conversion and the
+ * union succeeds.  Otherwise 0, classes UNTOUCHED. */
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+
+fn eg_union_kernel(a: u32, b: u32, a_tc: u32, b_tc: u32) -> u32 @export {
+    if a == EGRAPH_SENT { return 0u32 }
+    if b == EGRAPH_SENT { return 0u32 }
+    if eg_find(a) == eg_find(b) { return 1u32 }       /* auto-congruence, proof-free */
+    if tc_conv(a_tc, b_tc) != 1u8 { return 0u32 }     /* DISPOSE: the kernel's conversion oracle */
+    if eg_union(a, b) == EGRAPH_SENT { return 0u32 }
+    return 1u32
+}

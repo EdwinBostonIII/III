@@ -1,0 +1,16 @@
+/* 1331_xii_iflift_verify.iii -- semantic verification of the XII IF-lift (branch-distribution) rewrites.
+ * Drives omnia::xii_iflift_verify::xiv_verify: 99 = every IF-lift rule (R005/R006/R009/R010/R011/R012 across
+ * FTHEN/FWITH/FUNDER, prefix and suffix) is meaning-preserving on the LIVE engine -- each branched witness
+ * F.IF(p, X(s,t), X(s,e)) one-steps (firing the SPECIFIC rule id) to the hoisted form X(s, F.IF(p,t,e)), judged
+ * against the branch-distribution law f(if p then t else e)=if p then f(t) else f(e), not the rule's body --
+ * plus the teeth that a witness sharing no common operand does NOT lift. Closes xii_fusion_verify's "honest
+ * scope" deferral (the IF-lift family was the named next strike). */
+module corpus_1331
+
+extern @abi(c-msvc-x64) fn xiv_verify() -> u64 from "xii_iflift_verify.iii"
+
+fn main() -> u64 {
+    let r : u64 = xiv_verify()
+    if r != 99u64 { return r }
+    return 99u64
+}

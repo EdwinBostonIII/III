@@ -919,6 +919,7 @@ declare -A EXPECTED=(
     [1328_glob_class_range_negate]=99
     [1329_glyph_set_uniqueness]=99
     [1330_fix_signed]=99
+    [1331_xii_iflift_verify]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

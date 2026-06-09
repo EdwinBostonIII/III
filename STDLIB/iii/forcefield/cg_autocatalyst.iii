@@ -190,3 +190,26 @@ fn cga_dispose_bv(a: u32, b: u32, budget: u32) -> u8 @export {
     CGA_BV_N[0u64] = n + 1u32
     return 1u8
 }
+
+/* ===== harmony item 24: THE AUTONOMOUS WIDTH-FAITHFUL DISCOVERY LOOP =============================
+ * Item 17 built the per-candidate sieve; this is the DRIVER that makes discovery autonomous:
+ * exhaustively enumerate the (a, b) strength-candidate grid and dispose EVERY pair through the
+ * width-faithful two-tier gate.  Deterministic and observation-free -- exhaustive enumeration is
+ * the anti-ML discovery discipline (no counting-and-promoting, no thresholds: every candidate
+ * meets the kernel, the kernel decides, the registry records).  Returns the number ADMITTED.
+ * The width edge is part of the sweep's own truth: a max_exp of 64 offers the ideal-integer
+ * truth (64,64) to the gate and the kernel's count-mask iota REFUSES it -- the loop discovers
+ * exactly the machine-true diagonal and nothing else. */
+fn cga_bv_discover(max_exp: u32, budget: u32) -> u32 @export {
+    let mut admitted : u32 = 0u32
+    let mut a : u32 = 0u32
+    while a <= max_exp {
+        let mut b : u32 = 0u32
+        while b <= max_exp {
+            if cga_dispose_bv(a, b, budget) == 1u8 { admitted = admitted + 1u32 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return admitted
+}

@@ -26,6 +26,15 @@ var FN_B : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x62u8]   /* "fn b" */
 var FN_P : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x70u8]   /* "fn p" */
 var FN_Q : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x71u8]   /* "fn q" */
 
+extern @abi(c-msvc-x64) fn ra_merge_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64, canon: *u8, canon_len: u64, out: *u8, out_cap: u64) -> i64 from "ripple_apply.iii"
+var SRC4 : [u8; 14] = [0x66u8,0x6Eu8,0x20u8,0x64u8,0x28u8,0x29u8,0x2Du8,0x3Eu8,0x75u8,0x33u8,0x32u8,0x7Bu8,0x78u8,0x7Du8]  /* "fn d()->u32{x}" */
+var NM_D : [u8; 1] = [0x64u8]
+var MOD_M : [u8; 1] = [0x6Du8]                                                  /* "m" */
+var N_EXTERN : [u8; 6] = [0x65u8,0x78u8,0x74u8,0x65u8,0x72u8,0x6Eu8]            /* "extern" */
+var N_FROM   : [u8; 4] = [0x66u8,0x72u8,0x6Fu8,0x6Du8]                          /* "from"   */
+var N_BODY   : [u8; 3] = [0x7Bu8,0x78u8,0x7Du8]                                 /* "{x}"    */
+var FN_D     : [u8; 4] = [0x66u8,0x6Eu8,0x20u8,0x64u8]                          /* "fn d"   */
+
 fn contains(buf: u64, len: u64, needle: u64, nlen: u64) -> u8 {
     if nlen > len { return 0u8 }
     let bp : *u8 = buf as *u8
@@ -64,5 +73,14 @@ fn main() -> u64 {
     if contains(&OUT as u64, n4 as u64, &FN_P as u64, 4u64) != 0u8 { return 10u64 }
     /* (5) comment-skip: "fn g" only in a /* */ comment -> not matched -> -1 */
     if ra_cut_fn(&SRC3 as *u8, 23u64, &NM_G as *u8, 1u64, &OUT as *u8, 256u64) != -1i64 { return 11u64 }
+    /* (6) MERGE: replace fn "d" with an extern to "m" -- the signature kept, body gone, extern/from synthesized */
+    let n6 : i64 = ra_merge_fn(&SRC4 as *u8, 14u64, &NM_D as *u8, 1u64, &MOD_M as *u8, 1u64, &OUT as *u8, 256u64)
+    if n6 <= 0i64 { return 12u64 }
+    if contains(&OUT as u64, n6 as u64, &N_EXTERN as u64, 6u64) != 1u8 { return 13u64 }   /* extern synthesized */
+    if contains(&OUT as u64, n6 as u64, &N_FROM as u64,   4u64) != 1u8 { return 14u64 }   /* from clause        */
+    if contains(&OUT as u64, n6 as u64, &FN_D as u64,     4u64) != 1u8 { return 15u64 }   /* signature kept     */
+    if contains(&OUT as u64, n6 as u64, &N_BODY as u64,   3u64) != 0u8 { return 16u64 }   /* body excised       */
+    /* (7) merge an absent name -> -1 */
+    if ra_merge_fn(&SRC4 as *u8, 14u64, &NM_C as *u8, 1u64, &MOD_M as *u8, 1u64, &OUT as *u8, 256u64) != -1i64 { return 17u64 }
     return 99u64
 }

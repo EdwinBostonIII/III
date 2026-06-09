@@ -25,6 +25,11 @@ const RA_NOT_FOUND : u64 = 0xFFFFFFFFFFFFFFFFu64
 const RA_E_NOTFOUND : i64 = -1i64
 const RA_E_CAP      : i64 = -2i64
 
+/* literal fragments for the MERGE applier's extern synthesis */
+var RA_EXTERN_PRE : [u8; 24] = [0x65u8,0x78u8,0x74u8,0x65u8,0x72u8,0x6Eu8,0x20u8,0x40u8,0x61u8,0x62u8,0x69u8,0x28u8,0x63u8,0x2Du8,0x6Du8,0x73u8,0x76u8,0x63u8,0x2Du8,0x78u8,0x36u8,0x34u8,0x29u8,0x20u8] /* "extern @abi(c-msvc-x64) " */
+var RA_FROM       : [u8; 7]  = [0x20u8,0x66u8,0x72u8,0x6Fu8,0x6Du8,0x20u8,0x22u8]   /* " from \"" */
+var RA_EXPORT     : [u8; 7]  = [0x40u8,0x65u8,0x78u8,0x70u8,0x6Fu8,0x72u8,0x74u8]   /* "@export" */
+
 /* 1 iff src[i]==c0 && src[i+1]==c1 (bounds-checked). */
 fn ra_at(src: *u8, src_len: u64, i: u64, c0: u8, c1: u8) -> u8 {
     if (i + 2u64) > src_len { return 0u8 }
@@ -165,5 +170,112 @@ fn ra_cut_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64, out: *u8, out_
         o = o + 1u64
         i = i + 1u64
     }
+    return o as i64
+}
+
+/* From `start`, walk (state-aware) to the first CODE '{'; returns its position or RA_NOT_FOUND. */
+fn ra_find_brace(src: *u8, src_len: u64, start: u64) -> u64 {
+    let mut i : u64 = start
+    let mut state : u32 = 0u32
+    let mut bdepth : u32 = 0u32
+    while i < src_len {
+        if state == 0u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { state = 1u32  bdepth = 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Fu8, 0x2Fu8) == 1u8 { state = 2u32  i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 3u32  i = i + 1u64 }
+            else { if src[i] == 0x7Bu8 { return i }
+            else { i = i + 1u64 } } } }
+        }
+        else { if state == 1u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { bdepth = bdepth + 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Au8, 0x2Fu8) == 1u8 { bdepth = bdepth - 1u32  i = i + 2u64  if bdepth == 0u32 { state = 0u32 } }
+            else { i = i + 1u64 } }
+        }
+        else { if state == 2u32 {
+            if src[i] == 0x0Au8 { state = 0u32 }
+            i = i + 1u64
+        }
+        else {
+            if src[i] == 0x5Cu8 { i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 0u32  i = i + 1u64 } else { i = i + 1u64 } }
+        } } }
+    }
+    return RA_NOT_FOUND
+}
+
+/* Position of "@export" within [lo, hi), else hi. */
+fn ra_find_export(src: *u8, lo: u64, hi: u64) -> u64 {
+    if hi < 7u64 { return hi }
+    let cap : u64 = hi - 7u64
+    let mut i : u64 = lo
+    while i <= cap {
+        if src[i] == 0x40u8 {
+            let mut k : u64 = 0u64
+            let mut m : u8 = 1u8
+            while k < 7u64 { if src[i + k] != RA_EXPORT[k] { m = 0u8  k = 7u64 } else { k = k + 1u64 } }
+            if m == 1u8 { return i }
+        }
+        i = i + 1u64
+    }
+    return hi
+}
+
+/* Append `lit_len` bytes of `lit` to out[o..]; returns the new o, or out_cap+1 on overflow. */
+fn ra_append_lit(out: *u8, o: u64, out_cap: u64, lit: u64, lit_len: u64) -> u64 {
+    let lp : *u8 = lit as *u8
+    let mut oo : u64 = o
+    let mut k : u64 = 0u64
+    while k < lit_len {
+        if oo >= out_cap { return out_cap + 1u64 }
+        out[oo] = lp[k]
+        oo = oo + 1u64
+        k = k + 1u64
+    }
+    return oo
+}
+
+/* MERGE applier (increment A2): replace the top-level fn `fn_name`'s DEFINITION with an extern declaration to
+ * the canonical module `canon` (e.g. "canon.iii") -- the source edit for a certified dedup, where the
+ * duplicate's callers (same name) auto-resolve through the extern.  The synthesized line is
+ * `extern @abi(c-msvc-x64) <signature> from "<canon>"`, the signature being the fn's text up to the body
+ * brace with a trailing `@export` and whitespace stripped (an extern declares no @export).  Candidate buffer
+ * only; returns the edited length, RA_E_NOTFOUND if the fn is absent, or RA_E_CAP if `out` is too small. */
+fn ra_merge_fn(src: *u8, src_len: u64, fn_name: *u8, name_len: u64, canon: *u8, canon_len: u64, out: *u8, out_cap: u64) -> i64 @export {
+    let packed : u64 = ra_find_fn(src, src_len, fn_name, name_len)
+    if packed == RA_NOT_FOUND { return RA_E_NOTFOUND }
+    let fstart : u64 = packed >> 32u64
+    let fend   : u64 = packed & 0xFFFFFFFFu64
+    let brace  : u64 = ra_find_brace(src, src_len, fstart)
+    if brace == RA_NOT_FOUND { return RA_E_NOTFOUND }
+    let exp : u64 = ra_find_export(src, fstart, brace)
+    let mut sig_end : u64 = exp
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if sig_end <= fstart { go = 0u8 }
+        else {
+            let c : u8 = src[sig_end - 1u64]
+            if c == 0x20u8 { sig_end = sig_end - 1u64 }
+            else { if c == 0x0Au8 { sig_end = sig_end - 1u64 }
+            else { if c == 0x09u8 { sig_end = sig_end - 1u64 }
+            else { if c == 0x0Du8 { sig_end = sig_end - 1u64 }
+            else { go = 0u8 } } } }
+        }
+    }
+    let mut o : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < fstart { if o >= out_cap { return RA_E_CAP }  out[o] = src[i]  o = o + 1u64  i = i + 1u64 }
+    o = ra_append_lit(out, o, out_cap, &RA_EXTERN_PRE as u64, 24u64)
+    if o > out_cap { return RA_E_CAP }
+    i = fstart
+    while i < sig_end { if o >= out_cap { return RA_E_CAP }  out[o] = src[i]  o = o + 1u64  i = i + 1u64 }
+    o = ra_append_lit(out, o, out_cap, &RA_FROM as u64, 7u64)
+    if o > out_cap { return RA_E_CAP }
+    let mut j : u64 = 0u64
+    while j < canon_len { if o >= out_cap { return RA_E_CAP }  out[o] = canon[j]  o = o + 1u64  j = j + 1u64 }
+    if o >= out_cap { return RA_E_CAP }
+    out[o] = 0x22u8                  /* closing quote */
+    o = o + 1u64
+    i = fend
+    while i < src_len { if o >= out_cap { return RA_E_CAP }  out[o] = src[i]  o = o + 1u64  i = i + 1u64 }
     return o as i64
 }

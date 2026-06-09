@@ -1,0 +1,128 @@
+/* 1246_bv_canon_addr.iii -- BV_RING CANONICAL CONTENT-ADDRESS (harmony item 2).
+ *
+ * bv_ring's pairwise decider gains a canonical NORMAL FORM (bv_canon_serialize), and bv_dispose turns a
+ * ring-equivalence CLASS into a domain-separated, kernel-GATED 32-byte content-address (bvd_canon_addr) --
+ * the missing bridge from the soundest ring decider III owns into the content-address substrate.  8 arms:
+ *  (a) order-independence: canon(x+y) == canon(y+x) byte-for-byte (the headline normal-form bite);
+ *  (b) zero-collapse: canon((x-x)+y)==canon(y), canon(x+0)==canon(x), canon(x-x)==canon(0)==0 bytes;
+ *  (c) strength + biting negative: canon(x*2)==canon(x<<1) but canon(x*2)!=canon(x*3);
+ *  (d) refuse: a BV_ERR-overflowed arena returns BV_CANON_REFUSE and writes NOTHING (no address minted);
+ *  (e) cap guard: a too-small buffer refuses rather than writing OOB;
+ *  (f) domain separation (corpus-968 lesson): the class address != a bare un-domained hash of the bytes;
+ *  (g) shared-id coherence: minting from either side of a poly-equal pair gives the SAME class address;
+ *  (h) kernel veto: a kernel-rejected pair (x*2 vs x*4) mints NO address, out untouched.
+ * 99 = all hold. */
+module corpus_1246
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_canon_serialize(s: u32, out: *u8, cap: u64) -> u64 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bvd_canon_addr(side_bv: u32, peer_bv: u32, side_tc: u32, peer_tc: u32, out32: *u8) -> u8 from "bv_dispose.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const REFUSE : u64 = 0xFFFFFFFFFFFFFFFFu64
+var BUF1 : [u8; 384]
+var BUF2 : [u8; 384]
+var ADDR1 : [u8; 32]
+var ADDR2 : [u8; 32]
+
+fn memeq(a: *u8, b: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n { if a[i] != b[i] { return 0u8 } ; i = i + 1u64 }
+    return 1u8
+}
+fn p1() -> *u8 { return (&BUF1) as u64 as *u8 }
+fn p2() -> *u8 { return (&BUF2) as u64 as *u8 }
+
+fn main() -> u64 {
+    /* (a) ORDER-INDEPENDENCE */
+    bv_reset()
+    let la : u64 = bv_canon_serialize(bv_add(bv_var(0u32), bv_var(1u32)), p1(), 384u64)
+    let lb : u64 = bv_canon_serialize(bv_add(bv_var(1u32), bv_var(0u32)), p2(), 384u64)
+    if la == REFUSE { return 1u64 }
+    if la != lb { return 2u64 }
+    if memeq(p1(), p2(), la) != 1u8 { return 3u64 }
+
+    /* (b) ZERO-COLLAPSE */
+    bv_reset()
+    let lc : u64 = bv_canon_serialize(bv_add(bv_sub(bv_var(0u32), bv_var(0u32)), bv_var(1u32)), p1(), 384u64)
+    let ld : u64 = bv_canon_serialize(bv_var(1u32), p2(), 384u64)
+    if lc != ld { return 4u64 }
+    if memeq(p1(), p2(), lc) != 1u8 { return 5u64 }
+    bv_reset()
+    let le : u64 = bv_canon_serialize(bv_add(bv_var(0u32), bv_const(0u64)), p1(), 384u64)
+    let lf : u64 = bv_canon_serialize(bv_var(0u32), p2(), 384u64)
+    if le != lf { return 6u64 }
+    if memeq(p1(), p2(), le) != 1u8 { return 7u64 }
+    bv_reset()
+    if bv_canon_serialize(bv_sub(bv_var(0u32), bv_var(0u32)), p1(), 384u64) != 0u64 { return 8u64 }   /* x-x = 0 bytes */
+    if bv_canon_serialize(bv_const(0u64), p2(), 384u64) != 0u64 { return 9u64 }
+
+    /* (c) STRENGTH + biting negative */
+    bv_reset()
+    let l2 : u64 = bv_canon_serialize(bv_mul(bv_var(0u32), bv_const(2u64)), p1(), 384u64)
+    let ls : u64 = bv_canon_serialize(bv_shl(bv_var(0u32), 1u32), p2(), 384u64)
+    if l2 != ls { return 10u64 }
+    if memeq(p1(), p2(), l2) != 1u8 { return 11u64 }                                  /* x*2 == x<<1 */
+    let l3 : u64 = bv_canon_serialize(bv_mul(bv_var(0u32), bv_const(3u64)), p2(), 384u64)
+    if l2 != l3 { return 12u64 }
+    if memeq(p1(), p2(), l2) == 1u8 { return 13u64 }                                  /* x*2 != x*3 (biting) */
+
+    /* (d) REFUSE on BV_ERR (overflow the arena), writing NOTHING */
+    bv_reset()
+    let mut pf : u64 = 0u64
+    while pf < 384u64 { BUF1[pf] = 0x5Au8 ; pf = pf + 1u64 }
+    let mut na : u32 = 0u32
+    while na < 100u32 { bv_const((na as u64) + 1u64) ; na = na + 1u32 }               /* >96 allocs -> BV_ERR */
+    if bv_canon_serialize(0u32, p1(), 384u64) != REFUSE { return 14u64 }
+    if BUF1[0u64] != 0x5Au8 { return 15u64 }                                          /* sentinel intact */
+
+    /* (e) CAP GUARD: 2 monomials need 24 bytes; cap 12 -> refuse, no write */
+    bv_reset()
+    BUF1[0u64] = 0x5Au8
+    if bv_canon_serialize(bv_add(bv_var(0u32), bv_var(1u32)), p1(), 12u64) != REFUSE { return 16u64 }
+    if BUF1[0u64] != 0x5Au8 { return 17u64 }
+
+    /* (f) DOMAIN SEPARATION: class address != bare hash of the same canon bytes */
+    bv_reset() ; tc_reset()
+    let g2 : u32 = bv_mul(bv_var(0u32), bv_const(2u64))
+    let gs : u32 = bv_shl(bv_var(0u32), 1u32)
+    if bvd_canon_addr(g2, gs, tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64)), tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64)), (&ADDR1) as u64 as *u8) != 1u8 { return 18u64 }
+    let bl : u64 = bv_canon_serialize(g2, p1(), 384u64)
+    mhash_begin()
+    mhash_payload((&BUF1) as u64, bl)
+    mhash_final((&ADDR2) as u64)
+    if memeq((&ADDR1) as u64 as *u8, (&ADDR2) as u64 as *u8, 32u64) == 1u8 { return 19u64 }   /* must differ */
+
+    /* (g) SHARED-ID coherence: either side mints the SAME class address */
+    bv_reset() ; tc_reset()
+    let h2 : u32 = bv_mul(bv_var(0u32), bv_const(2u64))
+    let hs : u32 = bv_shl(bv_var(0u32), 1u32)
+    let ht2 : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64))
+    let hts : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    if bvd_canon_addr(h2, hs, ht2, hts, (&ADDR1) as u64 as *u8) != 1u8 { return 20u64 }
+    if bvd_canon_addr(hs, h2, hts, ht2, (&ADDR2) as u64 as *u8) != 1u8 { return 21u64 }
+    if memeq((&ADDR1) as u64 as *u8, (&ADDR2) as u64 as *u8, 32u64) != 1u8 { return 22u64 }   /* same id */
+
+    /* (h) KERNEL VETO: x*2 vs x*4 -> no address, out untouched */
+    bv_reset() ; tc_reset()
+    ADDR1[0u64] = 0x5Au8
+    if bvd_canon_addr(bv_mul(bv_var(0u32), bv_const(2u64)), bv_mul(bv_var(0u32), bv_const(4u64)),
+                      tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64)), tc_bvmul(tc_var(0u32), tc_bvlit_u64(4u64)),
+                      (&ADDR1) as u64 as *u8) != 0u8 { return 23u64 }
+    if ADDR1[0u64] != 0x5Au8 { return 24u64 }
+
+    return 99u64
+}

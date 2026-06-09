@@ -31,6 +31,11 @@ var BV_COEF : [u64; 3072]   /* coefficient mod 2^64 (native wrap) */
 var BV_LEN  : [u32; 96]     /* live monomial count per poly slot */
 var BV_USED : u32 = 0u32
 var BV_ERR  : u8  = 0u8      /* sticky: arena / exponent overflow this session */
+/* CANONICAL-SERIALIZATION sentinel + scratch (harmony item 2): the byte length 0xFFFF…FF can never be a
+ * real serialization length (a poly is <=32 monomials * 12 bytes = 384), so it is an unambiguous REFUSE. */
+const BV_CANON_REFUSE : u64 = 0xFFFFFFFFFFFFFFFFu64
+var BV_CANON_K : [u32; 32]   /* gathered live monomial keys, then key-sorted */
+var BV_CANON_C : [u64; 32]   /* their coefficients (kept paired through the sort) */
 
 /* Reset the arena before each certification (per-decision scope). */
 fn bv_reset() -> i32 @export {
@@ -247,6 +252,75 @@ fn bv_const_val(s: u32) -> u64 @export {
         i = i + 1u32
     }
     return 0u64
+}
+
+/* CANONICAL SERIALIZATION (harmony item 2) -- turn poly slot s into a UNIQUE byte string per polynomial
+ * (ring) equivalence class, so the class gets a content-addressable NAME.  Gathers the LIVE (nonzero-coeff)
+ * monomials -- bv_push leaves latent zeros after cancellation (x-x), which bv_subset/bv_equal already skip,
+ * so we skip them here too -- selection-sorts them ASCENDING by the packed exponent key (keys are UNIQUE per
+ * slot, since bv_push combines equal keys, so there are no ties and the order is deterministic), then streams
+ * each monomial as key(4 LE) || coeff(8 LE).  Because this is a true NORMAL FORM, bv_equal(a,b)==1 IFF
+ * bv_canon_serialize(a)==bv_canon_serialize(b) byte-for-byte: order-independent, zero-collapsing, exact.
+ * Returns the byte length written, or BV_CANON_REFUSE (writing NOTHING) when BV_ERR is set (an overflowed
+ * poly must NEVER mint an address) or the buffer `cap` is too small (no OOB write). */
+fn bv_canon_serialize(s: u32, out: *u8, cap: u64) -> u64 @export {
+    if BV_ERR == 1u8 { return BV_CANON_REFUSE }
+    if s >= BV_MAX_POLY { return BV_CANON_REFUSE }
+    let base : u64 = (s as u64) * 32u64
+    let n : u32 = BV_LEN[(s as u64)]
+    /* gather live (nonzero) monomials into the canon scratch */
+    let mut m : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = base + (i as u64)
+        let c : u64 = BV_COEF[idx]
+        if c != 0u64 {
+            BV_CANON_K[(m as u64)] = BV_KEY[idx]
+            BV_CANON_C[(m as u64)] = c
+            m = m + 1u32
+        }
+        i = i + 1u32
+    }
+    /* selection sort ascending by key (m <= 32; keys unique -> total order, deterministic) */
+    let mut a : u32 = 0u32
+    while a < m {
+        let mut minj : u32 = a
+        let mut b : u32 = a + 1u32
+        while b < m {
+            if BV_CANON_K[(b as u64)] < BV_CANON_K[(minj as u64)] { minj = b }
+            b = b + 1u32
+        }
+        let tk : u32 = BV_CANON_K[(a as u64)]
+        let tc : u64 = BV_CANON_C[(a as u64)]
+        BV_CANON_K[(a as u64)] = BV_CANON_K[(minj as u64)]
+        BV_CANON_C[(a as u64)] = BV_CANON_C[(minj as u64)]
+        BV_CANON_K[(minj as u64)] = tk
+        BV_CANON_C[(minj as u64)] = tc
+        a = a + 1u32
+    }
+    /* cap guard: each monomial is 12 bytes (key 4 LE + coeff 8 LE); refuse rather than write OOB */
+    let total : u64 = (m as u64) * 12u64
+    if total > cap { return BV_CANON_REFUSE }
+    /* stream key(4 LE) || coeff(8 LE) per sorted monomial */
+    let mut o : u64 = 0u64
+    let mut j : u32 = 0u32
+    while j < m {
+        let k : u32 = BV_CANON_K[(j as u64)]
+        out[o]        = (k & 0xFFu32) as u8
+        out[o + 1u64] = ((k >> 8u32) & 0xFFu32) as u8
+        out[o + 2u64] = ((k >> 16u32) & 0xFFu32) as u8
+        out[o + 3u64] = ((k >> 24u32) & 0xFFu32) as u8
+        o = o + 4u64
+        let c : u64 = BV_CANON_C[(j as u64)]
+        let mut bi : u64 = 0u64
+        while bi < 8u64 {
+            out[o] = ((c >> (bi * 8u64)) & 0xFFu64) as u8
+            o = o + 1u64
+            bi = bi + 1u64
+        }
+        j = j + 1u32
+    }
+    return total
 }
 
 /* ===== bitwise fragment: bit-parallel exhaustive decider ===================

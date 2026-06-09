@@ -44,6 +44,11 @@ extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
 extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
 extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
 extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+/* harmony item 2: the canonical serializer (the ring class's normal-form bytes) + the streaming hash. */
+extern @abi(c-msvc-x64) fn bv_canon_serialize(s: u32, out: *u8, cap: u64) -> u64 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
 
 /* THE DISPOSER.  lhs_tc/rhs_tc are the candidate's two sides as TC BV terms (already built in the TC
  * arena); lhs_bv/rhs_bv are the SAME two sides as bv_ring polynomials (already built in the bv_ring
@@ -52,6 +57,30 @@ extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
 fn bvd_admit(lhs_tc: u32, rhs_tc: u32, lhs_bv: u32, rhs_bv: u32) -> u8 @export {
     if bv_equal(lhs_bv, rhs_bv) == 0u8 { return 0u8 }   /* TIER 1: cheap, sound refutation (no kernel arena) */
     return tc_conv(lhs_tc, rhs_tc)                        /* TIER 2: width-faithful kernel disposal (sole arbiter) */
+}
+
+/* harmony item 2 -- the CONTENT-ADDRESS layer.  bv_ring's equivalence classes were pairwise + ephemeral
+ * (no NAME), so the soundest decider III owns could not feed the content-address substrate every other layer
+ * speaks.  bvd_canon_addr gives a ring-equivalence class a canonical, DOMAIN-SEPARATED, kernel-GATED 32-byte
+ * content-address: the canonical form is unique per polynomial class, so two poly-equal sides hash to the
+ * SAME address -- the address IS the class id -- and it is minted ONLY when the full two-tier gate agrees
+ * (bv_equal AND tc_conv: the kernel stays sovereign).  Domain separation (the corpus-968 lesson: an un-domained
+ * seal cross-aliases by second-preimage) is via the distinct BVD_CANON_DOMAIN tag streamed before the bytes. */
+var BVD_CANON_DOMAIN : [u8; 16] = [0x42u8, 0x56u8, 0x5Fu8, 0x43u8, 0x41u8, 0x4Eu8, 0x4Fu8, 0x4Eu8, 0x5Fu8, 0x43u8, 0x4Cu8, 0x41u8, 0x53u8, 0x53u8, 0x76u8, 0x31u8]   /* "BV_CANON_CLASSv1" */
+
+fn bvd_canon_addr(side_bv: u32, peer_bv: u32, side_tc: u32, peer_tc: u32, out32: *u8) -> u8 @export {
+    /* the full two-tier gate -- bv_ring refutes (so side_bv and peer_bv share a canonical form) AND the
+     * kernel disposes (sovereign).  Only then does the class get a name. */
+    if bvd_admit(side_tc, peer_tc, side_bv, peer_bv) != 1u8 { return 0u8 }
+    var buf : [u8; 384]
+    let len : u64 = bv_canon_serialize(side_bv, (&buf) as u64 as *u8, 384u64)
+    if len == 0xFFFFFFFFFFFFFFFFu64 { return 0u8 }   /* BV_CANON_REFUSE (overflowed poly) -> mint NO address */
+    /* domain-separated streaming content-address: tag THEN the canonical bytes -> out32. */
+    mhash_begin()
+    mhash_payload((&BVD_CANON_DOMAIN) as u64, 16u64)
+    mhash_payload((&buf) as u64, len)
+    mhash_final(out32 as u64)
+    return 1u8
 }
 
 /* THE KAT.  99 = the two-tier disposer admits exactly the width-faithful TRUE rewrites and rejects the

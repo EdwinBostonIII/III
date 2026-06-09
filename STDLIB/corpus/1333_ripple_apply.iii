@@ -47,6 +47,10 @@ extern @abi(c-msvc-x64) fn ra_apply(move_kind: u32, src: *u8, src_len: u64, fn_n
 extern @abi(c-msvc-x64) fn ra_check_balanced(src: *u8, src_len: u64) -> u8 from "ripple_apply.iii"
 var UNBAL : [u8; 7] = [0x66u8,0x6Eu8,0x20u8,0x78u8,0x28u8,0x29u8,0x7Bu8]        /* "fn x(){" (unbalanced) */
 
+extern @abi(c-msvc-x64) fn ra_enum_fns(src: *u8, src_len: u64, out_off: *u32, out_len: *u32, cap: u32) -> u32 from "ripple_apply.iii"
+var ENUM_OFF : [u32; 16]
+var ENUM_LEN : [u32; 16]
+
 fn contains(buf: u64, len: u64, needle: u64, nlen: u64) -> u8 {
     if nlen > len { return 0u8 }
     let bp : *u8 = buf as *u8
@@ -115,5 +119,17 @@ fn main() -> u64 {
     if nc <= 0i64 { return 30u64 }
     if contains(&OUT as u64, nc as u64, &N_MODULE as u64, 6u64) != 1u8 { return 31u64 }   /* EXTRACT dispatched */
     if ra_apply(99u32, &SRC1 as *u8, 17u64, &NM_B as *u8, 1u64, &MOD_M as *u8, 1u64, &OUT as *u8, 256u64) != -1i64 { return 32u64 }  /* unknown kind -> error */
+    /* (10) enumerate the top-level fns of SRC1 -> 2, at the right offsets (the introspection dual) */
+    let cnt : u32 = ra_enum_fns(&SRC1 as *u8, 17u64, &ENUM_OFF as *u32, &ENUM_LEN as *u32, 16u32)
+    if cnt != 2u32 { return 33u64 }
+    if ENUM_OFF[0u64] != 3u32 { return 34u64 }
+    if ENUM_LEN[0u64] != 1u32 { return 35u64 }
+    if SRC1[(ENUM_OFF[0u64]) as u64] != 0x61u8 { return 36u64 }   /* name byte is 'a' */
+    if ENUM_OFF[1u64] != 12u32 { return 37u64 }
+    if SRC1[(ENUM_OFF[1u64]) as u64] != 0x62u8 { return 38u64 }   /* name byte is 'b' */
+    /* (11) comment-skip in enumeration: "fn g" inside a comment is not counted -> only "fn r" */
+    let cnt2 : u32 = ra_enum_fns(&SRC3 as *u8, 23u64, &ENUM_OFF as *u32, &ENUM_LEN as *u32, 16u32)
+    if cnt2 != 1u32 { return 39u64 }
+    if SRC3[(ENUM_OFF[0u64]) as u64] != 0x72u8 { return 40u64 }   /* name byte is 'r' */
     return 99u64
 }

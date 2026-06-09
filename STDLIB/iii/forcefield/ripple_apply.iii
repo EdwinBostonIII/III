@@ -377,3 +377,96 @@ fn ra_apply(move_kind: u32, src: *u8, src_len: u64, fn_name: *u8, name_len: u64,
     if ra_check_balanced(out, r as u64) != 1u8 { return RA_E_UNBALANCED }
     return r
 }
+
+/* If a top-level `fn NAME` begins at i (token boundary, '(' or ws after NAME), return its name span packed as
+ * (name_start << 32 | name_len); else RA_NOT_FOUND.  NAME is [A-Za-z0-9_]+. */
+fn ra_fn_name_at(src: *u8, src_len: u64, i: u64) -> u64 {
+    if i > 0u64 {
+        let prev : u8 = src[i - 1u64]
+        let mut okb : u8 = 0u8
+        if prev == 0x20u8 { okb = 1u8 }
+        if prev == 0x0Au8 { okb = 1u8 }
+        if prev == 0x09u8 { okb = 1u8 }
+        if prev == 0x0Du8 { okb = 1u8 }
+        if okb == 0u8 { return RA_NOT_FOUND }
+    }
+    if (i + 3u64) > src_len { return RA_NOT_FOUND }
+    if src[i] != 0x66u8 { return RA_NOT_FOUND }
+    if src[i + 1u64] != 0x6Eu8 { return RA_NOT_FOUND }
+    let c2 : u8 = src[i + 2u64]
+    if c2 != 0x20u8 { if c2 != 0x09u8 { return RA_NOT_FOUND } }
+    let mut j : u64 = i + 2u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if j >= src_len { return RA_NOT_FOUND }
+        let c : u8 = src[j]
+        if c == 0x20u8 { j = j + 1u64 } else { if c == 0x09u8 { j = j + 1u64 } else { go = 0u8 } }
+    }
+    let name_start : u64 = j
+    let mut go2 : u8 = 1u8
+    while go2 == 1u8 {
+        if j >= src_len { go2 = 0u8 }
+        else {
+            let c : u8 = src[j]
+            let mut idc : u8 = 0u8
+            if c >= 0x41u8 { if c <= 0x5Au8 { idc = 1u8 } }   /* A-Z */
+            if c >= 0x61u8 { if c <= 0x7Au8 { idc = 1u8 } }   /* a-z */
+            if c >= 0x30u8 { if c <= 0x39u8 { idc = 1u8 } }   /* 0-9 */
+            if c == 0x5Fu8 { idc = 1u8 }                       /* _   */
+            if idc == 1u8 { j = j + 1u64 } else { go2 = 0u8 }
+        }
+    }
+    let name_len : u64 = j - name_start
+    if name_len == 0u64 { return RA_NOT_FOUND }
+    if j >= src_len { return RA_NOT_FOUND }
+    let nc : u8 = src[j]
+    let mut okn : u8 = 0u8
+    if nc == 0x28u8 { okn = 1u8 }
+    if nc == 0x20u8 { okn = 1u8 }
+    if nc == 0x09u8 { okn = 1u8 }
+    if okn == 0u8 { return RA_NOT_FOUND }
+    return (name_start << 32u64) | (name_len & 0xFFFFFFFFu64)
+}
+
+/* Enumerate every top-level fn in `src` (in CODE, skipping comments/strings): for each, record its name's source
+ * offset + length into out_off[]/out_len[] (up to `cap`), and return the total count.  The introspection dual of
+ * the applier -- the producer of fn candidates (and the place source names will bind to the abstract model). */
+fn ra_enum_fns(src: *u8, src_len: u64, out_off: *u32, out_len: *u32, cap: u32) -> u32 @export {
+    let mut count : u32 = 0u32
+    let mut i : u64 = 0u64
+    let mut state : u32 = 0u32
+    let mut bdepth : u32 = 0u32
+    while i < src_len {
+        if state == 0u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { state = 1u32  bdepth = 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Fu8, 0x2Fu8) == 1u8 { state = 2u32  i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 3u32  i = i + 1u64 }
+            else {
+                let nm : u64 = ra_fn_name_at(src, src_len, i)
+                if nm != RA_NOT_FOUND {
+                    if count < cap {
+                        out_off[count as u64] = (nm >> 32u64) as u32
+                        out_len[count as u64] = (nm & 0xFFFFFFFFu64) as u32
+                    }
+                    count = count + 1u32
+                    let packed : u64 = ra_match_fn_body(src, src_len, i)
+                    if packed != RA_NOT_FOUND { i = packed & 0xFFFFFFFFu64 } else { i = i + 1u64 }
+                } else { i = i + 1u64 }
+            } } }
+        }
+        else { if state == 1u32 {
+            if ra_at(src, src_len, i, 0x2Fu8, 0x2Au8) == 1u8 { bdepth = bdepth + 1u32  i = i + 2u64 }
+            else { if ra_at(src, src_len, i, 0x2Au8, 0x2Fu8) == 1u8 { bdepth = bdepth - 1u32  i = i + 2u64  if bdepth == 0u32 { state = 0u32 } }
+            else { i = i + 1u64 } }
+        }
+        else { if state == 2u32 {
+            if src[i] == 0x0Au8 { state = 0u32 }
+            i = i + 1u64
+        }
+        else {
+            if src[i] == 0x5Cu8 { i = i + 2u64 }
+            else { if src[i] == 0x22u8 { state = 0u32  i = i + 1u64 } else { i = i + 1u64 } }
+        } } }
+    }
+    return count
+}

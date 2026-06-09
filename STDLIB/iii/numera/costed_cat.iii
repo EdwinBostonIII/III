@@ -41,7 +41,7 @@ var CC_N       : [u32; 1]
 var CC_BUDGET  : [u64; 6]
 var CC_ACC     : [u64; 6]        /* scratch: accumulated cost during compose */
 
-fn cc_init() -> i32 @export {
+fn ccat_init() -> i32 @export {
     cat_init()
     let mut i : u64 = 0u64
     while i < CC_MAX { CC_LIVE[i] = 0u8  i = i + 1u64 }
@@ -52,7 +52,7 @@ fn cc_init() -> i32 @export {
 }
 
 /* set a per-dimension budget ceiling (caller-controlled). */
-fn cc_set_budget(b: *u64) -> i32 @export {
+fn ccat_set_budget(b: *u64) -> i32 @export {
     if (b as u64) == 0u64 { return -1i32 }
     let mut k : u64 = 0u64
     while k < CC_DIM { CC_BUDGET[k] = b[k]  k = k + 1u64 }
@@ -60,7 +60,7 @@ fn cc_set_budget(b: *u64) -> i32 @export {
 }
 
 /* find the own-entry whose category slot == cat_slot, or CC_SENT. */
-fn cc_find(cat_slot: u32) -> u32 {
+fn ccat_find(cat_slot: u32) -> u32 {
     let n : u64 = CC_N[0u64] as u64
     let mut i : u64 = 0u64
     let mut found : u32 = CC_SENT
@@ -83,7 +83,7 @@ fn pcat_add(src: u32, dst: u32, op: *u8, cost: *u64, out_id: *u8) -> u32 @export
     if (cost as u64) == 0u64 { return CC_SENT }
     let cs : u32 = cat_add_morphism(src, dst, op, out_id)     /* category arrow + dedup */
     if cs == CC_CATSENT { return CC_SENT }
-    let ex : u32 = cc_find(cs)
+    let ex : u32 = ccat_find(cs)
     if ex != CC_SENT {
         let exoff : u64 = (ex as u64) * CC_DIM
         let mut k : u64 = 0u64
@@ -138,7 +138,7 @@ fn pcat_compose(f_own: u32, g_own: u32, out_id: *u8) -> u32 @export {
     if cl_le_product((&CC_ACC as u64) as *u64, (&CC_BUDGET as u64) as *u64) != 1u8 { return CC_SENT }   /* OVER-BUDGET -> refuse, no composite */
     let cs : u32 = cat_compose(CC_CATSLOT[f_own as u64], CC_CATSLOT[g_own as u64], out_id)
     if cs == CC_CATSENT { return CC_SENT }
-    let ex : u32 = cc_find(cs)
+    let ex : u32 = ccat_find(cs)
     if ex != CC_SENT {
         let exoff : u64 = (ex as u64) * CC_DIM
         let mut k3 : u64 = 0u64
@@ -171,8 +171,8 @@ var CC_C_HI  : [u64; 6]
 var CC_C_BAD : [u64; 6]
 var CC_GOT   : [u64; 6]
 
-fn cc_selftest() -> u64 @export {
-    cc_init()
+fn ccat_selftest() -> u64 @export {
+    ccat_init()
     CC_IDA[0u64] = 0x41u8  CC_IDB[0u64] = 0x42u8  CC_IDC[0u64] = 0x43u8
     CC_OP1[0u64] = 0x31u8  CC_OP2[0u64] = 0x32u8  CC_OP3[0u64] = 0x33u8  CC_OP4[0u64] = 0x34u8
     CC_C_LO[0u64]  = 3u64

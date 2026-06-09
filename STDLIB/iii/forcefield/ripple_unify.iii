@@ -28,6 +28,8 @@ extern @abi(c-msvc-x64) fn rm_unifiable(i: u32, j: u32) -> u32 from "ripple_metr
 extern @abi(c-msvc-x64) fn cgr_union_certified(a: u32, b: u32, proof_ok: u32) -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_rep_cost(item: u32) -> u64 from "congruence.iii"
+/* the CIC kernel (numera/typecheck) -- the disposer that DISCHARGES the merge proof. */
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
 
 /* THE certified-unification decider.  node_i/node_j are ripple_metric node ids (carrying the
  * capability-hash + intent-class); class_i/class_j are their congruence class ids (from
@@ -48,6 +50,32 @@ fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_
     /* distinct classes: merge ONLY with a discharged kernel proof (congruence's faithfulness gate) */
     if cgr_union_certified(class_i, class_j, proof_ok) != 1u32 { return 0u32 }
     return 1u32   /* [CUT-4/A-RU-1] certified-union post-condition: cgr_find(i)==cgr_find(j) always holds here; the old re-check + return 0u32 was unreachable */
+}
+
+/* KERNEL-DISCHARGED certified unification (Increment 2.1 -- the harmony loop closes the faked gate).
+ * Identical to ru_certify_unify EXCEPT the merge proof is DISCHARGED BY THE CIC KERNEL here:
+ * proof_ok = tc_check(proof, goal), where `goal` is an Id(T, repr_i, repr_j) equating the two classes'
+ * representatives and `proof` is its certificate (a refl, or any propositional/inductively-learned proof
+ * term).  This closes the ONE place in the certified-refactoring loop where proof_ok was a caller-supplied
+ * LITERAL never discharged via the kernel for a MERGE -- now ripple_unify <-> congruence <-> the CIC kernel
+ * genuinely compose: PROPOSE (the intent gate) / DISPOSE (the kernel equality proof) closes on the kernel
+ * for GLOBAL congruence-closure refactoring, not just per-arrow admission.
+ *
+ * HONEST-SCOPE CALLER OBLIGATION (mirrors theorem_commons.tcom_admit + certified_morphism.cmorph_add):
+ * congruence stores 32-byte content-ADDRESSES, not TC term ids, so `goal`'s endpoints (repr_i, repr_j) are
+ * CALLER-SUPPLIED and bound to the two classes' content ONLY by caller convention.  This function does NOT
+ * (and cannot, in scope) verify the address<->term binding; it verifies the kernel EQUALITY of the supplied
+ * endpoints.  The intent gate AND the kernel equality are BOTH necessary; neither alone authorizes a merge
+ * (the cpufeat lesson: behavioral equality is necessary, not sufficient).
+ *
+ * Returns 1 IFF the intent gate passes AND (same class already, OR the kernel discharges the equality).
+ * Otherwise 0, classes UNTOUCHED. */
+fn ru_certify_unify_kernel(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof: u32, goal: u32) -> u32 @export {
+    if rm_unifiable(node_i, node_j) != 1u32 { return 0u32 }                 /* INTENT GATE first */
+    if cgr_find(class_i) == cgr_find(class_j) { return 1u32 }               /* auto-congruence, proof-free */
+    let proof_ok : u32 = tc_check(proof, goal) as u32                       /* DISPOSE: kernel discharges the merge proof */
+    if cgr_union_certified(class_i, class_j, proof_ok) != 1u32 { return 0u32 }
+    return 1u32
 }
 
 /* the cost-minimal surviving representative's cost after unification -- the realization all

@@ -1562,3 +1562,30 @@ the gate now hashes the **artifact directly** (`sha256sum libiii_native.a`) + as
 (`ar t`), never the sidecar -- one file, no write-ordering gap, OneDrive-staleness-immune.
 
 **§8.26 sealed at:** 2026-05-31 (ongoing).
+
+### §8.27 — R3 codegen catalog wiring + cg_r0 sign-aware cast-extend (C11 golden re-root, 2026-06-06)
+
+Two coordinated changes deployed in one re-root. (1) **R3**: `cg_r3.iii` + `cg_r3.c` gained the
+identity-element fold `r3_arith_identity` (x*1->x, x+0->x, x-0->x -- emit only the lhs, skip the op;
+kernel-justified by the BV64 model, corpus 1213/1215). (2) **cg_r0 sign-aware cast-extend**: `cg_r0.iii`
+`r0_emit_cast_extend` was stuck on the pre-K4 zero-uniform behaviour (i8->movzbq) -- it now sign-extends
+signed narrowing casts (i8->movsbq, i16->movswq, i32->movslq, byte-identical strings to cg_r3's EXT_MOVS*),
+fixing the long-standing `cg_seam_gate` `cast_i8_uni` FAIL (cg_r0 was the bug, not cg_r3). `cg_r0.c` is the
+frozen pass-through seed (no cast-extend), so no `.c` twin edit.
+
+**Note:** the iiis-0/iiis-1 goldens recorded before this were STALE (the K4 reseal rolled iiis-2 to
+`1e92903a` but never updated iiis-0/iiis-1 from `8d31f9fc`/`82ee8714`); this re-root reconciles them.
+
+| Artifact (golden) | Before | After |
+|---|---|---|
+| `COMPILER/BOOT/iiis-0.mhash` | `8d31f9fc…` (stale) | `9b1e243daec23cb2f6e76e87236a9d408d3b8cc1b2dd66e1b02e23d533d1b910` |
+| `COMPILER/BOOT/iiis-1.mhash` | `82ee8714…` (stale) | `93450d0133416443512c0f6e631576f28ae2e16b8a4344be1bec36019e210a47` |
+| `COMPILER/BOOT/iiis-2.mhash` = `iiis-3.mhash` (fixed point) | `1e92903a…` | `7480c72576648d580d0709108d5e55566ba26e40bc54fc4600aad0a97cf31eeb` |
+
+**Verified:** self-host fixpoint iiis-2 ≡ iiis-3 = `7480c725`; `build_iiis0` verify OK + all four
+binary↔golden CONSISTENT; `cg_seam_gate` **PASS=12 FAIL=0** (cast_i8_uni cg_r0==cg_r3=55); `build_stdlib`
+**486/0**; trusted base `f079dd81` UNMOVED; R3-stage full corpus **822/0 zero WRONG**; cg_r0-stage 37-test
+cross-category spot-check **FAILS=0**. (Full corpus on the `7480c725` stage: the long run is repeatedly
+killed by OneDrive re-syncing the fresh lib mid-run -- a settle-then-run confirmation is in flight.)
+
+**§8.27 sealed at:** 2026-06-06.

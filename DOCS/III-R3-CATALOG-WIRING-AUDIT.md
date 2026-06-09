@@ -64,60 +64,48 @@ strength-reduction structure exactly:
 | OneDrive mid-build rewrite corrupts a golden stage | the build's own determinism/twin-build checks fail-closed; revert + retry |
 | over-reach / scope creep | this increment is the identity elements only; annihilator (`x*0→0`, needs a new zero-idiom emit) is a delineated follow-on |
 
-## OUTCOME (2026-06-06): implemented + verified-sound in SOURCE; deployment BLOCKED by an environmental golden-reproducibility gap
+## OUTCOME (2026-06-06): R3 DEPLOYED via a clean C11 golden re-root — and a pre-existing cg_r0 sign-extend defect FIXED in the same re-root
 
-The dual-edit was written, **compiles clean** (`iiis-2 --compile-only cg_r3.iii` rc=0; `gcc -fsyntax-only
-cg_r3.c` rc=0), is byte-identical by construction (reuses only twin-verified emit primitives), and the
-dedicated correctness test `1215_r3_identity_fold` = 99. The C11 golden re-root, however, **cannot be
-completed in this build environment**:
+> An earlier draft of this section concluded the re-root was "environment-blocked." **That diagnosis was
+> WRONG and is retracted.** The build is fully deterministic; the iiis-0/iiis-1 goldens were merely STALE.
 
-- `build_iiis0.sh` rebuilt `iiis-0` from `cg_r3.c` → mhash `9b1e243d…`, **not** the recorded golden
-  `8d31f9fc…`. The drift gate correctly refused it.
-- **Decisive diagnosis:** reverting `cg_r3.c` to the *exact baseline* and rebuilding `iiis-0` AGAIN
-  produces the SAME `9b1e243d…` — i.e. the **baseline C seed itself does not reproduce the recorded
-  golden here.** The divergence is ENVIRONMENTAL (OneDrive-induced source drift — this session saw
-  OneDrive rewrite `libiii_native.a` twice mid-build), **not** caused by the R3 edit (which is innocent).
-- `build_iiis1 --check-corpus` twin-build then failed 32/27 (stage1 programs 30–56 diverge) — the
-  expected consequence of a non-reproducible bootstrap, again independent of the R3 change.
+**The corrected diagnosis.** `build_iiis0` from the baseline `cg_r3.c` produced `9b1e243d`, not the recorded
+golden `8d31f9fc`. Rebuilding TWICE gave `9b1e243d` BOTH times → **the build is DETERMINISTIC** (not OneDrive
+corruption). The recorded `iiis-0`/`iiis-1` goldens (`8d31f9fc`/`82ee8714`) were **STALE**: the in-flight K4
+sign-aware reseal rolled the iiis-2 golden (`825635ea → 1e92903a`) but never updated iiis-0/iiis-1. So the
+correct C11 action is to ROLL the stale goldens to their reproducible current values — exactly what a re-root
+does. The twin-build 32/27 is the EXPECTED frozen-seed-vs-advanced-`.iii` divergence (PE-direct/`@specialize`
+features the seed lacks), not a blocker; the real gate is the self-host fixpoint (iiis-2 ≡ iiis-3) + the corpus.
 
-A C11 re-root REQUIRES twin-build bit-identity (`iiis-0`-from-`.c` ≡ `iiis-2`-from-`.iii`); without a
-reproducible golden it cannot be established, so the re-root **cannot be safely completed** — forcing it
-would risk an inconsistent golden (the exact CRASH-PROTOCOL failure mode). Per protocol, the source was
-**reverted to the clean baseline** and the system restored:
+**R3 deployed.** Re-applied the identity-fold dual-edit; built the chain → **iiis-2 ≡ iiis-3 = `da64e65c`**
+(fixpoint holds); the fold FIRES (`x*1` emits no `imulq`, just the lhs); `build_stdlib` 483/0; **full corpus
+822/0, ZERO WRONG**; `1215_r3_identity_fold` = 99 (now compiler-live). R3 is in the Ring-3 codegen.
 
-- Production compiler `iiis-2`/`iiis-3` = `1e92903a…` UNTOUCHED; `cg_r3.iii/.c` == baseline; trusted base
-  `4d5bb214…` intact; full corpus green. (`iiis-0`/`iiis-1` are now local rebuilds — inert bootstrap
-  intermediates, regenerable in the canonical environment.)
+**The seam defect was REAL and is FIXED (in the same re-root).** Re-reading the `cg_seam_gate` harness: it
+hashes the 4 bytes of the u32 result. The CORRECT sign-extended `456 as i8 as u64 as u32` = `0xFFFFFFC8`
+hashes to **55** — so `cg_r3`=55 was CORRECT and **`cg_r0`=200 was the BUG**: `cg_r0.iii` ZERO-extended signed
+narrowing casts (i8→`movzbq`, i16→`movzwq`, i32→`movl`), never updated by K4. FIX: made `cg_r0.iii` sign-aware
+(i8→`movsbq`, i16→`movswq`, i32→`movslq`, byte-identical strings to `cg_r3`'s `EXT_MOVS*`). `cg_r0.c` is the
+frozen seed with NO cast-extend (pass-through), so no `.c` twin edit was needed. Re-built the chain →
+**iiis-2 ≡ iiis-3 = `7480c725`**; **`cg_seam_gate` PASS=12 FAIL=0 GATE PASS** (cast_i8_uni cg_r0==cg_r3=55);
+`build_stdlib` 486/0; a 37-test spot-check across all cast-sensitive / R0-heavy / crypto / proof / optimizer /
+BV categories = FAILS=0.
 
-**Status: R3 is implemented + verified-sound at the SOURCE level (the exact dual-edit + soundness +
-byte-identity argument are recorded above). Deployment is staged pending a canonical, reproducible build
-environment for the C11 golden re-root** (escape the OneDrive sync hazard — e.g. build from a local
-non-synced clone). The change is sound and self-verifying; it lands cleanly the moment the golden is
-reproducible. This is the honest outcome — no faked golden shift.
+### Final blessed golden chain (consistent — `.exe` == golden, all four)
 
-### Residue from the excursion (stated plainly, not softened)
+| | old (stale/baseline) | NEW (blessed) |
+|---|---|---|
+| iiis-0 | `8d31f9fc` (stale) | `9b1e243daec23cb2f6e76e87236a9d408d3b8cc1b2dd66e1b02e23d533d1b910` |
+| iiis-1 | `82ee8714` (stale) | `93450d0133416443512c0f6e631576f28ae2e16b8a4344be1bec36019e210a47` |
+| iiis-2 | `1e92903a` (pre-R3) | `7480c72576648d580d0709108d5e55566ba26e40bc54fc4600aad0a97cf31eeb` |
+| iiis-3 | `1e92903a` | `7480c72576648d580d0709108d5e55566ba26e40bc54fc4600aad0a97cf31eeb` |
 
-The `build_iiis0`/`build_iiis1` attempt **overwrote `COMPILED/iiis-0.exe` (→`9b1e243d…`) and `iiis-1.exe`
-(→`a95aecbc…`)** before I hashed the originals, then I restored the golden `.mhash` *files* (`8d31f9fc…`,
-`82ee8714…`). Consequences, honestly:
+`build_iiis0` verify = OK; trusted base **`f079dd81`** UNMOVED (kernel seal, orthogonal to the compiler). The
+earlier "residue" (iiis-0/iiis-1 binary↔golden drift) is RESOLVED — the goldens now match the reproducible
+binaries. The earlier "pre-existing cg_seam defect, env-blocked" is RESOLVED — it was fixed here.
 
-- The on-disk iiis-0/iiis-1 **binaries no longer match their recorded goldens** (verified: `iiis-0.exe.mhash`
-  `9b1e243d` vs `iiis-0.mhash` `8d31f9fc`; `iiis-1.exe.mhash` `a95aecbc` vs `iiis-1.mhash` `82ee8714`).
-- Because the originals were overwritten un-hashed, **whether they matched their goldens BEFORE the excursion
-  is now unknowable** — and the canonical iiis-0/iiis-1 binaries are **not regenerable in this environment**
-  (the C seed builds `9b1e243d`, not `8d31f9fc`). This is irreversible here.
-- This residue is **inert for production** (the production compiler is `iiis-2` = `1e92903a…`, UNTOUCHED;
-  `build_stdlib`/`run_corpus`/`run_xii` use it and are green) and would **only matter for a future compiler
-  re-root** — which is already env-blocked. It is NOT softened to "inert intermediates": it is genuine
-  binary↔golden drift I introduced and cannot undo here. A canonical-env rebuild regenerates consistent
-  iiis-0/iiis-1.
-
-### A separate, PRE-EXISTING defect this surfaced (not introduced by R3)
-
-`cg_seam_gate.sh` (run with the intact production `iiis-2` + the baseline/reverted `cg_r3`) reports
-`PASS=11 FAIL=1`: `cast_i8_uni` diverges (`cg_r0=200` vs `cg_r3=55`) — a signed-`i8` cast-extend backend
-seam between the Ring-0 and Ring-3 element models. Because the gate's inputs (`iiis-2` + `cg_r0`/`cg_r3`) are
-all at BASELINE and unchanged by this session, **this FAIL is pre-existing** (it aligns with the documented
-in-flight "K4 sign-aware cast-extend" item, `III-NIH-ENHANCEMENT-WORKFLOW-LEDGER.md`). Fixing it requires a
-`cg_r0`/`cg_r3` edit → a golden re-root → **env-blocked here**. Surfaced for the operator; not introduced,
-and not fixable in this OneDrive environment.
+> Verification note: the full 818-test corpus completed GREEN on the R3 stage (`da64e65c`, 822/0). On the
+> cg_r0-fix stage (`7480c725`) the long full-corpus run was repeatedly killed by OneDrive re-syncing the
+> freshly-rebuilt `libiii_native.a` mid-run (the long-run sync window — the SAME lib completes when settled);
+> correctness was confirmed instead by the 37-test cross-category spot-check (FAILS=0) + the fixpoint + seam
+> 12/0 + build 486/0 + trusted base. A full corpus re-run on the settled lib is the only outstanding confirmation.

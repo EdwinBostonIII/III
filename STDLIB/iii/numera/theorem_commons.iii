@@ -25,6 +25,8 @@ module numera_theorem_commons
 
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+/* increment 2 (harmony item 5): the kernel's injective goal-term serializer -- the address now BINDS the goal. */
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
 
 const TCOM_OK         : i32 =  0i32
 const TCOM_E_NULL     : i32 = -1i32
@@ -86,6 +88,27 @@ fn tcom_cite(stmt: u64, len: u64) -> i32 @export {
     cad_oneshot(TCOM_SUITE, stmt as *u8, len, (&TCOM_SCR as u64) as *u8)
     if tcom_find() != -1i32 { return TCOM_OK }   /* != (equality) -- NOT >=0i32: i32 signed ordering compiles UNSIGNED (the documented trap), so -1>=0 would be wrongly TRUE */
     return TCOM_E_ABSENT
+}
+
+/* serialized-goal scratch (module-scope, honoring the no-local-array-by-runtime-index discipline). */
+var TCOM_GBUF : [u8; 4096]
+
+/* INCREMENT 2 (harmony item 5) -- admit a theorem by its GOAL TERM.  The content-address is derived from
+ * the kernel's INJECTIVE SERIALIZED goal (tc_serialize), so the bytes<->goal binding is AUTOMATIC: the
+ * address IS the goal.  This closes the increment-1 mislabel gap (a caller could admit bytes "thm:3=3"
+ * while passing a proof of a DIFFERENT goal -- the bytes and the gated goal were independent).  Still gated
+ * on tc_check(proof, goal)==1, so soundness is unchanged; the binding is merely no longer caller-trusted. */
+fn tcom_admit_goal(proof: u32, goal: u32) -> i32 @export {
+    let len : u64 = tc_serialize(goal, (&TCOM_GBUF as u64) as *u8, 4096u64)
+    if len == 0xFFFFFFFFFFFFFFFFu64 { return TCOM_E_NULL }   /* goal too large to address -- refuse */
+    return tcom_admit((&TCOM_GBUF as u64), len, proof, goal)
+}
+
+/* cite a theorem by its GOAL TERM (address derived from the serialized goal). OK = kernel-certified. */
+fn tcom_cite_goal(goal: u32) -> i32 @export {
+    let len : u64 = tc_serialize(goal, (&TCOM_GBUF as u64) as *u8, 4096u64)
+    if len == 0xFFFFFFFFFFFFFFFFu64 { return TCOM_E_ABSENT }
+    return tcom_cite((&TCOM_GBUF as u64), len)
 }
 
 fn tcom_size() -> u64 @export { return TCOM_COUNT as u64 }

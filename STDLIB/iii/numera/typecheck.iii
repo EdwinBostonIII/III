@@ -2137,6 +2137,59 @@ fn tc_to_ccl(t: u32) -> u32 {
     return ccl_atom(2000u32 + (tag as u32))
 }
 
+/* ===== harmony item 5: TC TERM SERIALIZER (a SIBLING of tc_to_ccl -- OUTSIDE its span, so the
+ * content-address-sealed TRUSTED_BASE_ROOT is UNMOVED; never called by tc_to_ccl) =================
+ * A self-delimiting, INJECTIVE pre-order byte-encoding of a TC term, giving a goal a stable content
+ * address.  The scalar-field tags (VAR/SORT/REACH carry one value in A; LEK/BVLIT carry values in A,B)
+ * emit their RAW value(s); every other tag has node-ref children, so we recurse into A,B,C,D (a 0 field
+ * = a null-child marker byte).  A VAR with index k thus encodes <present,tag,k> while a node whose child
+ * is numerically k recurses into node k -- so a scalar can NEVER collide with a node-ref (the injectivity
+ * the goal-binding needs).  Bounded by `cap`; returns 0xFFFF…FF (REFUSE) if it would overflow. */
+var TC_SER_OUT : u64 = 0u64
+var TC_SER_POS : u64 = 0u64
+var TC_SER_CAP : u64 = 0u64
+var TC_SER_ERR : u8  = 0u8
+fn tc_ser_byte(b: u8) -> u64 {
+    if TC_SER_POS >= TC_SER_CAP { TC_SER_ERR = 1u8 ; return 0u64 }
+    let p : *u8 = TC_SER_OUT as *u8
+    p[TC_SER_POS] = b
+    TC_SER_POS = TC_SER_POS + 1u64
+    return 0u64
+}
+fn tc_ser_u32(v: u32) -> u64 {
+    tc_ser_byte((v & 0xFFu32) as u8)
+    tc_ser_byte(((v >> 8u32) & 0xFFu32) as u8)
+    tc_ser_byte(((v >> 16u32) & 0xFFu32) as u8)
+    tc_ser_byte(((v >> 24u32) & 0xFFu32) as u8)
+    return 0u64
+}
+fn tc_ser_walk(t: u32) -> u64 {
+    if TC_SER_ERR == 1u8 { return 0u64 }
+    if t == 0u32 { tc_ser_byte(0u8) ; return 0u64 }      /* null child */
+    tc_ser_byte(1u8)                                      /* present marker */
+    let tag : u8 = TC_TAG[t]
+    tc_ser_byte(tag)
+    if tag == TC_VAR   { tc_ser_u32(TC_A[t]) ; return 0u64 }
+    if tag == TC_SORT  { tc_ser_u32(TC_A[t]) ; return 0u64 }
+    if tag == TC_REACH { tc_ser_u32(TC_A[t]) ; return 0u64 }
+    if tag == TC_LEK   { tc_ser_u32(TC_A[t]) ; tc_ser_u32(TC_B[t]) ; return 0u64 }
+    if tag == TC_BVLIT { tc_ser_u32(TC_A[t]) ; tc_ser_u32(TC_B[t]) ; return 0u64 }
+    tc_ser_walk(TC_A[t])
+    tc_ser_walk(TC_B[t])
+    tc_ser_walk(TC_C[t])
+    tc_ser_walk(TC_D[t])
+    return 0u64
+}
+fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 @export {
+    TC_SER_OUT = out as u64
+    TC_SER_POS = 0u64
+    TC_SER_CAP = cap
+    TC_SER_ERR = 0u8
+    tc_ser_walk(t)
+    if TC_SER_ERR == 1u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    return TC_SER_POS
+}
+
 /* the CCL oracle agrees with NbE on (x,y). */
 /* the SINGULAR conversion verdict (the directed CCL oracle): 1 = convertible,
  * 0 = not.  Formerly `ccl_agrees`, a CCL-vs-NbE differential -- but NbE is

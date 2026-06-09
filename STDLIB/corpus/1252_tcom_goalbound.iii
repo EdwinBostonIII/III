@@ -1,0 +1,41 @@
+/* NNNN_tcom_goalbound.iii -- GOAL-BOUND THEOREM COMMONS (harmony item 5).
+ * tcom_admit_goal/tcom_cite_goal derive the content-address from the kernel's INJECTIVE serialized GOAL
+ * (tc_serialize), so the bytes<->goal binding is automatic -- closing the increment-1 mislabel gap.  Arms:
+ *  (1) cite-before-admit -> ABSENT; (2) admit Id(Nat,z,z) with refl(z) -> OK, then cite -> OK, size 1;
+ *  (3) a DIFFERENT true goal Id(Nat,1,1) is ABSENT (no false merge) then admits distinctly -> size 2;
+ *  (4) idempotent re-admit -> size unchanged; (5) soundness: a FALSE goal Id(Nat,z,1) is UNPROVEN, NOT
+ *  admitted (tc_check still the sole gate).  99 = all hold. */
+module corpus_1252
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite_goal(goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+fn main() -> u64 {
+    tc_reset()
+    tcom_init()
+    let nat : u32 = tc_nat()
+    let z : u32 = tc_zero()
+    let one : u32 = tc_succ(tc_zero())
+    let g_zz : u32 = tc_id(nat, z, z)
+    let g_11 : u32 = tc_id(nat, one, one)
+    if tcom_cite_goal(g_zz) != -2i32 { return 1u64 }                 /* ABSENT before admit */
+    if tcom_admit_goal(tc_refl(z), g_zz) != 0i32 { return 2u64 }     /* admit Id(Nat,z,z) */
+    if tcom_cite_goal(g_zz) != 0i32 { return 3u64 }                  /* now OK */
+    if tcom_size() != 1u64 { return 4u64 }
+    if tcom_cite_goal(g_11) != -2i32 { return 5u64 }                 /* distinct goal -> ABSENT (no merge) */
+    if tcom_admit_goal(tc_refl(one), g_11) != 0i32 { return 6u64 }
+    if tcom_size() != 2u64 { return 7u64 }                           /* distinct address -> 2 */
+    if tcom_cite_goal(g_11) != 0i32 { return 8u64 }
+    if tcom_admit_goal(tc_refl(z), g_zz) != 0i32 { return 9u64 }     /* idempotent */
+    if tcom_size() != 2u64 { return 10u64 }
+    let g_false : u32 = tc_id(nat, z, one)                           /* Id(Nat,z,1) -- FALSE */
+    if tcom_admit_goal(tc_refl(z), g_false) != -3i32 { return 11u64 }  /* UNPROVEN -> not admitted */
+    if tcom_size() != 2u64 { return 12u64 }
+    return 99u64
+}

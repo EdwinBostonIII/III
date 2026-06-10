@@ -1,0 +1,43 @@
+/* Independence proof #3 — THE GRAND CAPSTONE, image C (the witness-coupled set).
+ *
+ * The eleven faculties whose link closure pulls the witness spine (reversible, proof_term,
+ * constitution, memo_lattice, synthesis_spec, proof_carrying, symbolic_regression,
+ * curry_howard, nous_search, h7, h8) — they ride WITH the spine, apart from the zk arenas.
+ * See indep_cap_a.iii for THE HOST LAW (SizeOfImage < 0x77000000) that forces the
+ * one-image capstone into weight-balanced images + the III-built driver.  Faculty
+ * indices are the one-image capstone's ORIGINAL numbering, so a red exit names the
+ * same organ.  Compiled AND linked by iiis-2 alone (no gcc). */
+module indep_cap_c
+
+extern @abi(c-msvc-x64) fn rev_selftest() -> u64 from "reversible.iii"
+extern @abi(c-msvc-x64) fn pt_kat() -> u64 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn cons_selftest() -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ml_selftest() -> u64 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ss_selftest() -> u64 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn pc_selftest() -> u64 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn symreg_selftest() -> u64 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn curryh_selftest() -> u64 from "curry_howard.iii"
+extern @abi(c-msvc-x64) fn nous_search_selftest() -> u64 from "nous_search.iii"
+extern @abi(c-msvc-x64) fn h7_selftest() -> u64 from "h7_charter.iii"
+extern @abi(c-msvc-x64) fn h8_selftest() -> u64 from "h8_charter.iii"
+
+fn chk(code: u64, idx: u64) -> u64 {
+    if code != 99u64 { return idx }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let mut r : u64 = 0u64
+    r = chk(rev_selftest(), 10u64);    if r != 0u64 { return r }
+    r = chk(pt_kat(), 11u64);    if r != 0u64 { return r }
+    r = chk(cons_selftest(), 12u64);    if r != 0u64 { return r }
+    r = chk(ml_selftest(), 19u64);    if r != 0u64 { return r }
+    r = chk(ss_selftest(), 20u64);    if r != 0u64 { return r }
+    r = chk(pc_selftest(), 21u64);    if r != 0u64 { return r }
+    r = chk(symreg_selftest(), 30u64);    if r != 0u64 { return r }
+    r = chk(curryh_selftest(), 31u64);    if r != 0u64 { return r }
+    r = chk(nous_search_selftest(), 35u64);    if r != 0u64 { return r }
+    r = chk(h7_selftest(), 43u64);    if r != 0u64 { return r }
+    r = chk(h8_selftest(), 44u64);    if r != 0u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,83 @@
+/* Independence proof #3 — THE GRAND CAPSTONE, image B (the non-witness set).
+ *
+ * Faculties whose link closure does NOT pull the ~1 GiB witness spine: the XII engine
+ * certificates, decision procedures, math/crypto/zk arenas, type theory, consensus,
+ * the sovereign ISA, and the non-witnessing Harmony Invariants.
+ * See indep_cap_a.iii for THE HOST LAW (SizeOfImage < 0x77000000) that forces the
+ * one-image capstone into weight-balanced images + the III-built driver.  Faculty
+ * indices are the one-image capstone's ORIGINAL numbering, so a red exit names the
+ * same organ.  Compiled AND linked by iiis-2 alone (no gcc). */
+module indep_cap_b
+
+extern @abi(c-msvc-x64) fn xjn_selftest() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xcc_selftest() -> u64 from "xii_conf_cert.iii"
+extern @abi(c-msvc-x64) fn xtm_selftest() -> u64 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn sat_selftest() -> u64 from "sat.iii"
+extern @abi(c-msvc-x64) fn smt_selftest() -> u64 from "smt.iii"
+extern @abi(c-msvc-x64) fn gb_selftest() -> u64 from "groebner.iii"
+extern @abi(c-msvc-x64) fn eg_selftest() -> u64 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cat_laws_charter_selftest() -> u64 from "category.iii"
+extern @abi(c-msvc-x64) fn cl_selftest() -> u64 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn keccak256_kat() -> u64 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_selftest() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn galois_selftest() -> u64 from "galois.iii"
+extern @abi(c-msvc-x64) fn ntt_selftest() -> u64 from "ntt.iii"
+extern @abi(c-msvc-x64) fn zk_stark_kat() -> u64 from "zk_stark.iii"
+extern @abi(c-msvc-x64) fn zk_snark_kat() -> u64 from "zk_snark.iii"
+extern @abi(c-msvc-x64) fn zkf_pairing_selftest() -> u64 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn typecheck_selftest() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn ccl_beta_kat() -> u64 from "ccl.iii"
+extern @abi(c-msvc-x64) fn hs_selftest() -> u64 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn sov_isa_kat() -> u64 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn h1_selftest() -> u64 from "h1_charter.iii"
+extern @abi(c-msvc-x64) fn h2_selftest() -> u64 from "h2_charter.iii"
+extern @abi(c-msvc-x64) fn h3_selftest() -> u64 from "h3_charter.iii"
+extern @abi(c-msvc-x64) fn h4_selftest() -> u64 from "h4_charter.iii"
+extern @abi(c-msvc-x64) fn h5_selftest() -> u64 from "h5_charter.iii"
+extern @abi(c-msvc-x64) fn h6_selftest() -> u64 from "h6_charter.iii"
+extern @abi(c-msvc-x64) fn h9_selftest() -> u64 from "h9_charter.iii"
+extern @abi(c-msvc-x64) fn h10_selftest() -> u64 from "h10_charter.iii"
+extern @abi(c-msvc-x64) fn h11_selftest() -> u64 from "h11_charter.iii"
+extern @abi(c-msvc-x64) fn h12_selftest() -> u64 from "h12_charter.iii"
+extern @abi(c-msvc-x64) fn h13_selftest() -> u64 from "h13_charter.iii"
+
+fn chk(code: u64, idx: u64) -> u64 {
+    if code != 99u64 { return idx }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let mut r : u64 = 0u64
+    r = chk(xjn_selftest(), 7u64);    if r != 0u64 { return r }
+    r = chk(xcc_selftest(), 8u64);    if r != 0u64 { return r }
+    r = chk(xtm_selftest(), 9u64);    if r != 0u64 { return r }
+    r = chk(sat_selftest(), 13u64);    if r != 0u64 { return r }
+    r = chk(smt_selftest(), 14u64);    if r != 0u64 { return r }
+    r = chk(gb_selftest(), 15u64);    if r != 0u64 { return r }
+    r = chk(eg_selftest(), 16u64);    if r != 0u64 { return r }
+    r = chk(cat_laws_charter_selftest(), 17u64);    if r != 0u64 { return r }
+    r = chk(cl_selftest(), 18u64);    if r != 0u64 { return r }
+    r = chk(keccak256_kat(), 22u64);    if r != 0u64 { return r }
+    r = chk(rsa_pss_selftest(), 23u64);    if r != 0u64 { return r }
+    r = chk(galois_selftest(), 24u64);    if r != 0u64 { return r }
+    r = chk(ntt_selftest(), 25u64);    if r != 0u64 { return r }
+    r = chk(zk_stark_kat(), 26u64);    if r != 0u64 { return r }
+    r = chk(zk_snark_kat(), 28u64);    if r != 0u64 { return r }
+    r = chk(zkf_pairing_selftest(), 29u64);    if r != 0u64 { return r }
+    r = chk(typecheck_selftest(), 32u64);    if r != 0u64 { return r }
+    r = chk(ccl_beta_kat(), 33u64);    if r != 0u64 { return r }
+    r = chk(hs_selftest(), 34u64);    if r != 0u64 { return r }
+    r = chk(sov_isa_kat(), 36u64);    if r != 0u64 { return r }
+    r = chk(h1_selftest(), 37u64);    if r != 0u64 { return r }
+    r = chk(h2_selftest(), 38u64);    if r != 0u64 { return r }
+    r = chk(h3_selftest(), 39u64);    if r != 0u64 { return r }
+    r = chk(h4_selftest(), 40u64);    if r != 0u64 { return r }
+    r = chk(h5_selftest(), 41u64);    if r != 0u64 { return r }
+    r = chk(h6_selftest(), 42u64);    if r != 0u64 { return r }
+    r = chk(h9_selftest(), 45u64);    if r != 0u64 { return r }
+    r = chk(h10_selftest(), 46u64);    if r != 0u64 { return r }
+    r = chk(h11_selftest(), 47u64);    if r != 0u64 { return r }
+    r = chk(h12_selftest(), 48u64);    if r != 0u64 { return r }
+    r = chk(h13_selftest(), 49u64);    if r != 0u64 { return r }
+    return 99u64
+}

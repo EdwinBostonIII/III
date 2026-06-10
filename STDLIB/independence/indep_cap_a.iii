@@ -1,0 +1,37 @@
+/* Independence proof #3 — THE GRAND CAPSTONE, image A (Foundation).
+ *
+ * THE HOST LAW (discovered + pinned by bisection 2026-06-09): the Windows x64 loader REFUSES any
+ * image with SizeOfImage >= 0x77000000 (1904 MiB) — ERROR_BAD_EXE_FORMAT, regardless of free
+ * commit (a 1903 MiB-BSS probe loads; 1904 MiB does not; pure-C repro, toolchain-independent).
+ * The one-image capstone's union BSS (witness spine ~1 GiB + zk/ntt/sat arenas) is ~1.93 GiB —
+ * structurally unloadable AS ONE IMAGE on this host.  Nothing is downscaled: the proof is the
+ * CONJUNCTION of faculty verdicts, so it ships as two full-scale III-built images + an III-built
+ * driver (indep_cap_drive.iii) that runs both and aggregates.  Image A carries the witness-heavy
+ * Foundation (faculties 1-6, the ~1 GiB witness spine at gospel scale); image B carries 7-49.
+ *
+ * Compiled AND linked by iiis-2 alone (its own link.iii against libiii_native.a, no gcc).
+ * Returns 99 iff every Foundation faculty proves itself; else the 1-based faculty index. */
+module indep_cap_a
+
+extern @abi(c-msvc-x64) fn cad_selftest() -> u64 from "cad.iii"
+extern @abi(c-msvc-x64) fn trit_selftest() -> u64 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reach_selftest() -> u64 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn unc_selftest() -> u64 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn sv_selftest() -> u64 from "sovval.iii"
+extern @abi(c-msvc-x64) fn ws_selftest() -> u64 from "witness_spine.iii"
+
+fn chk(code: u64, idx: u64) -> u64 {
+    if code != 99u64 { return idx }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let mut r : u64 = 0u64
+    r = chk(cad_selftest(), 1u64);                 if r != 0u64 { return r }
+    r = chk(trit_selftest(), 2u64);                if r != 0u64 { return r }
+    r = chk(iii_hexad_reach_selftest(), 3u64);     if r != 0u64 { return r }
+    r = chk(unc_selftest(), 4u64);                 if r != 0u64 { return r }
+    r = chk(sv_selftest(), 5u64);                  if r != 0u64 { return r }
+    r = chk(ws_selftest(), 6u64);                  if r != 0u64 { return r }
+    return 99u64
+}

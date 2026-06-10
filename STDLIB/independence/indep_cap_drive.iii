@@ -1,0 +1,45 @@
+/* Independence proof #3 — THE GRAND CAPSTONE driver.
+ *
+ * Runs image A (Foundation), image B (the non-witness set), and image C (the witness-coupled set) — all
+ * compiled AND linked by iiis-2 alone — and aggregates: 99 iff ALL return 99; otherwise the
+ * failing faculty's own 1-based index propagates verbatim (A, B, and C keep the one-image
+ * capstone's numbering), so a red result still names the exact organ.
+ *
+ * WHY a driver: the Windows x64 loader refuses any image with SizeOfImage >= 0x77000000
+ * (1904 MiB; pinned by bisection — see indep_cap_a.iii).  The union of every faculty's
+ * full-scale arenas is ~1.93 GiB of BSS, so the conjunction ships as three weight-balanced images.  The driver
+ * itself is III-built: III alone builds all four artifacts, runs them, and renders the verdict.
+ *
+ * The command strings are NUL-terminated byte arrays (string literals carry no trailing NUL —
+ * the documented msvcrt-boundary discipline).  msvcrt system() on Windows returns the child's
+ * exit code directly. */
+module indep_cap_drive
+
+extern @abi(c-msvc-x64) fn system(cmd: *u8) -> i32 from "msvcrt"
+
+/* ".\_cap_a_run.exe" + NUL (cmd-native relative form) */
+var CMD_A : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,97u8,95u8,114u8,117u8,110u8,46u8,101u8,120u8,101u8,0u8]
+/* ".\_cap_b_run.exe" + NUL */
+var CMD_B : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,98u8,95u8,114u8,117u8,110u8,46u8,101u8,120u8,101u8,0u8]
+/* ".\_cap_c_run.exe" + NUL */
+var CMD_C : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,99u8,95u8,114u8,117u8,110u8,46u8,101u8,120u8,101u8,0u8]
+
+fn main() -> u64 {
+    let ra : i32 = system((&CMD_A as u64) as *u8)
+    if ra != 99i32 {
+        if ra < 0i32 { return 98u64 }              /* spawn failure: distinct from any faculty index */
+        return (ra as u64) & 0xFFu64
+    }
+    let rb : i32 = system((&CMD_B as u64) as *u8)
+    if rb != 99i32 {
+        if rb < 0i32 { return 98u64 }
+        return (rb as u64) & 0xFFu64
+    }
+    let rc2 : i32 = system((&CMD_C as u64) as *u8)
+    if rc2 != 99i32 {
+        if rc2 < 0i32 { return 98u64 }
+        return (rc2 as u64) & 0xFFu64
+    }
+    /* All 49 faculties proved themselves, across the three images. */
+    return 99u64
+}

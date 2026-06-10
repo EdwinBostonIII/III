@@ -1,0 +1,101 @@
+/* Independence proof #4 — A REAL INTEGRATED APPLICATION.
+ * Not a self-test: an end-to-end sovereign-document notarization pipeline that
+ * composes FIVE faculties III must be able to wield together —
+ *   content-address (SHA-256) · Merkle commitment · Ed25519 signatures ·
+ *   Merkle inclusion proof · content-address sealing —
+ * and then PROVES it detects forgery (3 negative arms). One III program,
+ * compiled + linked by III, only libc at the boundary. 99 = the whole pipeline
+ * worked AND every forgery was caught. */
+module indep_notary
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_domain(domain: u64, domain_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+
+fn fill(p: *u8, base: u8, n: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < n { p[i] = base + (i as u8)  i = i + 1u64 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* Four sovereign documents (32 bytes each), distinct content. */
+    let docs : *u8 = malloc(128u64)
+    fill(docs, 0x01u8, 32u64)
+    fill((docs as u64 + 32u64) as *u8, 0x40u8, 32u64)
+    fill((docs as u64 + 64u64) as *u8, 0x80u8, 32u64)
+    fill((docs as u64 + 96u64) as *u8, 0xC0u8, 32u64)
+
+    /* (1) Content-address each document -> the Merkle leaves (SHA-256 digests). */
+    let leaves : *u8 = malloc(128u64)
+    let mut d : u64 = 0u64
+    while d < 4u64 {
+        if cad_oneshot(0u32, (docs as u64 + d * 32u64) as *u8, 32u64, (leaves as u64 + d * 32u64) as *u8) != 0i32 { return 1u64 }
+        d = d + 1u64
+    }
+
+    /* (2) Merkle commitment over the four document digests. */
+    let root : *u8 = malloc(32u64)
+    if merkle_compute_root(leaves as u64, 4u32, 32u64, root as u64) != 0i32 { return 2u64 }
+
+    /* (3) The notary signs the committed root (Ed25519). */
+    let seed : *u8 = malloc(32u64)
+    fill(seed, 0x33u8, 32u64)
+    let pk : *u8 = malloc(32u64)
+    let sig : *u8 = malloc(64u64)
+    /* III's ed25519_sign reads pk as INPUT (A is hashed into the challenge) — derive it first. */
+    if ed25519_pubkey(seed, pk) != 1u8 { return 30u64 }
+    if ed25519_sign(seed, pk, root, 32u64, sig) != 1u8 { return 3u64 }
+    if ed25519_verify(pk, root, 32u64, sig) != 1u8 { return 4u64 }
+
+    /* (4) Inclusion proof: document #2 is provably in the committed set. */
+    let proof : *u8 = malloc(256u64)
+    let pci : u64 = merkle_pack_count_index(4u32, 2u32)
+    if merkle_compute_proof(leaves as u64, 32u64, pci, proof as u64) != 0i32 { return 5u64 }
+    let vm : u64 = merkle_pack_verify_meta(32u32, 2u32, 2u32)
+    let leaf2 : u64 = leaves as u64 + 64u64
+    if merkle_verify_proof(leaf2, vm, proof as u64, root as u64) != 1u8 { return 6u64 }
+
+    /* (5) Seal a content-addressed notarization receipt over (root || sig). */
+    let receipt : *u8 = malloc(32u64)
+    let dom : *u8 = "III/notary/v1" as *u8
+    cad_begin(0u32)
+    cad_domain(dom as u64, 13u64)
+    cad_payload(root as u64, 32u64)
+    cad_payload(sig as u64, 64u64)
+    if cad_final(receipt as u64) != 0i32 { return 7u64 }
+
+    /* --- Forgery detection (the receipt is only as good as what it refuses) --- */
+
+    /* NEG 1: a tampered signature must NOT verify against the root. */
+    sig[10] = sig[10] ^ 0xFFu8
+    if ed25519_verify(pk, root, 32u64, sig) != 0u8 { return 20u64 }
+    sig[10] = sig[10] ^ 0xFFu8
+
+    /* NEG 2: a tampered committed leaf must break the inclusion proof. */
+    leaves[64] = leaves[64] ^ 0xFFu8
+    if merkle_verify_proof(leaf2, vm, proof as u64, root as u64) != 0u8 { return 21u64 }
+    leaves[64] = leaves[64] ^ 0xFFu8
+
+    /* NEG 3: editing a document MUST change its content-address (no silent swap). */
+    docs[64] = docs[64] ^ 0xFFu8
+    let rehash : *u8 = malloc(32u64)
+    if cad_oneshot(0u32, (docs as u64 + 64u64) as *u8, 32u64, rehash) != 0i32 { return 8u64 }
+    let mut same : u32 = 1u32
+    let mut k : u64 = 0u64
+    while k < 32u64 { if rehash[k] != leaves[64u64 + k] { same = 0u32 }  k = k + 1u64 }
+    if same != 0u32 { return 22u64 }
+
+    return 99u64
+}

@@ -22,54 +22,58 @@ L_str_7:
 L_str_8:
     .ascii "pattern.iii\0"
 L_str_9:
-    .ascii "pattern_table.iii\0"
+    .ascii "pattern.iii\0"
 L_str_10:
-    .ascii "tp_iii_to_asm.iii\0"
+    .ascii "codegen_dispatch.iii\0"
 L_str_11:
-    .ascii "tp_iii_to_babel_json.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_12:
-    .ascii "tp_babel_json_to_iii.iii\0"
+    .ascii "tp_iii_to_asm.iii\0"
 L_str_13:
-    .ascii "tp_asm_to_pe.iii\0"
+    .ascii "tp_iii_to_babel_json.iii\0"
 L_str_14:
-    .ascii "tp_ast_bin_to_iii.iii\0"
+    .ascii "tp_babel_json_to_iii.iii\0"
 L_str_15:
-    .ascii "tp_babel_cbor_json.iii\0"
+    .ascii "tp_asm_to_pe.iii\0"
 L_str_16:
-    .ascii "tp_babel_json_cbor.iii\0"
+    .ascii "tp_ast_bin_to_iii.iii\0"
 L_str_17:
-    .ascii "tp_babel_text.iii\0"
+    .ascii "tp_babel_cbor_json.iii\0"
 L_str_18:
-    .ascii "tp_ripple_dot.iii\0"
+    .ascii "tp_babel_json_cbor.iii\0"
 L_str_19:
-    .ascii "tp_iii_to_ast_bin.iii\0"
+    .ascii "tp_babel_text.iii\0"
 L_str_20:
-    .ascii "tp_iii_to_c99.iii\0"
+    .ascii "tp_ripple_dot.iii\0"
 L_str_21:
-    .ascii "tp_iii_to_latex.iii\0"
+    .ascii "tp_iii_to_ast_bin.iii\0"
 L_str_22:
-    .ascii "tp_x86_disasm.iii\0"
+    .ascii "tp_iii_to_c99.iii\0"
 L_str_23:
-    .ascii "tp_pe_hex.iii\0"
+    .ascii "tp_iii_to_latex.iii\0"
 L_str_24:
-    .ascii "tp_ripple_md.iii\0"
+    .ascii "tp_x86_disasm.iii\0"
 L_str_25:
-    .ascii "tp_ast_dot.iii\0"
+    .ascii "tp_pe_hex.iii\0"
 L_str_26:
-    .ascii "tp_babel_text_back.iii\0"
+    .ascii "tp_ripple_md.iii\0"
 L_str_27:
-    .ascii "tp_iii_hex.iii\0"
+    .ascii "tp_ast_dot.iii\0"
 L_str_28:
-    .ascii "tp_c99hdr_to_iii.iii\0"
+    .ascii "tp_babel_text_back.iii\0"
 L_str_29:
-    .ascii "tp_iii_to_md.iii\0"
+    .ascii "tp_iii_hex.iii\0"
 L_str_30:
-    .ascii "tp_x86_assemble.iii\0"
+    .ascii "tp_c99hdr_to_iii.iii\0"
 L_str_31:
-    .ascii "tp_raw_hex.iii\0"
+    .ascii "tp_iii_to_md.iii\0"
 L_str_32:
-    .ascii "tp_ast_to_babel_json.iii\0"
+    .ascii "tp_x86_assemble.iii\0"
 L_str_33:
+    .ascii "tp_raw_hex.iii\0"
+L_str_34:
+    .ascii "tp_ast_to_babel_json.iii\0"
+L_str_35:
     .ascii "tp_babel_json_to_ast.iii\0"
     .section .bss
     .global L_TX_MODULE_MHASH
@@ -1027,6 +1031,24 @@ L__tx_register:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    leaq tp_unify_claim(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    leaq L_TX_TEMPLATE_BUF(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq pattern_template_set_unify
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     leaq L_TX_TEMPLATE_BUF(%rip), %rax
     pushq %rax
     popq %rax
@@ -1041,8 +1063,8 @@ L__tx_register:
     movzbq %al, %rax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
-    movzbq -40(%rbp), %rax
+    movq %rax, -48(%rbp)
+    movzbq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

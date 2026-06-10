@@ -29,6 +29,8 @@ L_str_11:
     .ascii "pattern_table.iii\0"
 L_str_12:
     .ascii "codegen_dispatch.iii\0"
+L_str_13:
+    .ascii "codegen_dispatch.iii\0"
     .section .rodata
 L_HEXAD_COMPOSE:
     .quad 0x6
@@ -260,6 +262,41 @@ L__cg_register:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_1
+    leaq cg_unify_astkind(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq -72(%rbp), %rax
+    pushq %rax
+    leaq L_CG_TEMPLATE_BUF(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq pattern_template_set_unify
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
     leaq L_CG_TEMPLATE_BUF(%rip), %rax
     pushq %rax
     popq %rax
@@ -287,7 +324,7 @@ L__cg_register:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_1
+    jz L_if_end_3
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -295,7 +332,7 @@ L__cg_register:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_1:
+L_if_end_3:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1071,7 +1108,7 @@ codegen_register_all:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_5
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1084,7 +1121,7 @@ codegen_register_all:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_5:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

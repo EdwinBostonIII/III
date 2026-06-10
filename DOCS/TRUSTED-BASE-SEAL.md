@@ -14,7 +14,7 @@ root. Any edit to the reducer or the translation MOVES the root, reddening the b
 explicit reseal acknowledges that the trusted base changed.
 
 ```
-TRUSTED_BASE_ROOT = f079dd81e42d12d014e25bef419317581114ea9887abc16e26b3d850ca3b2127
+TRUSTED_BASE_ROOT = f155a7de0d19afddc141c361ade25c53c7c873a77745fec0f41964e68cc63374
 ```
 
 > **Reseal log:**

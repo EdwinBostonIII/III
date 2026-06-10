@@ -1,0 +1,90 @@
+/* 1355_bv_selflaws_lshr.iii -- THE BV64 SELF-LAW IOTA + LOGICAL RIGHT SHIFT (harmony items 21 + 22).
+ *
+ * Item 21: the kernel's BV iota now carries x-x=0, x^x=0, x&x=x, x|x=x on STRUCTURALLY IDENTICAL
+ * operands (ccl_bv_eq: BVLIT by value, atoms by id, the de Bruijn projection chain a TC var
+ * compiles to, BV ops recursively; anything else REFUSES -- incomplete, never unsound).  The
+ * two-tier disposer therefore now ADMITS the self-cancellation family (1216's flipped arm 3).
+ * Item 22: TC_BVLSHR/CCL_BVLSHR -- LOGICAL right shift with the x86 count mask (&63), closing the
+ * kernel model's shift asymmetry and enabling a future kernel-certified cg_r3 SHR fold.
+ * Arms:
+ *  (1-4) the four self-laws hold on OPEN terms (previously undecidable by the kernel);
+ *  (5)   the comparator does NOT over-fire: x-y, x&y (distinct vars) stay undecided;
+ *  (6)   structural recursion: (x+1)-(x+1)=0 fires; the COMMUTED twin (x+1)-(1+x) is refused
+ *        (structural, not algebraic, identity -- the documented incompleteness);
+ *  (7)   bvlshr folds closed terms (0xFF00 >> 8 = 0xFF) and refuses false ones;
+ *  (8)   the SHR count mask: x >> 64 == x (64 & 63 = 0 -- the silicon law, mirroring SHL);
+ *  (9)   the new tag travels the wire: serialize -> deserialize -> re-serialize byte-identical;
+ * (10)   interplay: bvlshr(x,1) - bvlshr(x,1) = 0 (the comparator recurses through the new tag).
+ * Exit 99 = the kernel knows the self-laws and the right shift -- soundly, and no further. */
+module corpus_1355
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_deserialize(bytes: *u8, len: u64) -> u32 from "typecheck.iii"
+
+var W1 : [u8; 256]
+var W2 : [u8; 256]
+
+fn main() -> u64 {
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let y : u32 = tc_var(1u32)
+    let z : u32 = tc_bvlit_u64(0u64)
+
+    /* (1-4) the self-laws on OPEN terms */
+    if tc_conv(tc_bvsub(x, x), z) != 1u8 { return 1u64 }
+    if tc_conv(tc_bvxor(x, x), z) != 1u8 { return 2u64 }
+    if tc_conv(tc_bvand(x, x), x) != 1u8 { return 3u64 }
+    if tc_conv(tc_bvor(x, x), x) != 1u8 { return 4u64 }
+
+    /* (5) no over-fire on distinct vars */
+    if tc_conv(tc_bvsub(x, y), z) != 0u8 { return 5u64 }
+    if tc_conv(tc_bvand(x, y), x) != 0u8 { return 6u64 }
+
+    /* (6) structural recursion + the commuted-twin refusal */
+    let one : u32 = tc_bvlit_u64(1u64)
+    let xp1a : u32 = tc_bvadd(x, one)
+    let xp1b : u32 = tc_bvadd(x, one)
+    if tc_conv(tc_bvsub(xp1a, xp1b), z) != 1u8 { return 7u64 }
+    let onepx : u32 = tc_bvadd(one, x)
+    if tc_conv(tc_bvsub(xp1a, onepx), z) != 0u8 { return 8u64 }
+
+    /* (7) bvlshr closed fold + false refusal */
+    let big : u32 = tc_bvlit_u64(0xFF00u64)
+    let eight : u32 = tc_bvlit_u64(8u64)
+    if tc_conv(tc_bvlshr(big, eight), tc_bvlit_u64(0xFFu64)) != 1u8 { return 9u64 }
+    if tc_conv(tc_bvlshr(big, eight), tc_bvlit_u64(0xFEu64)) != 0u8 { return 10u64 }
+
+    /* (8) the SHR count mask: x >> 64 == x (the silicon law) */
+    if tc_conv(tc_bvlshr(x, tc_bvlit_u64(64u64)), x) != 1u8 { return 11u64 }
+
+    /* (9) the new tag travels the wire byte-identically */
+    let term : u32 = tc_bvlshr(tc_bvadd(x, one), eight)
+    let n1 : u64 = tc_serialize(term, (&W1 as u64) as *u8, 256u64)
+    if n1 == 0xFFFFFFFFFFFFFFFFu64 { return 12u64 }
+    let back : u32 = tc_deserialize((&W1 as u64) as *u8, n1)
+    if back == 0u32 { return 13u64 }
+    let n2 : u64 = tc_serialize(back, (&W2 as u64) as *u8, 256u64)
+    if n2 != n1 { return 14u64 }
+    let mut i : u64 = 0u64
+    while i < n1 {
+        if W1[i] != W2[i] { return 15u64 }
+        i = i + 1u64
+    }
+
+    /* (10) interplay: the comparator recurses through the new tag */
+    let sh1 : u32 = tc_bvlshr(x, one)
+    let sh2 : u32 = tc_bvlshr(x, one)
+    if tc_conv(tc_bvsub(sh1, sh2), z) != 1u8 { return 16u64 }
+
+    return 99u64
+}

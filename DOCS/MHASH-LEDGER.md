@@ -1589,3 +1589,36 @@ cross-category spot-check **FAILS=0**. (Full corpus on the `7480c725` stage: the
 killed by OneDrive re-syncing the fresh lib mid-run -- a settle-then-run confirmation is in flight.)
 
 **§8.27 sealed at:** 2026-06-06.
+
+### §8.28 — BV64 kernel: the self-law iota + logical right shift (TRUSTED-BASE reseal, 2026-06-09)
+
+Harmony items 21 + 22, the final two backlog items — both extend the kernel's BV64 model, so the
+content-addressed trusted base ({ccl.iii ++ tc_to_ccl}) MOVES by design:
+
+(21) **The self-law iota.** `ccl_bv_fold` now fires x−x=0, x^x=0, x&x=x, x|x=x on STRUCTURALLY
+IDENTICAL operands, decided by the new `ccl_bv_eq` — a bounded structural comparator over exactly
+the BV fragment (BVLIT by value, ATOM by id, the de Bruijn projection chain SND/FST/ID/COMP a TC
+var compiles to, BV operators recursively); ANY tag outside the set REFUSES — incomplete, never
+unsound. Each law is an unconditional identity of Z/2^64 for EVERY valuation of the operand term.
+The two-tier disposer (bv_dispose) therefore now ADMITS the self-cancellation family bv_ring always
+proposed (1216's arm 3 deliberately FLIPPED from decline-asserting to admit-asserting).
+
+(22) **Logical right shift.** TC_BVLSHR(48) / CCL_BVLSHR(39): folds closed terms by native
+`>> (count & 63)` (the x86 SHR count mask — x>>64 == x, the silicon law, mirroring SHL), x>>0 = x;
+typed as BV op2; serialized by the generic walk; the deserializer's fail-closed tag bound extended;
+all three CCL BV range checks (strengthen / step / comp-distribute) extended. Enables a future
+kernel-certified cg_r3 SHR fold (the 1207-style justification now PHRASABLE).
+
+| | Before | After |
+|---|---|---|
+| `TRUSTED_BASE_ROOT` | `f079dd81e42d12d014e25bef419317581114ea9887abc16e26b3d850ca3b2127` | `f155a7de0d19afddc141c361ade25c53c7c873a77745fec0f41964e68cc63374` |
+
+**Verified (pre-reseal battery):** 1213 (hand vectors) = 99; **1214 (the randomized differential
+soundness gate: thousands of seeded trees vs native u64 + the kernel⊆bv_ring entailment) = 99**;
+1216 (two-tier disposer incl. the flipped self-cancellation arm) = 99; 1355 (the items' own
+falsifier: four self-laws on OPEN terms, no over-fire on distinct vars, structural-not-algebraic
+recursion incl. the commuted-twin refusal, SHR folds + count mask + wire round-trip + comparator
+recursion through the new tag) = 99. GATE: build_stdlib FAIL=0 + FULL corpus zero WRONG (evidence
+appended at commit).
+
+**§8.28 sealed at:** 2026-06-09.

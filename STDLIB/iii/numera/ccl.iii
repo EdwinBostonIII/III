@@ -142,6 +142,7 @@ const CCL_BVXOR    : u8 = 35u8   /* A=left, B=right : BV                        
 const CCL_BVSHL    : u8 = 36u8   /* A=base, B=count : BV  (count masked &63; shl->mul definitional) */
 const CCL_BVADDOVF : u8 = 37u8   /* A=left, B=right : Bool  (unsigned add carry-out)                */
 const CCL_BVMULOVF : u8 = 38u8   /* A=left, B=right : Bool  (u64 full-product overflow)             */
+const CCL_BVLSHR   : u8 = 39u8   /* A=base, B=count : BV  (LOGICAL right shift; count masked &63 -- harmony 22) */
 
 const CCL_BV_ONES : u64 = 0xFFFFFFFFFFFFFFFFu64   /* the all-ones 64-bit word (~0) */
 
@@ -225,6 +226,7 @@ fn ccl_bvxor_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVXOR, a, b) }
 fn ccl_bvshl_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVSHL, a, b) }
 fn ccl_bvaddovf_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVADDOVF, a, b) }
 fn ccl_bvmulovf_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVMULOVF, a, b) }
+fn ccl_bvlshr_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVLSHR, a, b) }
 
 fn ccl_iter_c() -> u32 @export { return ccl_mk(CCL_ITER, 0u32, 0u32) }
 fn ccl_natrec_c() -> u32 @export { return ccl_mk(CCL_NATREC, 0u32, 0u32) }
@@ -276,7 +278,7 @@ fn ccl_strengthen(v: u32) -> u32 {
      * any operand depends on #0); they are NOT weakening-invariant constants.  A BVLIT (tag 29) IS a
      * closed value and correctly hits the constant rule below.  Mirror of the COMP/PAIR strengthen. */
     if tag >= CCL_BVADD {
-        if tag <= CCL_BVMULOVF {
+        if tag <= CCL_BVLSHR {
             let bsa : u32 = ccl_strengthen(CCL_A[v])
             if bsa == CCL_SENT { return CCL_SENT }
             let bsb : u32 = ccl_strengthen(CCL_B[v])
@@ -503,7 +505,45 @@ fn ccl_elim_redex(t: u32) -> u32 {
  * definitional rule x<<k == x*2^(k&63) (the x86-64 SHL count mask -- a shift >= width
  * wraps the COUNT, it does NOT zero the value).  The caller (ccl_step) sets CCL_FIRED.
  * A neutral operand never matches a literal guard, so x stays neutral and no polynomial
- * over x is ever canonicalised in this trusted base. ===== */
+ * over x is ever canonicalised in this trusted base.
+ *
+ * harmony item 21 adds the four SELF-LAWS on structurally identical operands (ccl_bv_eq):
+ * x-x=0, x^x=0, x&x=x, x|x=x -- each an unconditional identity of Z/2^64 for EVERY value of
+ * the operand term, so firing them never depends on the operand's meaning, only its identity
+ * with itself.  The two-tier disposer (bv_dispose) therefore now ADMITS the self-cancellation
+ * family the polynomial ring already proposed and the kernel previously had to decline. ===== */
+fn ccl_bv_eq(a: u32, b: u32, depth: u32) -> u8 {
+    if depth == 0u32 { return 0u8 }                /* depth belt: refuse, never claim */
+    if a == b { return 1u8 }
+    let at : u8 = CCL_TAG[a]
+    let bt : u8 = CCL_TAG[b]
+    if at != bt { return 0u8 }
+    if at == CCL_BVLIT {
+        if ccl_bv_val(a) == ccl_bv_val(b) { return 1u8 }
+        return 0u8
+    }
+    if at == CCL_ATOM {
+        if CCL_A[a] == CCL_A[b] { return 1u8 }
+        return 0u8
+    }
+    if at == CCL_FST { return 1u8 }
+    if at == CCL_SND { return 1u8 }
+    if at == CCL_ID  { return 1u8 }
+    let mut binary : u8 = 0u8
+    if at == CCL_COMP  { binary = 1u8 }
+    if at == CCL_BVADD { binary = 1u8 }
+    if at == CCL_BVSUB { binary = 1u8 }
+    if at == CCL_BVMUL { binary = 1u8 }
+    if at == CCL_BVAND { binary = 1u8 }
+    if at == CCL_BVOR  { binary = 1u8 }
+    if at == CCL_BVXOR { binary = 1u8 }
+    if at == CCL_BVSHL { binary = 1u8 }
+    if at == CCL_BVLSHR { binary = 1u8 }
+    if binary == 0u8 { return 0u8 }                /* outside the BV fragment: refuse (incomplete, never unsound) */
+    if ccl_bv_eq(CCL_A[a], CCL_A[b], depth - 1u32) != 1u8 { return 0u8 }
+    return ccl_bv_eq(CCL_B[a], CCL_B[b], depth - 1u32)
+}
+
 fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
     let at : u8 = CCL_TAG[a]
     let bt : u8 = CCL_TAG[b]
@@ -525,6 +565,7 @@ fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
     if op == CCL_BVSUB {
         if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va - vb) } }   /* fold (mod 2^64) */
         if blit == 1u8 { if vb == 0u64 { return a } }                      /* x - 0 = x */
+        if ccl_bv_eq(a, b, 64u32) == 1u8 { return ccl_bvlit_v(0u64) }      /* x - x = 0 (harmony 21) */
         return CCL_SENT
     }
     if op == CCL_BVMUL {
@@ -541,6 +582,7 @@ fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
         if blit == 1u8 { if vb == 0u64 { return b } }                      /* x & 0 = 0 */
         if alit == 1u8 { if va == CCL_BV_ONES { return b } }               /* ~0 & x = x */
         if blit == 1u8 { if vb == CCL_BV_ONES { return a } }               /* x & ~0 = x */
+        if ccl_bv_eq(a, b, 64u32) == 1u8 { return a }                      /* x & x = x (harmony 21) */
         return CCL_SENT
     }
     if op == CCL_BVOR {
@@ -549,12 +591,14 @@ fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
         if blit == 1u8 { if vb == 0u64 { return a } }                      /* x | 0 = x */
         if alit == 1u8 { if va == CCL_BV_ONES { return a } }               /* ~0 | x = ~0 */
         if blit == 1u8 { if vb == CCL_BV_ONES { return b } }               /* x | ~0 = ~0 */
+        if ccl_bv_eq(a, b, 64u32) == 1u8 { return a }                      /* x | x = x (harmony 21) */
         return CCL_SENT
     }
     if op == CCL_BVXOR {
         if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va ^ vb) } }
         if alit == 1u8 { if va == 0u64 { return b } }                      /* 0 ^ x = x */
         if blit == 1u8 { if vb == 0u64 { return a } }                      /* x ^ 0 = x */
+        if ccl_bv_eq(a, b, 64u32) == 1u8 { return ccl_bvlit_v(0u64) }      /* x ^ x = 0 (harmony 21) */
         return CCL_SENT
     }
     if op == CCL_BVSHL {
@@ -562,6 +606,11 @@ fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
             let k : u64 = vb & 63u64                                       /* x86-64 SHL count mask */
             return ccl_bvmul_c(a, ccl_bvlit_v(1u64 << k))                  /* x<<k == x * 2^(k&63) */
         }
+        return CCL_SENT
+    }
+    if op == CCL_BVLSHR {
+        if alit == 1u8 { if blit == 1u8 { return ccl_bvlit_v(va >> (vb & 63u64)) } }   /* fold (x86 SHR count mask) */
+        if blit == 1u8 { if (vb & 63u64) == 0u64 { return a } }            /* x >> 0 = x (incl. masked counts) */
         return CCL_SENT
     }
     if op == CCL_BVADDOVF {
@@ -611,7 +660,7 @@ fn ccl_step(t: u32) -> u32 {
      * leftmost-outermost, then fires a ring rule once both are normal. */
     if tag == CCL_BVLIT { return t }
     if tag >= CCL_BVADD {
-        if tag <= CCL_BVMULOVF {
+        if tag <= CCL_BVLSHR {
             let bo_a : u32 = CCL_A[t]
             let bo_b : u32 = CCL_B[t]
             let bo_ra : u32 = ccl_step(bo_a)
@@ -716,7 +765,7 @@ fn ccl_step(t: u32) -> u32 {
          * literal value (its A,B are the u64 halves, not morphisms) and correctly weakens below.
          * SOUNDNESS: without this, a BV op under a substituted binder would drop the substitution. */
         if atag >= CCL_BVADD {
-            if atag <= CCL_BVMULOVF {
+            if atag <= CCL_BVLSHR {
                 CCL_FIRED[0u64] = 1u32
                 return ccl_mk(atag, ccl_comp(CCL_A[a], b), ccl_comp(CCL_B[a], b))
             }

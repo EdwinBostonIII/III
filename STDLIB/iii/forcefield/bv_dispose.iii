@@ -87,9 +87,9 @@ fn bvd_canon_addr(side_bv: u32, peer_bv: u32, side_tc: u32, peer_tc: u32, out32:
  * meaning-changing ones, with both authorities in agreement and the kernel as the final arbiter.
  *   (1) strength x*2 == x<<1, and the width family x<<k == x*2^k (k=1,5,31): ADMITTED;
  *   (2) the multi-class collapse (x*1)+(x*0) == x: ADMITTED;
- *   (3) x-x == 0 (a bv_ring-decidable identity the kernel ALSO proves by folding the closed difference):
- *       handled below as a SOUNDNESS-PAIRING check, not an admission (the kernel's syntactic conv does
- *       NOT fold x-x, so the disposer correctly DECLINES it -- bv_ring proposes, the kernel is sovereign);
+ *   (3) x-x == 0: ADMITTED (harmony 21 -- the kernel's BV iota now carries the self-laws x-x=0,
+ *       x^x=0, x&x=x, x|x=x on structurally identical operands, so the self-cancellation family
+ *       bv_ring always proposed is finally kernel-discharged; both tiers agree);
  *   (4) FALSE rewrites x<<1 == x*3 and x+1 == x: REJECTED (Tier-1 veto);
  *   (5) the SOUNDNESS PAIRING: every admission implies the kernel converts (Tier 2 is the arbiter). */
 fn bvd_selftest() -> u64 @export {
@@ -155,7 +155,7 @@ fn bvd_selftest() -> u64 @export {
     tc_reset()
     let t_xx : u32 = tc_bvsub(tc_var(0u32), tc_var(0u32))
     let t_z  : u32 = tc_bvlit_u64(0u64)
-    if bvd_admit(t_xx, t_z, b_xx, b_z) != 0u8 { return 8u64 }   /* but the disposer DECLINES (kernel sovereign) */
+    if bvd_admit(t_xx, t_z, b_xx, b_z) != 1u8 { return 8u64 }   /* harmony 21: the kernel's self-law iota ADMITS it (both tiers agree) */
 
     /* (5) SOUNDNESS PAIRING: a Tier-1 survivor the kernel REJECTS is not admitted -- demonstrate the
      * kernel's veto is final by feeding a poly-equal pair whose TC sides are deliberately mismatched

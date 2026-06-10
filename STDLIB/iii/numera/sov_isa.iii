@@ -37,6 +37,8 @@ extern @abi(c-msvc-x64) fn eg_intern_symbol(sym_id: *u8) -> u32 from "egraph.iii
 extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn cga_dispose_shift(shape: u32, a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
@@ -115,6 +117,8 @@ const SI_C2   : u8 = 22u8     /* constant 2           (arity 0) */
 const SI_ADD  : u8 = 30u8     /* add(_, _)            (arity 2) */
 const SI_MUL  : u8 = 31u8     /* mul(_, _)            (arity 2) */
 const SI_SHL  : u8 = 32u8     /* shl(_, _)            (arity 2) */
+const SI_DIV  : u8 = 33u8     /* udiv(_, _)           (arity 2; wave-4 M12) */
+const SI_SHR  : u8 = 34u8     /* lshr(_, _)           (arity 2; wave-4 M12) */
 
 const SI_SENT     : u32 = 0xFFFFFFFFu32
 const CL_BALANCED : u32 = 3u32     /* cost_lattice seeds order 3 = balanced (2,2,1,1,1,1) */
@@ -222,6 +226,10 @@ fn sov_isa_cost_seed() -> i32 {
     ma_init()
     ma_set_latency((SI_MUL as u32), 3u32)
     cc_set_energy((SI_MUL as u32), 2u32)
+    /* wave-4 M12: division is the DEAREST scalar op (divq-class latency; a fixed deterministic
+     * table value, not observation).  SHR keeps the cheap defaults (latency 1, energy 1). */
+    ma_set_latency((SI_DIV as u32), 26u32)
+    cc_set_energy((SI_DIV as u32), 8u32)
     return 0i32
 }
 
@@ -394,6 +402,34 @@ fn sov_isa_rules() -> u32 @export {
         if eg_register_rule(rulep) == SI_SENT { return 10u32 }
     }
 
+    /* Rule I [KERNEL-CITED, wave-4 M12]: div(?0, c2) -> shr(?0, c1)  [x/2 = x>>1 -- THE
+     * DIV-STRENGTH IOTA, ledger 8.29].  OPTIONAL symbols: registered only when the div/shr
+     * slots exist (a caller that never builds division terms is untouched) AND the CIC KERNEL
+     * certifies the law AT REGISTRATION -- tc_conv(bvudiv(x,2), bvlshr(x,1)) consulted live
+     * (clobbers the tc arena; rules() callers hold no kernel state).  A kernel refusal SKIPS
+     * the rule: sound-but-weaker, and the div-strength KAT reddens (observable, never silent). */
+    let s_div : u32 = si_slot(SI_DIV)
+    let s_shr : u32 = si_slot(SI_SHR)
+    if s_div != SI_SENT {
+        if s_shr != SI_SENT {
+            tc_reset()
+            let kx : u32 = tc_var(0u32)
+            let lhs_k : u32 = tc_bvudiv(kx, tc_bvlit_u64(2u64))
+            let rhs_k : u32 = tc_bvlshr(kx, tc_bvlit_u64(1u64))
+            if tc_conv(lhs_k, rhs_k) == 1u8 {
+                SI_RULE[0u32] = 3u32
+                SI_RULE[1u32] = 3u32
+                SI_RULE[2u32] = si_enc_sym(s_div, 2u32)
+                SI_RULE[3u32] = si_enc_var(0u32)
+                SI_RULE[4u32] = si_enc_sym(s_c2, 0u32)
+                SI_RULE[5u32] = si_enc_sym(s_shr, 2u32)
+                SI_RULE[6u32] = si_enc_var(0u32)
+                SI_RULE[7u32] = si_enc_sym(s_c1, 0u32)
+                if eg_register_rule(rulep) == SI_SENT { return 11u32 }
+            }
+        }
+    }
+
     return 0u32
 }
 
@@ -414,7 +450,6 @@ fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 @export {
     let mut i : u32 = 0u32
     while i < 256u32 { SI_REQ[i] = 0u32 ; i = i + 1u32 }
     SI_REQ[0u32] = eg_find(root)
-    SI_REQ[1u32] = eg_sym_count()
     si_setcost(SI_X)
     si_setcost(SI_C0)
     si_setcost(SI_C1)
@@ -422,6 +457,13 @@ fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 @export {
     si_setcost(SI_ADD)
     si_setcost(SI_MUL)
     si_setcost(SI_SHL)
+    /* wave-4 M12: the division pair joins the cost field -- an unset cost is COST ZERO to the
+     * extractor, which would make divq look FREE and the strength reduction never taken.  The
+     * sym-count read moves AFTER the cost attaches (si_setcost interns idempotently; symbols
+     * never used by a term do not appear in any e-node, so old extractions are untouched). */
+    si_setcost(SI_DIV)
+    si_setcost(SI_SHR)
+    SI_REQ[1u32] = eg_sym_count()
     let reqp : *u32 = (&SI_REQ) as u64 as *u32
     return eg_extract(reqp, out_term, out_n)
 }
@@ -476,6 +518,51 @@ fn sov_isa_kat() -> u64 @export {
     let s_add : u32 = si_slot(SI_ADD)
     if SI_OUT[0u32] != s_add { return 10u64 }      /* head still add: no fabricated equality */
 
+    return 99u64
+}
+
+/* KAT [wave-4 M12]: KERNEL-CITED DIVISION STRENGTH REDUCTION.  div(x,2) descends to shr(x,1)
+ * -- Rule I, admitted only because the CIC kernel certifies THE DIV-STRENGTH IOTA (x/2 == x>>1,
+ * ledger 8.29) at registration.  Teeth: (a) the reduction fires (head shr, count c1); (b) the
+ * kernel citation is POSITIVE in-module AND the kernel REFUSES the false law (x/3 vs x>>1) --
+ * a wrong rule could never register; (c) the cost field ranks div DEARER than shr (the gradient
+ * that makes the reduction worth taking); (d) faithfulness (no rules => head stays div).
+ * 99 = never hard-coded. */
+fn sov_isa_divstrength_kat() -> u64 @export {
+    eg_init()
+    cl_init()
+    let cx : u32 = si_leaf(SI_X)
+    let cc2 : u32 = si_leaf(SI_C2)
+    let root : u32 = si_node2(SI_DIV, cx, cc2)
+    if root == SI_SENT { return 1u64 }
+    let cc1 : u32 = si_leaf(SI_C1)
+    let cseed : u32 = si_node2(SI_SHR, cx, cc1)     /* seed shr(x,c1) slots for the RHS */
+    if cseed == SI_SENT { return 2u64 }
+    if sov_isa_rules() != 0u32 { return 3u64 }
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    if sov_isa_descend(root, otp, onp) != 0i32 { return 4u64 }
+    let s_shr : u32 = si_slot(SI_SHR)
+    let s_c1 : u32 = si_slot(SI_C1)
+    if SI_OUTN[0u32] != 3u32 { return 5u64 }
+    if SI_OUT[0u32] != s_shr { return 6u64 }         /* head is shr: strength-reduced */
+    if SI_OUT[2u32] != s_c1 { return 7u64 }
+    /* (b) the kernel citation, both arms, in-module */
+    tc_reset()
+    let kx : u32 = tc_var(0u32)
+    if tc_conv(tc_bvudiv(kx, tc_bvlit_u64(2u64)), tc_bvlshr(kx, tc_bvlit_u64(1u64))) != 1u8 { return 8u64 }
+    if tc_conv(tc_bvudiv(kx, tc_bvlit_u64(3u64)), tc_bvlshr(kx, tc_bvlit_u64(1u64))) != 0u8 { return 9u64 }
+    /* (c) the cost gradient: division is dearer than the shift */
+    if sov_isa_op_cost(SI_DIV) <= sov_isa_op_cost(SI_SHR) { return 10u64 }
+    /* (d) faithfulness: no rules => no reduction */
+    eg_init()
+    cl_init()
+    let dx : u32 = si_leaf(SI_X)
+    let dc2 : u32 = si_leaf(SI_C2)
+    let droot : u32 = si_node2(SI_DIV, dx, dc2)
+    if sov_isa_descend(droot, otp, onp) != 0i32 { return 11u64 }
+    let s_div : u32 = si_slot(SI_DIV)
+    if SI_OUT[0u32] != s_div { return 12u64 }
     return 99u64
 }
 

@@ -1,0 +1,31 @@
+/* 1364_divstrength_cited.iii -- KERNEL-CITED DIVISION STRENGTH REDUCTION (wave-4 M12).
+ *
+ * The sovereign ISA optimizer gains division: SI_DIV (divq-class cost: latency 26, energy 8 --
+ * a fixed deterministic table, not observation) and SI_SHR, plus Rule I -- div(?0,c2) ->
+ * shr(?0,c1) -- registered ONLY when the CIC kernel certifies THE DIV-STRENGTH IOTA
+ * (x/2 == x>>1, ledger 8.29) live at registration.  A kernel refusal skips the rule:
+ * sound-but-weaker, observable here.  Drives numera/sov_isa::sov_isa_divstrength_kat:
+ *  (a) div(x,2) descends to shr(x,1) (head shr, count c1);
+ *  (b) the kernel citation, BOTH arms in-module: x/2==x>>1 certified, x/3 vs x>>1 REFUSED --
+ *      a wrong rule could never register;
+ *  (c) the cost gradient: division strictly dearer than the shift (and the bring-up trap is
+ *      pinned: an unset cost is COST ZERO to the extractor -- division must JOIN the cost
+ *      field or it looks free and the reduction is never taken);
+ *  (d) faithfulness: no rules => head stays div.
+ * Plus the optimizer regression pair (sov_isa_kat, sov_isa_shiftcombine_kat) under the extended
+ * symbol/rule/cost set.  99 = never hard-coded. */
+module corpus_1364
+
+extern @abi(c-msvc-x64) fn sov_isa_divstrength_kat() -> u64 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_kat() -> u64 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_shiftcombine_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_isa_divstrength_kat()
+    if r != 99u64 { return r }
+    let r2 : u64 = sov_isa_kat()
+    if r2 != 99u64 { return 30u64 + r2 }
+    let r3 : u64 = sov_isa_shiftcombine_kat()
+    if r3 != 99u64 { return 60u64 + r3 }
+    return 99u64
+}

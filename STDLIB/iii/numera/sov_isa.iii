@@ -36,6 +36,7 @@ extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_intern_symbol(sym_id: *u8) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cga_dispose_shift(shape: u32, a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
 extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
@@ -372,6 +373,27 @@ fn sov_isa_rules() -> u32 @export {
     SI_RULE[5u32] = si_enc_sym(s_c2, 0u32)
     if eg_register_rule(rulep) == SI_SENT { return 9u32 }
 
+    /* Rule H [LATTICE-CITED, wave-4 M10]: shl(shl(?0,c1),c1) -> shl(?0,c2)  [(x<<1)<<1 = x<<2,
+     * the (a=1,b=1) instance of the 0xB7 shift-combining family].  The rule is registered ONLY
+     * when the autocatalyst lattice CERTIFIES the pair AT USE-SITE -- cga_dispose_shift(2,1,1):
+     * UNSAT at four probe widths behind the count-mask wall -- so the optimizer can only do what
+     * the lattice proves.  A lattice refusal SKIPS the rule: the optimizer stays sound, merely
+     * weaker, and the shift-combine KAT reddens (observable, never silent).  The nested depth-2
+     * LHS is preorder [shl/2, shl/2, ?0, c1, c1] (matcher support proven during bring-up). */
+    if cga_dispose_shift(2u32, 1u32, 1u32, 1u32) == 1u8 {
+        SI_RULE[0u32] = 5u32
+        SI_RULE[1u32] = 3u32
+        SI_RULE[2u32] = si_enc_sym(s_shl, 2u32)
+        SI_RULE[3u32] = si_enc_sym(s_shl, 2u32)
+        SI_RULE[4u32] = si_enc_var(0u32)
+        SI_RULE[5u32] = si_enc_sym(s_c1, 0u32)
+        SI_RULE[6u32] = si_enc_sym(s_c1, 0u32)
+        SI_RULE[7u32] = si_enc_sym(s_shl, 2u32)
+        SI_RULE[8u32] = si_enc_var(0u32)
+        SI_RULE[9u32] = si_enc_sym(s_c2, 0u32)
+        if eg_register_rule(rulep) == SI_SENT { return 10u32 }
+    }
+
     return 0u32
 }
 
@@ -454,6 +476,46 @@ fn sov_isa_kat() -> u64 @export {
     let s_add : u32 = si_slot(SI_ADD)
     if SI_OUT[0u32] != s_add { return 10u64 }      /* head still add: no fabricated equality */
 
+    return 99u64
+}
+
+/* KAT [wave-4 M10]: THE LATTICE-CITED SHIFT COMBINE.  shl(shl(x,1),1) descends to shl(x,2) --
+ * Rule H, admitted only because the 0xB7 registry certifies (a=1,b=1) by UNSAT at four widths.
+ * Teeth: (a) the combine fires (5 preorder entries -> 3, head shl, count c2); (b) THE WALL is
+ * cited in-module (the lattice REFUSES (40,40) -- the false silicon law can never become a
+ * rule); (c) faithfulness (no rules => no combine).  99 = the optimizer does exactly what the
+ * lattice proves, nothing more. */
+fn sov_isa_shiftcombine_kat() -> u64 @export {
+    eg_init()
+    cl_init()
+    let cx : u32 = si_leaf(SI_X)
+    let cc1 : u32 = si_leaf(SI_C1)
+    let inner : u32 = si_node2(SI_SHL, cx, cc1)
+    let root : u32 = si_node2(SI_SHL, inner, cc1)
+    if root == SI_SENT { return 1u64 }
+    let cc2 : u32 = si_leaf(SI_C2)
+    let cseed : u32 = si_node2(SI_SHL, cx, cc2)     /* seed shl(x,c2) slots for the RHS */
+    if cseed == SI_SENT { return 2u64 }
+    if sov_isa_rules() != 0u32 { return 3u64 }
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    if sov_isa_descend(root, otp, onp) != 0i32 { return 4u64 }
+    let s_shl : u32 = si_slot(SI_SHL)
+    let s_c2 : u32 = si_slot(SI_C2)
+    if SI_OUTN[0u32] != 3u32 { return 5u64 }        /* combined: shl(x,c2) = 3 preorder entries */
+    if SI_OUT[0u32] != s_shl { return 6u64 }
+    if SI_OUT[2u32] != s_c2 { return 7u64 }          /* the count is c2: genuinely combined */
+    /* (b) THE WALL, cited in-module: the false silicon law is REFUSED by the lattice */
+    if cga_dispose_shift(2u32, 40u32, 40u32, 1u32) != 0u8 { return 8u64 }
+    /* (c) faithfulness: no rules => no combine (the 5-entry original stays) */
+    eg_init()
+    cl_init()
+    let dx : u32 = si_leaf(SI_X)
+    let dc1 : u32 = si_leaf(SI_C1)
+    let dinner : u32 = si_node2(SI_SHL, dx, dc1)
+    let droot : u32 = si_node2(SI_SHL, dinner, dc1)
+    if sov_isa_descend(droot, otp, onp) != 0i32 { return 9u64 }
+    if SI_OUTN[0u32] != 5u32 { return 10u64 }
     return 99u64
 }
 

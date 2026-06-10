@@ -1,0 +1,22 @@
+/* 1362_lattice_cited_combine.iii -- THE LATTICE-CITED SHIFT COMBINE (wave-4 M10).
+ *
+ * The sovereign ISA optimizer (sov_isa: equality saturation + min-cost extraction) gains Rule H
+ * -- shl(shl(?0,c1),c1) -> shl(?0,c2) -- REGISTERED ONLY when the autocatalyst's 0xB7 registry
+ * certifies the (a=1,b=1) pair AT USE-SITE (cga_dispose_shift: UNSAT at four probe widths behind
+ * the count-mask wall).  The certified-law registries become a LIVE dependency of the optimizer:
+ * it can only do what the lattice proves.  Drives numera/sov_isa::sov_isa_shiftcombine_kat:
+ *  (a) the combine fires: shl(shl(x,1),1) descends 5 preorder entries -> 3, head shl, count c2;
+ *  (b) THE WALL cited in-module: the lattice REFUSES (40,40) -- the false silicon law can never
+ *      become a rule;
+ *  (c) faithfulness: with NO rules the term does not combine.
+ * Also the first production DEPTH-2 rewrite pattern (nested-LHS matcher support proven).
+ * 99 = never hard-coded. */
+module corpus_1362
+
+extern @abi(c-msvc-x64) fn sov_isa_shiftcombine_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_isa_shiftcombine_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

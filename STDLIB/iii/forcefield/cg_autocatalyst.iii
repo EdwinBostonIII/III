@@ -450,3 +450,32 @@ fn cga_shift_get_shape(i: u32) -> u32 @export {
     if i >= CGA_SH_N[0u64] { return 0xFFFFFFFFu32 }
     return CGA_SH_SHAPE[i as u64]
 }
+
+/* ===== harmony wave-4 M5: the LEASH, completed across the lattice ================================
+ * cga_all_true / cga_bv_all_true re-verify the Peano and count-mask registries; these are the
+ * 0xB6/0xB7 analogs -- every registered mixed/shift law is RE-PROVEN through its own disposer
+ * (the volatile re-derive contract: a seal is never trusted, always re-earned).  1 iff every
+ * entry re-admits; an empty registry holds vacuously (the dream may not have run yet). */
+fn cga_mixed_verify_all() -> u8 @export {
+    let n : u32 = CGA_MX_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        let saved : u32 = CGA_MX_N[0u64]
+        if cga_dispose_mixed(CGA_MX_A[i as u64], 1u32) != 1u8 { return 0u8 }
+        CGA_MX_N[0u64] = saved            /* re-proof only: do not grow the registry */
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+fn cga_shift_verify_all() -> u8 @export {
+    let n : u32 = CGA_SH_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        let saved : u32 = CGA_SH_N[0u64]
+        if cga_dispose_shift(CGA_SH_SHAPE[i as u64], CGA_SH_A[i as u64], CGA_SH_B[i as u64], 1u32) != 1u8 { return 0u8 }
+        CGA_SH_N[0u64] = saved
+        i = i + 1u32
+    }
+    return 1u8
+}

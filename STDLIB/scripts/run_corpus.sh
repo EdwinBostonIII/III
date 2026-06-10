@@ -950,6 +950,7 @@ declare -A EXPECTED=(
     [1358_shift_laws]=99
     [1359_transform_claim]=99
     [1360_full_dream]=99
+    [1361_primitive_claim]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

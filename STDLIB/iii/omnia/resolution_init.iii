@@ -29,6 +29,8 @@ extern @abi(c-msvc-x64) fn pattern_template_set_ring(buf: u64, r: u8) -> i32 fro
 extern @abi(c-msvc-x64) fn pattern_template_set_k_value(buf: u64, k: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_binding_kind(buf: u64, slot: u8, k: u8) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_dispatch(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_unify(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn mu_unify_primitive(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
 extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
 
 /* Meta-pattern dispatch fns are defined in a separate file so the
@@ -100,6 +102,10 @@ fn _meta_register(slot: u32, hexad: u8, name_b0: u8, name_b1: u8, name_b2: u8, n
     pattern_template_set_dispatch((&INIT_TEMPLATE_BUF) as u64, fp)
     /* Side-channel: store intent_kind in binding_kinds[0] so dispatch can route */
     pattern_template_set_binding_kind((&INIT_TEMPLATE_BUF) as u64, 0u8, slot as u8)
+    /* harmony wave-4 M8: the self-tag is a LIVE claim -- the primitive unifier verifies it at
+     * resolve time whenever an intent claims a primitive (CLAIM REGION slot 12). */
+    let uf_mu : u64 = (&mu_unify_primitive) as u64
+    pattern_template_set_unify((&INIT_TEMPLATE_BUF) as u64, uf_mu)
     /* W4.3 (II-RESINIT-1): a failed registration is recorded -- it is no longer silently
      * dropped on the floor as it was before this fix. */
     let rok : u8 = pattern_register(slot, (&INIT_TEMPLATE_BUF) as u64)

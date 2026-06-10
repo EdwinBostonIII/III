@@ -97,3 +97,22 @@ fn tp_unify_claim(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export 
     if ti == 0xFFFFFFFFu32 { return 0u64 }
     return unify(buf, tp, ti) as u64
 }
+
+/* ===== harmony wave-4 M8: the PRIMITIVE claim unifier -- the taxonomy roots join the gate ========
+ * Every meta pattern self-tags binding_kinds[0] = its primitive slot (the Intent Calculus
+ * taxonomy root id, 0..18) -- the dispatch side-channel, never verified at resolve time.  This
+ * third tenant closes the registry: an intent claiming a primitive (CLAIM REGION slot 12,
+ * mask-gated) must Robinson-unify with the winning meta pattern's self-tag or the resolution
+ * REFUSES before dispatch.  Claimless intents pass vacuously.  With M3 (AST kind, slot 15) and
+ * M6 (transform pair, slots 13/14), every boot-registered pattern family now carries a LIVE,
+ * resolve-time-verified structural claim. */
+fn mu_unify_primitive(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export {
+    let _ctx4 : u64 = ctx
+    let mask : u32 = intent_partial_args_mask(intent)
+    if ((mask >> 12u32) & 1u32) == 0u32 { return 1u64 }   /* no claim: legacy routing */
+    let pk : u64 = pattern_binding_kind(pattern, 0u32) as u64
+    let ik : u64 = intent_partial_arg(intent, 12u32) & 0xFFu64
+    let ta : u32 = unify_make_const(buf, pk)
+    let tb : u32 = unify_make_const(buf, ik)
+    return unify(buf, ta, tb) as u64
+}

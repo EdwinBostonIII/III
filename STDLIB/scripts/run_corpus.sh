@@ -945,6 +945,7 @@ declare -A EXPECTED=(
     [1353_bv_discover_loop]=99
     [1354_resolve_unify]=99
     [1355_bv_selflaws_lshr]=99
+    [1356_mixed_discover]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

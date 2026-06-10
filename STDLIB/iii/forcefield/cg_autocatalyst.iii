@@ -213,3 +213,118 @@ fn cga_bv_discover(max_exp: u32, budget: u32) -> u32 @export {
     }
     return admitted
 }
+
+/* ===== harmony wave-4 M1: THE MIXED-FRAGMENT TIER (domain byte 0xB6) ============================
+ * The third registry tier, for identities NEITHER prior authority can phrase: bv_ring is
+ * polynomial-only (no &,|,^,~) and the kernel's BV iota carries no mixed laws.  The deciding
+ * authority here is UNSAT -- numera/bv_bits Tseitin-blasts both sides into III's own CDCL solver
+ * and refutes "some bit differs" (bb_equal == 1 is a resolution proof of pointwise equality over
+ * ALL 2^(2w) valuations).  A candidate is admitted ONLY when the miter is UNSAT at EVERY probe
+ * width (8, 16, 32, 64): a single countermodel at any width discards it -- fail-closed, and the
+ * w=64 tier alone is already the full machine width.  Deterministic (the solver's schedules are
+ * integer-driven), observation-free (exhaustive refutation, not sampling -- Mandate 7).
+ *
+ * The shape catalog (x = var 0, y = var 1) -- the textbook mixed strength laws a code generator
+ * lives on, every one UNPHRASABLE in the other two tiers:
+ *   1: (x&y)+(x|y)          == x+y          (the add/and/or exchange)
+ *   2: x-(x&y)              == x&~y         (masked subtract = and-not)
+ *   3: (x|y)-(x&y)          == x^y          (xor as or-minus-and)
+ *   4: (x&y)|(x^y)          == x|y          (or recomposition)
+ *   5: x+(~x&y)             == x|y          (carry-free or)
+ *   6: (x+y)-((x&y)<<1)     == x^y          (xor as add-minus-double-carry)
+ * Seals are cad(0xB6 || shape_le4) into the SAME volatile registry style as 0xB5 (re-derive,
+ * never trust a stale seal).  cga_dispose_mixed admits one shape; cga_mixed_discover sweeps the
+ * catalog.  A deliberately FALSE shape id (>= 7 -> builder refuses; a wrong pairing is caught by
+ * the solver's countermodel) keeps the negative arm honest. */
+
+var CGA_MX_A    : [u32; 64]     /* admitted shape ids */
+var CGA_MX_N    : [u32; 1]
+var CGA_MX_SEAL : [u8; 2048]    /* 64 x 32-byte cad seals */
+var CGA_MX_MSG  : [u8; 5]       /* 0xB6 || shape(4 LE) */
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+fn _cga_mx_lhs(shape: u32) -> u32 {
+    let x : u32 = bb_var(0u32)
+    let y : u32 = bb_var(1u32)
+    if shape == 1u32 { return bb_add(bb_and(x, y), bb_or(x, y)) }
+    if shape == 2u32 { return bb_sub(x, bb_and(x, y)) }
+    if shape == 3u32 { return bb_sub(bb_or(x, y), bb_and(x, y)) }
+    if shape == 4u32 { return bb_or(bb_and(x, y), bb_xor(x, y)) }
+    if shape == 5u32 { return bb_add(x, bb_and(bb_not(x), y)) }
+    if shape == 6u32 { return bb_sub(bb_add(x, y), bb_shl(bb_and(x, y), 1u64)) }
+    return 0xFFFFFFFFu32
+}
+
+fn _cga_mx_rhs(shape: u32) -> u32 {
+    let x : u32 = bb_var(0u32)
+    let y : u32 = bb_var(1u32)
+    if shape == 1u32 { return bb_add(x, y) }
+    if shape == 2u32 { return bb_and(x, bb_not(y)) }
+    if shape == 3u32 { return bb_xor(x, y) }
+    if shape == 4u32 { return bb_or(x, y) }
+    if shape == 5u32 { return bb_or(x, y) }
+    if shape == 6u32 { return bb_xor(x, y) }
+    return 0xFFFFFFFFu32
+}
+
+/* admit shape iff the lhs==rhs miter is UNSAT at w = 8, 16, 32 AND 64 (fail-closed at each) */
+fn cga_dispose_mixed(shape: u32, budget: u32) -> u8 @export {
+    if budget == 0u32 { return 0u8 }
+    if shape == 0u32 { return 0u8 }
+    if shape > 6u32 { return 0u8 }                   /* outside the catalog: refuse (fail-closed) */
+    let mut wi : u64 = 8u64
+    while wi <= 64u64 {
+        bb_reset(wi)
+        let l : u32 = _cga_mx_lhs(shape)
+        let r : u32 = _cga_mx_rhs(shape)
+        if l == 0xFFFFFFFFu32 { return 0u8 }
+        if r == 0xFFFFFFFFu32 { return 0u8 }
+        if bb_equal(l, r) != 1u8 { return 0u8 }      /* SAT countermodel or capacity: discard */
+        wi = wi * 2u64
+    }
+    let n : u32 = CGA_MX_N[0u64]
+    if n >= 64u32 { return 1u8 }                     /* certified but registry full: still true */
+    CGA_MX_MSG[0u64] = 0xB6u8
+    CGA_MX_MSG[1u64] = (shape & 0xFFu32) as u8
+    CGA_MX_MSG[2u64] = ((shape >> 8u32) & 0xFFu32) as u8
+    CGA_MX_MSG[3u64] = ((shape >> 16u32) & 0xFFu32) as u8
+    CGA_MX_MSG[4u64] = ((shape >> 24u32) & 0xFFu32) as u8
+    let outp : *u8 = ((&CGA_MX_SEAL as u64) + (n as u64) * 32u64) as *u8
+    cad_oneshot(1u32, (&CGA_MX_MSG as u64) as *u8, 5u64, outp)
+    CGA_MX_A[n as u64] = shape
+    CGA_MX_N[0u64] = n + 1u32
+    return 1u8
+}
+
+/* sweep the whole catalog; returns the number admitted */
+fn cga_mixed_discover(budget: u32) -> u32 @export {
+    if budget == 0u32 { return 0u32 }
+    let mut adm : u32 = 0u32
+    let mut s : u32 = 1u32
+    while s <= 6u32 {
+        if cga_dispose_mixed(s, budget) == 1u8 { adm = adm + 1u32 }
+        s = s + 1u32
+    }
+    return adm
+}
+
+fn cga_mixed_count() -> u32 @export { return CGA_MX_N[0u64] }
+fn cga_mixed_get(i: u32) -> u32 @export {
+    if i >= CGA_MX_N[0u64] { return 0xFFFFFFFFu32 }
+    return CGA_MX_A[i as u64]
+}
+fn cga_mixed_seal_byte(i: u32, j: u32) -> u8 @export {
+    if i >= CGA_MX_N[0u64] { return 0u8 }
+    if j >= 32u32 { return 0u8 }
+    return CGA_MX_SEAL[(i as u64) * 32u64 + (j as u64)]
+}

@@ -4,31 +4,30 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "builder.iii\0"
 L_str_6:
-    .ascii "builder.iiibuilder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "builder.iii\0"
 L_str_7:
-    .ascii "builder.iiihtml_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "builder.iii\0"
 L_str_8:
-    .ascii "html_escape.iiihtml_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "html_escape.iii\0"
 L_str_9:
-    .ascii "html_escape.iii<a href=\"x\">'&'</a>\0"
+    .ascii "html_escape.iii\0"
 L_str_10:
     .ascii "<a href=\"x\">'&'</a>\0"
     .section .iii.ring3,"n"
     .asciz "make_str"
     .text
-    .global L_make_str
     .seh_proc L_make_str
 L_make_str:
     pushq %rbp

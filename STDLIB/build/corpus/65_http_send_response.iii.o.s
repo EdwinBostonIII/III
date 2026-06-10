@@ -4,33 +4,32 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "builder.iii\0"
 L_str_6:
-    .ascii "builder.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "builder.iii\0"
 L_str_7:
-    .ascii "http_server.iiihttp_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "http_server.iii\0"
 L_str_8:
-    .ascii "http_server.iiihttp_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "http_server.iii\0"
 L_str_9:
-    .ascii "http_server.iiihttp_server.iiihttp_server.iii\0"
+    .ascii "http_server.iii\0"
 L_str_10:
-    .ascii "http_server.iiihttp_server.iii\0"
+    .ascii "http_server.iii\0"
 L_str_11:
     .ascii "http_server.iii\0"
     .section .iii.ring3,"n"
     .asciz "check_byte"
     .text
-    .global L_check_byte
     .seh_proc L_check_byte
 L_check_byte:
     pushq %rbp
@@ -106,11 +105,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

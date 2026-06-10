@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "checked_op"
     .text
-    .global L_checked_op
     .seh_proc L_checked_op
 L_checked_op:
     pushq %rbp

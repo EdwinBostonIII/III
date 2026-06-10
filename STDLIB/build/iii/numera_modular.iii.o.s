@@ -555,11 +555,8 @@ L_loop_top_16:
 L_if_end_19:
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -996,11 +993,8 @@ L_loop_top_34:
 L_if_end_37:
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1190,11 +1184,8 @@ L_loop_top_44:
 L_if_end_47:
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

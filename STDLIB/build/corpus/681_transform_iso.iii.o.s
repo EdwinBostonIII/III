@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "tp_iii_to_ast_bin.iiitp_ast_bin_to_iii.iii\0"
+    .ascii "tp_iii_to_ast_bin.iii\0"
 L_str_1:
     .ascii "tp_ast_bin_to_iii.iii\0"
     .section .bss
@@ -20,7 +20,6 @@ L_TI_OUT:
     .section .iii.ring3,"n"
     .asciz "ti_roundtrip"
     .text
-    .global L_ti_roundtrip
     .seh_proc L_ti_roundtrip
 L_ti_roundtrip:
     pushq %rbp

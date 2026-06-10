@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hdl.iiihdl.iiihdl.iiihdl_optimize.iiihdl_optimize.iiihdl_optimize.iii\0"
+    .ascii "hdl.iii\0"
 L_str_1:
-    .ascii "hdl.iiihdl.iiihdl_optimize.iiihdl_optimize.iiihdl_optimize.iii\0"
+    .ascii "hdl.iii\0"
 L_str_2:
-    .ascii "hdl.iiihdl_optimize.iiihdl_optimize.iiihdl_optimize.iii\0"
+    .ascii "hdl.iii\0"
 L_str_3:
-    .ascii "hdl_optimize.iiihdl_optimize.iiihdl_optimize.iii\0"
+    .ascii "hdl_optimize.iii\0"
 L_str_4:
-    .ascii "hdl_optimize.iiihdl_optimize.iii\0"
+    .ascii "hdl_optimize.iii\0"
 L_str_5:
     .ascii "hdl_optimize.iii\0"
     .section .rodata
@@ -65,11 +65,8 @@ hc_tok:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -144,11 +141,8 @@ L_loop_top_0:
     movq %rax, -40(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

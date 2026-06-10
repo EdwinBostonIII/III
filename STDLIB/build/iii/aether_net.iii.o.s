@@ -4,35 +4,35 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_1:
-    .ascii "ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_2:
-    .ascii "ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_3:
-    .ascii "ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_4:
-    .ascii "ws2_32ws2_32ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_5:
-    .ascii "ws2_32ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_6:
-    .ascii "ws2_32ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_7:
-    .ascii "ws2_32ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_8:
-    .ascii "ws2_32ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_9:
-    .ascii "ws2_32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "ws2_32\0"
 L_str_10:
-    .ascii "capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "capability.iii\0"
 L_str_11:
-    .ascii "handle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_12:
-    .ascii "handle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_13:
-    .ascii "handle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_14:
-    .ascii "handle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_15:
     .ascii "handle.iii\0"
     .section .rodata
@@ -70,10 +70,6 @@ L_NET_WSADATA:
     .global L_NET_INITED
 L_NET_INITED:
     .quad 0x0
-    .section .bss
-    .global L_NET_SOCKADDR
-L_NET_SOCKADDR:
-    .zero 128
     .section .iii.ring3,"n"
     .asciz "net_init"
     .text
@@ -166,247 +162,6 @@ L_if_end_3:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "net_build_sockaddr_ipv4"
-    .text
-    .global L_net_build_sockaddr_ipv4
-    .seh_proc L_net_build_sockaddr_ipv4
-L_net_build_sockaddr_ipv4:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    movq %r8, -24(%rbp)
-    movq %r9, -32(%rbp)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shrq %cl, %rax
-    pushq %rax
-    movabsq $0xff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movzbq %al, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0xff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movzbq %al, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0xff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movzbq %al, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x5, %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movzbq %al, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0xff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movzbq %al, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-L_loop_top_4:
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_5
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_4
-L_loop_end_5:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
-    .asciz "net_set_addr_d"
-    .text
-    .global net_set_addr_d
-    .seh_proc net_set_addr_d
-net_set_addr_d:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    leaq L_NET_SOCKADDR(%rip), %rax
-    pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0xff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movzbq %al, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
     .asciz "net_tcp_connect_ipv4"
     .text
     .global net_tcp_connect_ipv4
@@ -443,7 +198,7 @@ net_tcp_connect_ipv4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_5
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -453,7 +208,7 @@ net_tcp_connect_ipv4:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_5:
     movzbq L_NET_INITED(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -466,17 +221,37 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_7
     subq $32, %rsp
     callq net_init
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movslq L_NET_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
 L_if_end_9:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_7:
     movslq L_NET_IPPROTO_TCP(%rip), %rax
     pushq %rax
     movslq L_NET_SOCK_STREAM(%rip), %rax
@@ -541,7 +316,7 @@ L_if_end_13:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -607,6 +382,42 @@ L_if_end_15:
     addq $32, %rsp
     pushq %rax
     popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq closesocket
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rax
     movq %rbp, %rsp
     popq %rbp
     retq
@@ -654,7 +465,7 @@ net_tcp_listen_ipv4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -664,7 +475,7 @@ net_tcp_listen_ipv4:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movzbq L_NET_INITED(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -677,17 +488,37 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     subq $32, %rsp
     callq net_init
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movslq L_NET_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_23:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
     movslq L_NET_IPPROTO_TCP(%rip), %rax
     pushq %rax
     movslq L_NET_SOCK_STREAM(%rip), %rax
@@ -715,7 +546,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_25
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -725,7 +556,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_25:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -738,7 +569,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -748,11 +579,11 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_27:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -780,7 +611,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_29
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -799,7 +630,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_29:
     movabsq $0x10, %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -821,7 +652,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_31
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -840,7 +671,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_31:
     movq -8(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -853,6 +684,42 @@ L_if_end_27:
     subq $32, %rsp
     callq handle_alloc
     addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq closesocket
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    movq -48(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -901,7 +768,7 @@ net_tcp_accept:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_35
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -911,7 +778,7 @@ net_tcp_accept:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_35:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -933,7 +800,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_37
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -943,7 +810,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_37:
     movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -971,7 +838,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_39
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -981,7 +848,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_39:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -994,7 +861,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_41
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1004,7 +871,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_41:
     movq -16(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1017,6 +884,42 @@ L_if_end_35:
     subq $32, %rsp
     callq handle_alloc
     addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq closesocket
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
+    movq -40(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1067,7 +970,7 @@ net_tcp_send:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_45
     movslq L_NET_E_DENIED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1077,7 +980,7 @@ net_tcp_send:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_45:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1099,7 +1002,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_47
     movslq L_NET_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1109,7 +1012,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_47:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1125,7 +1028,7 @@ L_if_end_39:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1163,7 +1066,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_49
     movslq L_NET_E_IO(%rip), %rax
     pushq %rax
     popq %rax
@@ -1173,7 +1076,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_49:
     movslq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1225,7 +1128,7 @@ net_tcp_recv:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_51
     movslq L_NET_E_DENIED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1235,7 +1138,7 @@ net_tcp_recv:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_51:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1257,7 +1160,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_53
     movslq L_NET_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1267,7 +1170,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_53:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1283,7 +1186,7 @@ L_if_end_45:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1321,7 +1224,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_55
     movslq L_NET_E_IO(%rip), %rax
     pushq %rax
     popq %rax
@@ -1331,7 +1234,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_55:
     movslq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1380,7 +1283,7 @@ net_close:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_57
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1393,7 +1296,7 @@ net_close:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_57:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1444,7 +1347,7 @@ net_pack_sockaddr_ipv4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_59
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1454,7 +1357,7 @@ net_pack_sockaddr_ipv4:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_59:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1487,11 +1390,8 @@ L_if_end_51:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1531,11 +1431,8 @@ L_if_end_51:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1556,11 +1453,8 @@ L_if_end_51:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1581,11 +1475,8 @@ L_if_end_51:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1623,7 +1514,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_52:
+L_loop_top_60:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x10, %rax
@@ -1636,7 +1527,7 @@ L_loop_top_52:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_53
+    jz L_loop_end_61
     movq -32(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1660,8 +1551,8 @@ L_loop_top_52:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_52
-L_loop_end_53:
+    jmp L_loop_top_60
+L_loop_end_61:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtx25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtx25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "x25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "x25519.iii\0"
 L_str_3:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_4:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_5:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_6:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_7:
-    .ascii "sealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_8:
     .ascii "sealed_channel.iii\0"
     .section .bss
@@ -46,7 +46,6 @@ L_BASEPOINT:
     .section .iii.ring3,"n"
     .asciz "_bytes_eq"
     .text
-    .global L__bytes_eq
     .seh_proc L__bytes_eq
 L__bytes_eq:
     pushq %rbp
@@ -143,7 +142,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_sid_eq"
     .text
-    .global L__sid_eq
     .seh_proc L__sid_eq
 L__sid_eq:
     pushq %rbp
@@ -254,7 +252,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_sid_byte_sum"
     .text
-    .global L__sid_byte_sum
     .seh_proc L__sid_byte_sum
 L__sid_byte_sum:
     pushq %rbp
@@ -372,7 +369,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "_fill_sk"
     .text
-    .global L__fill_sk
     .seh_proc L__fill_sk
 L__fill_sk:
     pushq %rbp

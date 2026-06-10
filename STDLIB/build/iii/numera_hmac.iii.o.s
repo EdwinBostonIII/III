@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha512.iiisha512.iiisha512.iiiarena.iiiarena.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha512.iiisha512.iiisha512.iiiarena.iiiarena.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha512.iiisha512.iiisha512.iiiarena.iiiarena.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
-    .ascii "sha512.iiisha512.iiisha512.iiiarena.iiiarena.iii\0"
+    .ascii "sha512.iii\0"
 L_str_4:
-    .ascii "sha512.iiisha512.iiiarena.iiiarena.iii\0"
+    .ascii "sha512.iii\0"
 L_str_5:
-    .ascii "sha512.iiiarena.iiiarena.iii\0"
+    .ascii "sha512.iii\0"
 L_str_6:
-    .ascii "arena.iiiarena.iii\0"
+    .ascii "arena.iii\0"
 L_str_7:
     .ascii "arena.iii\0"
     .section .rodata
@@ -48,7 +48,6 @@ L_HMAC_INNER:
     .section .iii.ring3,"n"
     .asciz "hmac_alloc_buffers"
     .text
-    .global L_hmac_alloc_buffers
     .seh_proc L_hmac_alloc_buffers
 L_hmac_alloc_buffers:
     pushq %rbp
@@ -165,7 +164,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "hmac_zero"
     .text
-    .global L_hmac_zero
     .seh_proc L_hmac_zero
 L_hmac_zero:
     pushq %rbp
@@ -242,7 +240,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "hmac_prepare_key_sha256"
     .text
-    .global L_hmac_prepare_key_sha256
     .seh_proc L_hmac_prepare_key_sha256
 L_hmac_prepare_key_sha256:
     pushq %rbp
@@ -387,7 +384,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "hmac_prepare_key_sha512"
     .text
-    .global L_hmac_prepare_key_sha512
     .seh_proc L_hmac_prepare_key_sha512
 L_hmac_prepare_key_sha512:
     pushq %rbp
@@ -532,7 +528,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "hmac_build_pad"
     .text
-    .global L_hmac_build_pad
     .seh_proc L_hmac_build_pad
 L_hmac_build_pad:
     pushq %rbp

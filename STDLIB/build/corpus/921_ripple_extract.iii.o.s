@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "congruence.iiicongruence.iiiripple_metric.iiiripple_metric.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "congruence.iii\0"
 L_str_1:
-    .ascii "congruence.iiiripple_metric.iiiripple_metric.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "congruence.iii\0"
 L_str_2:
-    .ascii "ripple_metric.iiiripple_metric.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_3:
-    .ascii "ripple_metric.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_4:
-    .ascii "ripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_extract.iii\0"
 L_str_5:
-    .ascii "ripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_extract.iii\0"
 L_str_6:
-    .ascii "ripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_extract.iii\0"
 L_str_7:
-    .ascii "ripple_extract.iiiripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_extract.iii\0"
 L_str_8:
-    .ascii "ripple_extract.iiiripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_extract.iii\0"
 L_str_9:
-    .ascii "ripple_extract.iiiripple_extract.iii\0"
+    .ascii "ripple_extract.iii\0"
 L_str_10:
     .ascii "ripple_extract.iii\0"
     .section .bss
@@ -38,7 +38,6 @@ L_FH:
     .section .iii.ring3,"n"
     .asciz "fill32"
     .text
-    .global L_fill32
     .seh_proc L_fill32
 L_fill32:
     pushq %rbp

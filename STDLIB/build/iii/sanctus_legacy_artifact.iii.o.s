@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiicad.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
     .ascii "cad.iii\0"
     .section .rodata
@@ -48,7 +48,6 @@ L_LA_DIGEST:
     .section .iii.ring3,"n"
     .asciz "la_slot_of"
     .text
-    .global L_la_slot_of
     .seh_proc L_la_slot_of
 L_la_slot_of:
     pushq %rbp
@@ -558,11 +557,8 @@ L_if_end_23:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -712,11 +708,8 @@ L_if_end_27:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax

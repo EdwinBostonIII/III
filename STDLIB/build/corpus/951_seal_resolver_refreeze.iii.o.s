@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "seal_resolver.iiiseal_resolver.iiiseal_resolver.iiiseal_resolver.iiiseal_resolver.iiiseal_resolver.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_1:
-    .ascii "seal_resolver.iiiseal_resolver.iiiseal_resolver.iiiseal_resolver.iiiseal_resolver.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_2:
-    .ascii "seal_resolver.iiiseal_resolver.iiiseal_resolver.iiiseal_resolver.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_3:
-    .ascii "seal_resolver.iiiseal_resolver.iiiseal_resolver.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_4:
-    .ascii "seal_resolver.iiiseal_resolver.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_5:
     .ascii "seal_resolver.iii\0"
     .section .bss
@@ -22,7 +22,6 @@ L_SR_SNAP:
     .section .iii.ring3,"n"
     .asciz "_sr_snapshot"
     .text
-    .global L__sr_snapshot
     .seh_proc L__sr_snapshot
 L__sr_snapshot:
     pushq %rbp
@@ -98,7 +97,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_sr_eq_snapshot"
     .text
-    .global L__sr_eq_snapshot
     .seh_proc L__sr_eq_snapshot
 L__sr_eq_snapshot:
     pushq %rbp

@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiichacha20.iiichacha20.iiichacha20.iiipoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiichacha20.iiichacha20.iiichacha20.iiipoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "chacha20.iiichacha20.iiichacha20.iiipoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_3:
-    .ascii "chacha20.iiichacha20.iiipoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_4:
-    .ascii "chacha20.iiipoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_5:
-    .ascii "poly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "poly1305.iii\0"
 L_str_6:
-    .ascii "poly1305.iiipoly1305.iii\0"
+    .ascii "poly1305.iii\0"
 L_str_7:
     .ascii "poly1305.iii\0"
     .section .rodata
@@ -52,7 +52,6 @@ L_AEAD_INITED:
     .section .iii.ring3,"n"
     .asciz "aead_alloc_buffers"
     .text
-    .global L_aead_alloc_buffers
     .seh_proc L_aead_alloc_buffers
 L_aead_alloc_buffers:
     pushq %rbp
@@ -181,7 +180,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "aead_poly_submit_padded"
     .text
-    .global L_aead_poly_submit_padded
     .seh_proc L_aead_poly_submit_padded
 L_aead_poly_submit_padded:
     pushq %rbp
@@ -202,11 +200,8 @@ L_aead_poly_submit_padded:
     xorl %edx, %edx
     divq %rcx
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -576,7 +571,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "aead_build_lengths"
     .text
-    .global L_aead_build_lengths
     .seh_proc L_aead_build_lengths
 L_aead_build_lengths:
     pushq %rbp
@@ -613,11 +607,8 @@ L_loop_top_16:
     jz L_loop_end_17
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -685,11 +676,8 @@ L_loop_top_18:
     jz L_loop_end_19
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax

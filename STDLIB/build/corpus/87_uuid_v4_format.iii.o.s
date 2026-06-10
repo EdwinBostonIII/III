@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtxoshiro.iiiuuid.iiiuuid.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtxoshiro.iiiuuid.iiiuuid.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "xoshiro.iiiuuid.iiiuuid.iii\0"
+    .ascii "xoshiro.iii\0"
 L_str_3:
-    .ascii "uuid.iiiuuid.iii\0"
+    .ascii "uuid.iii\0"
 L_str_4:
     .ascii "uuid.iii\0"
     .section .iii.ring3,"n"
@@ -82,11 +82,8 @@ main:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
@@ -120,11 +117,8 @@ L_if_end_1:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax

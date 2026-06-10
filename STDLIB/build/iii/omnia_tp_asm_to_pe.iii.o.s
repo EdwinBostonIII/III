@@ -103,7 +103,6 @@ L_TP_PE_COFF:
     .section .iii.ring3,"n"
     .asciz "tp_pe_emit"
     .text
-    .global L_tp_pe_emit
     .seh_proc L_tp_pe_emit
 L_tp_pe_emit:
     pushq %rbp

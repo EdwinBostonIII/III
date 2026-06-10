@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiikeccak.iiikeccak.iiikeccak.iiishake256.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "keccak.iiikeccak.iiikeccak.iiishake256.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "keccak.iii\0"
 L_str_2:
-    .ascii "keccak.iiikeccak.iiishake256.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "keccak.iii\0"
 L_str_3:
-    .ascii "keccak.iiishake256.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "keccak.iii\0"
 L_str_4:
-    .ascii "shake256.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "shake256.iii\0"
 L_str_5:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_6:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_7:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_8:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -125,7 +125,6 @@ L_SLH_KROOT:
     .section .iii.ring3,"n"
     .asciz "slh_sha2_prefix"
     .text
-    .global L_slh_sha2_prefix
     .seh_proc L_slh_sha2_prefix
 L_slh_sha2_prefix:
     pushq %rbp
@@ -240,11 +239,8 @@ L_loop_top_2:
 L_loop_end_3:
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -442,7 +438,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "slh_mgf1_sha256"
     .text
-    .global L_slh_mgf1_sha256
     .seh_proc L_slh_mgf1_sha256
 L_slh_mgf1_sha256:
     pushq %rbp
@@ -508,11 +503,8 @@ L_loop_top_8:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -533,11 +525,8 @@ L_loop_top_8:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -558,11 +547,8 @@ L_loop_top_8:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -736,7 +722,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "slh_n"
     .text
-    .global L_slh_n
     .seh_proc L_slh_n
 L_slh_n:
     pushq %rbp
@@ -809,7 +794,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "slh_h"
     .text
-    .global L_slh_h
     .seh_proc L_slh_h
 L_slh_h:
     pushq %rbp
@@ -859,7 +843,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "slh_d"
     .text
-    .global L_slh_d
     .seh_proc L_slh_d
 L_slh_d:
     pushq %rbp
@@ -909,7 +892,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "slh_hp"
     .text
-    .global L_slh_hp
     .seh_proc L_slh_hp
 L_slh_hp:
     pushq %rbp
@@ -959,7 +941,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "slh_a"
     .text
-    .global L_slh_a
     .seh_proc L_slh_a
 L_slh_a:
     pushq %rbp
@@ -1009,7 +990,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "slh_kf"
     .text
-    .global L_slh_kf
     .seh_proc L_slh_kf
 L_slh_kf:
     pushq %rbp
@@ -1082,7 +1062,6 @@ L_if_end_29:
     .section .iii.ring3,"n"
     .asciz "slh_len1"
     .text
-    .global L_slh_len1
     .seh_proc L_slh_len1
 L_slh_len1:
     pushq %rbp
@@ -1122,7 +1101,6 @@ L_slh_len1:
     .section .iii.ring3,"n"
     .asciz "slh_len2"
     .text
-    .global L_slh_len2
     .seh_proc L_slh_len2
 L_slh_len2:
     pushq %rbp
@@ -1149,7 +1127,6 @@ L_slh_len2:
     .section .iii.ring3,"n"
     .asciz "slh_len"
     .text
-    .global L_slh_len
     .seh_proc L_slh_len
 L_slh_len:
     pushq %rbp
@@ -1187,7 +1164,6 @@ L_slh_len:
     .section .iii.ring3,"n"
     .asciz "slh_sig_bytes"
     .text
-    .global L_slh_sig_bytes
     .seh_proc L_slh_sig_bytes
 L_slh_sig_bytes:
     pushq %rbp
@@ -1310,7 +1286,6 @@ L_slh_sig_bytes:
     .section .iii.ring3,"n"
     .asciz "adrs_zero"
     .text
-    .global L_adrs_zero
     .seh_proc L_adrs_zero
 L_adrs_zero:
     pushq %rbp
@@ -1323,11 +1298,8 @@ L_adrs_zero:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -1396,7 +1368,6 @@ L_loop_end_31:
     .section .iii.ring3,"n"
     .asciz "adrs_copy"
     .text
-    .global L_adrs_copy
     .seh_proc L_adrs_copy
 L_adrs_copy:
     pushq %rbp
@@ -1410,21 +1381,15 @@ L_adrs_copy:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -1505,7 +1470,6 @@ L_loop_end_33:
     .section .iii.ring3,"n"
     .asciz "adrs_set4"
     .text
-    .global L_adrs_set4
     .seh_proc L_adrs_set4
 L_adrs_set4:
     pushq %rbp
@@ -1520,11 +1484,8 @@ L_adrs_set4:
     movq %r8, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -1540,11 +1501,8 @@ L_adrs_set4:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1571,11 +1529,8 @@ L_adrs_set4:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1602,11 +1557,8 @@ L_adrs_set4:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1662,7 +1614,6 @@ L_adrs_set4:
     .section .iii.ring3,"n"
     .asciz "adrs_set_layer"
     .text
-    .global L_adrs_set_layer
     .seh_proc L_adrs_set_layer
 L_adrs_set_layer:
     pushq %rbp
@@ -1702,7 +1653,6 @@ L_adrs_set_layer:
     .section .iii.ring3,"n"
     .asciz "adrs_set_tree"
     .text
-    .global L_adrs_set_tree
     .seh_proc L_adrs_set_tree
 L_adrs_set_tree:
     pushq %rbp
@@ -1716,11 +1666,8 @@ L_adrs_set_tree:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -1822,7 +1769,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "adrs_set_type"
     .text
-    .global L_adrs_set_type
     .seh_proc L_adrs_set_type
 L_adrs_set_type:
     pushq %rbp
@@ -1851,11 +1797,8 @@ L_adrs_set_type:
     popq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -1930,7 +1873,6 @@ L_loop_end_37:
     .section .iii.ring3,"n"
     .asciz "adrs_set_keypair"
     .text
-    .global L_adrs_set_keypair
     .seh_proc L_adrs_set_keypair
 L_adrs_set_keypair:
     pushq %rbp
@@ -1970,7 +1912,6 @@ L_adrs_set_keypair:
     .section .iii.ring3,"n"
     .asciz "adrs_set_chain"
     .text
-    .global L_adrs_set_chain
     .seh_proc L_adrs_set_chain
 L_adrs_set_chain:
     pushq %rbp
@@ -2010,7 +1951,6 @@ L_adrs_set_chain:
     .section .iii.ring3,"n"
     .asciz "adrs_set_hash"
     .text
-    .global L_adrs_set_hash
     .seh_proc L_adrs_set_hash
 L_adrs_set_hash:
     pushq %rbp
@@ -2050,7 +1990,6 @@ L_adrs_set_hash:
     .section .iii.ring3,"n"
     .asciz "adrs_set_tree_height"
     .text
-    .global L_adrs_set_tree_height
     .seh_proc L_adrs_set_tree_height
 L_adrs_set_tree_height:
     pushq %rbp
@@ -2090,7 +2029,6 @@ L_adrs_set_tree_height:
     .section .iii.ring3,"n"
     .asciz "adrs_set_tree_index"
     .text
-    .global L_adrs_set_tree_index
     .seh_proc L_adrs_set_tree_index
 L_adrs_set_tree_index:
     pushq %rbp
@@ -2130,7 +2068,6 @@ L_adrs_set_tree_index:
     .section .iii.ring3,"n"
     .asciz "slh_H_n"
     .text
-    .global L_slh_H_n
     .seh_proc L_slh_H_n
 L_slh_H_n:
     pushq %rbp
@@ -2355,11 +2292,8 @@ L_if_end_39:
     movq %rax, -80(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
@@ -2683,7 +2617,6 @@ L_loop_end_53:
     .section .iii.ring3,"n"
     .asciz "slh_PRF"
     .text
-    .global L_slh_PRF
     .seh_proc L_slh_PRF
 L_slh_PRF:
     pushq %rbp
@@ -2904,11 +2837,8 @@ L_if_end_55:
     movq %rax, -64(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -3240,7 +3170,6 @@ L_loop_end_69:
     .section .iii.ring3,"n"
     .asciz "slh_PRF_msg"
     .text
-    .global L_slh_PRF_msg
     .seh_proc L_slh_PRF_msg
 L_slh_PRF_msg:
     pushq %rbp
@@ -3959,7 +3888,6 @@ L_loop_end_89:
     .section .iii.ring3,"n"
     .asciz "slh_sh_init"
     .text
-    .global L_slh_sh_init
     .seh_proc L_slh_sh_init
 L_slh_sh_init:
     pushq %rbp
@@ -4006,7 +3934,6 @@ L_slh_sh_init:
     .section .iii.ring3,"n"
     .asciz "slh_sh_absorb"
     .text
-    .global L_slh_sh_absorb
     .seh_proc L_slh_sh_absorb
 L_slh_sh_absorb:
     pushq %rbp
@@ -4169,7 +4096,6 @@ L_loop_end_91:
     .section .iii.ring3,"n"
     .asciz "slh_sh_finish"
     .text
-    .global L_slh_sh_finish
     .seh_proc L_slh_sh_finish
 L_slh_sh_finish:
     pushq %rbp
@@ -4288,7 +4214,6 @@ L_slh_sh_finish:
     .section .iii.ring3,"n"
     .asciz "slh_H_msg"
     .text
-    .global L_slh_H_msg
     .seh_proc L_slh_H_msg
 L_slh_H_msg:
     pushq %rbp
@@ -4678,7 +4603,6 @@ L_if_end_95:
     .section .iii.ring3,"n"
     .asciz "adrs_get4"
     .text
-    .global L_adrs_get4
     .seh_proc L_adrs_get4
 L_adrs_get4:
     pushq %rbp
@@ -4692,11 +4616,8 @@ L_adrs_get4:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -4716,11 +4637,8 @@ L_adrs_get4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     leaq L_SLH_ADRS(%rip), %rax
     pushq %rax
@@ -4738,11 +4656,8 @@ L_adrs_get4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4764,11 +4679,8 @@ L_adrs_get4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4808,7 +4720,6 @@ L_adrs_get4:
     .section .iii.ring3,"n"
     .asciz "slh_wots_chain"
     .text
-    .global L_slh_wots_chain
     .seh_proc L_slh_wots_chain
 L_slh_wots_chain:
     pushq %rbp
@@ -4983,7 +4894,6 @@ L_loop_end_105:
     .section .iii.ring3,"n"
     .asciz "slh_wots_chain_lengths"
     .text
-    .global L_slh_wots_chain_lengths
     .seh_proc L_slh_wots_chain_lengths
 L_slh_wots_chain_lengths:
     pushq %rbp
@@ -5041,11 +4951,8 @@ L_loop_top_106:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -5165,11 +5072,8 @@ L_loop_end_109:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
@@ -5205,11 +5109,8 @@ L_loop_end_109:
     movq %rax, -56(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
@@ -5264,11 +5165,8 @@ L_loop_end_109:
 L_if_else_110:
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -5379,11 +5277,8 @@ L_if_end_115:
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -5451,7 +5346,6 @@ L_loop_end_113:
     .section .iii.ring3,"n"
     .asciz "slh_wots_pkgen"
     .text
-    .global L_slh_wots_pkgen
     .seh_proc L_slh_wots_pkgen
 L_slh_wots_pkgen:
     pushq %rbp
@@ -5753,7 +5647,6 @@ L_loop_end_119:
     .section .iii.ring3,"n"
     .asciz "slh_wots_sign"
     .text
-    .global L_slh_wots_sign
     .seh_proc L_slh_wots_sign
 L_slh_wots_sign:
     pushq %rbp
@@ -6012,7 +5905,6 @@ L_loop_end_121:
     .section .iii.ring3,"n"
     .asciz "slh_wots_pk_from_sig"
     .text
-    .global L_slh_wots_pk_from_sig
     .seh_proc L_slh_wots_pk_from_sig
 L_slh_wots_pk_from_sig:
     pushq %rbp
@@ -6281,7 +6173,6 @@ L_loop_end_123:
     .section .iii.ring3,"n"
     .asciz "slh_compute_root"
     .text
-    .global L_slh_compute_root
     .seh_proc L_slh_compute_root
 L_slh_compute_root:
     pushq %rbp
@@ -6920,7 +6811,6 @@ L_loop_end_141:
     .section .iii.ring3,"n"
     .asciz "slh_fors_indices"
     .text
-    .global L_slh_fors_indices
     .seh_proc L_slh_fors_indices
 L_slh_fors_indices:
     pushq %rbp
@@ -7014,11 +6904,8 @@ L_loop_top_144:
     movq %rax, -80(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
@@ -7114,7 +7001,6 @@ L_loop_end_143:
     .section .iii.ring3,"n"
     .asciz "slh_fors_subtree"
     .text
-    .global L_slh_fors_subtree
     .seh_proc L_slh_fors_subtree
 L_slh_fors_subtree:
     pushq %rbp
@@ -7857,7 +7743,6 @@ L_loop_end_155:
     .section .iii.ring3,"n"
     .asciz "slh_fors_sign_and_root"
     .text
-    .global L_slh_fors_sign_and_root
     .seh_proc L_slh_fors_sign_and_root
 L_slh_fors_sign_and_root:
     pushq %rbp
@@ -8484,7 +8369,6 @@ L_loop_end_157:
     .section .iii.ring3,"n"
     .asciz "slh_fors_pk_from_sig"
     .text
-    .global L_slh_fors_pk_from_sig
     .seh_proc L_slh_fors_pk_from_sig
 L_slh_fors_pk_from_sig:
     pushq %rbp
@@ -8895,7 +8779,6 @@ L_loop_end_161:
     .section .iii.ring3,"n"
     .asciz "slh_xmss_subtree"
     .text
-    .global L_slh_xmss_subtree
     .seh_proc L_slh_xmss_subtree
 L_slh_xmss_subtree:
     pushq %rbp
@@ -9486,7 +9369,6 @@ L_loop_end_171:
     .section .iii.ring3,"n"
     .asciz "slh_xmss_sign_and_root"
     .text
-    .global L_slh_xmss_sign_and_root
     .seh_proc L_slh_xmss_sign_and_root
 L_slh_xmss_sign_and_root:
     pushq %rbp
@@ -9851,7 +9733,6 @@ L_loop_end_173:
     .section .iii.ring3,"n"
     .asciz "slh_xmss_pk_from_sig"
     .text
-    .global L_slh_xmss_pk_from_sig
     .seh_proc L_slh_xmss_pk_from_sig
 L_slh_xmss_pk_from_sig:
     pushq %rbp
@@ -10036,7 +9917,6 @@ L_slh_xmss_pk_from_sig:
     .section .iii.ring3,"n"
     .asciz "slh_copy"
     .text
-    .global L_slh_copy
     .seh_proc L_slh_copy
 L_slh_copy:
     pushq %rbp
@@ -10126,7 +10006,6 @@ L_loop_end_175:
     .section .iii.ring3,"n"
     .asciz "slh_lowmask"
     .text
-    .global L_slh_lowmask
     .seh_proc L_slh_lowmask
 L_slh_lowmask:
     pushq %rbp
@@ -10819,11 +10698,8 @@ L_loop_top_176:
     jz L_loop_end_177
     movq -224(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     movq -216(%rbp), %rax
     pushq %rax
@@ -10903,11 +10779,8 @@ L_loop_top_178:
     jz L_loop_end_179
     movq -240(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     movq -216(%rbp), %rax
     pushq %rax
@@ -11617,11 +11490,8 @@ L_loop_top_184:
     jz L_loop_end_185
     movq -200(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     movq -192(%rbp), %rax
     pushq %rax
@@ -11701,11 +11571,8 @@ L_loop_top_186:
     jz L_loop_end_187
     movq -216(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     movq -192(%rbp), %rax
     pushq %rax

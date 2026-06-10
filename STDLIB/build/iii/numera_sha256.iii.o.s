@@ -42,7 +42,6 @@ L_SHA_FORCE:
     .section .iii.ring3,"n"
     .asciz "sha_init_k"
     .text
-    .global L_sha_init_k
     .seh_proc L_sha_init_k
 L_sha_init_k:
     pushq %rbp
@@ -708,7 +707,6 @@ L_sha_init_k:
     .section .iii.ring3,"n"
     .asciz "sha_rotr"
     .text
-    .global L_sha_rotr
     .seh_proc L_sha_rotr
 L_sha_rotr:
     pushq %rbp
@@ -761,7 +759,6 @@ L_sha_rotr:
     .section .iii.ring3,"n"
     .asciz "_sha_sched4_scalar"
     .text
-    .global L__sha_sched4_scalar
     .seh_proc L__sha_sched4_scalar
 L__sha_sched4_scalar:
     pushq %rbp
@@ -847,11 +844,8 @@ L_loop_top_0:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -963,7 +957,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_sha_sched4_avx512"
     .text
-    .global L__sha_sched4_avx512
     .seh_proc L__sha_sched4_avx512
 L__sha_sched4_avx512:
     pushq %rbp
@@ -1010,7 +1003,6 @@ L__sha_sched4_avx512:
     .section .iii.ring3,"n"
     .asciz "_sha_sched4"
     .text
-    .global L__sha_sched4
     .seh_proc L__sha_sched4
 L__sha_sched4:
     pushq %rbp
@@ -1151,7 +1143,6 @@ sha256_sched_force:
     .section .iii.ring3,"n"
     .asciz "sha_block"
     .text
-    .global L_sha_block
     .seh_proc L_sha_block
 L_sha_block:
     pushq %rbp
@@ -1183,18 +1174,11 @@ L_loop_top_8:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1210,11 +1194,8 @@ L_loop_top_8:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1237,11 +1218,8 @@ L_loop_top_8:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x2, %rax
@@ -1264,11 +1242,8 @@ L_loop_top_8:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -1293,20 +1268,14 @@ L_loop_top_8:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1315,11 +1284,8 @@ L_loop_top_8:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1452,11 +1418,8 @@ L_loop_top_12:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0xa, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $10, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2256,11 +2219,8 @@ L_if_end_17:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2660,11 +2620,8 @@ L_loop_top_34:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2771,11 +2728,8 @@ L_loop_top_36:
     movq %rax, -40(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2784,20 +2738,13 @@ L_loop_top_36:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2825,11 +2772,8 @@ L_loop_top_36:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2857,11 +2801,8 @@ L_loop_top_36:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2989,6 +2930,745 @@ sha256_oneshot:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "sha256_feed_packed"
+    .text
+    .global sha256_feed_packed
+    .seh_proc sha256_feed_packed
+sha256_feed_packed:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $3, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+L_loop_top_38:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_39
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $16, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $24, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $32, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $40, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $48, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $56, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_38
+L_loop_end_39:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+L_loop_top_42:
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_43
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_42
+L_loop_end_43:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sha256_oneshot_packed"
+    .text
+    .global sha256_oneshot_packed
+    .seh_proc sha256_oneshot_packed
+sha256_oneshot_packed:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    subq $32, %rsp
+    callq sha256_init
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq sha256_feed_packed
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_final
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sha256_emit_bp"
+    .text
+    .global sha256_emit_bp
+    .seh_proc sha256_emit_bp
+sha256_emit_bp:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+L_loop_top_44:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_45
+    leaq L_SHA_H(%rip), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shlq $1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_SHA_H(%rip), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shlq $1, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $24, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $16, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $16, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $24, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $24, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $32, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $16, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $40, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $48, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $56, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_44
+L_loop_end_45:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sha256_oneshot_packed_bp"
+    .text
+    .global sha256_oneshot_packed_bp
+    .seh_proc sha256_oneshot_packed_bp
+sha256_oneshot_packed_bp:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    subq $32, %rsp
+    callq sha256_init
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq sha256_feed_packed
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq sha256_finalize_internal
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_emit_bp
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "sha256_update_byte"
     .text
     .global sha256_update_byte
@@ -3014,7 +3694,7 @@ sha256_update_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_47
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3024,7 +3704,7 @@ sha256_update_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_47:
     movq L_SHA_BITS(%rip), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -3077,7 +3757,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_49
     subq $32, %rsp
     callq L_sha_block
     addq $32, %rsp
@@ -3091,7 +3771,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_49:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3130,7 +3810,7 @@ sha256_finalize_internal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_51
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3140,7 +3820,7 @@ sha256_finalize_internal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_51:
     movq L_SHA_BITS(%rip), %rax
     pushq %rax
     popq %rax
@@ -3178,8 +3858,8 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
-L_loop_top_46:
+    jz L_if_end_53
+L_loop_top_54:
     movl L_SHA_BUFLEN(%rip), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -3192,7 +3872,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_47
+    jz L_loop_end_55
     leaq L_SHA_BUF(%rip), %rax
     pushq %rax
     movl L_SHA_BUFLEN(%rip), %eax
@@ -3217,8 +3897,8 @@ L_loop_top_46:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
+    jmp L_loop_top_54
+L_loop_end_55:
     subq $32, %rsp
     callq L_sha_block
     addq $32, %rsp
@@ -3232,8 +3912,8 @@ L_loop_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
-L_loop_top_48:
+L_if_end_53:
+L_loop_top_56:
     movl L_SHA_BUFLEN(%rip), %eax
     pushq %rax
     movabsq $0x38, %rax
@@ -3246,7 +3926,7 @@ L_loop_top_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_49
+    jz L_loop_end_57
     leaq L_SHA_BUF(%rip), %rax
     pushq %rax
     movl L_SHA_BUFLEN(%rip), %eax
@@ -3271,13 +3951,13 @@ L_loop_top_48:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_48
-L_loop_end_49:
+    jmp L_loop_top_56
+L_loop_end_57:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_50:
+L_loop_top_58:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -3290,16 +3970,13 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_51
+    jz L_loop_end_59
     movabsq $0x38, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3364,8 +4041,8 @@ L_loop_top_50:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_50
-L_loop_end_51:
+    jmp L_loop_top_58
+L_loop_end_59:
     subq $32, %rsp
     callq L_sha_block
     addq $32, %rsp
@@ -3419,7 +4096,7 @@ sha256_digest_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_61
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -3429,7 +4106,7 @@ sha256_digest_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_61:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
@@ -3469,11 +4146,8 @@ L_if_end_53:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)

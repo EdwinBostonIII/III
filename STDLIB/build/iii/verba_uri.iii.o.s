@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiibuilder.iiibuilder.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "builder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_2:
     .ascii "builder.iii\0"
     .section .rodata
@@ -18,6 +18,8 @@ L_URI_E_BADID:
     .quad 0xfffffffffffffffe
 L_URI_E_BADHEX:
     .quad 0xfffffffffffffffd
+L_URI_E_BUILDER:
+    .quad 0xfffffffffffffffc
 L_URI_MAX:
     .quad 0x20
     .section .bss
@@ -57,7 +59,6 @@ L_URI_LIVE:
     .section .iii.ring3,"n"
     .asciz "uri_alloc_slot"
     .text
-    .global L_uri_alloc_slot
     .seh_proc L_uri_alloc_slot
 L_uri_alloc_slot:
     pushq %rbp
@@ -256,7 +257,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "uri_resolve_id"
     .text
-    .global L_uri_resolve_id
     .seh_proc L_uri_resolve_id
 L_uri_resolve_id:
     pushq %rbp
@@ -377,7 +377,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "uri_is_alpha"
     .text
-    .global L_uri_is_alpha
     .seh_proc L_uri_is_alpha
 L_uri_is_alpha:
     pushq %rbp
@@ -484,7 +483,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "uri_is_digit"
     .text
-    .global L_uri_is_digit
     .seh_proc L_uri_is_digit
 L_uri_is_digit:
     pushq %rbp
@@ -551,7 +549,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "uri_is_scheme_byte"
     .text
-    .global L_uri_is_scheme_byte
     .seh_proc L_uri_is_scheme_byte
 L_uri_is_scheme_byte:
     pushq %rbp
@@ -705,7 +702,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "uri_is_unreserved"
     .text
-    .global L_uri_is_unreserved
     .seh_proc L_uri_is_unreserved
 L_uri_is_unreserved:
     pushq %rbp
@@ -882,7 +878,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "uri_hex_nibble"
     .text
-    .global L_uri_hex_nibble
     .seh_proc L_uri_hex_nibble
 L_uri_hex_nibble:
     pushq %rbp
@@ -1050,7 +1045,6 @@ L_if_end_53:
     .section .iii.ring3,"n"
     .asciz "uri_nibble_to_hex_upper"
     .text
-    .global L_uri_nibble_to_hex_upper
     .seh_proc L_uri_nibble_to_hex_upper
 L_uri_nibble_to_hex_upper:
     pushq %rbp
@@ -1131,7 +1125,6 @@ L_if_end_57:
     .section .iii.ring3,"n"
     .asciz "uri_detect_scheme"
     .text
-    .global L_uri_detect_scheme
     .seh_proc L_uri_detect_scheme
 L_uri_detect_scheme:
     pushq %rbp
@@ -3171,7 +3164,27 @@ L_loop_top_158:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_163
+    movslq L_URI_E_BUILDER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_163:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -3188,14 +3201,31 @@ L_if_else_160:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
-    popq %rax
-    movl -48(%rbp), %eax
-    pushq %rax
-    movabsq $0x4, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    shrq %cl, %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_165
+    movslq L_URI_E_BUILDER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_165:
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -3232,7 +3262,27 @@ L_if_else_160:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_167
+    movslq L_URI_E_BUILDER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_167:
     movl -64(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -3250,7 +3300,27 @@ L_if_else_160:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_169
+    movslq L_URI_E_BUILDER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_169:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -3309,7 +3379,7 @@ uri_pct_decode:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_162:
+L_loop_top_170:
     movq -40(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -3322,7 +3392,7 @@ L_loop_top_162:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_163
+    jz L_loop_end_171
     movq -32(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -3348,7 +3418,7 @@ L_loop_top_162:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_164
+    jz L_if_else_172
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -3367,7 +3437,7 @@ L_loop_top_162:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_167
+    jz L_if_end_175
     movslq L_URI_E_BADHEX(%rip), %rax
     pushq %rax
     popq %rax
@@ -3377,7 +3447,7 @@ L_loop_top_162:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_167:
+L_if_end_175:
     movq -32(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -3448,7 +3518,7 @@ L_if_end_167:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_169
+    jz L_if_end_177
     movslq L_URI_E_BADHEX(%rip), %rax
     pushq %rax
     popq %rax
@@ -3458,7 +3528,7 @@ L_if_end_167:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_169:
+L_if_end_177:
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0xff, %rax
@@ -3471,7 +3541,7 @@ L_if_end_169:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_171
+    jz L_if_end_179
     movslq L_URI_E_BADHEX(%rip), %rax
     pushq %rax
     popq %rax
@@ -3481,14 +3551,11 @@ L_if_end_169:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_171:
+L_if_end_179:
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     movl -80(%rbp), %eax
@@ -3510,7 +3577,27 @@ L_if_end_171:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_181
+    movslq L_URI_E_BUILDER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_181:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -3524,8 +3611,8 @@ L_if_end_171:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_165
-L_if_else_164:
+    jmp L_if_end_173
+L_if_else_172:
     movl -48(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -3537,7 +3624,27 @@ L_if_else_164:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_183
+    movslq L_URI_E_BUILDER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_183:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3551,12 +3658,12 @@ L_if_else_164:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_165:
+L_if_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_162
-L_loop_end_163:
+    jmp L_loop_top_170
+L_loop_end_171:
     movslq L_URI_OK(%rip), %rax
     pushq %rax
     popq %rax

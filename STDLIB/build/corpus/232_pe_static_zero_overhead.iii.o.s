@@ -4,23 +4,22 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtintent.iiipattern_table.iiicall_context.iiiresolver.iiisha256.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtintent.iiipattern_table.iiicall_context.iiiresolver.iiisha256.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "intent.iiipattern_table.iiicall_context.iiiresolver.iiisha256.iii\0"
+    .ascii "intent.iii\0"
 L_str_3:
-    .ascii "pattern_table.iiicall_context.iiiresolver.iiisha256.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_4:
-    .ascii "call_context.iiiresolver.iiisha256.iii\0"
+    .ascii "call_context.iii\0"
 L_str_5:
-    .ascii "resolver.iiisha256.iii\0"
+    .ascii "resolver.iii\0"
 L_str_6:
     .ascii "sha256.iii\0"
     .section .iii.ring3,"n"
     .asciz "pe_get_sha256_fp"
     .text
-    .global L_pe_get_sha256_fp
     .seh_proc L_pe_get_sha256_fp
 L_pe_get_sha256_fp:
     pushq %rbp
@@ -68,7 +67,6 @@ L_pe_get_sha256_fp:
     .section .iii.ring3,"n"
     .asciz "pe_call_through_fp"
     .text
-    .global L_pe_call_through_fp
     .seh_proc L_pe_call_through_fp
 L_pe_call_through_fp:
     pushq %rbp

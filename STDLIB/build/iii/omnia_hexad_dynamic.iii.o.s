@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hexad_algebra.iiihexad_reach.iiihexad_reach.iii\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
-    .ascii "hexad_reach.iiihexad_reach.iii\0"
+    .ascii "hexad_reach.iii\0"
 L_str_2:
     .ascii "hexad_reach.iii\0"
     .section .rodata
@@ -236,7 +236,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_hxd_structural_ok"
     .text
-    .global L__hxd_structural_ok
     .seh_proc L__hxd_structural_ok
 L__hxd_structural_ok:
     pushq %rbp
@@ -361,7 +360,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "_hxd_escalates"
     .text
-    .global L__hxd_escalates
     .seh_proc L__hxd_escalates
 L__hxd_escalates:
     pushq %rbp

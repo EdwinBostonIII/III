@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "zk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_1:
     .ascii "zk_field.iii\0"
     .section .iii.ring3,"n"

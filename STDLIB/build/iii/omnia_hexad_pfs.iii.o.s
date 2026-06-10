@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hexad_algebra.iiinonecapsule_updatemicrocode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
-    .ascii "nonecapsule_updatemicrocode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "none\0"
 L_str_2:
-    .ascii "capsule_updatemicrocode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "capsule_update\0"
 L_str_3:
-    .ascii "microcode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "microcode_load\0"
 L_str_4:
-    .ascii "bootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "bootorder_set\0"
 L_str_5:
-    .ascii "real_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "real_nvram_write\0"
 L_str_6:
-    .ascii "me_psp_mailboxsmram_writeunknown\0"
+    .ascii "me_psp_mailbox\0"
 L_str_7:
-    .ascii "smram_writeunknown\0"
+    .ascii "smram_write\0"
 L_str_8:
     .ascii "unknown\0"
     .section .rodata
@@ -31,7 +31,6 @@ L_HXP_PILLARS:
     .section .iii.ring3,"n"
     .asciz "_hxp_fill"
     .text
-    .global L__hxp_fill
     .seh_proc L__hxp_fill
 L__hxp_fill:
     pushq %rbp

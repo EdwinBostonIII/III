@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "capability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_5:
-    .ascii "witness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_6:
-    .ascii "capability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_7:
     .ascii "capability.iii\0"
     .section .rodata
@@ -278,7 +278,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "corh_find_slot"
     .text
-    .global L_corh_find_slot
     .seh_proc L_corh_find_slot
 L_corh_find_slot:
     pushq %rbp
@@ -349,11 +348,8 @@ L_loop_top_2:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -435,7 +431,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "corh_alloc_slot"
     .text
-    .global L_corh_alloc_slot
     .seh_proc L_corh_alloc_slot
 L_corh_alloc_slot:
     pushq %rbp
@@ -604,11 +599,8 @@ L_if_end_19:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -682,7 +674,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "corh_sat_mul2"
     .text
-    .global L_corh_sat_mul2
     .seh_proc L_corh_sat_mul2
 L_corh_sat_mul2:
     pushq %rbp
@@ -695,11 +686,8 @@ L_corh_sat_mul2:
     movq %rcx, -8(%rbp)
     movq L_CORH_SAT(%rip), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -1102,7 +1090,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "corh_ser_vec"
     .text
-    .global L_corh_ser_vec
     .seh_proc L_corh_ser_vec
 L_corh_ser_vec:
     pushq %rbp
@@ -1154,11 +1141,8 @@ L_loop_top_42:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1198,11 +1182,8 @@ L_loop_top_44:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1267,7 +1248,6 @@ L_loop_end_43:
     .section .iii.ring3,"n"
     .asciz "corh_witness_event"
     .text
-    .global L_corh_witness_event
     .seh_proc L_corh_witness_event
 L_corh_witness_event:
     pushq %rbp
@@ -1370,11 +1350,8 @@ L_loop_end_47:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1395,11 +1372,8 @@ L_loop_end_47:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1420,11 +1394,8 @@ L_loop_end_47:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1569,7 +1540,6 @@ L_if_end_49:
     .section .iii.ring3,"n"
     .asciz "corh_handle"
     .text
-    .global L_corh_handle
     .seh_proc L_corh_handle
 L_corh_handle:
     pushq %rbp
@@ -2818,7 +2788,6 @@ corh_event_count:
     .section .iii.ring3,"n"
     .asciz "corh_st_fill_id"
     .text
-    .global L_corh_st_fill_id
     .seh_proc L_corh_st_fill_id
 L_corh_st_fill_id:
     pushq %rbp
@@ -2895,7 +2864,6 @@ L_loop_end_101:
     .section .iii.ring3,"n"
     .asciz "corh_st_setup_vectors"
     .text
-    .global L_corh_st_setup_vectors
     .seh_proc L_corh_st_setup_vectors
 L_corh_st_setup_vectors:
     pushq %rbp
@@ -3221,7 +3189,6 @@ L_corh_st_setup_vectors:
     .section .iii.ring3,"n"
     .asciz "corh_st_put_vec"
     .text
-    .global L_corh_st_put_vec
     .seh_proc L_corh_st_put_vec
 L_corh_st_put_vec:
     pushq %rbp
@@ -3275,11 +3242,8 @@ L_loop_top_102:
     movq %rax, -48(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -3315,11 +3279,8 @@ L_loop_top_104:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3384,7 +3345,6 @@ L_loop_end_103:
     .section .iii.ring3,"n"
     .asciz "corh_st_k0"
     .text
-    .global L_corh_st_k0
     .seh_proc L_corh_st_k0
 L_corh_st_k0:
     pushq %rbp
@@ -3544,7 +3504,6 @@ L_if_end_111:
     .section .iii.ring3,"n"
     .asciz "corh_st_k1"
     .text
-    .global L_corh_st_k1
     .seh_proc L_corh_st_k1
 L_corh_st_k1:
     pushq %rbp
@@ -3774,7 +3733,6 @@ L_if_end_121:
     .section .iii.ring3,"n"
     .asciz "corh_st_k2"
     .text
-    .global L_corh_st_k2
     .seh_proc L_corh_st_k2
 L_corh_st_k2:
     pushq %rbp
@@ -4015,7 +3973,6 @@ L_if_end_133:
     .section .iii.ring3,"n"
     .asciz "corh_st_k3"
     .text
-    .global L_corh_st_k3
     .seh_proc L_corh_st_k3
 L_corh_st_k3:
     pushq %rbp
@@ -4464,7 +4421,6 @@ L_if_end_157:
     .section .iii.ring3,"n"
     .asciz "corh_st_k4"
     .text
-    .global L_corh_st_k4
     .seh_proc L_corh_st_k4
 L_corh_st_k4:
     pushq %rbp
@@ -4923,7 +4879,6 @@ L_if_end_179:
     .section .iii.ring3,"n"
     .asciz "corh_st_k5"
     .text
-    .global L_corh_st_k5
     .seh_proc L_corh_st_k5
 L_corh_st_k5:
     pushq %rbp
@@ -5202,7 +5157,6 @@ L_if_end_189:
     .section .iii.ring3,"n"
     .asciz "corh_st_knull"
     .text
-    .global L_corh_st_knull
     .seh_proc L_corh_st_knull
 L_corh_st_knull:
     pushq %rbp
@@ -5470,7 +5424,6 @@ L_if_end_201:
     .section .iii.ring3,"n"
     .asciz "corh_st_k6"
     .text
-    .global L_corh_st_k6
     .seh_proc L_corh_st_k6
 L_corh_st_k6:
     pushq %rbp

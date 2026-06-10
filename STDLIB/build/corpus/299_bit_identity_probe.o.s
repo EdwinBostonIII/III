@@ -8,7 +8,6 @@ L_str_0:
     .section .iii.ring3,"n"
     .asciz "outer"
     .text
-    .global L_outer
     .seh_proc L_outer
 L_outer:
     pushq %rbp

@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtripple_metric.iiiripple_metric.iiiripple_metric.iiiripple_metric.iiiripple_metric.iiioptinvoke.iiicommit_gate.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "ripple_metric.iiiripple_metric.iiiripple_metric.iiiripple_metric.iiiripple_metric.iiioptinvoke.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_2:
-    .ascii "ripple_metric.iiiripple_metric.iiiripple_metric.iiiripple_metric.iiioptinvoke.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_3:
-    .ascii "ripple_metric.iiiripple_metric.iiiripple_metric.iiioptinvoke.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_4:
-    .ascii "ripple_metric.iiiripple_metric.iiioptinvoke.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_5:
-    .ascii "ripple_metric.iiioptinvoke.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_6:
-    .ascii "optinvoke.iiicommit_gate.iii\0"
+    .ascii "optinvoke.iii\0"
 L_str_7:
     .ascii "commit_gate.iii\0"
     .section .rodata
@@ -25,7 +25,6 @@ L_OI_NONE:
     .section .iii.ring3,"n"
     .asciz "st_u64"
     .text
-    .global L_st_u64
     .seh_proc L_st_u64
 L_st_u64:
     pushq %rbp
@@ -87,11 +86,8 @@ L_loop_top_0:
     movb %dl, (%rax,%rcx,1)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -126,7 +122,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "cand"
     .text
-    .global L_cand
     .seh_proc L_cand
 L_cand:
     pushq %rbp
@@ -203,11 +198,7 @@ L_loop_end_3:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -24(%rbp), %rax
     pushq %rax
@@ -263,7 +254,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "vec1"
     .text
-    .global L_vec1
     .seh_proc L_vec1
 L_vec1:
     pushq %rbp
@@ -339,11 +329,7 @@ L_loop_end_5:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -609,11 +595,8 @@ L_loop_top_12:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax

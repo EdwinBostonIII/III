@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiifed_sybil.iiifed_sybil.iiifed_sybil.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "fed_sybil.iiifed_sybil.iiifed_sybil.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_2:
-    .ascii "fed_sybil.iiifed_sybil.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_3:
     .ascii "fed_sybil.iii\0"
     .section .rodata
@@ -876,7 +876,6 @@ L_loop_end_29:
     .section .iii.ring3,"n"
     .asciz "_eclipse_popcount8"
     .text
-    .global L__eclipse_popcount8
     .seh_proc L__eclipse_popcount8
 L__eclipse_popcount8:
     pushq %rbp

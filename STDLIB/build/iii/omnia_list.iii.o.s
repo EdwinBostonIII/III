@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiibound.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
     .ascii "bound.iii\0"
     .section .rodata
@@ -52,7 +52,6 @@ L_LIST_LEN:
     .section .iii.ring3,"n"
     .asciz "list_slot_of"
     .text
-    .global L_list_slot_of
     .seh_proc L_list_slot_of
 L_list_slot_of:
     pushq %rbp
@@ -347,11 +346,8 @@ L_loop_end_11:
 L_if_end_17:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -494,7 +490,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "list_node_set"
     .text
-    .global L_list_node_set
     .seh_proc L_list_node_set
 L_list_node_set:
     pushq %rbp
@@ -512,11 +507,8 @@ L_list_node_set:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -566,7 +558,6 @@ L_list_node_set:
     .section .iii.ring3,"n"
     .asciz "list_node_value"
     .text
-    .global L_list_node_value
     .seh_proc L_list_node_value
 L_list_node_value:
     pushq %rbp
@@ -582,11 +573,8 @@ L_list_node_value:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -618,7 +606,6 @@ L_list_node_value:
     .section .iii.ring3,"n"
     .asciz "list_node_next"
     .text
-    .global L_list_node_next
     .seh_proc L_list_node_next
 L_list_node_next:
     pushq %rbp
@@ -634,11 +621,8 @@ L_list_node_next:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -670,7 +654,6 @@ L_list_node_next:
     .section .iii.ring3,"n"
     .asciz "list_node_set_next"
     .text
-    .global L_list_node_set_next
     .seh_proc L_list_node_set_next
 L_list_node_set_next:
     pushq %rbp
@@ -687,11 +670,8 @@ L_list_node_set_next:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -727,7 +707,6 @@ L_list_node_set_next:
     .section .iii.ring3,"n"
     .asciz "list_alloc_node"
     .text
-    .global L_list_alloc_node
     .seh_proc L_list_alloc_node
 L_list_alloc_node:
     pushq %rbp

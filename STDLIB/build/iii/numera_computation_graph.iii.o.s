@@ -4,33 +4,33 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiiidentifier.iiiwitness_spine.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiiwitness_spine.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_spine.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiiidentifier.iiiwitness_spine.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "identifier.iiiwitness_spine.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_5:
-    .ascii "witness_spine.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
-    .ascii "witness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_9:
-    .ascii "witness_spine.iiiwitness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_10:
-    .ascii "witness_spine.iiiconstitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_11:
-    .ascii "constitution.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "constitution.iii\0"
 L_str_12:
-    .ascii "caindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_13:
-    .ascii "caindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_14:
     .ascii "caindex.iii\0"
     .section .rodata
@@ -1024,7 +1024,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "cg_branch_slot_find"
     .text
-    .global L_cg_branch_slot_find
     .seh_proc L_cg_branch_slot_find
 L_cg_branch_slot_find:
     pushq %rbp
@@ -1215,7 +1214,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "cg_anchor_slot_find"
     .text
-    .global L_cg_anchor_slot_find
     .seh_proc L_cg_anchor_slot_find
 L_cg_anchor_slot_find:
     pushq %rbp
@@ -1501,7 +1499,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "cg_lookup_fragment"
     .text
-    .global L_cg_lookup_fragment
     .seh_proc L_cg_lookup_fragment
 L_cg_lookup_fragment:
     pushq %rbp
@@ -1946,11 +1943,8 @@ L_loop_end_41:
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1958,11 +1952,8 @@ L_loop_end_41:
     pushq %rax
     movq -112(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1970,11 +1961,8 @@ L_loop_end_41:
     pushq %rax
     movq -120(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1984,19 +1972,13 @@ L_loop_end_41:
     movq %rax, -160(%rbp)
     movq -128(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2004,11 +1986,8 @@ L_loop_end_41:
     pushq %rax
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2016,11 +1995,8 @@ L_loop_end_41:
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2060,7 +2036,6 @@ L_loop_end_41:
     .section .iii.ring3,"n"
     .asciz "cg_load_u64_le"
     .text
-    .global L_cg_load_u64_le
     .seh_proc L_cg_load_u64_le
 L_cg_load_u64_le:
     pushq %rbp
@@ -2082,11 +2057,7 @@ L_cg_load_u64_le:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2226,11 +2197,8 @@ L_cg_load_u64_le:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2238,11 +2206,8 @@ L_cg_load_u64_le:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2250,11 +2215,8 @@ L_cg_load_u64_le:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2264,19 +2226,13 @@ L_cg_load_u64_le:
     movq %rax, -96(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2284,11 +2240,8 @@ L_cg_load_u64_le:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2296,11 +2249,8 @@ L_cg_load_u64_le:
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2330,7 +2280,6 @@ L_cg_load_u64_le:
     .section .iii.ring3,"n"
     .asciz "cg_store_u64_le"
     .text
-    .global L_cg_store_u64_le
     .seh_proc L_cg_store_u64_le
 L_cg_store_u64_le:
     pushq %rbp
@@ -2380,11 +2329,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2405,11 +2351,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2430,11 +2373,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2455,11 +2395,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2480,11 +2417,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2505,11 +2439,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2530,11 +2461,8 @@ L_cg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2565,7 +2493,6 @@ L_cg_store_u64_le:
     .section .iii.ring3,"n"
     .asciz "cg_walk_inner"
     .text
-    .global L_cg_walk_inner
     .seh_proc L_cg_walk_inner
 L_cg_walk_inner:
     pushq %rbp
@@ -2693,11 +2620,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2718,11 +2642,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2743,11 +2664,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2768,11 +2686,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2793,11 +2708,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2818,11 +2730,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2843,11 +2752,8 @@ L_loop_end_45:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4595,7 +4501,6 @@ L_if_end_107:
     .section .iii.ring3,"n"
     .asciz "cg_kat_emit"
     .text
-    .global L_cg_kat_emit
     .seh_proc L_cg_kat_emit
 L_cg_kat_emit:
     pushq %rbp
@@ -4671,7 +4576,6 @@ L_cg_kat_emit:
     .section .iii.ring3,"n"
     .asciz "cg_kat_bisim"
     .text
-    .global L_cg_kat_bisim
     .seh_proc L_cg_kat_bisim
 L_cg_kat_bisim:
     pushq %rbp

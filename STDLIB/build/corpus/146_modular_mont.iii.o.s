@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "modular_mont.iiimodular_mont.iiimodular_mont.iiimodular_mont.iii\0"
+    .ascii "modular_mont.iii\0"
 L_str_1:
-    .ascii "modular_mont.iiimodular_mont.iiimodular_mont.iii\0"
+    .ascii "modular_mont.iii\0"
 L_str_2:
-    .ascii "modular_mont.iiimodular_mont.iii\0"
+    .ascii "modular_mont.iii\0"
 L_str_3:
     .ascii "modular_mont.iii\0"
     .section .iii.ring3,"n"

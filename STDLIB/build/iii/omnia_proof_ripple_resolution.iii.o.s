@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "crystal.iii\0"
 L_str_1:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "crystal.iii\0"
 L_str_2:
-    .ascii "crystal.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "crystal.iii\0"
 L_str_3:
-    .ascii "crystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "crystal.iii\0"
 L_str_4:
-    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "crystal.iii\0"
 L_str_5:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_6:
-    .ascii "mhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_7:
-    .ascii "mhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_8:
-    .ascii "mhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_9:
-    .ascii "pattern_table.iiipattern_table.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_10:
     .ascii "pattern_table.iii\0"
     .section .rodata
@@ -88,7 +88,6 @@ L_PROOF_EXIT_HASH:
     .section .iii.ring3,"n"
     .asciz "_emit_le8"
     .text
-    .global L__emit_le8
     .seh_proc L__emit_le8
 L__emit_le8:
     pushq %rbp
@@ -131,11 +130,8 @@ L_loop_top_0:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -800,11 +796,8 @@ L_if_end_23:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -879,11 +872,8 @@ L_loop_top_26:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
@@ -1138,11 +1128,8 @@ L_loop_end_27:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
@@ -1300,11 +1287,8 @@ L_if_end_33:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
@@ -1561,11 +1545,8 @@ L_if_end_47:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
@@ -1640,11 +1621,8 @@ L_loop_top_50:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
@@ -2066,11 +2044,8 @@ L_if_end_61:
     movq %rax, -24(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax

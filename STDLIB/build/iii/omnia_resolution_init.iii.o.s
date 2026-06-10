@@ -4,45 +4,45 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_1:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_2:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_3:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_4:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_5:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_6:
-    .ascii "pattern.iiipattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_7:
-    .ascii "pattern.iiipattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern.iii\0"
 L_str_8:
-    .ascii "pattern_table.iiiresolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_9:
-    .ascii "resolution_meta_dispatch.iiiresolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "resolution_meta_dispatch.iii\0"
 L_str_10:
-    .ascii "resolution_meta_dispatch.iiipattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "resolution_meta_dispatch.iii\0"
 L_str_11:
-    .ascii "pattern_table.iiicalculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_12:
-    .ascii "calculus_v1.iiiirreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_13:
-    .ascii "irreducibility_proof.iiipattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_14:
-    .ascii "pattern_table.iiitransform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_15:
-    .ascii "transform_patterns.iiicodegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "transform_patterns.iii\0"
 L_str_16:
-    .ascii "codegen_patterns.iiiseal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "codegen_patterns.iii\0"
 L_str_17:
-    .ascii "seal_resolver.iiiquality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_18:
-    .ascii "quality_q7.iiiclosure.iiiclosure.iii\0"
+    .ascii "quality_q7.iii\0"
 L_str_19:
-    .ascii "closure.iiiclosure.iii\0"
+    .ascii "closure.iii\0"
 L_str_20:
     .ascii "closure.iii\0"
     .section .rodata
@@ -85,7 +85,6 @@ L_RI_RING_R0:
     .section .iii.ring3,"n"
     .asciz "_meta_register"
     .text
-    .global L__meta_register
     .seh_proc L__meta_register
 L__meta_register:
     pushq %rbp

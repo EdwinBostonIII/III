@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -86,7 +86,6 @@ L_PATTERN_TEMPLATE_OUT32:
     .section .iii.ring3,"n"
     .asciz "vp_write_u32"
     .text
-    .global L_vp_write_u32
     .seh_proc L_vp_write_u32
 L_vp_write_u32:
     pushq %rbp
@@ -165,11 +164,8 @@ L_vp_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -190,11 +186,8 @@ L_vp_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -215,11 +208,8 @@ L_vp_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -250,7 +240,6 @@ L_vp_write_u32:
     .section .iii.ring3,"n"
     .asciz "vp_read_u32"
     .text
-    .global L_vp_read_u32
     .seh_proc L_vp_read_u32
 L_vp_read_u32:
     pushq %rbp
@@ -383,11 +372,8 @@ L_vp_read_u32:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -396,11 +382,8 @@ L_vp_read_u32:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -409,11 +392,8 @@ L_vp_read_u32:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -434,7 +414,6 @@ L_vp_read_u32:
     .section .iii.ring3,"n"
     .asciz "vp_write_u64"
     .text
-    .global L_vp_write_u64
     .seh_proc L_vp_write_u64
 L_vp_write_u64:
     pushq %rbp
@@ -469,11 +448,8 @@ L_vp_write_u64:
     popq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -516,7 +492,6 @@ L_vp_write_u64:
     .section .iii.ring3,"n"
     .asciz "vp_read_u64"
     .text
-    .global L_vp_read_u64
     .seh_proc L_vp_read_u64
 L_vp_read_u64:
     pushq %rbp
@@ -573,11 +548,8 @@ L_vp_read_u64:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax

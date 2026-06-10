@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiimsvcrtmsvcrtbuilder.iiibuilder.iiibuilder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiimsvcrtmsvcrtbuilder.iiibuilder.iiibuilder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "msvcrtmsvcrtbuilder.iiibuilder.iiibuilder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "msvcrt\0"
 L_str_3:
-    .ascii "msvcrtbuilder.iiibuilder.iiibuilder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "msvcrt\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "builder.iii\0"
 L_str_6:
-    .ascii "builder.iiibuilder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "builder.iii\0"
 L_str_7:
-    .ascii "builder.iiiformat.iiiformat.iiiformat.iii\0"
+    .ascii "builder.iii\0"
 L_str_8:
-    .ascii "format.iiiformat.iiiformat.iii\0"
+    .ascii "format.iii\0"
 L_str_9:
-    .ascii "format.iiiformat.iii\0"
+    .ascii "format.iii\0"
 L_str_10:
     .ascii "format.iii\0"
     .section .iii.ring3,"n"

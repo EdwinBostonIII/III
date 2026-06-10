@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "aes.iiiaes.iii\0"
+    .ascii "aes.iii\0"
 L_str_1:
     .ascii "aes.iii\0"
     .section .bss
@@ -41,7 +41,6 @@ L_SIV_TBUF:
     .section .iii.ring3,"n"
     .asciz "siv_xor16"
     .text
-    .global L_siv_xor16
     .seh_proc L_siv_xor16
 L_siv_xor16:
     pushq %rbp
@@ -156,7 +155,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "siv_dbl"
     .text
-    .global L_siv_dbl
     .seh_proc L_siv_dbl
 L_siv_dbl:
     pushq %rbp
@@ -183,11 +181,8 @@ L_siv_dbl:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -241,11 +236,8 @@ L_loop_top_2:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
@@ -268,11 +260,8 @@ L_loop_top_2:
     movb %dl, (%rax,%rcx,1)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -347,7 +336,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "siv_cmac_setup"
     .text
-    .global L_siv_cmac_setup
     .seh_proc L_siv_cmac_setup
 L_siv_cmac_setup:
     pushq %rbp
@@ -503,7 +491,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "siv_cmac"
     .text
-    .global L_siv_cmac
     .seh_proc L_siv_cmac
 L_siv_cmac:
     pushq %rbp
@@ -642,11 +629,8 @@ L_if_else_12:
     movq %rax, -56(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -703,11 +687,8 @@ L_loop_top_16:
     jz L_loop_end_17
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
@@ -1146,7 +1127,6 @@ L_loop_end_31:
     .section .iii.ring3,"n"
     .asciz "siv_s2v"
     .text
-    .global L_siv_s2v
     .seh_proc L_siv_s2v
 L_siv_s2v:
     pushq %rbp
@@ -1635,7 +1615,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "siv_ctr"
     .text
-    .global L_siv_ctr
     .seh_proc L_siv_ctr
 L_siv_ctr:
     pushq %rbp

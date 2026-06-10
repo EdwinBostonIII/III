@@ -66,7 +66,6 @@ L_NL_LEX_INITED:
     .section .iii.ring3,"n"
     .asciz "_nl_to_lower"
     .text
-    .global L__nl_to_lower
     .seh_proc L__nl_to_lower
 L__nl_to_lower:
     pushq %rbp
@@ -143,7 +142,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_nl_is_digit"
     .text
-    .global L__nl_is_digit
     .seh_proc L__nl_is_digit
 L__nl_is_digit:
     pushq %rbp
@@ -214,7 +212,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_nl_is_alpha"
     .text
-    .global L__nl_is_alpha
     .seh_proc L__nl_is_alpha
 L__nl_is_alpha:
     pushq %rbp
@@ -325,7 +322,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "_nl_is_word_char"
     .text
-    .global L__nl_is_word_char
     .seh_proc L__nl_is_word_char
 L__nl_is_word_char:
     pushq %rbp
@@ -408,7 +404,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "_nl_is_space"
     .text
-    .global L__nl_is_space
     .seh_proc L__nl_is_space
 L__nl_is_space:
     pushq %rbp
@@ -508,7 +503,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "_nl_is_punct"
     .text
-    .global L__nl_is_punct
     .seh_proc L__nl_is_punct
 L__nl_is_punct:
     pushq %rbp
@@ -838,7 +832,6 @@ L_if_end_51:
     .section .iii.ring3,"n"
     .asciz "_nl_fnv_lower"
     .text
-    .global L__nl_fnv_lower
     .seh_proc L__nl_fnv_lower
 L__nl_fnv_lower:
     pushq %rbp
@@ -1390,11 +1383,8 @@ L_if_end_69:
     movq %rax, -56(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -1645,11 +1635,8 @@ nl_token_pack:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1663,11 +1650,8 @@ nl_token_pack:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -1681,11 +1665,8 @@ nl_token_pack:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -1772,11 +1753,8 @@ nl_token_word_id:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xffffff, %rax
     pushq %rax
@@ -1814,11 +1792,8 @@ nl_token_span_start:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -1856,11 +1831,8 @@ nl_token_span_end:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -1885,7 +1857,6 @@ nl_token_span_end:
     .section .iii.ring3,"n"
     .asciz "_nl_emit"
     .text
-    .global L__nl_emit
     .seh_proc L__nl_emit
 L__nl_emit:
     pushq %rbp
@@ -1940,11 +1911,8 @@ L_if_end_75:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1987,7 +1955,6 @@ L_if_end_75:
     .section .iii.ring3,"n"
     .asciz "_nl_scan_string"
     .text
-    .global L__nl_scan_string
     .seh_proc L__nl_scan_string
 L__nl_scan_string:
     pushq %rbp
@@ -2169,7 +2136,6 @@ L_if_end_83:
     .section .iii.ring3,"n"
     .asciz "_nl_scan_number"
     .text
-    .global L__nl_scan_number
     .seh_proc L__nl_scan_number
 L__nl_scan_number:
     pushq %rbp
@@ -2363,11 +2329,8 @@ L_loop_end_85:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
@@ -2393,7 +2356,6 @@ L_loop_end_85:
     .section .iii.ring3,"n"
     .asciz "_nl_scan_word"
     .text
-    .global L__nl_scan_word
     .seh_proc L__nl_scan_word
 L__nl_scan_word:
     pushq %rbp
@@ -2583,11 +2545,8 @@ nl_lex_tokenize:
     movq %rax, -56(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -3114,11 +3073,8 @@ L_if_else_114:
     movq %rax, -136(%rbp)
     movq -128(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffff, %rax
     pushq %rax
@@ -3286,11 +3242,8 @@ L_if_else_118:
     jz L_if_end_125
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -3538,11 +3491,8 @@ nl_lex_pack_lens:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)

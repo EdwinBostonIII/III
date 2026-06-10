@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "intent.iiipattern_table.iiicall_context.iiiresolver.iii\0"
+    .ascii "intent.iii\0"
 L_str_1:
-    .ascii "pattern_table.iiicall_context.iiiresolver.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_2:
-    .ascii "call_context.iiiresolver.iii\0"
+    .ascii "call_context.iii\0"
 L_str_3:
     .ascii "resolver.iii\0"
     .section .iii.ring3,"n"
     .asciz "build_dynamic_intent"
     .text
-    .global L_build_dynamic_intent
     .seh_proc L_build_dynamic_intent
 L_build_dynamic_intent:
     pushq %rbp
@@ -41,7 +40,6 @@ L_build_dynamic_intent:
     .section .iii.ring3,"n"
     .asciz "use_cross_fn_dynamic"
     .text
-    .global L_use_cross_fn_dynamic
     .seh_proc L_use_cross_fn_dynamic
 L_use_cross_fn_dynamic:
     pushq %rbp

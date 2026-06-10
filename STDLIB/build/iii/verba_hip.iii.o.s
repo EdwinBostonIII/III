@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "nl_lex.iiinl_lex.iiinl_lex.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_lex.iii\0"
 L_str_1:
-    .ascii "nl_lex.iiinl_lex.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_lex.iii\0"
 L_str_2:
-    .ascii "nl_lex.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_lex.iii\0"
 L_str_3:
-    .ascii "nl_parse.iiinl_parse.iiinl_parse.iiinl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_parse.iii\0"
 L_str_4:
-    .ascii "nl_parse.iiinl_parse.iiinl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_parse.iii\0"
 L_str_5:
-    .ascii "nl_parse.iiinl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_parse.iii\0"
 L_str_6:
-    .ascii "nl_parse.iiinl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_parse.iii\0"
 L_str_7:
-    .ascii "nl_lex.iiinl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_lex.iii\0"
 L_str_8:
-    .ascii "nl_lex.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "nl_lex.iii\0"
 L_str_9:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_10:
-    .ascii "intent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_11:
-    .ascii "intent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_12:
     .ascii "intent.iii\0"
     .section .rodata
@@ -66,8 +66,6 @@ L_HIPN_ROLE_BENEFICIARY:
     .quad 0x8
 L_HIPN_ROLE_OF:
     .quad 0x9
-L_HIPN_ROLE_TOPIC:
-    .quad 0xa
 L_HIPN_KIND_UNKNOWN:
     .quad 0x0
 L_HIPN_KIND_IMPERATIVE:
@@ -179,7 +177,6 @@ L_HIP_INITED:
     .section .iii.ring3,"n"
     .asciz "_hip_read_u32"
     .text
-    .global L__hip_read_u32
     .seh_proc L__hip_read_u32
 L__hip_read_u32:
     pushq %rbp
@@ -268,11 +265,8 @@ L__hip_read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -294,11 +288,8 @@ L__hip_read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -320,11 +311,8 @@ L__hip_read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -363,7 +351,6 @@ L__hip_read_u32:
     .section .iii.ring3,"n"
     .asciz "_hip_write_u32"
     .text
-    .global L__hip_write_u32
     .seh_proc L__hip_write_u32
 L__hip_write_u32:
     pushq %rbp
@@ -442,11 +429,8 @@ L__hip_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -467,11 +451,8 @@ L__hip_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -492,11 +473,8 @@ L__hip_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -527,7 +505,6 @@ L__hip_write_u32:
     .section .iii.ring3,"n"
     .asciz "_hip_role_of"
     .text
-    .global L__hip_role_of
     .seh_proc L__hip_role_of
 L__hip_role_of:
     pushq %rbp
@@ -653,7 +630,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_hip_verb_word_id"
     .text
-    .global L__hip_verb_word_id
     .seh_proc L__hip_verb_word_id
 L__hip_verb_word_id:
     pushq %rbp
@@ -736,11 +712,8 @@ L_if_end_7:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -782,7 +755,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "_hip_role_quantifier"
     .text
-    .global L__hip_role_quantifier
     .seh_proc L__hip_role_quantifier
 L__hip_role_quantifier:
     pushq %rbp
@@ -859,7 +831,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_hip_role_head_word_id"
     .text
-    .global L__hip_role_head_word_id
     .seh_proc L__hip_role_head_word_id
 L__hip_role_head_word_id:
     pushq %rbp
@@ -970,11 +941,8 @@ L_if_end_13:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1012,7 +980,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "_hip_emit_intent"
     .text
-    .global L__hip_emit_intent
     .seh_proc L__hip_emit_intent
 L__hip_emit_intent:
     pushq %rbp
@@ -1067,11 +1034,8 @@ L_if_end_15:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1114,7 +1078,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "_hip_pack_pv_meta"
     .text
-    .global L__hip_pack_pv_meta
     .seh_proc L__hip_pack_pv_meta
 L__hip_pack_pv_meta:
     pushq %rbp
@@ -1150,11 +1113,8 @@ L__hip_pack_pv_meta:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1168,11 +1128,8 @@ L__hip_pack_pv_meta:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -1186,11 +1143,8 @@ L__hip_pack_pv_meta:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -1228,7 +1182,6 @@ L__hip_pack_pv_meta:
     .section .iii.ring3,"n"
     .asciz "_hip_convey_src"
     .text
-    .global L__hip_convey_src
     .seh_proc L__hip_convey_src
 L__hip_convey_src:
     pushq %rbp
@@ -1279,7 +1232,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "_hip_project_verb"
     .text
-    .global L__hip_project_verb
     .seh_proc L__hip_project_verb
 L__hip_project_verb:
     pushq %rbp
@@ -1312,11 +1264,8 @@ L__hip_project_verb:
     movq %rax, -48(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -1331,11 +1280,8 @@ L__hip_project_verb:
     movq %rax, -56(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -1362,11 +1308,8 @@ L__hip_project_verb:
     movq %rax, -88(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -3719,7 +3662,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "_hip_classify"
     .text
-    .global L__hip_classify
     .seh_proc L__hip_classify
 L__hip_classify:
     pushq %rbp

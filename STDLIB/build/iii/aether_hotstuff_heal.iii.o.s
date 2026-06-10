@@ -204,11 +204,8 @@ L_loop_top_6:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -232,11 +229,8 @@ L_loop_top_6:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -304,7 +298,7 @@ L_loop_end_7:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -487,11 +481,8 @@ L_loop_top_16:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -515,11 +506,8 @@ L_loop_top_16:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -686,7 +674,7 @@ L_if_end_21:
     movzbq (%rax,%rcx,1), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

@@ -32,7 +32,6 @@ L_IMPACT_COUNT:
     .section .iii.ring3,"n"
     .asciz "impact_find"
     .text
-    .global L_impact_find
     .seh_proc L_impact_find
 L_impact_find:
     pushq %rbp
@@ -630,7 +629,6 @@ dynamic_impact_count:
     .section .iii.ring3,"n"
     .asciz "_di_sext32"
     .text
-    .global L__di_sext32
     .seh_proc L__di_sext32
 L__di_sext32:
     pushq %rbp
@@ -972,11 +970,8 @@ dynamic_impact_aggregate_perf_hi:
     callq dynamic_impact_aggregate_perf
     addq $32, %rsp
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1046,11 +1041,8 @@ dynamic_impact_aggregate_ux_hi:
     callq dynamic_impact_aggregate_ux
     addq $32, %rsp
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax

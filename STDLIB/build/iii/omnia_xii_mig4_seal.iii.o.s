@@ -4,65 +4,65 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_rule_patterns.iiixii_rule_overlap.iiixii_critpair_enum.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_1:
-    .ascii "xii_rule_overlap.iiixii_critpair_enum.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_rule_overlap.iii\0"
 L_str_2:
-    .ascii "xii_critpair_enum.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_critpair_enum.iii\0"
 L_str_3:
-    .ascii "xii_joinability.iiixii_termination.iiixii_admission.iiixii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_4:
-    .ascii "xii_termination.iiixii_admission.iiixii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_termination.iii\0"
 L_str_5:
-    .ascii "xii_admission.iiixii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_6:
-    .ascii "xii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_compose.iii\0"
 L_str_7:
-    .ascii "xii_lower_decide.iiixii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_decide.iii\0"
 L_str_8:
-    .ascii "xii_lower_iterate.iiixii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_iterate.iii\0"
 L_str_9:
-    .ascii "xii_lower_program.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_program.iii\0"
 L_str_10:
-    .ascii "xii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_then.iii\0"
 L_str_11:
-    .ascii "xii_lower_with.iiixii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_with.iii\0"
 L_str_12:
-    .ascii "xii_lower_under.iiixii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_lower_under.iii\0"
 L_str_13:
-    .ascii "xii_admission.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_14:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_15:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_16:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_17:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_18:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_19:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_20:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_21:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_22:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_23:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_24:
-    .ascii "xii_term.iiixii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_25:
-    .ascii "xii_canonicalise.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_26:
-    .ascii "cad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_27:
-    .ascii "cad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_28:
-    .ascii "cad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_29:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_30:
     .ascii "cad.iii\0"
     .section .rodata
@@ -105,7 +105,6 @@ L_XMS_DIG2:
     .section .iii.ring3,"n"
     .asciz "_xms_feed_node"
     .text
-    .global L__xms_feed_node
     .seh_proc L__xms_feed_node
 L__xms_feed_node:
     pushq %rbp
@@ -176,11 +175,8 @@ L__xms_feed_node:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -201,11 +197,8 @@ L__xms_feed_node:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -226,11 +219,8 @@ L__xms_feed_node:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -270,11 +260,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -295,11 +282,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -320,11 +304,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -345,11 +326,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -370,11 +348,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -395,11 +370,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -420,11 +392,8 @@ L__xms_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -469,7 +438,6 @@ L__xms_feed_node:
     .section .iii.ring3,"n"
     .asciz "_xms_walk"
     .text
-    .global L__xms_walk
     .seh_proc L__xms_walk
 L__xms_walk:
     pushq %rbp

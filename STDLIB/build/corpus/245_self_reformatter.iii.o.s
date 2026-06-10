@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_2:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_3:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_4:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_5:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_6:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_7:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_8:
-    .ascii "self_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_9:
     .ascii "self_reformatter.iii\0"
     .section .iii.ring3,"n"

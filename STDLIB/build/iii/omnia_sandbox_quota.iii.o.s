@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiibound.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_1:
-    .ascii "sandbox_ctor.iiibound.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_2:
     .ascii "bound.iii\0"
     .section .rodata
@@ -24,7 +24,6 @@ L_SBQ_CPU_USED:
     .section .iii.ring3,"n"
     .asciz "_sbq_slot_of"
     .text
-    .global L__sbq_slot_of
     .seh_proc L__sbq_slot_of
 L__sbq_slot_of:
     pushq %rbp

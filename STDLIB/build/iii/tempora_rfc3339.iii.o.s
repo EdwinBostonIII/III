@@ -4,25 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_1:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_2:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_3:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_4:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_5:
-    .ascii "calendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_6:
-    .ascii "calendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_7:
     .ascii "calendar.iii\0"
     .section .iii.ring3,"n"
     .asciz "rfc_digit"
     .text
-    .global L_rfc_digit
     .seh_proc L_rfc_digit
 L_rfc_digit:
     pushq %rbp
@@ -64,7 +63,6 @@ L_rfc_digit:
     .section .iii.ring3,"n"
     .asciz "rfc_emit2"
     .text
-    .global L_rfc_emit2
     .seh_proc L_rfc_emit2
 L_rfc_emit2:
     pushq %rbp
@@ -146,7 +144,6 @@ L_rfc_emit2:
     .section .iii.ring3,"n"
     .asciz "rfc_emit4"
     .text
-    .global L_rfc_emit4
     .seh_proc L_rfc_emit4
 L_rfc_emit4:
     pushq %rbp
@@ -163,11 +160,7 @@ L_rfc_emit4:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -545,7 +538,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "rfc_parse2"
     .text
-    .global L_rfc_parse2
     .seh_proc L_rfc_parse2
 L_rfc_parse2:
     pushq %rbp
@@ -633,7 +625,6 @@ L_rfc_parse2:
     .section .iii.ring3,"n"
     .asciz "rfc_parse4"
     .text
-    .global L_rfc_parse4
     .seh_proc L_rfc_parse4
 L_rfc_parse4:
     pushq %rbp
@@ -649,11 +640,7 @@ L_rfc_parse4:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -922,6 +909,113 @@ L_if_end_3:
     movq %rax, -64(%rbp)
     movl -48(%rbp), %eax
     pushq %rax
+    movabsq $0x17, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0x3b, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_7
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_7:
+    movl -64(%rbp), %eax
+    pushq %rax
+    movabsq $0x3c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq cal_civil_to_unix
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    movl -48(%rbp), %eax
+    pushq %rax
     popq %rax
     pushq %rax
     movabsq $0xe10, %rax
@@ -953,21 +1047,10 @@ L_if_end_3:
     addq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
-    movl -40(%rbp), %eax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq cal_civil_to_unix
-    addq $32, %rsp
-    pushq %rax
+    movq %rax, -80(%rbp)
     movq -72(%rbp), %rax
+    pushq %rax
+    movq -80(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax

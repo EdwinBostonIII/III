@@ -4,39 +4,39 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtbench.iiibench.iiihip.iiihip.iiihip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtbench.iiibench.iiihip.iiihip.iiihip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "bench.iiibench.iiihip.iiihip.iiihip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "bench.iii\0"
 L_str_3:
-    .ascii "bench.iiihip.iiihip.iiihip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "bench.iii\0"
 L_str_4:
-    .ascii "hip.iiihip.iiihip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "hip.iii\0"
 L_str_5:
-    .ascii "hip.iiihip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "hip.iii\0"
 L_str_6:
-    .ascii "hip.iiihip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "hip.iii\0"
 L_str_7:
-    .ascii "hip.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "hip.iii\0"
 L_str_8:
-    .ascii "idoc.iiiidoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "idoc.iii\0"
 L_str_9:
-    .ascii "idoc.iiiidoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "idoc.iii\0"
 L_str_10:
-    .ascii "idoc.iiiidoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "idoc.iii\0"
 L_str_11:
-    .ascii "idoc.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "idoc.iii\0"
 L_str_12:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_13:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_14:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_15:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_16:
-    .ascii "babel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_17:
     .ascii "babel_wire.iii\0"
     .section .bss
@@ -85,7 +85,6 @@ L_C244_IDOC_DIG_PTR:
     .section .iii.ring3,"n"
     .asciz "_read_u64"
     .text
-    .global L__read_u64
     .seh_proc L__read_u64
 L__read_u64:
     pushq %rbp
@@ -169,11 +168,8 @@ L_loop_top_0:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -216,7 +212,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_write_u64"
     .text
-    .global L__write_u64
     .seh_proc L__write_u64
 L__write_u64:
     pushq %rbp
@@ -285,11 +280,8 @@ L_loop_top_2:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -339,7 +331,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_read_u32"
     .text
-    .global L__read_u32
     .seh_proc L__read_u32
 L__read_u32:
     pushq %rbp
@@ -393,11 +384,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -425,11 +413,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -457,11 +442,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -500,7 +482,6 @@ L__read_u32:
     .section .iii.ring3,"n"
     .asciz "_put"
     .text
-    .global L__put
     .seh_proc L__put
 L__put:
     pushq %rbp
@@ -545,7 +526,6 @@ L__put:
     .section .iii.ring3,"n"
     .asciz "_phrase_send_buffer"
     .text
-    .global L__phrase_send_buffer
     .seh_proc L__phrase_send_buffer
 L__phrase_send_buffer:
     pushq %rbp
@@ -744,7 +724,6 @@ L__phrase_send_buffer:
     .section .iii.ring3,"n"
     .asciz "_phrase_open_file"
     .text
-    .global L__phrase_open_file
     .seh_proc L__phrase_open_file
 L__phrase_open_file:
     pushq %rbp
@@ -913,7 +892,6 @@ L__phrase_open_file:
     .section .iii.ring3,"n"
     .asciz "_phrase_nomatch"
     .text
-    .global L__phrase_nomatch
     .seh_proc L__phrase_nomatch
 L__phrase_nomatch:
     pushq %rbp
@@ -1217,7 +1195,6 @@ L__phrase_nomatch:
     .section .iii.ring3,"n"
     .asciz "_sort_deltas"
     .text
-    .global L__sort_deltas
     .seh_proc L__sort_deltas
 L__sort_deltas:
     pushq %rbp
@@ -1260,11 +1237,8 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1279,7 +1253,7 @@ L_loop_top_4:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1347,11 +1321,8 @@ L_if_else_8:
     movq %rax, -64(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1386,11 +1357,8 @@ L_if_else_8:
     popq %rax
     addq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1459,11 +1427,8 @@ L_loop_end_7:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1508,7 +1473,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_median"
     .text
-    .global L__median
     .seh_proc L__median
 L__median:
     pushq %rbp
@@ -1544,11 +1508,8 @@ L__median:
     movq %rax, -32(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1572,7 +1533,6 @@ L__median:
     .section .iii.ring3,"n"
     .asciz "_set_buffers"
     .text
-    .global L__set_buffers
     .seh_proc L__set_buffers
 L__set_buffers:
     pushq %rbp
@@ -1634,7 +1594,6 @@ L__set_buffers:
     .section .iii.ring3,"n"
     .asciz "_bench_hip"
     .text
-    .global L__bench_hip
     .seh_proc L__bench_hip
 L__bench_hip:
     pushq %rbp
@@ -1758,11 +1717,8 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -1821,7 +1777,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "_idoc_set_env"
     .text
-    .global L__idoc_set_env
     .seh_proc L__idoc_set_env
 L__idoc_set_env:
     pushq %rbp
@@ -1883,7 +1838,6 @@ L__idoc_set_env:
     .section .iii.ring3,"n"
     .asciz "_idoc_set_facets"
     .text
-    .global L__idoc_set_facets
     .seh_proc L__idoc_set_facets
 L__idoc_set_facets:
     pushq %rbp
@@ -1963,7 +1917,6 @@ L__idoc_set_facets:
     .section .iii.ring3,"n"
     .asciz "_idoc_set_outs"
     .text
-    .global L__idoc_set_outs
     .seh_proc L__idoc_set_outs
 L__idoc_set_outs:
     pushq %rbp
@@ -2025,7 +1978,6 @@ L__idoc_set_outs:
     .section .iii.ring3,"n"
     .asciz "_idoc_one_roundtrip"
     .text
-    .global L__idoc_one_roundtrip
     .seh_proc L__idoc_one_roundtrip
 L__idoc_one_roundtrip:
     pushq %rbp
@@ -2209,6 +2161,15 @@ L__idoc_one_roundtrip:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
+    subq $8, %rsp
+    movabsq $0x200, %rax
+    pushq %rax
+    movl -64(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -2224,6 +2185,8 @@ L__idoc_one_roundtrip:
     subq $32, %rsp
     callq idoc_pack_payload
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2335,7 +2298,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "_bench_idoc"
     .text
-    .global L__bench_idoc
     .seh_proc L__bench_idoc
 L__bench_idoc:
     pushq %rbp
@@ -2409,11 +2371,8 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -4078,6 +4037,15 @@ L_if_end_65:
     pushq %rax
     popq %rax
     movq %rax, -256(%rbp)
+    subq $8, %rsp
+    movabsq $0x200, %rax
+    pushq %rax
+    movl -248(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
     movq -256(%rbp), %rax
     pushq %rax
     movq -192(%rbp), %rax
@@ -4099,6 +4067,8 @@ L_if_end_65:
     subq $32, %rsp
     callq idoc_pack_payload
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax

@@ -4,47 +4,47 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "arena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iiibigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_11:
-    .ascii "bigint_div.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint_div.iii\0"
 L_str_12:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "fe25519.iii\0"
 L_str_13:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "fe25519.iii\0"
 L_str_14:
-    .ascii "fe25519.iiife25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "fe25519.iii\0"
 L_str_15:
-    .ascii "fe25519.iiife25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "fe25519.iii\0"
 L_str_16:
-    .ascii "fe25519.iiibench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "fe25519.iii\0"
 L_str_17:
-    .ascii "bench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_18:
-    .ascii "bench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_19:
-    .ascii "bench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_20:
-    .ascii "kernel32kernel32\0"
+    .ascii "kernel32\0"
 L_str_21:
     .ascii "kernel32\0"
     .section .rodata
@@ -92,7 +92,6 @@ L_FR:
     .section .iii.ring3,"n"
     .asciz "warmup"
     .text
-    .global L_warmup
     .seh_proc L_warmup
 L_warmup:
     pushq %rbp
@@ -142,7 +141,6 @@ L_warmup:
     .section .iii.ring3,"n"
     .asciz "lcg_next"
     .text
-    .global L_lcg_next
     .seh_proc L_lcg_next
 L_lcg_next:
     pushq %rbp
@@ -184,7 +182,6 @@ L_lcg_next:
     .section .iii.ring3,"n"
     .asciz "fill_words"
     .text
-    .global L_fill_words
     .seh_proc L_fill_words
 L_fill_words:
     pushq %rbp
@@ -262,7 +259,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "words_to_bytes"
     .text
-    .global L_words_to_bytes
     .seh_proc L_words_to_bytes
 L_words_to_bytes:
     pushq %rbp
@@ -336,11 +332,8 @@ L_loop_top_4:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -352,11 +345,8 @@ L_loop_top_4:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -421,7 +411,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "words_to_bigint"
     .text
-    .global L_words_to_bigint
     .seh_proc L_words_to_bigint
 L_words_to_bigint:
     pushq %rbp
@@ -572,7 +561,6 @@ L_words_to_bigint:
     .section .iii.ring3,"n"
     .asciz "bytes_to_bigint"
     .text
-    .global L_bytes_to_bigint
     .seh_proc L_bytes_to_bigint
 L_bytes_to_bigint:
     pushq %rbp
@@ -646,11 +634,8 @@ L_loop_top_8:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -672,11 +657,8 @@ L_loop_top_8:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -770,7 +752,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "build_p"
     .text
-    .global L_build_p
     .seh_proc L_build_p
 L_build_p:
     pushq %rbp
@@ -890,7 +871,6 @@ L_build_p:
     .section .iii.ring3,"n"
     .asciz "time_fz"
     .text
-    .global L_time_fz
     .seh_proc L_time_fz
 L_time_fz:
     pushq %rbp
@@ -1029,7 +1009,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "time_bigint"
     .text
-    .global L_time_bigint
     .seh_proc L_time_bigint
 L_time_bigint:
     pushq %rbp
@@ -1203,7 +1182,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "put_dec"
     .text
-    .global L_put_dec
     .seh_proc L_put_dec
 L_put_dec:
     pushq %rbp
@@ -1426,7 +1404,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "emit"
     .text
-    .global L_emit
     .seh_proc L_emit
 L_emit:
     pushq %rbp
@@ -1489,7 +1466,6 @@ L_emit:
     .section .iii.ring3,"n"
     .asciz "report"
     .text
-    .global L_report
     .seh_proc L_report
 L_report:
     pushq %rbp
@@ -1668,11 +1644,8 @@ main:
 L_if_end_25:
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1683,11 +1656,8 @@ L_if_end_25:
     movq %rax, -8(%rbp)
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $20, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

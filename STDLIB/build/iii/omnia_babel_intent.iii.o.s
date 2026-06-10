@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_1:
-    .ascii "intent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_2:
-    .ascii "intent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_3:
     .ascii "intent.iii\0"
     .section .rodata
@@ -173,7 +173,6 @@ L_BABEL_SFX4:
     .section .iii.ring3,"n"
     .asciz "babel_int_emit"
     .text
-    .global L_babel_int_emit
     .seh_proc L_babel_int_emit
 L_babel_int_emit:
     pushq %rbp
@@ -237,7 +236,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "babel_int_emit_str"
     .text
-    .global L_babel_int_emit_str
     .seh_proc L_babel_int_emit_str
 L_babel_int_emit_str:
     pushq %rbp
@@ -345,7 +343,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "babel_int_emit_hex16"
     .text
-    .global L_babel_int_emit_hex16
     .seh_proc L_babel_int_emit_hex16
 L_babel_int_emit_hex16:
     pushq %rbp
@@ -393,11 +390,8 @@ L_loop_top_4:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -471,7 +465,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "babel_int_emit_dec"
     .text
-    .global L_babel_int_emit_dec
     .seh_proc L_babel_int_emit_dec
 L_babel_int_emit_dec:
     pushq %rbp
@@ -1330,7 +1323,6 @@ L_loop_end_17:
     .section .iii.ring3,"n"
     .asciz "_babel_eq_at"
     .text
-    .global L__babel_eq_at
     .seh_proc L__babel_eq_at
 L__babel_eq_at:
     pushq %rbp
@@ -1538,7 +1530,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "_babel_find_from"
     .text
-    .global L__babel_find_from
     .seh_proc L__babel_find_from
 L__babel_find_from:
     pushq %rbp

@@ -142,7 +142,7 @@ revinv_kat_target:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

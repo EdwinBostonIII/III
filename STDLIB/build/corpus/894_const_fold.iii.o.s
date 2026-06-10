@@ -81,11 +81,8 @@ L_if_end_1:
 L_if_end_3:
     movq L_CSZ(%rip), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x7d0, %rax
     pushq %rax

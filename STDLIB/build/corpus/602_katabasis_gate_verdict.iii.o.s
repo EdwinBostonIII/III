@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "gate_verdict.iiigate_verdict.iiigate_verdict.iiigate_verdict.iii\0"
+    .ascii "gate_verdict.iii\0"
 L_str_1:
-    .ascii "gate_verdict.iiigate_verdict.iiigate_verdict.iii\0"
+    .ascii "gate_verdict.iii\0"
 L_str_2:
-    .ascii "gate_verdict.iiigate_verdict.iii\0"
+    .ascii "gate_verdict.iii\0"
 L_str_3:
     .ascii "gate_verdict.iii\0"
     .section .iii.ring3,"n"

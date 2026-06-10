@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "call_context.iiicall_context.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_1:
-    .ascii "call_context.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_2:
     .ascii "kchain.iii\0"
     .section .rodata
@@ -15,7 +15,6 @@ L_C261_FAIL_SENTINEL:
     .section .iii.ring3,"n"
     .asciz "_form_op"
     .text
-    .global L__form_op
     .seh_proc L__form_op
 L__form_op:
     pushq %rbp
@@ -60,7 +59,6 @@ L_hexad_ok_805306386:
     .section .iii.ring3,"n"
     .asciz "_compose_op"
     .text
-    .global L__compose_op
     .seh_proc L__compose_op
 L__compose_op:
     pushq %rbp

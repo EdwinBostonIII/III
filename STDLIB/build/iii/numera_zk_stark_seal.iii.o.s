@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "cad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_4:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_5:
     .ascii "cad.iii\0"
     .section .bss
@@ -46,7 +46,6 @@ L_ZKS_S3:
     .section .iii.ring3,"n"
     .asciz "zk_seal_dom_init"
     .text
-    .global L_zk_seal_dom_init
     .seh_proc L_zk_seal_dom_init
 L_zk_seal_dom_init:
     pushq %rbp
@@ -455,7 +454,6 @@ zk_proof_seal_eq:
     .section .iii.ring3,"n"
     .asciz "zk_seal_one"
     .text
-    .global L_zk_seal_one
     .seh_proc L_zk_seal_one
 L_zk_seal_one:
     pushq %rbp

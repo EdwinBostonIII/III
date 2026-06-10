@@ -4,29 +4,28 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "crystal.iii\0"
 L_str_5:
-    .ascii "crystal.iiicrystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "crystal.iii\0"
 L_str_6:
-    .ascii "crystal.iiicrystal.iiiripple.iiiripple.iii\0"
+    .ascii "crystal.iii\0"
 L_str_7:
-    .ascii "crystal.iiiripple.iiiripple.iii\0"
+    .ascii "crystal.iii\0"
 L_str_8:
-    .ascii "ripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_9:
     .ascii "ripple.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill"
     .text
-    .global L_fill
     .seh_proc L_fill
 L_fill:
     pushq %rbp
@@ -172,11 +171,8 @@ main:
     popq %rax
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $20, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

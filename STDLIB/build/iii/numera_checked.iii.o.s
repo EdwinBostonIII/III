@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "scalar.iiiscalar.iiiscalar.iiiscalar.iiiscalar.iiiscalar.iii\0"
+    .ascii "scalar.iii\0"
 L_str_1:
-    .ascii "scalar.iiiscalar.iiiscalar.iiiscalar.iiiscalar.iii\0"
+    .ascii "scalar.iii\0"
 L_str_2:
-    .ascii "scalar.iiiscalar.iiiscalar.iiiscalar.iii\0"
+    .ascii "scalar.iii\0"
 L_str_3:
-    .ascii "scalar.iiiscalar.iiiscalar.iii\0"
+    .ascii "scalar.iii\0"
 L_str_4:
-    .ascii "scalar.iiiscalar.iii\0"
+    .ascii "scalar.iii\0"
 L_str_5:
     .ascii "scalar.iii\0"
     .section .rodata
@@ -93,11 +93,8 @@ L_if_end_1:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -184,11 +181,8 @@ L_if_end_3:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -275,11 +269,8 @@ L_if_end_5:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -351,11 +342,8 @@ L_if_end_7:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -377,7 +365,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "chk_alloc_u64"
     .text
-    .global L_chk_alloc_u64
     .seh_proc L_chk_alloc_u64
 L_chk_alloc_u64:
     pushq %rbp

@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiicrystal.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iiicrystal.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iiicrystal.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
-    .ascii "sha256.iiicrystal.iii\0"
+    .ascii "sha256.iii\0"
 L_str_4:
     .ascii "crystal.iii\0"
     .section .rodata
@@ -40,7 +40,6 @@ L_MINI_CRYSTAL_USED:
     .section .iii.ring3,"n"
     .asciz "_mini_alloc_slot"
     .text
-    .global L__mini_alloc_slot
     .seh_proc L__mini_alloc_slot
 L__mini_alloc_slot:
     pushq %rbp
@@ -129,7 +128,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_mini_slot_of"
     .text
-    .global L__mini_slot_of
     .seh_proc L__mini_slot_of
 L__mini_slot_of:
     pushq %rbp
@@ -254,7 +252,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_mini_compute_hash"
     .text
-    .global L__mini_compute_hash
     .seh_proc L__mini_compute_hash
 L__mini_compute_hash:
     pushq %rbp
@@ -412,11 +409,8 @@ L_loop_top_10:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -483,11 +477,8 @@ L_loop_top_12:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -554,11 +545,8 @@ L_loop_top_14:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -655,11 +643,8 @@ L_loop_top_16:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

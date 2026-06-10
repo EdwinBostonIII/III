@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
-    .ascii "xii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_8:
-    .ascii "xii_term.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_9:
-    .ascii "xii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_10:
     .ascii "xii_rewrite.iii\0"
     .section .rodata
@@ -107,7 +107,6 @@ L_XRP_CC:
     .section .iii.ring3,"n"
     .asciz "_xrp_set"
     .text
-    .global L__xrp_set
     .seh_proc L__xrp_set
 L__xrp_set:
     pushq %rbp
@@ -191,7 +190,6 @@ L__xrp_set:
     .section .iii.ring3,"n"
     .asciz "_xrp_add"
     .text
-    .global L__xrp_add
     .seh_proc L__xrp_add
 L__xrp_add:
     pushq %rbp
@@ -254,7 +252,6 @@ L__xrp_add:
     .section .iii.ring3,"n"
     .asciz "_xrp_fill"
     .text
-    .global L__xrp_fill
     .seh_proc L__xrp_fill
 L__xrp_fill:
     pushq %rbp
@@ -1313,7 +1310,6 @@ L__xrp_fill:
     .section .iii.ring3,"n"
     .asciz "_xrp_ensure"
     .text
-    .global L__xrp_ensure
     .seh_proc L__xrp_ensure
 L__xrp_ensure:
     pushq %rbp
@@ -1361,7 +1357,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_xrp_slot"
     .text
-    .global L__xrp_slot
     .seh_proc L__xrp_slot
 L__xrp_slot:
     pushq %rbp
@@ -1470,7 +1465,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_xrp_child_ok"
     .text
-    .global L__xrp_child_ok
     .seh_proc L__xrp_child_ok
 L__xrp_child_ok:
     pushq %rbp
@@ -2267,7 +2261,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "_xrp_check"
     .text
-    .global L__xrp_check
     .seh_proc L__xrp_check
 L__xrp_check:
     pushq %rbp
@@ -2369,7 +2362,6 @@ L_if_end_37:
     .section .iii.ring3,"n"
     .asciz "_xrp_make_kind"
     .text
-    .global L__xrp_make_kind
     .seh_proc L__xrp_make_kind
 L__xrp_make_kind:
     pushq %rbp
@@ -2605,7 +2597,6 @@ L_if_end_45:
     .section .iii.ring3,"n"
     .asciz "_xrp_child_or_leaf"
     .text
-    .global L__xrp_child_or_leaf
     .seh_proc L__xrp_child_or_leaf
 L__xrp_child_or_leaf:
     pushq %rbp
@@ -2670,7 +2661,6 @@ L_if_end_47:
     .section .iii.ring3,"n"
     .asciz "_xrp_shape_term"
     .text
-    .global L__xrp_shape_term
     .seh_proc L__xrp_shape_term
 L__xrp_shape_term:
     pushq %rbp

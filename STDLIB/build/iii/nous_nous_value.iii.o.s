@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
     .ascii "cad.iii\0"
     .section .rodata
@@ -37,7 +37,6 @@ L_NOUS_VAL_WADDR2:
     .section .iii.ring3,"n"
     .asciz "_nous_val_put"
     .text
-    .global L__nous_val_put
     .seh_proc L__nous_val_put
 L__nous_val_put:
     pushq %rbp
@@ -69,11 +68,8 @@ L_loop_top_0:
     jz L_loop_end_1
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)

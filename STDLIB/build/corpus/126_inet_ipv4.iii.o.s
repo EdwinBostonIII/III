@@ -4,43 +4,42 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "builder.iii\0"
 L_str_6:
-    .ascii "builder.iiibuilder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "builder.iii\0"
 L_str_7:
-    .ascii "builder.iiiinet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "builder.iii\0"
 L_str_8:
-    .ascii "inet.iiiinet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "inet.iii\0"
 L_str_9:
-    .ascii "inet.iiiinet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "inet.iii\0"
 L_str_10:
-    .ascii "inet.iii192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "inet.iii\0"
 L_str_11:
-    .ascii "192.0.2.1255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "192.0.2.1\0"
 L_str_12:
-    .ascii "255.255.255.2550.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "255.255.255.255\0"
 L_str_13:
-    .ascii "0.0.0.0256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "0.0.0.0\0"
 L_str_14:
-    .ascii "256.1.1.11.2.3.4x1.2.3.4.5\0"
+    .ascii "256.1.1.1\0"
 L_str_15:
-    .ascii "1.2.3.4x1.2.3.4.5\0"
+    .ascii "1.2.3.4x\0"
 L_str_16:
     .ascii "1.2.3.4.5\0"
     .section .iii.ring3,"n"
     .asciz "make_str"
     .text
-    .global L_make_str
     .seh_proc L_make_str
 L_make_str:
     pushq %rbp

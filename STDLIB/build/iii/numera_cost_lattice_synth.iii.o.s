@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -95,13 +95,13 @@ L_CLS_CADDR_IN:
     .zero 768
     .global L_CLS_KA
 L_CLS_KA:
-    .zero 512
+    .zero 576
     .global L_CLS_KB
 L_CLS_KB:
-    .zero 512
+    .zero 576
     .global L_CLS_KOUT
 L_CLS_KOUT:
-    .zero 512
+    .zero 576
     .global L_CLS_KDESC
 L_CLS_KDESC:
     .zero 192
@@ -123,7 +123,6 @@ L_CLS_KCADDR:
     .section .iii.ring3,"n"
     .asciz "cls_sat_add"
     .text
-    .global L_cls_sat_add
     .seh_proc L_cls_sat_add
 L_cls_sat_add:
     pushq %rbp
@@ -184,7 +183,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "cls_max_u64"
     .text
-    .global L_cls_max_u64
     .seh_proc L_cls_max_u64
 L_cls_max_u64:
     pushq %rbp
@@ -235,7 +233,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "cls_min_u64"
     .text
-    .global L_cls_min_u64
     .seh_proc L_cls_min_u64
 L_cls_min_u64:
     pushq %rbp
@@ -435,11 +432,8 @@ L_if_end_11:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -485,11 +479,8 @@ L_loop_top_14:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -646,11 +637,8 @@ L_if_end_19:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -686,11 +674,8 @@ L_loop_top_22:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2302,11 +2287,8 @@ L_loop_top_102:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2339,11 +2321,8 @@ L_loop_top_102:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2615,11 +2594,7 @@ L_loop_end_111:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -2853,11 +2828,8 @@ L_loop_top_112:
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2889,11 +2861,8 @@ L_loop_top_112:
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2983,11 +2952,8 @@ L_loop_top_116:
     pushq %rax
     movq -120(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3098,7 +3064,6 @@ L_if_end_119:
     .section .iii.ring3,"n"
     .asciz "cls_ka_le_u64"
     .text
-    .global L_cls_ka_le_u64
     .seh_proc L_cls_ka_le_u64
 L_cls_ka_le_u64:
     pushq %rbp
@@ -3152,11 +3117,8 @@ L_loop_top_120:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crystal_edges.iiicrystal_edges.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal_edges.iii\0"
 L_str_1:
-    .ascii "crystal_edges.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal_edges.iii\0"
 L_str_2:
-    .ascii "crystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_3:
     .ascii "crystal.iii\0"
     .section .data
@@ -112,7 +112,6 @@ L_TP_RM_EDGES:
     .section .iii.ring3,"n"
     .asciz "tp_rm_emit"
     .text
-    .global L_tp_rm_emit
     .seh_proc L_tp_rm_emit
 L_tp_rm_emit:
     pushq %rbp
@@ -163,7 +162,6 @@ L_tp_rm_emit:
     .section .iii.ring3,"n"
     .asciz "tp_rm_hex16"
     .text
-    .global L_tp_rm_hex16
     .seh_proc L_tp_rm_hex16
 L_tp_rm_hex16:
     pushq %rbp
@@ -212,11 +210,8 @@ L_loop_top_0:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -300,7 +295,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "tp_rm_hex8"
     .text
-    .global L_tp_rm_hex8
     .seh_proc L_tp_rm_hex8
 L_tp_rm_hex8:
     pushq %rbp
@@ -347,11 +341,8 @@ L_loop_top_2:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -432,7 +423,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "tp_rm_decimal"
     .text
-    .global L_tp_rm_decimal
     .seh_proc L_tp_rm_decimal
 L_tp_rm_decimal:
     pushq %rbp
@@ -852,11 +842,8 @@ L_loop_top_18:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiitemporal_logic.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiitemporal_logic.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiitemporal_logic.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiitemporal_logic.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiitemporal_logic.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "temporal_logic.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "temporal_logic.iii\0"
 L_str_6:
-    .ascii "constitution.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "constitution.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiialgebraic_time.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
     .ascii "algebraic_time.iii\0"
     .section .rodata
@@ -106,7 +106,6 @@ L_CPRES_T_STR:
     .section .iii.ring3,"n"
     .asciz "cpres_load_u64"
     .text
-    .global L_cpres_load_u64
     .seh_proc L_cpres_load_u64
 L_cpres_load_u64:
     pushq %rbp
@@ -128,11 +127,7 @@ L_cpres_load_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -272,11 +267,8 @@ L_cpres_load_u64:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -284,11 +276,8 @@ L_cpres_load_u64:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -296,11 +285,8 @@ L_cpres_load_u64:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -310,19 +296,13 @@ L_cpres_load_u64:
     movq %rax, -96(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -330,11 +310,8 @@ L_cpres_load_u64:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -342,11 +319,8 @@ L_cpres_load_u64:
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1442,7 +1416,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "cpres_record_failure"
     .text
-    .global L_cpres_record_failure
     .seh_proc L_cpres_record_failure
 L_cpres_record_failure:
     pushq %rbp
@@ -1830,11 +1803,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1855,11 +1825,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1880,11 +1847,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1905,11 +1869,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1930,11 +1891,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1955,11 +1913,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1980,11 +1935,8 @@ L_if_end_47:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

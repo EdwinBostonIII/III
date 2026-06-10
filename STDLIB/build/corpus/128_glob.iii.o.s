@@ -4,59 +4,58 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtglob.iiiabcabcabcabd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtglob.iiiabcabcabcabd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "glob.iiiabcabcabcabd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "glob.iii\0"
 L_str_3:
-    .ascii "abcabcabcabd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abc\0"
 L_str_4:
-    .ascii "abcabcabd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abc\0"
 L_str_5:
-    .ascii "abcabd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abc\0"
 L_str_6:
-    .ascii "abd*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abd\0"
 L_str_7:
-    .ascii "*anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "*\0"
 L_str_8:
-    .ascii "anything goes herea*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "anything goes here\0"
 L_str_9:
-    .ascii "a*cabcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "a*c\0"
 L_str_10:
-    .ascii "abcaxxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abc\0"
 L_str_11:
-    .ascii "axxxxcabda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "axxxxc\0"
 L_str_12:
-    .ascii "abda?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abd\0"
 L_str_13:
-    .ascii "a?cabcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "a?c\0"
 L_str_14:
-    .ascii "abcac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "abc\0"
 L_str_15:
-    .ascii "ac[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "ac\0"
 L_str_16:
-    .ascii "[abc]ooboodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "[abc]oo\0"
 L_str_17:
-    .ascii "boodoo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "boo\0"
 L_str_18:
-    .ascii "doo*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "doo\0"
 L_str_19:
-    .ascii "*.txtreport.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "*.txt\0"
 L_str_20:
-    .ascii "report.txtreport.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "report.txt\0"
 L_str_21:
-    .ascii "report.doc*foo*bar*xfooybarzfobar\0"
+    .ascii "report.doc\0"
 L_str_22:
-    .ascii "*foo*bar*xfooybarzfobar\0"
+    .ascii "*foo*bar*\0"
 L_str_23:
-    .ascii "xfooybarzfobar\0"
+    .ascii "xfooybarz\0"
 L_str_24:
     .ascii "fobar\0"
     .section .iii.ring3,"n"
     .asciz "make_str"
     .text
-    .global L_make_str
     .seh_proc L_make_str
 L_make_str:
     pushq %rbp

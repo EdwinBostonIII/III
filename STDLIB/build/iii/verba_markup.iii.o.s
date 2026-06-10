@@ -137,7 +137,6 @@ L_MK_LIT_STYLE:
     .section .iii.ring3,"n"
     .asciz "_mk_w32"
     .text
-    .global L__mk_w32
     .seh_proc L__mk_w32
 L__mk_w32:
     pushq %rbp
@@ -216,11 +215,8 @@ L__mk_w32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -241,11 +237,8 @@ L__mk_w32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -266,11 +259,8 @@ L__mk_w32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -301,7 +291,6 @@ L__mk_w32:
     .section .iii.ring3,"n"
     .asciz "_mk_r32"
     .text
-    .global L__mk_r32
     .seh_proc L__mk_r32
 L__mk_r32:
     pushq %rbp
@@ -434,11 +423,8 @@ L__mk_r32:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -447,11 +433,8 @@ L__mk_r32:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -460,11 +443,8 @@ L__mk_r32:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -485,7 +465,6 @@ L__mk_r32:
     .section .iii.ring3,"n"
     .asciz "_mk_is_ws"
     .text
-    .global L__mk_is_ws
     .seh_proc L__mk_is_ws
 L__mk_is_ws:
     pushq %rbp
@@ -627,7 +606,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_mk_is_alpha"
     .text
-    .global L__mk_is_alpha
     .seh_proc L__mk_is_alpha
 L__mk_is_alpha:
     pushq %rbp
@@ -734,7 +712,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "_mk_lower"
     .text
-    .global L__mk_lower
     .seh_proc L__mk_lower
 L__mk_lower:
     pushq %rbp
@@ -807,7 +784,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "_mk_emit"
     .text
-    .global L__mk_emit
     .seh_proc L__mk_emit
 L__mk_emit:
     pushq %rbp
@@ -969,7 +945,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "_mk_name_eq_ci"
     .text
-    .global L__mk_name_eq_ci
     .seh_proc L__mk_name_eq_ci
 L__mk_name_eq_ci:
     pushq %rbp
@@ -1115,7 +1090,6 @@ L_loop_end_27:
     .section .iii.ring3,"n"
     .asciz "_mk_raw_kind"
     .text
-    .global L__mk_raw_kind
     .seh_proc L__mk_raw_kind
 L__mk_raw_kind:
     pushq %rbp
@@ -1251,7 +1225,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "_mk_finish_name"
     .text
-    .global L__mk_finish_name
     .seh_proc L__mk_finish_name
 L__mk_finish_name:
     pushq %rbp
@@ -1334,7 +1307,6 @@ L__mk_finish_name:
     .section .iii.ring3,"n"
     .asciz "_mk_finish_open"
     .text
-    .global L__mk_finish_open
     .seh_proc L__mk_finish_open
 L__mk_finish_open:
     pushq %rbp
@@ -1416,7 +1388,6 @@ L_if_end_39:
     .section .iii.ring3,"n"
     .asciz "_mk_emit_close_name"
     .text
-    .global L__mk_emit_close_name
     .seh_proc L__mk_emit_close_name
 L__mk_emit_close_name:
     pushq %rbp
@@ -1482,7 +1453,6 @@ L__mk_emit_close_name:
     .section .iii.ring3,"n"
     .asciz "_mk_emit_attr_name"
     .text
-    .global L__mk_emit_attr_name
     .seh_proc L__mk_emit_attr_name
 L__mk_emit_attr_name:
     pushq %rbp
@@ -1548,7 +1518,6 @@ L__mk_emit_attr_name:
     .section .iii.ring3,"n"
     .asciz "_mk_emit_attr_value"
     .text
-    .global L__mk_emit_attr_value
     .seh_proc L__mk_emit_attr_value
 L__mk_emit_attr_value:
     pushq %rbp
@@ -1614,7 +1583,6 @@ L__mk_emit_attr_value:
     .section .iii.ring3,"n"
     .asciz "_mk_step"
     .text
-    .global L__mk_step
     .seh_proc L__mk_step
 L__mk_step:
     pushq %rbp

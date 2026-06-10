@@ -4,15 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "chacha20.iiichacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_1:
-    .ascii "chacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20_poly1305.iii\0"
 L_str_2:
-    .ascii "chacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20_poly1305.iii\0"
 L_str_3:
-    .ascii "chacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20_poly1305.iii\0"
 L_str_4:
     .ascii "chacha20_poly1305.iii\0"
+    .section .rodata
+L_XC_OK:
+    .quad 0x0
+L_XC_E_SETUP:
+    .quad 0xffffffffffffffff
+L_XC_E_AAD:
+    .quad 0xfffffffffffffffe
+L_XC_E_SEAL:
+    .quad 0xfffffffffffffffd
     .section .bss
     .global L_XC_SUBKEY
 L_XC_SUBKEY:
@@ -23,7 +32,6 @@ L_XC_NONCE:
     .section .iii.ring3,"n"
     .asciz "xc_setup"
     .text
-    .global L_xc_setup
     .seh_proc L_xc_setup
 L_xc_setup:
     pushq %rbp
@@ -181,7 +189,8 @@ L_loop_end_1:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movabsq $0x0, %rax
+    movq %rax, -48(%rbp)
+    movslq -48(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -231,6 +240,30 @@ xchacha20_poly1305_seal:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -72(%rbp)
+    movslq -72(%rbp), %rax
+    pushq %rax
+    movslq L_XC_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movslq L_XC_E_SETUP(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -243,7 +276,7 @@ xchacha20_poly1305_seal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_5
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -256,10 +289,34 @@ xchacha20_poly1305_seal:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -80(%rbp)
+    movslq -80(%rbp), %rax
+    pushq %rax
+    movslq L_XC_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_7
+    movslq L_XC_E_AAD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_7:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
     movq -64(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -278,7 +335,31 @@ L_if_end_3:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movabsq $0x0, %rax
+    movq %rax, -80(%rbp)
+    movslq -80(%rbp), %rax
+    pushq %rax
+    movslq L_XC_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movslq L_XC_E_SEAL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
+    movslq L_XC_OK(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -328,6 +409,30 @@ xchacha20_poly1305_open:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -72(%rbp)
+    movslq -72(%rbp), %rax
+    pushq %rax
+    movslq L_XC_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -340,7 +445,7 @@ xchacha20_poly1305_open:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_13
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -353,10 +458,34 @@ xchacha20_poly1305_open:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -80(%rbp)
+    movslq -80(%rbp), %rax
+    pushq %rax
+    movslq L_XC_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_15:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
     movq -64(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax

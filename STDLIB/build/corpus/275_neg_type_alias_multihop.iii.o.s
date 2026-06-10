@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_wants_form"
     .text
-    .global L__wants_form
     .seh_proc L__wants_form
 L__wants_form:
     pushq %rbp

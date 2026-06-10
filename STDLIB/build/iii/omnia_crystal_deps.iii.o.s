@@ -4,48 +4,52 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crystal.iiicrystal.iiicrystal.iiivec.iiivec.iiivec.iiivec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_1:
-    .ascii "crystal.iiicrystal.iiivec.iiivec.iiivec.iiivec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_2:
-    .ascii "crystal.iiivec.iiivec.iiivec.iiivec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_3:
-    .ascii "vec.iiivec.iiivec.iiivec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_4:
-    .ascii "vec.iiivec.iiivec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_5:
-    .ascii "vec.iiivec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_6:
-    .ascii "vec.iiivec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_7:
-    .ascii "vec.iiivec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_8:
-    .ascii "vec.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_9:
-    .ascii "queue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "vec.iii\0"
 L_str_10:
-    .ascii "queue.iiiqueue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "queue.iii\0"
 L_str_11:
-    .ascii "queue.iiiqueue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "queue.iii\0"
 L_str_12:
-    .ascii "queue.iiiqueue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "queue.iii\0"
 L_str_13:
-    .ascii "queue.iiiqueue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "queue.iii\0"
 L_str_14:
-    .ascii "queue.iiimap.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "queue.iii\0"
 L_str_15:
-    .ascii "map.iiimap.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "queue.iii\0"
 L_str_16:
-    .ascii "map.iiimap.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "map.iii\0"
 L_str_17:
-    .ascii "map.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "map.iii\0"
 L_str_18:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "map.iii\0"
 L_str_19:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "map.iii\0"
 L_str_20:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_21:
+    .ascii "mhash.iii\0"
+L_str_22:
+    .ascii "mhash.iii\0"
+L_str_23:
     .ascii "mhash.iii\0"
     .section .rodata
 L_SID_INVALID:
@@ -93,7 +97,6 @@ L_SID_VIS_LIT_INIT:
     .section .iii.ring3,"n"
     .asciz "sid_init_delta_domain"
     .text
-    .global L_sid_init_delta_domain
     .seh_proc L_sid_init_delta_domain
 L_sid_init_delta_domain:
     pushq %rbp
@@ -1089,6 +1092,15 @@ L_loop_end_25:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq map_u32u32_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movzbq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1102,6 +1114,15 @@ L_loop_end_25:
     popq %rax
     testq %rax, %rax
     jz L_if_end_41
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq vec_u64_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq L_SID_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1280,7 +1301,6 @@ L_if_end_45:
     .section .iii.ring3,"n"
     .asciz "sid_emit_dec_u64"
     .text
-    .global L_sid_emit_dec_u64
     .seh_proc L_sid_emit_dec_u64
 L_sid_emit_dec_u64:
     pushq %rbp
@@ -1511,7 +1531,6 @@ L_loop_end_51:
     .section .iii.ring3,"n"
     .asciz "sid_emit_str"
     .text
-    .global L_sid_emit_str
     .seh_proc L_sid_emit_str
 L_sid_emit_str:
     pushq %rbp
@@ -1600,7 +1619,6 @@ L_loop_end_57:
     .section .iii.ring3,"n"
     .asciz "sid_init_vis_literals"
     .text
-    .global L_sid_init_vis_literals
     .seh_proc L_sid_init_vis_literals
 L_sid_init_vis_literals:
     pushq %rbp

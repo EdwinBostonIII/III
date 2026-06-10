@@ -4,25 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "reversible.iiireversible.iiireversible.iiireversible.iiireversibility_audit.iiireversibility_audit.iiireversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversible.iii\0"
 L_str_1:
-    .ascii "reversible.iiireversible.iiireversible.iiireversibility_audit.iiireversibility_audit.iiireversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversible.iii\0"
 L_str_2:
-    .ascii "reversible.iiireversible.iiireversibility_audit.iiireversibility_audit.iiireversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversible.iii\0"
 L_str_3:
-    .ascii "reversible.iiireversibility_audit.iiireversibility_audit.iiireversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversible.iii\0"
 L_str_4:
-    .ascii "reversibility_audit.iiireversibility_audit.iiireversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversibility_audit.iii\0"
 L_str_5:
-    .ascii "reversibility_audit.iiireversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversibility_audit.iii\0"
 L_str_6:
-    .ascii "reversibility_audit.iiismt.iiismt.iiismt.iii\0"
+    .ascii "reversibility_audit.iii\0"
 L_str_7:
-    .ascii "smt.iiismt.iiismt.iii\0"
+    .ascii "smt.iii\0"
 L_str_8:
-    .ascii "smt.iiismt.iii\0"
+    .ascii "smt.iii\0"
 L_str_9:
     .ascii "smt.iii\0"
+L_str_10:
+    .ascii "h9_mig2_tie.iii\0"
     .section .rodata
 L_H9_OK:
     .quad 0x0
@@ -120,7 +122,6 @@ h9_init:
     .section .iii.ring3,"n"
     .asciz "h9_roundtrip_holds"
     .text
-    .global L_h9_roundtrip_holds
     .seh_proc L_h9_roundtrip_holds
 L_h9_roundtrip_holds:
     pushq %rbp
@@ -305,7 +306,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "h9_identity_reversible"
     .text
-    .global L_h9_identity_reversible
     .seh_proc L_h9_identity_reversible
 L_h9_identity_reversible:
     pushq %rbp
@@ -510,7 +510,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "h9_decode_le_u64"
     .text
-    .global L_h9_decode_le_u64
     .seh_proc L_h9_decode_le_u64
 L_h9_decode_le_u64:
     pushq %rbp
@@ -525,11 +524,7 @@ L_h9_decode_le_u64:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -567,11 +562,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -597,11 +589,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -627,11 +616,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -657,11 +643,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -687,11 +670,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -717,11 +697,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -747,11 +724,8 @@ L_h9_decode_le_u64:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -1024,7 +998,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "h9_canary_holds"
     .text
-    .global L_h9_canary_holds
     .seh_proc L_h9_canary_holds
 L_h9_canary_holds:
     pushq %rbp
@@ -1161,7 +1134,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "h9_clause_eval"
     .text
-    .global L_h9_clause_eval
     .seh_proc L_h9_clause_eval
 L_h9_clause_eval:
     pushq %rbp
@@ -1307,7 +1279,6 @@ L_if_end_29:
     .section .iii.ring3,"n"
     .asciz "h9_register"
     .text
-    .global L_h9_register
     .seh_proc L_h9_register
 L_h9_register:
     pushq %rbp
@@ -1384,7 +1355,7 @@ L_if_end_31:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1754,6 +1725,31 @@ L_if_end_51:
     pushq %rax
     popq %rax
 L_if_end_53:
+    subq $32, %rsp
+    callq h9_mig2_tie_selftest
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x63, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

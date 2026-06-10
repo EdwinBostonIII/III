@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "checked.iiichecked.iii\0"
+    .ascii "checked.iii\0"
 L_str_1:
     .ascii "checked.iii\0"
     .section .iii.ring3,"n"
@@ -104,11 +104,8 @@ L_if_end_1:
 L_if_end_3:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -199,11 +196,8 @@ L_if_end_7:
     movq %rax, -40(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax

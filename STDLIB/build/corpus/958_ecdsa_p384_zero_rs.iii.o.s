@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ecdsa_p384.iiiecdsa_p384.iiiecdsa_p384.iii\0"
+    .ascii "ecdsa_p384.iii\0"
 L_str_1:
-    .ascii "ecdsa_p384.iiiecdsa_p384.iii\0"
+    .ascii "ecdsa_p384.iii\0"
 L_str_2:
     .ascii "ecdsa_p384.iii\0"
     .section .bss

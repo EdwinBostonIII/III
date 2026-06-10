@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "proof_ripple_resolution.iiiproof_ripple_resolution.iiiproof_ripple_resolution.iiiresolver.iiisha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "proof_ripple_resolution.iii\0"
 L_str_1:
-    .ascii "proof_ripple_resolution.iiiproof_ripple_resolution.iiiresolver.iiisha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "proof_ripple_resolution.iii\0"
 L_str_2:
-    .ascii "proof_ripple_resolution.iiiresolver.iiisha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "proof_ripple_resolution.iii\0"
 L_str_3:
-    .ascii "resolver.iiisha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "resolver.iii\0"
 L_str_4:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "sha256.iii\0"
 L_str_5:
-    .ascii "sha256.iiisha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "sha256.iii\0"
 L_str_6:
-    .ascii "sha256.iiisha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "sha256.iii\0"
 L_str_7:
-    .ascii "sha256.iiiwitness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "sha256.iii\0"
 L_str_8:
-    .ascii "witness.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "witness.iii\0"
 L_str_9:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_10:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_11:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_12:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -149,7 +149,6 @@ L_OBSERVE_HISTORY_NEXT:
     .section .iii.ring3,"n"
     .asciz "_gov_alloc_slot"
     .text
-    .global L__gov_alloc_slot
     .seh_proc L__gov_alloc_slot
 L__gov_alloc_slot:
     pushq %rbp
@@ -238,7 +237,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_gov_slot_of"
     .text
-    .global L__gov_slot_of
     .seh_proc L__gov_slot_of
 L__gov_slot_of:
     pushq %rbp
@@ -363,7 +361,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_gov_hash_rationale"
     .text
-    .global L__gov_hash_rationale
     .seh_proc L__gov_hash_rationale
 L__gov_hash_rationale:
     pushq %rbp
@@ -480,11 +477,8 @@ L_loop_end_11:
     popq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -791,11 +785,8 @@ L_if_end_19:
     jz L_if_end_21
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1234,11 +1225,8 @@ governance_prove_equivalence_with_count:
     movq %rax, -72(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1713,11 +1701,8 @@ L_if_end_51:
     movq %rax, -48(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -1727,11 +1712,8 @@ L_if_end_51:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2235,11 +2217,8 @@ L_loop_top_70:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2331,11 +2310,8 @@ L_loop_top_72:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2420,11 +2396,8 @@ L_loop_end_73:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2445,11 +2418,8 @@ L_loop_end_73:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2470,11 +2440,8 @@ L_loop_end_73:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2545,11 +2512,8 @@ L_loop_end_73:
     popq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -3064,11 +3028,8 @@ L_if_end_85:
 L_if_end_87:
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -3297,11 +3258,8 @@ L_if_end_89:
     movb %dl, (%rax,%rcx,1)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -3544,11 +3502,8 @@ L_loop_top_96:
     pushq %rax
     movl L_GOV_PROPOSAL_CAP(%rip), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "intent.iiicall_context.iiicall_context.iiipattern_table.iiipattern_table.iiiresolver.iiicrystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "intent.iii\0"
 L_str_1:
-    .ascii "call_context.iiicall_context.iiipattern_table.iiipattern_table.iiiresolver.iiicrystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "call_context.iii\0"
 L_str_2:
-    .ascii "call_context.iiipattern_table.iiipattern_table.iiiresolver.iiicrystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "call_context.iii\0"
 L_str_3:
-    .ascii "pattern_table.iiipattern_table.iiiresolver.iiicrystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_4:
-    .ascii "pattern_table.iiiresolver.iiicrystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_5:
-    .ascii "resolver.iiicrystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "resolver.iii\0"
 L_str_6:
-    .ascii "crystal.iiicrystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_7:
-    .ascii "crystal_edges.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal_edges.iii\0"
 L_str_8:
-    .ascii "arena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "arena.iii\0"
 L_str_9:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_10:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_11:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_12:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -301,11 +301,8 @@ transform_site_hash:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -326,11 +323,8 @@ transform_site_hash:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -351,11 +345,8 @@ transform_site_hash:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -409,11 +400,8 @@ transform_site_hash:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -434,11 +422,8 @@ transform_site_hash:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -459,11 +444,8 @@ transform_site_hash:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -524,11 +506,8 @@ L_loop_top_4:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -631,11 +610,8 @@ transform_pack:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -688,7 +664,6 @@ transform_unpack_dst:
     .section .iii.ring3,"n"
     .asciz "result_ok"
     .text
-    .global L_result_ok
     .seh_proc L_result_ok
 L_result_ok:
     pushq %rbp
@@ -707,11 +682,8 @@ L_result_ok:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -727,7 +699,6 @@ L_result_ok:
     .section .iii.ring3,"n"
     .asciz "result_err"
     .text
-    .global L_result_err
     .seh_proc L_result_err
 L_result_err:
     pushq %rbp
@@ -748,11 +719,8 @@ L_result_err:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -774,7 +742,6 @@ L_result_err:
     .section .iii.ring3,"n"
     .asciz "result_is_ok"
     .text
-    .global L_result_is_ok
     .seh_proc L_result_is_ok
 L_result_is_ok:
     pushq %rbp
@@ -830,7 +797,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "result_unwrap"
     .text
-    .global L_result_unwrap
     .seh_proc L_result_unwrap
 L_result_unwrap:
     pushq %rbp
@@ -843,11 +809,8 @@ L_result_unwrap:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0x7fffffffffffffff, %rax
     pushq %rax
@@ -1277,11 +1240,8 @@ L_loop_top_24:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1373,11 +1333,8 @@ L_loop_top_26:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiilegacy_artifact.iiilegacy_artifact.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiilegacy_artifact.iiilegacy_artifact.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_3:
-    .ascii "legacy_artifact.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_4:
-    .ascii "sovereign_witness.iiisovereign_witness.iiisovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "sovereign_witness.iii\0"
 L_str_5:
-    .ascii "sovereign_witness.iiisovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "sovereign_witness.iii\0"
 L_str_6:
-    .ascii "sovereign_witness.iiisovereign_witness.iiicad.iii\0"
+    .ascii "sovereign_witness.iii\0"
 L_str_7:
-    .ascii "sovereign_witness.iiicad.iii\0"
+    .ascii "sovereign_witness.iii\0"
 L_str_8:
     .ascii "cad.iii\0"
     .section .bss
@@ -43,7 +43,6 @@ L_SW417_D2:
     .section .iii.ring3,"n"
     .asciz "sw417_w_u64"
     .text
-    .global L_sw417_w_u64
     .seh_proc L_sw417_w_u64
 L_sw417_w_u64:
     pushq %rbp
@@ -141,7 +140,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "sw417_w_rec"
     .text
-    .global L_sw417_w_rec
     .seh_proc L_sw417_w_rec
 L_sw417_w_rec:
     pushq %rbp
@@ -425,11 +423,8 @@ L_if_end_7:
 L_if_end_9:
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

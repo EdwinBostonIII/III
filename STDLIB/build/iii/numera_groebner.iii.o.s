@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiigalois.iiigalois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "bigint.iii\0"
 L_str_1:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiigalois.iiigalois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "bigint.iii\0"
 L_str_2:
-    .ascii "bigint.iiibigint.iiibigint.iiigalois.iiigalois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "bigint.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiigalois.iiigalois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiigalois.iiigalois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "galois.iiigalois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "galois.iii\0"
 L_str_6:
-    .ascii "galois.iiigalois.iiigalois.iiiarena.iii\0"
+    .ascii "galois.iii\0"
 L_str_7:
-    .ascii "galois.iiigalois.iiiarena.iii\0"
+    .ascii "galois.iii\0"
 L_str_8:
-    .ascii "galois.iiiarena.iii\0"
+    .ascii "galois.iii\0"
 L_str_9:
     .ascii "arena.iii\0"
     .section .rodata
@@ -180,6 +180,9 @@ L_GROEBNER_KAT_DIG2:
     .section .data
     .global L_GROEBNER_RS_STATUS
 L_GROEBNER_RS_STATUS:
+    .quad 0x0
+    .global L_GROEBNER_SPOLY_STATUS
+L_GROEBNER_SPOLY_STATUS:
     .quad 0x0
     .global L_GROEBNER_BN_OUT
 L_GROEBNER_BN_OUT:
@@ -877,7 +880,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "gb_term_exp_ptr"
     .text
-    .global L_gb_term_exp_ptr
     .seh_proc L_gb_term_exp_ptr
 L_gb_term_exp_ptr:
     pushq %rbp
@@ -916,11 +918,8 @@ L_gb_term_exp_ptr:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -942,7 +941,6 @@ L_gb_term_exp_ptr:
     .section .iii.ring3,"n"
     .asciz "gb_exp_cmp"
     .text
-    .global L_gb_exp_cmp
     .seh_proc L_gb_exp_cmp
 L_gb_exp_cmp:
     pushq %rbp
@@ -1286,7 +1284,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "gb_exp_eq"
     .text
-    .global L_gb_exp_eq
     .seh_proc L_gb_exp_eq
 L_gb_exp_eq:
     pushq %rbp
@@ -1452,7 +1449,6 @@ L_loop_end_45:
     .section .iii.ring3,"n"
     .asciz "gb_lcm"
     .text
-    .global L_gb_lcm
     .seh_proc L_gb_lcm
 L_gb_lcm:
     pushq %rbp
@@ -1593,7 +1589,6 @@ L_loop_end_53:
     .section .iii.ring3,"n"
     .asciz "gb_div_exp"
     .text
-    .global L_gb_div_exp
     .seh_proc L_gb_div_exp
 L_gb_div_exp:
     pushq %rbp
@@ -1759,7 +1754,6 @@ L_loop_end_57:
     .section .iii.ring3,"n"
     .asciz "gb_disjoint_supports"
     .text
-    .global L_gb_disjoint_supports
     .seh_proc L_gb_disjoint_supports
 L_gb_disjoint_supports:
     pushq %rbp
@@ -2496,7 +2490,6 @@ L_loop_end_91:
     .section .iii.ring3,"n"
     .asciz "gb_swap_terms"
     .text
-    .global L_gb_swap_terms
     .seh_proc L_gb_swap_terms
 L_gb_swap_terms:
     pushq %rbp
@@ -2596,7 +2589,6 @@ L_gb_swap_terms:
     .section .iii.ring3,"n"
     .asciz "gb_norm_sort"
     .text
-    .global L_gb_norm_sort
     .seh_proc L_gb_norm_sort
 L_gb_norm_sort:
     pushq %rbp
@@ -2815,7 +2807,6 @@ L_loop_end_93:
     .section .iii.ring3,"n"
     .asciz "gb_norm_merge"
     .text
-    .global L_gb_norm_merge
     .seh_proc L_gb_norm_merge
 L_gb_norm_merge:
     pushq %rbp
@@ -3109,7 +3100,6 @@ L_loop_end_103:
     .section .iii.ring3,"n"
     .asciz "gb_norm_compact"
     .text
-    .global L_gb_norm_compact
     .seh_proc L_gb_norm_compact
 L_gb_norm_compact:
     pushq %rbp
@@ -3824,7 +3814,6 @@ L_if_end_135:
     .section .iii.ring3,"n"
     .asciz "gb_is_zero"
     .text
-    .global L_gb_is_zero
     .seh_proc L_gb_is_zero
 L_gb_is_zero:
     pushq %rbp
@@ -3938,7 +3927,6 @@ L_if_end_141:
     .section .iii.ring3,"n"
     .asciz "gb_mul_term"
     .text
-    .global L_gb_mul_term
     .seh_proc L_gb_mul_term
 L_gb_mul_term:
     pushq %rbp
@@ -4270,7 +4258,6 @@ L_if_end_153:
     .section .iii.ring3,"n"
     .asciz "gb_copy_into"
     .text
-    .global L_gb_copy_into
     .seh_proc L_gb_copy_into
 L_gb_copy_into:
     pushq %rbp
@@ -4420,7 +4407,6 @@ L_loop_end_155:
     .section .iii.ring3,"n"
     .asciz "gb_sub_new"
     .text
-    .global L_gb_sub_new
     .seh_proc L_gb_sub_new
 L_gb_sub_new:
     pushq %rbp
@@ -5008,7 +4994,6 @@ L_loop_end_179:
     .section .iii.ring3,"n"
     .asciz "gb_reduce_find"
     .text
-    .global L_gb_reduce_find
     .seh_proc L_gb_reduce_find
 L_gb_reduce_find:
     pushq %rbp
@@ -5321,7 +5306,6 @@ L_loop_end_181:
     .section .iii.ring3,"n"
     .asciz "gb_reduce_step"
     .text
-    .global L_gb_reduce_step
     .seh_proc L_gb_reduce_step
 L_gb_reduce_step:
     pushq %rbp
@@ -6121,6 +6105,10 @@ gb_spoly:
     popq %rax
     testq %rax, %rax
     jz L_if_end_219
+    movslq L_GROEBNER_E_NOSESS(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6150,6 +6138,10 @@ L_if_end_219:
     popq %rax
     testq %rax, %rax
     jz L_if_end_221
+    movslq L_GROEBNER_E_BAD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6179,6 +6171,10 @@ L_if_end_221:
     popq %rax
     testq %rax, %rax
     jz L_if_end_223
+    movslq L_GROEBNER_E_BAD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6532,6 +6528,10 @@ L_loop_end_227:
     popq %rax
     testq %rax, %rax
     jz L_if_end_229
+    movslq L_GROEBNER_E_INV(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6579,6 +6579,10 @@ L_if_end_229:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movslq L_GROEBNER_E_INV(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6636,6 +6640,10 @@ L_if_end_231:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movslq L_GROEBNER_E_FULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6693,6 +6701,10 @@ L_if_end_233:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movslq L_GROEBNER_E_FULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6747,6 +6759,10 @@ L_if_end_235:
     popq %rax
     testq %rax, %rax
     jz L_if_end_237
+    movslq L_GROEBNER_E_FULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl L_GROEBNER_SENT(%rip), %eax
     pushq %rax
     popq %rax
@@ -6757,6 +6773,10 @@ L_if_end_235:
     pushq %rax
     popq %rax
 L_if_end_237:
+    movslq L_GROEBNER_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_GROEBNER_SPOLY_STATUS(%rip)
     movl -184(%rbp), %eax
     pushq %rax
     popq %rax
@@ -6773,7 +6793,6 @@ L_if_end_237:
     .section .iii.ring3,"n"
     .asciz "gb_ar_keep"
     .text
-    .global L_gb_ar_keep
     .seh_proc L_gb_ar_keep
 L_gb_ar_keep:
     pushq %rbp
@@ -7244,7 +7263,6 @@ L_loop_end_243:
     .section .iii.ring3,"n"
     .asciz "gb_ar_sort"
     .text
-    .global L_gb_ar_sort
     .seh_proc L_gb_ar_sort
 L_gb_ar_sort:
     pushq %rbp
@@ -8020,7 +8038,6 @@ L_loop_end_287:
     .section .iii.ring3,"n"
     .asciz "gb_buch_push"
     .text
-    .global L_gb_buch_push
     .seh_proc L_gb_buch_push
 L_gb_buch_push:
     pushq %rbp
@@ -8088,7 +8105,6 @@ L_if_end_289:
     .section .iii.ring3,"n"
     .asciz "gb_buch_enqueue"
     .text
-    .global L_gb_buch_enqueue
     .seh_proc L_gb_buch_enqueue
 L_gb_buch_enqueue:
     pushq %rbp
@@ -8915,7 +8931,6 @@ L_if_end_337:
     .section .iii.ring3,"n"
     .asciz "gb_buch_step"
     .text
-    .global L_gb_buch_step
     .seh_proc L_gb_buch_step
 L_gb_buch_step:
     pushq %rbp
@@ -9038,7 +9053,7 @@ L_if_end_339:
     popq %rax
     testq %rax, %rax
     jz L_if_end_341
-    movslq L_GROEBNER_E_INV(%rip), %rax
+    movslq L_GROEBNER_SPOLY_STATUS(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -9237,7 +9252,6 @@ L_if_end_349:
     .section .iii.ring3,"n"
     .asciz "gb_fnv_step"
     .text
-    .global L_gb_fnv_step
     .seh_proc L_gb_fnv_step
 L_gb_fnv_step:
     pushq %rbp
@@ -9404,11 +9418,8 @@ L_if_end_353:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9450,11 +9461,8 @@ L_if_end_353:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9562,11 +9570,8 @@ L_loop_top_354:
     movq %rax, -40(%rbp)
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9679,11 +9684,8 @@ L_loop_top_358:
     movq %rax, -40(%rbp)
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9703,11 +9705,8 @@ L_loop_top_358:
     movq %rax, -48(%rbp)
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9727,11 +9726,8 @@ L_loop_top_358:
     movq %rax, -56(%rbp)
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9800,11 +9796,8 @@ L_loop_end_359:
     movq %rax, -40(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9824,11 +9817,8 @@ L_loop_end_359:
     movq %rax, -48(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9848,11 +9838,8 @@ L_loop_end_359:
     movq %rax, -56(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9872,11 +9859,8 @@ L_loop_end_359:
     movq %rax, -64(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9896,11 +9880,8 @@ L_loop_end_359:
     movq %rax, -40(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9920,11 +9901,8 @@ L_loop_end_359:
     movq %rax, -48(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -9944,11 +9922,8 @@ L_loop_end_359:
     movq %rax, -56(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -10074,7 +10049,6 @@ L_loop_end_355:
     .section .iii.ring3,"n"
     .asciz "gb_digest_emit"
     .text
-    .global L_gb_digest_emit
     .seh_proc L_gb_digest_emit
 L_gb_digest_emit:
     pushq %rbp
@@ -10107,11 +10081,8 @@ L_loop_top_360:
     jz L_loop_end_361
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -10177,7 +10148,6 @@ L_loop_end_361:
     .section .iii.ring3,"n"
     .asciz "gb_kat_set2"
     .text
-    .global L_gb_kat_set2
     .seh_proc L_gb_kat_set2
 L_gb_kat_set2:
     pushq %rbp
@@ -10247,11 +10217,8 @@ gb_selftest:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $20, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

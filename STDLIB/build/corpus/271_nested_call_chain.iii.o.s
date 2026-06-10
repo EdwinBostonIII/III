@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "inner"
     .text
-    .global L_inner
     .seh_proc L_inner
 L_inner:
     pushq %rbp
@@ -32,7 +31,6 @@ L_inner:
     .section .iii.ring3,"n"
     .asciz "middle"
     .text
-    .global L_middle
     .seh_proc L_middle
 L_middle:
     pushq %rbp
@@ -45,11 +43,8 @@ L_middle:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -65,7 +60,6 @@ L_middle:
     .section .iii.ring3,"n"
     .asciz "outer"
     .text
-    .global L_outer
     .seh_proc L_outer
 L_outer:
     pushq %rbp

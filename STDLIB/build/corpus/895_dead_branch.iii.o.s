@@ -11,7 +11,6 @@ L_OFF:
     .section .iii.ring3,"n"
     .asciz "rt"
     .text
-    .global L_rt
     .seh_proc L_rt
 L_rt:
     pushq %rbp

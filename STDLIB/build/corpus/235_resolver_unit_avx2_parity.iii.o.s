@@ -4,33 +4,32 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "pattern_table.iii\0"
 L_str_2:
-    .ascii "pattern_table.iiipattern_table.iiiresolver.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "pattern_table.iii\0"
 L_str_3:
-    .ascii "pattern_table.iiiresolver.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "pattern_table.iii\0"
 L_str_4:
-    .ascii "resolver.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "resolver.iii\0"
 L_str_5:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_7:
-    .ascii "intent.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_8:
-    .ascii "intent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_9:
-    .ascii "intent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_10:
-    .ascii "call_context.iiiresolver_unit\0"
+    .ascii "call_context.iii\0"
 L_str_11:
     .ascii "resolver_unit\0"
     .section .iii.ring3,"n"
     .asciz "_ref_resolve_scalar"
     .text
-    .global L__ref_resolve_scalar
     .seh_proc L__ref_resolve_scalar
 L__ref_resolve_scalar:
     pushq %rbp
@@ -265,11 +264,8 @@ L_loop_end_1:
     movq %rax, -80(%rbp)
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
@@ -291,7 +287,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_check_parity"
     .text
-    .global L__check_parity
     .seh_proc L__check_parity
 L__check_parity:
     pushq %rbp

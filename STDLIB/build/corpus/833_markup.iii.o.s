@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "markup.iiimarkup.iiimarkup.iiimarkup.iii\0"
+    .ascii "markup.iii\0"
 L_str_1:
-    .ascii "markup.iiimarkup.iiimarkup.iii\0"
+    .ascii "markup.iii\0"
 L_str_2:
-    .ascii "markup.iiimarkup.iii\0"
+    .ascii "markup.iii\0"
 L_str_3:
     .ascii "markup.iii\0"
     .section .rodata

@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "checked.iiichecked.iiichecked.iiichecked.iiichecked.iiichecked.iiichecked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_1:
-    .ascii "checked.iiichecked.iiichecked.iiichecked.iiichecked.iiichecked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_2:
-    .ascii "checked.iiichecked.iiichecked.iiichecked.iiichecked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_3:
-    .ascii "checked.iiichecked.iiichecked.iiichecked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_4:
-    .ascii "checked.iiichecked.iiichecked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_5:
-    .ascii "checked.iiichecked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_6:
-    .ascii "checked.iiichecked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_7:
-    .ascii "checked.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "checked.iii\0"
 L_str_8:
-    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_9:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_10:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_11:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_12:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -72,7 +72,6 @@ L_CC_LAST_ERR:
     .section .iii.ring3,"n"
     .asciz "cc_init_domain"
     .text
-    .global L_cc_init_domain
     .seh_proc L_cc_init_domain
 L_cc_init_domain:
     pushq %rbp
@@ -245,7 +244,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "cc_pack_u32"
     .text
-    .global L_cc_pack_u32
     .seh_proc L_cc_pack_u32
 L_cc_pack_u32:
     pushq %rbp
@@ -288,11 +286,8 @@ L_cc_pack_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -313,11 +308,8 @@ L_cc_pack_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -338,11 +330,8 @@ L_cc_pack_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -373,7 +362,6 @@ L_cc_pack_u32:
     .section .iii.ring3,"n"
     .asciz "cc_pack_u64"
     .text
-    .global L_cc_pack_u64
     .seh_proc L_cc_pack_u64
 L_cc_pack_u64:
     pushq %rbp
@@ -417,11 +405,8 @@ L_loop_top_2:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -471,7 +456,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "cc_mint_err"
     .text
-    .global L_cc_mint_err
     .seh_proc L_cc_mint_err
 L_cc_mint_err:
     pushq %rbp

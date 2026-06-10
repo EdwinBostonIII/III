@@ -55,7 +55,6 @@ L_FUSE_CURRENT_SEQ:
     .section .iii.ring3,"n"
     .asciz "_fuse_slot_arena_offset"
     .text
-    .global L__fuse_slot_arena_offset
     .seh_proc L__fuse_slot_arena_offset
 L__fuse_slot_arena_offset:
     pushq %rbp
@@ -100,7 +99,6 @@ L__fuse_slot_arena_offset:
     .section .iii.ring3,"n"
     .asciz "_fuse_find"
     .text
-    .global L__fuse_find
     .seh_proc L__fuse_find
 L__fuse_find:
     pushq %rbp
@@ -245,7 +243,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_fuse_alloc_slot"
     .text
-    .global L__fuse_alloc_slot
     .seh_proc L__fuse_alloc_slot
 L__fuse_alloc_slot:
     pushq %rbp

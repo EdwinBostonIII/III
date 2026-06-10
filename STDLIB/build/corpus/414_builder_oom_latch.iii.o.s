@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_3:
-    .ascii "builder.iiibuilder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_5:
     .ascii "builder.iii\0"
     .section .iii.ring3,"n"
@@ -219,11 +219,8 @@ L_if_end_9:
     popq %rax
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $20, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -385,11 +382,8 @@ L_if_end_17:
     popq %rax
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

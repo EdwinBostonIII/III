@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtparse.iiiparse.iiiparse.iiiparse.iiiparse.iiiparse.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtparse.iiiparse.iiiparse.iiiparse.iiiparse.iiiparse.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "parse.iiiparse.iiiparse.iiiparse.iiiparse.iiiparse.iii\0"
+    .ascii "parse.iii\0"
 L_str_3:
-    .ascii "parse.iiiparse.iiiparse.iiiparse.iiiparse.iii\0"
+    .ascii "parse.iii\0"
 L_str_4:
-    .ascii "parse.iiiparse.iiiparse.iiiparse.iii\0"
+    .ascii "parse.iii\0"
 L_str_5:
-    .ascii "parse.iiiparse.iiiparse.iii\0"
+    .ascii "parse.iii\0"
 L_str_6:
-    .ascii "parse.iiiparse.iii\0"
+    .ascii "parse.iii\0"
 L_str_7:
     .ascii "parse.iii\0"
     .section .iii.ring3,"n"

@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_leaf_high"
     .text
-    .global L__leaf_high
     .seh_proc L__leaf_high
 L__leaf_high:
     pushq %rbp
@@ -54,7 +53,6 @@ L_cap_ok_805306374:
     .section .iii.ring3,"n"
     .asciz "_caller_low"
     .text
-    .global L__caller_low
     .seh_proc L__caller_low
 L__caller_low:
     pushq %rbp
@@ -87,9 +85,7 @@ L_cap_ok_805306382:
     popq %rax
     movq %rax, -16(%rbp)
     # III_CAP_FLOW_VIOLATION: caller mask 0x100 insufficient for callee mask 0x200 (missing 0x200)
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    leaq L_r(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

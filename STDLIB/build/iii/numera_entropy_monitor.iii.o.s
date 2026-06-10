@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiialgebraic_time.iiintt.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "algebraic_time.iiintt.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_2:
     .ascii "ntt.iii\0"
     .section .rodata
@@ -94,7 +94,6 @@ L_ENTROPY_KAT_H2:
     .section .iii.ring3,"n"
     .asciz "entropy_mulmod"
     .text
-    .global L_entropy_mulmod
     .seh_proc L_entropy_mulmod
 L_entropy_mulmod:
     pushq %rbp
@@ -144,7 +143,6 @@ L_entropy_mulmod:
     .section .iii.ring3,"n"
     .asciz "entropy_addmod"
     .text
-    .global L_entropy_addmod
     .seh_proc L_entropy_addmod
 L_entropy_addmod:
     pushq %rbp
@@ -211,7 +209,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "entropy_submod"
     .text
-    .global L_entropy_submod
     .seh_proc L_entropy_submod
 L_entropy_submod:
     pushq %rbp
@@ -280,7 +277,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "entropy_powmod"
     .text
-    .global L_entropy_powmod
     .seh_proc L_entropy_powmod
 L_entropy_powmod:
     pushq %rbp
@@ -375,11 +371,8 @@ L_if_end_7:
     movq %rax, -32(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -742,7 +735,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "entropy_umod_prime"
     .text
-    .global L_entropy_umod_prime
     .seh_proc L_entropy_umod_prime
 L_entropy_umod_prime:
     pushq %rbp
@@ -755,11 +747,8 @@ L_entropy_umod_prime:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1815,7 +1804,6 @@ L_loop_end_47:
     .section .iii.ring3,"n"
     .asciz "entropy_witness_core"
     .text
-    .global L_entropy_witness_core
     .seh_proc L_entropy_witness_core
 L_entropy_witness_core:
     pushq %rbp
@@ -1989,11 +1977,8 @@ L_loop_top_54:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2077,11 +2062,8 @@ L_loop_top_56:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2093,11 +2075,7 @@ L_loop_top_56:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
@@ -2126,11 +2104,8 @@ L_loop_top_56:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2157,11 +2132,8 @@ L_loop_top_56:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2188,11 +2160,8 @@ L_loop_top_56:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

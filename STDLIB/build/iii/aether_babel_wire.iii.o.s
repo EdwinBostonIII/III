@@ -23,7 +23,6 @@ L_BABEL_WIRE_E_BAD_LEN:
     .section .iii.ring3,"n"
     .asciz "_bw_write_u64_le"
     .text
-    .global L__bw_write_u64_le
     .seh_proc L__bw_write_u64_le
 L__bw_write_u64_le:
     pushq %rbp
@@ -92,11 +91,8 @@ L_loop_top_0:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -146,7 +142,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_bw_read_u64_le"
     .text
-    .global L__bw_read_u64_le
     .seh_proc L__bw_read_u64_le
 L__bw_read_u64_le:
     pushq %rbp
@@ -230,11 +225,8 @@ L_loop_top_2:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -277,7 +269,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_bw_write_u32_le"
     .text
-    .global L__bw_write_u32_le
     .seh_proc L__bw_write_u32_le
 L__bw_write_u32_le:
     pushq %rbp
@@ -354,11 +345,8 @@ L_loop_top_4:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -410,7 +398,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_bw_read_u32_le"
     .text
-    .global L__bw_read_u32_le
     .seh_proc L__bw_read_u32_le
 L__bw_read_u32_le:
     pushq %rbp
@@ -503,11 +490,8 @@ L_loop_top_6:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

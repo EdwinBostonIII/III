@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "scalar.iiiscalar.iiiscalar.iiiscalar.iiiscalar.iiiscalar.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "scalar.iii\0"
 L_str_1:
-    .ascii "scalar.iiiscalar.iiiscalar.iiiscalar.iiiscalar.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "scalar.iii\0"
 L_str_2:
-    .ascii "scalar.iiiscalar.iiiscalar.iiiscalar.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "scalar.iii\0"
 L_str_3:
-    .ascii "scalar.iiiscalar.iiiscalar.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "scalar.iii\0"
 L_str_4:
-    .ascii "scalar.iiiscalar.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "scalar.iii\0"
 L_str_5:
-    .ascii "scalar.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "scalar.iii\0"
 L_str_6:
-    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_7:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_8:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_9:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_10:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -64,7 +64,6 @@ L_SP_SITE:
     .section .iii.ring3,"n"
     .asciz "sp_init_domain"
     .text
-    .global L_sp_init_domain
     .seh_proc L_sp_init_domain
 L_sp_init_domain:
     pushq %rbp
@@ -257,7 +256,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "sp_pack_u32"
     .text
-    .global L_sp_pack_u32
     .seh_proc L_sp_pack_u32
 L_sp_pack_u32:
     pushq %rbp
@@ -300,11 +298,8 @@ L_sp_pack_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -325,11 +320,8 @@ L_sp_pack_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -350,11 +342,8 @@ L_sp_pack_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -385,7 +374,6 @@ L_sp_pack_u32:
     .section .iii.ring3,"n"
     .asciz "sp_pack_u64"
     .text
-    .global L_sp_pack_u64
     .seh_proc L_sp_pack_u64
 L_sp_pack_u64:
     pushq %rbp
@@ -429,11 +417,8 @@ L_loop_top_2:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -483,7 +468,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "sp_mint"
     .text
-    .global L_sp_mint
     .seh_proc L_sp_mint
 L_sp_mint:
     pushq %rbp

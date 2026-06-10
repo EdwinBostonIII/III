@@ -4,39 +4,39 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtresolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtresolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "resolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_3:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_4:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_5:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_6:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_7:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_8:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_9:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_10:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_11:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_12:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_13:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_14:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_15:
-    .ascii "governance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_16:
-    .ascii "governance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_17:
     .ascii "governance.iii\0"
     .section .iii.ring3,"n"
@@ -784,11 +784,8 @@ L_if_end_31:
     movq %rax, -64(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
@@ -821,11 +818,8 @@ L_if_end_31:
 L_if_end_33:
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax

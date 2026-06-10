@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_curate.iiixii_curate.iiixii_curate.iiixii_curate.iiixii_curate.iii\0"
+    .ascii "xii_curate.iii\0"
 L_str_1:
-    .ascii "xii_curate.iiixii_curate.iiixii_curate.iiixii_curate.iii\0"
+    .ascii "xii_curate.iii\0"
 L_str_2:
-    .ascii "xii_curate.iiixii_curate.iiixii_curate.iii\0"
+    .ascii "xii_curate.iii\0"
 L_str_3:
-    .ascii "xii_curate.iiixii_curate.iii\0"
+    .ascii "xii_curate.iii\0"
 L_str_4:
     .ascii "xii_curate.iii\0"
     .section .bss

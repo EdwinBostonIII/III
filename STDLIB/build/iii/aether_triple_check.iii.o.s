@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -116,7 +116,6 @@ L_TRIPLE_T_OPX:
     .section .iii.ring3,"n"
     .asciz "tc_op_ptr"
     .text
-    .global L_tc_op_ptr
     .seh_proc L_tc_op_ptr
 L_tc_op_ptr:
     pushq %rbp
@@ -141,11 +140,8 @@ L_tc_op_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -991,7 +987,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "tc_find"
     .text
-    .global L_tc_find
     .seh_proc L_tc_find
 L_tc_find:
     pushq %rbp
@@ -1208,7 +1203,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "tc_publish_disagreement"
     .text
-    .global L_tc_publish_disagreement
     .seh_proc L_tc_publish_disagreement
 L_tc_publish_disagreement:
     pushq %rbp
@@ -1341,11 +1335,8 @@ L_loop_top_24:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1378,11 +1369,8 @@ L_loop_top_24:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1415,11 +1403,8 @@ L_loop_top_24:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2154,7 +2139,6 @@ tc_disagreement_count:
     .section .iii.ring3,"n"
     .asciz "tc_kat_sum"
     .text
-    .global L_tc_kat_sum
     .seh_proc L_tc_kat_sum
 L_tc_kat_sum:
     pushq %rbp
@@ -2202,7 +2186,6 @@ L_tc_kat_sum:
     .section .iii.ring3,"n"
     .asciz "tc_kat_sum2"
     .text
-    .global L_tc_kat_sum2
     .seh_proc L_tc_kat_sum2
 L_tc_kat_sum2:
     pushq %rbp
@@ -2250,7 +2233,6 @@ L_tc_kat_sum2:
     .section .iii.ring3,"n"
     .asciz "tc_kat_xor"
     .text
-    .global L_tc_kat_xor
     .seh_proc L_tc_kat_xor
 L_tc_kat_xor:
     pushq %rbp
@@ -2298,7 +2280,6 @@ L_tc_kat_xor:
     .section .iii.ring3,"n"
     .asciz "tc_kat_first"
     .text
-    .global L_tc_kat_first
     .seh_proc L_tc_kat_first
 L_tc_kat_first:
     pushq %rbp
@@ -2328,7 +2309,6 @@ L_tc_kat_first:
     .section .iii.ring3,"n"
     .asciz "tc_kat_fill"
     .text
-    .global L_tc_kat_fill
     .seh_proc L_tc_kat_fill
 L_tc_kat_fill:
     pushq %rbp

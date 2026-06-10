@@ -47,7 +47,6 @@ L_CAT_FIRED:
     .section .iii.ring3,"n"
     .asciz "_cat_lookup"
     .text
-    .global L__cat_lookup
     .seh_proc L__cat_lookup
 L__cat_lookup:
     pushq %rbp
@@ -187,7 +186,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_cat_first_free"
     .text
-    .global L__cat_first_free
     .seh_proc L__cat_first_free
 L__cat_first_free:
     pushq %rbp
@@ -276,7 +274,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "_cat_valid_gate"
     .text
-    .global L__cat_valid_gate
     .seh_proc L__cat_valid_gate
 L__cat_valid_gate:
     pushq %rbp

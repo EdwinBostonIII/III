@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_wants_form"
     .text
-    .global L__wants_form
     .seh_proc L__wants_form
 L__wants_form:
     pushq %rbp
@@ -48,7 +47,9 @@ main:
     popq %rax
     movq %rax, -8(%rbp)
     # III_INTENT_KIND_VIOLATION: arg 0 kind 0x6 does not match param kind 0x1
-    leaq L_r(%rip), %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

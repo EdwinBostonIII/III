@@ -4,43 +4,43 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sandbox_ctor.iiisandbox_quota.iiisandbox_exec.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_1:
-    .ascii "sandbox_quota.iiisandbox_exec.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_quota.iii\0"
 L_str_2:
-    .ascii "sandbox_exec.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_exec.iii\0"
 L_str_3:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_4:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_5:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_6:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_7:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_8:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_9:
-    .ascii "sandbox_ctor.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_10:
-    .ascii "sandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_quota.iii\0"
 L_str_11:
-    .ascii "sandbox_quota.iiisandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_quota.iii\0"
 L_str_12:
-    .ascii "sandbox_quota.iiisandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_quota.iii\0"
 L_str_13:
-    .ascii "sandbox_quota.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_quota.iii\0"
 L_str_14:
-    .ascii "sandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_exec.iii\0"
 L_str_15:
-    .ascii "sandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_exec.iii\0"
 L_str_16:
-    .ascii "sandbox_exec.iiisandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_exec.iii\0"
 L_str_17:
-    .ascii "sandbox_exec.iiisandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_exec.iii\0"
 L_str_18:
-    .ascii "sandbox_exec.iiisandbox_exec.iii\0"
+    .ascii "sandbox_exec.iii\0"
 L_str_19:
     .ascii "sandbox_exec.iii\0"
     .section .iii.ring3,"n"

@@ -19,7 +19,6 @@ L_g_ast_intent_table:
     .section .iii.ring3,"n"
     .asciz "ast_intent_template_ptr"
     .text
-    .global L_ast_intent_template_ptr
     .seh_proc L_ast_intent_template_ptr
 L_ast_intent_template_ptr:
     pushq %rbp
@@ -76,7 +75,6 @@ L_ast_intent_template_ptr:
     .section .iii.ring3,"n"
     .asciz "ast_intent_field_offset"
     .text
-    .global L_ast_intent_field_offset
     .seh_proc L_ast_intent_field_offset
 L_ast_intent_field_offset:
     pushq %rbp
@@ -125,7 +123,6 @@ L_ast_intent_field_offset:
     .section .iii.ring3,"n"
     .asciz "ast_intent_emit_byte"
     .text
-    .global L_ast_intent_emit_byte
     .seh_proc L_ast_intent_emit_byte
 L_ast_intent_emit_byte:
     pushq %rbp
@@ -169,7 +166,6 @@ L_ast_intent_emit_byte:
     .section .iii.ring3,"n"
     .asciz "ast_intent_write_u32"
     .text
-    .global L_ast_intent_write_u32
     .seh_proc L_ast_intent_write_u32
 L_ast_intent_write_u32:
     pushq %rbp
@@ -248,11 +244,8 @@ L_ast_intent_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -273,11 +266,8 @@ L_ast_intent_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -298,11 +288,8 @@ L_ast_intent_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -333,7 +320,6 @@ L_ast_intent_write_u32:
     .section .iii.ring3,"n"
     .asciz "ast_intent_read_u32"
     .text
-    .global L_ast_intent_read_u32
     .seh_proc L_ast_intent_read_u32
 L_ast_intent_read_u32:
     pushq %rbp
@@ -466,11 +452,8 @@ L_ast_intent_read_u32:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -479,11 +462,8 @@ L_ast_intent_read_u32:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -492,11 +472,8 @@ L_ast_intent_read_u32:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -517,7 +494,6 @@ L_ast_intent_read_u32:
     .section .iii.ring3,"n"
     .asciz "ast_intent_write_u64"
     .text
-    .global L_ast_intent_write_u64
     .seh_proc L_ast_intent_write_u64
 L_ast_intent_write_u64:
     pushq %rbp
@@ -552,11 +528,8 @@ L_ast_intent_write_u64:
     popq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -599,7 +572,6 @@ L_ast_intent_write_u64:
     .section .iii.ring3,"n"
     .asciz "ast_intent_read_u64"
     .text
-    .global L_ast_intent_read_u64
     .seh_proc L_ast_intent_read_u64
 L_ast_intent_read_u64:
     pushq %rbp
@@ -656,11 +628,8 @@ L_ast_intent_read_u64:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax

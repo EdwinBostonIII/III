@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "shl_c"
     .text
-    .global L_shl_c
     .seh_proc L_shl_c
 L_shl_c:
     pushq %rbp
@@ -18,11 +17,8 @@ L_shl_c:
     .seh_endprologue
     movabsq $0x3, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -38,7 +34,6 @@ L_shl_c:
     .section .iii.ring3,"n"
     .asciz "shr_c"
     .text
-    .global L_shr_c
     .seh_proc L_shr_c
 L_shr_c:
     pushq %rbp
@@ -50,11 +45,8 @@ L_shr_c:
     .seh_endprologue
     movabsq $0x100, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $2, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -70,7 +62,6 @@ L_shr_c:
     .section .iii.ring3,"n"
     .asciz "shl_u32c"
     .text
-    .global L_shl_u32c
     .seh_proc L_shl_u32c
 L_shl_u32c:
     pushq %rbp
@@ -82,11 +73,8 @@ L_shl_u32c:
     .seh_endprologue
     movabsq $0x3, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -102,7 +90,6 @@ L_shl_u32c:
     .section .iii.ring3,"n"
     .asciz "eq_t"
     .text
-    .global L_eq_t
     .seh_proc L_eq_t
 L_eq_t:
     pushq %rbp
@@ -136,7 +123,6 @@ L_eq_t:
     .section .iii.ring3,"n"
     .asciz "eq_f"
     .text
-    .global L_eq_f
     .seh_proc L_eq_f
 L_eq_f:
     pushq %rbp
@@ -170,7 +156,6 @@ L_eq_f:
     .section .iii.ring3,"n"
     .asciz "ne_t"
     .text
-    .global L_ne_t
     .seh_proc L_ne_t
 L_ne_t:
     pushq %rbp
@@ -204,7 +189,6 @@ L_ne_t:
     .section .iii.ring3,"n"
     .asciz "lt_t"
     .text
-    .global L_lt_t
     .seh_proc L_lt_t
 L_lt_t:
     pushq %rbp
@@ -238,7 +222,6 @@ L_lt_t:
     .section .iii.ring3,"n"
     .asciz "lt_f"
     .text
-    .global L_lt_f
     .seh_proc L_lt_f
 L_lt_f:
     pushq %rbp
@@ -272,7 +255,6 @@ L_lt_f:
     .section .iii.ring3,"n"
     .asciz "le_t"
     .text
-    .global L_le_t
     .seh_proc L_le_t
 L_le_t:
     pushq %rbp
@@ -306,7 +288,6 @@ L_le_t:
     .section .iii.ring3,"n"
     .asciz "gt_t"
     .text
-    .global L_gt_t
     .seh_proc L_gt_t
 L_gt_t:
     pushq %rbp
@@ -340,7 +321,6 @@ L_gt_t:
     .section .iii.ring3,"n"
     .asciz "ge_f"
     .text
-    .global L_ge_f
     .seh_proc L_ge_f
 L_ge_f:
     pushq %rbp
@@ -374,7 +354,6 @@ L_ge_f:
     .section .iii.ring3,"n"
     .asciz "slt_t"
     .text
-    .global L_slt_t
     .seh_proc L_slt_t
 L_slt_t:
     pushq %rbp
@@ -408,7 +387,6 @@ L_slt_t:
     .section .iii.ring3,"n"
     .asciz "sgt_t"
     .text
-    .global L_sgt_t
     .seh_proc L_sgt_t
 L_sgt_t:
     pushq %rbp

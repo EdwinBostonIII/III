@@ -66,7 +66,6 @@ L_TP_C99_HEX_CHARS:
     .section .iii.ring3,"n"
     .asciz "tp_c99_emit"
     .text
-    .global L_tp_c99_emit
     .seh_proc L_tp_c99_emit
 L_tp_c99_emit:
     pushq %rbp
@@ -117,7 +116,6 @@ L_tp_c99_emit:
     .section .iii.ring3,"n"
     .asciz "tp_c99_emit_escape"
     .text
-    .global L_tp_c99_emit_escape
     .seh_proc L_tp_c99_emit_escape
 L_tp_c99_emit_escape:
     pushq %rbp
@@ -518,11 +516,8 @@ L_if_end_11:
     popq %rax
     movzbq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax

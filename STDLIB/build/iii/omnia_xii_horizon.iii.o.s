@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_subforms.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_subforms.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_subforms.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_subforms.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
     .ascii "xii_subforms.iii\0"
     .section .rodata
@@ -178,7 +178,6 @@ L_XHC_NM:
     .section .iii.ring3,"n"
     .asciz "_meta_set"
     .text
-    .global L__meta_set
     .seh_proc L__meta_set
 L__meta_set:
     pushq %rbp
@@ -275,11 +274,8 @@ L__meta_set:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -307,11 +303,8 @@ L__meta_set:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -339,11 +332,8 @@ L__meta_set:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -377,11 +367,8 @@ L__meta_set:
     movb %dl, (%rax,%rcx,1)
     movzbq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $7, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -424,7 +411,6 @@ L__meta_set:
     .section .iii.ring3,"n"
     .asciz "_templ_set"
     .text
-    .global L__templ_set
     .seh_proc L__templ_set
 L__templ_set:
     pushq %rbp
@@ -442,11 +428,8 @@ L__templ_set:
     movq %rax, -40(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -5299,11 +5282,8 @@ L_if_end_35:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -5312,11 +5292,8 @@ L_if_end_35:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -5325,11 +5302,8 @@ L_if_end_35:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -5729,11 +5703,8 @@ L_if_end_53:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -5815,11 +5786,8 @@ L_if_end_57:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -5994,7 +5962,6 @@ L_loop_end_61:
     .section .iii.ring3,"n"
     .asciz "_xhc_r"
     .text
-    .global L__xhc_r
     .seh_proc L__xhc_r
 L__xhc_r:
     pushq %rbp
@@ -6048,7 +6015,6 @@ L__xhc_r:
     .section .iii.ring3,"n"
     .asciz "_a_col"
     .text
-    .global L__a_col
     .seh_proc L__a_col
 L__a_col:
     pushq %rbp
@@ -6120,7 +6086,6 @@ L__a_col:
     .section .iii.ring3,"n"
     .asciz "_a_diag"
     .text
-    .global L__a_diag
     .seh_proc L__a_diag
 L__a_diag:
     pushq %rbp
@@ -6202,7 +6167,6 @@ L__a_diag:
     .section .iii.ring3,"n"
     .asciz "_a_poly_mult"
     .text
-    .global L__a_poly_mult
     .seh_proc L__a_poly_mult
 L__a_poly_mult:
     pushq %rbp
@@ -6334,7 +6298,6 @@ L__a_poly_mult:
     .section .iii.ring3,"n"
     .asciz "_a_aes_enc"
     .text
-    .global L__a_aes_enc
     .seh_proc L__a_aes_enc
 L__a_aes_enc:
     pushq %rbp
@@ -6446,7 +6409,6 @@ L__a_aes_enc:
     .section .iii.ring3,"n"
     .asciz "_a_aes_dec"
     .text
-    .global L__a_aes_dec
     .seh_proc L__a_aes_dec
 L__a_aes_dec:
     pushq %rbp
@@ -6558,7 +6520,6 @@ L__a_aes_dec:
     .section .iii.ring3,"n"
     .asciz "_a_gf_mult"
     .text
-    .global L__a_gf_mult
     .seh_proc L__a_gf_mult
 L__a_gf_mult:
     pushq %rbp
@@ -6670,7 +6631,6 @@ L__a_gf_mult:
     .section .iii.ring3,"n"
     .asciz "_a_expand"
     .text
-    .global L__a_expand
     .seh_proc L__a_expand
 L__a_expand:
     pushq %rbp
@@ -6772,7 +6732,6 @@ L__a_expand:
     .section .iii.ring3,"n"
     .asciz "_a_ladder"
     .text
-    .global L__a_ladder
     .seh_proc L__a_ladder
 L__a_ladder:
     pushq %rbp
@@ -6924,7 +6883,6 @@ L__a_ladder:
     .section .iii.ring3,"n"
     .asciz "_a_sha256_rnd"
     .text
-    .global L__a_sha256_rnd
     .seh_proc L__a_sha256_rnd
 L__a_sha256_rnd:
     pushq %rbp
@@ -7066,7 +7024,6 @@ L__a_sha256_rnd:
     .section .iii.ring3,"n"
     .asciz "_a_sha256_block"
     .text
-    .global L__a_sha256_block
     .seh_proc L__a_sha256_block
 L__a_sha256_block:
     pushq %rbp
@@ -7208,7 +7165,6 @@ L__a_sha256_block:
     .section .iii.ring3,"n"
     .asciz "_a_sha256_64"
     .text
-    .global L__a_sha256_64
     .seh_proc L__a_sha256_64
 L__a_sha256_64:
     pushq %rbp
@@ -7380,7 +7336,6 @@ L__a_sha256_64:
     .section .iii.ring3,"n"
     .asciz "_a_sha512_rnd"
     .text
-    .global L__a_sha512_rnd
     .seh_proc L__a_sha512_rnd
 L__a_sha512_rnd:
     pushq %rbp
@@ -7522,7 +7477,6 @@ L__a_sha512_rnd:
     .section .iii.ring3,"n"
     .asciz "_a_keccak_rnd"
     .text
-    .global L__a_keccak_rnd
     .seh_proc L__a_keccak_rnd
 L__a_keccak_rnd:
     pushq %rbp
@@ -7664,7 +7618,6 @@ L__a_keccak_rnd:
     .section .iii.ring3,"n"
     .asciz "_a_blake2s"
     .text
-    .global L__a_blake2s
     .seh_proc L__a_blake2s
 L__a_blake2s:
     pushq %rbp
@@ -7816,7 +7769,6 @@ L__a_blake2s:
     .section .iii.ring3,"n"
     .asciz "_a_ipad"
     .text
-    .global L__a_ipad
     .seh_proc L__a_ipad
 L__a_ipad:
     pushq %rbp
@@ -7898,7 +7850,6 @@ L__a_ipad:
     .section .iii.ring3,"n"
     .asciz "_a_crc32c"
     .text
-    .global L__a_crc32c
     .seh_proc L__a_crc32c
 L__a_crc32c:
     pushq %rbp
@@ -8030,7 +7981,6 @@ L__a_crc32c:
     .section .iii.ring3,"n"
     .asciz "_a_murmur3"
     .text
-    .global L__a_murmur3
     .seh_proc L__a_murmur3
 L__a_murmur3:
     pushq %rbp
@@ -8182,7 +8132,6 @@ L__a_murmur3:
     .section .iii.ring3,"n"
     .asciz "_a_add"
     .text
-    .global L__a_add
     .seh_proc L__a_add
 L__a_add:
     pushq %rbp
@@ -8254,7 +8203,6 @@ L__a_add:
     .section .iii.ring3,"n"
     .asciz "_a_xor"
     .text
-    .global L__a_xor
     .seh_proc L__a_xor
 L__a_xor:
     pushq %rbp
@@ -8326,7 +8274,6 @@ L__a_xor:
     .section .iii.ring3,"n"
     .asciz "_a_max_ct"
     .text
-    .global L__a_max_ct
     .seh_proc L__a_max_ct
 L__a_max_ct:
     pushq %rbp
@@ -8428,7 +8375,6 @@ L__a_max_ct:
     .section .iii.ring3,"n"
     .asciz "_a_min_ct"
     .text
-    .global L__a_min_ct
     .seh_proc L__a_min_ct
 L__a_min_ct:
     pushq %rbp
@@ -8530,7 +8476,6 @@ L__a_min_ct:
     .section .iii.ring3,"n"
     .asciz "_a_popcnt"
     .text
-    .global L__a_popcnt
     .seh_proc L__a_popcnt
 L__a_popcnt:
     pushq %rbp
@@ -8632,7 +8577,6 @@ L__a_popcnt:
     .section .iii.ring3,"n"
     .asciz "_a_popcnt_add"
     .text
-    .global L__a_popcnt_add
     .seh_proc L__a_popcnt_add
 L__a_popcnt_add:
     pushq %rbp
@@ -8774,7 +8718,6 @@ L__a_popcnt_add:
     .section .iii.ring3,"n"
     .asciz "_a_mul"
     .text
-    .global L__a_mul
     .seh_proc L__a_mul
 L__a_mul:
     pushq %rbp
@@ -8846,7 +8789,6 @@ L__a_mul:
     .section .iii.ring3,"n"
     .asciz "_a_mul_recip"
     .text
-    .global L__a_mul_recip
     .seh_proc L__a_mul_recip
 L__a_mul_recip:
     pushq %rbp
@@ -8988,7 +8930,6 @@ L__a_mul_recip:
     .section .iii.ring3,"n"
     .asciz "_a_shift_down"
     .text
-    .global L__a_shift_down
     .seh_proc L__a_shift_down
 L__a_shift_down:
     pushq %rbp
@@ -9130,7 +9071,6 @@ L__a_shift_down:
     .section .iii.ring3,"n"
     .asciz "_a_shift_sub"
     .text
-    .global L__a_shift_sub
     .seh_proc L__a_shift_sub
 L__a_shift_sub:
     pushq %rbp
@@ -9262,7 +9202,6 @@ L__a_shift_sub:
     .section .iii.ring3,"n"
     .asciz "_a_mul_mod_p"
     .text
-    .global L__a_mul_mod_p
     .seh_proc L__a_mul_mod_p
 L__a_mul_mod_p:
     pushq %rbp
@@ -9394,7 +9333,6 @@ L__a_mul_mod_p:
     .section .iii.ring3,"n"
     .asciz "_a_sq_mod_p"
     .text
-    .global L__a_sq_mod_p
     .seh_proc L__a_sq_mod_p
 L__a_sq_mod_p:
     pushq %rbp
@@ -9516,7 +9454,6 @@ L__a_sq_mod_p:
     .section .iii.ring3,"n"
     .asciz "_a_mult_barrett"
     .text
-    .global L__a_mult_barrett
     .seh_proc L__a_mult_barrett
 L__a_mult_barrett:
     pushq %rbp
@@ -9648,7 +9585,6 @@ L__a_mult_barrett:
     .section .iii.ring3,"n"
     .asciz "_a_mult_mont"
     .text
-    .global L__a_mult_mont
     .seh_proc L__a_mult_mont
 L__a_mult_mont:
     pushq %rbp
@@ -9800,7 +9736,6 @@ L__a_mult_mont:
     .section .iii.ring3,"n"
     .asciz "_a_sub_mod"
     .text
-    .global L__a_sub_mod
     .seh_proc L__a_sub_mod
 L__a_sub_mod:
     pushq %rbp
@@ -9962,7 +9897,6 @@ L__a_sub_mod:
     .section .iii.ring3,"n"
     .asciz "_a_raise"
     .text
-    .global L__a_raise
     .seh_proc L__a_raise
 L__a_raise:
     pushq %rbp
@@ -10054,7 +9988,6 @@ L__a_raise:
     .section .iii.ring3,"n"
     .asciz "_a_or_set"
     .text
-    .global L__a_or_set
     .seh_proc L__a_or_set
 L__a_or_set:
     pushq %rbp
@@ -10156,7 +10089,6 @@ L__a_or_set:
     .section .iii.ring3,"n"
     .asciz "_a_and_clear"
     .text
-    .global L__a_and_clear
     .seh_proc L__a_and_clear
 L__a_and_clear:
     pushq %rbp
@@ -10288,7 +10220,6 @@ L__a_and_clear:
     .section .iii.ring3,"n"
     .asciz "_a_add_pair"
     .text
-    .global L__a_add_pair
     .seh_proc L__a_add_pair
 L__a_add_pair:
     pushq %rbp
@@ -10410,7 +10341,6 @@ L__a_add_pair:
     .section .iii.ring3,"n"
     .asciz "_a_mul_twiddle"
     .text
-    .global L__a_mul_twiddle
     .seh_proc L__a_mul_twiddle
 L__a_mul_twiddle:
     pushq %rbp
@@ -10562,7 +10492,6 @@ L__a_mul_twiddle:
     .section .iii.ring3,"n"
     .asciz "_a_xor_or"
     .text
-    .global L__a_xor_or
     .seh_proc L__a_xor_or
 L__a_xor_or:
     pushq %rbp
@@ -10664,7 +10593,6 @@ L__a_xor_or:
     .section .iii.ring3,"n"
     .asciz "_a_canon_xf"
     .text
-    .global L__a_canon_xf
     .seh_proc L__a_canon_xf
 L__a_canon_xf:
     pushq %rbp
@@ -10896,7 +10824,6 @@ L__a_canon_xf:
     .section .iii.ring3,"n"
     .asciz "_a_finalise"
     .text
-    .global L__a_finalise
     .seh_proc L__a_finalise
 L__a_finalise:
     pushq %rbp
@@ -11068,7 +10995,6 @@ L__a_finalise:
     .section .iii.ring3,"n"
     .asciz "_a_tally"
     .text
-    .global L__a_tally
     .seh_proc L__a_tally
 L__a_tally:
     pushq %rbp
@@ -11160,7 +11086,6 @@ L__a_tally:
     .section .iii.ring3,"n"
     .asciz "_a_reject"
     .text
-    .global L__a_reject
     .seh_proc L__a_reject
 L__a_reject:
     pushq %rbp
@@ -11262,7 +11187,6 @@ L__a_reject:
     .section .iii.ring3,"n"
     .asciz "_a_veto"
     .text
-    .global L__a_veto
     .seh_proc L__a_veto
 L__a_veto:
     pushq %rbp
@@ -11404,7 +11328,6 @@ L__a_veto:
     .section .iii.ring3,"n"
     .asciz "_a_emit_bin"
     .text
-    .global L__a_emit_bin
     .seh_proc L__a_emit_bin
 L__a_emit_bin:
     pushq %rbp
@@ -11556,7 +11479,6 @@ L__a_emit_bin:
     .section .iii.ring3,"n"
     .asciz "_a_emit_un"
     .text
-    .global L__a_emit_un
     .seh_proc L__a_emit_un
 L__a_emit_un:
     pushq %rbp
@@ -11698,7 +11620,6 @@ L__a_emit_un:
     .section .iii.ring3,"n"
     .asciz "_a_emit_call32"
     .text
-    .global L__a_emit_call32
     .seh_proc L__a_emit_call32
 L__a_emit_call32:
     pushq %rbp
@@ -11890,7 +11811,6 @@ L__a_emit_call32:
     .section .iii.ring3,"n"
     .asciz "_a_emit_callind"
     .text
-    .global L__a_emit_callind
     .seh_proc L__a_emit_callind
 L__a_emit_callind:
     pushq %rbp
@@ -12112,7 +12032,6 @@ L__a_emit_callind:
     .section .iii.ring3,"n"
     .asciz "_a_emit_bypass"
     .text
-    .global L__a_emit_bypass
     .seh_proc L__a_emit_bypass
 L__a_emit_bypass:
     pushq %rbp
@@ -12334,7 +12253,6 @@ L__a_emit_bypass:
     .section .iii.ring3,"n"
     .asciz "_a_emit_thunk"
     .text
-    .global L__a_emit_thunk
     .seh_proc L__a_emit_thunk
 L__a_emit_thunk:
     pushq %rbp
@@ -12536,7 +12454,6 @@ L__a_emit_thunk:
     .section .iii.ring3,"n"
     .asciz "_a_emit_callq"
     .text
-    .global L__a_emit_callq
     .seh_proc L__a_emit_callq
 L__a_emit_callq:
     pushq %rbp
@@ -12738,7 +12655,6 @@ L__a_emit_callq:
     .section .iii.ring3,"n"
     .asciz "_a_emit_externtag"
     .text
-    .global L__a_emit_externtag
     .seh_proc L__a_emit_externtag
 L__a_emit_externtag:
     pushq %rbp
@@ -12930,7 +12846,6 @@ L__a_emit_externtag:
     .section .iii.ring3,"n"
     .asciz "_a_apply_rule"
     .text
-    .global L__a_apply_rule
     .seh_proc L__a_apply_rule
 L__a_apply_rule:
     pushq %rbp
@@ -13112,7 +13027,6 @@ L__a_apply_rule:
     .section .iii.ring3,"n"
     .asciz "_a_copy_cell"
     .text
-    .global L__a_copy_cell
     .seh_proc L__a_copy_cell
 L__a_copy_cell:
     pushq %rbp
@@ -13304,7 +13218,6 @@ L__a_copy_cell:
     .section .iii.ring3,"n"
     .asciz "_a_write_ctw"
     .text
-    .global L__a_write_ctw
     .seh_proc L__a_write_ctw
 L__a_write_ctw:
     pushq %rbp
@@ -13506,7 +13419,6 @@ L__a_write_ctw:
     .section .iii.ring3,"n"
     .asciz "_a_cmp_score"
     .text
-    .global L__a_cmp_score
     .seh_proc L__a_cmp_score
 L__a_cmp_score:
     pushq %rbp
@@ -13678,7 +13590,6 @@ L__a_cmp_score:
     .section .iii.ring3,"n"
     .asciz "_a_bind_slot"
     .text
-    .global L__a_bind_slot
     .seh_proc L__a_bind_slot
 L__a_bind_slot:
     pushq %rbp
@@ -13810,7 +13721,6 @@ L__a_bind_slot:
     .section .iii.ring3,"n"
     .asciz "_a_call_ind"
     .text
-    .global L__a_call_ind
     .seh_proc L__a_call_ind
 L__a_call_ind:
     pushq %rbp
@@ -13982,7 +13892,6 @@ L__a_call_ind:
     .section .iii.ring3,"n"
     .asciz "_a_k_underflow"
     .text
-    .global L__a_k_underflow
     .seh_proc L__a_k_underflow
 L__a_k_underflow:
     pushq %rbp
@@ -14134,7 +14043,6 @@ L__a_k_underflow:
     .section .iii.ring3,"n"
     .asciz "_a_return"
     .text
-    .global L__a_return
     .seh_proc L__a_return
 L__a_return:
     pushq %rbp
@@ -14236,7 +14144,6 @@ L__a_return:
     .section .iii.ring3,"n"
     .asciz "_a_advance64"
     .text
-    .global L__a_advance64
     .seh_proc L__a_advance64
 L__a_advance64:
     pushq %rbp
@@ -14378,7 +14285,6 @@ L__a_advance64:
     .section .iii.ring3,"n"
     .asciz "_a_dispatch_fp"
     .text
-    .global L__a_dispatch_fp
     .seh_proc L__a_dispatch_fp
 L__a_dispatch_fp:
     pushq %rbp
@@ -14530,7 +14436,6 @@ L__a_dispatch_fp:
     .section .iii.ring3,"n"
     .asciz "_a_bswap64"
     .text
-    .global L__a_bswap64
     .seh_proc L__a_bswap64
 L__a_bswap64:
     pushq %rbp
@@ -14652,7 +14557,6 @@ L__a_bswap64:
     .section .iii.ring3,"n"
     .asciz "_a_brev64"
     .text
-    .global L__a_brev64
     .seh_proc L__a_brev64
 L__a_brev64:
     pushq %rbp
@@ -14764,7 +14668,6 @@ L__a_brev64:
     .section .iii.ring3,"n"
     .asciz "_a_serialise_le"
     .text
-    .global L__a_serialise_le
     .seh_proc L__a_serialise_le
 L__a_serialise_le:
     pushq %rbp
@@ -14926,7 +14829,6 @@ L__a_serialise_le:
     .section .iii.ring3,"n"
     .asciz "_a_index_write"
     .text
-    .global L__a_index_write
     .seh_proc L__a_index_write
 L__a_index_write:
     pushq %rbp
@@ -15078,7 +14980,6 @@ L__a_index_write:
     .section .iii.ring3,"n"
     .asciz "_a_zero_write"
     .text
-    .global L__a_zero_write
     .seh_proc L__a_zero_write
 L__a_zero_write:
     pushq %rbp
@@ -15220,7 +15121,6 @@ L__a_zero_write:
     .section .iii.ring3,"n"
     .asciz "_a_value_write"
     .text
-    .global L__a_value_write
     .seh_proc L__a_value_write
 L__a_value_write:
     pushq %rbp
@@ -15372,7 +15272,6 @@ L__a_value_write:
     .section .iii.ring3,"n"
     .asciz "_a_write"
     .text
-    .global L__a_write
     .seh_proc L__a_write
 L__a_write:
     pushq %rbp
@@ -15464,7 +15363,6 @@ L__a_write:
     .section .iii.ring3,"n"
     .asciz "_a_read"
     .text
-    .global L__a_read
     .seh_proc L__a_read
 L__a_read:
     pushq %rbp
@@ -15546,7 +15444,6 @@ L__a_read:
     .section .iii.ring3,"n"
     .asciz "_a_bit_check"
     .text
-    .global L__a_bit_check
     .seh_proc L__a_bit_check
 L__a_bit_check:
     pushq %rbp
@@ -15678,7 +15575,6 @@ L__a_bit_check:
     .section .iii.ring3,"n"
     .asciz "_a_compute"
     .text
-    .global L__a_compute
     .seh_proc L__a_compute
 L__a_compute:
     pushq %rbp
@@ -15790,7 +15686,6 @@ L__a_compute:
     .section .iii.ring3,"n"
     .asciz "_a_asym_compose"
     .text
-    .global L__a_asym_compose
     .seh_proc L__a_asym_compose
 L__a_asym_compose:
     pushq %rbp
@@ -16082,7 +15977,6 @@ L__a_asym_compose:
     .section .iii.ring3,"n"
     .asciz "_a_not_tbl"
     .text
-    .global L__a_not_tbl
     .seh_proc L__a_not_tbl
 L__a_not_tbl:
     pushq %rbp
@@ -16284,7 +16178,6 @@ L__a_not_tbl:
     .section .iii.ring3,"n"
     .asciz "_a_and_tbl"
     .text
-    .global L__a_and_tbl
     .seh_proc L__a_and_tbl
 L__a_and_tbl:
     pushq %rbp
@@ -16486,7 +16379,6 @@ L__a_and_tbl:
     .section .iii.ring3,"n"
     .asciz "_a_or_tbl"
     .text
-    .global L__a_or_tbl
     .seh_proc L__a_or_tbl
 L__a_or_tbl:
     pushq %rbp
@@ -16678,7 +16570,6 @@ L__a_or_tbl:
     .section .iii.ring3,"n"
     .asciz "_a_mul_tbl"
     .text
-    .global L__a_mul_tbl
     .seh_proc L__a_mul_tbl
 L__a_mul_tbl:
     pushq %rbp
@@ -16880,7 +16771,6 @@ L__a_mul_tbl:
     .section .iii.ring3,"n"
     .asciz "_a_raise_cap_fault"
     .text
-    .global L__a_raise_cap_fault
     .seh_proc L__a_raise_cap_fault
 L__a_raise_cap_fault:
     pushq %rbp
@@ -17072,7 +16962,6 @@ L__a_raise_cap_fault:
     .section .iii.ring3,"n"
     .asciz "_a_verify_launch"
     .text
-    .global L__a_verify_launch
     .seh_proc L__a_verify_launch
 L__a_verify_launch:
     pushq %rbp
@@ -17244,7 +17133,6 @@ L__a_verify_launch:
     .section .iii.ring3,"n"
     .asciz "_a_reach_violation"
     .text
-    .global L__a_reach_violation
     .seh_proc L__a_reach_violation
 L__a_reach_violation:
     pushq %rbp
@@ -17436,7 +17324,6 @@ L__a_reach_violation:
     .section .iii.ring3,"n"
     .asciz "_a_new_record"
     .text
-    .global L__a_new_record
     .seh_proc L__a_new_record
 L__a_new_record:
     pushq %rbp
@@ -17578,7 +17465,6 @@ L__a_new_record:
     .section .iii.ring3,"n"
     .asciz "_a_aligned16w"
     .text
-    .global L__a_aligned16w
     .seh_proc L__a_aligned16w
 L__a_aligned16w:
     pushq %rbp
@@ -17780,7 +17666,6 @@ L__a_aligned16w:
     .section .iii.ring3,"n"
     .asciz "_q_bit_check"
     .text
-    .global L__q_bit_check
     .seh_proc L__q_bit_check
 L__q_bit_check:
     pushq %rbp
@@ -17912,7 +17797,6 @@ L__q_bit_check:
     .section .iii.ring3,"n"
     .asciz "_f_broadcast"
     .text
-    .global L__f_broadcast
     .seh_proc L__f_broadcast
 L__f_broadcast:
     pushq %rbp
@@ -18094,7 +17978,6 @@ L__f_broadcast:
     .section .iii.ring3,"n"
     .asciz "_s_dom_resolve_ok"
     .text
-    .global L__s_dom_resolve_ok
     .seh_proc L__s_dom_resolve_ok
 L__s_dom_resolve_ok:
     pushq %rbp
@@ -18276,7 +18159,6 @@ L__s_dom_resolve_ok:
     .section .iii.ring3,"n"
     .asciz "_s_dom_resolve_fail"
     .text
-    .global L__s_dom_resolve_fail
     .seh_proc L__s_dom_resolve_fail
 L__s_dom_resolve_fail:
     pushq %rbp
@@ -18478,7 +18360,6 @@ L__s_dom_resolve_fail:
     .section .iii.ring3,"n"
     .asciz "_q_read_u64"
     .text
-    .global L__q_read_u64
     .seh_proc L__q_read_u64
 L__q_read_u64:
     pushq %rbp
@@ -18600,7 +18481,6 @@ L__q_read_u64:
     .section .iii.ring3,"n"
     .asciz "_q_read_u32"
     .text
-    .global L__q_read_u32
     .seh_proc L__q_read_u32
 L__q_read_u32:
     pushq %rbp
@@ -18722,7 +18602,6 @@ L__q_read_u32:
     .section .iii.ring3,"n"
     .asciz "_q_read"
     .text
-    .global L__q_read
     .seh_proc L__q_read
 L__q_read:
     pushq %rbp
@@ -18804,7 +18683,6 @@ L__q_read:
     .section .iii.ring3,"n"
     .asciz "_q_read_direct"
     .text
-    .global L__q_read_direct
     .seh_proc L__q_read_direct
 L__q_read_direct:
     pushq %rbp
@@ -18956,7 +18834,6 @@ L__q_read_direct:
     .section .iii.ring3,"n"
     .asciz "_q_read_aligned"
     .text
-    .global L__q_read_aligned
     .seh_proc L__q_read_aligned
 L__q_read_aligned:
     pushq %rbp
@@ -19098,7 +18975,6 @@ L__q_read_aligned:
     .section .iii.ring3,"n"
     .asciz "_q_read_record"
     .text
-    .global L__q_read_record
     .seh_proc L__q_read_record
 L__q_read_record:
     pushq %rbp
@@ -19220,7 +19096,6 @@ L__q_read_record:
     .section .iii.ring3,"n"
     .asciz "_q_read_vote"
     .text
-    .global L__q_read_vote
     .seh_proc L__q_read_vote
 L__q_read_vote:
     pushq %rbp
@@ -19342,7 +19217,6 @@ L__q_read_vote:
     .section .iii.ring3,"n"
     .asciz "_q_mphf"
     .text
-    .global L__q_mphf
     .seh_proc L__q_mphf
 L__q_mphf:
     pushq %rbp
@@ -19494,7 +19368,6 @@ L__q_mphf:
     .section .iii.ring3,"n"
     .asciz "_q_index"
     .text
-    .global L__q_index
     .seh_proc L__q_index
 L__q_index:
     pushq %rbp
@@ -19586,7 +19459,6 @@ L__q_index:
     .section .iii.ring3,"n"
     .asciz "_q_dispatch"
     .text
-    .global L__q_dispatch
     .seh_proc L__q_dispatch
 L__q_dispatch:
     pushq %rbp
@@ -19708,7 +19580,6 @@ L__q_dispatch:
     .section .iii.ring3,"n"
     .asciz "_q_prov_read"
     .text
-    .global L__q_prov_read
     .seh_proc L__q_prov_read
 L__q_prov_read:
     pushq %rbp
@@ -19840,7 +19711,6 @@ L__q_prov_read:
     .section .iii.ring3,"n"
     .asciz "_s_witness"
     .text
-    .global L__s_witness
     .seh_proc L__s_witness
 L__s_witness:
     pushq %rbp
@@ -20002,7 +19872,6 @@ L__s_witness:
     .section .iii.ring3,"n"
     .asciz "_s_cap"
     .text
-    .global L__s_cap
     .seh_proc L__s_cap
 L__s_cap:
     pushq %rbp
@@ -20124,7 +19993,6 @@ L__s_cap:
     .section .iii.ring3,"n"
     .asciz "_s_scoped"
     .text
-    .global L__s_scoped
     .seh_proc L__s_scoped
 L__s_scoped:
     pushq %rbp
@@ -20276,7 +20144,6 @@ L__s_scoped:
     .section .iii.ring3,"n"
     .asciz "_s_revoked"
     .text
-    .global L__s_revoked
     .seh_proc L__s_revoked
 L__s_revoked:
     pushq %rbp
@@ -20438,7 +20305,6 @@ L__s_revoked:
     .section .iii.ring3,"n"
     .asciz "_s_aead"
     .text
-    .global L__s_aead
     .seh_proc L__s_aead
 L__s_aead:
     pushq %rbp
@@ -20570,7 +20436,6 @@ L__s_aead:
     .section .iii.ring3,"n"
     .asciz "_s_hkdf_prk"
     .text
-    .global L__s_hkdf_prk
     .seh_proc L__s_hkdf_prk
 L__s_hkdf_prk:
     pushq %rbp
@@ -20692,7 +20557,6 @@ L__s_hkdf_prk:
     .section .iii.ring3,"n"
     .asciz "_s_prov"
     .text
-    .global L__s_prov
     .seh_proc L__s_prov
 L__s_prov:
     pushq %rbp
@@ -20824,7 +20688,6 @@ L__s_prov:
     .section .iii.ring3,"n"
     .asciz "_s_xform_rec"
     .text
-    .global L__s_xform_rec
     .seh_proc L__s_xform_rec
 L__s_xform_rec:
     pushq %rbp
@@ -20956,7 +20819,6 @@ L__s_xform_rec:
     .section .iii.ring3,"n"
     .asciz "_s_iat"
     .text
-    .global L__s_iat
     .seh_proc L__s_iat
 L__s_iat:
     pushq %rbp
@@ -21078,7 +20940,6 @@ L__s_iat:
     .section .iii.ring3,"n"
     .asciz "_s_ct_witness"
     .text
-    .global L__s_ct_witness
     .seh_proc L__s_ct_witness
 L__s_ct_witness:
     pushq %rbp
@@ -21220,7 +21081,6 @@ L__s_ct_witness:
     .section .iii.ring3,"n"
     .asciz "_s_admit"
     .text
-    .global L__s_admit
     .seh_proc L__s_admit
 L__s_admit:
     pushq %rbp
@@ -21362,7 +21222,6 @@ L__s_admit:
     .section .iii.ring3,"n"
     .asciz "_s_catalyst"
     .text
-    .global L__s_catalyst
     .seh_proc L__s_catalyst
 L__s_catalyst:
     pushq %rbp
@@ -21534,7 +21393,6 @@ L__s_catalyst:
     .section .iii.ring3,"n"
     .asciz "_s_r1"
     .text
-    .global L__s_r1
     .seh_proc L__s_r1
 L__s_r1:
     pushq %rbp
@@ -21646,7 +21504,6 @@ L__s_r1:
     .section .iii.ring3,"n"
     .asciz "_s_initial"
     .text
-    .global L__s_initial
     .seh_proc L__s_initial
 L__s_initial:
     pushq %rbp
@@ -21808,7 +21665,6 @@ L__s_initial:
     .section .iii.ring3,"n"
     .asciz "_s_final"
     .text
-    .global L__s_final
     .seh_proc L__s_final
 L__s_final:
     pushq %rbp
@@ -21950,7 +21806,6 @@ L__s_final:
     .section .iii.ring3,"n"
     .asciz "_s_m_audit"
     .text
-    .global L__s_m_audit
     .seh_proc L__s_m_audit
 L__s_m_audit:
     pushq %rbp
@@ -22112,7 +21967,6 @@ L__s_m_audit:
     .section .iii.ring3,"n"
     .asciz "_s_pre_relaunch"
     .text
-    .global L__s_pre_relaunch
     .seh_proc L__s_pre_relaunch
 L__s_pre_relaunch:
     pushq %rbp
@@ -22274,7 +22128,6 @@ L__s_pre_relaunch:
     .section .iii.ring3,"n"
     .asciz "_f_le"
     .text
-    .global L__f_le
     .seh_proc L__f_le
 L__f_le:
     pushq %rbp
@@ -22386,7 +22239,6 @@ L__f_le:
     .section .iii.ring3,"n"
     .asciz "_f_ge"
     .text
-    .global L__f_ge
     .seh_proc L__f_ge
 L__f_ge:
     pushq %rbp
@@ -22498,7 +22350,6 @@ L__f_ge:
     .section .iii.ring3,"n"
     .asciz "_f_eq"
     .text
-    .global L__f_eq
     .seh_proc L__f_eq
 L__f_eq:
     pushq %rbp
@@ -22610,7 +22461,6 @@ L__f_eq:
     .section .iii.ring3,"n"
     .asciz "_f_lt"
     .text
-    .global L__f_lt
     .seh_proc L__f_lt
 L__f_lt:
     pushq %rbp
@@ -22722,7 +22572,6 @@ L__f_lt:
     .section .iii.ring3,"n"
     .asciz "_f_nonzero"
     .text
-    .global L__f_nonzero
     .seh_proc L__f_nonzero
 L__f_nonzero:
     pushq %rbp
@@ -22834,7 +22683,6 @@ L__f_nonzero:
     .section .iii.ring3,"n"
     .asciz "_f_overflow"
     .text
-    .global L__f_overflow
     .seh_proc L__f_overflow
 L__f_overflow:
     pushq %rbp
@@ -23006,7 +22854,6 @@ L__f_overflow:
     .section .iii.ring3,"n"
     .asciz "_f_not_all_ones"
     .text
-    .global L__f_not_all_ones
     .seh_proc L__f_not_all_ones
 L__f_not_all_ones:
     pushq %rbp
@@ -23168,7 +23015,6 @@ L__f_not_all_ones:
     .section .iii.ring3,"n"
     .asciz "_f_kdf"
     .text
-    .global L__f_kdf
     .seh_proc L__f_kdf
 L__f_kdf:
     pushq %rbp
@@ -23290,7 +23136,6 @@ L__f_kdf:
     .section .iii.ring3,"n"
     .asciz "_f_anchor_inv"
     .text
-    .global L__f_anchor_inv
     .seh_proc L__f_anchor_inv
 L__f_anchor_inv:
     pushq %rbp
@@ -23432,7 +23277,6 @@ L__f_anchor_inv:
     .section .iii.ring3,"n"
     .asciz "_f_expected_cap"
     .text
-    .global L__f_expected_cap
     .seh_proc L__f_expected_cap
 L__f_expected_cap:
     pushq %rbp
@@ -23594,7 +23438,6 @@ L__f_expected_cap:
     .section .iii.ring3,"n"
     .asciz "_f_pat_pred"
     .text
-    .global L__f_pat_pred
     .seh_proc L__f_pat_pred
 L__f_pat_pred:
     pushq %rbp
@@ -23856,7 +23699,6 @@ L__f_pat_pred:
     .section .iii.ring3,"n"
     .asciz "_f_resolver_ident"
     .text
-    .global L__f_resolver_ident
     .seh_proc L__f_resolver_ident
 L__f_resolver_ident:
     pushq %rbp
@@ -24038,7 +23880,6 @@ L__f_resolver_ident:
     .section .iii.ring3,"n"
     .asciz "_hb"
     .text
-    .global L__hb
     .seh_proc L__hb
 L__hb:
     pushq %rbp
@@ -24079,7 +23920,6 @@ L__hb:
     .section .iii.ring3,"n"
     .asciz "_hf"
     .text
-    .global L__hf
     .seh_proc L__hf
 L__hf:
     pushq %rbp
@@ -24124,7 +23964,6 @@ L__hf:
     .section .iii.ring3,"n"
     .asciz "_hnull"
     .text
-    .global L__hnull
     .seh_proc L__hnull
 L__hnull:
     pushq %rbp
@@ -24163,7 +24002,6 @@ L__hnull:
     .section .iii.ring3,"n"
     .asciz "_hlift"
     .text
-    .global L__hlift
     .seh_proc L__hlift
 L__hlift:
     pushq %rbp
@@ -24179,11 +24017,8 @@ L__hlift:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -24221,7 +24056,6 @@ L__hlift:
     .section .iii.ring3,"n"
     .asciz "_hfree"
     .text
-    .global L__hfree
     .seh_proc L__hfree
 L__hfree:
     pushq %rbp
@@ -24261,7 +24095,6 @@ L__hfree:
     .section .iii.ring3,"n"
     .asciz "_hc"
     .text
-    .global L__hc
     .seh_proc L__hc
 L__hc:
     pushq %rbp

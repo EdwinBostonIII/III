@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_eq_i32"
     .text
-    .global L__eq_i32
     .seh_proc L__eq_i32
 L__eq_i32:
     pushq %rbp
@@ -57,7 +56,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_ne_i32"
     .text
-    .global L__ne_i32
     .seh_proc L__ne_i32
 L__ne_i32:
     pushq %rbp
@@ -108,7 +106,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "_lt_i64"
     .text
-    .global L__lt_i64
     .seh_proc L__lt_i64
 L__lt_i64:
     pushq %rbp
@@ -159,7 +156,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_le_i64"
     .text
-    .global L__le_i64
     .seh_proc L__le_i64
 L__le_i64:
     pushq %rbp
@@ -210,7 +206,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "_gt_i64"
     .text
-    .global L__gt_i64
     .seh_proc L__gt_i64
 L__gt_i64:
     pushq %rbp
@@ -261,7 +256,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_ge_i64"
     .text
-    .global L__ge_i64
     .seh_proc L__ge_i64
 L__ge_i64:
     pushq %rbp

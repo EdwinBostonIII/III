@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcapability.iiicapability.iiifs.iiifs.iiifs.iiifs.iiifs.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcapability.iiicapability.iiifs.iiifs.iiifs.iiifs.iiifs.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "capability.iiicapability.iiifs.iiifs.iiifs.iiifs.iiifs.iii\0"
+    .ascii "capability.iii\0"
 L_str_3:
-    .ascii "capability.iiifs.iiifs.iiifs.iiifs.iiifs.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
-    .ascii "fs.iiifs.iiifs.iiifs.iiifs.iii\0"
+    .ascii "fs.iii\0"
 L_str_5:
-    .ascii "fs.iiifs.iiifs.iiifs.iii\0"
+    .ascii "fs.iii\0"
 L_str_6:
-    .ascii "fs.iiifs.iiifs.iii\0"
+    .ascii "fs.iii\0"
 L_str_7:
-    .ascii "fs.iiifs.iii\0"
+    .ascii "fs.iii\0"
 L_str_8:
     .ascii "fs.iii\0"
     .section .iii.ring3,"n"

@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_1:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_2:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_3:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_4:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_5:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_6:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_7:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_8:
-    .ascii "fp384.iiifp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_9:
-    .ascii "fp384.iiifp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_10:
-    .ascii "fp384.iiifp384.iii\0"
+    .ascii "fp384.iii\0"
 L_str_11:
     .ascii "fp384.iii\0"
     .section .bss
@@ -34,7 +34,6 @@ L_EQ_INIT:
     .section .iii.ring3,"n"
     .asciz "ec384_init"
     .text
-    .global L_ec384_init
     .seh_proc L_ec384_init
 L_ec384_init:
     pushq %rbp
@@ -705,7 +704,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "ec384_add"
     .text
-    .global L_ec384_add
     .seh_proc L_ec384_add
 L_ec384_add:
     pushq %rbp
@@ -1475,7 +1473,6 @@ L_ec384_add:
     .section .iii.ring3,"n"
     .asciz "ec384_set_identity"
     .text
-    .global L_ec384_set_identity
     .seh_proc L_ec384_set_identity
 L_ec384_set_identity:
     pushq %rbp
@@ -1550,7 +1547,6 @@ L_ec384_set_identity:
     .section .iii.ring3,"n"
     .asciz "ec384_scalar_mul"
     .text
-    .global L_ec384_scalar_mul
     .seh_proc L_ec384_scalar_mul
 L_ec384_scalar_mul:
     pushq %rbp
@@ -1984,7 +1980,6 @@ ec384_add_x:
     .section .iii.ring3,"n"
     .asciz "ec384_load_be_mont"
     .text
-    .global L_ec384_load_be_mont
     .seh_proc L_ec384_load_be_mont
 L_ec384_load_be_mont:
     pushq %rbp
@@ -2028,11 +2023,8 @@ L_loop_top_4:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -2046,11 +2038,8 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -2068,11 +2057,8 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2094,11 +2080,8 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2270,7 +2253,6 @@ ec384_set_affine:
     .section .iii.ring3,"n"
     .asciz "ec384_emit_be"
     .text
-    .global L_ec384_emit_be
     .seh_proc L_ec384_emit_be
 L_ec384_emit_be:
     pushq %rbp
@@ -2329,25 +2311,15 @@ L_loop_top_6:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2366,11 +2338,8 @@ L_loop_top_6:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -2380,11 +2349,8 @@ L_loop_top_6:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2403,11 +2369,8 @@ L_loop_top_6:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -2417,11 +2380,8 @@ L_loop_top_6:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2440,11 +2400,8 @@ L_loop_top_6:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax

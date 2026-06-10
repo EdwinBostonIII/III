@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcapability.iiicapability.iiiwitness.iiiwitness.iiiattest.iiiattest.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcapability.iiicapability.iiiwitness.iiiwitness.iiiattest.iiiattest.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "capability.iiicapability.iiiwitness.iiiwitness.iiiattest.iiiattest.iii\0"
+    .ascii "capability.iii\0"
 L_str_3:
-    .ascii "capability.iiiwitness.iiiwitness.iiiattest.iiiattest.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
-    .ascii "witness.iiiwitness.iiiattest.iiiattest.iii\0"
+    .ascii "witness.iii\0"
 L_str_5:
-    .ascii "witness.iiiattest.iiiattest.iii\0"
+    .ascii "witness.iii\0"
 L_str_6:
-    .ascii "attest.iiiattest.iii\0"
+    .ascii "attest.iii\0"
 L_str_7:
     .ascii "attest.iii\0"
     .section .iii.ring3,"n"

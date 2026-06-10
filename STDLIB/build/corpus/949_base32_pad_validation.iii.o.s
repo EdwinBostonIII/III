@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiibase32.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "builder.iiibuilder.iiibuilder.iiibase32.iii\0"
+    .ascii "builder.iii\0"
 L_str_2:
-    .ascii "builder.iiibuilder.iiibase32.iii\0"
+    .ascii "builder.iii\0"
 L_str_3:
-    .ascii "builder.iiibase32.iii\0"
+    .ascii "builder.iii\0"
 L_str_4:
     .ascii "base32.iii\0"
     .section .data
@@ -99,11 +99,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

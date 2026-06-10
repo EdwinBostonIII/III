@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtcost_lattice.iiioptinvoke.iiioptinvoke.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "cost_lattice.iiioptinvoke.iiioptinvoke.iii\0"
+    .ascii "cost_lattice.iii\0"
 L_str_2:
-    .ascii "optinvoke.iiioptinvoke.iii\0"
+    .ascii "optinvoke.iii\0"
 L_str_3:
     .ascii "optinvoke.iii\0"
     .section .iii.ring3,"n"
     .asciz "st_u64"
     .text
-    .global L_st_u64
     .seh_proc L_st_u64
 L_st_u64:
     pushq %rbp
@@ -76,11 +75,8 @@ L_loop_top_0:
     movb %dl, (%rax,%rcx,1)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -115,7 +111,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "ld_u64"
     .text
-    .global L_ld_u64
     .seh_proc L_ld_u64
 L_ld_u64:
     pushq %rbp
@@ -169,11 +164,8 @@ L_loop_top_2:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -216,7 +208,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "cand"
     .text
-    .global L_cand
     .seh_proc L_cand
 L_cand:
     pushq %rbp
@@ -295,11 +286,7 @@ L_loop_end_5:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -24(%rbp), %rax
     pushq %rax
@@ -355,7 +342,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "vec6"
     .text
-    .global L_vec6
     .seh_proc L_vec6
 L_vec6:
     pushq %rbp
@@ -391,11 +377,7 @@ L_vec6:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax

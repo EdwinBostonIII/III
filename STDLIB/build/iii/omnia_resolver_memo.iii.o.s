@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -46,7 +46,6 @@ L_MEMO_USED:
     .section .iii.ring3,"n"
     .asciz "_memo_compute_key"
     .text
-    .global L__memo_compute_key
     .seh_proc L__memo_compute_key
 L__memo_compute_key:
     pushq %rbp
@@ -212,11 +211,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
@@ -236,11 +232,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -144(%rbp)
@@ -260,11 +253,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rax
     movq %rax, -152(%rbp)
@@ -284,11 +274,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -160(%rbp)
@@ -308,11 +295,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rax
     movq %rax, -168(%rbp)
@@ -332,11 +316,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rax
     movq %rax, -176(%rbp)
@@ -356,11 +337,8 @@ L__memo_compute_key:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rax
     movq %rax, -184(%rbp)
@@ -504,7 +482,6 @@ memo_key:
     .section .iii.ring3,"n"
     .asciz "_memo_initial_slot"
     .text
-    .global L__memo_initial_slot
     .seh_proc L__memo_initial_slot
 L__memo_initial_slot:
     pushq %rbp

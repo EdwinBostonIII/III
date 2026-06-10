@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "result.iiiresult.iiiresult.iiiresult.iiiresult.iiiresult.iiiresult.iii\0"
+    .ascii "result.iii\0"
 L_str_1:
-    .ascii "result.iiiresult.iiiresult.iiiresult.iiiresult.iiiresult.iii\0"
+    .ascii "result.iii\0"
 L_str_2:
-    .ascii "result.iiiresult.iiiresult.iiiresult.iiiresult.iii\0"
+    .ascii "result.iii\0"
 L_str_3:
-    .ascii "result.iiiresult.iiiresult.iiiresult.iii\0"
+    .ascii "result.iii\0"
 L_str_4:
-    .ascii "result.iiiresult.iiiresult.iii\0"
+    .ascii "result.iii\0"
 L_str_5:
-    .ascii "result.iiiresult.iii\0"
+    .ascii "result.iii\0"
 L_str_6:
     .ascii "result.iii\0"
     .section .iii.ring3,"n"
@@ -93,7 +93,7 @@ L_if_end_1:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)

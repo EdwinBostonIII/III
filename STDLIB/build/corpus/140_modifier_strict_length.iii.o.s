@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "raw_bytes"
     .text
-    .global L_raw_bytes
     .seh_proc L_raw_bytes
 L_raw_bytes:
     pushq %rbp

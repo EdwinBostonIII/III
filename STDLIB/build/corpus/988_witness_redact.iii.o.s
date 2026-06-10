@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_1:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_2:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "witness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
     .ascii "keccak256.iii\0"
     .section .rodata
@@ -67,7 +67,6 @@ L_PAY_LEN:
     .section .iii.ring3,"n"
     .asciz "fill_id"
     .text
-    .global L_fill_id
     .seh_proc L_fill_id
 L_fill_id:
     pushq %rbp

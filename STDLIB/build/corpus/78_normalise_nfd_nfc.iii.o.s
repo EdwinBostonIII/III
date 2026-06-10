@@ -4,27 +4,26 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiinormalise.iiinormalise.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiinormalise.iiinormalise.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiinormalise.iiinormalise.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiinormalise.iiinormalise.iii\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iiinormalise.iiinormalise.iii\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iiinormalise.iiinormalise.iii\0"
+    .ascii "builder.iii\0"
 L_str_6:
-    .ascii "builder.iiinormalise.iiinormalise.iii\0"
+    .ascii "builder.iii\0"
 L_str_7:
-    .ascii "normalise.iiinormalise.iii\0"
+    .ascii "normalise.iii\0"
 L_str_8:
     .ascii "normalise.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_cafe_precomposed"
     .text
-    .global L_fill_cafe_precomposed
     .seh_proc L_fill_cafe_precomposed
 L_fill_cafe_precomposed:
     pushq %rbp
@@ -101,7 +100,6 @@ L_fill_cafe_precomposed:
     .section .iii.ring3,"n"
     .asciz "fill_cafe_decomposed"
     .text
-    .global L_fill_cafe_decomposed
     .seh_proc L_fill_cafe_decomposed
 L_fill_cafe_decomposed:
     pushq %rbp
@@ -200,11 +198,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

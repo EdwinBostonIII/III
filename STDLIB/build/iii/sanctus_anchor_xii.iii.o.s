@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_1:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_2:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_3:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_horizon.iiixii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_4:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_5:
-    .ascii "xii_horizon.iiixii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_6:
-    .ascii "xii_chd.iiixii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_chd.iii\0"
 L_str_7:
-    .ascii "xii_savings.iiixii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_savings.iii\0"
 L_str_8:
-    .ascii "xii_savings.iiixii_horizon.iii\0"
+    .ascii "xii_savings.iii\0"
 L_str_9:
     .ascii "xii_horizon.iii\0"
     .section .rodata

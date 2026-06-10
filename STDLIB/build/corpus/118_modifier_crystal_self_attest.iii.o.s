@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "proof_emit"
     .text
-    .global L_proof_emit
     .seh_proc L_proof_emit
 L_proof_emit:
     pushq %rbp

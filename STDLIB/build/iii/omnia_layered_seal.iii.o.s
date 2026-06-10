@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -42,7 +42,6 @@ L_LSEAL_SCRATCH:
     .section .iii.ring3,"n"
     .asciz "lseal_init_domains"
     .text
-    .global L_lseal_init_domains
     .seh_proc L_lseal_init_domains
 L_lseal_init_domains:
     pushq %rbp
@@ -650,7 +649,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "layered_seal_finalize_into_offset"
     .text
-    .global L_layered_seal_finalize_into_offset
     .seh_proc L_layered_seal_finalize_into_offset
 L_layered_seal_finalize_into_offset:
     pushq %rbp
@@ -743,7 +741,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "layered_seal_payload_offset"
     .text
-    .global L_layered_seal_payload_offset
     .seh_proc L_layered_seal_payload_offset
 L_layered_seal_payload_offset:
     pushq %rbp

@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "babel.iiibabel.iiibabel.iiibabel.iiibabel.iiibabel.iii\0"
+    .ascii "babel.iii\0"
 L_str_1:
-    .ascii "babel.iiibabel.iiibabel.iiibabel.iiibabel.iii\0"
+    .ascii "babel.iii\0"
 L_str_2:
-    .ascii "babel.iiibabel.iiibabel.iiibabel.iii\0"
+    .ascii "babel.iii\0"
 L_str_3:
-    .ascii "babel.iiibabel.iiibabel.iii\0"
+    .ascii "babel.iii\0"
 L_str_4:
-    .ascii "babel.iiibabel.iii\0"
+    .ascii "babel.iii\0"
 L_str_5:
     .ascii "babel.iii\0"
     .section .bss
@@ -25,7 +25,6 @@ L_BH2:
     .section .iii.ring3,"n"
     .asciz "beq"
     .text
-    .global L_beq
     .seh_proc L_beq
 L_beq:
     pushq %rbp

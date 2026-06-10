@@ -211,31 +211,47 @@ mont_redc:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movabsq $0x1, %rax
+    xorq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq $0, %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+    shrq $63, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
     movq L_MONT_R_SHIFT(%rip), %rax
@@ -244,7 +260,7 @@ L_if_end_3:
     popq %rax
     shrq %cl, %rax
     pushq %rax
-    movq -64(%rbp), %rax
+    movq -72(%rbp), %rax
     pushq %rax
     movq L_MONT_R_SHIFT(%rip), %rax
     pushq %rax
@@ -257,21 +273,8 @@ L_if_end_3:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
-    movq -72(%rbp), %rax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_5
-    movq -72(%rbp), %rax
+    movq %rax, -80(%rbp)
+    movq -80(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
@@ -280,14 +283,39 @@ L_if_end_3:
     subq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
+    shrq $63, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
-    movq -72(%rbp), %rax
+    movq %rax, -88(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -88(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq -80(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -96(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -323,6 +351,29 @@ mont_to_form:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
     movq -24(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -438,6 +489,29 @@ mont_mul_u32:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -832,11 +906,8 @@ L_if_end_23:
     movq %rax, -64(%rbp)
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -1023,11 +1094,8 @@ L_if_end_31:
     movq %rax, -88(%rbp)
     movq -96(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)

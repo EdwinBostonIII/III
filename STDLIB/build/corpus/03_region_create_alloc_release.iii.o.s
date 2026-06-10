@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iii\0"
+    .ascii "region.iii\0"
 L_str_1:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiiregion.iii\0"
+    .ascii "region.iii\0"
 L_str_2:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iii\0"
+    .ascii "region.iii\0"
 L_str_3:
-    .ascii "region.iiiregion.iiiregion.iii\0"
+    .ascii "region.iii\0"
 L_str_4:
-    .ascii "region.iiiregion.iii\0"
+    .ascii "region.iii\0"
 L_str_5:
     .ascii "region.iii\0"
     .section .iii.ring3,"n"

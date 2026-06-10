@@ -10,7 +10,6 @@ L_BUF:
     .section .iii.ring3,"n"
     .asciz "_read_u32_via_ptr"
     .text
-    .global L__read_u32_via_ptr
     .seh_proc L__read_u32_via_ptr
 L__read_u32_via_ptr:
     pushq %rbp
@@ -44,7 +43,6 @@ L__read_u32_via_ptr:
     .section .iii.ring3,"n"
     .asciz "_write_u32_via_ptr"
     .text
-    .global L__write_u32_via_ptr
     .seh_proc L__write_u32_via_ptr
 L__write_u32_via_ptr:
     pushq %rbp

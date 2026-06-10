@@ -4,33 +4,32 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_5:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_6:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_7:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_8:
-    .ascii "crystal.iiicrystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_9:
-    .ascii "crystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_10:
-    .ascii "crystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_11:
     .ascii "crystal.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_site"
     .text
-    .global L_fill_site
     .seh_proc L_fill_site
 L_fill_site:
     pushq %rbp
@@ -314,11 +313,8 @@ L_if_end_5:
 L_if_end_7:
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $12, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

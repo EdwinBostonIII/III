@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
     .ascii "identifier.iii\0"
     .section .rodata
@@ -240,7 +240,6 @@ L_LDIL_T_CALLARGS:
     .section .iii.ring3,"n"
     .asciz "ldil_f_name_ptr"
     .text
-    .global L_ldil_f_name_ptr
     .seh_proc L_ldil_f_name_ptr
 L_ldil_f_name_ptr:
     pushq %rbp
@@ -261,11 +260,8 @@ L_ldil_f_name_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -299,7 +295,6 @@ L_ldil_f_name_ptr:
     .section .iii.ring3,"n"
     .asciz "ldil_alloc_instr"
     .text
-    .global L_ldil_alloc_instr
     .seh_proc L_ldil_alloc_instr
 L_ldil_alloc_instr:
     pushq %rbp
@@ -433,7 +428,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "ldil_block_ok"
     .text
-    .global L_ldil_block_ok
     .seh_proc L_ldil_block_ok
 L_ldil_block_ok:
     pushq %rbp
@@ -512,7 +506,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "ldil_value_ok"
     .text
-    .global L_ldil_value_ok
     .seh_proc L_ldil_value_ok
 L_ldil_value_ok:
     pushq %rbp
@@ -591,7 +584,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "ldil_func_ok"
     .text
-    .global L_ldil_func_ok
     .seh_proc L_ldil_func_ok
 L_ldil_func_ok:
     pushq %rbp
@@ -670,7 +662,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "ldil_instr_ok"
     .text
-    .global L_ldil_instr_ok
     .seh_proc L_ldil_instr_ok
 L_ldil_instr_ok:
     pushq %rbp
@@ -749,7 +740,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "ldil_block_append"
     .text
-    .global L_ldil_block_append
     .seh_proc L_ldil_block_append
 L_ldil_block_append:
     pushq %rbp
@@ -862,11 +852,8 @@ L_if_end_23:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -1481,11 +1468,8 @@ L_if_end_41:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
@@ -1755,11 +1739,8 @@ L_if_end_51:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -1962,11 +1943,8 @@ L_if_end_57:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -2148,11 +2126,8 @@ L_if_end_63:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -3041,11 +3016,8 @@ L_if_end_87:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -3248,11 +3220,8 @@ L_if_end_93:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -3618,11 +3587,8 @@ L_if_end_107:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -4037,7 +4003,6 @@ L_if_end_119:
     .section .iii.ring3,"n"
     .asciz "ldil_binop_width"
     .text
-    .global L_ldil_binop_width
     .seh_proc L_ldil_binop_width
 L_ldil_binop_width:
     pushq %rbp
@@ -4223,7 +4188,6 @@ L_if_end_131:
     .section .iii.ring3,"n"
     .asciz "ldil_op_is_cmp"
     .text
-    .global L_ldil_op_is_cmp
     .seh_proc L_ldil_op_is_cmp
 L_ldil_op_is_cmp:
     pushq %rbp
@@ -4388,7 +4352,6 @@ L_if_end_143:
     .section .iii.ring3,"n"
     .asciz "ldil_op_is_binop"
     .text
-    .global L_ldil_op_is_binop
     .seh_proc L_ldil_op_is_binop
 L_ldil_op_is_binop:
     pushq %rbp
@@ -4975,11 +4938,8 @@ L_if_end_181:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -4987,11 +4947,7 @@ L_if_end_181:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -5250,11 +5206,8 @@ L_if_end_189:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -5262,11 +5215,7 @@ L_if_end_189:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -5490,11 +5439,8 @@ L_if_end_197:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -5502,11 +5448,7 @@ L_if_end_197:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -5722,11 +5664,8 @@ L_if_end_205:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -5734,11 +5673,7 @@ L_if_end_205:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -6110,11 +6045,8 @@ L_if_end_219:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
@@ -6447,11 +6379,8 @@ L_if_end_229:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -6509,11 +6438,8 @@ L_if_end_229:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -6521,11 +6447,7 @@ L_if_end_229:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -6714,11 +6636,8 @@ L_if_end_233:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -6726,11 +6645,7 @@ L_if_end_233:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -6953,11 +6868,8 @@ L_if_end_243:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -7413,11 +7325,8 @@ L_if_end_257:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -7537,11 +7446,8 @@ L_if_end_261:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -7723,11 +7629,8 @@ L_if_end_267:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -7896,7 +7799,6 @@ L_if_end_271:
     .section .iii.ring3,"n"
     .asciz "ldil_tc_check_inputs"
     .text
-    .global L_ldil_tc_check_inputs
     .seh_proc L_ldil_tc_check_inputs
 L_ldil_tc_check_inputs:
     pushq %rbp
@@ -7927,11 +7829,8 @@ L_ldil_tc_check_inputs:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -8036,7 +7935,6 @@ L_loop_end_273:
     .section .iii.ring3,"n"
     .asciz "ldil_tc_binop_types"
     .text
-    .global L_ldil_tc_binop_types
     .seh_proc L_ldil_tc_binop_types
 L_ldil_tc_binop_types:
     pushq %rbp
@@ -8125,11 +8023,8 @@ L_if_end_279:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -8137,11 +8032,7 @@ L_if_end_279:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -8350,7 +8241,6 @@ L_if_end_289:
     .section .iii.ring3,"n"
     .asciz "ldil_tc_require_signed"
     .text
-    .global L_ldil_tc_require_signed
     .seh_proc L_ldil_tc_require_signed
 L_ldil_tc_require_signed:
     pushq %rbp
@@ -8432,7 +8322,6 @@ L_if_end_293:
     .section .iii.ring3,"n"
     .asciz "ldil_tc_check_phi"
     .text
-    .global L_ldil_tc_check_phi
     .seh_proc L_ldil_tc_check_phi
 L_ldil_tc_check_phi:
     pushq %rbp
@@ -8501,7 +8390,6 @@ L_if_end_295:
     .section .iii.ring3,"n"
     .asciz "ldil_tc_walk_block"
     .text
-    .global L_ldil_tc_walk_block
     .seh_proc L_ldil_tc_walk_block
 L_ldil_tc_walk_block:
     pushq %rbp
@@ -8586,11 +8474,8 @@ L_if_end_299:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -8941,11 +8826,8 @@ L_if_end_315:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -9032,7 +8914,6 @@ L_loop_end_317:
     .section .iii.ring3,"n"
     .asciz "ldil_refine_instr_in_func"
     .text
-    .global L_ldil_refine_instr_in_func
     .seh_proc L_ldil_refine_instr_in_func
 L_ldil_refine_instr_in_func:
     pushq %rbp
@@ -9157,7 +9038,6 @@ L_if_end_323:
     .section .iii.ring3,"n"
     .asciz "ldil_refine_check_value"
     .text
-    .global L_ldil_refine_check_value
     .seh_proc L_ldil_refine_check_value
 L_ldil_refine_check_value:
     pushq %rbp
@@ -9458,7 +9338,6 @@ L_loop_end_339:
     .section .iii.ring3,"n"
     .asciz "ldil_t_make_name"
     .text
-    .global L_ldil_t_make_name
     .seh_proc L_ldil_t_make_name
 L_ldil_t_make_name:
     pushq %rbp
@@ -9515,7 +9394,6 @@ L_ldil_t_make_name:
     .section .iii.ring3,"n"
     .asciz "ldil_selftest_k1"
     .text
-    .global L_ldil_selftest_k1
     .seh_proc L_ldil_selftest_k1
 L_ldil_selftest_k1:
     pushq %rbp
@@ -10095,7 +9973,6 @@ L_if_end_371:
     .section .iii.ring3,"n"
     .asciz "ldil_selftest_k2"
     .text
-    .global L_ldil_selftest_k2
     .seh_proc L_ldil_selftest_k2
 L_ldil_selftest_k2:
     pushq %rbp
@@ -10853,7 +10730,6 @@ L_if_end_413:
     .section .iii.ring3,"n"
     .asciz "ldil_selftest_k3"
     .text
-    .global L_ldil_selftest_k3
     .seh_proc L_ldil_selftest_k3
 L_ldil_selftest_k3:
     pushq %rbp
@@ -11544,7 +11420,6 @@ L_if_end_435:
     .section .iii.ring3,"n"
     .asciz "ldil_selftest_k4"
     .text
-    .global L_ldil_selftest_k4
     .seh_proc L_ldil_selftest_k4
 L_ldil_selftest_k4:
     pushq %rbp
@@ -11928,7 +11803,6 @@ L_if_end_449:
     .section .iii.ring3,"n"
     .asciz "ldil_selftest_k5"
     .text
-    .global L_ldil_selftest_k5
     .seh_proc L_ldil_selftest_k5
 L_ldil_selftest_k5:
     pushq %rbp

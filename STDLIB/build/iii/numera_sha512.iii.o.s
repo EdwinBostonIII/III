@@ -56,7 +56,6 @@ L_SHA512_AVX512:
     .section .iii.ring3,"n"
     .asciz "sha512_rotr"
     .text
-    .global L_sha512_rotr
     .seh_proc L_sha512_rotr
 L_sha512_rotr:
     pushq %rbp
@@ -108,7 +107,6 @@ L_sha512_rotr:
     .section .iii.ring3,"n"
     .asciz "sha512_init_k"
     .text
-    .global L_sha512_init_k
     .seh_proc L_sha512_init_k
 L_sha512_init_k:
     pushq %rbp
@@ -961,7 +959,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_sha512_sched4_scalar"
     .text
-    .global L__sha512_sched4_scalar
     .seh_proc L__sha512_sched4_scalar
 L__sha512_sched4_scalar:
     pushq %rbp
@@ -1045,11 +1042,8 @@ L_loop_top_2:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1159,7 +1153,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_sha512_sched4_avx512"
     .text
-    .global L__sha512_sched4_avx512
     .seh_proc L__sha512_sched4_avx512
 L__sha512_sched4_avx512:
     pushq %rbp
@@ -1206,7 +1199,6 @@ L__sha512_sched4_avx512:
     .section .iii.ring3,"n"
     .asciz "_sha512_avx512_ok"
     .text
-    .global L__sha512_avx512_ok
     .seh_proc L__sha512_avx512_ok
 L__sha512_avx512_ok:
     pushq %rbp
@@ -1305,7 +1297,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_sha512_sched4"
     .text
-    .global L__sha512_sched4
     .seh_proc L__sha512_sched4
 L__sha512_sched4:
     pushq %rbp
@@ -1446,7 +1437,6 @@ sha512_sched_force:
     .section .iii.ring3,"n"
     .asciz "sha512_block"
     .text
-    .global L_sha512_block
     .seh_proc L_sha512_block
 L_sha512_block:
     pushq %rbp
@@ -1476,11 +1466,8 @@ L_loop_top_16:
     jz L_loop_end_17
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1489,11 +1476,7 @@ L_loop_top_16:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1643,19 +1626,13 @@ L_loop_top_16:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1663,11 +1640,8 @@ L_loop_top_16:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1675,11 +1649,8 @@ L_loop_top_16:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1687,11 +1658,8 @@ L_loop_top_16:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1699,11 +1667,8 @@ L_loop_top_16:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1711,11 +1676,8 @@ L_loop_top_16:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1845,11 +1807,8 @@ L_loop_top_20:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2593,7 +2552,6 @@ sha512_init:
     .section .iii.ring3,"n"
     .asciz "sha512_bits_add"
     .text
-    .global L_sha512_bits_add
     .seh_proc L_sha512_bits_add
 L_sha512_bits_add:
     pushq %rbp
@@ -2698,11 +2656,8 @@ sha512_update:
 L_if_end_27:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -3222,11 +3177,8 @@ L_loop_top_48:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3311,11 +3263,8 @@ L_loop_top_50:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3455,11 +3404,8 @@ L_loop_top_52:
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -3486,11 +3432,8 @@ L_loop_top_54:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3709,11 +3652,8 @@ L_if_end_57:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     pushq %rax

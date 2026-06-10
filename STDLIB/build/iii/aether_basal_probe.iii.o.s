@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiquarantine.iiiquarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiquarantine.iiiquarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiiquarantine.iiiquarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiquarantine.iiiquarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiquarantine.iiiquarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "quarantine.iiiquarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "quarantine.iii\0"
 L_str_6:
-    .ascii "quarantine.iiiquarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "quarantine.iii\0"
 L_str_7:
-    .ascii "quarantine.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "quarantine.iii\0"
 L_str_8:
-    .ascii "capability.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_9:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -132,7 +132,6 @@ L_BPROBE_KAT_IDB:
     .section .iii.ring3,"n"
     .asciz "bprobe_op_id_ptr"
     .text
-    .global L_bprobe_op_id_ptr
     .seh_proc L_bprobe_op_id_ptr
 L_bprobe_op_id_ptr:
     pushq %rbp
@@ -183,7 +182,6 @@ L_bprobe_op_id_ptr:
     .section .iii.ring3,"n"
     .asciz "bprobe_pred_idx"
     .text
-    .global L_bprobe_pred_idx
     .seh_proc L_bprobe_pred_idx
 L_bprobe_pred_idx:
     pushq %rbp
@@ -558,7 +556,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "bprobe_fill_producer_src"
     .text
-    .global L_bprobe_fill_producer_src
     .seh_proc L_bprobe_fill_producer_src
 L_bprobe_fill_producer_src:
     pushq %rbp
@@ -782,7 +779,6 @@ L_bprobe_fill_producer_src:
     .section .iii.ring3,"n"
     .asciz "bprobe_fill_opid_src"
     .text
-    .global L_bprobe_fill_opid_src
     .seh_proc L_bprobe_fill_opid_src
 L_bprobe_fill_opid_src:
     pushq %rbp
@@ -1332,7 +1328,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "bprobe_fill_uniform_pred"
     .text
-    .global L_bprobe_fill_uniform_pred
     .seh_proc L_bprobe_fill_uniform_pred
 L_bprobe_fill_uniform_pred:
     pushq %rbp
@@ -1651,7 +1646,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "bprobe_msb_pos"
     .text
-    .global L_bprobe_msb_pos
     .seh_proc L_bprobe_msb_pos
 L_bprobe_msb_pos:
     pushq %rbp
@@ -1842,7 +1836,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "bprobe_neg_log2_fp"
     .text
-    .global L_bprobe_neg_log2_fp
     .seh_proc L_bprobe_neg_log2_fp
 L_bprobe_neg_log2_fp:
     pushq %rbp
@@ -1974,11 +1967,8 @@ L_if_end_49:
     movq %rax, -48(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movq L_BPROBE_LOG2_INV_LN2(%rip), %rax
     pushq %rax
@@ -1986,11 +1976,8 @@ L_if_end_49:
     popq %rax
     imulq %rcx, %rax
     pushq %rax
-    movabsq $0x1f, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $31, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -2039,7 +2026,6 @@ L_if_end_51:
     .section .iii.ring3,"n"
     .asciz "bprobe_entropy_of"
     .text
-    .global L_bprobe_entropy_of
     .seh_proc L_bprobe_entropy_of
 L_bprobe_entropy_of:
     pushq %rbp
@@ -2117,11 +2103,8 @@ L_loop_top_52:
     popq %rax
     imulq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2165,7 +2148,6 @@ L_loop_end_53:
     .section .iii.ring3,"n"
     .asciz "bprobe_mul_fp"
     .text
-    .global L_bprobe_mul_fp
     .seh_proc L_bprobe_mul_fp
 L_bprobe_mul_fp:
     pushq %rbp
@@ -2231,11 +2213,8 @@ L_if_end_59:
     popq %rax
     imulq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -2251,7 +2230,6 @@ L_if_end_59:
     .section .iii.ring3,"n"
     .asciz "bprobe_marginal"
     .text
-    .global L_bprobe_marginal
     .seh_proc L_bprobe_marginal
 L_bprobe_marginal:
     pushq %rbp
@@ -2368,7 +2346,6 @@ L_loop_end_61:
     .section .iii.ring3,"n"
     .asciz "bprobe_scalediv"
     .text
-    .global L_bprobe_scalediv
     .seh_proc L_bprobe_scalediv
 L_bprobe_scalediv:
     pushq %rbp
@@ -2454,21 +2431,15 @@ L_loop_top_64:
     jz L_loop_end_65
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -2527,11 +2498,8 @@ L_if_end_67:
 L_loop_end_65:
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -2557,7 +2525,6 @@ L_loop_end_65:
     .section .iii.ring3,"n"
     .asciz "bprobe_posterior"
     .text
-    .global L_bprobe_posterior
     .seh_proc L_bprobe_posterior
 L_bprobe_posterior:
     pushq %rbp
@@ -2879,7 +2846,6 @@ L_loop_end_75:
     .section .iii.ring3,"n"
     .asciz "bprobe_information_gain"
     .text
-    .global L_bprobe_information_gain
     .seh_proc L_bprobe_information_gain
 L_bprobe_information_gain:
     pushq %rbp
@@ -3002,11 +2968,8 @@ L_loop_top_76:
     popq %rax
     imulq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3676,11 +3639,8 @@ L_if_end_111:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -3701,11 +3661,8 @@ L_if_end_111:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -3726,11 +3683,8 @@ L_if_end_111:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

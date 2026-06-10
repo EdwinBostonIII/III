@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "algebraic_time.iiiwitness_hook.iiiconstitution.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_1:
-    .ascii "witness_hook.iiiconstitution.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_2:
-    .ascii "constitution.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "constitution.iii\0"
 L_str_3:
-    .ascii "constitution.iiicomputation_graph.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "constitution.iii\0"
 L_str_4:
-    .ascii "computation_graph.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "computation_graph.iii\0"
 L_str_5:
-    .ascii "computation_graph.iiicomputation_graph.iii\0"
+    .ascii "computation_graph.iii\0"
 L_str_6:
     .ascii "computation_graph.iii\0"
     .section .rodata
@@ -52,7 +52,6 @@ L_QOUT:
     .section .iii.ring3,"n"
     .asciz "req_u64"
     .text
-    .global L_req_u64
     .seh_proc L_req_u64
 L_req_u64:
     pushq %rbp
@@ -76,11 +75,7 @@ L_req_u64:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -109,11 +104,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -140,11 +132,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -171,11 +160,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -202,11 +188,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -233,11 +216,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -264,11 +244,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -295,11 +272,8 @@ L_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -330,7 +304,6 @@ L_req_u64:
     .section .iii.ring3,"n"
     .asciz "mkfid"
     .text
-    .global L_mkfid
     .seh_proc L_mkfid
 L_mkfid:
     pushq %rbp
@@ -417,11 +390,8 @@ L_loop_end_1:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -442,11 +412,8 @@ L_loop_end_1:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -467,11 +434,8 @@ L_loop_end_1:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

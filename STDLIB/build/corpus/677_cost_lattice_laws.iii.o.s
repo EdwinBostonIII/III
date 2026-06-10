@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cost_lattice.iiicost_lattice.iiicost_lattice.iiicost_lattice.iiicost_lattice.iii\0"
+    .ascii "cost_lattice.iii\0"
 L_str_1:
-    .ascii "cost_lattice.iiicost_lattice.iiicost_lattice.iiicost_lattice.iii\0"
+    .ascii "cost_lattice.iii\0"
 L_str_2:
-    .ascii "cost_lattice.iiicost_lattice.iiicost_lattice.iii\0"
+    .ascii "cost_lattice.iii\0"
 L_str_3:
-    .ascii "cost_lattice.iiicost_lattice.iii\0"
+    .ascii "cost_lattice.iii\0"
 L_str_4:
     .ascii "cost_lattice.iii\0"
     .section .bss

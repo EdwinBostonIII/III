@@ -29,7 +29,6 @@ L_HSU_BACKOFF_CAP:
     .section .iii.ring3,"n"
     .asciz "hsu_tier_base"
     .text
-    .global L_hsu_tier_base
     .seh_proc L_hsu_tier_base
 L_hsu_tier_base:
     pushq %rbp

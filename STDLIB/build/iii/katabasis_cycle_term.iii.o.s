@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
     .ascii "xii_term.iii\0"
     .section .rodata
@@ -63,20 +63,26 @@ katabasis_cycle_act:
     movq %rax, -64(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
+    movabsq $0xff, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    shlq %cl, %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
+    movabsq $0xff, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    shlq %cl, %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -351,11 +357,8 @@ katabasis_cycle_family:
     movq %rax, -32(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -414,11 +417,8 @@ katabasis_cycle_target_kind:
     movq %rax, -32(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

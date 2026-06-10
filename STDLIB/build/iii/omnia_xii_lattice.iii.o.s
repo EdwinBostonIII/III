@@ -44,7 +44,6 @@ L_XII_LATTICE_LOOKUP:
     .section .iii.ring3,"n"
     .asciz "_lat_write_u32"
     .text
-    .global L__lat_write_u32
     .seh_proc L__lat_write_u32
 L__lat_write_u32:
     pushq %rbp
@@ -88,11 +87,8 @@ L__lat_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -120,11 +116,8 @@ L__lat_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -152,11 +145,8 @@ L__lat_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -187,7 +177,6 @@ L__lat_write_u32:
     .section .iii.ring3,"n"
     .asciz "_lat_read_u32"
     .text
-    .global L__lat_read_u32
     .seh_proc L__lat_read_u32
 L__lat_read_u32:
     pushq %rbp
@@ -275,11 +264,8 @@ L__lat_read_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -288,11 +274,8 @@ L__lat_read_u32:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -301,11 +284,8 @@ L__lat_read_u32:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -380,6 +360,12 @@ L_loop_top_0:
     popq %rax
     jmp L_loop_top_0
 L_loop_end_1:
+    subq $32, %rsp
+    callq xii_lattice_lookup_clear
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1433,11 +1419,8 @@ L_if_end_31:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1474,11 +1457,8 @@ L_if_end_31:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1506,11 +1486,8 @@ L_if_end_31:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1538,11 +1515,8 @@ L_if_end_31:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1650,11 +1624,8 @@ L_if_end_35:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1736,11 +1707,8 @@ L_if_end_35:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1749,11 +1717,8 @@ L_if_end_35:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1762,16 +1727,87 @@ L_if_end_35:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "xii_lattice_lookup_clear"
+    .text
+    .global xii_lattice_lookup_clear
+    .seh_proc xii_lattice_lookup_clear
+xii_lattice_lookup_clear:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+L_loop_top_36:
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl L_XL_LOOKUP_ENTRIES(%rip), %eax
+    pushq %rax
+    popq %rax
+    shlq $2, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_37
+    leaq L_XII_LATTICE_LOOKUP(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_36
+L_loop_end_37:
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1808,11 +1844,8 @@ xii_lattice_circ_to_slot:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $12, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax

@@ -4,55 +4,55 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "arena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_11:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_12:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_13:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_14:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_15:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_16:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_17:
-    .ascii "bigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_18:
-    .ascii "bigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_19:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_20:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_21:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_22:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_23:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_24:
-    .ascii "bigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_25:
     .ascii "bigint_div.iii\0"
     .section .data
@@ -62,7 +62,6 @@ L_LCG:
     .section .iii.ring3,"n"
     .asciz "lcg"
     .text
-    .global L_lcg
     .seh_proc L_lcg
 L_lcg:
     pushq %rbp
@@ -104,7 +103,6 @@ L_lcg:
     .section .iii.ring3,"n"
     .asciz "build"
     .text
-    .global L_build
     .seh_proc L_build
 L_build:
     pushq %rbp
@@ -324,7 +322,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "rt_ctx"
     .text
-    .global L_rt_ctx
     .seh_proc L_rt_ctx
 L_rt_ctx:
     pushq %rbp
@@ -655,7 +652,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "check"
     .text
-    .global L_check
     .seh_proc L_check
 L_check:
     pushq %rbp
@@ -822,7 +818,6 @@ L_check:
     .section .iii.ring3,"n"
     .asciz "modpow_naive"
     .text
-    .global L_modpow_naive
     .seh_proc L_modpow_naive
 L_modpow_naive:
     pushq %rbp
@@ -892,11 +887,8 @@ L_loop_top_16:
     jz L_loop_end_17
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -1099,7 +1091,6 @@ L_loop_end_17:
     .section .iii.ring3,"n"
     .asciz "sa_for_n"
     .text
-    .global L_sa_for_n
     .seh_proc L_sa_for_n
 L_sa_for_n:
     pushq %rbp
@@ -1694,11 +1685,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x16, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $22, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

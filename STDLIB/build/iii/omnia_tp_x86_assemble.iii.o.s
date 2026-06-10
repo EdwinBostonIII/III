@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "tp_assem_hex_digit"
     .text
-    .global L_tp_assem_hex_digit
     .seh_proc L_tp_assem_hex_digit
 L_tp_assem_hex_digit:
     pushq %rbp
@@ -180,7 +179,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "tp_assem_emit"
     .text
-    .global L_tp_assem_emit
     .seh_proc L_tp_assem_emit
 L_tp_assem_emit:
     pushq %rbp
@@ -479,11 +477,8 @@ L_loop_top_12:
 L_if_end_25:
     movl -88(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     movl -96(%rbp), %eax

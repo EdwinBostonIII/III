@@ -259,7 +259,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "_fill_x86"
     .text
-    .global L__fill_x86
     .seh_proc L__fill_x86
 L__fill_x86:
     pushq %rbp
@@ -297,11 +296,7 @@ L_loop_top_14:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -490,11 +485,7 @@ L_loop_top_16:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -607,11 +598,7 @@ L_loop_top_18:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -724,7 +711,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "_fill_x86_scalar"
     .text
-    .global L__fill_x86_scalar
     .seh_proc L__fill_x86_scalar
 L__fill_x86_scalar:
     pushq %rbp
@@ -798,7 +784,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "_fill_arm64"
     .text
-    .global L__fill_arm64
     .seh_proc L__fill_arm64
 L__fill_arm64:
     pushq %rbp
@@ -842,11 +827,7 @@ L_loop_top_24:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -946,7 +927,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "_fill_riscv"
     .text
-    .global L__fill_riscv
     .seh_proc L__fill_riscv
 L__fill_riscv:
     pushq %rbp
@@ -990,11 +970,7 @@ L_loop_top_26:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1094,7 +1070,6 @@ L_loop_end_27:
     .section .iii.ring3,"n"
     .asciz "_fill_cortex_m"
     .text
-    .global L__fill_cortex_m
     .seh_proc L__fill_cortex_m
 L__fill_cortex_m:
     pushq %rbp
@@ -1138,11 +1113,7 @@ L_loop_top_28:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax

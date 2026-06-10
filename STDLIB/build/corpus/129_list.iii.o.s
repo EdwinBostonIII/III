@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "list.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_3:
-    .ascii "list.iiilist.iiilist.iiilist.iiilist.iiilist.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_4:
-    .ascii "list.iiilist.iiilist.iiilist.iiilist.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_5:
-    .ascii "list.iiilist.iiilist.iiilist.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_6:
-    .ascii "list.iiilist.iiilist.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_7:
-    .ascii "list.iiilist.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_8:
-    .ascii "list.iiilist.iii\0"
+    .ascii "list.iii\0"
 L_str_9:
     .ascii "list.iii\0"
     .section .iii.ring3,"n"

@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "witness_hook.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_1:
-    .ascii "witness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_2:
-    .ascii "constitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iii\0"
+    .ascii "constitution.iii\0"
 L_str_3:
-    .ascii "memo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_4:
-    .ascii "memo_lattice.iiimemo_lattice.iiimemo_lattice.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_5:
-    .ascii "memo_lattice.iiimemo_lattice.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_6:
     .ascii "memo_lattice.iii\0"
     .section .rodata

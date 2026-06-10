@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_leaf_high"
     .text
-    .global L__leaf_high
     .seh_proc L__leaf_high
 L__leaf_high:
     pushq %rbp
@@ -54,7 +53,6 @@ L_cap_ok_805306374:
     .section .iii.ring3,"n"
     .asciz "_caller_low"
     .text
-    .global L__caller_low
     .seh_proc L__caller_low
 L__caller_low:
     pushq %rbp

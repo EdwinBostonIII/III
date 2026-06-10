@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_1:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_2:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_3:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_4:
-    .ascii "calculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_5:
     .ascii "calculus_v1.iii\0"
     .section .rodata
@@ -40,7 +40,6 @@ L_PROOF_OP_INIT:
     .section .iii.ring3,"n"
     .asciz "_proof_set_pair"
     .text
-    .global L__proof_set_pair
     .seh_proc L__proof_set_pair
 L__proof_set_pair:
     pushq %rbp
@@ -101,7 +100,6 @@ L__proof_set_pair:
     .section .iii.ring3,"n"
     .asciz "_proof_init_op_pairs"
     .text
-    .global L__proof_init_op_pairs
     .seh_proc L__proof_init_op_pairs
 L__proof_init_op_pairs:
     pushq %rbp

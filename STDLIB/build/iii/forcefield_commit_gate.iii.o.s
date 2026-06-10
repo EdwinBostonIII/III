@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_admission.iiipleroma.iiicad.iiicad.iiisov_pipeline.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_1:
-    .ascii "pleroma.iiicad.iiicad.iiisov_pipeline.iii\0"
+    .ascii "pleroma.iii\0"
 L_str_2:
-    .ascii "cad.iiicad.iiisov_pipeline.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "cad.iiisov_pipeline.iii\0"
+    .ascii "cad.iii\0"
 L_str_4:
     .ascii "sov_pipeline.iii\0"
     .section .rodata

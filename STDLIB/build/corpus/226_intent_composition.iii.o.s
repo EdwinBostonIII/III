@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_2:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_3:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_4:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_5:
-    .ascii "intent.iiiintent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "intent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_7:
     .ascii "intent.iii\0"
     .section .rodata

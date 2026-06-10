@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiwitness_hook.iiialgebraic_time.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "witness_hook.iiialgebraic_time.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_6:
     .ascii "algebraic_time.iii\0"
     .section .rodata
@@ -101,7 +101,6 @@ L_SNAPL_T_GET:
     .section .iii.ring3,"n"
     .asciz "sl_id_ptr"
     .text
-    .global L_sl_id_ptr
     .seh_proc L_sl_id_ptr
 L_sl_id_ptr:
     pushq %rbp
@@ -126,11 +125,8 @@ L_sl_id_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -152,7 +148,6 @@ L_sl_id_ptr:
     .section .iii.ring3,"n"
     .asciz "sl_root_ptr"
     .text
-    .global L_sl_root_ptr
     .seh_proc L_sl_root_ptr
 L_sl_root_ptr:
     pushq %rbp
@@ -177,11 +172,8 @@ L_sl_root_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -203,7 +195,6 @@ L_sl_root_ptr:
     .section .iii.ring3,"n"
     .asciz "sl_load_prodstr"
     .text
-    .global L_sl_load_prodstr
     .seh_proc L_sl_load_prodstr
 L_sl_load_prodstr:
     pushq %rbp
@@ -469,7 +460,6 @@ L_sl_load_prodstr:
     .section .iii.ring3,"n"
     .asciz "sl_load_opstr"
     .text
-    .global L_sl_load_opstr
     .seh_proc L_sl_load_opstr
 L_sl_load_opstr:
     pushq %rbp
@@ -1285,11 +1275,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1310,11 +1297,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1335,11 +1319,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1360,11 +1341,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1385,11 +1363,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1410,11 +1385,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1435,11 +1407,8 @@ L_loop_end_15:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1581,7 +1550,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "sl_ante_live"
     .text
-    .global L_sl_ante_live
     .seh_proc L_sl_ante_live
 L_sl_ante_live:
     pushq %rbp

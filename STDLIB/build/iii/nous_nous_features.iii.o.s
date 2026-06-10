@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
     .ascii "xii_term.iii\0"
     .section .rodata
@@ -88,7 +88,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "nous_feat_depth_b"
     .text
-    .global L_nous_feat_depth_b
     .seh_proc L_nous_feat_depth_b
 L_nous_feat_depth_b:
     pushq %rbp
@@ -387,7 +386,6 @@ nous_feat_depth:
     .section .iii.ring3,"n"
     .asciz "nous_feat_size_b"
     .text
-    .global L_nous_feat_size_b
     .seh_proc L_nous_feat_size_b
 L_nous_feat_size_b:
     pushq %rbp

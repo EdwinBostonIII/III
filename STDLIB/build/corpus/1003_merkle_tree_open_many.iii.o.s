@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "merkle.iiimerkle.iiimerkle.iiimerkle.iii\0"
+    .ascii "merkle.iii\0"
 L_str_1:
-    .ascii "merkle.iiimerkle.iiimerkle.iii\0"
+    .ascii "merkle.iii\0"
 L_str_2:
-    .ascii "merkle.iiimerkle.iii\0"
+    .ascii "merkle.iii\0"
 L_str_3:
     .ascii "merkle.iii\0"
     .section .bss

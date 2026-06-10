@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_1:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_2:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiiregion.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_3:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_4:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_5:
-    .ascii "region.iiiregion.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_6:
-    .ascii "region.iiiregion.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_7:
-    .ascii "region.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "region.iii\0"
 L_str_8:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_9:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_10:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_11:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -381,7 +381,6 @@ arena_base:
     .section .iii.ring3,"n"
     .asciz "arena_witness_word"
     .text
-    .global L_arena_witness_word
     .seh_proc L_arena_witness_word
 L_arena_witness_word:
     pushq %rbp
@@ -462,11 +461,8 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -532,11 +528,8 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -588,11 +581,8 @@ L_loop_end_5:
     popq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -652,11 +642,8 @@ L_loop_top_6:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

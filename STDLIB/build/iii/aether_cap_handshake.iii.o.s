@@ -4,43 +4,59 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_1:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_2:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_3:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_4:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_5:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_6:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_7:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_8:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_9:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_10:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_11:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_12:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_13:
-    .ascii "babel_wire.iiibabel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_14:
-    .ascii "babel_wire.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_15:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_16:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_17:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_18:
     .ascii "sha256.iii\0"
+L_str_19:
+    .ascii "taint_analysis.iii\0"
+L_str_20:
+    .ascii "taint_analysis.iii\0"
+L_str_21:
+    .ascii "taint_analysis.iii\0"
+L_str_22:
+    .ascii "taint_analysis.iii\0"
+L_str_23:
+    .ascii "taint_analysis.iii\0"
+L_str_24:
+    .ascii "taint_analysis.iii\0"
+L_str_25:
+    .ascii "taint_analysis.iii\0"
+L_str_26:
+    .ascii "taint_analysis.iii\0"
     .section .rodata
 L_CAP_HANDSHAKE_SEAL:
     .quad 0xcab0cab0cab0cab0
@@ -77,7 +93,6 @@ L_CHS_SESSION_USED:
     .section .iii.ring3,"n"
     .asciz "_cap_derive_session_id"
     .text
-    .global L__cap_derive_session_id
     .seh_proc L__cap_derive_session_id
 L__cap_derive_session_id:
     pushq %rbp
@@ -425,11 +440,8 @@ L_loop_top_4:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -474,7 +486,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_cap_alloc_slot"
     .text
-    .global L__cap_alloc_slot
     .seh_proc L__cap_alloc_slot
 L__cap_alloc_slot:
     pushq %rbp
@@ -563,7 +574,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "_cap_find"
     .text
-    .global L__cap_find
     .seh_proc L__cap_find
 L__cap_find:
     pushq %rbp
@@ -680,7 +690,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "_cap_digest_eq"
     .text
-    .global L__cap_digest_eq
     .seh_proc L__cap_digest_eq
 L__cap_digest_eq:
     pushq %rbp
@@ -1430,11 +1439,8 @@ L_if_end_47:
     movq %rax, -48(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1652,11 +1658,8 @@ L_if_end_53:
 L_if_end_55:
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1827,11 +1830,8 @@ cap_session_drop:
 L_if_end_61:
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2073,11 +2073,8 @@ L_loop_end_67:
     movq %rax, -16(%rbp)
     movl L_CHS_SESSION_CAP(%rip), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2127,6 +2124,256 @@ L_loop_end_69:
     popq %rax
     movl %eax, L_CHS_SESSION_USED(%rip)
     movslq L_CHS_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cap_handshake_taint_kat"
+    .text
+    .global cap_handshake_taint_kat
+    .seh_proc cap_handshake_taint_kat
+cap_handshake_taint_kat:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_reset
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_set_source
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq taint_set_op
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq taint_set_sanitize
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq taint_set_sink
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq taint_propagate
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_tainted
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_71:
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_tainted
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    subq $32, %rsp
+    callq taint_violations
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_reset
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_set_source
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq taint_set_op
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq taint_set_sink
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq taint_propagate
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq taint_violations
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
+    movabsq $0x63, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

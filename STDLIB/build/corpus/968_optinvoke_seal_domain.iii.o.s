@@ -4,19 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtoptinvoke.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "optinvoke.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "optinvoke.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
     .ascii "mhash.iii\0"
     .section .iii.ring3,"n"
     .asciz "eq32"
     .text
-    .global L_eq32
     .seh_proc L_eq32
 L_eq32:
     pushq %rbp

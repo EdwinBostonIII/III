@@ -81,7 +81,6 @@ L_CAP_ENV_INITED:
     .section .iii.ring3,"n"
     .asciz "cap_alloc_slot"
     .text
-    .global L_cap_alloc_slot
     .seh_proc L_cap_alloc_slot
 L_cap_alloc_slot:
     pushq %rbp
@@ -170,7 +169,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "cap_slot_of"
     .text
-    .global L_cap_slot_of
     .seh_proc L_cap_slot_of
 L_cap_slot_of:
     pushq %rbp

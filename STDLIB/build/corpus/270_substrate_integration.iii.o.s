@@ -4,19 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "call_context.iiicall_context.iiicapability.iiicapability.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_1:
-    .ascii "call_context.iiicapability.iiicapability.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_2:
-    .ascii "capability.iiicapability.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_3:
-    .ascii "capability.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
     .ascii "kchain.iii\0"
     .section .iii.ring3,"n"
     .asciz "_accumulate"
     .text
-    .global L__accumulate
     .seh_proc L__accumulate
 L__accumulate:
     pushq %rbp
@@ -78,11 +77,8 @@ L_hexad_ok_805306401:
 L_kmax_ok_805306401:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -98,7 +94,6 @@ L_kmax_ok_805306401:
     .section .iii.ring3,"n"
     .asciz "_drive_loop"
     .text
-    .global L__drive_loop
     .seh_proc L__drive_loop
 L__drive_loop:
     pushq %rbp

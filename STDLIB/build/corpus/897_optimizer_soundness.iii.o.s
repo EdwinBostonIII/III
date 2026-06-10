@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "cert"
     .text
-    .global L_cert
     .seh_proc L_cert
 L_cert:
     pushq %rbp
@@ -24,11 +23,7 @@ L_cert:
     movq %rax, -40(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -59,11 +54,7 @@ L_cert:
 L_if_end_1:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    subq %rcx, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -94,11 +85,7 @@ L_if_end_1:
 L_if_end_3:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -164,11 +151,8 @@ L_if_end_5:
 L_if_end_7:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -604,7 +588,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "probe"
     .text
-    .global L_probe
     .seh_proc L_probe
 L_probe:
     pushq %rbp

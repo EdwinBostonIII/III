@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_3:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_4:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_5:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_6:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_7:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_8:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_9:
-    .ascii "obs_trace.iiiobs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_10:
-    .ascii "obs_trace.iiiobs_trace.iii\0"
+    .ascii "obs_trace.iii\0"
 L_str_11:
     .ascii "obs_trace.iii\0"
     .section .iii.ring3,"n"

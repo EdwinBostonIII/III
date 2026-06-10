@@ -44,7 +44,6 @@ L_SBX_RESULT:
     .section .iii.ring3,"n"
     .asciz "_sbx_slot_of"
     .text
-    .global L__sbx_slot_of
     .seh_proc L__sbx_slot_of
 L__sbx_slot_of:
     pushq %rbp

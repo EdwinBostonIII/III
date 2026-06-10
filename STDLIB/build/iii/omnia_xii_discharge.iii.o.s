@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_strategy_det.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_1:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_strategy_det.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_2:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_strategy_det.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_3:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_strategy_det.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_4:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_strategy_det.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_5:
-    .ascii "xii_joinability.iiixii_strategy_det.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_6:
     .ascii "xii_strategy_det.iii\0"
     .section .rodata
@@ -31,7 +31,6 @@ L_XDC_MASK:
     .section .iii.ring3,"n"
     .asciz "_xdc_in"
     .text
-    .global L__xdc_in
     .seh_proc L__xdc_in
 L__xdc_in:
     pushq %rbp
@@ -356,7 +355,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "xdc_route_classify"
     .text
-    .global L_xdc_route_classify
     .seh_proc L_xdc_route_classify
 L_xdc_route_classify:
     pushq %rbp

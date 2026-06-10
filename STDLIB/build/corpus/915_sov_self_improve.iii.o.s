@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "egraph.iiicost_lattice.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "egraph.iii\0"
 L_str_1:
-    .ascii "cost_lattice.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "cost_lattice.iii\0"
 L_str_2:
-    .ascii "sov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_3:
-    .ascii "sov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_4:
-    .ascii "sov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_5:
-    .ascii "sov_isa.iiisov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_6:
-    .ascii "sov_isa.iiisov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_7:
-    .ascii "sov_isa.iiisov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_8:
-    .ascii "sov_isa.iiitypecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_9:
-    .ascii "typecheck.iiitypecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "typecheck.iii\0"
 L_str_10:
-    .ascii "typecheck.iiitypecheck.iiitypecheck.iii\0"
+    .ascii "typecheck.iii\0"
 L_str_11:
-    .ascii "typecheck.iiitypecheck.iii\0"
+    .ascii "typecheck.iii\0"
 L_str_12:
     .ascii "typecheck.iii\0"
     .section .rodata

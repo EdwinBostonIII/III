@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtgenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtgenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "genesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "genesis.iii\0"
 L_str_3:
-    .ascii "genesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "genesis.iii\0"
 L_str_4:
-    .ascii "genesis.iiigenesis.iiigenesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "genesis.iii\0"
 L_str_5:
-    .ascii "genesis.iiigenesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "genesis.iii\0"
 L_str_6:
-    .ascii "genesis.iiigenesis.iiigenesis.iii\0"
+    .ascii "genesis.iii\0"
 L_str_7:
-    .ascii "genesis.iiigenesis.iii\0"
+    .ascii "genesis.iii\0"
 L_str_8:
     .ascii "genesis.iii\0"
     .section .iii.ring3,"n"

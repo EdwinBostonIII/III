@@ -10,7 +10,6 @@ L_BUF:
     .section .iii.ring3,"n"
     .asciz "store_u32"
     .text
-    .global L_store_u32
     .seh_proc L_store_u32
 L_store_u32:
     pushq %rbp

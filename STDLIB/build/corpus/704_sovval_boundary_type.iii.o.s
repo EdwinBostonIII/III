@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sovval.iiisovval.iiisovval.iii\0"
+    .ascii "sovval.iii\0"
 L_str_1:
-    .ascii "sovval.iiisovval.iii\0"
+    .ascii "sovval.iii\0"
 L_str_2:
     .ascii "sovval.iii\0"
     .section .bss
@@ -16,7 +16,6 @@ L_C704_CELL:
     .section .iii.ring3,"n"
     .asciz "c704_read_hexad"
     .text
-    .global L_c704_read_hexad
     .seh_proc L_c704_read_hexad
 L_c704_read_hexad:
     # III_SOVEREIGN_AUDIT SOVVAL c704_read_hexad p0

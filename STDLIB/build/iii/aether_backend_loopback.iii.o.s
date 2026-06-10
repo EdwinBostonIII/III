@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiinet.iiireach_store.iiihex.iii\0"
+    .ascii "net.iii\0"
 L_str_1:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiireach_store.iiihex.iii\0"
+    .ascii "net.iii\0"
 L_str_2:
-    .ascii "net.iiinet.iiinet.iiinet.iiireach_store.iiihex.iii\0"
+    .ascii "net.iii\0"
 L_str_3:
-    .ascii "net.iiinet.iiinet.iiireach_store.iiihex.iii\0"
+    .ascii "net.iii\0"
 L_str_4:
-    .ascii "net.iiinet.iiireach_store.iiihex.iii\0"
+    .ascii "net.iii\0"
 L_str_5:
-    .ascii "net.iiireach_store.iiihex.iii\0"
+    .ascii "net.iii\0"
 L_str_6:
-    .ascii "reach_store.iiihex.iii\0"
+    .ascii "reach_store.iii\0"
 L_str_7:
     .ascii "hex.iii\0"
     .section .rodata
@@ -128,7 +128,6 @@ backend_loopback_listen:
     .section .iii.ring3,"n"
     .asciz "_lb_parse_addr"
     .text
-    .global L__lb_parse_addr
     .seh_proc L__lb_parse_addr
 L__lb_parse_addr:
     pushq %rbp
@@ -347,6 +346,30 @@ L_if_end_11:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -32(%rbp)
+    movslq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -363,7 +386,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "_lb_build_200"
     .text
-    .global L__lb_build_200
     .seh_proc L__lb_build_200
 L__lb_build_200:
     pushq %rbp
@@ -588,7 +610,7 @@ L__lb_build_200:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_12:
+L_loop_top_14:
     movq -40(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -601,7 +623,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_15
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x13, %rax
@@ -637,8 +659,8 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_14
+L_loop_end_15:
     movabsq $0x13, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -661,7 +683,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "_lb_build_404"
     .text
-    .global L__lb_build_404
     .seh_proc L__lb_build_404
 L__lb_build_404:
     pushq %rbp
@@ -899,7 +920,7 @@ backend_loopback_serve_once:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movslq L_LB_E_ACCEPT(%rip), %rax
     pushq %rax
     popq %rax
@@ -909,7 +930,7 @@ backend_loopback_serve_once:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movabsq $0x100, %rax
     pushq %rax
     leaq L_LB_REQ(%rip), %rax
@@ -953,38 +974,6 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq net_close
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    movslq L_LB_E_REQ(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_17:
-    movslq -48(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_19
     movq -40(%rbp), %rax
     pushq %rax
@@ -1005,6 +994,38 @@ L_if_end_17:
     pushq %rax
     popq %rax
 L_if_end_19:
+    movslq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq net_close
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movslq L_LB_E_REQ(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
     movslq -48(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1029,7 +1050,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     subq $32, %rsp
     callq L__lb_build_404
     addq $32, %rsp
@@ -1071,7 +1092,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     subq $8, %rsp
     leaq L_LB_LEN8(%rip), %rax
     pushq %rax
@@ -1114,7 +1135,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     subq $32, %rsp
     callq L__lb_build_404
     addq $32, %rsp
@@ -1156,7 +1177,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     leaq L_LB_LEN8(%rip), %rax
     pushq %rax
     popq %rax

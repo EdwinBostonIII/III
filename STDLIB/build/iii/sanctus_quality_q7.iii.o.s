@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_table.iiiseal_resolver.iiiresolver_replay.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_1:
-    .ascii "seal_resolver.iiiresolver_replay.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_2:
     .ascii "resolver_replay.iii\0"
     .section .rodata
@@ -117,7 +117,6 @@ quality_resolver_lint_passed:
     .section .iii.ring3,"n"
     .asciz "_q7_contains"
     .text
-    .global L__q7_contains
     .seh_proc L__q7_contains
 L__q7_contains:
     pushq %rbp

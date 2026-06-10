@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "source"
     .text
-    .global L_source
     .seh_proc L_source
 L_source:
     pushq %rbp
@@ -34,7 +33,6 @@ L_source:
     .section .iii.ring3,"n"
     .asciz "trusted"
     .text
-    .global L_trusted
     .seh_proc L_trusted
 L_trusted:
     pushq %rbp

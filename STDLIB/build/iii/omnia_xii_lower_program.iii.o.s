@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_lower_compose.iiixii_lower_decide.iiixii_lower_iterate.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_lower_compose.iii\0"
 L_str_1:
-    .ascii "xii_lower_decide.iiixii_lower_iterate.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_lower_decide.iii\0"
 L_str_2:
-    .ascii "xii_lower_iterate.iiixii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_lower_iterate.iii\0"
 L_str_3:
-    .ascii "xii_lower_then.iiixii_lower_with.iiixii_lower_under.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_lower_then.iii\0"
 L_str_4:
-    .ascii "xii_lower_with.iiixii_lower_under.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_lower_with.iii\0"
 L_str_5:
-    .ascii "xii_lower_under.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_lower_under.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_8:
-    .ascii "xii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_9:
-    .ascii "xii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_10:
     .ascii "xii_admission.iii\0"
     .section .rodata

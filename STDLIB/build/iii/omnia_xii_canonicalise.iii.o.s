@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
-    .ascii "xii_term.iiixii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_8:
-    .ascii "xii_basis.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_basis.iii\0"
 L_str_9:
-    .ascii "xii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_10:
     .ascii "xii_rewrite.iii\0"
     .section .rodata
@@ -510,7 +510,6 @@ xii_canonicalise_gapped:
     .section .iii.ring3,"n"
     .asciz "_canon_walk_cap"
     .text
-    .global L__canon_walk_cap
     .seh_proc L__canon_walk_cap
 L__canon_walk_cap:
     pushq %rbp

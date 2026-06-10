@@ -34,11 +34,8 @@ bitops_popcount32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0x55555555, %rax
     pushq %rax
@@ -63,11 +60,8 @@ bitops_popcount32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $2, %rax
     pushq %rax
     movabsq $0x33333333, %rax
     pushq %rax
@@ -92,11 +86,8 @@ bitops_popcount32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf0f0f0f, %rax
     pushq %rax
@@ -124,11 +115,8 @@ bitops_popcount32:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -176,11 +164,8 @@ bitops_popcount64:
     movq %rax, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -303,11 +288,8 @@ L_if_end_1:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -348,11 +330,8 @@ L_if_end_3:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -393,11 +372,8 @@ L_if_end_5:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -438,11 +414,8 @@ L_if_end_7:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -540,11 +513,8 @@ bitops_clz64:
 L_if_end_13:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -703,11 +673,8 @@ L_if_end_17:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -747,11 +714,8 @@ L_if_end_19:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -791,11 +755,8 @@ L_if_end_21:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -835,11 +796,8 @@ L_if_end_23:
     movq %rax, -16(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -978,11 +936,8 @@ L_if_end_29:
 L_if_end_31:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1587,11 +1542,8 @@ bitops_reverse32:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0x55555555, %rax
     pushq %rax
@@ -1607,11 +1559,8 @@ bitops_reverse32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1622,11 +1571,8 @@ bitops_reverse32:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $2, %rax
     pushq %rax
     movabsq $0x33333333, %rax
     pushq %rax
@@ -1642,11 +1588,8 @@ bitops_reverse32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1657,11 +1600,8 @@ bitops_reverse32:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf0f0f0f, %rax
     pushq %rax
@@ -1677,11 +1617,8 @@ bitops_reverse32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1692,11 +1629,8 @@ bitops_reverse32:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff00ff, %rax
     pushq %rax
@@ -1712,11 +1646,8 @@ bitops_reverse32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1727,19 +1658,13 @@ bitops_reverse32:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

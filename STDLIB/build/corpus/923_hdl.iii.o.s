@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hdl.iiihdl.iiihdl.iiihdl.iiihdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_1:
-    .ascii "hdl.iiihdl.iiihdl.iiihdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_2:
-    .ascii "hdl.iiihdl.iiihdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_3:
-    .ascii "hdl.iiihdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_4:
-    .ascii "hdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_5:
-    .ascii "hdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_6:
     .ascii "hdl.iii\0"
     .section .iii.ring3,"n"

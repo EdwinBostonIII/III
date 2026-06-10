@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_classify"
     .text
-    .global L__classify
     .seh_proc L__classify
 L__classify:
     pushq %rbp
@@ -61,7 +60,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_chained"
     .text
-    .global L__chained
     .seh_proc L__chained
 L__chained:
     pushq %rbp

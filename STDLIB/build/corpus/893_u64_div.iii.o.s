@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "divu"
     .text
-    .global L_divu
     .seh_proc L_divu
 L_divu:
     pushq %rbp
@@ -41,7 +40,6 @@ L_divu:
     .section .iii.ring3,"n"
     .asciz "modu"
     .text
-    .global L_modu
     .seh_proc L_modu
 L_modu:
     pushq %rbp
@@ -77,7 +75,6 @@ L_modu:
     .section .iii.ring3,"n"
     .asciz "divi"
     .text
-    .global L_divi
     .seh_proc L_divi
 L_divi:
     pushq %rbp

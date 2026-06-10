@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_canonicalise.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_6:
-    .ascii "xii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_7:
     .ascii "xii_rewrite.iii\0"
     .section .rodata
@@ -37,7 +37,6 @@ L_XFV_MARK:
     .section .iii.ring3,"n"
     .asciz "xfv_null_compose"
     .text
-    .global L_xfv_null_compose
     .seh_proc L_xfv_null_compose
 L_xfv_null_compose:
     pushq %rbp
@@ -72,7 +71,6 @@ L_xfv_null_compose:
     .section .iii.ring3,"n"
     .asciz "xfv_null_then"
     .text
-    .global L_xfv_null_then
     .seh_proc L_xfv_null_then
 L_xfv_null_then:
     pushq %rbp
@@ -107,7 +105,6 @@ L_xfv_null_then:
     .section .iii.ring3,"n"
     .asciz "xfv_form"
     .text
-    .global L_xfv_form
     .seh_proc L_xfv_form
 L_xfv_form:
     pushq %rbp
@@ -143,7 +140,6 @@ L_xfv_form:
     .section .iii.ring3,"n"
     .asciz "xfv_yields"
     .text
-    .global L_xfv_yields
     .seh_proc L_xfv_yields
 L_xfv_yields:
     pushq %rbp

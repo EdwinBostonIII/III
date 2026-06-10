@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_1:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_2:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiwitness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "witness_hook.iiikeccak256.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_6:
     .ascii "keccak256.iii\0"
     .section .rodata
@@ -212,7 +212,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "h8_publish_one"
     .text
-    .global L_h8_publish_one
     .seh_proc L_h8_publish_one
 L_h8_publish_one:
     pushq %rbp
@@ -891,7 +890,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "h8_canary_holds"
     .text
-    .global L_h8_canary_holds
     .seh_proc L_h8_canary_holds
 L_h8_canary_holds:
     pushq %rbp
@@ -1073,7 +1071,6 @@ L_loop_end_33:
     .section .iii.ring3,"n"
     .asciz "h8_clause_eval"
     .text
-    .global L_h8_clause_eval
     .seh_proc L_h8_clause_eval
 L_h8_clause_eval:
     pushq %rbp
@@ -1219,7 +1216,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "h8_register"
     .text
-    .global L_h8_register
     .seh_proc L_h8_register
 L_h8_register:
     pushq %rbp
@@ -1296,7 +1292,7 @@ L_if_end_45:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

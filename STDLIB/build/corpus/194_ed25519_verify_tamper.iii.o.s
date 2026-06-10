@@ -4,15 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcrypt_ed25519.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcrypt_ed25519.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
     .ascii "crypt_ed25519.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_pubkey"
     .text
-    .global L_fill_pubkey
     .seh_proc L_fill_pubkey
 L_fill_pubkey:
     pushq %rbp
@@ -359,7 +358,6 @@ L_fill_pubkey:
     .section .iii.ring3,"n"
     .asciz "fill_sig"
     .text
-    .global L_fill_sig
     .seh_proc L_fill_sig
 L_fill_sig:
     pushq %rbp

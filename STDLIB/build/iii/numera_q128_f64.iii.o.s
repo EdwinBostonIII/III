@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "q128.iiiq128.iiicrystal.iii\0"
+    .ascii "q128.iii\0"
 L_str_1:
-    .ascii "q128.iiicrystal.iii\0"
+    .ascii "q128.iii\0"
 L_str_2:
     .ascii "crystal.iii\0"
     .section .rodata
@@ -23,7 +23,6 @@ L_Q128_F64_LAST_DIR:
     .section .iii.ring3,"n"
     .asciz "q128f_msb"
     .text
-    .global L_q128f_msb
     .seh_proc L_q128f_msb
 L_q128f_msb:
     pushq %rbp
@@ -406,7 +405,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "q128f_extract"
     .text
-    .global L_q128f_extract
     .seh_proc L_q128f_extract
 L_q128f_extract:
     pushq %rbp
@@ -1016,11 +1014,8 @@ L_if_end_41:
 L_if_end_39:
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x34, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $52, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax

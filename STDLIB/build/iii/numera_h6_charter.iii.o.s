@@ -206,7 +206,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "h6_canary_holds"
     .text
-    .global L_h6_canary_holds
     .seh_proc L_h6_canary_holds
 L_h6_canary_holds:
     pushq %rbp
@@ -261,7 +260,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "h6_clause_eval"
     .text
-    .global L_h6_clause_eval
     .seh_proc L_h6_clause_eval
 L_h6_clause_eval:
     pushq %rbp
@@ -407,7 +405,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "h6_register"
     .text
-    .global L_h6_register
     .seh_proc L_h6_register
 L_h6_register:
     pushq %rbp
@@ -484,7 +481,7 @@ L_if_end_17:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

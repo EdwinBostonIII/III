@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "unified_cost_manifold.iiiunified_cost_manifold.iiiunified_cost_manifold.iiiunified_cost_manifold.iii\0"
+    .ascii "unified_cost_manifold.iii\0"
 L_str_1:
-    .ascii "unified_cost_manifold.iiiunified_cost_manifold.iiiunified_cost_manifold.iii\0"
+    .ascii "unified_cost_manifold.iii\0"
 L_str_2:
-    .ascii "unified_cost_manifold.iiiunified_cost_manifold.iii\0"
+    .ascii "unified_cost_manifold.iii\0"
 L_str_3:
     .ascii "unified_cost_manifold.iii\0"
     .section .bss
@@ -105,6 +105,29 @@ L_if_end_1:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
     movq -8(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -117,7 +140,7 @@ L_if_end_1:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_5
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -127,7 +150,7 @@ L_if_end_1:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_5:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -290,7 +313,7 @@ cost_lattice_unified_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -300,7 +323,7 @@ cost_lattice_unified_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     movabsq $0x5, %rax
     pushq %rax
     movabsq $0xd, %rax
@@ -322,7 +345,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -332,7 +355,7 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_9:
     movabsq $0x5, %rax
     pushq %rax
     movabsq $0x12, %rax
@@ -354,7 +377,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -364,7 +387,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_11:
     movabsq $0x5, %rax
     pushq %rax
     movabsq $0x14, %rax
@@ -386,7 +409,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -396,7 +419,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movabsq $0x5, %rax
     pushq %rax
     movabsq $0xa, %rax
@@ -418,7 +441,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -428,7 +451,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     subq $32, %rsp
     callq uc_reset
     addq $32, %rsp
@@ -565,7 +588,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -575,7 +598,7 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movabsq $0x5, %rax
     pushq %rax
     movabsq $0xd, %rax
@@ -597,7 +620,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -607,7 +630,7 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movabsq $0x5, %rax
     pushq %rax
     movabsq $0x6, %rax
@@ -629,7 +652,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -639,7 +662,7 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

@@ -35,7 +35,6 @@ L_SWAP_LIVE:
     .section .iii.ring3,"n"
     .asciz "swap_find"
     .text
-    .global L_swap_find
     .seh_proc L_swap_find
 L_swap_find:
     pushq %rbp
@@ -190,7 +189,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "swap_alloc_or_find"
     .text
-    .global L_swap_alloc_or_find
     .seh_proc L_swap_alloc_or_find
 L_swap_alloc_or_find:
     pushq %rbp

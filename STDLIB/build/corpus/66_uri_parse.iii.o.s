@@ -4,39 +4,38 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_5:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_6:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_7:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_8:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_9:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_10:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_11:
-    .ascii "uri.iiiuri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_12:
-    .ascii "uri.iiiuri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_13:
-    .ascii "uri.iiiuri.iii\0"
+    .ascii "uri.iii\0"
 L_str_14:
     .ascii "uri.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_uri"
     .text
-    .global L_fill_uri
     .seh_proc L_fill_uri
 L_fill_uri:
     pushq %rbp
@@ -765,11 +764,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

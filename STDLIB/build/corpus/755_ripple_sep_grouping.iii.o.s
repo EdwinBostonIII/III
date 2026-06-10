@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple_metric.iiiripple_metric.iiiripple_metric.iiiripple_metric.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_1:
-    .ascii "ripple_metric.iiiripple_metric.iiiripple_metric.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_2:
-    .ascii "ripple_metric.iiiripple_metric.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_3:
     .ascii "ripple_metric.iii\0"
     .section .iii.ring3,"n"
     .asciz "add_group"
     .text
-    .global L_add_group
     .seh_proc L_add_group
 L_add_group:
     pushq %rbp
@@ -89,7 +88,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "count_pairs"
     .text
-    .global L_count_pairs
     .seh_proc L_count_pairs
 L_count_pairs:
     pushq %rbp

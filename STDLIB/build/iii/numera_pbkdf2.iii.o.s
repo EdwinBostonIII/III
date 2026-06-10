@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hmac.iiihmac.iii\0"
+    .ascii "hmac.iii\0"
 L_str_1:
     .ascii "hmac.iii\0"
     .section .rodata
@@ -329,19 +329,12 @@ L_loop_end_9:
     pushq %rax
     movq L_PBK_SALT_LEN(%rip), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -368,11 +361,8 @@ L_loop_end_9:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -399,11 +389,8 @@ L_loop_end_9:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -466,7 +453,27 @@ L_loop_end_9:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movslq L_PBKDF2_E_INIT(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -480,7 +487,7 @@ L_loop_end_9:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-L_loop_top_10:
+L_loop_top_12:
     movl -96(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -493,7 +500,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_13
     movq -72(%rbp), %rax
     pushq %rax
     movl -96(%rbp), %eax
@@ -524,13 +531,13 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_12
+L_loop_end_13:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
-L_loop_top_12:
+L_loop_top_14:
     movl -104(%rbp), %eax
     pushq %rax
     movl L_PBK_ITER(%rip), %eax
@@ -543,7 +550,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_15
     movabsq $0x20, %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -575,7 +582,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
-L_loop_top_14:
+L_loop_top_16:
     movl -112(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -588,7 +595,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_17
     movq -64(%rbp), %rax
     pushq %rax
     movl -112(%rbp), %eax
@@ -648,8 +655,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_16
+L_loop_end_17:
     movl -104(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -664,8 +671,8 @@ L_loop_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_14
+L_loop_end_15:
     movabsq $0x20, %rax
     pushq %rax
     popq %rax
@@ -688,7 +695,7 @@ L_loop_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movq -32(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -702,12 +709,12 @@ L_loop_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -120(%rbp)
-L_loop_top_18:
+L_loop_top_20:
     movq -120(%rbp), %rax
     pushq %rax
     movq -112(%rbp), %rax
@@ -720,7 +727,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_19
+    jz L_loop_end_21
     movq -24(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -756,8 +763,8 @@ L_loop_top_18:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_18
-L_loop_end_19:
+    jmp L_loop_top_20
+L_loop_end_21:
     movq -48(%rbp), %rax
     pushq %rax
     movq -112(%rbp), %rax
@@ -845,7 +852,7 @@ pbkdf2_sha256_oneshot:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movslq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -855,7 +862,7 @@ pbkdf2_sha256_oneshot:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     movl -40(%rbp), %eax
     pushq %rax
     popq %rcx

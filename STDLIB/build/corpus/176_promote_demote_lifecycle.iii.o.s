@@ -4,39 +4,39 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_3:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_4:
-    .ascii "catalyst.iiicatalyst.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_5:
-    .ascii "catalyst.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_6:
-    .ascii "promote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_7:
-    .ascii "promote.iiipromote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_8:
-    .ascii "promote.iiipromote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_9:
-    .ascii "promote.iiipromote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_10:
-    .ascii "promote.iiipromote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_11:
-    .ascii "promote.iiipromote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_12:
-    .ascii "promote.iiidemote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "promote.iii\0"
 L_str_13:
-    .ascii "demote.iiidemote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "demote.iii\0"
 L_str_14:
-    .ascii "demote.iiidemote.iiidemote.iiidemote.iii\0"
+    .ascii "demote.iii\0"
 L_str_15:
-    .ascii "demote.iiidemote.iiidemote.iii\0"
+    .ascii "demote.iii\0"
 L_str_16:
-    .ascii "demote.iiidemote.iii\0"
+    .ascii "demote.iii\0"
 L_str_17:
     .ascii "demote.iii\0"
     .section .iii.ring3,"n"

@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_canonicalise.iiixii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_5:
-    .ascii "xii_rewrite.iiixii_admission.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_6:
     .ascii "xii_admission.iii\0"
     .section .rodata

@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "ml3"
     .text
-    .global L_ml3
     .seh_proc L_ml3
 L_ml3:
     pushq %rbp
@@ -63,7 +62,6 @@ L_ml3:
     .section .iii.ring3,"n"
     .asciz "ml5"
     .text
-    .global L_ml5
     .seh_proc L_ml5
 L_ml5:
     pushq %rbp
@@ -83,11 +81,8 @@ L_ml5:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -111,11 +106,8 @@ L_ml5:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

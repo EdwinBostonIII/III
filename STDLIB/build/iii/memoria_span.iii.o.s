@@ -536,10 +536,7 @@ span_u8_cmp:
     popq %rax
     testq %rax, %rax
     jz L_if_end_23
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
+    movslq L_SPAN_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -562,10 +559,7 @@ L_if_end_23:
     popq %rax
     testq %rax, %rax
     jz L_if_end_25
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
+    movslq L_SPAN_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

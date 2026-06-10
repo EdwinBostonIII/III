@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha3_256.iiicrypt_ed25519.iii\0"
+    .ascii "sha3_256.iii\0"
 L_str_1:
     .ascii "crypt_ed25519.iii\0"
     .section .rodata
@@ -83,7 +83,6 @@ fed_sybil_pow_min_difficulty_bits:
     .section .iii.ring3,"n"
     .asciz "_fsyb_eq32"
     .text
-    .global L__fsyb_eq32
     .seh_proc L__fsyb_eq32
 L__fsyb_eq32:
     pushq %rbp
@@ -232,7 +231,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_fsyb_lookup"
     .text
-    .global L__fsyb_lookup
     .seh_proc L__fsyb_lookup
 L__fsyb_lookup:
     pushq %rbp
@@ -315,11 +313,8 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -395,7 +390,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "_fsyb_first_free"
     .text
-    .global L__fsyb_first_free
     .seh_proc L__fsyb_first_free
 L__fsyb_first_free:
     pushq %rbp
@@ -484,7 +478,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "_fsyb_build_pow_input"
     .text
-    .global L__fsyb_build_pow_input
     .seh_proc L__fsyb_build_pow_input
 L__fsyb_build_pow_input:
     pushq %rbp
@@ -591,11 +584,8 @@ L_loop_top_20:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -645,7 +635,6 @@ L_loop_end_21:
     .section .iii.ring3,"n"
     .asciz "_fsyb_leading_zero_bits"
     .text
-    .global L__fsyb_leading_zero_bits
     .seh_proc L__fsyb_leading_zero_bits
 L__fsyb_leading_zero_bits:
     pushq %rbp
@@ -858,11 +847,8 @@ L_if_end_37:
     movq %rax, -48(%rbp)
     movzbq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -1364,11 +1350,8 @@ L_if_end_59:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1384,11 +1367,8 @@ L_if_end_59:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1764,11 +1744,8 @@ L_if_end_75:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1912,11 +1889,8 @@ L_if_end_79:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1932,11 +1906,8 @@ L_if_end_79:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2506,11 +2477,8 @@ L_if_end_101:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax

@@ -4,47 +4,46 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "builder.iii\0"
 L_str_6:
-    .ascii "builder.iiibuilder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "builder.iii\0"
 L_str_7:
-    .ascii "builder.iiipath.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "builder.iii\0"
 L_str_8:
-    .ascii "path.iiipath.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "path.iii\0"
 L_str_9:
-    .ascii "path.iiipath.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "path.iii\0"
 L_str_10:
-    .ascii "path.iiipath.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "path.iii\0"
 L_str_11:
-    .ascii "path.iiipath.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "path.iii\0"
 L_str_12:
-    .ascii "path.iii/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "path.iii\0"
 L_str_13:
-    .ascii "/usr/local/bin/foo.txtREADME.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "/usr/local/bin/foo.txt\0"
 L_str_14:
-    .ascii "README.bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "README\0"
 L_str_15:
-    .ascii ".bashrc//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii ".bashrc\0"
 L_str_16:
-    .ascii "//foo//./bar//baz/foo/../bara/../b\0"
+    .ascii "//foo//./bar//baz\0"
 L_str_17:
-    .ascii "/foo/../bara/../b\0"
+    .ascii "/foo/../bar\0"
 L_str_18:
     .ascii "a/../b\0"
     .section .iii.ring3,"n"
     .asciz "make_str"
     .text
-    .global L_make_str
     .seh_proc L_make_str
 L_make_str:
     pushq %rbp

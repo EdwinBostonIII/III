@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiibigint.iiirsa.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiibigint.iiirsa.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "bigint.iiirsa.iii\0"
+    .ascii "bigint.iii\0"
 L_str_3:
     .ascii "rsa.iii\0"
     .section .bss
@@ -33,11 +33,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

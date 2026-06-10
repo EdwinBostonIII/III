@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cycle_family.iiicycle_family.iiisvm_layout.iiibar_layout.iiihexad_reach.iii\0"
+    .ascii "cycle_family.iii\0"
 L_str_1:
-    .ascii "cycle_family.iiisvm_layout.iiibar_layout.iiihexad_reach.iii\0"
+    .ascii "cycle_family.iii\0"
 L_str_2:
-    .ascii "svm_layout.iiibar_layout.iiihexad_reach.iii\0"
+    .ascii "svm_layout.iii\0"
 L_str_3:
-    .ascii "bar_layout.iiihexad_reach.iii\0"
+    .ascii "bar_layout.iii\0"
 L_str_4:
     .ascii "hexad_reach.iii\0"
     .section .rodata

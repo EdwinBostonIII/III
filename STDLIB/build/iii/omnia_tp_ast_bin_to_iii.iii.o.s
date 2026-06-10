@@ -17,7 +17,6 @@ L_TP_ASTI_MAGIC:
     .section .iii.ring3,"n"
     .asciz "tp_asti_emit"
     .text
-    .global L_tp_asti_emit
     .seh_proc L_tp_asti_emit
 L_tp_asti_emit:
     pushq %rbp
@@ -270,11 +269,8 @@ L_loop_top_6:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

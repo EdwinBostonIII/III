@@ -4,55 +4,54 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_1:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_2:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_3:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_4:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_5:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_6:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_7:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_8:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_9:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_10:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_11:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_12:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_13:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_14:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_15:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_16:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_17:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_18:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_19:
-    .ascii "zk_field.iiizk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_20:
-    .ascii "zk_field.iiizk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_21:
-    .ascii "zk_field.iiizk_field.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_22:
     .ascii "zk_field.iii\0"
     .section .iii.ring3,"n"
     .asciz "sn_set_mont"
     .text
-    .global L_sn_set_mont
     .seh_proc L_sn_set_mont
 L_sn_set_mont:
     pushq %rbp
@@ -104,7 +103,6 @@ L_sn_set_mont:
     .section .iii.ring3,"n"
     .asciz "sn_fr_eq"
     .text
-    .global L_sn_fr_eq
     .seh_proc L_sn_fr_eq
 L_sn_fr_eq:
     pushq %rbp
@@ -208,7 +206,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "sn_poly_eval"
     .text
-    .global L_sn_poly_eval
     .seh_proc L_sn_poly_eval
 L_sn_poly_eval:
     pushq %rbp
@@ -337,7 +334,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "sn_target_poly"
     .text
-    .global L_sn_target_poly
     .seh_proc L_sn_target_poly
 L_sn_target_poly:
     pushq %rbp
@@ -625,7 +621,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "sn_poly_mul"
     .text
-    .global L_sn_poly_mul
     .seh_proc L_sn_poly_mul
 L_sn_poly_mul:
     pushq %rbp
@@ -856,7 +851,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "sn_poly_divmod"
     .text
-    .global L_sn_poly_divmod
     .seh_proc L_sn_poly_divmod
 L_sn_poly_divmod:
     pushq %rbp
@@ -1252,7 +1246,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "sn_bary_weights"
     .text
-    .global L_sn_bary_weights
     .seh_proc L_sn_bary_weights
 L_sn_bary_weights:
     pushq %rbp
@@ -1465,7 +1458,6 @@ L_loop_end_29:
     .section .iii.ring3,"n"
     .asciz "sn_lagrange_coeffs"
     .text
-    .global L_sn_lagrange_coeffs
     .seh_proc L_sn_lagrange_coeffs
 L_sn_lagrange_coeffs:
     pushq %rbp
@@ -2548,7 +2540,6 @@ L_if_end_63:
     .section .iii.ring3,"n"
     .asciz "sn_setup"
     .text
-    .global L_sn_setup
     .seh_proc L_sn_setup
 L_sn_setup:
     pushq %rbp
@@ -3678,7 +3669,6 @@ L_loop_end_79:
     .section .iii.ring3,"n"
     .asciz "sn_prove"
     .text
-    .global L_sn_prove
     .seh_proc L_sn_prove
 L_sn_prove:
     pushq %rbp
@@ -4905,7 +4895,6 @@ L_loop_end_95:
     .section .iii.ring3,"n"
     .asciz "sn_verify"
     .text
-    .global L_sn_verify
     .seh_proc L_sn_verify
 L_sn_verify:
     pushq %rbp

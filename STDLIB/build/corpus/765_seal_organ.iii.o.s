@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiicapability.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "capability.iii\0"
 L_str_1:
-    .ascii "capability.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "seal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "seal_organ.iii\0"
 L_str_3:
-    .ascii "seal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "seal_organ.iii\0"
 L_str_4:
-    .ascii "seal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "seal_organ.iii\0"
 L_str_5:
-    .ascii "seal_organ.iiiseal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "seal_organ.iii\0"
 L_str_6:
-    .ascii "seal_organ.iiiseal_organ.iiiseal_organ.iii\0"
+    .ascii "seal_organ.iii\0"
 L_str_7:
-    .ascii "seal_organ.iiiseal_organ.iii\0"
+    .ascii "seal_organ.iii\0"
 L_str_8:
     .ascii "seal_organ.iii\0"
     .section .iii.ring3,"n"

@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_make_form"
     .text
-    .global L__make_form
     .seh_proc L__make_form
 L__make_form:
     pushq %rbp
@@ -32,7 +31,6 @@ L__make_form:
     .section .iii.ring3,"n"
     .asciz "_make_compose"
     .text
-    .global L__make_compose
     .seh_proc L__make_compose
 L__make_compose:
     pushq %rbp

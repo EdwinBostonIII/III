@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_3:
     .ascii "crypt_ed25519.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_seed"
     .text
-    .global L_fill_seed
     .seh_proc L_fill_seed
 L_fill_seed:
     pushq %rbp
@@ -361,7 +360,6 @@ L_fill_seed:
     .section .iii.ring3,"n"
     .asciz "fill_pubkey"
     .text
-    .global L_fill_pubkey
     .seh_proc L_fill_pubkey
 L_fill_pubkey:
     pushq %rbp
@@ -708,7 +706,6 @@ L_fill_pubkey:
     .section .iii.ring3,"n"
     .asciz "fill_expected_lo32"
     .text
-    .global L_fill_expected_lo32
     .seh_proc L_fill_expected_lo32
 L_fill_expected_lo32:
     pushq %rbp
@@ -1055,7 +1052,6 @@ L_fill_expected_lo32:
     .section .iii.ring3,"n"
     .asciz "fill_expected_hi32"
     .text
-    .global L_fill_expected_hi32
     .seh_proc L_fill_expected_hi32
 L_fill_expected_hi32:
     pushq %rbp

@@ -59,7 +59,6 @@ L_TPCH_OUT_OFF:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_emit_at"
     .text
-    .global L_tp_c99hi_emit_at
     .seh_proc L_tp_c99hi_emit_at
 L_tp_c99hi_emit_at:
     pushq %rbp
@@ -109,7 +108,6 @@ L_tp_c99hi_emit_at:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_skip_ws"
     .text
-    .global L_tp_c99hi_skip_ws
     .seh_proc L_tp_c99hi_skip_ws
 L_tp_c99hi_skip_ws:
     pushq %rbp
@@ -302,7 +300,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_find_byte"
     .text
-    .global L_tp_c99hi_find_byte
     .seh_proc L_tp_c99hi_find_byte
 L_tp_c99hi_find_byte:
     pushq %rbp
@@ -404,7 +401,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_is_extern"
     .text
-    .global L_tp_c99hi_is_extern
     .seh_proc L_tp_c99hi_is_extern
 L_tp_c99hi_is_extern:
     pushq %rbp
@@ -555,7 +551,6 @@ L_loop_end_19:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_emit_prefix"
     .text
-    .global L_tp_c99hi_emit_prefix
     .seh_proc L_tp_c99hi_emit_prefix
 L_tp_c99hi_emit_prefix:
     pushq %rbp
@@ -672,7 +667,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_copy_range"
     .text
-    .global L_tp_c99hi_copy_range
     .seh_proc L_tp_c99hi_copy_range
 L_tp_c99hi_copy_range:
     pushq %rbp
@@ -796,7 +790,6 @@ L_loop_end_27:
     .section .iii.ring3,"n"
     .asciz "tp_c99hi_emit_decl"
     .text
-    .global L_tp_c99hi_emit_decl
     .seh_proc L_tp_c99hi_emit_decl
 L_tp_c99hi_emit_decl:
     pushq %rbp

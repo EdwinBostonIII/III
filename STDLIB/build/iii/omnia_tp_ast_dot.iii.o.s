@@ -47,7 +47,6 @@ L_TP_AD_TAIL:
     .section .iii.ring3,"n"
     .asciz "tp_ad_emit"
     .text
-    .global L_tp_ad_emit
     .seh_proc L_tp_ad_emit
 L_tp_ad_emit:
     pushq %rbp

@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtmsvcrtmsvcrtkeccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtmsvcrtmsvcrtkeccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "msvcrtmsvcrtkeccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "msvcrt\0"
 L_str_3:
-    .ascii "msvcrtkeccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "msvcrt\0"
 L_str_4:
-    .ascii "keccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_5:
-    .ascii "keccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_6:
-    .ascii "keccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_7:
     .ascii "keccak.iii\0"
     .section .bss
@@ -109,7 +109,6 @@ L_KKD_HEXCH:
     .section .iii.ring3,"n"
     .asciz "_kkd_hex"
     .text
-    .global L__kkd_hex
     .seh_proc L__kkd_hex
 L__kkd_hex:
     pushq %rbp
@@ -186,11 +185,8 @@ L_loop_top_0:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     leaq L_KKD_HEXCH(%rip), %rax
@@ -209,11 +205,8 @@ L_loop_top_0:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax

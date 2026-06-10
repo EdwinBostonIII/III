@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_1:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_2:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_3:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_4:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_5:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_6:
-    .ascii "glyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_7:
     .ascii "glyph_core.iii\0"
     .section .rodata
@@ -83,11 +83,8 @@ glyph_crystal_pack:
     movq %rax, -64(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -152,11 +149,7 @@ L_if_end_1:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -303,11 +296,8 @@ glyph_crystal_pack_meta:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)

@@ -4,18 +4,20 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_4:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_5:
-    .ascii "cycle_term.iiicycle_term.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_6:
+    .ascii "cycle_term.iii\0"
+L_str_7:
     .ascii "cycle_term.iii\0"
     .section .bss
     .global L_KCS_BUF
@@ -181,12 +183,9 @@ katabasis_cycle_seal:
     popq %r8
     popq %r9
     subq $32, %rsp
-    callq cad_oneshot
+    callq cad_oneshot_packed
     addq $32, %rsp
     movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

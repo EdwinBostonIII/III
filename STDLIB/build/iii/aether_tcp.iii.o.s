@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_1:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_2:
-    .ascii "net.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_3:
-    .ascii "net.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_4:
-    .ascii "net.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_5:
     .ascii "net.iii\0"
     .section .rodata
@@ -34,7 +34,6 @@ L_TCP_NET:
     .section .iii.ring3,"n"
     .asciz "tcp_slot_of"
     .text
-    .global L_tcp_slot_of
     .seh_proc L_tcp_slot_of
 L_tcp_slot_of:
     pushq %rbp
@@ -161,7 +160,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "tcp_alloc_slot"
     .text
-    .global L_tcp_alloc_slot
     .seh_proc L_tcp_alloc_slot
 L_tcp_alloc_slot:
     pushq %rbp

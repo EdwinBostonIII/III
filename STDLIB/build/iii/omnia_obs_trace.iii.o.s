@@ -268,11 +268,8 @@ L_if_end_9:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -376,7 +373,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "_obst_slot_of"
     .text
-    .global L__obst_slot_of
     .seh_proc L__obst_slot_of
 L__obst_slot_of:
     pushq %rbp
@@ -1058,11 +1054,8 @@ L_if_end_35:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax

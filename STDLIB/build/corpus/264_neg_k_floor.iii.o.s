@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_leaf_high_k"
     .text
-    .global L__leaf_high_k
     .seh_proc L__leaf_high_k
 L__leaf_high_k:
     pushq %rbp
@@ -54,7 +53,6 @@ L_kmax_ok_805306374:
     .section .iii.ring3,"n"
     .asciz "_caller_low_k"
     .text
-    .global L__caller_low_k
     .seh_proc L__caller_low_k
 L__caller_low_k:
     pushq %rbp

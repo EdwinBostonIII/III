@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_table.iiiproof_ripple_resolution.iiiproof_ripple_resolution.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_1:
-    .ascii "proof_ripple_resolution.iiiproof_ripple_resolution.iii\0"
+    .ascii "proof_ripple_resolution.iii\0"
 L_str_2:
     .ascii "proof_ripple_resolution.iii\0"
     .section .bss
@@ -23,7 +23,6 @@ L_RD_WIT:
     .section .iii.ring3,"n"
     .asciz "rd_dispatch_a"
     .text
-    .global L_rd_dispatch_a
     .seh_proc L_rd_dispatch_a
 L_rd_dispatch_a:
     pushq %rbp
@@ -59,7 +58,6 @@ L_rd_dispatch_a:
     .section .iii.ring3,"n"
     .asciz "rd_dispatch_b"
     .text
-    .global L_rd_dispatch_b
     .seh_proc L_rd_dispatch_b
 L_rd_dispatch_b:
     pushq %rbp
@@ -95,7 +93,6 @@ L_rd_dispatch_b:
     .section .iii.ring3,"n"
     .asciz "_rd_put_q"
     .text
-    .global L__rd_put_q
     .seh_proc L__rd_put_q
 L__rd_put_q:
     pushq %rbp
@@ -148,11 +145,8 @@ L_loop_top_0:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -203,7 +197,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_rd_register"
     .text
-    .global L__rd_register
     .seh_proc L__rd_register
 L__rd_register:
     pushq %rbp

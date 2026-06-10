@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "span.iiispan.iiispan.iiispan.iiispan.iiispan.iii\0"
+    .ascii "span.iii\0"
 L_str_1:
-    .ascii "span.iiispan.iiispan.iiispan.iiispan.iii\0"
+    .ascii "span.iii\0"
 L_str_2:
-    .ascii "span.iiispan.iiispan.iiispan.iii\0"
+    .ascii "span.iii\0"
 L_str_3:
-    .ascii "span.iiispan.iiispan.iii\0"
+    .ascii "span.iii\0"
 L_str_4:
-    .ascii "span.iiispan.iii\0"
+    .ascii "span.iii\0"
 L_str_5:
     .ascii "span.iii\0"
     .section .bss
@@ -237,7 +237,7 @@ L_if_end_9:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movzwq %ax, %rax
+    movswq %ax, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)

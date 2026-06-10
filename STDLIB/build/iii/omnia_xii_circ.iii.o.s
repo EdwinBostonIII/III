@@ -73,11 +73,8 @@ xii_circ_encode:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -90,11 +87,8 @@ xii_circ_encode:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $7, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -107,11 +101,8 @@ xii_circ_encode:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0xa, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $10, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -124,11 +115,8 @@ xii_circ_encode:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0xe, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $14, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -141,11 +129,8 @@ xii_circ_encode:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x11, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $17, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -242,11 +227,8 @@ xii_circ_hw_mask:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -281,11 +263,8 @@ xii_circ_k_bucket:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
@@ -320,11 +299,8 @@ xii_circ_cap_class:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xa, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $10, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -359,11 +335,8 @@ xii_circ_hexad:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xe, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $14, %rax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
@@ -398,11 +371,8 @@ xii_circ_fusion_budget:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x11, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $17, %rax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
@@ -1227,7 +1197,6 @@ L_if_end_49:
     .section .iii.ring3,"n"
     .asciz "xcr_bucket_kmax"
     .text
-    .global L_xcr_bucket_kmax
     .seh_proc L_xcr_bucket_kmax
 L_xcr_bucket_kmax:
     pushq %rbp
@@ -2392,11 +2361,8 @@ xii_circ_count_feasible:
     movq %rax, -16(%rbp)
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $20, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)

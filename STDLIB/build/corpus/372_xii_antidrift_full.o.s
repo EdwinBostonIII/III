@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiixii_horizon.iiixii_register_all.iiixii_chd.iiixii_chd.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "xii_horizon.iiixii_register_all.iiixii_chd.iiixii_chd.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_2:
-    .ascii "xii_register_all.iiixii_chd.iiixii_chd.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_register_all.iii\0"
 L_str_3:
-    .ascii "xii_chd.iiixii_chd.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_chd.iii\0"
 L_str_4:
-    .ascii "xii_chd.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_chd.iii\0"
 L_str_5:
-    .ascii "xii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_6:
-    .ascii "xii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_7:
-    .ascii "xii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_8:
-    .ascii "xii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_9:
-    .ascii "xii_antidrift.iiixii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_10:
-    .ascii "xii_antidrift.iiixii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_11:
-    .ascii "xii_antidrift.iiixii_antidrift.iii\0"
+    .ascii "xii_antidrift.iii\0"
 L_str_12:
     .ascii "xii_antidrift.iii\0"
     .section .rodata
@@ -44,7 +44,6 @@ L_C372_GOLDEN:
     .section .iii.ring3,"n"
     .asciz "_c372_seed_manifest"
     .text
-    .global L__c372_seed_manifest
     .seh_proc L__c372_seed_manifest
 L__c372_seed_manifest:
     pushq %rbp
@@ -123,7 +122,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_c372_seed_chd"
     .text
-    .global L__c372_seed_chd
     .seh_proc L__c372_seed_chd
 L__c372_seed_chd:
     pushq %rbp

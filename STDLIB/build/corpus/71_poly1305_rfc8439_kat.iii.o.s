@@ -4,19 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtpoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtpoly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "poly1305.iiipoly1305.iiipoly1305.iii\0"
+    .ascii "poly1305.iii\0"
 L_str_3:
-    .ascii "poly1305.iiipoly1305.iii\0"
+    .ascii "poly1305.iii\0"
 L_str_4:
     .ascii "poly1305.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_key"
     .text
-    .global L_fill_key
     .seh_proc L_fill_key
 L_fill_key:
     pushq %rbp
@@ -363,7 +362,6 @@ L_fill_key:
     .section .iii.ring3,"n"
     .asciz "fill_msg"
     .text
-    .global L_fill_msg
     .seh_proc L_fill_msg
 L_fill_msg:
     pushq %rbp
@@ -730,7 +728,6 @@ L_fill_msg:
     .section .iii.ring3,"n"
     .asciz "check_tag"
     .text
-    .global L_check_tag
     .seh_proc L_check_tag
 L_check_tag:
     pushq %rbp

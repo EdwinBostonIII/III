@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hip.iiihip.iiicall_context.iiicall_context.iiipattern_table.iiiresolver.iiikchain.iii\0"
+    .ascii "hip.iii\0"
 L_str_1:
-    .ascii "hip.iiicall_context.iiicall_context.iiipattern_table.iiiresolver.iiikchain.iii\0"
+    .ascii "hip.iii\0"
 L_str_2:
-    .ascii "call_context.iiicall_context.iiipattern_table.iiiresolver.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_3:
-    .ascii "call_context.iiipattern_table.iiiresolver.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_4:
-    .ascii "pattern_table.iiiresolver.iiikchain.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_5:
-    .ascii "resolver.iiikchain.iii\0"
+    .ascii "resolver.iii\0"
 L_str_6:
     .ascii "kchain.iii\0"
     .section .rodata
@@ -231,11 +231,8 @@ L_if_end_5:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -243,11 +240,8 @@ L_if_end_5:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -255,11 +249,8 @@ L_if_end_5:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax

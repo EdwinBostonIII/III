@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hexad_reach.iiisafety_type.iiiaeu.iiiaeu.iii\0"
+    .ascii "hexad_reach.iii\0"
 L_str_1:
-    .ascii "safety_type.iiiaeu.iiiaeu.iii\0"
+    .ascii "safety_type.iii\0"
 L_str_2:
-    .ascii "aeu.iiiaeu.iii\0"
+    .ascii "aeu.iii\0"
 L_str_3:
     .ascii "aeu.iii\0"
     .section .iii.ring3,"n"

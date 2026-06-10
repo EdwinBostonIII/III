@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "handle"
     .text
-    .global L_handle
     .seh_proc L_handle
 L_handle:
     # III_SOVEREIGN_AUDIT SOVFN handle

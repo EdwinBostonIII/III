@@ -37,7 +37,6 @@ L_DYNAMIC_REC_COUNT:
     .section .iii.ring3,"n"
     .asciz "dynamic_find"
     .text
-    .global L_dynamic_find
     .seh_proc L_dynamic_find
 L_dynamic_find:
     pushq %rbp

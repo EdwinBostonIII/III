@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -63,7 +63,6 @@ L_CRYSTAL_VERIFY_SAVED:
     .section .iii.ring3,"n"
     .asciz "crystal_init_key"
     .text
-    .global L_crystal_init_key
     .seh_proc L_crystal_init_key
 L_crystal_init_key:
     pushq %rbp
@@ -227,11 +226,8 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -360,7 +356,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "crystal_alloc_slot"
     .text
-    .global L_crystal_alloc_slot
     .seh_proc L_crystal_alloc_slot
 L_crystal_alloc_slot:
     pushq %rbp
@@ -449,7 +444,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "crystal_slot_of"
     .text
-    .global L_crystal_slot_of
     .seh_proc L_crystal_slot_of
 L_crystal_slot_of:
     pushq %rbp
@@ -603,7 +597,6 @@ crystal_slot_of_pub:
     .section .iii.ring3,"n"
     .asciz "crystal_mac_compute"
     .text
-    .global L_crystal_mac_compute
     .seh_proc L_crystal_mac_compute
 L_crystal_mac_compute:
     pushq %rbp
@@ -755,11 +748,8 @@ L_crystal_mac_compute:
     popq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -776,11 +766,8 @@ L_crystal_mac_compute:
     popq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -797,11 +784,8 @@ L_crystal_mac_compute:
     popq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -818,11 +802,8 @@ L_crystal_mac_compute:
     popq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -918,11 +899,8 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -998,11 +976,8 @@ L_loop_top_20:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -1078,11 +1053,8 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
@@ -1128,11 +1100,8 @@ L_loop_top_22:
 L_loop_end_23:
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1256,11 +1225,8 @@ L_loop_end_27:
     popq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1455,11 +1421,8 @@ L_if_end_31:
     movq %rax, -48(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1710,11 +1673,8 @@ L_if_end_37:
     movq %rax, -32(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2137,11 +2097,8 @@ L_if_end_49:
 L_if_end_51:
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2248,11 +2205,8 @@ L_if_end_53:
 L_if_end_55:
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2359,11 +2313,8 @@ L_if_end_57:
 L_if_end_59:
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2385,6 +2336,131 @@ L_if_end_59:
     pushq %rax
     popq %rax
     movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "crystal_mac_set"
+    .text
+    .global crystal_mac_set
+    .seh_proc crystal_mac_set
+crystal_mac_set:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_crystal_slot_of
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_61
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_61:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_63
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_63:
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
+    shlq $4, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    leaq L_CRYSTAL_MAC(%rip), %rax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -2433,7 +2509,7 @@ crystal_verify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_65
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2443,14 +2519,11 @@ crystal_verify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_65:
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2459,7 +2532,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_62:
+L_loop_top_66:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -2472,7 +2545,7 @@ L_loop_top_62:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_63
+    jz L_loop_end_67
     leaq L_CRYSTAL_VERIFY_SAVED(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2510,8 +2583,8 @@ L_loop_top_62:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_62
-L_loop_end_63:
+    jmp L_loop_top_66
+L_loop_end_67:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -2529,7 +2602,7 @@ L_loop_end_63:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_64:
+L_loop_top_68:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -2542,7 +2615,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_65
+    jz L_loop_end_69
     leaq L_CRYSTAL_MAC(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2574,7 +2647,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_71
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2582,7 +2655,7 @@ L_loop_top_64:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_71:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2597,8 +2670,8 @@ L_if_end_67:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_64
-L_loop_end_65:
+    jmp L_loop_top_68
+L_loop_end_69:
     movzbq -40(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2611,7 +2684,7 @@ L_loop_end_65:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_73
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2621,12 +2694,12 @@ L_loop_end_65:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_73:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_70:
+L_loop_top_74:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -2639,7 +2712,7 @@ L_loop_top_70:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_71
+    jz L_loop_end_75
     leaq L_CRYSTAL_MAC(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2677,8 +2750,8 @@ L_loop_top_70:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_70
-L_loop_end_71:
+    jmp L_loop_top_74
+L_loop_end_75:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2728,7 +2801,7 @@ crystal_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_77
     movslq L_CRYSTAL_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -2738,7 +2811,7 @@ crystal_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_77:
     leaq L_CRYSTAL_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -2791,11 +2864,8 @@ L_if_end_73:
     movq %rdx, (%rax,%rcx,8)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2804,7 +2874,7 @@ L_if_end_73:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_74:
+L_loop_top_78:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -2817,7 +2887,7 @@ L_loop_top_74:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_75
+    jz L_loop_end_79
     leaq L_CRYSTAL_SITE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2866,15 +2936,12 @@ L_loop_top_74:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_74
-L_loop_end_75:
+    jmp L_loop_top_78
+L_loop_end_79:
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2883,7 +2950,7 @@ L_loop_end_75:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_76:
+L_loop_top_80:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -2896,7 +2963,7 @@ L_loop_top_76:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_77
+    jz L_loop_end_81
     leaq L_CRYSTAL_MAC(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -2928,8 +2995,8 @@ L_loop_top_76:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_76
-L_loop_end_77:
+    jmp L_loop_top_80
+L_loop_end_81:
     movslq L_CRYSTAL_OK(%rip), %rax
     pushq %rax
     popq %rax

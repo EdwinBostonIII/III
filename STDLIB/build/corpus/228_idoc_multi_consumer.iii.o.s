@@ -4,33 +4,32 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtbabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtbabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_3:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_4:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_5:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_6:
-    .ascii "babel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_7:
-    .ascii "babel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_8:
-    .ascii "idoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_9:
-    .ascii "idoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_10:
-    .ascii "idoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_11:
     .ascii "idoc.iii\0"
     .section .iii.ring3,"n"
     .asciz "_put_ptr_u64"
     .text
-    .global L__put_ptr_u64
     .seh_proc L__put_ptr_u64
 L__put_ptr_u64:
     pushq %rbp
@@ -75,11 +74,8 @@ L_loop_top_0:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -129,7 +125,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_put_u32"
     .text
-    .global L__put_u32
     .seh_proc L__put_u32
 L__put_u32:
     pushq %rbp
@@ -173,11 +168,8 @@ L__put_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -204,11 +196,8 @@ L__put_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -235,11 +224,8 @@ L__put_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -270,7 +256,6 @@ L__put_u32:
     .section .iii.ring3,"n"
     .asciz "_resolve_check"
     .text
-    .global L__resolve_check
     .seh_proc L__resolve_check
 L__resolve_check:
     pushq %rbp
@@ -416,11 +401,8 @@ L_loop_top_4:
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -493,11 +475,8 @@ L_loop_top_6:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1267,6 +1246,15 @@ L_loop_end_17:
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
+    subq $8, %rsp
+    movabsq $0x200, %rax
+    pushq %rax
+    movl -104(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
     movq -112(%rbp), %rax
     pushq %rax
     movq -96(%rbp), %rax
@@ -1288,6 +1276,8 @@ L_loop_end_17:
     subq $32, %rsp
     callq idoc_pack_payload
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax

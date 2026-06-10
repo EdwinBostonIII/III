@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u64.iiiglyph_u64.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_1:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u64.iiiglyph_u64.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_2:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_u64.iiiglyph_u64.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_3:
-    .ascii "glyph_core.iiiglyph_u64.iiiglyph_u64.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_4:
-    .ascii "glyph_u64.iiiglyph_u64.iii\0"
+    .ascii "glyph_u64.iii\0"
 L_str_5:
     .ascii "glyph_u64.iii\0"
     .section .rodata
@@ -580,7 +580,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "h3_canary_holds"
     .text
-    .global L_h3_canary_holds
     .seh_proc L_h3_canary_holds
 L_h3_canary_holds:
     pushq %rbp
@@ -690,7 +689,6 @@ L_h3_canary_holds:
     .section .iii.ring3,"n"
     .asciz "h3_clause_eval"
     .text
-    .global L_h3_clause_eval
     .seh_proc L_h3_clause_eval
 L_h3_clause_eval:
     pushq %rbp
@@ -836,7 +834,6 @@ L_if_end_29:
     .section .iii.ring3,"n"
     .asciz "h3_register"
     .text
-    .global L_h3_register
     .seh_proc L_h3_register
 L_h3_register:
     pushq %rbp
@@ -913,7 +910,7 @@ L_if_end_31:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiiregion.iiiregion.iiiregion.iiiregion.iiixii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiiregion.iiiregion.iiiregion.iiiregion.iiixii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "region.iiiregion.iiiregion.iiiregion.iiixii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "region.iii\0"
 L_str_3:
-    .ascii "region.iiiregion.iiiregion.iiixii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "region.iii\0"
 L_str_4:
-    .ascii "region.iiiregion.iiixii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "region.iii\0"
 L_str_5:
-    .ascii "region.iiixii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "region.iii\0"
 L_str_6:
-    .ascii "xii_conf_cert.iiixii_strategy_det.iii\0"
+    .ascii "xii_conf_cert.iii\0"
 L_str_7:
     .ascii "xii_strategy_det.iii\0"
     .section .rodata
@@ -161,7 +161,6 @@ h12_init:
     .section .iii.ring3,"n"
     .asciz "h12_hash_reproduces"
     .text
-    .global L_h12_hash_reproduces
     .seh_proc L_h12_hash_reproduces
 L_h12_hash_reproduces:
     pushq %rbp
@@ -261,7 +260,6 @@ L_h12_hash_reproduces:
     .section .iii.ring3,"n"
     .asciz "h12_region_reproduces"
     .text
-    .global L_h12_region_reproduces
     .seh_proc L_h12_region_reproduces
 L_h12_region_reproduces:
     pushq %rbp
@@ -840,7 +838,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "h12_canary_holds"
     .text
-    .global L_h12_canary_holds
     .seh_proc L_h12_canary_holds
 L_h12_canary_holds:
     pushq %rbp
@@ -958,7 +955,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "h12_clause_eval"
     .text
-    .global L_h12_clause_eval
     .seh_proc L_h12_clause_eval
 L_h12_clause_eval:
     pushq %rbp
@@ -1104,7 +1100,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "h12_register"
     .text
-    .global L_h12_register
     .seh_proc L_h12_register
 L_h12_register:
     pushq %rbp
@@ -1181,7 +1176,7 @@ L_if_end_35:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

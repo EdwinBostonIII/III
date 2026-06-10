@@ -4,16 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_set_federation.iiipattern_set_federation.iiipattern_set_federation.iiipattern_set_federation.iii\0"
+    .ascii "pattern_set_federation.iii\0"
 L_str_1:
-    .ascii "pattern_set_federation.iiipattern_set_federation.iiipattern_set_federation.iii\0"
+    .ascii "pattern_set_federation.iii\0"
 L_str_2:
-    .ascii "pattern_set_federation.iiipattern_set_federation.iii\0"
+    .ascii "pattern_set_federation.iii\0"
 L_str_3:
     .ascii "pattern_set_federation.iii\0"
+L_str_4:
+    .ascii "fed_seal.iii\0"
+L_str_5:
+    .ascii "fed_seal.iii\0"
     .section .bss
     .global L_PSF_M
 L_PSF_M:
+    .zero 256
+    .global L_PSF_PARENT
+L_PSF_PARENT:
     .zero 256
     .section .iii.ring3,"n"
     .asciz "main"
@@ -30,6 +37,12 @@ main:
     .seh_endprologue
     subq $32, %rsp
     callq pattern_set_fed_reset
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq fed_seal_clear
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -98,6 +111,25 @@ L_loop_top_2:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
+    leaq L_PSF_PARENT(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x80, %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -118,7 +150,7 @@ L_loop_end_3:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0xcafe, %rax
+    movabsq $0x2, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -138,7 +170,7 @@ L_loop_end_3:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    sete %al
+    setne %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -159,7 +191,7 @@ L_if_end_5:
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
-    movabsq $0x1, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -180,13 +212,26 @@ L_if_end_5:
     pushq %rax
     popq %rax
 L_if_end_7:
-    movq -16(%rbp), %rax
+    leaq L_PSF_PARENT(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    leaq L_PSF_M(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x2, %rax
     pushq %rax
     popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
     subq $32, %rsp
-    callq pattern_set_fed_verify_ancestry
+    callq fed_seal_anchor
     addq $32, %rsp
-    movzbq %al, %rax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -209,20 +254,31 @@ L_if_end_7:
     pushq %rax
     popq %rax
 L_if_end_9:
+    leaq L_PSF_M(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
+    popq %rdx
+    popq %r8
     subq $32, %rsp
-    callq pattern_set_fed_verify_ancestry
+    callq pattern_set_fed_publish
     addq $32, %rsp
-    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setne %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -238,15 +294,12 @@ L_if_end_9:
     pushq %rax
     popq %rax
 L_if_end_11:
-    movabsq $0x270f, %rax
-    pushq %rax
-    popq %rcx
     subq $32, %rsp
-    callq pattern_set_fed_verify_ancestry
+    callq pattern_set_fed_count
     addq $32, %rsp
-    movzbq %al, %rax
+    movl %eax, %eax
     pushq %rax
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -267,6 +320,93 @@ L_if_end_11:
     pushq %rax
     popq %rax
 L_if_end_13:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_set_fed_verify_ancestry
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_set_fed_verify_ancestry
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movabsq $0x270f, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_set_fed_verify_ancestry
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movabsq $0x9, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

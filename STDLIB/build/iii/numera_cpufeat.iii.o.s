@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cpuid_helpercpuid_helper\0"
+    .ascii "cpuid_helper\0"
 L_str_1:
     .ascii "cpuid_helper\0"
     .section .rodata
@@ -77,7 +77,6 @@ cpufeat_force_mask:
     .section .iii.ring3,"n"
     .asciz "cf_ld_u32"
     .text
-    .global L_cf_ld_u32
     .seh_proc L_cf_ld_u32
 L_cf_ld_u32:
     pushq %rbp
@@ -163,11 +162,8 @@ L_cf_ld_u32:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -176,11 +172,8 @@ L_cf_ld_u32:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -189,11 +182,8 @@ L_cf_ld_u32:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -214,7 +204,6 @@ L_cf_ld_u32:
     .section .iii.ring3,"n"
     .asciz "cf_bit"
     .text
-    .global L_cf_bit
     .seh_proc L_cf_bit
 L_cf_bit:
     pushq %rbp
@@ -1077,7 +1066,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "cf_has"
     .text
-    .global L_cf_has
     .seh_proc L_cf_has
 L_cf_has:
     pushq %rbp

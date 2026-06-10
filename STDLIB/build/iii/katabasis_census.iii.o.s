@@ -5,6 +5,8 @@
     .section .rodata
 L_str_0:
     .ascii "sha256.iii\0"
+L_str_1:
+    .ascii "sha256.iii\0"
     .section .bss
     .global L_KCEN_FACTS
 L_KCEN_FACTS:
@@ -457,7 +459,7 @@ katabasis_census_hash:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq sha256_oneshot
+    callq sha256_oneshot_packed
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax

@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "tempaloc.iiitempaloc.iiitempaloc.iiitempaloc.iiikernel32kernel32\0"
+    .ascii "tempaloc.iii\0"
 L_str_1:
-    .ascii "tempaloc.iiitempaloc.iiitempaloc.iiikernel32kernel32\0"
+    .ascii "tempaloc.iii\0"
 L_str_2:
-    .ascii "tempaloc.iiitempaloc.iiikernel32kernel32\0"
+    .ascii "tempaloc.iii\0"
 L_str_3:
-    .ascii "tempaloc.iiikernel32kernel32\0"
+    .ascii "tempaloc.iii\0"
 L_str_4:
-    .ascii "kernel32kernel32\0"
+    .ascii "kernel32\0"
 L_str_5:
     .ascii "kernel32\0"
     .section .rodata
@@ -32,6 +32,8 @@ L_REG_E_NOFIT:
     .quad 0xfffffffffffffffc
 L_REG_E_SEALED:
     .quad 0xfffffffffffffffb
+L_REG_E_OSFREE:
+    .quad 0xfffffffffffffffa
 L_REG_TYPE:
     .quad 0x1
     .section .bss
@@ -242,7 +244,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "region_slot_of"
     .text
-    .global L_region_slot_of
     .seh_proc L_region_slot_of
 L_region_slot_of:
     pushq %rbp
@@ -1114,6 +1115,10 @@ L_if_end_35:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1132,12 +1137,12 @@ L_if_end_35:
     popq %rax
     pushq %rax
     popq %rax
-    movq %rax, -32(%rbp)
+    movq %rax, -40(%rbp)
     movabsq $0x8000, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1148,6 +1153,7 @@ L_if_end_35:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -32(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -1204,6 +1210,29 @@ L_if_end_37:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movslq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movslq L_REG_E_OSFREE(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
     movslq L_REG_OK(%rip), %rax
     pushq %rax
     popq %rax

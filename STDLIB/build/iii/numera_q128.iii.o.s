@@ -21,7 +21,6 @@ L_Q128_LIVE:
     .section .iii.ring3,"n"
     .asciz "q128_alloc"
     .text
-    .global L_q128_alloc
     .seh_proc L_q128_alloc
 L_q128_alloc:
     pushq %rbp
@@ -110,7 +109,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "q128_slot_of"
     .text
-    .global L_q128_slot_of
     .seh_proc L_q128_slot_of
 L_q128_slot_of:
     pushq %rbp
@@ -2062,11 +2060,8 @@ L_if_end_71:
     movq %rax, -72(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
@@ -2092,11 +2087,8 @@ L_if_end_71:
     movq %rax, -96(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
@@ -2152,11 +2144,8 @@ L_if_end_71:
     movq %rax, -144(%rbp)
     movq -120(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -152(%rbp)
@@ -2202,31 +2191,22 @@ L_if_end_71:
     movq %rax, -184(%rbp)
     movq -184(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -192(%rbp)
     movq -128(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -200(%rbp)
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -208(%rbp)

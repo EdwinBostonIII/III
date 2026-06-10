@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiicad.iiicad.iiicad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiicad.iiicad.iiicad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "cad.iiicad.iiicad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_5:
-    .ascii "cad.iiicad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_6:
-    .ascii "cad.iiikeccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_7:
-    .ascii "keccak256.iiiconstitution.iiiwitness_hook.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_8:
-    .ascii "constitution.iiiwitness_hook.iii\0"
+    .ascii "constitution.iii\0"
 L_str_9:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -154,7 +154,6 @@ L_SYNSPEC_KAT_ZEROID:
     .section .iii.ring3,"n"
     .asciz "ss_id_addr"
     .text
-    .global L_ss_id_addr
     .seh_proc L_ss_id_addr
 L_ss_id_addr:
     pushq %rbp
@@ -171,11 +170,8 @@ L_ss_id_addr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -195,7 +191,6 @@ L_ss_id_addr:
     .section .iii.ring3,"n"
     .asciz "ss_ink_addr"
     .text
-    .global L_ss_ink_addr
     .seh_proc L_ss_ink_addr
 L_ss_ink_addr:
     pushq %rbp
@@ -212,11 +207,8 @@ L_ss_ink_addr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -236,7 +228,6 @@ L_ss_ink_addr:
     .section .iii.ring3,"n"
     .asciz "ss_outk_addr"
     .text
-    .global L_ss_outk_addr
     .seh_proc L_ss_outk_addr
 L_ss_outk_addr:
     pushq %rbp
@@ -253,11 +244,8 @@ L_ss_outk_addr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -277,7 +265,6 @@ L_ss_outk_addr:
     .section .iii.ring3,"n"
     .asciz "ss_cost_addr"
     .text
-    .global L_ss_cost_addr
     .seh_proc L_ss_cost_addr
 L_ss_cost_addr:
     pushq %rbp
@@ -294,11 +281,8 @@ L_ss_cost_addr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -318,7 +302,6 @@ L_ss_cost_addr:
     .section .iii.ring3,"n"
     .asciz "ss_vmod_addr"
     .text
-    .global L_ss_vmod_addr
     .seh_proc L_ss_vmod_addr
 L_ss_vmod_addr:
     pushq %rbp
@@ -335,11 +318,8 @@ L_ss_vmod_addr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -359,7 +339,6 @@ L_ss_vmod_addr:
     .section .iii.ring3,"n"
     .asciz "ss_vfn_addr"
     .text
-    .global L_ss_vfn_addr
     .seh_proc L_ss_vfn_addr
 L_ss_vfn_addr:
     pushq %rbp
@@ -376,11 +355,8 @@ L_ss_vfn_addr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -400,7 +376,6 @@ L_ss_vfn_addr:
     .section .iii.ring3,"n"
     .asciz "ss_cbuf_addr"
     .text
-    .global L_ss_cbuf_addr
     .seh_proc L_ss_cbuf_addr
 L_ss_cbuf_addr:
     pushq %rbp
@@ -414,11 +389,8 @@ L_ss_cbuf_addr:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -434,11 +406,8 @@ L_ss_cbuf_addr:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x1000, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $12, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -458,7 +427,6 @@ L_ss_cbuf_addr:
     .section .iii.ring3,"n"
     .asciz "ss_clen_addr"
     .text
-    .global L_ss_clen_addr
     .seh_proc L_ss_clen_addr
 L_ss_clen_addr:
     pushq %rbp
@@ -472,11 +440,8 @@ L_ss_clen_addr:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -492,11 +457,8 @@ L_ss_clen_addr:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -516,7 +478,6 @@ L_ss_clen_addr:
     .section .iii.ring3,"n"
     .asciz "ss_write_le32"
     .text
-    .global L_ss_write_le32
     .seh_proc L_ss_write_le32
 L_ss_write_le32:
     pushq %rbp
@@ -553,11 +514,8 @@ L_ss_write_le32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -578,11 +536,8 @@ L_ss_write_le32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -603,11 +558,8 @@ L_ss_write_le32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -638,7 +590,6 @@ L_ss_write_le32:
     .section .iii.ring3,"n"
     .asciz "ss_read_le32"
     .text
-    .global L_ss_read_le32
     .seh_proc L_ss_read_le32
 L_ss_read_le32:
     pushq %rbp
@@ -705,11 +656,8 @@ L_ss_read_le32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -718,11 +666,8 @@ L_ss_read_le32:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -731,11 +676,8 @@ L_ss_read_le32:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -756,7 +698,6 @@ L_ss_read_le32:
     .section .iii.ring3,"n"
     .asciz "ss_copy_bytes"
     .text
-    .global L_ss_copy_bytes
     .seh_proc L_ss_copy_bytes
 L_ss_copy_bytes:
     pushq %rbp
@@ -834,7 +775,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "ss_find_slot"
     .text
-    .global L_ss_find_slot
     .seh_proc L_ss_find_slot
 L_ss_find_slot:
     pushq %rbp
@@ -1392,11 +1332,8 @@ L_if_end_25:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1417,11 +1354,8 @@ L_if_end_25:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1442,11 +1376,8 @@ L_if_end_25:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

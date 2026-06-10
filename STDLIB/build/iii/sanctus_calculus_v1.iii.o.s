@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iiiintent.iiiintent.iii\0"
+    .ascii "mhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iiimhash.iiiintent.iiiintent.iii\0"
+    .ascii "mhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iiiintent.iiiintent.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
-    .ascii "mhash.iiiintent.iiiintent.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
-    .ascii "intent.iiiintent.iii\0"
+    .ascii "intent.iii\0"
 L_str_5:
     .ascii "intent.iii\0"
     .section .rodata
@@ -93,7 +93,6 @@ L_CALC_ROOT_BUF8:
     .section .iii.ring3,"n"
     .asciz "_calc_set"
     .text
-    .global L__calc_set
     .seh_proc L__calc_set
 L__calc_set:
     pushq %rbp
@@ -185,7 +184,6 @@ L__calc_set:
     .section .iii.ring3,"n"
     .asciz "_calc_compute_root"
     .text
-    .global L__calc_compute_root
     .seh_proc L__calc_compute_root
 L__calc_compute_root:
     pushq %rbp
@@ -244,11 +242,8 @@ L__calc_compute_root:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -269,11 +264,8 @@ L__calc_compute_root:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -294,11 +286,8 @@ L__calc_compute_root:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -401,11 +390,8 @@ L_loop_top_2:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -531,11 +517,8 @@ L_loop_top_6:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1967,11 +1950,8 @@ L_loop_top_48:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)

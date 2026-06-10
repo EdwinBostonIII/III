@@ -4,75 +4,74 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtresolution_init.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtresolution_init.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "resolution_init.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_3:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_4:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_5:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_7:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_8:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_9:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_10:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_11:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_12:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_13:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_14:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_15:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_16:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_17:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_18:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_19:
-    .ascii "intent.iiiintent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_20:
-    .ascii "intent.iiiintent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_21:
-    .ascii "intent.iiiintent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_22:
-    .ascii "intent.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "intent.iii\0"
 L_str_23:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_24:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_25:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_26:
-    .ascii "calculus_v1.iiicalculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_27:
-    .ascii "calculus_v1.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_28:
-    .ascii "irreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_29:
-    .ascii "irreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_30:
-    .ascii "irreducibility_proof.iiiirreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_31:
-    .ascii "irreducibility_proof.iiiirreducibility_proof.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_32:
     .ascii "irreducibility_proof.iii\0"
     .section .iii.ring3,"n"
     .asciz "write_u64_le"
     .text
-    .global L_write_u64_le
     .seh_proc L_write_u64_le
 L_write_u64_le:
     pushq %rbp
@@ -129,11 +128,8 @@ L_loop_top_0:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

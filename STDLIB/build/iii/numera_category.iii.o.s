@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiikeccak256.iiicad.iiinous_behavioral_key.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiikeccak256.iiicad.iiinous_behavioral_key.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiikeccak256.iiicad.iiinous_behavioral_key.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "keccak256.iiicad.iiinous_behavioral_key.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_4:
-    .ascii "cad.iiinous_behavioral_key.iii\0"
+    .ascii "cad.iii\0"
 L_str_5:
     .ascii "nous_behavioral_key.iii\0"
     .section .rodata
@@ -193,7 +193,6 @@ L_CATL_SH:
     .section .iii.ring3,"n"
     .asciz "cat_obj_id_ptr"
     .text
-    .global L_cat_obj_id_ptr
     .seh_proc L_cat_obj_id_ptr
 L_cat_obj_id_ptr:
     pushq %rbp
@@ -214,11 +213,8 @@ L_cat_obj_id_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -248,7 +244,6 @@ L_cat_obj_id_ptr:
     .section .iii.ring3,"n"
     .asciz "cat_mor_op_ptr"
     .text
-    .global L_cat_mor_op_ptr
     .seh_proc L_cat_mor_op_ptr
 L_cat_mor_op_ptr:
     pushq %rbp
@@ -269,11 +264,8 @@ L_cat_mor_op_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -303,7 +295,6 @@ L_cat_mor_op_ptr:
     .section .iii.ring3,"n"
     .asciz "cat_mor_id_ptr"
     .text
-    .global L_cat_mor_id_ptr
     .seh_proc L_cat_mor_id_ptr
 L_cat_mor_id_ptr:
     pushq %rbp
@@ -324,11 +315,8 @@ L_cat_mor_id_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -358,7 +346,6 @@ L_cat_mor_id_ptr:
     .section .iii.ring3,"n"
     .asciz "cat_mor_word_ptr"
     .text
-    .global L_cat_mor_word_ptr
     .seh_proc L_cat_mor_word_ptr
 L_cat_mor_word_ptr:
     pushq %rbp
@@ -413,7 +400,6 @@ L_cat_mor_word_ptr:
     .section .iii.ring3,"n"
     .asciz "cat_obj_ok"
     .text
-    .global L_cat_obj_ok
     .seh_proc L_cat_obj_ok
 L_cat_obj_ok:
     pushq %rbp
@@ -492,7 +478,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "cat_mor_ok"
     .text
-    .global L_cat_mor_ok
     .seh_proc L_cat_mor_ok
 L_cat_mor_ok:
     pushq %rbp
@@ -571,7 +556,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "cat_compute_word_id"
     .text
-    .global L_cat_compute_word_id
     .seh_proc L_cat_compute_word_id
 L_cat_compute_word_id:
     pushq %rbp
@@ -804,11 +788,8 @@ L_loop_top_18:
 L_loop_end_19:
     movq L_CATEGORY_WBUF_LEN(%rip), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -1677,7 +1658,6 @@ L_loop_end_55:
     .section .iii.ring3,"n"
     .asciz "cat_add_morphism_word"
     .text
-    .global L_cat_add_morphism_word
     .seh_proc L_cat_add_morphism_word
 L_cat_add_morphism_word:
     pushq %rbp
@@ -2062,11 +2042,8 @@ L_if_end_83:
     movq %rax, -64(%rbp)
     movq L_CATEGORY_WBUF_LEN(%rip), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -3253,11 +3230,8 @@ L_if_end_129:
     movq %rax, -64(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -3312,11 +3286,8 @@ L_loop_top_130:
 L_loop_end_131:
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
@@ -3796,7 +3767,6 @@ L_if_end_147:
     .section .iii.ring3,"n"
     .asciz "category_pb_probe"
     .text
-    .global L_category_pb_probe
     .seh_proc L_category_pb_probe
 L_category_pb_probe:
     pushq %rbp
@@ -4002,7 +3972,6 @@ L_if_end_155:
     .section .iii.ring3,"n"
     .asciz "cat_find_arrow"
     .text
-    .global L_cat_find_arrow
     .seh_proc L_cat_find_arrow
 L_cat_find_arrow:
     pushq %rbp
@@ -4158,7 +4127,6 @@ L_loop_end_157:
     .section .iii.ring3,"n"
     .asciz "cat_lexmin_wins"
     .text
-    .global L_cat_lexmin_wins
     .seh_proc L_cat_lexmin_wins
 L_cat_lexmin_wins:
     pushq %rbp
@@ -4256,7 +4224,6 @@ L_if_end_169:
     .section .iii.ring3,"n"
     .asciz "cat_span_search"
     .text
-    .global L_cat_span_search
     .seh_proc L_cat_span_search
 L_cat_span_search:
     pushq %rbp
@@ -4951,7 +4918,6 @@ L_if_end_199:
     .section .iii.ring3,"n"
     .asciz "cat_coeq_search"
     .text
-    .global L_cat_coeq_search
     .seh_proc L_cat_coeq_search
 L_cat_coeq_search:
     pushq %rbp
@@ -5407,7 +5373,6 @@ L_if_end_221:
     .section .iii.ring3,"n"
     .asciz "cat_kat_mkid"
     .text
-    .global L_cat_kat_mkid
     .seh_proc L_cat_kat_mkid
 L_cat_kat_mkid:
     pushq %rbp
@@ -8119,7 +8084,6 @@ L_if_end_335:
     .section .iii.ring3,"n"
     .asciz "catl_fill32"
     .text
-    .global L_catl_fill32
     .seh_proc L_catl_fill32
 L_catl_fill32:
     pushq %rbp
@@ -8196,7 +8160,6 @@ L_loop_end_337:
     .section .iii.ring3,"n"
     .asciz "catl_build_scene"
     .text
-    .global L_catl_build_scene
     .seh_proc L_catl_build_scene
 L_catl_build_scene:
     pushq %rbp
@@ -8632,7 +8595,6 @@ L_if_end_351:
     .section .iii.ring3,"n"
     .asciz "catl_verify_assoc"
     .text
-    .global L_catl_verify_assoc
     .seh_proc L_catl_verify_assoc
 L_catl_verify_assoc:
     pushq %rbp
@@ -8719,7 +8681,6 @@ L_if_end_355:
     .section .iii.ring3,"n"
     .asciz "catl_verify_closure"
     .text
-    .global L_catl_verify_closure
     .seh_proc L_catl_verify_closure
 L_catl_verify_closure:
     pushq %rbp
@@ -9073,7 +9034,6 @@ L_if_end_373:
     .section .iii.ring3,"n"
     .asciz "catl_falsify_reject"
     .text
-    .global L_catl_falsify_reject
     .seh_proc L_catl_falsify_reject
 L_catl_falsify_reject:
     pushq %rbp
@@ -9250,7 +9210,6 @@ L_if_end_381:
     .section .iii.ring3,"n"
     .asciz "catl_canary_holds"
     .text
-    .global L_catl_canary_holds
     .seh_proc L_catl_canary_holds
 L_catl_canary_holds:
     pushq %rbp
@@ -9353,7 +9312,6 @@ L_if_end_385:
     .section .iii.ring3,"n"
     .asciz "catl_clause_eval"
     .text
-    .global L_catl_clause_eval
     .seh_proc L_catl_clause_eval
 L_catl_clause_eval:
     pushq %rbp
@@ -9623,7 +9581,6 @@ L_if_end_403:
     .section .iii.ring3,"n"
     .asciz "catl_register"
     .text
-    .global L_catl_register
     .seh_proc L_catl_register
 L_catl_register:
     pushq %rbp
@@ -9700,7 +9657,7 @@ L_if_end_405:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -9716,7 +9673,6 @@ L_if_end_405:
     .section .iii.ring3,"n"
     .asciz "catl_run_charter"
     .text
-    .global L_catl_run_charter
     .seh_proc L_catl_run_charter
 L_catl_run_charter:
     pushq %rbp
@@ -9823,7 +9779,6 @@ L_loop_end_407:
     .section .iii.ring3,"n"
     .asciz "catl_init"
     .text
-    .global L_catl_init
     .seh_proc L_catl_init
 L_catl_init:
     pushq %rbp

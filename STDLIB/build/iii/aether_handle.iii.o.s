@@ -50,7 +50,6 @@ L_HANDLE_CLOSED:
     .section .iii.ring3,"n"
     .asciz "handle_alloc_slot"
     .text
-    .global L_handle_alloc_slot
     .seh_proc L_handle_alloc_slot
 L_handle_alloc_slot:
     pushq %rbp
@@ -139,7 +138,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "handle_slot_of"
     .text
-    .global L_handle_slot_of
     .seh_proc L_handle_slot_of
 L_handle_slot_of:
     pushq %rbp

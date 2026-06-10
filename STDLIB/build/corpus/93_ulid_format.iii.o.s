@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtxoshiro.iiiulid.iiiulid.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtxoshiro.iiiulid.iiiulid.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "xoshiro.iiiulid.iiiulid.iii\0"
+    .ascii "xoshiro.iii\0"
 L_str_3:
-    .ascii "ulid.iiiulid.iii\0"
+    .ascii "ulid.iii\0"
 L_str_4:
     .ascii "ulid.iii\0"
     .section .iii.ring3,"n"

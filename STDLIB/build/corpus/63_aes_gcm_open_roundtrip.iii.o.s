@@ -4,19 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtaes_gcm.iiiaes_gcm.iiiaes_gcm.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtaes_gcm.iiiaes_gcm.iiiaes_gcm.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "aes_gcm.iiiaes_gcm.iiiaes_gcm.iii\0"
+    .ascii "aes_gcm.iii\0"
 L_str_3:
-    .ascii "aes_gcm.iiiaes_gcm.iii\0"
+    .ascii "aes_gcm.iii\0"
 L_str_4:
     .ascii "aes_gcm.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_pattern"
     .text
-    .global L_fill_pattern
     .seh_proc L_fill_pattern
 L_fill_pattern:
     pushq %rbp
@@ -96,7 +95,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "zero_buf"
     .text
-    .global L_zero_buf
     .seh_proc L_zero_buf
 L_zero_buf:
     pushq %rbp

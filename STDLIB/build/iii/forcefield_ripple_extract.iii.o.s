@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "congruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_metric.iiiripple_metric.iiicommit_gate.iii\0"
+    .ascii "congruence.iii\0"
 L_str_1:
-    .ascii "congruence.iiicongruence.iiicongruence.iiiripple_metric.iiiripple_metric.iiicommit_gate.iii\0"
+    .ascii "congruence.iii\0"
 L_str_2:
-    .ascii "congruence.iiicongruence.iiiripple_metric.iiiripple_metric.iiicommit_gate.iii\0"
+    .ascii "congruence.iii\0"
 L_str_3:
-    .ascii "congruence.iiiripple_metric.iiiripple_metric.iiicommit_gate.iii\0"
+    .ascii "congruence.iii\0"
 L_str_4:
-    .ascii "ripple_metric.iiiripple_metric.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_5:
-    .ascii "ripple_metric.iiicommit_gate.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_6:
     .ascii "commit_gate.iii\0"
     .section .rodata
@@ -1006,7 +1006,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "rx_addr_set"
     .text
-    .global L_rx_addr_set
     .seh_proc L_rx_addr_set
 L_rx_addr_set:
     pushq %rbp
@@ -1092,11 +1091,8 @@ L_loop_end_43:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1117,11 +1113,8 @@ L_loop_end_43:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1142,11 +1135,8 @@ L_loop_end_43:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

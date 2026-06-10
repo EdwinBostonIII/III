@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "tcp.iiitcp.iiitcp.iiitcp.iiitcp.iii\0"
+    .ascii "tcp.iii\0"
 L_str_1:
-    .ascii "tcp.iiitcp.iiitcp.iiitcp.iii\0"
+    .ascii "tcp.iii\0"
 L_str_2:
-    .ascii "tcp.iiitcp.iiitcp.iii\0"
+    .ascii "tcp.iii\0"
 L_str_3:
-    .ascii "tcp.iiitcp.iii\0"
+    .ascii "tcp.iii\0"
 L_str_4:
     .ascii "tcp.iii\0"
     .section .bss

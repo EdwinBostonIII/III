@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hexad_algebra.iiihexad_pfs.iiihexad_reach.iiihexad_reach.iiihexad_epistemic.iiihexad_epistemic.iiihexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
-    .ascii "hexad_pfs.iiihexad_reach.iiihexad_reach.iiihexad_epistemic.iiihexad_epistemic.iiihexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_pfs.iii\0"
 L_str_2:
-    .ascii "hexad_reach.iiihexad_reach.iiihexad_epistemic.iiihexad_epistemic.iiihexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_reach.iii\0"
 L_str_3:
-    .ascii "hexad_reach.iiihexad_epistemic.iiihexad_epistemic.iiihexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_reach.iii\0"
 L_str_4:
-    .ascii "hexad_epistemic.iiihexad_epistemic.iiihexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_epistemic.iii\0"
 L_str_5:
-    .ascii "hexad_epistemic.iiihexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_epistemic.iii\0"
 L_str_6:
-    .ascii "hexad_epistemic.iiihexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_epistemic.iii\0"
 L_str_7:
-    .ascii "hexad_mobius.iiihexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_mobius.iii\0"
 L_str_8:
-    .ascii "hexad_mobius.iiihexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_mobius.iii\0"
 L_str_9:
-    .ascii "hexad_mobius.iiihexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_mobius.iii\0"
 L_str_10:
-    .ascii "hexad_dynamic.iiihexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_dynamic.iii\0"
 L_str_11:
-    .ascii "hexad_dynamic.iiihexad_dynamic.iii\0"
+    .ascii "hexad_dynamic.iii\0"
 L_str_12:
     .ascii "hexad_dynamic.iii\0"
     .section .bss

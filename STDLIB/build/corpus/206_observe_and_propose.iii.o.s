@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_2:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_3:
-    .ascii "governance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_4:
-    .ascii "governance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_5:
     .ascii "governance.iii\0"
     .section .iii.ring3,"n"

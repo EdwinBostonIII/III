@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_4:
     .ascii "xii_rewrite.iii\0"
     .section .rodata
@@ -83,7 +83,6 @@ h4_init:
     .section .iii.ring3,"n"
     .asciz "h4_mkval"
     .text
-    .global L_h4_mkval
     .seh_proc L_h4_mkval
 L_h4_mkval:
     pushq %rbp
@@ -119,7 +118,6 @@ L_h4_mkval:
     .section .iii.ring3,"n"
     .asciz "h4_mkop"
     .text
-    .global L_h4_mkop
     .seh_proc L_h4_mkop
 L_h4_mkop:
     pushq %rbp
@@ -530,7 +528,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "h4_canary_holds"
     .text
-    .global L_h4_canary_holds
     .seh_proc L_h4_canary_holds
 L_h4_canary_holds:
     pushq %rbp
@@ -692,7 +689,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "h4_clause_eval"
     .text
-    .global L_h4_clause_eval
     .seh_proc L_h4_clause_eval
 L_h4_clause_eval:
     pushq %rbp
@@ -838,7 +834,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "h4_register"
     .text
-    .global L_h4_register
     .seh_proc L_h4_register
 L_h4_register:
     pushq %rbp
@@ -915,7 +910,7 @@ L_if_end_29:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

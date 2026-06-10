@@ -4,27 +4,26 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtegraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "egraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_2:
-    .ascii "egraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_3:
-    .ascii "egraph.iiiegraph.iiiegraph.iiiegraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_4:
-    .ascii "egraph.iiiegraph.iiiegraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_5:
-    .ascii "egraph.iiiegraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_6:
-    .ascii "egraph.iiiegraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_7:
-    .ascii "egraph.iiioptinvoke.iii\0"
+    .ascii "egraph.iii\0"
 L_str_8:
     .ascii "optinvoke.iii\0"
     .section .iii.ring3,"n"
     .asciz "kset_sym"
     .text
-    .global L_kset_sym
     .seh_proc L_kset_sym
 L_kset_sym:
     pushq %rbp
@@ -105,7 +104,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "st_u64"
     .text
-    .global L_st_u64
     .seh_proc L_st_u64
 L_st_u64:
     pushq %rbp
@@ -167,11 +165,8 @@ L_loop_top_2:
     movb %dl, (%rax,%rcx,1)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -206,7 +201,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "vec1"
     .text
-    .global L_vec1
     .seh_proc L_vec1
 L_vec1:
     pushq %rbp
@@ -291,7 +285,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "enc_sym"
     .text
-    .global L_enc_sym
     .seh_proc L_enc_sym
 L_enc_sym:
     pushq %rbp
@@ -305,20 +298,14 @@ L_enc_sym:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -339,7 +326,6 @@ L_enc_sym:
     .section .iii.ring3,"n"
     .asciz "enc_var"
     .text
-    .global L_enc_var
     .seh_proc L_enc_var
 L_enc_var:
     pushq %rbp
@@ -352,11 +338,8 @@ L_enc_var:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -514,11 +497,8 @@ L_loop_top_6:
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -96(%rbp), %rax
     pushq %rax

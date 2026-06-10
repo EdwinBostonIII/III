@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "proof_ripple_resolution.iiiproof_ripple_resolution.iii\0"
+    .ascii "proof_ripple_resolution.iii\0"
 L_str_1:
     .ascii "proof_ripple_resolution.iii\0"
     .section .iii.ring3,"n"

@@ -79,7 +79,6 @@ L_g_intent_used:
     .section .iii.ring3,"n"
     .asciz "intent_slot_ptr"
     .text
-    .global L_intent_slot_ptr
     .seh_proc L_intent_slot_ptr
 L_intent_slot_ptr:
     pushq %rbp
@@ -138,7 +137,6 @@ L_intent_slot_ptr:
     .section .iii.ring3,"n"
     .asciz "intent_zero"
     .text
-    .global L_intent_zero
     .seh_proc L_intent_zero
 L_intent_zero:
     pushq %rbp
@@ -229,7 +227,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "write_u32_le_at"
     .text
-    .global L_write_u32_le_at
     .seh_proc L_write_u32_le_at
 L_write_u32_le_at:
     pushq %rbp
@@ -308,11 +305,8 @@ L_write_u32_le_at:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -333,11 +327,8 @@ L_write_u32_le_at:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -358,11 +349,8 @@ L_write_u32_le_at:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -393,7 +381,6 @@ L_write_u32_le_at:
     .section .iii.ring3,"n"
     .asciz "read_u32_le_at"
     .text
-    .global L_read_u32_le_at
     .seh_proc L_read_u32_le_at
 L_read_u32_le_at:
     pushq %rbp
@@ -526,11 +513,8 @@ L_read_u32_le_at:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -539,11 +523,8 @@ L_read_u32_le_at:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -552,11 +533,8 @@ L_read_u32_le_at:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -577,7 +555,6 @@ L_read_u32_le_at:
     .section .iii.ring3,"n"
     .asciz "write_u64_le_at"
     .text
-    .global L_write_u64_le_at
     .seh_proc L_write_u64_le_at
 L_write_u64_le_at:
     pushq %rbp
@@ -604,11 +581,8 @@ L_write_u64_le_at:
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -667,7 +641,6 @@ L_write_u64_le_at:
     .section .iii.ring3,"n"
     .asciz "read_u64_le_at"
     .text
-    .global L_read_u64_le_at
     .seh_proc L_read_u64_le_at
 L_read_u64_le_at:
     pushq %rbp
@@ -724,11 +697,8 @@ L_read_u64_le_at:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -935,11 +905,8 @@ L_if_end_5:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1290,11 +1257,8 @@ intent_set_recursion_depth:
     pushq %rax
     movzwq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1495,11 +1459,8 @@ L_if_end_7:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1810,11 +1771,8 @@ intent_recursion_depth:
     pushq %rax
     movzwq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax

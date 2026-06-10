@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "f_multi"
     .text
-    .global L_f_multi
     .seh_proc L_f_multi
 L_f_multi:
     pushq %rbp

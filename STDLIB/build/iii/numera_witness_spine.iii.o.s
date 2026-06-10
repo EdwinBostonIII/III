@@ -4,35 +4,35 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_9:
-    .ascii "witness_hook.iiiwitness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "cad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_12:
-    .ascii "cad.iiicad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_13:
-    .ascii "cad.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_14:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_15:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -162,7 +162,6 @@ L_WSPINE_T_FIDOUT:
     .section .iii.ring3,"n"
     .asciz "ws_pk2_get"
     .text
-    .global L_ws_pk2_get
     .seh_proc L_ws_pk2_get
 L_ws_pk2_get:
     pushq %rbp
@@ -178,17 +177,11 @@ L_ws_pk2_get:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -245,11 +238,8 @@ L_ws_pk2_get:
 L_if_end_1:
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -271,7 +261,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "ws_pk2_set"
     .text
-    .global L_ws_pk2_set
     .seh_proc L_ws_pk2_set
 L_ws_pk2_set:
     pushq %rbp
@@ -288,17 +277,11 @@ L_ws_pk2_set:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -388,11 +371,8 @@ L_if_else_2:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -441,11 +421,8 @@ L_loop_top_4:
     pushq %rax
     movq L_WSPINE_HASH_SIZE(%rip), %rax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -603,7 +580,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "ws_id_hash"
     .text
-    .global L_ws_id_hash
     .seh_proc L_ws_id_hash
 L_ws_id_hash:
     pushq %rbp
@@ -650,11 +626,8 @@ L_loop_top_10:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -703,7 +676,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "ws_ht_insert"
     .text
-    .global L_ws_ht_insert
     .seh_proc L_ws_ht_insert
 L_ws_ht_insert:
     pushq %rbp
@@ -1109,7 +1081,6 @@ L_loop_end_17:
     .section .iii.ring3,"n"
     .asciz "ws_chain_bucket"
     .text
-    .global L_ws_chain_bucket
     .seh_proc L_ws_chain_bucket
 L_ws_chain_bucket:
     pushq %rbp
@@ -1140,11 +1111,8 @@ L_ws_chain_bucket:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1164,7 +1132,6 @@ L_ws_chain_bucket:
     .section .iii.ring3,"n"
     .asciz "ws_chain_push"
     .text
-    .global L_ws_chain_push
     .seh_proc L_ws_chain_push
 L_ws_chain_push:
     pushq %rbp
@@ -1405,7 +1372,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "ws_chain_iter_count"
     .text
-    .global L_ws_chain_iter_count
     .seh_proc L_ws_chain_iter_count
 L_ws_chain_iter_count:
     pushq %rbp
@@ -1681,7 +1647,6 @@ L_loop_end_29:
     .section .iii.ring3,"n"
     .asciz "ws_chain_iter_at"
     .text
-    .global L_ws_chain_iter_at
     .seh_proc L_ws_chain_iter_at
 L_ws_chain_iter_at:
     pushq %rbp
@@ -2663,11 +2628,8 @@ ws_epoch_close:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2755,11 +2717,8 @@ L_if_end_65:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax

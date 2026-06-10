@@ -14,7 +14,6 @@ L_str_3:
     .section .iii.ring3,"n"
     .asciz "build_dynamic_intent"
     .text
-    .global L_build_dynamic_intent
     .seh_proc L_build_dynamic_intent
 L_build_dynamic_intent:
     pushq %rbp
@@ -41,7 +40,6 @@ L_build_dynamic_intent:
     .section .iii.ring3,"n"
     .asciz "use_cross_fn_dynamic"
     .text
-    .global L_use_cross_fn_dynamic
     .seh_proc L_use_cross_fn_dynamic
 L_use_cross_fn_dynamic:
     pushq %rbp

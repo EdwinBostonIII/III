@@ -11,7 +11,6 @@ L_NRM_E_BUF:
     .section .iii.ring3,"n"
     .asciz "ascii_to_lower"
     .text
-    .global L_ascii_to_lower
     .seh_proc L_ascii_to_lower
 L_ascii_to_lower:
     pushq %rbp
@@ -85,7 +84,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "ascii_to_upper"
     .text
-    .global L_ascii_to_upper
     .seh_proc L_ascii_to_upper
 L_ascii_to_upper:
     pushq %rbp

@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtarena.iiiarena.iiibuilder.iiibuilder.iiibase32.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibase32.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "arena.iiibuilder.iiibuilder.iiibase32.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "builder.iiibuilder.iiibase32.iii\0"
+    .ascii "builder.iii\0"
 L_str_4:
-    .ascii "builder.iiibase32.iii\0"
+    .ascii "builder.iii\0"
 L_str_5:
     .ascii "base32.iii\0"
     .section .iii.ring3,"n"
@@ -30,11 +30,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

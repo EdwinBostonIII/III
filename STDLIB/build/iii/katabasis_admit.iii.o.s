@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cycle_term.iiicycle_term.iiiseal.iiicaps.iiigate.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_1:
-    .ascii "cycle_term.iiiseal.iiicaps.iiigate.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_2:
-    .ascii "seal.iiicaps.iiigate.iii\0"
+    .ascii "seal.iii\0"
 L_str_3:
-    .ascii "caps.iiigate.iii\0"
+    .ascii "caps.iii\0"
 L_str_4:
     .ascii "gate.iii\0"
     .section .iii.ring3,"n"

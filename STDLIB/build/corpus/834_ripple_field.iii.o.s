@@ -4,25 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_1:
-    .ascii "ripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_2:
-    .ascii "ripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_3:
-    .ascii "ripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_4:
-    .ascii "ripple_field.iiiripple_field.iiiripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_5:
-    .ascii "ripple_field.iiiripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_6:
-    .ascii "ripple_field.iiiripple_field.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_7:
     .ascii "ripple_field.iii\0"
     .section .iii.ring3,"n"
     .asciz "eq_i64"
     .text
-    .global L_eq_i64
     .seh_proc L_eq_i64
 L_eq_i64:
     pushq %rbp
@@ -73,7 +72,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "check_ranks"
     .text
-    .global L_check_ranks
     .seh_proc L_check_ranks
 L_check_ranks:
     pushq %rbp
@@ -302,7 +300,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "check_edges"
     .text
-    .global L_check_edges
     .seh_proc L_check_edges
 L_check_edges:
     pushq %rbp
@@ -553,7 +550,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "check_gradient"
     .text
-    .global L_check_gradient
     .seh_proc L_check_gradient
 L_check_gradient:
     pushq %rbp
@@ -791,7 +787,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "check_purity"
     .text
-    .global L_check_purity
     .seh_proc L_check_purity
 L_check_purity:
     pushq %rbp
@@ -951,7 +946,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "check_nonvacuity"
     .text
-    .global L_check_nonvacuity
     .seh_proc L_check_nonvacuity
 L_check_nonvacuity:
     pushq %rbp

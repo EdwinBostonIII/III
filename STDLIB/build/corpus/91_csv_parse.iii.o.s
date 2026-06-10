@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtarena.iiiarena.iiicsv.iiicsv.iiicsv.iiicsv.iiicsv.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtarena.iiiarena.iiicsv.iiicsv.iiicsv.iiicsv.iiicsv.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiicsv.iiicsv.iiicsv.iiicsv.iiicsv.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "arena.iiicsv.iiicsv.iiicsv.iiicsv.iiicsv.iii\0"
+    .ascii "arena.iii\0"
 L_str_4:
-    .ascii "csv.iiicsv.iiicsv.iiicsv.iiicsv.iii\0"
+    .ascii "csv.iii\0"
 L_str_5:
-    .ascii "csv.iiicsv.iiicsv.iiicsv.iii\0"
+    .ascii "csv.iii\0"
 L_str_6:
-    .ascii "csv.iiicsv.iiicsv.iii\0"
+    .ascii "csv.iii\0"
 L_str_7:
-    .ascii "csv.iiicsv.iii\0"
+    .ascii "csv.iii\0"
 L_str_8:
     .ascii "csv.iii\0"
     .section .iii.ring3,"n"
@@ -36,11 +36,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

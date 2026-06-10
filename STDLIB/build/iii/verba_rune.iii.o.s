@@ -900,11 +900,8 @@ L_if_end_51:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -973,11 +970,8 @@ L_if_end_53:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $12, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -998,11 +992,8 @@ L_if_end_53:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     movabsq $0x3f, %rax
     pushq %rax
@@ -1064,11 +1055,8 @@ L_if_end_55:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x12, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $18, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1089,11 +1077,8 @@ L_if_end_55:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $12, %rax
     pushq %rax
     movabsq $0x3f, %rax
     pushq %rax
@@ -1120,11 +1105,8 @@ L_if_end_55:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     movabsq $0x3f, %rax
     pushq %rax
@@ -1319,11 +1301,8 @@ L_if_end_59:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1344,11 +1323,8 @@ L_if_end_59:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1369,11 +1345,8 @@ L_if_end_59:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1511,11 +1484,8 @@ L_if_end_71:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     movl -48(%rbp), %eax
@@ -1599,11 +1569,8 @@ L_if_end_73:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1624,11 +1591,8 @@ L_if_end_73:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1649,11 +1613,8 @@ L_if_end_73:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1810,11 +1771,8 @@ L_if_end_83:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $12, %rax
     movl %eax, %eax
     pushq %rax
     movl -48(%rbp), %eax
@@ -1825,11 +1783,8 @@ L_if_end_83:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1957,11 +1912,8 @@ L_if_end_87:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1982,11 +1934,8 @@ L_if_end_87:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2007,11 +1956,8 @@ L_if_end_87:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2210,11 +2156,8 @@ L_if_end_101:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x12, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $18, %rax
     movl %eax, %eax
     pushq %rax
     movl -48(%rbp), %eax
@@ -2225,11 +2168,8 @@ L_if_end_101:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $12, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2244,11 +2184,8 @@ L_if_end_101:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2359,11 +2296,8 @@ L_if_end_105:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2384,11 +2318,8 @@ L_if_end_105:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2409,11 +2340,8 @@ L_if_end_105:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

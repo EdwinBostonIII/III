@@ -4,15 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtx25519.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtx25519.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
     .ascii "x25519.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_scalar"
     .text
-    .global L_fill_scalar
     .seh_proc L_fill_scalar
 L_fill_scalar:
     pushq %rbp
@@ -359,7 +358,6 @@ L_fill_scalar:
     .section .iii.ring3,"n"
     .asciz "fill_u"
     .text
-    .global L_fill_u
     .seh_proc L_fill_u
 L_fill_u:
     pushq %rbp
@@ -706,7 +704,6 @@ L_fill_u:
     .section .iii.ring3,"n"
     .asciz "check_result"
     .text
-    .global L_check_result
     .seh_proc L_check_result
 L_check_result:
     pushq %rbp

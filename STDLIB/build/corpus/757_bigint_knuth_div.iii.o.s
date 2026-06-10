@@ -4,37 +4,37 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "arena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_11:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_12:
-    .ascii "bigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_13:
-    .ascii "bigint.iiibigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint.iii\0"
 L_str_14:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_15:
-    .ascii "bigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_16:
     .ascii "bigint_div.iii\0"
     .section .data
@@ -44,7 +44,6 @@ L_LCG:
     .section .iii.ring3,"n"
     .asciz "lcg_next"
     .text
-    .global L_lcg_next
     .seh_proc L_lcg_next
 L_lcg_next:
     pushq %rbp
@@ -86,7 +85,6 @@ L_lcg_next:
     .section .iii.ring3,"n"
     .asciz "build_rand"
     .text
-    .global L_build_rand
     .seh_proc L_build_rand
 L_build_rand:
     pushq %rbp
@@ -256,7 +254,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "build_limbs2"
     .text
-    .global L_build_limbs2
     .seh_proc L_build_limbs2
 L_build_limbs2:
     pushq %rbp
@@ -348,7 +345,6 @@ L_build_limbs2:
     .section .iii.ring3,"n"
     .asciz "check"
     .text
-    .global L_check
     .seh_proc L_check
 L_check:
     pushq %rbp
@@ -681,7 +677,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "check_drop"
     .text
-    .global L_check_drop
     .seh_proc L_check_drop
 L_check_drop:
     pushq %rbp
@@ -774,11 +769,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x16, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $22, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

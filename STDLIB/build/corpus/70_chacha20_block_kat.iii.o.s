@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtchacha20.iiichacha20.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtchacha20.iiichacha20.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "chacha20.iiichacha20.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_3:
     .ascii "chacha20.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_key"
     .text
-    .global L_fill_key
     .seh_proc L_fill_key
 L_fill_key:
     pushq %rbp
@@ -87,7 +86,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "fill_nonce"
     .text
-    .global L_fill_nonce
     .seh_proc L_fill_nonce
 L_fill_nonce:
     pushq %rbp
@@ -234,7 +232,6 @@ L_fill_nonce:
     .section .iii.ring3,"n"
     .asciz "check_output"
     .text
-    .global L_check_output
     .seh_proc L_check_output
 L_check_output:
     pushq %rbp

@@ -54,7 +54,6 @@ L_HW_BLOB_USED:
     .section .iii.ring3,"n"
     .asciz "_hw_alloc_slot"
     .text
-    .global L__hw_alloc_slot
     .seh_proc L__hw_alloc_slot
 L__hw_alloc_slot:
     pushq %rbp
@@ -143,7 +142,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_hw_alloc_blob"
     .text
-    .global L__hw_alloc_blob
     .seh_proc L__hw_alloc_blob
 L__hw_alloc_blob:
     pushq %rbp
@@ -268,11 +266,8 @@ hw_offload_register:
     movq %rax, -56(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -287,11 +282,8 @@ hw_offload_register:
     movq %rax, -64(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -642,11 +634,8 @@ hw_offload_pack_meta:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -660,11 +649,8 @@ hw_offload_pack_meta:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

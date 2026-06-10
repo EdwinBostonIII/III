@@ -4,31 +4,31 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "cad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "cad.iii\0"
 L_str_5:
-    .ascii "cad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "cad.iii\0"
 L_str_6:
-    .ascii "cad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "cad.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "witness_hook.iii\0"
 L_str_9:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "witness_hook.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "witness_hook.iiiwitness_hook.iiiaether::manifest::attach\0"
+    .ascii "witness_hook.iii\0"
 L_str_12:
-    .ascii "witness_hook.iiiaether::manifest::attach\0"
+    .ascii "witness_hook.iii\0"
 L_str_13:
     .ascii "aether::manifest::attach\0"
     .section .rodata
@@ -213,7 +213,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_mf_put_u64_le"
     .text
-    .global L__mf_put_u64_le
     .seh_proc L__mf_put_u64_le
 L__mf_put_u64_le:
     pushq %rbp
@@ -273,11 +272,8 @@ L_loop_top_2:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -327,7 +323,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_mf_get_u64_le"
     .text
-    .global L__mf_get_u64_le
     .seh_proc L__mf_get_u64_le
 L__mf_get_u64_le:
     pushq %rbp
@@ -389,11 +384,8 @@ L_loop_top_4:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -436,7 +428,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_mf_copy32_into_scratch"
     .text
-    .global L__mf_copy32_into_scratch
     .seh_proc L__mf_copy32_into_scratch
 L__mf_copy32_into_scratch:
     pushq %rbp
@@ -535,7 +526,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "_mf_compute_in_commit"
     .text
-    .global L__mf_compute_in_commit
     .seh_proc L__mf_compute_in_commit
 L__mf_compute_in_commit:
     pushq %rbp
@@ -1141,7 +1131,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "_mf_register_index"
     .text
-    .global L__mf_register_index
     .seh_proc L__mf_register_index
 L__mf_register_index:
     pushq %rbp
@@ -1186,11 +1175,8 @@ L_if_end_23:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1586,7 +1572,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "_mf_lookup_idx"
     .text
-    .global L__mf_lookup_idx
     .seh_proc L__mf_lookup_idx
 L__mf_lookup_idx:
     pushq %rbp
@@ -1665,11 +1650,8 @@ L_loop_top_36:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2171,7 +2153,6 @@ L_if_end_59:
     .section .iii.ring3,"n"
     .asciz "_mf_build_test_req"
     .text
-    .global L__mf_build_test_req
     .seh_proc L__mf_build_test_req
 L__mf_build_test_req:
     pushq %rbp
@@ -2265,7 +2246,6 @@ L__mf_build_test_req:
     .section .iii.ring3,"n"
     .asciz "_mf_put_test_ptr"
     .text
-    .global L__mf_put_test_ptr
     .seh_proc L__mf_put_test_ptr
 L__mf_put_test_ptr:
     pushq %rbp
@@ -2325,11 +2305,8 @@ L_loop_top_60:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

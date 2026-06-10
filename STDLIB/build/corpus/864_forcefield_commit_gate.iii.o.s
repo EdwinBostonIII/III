@@ -4,25 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcommit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicad.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcommit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicad.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "commit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicad.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_3:
-    .ascii "commit_gate.iiicommit_gate.iiicommit_gate.iiicommit_gate.iiicad.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_4:
-    .ascii "commit_gate.iiicommit_gate.iiicommit_gate.iiicad.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_5:
-    .ascii "commit_gate.iiicommit_gate.iiicad.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_6:
-    .ascii "commit_gate.iiicad.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_7:
     .ascii "cad.iii\0"
     .section .iii.ring3,"n"
     .asciz "kst_u32"
     .text
-    .global L_kst_u32
     .seh_proc L_kst_u32
 L_kst_u32:
     pushq %rbp
@@ -37,11 +36,8 @@ L_kst_u32:
     movq %r8, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -76,11 +72,8 @@ L_kst_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -107,11 +100,8 @@ L_kst_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -138,11 +128,8 @@ L_kst_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -173,7 +160,6 @@ L_kst_u32:
     .section .iii.ring3,"n"
     .asciz "kperm4"
     .text
-    .global L_kperm4
     .seh_proc L_kperm4
 L_kperm4:
     pushq %rbp
@@ -193,11 +179,8 @@ L_kperm4:
     movq %rax, -48(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -275,7 +258,6 @@ L_kperm4:
     .section .iii.ring3,"n"
     .asciz "kedge"
     .text
-    .global L_kedge
     .seh_proc L_kedge
 L_kedge:
     pushq %rbp
@@ -335,7 +317,6 @@ L_kedge:
     .section .iii.ring3,"n"
     .asciz "kfill_objid"
     .text
-    .global L_kfill_objid
     .seh_proc L_kfill_objid
 L_kfill_objid:
     pushq %rbp
@@ -353,11 +334,8 @@ L_kfill_objid:
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -425,7 +403,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "build_square"
     .text
-    .global L_build_square
     .seh_proc L_build_square
 L_build_square:
     pushq %rbp

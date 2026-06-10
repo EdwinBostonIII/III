@@ -4,33 +4,32 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_3:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_4:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_5:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_6:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_7:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_8:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_9:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_10:
-    .ascii "calculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_11:
     .ascii "calculus_v1.iii\0"
     .section .iii.ring3,"n"
     .asciz "_check_primitive_metadata"
     .text
-    .global L__check_primitive_metadata
     .seh_proc L__check_primitive_metadata
 L__check_primitive_metadata:
     pushq %rbp
@@ -242,7 +241,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_bytes_equal"
     .text
-    .global L__bytes_equal
     .seh_proc L__bytes_equal
 L__bytes_equal:
     pushq %rbp
@@ -339,7 +337,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "_byte_sum"
     .text
-    .global L__byte_sum
     .seh_proc L__byte_sum
 L__byte_sum:
     pushq %rbp
@@ -434,7 +431,6 @@ L_loop_end_17:
     .section .iii.ring3,"n"
     .asciz "_check_byte_accessor"
     .text
-    .global L__check_byte_accessor
     .seh_proc L__check_byte_accessor
 L__check_byte_accessor:
     pushq %rbp

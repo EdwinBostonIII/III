@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtbench.iiibench.iiix25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtbench.iiibench.iiix25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "bench.iiibench.iiix25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "bench.iii\0"
 L_str_3:
-    .ascii "bench.iiix25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "bench.iii\0"
 L_str_4:
-    .ascii "x25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "x25519.iii\0"
 L_str_5:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_6:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_7:
-    .ascii "sealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_8:
     .ascii "sealed_channel.iii\0"
     .section .bss
@@ -66,7 +66,6 @@ L_C243_BUDGET_1024B:
     .section .iii.ring3,"n"
     .asciz "_read_u64"
     .text
-    .global L__read_u64
     .seh_proc L__read_u64
 L__read_u64:
     pushq %rbp
@@ -150,11 +149,8 @@ L_loop_top_0:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -197,7 +193,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_write_u64"
     .text
-    .global L__write_u64
     .seh_proc L__write_u64
 L__write_u64:
     pushq %rbp
@@ -266,11 +261,8 @@ L_loop_top_2:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -320,7 +312,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_sort_deltas"
     .text
-    .global L__sort_deltas
     .seh_proc L__sort_deltas
 L__sort_deltas:
     pushq %rbp
@@ -363,11 +354,8 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -411,11 +399,8 @@ L_loop_top_6:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -444,11 +429,8 @@ L_loop_top_6:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -480,11 +462,8 @@ L_if_else_8:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -578,7 +557,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_median"
     .text
-    .global L__median
     .seh_proc L__median
 L__median:
     pushq %rbp
@@ -614,11 +592,8 @@ L__median:
     movq %rax, -32(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -642,7 +617,6 @@ L__median:
     .section .iii.ring3,"n"
     .asciz "_init_basepoint"
     .text
-    .global L__init_basepoint
     .seh_proc L__init_basepoint
 L__init_basepoint:
     pushq %rbp
@@ -721,7 +695,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "_init_alice_sk"
     .text
-    .global L__init_alice_sk
     .seh_proc L__init_alice_sk
 L__init_alice_sk:
     pushq %rbp
@@ -805,7 +778,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "_init_bob_sk"
     .text
-    .global L__init_bob_sk
     .seh_proc L__init_bob_sk
 L__init_bob_sk:
     pushq %rbp
@@ -889,7 +861,6 @@ L_loop_end_17:
     .section .iii.ring3,"n"
     .asciz "_fill_payload"
     .text
-    .global L__fill_payload
     .seh_proc L__fill_payload
 L__fill_payload:
     pushq %rbp
@@ -1000,7 +971,6 @@ L_loop_end_19:
     .section .iii.ring3,"n"
     .asciz "_restore_payload"
     .text
-    .global L__restore_payload
     .seh_proc L__restore_payload
 L__restore_payload:
     pushq %rbp
@@ -1082,7 +1052,6 @@ L_loop_end_21:
     .section .iii.ring3,"n"
     .asciz "_payload_matches"
     .text
-    .global L__payload_matches
     .seh_proc L__payload_matches
 L__payload_matches:
     pushq %rbp
@@ -1183,7 +1152,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "_bench_size"
     .text
-    .global L__bench_size
     .seh_proc L__bench_size
 L__bench_size:
     pushq %rbp
@@ -1376,11 +1344,8 @@ L_if_end_31:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax

@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtx25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtx25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "x25519.iiisealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "x25519.iii\0"
 L_str_3:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_4:
-    .ascii "sealed_channel.iiisealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_5:
-    .ascii "sealed_channel.iiisealed_channel.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_6:
     .ascii "sealed_channel.iii\0"
     .section .iii.ring3,"n"

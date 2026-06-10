@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_make_compose"
     .text
-    .global L__make_compose
     .seh_proc L__make_compose
 L__make_compose:
     pushq %rbp

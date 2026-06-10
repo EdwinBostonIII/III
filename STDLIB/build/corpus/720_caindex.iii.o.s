@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "caindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_1:
-    .ascii "caindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_2:
     .ascii "caindex.iii\0"
     .section .rodata
@@ -27,7 +27,6 @@ L_VALS:
     .section .iii.ring3,"n"
     .asciz "mkid"
     .text
-    .global L_mkid
     .seh_proc L_mkid
 L_mkid:
     pushq %rbp
@@ -106,11 +105,8 @@ L_loop_end_1:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -131,11 +127,8 @@ L_loop_end_1:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -156,11 +149,8 @@ L_loop_end_1:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

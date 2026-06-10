@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_1:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iiisandbox_quota.iiisandbox_quota.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_2:
-    .ascii "sandbox_ctor.iiisandbox_quota.iiisandbox_quota.iii\0"
+    .ascii "sandbox_ctor.iii\0"
 L_str_3:
-    .ascii "sandbox_quota.iiisandbox_quota.iii\0"
+    .ascii "sandbox_quota.iii\0"
 L_str_4:
     .ascii "sandbox_quota.iii\0"
     .section .rodata
@@ -42,7 +42,6 @@ L_SBE_CTX:
     .section .iii.ring3,"n"
     .asciz "_sbe_slot_of"
     .text
-    .global L__sbe_slot_of
     .seh_proc L__sbe_slot_of
 L__sbe_slot_of:
     pushq %rbp
@@ -356,13 +355,9 @@ sandbox_exec_kind:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L__sbe_slot_of
+    callq sandbox_state
     addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -385,6 +380,39 @@ sandbox_exec_kind:
     pushq %rax
     popq %rax
 L_if_end_13:
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L__sbe_slot_of
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
     leaq L_SBE_KIND(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -426,6 +454,35 @@ sandbox_exec_ctx:
     pushq %rax
     popq %rcx
     subq $32, %rsp
+    callq sandbox_state
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
     callq L__sbe_slot_of
     addq $32, %rsp
     movl %eax, %eax
@@ -444,7 +501,7 @@ sandbox_exec_ctx:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -454,7 +511,7 @@ sandbox_exec_ctx:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_19:
     leaq L_SBE_CTX(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -519,7 +576,7 @@ sandbox_exec_finish:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_21
     movslq L_SBE_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -529,7 +586,7 @@ sandbox_exec_finish:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_21:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -552,7 +609,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_23
     movslq L_SBE_E_BADSTATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -562,7 +619,7 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_23:
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -640,7 +697,7 @@ sandbox_exec_cancel:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_25
     movslq L_SBE_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -650,7 +707,7 @@ sandbox_exec_cancel:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_25:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -673,7 +730,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_27
     movslq L_SBE_E_BADSTATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -683,7 +740,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_27:
     movl -32(%rbp), %eax
     pushq %rax
     movl L_SBE_STATE_CANCELLED(%rip), %eax
@@ -696,7 +753,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_29
     movslq L_SBE_E_BADSTATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -706,7 +763,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_29:
     movl L_SBE_STATE_CANCELLED(%rip), %eax
     pushq %rax
     movq -16(%rbp), %rax
@@ -772,7 +829,7 @@ sandbox_exec_completed:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_31
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -782,7 +839,7 @@ sandbox_exec_completed:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_31:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -805,7 +862,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_33
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -815,7 +872,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_33:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -846,7 +903,7 @@ sandbox_exec_clear_all:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_30:
+L_loop_top_34:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_SBE_SLOTS(%rip), %eax
@@ -859,7 +916,7 @@ L_loop_top_30:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_31
+    jz L_loop_end_35
     leaq L_SBE_KIND(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -894,8 +951,8 @@ L_loop_top_30:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_30
-L_loop_end_31:
+    jmp L_loop_top_34
+L_loop_end_35:
     movslq L_SBE_OK(%rip), %rax
     pushq %rax
     popq %rax

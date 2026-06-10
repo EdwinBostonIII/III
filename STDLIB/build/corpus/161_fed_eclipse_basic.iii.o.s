@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtfed_sybil.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtfed_sybil.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "fed_sybil.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_3:
-    .ascii "fed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_4:
-    .ascii "fed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_5:
-    .ascii "fed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_6:
-    .ascii "fed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_7:
-    .ascii "fed_eclipse.iiifed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_8:
-    .ascii "fed_eclipse.iiifed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_9:
-    .ascii "fed_eclipse.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_10:
     .ascii "fed_eclipse.iii\0"
     .section .iii.ring3,"n"

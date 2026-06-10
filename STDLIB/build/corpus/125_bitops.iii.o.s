@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_1:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_2:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_3:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_4:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_5:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_6:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_7:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_8:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_9:
-    .ascii "bitops.iiibitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_10:
-    .ascii "bitops.iiibitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_11:
-    .ascii "bitops.iiibitops.iii\0"
+    .ascii "bitops.iii\0"
 L_str_12:
     .ascii "bitops.iii\0"
     .section .iii.ring3,"n"

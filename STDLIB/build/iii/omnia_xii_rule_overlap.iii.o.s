@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_1:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_2:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_3:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_4:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_5:
     .ascii "xii_rule_patterns.iii\0"
     .section .rodata
@@ -23,7 +23,6 @@ L_XRO_SENT:
     .section .iii.ring3,"n"
     .asciz "xro_kind_unify"
     .text
-    .global L_xro_kind_unify
     .seh_proc L_xro_kind_unify
 L_xro_kind_unify:
     pushq %rbp
@@ -224,7 +223,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "xro_child_at"
     .text
-    .global L_xro_child_at
     .seh_proc L_xro_child_at
 L_xro_child_at:
     pushq %rbp

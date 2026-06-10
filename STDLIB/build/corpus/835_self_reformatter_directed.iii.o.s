@@ -4,31 +4,30 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_2:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_3:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_4:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_5:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_6:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_7:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_8:
-    .ascii "self_reformatter.iiiself_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_9:
-    .ascii "self_reformatter.iiiself_reformatter.iii\0"
+    .ascii "self_reformatter.iii\0"
 L_str_10:
     .ascii "self_reformatter.iii\0"
     .section .iii.ring3,"n"
     .asciz "eq_i64"
     .text
-    .global L_eq_i64
     .seh_proc L_eq_i64
 L_eq_i64:
     pushq %rbp
@@ -79,7 +78,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "check_pure"
     .text
-    .global L_check_pure
     .seh_proc L_check_pure
 L_check_pure:
     pushq %rbp
@@ -426,7 +424,6 @@ L_if_end_15:
     .section .iii.ring3,"n"
     .asciz "check_directed"
     .text
-    .global L_check_directed
     .seh_proc L_check_directed
 L_check_directed:
     pushq %rbp
@@ -623,7 +620,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "check_determin"
     .text
-    .global L_check_determin
     .seh_proc L_check_determin
 L_check_determin:
     pushq %rbp

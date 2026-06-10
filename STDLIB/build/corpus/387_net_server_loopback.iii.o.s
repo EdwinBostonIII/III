@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiicapability.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "capability.iii\0"
 L_str_1:
-    .ascii "capability.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_3:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_4:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_5:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_6:
-    .ascii "net.iiinet.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_7:
-    .ascii "net.iiinet.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_8:
-    .ascii "net.iiinet.iii\0"
+    .ascii "net.iii\0"
 L_str_9:
     .ascii "net.iii\0"
     .section .bss

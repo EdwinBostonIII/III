@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "c1"
     .text
-    .global L_c1
     .seh_proc L_c1
 L_c1:
     pushq %rbp
@@ -81,7 +80,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "c2"
     .text
-    .global L_c2
     .seh_proc L_c2
 L_c2:
     pushq %rbp
@@ -155,7 +153,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "c3"
     .text
-    .global L_c3
     .seh_proc L_c3
 L_c3:
     pushq %rbp
@@ -264,7 +261,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "c4"
     .text
-    .global L_c4
     .seh_proc L_c4
 L_c4:
     pushq %rbp

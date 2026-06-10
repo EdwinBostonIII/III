@@ -4,31 +4,31 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiidentifier.iiiwitness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_1:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiidentifier.iiiwitness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_2:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiidentifier.iiiwitness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiiidentifier.iiiwitness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiiidentifier.iiiwitness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "identifier.iiiwitness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "identifier.iii\0"
 L_str_6:
-    .ascii "witness_spine.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_7:
-    .ascii "cad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "cad.iii\0"
 L_str_8:
-    .ascii "cad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "cad.iii\0"
 L_str_9:
-    .ascii "cad.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "cad.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "witness_hook.iiiwitness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_12:
-    .ascii "witness_spine.iiiwitness_spine.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_13:
     .ascii "witness_spine.iii\0"
     .section .rodata
@@ -112,7 +112,6 @@ L_WCOMP_T_LEN:
     .section .iii.ring3,"n"
     .asciz "wc_expand_one"
     .text
-    .global L_wc_expand_one
     .seh_proc L_wc_expand_one
 L_wc_expand_one:
     pushq %rbp
@@ -308,7 +307,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "wc_scan_run"
     .text
-    .global L_wc_scan_run
     .seh_proc L_wc_scan_run
 L_wc_scan_run:
     pushq %rbp
@@ -455,7 +453,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "wc_emit_run"
     .text
-    .global L_wc_emit_run
     .seh_proc L_wc_emit_run
 L_wc_emit_run:
     pushq %rbp
@@ -584,11 +581,8 @@ L_loop_top_20:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -621,11 +615,8 @@ L_loop_top_20:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -737,11 +728,8 @@ L_loop_top_24:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1847,7 +1835,6 @@ L_loop_end_49:
     .section .iii.ring3,"n"
     .asciz "wc_t_emit"
     .text
-    .global L_wc_t_emit
     .seh_proc L_wc_t_emit
 L_wc_t_emit:
     pushq %rbp
@@ -1945,7 +1932,6 @@ L_if_end_55:
     .section .iii.ring3,"n"
     .asciz "wc_selftest_k1"
     .text
-    .global L_wc_selftest_k1
     .seh_proc L_wc_selftest_k1
 L_wc_selftest_k1:
     pushq %rbp
@@ -2204,7 +2190,6 @@ L_if_end_63:
     .section .iii.ring3,"n"
     .asciz "wc_selftest_k2"
     .text
-    .global L_wc_selftest_k2
     .seh_proc L_wc_selftest_k2
 L_wc_selftest_k2:
     pushq %rbp
@@ -2544,7 +2529,6 @@ L_if_end_77:
     .section .iii.ring3,"n"
     .asciz "wc_selftest_k3"
     .text
-    .global L_wc_selftest_k3
     .seh_proc L_wc_selftest_k3
 L_wc_selftest_k3:
     pushq %rbp
@@ -2926,7 +2910,6 @@ L_if_end_91:
     .section .iii.ring3,"n"
     .asciz "wc_selftest_k4"
     .text
-    .global L_wc_selftest_k4
     .seh_proc L_wc_selftest_k4
 L_wc_selftest_k4:
     pushq %rbp

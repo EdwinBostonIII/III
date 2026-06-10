@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrthip.iiihip.iiihip.iiiintent.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrthip.iiihip.iiihip.iiiintent.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "hip.iiihip.iiihip.iiiintent.iii\0"
+    .ascii "hip.iii\0"
 L_str_3:
-    .ascii "hip.iiihip.iiiintent.iii\0"
+    .ascii "hip.iii\0"
 L_str_4:
-    .ascii "hip.iiiintent.iii\0"
+    .ascii "hip.iii\0"
 L_str_5:
     .ascii "intent.iii\0"
     .section .rodata
@@ -25,7 +25,6 @@ L_C224_QUERY:
     .section .iii.ring3,"n"
     .asciz "_read_u32"
     .text
-    .global L__read_u32
     .seh_proc L__read_u32
 L__read_u32:
     pushq %rbp
@@ -79,11 +78,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -111,11 +107,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -143,11 +136,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -186,7 +176,6 @@ L__read_u32:
     .section .iii.ring3,"n"
     .asciz "_read_u64"
     .text
-    .global L__read_u64
     .seh_proc L__read_u64
 L__read_u64:
     pushq %rbp
@@ -246,11 +235,8 @@ L_loop_top_0:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -293,7 +279,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_put"
     .text
-    .global L__put
     .seh_proc L__put
 L__put:
     pushq %rbp
@@ -338,7 +323,6 @@ L__put:
     .section .iii.ring3,"n"
     .asciz "_phrase_is_buffer_valid"
     .text
-    .global L__phrase_is_buffer_valid
     .seh_proc L__phrase_is_buffer_valid
 L__phrase_is_buffer_valid:
     pushq %rbp
@@ -597,7 +581,6 @@ L__phrase_is_buffer_valid:
     .section .iii.ring3,"n"
     .asciz "_phrase_are_sockets_sealed"
     .text
-    .global L__phrase_are_sockets_sealed
     .seh_proc L__phrase_are_sockets_sealed
 L__phrase_are_sockets_sealed:
     pushq %rbp
@@ -886,7 +869,6 @@ L__phrase_are_sockets_sealed:
     .section .iii.ring3,"n"
     .asciz "_phrase_send_buffer"
     .text
-    .global L__phrase_send_buffer
     .seh_proc L__phrase_send_buffer
 L__phrase_send_buffer:
     pushq %rbp

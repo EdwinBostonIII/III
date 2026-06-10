@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_register_all.iiixii_emit_gen.iiixii_horizon.iiixii_kernel_emit.iii\0"
+    .ascii "xii_register_all.iii\0"
 L_str_1:
-    .ascii "xii_emit_gen.iiixii_horizon.iiixii_kernel_emit.iii\0"
+    .ascii "xii_emit_gen.iii\0"
 L_str_2:
-    .ascii "xii_horizon.iiixii_kernel_emit.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_3:
     .ascii "xii_kernel_emit.iii\0"
     .section .bss

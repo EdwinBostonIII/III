@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "census.iiicensus.iiicensus.iiicensus.iiicad.iiicad.iii\0"
+    .ascii "census.iii\0"
 L_str_1:
-    .ascii "census.iiicensus.iiicensus.iiicad.iiicad.iii\0"
+    .ascii "census.iii\0"
 L_str_2:
-    .ascii "census.iiicensus.iiicad.iiicad.iii\0"
+    .ascii "census.iii\0"
 L_str_3:
-    .ascii "census.iiicad.iiicad.iii\0"
+    .ascii "census.iii\0"
 L_str_4:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_5:
     .ascii "cad.iii\0"
     .section .bss

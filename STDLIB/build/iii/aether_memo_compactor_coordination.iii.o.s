@@ -4,41 +4,41 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "memo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiiwitness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_1:
-    .ascii "memo_lattice.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiiwitness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_2:
-    .ascii "memo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiiwitness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_3:
-    .ascii "memo_lattice.iiimemo_lattice.iiicapability.iiiwitness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_4:
-    .ascii "memo_lattice.iiicapability.iiiwitness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_5:
-    .ascii "capability.iiiwitness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiiidentifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_8:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_9:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "witness_spine.iiiwitness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_12:
-    .ascii "witness_spine.iiiconstitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_13:
-    .ascii "constitution.iiimemo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "constitution.iii\0"
 L_str_14:
-    .ascii "memo_lattice.iiimemo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_15:
-    .ascii "memo_lattice.iiimemo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_16:
-    .ascii "memo_lattice.iiicapability.iiicapability.iii\0"
+    .ascii "memo_lattice.iii\0"
 L_str_17:
-    .ascii "capability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_18:
     .ascii "capability.iii\0"
     .section .rodata
@@ -147,7 +147,6 @@ L_MCC_LK_KM:
     .section .iii.ring3,"n"
     .asciz "mcc_process_slot"
     .text
-    .global L_mcc_process_slot
     .seh_proc L_mcc_process_slot
 L_mcc_process_slot:
     pushq %rbp
@@ -307,7 +306,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "mcc_emit_pass"
     .text
-    .global L_mcc_emit_pass
     .seh_proc L_mcc_emit_pass
 L_mcc_emit_pass:
     pushq %rbp
@@ -481,11 +479,8 @@ L_loop_top_12:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1107,7 +1102,6 @@ mcc_last_marked_count:
     .section .iii.ring3,"n"
     .asciz "mcc_st_fill"
     .text
-    .global L_mcc_st_fill
     .seh_proc L_mcc_st_fill
 L_mcc_st_fill:
     pushq %rbp
@@ -1184,7 +1178,6 @@ L_loop_end_41:
     .section .iii.ring3,"n"
     .asciz "mcc_st_ratify"
     .text
-    .global L_mcc_st_ratify
     .seh_proc L_mcc_st_ratify
 L_mcc_st_ratify:
     pushq %rbp
@@ -1476,7 +1469,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "mcc_st_make_chain"
     .text
-    .global L_mcc_st_make_chain
     .seh_proc L_mcc_st_make_chain
 L_mcc_st_make_chain:
     pushq %rbp
@@ -1608,7 +1600,6 @@ L_if_end_45:
     .section .iii.ring3,"n"
     .asciz "mcc_st_setup"
     .text
-    .global L_mcc_st_setup
     .seh_proc L_mcc_st_setup
 L_mcc_st_setup:
     pushq %rbp
@@ -2060,7 +2051,6 @@ L_if_end_61:
     .section .iii.ring3,"n"
     .asciz "mcc_st_lookup"
     .text
-    .global L_mcc_st_lookup
     .seh_proc L_mcc_st_lookup
 L_mcc_st_lookup:
     pushq %rbp

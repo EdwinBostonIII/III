@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "handoff"
     .text
-    .global L_handoff
     .seh_proc L_handoff
 L_handoff:
     pushq %rbp

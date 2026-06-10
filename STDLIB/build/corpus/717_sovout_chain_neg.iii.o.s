@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "recv_into"
     .text
-    .global L_recv_into
     .seh_proc L_recv_into
 L_recv_into:
     # III_SOVEREIGN_AUDIT SOURCE recv_into p0
@@ -35,7 +34,6 @@ L_recv_into:
     .section .iii.ring3,"n"
     .asciz "trusted"
     .text
-    .global L_trusted
     .seh_proc L_trusted
 L_trusted:
     pushq %rbp

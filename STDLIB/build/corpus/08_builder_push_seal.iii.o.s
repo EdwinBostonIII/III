@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_3:
-    .ascii "builder.iiibuilder.iiibuilder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_4:
-    .ascii "builder.iiibuilder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_5:
-    .ascii "builder.iiibuilder.iii\0"
+    .ascii "builder.iii\0"
 L_str_6:
     .ascii "builder.iii\0"
     .section .iii.ring3,"n"

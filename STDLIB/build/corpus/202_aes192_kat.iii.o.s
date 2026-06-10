@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "aes.iiiaes.iiiaes.iii\0"
+    .ascii "aes.iii\0"
 L_str_1:
-    .ascii "aes.iiiaes.iii\0"
+    .ascii "aes.iii\0"
 L_str_2:
     .ascii "aes.iii\0"
     .section .bss

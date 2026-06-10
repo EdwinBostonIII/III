@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtslhdsa.iiislhdsa.iiislhdsa.iiisha256.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtslhdsa.iiislhdsa.iiislhdsa.iiisha256.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "slhdsa.iiislhdsa.iiislhdsa.iiisha256.iii\0"
+    .ascii "slhdsa.iii\0"
 L_str_3:
-    .ascii "slhdsa.iiislhdsa.iiisha256.iii\0"
+    .ascii "slhdsa.iii\0"
 L_str_4:
-    .ascii "slhdsa.iiisha256.iii\0"
+    .ascii "slhdsa.iii\0"
 L_str_5:
     .ascii "sha256.iii\0"
     .section .bss
@@ -1110,11 +1110,8 @@ L_if_end_1:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1130,11 +1127,8 @@ L_if_end_1:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1150,11 +1144,8 @@ L_if_end_1:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax

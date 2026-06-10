@@ -4,41 +4,40 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtkchain.iiikchain.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtkchain.iiikchain.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "kchain.iiikchain.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "kchain.iii\0"
 L_str_3:
-    .ascii "kchain.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "kchain.iii\0"
 L_str_4:
-    .ascii "quality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_5:
-    .ascii "quality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_6:
-    .ascii "quality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_7:
-    .ascii "quality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_8:
-    .ascii "quality.iiiquality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_9:
-    .ascii "quality.iiiquality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_10:
-    .ascii "quality.iiiquality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_11:
-    .ascii "quality.iiiquality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_12:
-    .ascii "quality.iiiquality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality.iii\0"
 L_str_13:
-    .ascii "quality_q7.iiiseal_resolver.iiipattern_table.iii\0"
+    .ascii "quality_q7.iii\0"
 L_str_14:
-    .ascii "seal_resolver.iiipattern_table.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_15:
     .ascii "pattern_table.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_buf"
     .text
-    .global L_fill_buf
     .seh_proc L_fill_buf
 L_fill_buf:
     pushq %rbp

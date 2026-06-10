@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "parse_fast"
     .text
-    .global L_parse_fast
     .seh_proc L_parse_fast
 L_parse_fast:
     pushq %rbp

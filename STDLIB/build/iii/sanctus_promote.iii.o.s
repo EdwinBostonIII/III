@@ -38,7 +38,6 @@ L_PRM_USED:
     .section .iii.ring3,"n"
     .asciz "_prm_slot_of"
     .text
-    .global L__prm_slot_of
     .seh_proc L__prm_slot_of
 L__prm_slot_of:
     pushq %rbp
@@ -348,11 +347,8 @@ L_if_end_15:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -817,11 +813,8 @@ L_if_end_31:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax

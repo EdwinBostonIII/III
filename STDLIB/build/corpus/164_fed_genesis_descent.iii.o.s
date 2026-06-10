@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtsha256.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtsha256.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "sha256.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
-    .ascii "fed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_4:
-    .ascii "fed_genesis.iiifed_genesis.iiifed_genesis.iiifed_genesis.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_5:
-    .ascii "fed_genesis.iiifed_genesis.iiifed_genesis.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_6:
-    .ascii "fed_genesis.iiifed_genesis.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_7:
     .ascii "fed_genesis.iii\0"
     .section .bss
@@ -29,7 +29,6 @@ L_C164_BUF:
     .section .iii.ring3,"n"
     .asciz "_c164_dom_init"
     .text
-    .global L__c164_dom_init
     .seh_proc L__c164_dom_init
 L__c164_dom_init:
     pushq %rbp
@@ -315,7 +314,6 @@ L__c164_dom_init:
     .section .iii.ring3,"n"
     .asciz "_c164_step"
     .text
-    .global L__c164_step
     .seh_proc L__c164_step
 L__c164_step:
     pushq %rbp
@@ -397,11 +395,8 @@ L_loop_top_2:
     jz L_loop_end_3
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

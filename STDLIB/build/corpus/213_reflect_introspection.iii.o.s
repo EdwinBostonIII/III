@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtresolution_init.iiiresolver.iiiresolver.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtresolution_init.iiiresolver.iiiresolver.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "resolution_init.iiiresolver.iiiresolver.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_3:
-    .ascii "resolver.iiiresolver.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "resolver.iii\0"
 L_str_4:
-    .ascii "resolver.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "resolver.iii\0"
 L_str_5:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_6:
-    .ascii "calculus_v1.iiicalculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_7:
-    .ascii "calculus_v1.iiicalculus_v1.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_8:
     .ascii "calculus_v1.iii\0"
     .section .iii.ring3,"n"

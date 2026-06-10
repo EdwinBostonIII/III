@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_3:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_4:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_5:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_6:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_7:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_8:
-    .ascii "legacy_artifact.iiilegacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_9:
-    .ascii "legacy_artifact.iiicad.iii\0"
+    .ascii "legacy_artifact.iii\0"
 L_str_10:
     .ascii "cad.iii\0"
     .section .bss
@@ -66,11 +66,8 @@ main:
     movq %rax, -8(%rbp)
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

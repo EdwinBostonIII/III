@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_1:
-    .ascii "bigint_div.iiibigint_div.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_2:
     .ascii "bigint_div.iii\0"
     .section .bss
@@ -37,7 +37,6 @@ L_FN_NM2:
     .section .iii.ring3,"n"
     .asciz "fn256_init"
     .text
-    .global L_fn256_init
     .seh_proc L_fn256_init
 L_fn256_init:
     pushq %rbp
@@ -351,34 +350,17 @@ L_loop_top_4:
     movl %edx, (%rax,%rcx,4)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x100000000, %rax
+    popq %rax
+    shrq $32, %rax
+    pushq %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_else_6
-    movabsq $0x1, %rax
+    xorq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_7
-L_if_else_6:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_7:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -398,7 +380,7 @@ L_loop_end_5:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_8:
+L_loop_top_6:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -411,7 +393,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_9
+    jz L_loop_end_7
     leaq L_FN_R2(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -441,13 +423,13 @@ L_loop_top_8:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
+    jmp L_loop_top_6
+L_loop_end_7:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_10:
+L_loop_top_8:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x100, %rax
@@ -460,7 +442,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_9
     leaq L_FN_R2(%rip), %rax
     pushq %rax
     popq %rax
@@ -485,8 +467,8 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_8
+L_loop_end_9:
     leaq L_FN_INIT(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -513,7 +495,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "fn_dbl_raw"
     .text
-    .global L_fn_dbl_raw
     .seh_proc L_fn_dbl_raw
 L_fn_dbl_raw:
     pushq %rbp
@@ -538,7 +519,7 @@ L_fn_dbl_raw:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_12:
+L_loop_top_10:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -551,7 +532,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_11
     movq -16(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -562,11 +543,8 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -597,11 +575,8 @@ L_loop_top_12:
     movl %edx, (%rax,%rcx,4)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -618,8 +593,8 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_10
+L_loop_end_11:
     movq -24(%rbp), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -648,7 +623,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "fn_csub_n"
     .text
-    .global L_fn_csub_n
     .seh_proc L_fn_csub_n
 L_fn_csub_n:
     pushq %rbp
@@ -680,7 +654,7 @@ L_fn_csub_n:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_14:
+L_loop_top_12:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -693,7 +667,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_13
     movabsq $0x100000000, %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -750,34 +724,17 @@ L_loop_top_14:
     movq %rdx, (%rax,%rcx,8)
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x100000000, %rax
+    popq %rax
+    shrq $32, %rax
+    pushq %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_else_16
-    movabsq $0x1, %rax
+    xorq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_17
-L_if_else_16:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_17:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -791,65 +748,62 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_12
+L_loop_end_13:
     movabsq $0x0, %rax
     pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
     movq -16(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_19
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_19:
-    movq -40(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_21
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_21:
-    movabsq $0x0, %rax
-    pushq %rax
-    movq -56(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
     subq %rcx, %rax
     pushq %rax
     popq %rax
+    movq %rax, -56(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    shrq $63, %rax
+    pushq %rax
+    popq %rax
     movq %rax, -64(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
     movq -64(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -80(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -80(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    movq -88(%rbp), %rax
     pushq %rax
     movabsq $0xffffffffffffffff, %rax
     pushq %rax
@@ -858,12 +812,12 @@ L_if_end_21:
     xorq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
+    movq %rax, -96(%rbp)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_22:
+L_loop_top_14:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -876,7 +830,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_23
+    jz L_loop_end_15
     movq -24(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -889,7 +843,7 @@ L_loop_top_22:
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
-    movq -64(%rbp), %rax
+    movq -88(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -905,7 +859,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     pushq %rax
-    movq -72(%rbp), %rax
+    movq -96(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -941,8 +895,8 @@ L_loop_top_22:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_22
-L_loop_end_23:
+    jmp L_loop_top_14
+L_loop_end_15:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -959,7 +913,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "fn_copy"
     .text
-    .global L_fn_copy
     .seh_proc L_fn_copy
 L_fn_copy:
     pushq %rbp
@@ -973,21 +926,15 @@ L_fn_copy:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -995,7 +942,7 @@ L_fn_copy:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_24:
+L_loop_top_16:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -1008,7 +955,7 @@ L_loop_top_24:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_25
+    jz L_loop_end_17
     leaq L_FN(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1050,8 +997,8 @@ L_loop_top_24:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_24
-L_loop_end_25:
+    jmp L_loop_top_16
+L_loop_end_17:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1068,7 +1015,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "fn_add"
     .text
-    .global L_fn_add
     .seh_proc L_fn_add
 L_fn_add:
     pushq %rbp
@@ -1083,31 +1029,22 @@ L_fn_add:
     movq %r8, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1119,7 +1056,7 @@ L_fn_add:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_26:
+L_loop_top_18:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -1132,7 +1069,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_27
+    jz L_loop_end_19
     leaq L_FN(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1204,11 +1141,8 @@ L_loop_top_26:
     movl %edx, (%rax,%rcx,4)
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -1225,8 +1159,8 @@ L_loop_top_26:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_26
-L_loop_end_27:
+    jmp L_loop_top_18
+L_loop_end_19:
     movq -56(%rbp), %rax
     pushq %rax
     leaq L_FN(%rip), %rax
@@ -1235,11 +1169,8 @@ L_loop_end_27:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1269,7 +1200,6 @@ L_loop_end_27:
     .section .iii.ring3,"n"
     .asciz "fn_sub"
     .text
-    .global L_fn_sub
     .seh_proc L_fn_sub
 L_fn_sub:
     pushq %rbp
@@ -1284,31 +1214,22 @@ L_fn_sub:
     movq %r8, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -1320,7 +1241,7 @@ L_fn_sub:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_28:
+L_loop_top_20:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -1333,7 +1254,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_29
+    jz L_loop_end_21
     movabsq $0x100000000, %rax
     pushq %rax
     leaq L_FN(%rip), %rax
@@ -1411,34 +1332,17 @@ L_loop_top_28:
     movl %edx, (%rax,%rcx,4)
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x100000000, %rax
+    popq %rax
+    shrq $32, %rax
+    pushq %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_else_30
-    movabsq $0x1, %rax
+    xorq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_31
-L_if_else_30:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_31:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1452,8 +1356,8 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_28
-L_loop_end_29:
+    jmp L_loop_top_20
+L_loop_end_21:
     movabsq $0x0, %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -1478,7 +1382,7 @@ L_loop_end_29:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_32:
+L_loop_top_22:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -1491,7 +1395,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_33
+    jz L_loop_end_23
     leaq L_FN(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1563,11 +1467,8 @@ L_loop_top_32:
     movl %edx, (%rax,%rcx,4)
     movq -96(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
@@ -1584,8 +1485,8 @@ L_loop_top_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_32
-L_loop_end_33:
+    jmp L_loop_top_22
+L_loop_end_23:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1602,7 +1503,6 @@ L_loop_end_33:
     .section .iii.ring3,"n"
     .asciz "fn_mul"
     .text
-    .global L_fn_mul
     .seh_proc L_fn_mul
 L_fn_mul:
     pushq %rbp
@@ -1631,11 +1531,8 @@ L_fn_mul:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1645,11 +1542,8 @@ L_fn_mul:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1694,11 +1588,8 @@ L_fn_mul:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1728,7 +1619,6 @@ L_fn_mul:
     .section .iii.ring3,"n"
     .asciz "fn_sqr"
     .text
-    .global L_fn_sqr
     .seh_proc L_fn_sqr
 L_fn_sqr:
     pushq %rbp
@@ -1768,7 +1658,6 @@ L_fn_sqr:
     .section .iii.ring3,"n"
     .asciz "fn_to_mont"
     .text
-    .global L_fn_to_mont
     .seh_proc L_fn_to_mont
 L_fn_to_mont:
     pushq %rbp
@@ -1784,7 +1673,7 @@ L_fn_to_mont:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_34:
+L_loop_top_24:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -1797,16 +1686,13 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_25
     leaq L_FN(%rip), %rax
     pushq %rax
     movabsq $0x3f, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1839,8 +1725,8 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_24
+L_loop_end_25:
     movabsq $0x3f, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1869,7 +1755,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "fn_from_mont"
     .text
-    .global L_fn_from_mont
     .seh_proc L_fn_from_mont
 L_fn_from_mont:
     pushq %rbp
@@ -1885,7 +1770,7 @@ L_fn_from_mont:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_36:
+L_loop_top_26:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -1898,16 +1783,13 @@ L_loop_top_36:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_37
+    jz L_loop_end_27
     leaq L_FN(%rip), %rax
     pushq %rax
     movabsq $0x3f, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1934,17 +1816,14 @@ L_loop_top_36:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
+    jmp L_loop_top_26
+L_loop_end_27:
     leaq L_FN(%rip), %rax
     pushq %rax
     movabsq $0x3f, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1980,7 +1859,6 @@ L_loop_end_37:
     .section .iii.ring3,"n"
     .asciz "fn_inv"
     .text
-    .global L_fn_inv
     .seh_proc L_fn_inv
 L_fn_inv:
     pushq %rbp
@@ -2002,7 +1880,7 @@ L_fn_inv:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_38:
+L_loop_top_28:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2015,7 +1893,7 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
+    jz L_loop_end_29
     leaq L_FN_NM2(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -2045,8 +1923,8 @@ L_loop_top_38:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
+    jmp L_loop_top_28
+L_loop_end_29:
     leaq L_FN_NM2(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2090,7 +1968,7 @@ L_loop_end_39:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_40:
+L_loop_top_30:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2103,16 +1981,13 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_31
     leaq L_FN(%rip), %rax
     pushq %rax
     movabsq $0x3e, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -2145,13 +2020,13 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_30
+L_loop_end_31:
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_42:
+L_loop_top_32:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2164,7 +2039,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_33
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -2246,7 +2121,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_35
     movabsq $0x3d, %rax
     pushq %rax
     movabsq $0x3e, %rax
@@ -2265,12 +2140,12 @@ L_loop_top_42:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_32
+L_loop_end_33:
     movabsq $0x3e, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2299,7 +2174,6 @@ L_loop_end_43:
     .section .iii.ring3,"n"
     .asciz "fn_set_bytes"
     .text
-    .global L_fn_set_bytes
     .seh_proc L_fn_set_bytes
 L_fn_set_bytes:
     pushq %rbp
@@ -2319,11 +2193,8 @@ L_fn_set_bytes:
     movq %rax, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -2331,7 +2202,7 @@ L_fn_set_bytes:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_46:
+L_loop_top_36:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2344,7 +2215,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_47
+    jz L_loop_end_37
     movabsq $0x7, %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -2353,11 +2224,8 @@ L_loop_top_46:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -2381,11 +2249,8 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -2403,11 +2268,8 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2429,11 +2291,8 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2479,8 +2338,8 @@ L_loop_top_46:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
+    jmp L_loop_top_36
+L_loop_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2497,7 +2356,6 @@ L_loop_end_47:
     .section .iii.ring3,"n"
     .asciz "fn_get_bytes"
     .text
-    .global L_fn_get_bytes
     .seh_proc L_fn_get_bytes
 L_fn_get_bytes:
     pushq %rbp
@@ -2517,11 +2375,8 @@ L_fn_get_bytes:
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -2529,7 +2384,7 @@ L_fn_get_bytes:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_48:
+L_loop_top_38:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2542,7 +2397,7 @@ L_loop_top_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_49
+    jz L_loop_end_39
     leaq L_FN(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -2571,25 +2426,15 @@ L_loop_top_48:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2608,11 +2453,8 @@ L_loop_top_48:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -2622,11 +2464,8 @@ L_loop_top_48:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2645,11 +2484,8 @@ L_loop_top_48:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -2659,11 +2495,8 @@ L_loop_top_48:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2682,11 +2515,8 @@ L_loop_top_48:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
@@ -2722,8 +2552,8 @@ L_loop_top_48:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_48
-L_loop_end_49:
+    jmp L_loop_top_38
+L_loop_end_39:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2740,7 +2570,6 @@ L_loop_end_49:
     .section .iii.ring3,"n"
     .asciz "fn_reduce"
     .text
-    .global L_fn_reduce
     .seh_proc L_fn_reduce
 L_fn_reduce:
     pushq %rbp
@@ -2759,17 +2588,11 @@ L_fn_reduce:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2799,7 +2622,6 @@ L_fn_reduce:
     .section .iii.ring3,"n"
     .asciz "fn_is_zero"
     .text
-    .global L_fn_is_zero
     .seh_proc L_fn_is_zero
 L_fn_is_zero:
     pushq %rbp
@@ -2812,11 +2634,8 @@ L_fn_is_zero:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -2828,7 +2647,7 @@ L_fn_is_zero:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_50:
+L_loop_top_40:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2841,7 +2660,7 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_51
+    jz L_loop_end_41
     movl -24(%rbp), %eax
     pushq %rax
     leaq L_FN(%rip), %rax
@@ -2877,8 +2696,8 @@ L_loop_top_50:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_50
-L_loop_end_51:
+    jmp L_loop_top_40
+L_loop_end_41:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -2891,7 +2710,7 @@ L_loop_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_43
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2901,7 +2720,7 @@ L_loop_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_43:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2918,7 +2737,6 @@ L_if_end_53:
     .section .iii.ring3,"n"
     .asciz "fn_eq"
     .text
-    .global L_fn_eq
     .seh_proc L_fn_eq
 L_fn_eq:
     pushq %rbp
@@ -2932,21 +2750,15 @@ L_fn_eq:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -2958,7 +2770,7 @@ L_fn_eq:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_54:
+L_loop_top_44:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2971,7 +2783,7 @@ L_loop_top_54:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_55
+    jz L_loop_end_45
     movl -40(%rbp), %eax
     pushq %rax
     leaq L_FN(%rip), %rax
@@ -3025,8 +2837,8 @@ L_loop_top_54:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_54
-L_loop_end_55:
+    jmp L_loop_top_44
+L_loop_end_45:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -3039,7 +2851,7 @@ L_loop_end_55:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_47
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3049,7 +2861,7 @@ L_loop_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_47:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3518,11 +3330,8 @@ fn_get_limb_x:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -3562,11 +3371,8 @@ fn_set_u32_x:
     movq %rdx, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -3584,7 +3390,7 @@ fn_set_u32_x:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_58:
+L_loop_top_48:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -3597,7 +3403,7 @@ L_loop_top_58:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_59
+    jz L_loop_end_49
     leaq L_FN(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -3627,8 +3433,8 @@ L_loop_top_58:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_58
-L_loop_end_59:
+    jmp L_loop_top_48
+L_loop_end_49:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

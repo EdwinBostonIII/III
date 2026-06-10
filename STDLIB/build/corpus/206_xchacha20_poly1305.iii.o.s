@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "chacha20.iiixchacha20_poly1305.iiixchacha20_poly1305.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_1:
-    .ascii "xchacha20_poly1305.iiixchacha20_poly1305.iii\0"
+    .ascii "xchacha20_poly1305.iii\0"
 L_str_2:
     .ascii "xchacha20_poly1305.iii\0"
     .section .bss
@@ -725,6 +725,30 @@ L_loop_end_27:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -24(%rbp)
+    movslq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
     leaq L_TG(%rip), %rax
     pushq %rax
     popq %rax
@@ -764,8 +788,8 @@ L_loop_end_27:
     movzbq %al, %rax
     pushq %rax
     popq %rax
-    movq %rax, -24(%rbp)
-    movzbq -24(%rbp), %rax
+    movq %rax, -32(%rbp)
+    movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -777,7 +801,7 @@ L_loop_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -787,12 +811,12 @@ L_loop_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_30:
+L_loop_top_32:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -805,7 +829,7 @@ L_loop_top_30:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_31
+    jz L_loop_end_33
     leaq L_PT2(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -830,7 +854,7 @@ L_loop_top_30:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -840,7 +864,7 @@ L_loop_top_30:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -854,8 +878,8 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_30
-L_loop_end_31:
+    jmp L_loop_top_32
+L_loop_end_33:
     leaq L_TG(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -917,8 +941,8 @@ L_loop_end_31:
     movzbq %al, %rax
     pushq %rax
     popq %rax
-    movq %rax, -32(%rbp)
-    movzbq -32(%rbp), %rax
+    movq %rax, -40(%rbp)
+    movzbq -40(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -930,7 +954,7 @@ L_loop_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_37
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -940,7 +964,7 @@ L_loop_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_37:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

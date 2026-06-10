@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cycle_family.iiicycle_family.iiicycle_family.iiicycle_family.iiicycle_family.iii\0"
+    .ascii "cycle_family.iii\0"
 L_str_1:
-    .ascii "cycle_family.iiicycle_family.iiicycle_family.iiicycle_family.iii\0"
+    .ascii "cycle_family.iii\0"
 L_str_2:
-    .ascii "cycle_family.iiicycle_family.iiicycle_family.iii\0"
+    .ascii "cycle_family.iii\0"
 L_str_3:
-    .ascii "cycle_family.iiicycle_family.iii\0"
+    .ascii "cycle_family.iii\0"
 L_str_4:
     .ascii "cycle_family.iii\0"
     .section .iii.ring3,"n"

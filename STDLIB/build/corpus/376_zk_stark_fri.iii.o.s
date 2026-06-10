@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "zk_stark.iiizk_stark.iiizk_stark.iiizk_stark.iii\0"
+    .ascii "zk_stark.iii\0"
 L_str_1:
-    .ascii "zk_stark.iiizk_stark.iiizk_stark.iii\0"
+    .ascii "zk_stark.iii\0"
 L_str_2:
-    .ascii "zk_stark.iiizk_stark.iii\0"
+    .ascii "zk_stark.iii\0"
 L_str_3:
     .ascii "zk_stark.iii\0"
     .section .iii.ring3,"n"

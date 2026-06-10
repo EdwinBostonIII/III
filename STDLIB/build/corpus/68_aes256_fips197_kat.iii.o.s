@@ -4,19 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtaes.iiiaes.iiiaes.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtaes.iiiaes.iiiaes.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "aes.iiiaes.iiiaes.iii\0"
+    .ascii "aes.iii\0"
 L_str_3:
-    .ascii "aes.iiiaes.iii\0"
+    .ascii "aes.iii\0"
 L_str_4:
     .ascii "aes.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_key"
     .text
-    .global L_fill_key
     .seh_proc L_fill_key
 L_fill_key:
     pushq %rbp
@@ -89,7 +88,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "fill_pt"
     .text
-    .global L_fill_pt
     .seh_proc L_fill_pt
 L_fill_pt:
     pushq %rbp

@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiicalculus_v1.iiipattern_table.iiicall_context.iiiintent.iiiintent.iiiintent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "calculus_v1.iiipattern_table.iiicall_context.iiiintent.iiiintent.iiiintent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_2:
-    .ascii "pattern_table.iiicall_context.iiiintent.iiiintent.iiiintent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_3:
-    .ascii "call_context.iiiintent.iiiintent.iiiintent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "call_context.iii\0"
 L_str_4:
-    .ascii "intent.iiiintent.iiiintent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "intent.iii\0"
 L_str_5:
-    .ascii "intent.iiiintent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "intent.iiicpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "intent.iii\0"
 L_str_7:
-    .ascii "cpufeat.iiicpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_8:
-    .ascii "cpufeat.iii_unused.iii_unused.iii_unused.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_9:
-    .ascii "_unused.iii_unused.iii_unused.iii\0"
+    .ascii "_unused.iii\0"
 L_str_10:
-    .ascii "_unused.iii_unused.iii\0"
+    .ascii "_unused.iii\0"
 L_str_11:
     .ascii "_unused.iii\0"
     .section .iii.ring3,"n"

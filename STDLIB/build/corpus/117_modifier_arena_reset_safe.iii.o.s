@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "my_clear"
     .text
-    .global L_my_clear
     .seh_proc L_my_clear
 L_my_clear:
     pushq %rbp
@@ -37,7 +36,6 @@ L_my_clear:
     .section .iii.ring3,"n"
     .asciz "use_arena"
     .text
-    .global L_use_arena
     .seh_proc L_use_arena
 L_use_arena:
     pushq %rbp

@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "duration.iiiduration.iiiduration.iiiduration.iiiduration.iii\0"
+    .ascii "duration.iii\0"
 L_str_1:
-    .ascii "duration.iiiduration.iiiduration.iiiduration.iii\0"
+    .ascii "duration.iii\0"
 L_str_2:
-    .ascii "duration.iiiduration.iiiduration.iii\0"
+    .ascii "duration.iii\0"
 L_str_3:
-    .ascii "duration.iiiduration.iii\0"
+    .ascii "duration.iii\0"
 L_str_4:
     .ascii "duration.iii\0"
     .section .iii.ring3,"n"

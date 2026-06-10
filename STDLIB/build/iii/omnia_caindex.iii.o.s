@@ -13,7 +13,6 @@ L_CAI_SEED:
     .section .iii.ring3,"n"
     .asciz "cai_id_eq"
     .text
-    .global L_cai_id_eq
     .seh_proc L_cai_id_eq
 L_cai_id_eq:
     pushq %rbp
@@ -109,7 +108,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "cai_bucket"
     .text
-    .global L_cai_bucket
     .seh_proc L_cai_bucket
 L_cai_bucket:
     pushq %rbp
@@ -321,11 +319,8 @@ L_if_end_9:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -495,11 +490,8 @@ L_loop_top_12:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -586,11 +578,8 @@ L_if_end_15:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax

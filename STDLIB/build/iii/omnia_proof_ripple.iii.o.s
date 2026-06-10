@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crystal.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_1:
-    .ascii "crystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_2:
-    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_3:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_5:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_6:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -46,7 +46,6 @@ L_PR_RECHECK:
     .section .iii.ring3,"n"
     .asciz "pr_init_domain"
     .text
-    .global L_pr_init_domain
     .seh_proc L_pr_init_domain
 L_pr_init_domain:
     pushq %rbp
@@ -217,11 +216,10 @@ L_if_end_1:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "pr_pack_u64"
+    .asciz "prp_pack_u64"
     .text
-    .global L_pr_pack_u64
-    .seh_proc L_pr_pack_u64
-L_pr_pack_u64:
+    .seh_proc L_prp_pack_u64
+L_prp_pack_u64:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -263,11 +261,8 @@ L_loop_top_2:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -368,7 +363,7 @@ L_if_end_5:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prp_pack_u64
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -382,7 +377,7 @@ L_if_end_5:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prp_pack_u64
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -594,7 +589,7 @@ L_if_end_11:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prp_pack_u64
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -608,7 +603,7 @@ L_if_end_11:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prp_pack_u64
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax

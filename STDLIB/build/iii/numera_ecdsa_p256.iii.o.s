@@ -4,41 +4,41 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ec256.iiiec256.iiiec256.iiiec256.iiiec256.iiiec256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "ec256.iii\0"
 L_str_1:
-    .ascii "ec256.iiiec256.iiiec256.iiiec256.iiiec256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "ec256.iii\0"
 L_str_2:
-    .ascii "ec256.iiiec256.iiiec256.iiiec256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "ec256.iii\0"
 L_str_3:
-    .ascii "ec256.iiiec256.iiiec256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "ec256.iii\0"
 L_str_4:
-    .ascii "ec256.iiiec256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "ec256.iii\0"
 L_str_5:
-    .ascii "ec256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "ec256.iii\0"
 L_str_6:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_7:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_8:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_9:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_10:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_11:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_12:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_13:
-    .ascii "fn256.iiifn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_14:
-    .ascii "fn256.iiifn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_15:
-    .ascii "fn256.iiifn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_16:
-    .ascii "fn256.iiidrbg.iiidrbg.iii\0"
+    .ascii "fn256.iii\0"
 L_str_17:
-    .ascii "drbg.iiidrbg.iii\0"
+    .ascii "drbg.iii\0"
 L_str_18:
     .ascii "drbg.iii\0"
     .section .bss
@@ -467,7 +467,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "ecdsa_n_init"
     .text
-    .global L_ecdsa_n_init
     .seh_proc L_ecdsa_n_init
 L_ecdsa_n_init:
     pushq %rbp
@@ -1160,7 +1159,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "ec_bytes_cmp"
     .text
-    .global L_ec_bytes_cmp
     .seh_proc L_ec_bytes_cmp
 L_ec_bytes_cmp:
     pushq %rbp
@@ -1299,7 +1297,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "ec_bytes_is_zero"
     .text
-    .global L_ec_bytes_is_zero
     .seh_proc L_ec_bytes_is_zero
 L_ec_bytes_is_zero:
     pushq %rbp
@@ -1661,7 +1658,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "iii_ecdsa_p256_verify"
     .text
-    .global L_iii_ecdsa_p256_verify
     .seh_proc L_iii_ecdsa_p256_verify
 L_iii_ecdsa_p256_verify:
     pushq %rbp
@@ -2413,6 +2409,10 @@ iii_ecdsa_p256_sign_det:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
 L_loop_top_42:
     movzbq -32(%rbp), %rax
     pushq %rax
@@ -2537,6 +2537,10 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -2545,7 +2549,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
 L_if_end_45:
-    movq -40(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -2554,8 +2558,8 @@ L_if_end_45:
     addq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
-    movq -40(%rbp), %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x40, %rax
     pushq %rax
@@ -2581,6 +2585,35 @@ L_if_end_49:
     popq %rax
     jmp L_loop_top_42
 L_loop_end_43:
+    movzbq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_51:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

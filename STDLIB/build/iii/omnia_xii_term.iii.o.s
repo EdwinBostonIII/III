@@ -5,6 +5,12 @@
     .section .rodata
 L_str_0:
     .ascii "sha256.iii\0"
+L_str_1:
+    .ascii "sha256.iii\0"
+L_str_2:
+    .ascii "sha256.iii\0"
+L_str_3:
+    .ascii "sha256.iii\0"
     .section .rodata
 L_XII_KIND_K01_FORM:
     .quad 0x0
@@ -243,7 +249,6 @@ xii_term_arena_capacity:
     .section .iii.ring3,"n"
     .asciz "_xii_term_write_u32"
     .text
-    .global L__xii_term_write_u32
     .seh_proc L__xii_term_write_u32
 L__xii_term_write_u32:
     pushq %rbp
@@ -287,11 +292,8 @@ L__xii_term_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -319,11 +321,8 @@ L__xii_term_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -351,11 +350,8 @@ L__xii_term_write_u32:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -386,7 +382,6 @@ L__xii_term_write_u32:
     .section .iii.ring3,"n"
     .asciz "_xii_term_read_u32"
     .text
-    .global L__xii_term_read_u32
     .seh_proc L__xii_term_read_u32
 L__xii_term_read_u32:
     pushq %rbp
@@ -474,11 +469,8 @@ L__xii_term_read_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -487,11 +479,8 @@ L__xii_term_read_u32:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -500,11 +489,8 @@ L__xii_term_read_u32:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -525,7 +511,6 @@ L__xii_term_read_u32:
     .section .iii.ring3,"n"
     .asciz "_xii_term_write_u64"
     .text
-    .global L__xii_term_write_u64
     .seh_proc L__xii_term_write_u64
 L__xii_term_write_u64:
     pushq %rbp
@@ -569,11 +554,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -601,11 +583,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -633,11 +612,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -665,11 +641,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -697,11 +670,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -729,11 +699,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -761,11 +728,8 @@ L__xii_term_write_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -796,7 +760,6 @@ L__xii_term_write_u64:
     .section .iii.ring3,"n"
     .asciz "_xii_term_read_u64"
     .text
-    .global L__xii_term_read_u64
     .seh_proc L__xii_term_read_u64
 L__xii_term_read_u64:
     pushq %rbp
@@ -956,11 +919,8 @@ L__xii_term_read_u64:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -968,11 +928,8 @@ L__xii_term_read_u64:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -980,11 +937,8 @@ L__xii_term_read_u64:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -994,19 +948,13 @@ L__xii_term_read_u64:
     movq %rax, -80(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1014,11 +962,8 @@ L__xii_term_read_u64:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1026,11 +971,8 @@ L__xii_term_read_u64:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2738,7 +2680,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "_xii_make_fusion2_raw"
     .text
-    .global L__xii_make_fusion2_raw
     .seh_proc L__xii_make_fusion2_raw
 L__xii_make_fusion2_raw:
     pushq %rbp
@@ -2833,7 +2774,6 @@ L_if_end_45:
     .section .iii.ring3,"n"
     .asciz "_xii_make_right"
     .text
-    .global L__xii_make_right
     .seh_proc L__xii_make_right
 L__xii_make_right:
     pushq %rbp
@@ -3076,7 +3016,6 @@ L_loop_end_53:
     .section .iii.ring3,"n"
     .asciz "_xii_make_left"
     .text
-    .global L__xii_make_left
     .seh_proc L__xii_make_left
 L__xii_make_left:
     pushq %rbp
@@ -4050,37 +3989,78 @@ L_if_end_87:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    leaq L_XII_TERM_ARENA(%rip), %rax
+    subq $32, %rsp
+    callq sha256_init
+    addq $32, %rsp
+    movl %eax, %eax
     pushq %rax
     popq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq -16(%rbp), %rax
+L_loop_top_88:
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
     pushq %rax
-    movq -40(%rbp), %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_89
+    leaq L_XII_TERM_ARENA(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    popq %r8
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
     subq $32, %rsp
-    callq sha256_oneshot
+    callq sha256_update_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_88
+L_loop_end_89:
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sha256_final
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax

@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiiai_resolve.iiiai_resolve.iiiai_resolve.iiiai_resolve.iiihip.iiihip.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "ai_resolve.iiiai_resolve.iiiai_resolve.iiiai_resolve.iiihip.iiihip.iii\0"
+    .ascii "ai_resolve.iii\0"
 L_str_2:
-    .ascii "ai_resolve.iiiai_resolve.iiiai_resolve.iiihip.iiihip.iii\0"
+    .ascii "ai_resolve.iii\0"
 L_str_3:
-    .ascii "ai_resolve.iiiai_resolve.iiihip.iiihip.iii\0"
+    .ascii "ai_resolve.iii\0"
 L_str_4:
-    .ascii "ai_resolve.iiihip.iiihip.iii\0"
+    .ascii "ai_resolve.iii\0"
 L_str_5:
-    .ascii "hip.iiihip.iii\0"
+    .ascii "hip.iii\0"
 L_str_6:
     .ascii "hip.iii\0"
     .section .rodata
@@ -30,7 +30,6 @@ L_TEXT_GIBBR:
     .section .iii.ring3,"n"
     .asciz "_set_bytes"
     .text
-    .global L__set_bytes
     .seh_proc L__set_bytes
 L__set_bytes:
     pushq %rbp

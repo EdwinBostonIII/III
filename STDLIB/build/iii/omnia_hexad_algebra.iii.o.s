@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "trit.iiitrit.iiitrit.iiitrit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_1:
-    .ascii "trit.iiitrit.iiitrit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_2:
-    .ascii "trit.iiitrit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_3:
-    .ascii "trit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_4:
     .ascii "trit.iii\0"
     .section .rodata
@@ -259,7 +259,7 @@ L_loop_top_4:
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -307,7 +307,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "iii_hexad_pillar"
     .text
-    .global L_iii_hexad_pillar
     .seh_proc L_iii_hexad_pillar
 L_iii_hexad_pillar:
     pushq %rbp
@@ -1469,6 +1468,497 @@ L_loop_end_47:
     callq iii_hexad_pack6
     addq $32, %rsp
     movzwq %ax, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "iii_hexad_algebra_selftest"
+    .text
+    .global iii_hexad_algebra_selftest
+    .seh_proc iii_hexad_algebra_selftest
+iii_hexad_algebra_selftest:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x2d8, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_add
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_49
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_add
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_51:
+    movabsq $0x16c, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_add
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_53
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_53:
+    movabsq $0x16c, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_sub
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
+    movabsq $0x16c, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_sub
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_57
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_57:
+    movabsq $0x2d8, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_sub
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_59
+    movabsq $0x6, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_59:
+    movabsq $0x2d8, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_mul
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_61
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_61:
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_mul
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_63
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_63:
+    movabsq $0x16c, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_mul
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_65
+    movabsq $0x9, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_65:
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq iii_hexad_neg6
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_67
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_67:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq iii_hexad_neg6
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x2d8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_69
+    movabsq $0xb, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_69:
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq iii_hexad_neg6
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x16c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movabsq $0xc, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_71:
+    movabsq $0x134, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq iii_hexad_neg6
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x1a4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movabsq $0xd, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    movabsq $0x2d8, %rax
+    pushq %rax
+    movabsq $0x2d9, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq iii_hexad_add
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movabsq $0xe, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
+    movabsq $0x2d9, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq iii_hexad_neg6
+    addq $32, %rsp
+    movzwq %ax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movabsq $0xf, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
+    movabsq $0x63, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

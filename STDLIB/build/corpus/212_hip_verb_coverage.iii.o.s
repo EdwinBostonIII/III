@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrthip.iiihip.iiihip.iiihip.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrthip.iiihip.iiihip.iiihip.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "hip.iiihip.iiihip.iiihip.iii\0"
+    .ascii "hip.iii\0"
 L_str_3:
-    .ascii "hip.iiihip.iiihip.iii\0"
+    .ascii "hip.iii\0"
 L_str_4:
-    .ascii "hip.iiihip.iii\0"
+    .ascii "hip.iii\0"
 L_str_5:
     .ascii "hip.iii\0"
     .section .bss
@@ -22,7 +22,6 @@ L__CHECK_CANDS:
     .section .iii.ring3,"n"
     .asciz "_read_u32"
     .text
-    .global L__read_u32
     .seh_proc L__read_u32
 L__read_u32:
     pushq %rbp
@@ -76,11 +75,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -108,11 +104,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -140,11 +133,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -183,7 +173,6 @@ L__read_u32:
     .section .iii.ring3,"n"
     .asciz "_put"
     .text
-    .global L__put
     .seh_proc L__put
 L__put:
     pushq %rbp
@@ -228,7 +217,6 @@ L__put:
     .section .iii.ring3,"n"
     .asciz "_put_word"
     .text
-    .global L__put_word
     .seh_proc L__put_word
 L__put_word:
     pushq %rbp
@@ -377,7 +365,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_check"
     .text
-    .global L__check
     .seh_proc L__check
 L__check:
     pushq %rbp
@@ -486,11 +473,8 @@ L_if_end_7:
     movq %rax, -72(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -565,7 +549,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "_check_pack"
     .text
-    .global L__check_pack
     .seh_proc L__check_pack
 L__check_pack:
     pushq %rbp
@@ -599,11 +582,8 @@ L__check_pack:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -629,7 +609,6 @@ L__check_pack:
     .section .iii.ring3,"n"
     .asciz "_phrase_open_the_file"
     .text
-    .global L__phrase_open_the_file
     .seh_proc L__phrase_open_the_file
 L__phrase_open_the_file:
     pushq %rbp
@@ -858,7 +837,6 @@ L__phrase_open_the_file:
     .section .iii.ring3,"n"
     .asciz "_phrase_close_socket"
     .text
-    .global L__phrase_close_socket
     .seh_proc L__phrase_close_socket
 L__phrase_close_socket:
     pushq %rbp
@@ -1072,7 +1050,6 @@ L__phrase_close_socket:
     .section .iii.ring3,"n"
     .asciz "_phrase_free_buffer"
     .text
-    .global L__phrase_free_buffer
     .seh_proc L__phrase_free_buffer
 L__phrase_free_buffer:
     pushq %rbp
@@ -1271,7 +1248,6 @@ L__phrase_free_buffer:
     .section .iii.ring3,"n"
     .asciz "_phrase_create_channel"
     .text
-    .global L__phrase_create_channel
     .seh_proc L__phrase_create_channel
 L__phrase_create_channel:
     pushq %rbp
@@ -1515,7 +1491,6 @@ L__phrase_create_channel:
     .section .iii.ring3,"n"
     .asciz "_phrase_sign_message"
     .text
-    .global L__phrase_sign_message
     .seh_proc L__phrase_sign_message
 L__phrase_sign_message:
     pushq %rbp
@@ -1729,7 +1704,6 @@ L__phrase_sign_message:
     .section .iii.ring3,"n"
     .asciz "_phrase_verify_signature"
     .text
-    .global L__phrase_verify_signature
     .seh_proc L__phrase_verify_signature
 L__phrase_verify_signature:
     pushq %rbp
@@ -2003,7 +1977,6 @@ L__phrase_verify_signature:
     .section .iii.ring3,"n"
     .asciz "_phrase_decrypt_buffer_with_key"
     .text
-    .global L__phrase_decrypt_buffer_with_key
     .seh_proc L__phrase_decrypt_buffer_with_key
 L__phrase_decrypt_buffer_with_key:
     pushq %rbp
@@ -2382,7 +2355,6 @@ L__phrase_decrypt_buffer_with_key:
     .section .iii.ring3,"n"
     .asciz "_phrase_destroy_socket"
     .text
-    .global L__phrase_destroy_socket
     .seh_proc L__phrase_destroy_socket
 L__phrase_destroy_socket:
     pushq %rbp
@@ -2626,7 +2598,6 @@ L__phrase_destroy_socket:
     .section .iii.ring3,"n"
     .asciz "_phrase_the_the_the"
     .text
-    .global L__phrase_the_the_the
     .seh_proc L__phrase_the_the_the
 L__phrase_the_the_the:
     pushq %rbp
@@ -2825,7 +2796,6 @@ L__phrase_the_the_the:
     .section .iii.ring3,"n"
     .asciz "_phrase_buffer_only"
     .text
-    .global L__phrase_buffer_only
     .seh_proc L__phrase_buffer_only
 L__phrase_buffer_only:
     pushq %rbp

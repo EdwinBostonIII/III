@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "ct_eq"
     .text
-    .global L_ct_eq
     .seh_proc L_ct_eq
 L_ct_eq:
     pushq %rbp
@@ -32,11 +31,8 @@ L_ct_eq:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x3f, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $63, %rax
     pushq %rax
     popq %rax
     movzbq %al, %rax

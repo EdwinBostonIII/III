@@ -142,11 +142,8 @@ L_loop_top_6:
     movq %rax, -56(%rbp)
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -190,17 +187,10 @@ L_loop_top_6:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -80(%rbp), %rax
     pushq %rax
@@ -212,11 +202,8 @@ L_loop_top_6:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -261,7 +248,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "hex_nibble_to_char"
     .text
-    .global L_hex_nibble_to_char
     .seh_proc L_hex_nibble_to_char
 L_hex_nibble_to_char:
     pushq %rbp
@@ -721,11 +707,8 @@ L_loop_top_34:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -746,11 +729,8 @@ L_loop_top_34:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -825,11 +805,8 @@ L_if_end_39:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     movl -80(%rbp), %eax

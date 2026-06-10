@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_6:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_7:
-    .ascii "xii_rewrite.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_8:
-    .ascii "xii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_9:
-    .ascii "xii_admission.iiixii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_10:
-    .ascii "xii_admission.iiixii_admission.iiixii_admission.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_11:
-    .ascii "xii_admission.iiixii_admission.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_12:
     .ascii "xii_admission.iii\0"
     .section .rodata
@@ -97,7 +97,6 @@ L_XRV_MUL_EXP:
     .section .iii.ring3,"n"
     .asciz "xrv_mkval"
     .text
-    .global L_xrv_mkval
     .seh_proc L_xrv_mkval
 L_xrv_mkval:
     pushq %rbp
@@ -143,7 +142,6 @@ L_xrv_mkval:
     .section .iii.ring3,"n"
     .asciz "xrv_getval"
     .text
-    .global L_xrv_getval
     .seh_proc L_xrv_getval
 L_xrv_getval:
     pushq %rbp
@@ -163,7 +161,7 @@ L_xrv_getval:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -186,7 +184,6 @@ L_xrv_getval:
     .section .iii.ring3,"n"
     .asciz "xrv_eval_bin"
     .text
-    .global L_xrv_eval_bin
     .seh_proc L_xrv_eval_bin
 L_xrv_eval_bin:
     pushq %rbp
@@ -299,7 +296,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "xrv_eval_un"
     .text
-    .global L_xrv_eval_un
     .seh_proc L_xrv_eval_un
 L_xrv_eval_un:
     pushq %rbp
@@ -436,7 +432,7 @@ L_loop_top_4:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -521,7 +517,7 @@ L_loop_top_8:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -553,7 +549,7 @@ L_loop_top_10:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

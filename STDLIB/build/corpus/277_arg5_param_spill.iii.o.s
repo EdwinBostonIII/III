@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "f5"
     .text
-    .global L_f5
     .seh_proc L_f5
 L_f5:
     pushq %rbp
@@ -26,11 +25,8 @@ L_f5:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -54,11 +50,8 @@ L_f5:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -94,7 +87,6 @@ L_f5:
     .section .iii.ring3,"n"
     .asciz "f6"
     .text
-    .global L_f6
     .seh_proc L_f6
 L_f6:
     pushq %rbp
@@ -116,11 +108,8 @@ L_f6:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -144,11 +133,8 @@ L_f6:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -198,7 +184,6 @@ L_f6:
     .section .iii.ring3,"n"
     .asciz "relay6"
     .text
-    .global L_relay6
     .seh_proc L_relay6
 L_relay6:
     pushq %rbp

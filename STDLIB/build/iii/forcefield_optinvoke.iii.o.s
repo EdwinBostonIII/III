@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iiicost_lattice.iii\0"
+    .ascii "mhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iiimhash.iiicost_lattice.iii\0"
+    .ascii "mhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iiicost_lattice.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
-    .ascii "mhash.iiicost_lattice.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
     .ascii "cost_lattice.iii\0"
     .section .rodata
@@ -34,7 +34,6 @@ L_OI_EG_COST_CAP:
     .section .iii.ring3,"n"
     .asciz "oi_ld_u64"
     .text
-    .global L_oi_ld_u64
     .seh_proc L_oi_ld_u64
 L_oi_ld_u64:
     pushq %rbp
@@ -188,11 +187,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -200,11 +196,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -212,11 +205,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -224,11 +214,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -236,11 +223,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -248,11 +232,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -260,11 +241,8 @@ L_oi_ld_u64:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -284,7 +262,6 @@ L_oi_ld_u64:
     .section .iii.ring3,"n"
     .asciz "oi_eq32"
     .text
-    .global L_oi_eq32
     .seh_proc L_oi_eq32
 L_oi_eq32:
     pushq %rbp
@@ -396,7 +373,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "oi_addr_lt"
     .text
-    .global L_oi_addr_lt
     .seh_proc L_oi_addr_lt
 L_oi_addr_lt:
     pushq %rbp
@@ -537,7 +513,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "oi_copy"
     .text
-    .global L_oi_copy
     .seh_proc L_oi_copy
 L_oi_copy:
     pushq %rbp
@@ -630,7 +605,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "oi_hash"
     .text
-    .global L_oi_hash
     .seh_proc L_oi_hash
 L_oi_hash:
     pushq %rbp
@@ -1330,7 +1304,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "oi_dom_init"
     .text
-    .global L_oi_dom_init
     .seh_proc L_oi_dom_init
 L_oi_dom_init:
     pushq %rbp
@@ -1648,7 +1621,6 @@ L_loop_end_47:
     .section .iii.ring3,"n"
     .asciz "oi_st_u64"
     .text
-    .global L_oi_st_u64
     .seh_proc L_oi_st_u64
 L_oi_st_u64:
     pushq %rbp
@@ -1710,11 +1682,8 @@ L_loop_top_48:
     movb %dl, (%rax,%rcx,1)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)

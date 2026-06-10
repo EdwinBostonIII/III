@@ -4,69 +4,69 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_1:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_2:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_7:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_8:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_9:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_10:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_11:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_12:
-    .ascii "bigint_div.iiibigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_13:
-    .ascii "bigint_div.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_14:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_15:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_16:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_17:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_18:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_19:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_20:
-    .ascii "bigint.iiibigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_21:
-    .ascii "bigint.iiibigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_22:
-    .ascii "bigint_div.iiibigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_23:
-    .ascii "bigint_div.iiidrbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_24:
-    .ascii "drbg.iiidrbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "drbg.iii\0"
 L_str_25:
-    .ascii "drbg.iiiarena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "drbg.iii\0"
 L_str_26:
-    .ascii "arena.iiiarena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "arena.iii\0"
 L_str_27:
-    .ascii "arena.iiibigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "arena.iii\0"
 L_str_28:
-    .ascii "bigint.iiisha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_29:
-    .ascii "sha256.iiisha256.iiisha256.iiibigint.iii\0"
+    .ascii "sha256.iii\0"
 L_str_30:
-    .ascii "sha256.iiisha256.iiibigint.iii\0"
+    .ascii "sha256.iii\0"
 L_str_31:
-    .ascii "sha256.iiibigint.iii\0"
+    .ascii "sha256.iii\0"
 L_str_32:
     .ascii "bigint.iii\0"
     .section .bss
@@ -161,7 +161,6 @@ L_RSA_SALTZ:
     .section .iii.ring3,"n"
     .asciz "rsa_os2ip"
     .text
-    .global L_rsa_os2ip
     .seh_proc L_rsa_os2ip
 L_rsa_os2ip:
     pushq %rbp
@@ -412,7 +411,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "rsa_i2osp"
     .text
-    .global L_rsa_i2osp
     .seh_proc L_rsa_i2osp
 L_rsa_i2osp:
     pushq %rbp
@@ -588,7 +586,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "rsa_mgf1"
     .text
-    .global L_rsa_mgf1
     .seh_proc L_rsa_mgf1
 L_rsa_mgf1:
     pushq %rbp
@@ -696,11 +693,8 @@ L_loop_top_12:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -721,11 +715,8 @@ L_loop_top_12:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -746,11 +737,8 @@ L_loop_top_12:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -954,7 +942,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "rsa_pss_encode"
     .text
-    .global L_rsa_pss_encode
     .seh_proc L_rsa_pss_encode
 L_rsa_pss_encode:
     pushq %rbp
@@ -1658,7 +1645,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "rsa_pss_verify_em"
     .text
-    .global L_rsa_pss_verify_em
     .seh_proc L_rsa_pss_verify_em
 L_rsa_pss_verify_em:
     pushq %rbp
@@ -2533,9 +2519,8 @@ L_if_end_61:
     .section .iii.ring3,"n"
     .asciz "rsa_dbg"
     .text
-    .global rsa_dbg
-    .seh_proc rsa_dbg
-rsa_dbg:
+    .seh_proc L_rsa_dbg
+L_rsa_dbg:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -2566,9 +2551,8 @@ rsa_dbg:
     .section .iii.ring3,"n"
     .asciz "rsa_debug_mod1"
     .text
-    .global rsa_debug_mod1
-    .seh_proc rsa_debug_mod1
-rsa_debug_mod1:
+    .seh_proc L_rsa_debug_mod1
+L_rsa_debug_mod1:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -2827,9 +2811,8 @@ L_loop_end_65:
     .section .iii.ring3,"n"
     .asciz "rsa_debug_sigser"
     .text
-    .global rsa_debug_sigser
-    .seh_proc rsa_debug_sigser
-rsa_debug_sigser:
+    .seh_proc L_rsa_debug_sigser
+L_rsa_debug_sigser:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -3035,9 +3018,8 @@ rsa_debug_sigser:
     .section .iii.ring3,"n"
     .asciz "rsa_debug_bigint_rt"
     .text
-    .global rsa_debug_bigint_rt
-    .seh_proc rsa_debug_bigint_rt
-rsa_debug_bigint_rt:
+    .seh_proc L_rsa_debug_bigint_rt
+L_rsa_debug_bigint_rt:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -3267,9 +3249,8 @@ rsa_debug_bigint_rt:
     .section .iii.ring3,"n"
     .asciz "rsa_debug_real"
     .text
-    .global rsa_debug_real
-    .seh_proc rsa_debug_real
-rsa_debug_real:
+    .seh_proc L_rsa_debug_real
+L_rsa_debug_real:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -3485,9 +3466,8 @@ rsa_debug_real:
     .section .iii.ring3,"n"
     .asciz "rsa_debug_path"
     .text
-    .global rsa_debug_path
-    .seh_proc rsa_debug_path
-rsa_debug_path:
+    .seh_proc L_rsa_debug_path
+L_rsa_debug_path:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -4462,7 +4442,6 @@ L_if_end_97:
     .section .iii.ring3,"n"
     .asciz "rsa_u64_modexp"
     .text
-    .global L_rsa_u64_modexp
     .seh_proc L_rsa_u64_modexp
 L_rsa_u64_modexp:
     pushq %rbp
@@ -4570,11 +4549,8 @@ L_if_end_101:
     movq %rax, -40(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -4599,7 +4575,6 @@ L_loop_end_99:
     .section .iii.ring3,"n"
     .asciz "rsa_setbit"
     .text
-    .global L_rsa_setbit
     .seh_proc L_rsa_setbit
 L_rsa_setbit:
     pushq %rbp
@@ -4697,7 +4672,6 @@ L_rsa_setbit:
     .section .iii.ring3,"n"
     .asciz "rsa_mr_base"
     .text
-    .global L_rsa_mr_base
     .seh_proc L_rsa_mr_base
 L_rsa_mr_base:
     pushq %rbp
@@ -5005,7 +4979,6 @@ L_loop_end_107:
     .section .iii.ring3,"n"
     .asciz "rsa_is_prime"
     .text
-    .global L_rsa_is_prime
     .seh_proc L_rsa_is_prime
 L_rsa_is_prime:
     pushq %rbp
@@ -5853,7 +5826,6 @@ L_if_end_157:
     .section .iii.ring3,"n"
     .asciz "rsa_rand_candidate"
     .text
-    .global L_rsa_rand_candidate
     .seh_proc L_rsa_rand_candidate
 L_rsa_rand_candidate:
     pushq %rbp
@@ -6006,7 +5978,6 @@ L_rsa_rand_candidate:
     .section .iii.ring3,"n"
     .asciz "rsa_gen_prime"
     .text
-    .global L_rsa_gen_prime
     .seh_proc L_rsa_gen_prime
 L_rsa_gen_prime:
     pushq %rbp
@@ -6610,7 +6581,6 @@ rsa_gen_d:
     .section .iii.ring3,"n"
     .asciz "rm_copy"
     .text
-    .global L_rm_copy
     .seh_proc L_rm_copy
 L_rm_copy:
     pushq %rbp
@@ -6698,9 +6668,155 @@ L_loop_end_167:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "rm_cond_copy"
+    .text
+    .seh_proc L_rm_cond_copy
+L_rm_cond_copy:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+L_loop_top_168:
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_169
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_168
+L_loop_end_169:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "rm_extract"
     .text
-    .global L_rm_extract
     .seh_proc L_rm_extract
 L_rm_extract:
     pushq %rbp
@@ -6732,7 +6848,7 @@ L_rm_extract:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_168:
+L_loop_top_170:
     movq -48(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -6745,7 +6861,7 @@ L_loop_top_168:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_169
+    jz L_loop_end_171
     movq -32(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -6769,13 +6885,13 @@ L_loop_top_168:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_168
-L_loop_end_169:
+    jmp L_loop_top_170
+L_loop_end_171:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_170:
+L_loop_top_172:
     movq -48(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -6788,7 +6904,7 @@ L_loop_top_170:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_171
+    jz L_loop_end_173
     movq -48(%rbp), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -6844,11 +6960,8 @@ L_loop_top_170:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -6876,15 +6989,12 @@ L_loop_top_170:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_170
-L_loop_end_171:
+    jmp L_loop_top_172
+L_loop_end_173:
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -6892,7 +7002,7 @@ L_loop_end_171:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_172:
+L_loop_top_174:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -6905,7 +7015,7 @@ L_loop_top_172:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_173
+    jz L_loop_end_175
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -6918,7 +7028,7 @@ L_loop_top_172:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_174
+    jz L_if_else_176
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -6926,8 +7036,8 @@ L_loop_top_172:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_175
-L_if_else_174:
+    jmp L_if_end_177
+L_if_else_176:
     movq -32(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -6952,7 +7062,7 @@ L_if_else_174:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_176
+    jz L_if_else_178
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -6966,8 +7076,8 @@ L_if_else_174:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_177
-L_if_else_176:
+    jmp L_if_end_179
+L_if_else_178:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -6975,16 +7085,16 @@ L_if_else_176:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_179:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_177:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_175:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_172
-L_loop_end_173:
+    jmp L_loop_top_174
+L_loop_end_175:
     movq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -7001,7 +7111,6 @@ L_loop_end_173:
     .section .iii.ring3,"n"
     .asciz "rm_csub"
     .text
-    .global L_rm_csub
     .seh_proc L_rm_csub
 L_rm_csub:
     pushq %rbp
@@ -7034,7 +7143,7 @@ L_rm_csub:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_178:
+L_loop_top_180:
     movq -56(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -7047,7 +7156,7 @@ L_loop_top_178:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_179
+    jz L_loop_end_181
     movabsq $0x100000000, %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -7114,7 +7223,7 @@ L_loop_top_178:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_180
+    jz L_if_else_182
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -7122,8 +7231,8 @@ L_loop_top_178:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_181
-L_if_else_180:
+    jmp L_if_end_183
+L_if_else_182:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -7131,7 +7240,7 @@ L_if_else_180:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
+L_if_end_183:
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -7145,8 +7254,8 @@ L_if_end_181:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_178
-L_loop_end_179:
+    jmp L_loop_top_180
+L_loop_end_181:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -7163,7 +7272,7 @@ L_loop_end_179:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_183
+    jz L_if_end_185
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -7171,7 +7280,7 @@ L_loop_end_179:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_183:
+L_if_end_185:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -7184,7 +7293,7 @@ L_if_end_183:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_185
+    jz L_if_end_187
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -7192,7 +7301,7 @@ L_if_end_183:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_185:
+L_if_end_187:
     movabsq $0x0, %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -7217,7 +7326,7 @@ L_if_end_185:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_186:
+L_loop_top_188:
     movq -56(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -7230,7 +7339,7 @@ L_loop_top_186:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_187
+    jz L_loop_end_189
     movq -32(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -7295,8 +7404,8 @@ L_loop_top_186:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_186
-L_loop_end_187:
+    jmp L_loop_top_188
+L_loop_end_189:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -7313,7 +7422,6 @@ L_loop_end_187:
     .section .iii.ring3,"n"
     .asciz "rm_dbl"
     .text
-    .global L_rm_dbl
     .seh_proc L_rm_dbl
 L_rm_dbl:
     pushq %rbp
@@ -7339,7 +7447,7 @@ L_rm_dbl:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_188:
+L_loop_top_190:
     movq -40(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -7352,7 +7460,7 @@ L_loop_top_188:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_189
+    jz L_loop_end_191
     movq -24(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -7363,11 +7471,8 @@ L_loop_top_188:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
@@ -7398,11 +7503,8 @@ L_loop_top_188:
     movl %edx, (%rax,%rcx,4)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -7419,8 +7521,8 @@ L_loop_top_188:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_188
-L_loop_end_189:
+    jmp L_loop_top_190
+L_loop_end_191:
     movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -7452,7 +7554,6 @@ L_loop_end_189:
     .section .iii.ring3,"n"
     .asciz "rm_mont_mul"
     .text
-    .global L_rm_mont_mul
     .seh_proc L_rm_mont_mul
 L_rm_mont_mul:
     pushq %rbp
@@ -7494,7 +7595,7 @@ L_rm_mont_mul:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_191
+    jz L_if_end_193
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -7502,7 +7603,7 @@ L_rm_mont_mul:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_191:
+L_if_end_193:
     movq -32(%rbp), %rax
     pushq %rax
     leaq L_RM_N(%rip), %rax
@@ -7566,7 +7667,6 @@ L_if_end_191:
     .section .iii.ring3,"n"
     .asciz "rm_mont_sq"
     .text
-    .global L_rm_mont_sq
     .seh_proc L_rm_mont_sq
 L_rm_mont_sq:
     pushq %rbp
@@ -7607,7 +7707,7 @@ L_rm_mont_sq:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_193
+    jz L_if_end_195
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -7615,7 +7715,7 @@ L_rm_mont_sq:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_193:
+L_if_end_195:
     movq -24(%rbp), %rax
     pushq %rax
     leaq L_RM_N(%rip), %rax
@@ -7676,7 +7776,6 @@ L_if_end_193:
     .section .iii.ring3,"n"
     .asciz "rsa_modexp"
     .text
-    .global L_rsa_modexp
     .seh_proc L_rsa_modexp
 L_rsa_modexp:
     pushq %rbp
@@ -7727,11 +7826,8 @@ L_rsa_modexp:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -7783,7 +7879,7 @@ L_rsa_modexp:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_194:
+L_loop_top_196:
     movq -80(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -7796,7 +7892,7 @@ L_loop_top_194:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_195
+    jz L_loop_end_197
     movabsq $0x100000000, %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -7852,7 +7948,7 @@ L_loop_top_194:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_196
+    jz L_if_else_198
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -7860,8 +7956,8 @@ L_loop_top_194:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_197
-L_if_else_196:
+    jmp L_if_end_199
+L_if_else_198:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -7869,7 +7965,7 @@ L_if_else_196:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_197:
+L_if_end_199:
     movq -80(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -7883,8 +7979,8 @@ L_if_end_197:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_194
-L_loop_end_195:
+    jmp L_loop_top_196
+L_loop_end_197:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -7899,7 +7995,7 @@ L_loop_end_195:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-L_loop_top_198:
+L_loop_top_200:
     movq -88(%rbp), %rax
     pushq %rax
     movq -96(%rbp), %rax
@@ -7912,7 +8008,7 @@ L_loop_top_198:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_199
+    jz L_loop_end_201
     movq -40(%rbp), %rax
     pushq %rax
     leaq L_RM_R2(%rip), %rax
@@ -7940,8 +8036,8 @@ L_loop_top_198:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_198
-L_loop_end_199:
+    jmp L_loop_top_200
+L_loop_end_201:
     movabsq $0x82, %rax
     pushq %rax
     leaq L_RM_A(%rip), %rax
@@ -8028,7 +8124,7 @@ L_loop_end_199:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_200:
+L_loop_top_202:
     movq -80(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -8041,7 +8137,7 @@ L_loop_top_200:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_201
+    jz L_loop_end_203
     movq -104(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -8065,8 +8161,8 @@ L_loop_top_200:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_200
-L_loop_end_201:
+    jmp L_loop_top_202
+L_loop_end_203:
     movq -104(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -8114,7 +8210,7 @@ L_loop_end_201:
     pushq %rax
     popq %rax
     movq %rax, -120(%rbp)
-L_loop_top_202:
+L_loop_top_204:
     movq -120(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -8127,7 +8223,7 @@ L_loop_top_202:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_203
+    jz L_loop_end_205
     movq -120(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -8219,19 +8315,6 @@ L_loop_top_202:
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
-    movq -136(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_205
     movq -40(%rbp), %rax
     pushq %rax
     leaq L_RM_A(%rip), %rax
@@ -8256,6 +8339,8 @@ L_loop_top_202:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq -136(%rbp), %rax
+    pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
     leaq L_RM_TMP(%rip), %rax
@@ -8269,8 +8354,9 @@ L_loop_top_202:
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq L_rm_copy
+    callq L_rm_cond_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -8278,12 +8364,8 @@ L_loop_top_202:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_205:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_202
-L_loop_end_203:
+    jmp L_loop_top_204
+L_loop_end_205:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -8518,11 +8600,8 @@ L_if_end_211:
     pushq %rax
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -8593,9 +8672,8 @@ L_loop_end_209:
     .section .iii.ring3,"n"
     .asciz "rsa_test_sq"
     .text
-    .global rsa_test_sq
-    .seh_proc rsa_test_sq
-rsa_test_sq:
+    .seh_proc L_rsa_test_sq
+L_rsa_test_sq:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -8878,11 +8956,8 @@ rsa_test_sq:
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -8902,9 +8977,8 @@ rsa_test_sq:
     .section .iii.ring3,"n"
     .asciz "rsa_test_smallbase"
     .text
-    .global rsa_test_smallbase
-    .seh_proc rsa_test_smallbase
-rsa_test_smallbase:
+    .seh_proc L_rsa_test_smallbase
+L_rsa_test_smallbase:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -9039,9 +9113,8 @@ rsa_test_smallbase:
     .section .iii.ring3,"n"
     .asciz "rsa_test_fermat"
     .text
-    .global rsa_test_fermat
-    .seh_proc rsa_test_fermat
-rsa_test_fermat:
+    .seh_proc L_rsa_test_fermat
+L_rsa_test_fermat:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -9234,9 +9307,8 @@ rsa_test_fermat:
     .section .iii.ring3,"n"
     .asciz "rsa_test_rm_vs_lib"
     .text
-    .global rsa_test_rm_vs_lib
-    .seh_proc rsa_test_rm_vs_lib
-rsa_test_rm_vs_lib:
+    .seh_proc L_rsa_test_rm_vs_lib
+L_rsa_test_rm_vs_lib:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -9605,9 +9677,8 @@ L_loop_end_217:
     .section .iii.ring3,"n"
     .asciz "rsa_test_mont_small"
     .text
-    .global rsa_test_mont_small
-    .seh_proc rsa_test_mont_small
-rsa_test_mont_small:
+    .seh_proc L_rsa_test_mont_small
+L_rsa_test_mont_small:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -9706,9 +9777,8 @@ rsa_test_mont_small:
     .section .iii.ring3,"n"
     .asciz "rsa_test_mulmod"
     .text
-    .global rsa_test_mulmod
-    .seh_proc rsa_test_mulmod
-rsa_test_mulmod:
+    .seh_proc L_rsa_test_mulmod
+L_rsa_test_mulmod:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -9935,9 +10005,8 @@ rsa_test_mulmod:
     .section .iii.ring3,"n"
     .asciz "rsa_test_modexp_len"
     .text
-    .global rsa_test_modexp_len
-    .seh_proc rsa_test_modexp_len
-rsa_test_modexp_len:
+    .seh_proc L_rsa_test_modexp_len
+L_rsa_test_modexp_len:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp

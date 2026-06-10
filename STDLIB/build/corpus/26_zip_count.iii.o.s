@@ -4,20 +4,22 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtiter.iiiiter.iiizip.iiizip.iiizip.iiizip.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtiter.iiiiter.iiizip.iiizip.iiizip.iiizip.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "iter.iiiiter.iiizip.iiizip.iiizip.iiizip.iii\0"
+    .ascii "iter.iii\0"
 L_str_3:
-    .ascii "iter.iiizip.iiizip.iiizip.iiizip.iii\0"
+    .ascii "iter.iii\0"
 L_str_4:
-    .ascii "zip.iiizip.iiizip.iiizip.iii\0"
+    .ascii "zip.iii\0"
 L_str_5:
-    .ascii "zip.iiizip.iiizip.iii\0"
+    .ascii "zip.iii\0"
 L_str_6:
-    .ascii "zip.iiizip.iii\0"
+    .ascii "zip.iii\0"
 L_str_7:
+    .ascii "zip.iii\0"
+L_str_8:
     .ascii "zip.iii\0"
     .section .iii.ring3,"n"
     .asciz "main"
@@ -379,6 +381,117 @@ L_if_end_7:
     pushq %rax
     popq %rax
 L_if_end_9:
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq zip_u8_u8_is_end
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x6, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq zip_u8_u8_is_end
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
+    movq -56(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq zip_u8_u8_next
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -80(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq zip_u8_u8_next
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    movq -88(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq zip_u8_u8_is_end
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
     movq -48(%rbp), %rax
     pushq %rax
     popq %rcx

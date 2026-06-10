@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "synthesis_spec.iiisynthesis_spec.iiisynthesis_spec.iiisynthesis_spec.iiisynthesis_spec.iii\0"
+    .ascii "synthesis_spec.iii\0"
 L_str_1:
-    .ascii "synthesis_spec.iiisynthesis_spec.iiisynthesis_spec.iiisynthesis_spec.iii\0"
+    .ascii "synthesis_spec.iii\0"
 L_str_2:
-    .ascii "synthesis_spec.iiisynthesis_spec.iiisynthesis_spec.iii\0"
+    .ascii "synthesis_spec.iii\0"
 L_str_3:
-    .ascii "synthesis_spec.iiisynthesis_spec.iii\0"
+    .ascii "synthesis_spec.iii\0"
 L_str_4:
     .ascii "synthesis_spec.iii\0"
     .section .rodata
@@ -42,7 +42,6 @@ L_SB_CA2:
     .section .iii.ring3,"n"
     .asciz "sb_set_sig"
     .text
-    .global L_sb_set_sig
     .seh_proc L_sb_set_sig
 L_sb_set_sig:
     pushq %rbp

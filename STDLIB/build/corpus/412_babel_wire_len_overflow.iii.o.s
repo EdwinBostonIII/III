@@ -12,7 +12,6 @@ L_KAT412_WIRE:
     .section .iii.ring3,"n"
     .asciz "kat412_w_u32_le"
     .text
-    .global L_kat412_w_u32_le
     .seh_proc L_kat412_w_u32_le
 L_kat412_w_u32_le:
     pushq %rbp
@@ -28,11 +27,7 @@ L_kat412_w_u32_le:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -61,11 +56,8 @@ L_kat412_w_u32_le:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -92,11 +84,8 @@ L_kat412_w_u32_le:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -123,11 +112,8 @@ L_kat412_w_u32_le:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

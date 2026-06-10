@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_consume_form"
     .text
-    .global L__consume_form
     .seh_proc L__consume_form
 L__consume_form:
     pushq %rbp
@@ -39,7 +38,6 @@ L__consume_form:
     .section .iii.ring3,"n"
     .asciz "_consume_compose"
     .text
-    .global L__consume_compose
     .seh_proc L__consume_compose
 L__consume_compose:
     pushq %rbp

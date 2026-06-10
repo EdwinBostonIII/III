@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "fs.iiifs.iiifs.iiifs.iiifs.iiicad.iii\0"
+    .ascii "fs.iii\0"
 L_str_1:
-    .ascii "fs.iiifs.iiifs.iiifs.iiicad.iii\0"
+    .ascii "fs.iii\0"
 L_str_2:
-    .ascii "fs.iiifs.iiifs.iiicad.iii\0"
+    .ascii "fs.iii\0"
 L_str_3:
-    .ascii "fs.iiifs.iiicad.iii\0"
+    .ascii "fs.iii\0"
 L_str_4:
-    .ascii "fs.iiicad.iii\0"
+    .ascii "fs.iii\0"
 L_str_5:
     .ascii "cad.iii\0"
     .section .rodata
@@ -53,7 +53,6 @@ L_RSTORE_FOUND_LEN:
     .section .iii.ring3,"n"
     .asciz "_rstore_fill_path"
     .text
-    .global L__rstore_fill_path
     .seh_proc L__rstore_fill_path
 L__rstore_fill_path:
     pushq %rbp
@@ -281,7 +280,6 @@ L__rstore_fill_path:
     .section .iii.ring3,"n"
     .asciz "_rstore_le8_to_u64"
     .text
-    .global L__rstore_le8_to_u64
     .seh_proc L__rstore_le8_to_u64
 L__rstore_le8_to_u64:
     pushq %rbp
@@ -334,11 +332,8 @@ L_loop_top_0:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -381,7 +376,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "_rstore_u64_to_le8"
     .text
-    .global L__rstore_u64_to_le8
     .seh_proc L__rstore_u64_to_le8
 L__rstore_u64_to_le8:
     pushq %rbp
@@ -429,11 +423,8 @@ L_loop_top_2:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -483,7 +474,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_rstore_locate"
     .text
-    .global L__rstore_locate
     .seh_proc L__rstore_locate
 L__rstore_locate:
     pushq %rbp
@@ -735,6 +725,28 @@ L_if_end_17:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -88(%rbp)
+    movslq -88(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -809,7 +821,7 @@ reach_store_has:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -819,7 +831,7 @@ reach_store_has:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -897,7 +909,7 @@ reach_store_get:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movslq L_RSTORE_NOTFOUND(%rip), %rax
     pushq %rax
     popq %rax
@@ -907,7 +919,7 @@ reach_store_get:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     movq L_RSTORE_FOUND_LEN(%rip), %rax
     pushq %rax
     popq %rax
@@ -924,7 +936,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -943,7 +955,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     movq -80(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -980,7 +992,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movslq L_RSTORE_E_IO(%rip), %rax
     pushq %rax
     popq %rax
@@ -990,7 +1002,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1074,7 +1086,7 @@ reach_store_put:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movslq L_RSTORE_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1084,7 +1096,7 @@ reach_store_put:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     subq $32, %rsp
     callq L__rstore_fill_path
     addq $32, %rsp
@@ -1118,7 +1130,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movl L_RSTORE_MODE_WRITE(%rip), %eax
     pushq %rax
     movq -72(%rbp), %rax
@@ -1146,7 +1158,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movslq L_RSTORE_E_DENIED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1156,7 +1168,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     movq -88(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1193,7 +1205,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movslq L_RSTORE_E_IO(%rip), %rax
     pushq %rax
     popq %rax
@@ -1203,11 +1215,11 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     movq L_RSTORE_ADDR_BYTES(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1289,29 +1301,6 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
-    movslq L_RSTORE_E_IO(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_35:
-    movq -96(%rbp), %rax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_37
     movslq L_RSTORE_E_IO(%rip), %rax
     pushq %rax
@@ -1323,9 +1312,9 @@ L_if_end_35:
     pushq %rax
     popq %rax
 L_if_end_37:
-    movq -104(%rbp), %rax
+    movq -96(%rbp), %rax
     pushq %rax
-    movq -56(%rbp), %rax
+    movabsq $0x8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1346,6 +1335,29 @@ L_if_end_37:
     pushq %rax
     popq %rax
 L_if_end_39:
+    movq -104(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movslq L_RSTORE_E_IO(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
     movslq L_RSTORE_OK(%rip), %rax
     pushq %rax
     popq %rax

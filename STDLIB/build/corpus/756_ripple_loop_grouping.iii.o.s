@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple_metric.iiiripple_metric.iiicongruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_1:
-    .ascii "ripple_metric.iiicongruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_2:
-    .ascii "congruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_3:
-    .ascii "congruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_4:
-    .ascii "congruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_5:
-    .ascii "congruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_6:
-    .ascii "ripple_loop.iiiripple_loop.iii\0"
+    .ascii "ripple_loop.iii\0"
 L_str_7:
     .ascii "ripple_loop.iii\0"
     .section .bss
@@ -26,7 +26,6 @@ L_CIBUF:
     .section .iii.ring3,"n"
     .asciz "intern_distinct"
     .text
-    .global L_intern_distinct
     .seh_proc L_intern_distinct
 L_intern_distinct:
     pushq %rbp
@@ -45,11 +44,8 @@ L_intern_distinct:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -147,7 +143,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "add_group"
     .text
-    .global L_add_group
     .seh_proc L_add_group
 L_add_group:
     pushq %rbp
@@ -222,7 +217,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "setup11"
     .text
-    .global L_setup11
     .seh_proc L_setup11
 L_setup11:
     pushq %rbp

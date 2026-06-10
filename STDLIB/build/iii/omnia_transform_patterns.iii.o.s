@@ -4,71 +4,71 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_1:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_2:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_3:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_4:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_5:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_6:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_7:
-    .ascii "pattern.iiipattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_8:
-    .ascii "pattern.iiipattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern.iii\0"
 L_str_9:
-    .ascii "pattern_table.iiitp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_10:
-    .ascii "tp_iii_to_asm.iiitp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_to_asm.iii\0"
 L_str_11:
-    .ascii "tp_iii_to_babel_json.iiitp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_to_babel_json.iii\0"
 L_str_12:
-    .ascii "tp_babel_json_to_iii.iiitp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_babel_json_to_iii.iii\0"
 L_str_13:
-    .ascii "tp_asm_to_pe.iiitp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_asm_to_pe.iii\0"
 L_str_14:
-    .ascii "tp_ast_bin_to_iii.iiitp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_ast_bin_to_iii.iii\0"
 L_str_15:
-    .ascii "tp_babel_cbor_json.iiitp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_babel_cbor_json.iii\0"
 L_str_16:
-    .ascii "tp_babel_json_cbor.iiitp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_babel_json_cbor.iii\0"
 L_str_17:
-    .ascii "tp_babel_text.iiitp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_babel_text.iii\0"
 L_str_18:
-    .ascii "tp_ripple_dot.iiitp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_ripple_dot.iii\0"
 L_str_19:
-    .ascii "tp_iii_to_ast_bin.iiitp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_to_ast_bin.iii\0"
 L_str_20:
-    .ascii "tp_iii_to_c99.iiitp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_to_c99.iii\0"
 L_str_21:
-    .ascii "tp_iii_to_latex.iiitp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_to_latex.iii\0"
 L_str_22:
-    .ascii "tp_x86_disasm.iiitp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_x86_disasm.iii\0"
 L_str_23:
-    .ascii "tp_pe_hex.iiitp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_pe_hex.iii\0"
 L_str_24:
-    .ascii "tp_ripple_md.iiitp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_ripple_md.iii\0"
 L_str_25:
-    .ascii "tp_ast_dot.iiitp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_ast_dot.iii\0"
 L_str_26:
-    .ascii "tp_babel_text_back.iiitp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_babel_text_back.iii\0"
 L_str_27:
-    .ascii "tp_iii_hex.iiitp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_hex.iii\0"
 L_str_28:
-    .ascii "tp_c99hdr_to_iii.iiitp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_c99hdr_to_iii.iii\0"
 L_str_29:
-    .ascii "tp_iii_to_md.iiitp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_iii_to_md.iii\0"
 L_str_30:
-    .ascii "tp_x86_assemble.iiitp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_x86_assemble.iii\0"
 L_str_31:
-    .ascii "tp_raw_hex.iiitp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_raw_hex.iii\0"
 L_str_32:
-    .ascii "tp_ast_to_babel_json.iiitp_babel_json_to_ast.iii\0"
+    .ascii "tp_ast_to_babel_json.iii\0"
 L_str_33:
     .ascii "tp_babel_json_to_ast.iii\0"
     .section .bss
@@ -91,7 +91,6 @@ L_TX_REG_FAIL:
     .section .iii.ring3,"n"
     .asciz "tp_table_set"
     .text
-    .global L_tp_table_set
     .seh_proc L_tp_table_set
 L_tp_table_set:
     pushq %rbp
@@ -269,11 +268,8 @@ L_loop_top_2:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -325,7 +321,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "tp_table_get_fn"
     .text
-    .global L_tp_table_get_fn
     .seh_proc L_tp_table_get_fn
 L_tp_table_get_fn:
     pushq %rbp
@@ -465,11 +460,8 @@ L_loop_top_6:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -717,6 +709,8 @@ tp_table_call:
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
     movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -725,8 +719,8 @@ tp_table_call:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
-    movq -40(%rbp), %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -749,7 +743,7 @@ tp_table_call:
     pushq %rax
     popq %rax
 L_if_end_13:
-    movabsq $0x100000, %rax
+    movq -40(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
@@ -762,7 +756,7 @@ L_if_end_13:
     popq %r8
     popq %r9
     subq $32, %rsp
-    movq -40(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     popq %rax
     callq *%rax
@@ -782,7 +776,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "_tx_register"
     .text
-    .global L__tx_register
     .seh_proc L__tx_register
 L__tx_register:
     pushq %rbp

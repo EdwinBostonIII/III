@@ -95,7 +95,6 @@ L_TP_ASM_LINE_SUFFIX:
     .section .iii.ring3,"n"
     .asciz "tp_asm_emit"
     .text
-    .global L_tp_asm_emit
     .seh_proc L_tp_asm_emit
 L_tp_asm_emit:
     pushq %rbp
@@ -146,7 +145,6 @@ L_tp_asm_emit:
     .section .iii.ring3,"n"
     .asciz "tp_asm_emit_escape"
     .text
-    .global L_tp_asm_emit_escape
     .seh_proc L_tp_asm_emit_escape
 L_tp_asm_emit_escape:
     pushq %rbp
@@ -511,11 +509,8 @@ L_if_end_13:
 L_if_end_11:
     movzbq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
@@ -527,11 +522,8 @@ L_if_end_11:
     movq %rax, -32(%rbp)
     movzbq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax

@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "transform_form.iiitransform_form.iiitransform_form.iiitransform_form.iiisrc=1,dst=3,input=0xCAFE\0"
+    .ascii "transform_form.iii\0"
 L_str_1:
-    .ascii "transform_form.iiitransform_form.iiitransform_form.iiisrc=1,dst=3,input=0xCAFE\0"
+    .ascii "transform_form.iii\0"
 L_str_2:
-    .ascii "transform_form.iiitransform_form.iiisrc=1,dst=3,input=0xCAFE\0"
+    .ascii "transform_form.iii\0"
 L_str_3:
-    .ascii "transform_form.iiisrc=1,dst=3,input=0xCAFE\0"
+    .ascii "transform_form.iii\0"
 L_str_4:
     .ascii "src=1,dst=3,input=0xCAFE\0"
     .section .iii.ring3,"n"

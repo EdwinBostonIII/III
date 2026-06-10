@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "tp_bt_emit"
     .text
-    .global L_tp_bt_emit
     .seh_proc L_tp_bt_emit
 L_tp_bt_emit:
     pushq %rbp

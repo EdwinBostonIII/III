@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "microarch_model.iiimicroarch_model.iiimicroarch_model.iiimicroarch_model.iiimicroarch_model.iii\0"
+    .ascii "microarch_model.iii\0"
 L_str_1:
-    .ascii "microarch_model.iiimicroarch_model.iiimicroarch_model.iiimicroarch_model.iii\0"
+    .ascii "microarch_model.iii\0"
 L_str_2:
-    .ascii "microarch_model.iiimicroarch_model.iiimicroarch_model.iii\0"
+    .ascii "microarch_model.iii\0"
 L_str_3:
-    .ascii "microarch_model.iiimicroarch_model.iii\0"
+    .ascii "microarch_model.iii\0"
 L_str_4:
     .ascii "microarch_model.iii\0"
     .section .data

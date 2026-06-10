@@ -4,15 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "category.iiicategory.iiicategory.iiicategory.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_1:
-    .ascii "category.iiicategory.iiicategory.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_2:
-    .ascii "category.iiicategory.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_3:
-    .ascii "category.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_4:
     .ascii "category.iii\0"
+L_str_5:
+    .ascii "sov_morphism.iii\0"
+L_str_6:
+    .ascii "xii_morphism.iii\0"
     .section .rodata
 L_H11_OK:
     .quad 0x0
@@ -83,7 +87,6 @@ L_H11_SK:
     .section .iii.ring3,"n"
     .asciz "h11_fill32"
     .text
-    .global L_h11_fill32
     .seh_proc L_h11_fill32
 L_h11_fill32:
     pushq %rbp
@@ -160,7 +163,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "h11_build_scene"
     .text
-    .global L_h11_build_scene
     .seh_proc L_h11_build_scene
 L_h11_build_scene:
     pushq %rbp
@@ -1230,7 +1232,6 @@ L_if_end_37:
     .section .iii.ring3,"n"
     .asciz "h11_canary_holds"
     .text
-    .global L_h11_canary_holds
     .seh_proc L_h11_canary_holds
 L_h11_canary_holds:
     pushq %rbp
@@ -1333,7 +1334,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "h11_clause_eval"
     .text
-    .global L_h11_clause_eval
     .seh_proc L_h11_clause_eval
 L_h11_clause_eval:
     pushq %rbp
@@ -1479,7 +1479,6 @@ L_if_end_49:
     .section .iii.ring3,"n"
     .asciz "h11_register"
     .text
-    .global L_h11_register
     .seh_proc L_h11_register
 L_h11_register:
     pushq %rbp
@@ -1556,7 +1555,7 @@ L_if_end_51:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1926,6 +1925,56 @@ L_if_end_71:
     pushq %rax
     popq %rax
 L_if_end_73:
+    subq $32, %rsp
+    callq sov_morphism_selftest
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x63, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
+    subq $32, %rsp
+    callq xii_morphism_selftest
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x63, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movabsq $0xb, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

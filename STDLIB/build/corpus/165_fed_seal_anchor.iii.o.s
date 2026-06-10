@@ -4,25 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtfed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtfed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "fed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_3:
-    .ascii "fed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_4:
-    .ascii "fed_seal.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_5:
-    .ascii "fed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_6:
-    .ascii "fed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_7:
     .ascii "fed_seal.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_root"
     .text
-    .global L_fill_root
     .seh_proc L_fill_root
 L_fill_root:
     pushq %rbp

@@ -62,7 +62,6 @@ L_XO_SD:
     .section .iii.ring3,"n"
     .asciz "xo_rotl"
     .text
-    .global L_xo_rotl
     .seh_proc L_xo_rotl
 L_xo_rotl:
     pushq %rbp
@@ -290,11 +289,8 @@ xoshiro_next_u64:
     movq %rax, -16(%rbp)
     movq L_XO_S1(%rip), %rax
     pushq %rax
-    movabsq $0x11, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $17, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -510,11 +506,8 @@ L_loop_top_12:
     jz L_loop_end_13
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -595,7 +588,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "xo_jump_word"
     .text
-    .global L_xo_jump_word
     .seh_proc L_xo_jump_word
 L_xo_jump_word:
     pushq %rbp
@@ -917,7 +909,6 @@ xoshiro_long_jump:
     .section .iii.ring3,"n"
     .asciz "xo_capture"
     .text
-    .global L_xo_capture
     .seh_proc L_xo_capture
 L_xo_capture:
     pushq %rbp
@@ -996,7 +987,6 @@ L_loop_end_19:
     .section .iii.ring3,"n"
     .asciz "xo_disjoint"
     .text
-    .global L_xo_disjoint
     .seh_proc L_xo_disjoint
 L_xo_disjoint:
     pushq %rbp

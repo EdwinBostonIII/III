@@ -4,45 +4,45 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_3:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_4:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_5:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_6:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_7:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_8:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_9:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_10:
-    .ascii "prespec.iiiprespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_11:
-    .ascii "prespec.iiiprespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_12:
-    .ascii "prespec.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "prespec.iii\0"
 L_str_13:
-    .ascii "hw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_14:
-    .ascii "hw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_15:
-    .ascii "hw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_16:
-    .ascii "hw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_17:
-    .ascii "hw_offload.iiihw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_18:
-    .ascii "hw_offload.iiihw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_19:
-    .ascii "hw_offload.iiihw_offload.iii\0"
+    .ascii "hw_offload.iii\0"
 L_str_20:
     .ascii "hw_offload.iii\0"
     .section .iii.ring3,"n"

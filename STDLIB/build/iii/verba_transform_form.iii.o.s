@@ -31,7 +31,6 @@ L_TF_INPUT:
     .section .iii.ring3,"n"
     .asciz "tf_is_alpha_under"
     .text
-    .global L_tf_is_alpha_under
     .seh_proc L_tf_is_alpha_under
 L_tf_is_alpha_under:
     pushq %rbp
@@ -161,7 +160,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "tf_is_alnum_under"
     .text
-    .global L_tf_is_alnum_under
     .seh_proc L_tf_is_alnum_under
 L_tf_is_alnum_under:
     pushq %rbp
@@ -257,7 +255,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "tf_is_ws"
     .text
-    .global L_tf_is_ws
     .seh_proc L_tf_is_ws
 L_tf_is_ws:
     pushq %rbp
@@ -376,7 +373,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "tf_skip_ws"
     .text
-    .global L_tf_skip_ws
     .seh_proc L_tf_skip_ws
 L_tf_skip_ws:
     pushq %rbp
@@ -485,7 +481,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "tf_advance_past_comma"
     .text
-    .global L_tf_advance_past_comma
     .seh_proc L_tf_advance_past_comma
 L_tf_advance_past_comma:
     pushq %rbp
@@ -594,7 +589,6 @@ L_loop_end_29:
     .section .iii.ring3,"n"
     .asciz "tf_read_key"
     .text
-    .global L_tf_read_key
     .seh_proc L_tf_read_key
 L_tf_read_key:
     pushq %rbp
@@ -755,7 +749,6 @@ L_loop_end_33:
     .section .iii.ring3,"n"
     .asciz "tf_hex_digit"
     .text
-    .global L_tf_hex_digit
     .seh_proc L_tf_hex_digit
 L_tf_hex_digit:
     pushq %rbp
@@ -929,7 +922,6 @@ L_if_end_47:
     .section .iii.ring3,"n"
     .asciz "tf_parse_value"
     .text
-    .global L_tf_parse_value
     .seh_proc L_tf_parse_value
 L_tf_parse_value:
     pushq %rbp
@@ -1137,11 +1129,34 @@ L_loop_top_58:
 L_if_end_61:
     movq L_TF_PARSED_VAL(%rip), %rax
     pushq %rax
-    movabsq $0x4, %rax
+    popq %rax
+    shrq $60, %rax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    shlq %cl, %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_63
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_63:
+    movq L_TF_PARSED_VAL(%rip), %rax
+    pushq %rax
+    popq %rax
+    shlq $4, %rax
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
@@ -1192,7 +1207,7 @@ L_if_end_55:
     pushq %rax
     popq %rax
 L_if_end_53:
-L_loop_top_62:
+L_loop_top_64:
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1205,7 +1220,7 @@ L_loop_top_62:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_63
+    jz L_loop_end_65
     movq -8(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1240,7 +1255,7 @@ L_loop_top_62:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_65
+    jz L_if_end_67
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1250,7 +1265,7 @@ L_loop_top_62:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_65:
+L_if_end_67:
     movzbq -56(%rbp), %rax
     pushq %rax
     movabsq $0x39, %rax
@@ -1263,7 +1278,7 @@ L_if_end_65:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_69
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1273,7 +1288,30 @@ L_if_end_65:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_69:
+    movq L_TF_PARSED_VAL(%rip), %rax
+    pushq %rax
+    movabsq $0x1999999999999999, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_71:
     movq L_TF_PARSED_VAL(%rip), %rax
     pushq %rax
     movabsq $0xa, %rax
@@ -1281,6 +1319,10 @@ L_if_end_67:
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq -64(%rbp), %rax
     pushq %rax
     movzbq -56(%rbp), %rax
     pushq %rax
@@ -1303,6 +1345,33 @@ L_if_end_67:
     addq %rcx, %rax
     pushq %rax
     popq %rax
+    movq %rax, -72(%rbp)
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rax
     movq %rax, L_TF_PARSED_VAL(%rip)
     movq -32(%rbp), %rax
     pushq %rax
@@ -1317,8 +1386,8 @@ L_if_end_67:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_62
-L_loop_end_63:
+    jmp L_loop_top_64
+L_loop_end_65:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1335,7 +1404,6 @@ L_loop_end_63:
     .section .iii.ring3,"n"
     .asciz "tf_key_eq_3"
     .text
-    .global L_tf_key_eq_3
     .seh_proc L_tf_key_eq_3
 L_tf_key_eq_3:
     pushq %rbp
@@ -1360,7 +1428,7 @@ L_tf_key_eq_3:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_75
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1370,7 +1438,7 @@ L_tf_key_eq_3:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_75:
     leaq L_TF_KEY_BUF(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1389,7 +1457,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_71
+    jz L_if_end_77
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1399,7 +1467,7 @@ L_if_end_69:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_71:
+L_if_end_77:
     leaq L_TF_KEY_BUF(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1418,7 +1486,7 @@ L_if_end_71:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_79
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1428,7 +1496,7 @@ L_if_end_71:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_79:
     leaq L_TF_KEY_BUF(%rip), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -1447,7 +1515,7 @@ L_if_end_73:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_81
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1457,7 +1525,7 @@ L_if_end_73:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_81:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1474,7 +1542,6 @@ L_if_end_75:
     .section .iii.ring3,"n"
     .asciz "tf_key_eq_5"
     .text
-    .global L_tf_key_eq_5
     .seh_proc L_tf_key_eq_5
 L_tf_key_eq_5:
     pushq %rbp
@@ -1502,93 +1569,6 @@ L_tf_key_eq_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_77:
-    leaq L_TF_KEY_BUF(%rip), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movzbq -8(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_79
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_79:
-    leaq L_TF_KEY_BUF(%rip), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movzbq -16(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_81
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_81:
-    leaq L_TF_KEY_BUF(%rip), %rax
-    pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movzbq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_83
     movabsq $0x0, %rax
     pushq %rax
@@ -1602,13 +1582,13 @@ L_if_end_81:
 L_if_end_83:
     leaq L_TF_KEY_BUF(%rip), %rax
     pushq %rax
-    movabsq $0x3, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     movzbq (%rax,%rcx,1), %rax
     pushq %rax
-    movzbq -32(%rbp), %rax
+    movzbq -8(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1631,13 +1611,13 @@ L_if_end_83:
 L_if_end_85:
     leaq L_TF_KEY_BUF(%rip), %rax
     pushq %rax
-    movabsq $0x4, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     movzbq (%rax,%rcx,1), %rax
     pushq %rax
-    movzbq -40(%rbp), %rax
+    movzbq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1658,6 +1638,93 @@ L_if_end_85:
     pushq %rax
     popq %rax
 L_if_end_87:
+    leaq L_TF_KEY_BUF(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_89
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_89:
+    leaq L_TF_KEY_BUF(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movzbq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_91
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_91:
+    leaq L_TF_KEY_BUF(%rip), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movzbq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_93
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_93:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1674,7 +1741,6 @@ L_if_end_87:
     .section .iii.ring3,"n"
     .asciz "tf_apply_field"
     .text
-    .global L_tf_apply_field
     .seh_proc L_tf_apply_field
 L_tf_apply_field:
     pushq %rbp
@@ -1708,7 +1774,7 @@ L_tf_apply_field:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_89
+    jz L_if_end_95
     movq L_TF_PARSED_VAL(%rip), %rax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -1731,7 +1797,7 @@ L_tf_apply_field:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_89:
+L_if_end_95:
     movabsq $0x74, %rax
     pushq %rax
     movabsq $0x73, %rax
@@ -1756,7 +1822,7 @@ L_if_end_89:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_91
+    jz L_if_end_97
     movq L_TF_PARSED_VAL(%rip), %rax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -1779,7 +1845,7 @@ L_if_end_89:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_91:
+L_if_end_97:
     subq $8, %rsp
     movabsq $0x74, %rax
     pushq %rax
@@ -1812,7 +1878,7 @@ L_if_end_91:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_93
+    jz L_if_end_99
     movq L_TF_PARSED_VAL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1826,7 +1892,7 @@ L_if_end_91:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_93:
+L_if_end_99:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1868,7 +1934,7 @@ transform_form_invoke:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_95
+    jz L_if_end_101
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1878,7 +1944,7 @@ transform_form_invoke:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_95:
+L_if_end_101:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1891,7 +1957,7 @@ L_if_end_95:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_97
+    jz L_if_end_103
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1901,7 +1967,7 @@ L_if_end_95:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_97:
+L_if_end_103:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1929,7 +1995,7 @@ L_if_end_97:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_98:
+L_loop_top_104:
     movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1942,7 +2008,7 @@ L_loop_top_98:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_99
+    jz L_loop_end_105
     movq -16(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1970,7 +2036,7 @@ L_loop_top_98:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_101
+    jz L_if_end_107
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1984,7 +2050,7 @@ L_loop_top_98:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_101:
+L_if_end_107:
     movl L_TF_KEY_LEN(%rip), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -1997,7 +2063,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_109
     movq -16(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -2025,7 +2091,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_105
+    jz L_if_end_111
     movq -8(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -2056,7 +2122,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_107
+    jz L_if_end_113
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -2106,15 +2172,15 @@ L_if_end_101:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_107:
+L_if_end_113:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_105:
+L_if_end_111:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_109:
     movq -16(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -2148,8 +2214,8 @@ L_if_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_98
-L_loop_end_99:
+    jmp L_loop_top_104
+L_loop_end_105:
     movq -24(%rbp), %rax
     pushq %rax
     movq L_TF_INPUT(%rip), %rax

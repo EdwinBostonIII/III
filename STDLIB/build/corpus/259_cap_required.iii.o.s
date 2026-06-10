@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiicapability.iiicall_context.iiicall_context.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_1:
-    .ascii "capability.iiicall_context.iiicall_context.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "call_context.iiicall_context.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_3:
-    .ascii "call_context.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_4:
     .ascii "kchain.iii\0"
     .section .rodata
@@ -23,7 +23,6 @@ L_C259_FAIL_SENTINEL:
     .section .iii.ring3,"n"
     .asciz "_signing_op"
     .text
-    .global L__signing_op
     .seh_proc L__signing_op
 L__signing_op:
     pushq %rbp
@@ -71,7 +70,6 @@ L_cap_ok_805306395:
     .section .iii.ring3,"n"
     .asciz "_plain_op"
     .text
-    .global L__plain_op
     .seh_proc L__plain_op
 L__plain_op:
     pushq %rbp

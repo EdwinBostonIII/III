@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "fed_sybil.iiifed_sybil.iiifed_sybil.iiifed_eclipse.iiihotstuff.iiifed_tier.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_1:
-    .ascii "fed_sybil.iiifed_sybil.iiifed_eclipse.iiihotstuff.iiifed_tier.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_2:
-    .ascii "fed_sybil.iiifed_eclipse.iiihotstuff.iiifed_tier.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_3:
-    .ascii "fed_eclipse.iiihotstuff.iiifed_tier.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_4:
-    .ascii "hotstuff.iiifed_tier.iii\0"
+    .ascii "hotstuff.iii\0"
 L_str_5:
     .ascii "fed_tier.iii\0"
     .section .rodata
@@ -32,6 +32,8 @@ L_FED_ADMIT_E_SCORE:
     .quad 0xfffffffffffffffa
 L_FED_ADMIT_E_QC:
     .quad 0xfffffffffffffff9
+L_FED_ADMIT_QC_MAX_SIGS:
+    .quad 0x40
 L_FED_ADMIT_MIN_SCORE:
     .quad 0xf42400
 L_FED_ADMIT_PLANETARY_TIER:
@@ -462,7 +464,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "_fed_admit_pack_node_id"
     .text
-    .global L__fed_admit_pack_node_id
     .seh_proc L__fed_admit_pack_node_id
 L__fed_admit_pack_node_id:
     pushq %rbp
@@ -511,11 +512,8 @@ L_loop_top_18:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -608,7 +606,6 @@ L_loop_end_21:
     .section .iii.ring3,"n"
     .asciz "_fed_admit_pow_bits_for_tier"
     .text
-    .global L__fed_admit_pow_bits_for_tier
     .seh_proc L__fed_admit_pow_bits_for_tier
 L__fed_admit_pow_bits_for_tier:
     pushq %rbp
@@ -728,18 +725,20 @@ fed_admit_with_qc_proof:
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
     movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
+    movq %rax, -48(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
+    movq %rax, -56(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
+    movq %rax, -64(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -765,13 +764,10 @@ fed_admit_with_qc_proof:
     pushq %rax
     popq %rax
 L_if_end_29:
-    movq -56(%rbp), %rax
+    movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -783,8 +779,8 @@ L_if_end_29:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
-    movq -56(%rbp), %rax
+    movq %rax, -72(%rbp)
+    movq -64(%rbp), %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -793,8 +789,8 @@ L_if_end_29:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
-    movl -64(%rbp), %eax
+    movq %rax, -80(%rbp)
+    movl -72(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -803,8 +799,8 @@ L_if_end_29:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -80(%rbp)
-    movl -80(%rbp), %eax
+    movq %rax, -88(%rbp)
+    movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -827,7 +823,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
 L_if_end_31:
-    movq -40(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -841,12 +837,12 @@ L_if_end_31:
     popq %rax
     pushq %rax
     popq %rax
-    movq %rax, -88(%rbp)
-    movl -80(%rbp), %eax
+    movq %rax, -96(%rbp)
+    movl -88(%rbp), %eax
     pushq %rax
-    movq -48(%rbp), %rax
+    movq -56(%rbp), %rax
     pushq %rax
-    movq -88(%rbp), %rax
+    movq -96(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -877,7 +873,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
 L_if_end_33:
-    movq -88(%rbp), %rax
+    movq -96(%rbp), %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -885,10 +881,10 @@ L_if_end_33:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq %rax, -96(%rbp)
-    movq -96(%rbp), %rax
+    movq %rax, -104(%rbp)
+    movq -104(%rbp), %rax
     pushq %rax
-    movq -72(%rbp), %rax
+    movq -80(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -909,11 +905,34 @@ L_if_end_33:
     pushq %rax
     popq %rax
 L_if_end_35:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x2c, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    movslq L_FED_ADMIT_E_QC(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -104(%rbp)
-    movq -104(%rbp), %rax
+    movq %rax, -112(%rbp)
+    movq -112(%rbp), %rax
     pushq %rax
     movabsq $0x28, %rax
     pushq %rax
@@ -924,7 +943,7 @@ L_if_end_35:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movq -104(%rbp), %rax
+    movq -112(%rbp), %rax
     pushq %rax
     movabsq $0x29, %rax
     pushq %rax
@@ -935,18 +954,15 @@ L_if_end_35:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     orq %rcx, %rax
     pushq %rax
-    movq -104(%rbp), %rax
+    movq -112(%rbp), %rax
     pushq %rax
     movabsq $0x2a, %rax
     pushq %rax
@@ -957,18 +973,15 @@ L_if_end_35:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     orq %rcx, %rax
     pushq %rax
-    movq -104(%rbp), %rax
+    movq -112(%rbp), %rax
     pushq %rax
     movabsq $0x2b, %rax
     pushq %rax
@@ -979,11 +992,8 @@ L_if_end_35:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -991,27 +1001,66 @@ L_if_end_35:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -112(%rbp)
-    movabsq $0x2c, %rax
+    movq %rax, -120(%rbp)
+    movl -120(%rbp), %eax
     pushq %rax
-    movl -112(%rbp), %eax
-    pushq %rax
-    movabsq $0x40, %rax
+    movl L_FED_ADMIT_QC_MAX_SIGS(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movslq L_FED_ADMIT_E_QC(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x2c, %rax
+    pushq %rax
+    movl -120(%rbp), %eax
+    pushq %rax
+    popq %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
     pushq %rax
+    popq %rcx
     popq %rax
-    movq %rax, -120(%rbp)
-    movl -120(%rbp), %eax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
     pushq %rax
-    movq -104(%rbp), %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movslq L_FED_ADMIT_E_QC(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movq -112(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1030,7 +1079,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_43
     movslq L_FED_ADMIT_E_QC(%rip), %rax
     pushq %rax
     popq %rax
@@ -1040,8 +1089,8 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
-    movq -88(%rbp), %rax
+L_if_end_43:
+    movq -96(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -1066,7 +1115,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_45
     movslq -128(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1076,7 +1125,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_45:
     movslq L_FED_ADMIT_OK(%rip), %rax
     pushq %rax
     popq %rax

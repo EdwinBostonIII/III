@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiikeccak256.iiikeccak256.iiikeccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiikeccak256.iiikeccak256.iiikeccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiikeccak256.iiikeccak256.iiikeccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiikeccak256.iiikeccak256.iiikeccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "keccak256.iiikeccak256.iiikeccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_5:
-    .ascii "keccak256.iiikeccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_6:
-    .ascii "keccak256.iiicad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_7:
-    .ascii "cad.iiicad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_8:
-    .ascii "cad.iiicad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_9:
-    .ascii "cad.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_12:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -1048,7 +1048,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "qv_reconstruct"
     .text
-    .global L_qv_reconstruct
     .seh_proc L_qv_reconstruct
 L_qv_reconstruct:
     pushq %rbp

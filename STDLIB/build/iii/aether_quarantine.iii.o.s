@@ -4,33 +4,33 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "witness_hook.iii\0"
 L_str_3:
-    .ascii "witness_hook.iiiwitness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "witness_hook.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "capability.iiiwitness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "capability.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiicapability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "capability.iiicapability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "capability.iii\0"
 L_str_8:
-    .ascii "capability.iiiidentifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "capability.iii\0"
 L_str_9:
-    .ascii "identifier.iiiaether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "identifier.iii\0"
 L_str_10:
-    .ascii "aether::quarantineaether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "aether::quarantine\0"
 L_str_11:
-    .ascii "aether::quarantine::enteraether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "aether::quarantine::enter\0"
 L_str_12:
-    .ascii "aether::quarantine::commitaether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "aether::quarantine::commit\0"
 L_str_13:
-    .ascii "aether::quarantine::abortaether::quarantine::rollback\0"
+    .ascii "aether::quarantine::abort\0"
 L_str_14:
     .ascii "aether::quarantine::rollback\0"
     .section .rodata
@@ -205,7 +205,6 @@ L_QUAR_KAT_W3:
     .section .iii.ring3,"n"
     .asciz "q_enter_id_ptr"
     .text
-    .global L_q_enter_id_ptr
     .seh_proc L_q_enter_id_ptr
 L_q_enter_id_ptr:
     pushq %rbp
@@ -226,11 +225,8 @@ L_q_enter_id_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -260,7 +256,6 @@ L_q_enter_id_ptr:
     .section .iii.ring3,"n"
     .asciz "q_commit_id_ptr"
     .text
-    .global L_q_commit_id_ptr
     .seh_proc L_q_commit_id_ptr
 L_q_commit_id_ptr:
     pushq %rbp
@@ -281,11 +276,8 @@ L_q_commit_id_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -315,7 +307,6 @@ L_q_commit_id_ptr:
     .section .iii.ring3,"n"
     .asciz "q_alloc_slot"
     .text
-    .global L_q_alloc_slot
     .seh_proc L_q_alloc_slot
 L_q_alloc_slot:
     pushq %rbp
@@ -404,7 +395,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "q_in_region"
     .text
-    .global L_q_in_region
     .seh_proc L_q_in_region
 L_q_in_region:
     pushq %rbp
@@ -554,7 +544,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "q_resolve_byte"
     .text
-    .global L_q_resolve_byte
     .seh_proc L_q_resolve_byte
 L_q_resolve_byte:
     pushq %rbp
@@ -819,7 +808,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "q_byte_in_entry"
     .text
-    .global L_q_byte_in_entry
     .seh_proc L_q_byte_in_entry
 L_q_byte_in_entry:
     pushq %rbp
@@ -904,7 +892,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "q_capture_undo"
     .text
-    .global L_q_capture_undo
     .seh_proc L_q_capture_undo
 L_q_capture_undo:
     pushq %rbp
@@ -1182,7 +1169,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "q_capture_one"
     .text
-    .global L_q_capture_one
     .seh_proc L_q_capture_one
 L_q_capture_one:
     pushq %rbp
@@ -1349,7 +1335,6 @@ L_loop_end_37:
     .section .iii.ring3,"n"
     .asciz "q_apply_forward"
     .text
-    .global L_q_apply_forward
     .seh_proc L_q_apply_forward
 L_q_apply_forward:
     pushq %rbp
@@ -1537,7 +1522,6 @@ L_loop_end_39:
     .section .iii.ring3,"n"
     .asciz "q_apply_undo_reverse"
     .text
-    .global L_q_apply_undo_reverse
     .seh_proc L_q_apply_undo_reverse
 L_q_apply_undo_reverse:
     pushq %rbp
@@ -1732,7 +1716,6 @@ L_loop_end_43:
     .section .iii.ring3,"n"
     .asciz "q_build_sumbuf"
     .text
-    .global L_q_build_sumbuf
     .seh_proc L_q_build_sumbuf
 L_q_build_sumbuf:
     pushq %rbp
@@ -1829,11 +1812,7 @@ L_loop_top_46:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -1862,11 +1841,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1893,11 +1869,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1924,11 +1897,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1955,11 +1925,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1986,11 +1953,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2017,11 +1981,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2048,11 +2009,8 @@ L_loop_top_46:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2104,11 +2062,8 @@ L_loop_top_46:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2135,11 +2090,8 @@ L_loop_top_46:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2166,11 +2118,8 @@ L_loop_top_46:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2228,7 +2177,6 @@ L_loop_end_47:
     .section .iii.ring3,"n"
     .asciz "q_build_abortbuf"
     .text
-    .global L_q_build_abortbuf
     .seh_proc L_q_build_abortbuf
 L_q_build_abortbuf:
     pushq %rbp
@@ -2347,7 +2295,6 @@ L_loop_end_49:
     .section .iii.ring3,"n"
     .asciz "q_build_desc"
     .text
-    .global L_q_build_desc
     .seh_proc L_q_build_desc
 L_q_build_desc:
     pushq %rbp
@@ -2393,11 +2340,8 @@ L_loop_top_50:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2430,11 +2374,8 @@ L_loop_top_50:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3943,6 +3884,25 @@ L_if_end_95:
     popq %rax
     testq %rax, %rax
     jz L_if_end_97
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_q_apply_undo_reverse
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    leaq L_QUAR_STATE(%rip), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movzbq L_QUAR_STATE_OPEN(%rip), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
     movslq L_QUAR_E_WITNESS(%rip), %rax
     pushq %rax
     popq %rax

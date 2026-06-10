@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "keccak256.iiimerkle.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_1:
     .ascii "merkle.iii\0"
     .section .bss
@@ -32,7 +32,6 @@ L_REF:
     .section .iii.ring3,"n"
     .asciz "kc"
     .text
-    .global L_kc
     .seh_proc L_kc
 L_kc:
     pushq %rbp

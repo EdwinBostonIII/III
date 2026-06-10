@@ -53,7 +53,6 @@ L_LRU_TAIL:
     .section .iii.ring3,"n"
     .asciz "lru_slot_of"
     .text
-    .global L_lru_slot_of
     .seh_proc L_lru_slot_of
 L_lru_slot_of:
     pushq %rbp
@@ -174,7 +173,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "lru_load_key"
     .text
-    .global L_lru_load_key
     .seh_proc L_lru_load_key
 L_lru_load_key:
     pushq %rbp
@@ -206,11 +204,8 @@ L_lru_load_key:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -276,11 +271,8 @@ L_lru_load_key:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -289,11 +281,8 @@ L_lru_load_key:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -302,11 +291,8 @@ L_lru_load_key:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -333,7 +319,6 @@ L_lru_load_key:
     .section .iii.ring3,"n"
     .asciz "lru_store_key"
     .text
-    .global L_lru_store_key
     .seh_proc L_lru_store_key
 L_lru_store_key:
     pushq %rbp
@@ -370,11 +355,8 @@ L_lru_store_key:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -409,11 +391,8 @@ L_lru_store_key:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -434,11 +413,8 @@ L_lru_store_key:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -459,11 +435,8 @@ L_lru_store_key:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -494,7 +467,6 @@ L_lru_store_key:
     .section .iii.ring3,"n"
     .asciz "lru_load_val"
     .text
-    .global L_lru_load_val
     .seh_proc L_lru_load_val
 L_lru_load_val:
     pushq %rbp
@@ -526,11 +498,8 @@ L_lru_load_val:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -576,11 +545,8 @@ L_loop_top_6:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -623,7 +589,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "lru_store_val"
     .text
-    .global L_lru_store_val
     .seh_proc L_lru_store_val
 L_lru_store_val:
     pushq %rbp
@@ -660,11 +625,8 @@ L_lru_store_val:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -700,11 +662,8 @@ L_loop_top_8:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -754,7 +713,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "lru_load_link"
     .text
-    .global L_lru_load_link
     .seh_proc L_lru_load_link
 L_lru_load_link:
     pushq %rbp
@@ -791,7 +749,6 @@ L_lru_load_link:
     .section .iii.ring3,"n"
     .asciz "lru_store_link"
     .text
-    .global L_lru_store_link
     .seh_proc L_lru_store_link
 L_lru_store_link:
     pushq %rbp
@@ -832,7 +789,6 @@ L_lru_store_link:
     .section .iii.ring3,"n"
     .asciz "lru_load_occ"
     .text
-    .global L_lru_load_occ
     .seh_proc L_lru_load_occ
 L_lru_load_occ:
     pushq %rbp
@@ -894,7 +850,6 @@ L_lru_load_occ:
     .section .iii.ring3,"n"
     .asciz "lru_store_occ"
     .text
-    .global L_lru_store_occ
     .seh_proc L_lru_store_occ
 L_lru_store_occ:
     pushq %rbp
@@ -1107,11 +1062,8 @@ L_loop_end_13:
 L_if_end_19:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -1148,11 +1100,8 @@ L_if_end_19:
 L_if_end_21:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -1189,11 +1138,8 @@ L_if_end_21:
 L_if_end_23:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -1230,11 +1176,8 @@ L_if_end_23:
 L_if_end_25:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -1489,7 +1432,6 @@ L_loop_end_31:
     .section .iii.ring3,"n"
     .asciz "lru_detach"
     .text
-    .global L_lru_detach
     .seh_proc L_lru_detach
 L_lru_detach:
     pushq %rbp
@@ -1665,7 +1607,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "lru_push_front"
     .text
-    .global L_lru_push_front
     .seh_proc L_lru_push_front
 L_lru_push_front:
     pushq %rbp
@@ -1836,7 +1777,6 @@ L_if_end_39:
     .section .iii.ring3,"n"
     .asciz "lru_find"
     .text
-    .global L_lru_find
     .seh_proc L_lru_find
 L_lru_find:
     pushq %rbp
@@ -2000,7 +1940,6 @@ L_loop_end_41:
     .section .iii.ring3,"n"
     .asciz "lru_first_free"
     .text
-    .global L_lru_first_free
     .seh_proc L_lru_first_free
 L_lru_first_free:
     pushq %rbp

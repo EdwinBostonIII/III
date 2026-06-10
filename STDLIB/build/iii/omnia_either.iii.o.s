@@ -26,11 +26,8 @@ either_u32_left:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_EITHER_TAG_LEFT(%rip), %rax
     pushq %rax
@@ -67,11 +64,8 @@ either_u32_right:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_EITHER_TAG_RIGHT(%rip), %rax
     pushq %rax
@@ -248,11 +242,8 @@ either_u32_unwrap_left_or:
 L_if_end_5:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -320,11 +311,8 @@ either_u32_unwrap_right_or:
 L_if_end_7:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -372,11 +360,8 @@ either_u32_swap:
     movq %rax, -16(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -398,11 +383,8 @@ either_u32_swap:
     movq %rax, -32(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax

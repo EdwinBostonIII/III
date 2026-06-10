@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_consume"
     .text
-    .global L__consume
     .seh_proc L__consume
 L__consume:
     pushq %rbp

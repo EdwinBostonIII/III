@@ -68,11 +68,8 @@ xii_horizon_reach_bit:
 L_if_end_1:
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)

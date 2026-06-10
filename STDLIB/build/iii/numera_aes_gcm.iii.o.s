@@ -4,17 +4,33 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiaes.iiiaes.iiiaes.iiicpufeat.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiiaes.iiiaes.iiiaes.iiicpufeat.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "aes.iiiaes.iiiaes.iiicpufeat.iii\0"
+    .ascii "aes.iii\0"
 L_str_3:
-    .ascii "aes.iiiaes.iiicpufeat.iii\0"
+    .ascii "aes.iii\0"
 L_str_4:
-    .ascii "aes.iiicpufeat.iii\0"
+    .ascii "aes.iii\0"
 L_str_5:
     .ascii "cpufeat.iii\0"
+L_str_6:
+    .ascii "taint_analysis.iii\0"
+L_str_7:
+    .ascii "taint_analysis.iii\0"
+L_str_8:
+    .ascii "taint_analysis.iii\0"
+L_str_9:
+    .ascii "taint_analysis.iii\0"
+L_str_10:
+    .ascii "taint_analysis.iii\0"
+L_str_11:
+    .ascii "taint_analysis.iii\0"
+L_str_12:
+    .ascii "taint_analysis.iii\0"
+L_str_13:
+    .ascii "taint_analysis.iii\0"
     .section .rodata
 L_GCM_OK:
     .quad 0x0
@@ -82,7 +98,6 @@ L_GCM_BSWAP_INIT:
     .section .iii.ring3,"n"
     .asciz "gcm_alloc_buffers"
     .text
-    .global L_gcm_alloc_buffers
     .seh_proc L_gcm_alloc_buffers
 L_gcm_alloc_buffers:
     pushq %rbp
@@ -295,7 +310,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "gcm_zero16"
     .text
-    .global L_gcm_zero16
     .seh_proc L_gcm_zero16
 L_gcm_zero16:
     pushq %rbp
@@ -372,7 +386,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "gcm_copy16"
     .text
-    .global L_gcm_copy16
     .seh_proc L_gcm_copy16
 L_gcm_copy16:
     pushq %rbp
@@ -462,7 +475,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "gcm_xor16_inplace"
     .text
-    .global L_gcm_xor16_inplace
     .seh_proc L_gcm_xor16_inplace
 L_gcm_xor16_inplace:
     pushq %rbp
@@ -581,7 +593,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "gcm_ghash_mul_scalar"
     .text
-    .global L_gcm_ghash_mul_scalar
     .seh_proc L_gcm_ghash_mul_scalar
 L_gcm_ghash_mul_scalar:
     pushq %rbp
@@ -695,11 +706,8 @@ L_loop_top_12:
     jz L_loop_end_13
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -918,19 +926,13 @@ L_loop_top_18:
     pushq %rax
     movl -104(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movl -112(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $7, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -979,11 +981,8 @@ L_loop_end_19:
     pushq %rax
     movl -104(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movzbq %al, %rax
@@ -1123,7 +1122,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "gcm_bswap_init"
     .text
-    .global L_gcm_bswap_init
     .seh_proc L_gcm_bswap_init
 L_gcm_bswap_init:
     pushq %rbp
@@ -1336,7 +1334,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "gcm_precompute_hp"
     .text
-    .global L_gcm_precompute_hp
     .seh_proc L_gcm_precompute_hp
 L_gcm_precompute_hp:
     pushq %rbp
@@ -1455,11 +1452,8 @@ L_loop_top_28:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1483,11 +1477,8 @@ L_loop_top_28:
     movb %dl, (%rax,%rcx,1)
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1610,7 +1601,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "gcm_ghash_mul_pclmul"
     .text
-    .global L_gcm_ghash_mul_pclmul
     .seh_proc L_gcm_ghash_mul_pclmul
 L_gcm_ghash_mul_pclmul:
     pushq %rbp
@@ -1690,7 +1680,6 @@ L_gcm_ghash_mul_pclmul:
     .section .iii.ring3,"n"
     .asciz "gcm_ghash_mul"
     .text
-    .global L_gcm_ghash_mul
     .seh_proc L_gcm_ghash_mul
 L_gcm_ghash_mul:
     pushq %rbp
@@ -1831,7 +1820,6 @@ gcm_force_path:
     .section .iii.ring3,"n"
     .asciz "gcm_ghash_block_in_buf"
     .text
-    .global L_gcm_ghash_block_in_buf
     .seh_proc L_gcm_ghash_block_in_buf
 L_gcm_ghash_block_in_buf:
     pushq %rbp
@@ -1875,7 +1863,6 @@ L_gcm_ghash_block_in_buf:
     .section .iii.ring3,"n"
     .asciz "gcm_inc32_ctr"
     .text
-    .global L_gcm_inc32_ctr
     .seh_proc L_gcm_inc32_ctr
 L_gcm_inc32_ctr:
     pushq %rbp
@@ -2144,7 +2131,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "gcm_init_after_key"
     .text
-    .global L_gcm_init_after_key
     .seh_proc L_gcm_init_after_key
 L_gcm_init_after_key:
     pushq %rbp
@@ -2489,7 +2475,6 @@ L_if_end_51:
     .section .iii.ring3,"n"
     .asciz "gcm_load_partial_block"
     .text
-    .global L_gcm_load_partial_block
     .seh_proc L_gcm_load_partial_block
 L_gcm_load_partial_block:
     pushq %rbp
@@ -2763,7 +2748,6 @@ L_loop_end_59:
     .section .iii.ring3,"n"
     .asciz "gcm_ctr_xor"
     .text
-    .global L_gcm_ctr_xor
     .seh_proc L_gcm_ctr_xor
 L_gcm_ctr_xor:
     pushq %rbp
@@ -2994,7 +2978,6 @@ L_loop_end_63:
     .section .iii.ring3,"n"
     .asciz "gcm_ghash_data"
     .text
-    .global L_gcm_ghash_data
     .seh_proc L_gcm_ghash_data
 L_gcm_ghash_data:
     pushq %rbp
@@ -3113,7 +3096,6 @@ L_loop_end_69:
     .section .iii.ring3,"n"
     .asciz "gcm_ghash_lengths"
     .text
-    .global L_gcm_ghash_lengths
     .seh_proc L_gcm_ghash_lengths
 L_gcm_ghash_lengths:
     pushq %rbp
@@ -3131,21 +3113,15 @@ L_gcm_ghash_lengths:
     movq %rax, -8(%rbp)
     movq L_GCM_AAD_LEN(%rip), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
     movq L_GCM_PT_LEN(%rip), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -3171,11 +3147,8 @@ L_loop_top_72:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3249,11 +3222,8 @@ L_loop_top_74:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3345,7 +3315,6 @@ L_loop_end_75:
     .section .iii.ring3,"n"
     .asciz "gcm_compute_tag"
     .text
-    .global L_gcm_compute_tag
     .seh_proc L_gcm_compute_tag
 L_gcm_compute_tag:
     pushq %rbp
@@ -3799,6 +3768,274 @@ L_if_end_85:
     pushq %rax
     popq %rax
     movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "aes_gcm_taint_kat"
+    .text
+    .global aes_gcm_taint_kat
+    .seh_proc aes_gcm_taint_kat
+aes_gcm_taint_kat:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_reset
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_set_source
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_set_source
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq taint_set_op
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq taint_set_sanitize
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq taint_set_sink
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq taint_propagate
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_tainted
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_87
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_87:
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_tainted
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_89
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_89:
+    subq $32, %rsp
+    callq taint_violations
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_91
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_91:
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_reset
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_set_source
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq taint_set_source
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq taint_set_op
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq taint_set_sink
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq taint_propagate
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq taint_violations
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_93
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_93:
+    movabsq $0x63, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

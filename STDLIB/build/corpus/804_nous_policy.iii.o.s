@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "nous_features.iiinous_policy.iiinous_value.iiinous_socket.iiinous_socket.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "nous_features.iii\0"
 L_str_1:
-    .ascii "nous_policy.iiinous_value.iiinous_socket.iiinous_socket.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "nous_policy.iii\0"
 L_str_2:
-    .ascii "nous_value.iiinous_socket.iiinous_socket.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "nous_value.iii\0"
 L_str_3:
-    .ascii "nous_socket.iiinous_socket.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "nous_socket.iii\0"
 L_str_4:
-    .ascii "nous_socket.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "nous_socket.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_8:
-    .ascii "xii_canonicalise.iiixii_rewrite.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_9:
     .ascii "xii_rewrite.iii\0"
     .section .rodata
@@ -35,7 +35,6 @@ L_C804_TRIT_SUM:
     .section .iii.ring3,"n"
     .asciz "c804_mkval"
     .text
-    .global L_c804_mkval
     .seh_proc L_c804_mkval
 L_c804_mkval:
     pushq %rbp
@@ -81,7 +80,6 @@ L_c804_mkval:
     .section .iii.ring3,"n"
     .asciz "c804_policy_keystone"
     .text
-    .global L_c804_policy_keystone
     .seh_proc L_c804_policy_keystone
 L_c804_policy_keystone:
     pushq %rbp
@@ -356,7 +354,7 @@ L_loop_top_6:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -388,7 +386,7 @@ L_loop_top_8:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

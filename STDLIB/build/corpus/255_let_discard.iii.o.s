@@ -10,7 +10,6 @@ L_SIDE_EFFECT_COUNTER:
     .section .iii.ring3,"n"
     .asciz "_side_effect"
     .text
-    .global L__side_effect
     .seh_proc L__side_effect
 L__side_effect:
     pushq %rbp

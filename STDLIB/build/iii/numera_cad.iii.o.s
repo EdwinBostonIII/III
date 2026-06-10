@@ -4,22 +4,36 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiisha256.iiikeccak256.iiikeccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiikeccak256.iiikeccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iiisha256.iiikeccak256.iiikeccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
-    .ascii "sha256.iiisha256.iiikeccak256.iiikeccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_4:
-    .ascii "sha256.iiikeccak256.iiikeccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_5:
-    .ascii "keccak256.iiikeccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_6:
-    .ascii "keccak256.iiikeccak256.iiikeccak256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_7:
-    .ascii "keccak256.iiikeccak256.iii\0"
+    .ascii "sha256_dispatch.iii\0"
 L_str_8:
+    .ascii "sha256_dispatch.iii\0"
+L_str_9:
+    .ascii "sha256_dispatch.iii\0"
+L_str_10:
+    .ascii "sha256_dispatch.iii\0"
+L_str_11:
+    .ascii "keccak256.iii\0"
+L_str_12:
+    .ascii "keccak256.iii\0"
+L_str_13:
+    .ascii "keccak256.iii\0"
+L_str_14:
+    .ascii "keccak256.iii\0"
+L_str_15:
     .ascii "keccak256.iii\0"
     .section .rodata
 L_CAD_OK:
@@ -65,6 +79,10 @@ L_CAD_REF:
     .global L_CAD_ZERO
 L_CAD_ZERO:
     .byte 0x0
+    .section .bss
+    .global L_CAD_PSCRATCH
+L_CAD_PSCRATCH:
+    .zero 64
     .section .iii.ring3,"n"
     .asciz "cad_oneshot"
     .text
@@ -171,7 +189,7 @@ L_if_end_3:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq sha256_oneshot
+    callq sha256_dispatch_oneshot
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -242,6 +260,1114 @@ L_if_end_7:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "cad_keccak_packed"
+    .text
+    .seh_proc L_cad_keccak_packed
+L_cad_keccak_packed:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    subq $32, %rsp
+    callq keccak256_init
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $3, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+L_loop_top_8:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_9
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $16, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $24, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $32, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $40, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x6, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $48, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $56, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x8, %rax
+    pushq %rax
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq keccak256_update
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_8
+L_loop_end_9:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+L_loop_top_12:
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_13
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_12
+L_loop_end_13:
+    movq -48(%rbp), %rax
+    pushq %rax
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq keccak256_update
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq keccak256_final
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cad_oneshot_packed"
+    .text
+    .global cad_oneshot_packed
+    .seh_proc cad_oneshot_packed
+cad_oneshot_packed:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movslq L_CAD_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movslq L_CAD_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_CAD_SUITE_SHA256(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq sha256_oneshot_packed
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movslq L_CAD_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_CAD_SUITE_KECCAK256(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_cad_keccak_packed
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
+    movslq L_CAD_E_BAD_SUITE(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cad_keccak_packed_bp"
+    .text
+    .seh_proc L_cad_keccak_packed_bp
+L_cad_keccak_packed_bp:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    subq $32, %rsp
+    callq keccak256_init
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $3, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+L_loop_top_22:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_23
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $16, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $24, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $32, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $40, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x6, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $48, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $56, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x8, %rax
+    pushq %rax
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq keccak256_update
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_22
+L_loop_end_23:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+L_loop_top_26:
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_27
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $8, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_26
+L_loop_end_27:
+    movq -48(%rbp), %rax
+    pushq %rax
+    leaq L_CAD_PSCRATCH(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq keccak256_update
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq keccak256_final_bp
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cad_oneshot_packed_bp"
+    .text
+    .global cad_oneshot_packed_bp
+    .seh_proc cad_oneshot_packed_bp
+cad_oneshot_packed_bp:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movslq L_CAD_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_31
+    movslq L_CAD_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_CAD_SUITE_SHA256(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq sha256_oneshot_packed_bp
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movslq L_CAD_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_CAD_SUITE_KECCAK256(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_cad_keccak_packed_bp
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    movslq L_CAD_E_BAD_SUITE(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "cad_compute"
     .text
     .global cad_compute
@@ -272,7 +1398,7 @@ cad_compute:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_37
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -282,7 +1408,7 @@ cad_compute:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_37:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -297,7 +1423,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_39
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -307,7 +1433,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_39:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -322,7 +1448,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_41
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -332,7 +1458,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_41:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -347,7 +1473,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_43
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -357,12 +1483,12 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_43:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_16:
+L_loop_top_44:
     movq -40(%rbp), %rax
     pushq %rax
     movq L_CAD_BYTES(%rip), %rax
@@ -375,7 +1501,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_45
     leaq L_CAD_BUF(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -455,8 +1581,8 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_44
+L_loop_end_45:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -525,7 +1651,7 @@ cad_compose:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_47
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -535,7 +1661,7 @@ cad_compose:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_47:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -550,7 +1676,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_49
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -560,7 +1686,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_49:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -575,7 +1701,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_51
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -585,12 +1711,12 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_51:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_24:
+L_loop_top_52:
     movq -32(%rbp), %rax
     pushq %rax
     movq L_CAD_BYTES(%rip), %rax
@@ -603,7 +1729,7 @@ L_loop_top_24:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_25
+    jz L_loop_end_53
     leaq L_CAD_BUF(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -655,8 +1781,8 @@ L_loop_top_24:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_24
-L_loop_end_25:
+    jmp L_loop_top_52
+L_loop_end_53:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -725,7 +1851,7 @@ cad_branch_key:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_55
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -735,7 +1861,7 @@ cad_branch_key:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_55:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -750,7 +1876,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_57
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -760,7 +1886,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_57:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -775,7 +1901,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_59
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -785,12 +1911,12 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_59:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_32:
+L_loop_top_60:
     movq -32(%rbp), %rax
     pushq %rax
     movq L_CAD_BYTES(%rip), %rax
@@ -803,7 +1929,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_33
+    jz L_loop_end_61
     leaq L_CAD_BUF(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -855,8 +1981,8 @@ L_loop_top_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_32
-L_loop_end_33:
+    jmp L_loop_top_60
+L_loop_end_61:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -925,13 +2051,13 @@ cad_begin:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_63
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movl %eax, L_CAD_ACTIVE(%rip)
     subq $32, %rsp
-    callq sha256_init
+    callq sha256_dispatch_init
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -945,7 +2071,7 @@ cad_begin:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_63:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_CAD_SUITE_KECCAK256(%rip), %eax
@@ -958,7 +2084,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_65
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -978,7 +2104,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_65:
     movslq L_CAD_E_BAD_SUITE(%rip), %rax
     pushq %rax
     popq %rax
@@ -1019,7 +2145,7 @@ cad_domain:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_67
     movslq L_CAD_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1029,7 +2155,7 @@ cad_domain:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_67:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1042,7 +2168,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_69
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1052,7 +2178,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_69:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1075,7 +2201,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_71
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1083,16 +2209,23 @@ L_if_end_41:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq sha256_update
+    callq sha256_dispatch_update
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    leaq L_CAD_ZERO(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rcx
+    popq %rdx
     subq $32, %rsp
-    callq sha256_update_byte
+    callq sha256_dispatch_update
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -1106,7 +2239,7 @@ L_if_end_41:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_71:
     movl L_CAD_ACTIVE(%rip), %eax
     pushq %rax
     movl L_CAD_SUITE_KECCAK256(%rip), %eax
@@ -1119,7 +2252,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_73
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1157,7 +2290,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_73:
     movslq L_CAD_E_BAD_SUITE(%rip), %rax
     pushq %rax
     popq %rax
@@ -1198,7 +2331,7 @@ cad_payload:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_75
     movslq L_CAD_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1208,7 +2341,7 @@ cad_payload:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_75:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1221,7 +2354,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_77
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1231,7 +2364,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_77:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1254,7 +2387,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_79
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1262,7 +2395,7 @@ L_if_end_49:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq sha256_update
+    callq sha256_dispatch_update
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -1276,7 +2409,7 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_79:
     movl L_CAD_ACTIVE(%rip), %eax
     pushq %rax
     movl L_CAD_SUITE_KECCAK256(%rip), %eax
@@ -1289,7 +2422,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_81
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1311,7 +2444,7 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_81:
     movslq L_CAD_E_BAD_SUITE(%rip), %rax
     pushq %rax
     popq %rax
@@ -1351,7 +2484,7 @@ cad_final:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_83
     movslq L_CAD_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1361,7 +2494,7 @@ cad_final:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_83:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1380,12 +2513,12 @@ L_if_end_55:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_85
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq sha256_final
+    callq sha256_dispatch_final
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -1399,7 +2532,7 @@ L_if_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_85:
     movl L_CAD_ACTIVE(%rip), %eax
     pushq %rax
     movl L_CAD_SUITE_KECCAK256(%rip), %eax
@@ -1412,7 +2545,7 @@ L_if_end_57:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_87
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1431,7 +2564,7 @@ L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_87:
     movslq L_CAD_E_BAD_SUITE(%rip), %rax
     pushq %rax
     popq %rax
@@ -1474,7 +2607,7 @@ cad_eq:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_89
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1484,7 +2617,7 @@ cad_eq:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_89:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1499,7 +2632,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_91
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1509,7 +2642,7 @@ L_if_end_61:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_91:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1518,7 +2651,7 @@ L_if_end_63:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_64:
+L_loop_top_92:
     movq -32(%rbp), %rax
     pushq %rax
     movq L_CAD_BYTES(%rip), %rax
@@ -1531,7 +2664,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_65
+    jz L_loop_end_93
     movl -24(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1579,8 +2712,8 @@ L_loop_top_64:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_64
-L_loop_end_65:
+    jmp L_loop_top_92
+L_loop_end_93:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -1593,7 +2726,7 @@ L_loop_end_65:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_95
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1603,7 +2736,7 @@ L_loop_end_65:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_95:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1645,7 +2778,7 @@ cad_is_zero:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_97
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1655,7 +2788,7 @@ cad_is_zero:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_97:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1664,7 +2797,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_70:
+L_loop_top_98:
     movq -24(%rbp), %rax
     pushq %rax
     movq L_CAD_BYTES(%rip), %rax
@@ -1677,7 +2810,7 @@ L_loop_top_70:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_71
+    jz L_loop_end_99
     movl -16(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1710,8 +2843,8 @@ L_loop_top_70:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_70
-L_loop_end_71:
+    jmp L_loop_top_98
+L_loop_end_99:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -1724,7 +2857,7 @@ L_loop_end_71:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_101
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1734,7 +2867,7 @@ L_loop_end_71:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_101:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1765,7 +2898,7 @@ cad_selftest:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_74:
+L_loop_top_102:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -1778,7 +2911,7 @@ L_loop_top_74:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_75
+    jz L_loop_end_103
     leaq L_CAD_A(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1843,8 +2976,8 @@ L_loop_top_74:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_74
-L_loop_end_75:
+    jmp L_loop_top_102
+L_loop_end_103:
     leaq L_CAD_O(%rip), %rax
     pushq %rax
     popq %rax
@@ -1926,7 +3059,7 @@ L_loop_end_75:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_105
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1936,7 +3069,7 @@ L_loop_end_75:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_105:
     leaq L_CAD_O2(%rip), %rax
     pushq %rax
     popq %rax
@@ -1989,7 +3122,7 @@ L_if_end_77:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_79
+    jz L_if_end_107
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -1999,7 +3132,7 @@ L_if_end_77:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_79:
+L_if_end_107:
     leaq L_CAD_O(%rip), %rax
     pushq %rax
     popq %rax
@@ -2074,7 +3207,7 @@ L_if_end_79:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_109
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -2084,7 +3217,7 @@ L_if_end_79:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_109:
     leaq L_CAD_O(%rip), %rax
     pushq %rax
     popq %rax
@@ -2123,7 +3256,7 @@ L_if_end_81:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_82:
+L_loop_top_110:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -2136,7 +3269,7 @@ L_loop_top_82:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_83
+    jz L_loop_end_111
     leaq L_CAD_REF(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2210,8 +3343,8 @@ L_loop_top_82:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_82
-L_loop_end_83:
+    jmp L_loop_top_110
+L_loop_end_111:
     leaq L_CAD_O2(%rip), %rax
     pushq %rax
     popq %rax
@@ -2262,7 +3395,7 @@ L_loop_end_83:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_85
+    jz L_if_end_113
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -2272,7 +3405,7 @@ L_loop_end_83:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_85:
+L_if_end_113:
     leaq L_CAD_C(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2358,7 +3491,7 @@ L_if_end_85:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_87
+    jz L_if_end_115
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -2368,7 +3501,7 @@ L_if_end_85:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_87:
+L_if_end_115:
     leaq L_CAD_C(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2422,7 +3555,7 @@ L_if_end_87:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_88:
+L_loop_top_116:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -2435,7 +3568,7 @@ L_loop_top_88:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_89
+    jz L_loop_end_117
     leaq L_CAD_REF(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2487,8 +3620,8 @@ L_loop_top_88:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_88
-L_loop_end_89:
+    jmp L_loop_top_116
+L_loop_end_117:
     leaq L_CAD_O2(%rip), %rax
     pushq %rax
     popq %rax
@@ -2539,7 +3672,7 @@ L_loop_end_89:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_91
+    jz L_if_end_119
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -2549,7 +3682,7 @@ L_loop_end_89:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_91:
+L_if_end_119:
     movl L_CAD_SUITE_SHA256(%rip), %eax
     pushq %rax
     popq %rcx
@@ -2636,7 +3769,7 @@ L_if_end_91:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_93
+    jz L_if_end_121
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -2646,7 +3779,7 @@ L_if_end_91:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_93:
+L_if_end_121:
     leaq L_CAD_O(%rip), %rax
     pushq %rax
     popq %rax
@@ -2682,7 +3815,7 @@ L_if_end_93:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_95
+    jz L_if_end_123
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -2692,7 +3825,7 @@ L_if_end_93:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_95:
+L_if_end_123:
     leaq L_CAD_O(%rip), %rax
     pushq %rax
     popq %rax
@@ -2726,7 +3859,7 @@ L_if_end_95:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_97
+    jz L_if_end_125
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -2736,7 +3869,7 @@ L_if_end_95:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_97:
+L_if_end_125:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2770,7 +3903,7 @@ L_if_end_97:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_99
+    jz L_if_end_127
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -2780,7 +3913,7 @@ L_if_end_97:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_99:
+L_if_end_127:
     movabsq $0x63, %rax
     pushq %rax
     popq %rcx
@@ -2799,7 +3932,7 @@ L_if_end_99:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_101
+    jz L_if_end_129
     movabsq $0xb, %rax
     pushq %rax
     popq %rax
@@ -2809,7 +3942,7 @@ L_if_end_99:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_101:
+L_if_end_129:
     leaq L_CAD_O(%rip), %rax
     pushq %rax
     popq %rax
@@ -2851,7 +3984,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_131
     movabsq $0xc, %rax
     pushq %rax
     popq %rax
@@ -2861,7 +3994,7 @@ L_if_end_101:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_131:
     movl L_CAD_SUITE_SHA256(%rip), %eax
     pushq %rax
     popq %rcx
@@ -2914,7 +4047,7 @@ L_if_end_103:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_104:
+L_loop_top_132:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -2927,7 +4060,7 @@ L_loop_top_104:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_105
+    jz L_loop_end_133
     leaq L_CAD_REF(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2957,8 +4090,8 @@ L_loop_top_104:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_104
-L_loop_end_105:
+    jmp L_loop_top_132
+L_loop_end_133:
     leaq L_CAD_REF(%rip), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -2973,7 +4106,7 @@ L_loop_end_105:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_106:
+L_loop_top_134:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2986,7 +4119,7 @@ L_loop_top_106:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_107
+    jz L_loop_end_135
     leaq L_CAD_REF(%rip), %rax
     pushq %rax
     movabsq $0x5, %rax
@@ -3022,8 +4155,8 @@ L_loop_top_106:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_106
-L_loop_end_107:
+    jmp L_loop_top_134
+L_loop_end_135:
     leaq L_CAD_O2(%rip), %rax
     pushq %rax
     popq %rax
@@ -3076,7 +4209,7 @@ L_loop_end_107:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_109
+    jz L_if_end_137
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -3086,7 +4219,211 @@ L_loop_end_107:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_109:
+L_if_end_137:
+    leaq L_CAD_O(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_CAD_B(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_CAD_A(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq cad_branch_key
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+L_loop_top_138:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_139
+    leaq L_CAD_REF(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    leaq L_CAD_A(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_CAD_REF(%rip), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    leaq L_CAD_B(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_138
+L_loop_end_139:
+    leaq L_CAD_O2(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x40, %rax
+    pushq %rax
+    leaq L_CAD_REF(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq keccak256_oneshot
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    leaq L_CAD_O2(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_CAD_O(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq cad_eq
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_141
+    movabsq $0xe, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_141:
+    leaq L_CAD_O(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_CAD_B(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq cad_branch_key
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movslq L_CAD_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_143
+    movabsq $0xf, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_143:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiirsa.iiirsa.iiirsa.iiirsa.iiirsa.iiirsa.iiirsa.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "rsa.iiirsa.iiirsa.iiirsa.iiirsa.iiirsa.iiirsa.iii\0"
+    .ascii "rsa.iii\0"
 L_str_2:
-    .ascii "rsa.iiirsa.iiirsa.iiirsa.iiirsa.iiirsa.iii\0"
+    .ascii "rsa.iii\0"
 L_str_3:
-    .ascii "rsa.iiirsa.iiirsa.iiirsa.iiirsa.iii\0"
+    .ascii "rsa.iii\0"
 L_str_4:
-    .ascii "rsa.iiirsa.iiirsa.iiirsa.iii\0"
+    .ascii "rsa.iii\0"
 L_str_5:
-    .ascii "rsa.iiirsa.iiirsa.iii\0"
+    .ascii "rsa.iii\0"
 L_str_6:
-    .ascii "rsa.iiirsa.iii\0"
+    .ascii "rsa.iii\0"
 L_str_7:
     .ascii "rsa.iii\0"
     .section .bss

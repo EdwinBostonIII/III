@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "aes_gcm.iiiaes_gcm.iiiaes_gcm.iiiaes_gcm.iii\0"
+    .ascii "aes_gcm.iii\0"
 L_str_1:
-    .ascii "aes_gcm.iiiaes_gcm.iiiaes_gcm.iii\0"
+    .ascii "aes_gcm.iii\0"
 L_str_2:
-    .ascii "aes_gcm.iiiaes_gcm.iii\0"
+    .ascii "aes_gcm.iii\0"
 L_str_3:
     .ascii "aes_gcm.iii\0"
     .section .data
@@ -221,7 +221,6 @@ L_PTOUT:
     .section .iii.ring3,"n"
     .asciz "cmp"
     .text
-    .global L_cmp
     .seh_proc L_cmp
 L_cmp:
     pushq %rbp

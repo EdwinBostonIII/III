@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiibound.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
     .ascii "bound.iii\0"
     .section .rodata
@@ -44,7 +44,6 @@ L_PQ_LIVE:
     .section .iii.ring3,"n"
     .asciz "pq_load_u64_le"
     .text
-    .global L_pq_load_u64_le
     .seh_proc L_pq_load_u64_le
 L_pq_load_u64_le:
     pushq %rbp
@@ -64,11 +63,8 @@ L_pq_load_u64_le:
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -76,11 +72,7 @@ L_pq_load_u64_le:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -220,11 +212,8 @@ L_pq_load_u64_le:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -232,11 +221,8 @@ L_pq_load_u64_le:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -244,11 +230,8 @@ L_pq_load_u64_le:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -258,19 +241,13 @@ L_pq_load_u64_le:
     movq %rax, -104(%rbp)
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -278,11 +255,8 @@ L_pq_load_u64_le:
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -290,11 +264,8 @@ L_pq_load_u64_le:
     pushq %rax
     movq -96(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -324,7 +295,6 @@ L_pq_load_u64_le:
     .section .iii.ring3,"n"
     .asciz "pq_store_u64_le"
     .text
-    .global L_pq_store_u64_le
     .seh_proc L_pq_store_u64_le
 L_pq_store_u64_le:
     pushq %rbp
@@ -345,11 +315,8 @@ L_pq_store_u64_le:
     movq %rax, -32(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -357,11 +324,7 @@ L_pq_store_u64_le:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -390,11 +353,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -421,11 +381,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -452,11 +409,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -483,11 +437,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -514,11 +465,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -545,11 +493,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -576,11 +521,8 @@ L_pq_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -611,7 +553,6 @@ L_pq_store_u64_le:
     .section .iii.ring3,"n"
     .asciz "pq_load_u32_le"
     .text
-    .global L_pq_load_u32_le
     .seh_proc L_pq_load_u32_le
 L_pq_load_u32_le:
     pushq %rbp
@@ -631,11 +572,8 @@ L_pq_load_u32_le:
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -643,11 +581,7 @@ L_pq_load_u32_le:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -719,11 +653,8 @@ L_pq_load_u32_le:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -732,11 +663,8 @@ L_pq_load_u32_le:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -745,11 +673,8 @@ L_pq_load_u32_le:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -776,7 +701,6 @@ L_pq_load_u32_le:
     .section .iii.ring3,"n"
     .asciz "pq_store_u32_le"
     .text
-    .global L_pq_store_u32_le
     .seh_proc L_pq_store_u32_le
 L_pq_store_u32_le:
     pushq %rbp
@@ -797,11 +721,8 @@ L_pq_store_u32_le:
     movq %rax, -32(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -809,11 +730,7 @@ L_pq_store_u32_le:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -842,11 +759,8 @@ L_pq_store_u32_le:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -873,11 +787,8 @@ L_pq_store_u32_le:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -904,11 +815,8 @@ L_pq_store_u32_le:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -939,7 +847,6 @@ L_pq_store_u32_le:
     .section .iii.ring3,"n"
     .asciz "pq_slot_of"
     .text
-    .global L_pq_slot_of
     .seh_proc L_pq_slot_of
 L_pq_slot_of:
     pushq %rbp
@@ -1060,7 +967,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "pq_swap"
     .text
-    .global L_pq_swap
     .seh_proc L_pq_swap
 L_pq_swap:
     pushq %rbp
@@ -1219,7 +1125,6 @@ L_pq_swap:
     .section .iii.ring3,"n"
     .asciz "pq_sift_up"
     .text
-    .global L_pq_sift_up
     .seh_proc L_pq_sift_up
 L_pq_sift_up:
     pushq %rbp
@@ -1501,7 +1406,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "pq_sift_down"
     .text
-    .global L_pq_sift_down
     .seh_proc L_pq_sift_down
 L_pq_sift_down:
     pushq %rbp
@@ -1592,11 +1496,8 @@ L_loop_top_16:
     jz L_loop_end_17
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1608,11 +1509,8 @@ L_loop_top_16:
     movq %rax, -80(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -2040,11 +1938,8 @@ L_if_end_39:
 L_if_end_41:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -2081,11 +1976,8 @@ L_if_end_41:
 L_if_end_43:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -2682,11 +2574,8 @@ L_if_end_59:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

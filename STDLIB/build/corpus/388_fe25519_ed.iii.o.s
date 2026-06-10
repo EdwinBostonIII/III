@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiisha512.iiisha512.iiisha512.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_1:
-    .ascii "fe25519.iiife25519.iiife25519.iiisha512.iiisha512.iiisha512.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_2:
-    .ascii "fe25519.iiife25519.iiisha512.iiisha512.iiisha512.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_3:
-    .ascii "fe25519.iiisha512.iiisha512.iiisha512.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_4:
-    .ascii "sha512.iiisha512.iiisha512.iii\0"
+    .ascii "sha512.iii\0"
 L_str_5:
-    .ascii "sha512.iiisha512.iii\0"
+    .ascii "sha512.iii\0"
 L_str_6:
     .ascii "sha512.iii\0"
     .section .bss

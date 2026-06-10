@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "answer"
     .text
-    .global L_answer
     .seh_proc L_answer
 L_answer:
     pushq %rbp

@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_1:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_2:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_3:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_4:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_5:
-    .ascii "glyph_core.iiiglyph_core.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_6:
     .ascii "glyph_core.iii\0"
     .section .rodata
@@ -182,11 +182,7 @@ L_if_end_5:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -620,7 +616,7 @@ L_loop_end_25:
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtresolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtresolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "resolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_3:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_4:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_5:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_6:
-    .ascii "governance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_7:
-    .ascii "governance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_8:
     .ascii "governance.iii\0"
     .section .iii.ring3,"n"

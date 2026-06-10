@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "recv_into"
     .text
-    .global L_recv_into
     .seh_proc L_recv_into
 L_recv_into:
     # III_SOVEREIGN_AUDIT SOURCE recv_into p0
@@ -35,7 +34,6 @@ L_recv_into:
     .section .iii.ring3,"n"
     .asciz "send_out"
     .text
-    .global L_send_out
     .seh_proc L_send_out
 L_send_out:
     # III_SOVEREIGN_AUDIT SOVVAL send_out p0
@@ -64,7 +62,6 @@ L_send_out:
     .section .iii.ring3,"n"
     .asciz "sanitise"
     .text
-    .global L_sanitise
     .seh_proc L_sanitise
 L_sanitise:
     # III_SOVEREIGN_AUDIT SOVVAL sanitise p0
@@ -92,7 +89,6 @@ L_sanitise:
     .section .iii.ring3,"n"
     .asciz "trusted"
     .text
-    .global L_trusted
     .seh_proc L_trusted
 L_trusted:
     pushq %rbp

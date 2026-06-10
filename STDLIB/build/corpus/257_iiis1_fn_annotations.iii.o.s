@@ -8,7 +8,6 @@ L_str_0:
     .section .iii.ring3,"n"
     .asciz "f1"
     .text
-    .global L_f1
     .seh_proc L_f1
 L_f1:
     pushq %rbp
@@ -41,7 +40,6 @@ L_f1:
     .section .iii.ring3,"n"
     .asciz "f2"
     .text
-    .global L_f2
     .seh_proc L_f2
 L_f2:
     pushq %rbp
@@ -54,11 +52,8 @@ L_f2:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

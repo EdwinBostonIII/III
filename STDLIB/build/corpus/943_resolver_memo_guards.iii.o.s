@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_1:
-    .ascii "resolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_2:
-    .ascii "resolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_3:
-    .ascii "resolver_memo.iiiresolver_memo.iiiresolver_memo.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_4:
-    .ascii "resolver_memo.iiiresolver_memo.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_5:
     .ascii "resolver_memo.iii\0"
     .section .iii.ring3,"n"

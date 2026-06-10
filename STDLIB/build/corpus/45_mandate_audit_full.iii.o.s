@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtkchain.iiikchain.iiimandate.iiimandate.iiiquality_q7.iiiseal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "kchain.iiikchain.iiimandate.iiimandate.iiiquality_q7.iiiseal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "kchain.iii\0"
 L_str_2:
-    .ascii "kchain.iiimandate.iiimandate.iiiquality_q7.iiiseal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "kchain.iii\0"
 L_str_3:
-    .ascii "mandate.iiimandate.iiiquality_q7.iiiseal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "mandate.iii\0"
 L_str_4:
-    .ascii "mandate.iiiquality_q7.iiiseal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "mandate.iii\0"
 L_str_5:
-    .ascii "quality_q7.iiiseal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "quality_q7.iii\0"
 L_str_6:
-    .ascii "seal_resolver.iiiclosure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_7:
-    .ascii "closure.iiiclosure.iiipattern_table.iii\0"
+    .ascii "closure.iii\0"
 L_str_8:
-    .ascii "closure.iiipattern_table.iii\0"
+    .ascii "closure.iii\0"
 L_str_9:
     .ascii "pattern_table.iii\0"
     .section .iii.ring3,"n"

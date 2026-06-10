@@ -4,37 +4,37 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiiwitness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiiwitness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiiwitness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiiidentifier.iiialgebraic_time.iiiwitness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "identifier.iiialgebraic_time.iiiwitness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "identifier.iii\0"
 L_str_5:
-    .ascii "algebraic_time.iiiwitness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiicomputation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "computation_graph.iiicomputation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "computation_graph.iii\0"
 L_str_8:
-    .ascii "computation_graph.iiiconstitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "computation_graph.iii\0"
 L_str_9:
-    .ascii "constitution.iiiwitness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "constitution.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiialgebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "algebraic_time.iiiwitness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_12:
-    .ascii "witness_spine.iiiwitness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_13:
-    .ascii "witness_spine.iiiconstitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_14:
-    .ascii "constitution.iiicomputation_graph.iiicomputation_graph.iii\0"
+    .ascii "constitution.iii\0"
 L_str_15:
-    .ascii "computation_graph.iiicomputation_graph.iii\0"
+    .ascii "computation_graph.iii\0"
 L_str_16:
     .ascii "computation_graph.iii\0"
     .section .rodata
@@ -185,7 +185,6 @@ L_BANCHOR_KAT_TGTN:
     .section .iii.ring3,"n"
     .asciz "ba_branch_ptr"
     .text
-    .global L_ba_branch_ptr
     .seh_proc L_ba_branch_ptr
 L_ba_branch_ptr:
     pushq %rbp
@@ -202,11 +201,8 @@ L_ba_branch_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -226,7 +222,6 @@ L_ba_branch_ptr:
     .section .iii.ring3,"n"
     .asciz "ba_branch_head_ptr"
     .text
-    .global L_ba_branch_head_ptr
     .seh_proc L_ba_branch_head_ptr
 L_ba_branch_head_ptr:
     pushq %rbp
@@ -243,11 +238,8 @@ L_ba_branch_head_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -267,7 +259,6 @@ L_ba_branch_head_ptr:
     .section .iii.ring3,"n"
     .asciz "ba_branch_anchor_ptr"
     .text
-    .global L_ba_branch_anchor_ptr
     .seh_proc L_ba_branch_anchor_ptr
 L_ba_branch_anchor_ptr:
     pushq %rbp
@@ -284,11 +275,8 @@ L_ba_branch_anchor_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -308,7 +296,6 @@ L_ba_branch_anchor_ptr:
     .section .iii.ring3,"n"
     .asciz "ba_prop_branch_ptr"
     .text
-    .global L_ba_prop_branch_ptr
     .seh_proc L_ba_prop_branch_ptr
 L_ba_prop_branch_ptr:
     pushq %rbp
@@ -325,11 +312,8 @@ L_ba_prop_branch_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -349,7 +333,6 @@ L_ba_prop_branch_ptr:
     .section .iii.ring3,"n"
     .asciz "ba_prop_target_ptr"
     .text
-    .global L_ba_prop_target_ptr
     .seh_proc L_ba_prop_target_ptr
 L_ba_prop_target_ptr:
     pushq %rbp
@@ -366,11 +349,8 @@ L_ba_prop_target_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -390,7 +370,6 @@ L_ba_prop_target_ptr:
     .section .iii.ring3,"n"
     .asciz "ba_prop_witness_ptr"
     .text
-    .global L_ba_prop_witness_ptr
     .seh_proc L_ba_prop_witness_ptr
 L_ba_prop_witness_ptr:
     pushq %rbp
@@ -407,11 +386,8 @@ L_ba_prop_witness_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -431,7 +407,6 @@ L_ba_prop_witness_ptr:
     .section .iii.ring3,"n"
     .asciz "ba_branch_slot"
     .text
-    .global L_ba_branch_slot
     .seh_proc L_ba_branch_slot
 L_ba_branch_slot:
     pushq %rbp
@@ -589,7 +564,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "ba_proposal_slot"
     .text
-    .global L_ba_proposal_slot
     .seh_proc L_ba_proposal_slot
 L_ba_proposal_slot:
     pushq %rbp
@@ -747,7 +721,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "ba_emit_branch_fragment"
     .text
-    .global L_ba_emit_branch_fragment
     .seh_proc L_ba_emit_branch_fragment
 L_ba_emit_branch_fragment:
     pushq %rbp
@@ -1127,7 +1100,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "ba_emit_merge_fragment"
     .text
-    .global L_ba_emit_merge_fragment
     .seh_proc L_ba_emit_merge_fragment
 L_ba_emit_merge_fragment:
     pushq %rbp
@@ -3698,7 +3670,6 @@ L_if_end_107:
     .section .iii.ring3,"n"
     .asciz "ba_kat_emit"
     .text
-    .global L_ba_kat_emit
     .seh_proc L_ba_kat_emit
 L_ba_kat_emit:
     pushq %rbp
@@ -3809,7 +3780,6 @@ L_if_end_109:
     .section .iii.ring3,"n"
     .asciz "ba_kat_merge"
     .text
-    .global L_ba_kat_merge
     .seh_proc L_ba_kat_merge
 L_ba_kat_merge:
     pushq %rbp

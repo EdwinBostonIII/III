@@ -4,34 +4,40 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "fixed.iiifixed.iiifixed.iiifixed.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "fixed.iii\0"
 L_str_1:
-    .ascii "fixed.iiifixed.iiifixed.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "fixed.iii\0"
 L_str_2:
-    .ascii "fixed.iiifixed.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "fixed.iii\0"
 L_str_3:
-    .ascii "fixed.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "fixed.iii\0"
 L_str_4:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_5:
-    .ascii "identifier.iiiidentifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_6:
-    .ascii "identifier.iiicad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_7:
-    .ascii "cad.iiicad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_8:
-    .ascii "cad.iiicapability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_9:
-    .ascii "capability.iiicapability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_10:
-    .ascii "capability.iiicapability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_11:
-    .ascii "capability.iiialgebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_12:
-    .ascii "algebraic_time.iiiaether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_13:
-    .ascii "aether/witness_hook.iiiaether/witness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_14:
+    .ascii "capability.iii\0"
+L_str_15:
+    .ascii "algebraic_time.iii\0"
+L_str_16:
+    .ascii "aether/witness_hook.iii\0"
+L_str_17:
     .ascii "aether/witness_hook.iii\0"
     .section .rodata
 L_SYMREG_OK:
@@ -287,6 +293,9 @@ L_SYMREG_T_DATA:
     .global L_SYMREG_T_EXPR
 L_SYMREG_T_EXPR:
     .zero 2560
+    .global L_SYMREG_T_SAVE
+L_SYMREG_T_SAVE:
+    .zero 256
     .global L_SYMREG_T_OUT
 L_SYMREG_T_OUT:
     .zero 2560
@@ -328,7 +337,6 @@ L_SYMREG_T_EVAL_SGN:
     .section .iii.ring3,"n"
     .asciz "symreg_load_u64_le"
     .text
-    .global L_symreg_load_u64_le
     .seh_proc L_symreg_load_u64_le
 L_symreg_load_u64_le:
     pushq %rbp
@@ -350,11 +358,7 @@ L_symreg_load_u64_le:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -494,11 +498,8 @@ L_symreg_load_u64_le:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -506,11 +507,8 @@ L_symreg_load_u64_le:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -518,11 +516,8 @@ L_symreg_load_u64_le:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -532,19 +527,13 @@ L_symreg_load_u64_le:
     movq %rax, -96(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -552,11 +541,8 @@ L_symreg_load_u64_le:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -564,11 +550,8 @@ L_symreg_load_u64_le:
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -598,7 +581,6 @@ L_symreg_load_u64_le:
     .section .iii.ring3,"n"
     .asciz "symreg_store_u64_le"
     .text
-    .global L_symreg_store_u64_le
     .seh_proc L_symreg_store_u64_le
 L_symreg_store_u64_le:
     pushq %rbp
@@ -621,11 +603,7 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -654,11 +632,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -685,11 +660,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -716,11 +688,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -747,11 +716,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -778,11 +744,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -809,11 +772,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -840,11 +800,8 @@ L_symreg_store_u64_le:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -875,7 +832,6 @@ L_symreg_store_u64_le:
     .section .iii.ring3,"n"
     .asciz "symreg_load_u32_le"
     .text
-    .global L_symreg_load_u32_le
     .seh_proc L_symreg_load_u32_le
 L_symreg_load_u32_le:
     pushq %rbp
@@ -897,11 +853,7 @@ L_symreg_load_u32_le:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -973,11 +925,8 @@ L_symreg_load_u32_le:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -986,11 +935,8 @@ L_symreg_load_u32_le:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -999,11 +945,8 @@ L_symreg_load_u32_le:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1024,7 +967,6 @@ L_symreg_load_u32_le:
     .section .iii.ring3,"n"
     .asciz "symreg_sm_add"
     .text
-    .global L_symreg_sm_add
     .seh_proc L_symreg_sm_add
 L_symreg_sm_add:
     pushq %rbp
@@ -1301,7 +1243,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "symreg_sm_mul"
     .text
-    .global L_symreg_sm_mul
     .seh_proc L_symreg_sm_mul
 L_symreg_sm_mul:
     pushq %rbp
@@ -1810,7 +1751,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "symreg_eval_step"
     .text
-    .global L_symreg_eval_step
     .seh_proc L_symreg_eval_step
 L_symreg_eval_step:
     pushq %rbp
@@ -1995,7 +1935,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "symreg_eval_var"
     .text
-    .global L_symreg_eval_var
     .seh_proc L_symreg_eval_var
 L_symreg_eval_var:
     pushq %rbp
@@ -2237,7 +2176,6 @@ L_if_end_47:
     .section .iii.ring3,"n"
     .asciz "symreg_eval_const"
     .text
-    .global L_symreg_eval_const
     .seh_proc L_symreg_eval_const
 L_symreg_eval_const:
     pushq %rbp
@@ -2409,7 +2347,6 @@ L_if_end_51:
     .section .iii.ring3,"n"
     .asciz "symreg_eval_neg"
     .text
-    .global L_symreg_eval_neg
     .seh_proc L_symreg_eval_neg
 L_symreg_eval_neg:
     pushq %rbp
@@ -2540,7 +2477,6 @@ L_if_end_55:
     .section .iii.ring3,"n"
     .asciz "symreg_eval_binary"
     .text
-    .global L_symreg_eval_binary
     .seh_proc L_symreg_eval_binary
 L_symreg_eval_binary:
     pushq %rbp
@@ -2704,7 +2640,6 @@ L_if_end_57:
     .section .iii.ring3,"n"
     .asciz "symreg_binary_apply"
     .text
-    .global L_symreg_binary_apply
     .seh_proc L_symreg_binary_apply
 L_symreg_binary_apply:
     pushq %rbp
@@ -2740,11 +2675,8 @@ L_symreg_binary_apply:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3268,7 +3200,6 @@ L_loop_end_75:
     .section .iii.ring3,"n"
     .asciz "symreg_build_xvec"
     .text
-    .global L_symreg_build_xvec
     .seh_proc L_symreg_build_xvec
 L_symreg_build_xvec:
     pushq %rbp
@@ -3433,7 +3364,6 @@ L_loop_end_79:
     .section .iii.ring3,"n"
     .asciz "symreg_verify_point"
     .text
-    .global L_symreg_verify_point
     .seh_proc L_symreg_verify_point
 L_symreg_verify_point:
     pushq %rbp
@@ -3634,7 +3564,6 @@ L_if_end_83:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_valid"
     .text
-    .global L_symreg_shape_valid
     .seh_proc L_symreg_shape_valid
 L_symreg_shape_valid:
     pushq %rbp
@@ -3915,7 +3844,6 @@ L_if_end_99:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_push"
     .text
-    .global L_symreg_shape_push
     .seh_proc L_symreg_shape_push
 L_symreg_shape_push:
     pushq %rbp
@@ -4252,7 +4180,6 @@ L_if_end_109:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_first"
     .text
-    .global L_symreg_shape_first
     .seh_proc L_symreg_shape_first
 L_symreg_shape_first:
     pushq %rbp
@@ -4359,7 +4286,6 @@ L_if_end_113:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_next"
     .text
-    .global L_symreg_shape_next
     .seh_proc L_symreg_shape_next
 L_symreg_shape_next:
     pushq %rbp
@@ -4561,7 +4487,6 @@ L_loop_end_115:
     .section .iii.ring3,"n"
     .asciz "symreg_arity_ok"
     .text
-    .global L_symreg_arity_ok
     .seh_proc L_symreg_arity_ok
 L_symreg_arity_ok:
     pushq %rbp
@@ -4703,7 +4628,6 @@ L_if_end_133:
     .section .iii.ring3,"n"
     .asciz "symreg_arity_step"
     .text
-    .global L_symreg_arity_step
     .seh_proc L_symreg_arity_step
 L_symreg_arity_step:
     pushq %rbp
@@ -4806,7 +4730,6 @@ L_loop_end_137:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_inc"
     .text
-    .global L_symreg_shape_inc
     .seh_proc L_symreg_shape_inc
 L_symreg_shape_inc:
     pushq %rbp
@@ -4932,7 +4855,6 @@ L_loop_end_141:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_failpos"
     .text
-    .global L_symreg_shape_failpos
     .seh_proc L_symreg_shape_failpos
 L_symreg_shape_failpos:
     pushq %rbp
@@ -5155,7 +5077,6 @@ L_loop_end_145:
     .section .iii.ring3,"n"
     .asciz "symreg_shape_jump"
     .text
-    .global L_symreg_shape_jump
     .seh_proc L_symreg_shape_jump
 L_symreg_shape_jump:
     pushq %rbp
@@ -5367,7 +5288,6 @@ L_loop_end_161:
     .section .iii.ring3,"n"
     .asciz "symreg_fill_first"
     .text
-    .global L_symreg_fill_first
     .seh_proc L_symreg_fill_first
 L_symreg_fill_first:
     pushq %rbp
@@ -5454,7 +5374,6 @@ L_loop_end_167:
     .section .iii.ring3,"n"
     .asciz "symreg_fill_ok"
     .text
-    .global L_symreg_fill_ok
     .seh_proc L_symreg_fill_ok
 L_symreg_fill_ok:
     pushq %rbp
@@ -5642,7 +5561,6 @@ L_loop_end_171:
     .section .iii.ring3,"n"
     .asciz "symreg_fill_next"
     .text
-    .global L_symreg_fill_next
     .seh_proc L_symreg_fill_next
 L_symreg_fill_next:
     pushq %rbp
@@ -5769,7 +5687,6 @@ L_loop_end_181:
     .section .iii.ring3,"n"
     .asciz "symreg_fill_digit"
     .text
-    .global L_symreg_fill_digit
     .seh_proc L_symreg_fill_digit
 L_symreg_fill_digit:
     pushq %rbp
@@ -5987,7 +5904,6 @@ L_if_end_191:
     .section .iii.ring3,"n"
     .asciz "symreg_serialize"
     .text
-    .global L_symreg_serialize
     .seh_proc L_symreg_serialize
 L_symreg_serialize:
     pushq %rbp
@@ -6109,7 +6025,6 @@ L_loop_end_193:
     .section .iii.ring3,"n"
     .asciz "symreg_emit_slot"
     .text
-    .global L_symreg_emit_slot
     .seh_proc L_symreg_emit_slot
 L_symreg_emit_slot:
     pushq %rbp
@@ -6266,7 +6181,6 @@ L_if_end_197:
     .section .iii.ring3,"n"
     .asciz "symreg_emit_leaf"
     .text
-    .global L_symreg_emit_leaf
     .seh_proc L_symreg_emit_leaf
 L_symreg_emit_leaf:
     pushq %rbp
@@ -6454,7 +6368,6 @@ L_if_end_199:
     .section .iii.ring3,"n"
     .asciz "symreg_decode_req"
     .text
-    .global L_symreg_decode_req
     .seh_proc L_symreg_decode_req
 L_symreg_decode_req:
     pushq %rbp
@@ -6725,7 +6638,6 @@ L_if_end_209:
     .section .iii.ring3,"n"
     .asciz "symreg_decode_sig"
     .text
-    .global L_symreg_decode_sig
     .seh_proc L_symreg_decode_sig
 L_symreg_decode_sig:
     pushq %rbp
@@ -7036,7 +6948,6 @@ L_if_end_225:
     .section .iii.ring3,"n"
     .asciz "symreg_sig_reset"
     .text
-    .global L_symreg_sig_reset
     .seh_proc L_symreg_sig_reset
 L_symreg_sig_reset:
     pushq %rbp
@@ -7216,7 +7127,6 @@ L_loop_end_231:
     .section .iii.ring3,"n"
     .asciz "symreg_decode_ops"
     .text
-    .global L_symreg_decode_ops
     .seh_proc L_symreg_decode_ops
 L_symreg_decode_ops:
     pushq %rbp
@@ -7321,7 +7231,6 @@ L_loop_end_233:
     .section .iii.ring3,"n"
     .asciz "symreg_mark_op"
     .text
-    .global L_symreg_mark_op
     .seh_proc L_symreg_mark_op
 L_symreg_mark_op:
     pushq %rbp
@@ -7507,7 +7416,6 @@ L_if_end_243:
     .section .iii.ring3,"n"
     .asciz "symreg_build_binoplist"
     .text
-    .global L_symreg_build_binoplist
     .seh_proc L_symreg_build_binoplist
 L_symreg_build_binoplist:
     pushq %rbp
@@ -7717,7 +7625,6 @@ L_if_end_251:
     .section .iii.ring3,"n"
     .asciz "symreg_decode_consts"
     .text
-    .global L_symreg_decode_consts
     .seh_proc L_symreg_decode_consts
 L_symreg_decode_consts:
     pushq %rbp
@@ -7866,7 +7773,6 @@ L_loop_end_253:
     .section .iii.ring3,"n"
     .asciz "symreg_decode_data"
     .text
-    .global L_symreg_decode_data
     .seh_proc L_symreg_decode_data
 L_symreg_decode_data:
     pushq %rbp
@@ -8075,7 +7981,6 @@ L_loop_end_263:
     .section .iii.ring3,"n"
     .asciz "symreg_decode_row"
     .text
-    .global L_symreg_decode_row
     .seh_proc L_symreg_decode_row
 L_symreg_decode_row:
     pushq %rbp
@@ -8329,7 +8234,6 @@ L_loop_end_265:
     .section .iii.ring3,"n"
     .asciz "symreg_search"
     .text
-    .global L_symreg_search
     .seh_proc L_symreg_search
 L_symreg_search:
     pushq %rbp
@@ -8453,7 +8357,6 @@ L_if_end_271:
     .section .iii.ring3,"n"
     .asciz "symreg_search_size"
     .text
-    .global L_symreg_search_size
     .seh_proc L_symreg_search_size
 L_symreg_search_size:
     pushq %rbp
@@ -8570,7 +8473,6 @@ L_loop_end_273:
     .section .iii.ring3,"n"
     .asciz "symreg_search_shape"
     .text
-    .global L_symreg_search_shape
     .seh_proc L_symreg_search_shape
 L_symreg_search_shape:
     pushq %rbp
@@ -8700,7 +8602,6 @@ L_loop_end_279:
     .section .iii.ring3,"n"
     .asciz "symreg_advance_fill"
     .text
-    .global L_symreg_advance_fill
     .seh_proc L_symreg_advance_fill
 L_symreg_advance_fill:
     pushq %rbp
@@ -8756,7 +8657,6 @@ L_if_end_285:
     .section .iii.ring3,"n"
     .asciz "symreg_try_candidate"
     .text
-    .global L_symreg_try_candidate
     .seh_proc L_symreg_try_candidate
 L_symreg_try_candidate:
     pushq %rbp
@@ -8824,7 +8724,6 @@ L_symreg_try_candidate:
     .section .iii.ring3,"n"
     .asciz "symreg_data_len"
     .text
-    .global L_symreg_data_len
     .seh_proc L_symreg_data_len
 L_symreg_data_len:
     pushq %rbp
@@ -8875,7 +8774,6 @@ L_symreg_data_len:
     .section .iii.ring3,"n"
     .asciz "symreg_max_nodes_for_depth"
     .text
-    .global L_symreg_max_nodes_for_depth
     .seh_proc L_symreg_max_nodes_for_depth
 L_symreg_max_nodes_for_depth:
     pushq %rbp
@@ -8925,11 +8823,8 @@ L_loop_top_286:
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -8989,7 +8884,6 @@ L_if_end_289:
     .section .iii.ring3,"n"
     .asciz "symreg_emit_witness"
     .text
-    .global L_symreg_emit_witness
     .seh_proc L_symreg_emit_witness
 L_symreg_emit_witness:
     pushq %rbp
@@ -9185,7 +9079,6 @@ L_if_end_293:
     .section .iii.ring3,"n"
     .asciz "symreg_make_labels"
     .text
-    .global L_symreg_make_labels
     .seh_proc L_symreg_make_labels
 L_symreg_make_labels:
     pushq %rbp
@@ -9513,7 +9406,6 @@ L_symreg_make_labels:
     .section .iii.ring3,"n"
     .asciz "symreg_make_in_commit"
     .text
-    .global L_symreg_make_in_commit
     .seh_proc L_symreg_make_in_commit
 L_symreg_make_in_commit:
     pushq %rbp
@@ -9551,22 +9443,43 @@ L_symreg_make_in_commit:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq cad_begin
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq cad_payload
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movl L_SYMREG_N_POINTS(%rip), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movabsq $0x0, %rax
+    movl L_SYMREG_N_VARS(%rip), %eax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movabsq $0x2000, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
 L_loop_top_294:
-    movq -48(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -9577,260 +9490,7 @@ L_loop_top_294:
     popq %rax
     testq %rax, %rax
     jz L_loop_end_295
-    movq -40(%rbp), %rax
-    pushq %rax
-    movq -56(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_297
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    movq -40(%rbp), %rax
-    pushq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movq -40(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_297:
-    movq -48(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_294
-L_loop_end_295:
-    movq -56(%rbp), %rax
-    pushq %rax
-    movq -40(%rbp), %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq L_symreg_fold_dataset
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    leaq L_SYMREG_IN_COMMIT(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movq -64(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -40(%rbp), %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    popq %r9
-    subq $32, %rsp
-    callq cad_oneshot
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    movslq L_SYMREG_OK(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
-    .asciz "symreg_fold_dataset"
-    .text
-    .global L_symreg_fold_dataset
-    .seh_proc L_symreg_fold_dataset
-L_symreg_fold_dataset:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    movq %r8, -24(%rbp)
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movl L_SYMREG_N_POINTS(%rip), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movl L_SYMREG_N_VARS(%rip), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-L_loop_top_298:
-    movl -64(%rbp), %eax
-    pushq %rax
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_299
-    subq $8, %rsp
-    movl -48(%rbp), %eax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movq -56(%rbp), %rax
-    pushq %rax
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    popq %r9
-    subq $32, %rsp
-    callq L_symreg_fold_row
-    addq $32, %rsp
-    addq $8, %rsp
-    addq $8, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movl -64(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_298
-L_loop_end_299:
-    movq -56(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
-    .asciz "symreg_fold_row"
-    .text
-    .global L_symreg_fold_row
-    .seh_proc L_symreg_fold_row
-L_symreg_fold_row:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    movq %r8, -24(%rbp)
-    movq %r9, -32(%rbp)
-    movq 48(%rbp), %rax
-    movq %rax, -40(%rbp)
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movl -32(%rbp), %eax
+    movl -56(%rbp), %eax
     pushq %rax
     movl L_SYMREG_MAX_VARS(%rip), %eax
     pushq %rax
@@ -9840,19 +9500,15 @@ L_symreg_fold_row:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
     movq %rax, -64(%rbp)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_300:
+L_loop_top_296:
     movl -72(%rbp), %eax
     pushq %rax
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -9862,8 +9518,8 @@ L_loop_top_300:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_301
-    movl -56(%rbp), %eax
+    jz L_loop_end_297
+    movl -64(%rbp), %eax
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
@@ -9882,28 +9538,9 @@ L_loop_top_300:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-    movq -64(%rbp), %rax
+    movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setbe %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_303
-    movq -48(%rbp), %rax
-    pushq %rax
-    movq -64(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
     leaq L_SYMREG_DX_SIGN(%rip), %rax
     pushq %rax
@@ -9931,15 +9568,9 @@ L_loop_top_300:
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
     movabsq $0x1, %rax
     pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    movq -8(%rbp), %rax
+    movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -9950,20 +9581,18 @@ L_loop_top_300:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
     movabsq $0x9, %rax
     pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
     popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    popq %rdx
+    subq $32, %rsp
+    callq cad_payload
+    addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_303:
     movl -72(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -9978,9 +9607,9 @@ L_if_end_303:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_300
-L_loop_end_301:
-    movl -32(%rbp), %eax
+    jmp L_loop_top_296
+L_loop_end_297:
+    movl -56(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -9992,28 +9621,9 @@ L_loop_end_301:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-    movq -64(%rbp), %rax
+    movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setbe %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_305
-    movq -48(%rbp), %rax
-    pushq %rax
-    movq -64(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
     leaq L_SYMREG_DY_SIGN(%rip), %rax
     pushq %rax
@@ -10041,15 +9651,9 @@ L_loop_end_301:
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
     movabsq $0x1, %rax
     pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    movq -8(%rbp), %rax
+    movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -10060,21 +9664,46 @@ L_loop_end_301:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
     movabsq $0x9, %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq cad_payload
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
+    movq %rax, -56(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_305:
-    movq -64(%rbp), %rax
+    jmp L_loop_top_294
+L_loop_end_295:
+    leaq L_SYMREG_IN_COMMIT(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq cad_final
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movslq L_SYMREG_OK(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -10090,7 +9719,6 @@ L_if_end_305:
     .section .iii.ring3,"n"
     .asciz "symreg_make_out_commit"
     .text
-    .global L_symreg_make_out_commit
     .seh_proc L_symreg_make_out_commit
 L_symreg_make_out_commit:
     pushq %rbp
@@ -10219,7 +9847,7 @@ symreg_init:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_307
+    jz L_if_end_299
     movslq L_SYMREG_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -10229,7 +9857,7 @@ symreg_init:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_307:
+L_if_end_299:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -10282,7 +9910,7 @@ symreg_regress:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_309
+    jz L_if_end_301
     movslq L_SYMREG_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -10292,7 +9920,7 @@ symreg_regress:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_309:
+L_if_end_301:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -10307,7 +9935,7 @@ L_if_end_309:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_311
+    jz L_if_end_303
     movslq L_SYMREG_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -10317,7 +9945,7 @@ L_if_end_309:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_311:
+L_if_end_303:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -10332,7 +9960,7 @@ L_if_end_311:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_313
+    jz L_if_end_305
     movslq L_SYMREG_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -10342,7 +9970,7 @@ L_if_end_311:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_313:
+L_if_end_305:
     movzbq L_SYMREG_INITED(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -10355,7 +9983,7 @@ L_if_end_313:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_315
+    jz L_if_end_307
     movslq L_SYMREG_E_NOT_INITED(%rip), %rax
     pushq %rax
     popq %rax
@@ -10365,7 +9993,7 @@ L_if_end_313:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_315:
+L_if_end_307:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -10400,7 +10028,7 @@ L_if_end_315:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_317
+    jz L_if_end_309
     movslq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -10410,7 +10038,7 @@ L_if_end_315:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_317:
+L_if_end_309:
     movl L_SYMREG_REQ_SIGLEN(%rip), %eax
     pushq %rax
     movq L_SYMREG_REQ_SIG(%rip), %rax
@@ -10436,7 +10064,7 @@ L_if_end_317:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_319
+    jz L_if_end_311
     movslq -48(%rbp), %rax
     pushq %rax
     popq %rax
@@ -10446,7 +10074,7 @@ L_if_end_317:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_319:
+L_if_end_311:
     subq $32, %rsp
     callq L_symreg_data_len
     addq $32, %rsp
@@ -10475,7 +10103,7 @@ L_if_end_319:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_321
+    jz L_if_end_313
     movslq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -10485,7 +10113,7 @@ L_if_end_319:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_321:
+L_if_end_313:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -10509,7 +10137,7 @@ L_if_end_321:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_323
+    jz L_if_end_315
     movslq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -10519,7 +10147,7 @@ L_if_end_321:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_323:
+L_if_end_315:
     movl L_SYMREG_EXPR_LEN(%rip), %eax
     pushq %rax
     movl -24(%rbp), %eax
@@ -10532,7 +10160,7 @@ L_if_end_323:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_325
+    jz L_if_end_317
     movslq L_SYMREG_E_OFLOW(%rip), %rax
     pushq %rax
     popq %rax
@@ -10542,7 +10170,7 @@ L_if_end_323:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_325:
+L_if_end_317:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -10581,7 +10209,6 @@ L_if_end_325:
     .section .iii.ring3,"n"
     .asciz "symreg_copy_expr"
     .text
-    .global L_symreg_copy_expr
     .seh_proc L_symreg_copy_expr
 L_symreg_copy_expr:
     pushq %rbp
@@ -10620,7 +10247,7 @@ L_symreg_copy_expr:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_326:
+L_loop_top_318:
     movq -40(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -10633,7 +10260,7 @@ L_loop_top_326:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_327
+    jz L_loop_end_319
     movq -8(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -10663,8 +10290,8 @@ L_loop_top_326:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_326
-L_loop_end_327:
+    jmp L_loop_top_318
+L_loop_end_319:
     movslq L_SYMREG_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -10706,7 +10333,7 @@ symreg_last_frag:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_329
+    jz L_if_end_321
     movslq L_SYMREG_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -10716,7 +10343,7 @@ symreg_last_frag:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_329:
+L_if_end_321:
     movzbq L_SYMREG_HAVE_FRAG(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -10729,7 +10356,7 @@ L_if_end_329:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_331
+    jz L_if_end_323
     movslq L_SYMREG_E_NO_FIT(%rip), %rax
     pushq %rax
     popq %rax
@@ -10739,7 +10366,7 @@ L_if_end_329:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_331:
+L_if_end_323:
     leaq L_SYMREG_LAST_FRAG(%rip), %rax
     pushq %rax
     popq %rax
@@ -10776,7 +10403,6 @@ L_if_end_331:
     .section .iii.ring3,"n"
     .asciz "symreg_t_env_init"
     .text
-    .global L_symreg_t_env_init
     .seh_proc L_symreg_t_env_init
 L_symreg_t_env_init:
     pushq %rbp
@@ -10847,7 +10473,6 @@ L_symreg_t_env_init:
     .section .iii.ring3,"n"
     .asciz "symreg_t_putval"
     .text
-    .global L_symreg_t_putval
     .seh_proc L_symreg_t_putval
 L_symreg_t_putval:
     pushq %rbp
@@ -10920,7 +10545,6 @@ L_symreg_t_putval:
     .section .iii.ring3,"n"
     .asciz "symreg_t_putu32"
     .text
-    .global L_symreg_t_putu32
     .seh_proc L_symreg_t_putu32
 L_symreg_t_putu32:
     pushq %rbp
@@ -10943,11 +10567,7 @@ L_symreg_t_putu32:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -10976,11 +10596,8 @@ L_symreg_t_putu32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -11007,11 +10624,8 @@ L_symreg_t_putu32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -11038,11 +10652,8 @@ L_symreg_t_putu32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -11073,7 +10684,6 @@ L_symreg_t_putu32:
     .section .iii.ring3,"n"
     .asciz "symreg_t_q"
     .text
-    .global L_symreg_t_q
     .seh_proc L_symreg_t_q
 L_symreg_t_q:
     pushq %rbp
@@ -11106,7 +10716,6 @@ L_symreg_t_q:
     .section .iii.ring3,"n"
     .asciz "symreg_t_build_req"
     .text
-    .global L_symreg_t_build_req
     .seh_proc L_symreg_t_build_req
 L_symreg_t_build_req:
     pushq %rbp
@@ -11299,6 +10908,396 @@ L_symreg_t_build_req:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "symreg_t_kat_notrunc"
+    .text
+    .seh_proc L_symreg_t_kat_notrunc
+L_symreg_t_kat_notrunc:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_SYMREG_REQ_SIGLEN(%rip)
+    movabsq $0x6e, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_SYMREG_N_POINTS(%rip)
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_SYMREG_N_VARS(%rip)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+L_loop_top_324:
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x6e, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_325
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl L_SYMREG_MAX_VARS(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    imulq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+L_loop_top_326:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_327
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_SYMREG_DX_SIGN(%rip), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_SYMREG_DX_MAG(%rip), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    shlq $3, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_326
+L_loop_end_327:
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_SYMREG_DY_SIGN(%rip), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_SYMREG_DY_MAG(%rip), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x3e8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_324
+L_loop_end_325:
+    subq $32, %rsp
+    callq L_symreg_make_in_commit
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+L_loop_top_328:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_329
+    leaq L_SYMREG_T_SAVE(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    leaq L_SYMREG_IN_COMMIT(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_328
+L_loop_end_329:
+    leaq L_SYMREG_DY_MAG(%rip), %rax
+    pushq %rax
+    movabsq $0x69, %rax
+    pushq %rax
+    leaq L_SYMREG_DY_MAG(%rip), %rax
+    pushq %rax
+    movabsq $0x69, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    subq $32, %rsp
+    callq L_symreg_make_in_commit
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+L_loop_top_330:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_331
+    leaq L_SYMREG_IN_COMMIT(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    leaq L_SYMREG_T_SAVE(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_333
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_333:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_330
+L_loop_end_331:
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_335
+    movabsq $0x370, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_335:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "symreg_selftest"
     .text
     .global symreg_selftest
@@ -11341,7 +11340,7 @@ symreg_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_333
+    jz L_if_end_337
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11351,7 +11350,7 @@ symreg_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_333:
+L_if_end_337:
     subq $32, %rsp
     callq L_symreg_t_kat_affine
     addq $32, %rsp
@@ -11370,7 +11369,7 @@ L_if_end_333:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_335
+    jz L_if_end_339
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11380,7 +11379,7 @@ L_if_end_333:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_335:
+L_if_end_339:
     subq $32, %rsp
     callq L_symreg_t_kat_twovar
     addq $32, %rsp
@@ -11399,7 +11398,7 @@ L_if_end_335:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_337
+    jz L_if_end_341
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11409,7 +11408,7 @@ L_if_end_335:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_337:
+L_if_end_341:
     subq $32, %rsp
     callq L_symreg_t_kat_nofit
     addq $32, %rsp
@@ -11428,7 +11427,7 @@ L_if_end_337:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_339
+    jz L_if_end_343
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11438,7 +11437,7 @@ L_if_end_337:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_339:
+L_if_end_343:
     subq $32, %rsp
     callq L_symreg_t_kat_caprefuse
     addq $32, %rsp
@@ -11457,7 +11456,7 @@ L_if_end_339:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_341
+    jz L_if_end_345
     movq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11467,7 +11466,7 @@ L_if_end_339:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_341:
+L_if_end_345:
     subq $32, %rsp
     callq L_symreg_t_kat_witness
     addq $32, %rsp
@@ -11486,7 +11485,7 @@ L_if_end_341:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_343
+    jz L_if_end_347
     movq -48(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11496,7 +11495,36 @@ L_if_end_341:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_343:
+L_if_end_347:
+    subq $32, %rsp
+    callq L_symreg_t_kat_notrunc
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_349
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_349:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax
@@ -11513,7 +11541,6 @@ L_if_end_343:
     .section .iii.ring3,"n"
     .asciz "symreg_t_kat_identity"
     .text
-    .global L_symreg_t_kat_identity
     .seh_proc L_symreg_t_kat_identity
 L_symreg_t_kat_identity:
     pushq %rbp
@@ -11798,7 +11825,7 @@ L_symreg_t_kat_identity:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_345
+    jz L_if_end_351
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -11808,7 +11835,7 @@ L_symreg_t_kat_identity:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_345:
+L_if_end_351:
     movl L_SYMREG_T_LEN(%rip), %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -11821,7 +11848,7 @@ L_if_end_345:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_347
+    jz L_if_end_353
     movabsq $0xb, %rax
     pushq %rax
     popq %rax
@@ -11831,7 +11858,7 @@ L_if_end_345:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_347:
+L_if_end_353:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11854,7 +11881,7 @@ L_if_end_347:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_349
+    jz L_if_end_355
     movabsq $0xc, %rax
     pushq %rax
     popq %rax
@@ -11864,7 +11891,7 @@ L_if_end_347:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_349:
+L_if_end_355:
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -11883,7 +11910,7 @@ L_if_end_349:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_351
+    jz L_if_end_357
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -11893,7 +11920,7 @@ L_if_end_349:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_351:
+L_if_end_357:
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -11912,7 +11939,7 @@ L_if_end_351:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_353
+    jz L_if_end_359
     movabsq $0xe, %rax
     pushq %rax
     popq %rax
@@ -11922,7 +11949,7 @@ L_if_end_351:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_353:
+L_if_end_359:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -11961,7 +11988,7 @@ L_if_end_353:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_355
+    jz L_if_end_361
     movabsq $0xf, %rax
     pushq %rax
     popq %rax
@@ -11971,7 +11998,7 @@ L_if_end_353:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_355:
+L_if_end_361:
     subq $32, %rsp
     callq L_symreg_t_build_bogus_addconst
     addq $32, %rsp
@@ -12016,7 +12043,7 @@ L_if_end_355:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_357
+    jz L_if_end_363
     movabsq $0x10, %rax
     pushq %rax
     popq %rax
@@ -12026,7 +12053,7 @@ L_if_end_355:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_357:
+L_if_end_363:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -12043,7 +12070,6 @@ L_if_end_357:
     .section .iii.ring3,"n"
     .asciz "symreg_t_build_bogus_addconst"
     .text
-    .global L_symreg_t_build_bogus_addconst
     .seh_proc L_symreg_t_build_bogus_addconst
 L_symreg_t_build_bogus_addconst:
     pushq %rbp
@@ -12165,7 +12191,6 @@ L_symreg_t_build_bogus_addconst:
     .section .iii.ring3,"n"
     .asciz "symreg_t_kat_affine"
     .text
-    .global L_symreg_t_kat_affine
     .seh_proc L_symreg_t_kat_affine
 L_symreg_t_kat_affine:
     pushq %rbp
@@ -12411,7 +12436,7 @@ L_symreg_t_kat_affine:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_359
+    jz L_if_end_365
     movabsq $0x14, %rax
     pushq %rax
     popq %rax
@@ -12421,7 +12446,7 @@ L_symreg_t_kat_affine:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_359:
+L_if_end_365:
     movl L_SYMREG_T_LEN(%rip), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -12434,7 +12459,7 @@ L_if_end_359:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_361
+    jz L_if_end_367
     movabsq $0x15, %rax
     pushq %rax
     popq %rax
@@ -12444,7 +12469,7 @@ L_if_end_359:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_361:
+L_if_end_367:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -12483,7 +12508,7 @@ L_if_end_361:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_363
+    jz L_if_end_369
     movabsq $0x16, %rax
     pushq %rax
     popq %rax
@@ -12493,7 +12518,7 @@ L_if_end_361:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_363:
+L_if_end_369:
     movabsq $0x3, %rax
     pushq %rax
     popq %rcx
@@ -12575,7 +12600,7 @@ L_if_end_363:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_365
+    jz L_if_end_371
     movabsq $0x17, %rax
     pushq %rax
     popq %rax
@@ -12585,7 +12610,7 @@ L_if_end_363:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_365:
+L_if_end_371:
     movzbq L_SYMREG_T_EVAL_SGN(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -12598,7 +12623,7 @@ L_if_end_365:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_367
+    jz L_if_end_373
     movabsq $0x18, %rax
     pushq %rax
     popq %rax
@@ -12608,7 +12633,7 @@ L_if_end_365:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_367:
+L_if_end_373:
     movq L_SYMREG_T_EVAL_MAG(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -12628,7 +12653,7 @@ L_if_end_367:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_369
+    jz L_if_end_375
     movabsq $0x19, %rax
     pushq %rax
     popq %rax
@@ -12638,7 +12663,7 @@ L_if_end_367:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_369:
+L_if_end_375:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -12655,7 +12680,6 @@ L_if_end_369:
     .section .iii.ring3,"n"
     .asciz "symreg_t_build_affine_sig"
     .text
-    .global L_symreg_t_build_affine_sig
     .seh_proc L_symreg_t_build_affine_sig
 L_symreg_t_build_affine_sig:
     pushq %rbp
@@ -12808,7 +12832,6 @@ L_symreg_t_build_affine_sig:
     .section .iii.ring3,"n"
     .asciz "symreg_t_kat_twovar"
     .text
-    .global L_symreg_t_kat_twovar
     .seh_proc L_symreg_t_kat_twovar
 L_symreg_t_kat_twovar:
     pushq %rbp
@@ -13178,7 +13201,7 @@ L_symreg_t_kat_twovar:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_371
+    jz L_if_end_377
     movabsq $0x1e, %rax
     pushq %rax
     popq %rax
@@ -13188,7 +13211,7 @@ L_symreg_t_kat_twovar:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_371:
+L_if_end_377:
     movl L_SYMREG_T_LEN(%rip), %eax
     pushq %rax
     movabsq $0x6, %rax
@@ -13201,7 +13224,7 @@ L_if_end_371:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_373
+    jz L_if_end_379
     movabsq $0x1f, %rax
     pushq %rax
     popq %rax
@@ -13211,7 +13234,7 @@ L_if_end_371:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_373:
+L_if_end_379:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -13234,7 +13257,7 @@ L_if_end_373:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_375
+    jz L_if_end_381
     movabsq $0x20, %rax
     pushq %rax
     popq %rax
@@ -13244,7 +13267,7 @@ L_if_end_373:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_375:
+L_if_end_381:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -13263,7 +13286,7 @@ L_if_end_375:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_377
+    jz L_if_end_383
     movabsq $0x21, %rax
     pushq %rax
     popq %rax
@@ -13273,7 +13296,7 @@ L_if_end_375:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_377:
+L_if_end_383:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -13292,7 +13315,7 @@ L_if_end_377:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_379
+    jz L_if_end_385
     movabsq $0x22, %rax
     pushq %rax
     popq %rax
@@ -13302,7 +13325,7 @@ L_if_end_377:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_379:
+L_if_end_385:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -13321,7 +13344,7 @@ L_if_end_379:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_381
+    jz L_if_end_387
     movabsq $0x23, %rax
     pushq %rax
     popq %rax
@@ -13331,7 +13354,7 @@ L_if_end_379:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_381:
+L_if_end_387:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -13350,7 +13373,7 @@ L_if_end_381:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_383
+    jz L_if_end_389
     movabsq $0x24, %rax
     pushq %rax
     popq %rax
@@ -13360,7 +13383,7 @@ L_if_end_381:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_383:
+L_if_end_389:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x5, %rax
@@ -13379,7 +13402,7 @@ L_if_end_383:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_385
+    jz L_if_end_391
     movabsq $0x25, %rax
     pushq %rax
     popq %rax
@@ -13389,7 +13412,7 @@ L_if_end_383:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_385:
+L_if_end_391:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -13428,7 +13451,7 @@ L_if_end_385:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_387
+    jz L_if_end_393
     movabsq $0x26, %rax
     pushq %rax
     popq %rax
@@ -13438,7 +13461,7 @@ L_if_end_385:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_387:
+L_if_end_393:
     subq $32, %rsp
     callq L_symreg_t_build_bogus_sub
     addq $32, %rsp
@@ -13483,7 +13506,7 @@ L_if_end_387:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_389
+    jz L_if_end_395
     movabsq $0x27, %rax
     pushq %rax
     popq %rax
@@ -13493,7 +13516,7 @@ L_if_end_387:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_389:
+L_if_end_395:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -13510,7 +13533,6 @@ L_if_end_389:
     .section .iii.ring3,"n"
     .asciz "symreg_t_build_bogus_sub"
     .text
-    .global L_symreg_t_build_bogus_sub
     .seh_proc L_symreg_t_build_bogus_sub
 L_symreg_t_build_bogus_sub:
     pushq %rbp
@@ -13608,7 +13630,6 @@ L_symreg_t_build_bogus_sub:
     .section .iii.ring3,"n"
     .asciz "symreg_t_kat_nofit"
     .text
-    .global L_symreg_t_kat_nofit
     .seh_proc L_symreg_t_kat_nofit
 L_symreg_t_kat_nofit:
     pushq %rbp
@@ -13863,7 +13884,7 @@ L_symreg_t_kat_nofit:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_391
+    jz L_if_end_397
     movabsq $0x28, %rax
     pushq %rax
     popq %rax
@@ -13873,7 +13894,7 @@ L_symreg_t_kat_nofit:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_391:
+L_if_end_397:
     movl L_SYMREG_T_LEN(%rip), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -13886,7 +13907,7 @@ L_if_end_391:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_393
+    jz L_if_end_399
     movabsq $0x29, %rax
     pushq %rax
     popq %rax
@@ -13896,7 +13917,7 @@ L_if_end_391:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_393:
+L_if_end_399:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -13913,7 +13934,6 @@ L_if_end_393:
     .section .iii.ring3,"n"
     .asciz "symreg_t_kat_caprefuse"
     .text
-    .global L_symreg_t_kat_caprefuse
     .seh_proc L_symreg_t_kat_caprefuse
 L_symreg_t_kat_caprefuse:
     pushq %rbp
@@ -14163,7 +14183,7 @@ L_symreg_t_kat_caprefuse:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_395
+    jz L_if_end_401
     movabsq $0x32, %rax
     pushq %rax
     popq %rax
@@ -14173,7 +14193,7 @@ L_symreg_t_kat_caprefuse:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_395:
+L_if_end_401:
     movl L_SYMREG_T_LEN(%rip), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -14186,7 +14206,7 @@ L_if_end_395:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_397
+    jz L_if_end_403
     movabsq $0x33, %rax
     pushq %rax
     popq %rax
@@ -14196,7 +14216,7 @@ L_if_end_395:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_397:
+L_if_end_403:
     leaq L_SYMREG_T_FRAG(%rip), %rax
     pushq %rax
     popq %rax
@@ -14223,7 +14243,7 @@ L_if_end_397:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_399
+    jz L_if_end_405
     movabsq $0x34, %rax
     pushq %rax
     popq %rax
@@ -14233,7 +14253,7 @@ L_if_end_397:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_399:
+L_if_end_405:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -14250,7 +14270,6 @@ L_if_end_399:
     .section .iii.ring3,"n"
     .asciz "symreg_t_kat_witness"
     .text
-    .global L_symreg_t_kat_witness
     .seh_proc L_symreg_t_kat_witness
 L_symreg_t_kat_witness:
     pushq %rbp
@@ -14500,7 +14519,7 @@ L_symreg_t_kat_witness:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_401
+    jz L_if_end_407
     movabsq $0x3c, %rax
     pushq %rax
     popq %rax
@@ -14510,7 +14529,7 @@ L_symreg_t_kat_witness:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_401:
+L_if_end_407:
     leaq L_SYMREG_T_FRAG(%rip), %rax
     pushq %rax
     popq %rax
@@ -14537,7 +14556,7 @@ L_if_end_401:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_403
+    jz L_if_end_409
     movabsq $0x3d, %rax
     pushq %rax
     popq %rax
@@ -14547,7 +14566,7 @@ L_if_end_401:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_403:
+L_if_end_409:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -14556,7 +14575,7 @@ L_if_end_403:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_404:
+L_loop_top_410:
     movq -72(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -14569,7 +14588,7 @@ L_loop_top_404:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_405
+    jz L_loop_end_411
     movq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -14606,8 +14625,8 @@ L_loop_top_404:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_404
-L_loop_end_405:
+    jmp L_loop_top_410
+L_loop_end_411:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -14620,7 +14639,7 @@ L_loop_end_405:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_407
+    jz L_if_end_413
     movabsq $0x3e, %rax
     pushq %rax
     popq %rax
@@ -14630,7 +14649,7 @@ L_loop_end_405:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_407:
+L_if_end_413:
     subq $32, %rsp
     callq L_symreg_make_out_commit
     addq $32, %rsp

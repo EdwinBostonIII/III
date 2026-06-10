@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
-    .ascii "sha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
+    .ascii "sha256.iii\0"
 L_str_4:
-    .ascii "witness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
+    .ascii "witness.iii\0"
 L_str_5:
-    .ascii "witness.iiicapability.iiitiming_safe.iii\0"
+    .ascii "witness.iii\0"
 L_str_6:
-    .ascii "capability.iiitiming_safe.iii\0"
+    .ascii "capability.iii\0"
 L_str_7:
     .ascii "timing_safe.iii\0"
     .section .rodata
@@ -229,11 +229,8 @@ L_loop_end_3:
     popq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -250,11 +247,8 @@ L_loop_end_3:
     popq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -271,11 +265,8 @@ L_loop_end_3:
     popq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -461,11 +452,8 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)

@@ -4,47 +4,47 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "arena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "arena.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_11:
-    .ascii "bigint.iiibigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_12:
-    .ascii "bigint.iiibigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint.iii\0"
 L_str_13:
-    .ascii "bigint_div.iiibigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint_div.iii\0"
 L_str_14:
-    .ascii "bigint_div.iiibigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint_div.iii\0"
 L_str_15:
-    .ascii "bigint_div.iiibench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bigint_div.iii\0"
 L_str_16:
-    .ascii "bench_helpersbench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_17:
-    .ascii "bench_helpersbench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_18:
-    .ascii "bench_helpersbench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_19:
-    .ascii "bench_helperskernel32kernel32\0"
+    .ascii "bench_helpers\0"
 L_str_20:
-    .ascii "kernel32kernel32\0"
+    .ascii "kernel32\0"
 L_str_21:
     .ascii "kernel32\0"
     .section .rodata
@@ -67,7 +67,6 @@ L_LCG:
     .section .iii.ring3,"n"
     .asciz "warmup"
     .text
-    .global L_warmup
     .seh_proc L_warmup
 L_warmup:
     pushq %rbp
@@ -117,7 +116,6 @@ L_warmup:
     .section .iii.ring3,"n"
     .asciz "lcg_next"
     .text
-    .global L_lcg_next
     .seh_proc L_lcg_next
 L_lcg_next:
     pushq %rbp
@@ -159,7 +157,6 @@ L_lcg_next:
     .section .iii.ring3,"n"
     .asciz "build_rand"
     .text
-    .global L_build_rand
     .seh_proc L_build_rand
 L_build_rand:
     pushq %rbp
@@ -358,7 +355,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "time_knuth"
     .text
-    .global L_time_knuth
     .seh_proc L_time_knuth
 L_time_knuth:
     pushq %rbp
@@ -512,7 +508,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "time_serial"
     .text
-    .global L_time_serial
     .seh_proc L_time_serial
 L_time_serial:
     pushq %rbp
@@ -666,7 +661,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "put_dec"
     .text
-    .global L_put_dec
     .seh_proc L_put_dec
 L_put_dec:
     pushq %rbp
@@ -893,7 +887,6 @@ L_loop_end_19:
     .section .iii.ring3,"n"
     .asciz "emit"
     .text
-    .global L_emit
     .seh_proc L_emit
 L_emit:
     pushq %rbp
@@ -956,7 +949,6 @@ L_emit:
     .section .iii.ring3,"n"
     .asciz "report"
     .text
-    .global L_report
     .seh_proc L_report
 L_report:
     pushq %rbp
@@ -1164,7 +1156,6 @@ L_report:
     .section .iii.ring3,"n"
     .asciz "run_size"
     .text
-    .global L_run_size
     .seh_proc L_run_size
 L_run_size:
     pushq %rbp
@@ -1649,11 +1640,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x16, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $22, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1664,11 +1652,8 @@ main:
     movq %rax, -8(%rbp)
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

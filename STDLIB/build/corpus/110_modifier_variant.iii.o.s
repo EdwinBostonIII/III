@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "shape"
     .text
-    .global L_shape
     .seh_proc L_shape
 L_shape:
     pushq %rbp

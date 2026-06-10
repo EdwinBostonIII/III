@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolver.iiiresolver.iiiresolver.iiiresolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiicad.iii\0"
+    .ascii "resolver.iii\0"
 L_str_1:
-    .ascii "resolver.iiiresolver.iiiresolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiicad.iii\0"
+    .ascii "resolver.iii\0"
 L_str_2:
-    .ascii "resolver.iiiresolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiicad.iii\0"
+    .ascii "resolver.iii\0"
 L_str_3:
-    .ascii "resolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiicad.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_4:
-    .ascii "pattern_table.iiiintent.iiiintent.iiicall_context.iiicad.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_5:
-    .ascii "intent.iiiintent.iiicall_context.iiicad.iii\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "intent.iiicall_context.iiicad.iii\0"
+    .ascii "intent.iii\0"
 L_str_7:
-    .ascii "call_context.iiicad.iii\0"
+    .ascii "call_context.iii\0"
 L_str_8:
     .ascii "cad.iii\0"
     .section .rodata
@@ -224,7 +224,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "pr_dom_init"
     .text
-    .global L_pr_dom_init
     .seh_proc L_pr_dom_init
 L_pr_dom_init:
     pushq %rbp
@@ -458,11 +457,10 @@ L_pr_dom_init:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "pr_pack_u64"
+    .asciz "prv_pack_u64"
     .text
-    .global L_pr_pack_u64
-    .seh_proc L_pr_pack_u64
-L_pr_pack_u64:
+    .seh_proc L_prv_pack_u64
+L_prv_pack_u64:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -504,11 +502,8 @@ L_loop_top_4:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -699,7 +694,7 @@ L_loop_end_9:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prv_pack_u64
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -711,7 +706,7 @@ L_loop_end_9:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prv_pack_u64
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -723,7 +718,7 @@ L_loop_end_9:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prv_pack_u64
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -735,7 +730,7 @@ L_loop_end_9:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_pr_pack_u64
+    callq L_prv_pack_u64
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax

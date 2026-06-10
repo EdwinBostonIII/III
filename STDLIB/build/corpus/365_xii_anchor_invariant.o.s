@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_horizon.iiianchor_xii.iiianchor_xii.iiianchor_xii.iiianchor_xii.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_1:
-    .ascii "anchor_xii.iiianchor_xii.iiianchor_xii.iiianchor_xii.iii\0"
+    .ascii "anchor_xii.iii\0"
 L_str_2:
-    .ascii "anchor_xii.iiianchor_xii.iiianchor_xii.iii\0"
+    .ascii "anchor_xii.iii\0"
 L_str_3:
-    .ascii "anchor_xii.iiianchor_xii.iii\0"
+    .ascii "anchor_xii.iii\0"
 L_str_4:
     .ascii "anchor_xii.iii\0"
     .section .iii.ring3,"n"

@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hmac.iiihmac.iiicpufeat.iiicpufeat.iii\0"
+    .ascii "hmac.iii\0"
 L_str_1:
-    .ascii "hmac.iiicpufeat.iiicpufeat.iii\0"
+    .ascii "hmac.iii\0"
 L_str_2:
-    .ascii "cpufeat.iiicpufeat.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_3:
     .ascii "cpufeat.iii\0"
     .section .bss
@@ -36,7 +36,6 @@ L_DRBG_SEED:
     .section .iii.ring3,"n"
     .asciz "drbg_rdrand_once"
     .text
-    .global L_drbg_rdrand_once
     .seh_proc L_drbg_rdrand_once
 L_drbg_rdrand_once:
     pushq %rbp
@@ -71,7 +70,6 @@ L_drbg_rdrand_once:
     .section .iii.ring3,"n"
     .asciz "drbg_rdseed_once"
     .text
-    .global L_drbg_rdseed_once
     .seh_proc L_drbg_rdseed_once
 L_drbg_rdseed_once:
     pushq %rbp
@@ -503,7 +501,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "drbg_hmac_into"
     .text
-    .global L_drbg_hmac_into
     .seh_proc L_drbg_hmac_into
 L_drbg_hmac_into:
     pushq %rbp
@@ -561,7 +558,6 @@ L_drbg_hmac_into:
     .section .iii.ring3,"n"
     .asciz "drbg_update"
     .text
-    .global L_drbg_update
     .seh_proc L_drbg_update
 L_drbg_update:
     pushq %rbp
@@ -1565,6 +1561,35 @@ iii_drbg_generate:
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
     movq %r9, -32(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x10000, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_49
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1577,7 +1602,7 @@ iii_drbg_generate:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_51
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1593,7 +1618,7 @@ iii_drbg_generate:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_51:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1610,7 +1635,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_50:
+L_loop_top_52:
     movq -56(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1623,7 +1648,7 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_51
+    jz L_loop_end_53
     movabsq $0x40, %rax
     pushq %rax
     leaq L_DRBG_V(%rip), %rax
@@ -1665,7 +1690,7 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_55
     movq -16(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -1679,12 +1704,12 @@ L_loop_top_50:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_55:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_54:
+L_loop_top_56:
     movq -72(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -1697,7 +1722,7 @@ L_loop_top_54:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_55
+    jz L_loop_end_57
     movq -40(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -1733,8 +1758,8 @@ L_loop_top_54:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_54
-L_loop_end_55:
+    jmp L_loop_top_56
+L_loop_end_57:
     movq -56(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -1748,8 +1773,8 @@ L_loop_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_50
-L_loop_end_51:
+    jmp L_loop_top_52
+L_loop_end_53:
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax

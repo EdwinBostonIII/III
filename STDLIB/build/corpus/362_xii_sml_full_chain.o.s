@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiixii_sml.iiixii_sml.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "xii_sml.iiixii_sml.iii\0"
+    .ascii "xii_sml.iii\0"
 L_str_2:
     .ascii "xii_sml.iii\0"
     .section .bss

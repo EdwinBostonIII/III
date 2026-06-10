@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "babel_intent.iiibabel_intent.iiiintent.iii\0"
+    .ascii "babel_intent.iii\0"
 L_str_1:
-    .ascii "babel_intent.iiiintent.iii\0"
+    .ascii "babel_intent.iii\0"
 L_str_2:
     .ascii "intent.iii\0"
     .section .bss

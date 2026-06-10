@@ -22,7 +22,6 @@ L_TP_BJI_KEY:
     .section .iii.ring3,"n"
     .asciz "tp_bji_emit"
     .text
-    .global L_tp_bji_emit
     .seh_proc L_tp_bji_emit
 L_tp_bji_emit:
     pushq %rbp
@@ -73,7 +72,6 @@ L_tp_bji_emit:
     .section .iii.ring3,"n"
     .asciz "tp_bji_b64_decode_char"
     .text
-    .global L_tp_bji_b64_decode_char
     .seh_proc L_tp_bji_b64_decode_char
 L_tp_bji_b64_decode_char:
     pushq %rbp
@@ -328,7 +326,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "tp_bji_find_payload"
     .text
-    .global L_tp_bji_find_payload
     .seh_proc L_tp_bji_find_payload
 L_tp_bji_find_payload:
     pushq %rbp
@@ -909,20 +906,14 @@ L_if_end_39:
 L_if_end_41:
     movl -96(%rbp), %eax
     pushq %rax
-    movabsq $0x12, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $18, %rax
     movl %eax, %eax
     pushq %rax
     movl -104(%rbp), %eax
     pushq %rax
-    movabsq $0xc, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $12, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -937,11 +928,8 @@ L_if_end_41:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -987,11 +975,8 @@ L_if_end_41:
 L_if_end_43:
     movl -128(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1063,11 +1048,8 @@ L_if_end_43:
 L_if_end_47:
     movl -128(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

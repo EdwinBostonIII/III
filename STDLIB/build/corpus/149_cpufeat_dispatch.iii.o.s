@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcpufeat.iiicpufeat.iiisha256.iiisha256_dispatch.iiisha256_dispatch.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcpufeat.iiicpufeat.iiisha256.iiisha256_dispatch.iiisha256_dispatch.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "cpufeat.iiicpufeat.iiisha256.iiisha256_dispatch.iiisha256_dispatch.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_3:
-    .ascii "cpufeat.iiisha256.iiisha256_dispatch.iiisha256_dispatch.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_4:
-    .ascii "sha256.iiisha256_dispatch.iiisha256_dispatch.iii\0"
+    .ascii "sha256.iii\0"
 L_str_5:
-    .ascii "sha256_dispatch.iiisha256_dispatch.iii\0"
+    .ascii "sha256_dispatch.iii\0"
 L_str_6:
     .ascii "sha256_dispatch.iii\0"
     .section .iii.ring3,"n"

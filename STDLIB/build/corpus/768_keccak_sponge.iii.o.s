@@ -4,19 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "keccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak256.iii\0"
+    .ascii "keccak_sponge.iii\0"
 L_str_1:
-    .ascii "keccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak256.iii\0"
+    .ascii "keccak_sponge.iii\0"
 L_str_2:
-    .ascii "keccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak256.iii\0"
+    .ascii "keccak_sponge.iii\0"
 L_str_3:
-    .ascii "keccak_sponge.iiikeccak_sponge.iiikeccak_sponge.iiikeccak256.iii\0"
+    .ascii "keccak_sponge.iii\0"
 L_str_4:
-    .ascii "keccak_sponge.iiikeccak_sponge.iiikeccak256.iii\0"
+    .ascii "keccak_sponge.iii\0"
 L_str_5:
-    .ascii "keccak_sponge.iiikeccak256.iii\0"
+    .ascii "keccak_sponge.iii\0"
 L_str_6:
     .ascii "keccak256.iii\0"
+L_str_7:
+    .ascii "keccak_sponge.iii\0"
+L_str_8:
+    .ascii "keccak_sponge.iii\0"
+L_str_9:
+    .ascii "keccak_sponge.iii\0"
     .section .bss
     .global L_KSPK_MSGA
 L_KSPK_MSGA:
@@ -39,7 +45,6 @@ L_KSPK_POOLB:
     .section .iii.ring3,"n"
     .asciz "kspk_eq32"
     .text
-    .global L_kspk_eq32
     .seh_proc L_kspk_eq32
 L_kspk_eq32:
     pushq %rbp
@@ -921,6 +926,270 @@ L_if_end_27:
     pushq %rax
     popq %rax
 L_if_end_29:
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_state_addr
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_31
+    movabsq $0xe, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_leased
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movabsq $0xf, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_zero
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_leased
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    movabsq $0x11, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_zero
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movabsq $0x12, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_state_addr
+    addq $32, %rsp
+    pushq %rax
+    subq $8, %rsp
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_state_addr
+    addq $32, %rsp
+    addq $8, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    movabsq $0xc8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movabsq $0x13, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    subq $32, %rsp
+    callq ksp_lease
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq -96(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_leased
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movabsq $0x14, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
+    movq -96(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_zero
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_45
+    movabsq $0x15, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_45:
+    movq -96(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ksp_release
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

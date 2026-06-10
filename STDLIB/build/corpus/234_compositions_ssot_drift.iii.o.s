@@ -4,39 +4,38 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiisha256.iiisha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "prespec.iii\0"
 L_str_1:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiisha256.iiisha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "prespec.iii\0"
 L_str_2:
-    .ascii "prespec.iiiprespec.iiiprespec.iiisha256.iiisha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "prespec.iii\0"
 L_str_3:
-    .ascii "prespec.iiiprespec.iiisha256.iiisha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "prespec.iii\0"
 L_str_4:
-    .ascii "prespec.iiisha256.iiisha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "prespec.iii\0"
 L_str_5:
-    .ascii "sha256.iiisha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "sha256.iii\0"
 L_str_6:
-    .ascii "sha512.iiiblake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "sha512.iii\0"
 L_str_7:
-    .ascii "blake2s.iiix25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "blake2s.iii\0"
 L_str_8:
-    .ascii "x25519.iiichacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "x25519.iii\0"
 L_str_9:
-    .ascii "chacha20.iiiaes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "chacha20.iii\0"
 L_str_10:
-    .ascii "aes.iiiaes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "aes.iii\0"
 L_str_11:
-    .ascii "aes.iiiarena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "aes.iii\0"
 L_str_12:
-    .ascii "arena.iiiarena.iiicrypt_ed25519.iii\0"
+    .ascii "arena.iii\0"
 L_str_13:
-    .ascii "arena.iiicrypt_ed25519.iii\0"
+    .ascii "arena.iii\0"
 L_str_14:
     .ascii "crypt_ed25519.iii\0"
     .section .iii.ring3,"n"
     .asciz "_synth"
     .text
-    .global L__synth
     .seh_proc L__synth
 L__synth:
     pushq %rbp
@@ -71,11 +70,8 @@ L__synth:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -89,21 +85,15 @@ L__synth:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
     movabsq $0x494e5450, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -141,7 +131,6 @@ L__synth:
     .section .iii.ring3,"n"
     .asciz "_check"
     .text
-    .global L__check
     .seh_proc L__check
 L__check:
     pushq %rbp

@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiicapability.iiicall_context.iiicall_context.iiikchain.iiikchain.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_1:
-    .ascii "capability.iiicall_context.iiicall_context.iiikchain.iiikchain.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "call_context.iiicall_context.iiikchain.iiikchain.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_3:
-    .ascii "call_context.iiikchain.iiikchain.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_4:
-    .ascii "kchain.iiikchain.iiikchain.iii\0"
+    .ascii "kchain.iii\0"
 L_str_5:
-    .ascii "kchain.iiikchain.iii\0"
+    .ascii "kchain.iii\0"
 L_str_6:
     .ascii "kchain.iii\0"
     .section .rodata
@@ -25,7 +25,6 @@ L_C260_RIGHT_CRYPTO:
     .section .iii.ring3,"n"
     .asciz "_budget_op"
     .text
-    .global L__budget_op
     .seh_proc L__budget_op
 L__budget_op:
     pushq %rbp
@@ -73,7 +72,6 @@ L_kmax_ok_805306401:
     .section .iii.ring3,"n"
     .asciz "_combined_op"
     .text
-    .global L__combined_op
     .seh_proc L__combined_op
 L__combined_op:
     pushq %rbp

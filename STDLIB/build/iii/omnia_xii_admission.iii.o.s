@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_termination.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_1:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_termination.iiixii_termination.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_2:
-    .ascii "xii_joinability.iiixii_termination.iiixii_termination.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_3:
-    .ascii "xii_termination.iiixii_termination.iii\0"
+    .ascii "xii_termination.iii\0"
 L_str_4:
     .ascii "xii_termination.iii\0"
     .section .rodata

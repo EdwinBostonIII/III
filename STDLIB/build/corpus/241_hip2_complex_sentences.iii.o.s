@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrthip.iiihip.iiihip.iiihip.iiinl_lex.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrthip.iiihip.iiihip.iiihip.iiinl_lex.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "hip.iiihip.iiihip.iiihip.iiinl_lex.iii\0"
+    .ascii "hip.iii\0"
 L_str_3:
-    .ascii "hip.iiihip.iiihip.iiinl_lex.iii\0"
+    .ascii "hip.iii\0"
 L_str_4:
-    .ascii "hip.iiihip.iiinl_lex.iii\0"
+    .ascii "hip.iii\0"
 L_str_5:
-    .ascii "hip.iiinl_lex.iii\0"
+    .ascii "hip.iii\0"
 L_str_6:
     .ascii "nl_lex.iii\0"
     .section .rodata
@@ -39,7 +39,6 @@ L_H_FORWARD:
     .section .iii.ring3,"n"
     .asciz "_read_u32"
     .text
-    .global L__read_u32
     .seh_proc L__read_u32
 L__read_u32:
     pushq %rbp
@@ -93,11 +92,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -125,11 +121,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -157,11 +150,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -200,7 +190,6 @@ L__read_u32:
     .section .iii.ring3,"n"
     .asciz "_put"
     .text
-    .global L__put
     .seh_proc L__put
 L__put:
     pushq %rbp
@@ -245,7 +234,6 @@ L__put:
     .section .iii.ring3,"n"
     .asciz "_phrase_1"
     .text
-    .global L__phrase_1
     .seh_proc L__phrase_1
 L__phrase_1:
     pushq %rbp
@@ -864,7 +852,6 @@ L__phrase_1:
     .section .iii.ring3,"n"
     .asciz "_phrase_2"
     .text
-    .global L__phrase_2
     .seh_proc L__phrase_2
 L__phrase_2:
     pushq %rbp
@@ -1468,7 +1455,6 @@ L__phrase_2:
     .section .iii.ring3,"n"
     .asciz "_phrase_3"
     .text
-    .global L__phrase_3
     .seh_proc L__phrase_3
 L__phrase_3:
     pushq %rbp
@@ -2057,7 +2043,6 @@ L__phrase_3:
     .section .iii.ring3,"n"
     .asciz "_phrase_4"
     .text
-    .global L__phrase_4
     .seh_proc L__phrase_4
 L__phrase_4:
     pushq %rbp
@@ -2496,7 +2481,6 @@ L__phrase_4:
     .section .iii.ring3,"n"
     .asciz "_phrase_5"
     .text
-    .global L__phrase_5
     .seh_proc L__phrase_5
 L__phrase_5:
     pushq %rbp
@@ -2905,7 +2889,6 @@ L__phrase_5:
     .section .iii.ring3,"n"
     .asciz "_phrase_6"
     .text
-    .global L__phrase_6
     .seh_proc L__phrase_6
 L__phrase_6:
     pushq %rbp
@@ -3419,7 +3402,6 @@ L__phrase_6:
     .section .iii.ring3,"n"
     .asciz "_phrase_7"
     .text
-    .global L__phrase_7
     .seh_proc L__phrase_7
 L__phrase_7:
     pushq %rbp
@@ -3798,7 +3780,6 @@ L__phrase_7:
     .section .iii.ring3,"n"
     .asciz "_phrase_8"
     .text
-    .global L__phrase_8
     .seh_proc L__phrase_8
 L__phrase_8:
     pushq %rbp
@@ -4252,7 +4233,6 @@ L__phrase_8:
     .section .iii.ring3,"n"
     .asciz "_phrase_init"
     .text
-    .global L__phrase_init
     .seh_proc L__phrase_init
 L__phrase_init:
     pushq %rbp
@@ -4451,7 +4431,6 @@ L__phrase_init:
     .section .iii.ring3,"n"
     .asciz "_resolve_into"
     .text
-    .global L__resolve_into
     .seh_proc L__resolve_into
 L__resolve_into:
     pushq %rbp

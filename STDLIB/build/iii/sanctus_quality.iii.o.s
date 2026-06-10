@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "kchain.iiikchain.iiikchain.iiiclosure.iiimhash.iiimhash.iiimhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "kchain.iii\0"
 L_str_1:
-    .ascii "kchain.iiikchain.iiiclosure.iiimhash.iiimhash.iiimhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "kchain.iii\0"
 L_str_2:
-    .ascii "kchain.iiiclosure.iiimhash.iiimhash.iiimhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "kchain.iii\0"
 L_str_3:
-    .ascii "closure.iiimhash.iiimhash.iiimhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "closure.iii\0"
 L_str_4:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "mhash.iii\0"
 L_str_5:
-    .ascii "mhash.iiimhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "mhash.iii\0"
 L_str_6:
-    .ascii "mhash.iiimhash.iiiquality_q7.iii\0"
+    .ascii "mhash.iii\0"
 L_str_7:
-    .ascii "mhash.iiiquality_q7.iii\0"
+    .ascii "mhash.iii\0"
 L_str_8:
     .ascii "quality_q7.iii\0"
     .section .rodata
@@ -122,7 +122,6 @@ L_QUALITY_SEAL_DOMAIN_INIT:
     .section .iii.ring3,"n"
     .asciz "q_init_seal_domain"
     .text
-    .global L_q_init_seal_domain
     .seh_proc L_q_init_seal_domain
 L_q_init_seal_domain:
     pushq %rbp
@@ -1417,7 +1416,7 @@ quality_check_q5_kfloor:
     popq %rax
     testq %rax, %rax
     jz L_if_end_43
-    movabsq $0x1, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1604,11 +1603,8 @@ L_if_end_51:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1629,11 +1625,8 @@ L_if_end_51:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1654,11 +1647,8 @@ L_if_end_51:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

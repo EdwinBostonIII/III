@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "unify.iiiunify.iiiunify.iiiunify.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "unify.iii\0"
 L_str_1:
-    .ascii "unify.iiiunify.iiiunify.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "unify.iii\0"
 L_str_2:
-    .ascii "unify.iiiunify.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "unify.iii\0"
 L_str_3:
-    .ascii "unify.iiiarena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "unify.iii\0"
 L_str_4:
-    .ascii "arena.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "arena.iii\0"
 L_str_5:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_6:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_7:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_8:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -104,7 +104,6 @@ L_PT_DIGEST_OUT:
     .section .iii.ring3,"n"
     .asciz "pattern_slot_ptr"
     .text
-    .global L_pattern_slot_ptr
     .seh_proc L_pattern_slot_ptr
 L_pattern_slot_ptr:
     pushq %rbp
@@ -1252,11 +1251,8 @@ L_loop_top_16:
 L_loop_end_17:
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     movabsq $0x1ff, %rax
     pushq %rax
@@ -1732,11 +1728,8 @@ pattern_set_add:
 L_if_end_27:
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     movabsq $0x1ff, %rax
     pushq %rax
@@ -1862,11 +1855,8 @@ pattern_set_has:
 L_if_end_29:
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     movabsq $0x1ff, %rax
     pushq %rax

@@ -140,11 +140,8 @@ L_if_end_1:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
@@ -332,7 +329,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "_obsl_resolve_slot"
     .text
-    .global L__obsl_resolve_slot
     .seh_proc L__obsl_resolve_slot
 L__obsl_resolve_slot:
     pushq %rbp
@@ -731,11 +727,8 @@ L_if_end_23:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax

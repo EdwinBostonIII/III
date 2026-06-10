@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_canonicalise.iiicad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_7:
-    .ascii "cad.iiixii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_8:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_9:
-    .ascii "xii_term.iiixii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_10:
-    .ascii "xii_term.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_11:
     .ascii "cad.iii\0"
     .section .rodata
@@ -74,7 +74,6 @@ L_NBK_K3:
     .section .iii.ring3,"n"
     .asciz "_nbk_emit"
     .text
-    .global L__nbk_emit
     .seh_proc L__nbk_emit
 L__nbk_emit:
     pushq %rbp
@@ -144,7 +143,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_nbk_emit_u32"
     .text
-    .global L__nbk_emit_u32
     .seh_proc L__nbk_emit_u32
 L__nbk_emit_u32:
     pushq %rbp
@@ -177,11 +175,8 @@ L_loop_top_2:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -256,7 +251,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "_nbk_emit_u64"
     .text
-    .global L__nbk_emit_u64
     .seh_proc L__nbk_emit_u64
 L__nbk_emit_u64:
     pushq %rbp
@@ -289,11 +283,8 @@ L_loop_top_6:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -366,7 +357,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "_nbk_serialize"
     .text
-    .global L__nbk_serialize
     .seh_proc L__nbk_serialize
 L__nbk_serialize:
     pushq %rbp
@@ -908,9 +898,6 @@ L_if_end_31:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movslq L_NBK_OK(%rip), %rax
-    pushq %rax
-    popq %rax
     movq %rbp, %rsp
     popq %rbp
     retq
@@ -1024,9 +1011,6 @@ L_if_end_35:
     callq cad_oneshot
     addq $32, %rsp
     movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    movslq L_NBK_OK(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

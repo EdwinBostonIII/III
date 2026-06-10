@@ -46,7 +46,6 @@ L_TP_LX_FOOTER:
     .section .iii.ring3,"n"
     .asciz "tp_iii_to_latex_emit"
     .text
-    .global L_tp_iii_to_latex_emit
     .seh_proc L_tp_iii_to_latex_emit
 L_tp_iii_to_latex_emit:
     pushq %rbp

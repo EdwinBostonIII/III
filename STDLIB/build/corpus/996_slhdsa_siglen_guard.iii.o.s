@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "slhdsa.iiislhdsa.iiislhdsa.iii\0"
+    .ascii "slhdsa.iii\0"
 L_str_1:
-    .ascii "slhdsa.iiislhdsa.iii\0"
+    .ascii "slhdsa.iii\0"
 L_str_2:
     .ascii "slhdsa.iii\0"
     .section .rodata
@@ -265,11 +265,8 @@ L_if_end_5:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -285,11 +282,8 @@ L_if_end_5:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -305,11 +299,8 @@ L_if_end_5:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax

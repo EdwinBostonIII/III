@@ -10,7 +10,6 @@ L_G_BUF:
     .section .iii.ring3,"n"
     .asciz "read_via_ptr"
     .text
-    .global L_read_via_ptr
     .seh_proc L_read_via_ptr
 L_read_via_ptr:
     pushq %rbp

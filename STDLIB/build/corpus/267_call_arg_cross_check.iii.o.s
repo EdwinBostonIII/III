@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "_make_compose"
     .text
-    .global L__make_compose
     .seh_proc L__make_compose
 L__make_compose:
     pushq %rbp
@@ -32,7 +31,6 @@ L__make_compose:
     .section .iii.ring3,"n"
     .asciz "_consume_compose"
     .text
-    .global L__consume_compose
     .seh_proc L__consume_compose
 L__consume_compose:
     pushq %rbp

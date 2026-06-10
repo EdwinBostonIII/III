@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iiihotstuff.iiihotstuff.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_1:
-    .ascii "crypt_ed25519.iiihotstuff.iiihotstuff.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_2:
-    .ascii "hotstuff.iiihotstuff.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "hotstuff.iii\0"
 L_str_3:
-    .ascii "hotstuff.iiifed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "hotstuff.iii\0"
 L_str_4:
-    .ascii "fed_seal.iiifed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_5:
-    .ascii "fed_seal.iiifed_seal.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_6:
     .ascii "fed_seal.iii\0"
     .section .bss
@@ -98,11 +98,8 @@ L_loop_top_2:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -191,11 +188,8 @@ L_loop_top_4:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -209,11 +203,8 @@ L_loop_top_4:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -491,11 +482,8 @@ L_loop_top_14:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -517,11 +505,8 @@ L_loop_top_14:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -535,11 +520,8 @@ L_loop_top_14:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -726,7 +708,8 @@ L_loop_end_21:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    subq $8, %rsp
+    movabsq $0xec, %rax
+    pushq %rax
     leaq L_Q_BADQC(%rip), %rax
     pushq %rax
     popq %rax
@@ -752,8 +735,7 @@ L_loop_end_21:
     subq $32, %rsp
     callq fed_seal_anchor_with_qc
     addq $32, %rsp
-    addq $8, %rsp
-    addq $8, %rsp
+    addq $16, %rsp
     movslq %eax, %rax
     pushq %rax
     movabsq $0x5, %rax
@@ -806,7 +788,8 @@ L_if_end_23:
     pushq %rax
     popq %rax
 L_if_end_25:
-    subq $8, %rsp
+    movabsq $0xec, %rax
+    pushq %rax
     leaq L_Q_QC(%rip), %rax
     pushq %rax
     popq %rax
@@ -832,8 +815,7 @@ L_if_end_25:
     subq $32, %rsp
     callq fed_seal_anchor_with_qc
     addq $32, %rsp
-    addq $8, %rsp
-    addq $8, %rsp
+    addq $16, %rsp
     movslq %eax, %rax
     pushq %rax
     movabsq $0x0, %rax

@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcalculus_v1.iiiirreducibility_proof.iiifed_sybil.iiifed_eclipse.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcalculus_v1.iiiirreducibility_proof.iiifed_sybil.iiifed_eclipse.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "calculus_v1.iiiirreducibility_proof.iiifed_sybil.iiifed_eclipse.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "calculus_v1.iii\0"
 L_str_3:
-    .ascii "irreducibility_proof.iiifed_sybil.iiifed_eclipse.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_4:
-    .ascii "fed_sybil.iiifed_eclipse.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "fed_sybil.iii\0"
 L_str_5:
-    .ascii "fed_eclipse.iiifed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "fed_eclipse.iii\0"
 L_str_6:
-    .ascii "fed_genesis.iiifed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_7:
-    .ascii "fed_genesis.iiifed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_8:
-    .ascii "fed_genesis.iiifed_admit.iiifed_eclipse.iii\0"
+    .ascii "fed_genesis.iii\0"
 L_str_9:
-    .ascii "fed_admit.iiifed_eclipse.iii\0"
+    .ascii "fed_admit.iii\0"
 L_str_10:
     .ascii "fed_eclipse.iii\0"
     .section .rodata
@@ -33,7 +33,6 @@ L_PACKED_META_PLANETARY:
     .section .iii.ring3,"n"
     .asciz "_fill"
     .text
-    .global L__fill
     .seh_proc L__fill
 L__fill:
     pushq %rbp
@@ -481,6 +480,9 @@ L_if_end_17:
     pushq %rax
     popq %rax
 L_if_end_19:
+    subq $8, %rsp
+    movabsq $0x0, %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
     movq L_PACKED_META_PLANETARY(%rip), %rax
@@ -496,6 +498,8 @@ L_if_end_19:
     subq $32, %rsp
     callq fed_admit_with_qc_proof
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movslq %eax, %rax
     pushq %rax
     popq %rax

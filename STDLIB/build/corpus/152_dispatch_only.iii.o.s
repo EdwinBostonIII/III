@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtsha256_dispatch.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtsha256_dispatch.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
     .ascii "sha256_dispatch.iii\0"
     .section .iii.ring3,"n"

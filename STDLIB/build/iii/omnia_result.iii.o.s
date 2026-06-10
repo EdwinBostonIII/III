@@ -79,11 +79,8 @@ result_u8_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -120,11 +117,8 @@ result_u16_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -161,11 +155,8 @@ result_u32_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -202,11 +193,8 @@ result_i8_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -243,11 +231,8 @@ result_i16_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -284,11 +269,8 @@ result_i32_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -325,11 +307,8 @@ result_bool_ok:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_OK(%rip), %rax
     pushq %rax
@@ -366,11 +345,8 @@ result_u8_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -407,11 +383,8 @@ result_u16_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -448,11 +421,8 @@ result_u32_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -489,11 +459,8 @@ result_i8_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -530,11 +497,8 @@ result_i16_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -571,11 +535,8 @@ result_i32_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -612,11 +573,8 @@ result_bool_err:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movq L_RES_TAG_ERR(%rip), %rax
     pushq %rax
@@ -1467,11 +1425,8 @@ result_u8_unwrap_or:
 L_if_end_29:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1532,11 +1487,8 @@ result_u16_unwrap_or:
 L_if_end_31:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1597,11 +1549,8 @@ result_u32_unwrap_or:
 L_if_end_33:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1662,11 +1611,8 @@ result_i8_unwrap_or:
 L_if_end_35:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1727,11 +1673,8 @@ result_i16_unwrap_or:
 L_if_end_37:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1792,11 +1735,8 @@ result_i32_unwrap_or:
 L_if_end_39:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1857,11 +1797,8 @@ result_bool_unwrap_or:
 L_if_end_41:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1919,11 +1856,8 @@ result_u8_err_code:
 L_if_end_43:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1990,11 +1924,8 @@ result_u16_err_code:
 L_if_end_45:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -2061,11 +1992,8 @@ result_u32_err_code:
 L_if_end_47:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -2132,11 +2060,8 @@ result_i8_err_code:
 L_if_end_49:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -2203,11 +2128,8 @@ result_i16_err_code:
 L_if_end_51:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -2274,11 +2196,8 @@ result_i32_err_code:
 L_if_end_53:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -2345,11 +2264,8 @@ result_bool_err_code:
 L_if_end_55:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -2374,7 +2290,6 @@ L_if_end_55:
     .section .iii.ring3,"n"
     .asciz "result_u64_alloc_slot"
     .text
-    .global L_result_u64_alloc_slot
     .seh_proc L_result_u64_alloc_slot
 L_result_u64_alloc_slot:
     pushq %rbp
@@ -2673,7 +2588,6 @@ L_if_end_63:
     .section .iii.ring3,"n"
     .asciz "result_u64_slot_of"
     .text
-    .global L_result_u64_slot_of
     .seh_proc L_result_u64_slot_of
 L_result_u64_slot_of:
     pushq %rbp

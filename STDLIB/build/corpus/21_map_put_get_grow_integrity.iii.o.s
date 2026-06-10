@@ -4,31 +4,31 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiimsvcrtmsvcrtmap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiimsvcrtmsvcrtmap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "msvcrtmsvcrtmap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "msvcrt\0"
 L_str_3:
-    .ascii "msvcrtmap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "msvcrt\0"
 L_str_4:
-    .ascii "map.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_5:
-    .ascii "map.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_6:
-    .ascii "map.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_7:
-    .ascii "map.iiimap.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_8:
-    .ascii "map.iiimap.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_9:
-    .ascii "map.iiimap.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_10:
-    .ascii "map.iiimap.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_11:
-    .ascii "map.iiimap.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_12:
-    .ascii "map.iiimap.iii\0"
+    .ascii "map.iii\0"
 L_str_13:
     .ascii "map.iii\0"
     .section .iii.ring3,"n"
@@ -46,11 +46,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -328,11 +325,8 @@ L_loop_top_12:
 L_if_end_15:
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -551,11 +545,8 @@ L_if_end_23:
 L_if_end_25:
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax

@@ -4,18 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "dynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iii\0"
+    .ascii "dynamic_impact.iii\0"
 L_str_1:
-    .ascii "dynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iii\0"
+    .ascii "dynamic_impact.iii\0"
 L_str_2:
-    .ascii "dynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iii\0"
+    .ascii "dynamic_impact.iii\0"
 L_str_3:
-    .ascii "dynamic_impact.iiidynamic_impact.iiidynamic_impact.iiidynamic_impact.iii\0"
+    .ascii "dynamic_impact.iii\0"
 L_str_4:
-    .ascii "dynamic_impact.iiidynamic_impact.iiidynamic_impact.iii\0"
+    .ascii "dynamic_impact.iii\0"
 L_str_5:
-    .ascii "dynamic_impact.iiidynamic_impact.iii\0"
+    .ascii "dynamic_impact.iii\0"
 L_str_6:
+    .ascii "dynamic_impact.iii\0"
+L_str_7:
+    .ascii "dynamic_impact.iii\0"
+L_str_8:
+    .ascii "dynamic_impact.iii\0"
+L_str_9:
     .ascii "dynamic_impact.iii\0"
     .section .iii.ring3,"n"
     .asciz "main"
@@ -380,6 +386,221 @@ L_if_end_19:
     pushq %rax
     popq %rax
 L_if_end_21:
+    movabsq $0xb2, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq dynamic_impact_ux_bp
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movabsq $0xc, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    subq $32, %rsp
+    callq dynamic_impact_aggregate_ux_lo
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x32, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movabsq $0xd, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
+    subq $32, %rsp
+    callq dynamic_impact_aggregate_ux_hi
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_27
+    movabsq $0xe, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_27:
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x64, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0xd4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq dynamic_impact_register
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movabsq $0xf, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x32, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    subq $32, %rsp
+    callq dynamic_impact_aggregate_ux
+    addq $32, %rsp
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_31
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
+    subq $32, %rsp
+    callq dynamic_impact_aggregate_ux_lo
+    addq $32, %rsp
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movabsq $0x11, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    subq $32, %rsp
+    callq dynamic_impact_aggregate_ux_hi
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x12, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

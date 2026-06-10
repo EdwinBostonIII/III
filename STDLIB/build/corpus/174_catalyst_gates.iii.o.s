@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_1:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_2:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iiicatalyst.iiicatalyst.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_3:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iiicatalyst.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_4:
-    .ascii "catalyst.iiicatalyst.iiicatalyst.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_5:
-    .ascii "catalyst.iiicatalyst.iii\0"
+    .ascii "catalyst.iii\0"
 L_str_6:
     .ascii "catalyst.iii\0"
     .section .iii.ring3,"n"

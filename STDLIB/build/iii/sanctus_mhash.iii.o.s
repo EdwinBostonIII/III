@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
     .ascii "cad.iii\0"
     .section .rodata

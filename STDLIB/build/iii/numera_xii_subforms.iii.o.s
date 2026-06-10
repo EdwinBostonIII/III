@@ -128,7 +128,6 @@ L_XSF_MEAN_SEMANTIC_EQ:
     .section .iii.ring3,"n"
     .asciz "_prefix_bytes"
     .text
-    .global L__prefix_bytes
     .seh_proc L__prefix_bytes
 L__prefix_bytes:
     pushq %rbp
@@ -1164,11 +1163,8 @@ L_loop_end_21:
     pushq %rax
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1177,11 +1173,8 @@ L_loop_end_21:
     pushq %rax
     movl -88(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1190,11 +1183,8 @@ L_loop_end_21:
     pushq %rax
     movl -96(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1235,7 +1225,6 @@ L_loop_end_21:
     .section .iii.ring3,"n"
     .asciz "if_mask"
     .text
-    .global L_if_mask
     .seh_proc L_if_mask
 L_if_mask:
     pushq %rbp
@@ -1590,11 +1579,8 @@ L_loop_end_31:
     pushq %rax
     movl -88(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1603,11 +1589,8 @@ L_loop_end_31:
     pushq %rax
     movl -96(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1616,11 +1599,8 @@ L_loop_end_31:
     pushq %rax
     movl -104(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1896,7 +1876,6 @@ L_loop_end_33:
     .section .iii.ring3,"n"
     .asciz "_name_buf_set"
     .text
-    .global L__name_buf_set
     .seh_proc L__name_buf_set
 L__name_buf_set:
     pushq %rbp
@@ -2454,11 +2433,8 @@ xii_subforms_lift_encode:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2467,11 +2443,8 @@ xii_subforms_lift_encode:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

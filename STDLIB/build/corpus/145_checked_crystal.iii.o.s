@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "checked_crystal.iiichecked_crystal.iiichecked_crystal.iiichecked_crystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "checked_crystal.iii\0"
 L_str_1:
-    .ascii "checked_crystal.iiichecked_crystal.iiichecked_crystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "checked_crystal.iii\0"
 L_str_2:
-    .ascii "checked_crystal.iiichecked_crystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "checked_crystal.iii\0"
 L_str_3:
-    .ascii "checked_crystal.iiicrystal.iiicrystal.iii\0"
+    .ascii "checked_crystal.iii\0"
 L_str_4:
-    .ascii "crystal.iiicrystal.iii\0"
+    .ascii "crystal.iii\0"
 L_str_5:
     .ascii "crystal.iii\0"
     .section .iii.ring3,"n"

@@ -767,19 +767,6 @@ L_loop_top_26:
     movzbq L_XHJ_HEXAD_COMPOSE(%rip), %rax
     pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_29
-    movzbq -16(%rbp), %rax
-    pushq %rax
-    movzbq L_XHJ_HEXAD_COMPOSE(%rip), %rax
-    pushq %rax
-    popq %rcx
     popq %rdx
     subq $32, %rsp
     callq xii_hj_join
@@ -800,7 +787,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_29
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -812,10 +799,6 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -869,7 +852,7 @@ xii_hj_origin_dominates_check:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_32:
+L_loop_top_30:
     movzbq -16(%rbp), %rax
     pushq %rax
     movabsq $0x7, %rax
@@ -882,7 +865,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_33
+    jz L_loop_end_31
     movzbq -16(%rbp), %rax
     pushq %rax
     movzbq L_XHJ_HEXAD_ORIGIN(%rip), %rax
@@ -908,7 +891,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_33
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -923,7 +906,7 @@ L_loop_top_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_33:
     movzbq -16(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -937,8 +920,8 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_32
-L_loop_end_33:
+    jmp L_loop_top_30
+L_loop_end_31:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax

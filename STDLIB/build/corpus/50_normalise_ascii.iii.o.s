@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtnormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtnormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "normalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iii\0"
+    .ascii "normalise_ascii.iii\0"
 L_str_3:
-    .ascii "normalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iii\0"
+    .ascii "normalise_ascii.iii\0"
 L_str_4:
-    .ascii "normalise_ascii.iiinormalise_ascii.iiinormalise_ascii.iii\0"
+    .ascii "normalise_ascii.iii\0"
 L_str_5:
-    .ascii "normalise_ascii.iiinormalise_ascii.iii\0"
+    .ascii "normalise_ascii.iii\0"
 L_str_6:
     .ascii "normalise_ascii.iii\0"
     .section .iii.ring3,"n"

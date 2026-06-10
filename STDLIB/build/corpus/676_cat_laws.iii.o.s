@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "category.iiicategory.iiicategory.iiicategory.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_1:
-    .ascii "category.iiicategory.iiicategory.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_2:
-    .ascii "category.iiicategory.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_3:
-    .ascii "category.iiicategory.iii\0"
+    .ascii "category.iii\0"
 L_str_4:
     .ascii "category.iii\0"
     .section .rodata
@@ -56,7 +56,6 @@ L_CSINK:
     .section .iii.ring3,"n"
     .asciz "cat_fill32"
     .text
-    .global L_cat_fill32
     .seh_proc L_cat_fill32
 L_cat_fill32:
     pushq %rbp

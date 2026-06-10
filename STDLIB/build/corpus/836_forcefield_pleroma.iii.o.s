@@ -4,15 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtpleroma.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtpleroma.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
     .ascii "pleroma.iii\0"
     .section .iii.ring3,"n"
     .asciz "kst_u32"
     .text
-    .global L_kst_u32
     .seh_proc L_kst_u32
 L_kst_u32:
     pushq %rbp
@@ -27,11 +26,8 @@ L_kst_u32:
     movq %r8, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -66,11 +62,8 @@ L_kst_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -97,11 +90,8 @@ L_kst_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -128,11 +118,8 @@ L_kst_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -163,7 +150,6 @@ L_kst_u32:
     .section .iii.ring3,"n"
     .asciz "kld_u32"
     .text
-    .global L_kld_u32
     .seh_proc L_kld_u32
 L_kld_u32:
     pushq %rbp
@@ -177,11 +163,8 @@ L_kld_u32:
     movq %rdx, -16(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -259,11 +242,8 @@ L_kld_u32:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -272,11 +252,8 @@ L_kld_u32:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -285,11 +262,8 @@ L_kld_u32:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -310,7 +284,6 @@ L_kld_u32:
     .section .iii.ring3,"n"
     .asciz "kperm4"
     .text
-    .global L_kperm4
     .seh_proc L_kperm4
 L_kperm4:
     pushq %rbp
@@ -330,11 +303,8 @@ L_kperm4:
     movq %rax, -48(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -412,7 +382,6 @@ L_kperm4:
     .section .iii.ring3,"n"
     .asciz "kedge"
     .text
-    .global L_kedge
     .seh_proc L_kedge
 L_kedge:
     pushq %rbp
@@ -472,7 +441,6 @@ L_kedge:
     .section .iii.ring3,"n"
     .asciz "kfill_objid"
     .text
-    .global L_kfill_objid
     .seh_proc L_kfill_objid
 L_kfill_objid:
     pushq %rbp
@@ -490,11 +458,8 @@ L_kfill_objid:
     movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -562,7 +527,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "build_square"
     .text
-    .global L_build_square
     .seh_proc L_build_square
 L_build_square:
     pushq %rbp
@@ -810,11 +774,8 @@ main:
     movq %rax, -32(%rbp)
     movabsq $0x4, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -825,11 +786,8 @@ main:
     movq %rax, -40(%rbp)
     movabsq $0x4, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -840,11 +798,8 @@ main:
     movq %rax, -48(%rbp)
     movabsq $0x4, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -855,11 +810,8 @@ main:
     movq %rax, -56(%rbp)
     movabsq $0x4, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1278,11 +1230,8 @@ L_if_end_17:
     popq %rax
     movabsq $0x2, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1293,11 +1242,8 @@ L_if_end_17:
     movq %rax, -120(%rbp)
     movabsq $0x2, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1308,11 +1254,8 @@ L_if_end_17:
     movq %rax, -128(%rbp)
     movabsq $0x2, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1323,11 +1266,8 @@ L_if_end_17:
     movq %rax, -136(%rbp)
     movabsq $0x2, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1555,11 +1495,8 @@ L_if_end_21:
     popq %rax
     movabsq $0x3, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1570,11 +1507,8 @@ L_if_end_21:
     movq %rax, -160(%rbp)
     movabsq $0x3, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1585,11 +1519,8 @@ L_if_end_21:
     movq %rax, -168(%rbp)
     movabsq $0x3, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1600,11 +1531,8 @@ L_if_end_21:
     movq %rax, -176(%rbp)
     movabsq $0x3, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

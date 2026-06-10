@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "field.iiibigint.iiibigint_div.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "field.iii\0"
 L_str_1:
-    .ascii "bigint.iiibigint_div.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "bigint.iii\0"
 L_str_2:
-    .ascii "bigint_div.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_3:
-    .ascii "bigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "crystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_5:
-    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iii\0"
 L_str_6:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_7:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_8:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_9:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -49,7 +49,6 @@ L_FC_SITE:
     .section .iii.ring3,"n"
     .asciz "fc_init_domain"
     .text
-    .global L_fc_init_domain
     .seh_proc L_fc_init_domain
 L_fc_init_domain:
     pushq %rbp
@@ -262,7 +261,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "fc_pack_u64"
     .text
-    .global L_fc_pack_u64
     .seh_proc L_fc_pack_u64
 L_fc_pack_u64:
     pushq %rbp
@@ -306,11 +304,8 @@ L_loop_top_2:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

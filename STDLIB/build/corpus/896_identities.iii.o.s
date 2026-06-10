@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "check"
     .text
-    .global L_check
     .seh_proc L_check
 L_check:
     pushq %rbp
@@ -27,11 +26,7 @@ L_check:
     movq %rax, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    subq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)

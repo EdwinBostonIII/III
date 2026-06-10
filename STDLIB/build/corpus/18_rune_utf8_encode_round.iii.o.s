@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtrune.iiirune.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtrune.iiirune.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "rune.iiirune.iii\0"
+    .ascii "rune.iii\0"
 L_str_3:
     .ascii "rune.iii\0"
     .section .iii.ring3,"n"
@@ -203,11 +203,8 @@ L_if_end_7:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -225,11 +222,8 @@ L_if_end_7:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -247,11 +241,8 @@ L_if_end_7:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx

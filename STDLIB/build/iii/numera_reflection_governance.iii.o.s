@@ -4,51 +4,51 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiiconstitution.iiicapability.iiicapability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiconstitution.iiicapability.iiicapability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiiconstitution.iiicapability.iiicapability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiiconstitution.iiicapability.iiicapability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "constitution.iiicapability.iiicapability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "constitution.iii\0"
 L_str_5:
-    .ascii "capability.iiicapability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "capability.iii\0"
 L_str_6:
-    .ascii "capability.iiiwitness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "capability.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
-    .ascii "reflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_9:
-    .ascii "reflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_10:
-    .ascii "reflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_11:
-    .ascii "reflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_12:
-    .ascii "reflection_constrained.iiireflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_13:
-    .ascii "reflection_constrained.iiireflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_14:
-    .ascii "reflection_constrained.iiireflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_15:
-    .ascii "reflection_constrained.iiiwitness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_16:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_17:
-    .ascii "witness_hook.iiiwitness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_18:
-    .ascii "witness_spine.iiiproof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "witness_spine.iii\0"
 L_str_19:
-    .ascii "proof_term.iiicapability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_20:
-    .ascii "capability.iiicapability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "capability.iii\0"
 L_str_21:
-    .ascii "capability.iiireflection_constrained.iiiconstitution.iii\0"
+    .ascii "capability.iii\0"
 L_str_22:
-    .ascii "reflection_constrained.iiiconstitution.iii\0"
+    .ascii "reflection_constrained.iii\0"
 L_str_23:
     .ascii "constitution.iii\0"
     .section .rodata
@@ -190,7 +190,6 @@ L_RFLG_RATLABEL:
     .section .iii.ring3,"n"
     .asciz "rg_forbidden_ptr"
     .text
-    .global L_rg_forbidden_ptr
     .seh_proc L_rg_forbidden_ptr
 L_rg_forbidden_ptr:
     pushq %rbp
@@ -207,11 +206,8 @@ L_rg_forbidden_ptr:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -233,7 +229,6 @@ L_rg_forbidden_ptr:
     .section .iii.ring3,"n"
     .asciz "rg_load_u64"
     .text
-    .global L_rg_load_u64
     .seh_proc L_rg_load_u64
 L_rg_load_u64:
     pushq %rbp
@@ -293,11 +288,8 @@ L_loop_top_0:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -340,7 +332,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "rg_fill_id"
     .text
-    .global L_rg_fill_id
     .seh_proc L_rg_fill_id
 L_rg_fill_id:
     pushq %rbp
@@ -392,7 +383,6 @@ L_rg_fill_id:
     .section .iii.ring3,"n"
     .asciz "rg_p0"
     .text
-    .global L_rg_p0
     .seh_proc L_rg_p0
 L_rg_p0:
     pushq %rbp
@@ -726,7 +716,6 @@ L_rg_p0:
     .section .iii.ring3,"n"
     .asciz "rg_p1"
     .text
-    .global L_rg_p1
     .seh_proc L_rg_p1
 L_rg_p1:
     pushq %rbp
@@ -1050,7 +1039,6 @@ L_rg_p1:
     .section .iii.ring3,"n"
     .asciz "rg_p2"
     .text
-    .global L_rg_p2
     .seh_proc L_rg_p2
 L_rg_p2:
     pushq %rbp
@@ -1284,7 +1272,6 @@ L_rg_p2:
     .section .iii.ring3,"n"
     .asciz "rg_p3"
     .text
-    .global L_rg_p3
     .seh_proc L_rg_p3
 L_rg_p3:
     pushq %rbp
@@ -1618,7 +1605,6 @@ L_rg_p3:
     .section .iii.ring3,"n"
     .asciz "rg_p4"
     .text
-    .global L_rg_p4
     .seh_proc L_rg_p4
 L_rg_p4:
     pushq %rbp
@@ -1872,7 +1858,6 @@ L_rg_p4:
     .section .iii.ring3,"n"
     .asciz "rg_p5"
     .text
-    .global L_rg_p5
     .seh_proc L_rg_p5
 L_rg_p5:
     pushq %rbp
@@ -2096,7 +2081,6 @@ L_rg_p5:
     .section .iii.ring3,"n"
     .asciz "rg_p6"
     .text
-    .global L_rg_p6
     .seh_proc L_rg_p6
 L_rg_p6:
     pushq %rbp
@@ -2340,7 +2324,6 @@ L_rg_p6:
     .section .iii.ring3,"n"
     .asciz "rg_build_clause_ids"
     .text
-    .global L_rg_build_clause_ids
     .seh_proc L_rg_build_clause_ids
 L_rg_build_clause_ids:
     pushq %rbp
@@ -2780,7 +2763,6 @@ L_rg_build_clause_ids:
     .section .iii.ring3,"n"
     .asciz "rg_emit_invocation"
     .text
-    .global L_rg_emit_invocation
     .seh_proc L_rg_emit_invocation
 L_rg_emit_invocation:
     pushq %rbp
@@ -3019,11 +3001,8 @@ L_loop_top_8:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3200,7 +3179,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "rg_dispatch"
     .text
-    .global L_rg_dispatch
     .seh_proc L_rg_dispatch
 L_rg_dispatch:
     pushq %rbp
@@ -4101,11 +4079,7 @@ L_if_end_39:
 L_if_end_41:
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, L_RFLG_REQ_TARGET(%rip)
@@ -4775,7 +4749,6 @@ L_if_end_73:
     .section .iii.ring3,"n"
     .asciz "rg_st_fill"
     .text
-    .global L_rg_st_fill
     .seh_proc L_rg_st_fill
 L_rg_st_fill:
     pushq %rbp
@@ -4853,7 +4826,6 @@ L_loop_end_75:
     .section .iii.ring3,"n"
     .asciz "rg_st_ratify"
     .text
-    .global L_rg_st_ratify
     .seh_proc L_rg_st_ratify
 L_rg_st_ratify:
     pushq %rbp
@@ -5003,7 +4975,6 @@ L_if_end_77:
     .section .iii.ring3,"n"
     .asciz "rg_st_ratify_clause1"
     .text
-    .global L_rg_st_ratify_clause1
     .seh_proc L_rg_st_ratify_clause1
 L_rg_st_ratify_clause1:
     pushq %rbp
@@ -5208,7 +5179,6 @@ L_rg_st_ratify_clause1:
     .section .iii.ring3,"n"
     .asciz "rg_st_ratify_clause2"
     .text
-    .global L_rg_st_ratify_clause2
     .seh_proc L_rg_st_ratify_clause2
 L_rg_st_ratify_clause2:
     pushq %rbp
@@ -5453,7 +5423,6 @@ L_rg_st_ratify_clause2:
     .section .iii.ring3,"n"
     .asciz "rg_st_build_invreq"
     .text
-    .global L_rg_st_build_invreq
     .seh_proc L_rg_st_build_invreq
 L_rg_st_build_invreq:
     pushq %rbp
@@ -5634,11 +5603,8 @@ L_loop_top_82:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5720,11 +5686,8 @@ L_loop_top_84:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5796,11 +5759,8 @@ L_loop_top_86:
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5850,7 +5810,6 @@ L_loop_end_87:
     .section .iii.ring3,"n"
     .asciz "rg_st_k1"
     .text
-    .global L_rg_st_k1
     .seh_proc L_rg_st_k1
 L_rg_st_k1:
     pushq %rbp
@@ -6050,7 +6009,6 @@ L_if_end_93:
     .section .iii.ring3,"n"
     .asciz "rg_st_k3"
     .text
-    .global L_rg_st_k3
     .seh_proc L_rg_st_k3
 L_rg_st_k3:
     pushq %rbp
@@ -6181,7 +6139,6 @@ L_if_end_99:
     .section .iii.ring3,"n"
     .asciz "rg_st_k4"
     .text
-    .global L_rg_st_k4
     .seh_proc L_rg_st_k4
 L_rg_st_k4:
     pushq %rbp
@@ -6335,7 +6292,6 @@ L_if_end_107:
     .section .iii.ring3,"n"
     .asciz "rg_st_k5"
     .text
-    .global L_rg_st_k5
     .seh_proc L_rg_st_k5
 L_rg_st_k5:
     pushq %rbp
@@ -6506,7 +6462,6 @@ L_if_end_113:
     .section .iii.ring3,"n"
     .asciz "rg_st_put_u64"
     .text
-    .global L_rg_st_put_u64
     .seh_proc L_rg_st_put_u64
 L_rg_st_put_u64:
     pushq %rbp
@@ -6557,11 +6512,8 @@ L_loop_top_114:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -6611,7 +6563,6 @@ L_loop_end_115:
     .section .iii.ring3,"n"
     .asciz "rg_st_k6"
     .text
-    .global L_rg_st_k6
     .seh_proc L_rg_st_k6
 L_rg_st_k6:
     pushq %rbp
@@ -6853,7 +6804,6 @@ L_if_end_123:
     .section .iii.ring3,"n"
     .asciz "rg_st_k7"
     .text
-    .global L_rg_st_k7
     .seh_proc L_rg_st_k7
 L_rg_st_k7:
     pushq %rbp

@@ -26,11 +26,8 @@ ulid_generate:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -51,11 +48,8 @@ ulid_generate:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -76,11 +70,8 @@ ulid_generate:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -101,11 +92,8 @@ ulid_generate:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -126,11 +114,8 @@ ulid_generate:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -182,11 +167,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -207,11 +189,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -232,11 +211,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -257,11 +233,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -282,11 +255,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -307,11 +277,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -332,11 +299,8 @@ ulid_generate:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -376,11 +340,8 @@ ulid_generate:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -401,11 +362,8 @@ ulid_generate:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -436,7 +394,6 @@ ulid_generate:
     .section .iii.ring3,"n"
     .asciz "ulid_5bit"
     .text
-    .global L_ulid_5bit
     .seh_proc L_ulid_5bit
 L_ulid_5bit:
     pushq %rbp
@@ -741,19 +698,13 @@ ulid_format:
     movq %rax, -80(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -761,11 +712,8 @@ ulid_format:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -773,11 +721,8 @@ ulid_format:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -785,11 +730,8 @@ ulid_format:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -797,11 +739,8 @@ ulid_format:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -809,11 +748,8 @@ ulid_format:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -925,19 +861,13 @@ ulid_format:
     movq %rax, -152(%rbp)
     movq -96(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -945,11 +875,8 @@ ulid_format:
     pushq %rax
     movq -112(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -957,11 +884,8 @@ ulid_format:
     pushq %rax
     movq -120(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -969,11 +893,8 @@ ulid_format:
     pushq %rax
     movq -128(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -981,11 +902,8 @@ ulid_format:
     pushq %rax
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -993,11 +911,8 @@ ulid_format:
     pushq %rax
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1013,11 +928,8 @@ ulid_format:
     movq %rax, -160(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x3d, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $61, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1051,11 +963,8 @@ ulid_format:
     movb %dl, (%rax,%rcx,1)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1067,11 +976,8 @@ ulid_format:
     movq %rax, -176(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x33, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $51, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1083,11 +989,8 @@ ulid_format:
     movq %rax, -184(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x2e, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $46, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1099,11 +1002,8 @@ ulid_format:
     movq %rax, -192(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x29, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $41, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1115,11 +1015,8 @@ ulid_format:
     movq %rax, -200(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x24, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $36, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1131,11 +1028,8 @@ ulid_format:
     movq %rax, -208(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x1f, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $31, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1147,11 +1041,8 @@ ulid_format:
     movq %rax, -216(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x1a, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $26, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1163,11 +1054,8 @@ ulid_format:
     movq %rax, -224(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x15, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $21, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1179,11 +1067,8 @@ ulid_format:
     movq %rax, -232(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1195,11 +1080,8 @@ ulid_format:
     movq %rax, -240(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0xb, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $11, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1211,11 +1093,8 @@ ulid_format:
     movq %rax, -248(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1227,11 +1106,8 @@ ulid_format:
     movq %rax, -256(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1517,11 +1393,8 @@ ulid_format:
     movq %rax, -272(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x3c, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $60, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -1533,11 +1406,8 @@ ulid_format:
     movq %rax, -280(%rbp)
     movq -272(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     pushq %rax
     movq -280(%rbp), %rax
     pushq %rax
@@ -1571,11 +1441,8 @@ ulid_format:
     movb %dl, (%rax,%rcx,1)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x37, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $55, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1587,11 +1454,8 @@ ulid_format:
     movq %rax, -296(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x32, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $50, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1603,11 +1467,8 @@ ulid_format:
     movq %rax, -304(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x2d, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $45, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1619,11 +1480,8 @@ ulid_format:
     movq %rax, -312(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1635,11 +1493,8 @@ ulid_format:
     movq %rax, -320(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x23, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $35, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1651,11 +1506,8 @@ ulid_format:
     movq %rax, -328(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x1e, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $30, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1667,11 +1519,8 @@ ulid_format:
     movq %rax, -336(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x19, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $25, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1683,11 +1532,8 @@ ulid_format:
     movq %rax, -344(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $20, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1699,11 +1545,8 @@ ulid_format:
     movq %rax, -352(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0xf, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $15, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1715,11 +1558,8 @@ ulid_format:
     movq %rax, -360(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0xa, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $10, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -1731,11 +1571,8 @@ ulid_format:
     movq %rax, -368(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x5, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $5, %rax
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax

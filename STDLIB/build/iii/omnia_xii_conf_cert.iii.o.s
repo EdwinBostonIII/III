@@ -4,53 +4,53 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_1:
-    .ascii "xii_rule_patterns.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_2:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_3:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_4:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_5:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_6:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_7:
-    .ascii "xii_joinability.iiixii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_8:
-    .ascii "xii_termination.iiixii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_termination.iii\0"
 L_str_9:
-    .ascii "xii_admission.iiixii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_admission.iii\0"
 L_str_10:
-    .ascii "xii_discharge.iiixii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_discharge.iii\0"
 L_str_11:
-    .ascii "xii_strategy_det.iiixii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_strategy_det.iii\0"
 L_str_12:
-    .ascii "xii_rewrite.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_13:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_14:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_15:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_16:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_17:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_18:
-    .ascii "xii_term.iiixii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_19:
-    .ascii "xii_term.iiicad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_20:
-    .ascii "cad.iiicad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_21:
-    .ascii "cad.iiicad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_22:
-    .ascii "cad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_23:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_24:
     .ascii "cad.iii\0"
     .section .rodata
@@ -89,7 +89,6 @@ L_XCC_LIVE2:
     .section .iii.ring3,"n"
     .asciz "_xcc_feed_node"
     .text
-    .global L__xcc_feed_node
     .seh_proc L__xcc_feed_node
 L__xcc_feed_node:
     pushq %rbp
@@ -160,11 +159,8 @@ L__xcc_feed_node:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -185,11 +181,8 @@ L__xcc_feed_node:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -210,11 +203,8 @@ L__xcc_feed_node:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -254,11 +244,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -279,11 +266,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -304,11 +288,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -329,11 +310,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -354,11 +332,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -379,11 +354,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -404,11 +376,8 @@ L__xcc_feed_node:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -453,7 +422,6 @@ L__xcc_feed_node:
     .section .iii.ring3,"n"
     .asciz "_xcc_walk"
     .text
-    .global L__xcc_walk
     .seh_proc L__xcc_walk
 L__xcc_walk:
     pushq %rbp
@@ -692,7 +660,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "_xcc_feed_rid"
     .text
-    .global L__xcc_feed_rid
     .seh_proc L__xcc_feed_rid
 L__xcc_feed_rid:
     pushq %rbp
@@ -728,11 +695,8 @@ L__xcc_feed_rid:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -753,11 +717,8 @@ L__xcc_feed_rid:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -778,11 +739,8 @@ L__xcc_feed_rid:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -986,7 +944,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "_xcc_load_golden"
     .text
-    .global L__xcc_load_golden
     .seh_proc L__xcc_load_golden
 L__xcc_load_golden:
     pushq %rbp

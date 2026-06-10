@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrthip.iiihip.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrthip.iiihip.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "hip.iiihip.iii\0"
+    .ascii "hip.iii\0"
 L_str_3:
     .ascii "hip.iii\0"
     .section .iii.ring3,"n"
     .asciz "_read_u32"
     .text
-    .global L__read_u32
     .seh_proc L__read_u32
 L__read_u32:
     pushq %rbp
@@ -68,11 +67,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -100,11 +96,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -132,11 +125,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -175,7 +165,6 @@ L__read_u32:
     .section .iii.ring3,"n"
     .asciz "_put"
     .text
-    .global L__put
     .seh_proc L__put
 L__put:
     pushq %rbp
@@ -220,7 +209,6 @@ L__put:
     .section .iii.ring3,"n"
     .asciz "_send_buffer"
     .text
-    .global L__send_buffer
     .seh_proc L__send_buffer
 L__send_buffer:
     pushq %rbp

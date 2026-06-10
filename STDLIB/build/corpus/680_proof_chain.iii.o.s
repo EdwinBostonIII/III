@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiialgebraic_time.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_1:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiialgebraic_time.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_2:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiialgebraic_time.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_3:
-    .ascii "proof_term.iiiproof_term.iiialgebraic_time.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_4:
-    .ascii "proof_term.iiialgebraic_time.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_5:
-    .ascii "algebraic_time.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_6:
-    .ascii "theorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "theorem_carrier.iii\0"
 L_str_7:
-    .ascii "theorem_carrier.iiitheorem_carrier.iii\0"
+    .ascii "theorem_carrier.iii\0"
 L_str_8:
     .ascii "theorem_carrier.iii\0"
     .section .rodata
@@ -60,7 +60,6 @@ L_PC_DEP:
     .section .iii.ring3,"n"
     .asciz "pc_pk8"
     .text
-    .global L_pc_pk8
     .seh_proc L_pc_pk8
 L_pc_pk8:
     pushq %rbp
@@ -104,11 +103,8 @@ L_loop_top_0:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -158,7 +154,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "pc_build_axiom"
     .text
-    .global L_pc_build_axiom
     .seh_proc L_pc_build_axiom
 L_pc_build_axiom:
     pushq %rbp
@@ -385,7 +380,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "pc_set_pads"
     .text
-    .global L_pc_set_pads
     .seh_proc L_pc_set_pads
 L_pc_set_pads:
     pushq %rbp

@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "resolution_init.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iiicpufeat.iiiresolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "resolution_init.iii\0"
 L_str_1:
-    .ascii "pattern_table.iiiintent.iiicall_context.iiicpufeat.iiicpufeat.iiiresolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "pattern_table.iii\0"
 L_str_2:
-    .ascii "intent.iiicall_context.iiicpufeat.iiicpufeat.iiiresolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "intent.iii\0"
 L_str_3:
-    .ascii "call_context.iiicpufeat.iiicpufeat.iiiresolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "call_context.iii\0"
 L_str_4:
-    .ascii "cpufeat.iiicpufeat.iiiresolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "cpufeat.iii\0"
 L_str_5:
-    .ascii "cpufeat.iiiresolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "cpufeat.iii\0"
 L_str_6:
-    .ascii "resolver_unitresolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "resolver_unit\0"
 L_str_7:
-    .ascii "resolver_unitresolver_unit_avx512bench_helpers\0"
+    .ascii "resolver_unit\0"
 L_str_8:
-    .ascii "resolver_unit_avx512bench_helpers\0"
+    .ascii "resolver_unit_avx512\0"
 L_str_9:
     .ascii "bench_helpers\0"
     .section .data
@@ -30,7 +30,6 @@ L_BENCH_LAST_PACKED:
     .section .iii.ring3,"n"
     .asciz "_bench_scalar"
     .text
-    .global L__bench_scalar
     .seh_proc L__bench_scalar
 L__bench_scalar:
     pushq %rbp
@@ -96,7 +95,6 @@ L__bench_scalar:
     .section .iii.ring3,"n"
     .asciz "_bench_avx2"
     .text
-    .global L__bench_avx2
     .seh_proc L__bench_avx2
 L__bench_avx2:
     pushq %rbp
@@ -162,7 +160,6 @@ L__bench_avx2:
     .section .iii.ring3,"n"
     .asciz "_bench_avx512"
     .text
-    .global L__bench_avx512
     .seh_proc L__bench_avx512
 L__bench_avx512:
     pushq %rbp

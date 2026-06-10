@@ -4,16 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple_metric.iiiripple_metric.iiicongruence.iiicongruence.iiicongruence.iiiripple_unify.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_1:
-    .ascii "ripple_metric.iiicongruence.iiicongruence.iiicongruence.iiiripple_unify.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_2:
-    .ascii "congruence.iiicongruence.iiicongruence.iiiripple_unify.iii\0"
+    .ascii "congruence.iii\0"
 L_str_3:
-    .ascii "congruence.iiicongruence.iiiripple_unify.iii\0"
+    .ascii "congruence.iii\0"
 L_str_4:
-    .ascii "congruence.iiiripple_unify.iii\0"
+    .ascii "congruence.iii\0"
 L_str_5:
+    .ascii "ripple_unify.iii\0"
+L_str_6:
     .ascii "ripple_unify.iii\0"
     .section .bss
     .global L_ADDR_A
@@ -31,7 +33,6 @@ L_ADDR_B2:
     .section .iii.ring3,"n"
     .asciz "fill32"
     .text
-    .global L_fill32
     .seh_proc L_fill32
 L_fill32:
     pushq %rbp
@@ -473,6 +474,34 @@ L_if_end_7:
     pushq %rax
     popq %rax
 L_if_end_9:
+    movl -88(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq ru_survivor_cost
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0xe, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     subq $32, %rsp
     callq cgr_init
     addq $32, %rsp
@@ -537,7 +566,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x14, %rax
     pushq %rax
     popq %rax
@@ -547,7 +576,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movl -104(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -574,7 +603,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x15, %rax
     pushq %rax
     popq %rax
@@ -584,7 +613,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     subq $32, %rsp
     callq cgr_init
     addq $32, %rsp
@@ -649,7 +678,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x1e, %rax
     pushq %rax
     popq %rax
@@ -659,7 +688,7 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movl -120(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -686,7 +715,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movabsq $0x1f, %rax
     pushq %rax
     popq %rax
@@ -696,7 +725,7 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

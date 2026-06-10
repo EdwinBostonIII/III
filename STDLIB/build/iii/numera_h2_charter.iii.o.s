@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiicad.iiikeccak256.iiisha256.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiicad.iiikeccak256.iiisha256.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cad.iiikeccak256.iiisha256.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "keccak256.iiisha256.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_4:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -126,7 +126,6 @@ h2_init:
     .section .iii.ring3,"n"
     .asciz "h2_faithful_on"
     .text
-    .global L_h2_faithful_on
     .seh_proc L_h2_faithful_on
 L_h2_faithful_on:
     pushq %rbp
@@ -414,7 +413,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "h2_suite_distinct_on"
     .text
-    .global L_h2_suite_distinct_on
     .seh_proc L_h2_suite_distinct_on
 L_h2_suite_distinct_on:
     pushq %rbp
@@ -647,7 +645,6 @@ h2_falsify:
     .section .iii.ring3,"n"
     .asciz "h2_canary_holds"
     .text
-    .global L_h2_canary_holds
     .seh_proc L_h2_canary_holds
 L_h2_canary_holds:
     pushq %rbp
@@ -739,7 +736,6 @@ L_h2_canary_holds:
     .section .iii.ring3,"n"
     .asciz "h2_clause_eval"
     .text
-    .global L_h2_clause_eval
     .seh_proc L_h2_clause_eval
 L_h2_clause_eval:
     pushq %rbp
@@ -885,7 +881,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "h2_register"
     .text
-    .global L_h2_register
     .seh_proc L_h2_register
 L_h2_register:
     pushq %rbp
@@ -964,11 +959,8 @@ L_if_end_21:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1010,7 +1002,7 @@ L_if_end_21:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1026,7 +1018,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "h2_seal_verdict"
     .text
-    .global L_h2_seal_verdict
     .seh_proc L_h2_seal_verdict
 L_h2_seal_verdict:
     pushq %rbp
@@ -1074,11 +1065,8 @@ L_h2_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1099,11 +1087,8 @@ L_h2_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1124,11 +1109,8 @@ L_h2_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1145,11 +1127,8 @@ L_h2_seal_verdict:
     movb %dl, (%rax,%rcx,1)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)

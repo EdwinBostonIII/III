@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_nop_tables.iiixii_kernel_emit.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_horizon.iiixii_horizon.iiixii_nop_tables.iiixii_kernel_emit.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_2:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_horizon.iiixii_nop_tables.iiixii_kernel_emit.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_3:
-    .ascii "xii_horizon.iiixii_horizon.iiixii_nop_tables.iiixii_kernel_emit.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_4:
-    .ascii "xii_horizon.iiixii_nop_tables.iiixii_kernel_emit.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_5:
-    .ascii "xii_nop_tables.iiixii_kernel_emit.iii\0"
+    .ascii "xii_nop_tables.iii\0"
 L_str_6:
     .ascii "xii_kernel_emit.iii\0"
     .section .rodata
@@ -46,7 +46,6 @@ L_XEG_MHASH_SCRATCH:
     .section .iii.ring3,"n"
     .asciz "_prologue_x86"
     .text
-    .global L__prologue_x86
     .seh_proc L__prologue_x86
 L__prologue_x86:
     pushq %rbp
@@ -183,7 +182,6 @@ L__prologue_x86:
     .section .iii.ring3,"n"
     .asciz "_epilogue_x86"
     .text
-    .global L__epilogue_x86
     .seh_proc L__epilogue_x86
 L__epilogue_x86:
     pushq %rbp
@@ -330,7 +328,6 @@ L__epilogue_x86:
     .section .iii.ring3,"n"
     .asciz "_prologue_arm64"
     .text
-    .global L__prologue_arm64
     .seh_proc L__prologue_arm64
 L__prologue_arm64:
     pushq %rbp
@@ -437,7 +434,6 @@ L__prologue_arm64:
     .section .iii.ring3,"n"
     .asciz "_epilogue_arm64"
     .text
-    .global L__epilogue_arm64
     .seh_proc L__epilogue_arm64
 L__epilogue_arm64:
     pushq %rbp
@@ -544,7 +540,6 @@ L__epilogue_arm64:
     .section .iii.ring3,"n"
     .asciz "_prologue_riscv"
     .text
-    .global L__prologue_riscv
     .seh_proc L__prologue_riscv
 L__prologue_riscv:
     pushq %rbp
@@ -691,7 +686,6 @@ L__prologue_riscv:
     .section .iii.ring3,"n"
     .asciz "_epilogue_riscv"
     .text
-    .global L__epilogue_riscv
     .seh_proc L__epilogue_riscv
 L__epilogue_riscv:
     pushq %rbp
@@ -878,7 +872,6 @@ L__epilogue_riscv:
     .section .iii.ring3,"n"
     .asciz "_prologue_cortex_m"
     .text
-    .global L__prologue_cortex_m
     .seh_proc L__prologue_cortex_m
 L__prologue_cortex_m:
     pushq %rbp
@@ -945,7 +938,6 @@ L__prologue_cortex_m:
     .section .iii.ring3,"n"
     .asciz "_epilogue_cortex_m"
     .text
-    .global L__epilogue_cortex_m
     .seh_proc L__epilogue_cortex_m
 L__epilogue_cortex_m:
     pushq %rbp
@@ -992,7 +984,6 @@ L__epilogue_cortex_m:
     .section .iii.ring3,"n"
     .asciz "_prologue_emit"
     .text
-    .global L__prologue_emit
     .seh_proc L__prologue_emit
 L__prologue_emit:
     pushq %rbp
@@ -1223,7 +1214,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "_epilogue_emit"
     .text
-    .global L__epilogue_emit
     .seh_proc L__epilogue_emit
 L__epilogue_emit:
     pushq %rbp
@@ -1454,7 +1444,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "_prologue_emit_len"
     .text
-    .global L__prologue_emit_len
     .seh_proc L__prologue_emit_len
 L__prologue_emit_len:
     pushq %rbp
@@ -1642,7 +1631,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "_epilogue_emit_len"
     .text
-    .global L__epilogue_emit_len
     .seh_proc L__epilogue_emit_len
 L__epilogue_emit_len:
     pushq %rbp
@@ -1901,11 +1889,8 @@ L_if_end_57:
 L_if_end_59:
     movl L_XEG_OVERRIDE_USED(%rip), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1982,11 +1967,8 @@ L_if_end_59:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -2003,11 +1985,8 @@ L_if_end_59:
     movb %dl, (%rax,%rcx,1)
     movl L_XEG_OVERRIDE_USED(%rip), %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2101,7 +2080,6 @@ L_loop_end_61:
     .section .iii.ring3,"n"
     .asciz "_find_override"
     .text
-    .global L__find_override
     .seh_proc L__find_override
 L__find_override:
     pushq %rbp
@@ -2156,11 +2134,8 @@ L_loop_top_64:
     jz L_loop_end_65
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2293,7 +2268,6 @@ xeg_override_index:
     .section .iii.ring3,"n"
     .asciz "_structural_body"
     .text
-    .global L__structural_body
     .seh_proc L__structural_body
 L__structural_body:
     pushq %rbp
@@ -2443,7 +2417,6 @@ L_if_end_73:
     .section .iii.ring3,"n"
     .asciz "if_min"
     .text
-    .global L_if_min
     .seh_proc L_if_min
 L_if_min:
     pushq %rbp
@@ -2737,11 +2710,8 @@ L_if_end_85:
     jz L_if_else_86
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2784,11 +2754,8 @@ L_if_end_85:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2805,11 +2772,8 @@ L_if_end_85:
     movq %rax, -128(%rbp)
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2916,11 +2880,8 @@ L_if_else_86:
     pushq %rax
     movl -104(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3190,11 +3151,8 @@ xii_emit_gen_cell_mhash:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -3247,7 +3205,6 @@ xii_emit_gen_cell_mhash:
     .section .iii.ring3,"n"
     .asciz "_sha256_prefix_then_payload"
     .text
-    .global L__sha256_prefix_then_payload
     .seh_proc L__sha256_prefix_then_payload
 L__sha256_prefix_then_payload:
     pushq %rbp
@@ -3264,13 +3221,6 @@ L__sha256_prefix_then_payload:
     movq 48(%rbp), %rax
     movq %rax, -40(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
     pushq %rax
     movabsq $0x1000, %rax
     pushq %rax
@@ -3296,11 +3246,43 @@ L__sha256_prefix_then_payload:
     pushq %rax
     popq %rax
 L_if_end_93:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1000, %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_95
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_95:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_94:
+L_loop_top_96:
     movl -48(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3313,7 +3295,7 @@ L_loop_top_94:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_95
+    jz L_loop_end_97
     leaq L_XEG_MHASH_SCRATCH(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -3346,13 +3328,13 @@ L_loop_top_94:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_94
-L_loop_end_95:
+    jmp L_loop_top_96
+L_loop_end_97:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_96:
+L_loop_top_98:
     movl -56(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3365,7 +3347,7 @@ L_loop_top_96:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_97
+    jz L_loop_end_99
     leaq L_XEG_MHASH_SCRATCH(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3405,8 +3387,8 @@ L_loop_top_96:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_96
-L_loop_end_97:
+    jmp L_loop_top_98
+L_loop_end_99:
     movq -40(%rbp), %rax
     pushq %rax
     movl -16(%rbp), %eax

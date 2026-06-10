@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtmhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtmhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_5:
     .ascii "mhash.iii\0"
     .section .iii.ring3,"n"

@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "quality.iiiquality.iiiquality.iii\0"
+    .ascii "quality.iii\0"
 L_str_1:
-    .ascii "quality.iiiquality.iii\0"
+    .ascii "quality.iii\0"
 L_str_2:
     .ascii "quality.iii\0"
     .section .bss
@@ -19,7 +19,6 @@ L_ROOT_B:
     .section .iii.ring3,"n"
     .asciz "fill32"
     .text
-    .global L_fill32
     .seh_proc L_fill32
 L_fill32:
     pushq %rbp

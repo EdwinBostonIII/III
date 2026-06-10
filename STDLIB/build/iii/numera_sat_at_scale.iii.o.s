@@ -4,23 +4,23 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiikeccak256.iiicad.iiicapability.iiiwitness_hook.iiisat.iiisat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "keccak256.iiicad.iiicapability.iiiwitness_hook.iiisat.iiisat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_2:
-    .ascii "cad.iiicapability.iiiwitness_hook.iiisat.iiisat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "capability.iiiwitness_hook.iiisat.iiisat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
-    .ascii "witness_hook.iiisat.iiisat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_5:
-    .ascii "sat.iiisat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "sat.iii\0"
 L_str_6:
-    .ascii "sat.iiisat.iiisat.iiisat.iii\0"
+    .ascii "sat.iii\0"
 L_str_7:
-    .ascii "sat.iiisat.iiisat.iii\0"
+    .ascii "sat.iii\0"
 L_str_8:
-    .ascii "sat.iiisat.iii\0"
+    .ascii "sat.iii\0"
 L_str_9:
     .ascii "sat.iii\0"
     .section .rodata
@@ -427,7 +427,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "sats_rd_u32"
     .text
-    .global L_sats_rd_u32
     .seh_proc L_sats_rd_u32
 L_sats_rd_u32:
     pushq %rbp
@@ -521,11 +520,8 @@ L_sats_rd_u32:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -534,11 +530,8 @@ L_sats_rd_u32:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -547,11 +540,8 @@ L_sats_rd_u32:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -572,7 +562,6 @@ L_sats_rd_u32:
     .section .iii.ring3,"n"
     .asciz "sats_rd_clause_count"
     .text
-    .global L_sats_rd_clause_count
     .seh_proc L_sats_rd_clause_count
 L_sats_rd_clause_count:
     pushq %rbp
@@ -632,7 +621,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "sats_walk_clauses"
     .text
-    .global L_sats_walk_clauses
     .seh_proc L_sats_walk_clauses
 L_sats_walk_clauses:
     pushq %rbp
@@ -780,11 +768,8 @@ L_if_end_15:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -912,7 +897,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "sats_parse_header"
     .text
-    .global L_sats_parse_header
     .seh_proc L_sats_parse_header
 L_sats_parse_header:
     pushq %rbp
@@ -1118,7 +1102,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "sats_clause_off"
     .text
-    .global L_sats_clause_off
     .seh_proc L_sats_clause_off
 L_sats_clause_off:
     pushq %rbp
@@ -1176,11 +1159,8 @@ L_loop_top_34:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1222,7 +1202,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "sats_load_into_core"
     .text
-    .global L_sats_load_into_core
     .seh_proc L_sats_load_into_core
 L_sats_load_into_core:
     pushq %rbp
@@ -1385,11 +1364,8 @@ L_loop_top_44:
     pushq %rax
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1530,11 +1506,8 @@ L_if_end_49:
     pushq %rax
     movl -72(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1584,7 +1557,6 @@ L_loop_end_39:
     .section .iii.ring3,"n"
     .asciz "sats_lit_sat"
     .text
-    .global L_sats_lit_sat
     .seh_proc L_sats_lit_sat
 L_sats_lit_sat:
     pushq %rbp
@@ -1599,11 +1571,8 @@ L_sats_lit_sat:
     movq %r8, -24(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -1802,7 +1771,6 @@ L_if_end_63:
     .section .iii.ring3,"n"
     .asciz "sats_clause_sat"
     .text
-    .global L_sats_clause_sat
     .seh_proc L_sats_clause_sat
 L_sats_clause_sat:
     pushq %rbp
@@ -1874,11 +1842,8 @@ L_loop_top_66:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1987,7 +1952,6 @@ L_loop_end_67:
     .section .iii.ring3,"n"
     .asciz "sats_check_model_cert"
     .text
-    .global L_sats_check_model_cert
     .seh_proc L_sats_check_model_cert
 L_sats_check_model_cert:
     pushq %rbp
@@ -2217,7 +2181,6 @@ L_if_end_83:
     .section .iii.ring3,"n"
     .asciz "sats_fetch_clause"
     .text
-    .global L_sats_fetch_clause
     .seh_proc L_sats_fetch_clause
 L_sats_fetch_clause:
     pushq %rbp
@@ -2328,11 +2291,8 @@ L_loop_top_88:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2357,11 +2317,8 @@ L_loop_top_88:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2525,11 +2482,8 @@ L_loop_top_94:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2598,7 +2552,6 @@ L_loop_end_95:
     .section .iii.ring3,"n"
     .asciz "sats_list_has"
     .text
-    .global L_sats_list_has
     .seh_proc L_sats_list_has
 L_sats_list_has:
     pushq %rbp
@@ -2651,11 +2604,8 @@ L_loop_top_96:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2745,7 +2695,6 @@ L_loop_end_97:
     .section .iii.ring3,"n"
     .asciz "sats_resolv_push"
     .text
-    .global L_sats_resolv_push
     .seh_proc L_sats_resolv_push
 L_sats_resolv_push:
     pushq %rbp
@@ -2887,7 +2836,6 @@ L_if_end_107:
     .section .iii.ring3,"n"
     .asciz "sats_resolve"
     .text
-    .global L_sats_resolve
     .seh_proc L_sats_resolve
 L_sats_resolve:
     pushq %rbp
@@ -2902,22 +2850,16 @@ L_sats_resolve:
     movq %r8, -24(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3228,7 +3170,6 @@ L_loop_end_119:
     .section .iii.ring3,"n"
     .asciz "sats_check_refutation"
     .text
-    .global L_sats_check_refutation
     .seh_proc L_sats_check_refutation
 L_sats_check_refutation:
     pushq %rbp
@@ -3774,7 +3715,6 @@ L_if_end_153:
     .section .iii.ring3,"n"
     .asciz "sats_store_resolvent"
     .text
-    .global L_sats_store_resolvent
     .seh_proc L_sats_store_resolvent
 L_sats_store_resolvent:
     pushq %rbp
@@ -3960,7 +3900,6 @@ L_loop_end_159:
     .section .iii.ring3,"n"
     .asciz "sats_build_model_cert"
     .text
-    .global L_sats_build_model_cert
     .seh_proc L_sats_build_model_cert
 L_sats_build_model_cert:
     pushq %rbp
@@ -4000,11 +3939,8 @@ L_sats_build_model_cert:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4025,11 +3961,8 @@ L_sats_build_model_cert:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4050,11 +3983,8 @@ L_sats_build_model_cert:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4180,7 +4110,6 @@ L_loop_end_161:
     .section .iii.ring3,"n"
     .asciz "sats_build_refutation"
     .text
-    .global L_sats_build_refutation
     .seh_proc L_sats_build_refutation
 L_sats_build_refutation:
     pushq %rbp
@@ -4343,11 +4272,8 @@ L_loop_top_162:
     movq %rax, -32(%rbp)
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -4540,7 +4466,6 @@ L_if_end_175:
     .section .iii.ring3,"n"
     .asciz "sats_find_unit"
     .text
-    .global L_sats_find_unit
     .seh_proc L_sats_find_unit
 L_sats_find_unit:
     pushq %rbp
@@ -4725,7 +4650,6 @@ L_loop_end_177:
     .section .iii.ring3,"n"
     .asciz "sats_wr_u32"
     .text
-    .global L_sats_wr_u32
     .seh_proc L_sats_wr_u32
 L_sats_wr_u32:
     pushq %rbp
@@ -4789,11 +4713,8 @@ L_sats_wr_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4814,11 +4735,8 @@ L_sats_wr_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4839,11 +4757,8 @@ L_sats_wr_u32:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -4874,7 +4789,6 @@ L_sats_wr_u32:
     .section .iii.ring3,"n"
     .asciz "sats_commit"
     .text
-    .global L_sats_commit
     .seh_proc L_sats_commit
 L_sats_commit:
     pushq %rbp
@@ -4930,7 +4844,6 @@ L_sats_commit:
     .section .iii.ring3,"n"
     .asciz "sats_emit_witness"
     .text
-    .global L_sats_emit_witness
     .seh_proc L_sats_emit_witness
 L_sats_emit_witness:
     pushq %rbp
@@ -4976,11 +4889,8 @@ L_sats_emit_witness:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5267,11 +5177,8 @@ L_if_end_189:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5368,11 +5275,8 @@ L_if_end_191:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5456,11 +5360,8 @@ L_if_end_195:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5544,11 +5445,8 @@ L_if_end_199:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5632,11 +5530,8 @@ L_if_end_203:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -5837,7 +5732,6 @@ L_if_end_213:
     .section .iii.ring3,"n"
     .asciz "sats_run_oracle"
     .text
-    .global L_sats_run_oracle
     .seh_proc L_sats_run_oracle
 L_sats_run_oracle:
     pushq %rbp
@@ -5910,11 +5804,8 @@ L_if_end_215:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -6045,7 +5936,6 @@ L_if_end_223:
     .section .iii.ring3,"n"
     .asciz "sats_finish"
     .text
-    .global L_sats_finish
     .seh_proc L_sats_finish
 L_sats_finish:
     pushq %rbp
@@ -6601,7 +6491,6 @@ sats_verify_len:
     .section .iii.ring3,"n"
     .asciz "sats_t_hdr"
     .text
-    .global L_sats_t_hdr
     .seh_proc L_sats_t_hdr
 L_sats_t_hdr:
     pushq %rbp

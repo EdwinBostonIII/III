@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "traced"
     .text
-    .global L_traced
     .seh_proc L_traced
 L_traced:
     pushq %rbp

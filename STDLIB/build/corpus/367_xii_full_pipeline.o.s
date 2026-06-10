@@ -4,33 +4,33 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_register_all.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_register_all.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_canonicalise.iiixii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_7:
-    .ascii "xii_canonicalise.iiixii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_8:
-    .ascii "xii_emit_gen.iiixii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_emit_gen.iii\0"
 L_str_9:
-    .ascii "xii_emit_gen.iiisha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_emit_gen.iii\0"
 L_str_10:
-    .ascii "sha256.iiixii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "sha256.iii\0"
 L_str_11:
-    .ascii "xii_lattice.iiixii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_lattice.iii\0"
 L_str_12:
-    .ascii "xii_lattice.iiixii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_lattice.iii\0"
 L_str_13:
-    .ascii "xii_lattice.iiixii_atm.iii\0"
+    .ascii "xii_lattice.iii\0"
 L_str_14:
     .ascii "xii_atm.iii\0"
     .section .bss
@@ -73,11 +73,8 @@ main:
     popq %rax
     movabsq $0x10, %rax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $9, %rax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax
@@ -98,11 +95,8 @@ main:
     movq %rax, -8(%rbp)
     movabsq $0x20, %rax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $9, %rax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax

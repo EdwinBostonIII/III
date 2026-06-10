@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "vec.iiivec.iiibound.iii\0"
+    .ascii "vec.iii\0"
 L_str_1:
-    .ascii "vec.iiibound.iii\0"
+    .ascii "vec.iii\0"
 L_str_2:
     .ascii "bound.iii\0"
     .section .rodata
@@ -61,7 +61,6 @@ L_OMNIA_ASYNC_TASK_RESULT:
     .section .iii.ring3,"n"
     .asciz "_async_rt_slot_of"
     .text
-    .global L__async_rt_slot_of
     .seh_proc L__async_rt_slot_of
 L__async_rt_slot_of:
     pushq %rbp
@@ -159,7 +158,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "_async_task_global_idx"
     .text
-    .global L__async_task_global_idx
     .seh_proc L__async_task_global_idx
 L__async_task_global_idx:
     pushq %rbp

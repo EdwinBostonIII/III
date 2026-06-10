@@ -4,21 +4,31 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiset.iiiset.iiiset.iiiset.iiiset.iiiset.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiiset.iiiset.iiiset.iiiset.iiiset.iiiset.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "set.iiiset.iiiset.iiiset.iiiset.iiiset.iii\0"
+    .ascii "set.iii\0"
 L_str_3:
-    .ascii "set.iiiset.iiiset.iiiset.iiiset.iii\0"
+    .ascii "set.iii\0"
 L_str_4:
-    .ascii "set.iiiset.iiiset.iiiset.iii\0"
+    .ascii "set.iii\0"
 L_str_5:
-    .ascii "set.iiiset.iiiset.iii\0"
+    .ascii "set.iii\0"
 L_str_6:
-    .ascii "set.iiiset.iii\0"
+    .ascii "set.iii\0"
 L_str_7:
     .ascii "set.iii\0"
+L_str_8:
+    .ascii "set.iii\0"
+L_str_9:
+    .ascii "set.iii\0"
+L_str_10:
+    .ascii "set.iii\0"
+    .section .bss
+    .global L_SET_IBUF
+L_SET_IBUF:
+    .zero 256
     .section .iii.ring3,"n"
     .asciz "main"
     .text
@@ -392,6 +402,150 @@ L_if_end_15:
     pushq %rax
     popq %rax
 L_if_end_17:
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq set_u32_capacity
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
+    leaq L_SET_IBUF(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq set_u32_integrity_compute
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movabsq $0xb, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq set_u32_integrity_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    leaq L_SET_IBUF(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movabsq $0xc, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    movabsq $0x5, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq set_u32_integrity_byte
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    leaq L_SET_IBUF(%rip), %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movabsq $0xd, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx

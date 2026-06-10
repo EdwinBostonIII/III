@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crypt_ed25519.iiiegraph.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_1:
     .ascii "egraph.iii\0"
     .section .rodata
@@ -58,7 +58,6 @@ L_H10_MSG_BUF:
     .section .iii.ring3,"n"
     .asciz "h10_fill_pubkey"
     .text
-    .global L_h10_fill_pubkey
     .seh_proc L_h10_fill_pubkey
 L_h10_fill_pubkey:
     pushq %rbp
@@ -405,7 +404,6 @@ L_h10_fill_pubkey:
     .section .iii.ring3,"n"
     .asciz "h10_fill_sig"
     .text
-    .global L_h10_fill_sig
     .seh_proc L_h10_fill_sig
 L_h10_fill_sig:
     pushq %rbp
@@ -1546,7 +1544,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "h10_canary_holds"
     .text
-    .global L_h10_canary_holds
     .seh_proc L_h10_canary_holds
 L_h10_canary_holds:
     pushq %rbp
@@ -1656,7 +1653,6 @@ L_h10_canary_holds:
     .section .iii.ring3,"n"
     .asciz "h10_clause_eval"
     .text
-    .global L_h10_clause_eval
     .seh_proc L_h10_clause_eval
 L_h10_clause_eval:
     pushq %rbp
@@ -1828,7 +1824,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "h10_register"
     .text
-    .global L_h10_register
     .seh_proc L_h10_register
 L_h10_register:
     pushq %rbp
@@ -1905,7 +1900,7 @@ L_if_end_25:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

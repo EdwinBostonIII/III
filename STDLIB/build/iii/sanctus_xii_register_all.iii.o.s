@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_horizon.iiixii_savings.iiixii_rewrite.iiixii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
+    .ascii "xii_horizon.iii\0"
 L_str_1:
-    .ascii "xii_savings.iiixii_rewrite.iiixii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
+    .ascii "xii_savings.iii\0"
 L_str_2:
-    .ascii "xii_rewrite.iiixii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_3:
-    .ascii "xii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
+    .ascii "xii_curated_payloads.iii\0"
 L_str_4:
-    .ascii "xii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
+    .ascii "xii_curated_riscv.iii\0"
 L_str_5:
-    .ascii "xii_curated_embedded.iiixii_curated_extended.iii\0"
+    .ascii "xii_curated_embedded.iii\0"
 L_str_6:
     .ascii "xii_curated_extended.iii\0"
     .section .data

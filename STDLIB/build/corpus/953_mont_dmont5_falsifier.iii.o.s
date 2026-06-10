@@ -4,13 +4,12 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "modular_mont.iiimodular_mont.iii\0"
+    .ascii "modular_mont.iii\0"
 L_str_1:
     .ascii "modular_mont.iii\0"
     .section .iii.ring3,"n"
     .asciz "_ref_mul"
     .text
-    .global L__ref_mul
     .seh_proc L__ref_mul
 L__ref_mul:
     pushq %rbp
@@ -77,7 +76,6 @@ L__ref_mul:
     .section .iii.ring3,"n"
     .asciz "_ref_pow"
     .text
-    .global L__ref_pow
     .seh_proc L__ref_pow
 L__ref_pow:
     pushq %rbp
@@ -193,11 +191,8 @@ L_if_end_3:
     movq %rax, -40(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

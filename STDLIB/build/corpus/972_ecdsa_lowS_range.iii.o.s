@@ -4,15 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtecdsa_p256.iiiecdsa_p256.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "ecdsa_p256.iiiecdsa_p256.iii\0"
+    .ascii "ecdsa_p256.iii\0"
 L_str_2:
     .ascii "ecdsa_p256.iii\0"
     .section .iii.ring3,"n"
     .asciz "setr"
     .text
-    .global L_setr
     .seh_proc L_setr
 L_setr:
     pushq %rbp

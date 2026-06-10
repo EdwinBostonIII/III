@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "constitution.iiiconstitution.iiiconstitution.iiiconstitution.iiialgebraic_time.iiiwitness_hook.iii\0"
+    .ascii "constitution.iii\0"
 L_str_1:
-    .ascii "constitution.iiiconstitution.iiiconstitution.iiialgebraic_time.iiiwitness_hook.iii\0"
+    .ascii "constitution.iii\0"
 L_str_2:
-    .ascii "constitution.iiiconstitution.iiialgebraic_time.iiiwitness_hook.iii\0"
+    .ascii "constitution.iii\0"
 L_str_3:
-    .ascii "constitution.iiialgebraic_time.iiiwitness_hook.iii\0"
+    .ascii "constitution.iii\0"
 L_str_4:
-    .ascii "algebraic_time.iiiwitness_hook.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_5:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -89,7 +89,6 @@ L_H7_BAD:
     .section .iii.ring3,"n"
     .asciz "h7_req_u64"
     .text
-    .global L_h7_req_u64
     .seh_proc L_h7_req_u64
 L_h7_req_u64:
     pushq %rbp
@@ -113,11 +112,7 @@ L_h7_req_u64:
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -146,11 +141,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -177,11 +169,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -208,11 +197,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -239,11 +225,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -270,11 +253,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -301,11 +281,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -332,11 +309,8 @@ L_h7_req_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -367,7 +341,6 @@ L_h7_req_u64:
     .section .iii.ring3,"n"
     .asciz "h7_ratify_clause"
     .text
-    .global L_h7_ratify_clause
     .seh_proc L_h7_ratify_clause
 L_h7_ratify_clause:
     pushq %rbp
@@ -557,7 +530,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "h7_setup"
     .text
-    .global L_h7_setup
     .seh_proc L_h7_setup
 L_h7_setup:
     pushq %rbp
@@ -1183,7 +1155,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "h7_canary_holds"
     .text
-    .global L_h7_canary_holds
     .seh_proc L_h7_canary_holds
 L_h7_canary_holds:
     pushq %rbp
@@ -1266,7 +1237,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "h7_clause_eval"
     .text
-    .global L_h7_clause_eval
     .seh_proc L_h7_clause_eval
 L_h7_clause_eval:
     pushq %rbp
@@ -1412,7 +1382,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "h7_register"
     .text
-    .global L_h7_register
     .seh_proc L_h7_register
 L_h7_register:
     pushq %rbp
@@ -1489,7 +1458,7 @@ L_if_end_29:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

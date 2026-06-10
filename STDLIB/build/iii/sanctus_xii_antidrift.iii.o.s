@@ -4,37 +4,37 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiixii_joinability.iiixii_joinability.iiixii_termination.iiixii_hj.iiixii_savings.iiixii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "xii_joinability.iiixii_joinability.iiixii_termination.iiixii_hj.iiixii_savings.iiixii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_2:
-    .ascii "xii_joinability.iiixii_termination.iiixii_hj.iiixii_savings.iiixii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_joinability.iii\0"
 L_str_3:
-    .ascii "xii_termination.iiixii_hj.iiixii_savings.iiixii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_termination.iii\0"
 L_str_4:
-    .ascii "xii_hj.iiixii_savings.iiixii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_hj.iii\0"
 L_str_5:
-    .ascii "xii_savings.iiixii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_savings.iii\0"
 L_str_6:
-    .ascii "xii_savings.iiixii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_savings.iii\0"
 L_str_7:
-    .ascii "xii_horizon_reach.iiixii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_horizon_reach.iii\0"
 L_str_8:
-    .ascii "xii_chd.iiicrypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_chd.iii\0"
 L_str_9:
-    .ascii "crypt_ed25519.iiixii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_10:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_11:
-    .ascii "xii_term.iiixii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_12:
-    .ascii "xii_term.iiixii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_13:
-    .ascii "xii_canonicalise.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_canonicalise.iii\0"
 L_str_14:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_15:
-    .ascii "xii_rewrite.iiixii_rewrite.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_16:
     .ascii "xii_rewrite.iii\0"
     .section .rodata
@@ -560,11 +560,8 @@ L_loop_top_18:
     jz L_loop_end_19
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -573,11 +570,7 @@ L_loop_top_18:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -741,11 +734,8 @@ L_loop_top_18:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -753,11 +743,8 @@ L_loop_top_18:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -765,11 +752,8 @@ L_loop_top_18:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -779,19 +763,13 @@ L_loop_top_18:
     movq %rax, -112(%rbp)
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -799,11 +777,8 @@ L_loop_top_18:
     pushq %rax
     movq -96(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -811,11 +786,8 @@ L_loop_top_18:
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -925,11 +897,8 @@ L_loop_top_18:
     pushq %rax
     movl -144(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -938,11 +907,8 @@ L_loop_top_18:
     pushq %rax
     movl -152(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -951,11 +917,8 @@ L_loop_top_18:
     pushq %rax
     movl -160(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1114,7 +1077,6 @@ L_loop_end_19:
     .section .iii.ring3,"n"
     .asciz "_ad_rng_next"
     .text
-    .global L__ad_rng_next
     .seh_proc L__ad_rng_next
 L__ad_rng_next:
     pushq %rbp
@@ -1132,11 +1094,8 @@ L__ad_rng_next:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xd, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $13, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1149,11 +1108,8 @@ L__ad_rng_next:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x11, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $17, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1165,11 +1121,8 @@ L__ad_rng_next:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x5, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1198,7 +1151,6 @@ L__ad_rng_next:
     .section .iii.ring3,"n"
     .asciz "_ad_build_random_term"
     .text
-    .global L__ad_build_random_term
     .seh_proc L__ad_build_random_term
 L__ad_build_random_term:
     pushq %rbp

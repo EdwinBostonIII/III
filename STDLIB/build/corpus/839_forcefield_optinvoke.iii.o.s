@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtoptinvoke.iiioptinvoke.iiioptinvoke.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "optinvoke.iiioptinvoke.iiioptinvoke.iii\0"
+    .ascii "optinvoke.iii\0"
 L_str_2:
-    .ascii "optinvoke.iiioptinvoke.iii\0"
+    .ascii "optinvoke.iii\0"
 L_str_3:
     .ascii "optinvoke.iii\0"
     .section .rodata
@@ -17,7 +17,6 @@ L_OI_NONE:
     .section .iii.ring3,"n"
     .asciz "kfill"
     .text
-    .global L_kfill
     .seh_proc L_kfill
 L_kfill:
     pushq %rbp
@@ -111,7 +110,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "keqn"
     .text
-    .global L_keqn
     .seh_proc L_keqn
 L_keqn:
     pushq %rbp
@@ -225,7 +223,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "kst_u64"
     .text
-    .global L_kst_u64
     .seh_proc L_kst_u64
 L_kst_u64:
     pushq %rbp
@@ -287,11 +284,8 @@ L_loop_top_6:
     movb %dl, (%rax,%rcx,1)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -326,7 +320,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "kcand"
     .text
-    .global L_kcand
     .seh_proc L_kcand
 L_kcand:
     pushq %rbp

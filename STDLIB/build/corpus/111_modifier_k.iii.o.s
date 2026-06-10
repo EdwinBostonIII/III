@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "parse_int"
     .text
-    .global L_parse_int
     .seh_proc L_parse_int
 L_parse_int:
     pushq %rbp

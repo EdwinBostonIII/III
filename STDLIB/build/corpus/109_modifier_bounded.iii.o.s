@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "n_iters"
     .text
-    .global L_n_iters
     .seh_proc L_n_iters
 L_n_iters:
     pushq %rbp

@@ -709,7 +709,6 @@ L_XKE_FLOOP_CM:
     .section .iii.ring3,"n"
     .asciz "_copy_bytes"
     .text
-    .global L__copy_bytes
     .seh_proc L__copy_bytes
 L__copy_bytes:
     pushq %rbp

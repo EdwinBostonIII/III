@@ -4,21 +4,20 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iii\0"
+    .ascii "prespec.iii\0"
 L_str_1:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iiiprespec.iii\0"
+    .ascii "prespec.iii\0"
 L_str_2:
-    .ascii "prespec.iiiprespec.iiiprespec.iiiprespec.iii\0"
+    .ascii "prespec.iii\0"
 L_str_3:
-    .ascii "prespec.iiiprespec.iiiprespec.iii\0"
+    .ascii "prespec.iii\0"
 L_str_4:
-    .ascii "prespec.iiiprespec.iii\0"
+    .ascii "prespec.iii\0"
 L_str_5:
     .ascii "prespec.iii\0"
     .section .iii.ring3,"n"
     .asciz "_synth"
     .text
-    .global L__synth
     .seh_proc L__synth
 L__synth:
     pushq %rbp
@@ -53,11 +52,8 @@ L__synth:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -71,21 +67,15 @@ L__synth:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
     movabsq $0x494e5450, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)

@@ -35,7 +35,6 @@ L_FED_TIER_PEER_ROOT:
     .section .iii.ring3,"n"
     .asciz "_fed_tier_valid_id"
     .text
-    .global L__fed_tier_valid_id
     .seh_proc L__fed_tier_valid_id
 L__fed_tier_valid_id:
     pushq %rbp
@@ -252,11 +251,8 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
@@ -501,11 +497,8 @@ L_if_end_21:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
@@ -716,11 +709,8 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax

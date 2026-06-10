@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "q128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_1:
-    .ascii "q128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_2:
-    .ascii "q128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_3:
-    .ascii "q128.iiiq128.iiiq128.iiiq128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_4:
-    .ascii "q128.iiiq128.iiiq128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_5:
-    .ascii "q128.iiiq128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_6:
-    .ascii "q128.iiiq128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_7:
-    .ascii "q128.iiiq128.iii\0"
+    .ascii "q128.iii\0"
 L_str_8:
     .ascii "q128.iii\0"
     .section .iii.ring3,"n"

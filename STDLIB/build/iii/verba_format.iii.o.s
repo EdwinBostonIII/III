@@ -10,6 +10,8 @@ L_FMT_OK:
     .quad 0x0
 L_FMT_E_BUILD:
     .quad 0xfffffffffffffffe
+L_FMT_E_NULL:
+    .quad 0xffffffffffffffff
     .section .bss
     .global L_FMT_DEC_BUF
 L_FMT_DEC_BUF:
@@ -544,11 +546,8 @@ L_loop_top_20:
     movq %rax, -24(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -730,11 +729,8 @@ L_loop_top_28:
     movq %rax, -24(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -918,11 +914,8 @@ L_loop_top_36:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -1182,10 +1175,7 @@ format_literal:
     pushq %rax
     popq %rax
 L_if_end_49:
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
+    movslq L_FMT_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -52,7 +52,6 @@ L_WITNESS_RESOLVE_CAP_BASE:
     .section .iii.ring3,"n"
     .asciz "witness_load_byte"
     .text
-    .global L_witness_load_byte
     .seh_proc L_witness_load_byte
 L_witness_load_byte:
     pushq %rbp
@@ -104,7 +103,6 @@ L_witness_load_byte:
     .section .iii.ring3,"n"
     .asciz "witness_store_byte"
     .text
-    .global L_witness_store_byte
     .seh_proc L_witness_store_byte
 L_witness_store_byte:
     pushq %rbp
@@ -161,7 +159,6 @@ L_witness_store_byte:
     .section .iii.ring3,"n"
     .asciz "witness_store_u64_le"
     .text
-    .global L_witness_store_u64_le
     .seh_proc L_witness_store_u64_le
 L_witness_store_u64_le:
     pushq %rbp
@@ -196,11 +193,8 @@ L_loop_top_0:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -277,7 +271,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "witness_load_u64_le"
     .text
-    .global L_witness_load_u64_le
     .seh_proc L_witness_load_u64_le
 L_witness_load_u64_le:
     pushq %rbp
@@ -337,11 +330,8 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -494,7 +484,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "witness_update_root"
     .text
-    .global L_witness_update_root
     .seh_proc L_witness_update_root
 L_witness_update_root:
     pushq %rbp
@@ -1111,6 +1100,62 @@ witness_count:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "witness_remaining"
+    .text
+    .global witness_remaining
+    .seh_proc witness_remaining
+witness_remaining:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movl L_WITNESS_COUNT(%rip), %eax
+    pushq %rax
+    movl L_WITNESS_MAX_ENTRIES(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    movl L_WITNESS_MAX_ENTRIES(%rip), %eax
+    pushq %rax
+    movl L_WITNESS_COUNT(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "witness_root_byte"
     .text
     .global witness_root_byte
@@ -1136,7 +1181,7 @@ witness_root_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1146,7 +1191,7 @@ witness_root_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     leaq L_WITNESS_ROOT(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1196,7 +1241,7 @@ witness_entry_mhash_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1206,7 +1251,7 @@ witness_entry_mhash_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1219,7 +1264,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1229,7 +1274,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1281,7 +1326,7 @@ witness_entry_cap:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1291,7 +1336,7 @@ witness_entry_cap:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     movabsq $0x20, %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1339,7 +1384,7 @@ witness_entry_epoch:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1349,7 +1394,7 @@ witness_entry_epoch:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     movabsq $0x28, %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1397,7 +1442,7 @@ witness_entry_k:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1407,7 +1452,7 @@ witness_entry_k:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     movabsq $0x30, %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1432,7 +1477,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "witness_replay_update"
     .text
-    .global L_witness_replay_update
     .seh_proc L_witness_replay_update
 L_witness_replay_update:
     pushq %rbp
@@ -1453,7 +1497,7 @@ L_witness_replay_update:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_34:
+L_loop_top_36:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1466,7 +1510,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_37
     leaq L_WITNESS_REPLAY_ROOT(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1499,13 +1543,13 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_36
+L_loop_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_36:
+L_loop_top_38:
     movl -24(%rbp), %eax
     pushq %rax
     movl L_WITNESS_ENTRY_BYTES(%rip), %eax
@@ -1518,7 +1562,7 @@ L_loop_top_36:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_37
+    jz L_loop_end_39
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1554,8 +1598,8 @@ L_loop_top_36:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
+    jmp L_loop_top_38
+L_loop_end_39:
     subq $32, %rsp
     callq sha256_finalize_internal
     addq $32, %rsp
@@ -1566,7 +1610,7 @@ L_loop_end_37:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_38:
+L_loop_top_40:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1579,7 +1623,7 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
+    jz L_loop_end_41
     leaq L_WITNESS_REPLAY_ROOT(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1619,8 +1663,8 @@ L_loop_top_38:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
+    jmp L_loop_top_40
+L_loop_end_41:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1651,7 +1695,7 @@ witness_verify_chain:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_40:
+L_loop_top_42:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1664,7 +1708,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_43
     leaq L_WITNESS_SAVED_ROOT(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1705,13 +1749,13 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_42
+L_loop_end_43:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_42:
+L_loop_top_44:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_WITNESS_COUNT(%rip), %eax
@@ -1724,7 +1768,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_45
     movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -1748,13 +1792,13 @@ L_loop_top_42:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_44
+L_loop_end_45:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_44:
+L_loop_top_46:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1767,7 +1811,7 @@ L_loop_top_44:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_45
+    jz L_loop_end_47
     leaq L_WITNESS_SAVED_ROOT(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1792,7 +1836,7 @@ L_loop_top_44:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_49
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1802,7 +1846,7 @@ L_loop_top_44:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_49:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1817,8 +1861,8 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_44
-L_loop_end_45:
+    jmp L_loop_top_46
+L_loop_end_47:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1907,11 +1951,8 @@ witness_append_resolution:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

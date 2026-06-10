@@ -16,7 +16,7 @@ main:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    leaq -8(%rbp), %rax
+    leaq -16(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -26,7 +26,7 @@ main:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    leaq -8(%rbp), %rax
+    leaq -16(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -36,7 +36,7 @@ main:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    leaq -8(%rbp), %rax
+    leaq -16(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -65,7 +65,7 @@ main:
     pushq %rax
     popq %rax
 L_if_end_1:
-    leaq -8(%rbp), %rax
+    leaq -16(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

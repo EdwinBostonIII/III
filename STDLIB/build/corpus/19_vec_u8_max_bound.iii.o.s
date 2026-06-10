@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiivec.iiivec.iiivec.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiivec.iiivec.iiivec.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "vec.iiivec.iiivec.iii\0"
+    .ascii "vec.iii\0"
 L_str_3:
-    .ascii "vec.iiivec.iii\0"
+    .ascii "vec.iii\0"
 L_str_4:
     .ascii "vec.iii\0"
     .section .iii.ring3,"n"

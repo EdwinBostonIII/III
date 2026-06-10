@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_1:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_2:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_3:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_4:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_5:
-    .ascii "fe25519.iiife25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_6:
-    .ascii "fe25519.iiife25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_7:
-    .ascii "fe25519.iiife25519.iii\0"
+    .ascii "fe25519.iii\0"
 L_str_8:
     .ascii "fe25519.iii\0"
     .section .rodata
@@ -94,7 +94,6 @@ L_X_SCALAR:
     .section .iii.ring3,"n"
     .asciz "xf_set_small"
     .text
-    .global L_xf_set_small
     .seh_proc L_xf_set_small
 L_xf_set_small:
     pushq %rbp
@@ -181,7 +180,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "xf_wipe"
     .text
-    .global L_xf_wipe
     .seh_proc L_xf_wipe
 L_xf_wipe:
     pushq %rbp
@@ -257,7 +255,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "x_scalar_bit"
     .text
-    .global L_x_scalar_bit
     .seh_proc L_x_scalar_bit
 L_x_scalar_bit:
     pushq %rbp
@@ -270,11 +267,8 @@ L_x_scalar_bit:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -329,7 +323,6 @@ L_x_scalar_bit:
     .section .iii.ring3,"n"
     .asciz "x_cswap"
     .text
-    .global L_x_cswap
     .seh_proc L_x_cswap
 L_x_cswap:
     pushq %rbp
@@ -577,7 +570,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "x_ladder_step"
     .text
-    .global L_x_ladder_step
     .seh_proc L_x_ladder_step
 L_x_ladder_step:
     pushq %rbp

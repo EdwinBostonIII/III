@@ -4,37 +4,37 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_1:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_2:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_3:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_4:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_5:
-    .ascii "pattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_6:
-    .ascii "pattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_7:
-    .ascii "resolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "resolver.iii\0"
 L_str_8:
-    .ascii "ripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "ripple_field.iii\0"
 L_str_9:
-    .ascii "intent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "intent.iii\0"
 L_str_10:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_11:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_12:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_13:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_14:
-    .ascii "governance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_15:
-    .ascii "governance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_16:
     .ascii "governance.iii\0"
     .section .rodata
@@ -272,7 +272,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_sr_build_rationale"
     .text
-    .global L__sr_build_rationale
     .seh_proc L__sr_build_rationale
 L__sr_build_rationale:
     pushq %rbp
@@ -478,7 +477,7 @@ L_loop_end_3:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    movabsq $0x17, %rax
+    movabsq $0x16, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -692,7 +691,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "_sr_try_compose"
     .text
-    .global L__sr_try_compose
     .seh_proc L__sr_try_compose
 L__sr_try_compose:
     pushq %rbp
@@ -952,11 +950,8 @@ L_if_end_23:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
@@ -976,11 +971,8 @@ L_if_end_23:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -988,11 +980,8 @@ L_if_end_23:
     pushq %rax
     movabsq $0x494e5450, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax

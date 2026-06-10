@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "caindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_1:
-    .ascii "caindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_2:
     .ascii "caindex.iii\0"
     .section .rodata
@@ -799,7 +799,6 @@ rm_merge_improves:
     .section .iii.ring3,"n"
     .asciz "rm_write_key"
     .text
-    .global L_rm_write_key
     .seh_proc L_rm_write_key
 L_rm_write_key:
     pushq %rbp
@@ -901,11 +900,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -926,11 +922,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -951,11 +944,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -976,11 +966,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1001,11 +988,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $40, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1026,11 +1010,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1051,11 +1032,8 @@ L_loop_end_25:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1095,11 +1073,8 @@ L_loop_end_25:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1120,11 +1095,8 @@ L_loop_end_25:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1145,11 +1117,8 @@ L_loop_end_25:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1750,13 +1719,44 @@ rm_j:
     popq %rax
     addq %rcx, %rax
     pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
     movq -16(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
-    subq %rcx, %rax
+    addq %rcx, %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1875,7 +1875,7 @@ rm_extract_improves:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_45
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1885,7 +1885,7 @@ rm_extract_improves:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_45:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

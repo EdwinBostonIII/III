@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "integrity.iiiintegrity.iiihexad_reach.iii\0"
+    .ascii "integrity.iii\0"
 L_str_1:
-    .ascii "integrity.iiihexad_reach.iii\0"
+    .ascii "integrity.iii\0"
 L_str_2:
     .ascii "hexad_reach.iii\0"
     .section .iii.ring3,"n"

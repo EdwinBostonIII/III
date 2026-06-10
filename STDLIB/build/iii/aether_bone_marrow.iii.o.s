@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "galois.iiigalois.iiigalois.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "galois.iii\0"
 L_str_1:
-    .ascii "galois.iiigalois.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "galois.iii\0"
 L_str_2:
-    .ascii "galois.iiiidentifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "galois.iii\0"
 L_str_3:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiicad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "identifier.iiiidentifier.iiicad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_5:
-    .ascii "identifier.iiicad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_6:
-    .ascii "cad.iiicad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "cad.iii\0"
 L_str_7:
-    .ascii "cad.iiicad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "cad.iii\0"
 L_str_8:
-    .ascii "cad.iiicapability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "cad.iii\0"
 L_str_9:
-    .ascii "capability.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "capability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_12:
     .ascii "capability.iii\0"
     .section .rodata
@@ -141,7 +141,6 @@ L_MARROW_T_R1:
     .section .iii.ring3,"n"
     .asciz "bm_block_ptr"
     .text
-    .global L_bm_block_ptr
     .seh_proc L_bm_block_ptr
 L_bm_block_ptr:
     pushq %rbp
@@ -237,7 +236,6 @@ L_bm_block_ptr:
     .section .iii.ring3,"n"
     .asciz "bm_hash_ptr"
     .text
-    .global L_bm_hash_ptr
     .seh_proc L_bm_hash_ptr
 L_bm_hash_ptr:
     pushq %rbp
@@ -329,7 +327,6 @@ L_bm_hash_ptr:
     .section .iii.ring3,"n"
     .asciz "bm_live_idx"
     .text
-    .global L_bm_live_idx
     .seh_proc L_bm_live_idx
 L_bm_live_idx:
     pushq %rbp
@@ -408,7 +405,6 @@ L_bm_live_idx:
     .section .iii.ring3,"n"
     .asciz "bm_cap_ok"
     .text
-    .global L_bm_cap_ok
     .seh_proc L_bm_cap_ok
 L_bm_cap_ok:
     pushq %rbp
@@ -443,7 +439,6 @@ L_bm_cap_ok:
     .section .iii.ring3,"n"
     .asciz "bm_record_hash"
     .text
-    .global L_bm_record_hash
     .seh_proc L_bm_record_hash
 L_bm_record_hash:
     pushq %rbp
@@ -504,7 +499,6 @@ L_bm_record_hash:
     .section .iii.ring3,"n"
     .asciz "bm_copy_block"
     .text
-    .global L_bm_copy_block
     .seh_proc L_bm_copy_block
 L_bm_copy_block:
     pushq %rbp
@@ -583,7 +577,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "bm_build_row"
     .text
-    .global L_bm_build_row
     .seh_proc L_bm_build_row
 L_bm_build_row:
     pushq %rbp
@@ -788,7 +781,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "bm_find_pivot"
     .text
-    .global L_bm_find_pivot
     .seh_proc L_bm_find_pivot
 L_bm_find_pivot:
     pushq %rbp
@@ -917,7 +909,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "bm_swap_rows"
     .text
-    .global L_bm_swap_rows
     .seh_proc L_bm_swap_rows
 L_bm_swap_rows:
     pushq %rbp
@@ -1091,7 +1082,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "bm_scale_row"
     .text
-    .global L_bm_scale_row
     .seh_proc L_bm_scale_row
 L_bm_scale_row:
     pushq %rbp
@@ -1255,7 +1245,6 @@ L_loop_end_17:
     .section .iii.ring3,"n"
     .asciz "bm_eliminate"
     .text
-    .global L_bm_eliminate
     .seh_proc L_bm_eliminate
 L_bm_eliminate:
     pushq %rbp
@@ -1522,7 +1511,6 @@ L_loop_end_21:
     .section .iii.ring3,"n"
     .asciz "bm_eliminate_others"
     .text
-    .global L_bm_eliminate_others
     .seh_proc L_bm_eliminate_others
 L_bm_eliminate_others:
     pushq %rbp
@@ -1616,7 +1604,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "bm_invert"
     .text
-    .global L_bm_invert
     .seh_proc L_bm_invert
 L_bm_invert:
     pushq %rbp
@@ -1990,7 +1977,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "bm_parity_zero"
     .text
-    .global L_bm_parity_zero
     .seh_proc L_bm_parity_zero
 L_bm_parity_zero:
     pushq %rbp
@@ -2085,7 +2071,6 @@ L_loop_end_45:
     .section .iii.ring3,"n"
     .asciz "bm_parity_acc"
     .text
-    .global L_bm_parity_acc
     .seh_proc L_bm_parity_acc
 L_bm_parity_acc:
     pushq %rbp
@@ -2269,7 +2254,6 @@ L_loop_end_47:
     .section .iii.ring3,"n"
     .asciz "bm_encode_parity"
     .text
-    .global L_bm_encode_parity
     .seh_proc L_bm_encode_parity
 L_bm_encode_parity:
     pushq %rbp
@@ -2351,7 +2335,6 @@ L_loop_end_49:
     .section .iii.ring3,"n"
     .asciz "bm_recon_gather"
     .text
-    .global L_bm_recon_gather
     .seh_proc L_bm_recon_gather
 L_bm_recon_gather:
     pushq %rbp
@@ -2458,7 +2441,6 @@ L_loop_end_51:
     .section .iii.ring3,"n"
     .asciz "bm_recon_elem"
     .text
-    .global L_bm_recon_elem
     .seh_proc L_bm_recon_elem
 L_bm_recon_elem:
     pushq %rbp
@@ -2601,7 +2583,6 @@ L_loop_end_53:
     .section .iii.ring3,"n"
     .asciz "bm_recon_byte"
     .text
-    .global L_bm_recon_byte
     .seh_proc L_bm_recon_byte
 L_bm_recon_byte:
     pushq %rbp
@@ -3911,7 +3892,6 @@ L_loop_end_95:
     .section .iii.ring3,"n"
     .asciz "bm_collect"
     .text
-    .global L_bm_collect
     .seh_proc L_bm_collect
 L_bm_collect:
     pushq %rbp
@@ -4153,7 +4133,6 @@ L_loop_end_101:
     .section .iii.ring3,"n"
     .asciz "bm_build_survivor_matrix"
     .text
-    .global L_bm_build_survivor_matrix
     .seh_proc L_bm_build_survivor_matrix
 L_bm_build_survivor_matrix:
     pushq %rbp
@@ -4261,7 +4240,6 @@ L_loop_end_113:
     .section .iii.ring3,"n"
     .asciz "bm_finalize_data"
     .text
-    .global L_bm_finalize_data
     .seh_proc L_bm_finalize_data
 L_bm_finalize_data:
     pushq %rbp
@@ -4389,7 +4367,6 @@ L_loop_end_115:
     .section .iii.ring3,"n"
     .asciz "bm_finalize_parity"
     .text
-    .global L_bm_finalize_parity
     .seh_proc L_bm_finalize_parity
 L_bm_finalize_parity:
     pushq %rbp
@@ -4537,7 +4514,6 @@ L_loop_end_119:
     .section .iii.ring3,"n"
     .asciz "bm_recon_all"
     .text
-    .global L_bm_recon_all
     .seh_proc L_bm_recon_all
 L_bm_recon_all:
     pushq %rbp
@@ -5306,7 +5282,9 @@ bm_seal_root:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
-    movzbq L_MARROW_SEAL_SET(%rip), %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -5319,7 +5297,7 @@ bm_seal_root:
     popq %rax
     testq %rax, %rax
     jz L_if_end_143
-    movslq L_MARROW_E_NOSEAL(%rip), %rax
+    movslq L_MARROW_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -5329,6 +5307,29 @@ bm_seal_root:
     pushq %rax
     popq %rax
 L_if_end_143:
+    movzbq L_MARROW_SEAL_SET(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_145
+    movslq L_MARROW_E_NOSEAL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_145:
     leaq L_MARROW_SEAL_ROOT(%rip), %rax
     pushq %rax
     popq %rax
@@ -5365,7 +5366,6 @@ L_if_end_143:
     .section .iii.ring3,"n"
     .asciz "bm_t_fill"
     .text
-    .global L_bm_t_fill
     .seh_proc L_bm_t_fill
 L_bm_t_fill:
     pushq %rbp
@@ -5393,7 +5393,7 @@ L_bm_t_fill:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_144:
+L_loop_top_146:
     movq -32(%rbp), %rax
     pushq %rax
     movl L_MARROW_BLOCK_SZ(%rip), %eax
@@ -5408,7 +5408,7 @@ L_loop_top_144:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_145
+    jz L_loop_end_147
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -5459,8 +5459,8 @@ L_loop_top_144:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_144
-L_loop_end_145:
+    jmp L_loop_top_146
+L_loop_end_147:
     leaq L_MARROW_LIVE(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -5512,7 +5512,6 @@ L_loop_end_145:
     .section .iii.ring3,"n"
     .asciz "bm_t_setup_stripe"
     .text
-    .global L_bm_t_setup_stripe
     .seh_proc L_bm_t_setup_stripe
 L_bm_t_setup_stripe:
     pushq %rbp
@@ -5526,7 +5525,7 @@ L_bm_t_setup_stripe:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_146:
+L_loop_top_148:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_MARROW_K(%rip), %eax
@@ -5539,7 +5538,7 @@ L_loop_top_146:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_147
+    jz L_loop_end_149
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -5566,8 +5565,8 @@ L_loop_top_146:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_146
-L_loop_end_147:
+    jmp L_loop_top_148
+L_loop_end_149:
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
@@ -5590,7 +5589,6 @@ L_loop_end_147:
     .section .iii.ring3,"n"
     .asciz "bm_t_snapshot"
     .text
-    .global L_bm_t_snapshot
     .seh_proc L_bm_t_snapshot
 L_bm_t_snapshot:
     pushq %rbp
@@ -5617,7 +5615,7 @@ L_bm_t_snapshot:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_148:
+L_loop_top_150:
     movq -24(%rbp), %rax
     pushq %rax
     movl L_MARROW_BLOCK_SZ(%rip), %eax
@@ -5632,7 +5630,7 @@ L_loop_top_148:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_149
+    jz L_loop_end_151
     leaq L_MARROW_T_SNAP(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -5662,8 +5660,8 @@ L_loop_top_148:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_148
-L_loop_end_149:
+    jmp L_loop_top_150
+L_loop_end_151:
     movslq L_MARROW_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -5680,7 +5678,6 @@ L_loop_end_149:
     .section .iii.ring3,"n"
     .asciz "bm_t_wipe"
     .text
-    .global L_bm_t_wipe
     .seh_proc L_bm_t_wipe
 L_bm_t_wipe:
     pushq %rbp
@@ -5730,7 +5727,7 @@ L_bm_t_wipe:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_150:
+L_loop_top_152:
     movq -24(%rbp), %rax
     pushq %rax
     movl L_MARROW_BLOCK_SZ(%rip), %eax
@@ -5745,7 +5742,7 @@ L_loop_top_150:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_151
+    jz L_loop_end_153
     movq -16(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -5769,8 +5766,8 @@ L_loop_top_150:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_150
-L_loop_end_151:
+    jmp L_loop_top_152
+L_loop_end_153:
     movslq L_MARROW_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -5787,7 +5784,6 @@ L_loop_end_151:
     .section .iii.ring3,"n"
     .asciz "bm_t_match_snap"
     .text
-    .global L_bm_t_match_snap
     .seh_proc L_bm_t_match_snap
 L_bm_t_match_snap:
     pushq %rbp
@@ -5805,7 +5801,7 @@ L_bm_t_match_snap:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_152:
+L_loop_top_154:
     movq -16(%rbp), %rax
     pushq %rax
     movl L_MARROW_BLOCK_SZ(%rip), %eax
@@ -5820,7 +5816,7 @@ L_loop_top_152:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_153
+    jz L_loop_end_155
     movl -8(%rbp), %eax
     pushq %rax
     leaq L_MARROW_T_OUT(%rip), %rax
@@ -5868,8 +5864,8 @@ L_loop_top_152:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_152
-L_loop_end_153:
+    jmp L_loop_top_154
+L_loop_end_155:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -5882,7 +5878,7 @@ L_loop_end_153:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_155
+    jz L_if_end_157
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5892,7 +5888,7 @@ L_loop_end_153:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_155:
+L_if_end_157:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5945,7 +5941,7 @@ bm_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_157
+    jz L_if_end_159
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5955,7 +5951,7 @@ bm_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_157:
+L_if_end_159:
     movabsq $0x53, %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5977,7 +5973,7 @@ L_if_end_157:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_159
+    jz L_if_end_161
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -5987,7 +5983,7 @@ L_if_end_157:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_159:
+L_if_end_161:
     movabsq $0x0, %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -6009,7 +6005,7 @@ L_if_end_159:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_161
+    jz L_if_end_163
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -6019,7 +6015,7 @@ L_if_end_159:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_161:
+L_if_end_163:
     movabsq $0x53, %rax
     pushq %rax
     popq %rcx
@@ -6044,7 +6040,7 @@ L_if_end_161:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_163
+    jz L_if_end_165
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -6054,7 +6050,7 @@ L_if_end_161:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_163:
+L_if_end_165:
     subq $32, %rsp
     callq bm_init
     addq $32, %rsp
@@ -6106,7 +6102,7 @@ L_if_end_163:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_165
+    jz L_if_end_167
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -6116,7 +6112,7 @@ L_if_end_163:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_165:
+L_if_end_167:
     leaq L_MARROW_T_OUT(%rip), %rax
     pushq %rax
     popq %rax
@@ -6145,7 +6141,7 @@ L_if_end_165:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_167
+    jz L_if_end_169
     movabsq $0xb, %rax
     pushq %rax
     popq %rax
@@ -6155,7 +6151,7 @@ L_if_end_165:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_167:
+L_if_end_169:
     subq $32, %rsp
     callq L_bm_t_match_snap
     addq $32, %rsp
@@ -6171,7 +6167,7 @@ L_if_end_167:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_169
+    jz L_if_end_171
     movabsq $0xc, %rax
     pushq %rax
     popq %rax
@@ -6181,7 +6177,7 @@ L_if_end_167:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_169:
+L_if_end_171:
     movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6203,7 +6199,7 @@ L_if_end_169:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_171
+    jz L_if_end_173
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -6213,7 +6209,7 @@ L_if_end_169:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_171:
+L_if_end_173:
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
@@ -6232,7 +6228,7 @@ L_if_end_171:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_173
+    jz L_if_end_175
     movabsq $0xe, %rax
     pushq %rax
     popq %rax
@@ -6242,7 +6238,7 @@ L_if_end_171:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_173:
+L_if_end_175:
     movabsq $0x4c4, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6264,7 +6260,7 @@ L_if_end_173:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_175
+    jz L_if_end_177
     movabsq $0x14, %rax
     pushq %rax
     popq %rax
@@ -6274,7 +6270,7 @@ L_if_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_175:
+L_if_end_177:
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
@@ -6293,7 +6289,7 @@ L_if_end_175:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_177
+    jz L_if_end_179
     movabsq $0x15, %rax
     pushq %rax
     popq %rax
@@ -6303,7 +6299,7 @@ L_if_end_175:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_177:
+L_if_end_179:
     movabsq $0x2, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6325,7 +6321,7 @@ L_if_end_177:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_179
+    jz L_if_end_181
     movabsq $0x16, %rax
     pushq %rax
     popq %rax
@@ -6335,7 +6331,7 @@ L_if_end_177:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_179:
+L_if_end_181:
     movabsq $0x6, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6357,7 +6353,7 @@ L_if_end_179:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_181
+    jz L_if_end_183
     movabsq $0x17, %rax
     pushq %rax
     popq %rax
@@ -6367,7 +6363,7 @@ L_if_end_179:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
+L_if_end_183:
     movabsq $0x7, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6389,7 +6385,7 @@ L_if_end_181:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_183
+    jz L_if_end_185
     movabsq $0x18, %rax
     pushq %rax
     popq %rax
@@ -6399,7 +6395,7 @@ L_if_end_181:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_183:
+L_if_end_185:
     movabsq $0x50e, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6421,7 +6417,7 @@ L_if_end_183:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_185
+    jz L_if_end_187
     movabsq $0x19, %rax
     pushq %rax
     popq %rax
@@ -6431,7 +6427,7 @@ L_if_end_183:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_185:
+L_if_end_187:
     subq $32, %rsp
     callq bm_init
     addq $32, %rsp
@@ -6462,7 +6458,7 @@ L_if_end_185:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_187
+    jz L_if_end_189
     movabsq $0x1e, %rax
     pushq %rax
     popq %rax
@@ -6472,7 +6468,7 @@ L_if_end_185:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_187:
+L_if_end_189:
     leaq L_MARROW_T_R0(%rip), %rax
     pushq %rax
     popq %rax
@@ -6495,7 +6491,7 @@ L_if_end_187:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_189
+    jz L_if_end_191
     movabsq $0x1f, %rax
     pushq %rax
     popq %rax
@@ -6505,7 +6501,7 @@ L_if_end_187:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_189:
+L_if_end_191:
     leaq L_MARROW_T_R1(%rip), %rax
     pushq %rax
     popq %rax
@@ -6548,7 +6544,7 @@ L_if_end_189:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_191
+    jz L_if_end_193
     movabsq $0x20, %rax
     pushq %rax
     popq %rax
@@ -6558,7 +6554,7 @@ L_if_end_189:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_191:
+L_if_end_193:
     subq $32, %rsp
     callq bm_verify_seal
     addq $32, %rsp
@@ -6574,7 +6570,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_193
+    jz L_if_end_195
     movabsq $0x21, %rax
     pushq %rax
     popq %rax
@@ -6584,7 +6580,7 @@ L_if_end_191:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_193:
+L_if_end_195:
     movabsq $0x3, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6646,7 +6642,7 @@ L_if_end_193:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_195
+    jz L_if_end_197
     movabsq $0x22, %rax
     pushq %rax
     popq %rax
@@ -6656,7 +6652,7 @@ L_if_end_193:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_195:
+L_if_end_197:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6733,7 +6729,7 @@ L_if_end_195:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_197
+    jz L_if_end_199
     movabsq $0x23, %rax
     pushq %rax
     popq %rax
@@ -6743,7 +6739,7 @@ L_if_end_195:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_197:
+L_if_end_199:
     movabsq $0x0, %rax
     pushq %rax
     movq L_MARROW_CAP_PREAD(%rip), %rax
@@ -6771,7 +6767,7 @@ L_if_end_197:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_199
+    jz L_if_end_201
     movabsq $0x24, %rax
     pushq %rax
     popq %rax
@@ -6781,7 +6777,7 @@ L_if_end_197:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_199:
+L_if_end_201:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -6800,7 +6796,7 @@ L_if_end_199:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_201
+    jz L_if_end_203
     movabsq $0x25, %rax
     pushq %rax
     popq %rax
@@ -6810,7 +6806,7 @@ L_if_end_199:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_201:
+L_if_end_203:
     subq $32, %rsp
     callq bm_init
     addq $32, %rsp
@@ -6854,7 +6850,7 @@ L_if_end_201:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_203
+    jz L_if_end_205
     movabsq $0x28, %rax
     pushq %rax
     popq %rax
@@ -6864,7 +6860,7 @@ L_if_end_201:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_203:
+L_if_end_205:
     movabsq $0x1, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6886,7 +6882,7 @@ L_if_end_203:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_205
+    jz L_if_end_207
     movabsq $0x29, %rax
     pushq %rax
     popq %rax
@@ -6896,7 +6892,7 @@ L_if_end_203:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_205:
+L_if_end_207:
     movq L_MARROW_CAP_ENV_ROOT(%rip), %rax
     pushq %rax
     popq %rcx

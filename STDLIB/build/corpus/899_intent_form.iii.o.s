@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "intent_form.iiiintent.iiiintent.iiiintent.iiigoal_kind=5depth=7,arg0=99\0"
+    .ascii "intent_form.iii\0"
 L_str_1:
-    .ascii "intent.iiiintent.iiiintent.iiigoal_kind=5depth=7,arg0=99\0"
+    .ascii "intent.iii\0"
 L_str_2:
-    .ascii "intent.iiiintent.iiigoal_kind=5depth=7,arg0=99\0"
+    .ascii "intent.iii\0"
 L_str_3:
-    .ascii "intent.iiigoal_kind=5depth=7,arg0=99\0"
+    .ascii "intent.iii\0"
 L_str_4:
-    .ascii "goal_kind=5depth=7,arg0=99\0"
+    .ascii "goal_kind=5\0"
 L_str_5:
     .ascii "depth=7,arg0=99\0"
     .section .iii.ring3,"n"

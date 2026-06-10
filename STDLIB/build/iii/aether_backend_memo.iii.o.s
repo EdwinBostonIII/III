@@ -24,8 +24,6 @@ L_MEMO_MAXVAL:
     .quad 0x200
 L_MEMO_NONE:
     .quad 0xffffffffffffffff
-L_MEMO_U32MASK:
-    .quad 0xffffffff
     .section .bss
     .global L_MEMO_OCC
 L_MEMO_OCC:
@@ -46,7 +44,6 @@ L_MEMO_NEXT:
     .section .iii.ring3,"n"
     .asciz "_memo_addr_ptr"
     .text
-    .global L__memo_addr_ptr
     .seh_proc L__memo_addr_ptr
 L__memo_addr_ptr:
     pushq %rbp
@@ -59,7 +56,7 @@ L__memo_addr_ptr:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movq L_MEMO_U32MASK(%rip), %rax
+    movq L_MEMO_SLOTMASK(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -97,7 +94,6 @@ L__memo_addr_ptr:
     .section .iii.ring3,"n"
     .asciz "_memo_val_ptr"
     .text
-    .global L__memo_val_ptr
     .seh_proc L__memo_val_ptr
 L__memo_val_ptr:
     pushq %rbp
@@ -110,7 +106,7 @@ L__memo_val_ptr:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movq L_MEMO_U32MASK(%rip), %rax
+    movq L_MEMO_SLOTMASK(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -148,7 +144,6 @@ L__memo_val_ptr:
     .section .iii.ring3,"n"
     .asciz "_memo_find"
     .text
-    .global L__memo_find
     .seh_proc L__memo_find
 L__memo_find:
     pushq %rbp

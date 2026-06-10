@@ -4,18 +4,20 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiicapability.iiiinstant.iiiinstant.iiiinstant.iiiinstant.iiiinstant.iii\0"
+    .ascii "capability.iii\0"
 L_str_1:
-    .ascii "capability.iiiinstant.iiiinstant.iiiinstant.iiiinstant.iiiinstant.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "instant.iiiinstant.iiiinstant.iiiinstant.iiiinstant.iii\0"
+    .ascii "instant.iii\0"
 L_str_3:
-    .ascii "instant.iiiinstant.iiiinstant.iiiinstant.iii\0"
+    .ascii "instant.iii\0"
 L_str_4:
-    .ascii "instant.iiiinstant.iiiinstant.iii\0"
+    .ascii "instant.iii\0"
 L_str_5:
-    .ascii "instant.iiiinstant.iii\0"
+    .ascii "instant.iii\0"
 L_str_6:
+    .ascii "instant.iii\0"
+L_str_7:
     .ascii "instant.iii\0"
     .section .iii.ring3,"n"
     .asciz "main"
@@ -241,6 +243,66 @@ L_if_end_9:
     pushq %rax
     popq %rax
 L_if_end_11:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq instant_epoch
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq instant_epoch
+    addq $32, %rsp
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx

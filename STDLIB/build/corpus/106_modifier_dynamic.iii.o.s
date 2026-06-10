@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "step"
     .text
-    .global L_step
     .seh_proc L_step
 L_step:
     pushq %rbp

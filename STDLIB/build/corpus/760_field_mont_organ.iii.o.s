@@ -4,41 +4,41 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iiibigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_11:
-    .ascii "bigint.iiibigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint.iii\0"
 L_str_12:
-    .ascii "bigint_div.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "bigint_div.iii\0"
 L_str_13:
-    .ascii "fp256.iiifp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "fp256.iii\0"
 L_str_14:
-    .ascii "fp256.iiifp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "fp256.iii\0"
 L_str_15:
-    .ascii "fp256.iiifp256.iiifp256.iiifp256.iii\0"
+    .ascii "fp256.iii\0"
 L_str_16:
-    .ascii "fp256.iiifp256.iiifp256.iii\0"
+    .ascii "fp256.iii\0"
 L_str_17:
-    .ascii "fp256.iiifp256.iii\0"
+    .ascii "fp256.iii\0"
 L_str_18:
     .ascii "fp256.iii\0"
     .section .data
@@ -48,7 +48,6 @@ L_LCG:
     .section .iii.ring3,"n"
     .asciz "lcg"
     .text
-    .global L_lcg
     .seh_proc L_lcg
 L_lcg:
     pushq %rbp
@@ -90,7 +89,6 @@ L_lcg:
     .section .iii.ring3,"n"
     .asciz "make_p256"
     .text
-    .global L_make_p256
     .seh_proc L_make_p256
 L_make_p256:
     pushq %rbp
@@ -210,7 +208,6 @@ L_make_p256:
     .section .iii.ring3,"n"
     .asciz "load_fp"
     .text
-    .global L_load_fp
     .seh_proc L_load_fp
 L_load_fp:
     pushq %rbp
@@ -284,11 +281,8 @@ L_loop_top_0:
     popq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -355,7 +349,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "read_fp"
     .text
-    .global L_read_fp
     .seh_proc L_read_fp
 L_read_fp:
     pushq %rbp
@@ -449,11 +442,8 @@ L_loop_top_2:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -524,7 +514,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "fp256_rt"
     .text
-    .global L_fp256_rt
     .seh_proc L_fp256_rt
 L_fp256_rt:
     pushq %rbp
@@ -711,7 +700,6 @@ L_fp256_rt:
     .section .iii.ring3,"n"
     .asciz "rand_lt"
     .text
-    .global L_rand_lt
     .seh_proc L_rand_lt
 L_rand_lt:
     pushq %rbp
@@ -858,11 +846,8 @@ main:
     .seh_endprologue
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x16, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $22, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

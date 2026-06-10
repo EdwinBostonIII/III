@@ -4,31 +4,31 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ntt.iiintt.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "ntt.iii\0"
 L_str_1:
-    .ascii "ntt.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "ntt.iii\0"
 L_str_2:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiiarena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "arena.iiiarena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "arena.iii\0"
 L_str_9:
-    .ascii "arena.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "arena.iii\0"
 L_str_10:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_11:
-    .ascii "bigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_12:
-    .ascii "bigint.iiibigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_13:
     .ascii "bigint.iii\0"
     .section .rodata
@@ -71,7 +71,6 @@ L_NB_R2:
     .section .iii.ring3,"n"
     .asciz "nb_mulmod"
     .text
-    .global L_nb_mulmod
     .seh_proc L_nb_mulmod
 L_nb_mulmod:
     pushq %rbp
@@ -118,7 +117,6 @@ L_nb_mulmod:
     .section .iii.ring3,"n"
     .asciz "nb_powmod"
     .text
-    .global L_nb_powmod
     .seh_proc L_nb_powmod
 L_nb_powmod:
     pushq %rbp
@@ -220,11 +218,8 @@ L_if_end_3:
     movq %rax, -40(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -249,7 +244,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "nb_init"
     .text
-    .global L_nb_init
     .seh_proc L_nb_init
 L_nb_init:
     pushq %rbp
@@ -335,7 +329,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "nb_crt2"
     .text
-    .global L_nb_crt2
     .seh_proc L_nb_crt2
 L_nb_crt2:
     pushq %rbp
@@ -455,7 +448,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "nb_pack"
     .text
-    .global L_nb_pack
     .seh_proc L_nb_pack
 L_nb_pack:
     pushq %rbp
@@ -506,11 +498,8 @@ L_loop_top_8:
     movq %rax, -48(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -518,11 +507,7 @@ L_loop_top_8:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
@@ -551,11 +536,8 @@ L_loop_top_8:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -582,11 +564,8 @@ L_loop_top_8:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -613,11 +592,8 @@ L_loop_top_8:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $48, %rax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -663,7 +639,6 @@ L_loop_end_9:
     .section .iii.ring3,"n"
     .asciz "nb_zero"
     .text
-    .global L_nb_zero
     .seh_proc L_nb_zero
 L_nb_zero:
     pushq %rbp
@@ -741,7 +716,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "nb_copy"
     .text
-    .global L_nb_copy
     .seh_proc L_nb_copy
 L_nb_copy:
     pushq %rbp
@@ -831,7 +805,6 @@ L_loop_end_13:
     .section .iii.ring3,"n"
     .asciz "nb_convolve_mod"
     .text
-    .global L_nb_convolve_mod
     .seh_proc L_nb_convolve_mod
 L_nb_convolve_mod:
     pushq %rbp
@@ -1215,21 +1188,15 @@ L_if_end_17:
 L_if_end_19:
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -1263,11 +1230,8 @@ L_loop_top_20:
     jz L_loop_end_21
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -1570,11 +1534,8 @@ L_loop_top_26:
     movq %rax, -168(%rbp)
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
@@ -1584,11 +1545,8 @@ L_loop_top_26:
     pushq %rax
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1701,11 +1659,8 @@ L_loop_top_30:
     movq %rax, -152(%rbp)
     movq -112(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
@@ -1715,11 +1670,8 @@ L_loop_top_30:
     pushq %rax
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1863,7 +1815,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "nb_fill_pattern"
     .text
-    .global L_nb_fill_pattern
     .seh_proc L_nb_fill_pattern
 L_nb_fill_pattern:
     pushq %rbp
@@ -1964,7 +1915,6 @@ L_loop_end_37:
     .section .iii.ring3,"n"
     .asciz "nb_check_size"
     .text
-    .global L_nb_check_size
     .seh_proc L_nb_check_size
 L_nb_check_size:
     pushq %rbp
@@ -2204,11 +2154,8 @@ nb_selftest:
 L_if_end_39:
     movabsq $0x1, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

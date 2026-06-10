@@ -269,7 +269,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "kchain_slot_of"
     .text
-    .global L_kchain_slot_of
     .seh_proc L_kchain_slot_of
 L_kchain_slot_of:
     pushq %rbp

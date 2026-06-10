@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_1:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_2:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_3:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_4:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_5:
-    .ascii "calendar.iiicalendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_6:
-    .ascii "calendar.iiicalendar.iii\0"
+    .ascii "calendar.iii\0"
 L_str_7:
     .ascii "calendar.iii\0"
     .section .iii.ring3,"n"

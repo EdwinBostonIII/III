@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple_metric.iiiripple_metric.iiicongruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_1:
-    .ascii "ripple_metric.iiicongruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_2:
-    .ascii "congruence.iiicongruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_3:
-    .ascii "congruence.iiicongruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_4:
-    .ascii "congruence.iiicongruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_5:
-    .ascii "congruence.iiiripple_loop.iiiripple_loop.iii\0"
+    .ascii "congruence.iii\0"
 L_str_6:
-    .ascii "ripple_loop.iiiripple_loop.iii\0"
+    .ascii "ripple_loop.iii\0"
 L_str_7:
     .ascii "ripple_loop.iii\0"
     .section .bss
@@ -41,7 +41,6 @@ L_C1:
     .section .iii.ring3,"n"
     .asciz "fill32"
     .text
-    .global L_fill32
     .seh_proc L_fill32
 L_fill32:
     pushq %rbp
@@ -112,7 +111,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "setup6"
     .text
-    .global L_setup6
     .seh_proc L_setup6
 L_setup6:
     pushq %rbp

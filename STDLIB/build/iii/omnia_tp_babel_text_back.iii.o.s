@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "tp_btb_emit"
     .text
-    .global L_tp_btb_emit
     .seh_proc L_tp_btb_emit
 L_tp_btb_emit:
     pushq %rbp
@@ -81,13 +80,7 @@ tp_babel_text_back:
     movq %rax, -48(%rbp)
     movq -32(%rbp), %rax
     pushq %rax
-    movq -16(%rbp), %rax
-    pushq %rax
     movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -108,6 +101,35 @@ tp_babel_text_back:
     pushq %rax
     popq %rax
 L_if_end_1:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
     movabsq $0x7b, %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -137,7 +159,7 @@ L_if_end_1:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_2:
+L_loop_top_4:
     movq -40(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -150,7 +172,7 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_3
+    jz L_loop_end_5
     movq -8(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -185,7 +207,7 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -200,7 +222,7 @@ L_loop_top_2:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     movzbq -72(%rbp), %rax
     pushq %rax
     movabsq $0x7d, %rax
@@ -213,7 +235,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -228,7 +250,7 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_9:
     movzbq -72(%rbp), %rax
     pushq %rax
     movabsq $0xa, %rax
@@ -241,7 +263,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -254,7 +276,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x2c, %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -283,56 +305,10 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_13
-    movzbq -72(%rbp), %rax
-    pushq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq L_tp_btb_emit
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_13:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_9:
-    movzbq -72(%rbp), %rax
-    pushq %rax
-    movabsq $0xa, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -372,6 +348,52 @@ L_if_end_9:
     pushq %rax
     popq %rax
 L_if_end_15:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    movzbq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movzbq -72(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_tp_btb_emit
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -385,8 +407,8 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_2
-L_loop_end_3:
+    jmp L_loop_top_4
+L_loop_end_5:
     movabsq $0x7d, %rax
     pushq %rax
     movq -48(%rbp), %rax

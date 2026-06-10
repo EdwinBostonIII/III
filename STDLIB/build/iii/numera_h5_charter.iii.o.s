@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "trit.iiitrit.iiitrit.iiitrit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_1:
-    .ascii "trit.iiitrit.iiitrit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_2:
-    .ascii "trit.iiitrit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_3:
-    .ascii "trit.iiitrit.iii\0"
+    .ascii "trit.iii\0"
 L_str_4:
     .ascii "trit.iii\0"
     .section .rodata
@@ -114,7 +114,7 @@ L_loop_top_0:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -146,7 +146,7 @@ L_loop_top_2:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -694,7 +694,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "h5_canary_holds"
     .text
-    .global L_h5_canary_holds
     .seh_proc L_h5_canary_holds
 L_h5_canary_holds:
     pushq %rbp
@@ -752,7 +751,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "h5_clause_eval"
     .text
-    .global L_h5_clause_eval
     .seh_proc L_h5_clause_eval
 L_h5_clause_eval:
     pushq %rbp
@@ -898,7 +896,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "h5_register"
     .text
-    .global L_h5_register
     .seh_proc L_h5_register
 L_h5_register:
     pushq %rbp
@@ -975,7 +972,7 @@ L_if_end_43:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -991,7 +988,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "h5_seal_verdict"
     .text
-    .global L_h5_seal_verdict
     .seh_proc L_h5_seal_verdict
 L_h5_seal_verdict:
     pushq %rbp

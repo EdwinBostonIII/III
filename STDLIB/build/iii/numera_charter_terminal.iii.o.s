@@ -4,35 +4,35 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiicad.iiicad.iiih1_charter.iiih2_charter.iiih3_charter.iiih4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "cad.iiicad.iiih1_charter.iiih2_charter.iiih3_charter.iiih4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cad.iiih1_charter.iiih2_charter.iiih3_charter.iiih4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "h1_charter.iiih2_charter.iiih3_charter.iiih4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h1_charter.iii\0"
 L_str_4:
-    .ascii "h2_charter.iiih3_charter.iiih4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h2_charter.iii\0"
 L_str_5:
-    .ascii "h3_charter.iiih4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h3_charter.iii\0"
 L_str_6:
-    .ascii "h4_charter.iiih5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h4_charter.iii\0"
 L_str_7:
-    .ascii "h5_charter.iiih6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h5_charter.iii\0"
 L_str_8:
-    .ascii "h6_charter.iiih7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h6_charter.iii\0"
 L_str_9:
-    .ascii "h7_charter.iiih8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h7_charter.iii\0"
 L_str_10:
-    .ascii "h8_charter.iiih9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h8_charter.iii\0"
 L_str_11:
-    .ascii "h9_charter.iiih10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h9_charter.iii\0"
 L_str_12:
-    .ascii "h10_charter.iiih11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h10_charter.iii\0"
 L_str_13:
-    .ascii "h11_charter.iiih12_charter.iiih13_charter.iii\0"
+    .ascii "h11_charter.iii\0"
 L_str_14:
-    .ascii "h12_charter.iiih13_charter.iii\0"
+    .ascii "h12_charter.iii\0"
 L_str_15:
     .ascii "h13_charter.iii\0"
     .section .rodata
@@ -137,7 +137,6 @@ ct_init:
     .section .iii.ring3,"n"
     .asciz "ct_pass"
     .text
-    .global L_ct_pass
     .seh_proc L_ct_pass
 L_ct_pass:
     pushq %rbp
@@ -187,7 +186,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "ct_invariant_holds"
     .text
-    .global L_ct_invariant_holds
     .seh_proc L_ct_invariant_holds
 L_ct_invariant_holds:
     pushq %rbp
@@ -617,7 +615,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "ct_canary_holds"
     .text
-    .global L_ct_canary_holds
     .seh_proc L_ct_canary_holds
 L_ct_canary_holds:
     pushq %rbp
@@ -668,7 +665,6 @@ L_if_end_29:
     .section .iii.ring3,"n"
     .asciz "ct_clause_eval"
     .text
-    .global L_ct_clause_eval
     .seh_proc L_ct_clause_eval
 L_ct_clause_eval:
     pushq %rbp
@@ -745,7 +741,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "ct_register"
     .text
-    .global L_ct_register
     .seh_proc L_ct_register
 L_ct_register:
     pushq %rbp
@@ -824,11 +819,8 @@ L_if_end_33:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -870,7 +862,7 @@ L_if_end_33:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -886,7 +878,6 @@ L_if_end_33:
     .section .iii.ring3,"n"
     .asciz "ct_seal_verdict"
     .text
-    .global L_ct_seal_verdict
     .seh_proc L_ct_seal_verdict
 L_ct_seal_verdict:
     pushq %rbp
@@ -934,11 +925,8 @@ L_ct_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -959,11 +947,8 @@ L_ct_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -984,11 +969,8 @@ L_ct_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1005,11 +987,8 @@ L_ct_seal_verdict:
     movb %dl, (%rax,%rcx,1)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -1116,7 +1095,6 @@ L_loop_end_35:
     .section .iii.ring3,"n"
     .asciz "ct_register_all"
     .text
-    .global L_ct_register_all
     .seh_proc L_ct_register_all
 L_ct_register_all:
     pushq %rbp
@@ -1164,7 +1142,7 @@ L_loop_top_36:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1207,7 +1185,7 @@ L_loop_end_37:
     movl L_CT_INVARIANTS(%rip), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

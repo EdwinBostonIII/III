@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "call_context.iiicall_context.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_1:
-    .ascii "call_context.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_2:
     .ascii "kchain.iii\0"
     .section .rodata
@@ -17,7 +17,6 @@ L_C264_K_LOW:
     .section .iii.ring3,"n"
     .asciz "_leaf_low_k"
     .text
-    .global L__leaf_low_k
     .seh_proc L__leaf_low_k
 L__leaf_low_k:
     pushq %rbp
@@ -65,7 +64,6 @@ L_kmax_ok_805306387:
     .section .iii.ring3,"n"
     .asciz "_outer_high_k"
     .text
-    .global L__outer_high_k
     .seh_proc L__outer_high_k
 L__outer_high_k:
     pushq %rbp

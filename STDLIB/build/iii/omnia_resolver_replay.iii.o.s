@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "witness.iiipattern_table.iiiresolver_replay.iii\0"
+    .ascii "witness.iii\0"
 L_str_1:
-    .ascii "pattern_table.iiiresolver_replay.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_2:
     .ascii "resolver_replay.iii\0"
     .section .data

@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_form.iiipattern.iiipattern.iiipattern.iiihexad=6,ring=2\0"
+    .ascii "pattern_form.iii\0"
 L_str_1:
-    .ascii "pattern.iiipattern.iiipattern.iiihexad=6,ring=2\0"
+    .ascii "pattern.iii\0"
 L_str_2:
-    .ascii "pattern.iiipattern.iiihexad=6,ring=2\0"
+    .ascii "pattern.iii\0"
 L_str_3:
-    .ascii "pattern.iiihexad=6,ring=2\0"
+    .ascii "pattern.iii\0"
 L_str_4:
     .ascii "hexad=6,ring=2\0"
     .section .bss
@@ -23,7 +23,6 @@ L_PFBUF2:
     .section .iii.ring3,"n"
     .asciz "buf_eq"
     .text
-    .global L_buf_eq
     .seh_proc L_buf_eq
 L_buf_eq:
     pushq %rbp

@@ -4,33 +4,33 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiivec.iiivec.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiivec.iiivec.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "vec.iiivec.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "vec.iii\0"
 L_str_3:
-    .ascii "vec.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "vec.iii\0"
 L_str_4:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_5:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_6:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_7:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_8:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_9:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_10:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_11:
-    .ascii "async.iiiasync.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_12:
-    .ascii "async.iiiasync.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_13:
-    .ascii "async.iiiasync.iii\0"
+    .ascii "async.iii\0"
 L_str_14:
     .ascii "async.iii\0"
     .section .iii.ring3,"n"

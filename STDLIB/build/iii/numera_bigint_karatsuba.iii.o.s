@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_1:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_2:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iiintt_bigint.iii\0"
+    .ascii "bigint.iii\0"
 L_str_11:
     .ascii "ntt_bigint.iii\0"
     .section .rodata
@@ -37,7 +37,6 @@ L_KARA_NTT_THRESHOLD:
     .section .iii.ring3,"n"
     .asciz "kara_slice"
     .text
-    .global L_kara_slice
     .seh_proc L_kara_slice
 L_kara_slice:
     pushq %rbp
@@ -242,7 +241,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "kara_shl_limbs"
     .text
-    .global L_kara_shl_limbs
     .seh_proc L_kara_shl_limbs
 L_kara_shl_limbs:
     pushq %rbp
@@ -1138,11 +1136,8 @@ L_if_end_35:
     movq %rax, -168(%rbp)
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movq -128(%rbp), %rax
     pushq %rax

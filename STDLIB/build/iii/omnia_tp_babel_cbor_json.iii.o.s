@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "tp_bcj_emit"
     .text
-    .global L_tp_bcj_emit
     .seh_proc L_tp_bcj_emit
 L_tp_bcj_emit:
     pushq %rbp
@@ -344,11 +343,8 @@ L_if_end_13:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     movq -88(%rbp), %rax
     pushq %rax
@@ -476,11 +472,8 @@ L_loop_top_18:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
@@ -634,11 +627,8 @@ L_loop_top_24:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
@@ -692,15 +682,15 @@ L_loop_end_25:
     pushq %rax
     popq %rax
 L_if_end_21:
-    movq -56(%rbp), %rax
-    pushq %rax
     movq -64(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    movq -16(%rbp), %rax
+    subq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax

@@ -4,55 +4,55 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_1:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_2:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_rule_patterns.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_3:
-    .ascii "xii_rule_patterns.iiixii_rule_patterns.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_4:
-    .ascii "xii_rule_patterns.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_5:
-    .ascii "xii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_critpair_enum.iii\0"
 L_str_6:
-    .ascii "xii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_critpair_enum.iii\0"
 L_str_7:
-    .ascii "xii_critpair_enum.iiixii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_critpair_enum.iii\0"
 L_str_8:
-    .ascii "xii_critpair_enum.iiixii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_critpair_enum.iii\0"
 L_str_9:
-    .ascii "xii_critpair_enum.iiixii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_critpair_enum.iii\0"
 L_str_10:
-    .ascii "xii_rule_overlap.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rule_overlap.iii\0"
 L_str_11:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_12:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_13:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_14:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_15:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_16:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_17:
-    .ascii "xii_term.iiixii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_18:
-    .ascii "xii_term.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_19:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_20:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_21:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_22:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_23:
-    .ascii "xii_rewrite.iiixii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_24:
-    .ascii "xii_rewrite.iiixii_canonicalise.iii\0"
+    .ascii "xii_rewrite.iii\0"
 L_str_25:
     .ascii "xii_canonicalise.iii\0"
     .section .rodata
@@ -82,7 +82,6 @@ L_XJN_NJ_P:
     .section .iii.ring3,"n"
     .asciz "_xjn_inst"
     .text
-    .global L__xjn_inst
     .seh_proc L__xjn_inst
 L__xjn_inst:
     pushq %rbp
@@ -490,7 +489,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "_xjn_child_kind"
     .text
-    .global L__xjn_child_kind
     .seh_proc L__xjn_child_kind
 L__xjn_child_kind:
     pushq %rbp
@@ -541,7 +539,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "_xjn_build_witness"
     .text
-    .global L__xjn_build_witness
     .seh_proc L__xjn_build_witness
 L__xjn_build_witness:
     pushq %rbp
@@ -1153,7 +1150,6 @@ L_if_end_35:
     .section .iii.ring3,"n"
     .asciz "_xjn_set_child"
     .text
-    .global L__xjn_set_child
     .seh_proc L__xjn_set_child
 L__xjn_set_child:
     pushq %rbp
@@ -1517,7 +1513,6 @@ L_if_end_45:
     .section .iii.ring3,"n"
     .asciz "_xjn_check_idx"
     .text
-    .global L__xjn_check_idx
     .seh_proc L__xjn_check_idx
 L__xjn_check_idx:
     pushq %rbp
@@ -2252,7 +2247,6 @@ L_if_end_65:
     .section .iii.ring3,"n"
     .asciz "_xjn_in"
     .text
-    .global L__xjn_in
     .seh_proc L__xjn_in
 L__xjn_in:
     pushq %rbp
@@ -2692,7 +2686,6 @@ L_if_end_85:
     .section .iii.ring3,"n"
     .asciz "xjn_check_root_rids"
     .text
-    .global L_xjn_check_root_rids
     .seh_proc L_xjn_check_root_rids
 L_xjn_check_root_rids:
     pushq %rbp

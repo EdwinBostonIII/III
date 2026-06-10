@@ -4,35 +4,35 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcapability.iiicapability.iiireach_core.iiibackend_loopback.iiibackend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcapability.iiicapability.iiireach_core.iiibackend_loopback.iiibackend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "capability.iiicapability.iiireach_core.iiibackend_loopback.iiibackend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "capability.iii\0"
 L_str_3:
-    .ascii "capability.iiireach_core.iiibackend_loopback.iiibackend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
-    .ascii "reach_core.iiibackend_loopback.iiibackend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "reach_core.iii\0"
 L_str_5:
-    .ascii "backend_loopback.iiibackend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "backend_loopback.iii\0"
 L_str_6:
-    .ascii "backend_loopback.iiinet.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "backend_loopback.iii\0"
 L_str_7:
-    .ascii "net.iiinet.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "net.iii\0"
 L_str_8:
-    .ascii "net.iiinet.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "net.iii\0"
 L_str_9:
-    .ascii "net.iiinet.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "net.iii\0"
 L_str_10:
-    .ascii "net.iiinet.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "net.iii\0"
 L_str_11:
-    .ascii "net.iiihex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "net.iii\0"
 L_str_12:
-    .ascii "hex.iiicad.iiicad.iiifs.iii\0"
+    .ascii "hex.iii\0"
 L_str_13:
-    .ascii "cad.iiicad.iiifs.iii\0"
+    .ascii "cad.iii\0"
 L_str_14:
-    .ascii "cad.iiifs.iii\0"
+    .ascii "cad.iii\0"
 L_str_15:
     .ascii "fs.iii\0"
     .section .bss
@@ -51,7 +51,6 @@ L_RESP:
     .section .iii.ring3,"n"
     .asciz "build_get"
     .text
-    .global L_build_get
     .seh_proc L_build_get
 L_build_get:
     pushq %rbp

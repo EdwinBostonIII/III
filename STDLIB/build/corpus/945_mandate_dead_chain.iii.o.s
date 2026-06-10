@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "kchain.iiikchain.iiikchain.iiimandate.iiimandate.iiimandate.iii\0"
+    .ascii "kchain.iii\0"
 L_str_1:
-    .ascii "kchain.iiikchain.iiimandate.iiimandate.iiimandate.iii\0"
+    .ascii "kchain.iii\0"
 L_str_2:
-    .ascii "kchain.iiimandate.iiimandate.iiimandate.iii\0"
+    .ascii "kchain.iii\0"
 L_str_3:
-    .ascii "mandate.iiimandate.iiimandate.iii\0"
+    .ascii "mandate.iii\0"
 L_str_4:
-    .ascii "mandate.iiimandate.iii\0"
+    .ascii "mandate.iii\0"
 L_str_5:
     .ascii "mandate.iii\0"
     .section .iii.ring3,"n"

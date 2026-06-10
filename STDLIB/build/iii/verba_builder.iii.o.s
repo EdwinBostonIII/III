@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiirune.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
     .ascii "rune.iii\0"
     .section .rodata
@@ -318,7 +318,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "builder_slot_of"
     .text
-    .global L_builder_slot_of
     .seh_proc L_builder_slot_of
 L_builder_slot_of:
     pushq %rbp
@@ -439,7 +438,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "builder_grow"
     .text
-    .global L_builder_grow
     .seh_proc L_builder_grow
 L_builder_grow:
     pushq %rbp
@@ -471,6 +469,45 @@ L_builder_grow:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    leaq L_BLD_ERR(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movslq L_BLD_E_OOM(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
     movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -493,7 +530,7 @@ L_builder_grow:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movslq L_BLD_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -503,14 +540,11 @@ L_builder_grow:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -526,7 +560,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movabsq $0x40, %rax
     pushq %rax
     popq %rax
@@ -534,8 +568,8 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
-L_loop_top_22:
+L_if_end_23:
+L_loop_top_24:
     movq -48(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -548,22 +582,19 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_23
+    jz L_loop_end_25
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_22
-L_loop_end_23:
+    jmp L_loop_top_24
+L_loop_end_25:
     leaq L_BLD_ARENA(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -598,7 +629,7 @@ L_loop_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     leaq L_BLD_ERR(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -618,7 +649,7 @@ L_loop_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     leaq L_BLD_BASE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -641,7 +672,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movq -72(%rbp), %rax
     pushq %rax
     popq %rax
@@ -658,7 +689,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-L_loop_top_28:
+L_loop_top_30:
     movq -96(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -671,7 +702,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_29
+    jz L_loop_end_31
     movq -88(%rbp), %rax
     pushq %rax
     movq -96(%rbp), %rax
@@ -701,12 +732,12 @@ L_loop_top_28:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_28
-L_loop_end_29:
+    jmp L_loop_top_30
+L_loop_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     leaq L_BLD_BASE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -777,7 +808,7 @@ builder_push_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -787,7 +818,7 @@ builder_push_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     leaq L_BLD_SEALED(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -806,7 +837,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movslq L_BLD_E_SEALED(%rip), %rax
     pushq %rax
     popq %rax
@@ -816,7 +847,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     movabsq $0x1, %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -842,7 +873,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_37
     movslq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -852,7 +883,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_37:
     leaq L_BLD_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -955,7 +986,7 @@ builder_push_bytes:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -968,7 +999,7 @@ builder_push_bytes:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_41
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -978,7 +1009,7 @@ builder_push_bytes:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_41:
     movslq L_BLD_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -988,7 +1019,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1011,7 +1042,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_43
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1021,7 +1052,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_43:
     leaq L_BLD_SEALED(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1040,7 +1071,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_45
     movslq L_BLD_E_SEALED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1050,7 +1081,7 @@ L_if_end_41:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_45:
     movq -24(%rbp), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1076,7 +1107,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_47
     movslq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1086,7 +1117,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_47:
     leaq L_BLD_BASE(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1123,7 +1154,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_46:
+L_loop_top_48:
     movq -80(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1136,7 +1167,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_47
+    jz L_loop_end_49
     movq -64(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -1172,8 +1203,8 @@ L_loop_top_46:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
+    jmp L_loop_top_48
+L_loop_end_49:
     leaq L_BLD_LEN(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1240,7 +1271,7 @@ builder_push_rune:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_51
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1250,7 +1281,7 @@ builder_push_rune:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_51:
     leaq L_BLD_SEALED(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1269,7 +1300,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_53
     movslq L_BLD_E_SEALED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1279,7 +1310,7 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_53:
     movabsq $0x4, %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1305,7 +1336,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_55
     movslq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1315,7 +1346,7 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_55:
     leaq L_BLD_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1367,7 +1398,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_57
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1377,7 +1408,7 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_57:
     leaq L_BLD_LEN(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1445,7 +1476,7 @@ builder_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_59
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1455,7 +1486,7 @@ builder_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_59:
     leaq L_BLD_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1511,7 +1542,7 @@ builder_capacity:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_61
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1521,7 +1552,7 @@ builder_capacity:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_61:
     leaq L_BLD_CAP(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1577,7 +1608,7 @@ builder_error:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_63
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1587,7 +1618,7 @@ builder_error:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_63:
     leaq L_BLD_ERR(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1643,7 +1674,7 @@ builder_seal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_65
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1653,7 +1684,7 @@ builder_seal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_65:
     leaq L_BLD_SEALED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1719,7 +1750,7 @@ builder_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_65
+    jz L_if_end_67
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1729,7 +1760,7 @@ builder_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_65:
+L_if_end_67:
     leaq L_BLD_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

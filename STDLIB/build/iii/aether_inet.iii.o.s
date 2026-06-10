@@ -46,7 +46,6 @@ inet_last_error:
     .section .iii.ring3,"n"
     .asciz "inet_parse_octet"
     .text
-    .global L_inet_parse_octet
     .seh_proc L_inet_parse_octet
 L_inet_parse_octet:
     pushq %rbp
@@ -830,20 +829,14 @@ L_if_end_41:
 L_if_end_43:
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -852,11 +845,8 @@ L_if_end_43:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -883,7 +873,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "inet_emit_octet"
     .text
-    .global L_inet_emit_octet
     .seh_proc L_inet_emit_octet
 L_inet_emit_octet:
     pushq %rbp
@@ -1328,11 +1317,8 @@ inet_format_ipv4:
     movq %rdx, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1344,11 +1330,8 @@ inet_format_ipv4:
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1360,11 +1343,8 @@ inet_format_ipv4:
     movq %rax, -32(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

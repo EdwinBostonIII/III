@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "source"
     .text
-    .global L_source
     .seh_proc L_source
 L_source:
     pushq %rbp
@@ -34,7 +33,6 @@ L_source:
     .section .iii.ring3,"n"
     .asciz "handler"
     .text
-    .global L_handler
     .seh_proc L_handler
 L_handler:
     # III_SOVEREIGN_AUDIT SOVVAL handler p0

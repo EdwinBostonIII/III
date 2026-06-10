@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "tempaloc.iiitempaloc.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "tempaloc.iii\0"
 L_str_1:
-    .ascii "tempaloc.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "tempaloc.iii\0"
 L_str_2:
-    .ascii "tempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "tempaloc.iii\0"
 L_str_3:
-    .ascii "tempaloc.iiitempaloc.iii\0"
+    .ascii "tempaloc.iii\0"
 L_str_4:
     .ascii "tempaloc.iii\0"
     .section .iii.ring3,"n"

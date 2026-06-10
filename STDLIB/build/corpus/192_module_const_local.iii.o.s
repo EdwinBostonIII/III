@@ -13,7 +13,6 @@ L_C_SMALL:
     .section .iii.ring3,"n"
     .asciz "use_const"
     .text
-    .global L_use_const
     .seh_proc L_use_const
 L_use_const:
     pushq %rbp

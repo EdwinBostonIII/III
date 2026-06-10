@@ -4,39 +4,39 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "instant.iiiinstant.iiiinstant.iiiinstant.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "instant.iii\0"
 L_str_1:
-    .ascii "instant.iiiinstant.iiiinstant.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "instant.iii\0"
 L_str_2:
-    .ascii "instant.iiiinstant.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "instant.iii\0"
 L_str_3:
-    .ascii "instant.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "instant.iii\0"
 L_str_4:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_5:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_6:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_7:
-    .ascii "calendar.iiicalendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_8:
-    .ascii "calendar.iiicalendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_9:
-    .ascii "calendar.iiicalendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_10:
-    .ascii "calendar.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "calendar.iii\0"
 L_str_11:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "sha256.iii\0"
 L_str_12:
-    .ascii "sha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "sha256.iii\0"
 L_str_13:
-    .ascii "sha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "sha256.iii\0"
 L_str_14:
-    .ascii "sha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "sha256.iii\0"
 L_str_15:
-    .ascii "tempaloc.iiitempaloc.iiitempaloc.iii\0"
+    .ascii "tempaloc.iii\0"
 L_str_16:
-    .ascii "tempaloc.iiitempaloc.iii\0"
+    .ascii "tempaloc.iii\0"
 L_str_17:
     .ascii "tempaloc.iii\0"
     .section .rodata
@@ -77,7 +77,6 @@ L_SEAL_DIGEST:
     .section .iii.ring3,"n"
     .asciz "seal_civil_ok"
     .text
-    .global L_seal_civil_ok
     .seh_proc L_seal_civil_ok
 L_seal_civil_ok:
     pushq %rbp
@@ -315,7 +314,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "seal_feed"
     .text
-    .global L_seal_feed
     .seh_proc L_seal_feed
 L_seal_feed:
     pushq %rbp
@@ -432,11 +430,8 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -512,11 +507,8 @@ L_loop_top_18:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1001,11 +993,8 @@ L_if_end_27:
     popq %rax
     movl -88(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1218,11 +1207,8 @@ L_if_end_35:
     popq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1231,6 +1217,10 @@ L_if_end_35:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
 L_loop_top_36:
     movl -40(%rbp), %eax
     pushq %rax
@@ -1261,7 +1251,7 @@ L_loop_top_36:
     movzbq (%rax,%rcx,1), %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
+    movq %rax, -56(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -1277,13 +1267,45 @@ L_loop_top_36:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
-    movzbq -48(%rbp), %rax
+    movq %rax, -64(%rbp)
+    movl -48(%rbp), %eax
+    pushq %rax
+    movzbq -56(%rbp), %rax
     pushq %rax
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movl -56(%rbp), %eax
+    movl -64(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_36
+L_loop_end_37:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1304,22 +1326,6 @@ L_loop_top_36:
     pushq %rax
     popq %rax
 L_if_end_39:
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1409,11 +1415,8 @@ L_if_end_41:
 L_if_end_43:
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax

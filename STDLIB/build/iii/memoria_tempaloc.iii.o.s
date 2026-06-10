@@ -47,7 +47,6 @@ L_TEMPALOC_SLOT:
     .section .iii.ring3,"n"
     .asciz "tempaloc_base_of"
     .text
-    .global L_tempaloc_base_of
     .seh_proc L_tempaloc_base_of
 L_tempaloc_base_of:
     pushq %rbp
@@ -166,7 +165,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "tempaloc_cap_of"
     .text
-    .global L_tempaloc_cap_of
     .seh_proc L_tempaloc_cap_of
 L_tempaloc_cap_of:
     pushq %rbp
@@ -521,11 +519,8 @@ L_if_end_25:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -574,11 +569,8 @@ tempaloc_slot_of:
     movq %rax, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $56, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

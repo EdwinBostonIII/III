@@ -4,45 +4,45 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiimath_library.iiiwitness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiimath_library.iiiwitness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiialgebraic_time.iiimath_library.iiiwitness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiialgebraic_time.iiimath_library.iiiwitness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "algebraic_time.iiimath_library.iiiwitness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "algebraic_time.iii\0"
 L_str_5:
-    .ascii "math_library.iiiwitness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "math_library.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiiconstitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "constitution.iiimath_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "constitution.iii\0"
 L_str_8:
-    .ascii "math_library.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "math_library.iii\0"
 L_str_9:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_10:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_11:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_12:
-    .ascii "proof_term.iiiproof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_13:
-    .ascii "proof_term.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_term.iii\0"
 L_str_14:
-    .ascii "theorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "theorem_carrier.iii\0"
 L_str_15:
-    .ascii "theorem_carrier.iiitheorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "theorem_carrier.iii\0"
 L_str_16:
-    .ascii "theorem_carrier.iiitheorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "theorem_carrier.iii\0"
 L_str_17:
-    .ascii "theorem_carrier.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "theorem_carrier.iii\0"
 L_str_18:
-    .ascii "caindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_19:
-    .ascii "caindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_20:
     .ascii "caindex.iii\0"
     .section .rodata
@@ -274,7 +274,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "curate_find"
     .text
-    .global L_curate_find
     .seh_proc L_curate_find
 L_curate_find:
     pushq %rbp
@@ -788,11 +787,8 @@ L_loop_end_27:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -835,11 +831,8 @@ L_loop_end_27:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -867,11 +860,8 @@ L_loop_end_27:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1104,11 +1094,8 @@ L_if_end_35:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1124,11 +1111,8 @@ L_if_end_35:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1534,7 +1518,6 @@ L_if_end_53:
     .section .iii.ring3,"n"
     .asciz "mlcur_kat_finalize"
     .text
-    .global L_mlcur_kat_finalize
     .seh_proc L_mlcur_kat_finalize
 L_mlcur_kat_finalize:
     pushq %rbp

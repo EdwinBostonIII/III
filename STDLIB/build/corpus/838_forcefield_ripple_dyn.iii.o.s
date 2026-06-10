@@ -4,33 +4,32 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtcrypt_ed25519.iiicrypt_ed25519.iiiripple.iiiripple.iiiripple.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iiiripple.iiiripple.iiiripple.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_2:
-    .ascii "crypt_ed25519.iiiripple.iiiripple.iiiripple.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_3:
-    .ascii "ripple.iiiripple.iiiripple.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple.iii\0"
 L_str_4:
-    .ascii "ripple.iiiripple.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple.iii\0"
 L_str_5:
-    .ascii "ripple.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple.iii\0"
 L_str_6:
-    .ascii "ripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple_dyn.iii\0"
 L_str_7:
-    .ascii "ripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple_dyn.iii\0"
 L_str_8:
-    .ascii "ripple_dyn.iiiripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple_dyn.iii\0"
 L_str_9:
-    .ascii "ripple_dyn.iiiripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple_dyn.iii\0"
 L_str_10:
-    .ascii "ripple_dyn.iiiripple_dyn.iii\0"
+    .ascii "ripple_dyn.iii\0"
 L_str_11:
     .ascii "ripple_dyn.iii\0"
     .section .iii.ring3,"n"
     .asciz "kfill"
     .text
-    .global L_kfill
     .seh_proc L_kfill
 L_kfill:
     pushq %rbp
@@ -124,7 +123,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "keqn"
     .text
-    .global L_keqn
     .seh_proc L_keqn
 L_keqn:
     pushq %rbp
@@ -238,7 +236,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "kcopy"
     .text
-    .global L_kcopy
     .seh_proc L_kcopy
 L_kcopy:
     pushq %rbp
@@ -331,7 +328,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "ksign"
     .text
-    .global L_ksign
     .seh_proc L_ksign
 L_ksign:
     pushq %rbp
@@ -504,11 +500,8 @@ main:
     movq %rax, -40(%rbp)
     movabsq $0x40, %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

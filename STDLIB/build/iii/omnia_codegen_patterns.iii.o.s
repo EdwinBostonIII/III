@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_1:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_2:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_3:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_4:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_5:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_6:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_7:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_8:
-    .ascii "pattern.iiipattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_9:
-    .ascii "pattern.iiipattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_10:
-    .ascii "pattern.iiipattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern.iii\0"
 L_str_11:
-    .ascii "pattern_table.iiicodegen_dispatch.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_12:
     .ascii "codegen_dispatch.iii\0"
     .section .rodata
@@ -51,7 +51,6 @@ L_CG_REG_FAIL:
     .section .iii.ring3,"n"
     .asciz "_cg_register"
     .text
-    .global L__cg_register
     .seh_proc L__cg_register
 L__cg_register:
     pushq %rbp

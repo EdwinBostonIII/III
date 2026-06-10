@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bench_helpersbench_helpersbench_helpersbench_helpers\0"
+    .ascii "bench_helpers\0"
 L_str_1:
-    .ascii "bench_helpersbench_helpersbench_helpers\0"
+    .ascii "bench_helpers\0"
 L_str_2:
-    .ascii "bench_helpersbench_helpers\0"
+    .ascii "bench_helpers\0"
 L_str_3:
     .ascii "bench_helpers\0"
     .section .iii.ring3,"n"

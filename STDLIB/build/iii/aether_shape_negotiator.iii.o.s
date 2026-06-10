@@ -4,33 +4,33 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiisat.iiisat.iiisat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiisat.iiisat.iiisat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiisat.iiisat.iiisat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiisat.iiisat.iiisat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "sat.iiisat.iiisat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "sat.iii\0"
 L_str_5:
-    .ascii "sat.iiisat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "sat.iii\0"
 L_str_6:
-    .ascii "sat.iiisat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "sat.iii\0"
 L_str_7:
-    .ascii "sat.iiicapability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "sat.iii\0"
 L_str_8:
-    .ascii "capability.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_9:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_10:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_11:
-    .ascii "witness_hook.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_12:
-    .ascii "witness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_13:
-    .ascii "capability.iiicapability.iii\0"
+    .ascii "capability.iii\0"
 L_str_14:
     .ascii "capability.iii\0"
     .section .rodata
@@ -163,7 +163,6 @@ L_SHAPEN_T_IDB:
     .section .iii.ring3,"n"
     .asciz "sn_build_tags"
     .text
-    .global L_sn_build_tags
     .seh_proc L_sn_build_tags
 L_sn_build_tags:
     pushq %rbp
@@ -497,7 +496,6 @@ L_sn_build_tags:
     .section .iii.ring3,"n"
     .asciz "sn_val_ptr"
     .text
-    .global L_sn_val_ptr
     .seh_proc L_sn_val_ptr
 L_sn_val_ptr:
     pushq %rbp
@@ -522,11 +520,8 @@ L_sn_val_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -548,7 +543,6 @@ L_sn_val_ptr:
     .section .iii.ring3,"n"
     .asciz "sn_op_ptr"
     .text
-    .global L_sn_op_ptr
     .seh_proc L_sn_op_ptr
 L_sn_op_ptr:
     pushq %rbp
@@ -573,11 +567,8 @@ L_sn_op_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -599,7 +590,6 @@ L_sn_op_ptr:
     .section .iii.ring3,"n"
     .asciz "sn_active"
     .text
-    .global L_sn_active
     .seh_proc L_sn_active
 L_sn_active:
     pushq %rbp
@@ -684,7 +674,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "sn_encode_and_solve"
     .text
-    .global L_sn_encode_and_solve
     .seh_proc L_sn_encode_and_solve
 L_sn_encode_and_solve:
     pushq %rbp
@@ -825,11 +814,8 @@ L_loop_top_4:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -853,11 +839,8 @@ L_loop_top_4:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -959,11 +942,8 @@ L_loop_top_10:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -1019,7 +999,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "sn_peel_consider"
     .text
-    .global L_sn_peel_consider
     .seh_proc L_sn_peel_consider
 L_sn_peel_consider:
     pushq %rbp
@@ -1117,7 +1096,6 @@ L_if_end_17:
     .section .iii.ring3,"n"
     .asciz "sn_peel_target"
     .text
-    .global L_sn_peel_target
     .seh_proc L_sn_peel_target
 L_sn_peel_target:
     pushq %rbp
@@ -1300,7 +1278,6 @@ L_loop_end_19:
     .section .iii.ring3,"n"
     .asciz "sn_read_model"
     .text
-    .global L_sn_read_model
     .seh_proc L_sn_read_model
 L_sn_read_model:
     pushq %rbp
@@ -1454,7 +1431,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "sn_publish_and_count"
     .text
-    .global L_sn_publish_and_count
     .seh_proc L_sn_publish_and_count
 L_sn_publish_and_count:
     pushq %rbp
@@ -1617,11 +1593,8 @@ L_loop_end_33:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1642,11 +1615,8 @@ L_loop_end_33:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1667,11 +1637,8 @@ L_loop_end_33:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1743,7 +1710,7 @@ L_loop_end_33:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -3139,11 +3106,8 @@ L_loop_top_96:
     movq %rax, -56(%rbp)
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -3221,11 +3185,8 @@ L_loop_end_97:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -3254,7 +3215,6 @@ L_loop_end_97:
     .section .iii.ring3,"n"
     .asciz "sn_st_fill"
     .text
-    .global L_sn_st_fill
     .seh_proc L_sn_st_fill
 L_sn_st_fill:
     pushq %rbp
@@ -3331,7 +3291,6 @@ L_loop_end_101:
     .section .iii.ring3,"n"
     .asciz "sn_st_k1"
     .text
-    .global L_sn_st_k1
     .seh_proc L_sn_st_k1
 L_sn_st_k1:
     pushq %rbp
@@ -3632,7 +3591,6 @@ L_if_end_109:
     .section .iii.ring3,"n"
     .asciz "sn_st_k2"
     .text
-    .global L_sn_st_k2
     .seh_proc L_sn_st_k2
 L_sn_st_k2:
     pushq %rbp
@@ -3885,7 +3843,6 @@ L_if_end_117:
     .section .iii.ring3,"n"
     .asciz "sn_st_k3"
     .text
-    .global L_sn_st_k3
     .seh_proc L_sn_st_k3
 L_sn_st_k3:
     pushq %rbp
@@ -4195,7 +4152,6 @@ L_if_end_123:
     .section .iii.ring3,"n"
     .asciz "sn_st_k4"
     .text
-    .global L_sn_st_k4
     .seh_proc L_sn_st_k4
 L_sn_st_k4:
     pushq %rbp

@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_1:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_2:
-    .ascii "cycle_term.iiicycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_3:
-    .ascii "cycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_4:
-    .ascii "cycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_admit.iii\0"
 L_str_5:
     .ascii "cycle_family.iii\0"
     .section .rodata

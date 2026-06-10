@@ -20,7 +20,6 @@ L_CRC32_STATE:
     .section .iii.ring3,"n"
     .asciz "crc32_init_table"
     .text
-    .global L_crc32_init_table
     .seh_proc L_crc32_init_table
 L_crc32_init_table:
     pushq %rbp
@@ -114,11 +113,8 @@ L_loop_top_4:
     jz L_if_else_6
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movl L_CRC32_POLY_REV(%rip), %eax
     pushq %rax
@@ -135,11 +131,8 @@ L_loop_top_4:
 L_if_else_6:
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -209,11 +202,8 @@ L_loop_top_8:
     jz L_loop_end_9
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -227,11 +217,8 @@ L_loop_top_8:
     subq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -294,11 +281,8 @@ L_loop_top_10:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     leaq L_CRC32_TAB8(%rip), %rax
     pushq %rax
@@ -422,6 +406,31 @@ crc32_update:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
     movl L_CRC32_STATE(%rip), %eax
     pushq %rax
     popq %rax
@@ -430,7 +439,7 @@ crc32_update:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_12:
+L_loop_top_14:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -449,16 +458,12 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_15
     movq -8(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -530,11 +535,8 @@ L_loop_top_12:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -543,11 +545,8 @@ L_loop_top_12:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -556,11 +555,8 @@ L_loop_top_12:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -591,11 +587,8 @@ L_loop_top_12:
     movq %rax, -88(%rbp)
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -607,11 +600,8 @@ L_loop_top_12:
     movq %rax, -96(%rbp)
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -623,11 +613,8 @@ L_loop_top_12:
     movq %rax, -104(%rbp)
     movl -80(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -894,9 +881,9 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
-L_loop_top_14:
+    jmp L_loop_top_14
+L_loop_end_15:
+L_loop_top_16:
     movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -909,7 +896,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_17
     movq -8(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -941,11 +928,8 @@ L_loop_top_14:
     movq %rax, -48(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     leaq L_CRC32_TAB8(%rip), %rax
     pushq %rax
@@ -974,8 +958,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_16
+L_loop_end_17:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax

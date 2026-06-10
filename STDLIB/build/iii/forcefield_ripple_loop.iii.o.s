@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "congruence.iiicongruence.iiiproof_ripple_unified.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "congruence.iii\0"
 L_str_1:
-    .ascii "congruence.iiiproof_ripple_unified.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "congruence.iii\0"
 L_str_2:
-    .ascii "proof_ripple_unified.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_ripple_unified.iii\0"
 L_str_3:
-    .ascii "commit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_4:
-    .ascii "ripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "ripple_metric.iii\0"
 L_str_5:
-    .ascii "caindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_6:
-    .ascii "caindex.iiicaindex.iii\0"
+    .ascii "caindex.iii\0"
 L_str_7:
     .ascii "caindex.iii\0"
     .section .rodata
@@ -159,6 +159,30 @@ L_loop_top_2:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -72(%rbp)
+    movslq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
     movq -48(%rbp), %rax
     pushq %rax
     movq L_RL_CAI_MASK(%rip), %rax
@@ -177,8 +201,8 @@ L_loop_top_2:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
-    movl -72(%rbp), %eax
+    movq %rax, -80(%rbp)
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -190,7 +214,7 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_4
+    jz L_if_else_6
     subq $8, %rsp
     movl -64(%rbp), %eax
     pushq %rax
@@ -214,11 +238,35 @@ L_loop_top_2:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -88(%rbp)
+    movslq -88(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_5
-L_if_else_4:
+L_if_end_9:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_if_end_7
+L_if_else_6:
     movl -64(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -228,7 +276,7 @@ L_if_else_4:
     movl %eax, %eax
     pushq %rax
     subq $8, %rsp
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -245,17 +293,17 @@ L_if_else_4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_11
     subq $8, %rsp
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
@@ -282,7 +330,7 @@ L_if_else_4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_13
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -297,15 +345,15 @@ L_if_else_4:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_13:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
 L_if_end_7:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_5:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax

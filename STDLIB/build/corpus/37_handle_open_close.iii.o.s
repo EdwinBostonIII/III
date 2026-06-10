@@ -4,22 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiicapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "capability.iii\0"
 L_str_1:
-    .ascii "capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "handle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_3:
-    .ascii "handle.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_4:
-    .ascii "handle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_5:
-    .ascii "handle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_6:
-    .ascii "handle.iiihandle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_7:
-    .ascii "handle.iiihandle.iii\0"
+    .ascii "handle.iii\0"
 L_str_8:
+    .ascii "handle.iii\0"
+L_str_9:
     .ascii "handle.iii\0"
     .section .iii.ring3,"n"
     .asciz "main"
@@ -215,6 +217,34 @@ L_if_end_9:
     pushq %rax
     popq %rcx
     subq $32, %rsp
+    callq handle_cap
+    addq $32, %rsp
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
     callq handle_close
     addq $32, %rsp
     movslq %eax, %rax
@@ -238,7 +268,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -248,7 +278,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movabsq $0x2, %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -270,7 +300,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -280,7 +310,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx

@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hdl.iiihdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_1:
-    .ascii "hdl.iiihdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_2:
-    .ascii "hdl.iiihdl.iii\0"
+    .ascii "hdl.iii\0"
 L_str_3:
     .ascii "hdl.iii\0"
     .section .rodata
@@ -25,7 +25,6 @@ L_HGD_NAND:
     .section .iii.ring3,"n"
     .asciz "hgd_double_neg"
     .text
-    .global L_hgd_double_neg
     .seh_proc L_hgd_double_neg
 L_hgd_double_neg:
     pushq %rbp
@@ -110,7 +109,6 @@ L_hgd_double_neg:
     .section .iii.ring3,"n"
     .asciz "hgd_and_idem"
     .text
-    .global L_hgd_and_idem
     .seh_proc L_hgd_and_idem
 L_hgd_and_idem:
     pushq %rbp
@@ -179,7 +177,6 @@ L_hgd_and_idem:
     .section .iii.ring3,"n"
     .asciz "hgd_or_idem"
     .text
-    .global L_hgd_or_idem
     .seh_proc L_hgd_or_idem
 L_hgd_or_idem:
     pushq %rbp
@@ -248,7 +245,6 @@ L_hgd_or_idem:
     .section .iii.ring3,"n"
     .asciz "hgd_demorgan_and"
     .text
-    .global L_hgd_demorgan_and
     .seh_proc L_hgd_demorgan_and
 L_hgd_demorgan_and:
     pushq %rbp
@@ -389,7 +385,6 @@ L_hgd_demorgan_and:
     .section .iii.ring3,"n"
     .asciz "hgd_demorgan_or"
     .text
-    .global L_hgd_demorgan_or
     .seh_proc L_hgd_demorgan_or
 L_hgd_demorgan_or:
     pushq %rbp
@@ -530,7 +525,6 @@ L_hgd_demorgan_or:
     .section .iii.ring3,"n"
     .asciz "hgd_absorb_or"
     .text
-    .global L_hgd_absorb_or
     .seh_proc L_hgd_absorb_or
 L_hgd_absorb_or:
     pushq %rbp
@@ -625,7 +619,6 @@ L_hgd_absorb_or:
     .section .iii.ring3,"n"
     .asciz "hgd_absorb_and"
     .text
-    .global L_hgd_absorb_and
     .seh_proc L_hgd_absorb_and
 L_hgd_absorb_and:
     pushq %rbp
@@ -720,7 +713,6 @@ L_hgd_absorb_and:
     .section .iii.ring3,"n"
     .asciz "hgd_nand_def"
     .text
-    .global L_hgd_nand_def
     .seh_proc L_hgd_nand_def
 L_hgd_nand_def:
     pushq %rbp
@@ -829,7 +821,6 @@ L_hgd_nand_def:
     .section .iii.ring3,"n"
     .asciz "hgd_xor_sop"
     .text
-    .global L_hgd_xor_sop
     .seh_proc L_hgd_xor_sop
 L_hgd_xor_sop:
     pushq %rbp
@@ -988,7 +979,6 @@ L_hgd_xor_sop:
     .section .iii.ring3,"n"
     .asciz "hgd_and_comm"
     .text
-    .global L_hgd_and_comm
     .seh_proc L_hgd_and_comm
 L_hgd_and_comm:
     pushq %rbp
@@ -1083,7 +1073,6 @@ L_hgd_and_comm:
     .section .iii.ring3,"n"
     .asciz "hgd_or_comm"
     .text
-    .global L_hgd_or_comm
     .seh_proc L_hgd_or_comm
 L_hgd_or_comm:
     pushq %rbp
@@ -1178,7 +1167,6 @@ L_hgd_or_comm:
     .section .iii.ring3,"n"
     .asciz "hgd_xor_comm"
     .text
-    .global L_hgd_xor_comm
     .seh_proc L_hgd_xor_comm
 L_hgd_xor_comm:
     pushq %rbp
@@ -1273,7 +1261,6 @@ L_hgd_xor_comm:
     .section .iii.ring3,"n"
     .asciz "hgd_complement_and"
     .text
-    .global L_hgd_complement_and
     .seh_proc L_hgd_complement_and
 L_hgd_complement_and:
     pushq %rbp
@@ -1374,7 +1361,6 @@ L_hgd_complement_and:
     .section .iii.ring3,"n"
     .asciz "hgd_complement_or"
     .text
-    .global L_hgd_complement_or
     .seh_proc L_hgd_complement_or
 L_hgd_complement_or:
     pushq %rbp
@@ -1491,7 +1477,6 @@ L_hgd_complement_or:
     .section .iii.ring3,"n"
     .asciz "hgd_assoc_and"
     .text
-    .global L_hgd_assoc_and
     .seh_proc L_hgd_assoc_and
 L_hgd_assoc_and:
     pushq %rbp
@@ -1622,7 +1607,6 @@ L_hgd_assoc_and:
     .section .iii.ring3,"n"
     .asciz "hgd_assoc_or"
     .text
-    .global L_hgd_assoc_or
     .seh_proc L_hgd_assoc_or
 L_hgd_assoc_or:
     pushq %rbp
@@ -1753,7 +1737,6 @@ L_hgd_assoc_or:
     .section .iii.ring3,"n"
     .asciz "hgd_distrib_and_or"
     .text
-    .global L_hgd_distrib_and_or
     .seh_proc L_hgd_distrib_and_or
 L_hgd_distrib_and_or:
     pushq %rbp
@@ -1902,7 +1885,6 @@ L_hgd_distrib_and_or:
     .section .iii.ring3,"n"
     .asciz "hgd_distrib_or_and"
     .text
-    .global L_hgd_distrib_or_and
     .seh_proc L_hgd_distrib_or_and
 L_hgd_distrib_or_and:
     pushq %rbp
@@ -2051,7 +2033,6 @@ L_hgd_distrib_or_and:
     .section .iii.ring3,"n"
     .asciz "hgd_xor_assoc"
     .text
-    .global L_hgd_xor_assoc
     .seh_proc L_hgd_xor_assoc
 L_hgd_xor_assoc:
     pushq %rbp
@@ -2182,7 +2163,6 @@ L_hgd_xor_assoc:
     .section .iii.ring3,"n"
     .asciz "hgd_nand_demorgan"
     .text
-    .global L_hgd_nand_demorgan
     .seh_proc L_hgd_nand_demorgan
 L_hgd_nand_demorgan:
     pushq %rbp
@@ -2309,7 +2289,6 @@ L_hgd_nand_demorgan:
     .section .iii.ring3,"n"
     .asciz "hgd_xor_nand_or"
     .text
-    .global L_hgd_xor_nand_or
     .seh_proc L_hgd_xor_nand_or
 L_hgd_xor_nand_or:
     pushq %rbp
@@ -3008,7 +2987,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "hgd_false_rejected"
     .text
-    .global L_hgd_false_rejected
     .seh_proc L_hgd_false_rejected
 L_hgd_false_rejected:
     pushq %rbp
@@ -3103,7 +3081,6 @@ L_hgd_false_rejected:
     .section .iii.ring3,"n"
     .asciz "hgd_false_distrib"
     .text
-    .global L_hgd_false_distrib
     .seh_proc L_hgd_false_distrib
 L_hgd_false_distrib:
     pushq %rbp

@@ -4,21 +4,20 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtchacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtchacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "chacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20_poly1305.iii\0"
 L_str_3:
-    .ascii "chacha20_poly1305.iiichacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20_poly1305.iii\0"
 L_str_4:
-    .ascii "chacha20_poly1305.iiichacha20_poly1305.iii\0"
+    .ascii "chacha20_poly1305.iii\0"
 L_str_5:
     .ascii "chacha20_poly1305.iii\0"
     .section .iii.ring3,"n"
     .asciz "fill_key"
     .text
-    .global L_fill_key
     .seh_proc L_fill_key
 L_fill_key:
     pushq %rbp
@@ -97,7 +96,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "fill_nonce"
     .text
-    .global L_fill_nonce
     .seh_proc L_fill_nonce
 L_fill_nonce:
     pushq %rbp
@@ -244,7 +242,6 @@ L_fill_nonce:
     .section .iii.ring3,"n"
     .asciz "fill_aad"
     .text
-    .global L_fill_aad
     .seh_proc L_fill_aad
 L_fill_aad:
     pushq %rbp
@@ -391,7 +388,6 @@ L_fill_aad:
     .section .iii.ring3,"n"
     .asciz "fill_pt"
     .text
-    .global L_fill_pt
     .seh_proc L_fill_pt
 L_fill_pt:
     pushq %rbp
@@ -1558,7 +1554,6 @@ L_fill_pt:
     .section .iii.ring3,"n"
     .asciz "check_ct_anchors"
     .text
-    .global L_check_ct_anchors
     .seh_proc L_check_ct_anchors
 L_check_ct_anchors:
     pushq %rbp
@@ -1933,7 +1928,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "check_tag"
     .text
-    .global L_check_tag
     .seh_proc L_check_tag
 L_check_tag:
     pushq %rbp

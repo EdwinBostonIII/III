@@ -82,11 +82,8 @@ xii_chd_set_hash:
 L_if_end_1:
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -123,11 +120,8 @@ L_if_end_1:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -155,11 +149,8 @@ L_if_end_1:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -187,11 +178,8 @@ L_if_end_1:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -238,11 +226,8 @@ L_if_end_1:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -270,11 +255,8 @@ L_if_end_1:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -302,11 +284,8 @@ L_if_end_1:
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -337,7 +316,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "_read_hash_lo"
     .text
-    .global L__read_hash_lo
     .seh_proc L__read_hash_lo
 L__read_hash_lo:
     pushq %rbp
@@ -350,11 +328,8 @@ L__read_hash_lo:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -436,11 +411,8 @@ L__read_hash_lo:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -449,11 +421,8 @@ L__read_hash_lo:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -462,11 +431,8 @@ L__read_hash_lo:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -487,7 +453,6 @@ L__read_hash_lo:
     .section .iii.ring3,"n"
     .asciz "_read_hash_hi"
     .text
-    .global L__read_hash_hi
     .seh_proc L__read_hash_hi
 L__read_hash_hi:
     pushq %rbp
@@ -500,11 +465,8 @@ L__read_hash_hi:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -586,11 +548,8 @@ L__read_hash_hi:
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -599,11 +558,8 @@ L__read_hash_hi:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -612,11 +568,8 @@ L__read_hash_hi:
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -637,7 +590,6 @@ L__read_hash_hi:
     .section .iii.ring3,"n"
     .asciz "_bucket_for_hash"
     .text
-    .global L__bucket_for_hash
     .seh_proc L__bucket_for_hash
 L__bucket_for_hash:
     pushq %rbp
@@ -672,7 +624,6 @@ L__bucket_for_hash:
     .section .iii.ring3,"n"
     .asciz "_bucket_push"
     .text
-    .global L__bucket_push
     .seh_proc L__bucket_push
 L__bucket_push:
     pushq %rbp
@@ -786,7 +737,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "_bucket_at"
     .text
-    .global L__bucket_at
     .seh_proc L__bucket_at
 L__bucket_at:
     pushq %rbp
@@ -838,7 +788,6 @@ L__bucket_at:
     .section .iii.ring3,"n"
     .asciz "_sort_buckets_desc"
     .text
-    .global L__sort_buckets_desc
     .seh_proc L__sort_buckets_desc
 L__sort_buckets_desc:
     pushq %rbp
@@ -1153,7 +1102,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "_secondary_idx"
     .text
-    .global L__secondary_idx
     .seh_proc L__secondary_idx
 L__secondary_idx:
     pushq %rbp

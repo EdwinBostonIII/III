@@ -4,27 +4,27 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiicapability.iiiconstitution.iiibranch_anchor.iiibranch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiicapability.iiiconstitution.iiibranch_anchor.iiibranch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiicapability.iiiconstitution.iiibranch_anchor.iiibranch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "capability.iiiconstitution.iiibranch_anchor.iiibranch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
-    .ascii "constitution.iiibranch_anchor.iiibranch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "constitution.iii\0"
 L_str_5:
-    .ascii "branch_anchor.iiibranch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "branch_anchor.iii\0"
 L_str_6:
-    .ascii "branch_anchor.iiibranch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "branch_anchor.iii\0"
 L_str_7:
-    .ascii "branch_anchor.iiiwitness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "branch_anchor.iii\0"
 L_str_8:
-    .ascii "witness_hook.iiicapability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_9:
-    .ascii "capability.iiicapability.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_10:
-    .ascii "capability.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_11:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -88,7 +88,6 @@ L_BGOV_T_REQ:
     .section .iii.ring3,"n"
     .asciz "_bgov_fill_label"
     .text
-    .global L__bgov_fill_label
     .seh_proc L__bgov_fill_label
 L__bgov_fill_label:
     pushq %rbp
@@ -377,7 +376,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "_bgov_check_clause"
     .text
-    .global L__bgov_check_clause
     .seh_proc L__bgov_check_clause
 L__bgov_check_clause:
     pushq %rbp
@@ -468,7 +466,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_bgov_emit_governance"
     .text
-    .global L__bgov_emit_governance
     .seh_proc L__bgov_emit_governance
 L__bgov_emit_governance:
     pushq %rbp

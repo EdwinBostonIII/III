@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
-    .ascii "mhash.iiipattern_table.iiipattern_table.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
-    .ascii "pattern_table.iiipattern_table.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_5:
     .ascii "pattern_table.iii\0"
     .section .rodata
@@ -687,11 +687,8 @@ L_if_end_7:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -737,11 +734,8 @@ L_loop_top_8:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax

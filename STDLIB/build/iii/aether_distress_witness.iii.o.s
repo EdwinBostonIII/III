@@ -4,43 +4,43 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiiidentifier.iiicapability.iiiwitness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiicapability.iiiwitness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiicapability.iiiwitness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "identifier.iiiidentifier.iiicapability.iiiwitness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_4:
-    .ascii "identifier.iiicapability.iiiwitness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_5:
-    .ascii "capability.iiiwitness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiiwitness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiinode_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
-    .ascii "node_identity.iiinode_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "node_identity.iii\0"
 L_str_9:
-    .ascii "node_identity.iiicontext_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "node_identity.iii\0"
 L_str_10:
-    .ascii "context_awareness.iiicontext_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "context_awareness.iii\0"
 L_str_11:
-    .ascii "context_awareness.iiicapability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "context_awareness.iii\0"
 L_str_12:
-    .ascii "capability.iiicapability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_13:
-    .ascii "capability.iiinode_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_14:
-    .ascii "node_identity.iiicontext_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "node_identity.iii\0"
 L_str_15:
-    .ascii "context_awareness.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "context_awareness.iii\0"
 L_str_16:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_17:
-    .ascii "witness_hook.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_18:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_19:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -171,7 +171,6 @@ L_DWIT_NI_ARGS:
     .section .iii.ring3,"n"
     .asciz "dwit_outbox_ptr"
     .text
-    .global L_dwit_outbox_ptr
     .seh_proc L_dwit_outbox_ptr
 L_dwit_outbox_ptr:
     pushq %rbp
@@ -196,11 +195,8 @@ L_dwit_outbox_ptr:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -222,7 +218,6 @@ L_dwit_outbox_ptr:
     .section .iii.ring3,"n"
     .asciz "dwit_build_optag"
     .text
-    .global L_dwit_build_optag
     .seh_proc L_dwit_build_optag
 L_dwit_build_optag:
     pushq %rbp
@@ -586,7 +581,6 @@ L_dwit_build_optag:
     .section .iii.ring3,"n"
     .asciz "dwit_ante_ptr"
     .text
-    .global L_dwit_ante_ptr
     .seh_proc L_dwit_ante_ptr
 L_dwit_ante_ptr:
     pushq %rbp
@@ -639,7 +633,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "dwit_ante_count"
     .text
-    .global L_dwit_ante_count
     .seh_proc L_dwit_ante_count
 L_dwit_ante_count:
     pushq %rbp
@@ -688,7 +681,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "dwit_assemble"
     .text
-    .global L_dwit_assemble
     .seh_proc L_dwit_assemble
 L_dwit_assemble:
     pushq %rbp
@@ -756,11 +748,8 @@ L_dwit_assemble:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -781,11 +770,8 @@ L_dwit_assemble:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -806,11 +792,8 @@ L_dwit_assemble:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -938,11 +921,8 @@ L_loop_top_6:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1027,11 +1007,8 @@ L_loop_top_8:
     pushq %rax
     movq -96(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1289,7 +1266,6 @@ L_loop_end_15:
     .section .iii.ring3,"n"
     .asciz "dwit_record"
     .text
-    .global L_dwit_record
     .seh_proc L_dwit_record
 L_dwit_record:
     pushq %rbp
@@ -2123,7 +2099,6 @@ L_if_end_37:
     .section .iii.ring3,"n"
     .asciz "dwit_st_build_ni_args"
     .text
-    .global L_dwit_st_build_ni_args
     .seh_proc L_dwit_st_build_ni_args
 L_dwit_st_build_ni_args:
     pushq %rbp
@@ -2255,11 +2230,8 @@ L_loop_top_38:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2405,11 +2377,8 @@ L_loop_top_40:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2539,7 +2508,6 @@ L_loop_end_41:
     .section .iii.ring3,"n"
     .asciz "dwit_st_init"
     .text
-    .global L_dwit_st_init
     .seh_proc L_dwit_st_init
 L_dwit_st_init:
     pushq %rbp
@@ -2644,7 +2612,6 @@ L_if_end_45:
     .section .iii.ring3,"n"
     .asciz "dw_selftest_k1"
     .text
-    .global L_dw_selftest_k1
     .seh_proc L_dw_selftest_k1
 L_dw_selftest_k1:
     pushq %rbp
@@ -2845,7 +2812,6 @@ L_if_end_57:
     .section .iii.ring3,"n"
     .asciz "dw_selftest_k2"
     .text
-    .global L_dw_selftest_k2
     .seh_proc L_dw_selftest_k2
 L_dw_selftest_k2:
     pushq %rbp
@@ -3426,7 +3392,6 @@ L_if_end_85:
     .section .iii.ring3,"n"
     .asciz "dw_selftest_k3"
     .text
-    .global L_dw_selftest_k3
     .seh_proc L_dw_selftest_k3
 L_dw_selftest_k3:
     pushq %rbp
@@ -3753,7 +3718,6 @@ L_if_end_101:
     .section .iii.ring3,"n"
     .asciz "dw_selftest_k4"
     .text
-    .global L_dw_selftest_k4
     .seh_proc L_dw_selftest_k4
 L_dw_selftest_k4:
     pushq %rbp
@@ -3921,7 +3885,6 @@ L_if_end_109:
     .section .iii.ring3,"n"
     .asciz "dw_selftest_k5"
     .text
-    .global L_dw_selftest_k5
     .seh_proc L_dw_selftest_k5
 L_dw_selftest_k5:
     pushq %rbp

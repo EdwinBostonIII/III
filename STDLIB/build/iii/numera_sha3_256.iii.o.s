@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "keccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_1:
-    .ascii "keccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_2:
-    .ascii "keccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_3:
     .ascii "keccak.iii\0"
     .section .rodata
@@ -71,6 +71,46 @@ sha3_256_oneshot:
     pushq %rax
     popq %rax
 L_if_end_1:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
     leaq L_SHA3_256_STATE(%rip), %rax
     pushq %rax
     popq %rax

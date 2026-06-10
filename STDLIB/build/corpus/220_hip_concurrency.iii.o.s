@@ -4,17 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrthip.iiihip.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrthip.iiihip.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "hip.iiihip.iii\0"
+    .ascii "hip.iii\0"
 L_str_3:
     .ascii "hip.iii\0"
     .section .iii.ring3,"n"
     .asciz "_read_u32"
     .text
-    .global L__read_u32
     .seh_proc L__read_u32
 L__read_u32:
     pushq %rbp
@@ -68,11 +67,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -100,11 +96,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -132,11 +125,8 @@ L__read_u32:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -175,7 +165,6 @@ L__read_u32:
     .section .iii.ring3,"n"
     .asciz "_put"
     .text
-    .global L__put
     .seh_proc L__put
 L__put:
     pushq %rbp
@@ -220,7 +209,6 @@ L__put:
     .section .iii.ring3,"n"
     .asciz "_emit"
     .text
-    .global L__emit
     .seh_proc L__emit
 L__emit:
     pushq %rbp
@@ -266,7 +254,6 @@ L__emit:
     .section .iii.ring3,"n"
     .asciz "_check"
     .text
-    .global L__check
     .seh_proc L__check
 L__check:
     pushq %rbp
@@ -371,11 +358,8 @@ L_if_end_1:
     movq %rax, -72(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -450,7 +434,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "_check_pack"
     .text
-    .global L__check_pack
     .seh_proc L__check_pack
 L__check_pack:
     pushq %rbp
@@ -484,11 +467,8 @@ L__check_pack:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -514,7 +494,6 @@ L__check_pack:
     .section .iii.ring3,"n"
     .asciz "_phrase_lock_mutex"
     .text
-    .global L__phrase_lock_mutex
     .seh_proc L__phrase_lock_mutex
 L__phrase_lock_mutex:
     pushq %rbp
@@ -698,7 +677,6 @@ L__phrase_lock_mutex:
     .section .iii.ring3,"n"
     .asciz "_phrase_unlock_mutex"
     .text
-    .global L__phrase_unlock_mutex
     .seh_proc L__phrase_unlock_mutex
 L__phrase_unlock_mutex:
     pushq %rbp
@@ -912,7 +890,6 @@ L__phrase_unlock_mutex:
     .section .iii.ring3,"n"
     .asciz "_phrase_spawn_process"
     .text
-    .global L__phrase_spawn_process
     .seh_proc L__phrase_spawn_process
 L__phrase_spawn_process:
     pushq %rbp
@@ -1141,7 +1118,6 @@ L__phrase_spawn_process:
     .section .iii.ring3,"n"
     .asciz "_phrase_wait_barrier"
     .text
-    .global L__phrase_wait_barrier
     .seh_proc L__phrase_wait_barrier
 L__phrase_wait_barrier:
     pushq %rbp
@@ -1355,7 +1331,6 @@ L__phrase_wait_barrier:
     .section .iii.ring3,"n"
     .asciz "_phrase_signal_event"
     .text
-    .global L__phrase_signal_event
     .seh_proc L__phrase_signal_event
 L__phrase_signal_event:
     pushq %rbp

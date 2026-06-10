@@ -3,8 +3,6 @@
     .att_syntax
     .file 1 "<iii-source>"
     .section .rodata
-L_str_0:
-    .ascii "arena.iii\0"
     .section .rodata
 L_CSV_OK:
     .quad 0x0
@@ -39,7 +37,6 @@ L_CSV_COL_COUNT:
     .section .iii.ring3,"n"
     .asciz "csv_alloc_slot"
     .text
-    .global L_csv_alloc_slot
     .seh_proc L_csv_alloc_slot
 L_csv_alloc_slot:
     pushq %rbp
@@ -148,7 +145,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "csv_resolve"
     .text
-    .global L_csv_resolve
     .seh_proc L_csv_resolve
 L_csv_resolve:
     pushq %rbp
@@ -269,7 +265,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "csv_field_index"
     .text
-    .global L_csv_field_index
     .seh_proc L_csv_field_index
 L_csv_field_index:
     pushq %rbp
@@ -286,25 +281,16 @@ L_csv_field_index:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x400, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $10, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -330,7 +316,6 @@ L_csv_field_index:
     .section .iii.ring3,"n"
     .asciz "csv_row_col_index"
     .text
-    .global L_csv_row_col_index
     .seh_proc L_csv_row_col_index
 L_csv_row_col_index:
     pushq %rbp
@@ -346,11 +331,8 @@ L_csv_row_col_index:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x400, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $10, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax

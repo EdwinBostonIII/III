@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple_search.iiiripple_search.iiiripple_search.iiiripple_search.iiiripple_search.iii\0"
+    .ascii "ripple_search.iii\0"
 L_str_1:
-    .ascii "ripple_search.iiiripple_search.iiiripple_search.iiiripple_search.iii\0"
+    .ascii "ripple_search.iii\0"
 L_str_2:
-    .ascii "ripple_search.iiiripple_search.iiiripple_search.iii\0"
+    .ascii "ripple_search.iii\0"
 L_str_3:
-    .ascii "ripple_search.iiiripple_search.iii\0"
+    .ascii "ripple_search.iii\0"
 L_str_4:
     .ascii "ripple_search.iii\0"
     .section .rodata

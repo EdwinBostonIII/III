@@ -4,69 +4,68 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtsemver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtsemver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "semver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "semver.iii\0"
 L_str_3:
-    .ascii "semver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "semver.iii\0"
 L_str_4:
-    .ascii "semver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "semver.iii\0"
 L_str_5:
-    .ascii "semver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "semver.iii\0"
 L_str_6:
-    .ascii "semver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "semver.iii\0"
 L_str_7:
-    .ascii "semver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "semver.iii\0"
 L_str_8:
-    .ascii "1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.2.3\0"
 L_str_9:
-    .ascii "1.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.2.3-alpha.1\0"
 L_str_10:
-    .ascii "0.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "0.0.0\0"
 L_str_11:
-    .ascii "01.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "01.0.0\0"
 L_str_12:
-    .ascii "1.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.2\0"
 L_str_13:
-    .ascii "1.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-\0"
 L_str_14:
-    .ascii "1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0\0"
 L_str_15:
-    .ascii "2.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "2.0.0\0"
 L_str_16:
-    .ascii "1.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.2.3\0"
 L_str_17:
-    .ascii "1.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.2.3\0"
 L_str_18:
-    .ascii "1.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha\0"
 L_str_19:
-    .ascii "1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0\0"
 L_str_20:
-    .ascii "1.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha\0"
 L_str_21:
-    .ascii "1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-beta\0"
 L_str_22:
-    .ascii "1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-1\0"
 L_str_23:
-    .ascii "1.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha\0"
 L_str_24:
-    .ascii "1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha\0"
 L_str_25:
-    .ascii "1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha.1\0"
 L_str_26:
-    .ascii "1.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha.1\0"
 L_str_27:
-    .ascii "1.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha.2\0"
 L_str_28:
-    .ascii "1.0.0-alpha.beta1.0.0-alpha.beta\0"
+    .ascii "1.0.0-alpha.beta\0"
 L_str_29:
     .ascii "1.0.0-alpha.beta\0"
     .section .iii.ring3,"n"
     .asciz "make_str"
     .text
-    .global L_make_str
     .seh_proc L_make_str
 L_make_str:
     pushq %rbp

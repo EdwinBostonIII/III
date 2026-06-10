@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "cmp_i64"
     .text
-    .global L_cmp_i64
     .seh_proc L_cmp_i64
 L_cmp_i64:
     pushq %rbp
@@ -150,7 +149,6 @@ L_if_end_7:
     .section .iii.ring3,"n"
     .asciz "ge_zero_i64"
     .text
-    .global L_ge_zero_i64
     .seh_proc L_ge_zero_i64
 L_ge_zero_i64:
     pushq %rbp
@@ -200,7 +198,6 @@ L_if_end_9:
     .section .iii.ring3,"n"
     .asciz "cmp_i32"
     .text
-    .global L_cmp_i32
     .seh_proc L_cmp_i32
 L_cmp_i32:
     pushq %rbp

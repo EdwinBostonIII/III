@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iii\0"
 L_str_3:
     .ascii "sha256.iii\0"
     .section .bss
@@ -75,7 +75,6 @@ L_ZKP_STK_B1:
     .section .iii.ring3,"n"
     .asciz "zkp_w_addr"
     .text
-    .global L_zkp_w_addr
     .seh_proc L_zkp_w_addr
 L_zkp_w_addr:
     pushq %rbp
@@ -116,7 +115,6 @@ L_zkp_w_addr:
     .section .iii.ring3,"n"
     .asciz "zkp_mhash"
     .text
-    .global L_zkp_mhash
     .seh_proc L_zkp_mhash
 L_zkp_mhash:
     pushq %rbp
@@ -168,7 +166,6 @@ L_zkp_mhash:
     .section .iii.ring3,"n"
     .asciz "zkp_kind"
     .text
-    .global L_zkp_kind
     .seh_proc L_zkp_kind
 L_zkp_kind:
     pushq %rbp
@@ -206,11 +203,8 @@ L_zkp_kind:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     leaq L_ZKP_W(%rip), %rax
@@ -248,7 +242,6 @@ L_zkp_kind:
     .section .iii.ring3,"n"
     .asciz "zkp_preserved"
     .text
-    .global L_zkp_preserved
     .seh_proc L_zkp_preserved
 L_zkp_preserved:
     pushq %rbp
@@ -671,7 +664,6 @@ L_if_end_27:
     .section .iii.ring3,"n"
     .asciz "zkp_bytes_eq"
     .text
-    .global L_zkp_bytes_eq
     .seh_proc L_zkp_bytes_eq
 L_zkp_bytes_eq:
     pushq %rbp
@@ -780,7 +772,6 @@ L_loop_end_29:
     .section .iii.ring3,"n"
     .asciz "zkp_bytes_copy"
     .text
-    .global L_zkp_bytes_copy
     .seh_proc L_zkp_bytes_copy
 L_zkp_bytes_copy:
     pushq %rbp
@@ -870,7 +861,6 @@ L_loop_end_33:
     .section .iii.ring3,"n"
     .asciz "zkp_chain_consistent"
     .text
-    .global L_zkp_chain_consistent
     .seh_proc L_zkp_chain_consistent
 L_zkp_chain_consistent:
     pushq %rbp
@@ -1054,7 +1044,6 @@ L_loop_end_39:
     .section .iii.ring3,"n"
     .asciz "zkp_sidecar_root"
     .text
-    .global L_zkp_sidecar_root
     .seh_proc L_zkp_sidecar_root
 L_zkp_sidecar_root:
     pushq %rbp
@@ -1087,11 +1076,8 @@ L_zkp_sidecar_root:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1118,11 +1104,8 @@ L_zkp_sidecar_root:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1149,11 +1132,8 @@ L_zkp_sidecar_root:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1199,11 +1179,8 @@ L_zkp_sidecar_root:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1224,11 +1201,8 @@ L_zkp_sidecar_root:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1249,11 +1223,8 @@ L_zkp_sidecar_root:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1299,11 +1270,8 @@ L_zkp_sidecar_root:
     popq %rax
     movl (%rax,%rcx,4), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -1484,11 +1452,8 @@ L_loop_top_44:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1546,7 +1511,6 @@ L_loop_end_45:
     .section .iii.ring3,"n"
     .asciz "zkp_sidecar_build"
     .text
-    .global L_zkp_sidecar_build
     .seh_proc L_zkp_sidecar_build
 L_zkp_sidecar_build:
     pushq %rbp
@@ -1778,11 +1742,8 @@ L_loop_top_52:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1856,11 +1817,8 @@ L_loop_end_53:
     movq %rax, -40(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0xe, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $14, %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -2045,7 +2003,6 @@ L_if_end_61:
     .section .iii.ring3,"n"
     .asciz "zkp_rollup_build"
     .text
-    .global L_zkp_rollup_build
     .seh_proc L_zkp_rollup_build
 L_zkp_rollup_build:
     pushq %rbp
@@ -2150,11 +2107,8 @@ L_loop_top_64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2312,7 +2266,6 @@ L_loop_end_65:
     .section .iii.ring3,"n"
     .asciz "zkp_rollup_verify"
     .text
-    .global L_zkp_rollup_verify
     .seh_proc L_zkp_rollup_verify
 L_zkp_rollup_verify:
     pushq %rbp
@@ -2413,11 +2366,8 @@ L_if_end_69:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     leaq L_ZKP_ROLLUP(%rip), %rax
@@ -2778,11 +2728,8 @@ L_if_end_87:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2908,7 +2855,6 @@ L_if_end_91:
     .section .iii.ring3,"n"
     .asciz "zkp_mk"
     .text
-    .global L_zkp_mk
     .seh_proc L_zkp_mk
 L_zkp_mk:
     pushq %rbp
@@ -3074,7 +3020,6 @@ L_loop_end_95:
     .section .iii.ring3,"n"
     .asciz "zk_prune_kat"
     .text
-    .global L_zk_prune_kat
     .seh_proc L_zk_prune_kat
 L_zk_prune_kat:
     pushq %rbp
@@ -3219,11 +3164,8 @@ L_loop_end_97:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x5c, %rax
     pushq %rax
@@ -3528,17 +3470,10 @@ L_if_end_111:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3550,17 +3485,10 @@ L_if_end_111:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -16(%rbp), %rax
     pushq %rax
@@ -3611,17 +3539,10 @@ L_if_end_113:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -16(%rbp), %rax
     pushq %rax
@@ -4141,17 +4062,9 @@ L_if_end_133:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4163,17 +4076,9 @@ L_if_end_133:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -32(%rbp), %rax
     pushq %rax
@@ -4220,17 +4125,9 @@ L_if_end_135:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     movzbq -32(%rbp), %rax
     pushq %rax
@@ -4481,11 +4378,8 @@ L_loop_end_139:
     pushq %rax
     movabsq $0x80, %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $1, %rax
     pushq %rax
     movabsq $0x5c, %rax
     pushq %rax

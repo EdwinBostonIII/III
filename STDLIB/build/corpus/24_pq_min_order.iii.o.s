@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiipq.iiipq.iiipq.iiipq.iiipq.iii\0"
+    .ascii "arena.iii\0"
 L_str_1:
-    .ascii "arena.iiipq.iiipq.iiipq.iiipq.iiipq.iii\0"
+    .ascii "arena.iii\0"
 L_str_2:
-    .ascii "pq.iiipq.iiipq.iiipq.iiipq.iii\0"
+    .ascii "pq.iii\0"
 L_str_3:
-    .ascii "pq.iiipq.iiipq.iiipq.iii\0"
+    .ascii "pq.iii\0"
 L_str_4:
-    .ascii "pq.iiipq.iiipq.iii\0"
+    .ascii "pq.iii\0"
 L_str_5:
-    .ascii "pq.iiipq.iii\0"
+    .ascii "pq.iii\0"
 L_str_6:
     .ascii "pq.iii\0"
     .section .iii.ring3,"n"
@@ -239,11 +239,8 @@ L_loop_top_4:
 L_if_end_7:
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax

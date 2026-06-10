@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtripple.iiiripple.iiiripple.iiiripple.iiiripple.iiiripple.iiiripple.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "ripple.iiiripple.iiiripple.iiiripple.iiiripple.iiiripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_2:
-    .ascii "ripple.iiiripple.iiiripple.iiiripple.iiiripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_3:
-    .ascii "ripple.iiiripple.iiiripple.iiiripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_4:
-    .ascii "ripple.iiiripple.iiiripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_5:
-    .ascii "ripple.iiiripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_6:
-    .ascii "ripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_7:
     .ascii "ripple.iii\0"
     .section .rodata
@@ -25,7 +25,6 @@ L_RN_GAP:
     .section .iii.ring3,"n"
     .asciz "kfill"
     .text
-    .global L_kfill
     .seh_proc L_kfill
 L_kfill:
     pushq %rbp
@@ -119,7 +118,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "keqn"
     .text
-    .global L_keqn
     .seh_proc L_keqn
 L_keqn:
     pushq %rbp
@@ -233,7 +231,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "kst_u64"
     .text
-    .global L_kst_u64
     .seh_proc L_kst_u64
 L_kst_u64:
     pushq %rbp
@@ -295,11 +292,8 @@ L_loop_top_6:
     movb %dl, (%rax,%rcx,1)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -334,7 +328,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "kcopy"
     .text
-    .global L_kcopy
     .seh_proc L_kcopy
 L_kcopy:
     pushq %rbp
@@ -456,11 +449,8 @@ main:
     movq %rax, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -489,11 +479,8 @@ main:
     movq %rax, -48(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -522,11 +509,8 @@ main:
     movq %rax, -72(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -555,11 +539,8 @@ main:
     movq %rax, -96(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -588,11 +569,8 @@ main:
     movq %rax, -120(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -621,11 +599,8 @@ main:
     movq %rax, -144(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $6, %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp

@@ -46,7 +46,6 @@ L_TP_DISASM_SEP:
     .section .iii.ring3,"n"
     .asciz "tp_disasm_emit"
     .text
-    .global L_tp_disasm_emit
     .seh_proc L_tp_disasm_emit
 L_tp_disasm_emit:
     pushq %rbp
@@ -97,7 +96,6 @@ L_tp_disasm_emit:
     .section .iii.ring3,"n"
     .asciz "tp_disasm_emit_byte_hex"
     .text
-    .global L_tp_disasm_emit_byte_hex
     .seh_proc L_tp_disasm_emit_byte_hex
 L_tp_disasm_emit_byte_hex:
     pushq %rbp
@@ -112,11 +110,8 @@ L_tp_disasm_emit_byte_hex:
     movq %r8, -24(%rbp)
     movzbq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax

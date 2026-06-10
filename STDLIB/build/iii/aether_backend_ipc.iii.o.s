@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "kernel32kernel32cad.iii\0"
+    .ascii "kernel32\0"
 L_str_1:
-    .ascii "kernel32cad.iii\0"
+    .ascii "kernel32\0"
 L_str_2:
     .ascii "cad.iii\0"
     .section .rodata
@@ -60,7 +60,6 @@ L_IPC_NEXT:
     .section .iii.ring3,"n"
     .asciz "_ipc_name"
     .text
-    .global L__ipc_name
     .seh_proc L__ipc_name
 L__ipc_name:
     pushq %rbp
@@ -228,7 +227,6 @@ L__ipc_name:
     .section .iii.ring3,"n"
     .asciz "_ipc_ensure"
     .text
-    .global L__ipc_ensure
     .seh_proc L__ipc_ensure
 L__ipc_ensure:
     pushq %rbp
@@ -356,7 +354,6 @@ L_if_end_3:
     .section .iii.ring3,"n"
     .asciz "_ipc_slot"
     .text
-    .global L__ipc_slot
     .seh_proc L__ipc_slot
 L__ipc_slot:
     pushq %rbp
@@ -406,7 +403,6 @@ L__ipc_slot:
     .section .iii.ring3,"n"
     .asciz "_ipc_le8_read"
     .text
-    .global L__ipc_le8_read
     .seh_proc L__ipc_le8_read
 L__ipc_le8_read:
     pushq %rbp
@@ -459,11 +455,8 @@ L_loop_top_4:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -506,7 +499,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "_ipc_le8_write"
     .text
-    .global L__ipc_le8_write
     .seh_proc L__ipc_le8_write
 L__ipc_le8_write:
     pushq %rbp
@@ -554,11 +546,8 @@ L_loop_top_6:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -608,7 +597,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "_ipc_find"
     .text
-    .global L__ipc_find
     .seh_proc L__ipc_find
 L__ipc_find:
     pushq %rbp

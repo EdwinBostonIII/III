@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "nous_search.iiinous_search.iiicad.iiicad.iiicad.iii\0"
+    .ascii "nous_search.iii\0"
 L_str_1:
-    .ascii "nous_search.iiicad.iiicad.iiicad.iii\0"
+    .ascii "nous_search.iii\0"
 L_str_2:
-    .ascii "cad.iiicad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_4:
     .ascii "cad.iii\0"
     .section .rodata
@@ -349,7 +349,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "nous_ch_canary_holds"
     .text
-    .global L_nous_ch_canary_holds
     .seh_proc L_nous_ch_canary_holds
 L_nous_ch_canary_holds:
     pushq %rbp
@@ -407,7 +406,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "nous_ch_clause_eval"
     .text
-    .global L_nous_ch_clause_eval
     .seh_proc L_nous_ch_clause_eval
 L_nous_ch_clause_eval:
     pushq %rbp
@@ -553,7 +551,6 @@ L_if_end_21:
     .section .iii.ring3,"n"
     .asciz "nous_ch_register"
     .text
-    .global L_nous_ch_register
     .seh_proc L_nous_ch_register
 L_nous_ch_register:
     pushq %rbp
@@ -632,11 +629,8 @@ L_if_end_23:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -678,7 +672,7 @@ L_if_end_23:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -694,7 +688,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "nous_ch_seal_verdict"
     .text
-    .global L_nous_ch_seal_verdict
     .seh_proc L_nous_ch_seal_verdict
 L_nous_ch_seal_verdict:
     pushq %rbp
@@ -742,11 +735,8 @@ L_nous_ch_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $8, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -767,11 +757,8 @@ L_nous_ch_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -792,11 +779,8 @@ L_nous_ch_seal_verdict:
     pushq %rax
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -813,11 +797,8 @@ L_nous_ch_seal_verdict:
     movb %dl, (%rax,%rcx,1)
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)

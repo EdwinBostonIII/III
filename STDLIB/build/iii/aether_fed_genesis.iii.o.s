@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "crypt_ed25519.iiisha256.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_1:
     .ascii "sha256.iii\0"
     .section .rodata
@@ -378,7 +378,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "_fed_desc_domain_init"
     .text
-    .global L__fed_desc_domain_init
     .seh_proc L__fed_desc_domain_init
 L__fed_desc_domain_init:
     pushq %rbp
@@ -960,11 +959,8 @@ L_if_end_29:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
@@ -1190,11 +1186,8 @@ L_loop_top_40:
     jz L_loop_end_41
     movq -168(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -176(%rbp)
@@ -1250,11 +1243,8 @@ L_loop_top_40:
 L_loop_end_41:
     movq -152(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -176(%rbp)
@@ -1376,11 +1366,8 @@ L_if_end_45:
     popq %rax
     addq %rcx, %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $5, %rax
     pushq %rax
     popq %rax
     movq %rax, -208(%rbp)
@@ -1528,7 +1515,6 @@ L_loop_end_37:
     .section .iii.ring3,"n"
     .asciz "_anchor_init"
     .text
-    .global L__anchor_init
     .seh_proc L__anchor_init
 L__anchor_init:
     pushq %rbp

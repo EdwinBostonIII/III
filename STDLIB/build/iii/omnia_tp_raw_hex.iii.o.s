@@ -3,8 +3,6 @@
     .att_syntax
     .file 1 "<iii-source>"
     .section .rodata
-L_str_0:
-    .ascii "arena.iii\0"
     .section .data
     .global L_TP_RAW_HEX_CHARS
 L_TP_RAW_HEX_CHARS:
@@ -27,7 +25,6 @@ L_TP_RAW_HEX_CHARS:
     .section .iii.ring3,"n"
     .asciz "tp_raw_hex_emit_byte"
     .text
-    .global L_tp_raw_hex_emit_byte
     .seh_proc L_tp_raw_hex_emit_byte
 L_tp_raw_hex_emit_byte:
     pushq %rbp
@@ -78,7 +75,6 @@ L_tp_raw_hex_emit_byte:
     .section .iii.ring3,"n"
     .asciz "tp_raw_hex_emit_u8_hex"
     .text
-    .global L_tp_raw_hex_emit_u8_hex
     .seh_proc L_tp_raw_hex_emit_u8_hex
 L_tp_raw_hex_emit_u8_hex:
     pushq %rbp
@@ -93,11 +89,8 @@ L_tp_raw_hex_emit_u8_hex:
     movq %r8, -24(%rbp)
     movzbq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -187,7 +180,6 @@ L_tp_raw_hex_emit_u8_hex:
     .section .iii.ring3,"n"
     .asciz "tp_raw_hex_emit_offset"
     .text
-    .global L_tp_raw_hex_emit_offset
     .seh_proc L_tp_raw_hex_emit_offset
 L_tp_raw_hex_emit_offset:
     pushq %rbp

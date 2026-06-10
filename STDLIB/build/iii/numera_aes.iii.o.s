@@ -64,7 +64,6 @@ L_AES_IM3:
     .section .iii.ring3,"n"
     .asciz "aes_xtime"
     .text
-    .global L_aes_xtime
     .seh_proc L_aes_xtime
 L_aes_xtime:
     pushq %rbp
@@ -77,11 +76,8 @@ L_aes_xtime:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movabsq $0xff, %rax
@@ -94,11 +90,8 @@ L_aes_xtime:
     movq %rax, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -150,7 +143,6 @@ L_aes_xtime:
     .section .iii.ring3,"n"
     .asciz "aes_gmul"
     .text
-    .global L_aes_gmul
     .seh_proc L_aes_gmul
 L_aes_gmul:
     pushq %rbp
@@ -249,11 +241,8 @@ L_if_end_3:
     movq %rax, -32(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $1, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -295,7 +284,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "aes_mulinv"
     .text
-    .global L_aes_mulinv
     .seh_proc L_aes_mulinv
 L_aes_mulinv:
     pushq %rbp
@@ -524,7 +512,6 @@ L_if_end_5:
     .section .iii.ring3,"n"
     .asciz "aes_affine_fwd"
     .text
-    .global L_aes_affine_fwd
     .seh_proc L_aes_affine_fwd
 L_aes_affine_fwd:
     pushq %rbp
@@ -547,20 +534,14 @@ L_aes_affine_fwd:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -576,20 +557,14 @@ L_aes_affine_fwd:
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $6, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -605,20 +580,14 @@ L_aes_affine_fwd:
     movq %rax, -32(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x5, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -634,20 +603,14 @@ L_aes_affine_fwd:
     movq %rax, -40(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -717,7 +680,6 @@ L_aes_affine_fwd:
     .section .iii.ring3,"n"
     .asciz "aes_affine_inv"
     .text
-    .global L_aes_affine_inv
     .seh_proc L_aes_affine_inv
 L_aes_affine_inv:
     pushq %rbp
@@ -740,20 +702,14 @@ L_aes_affine_inv:
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $1, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x7, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $7, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -769,20 +725,14 @@ L_aes_affine_inv:
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $3, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x5, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $5, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -798,20 +748,14 @@ L_aes_affine_inv:
     movq %rax, -32(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $6, %rax
     movl %eax, %eax
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -869,7 +813,6 @@ L_aes_affine_inv:
     .section .iii.ring3,"n"
     .asciz "aes_init_tables"
     .text
-    .global L_aes_init_tables
     .seh_proc L_aes_init_tables
 L_aes_init_tables:
     pushq %rbp
@@ -1155,7 +1098,6 @@ L_loop_end_11:
     .section .iii.ring3,"n"
     .asciz "aes_expand_key_into"
     .text
-    .global L_aes_expand_key_into
     .seh_proc L_aes_expand_key_into
 L_aes_expand_key_into:
     pushq %rbp
@@ -1540,11 +1482,7 @@ L_if_end_19:
     subq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -1641,11 +1579,7 @@ L_if_end_19:
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     movl -88(%rbp), %eax
@@ -1941,7 +1875,6 @@ aes192_set_key:
     .section .iii.ring3,"n"
     .asciz "aes_add_round_key"
     .text
-    .global L_aes_add_round_key
     .seh_proc L_aes_add_round_key
 L_aes_add_round_key:
     pushq %rbp
@@ -1954,11 +1887,8 @@ L_aes_add_round_key:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2057,7 +1987,6 @@ L_loop_end_23:
     .section .iii.ring3,"n"
     .asciz "aes_sub_bytes"
     .text
-    .global L_aes_sub_bytes
     .seh_proc L_aes_sub_bytes
 L_aes_sub_bytes:
     pushq %rbp
@@ -2146,7 +2075,6 @@ L_loop_end_25:
     .section .iii.ring3,"n"
     .asciz "aes_inv_sub_bytes"
     .text
-    .global L_aes_inv_sub_bytes
     .seh_proc L_aes_inv_sub_bytes
 L_aes_inv_sub_bytes:
     pushq %rbp
@@ -2235,7 +2163,6 @@ L_loop_end_27:
     .section .iii.ring3,"n"
     .asciz "aes_shift_rows"
     .text
-    .global L_aes_shift_rows
     .seh_proc L_aes_shift_rows
 L_aes_shift_rows:
     pushq %rbp
@@ -2469,7 +2396,6 @@ L_aes_shift_rows:
     .section .iii.ring3,"n"
     .asciz "aes_inv_shift_rows"
     .text
-    .global L_aes_inv_shift_rows
     .seh_proc L_aes_inv_shift_rows
 L_aes_inv_shift_rows:
     pushq %rbp
@@ -2703,7 +2629,6 @@ L_aes_inv_shift_rows:
     .section .iii.ring3,"n"
     .asciz "aes_mix_one_column"
     .text
-    .global L_aes_mix_one_column
     .seh_proc L_aes_mix_one_column
 L_aes_mix_one_column:
     pushq %rbp
@@ -2716,11 +2641,8 @@ L_aes_mix_one_column:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -2729,11 +2651,7 @@ L_aes_mix_one_column:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -2849,11 +2767,7 @@ L_aes_mix_one_column:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     movl -56(%rbp), %eax
@@ -3037,7 +2951,6 @@ L_aes_mix_one_column:
     .section .iii.ring3,"n"
     .asciz "aes_mix_columns"
     .text
-    .global L_aes_mix_columns
     .seh_proc L_aes_mix_columns
 L_aes_mix_columns:
     pushq %rbp
@@ -3099,7 +3012,6 @@ L_aes_mix_columns:
     .section .iii.ring3,"n"
     .asciz "aes_inv_mults"
     .text
-    .global L_aes_inv_mults
     .seh_proc L_aes_inv_mults
 L_aes_inv_mults:
     pushq %rbp
@@ -3245,7 +3157,6 @@ L_aes_inv_mults:
     .section .iii.ring3,"n"
     .asciz "aes_inv_mix_one_column"
     .text
-    .global L_aes_inv_mix_one_column
     .seh_proc L_aes_inv_mix_one_column
 L_aes_inv_mix_one_column:
     pushq %rbp
@@ -3258,11 +3169,8 @@ L_aes_inv_mix_one_column:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -3271,11 +3179,7 @@ L_aes_inv_mix_one_column:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -3615,11 +3519,7 @@ L_aes_inv_mix_one_column:
     pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
     movl -56(%rbp), %eax
@@ -3707,7 +3607,6 @@ L_aes_inv_mix_one_column:
     .section .iii.ring3,"n"
     .asciz "aes_inv_mix_columns"
     .text
-    .global L_aes_inv_mix_columns
     .seh_proc L_aes_inv_mix_columns
 L_aes_inv_mix_columns:
     pushq %rbp

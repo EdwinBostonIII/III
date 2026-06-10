@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiicycle_term.iiicycle_term.iiiseal.iiiseal.iiicad.iiicad.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "cycle_term.iiicycle_term.iiiseal.iiiseal.iiicad.iiicad.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_2:
-    .ascii "cycle_term.iiiseal.iiiseal.iiicad.iiicad.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_3:
-    .ascii "seal.iiiseal.iiicad.iiicad.iii\0"
+    .ascii "seal.iii\0"
 L_str_4:
-    .ascii "seal.iiicad.iiicad.iii\0"
+    .ascii "seal.iii\0"
 L_str_5:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iii\0"
 L_str_6:
     .ascii "cad.iii\0"
     .section .bss

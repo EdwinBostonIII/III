@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "commit_gate.iiicommit_gate.iiiaeu.iiihexad_reach.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_1:
-    .ascii "commit_gate.iiiaeu.iiihexad_reach.iii\0"
+    .ascii "commit_gate.iii\0"
 L_str_2:
-    .ascii "aeu.iiihexad_reach.iii\0"
+    .ascii "aeu.iii\0"
 L_str_3:
     .ascii "hexad_reach.iii\0"
     .section .rodata

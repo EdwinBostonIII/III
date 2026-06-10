@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "hexad_algebra.iiihexad_reach.iii\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
     .ascii "hexad_reach.iii\0"
     .section .rodata

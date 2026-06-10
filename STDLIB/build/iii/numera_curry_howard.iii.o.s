@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiicad.iiicad.iiicad.iiikeccak256.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_1:
-    .ascii "cad.iiicad.iiicad.iiikeccak256.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cad.iiicad.iiikeccak256.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "cad.iiikeccak256.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "cad.iii\0"
 L_str_4:
-    .ascii "keccak256.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_5:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_6:
     .ascii "witness_hook.iii\0"
     .section .rodata

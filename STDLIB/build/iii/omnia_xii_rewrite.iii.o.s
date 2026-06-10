@@ -4,53 +4,53 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_8:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_9:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_10:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_11:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_12:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_13:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_14:
-    .ascii "xii_term.iiixii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_15:
-    .ascii "xii_term.iiixii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_16:
-    .ascii "xii_basis.iiitrit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "xii_basis.iii\0"
 L_str_17:
-    .ascii "trit.iiitrit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "trit.iii\0"
 L_str_18:
-    .ascii "trit.iiitrit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "trit.iii\0"
 L_str_19:
-    .ascii "trit.iiitrit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "trit.iii\0"
 L_str_20:
-    .ascii "trit.iiitrit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "trit.iii\0"
 L_str_21:
-    .ascii "trit.iiinous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "trit.iii\0"
 L_str_22:
-    .ascii "nous_socket.iiinous_socket.iiinous_socket.iii\0"
+    .ascii "nous_socket.iii\0"
 L_str_23:
-    .ascii "nous_socket.iiinous_socket.iii\0"
+    .ascii "nous_socket.iii\0"
 L_str_24:
     .ascii "nous_socket.iii\0"
     .section .rodata
@@ -308,11 +308,8 @@ L_if_end_5:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     movzbq -16(%rbp), %rax
@@ -329,11 +326,8 @@ L_if_end_5:
     movq %rax, -24(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -387,11 +381,8 @@ L_if_end_5:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     movzbq -8(%rbp), %rax
@@ -408,11 +399,8 @@ L_if_end_5:
     movq %rax, -56(%rbp)
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -517,11 +505,8 @@ L_if_end_7:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     movzbq -16(%rbp), %rax
@@ -538,11 +523,8 @@ L_if_end_7:
     movq %rax, -24(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -665,11 +647,8 @@ L_if_end_11:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     movzbq -16(%rbp), %rax
@@ -750,11 +729,8 @@ L_if_end_13:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $8, %rax
     movl %eax, %eax
     pushq %rax
     movzbq -16(%rbp), %rax
@@ -791,7 +767,6 @@ L_if_end_13:
     .section .iii.ring3,"n"
     .asciz "_is_compose_null"
     .text
-    .global L__is_compose_null
     .seh_proc L__is_compose_null
 L__is_compose_null:
     pushq %rbp
@@ -899,7 +874,6 @@ L_if_end_19:
     .section .iii.ring3,"n"
     .asciz "_is_then_null"
     .text
-    .global L__is_then_null
     .seh_proc L__is_then_null
 L__is_then_null:
     pushq %rbp
@@ -1007,7 +981,6 @@ L_if_end_25:
     .section .iii.ring3,"n"
     .asciz "_is_grant_noop"
     .text
-    .global L__is_grant_noop
     .seh_proc L__is_grant_noop
 L__is_grant_noop:
     pushq %rbp
@@ -1115,7 +1088,6 @@ L_if_end_31:
     .section .iii.ring3,"n"
     .asciz "_is_pe_const_true"
     .text
-    .global L__is_pe_const_true
     .seh_proc L__is_pe_const_true
 L__is_pe_const_true:
     pushq %rbp
@@ -1223,7 +1195,6 @@ L_if_end_37:
     .section .iii.ring3,"n"
     .asciz "_is_pe_const_false"
     .text
-    .global L__is_pe_const_false
     .seh_proc L__is_pe_const_false
 L__is_pe_const_false:
     pushq %rbp
@@ -1331,7 +1302,6 @@ L_if_end_43:
     .section .iii.ring3,"n"
     .asciz "_has_kind"
     .text
-    .global L__has_kind
     .seh_proc L__has_kind
 L__has_kind:
     pushq %rbp
@@ -2987,7 +2957,6 @@ apply_R004:
     .section .iii.ring3,"n"
     .asciz "_match_b_prefix"
     .text
-    .global L__match_b_prefix
     .seh_proc L__match_b_prefix
 L__match_b_prefix:
     pushq %rbp
@@ -3225,7 +3194,6 @@ L_if_end_109:
     .section .iii.ring3,"n"
     .asciz "_apply_b_prefix"
     .text
-    .global L__apply_b_prefix
     .seh_proc L__apply_b_prefix
 L__apply_b_prefix:
     pushq %rbp
@@ -3345,7 +3313,6 @@ L__apply_b_prefix:
     .section .iii.ring3,"n"
     .asciz "_match_b_suffix"
     .text
-    .global L__match_b_suffix
     .seh_proc L__match_b_suffix
 L__match_b_suffix:
     pushq %rbp
@@ -3541,7 +3508,6 @@ L_if_end_117:
     .section .iii.ring3,"n"
     .asciz "_apply_b_suffix"
     .text
-    .global L__apply_b_suffix
     .seh_proc L__apply_b_suffix
 L__apply_b_suffix:
     pushq %rbp
@@ -6118,19 +6084,13 @@ L_if_end_179:
     movq %rax, -40(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -6507,11 +6467,8 @@ L_if_end_191:
 L_if_end_193:
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -6633,11 +6590,8 @@ apply_R024:
     movq %rax, -48(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -6661,11 +6615,8 @@ apply_R024:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $4, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -6770,11 +6721,8 @@ L_if_end_197:
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -6885,7 +6833,6 @@ apply_R025:
     .section .iii.ring3,"n"
     .asciz "_is_trivial_lift"
     .text
-    .global L__is_trivial_lift
     .seh_proc L__is_trivial_lift
 L__is_trivial_lift:
     pushq %rbp
@@ -7881,11 +7828,8 @@ L_if_end_239:
 L_if_end_241:
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -7900,11 +7844,8 @@ L_if_end_241:
     movq %rax, -48(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8060,11 +8001,8 @@ apply_R028:
     movq %rax, -48(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8079,11 +8017,8 @@ apply_R028:
     movq %rax, -56(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8116,11 +8051,8 @@ apply_R028:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $9, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -8338,11 +8270,8 @@ L_if_end_251:
 L_if_end_253:
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8357,11 +8286,8 @@ L_if_end_253:
     movq %rax, -48(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8485,11 +8411,8 @@ apply_R029:
     movq %rax, -48(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8504,11 +8427,8 @@ apply_R029:
     movq %rax, -56(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -8541,11 +8461,8 @@ apply_R029:
     popq %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $9, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -8911,19 +8828,13 @@ L_if_end_267:
     movq %rax, -40(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x12, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $18, %rax
     pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x12, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $18, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -8946,11 +8857,8 @@ L_if_end_267:
 L_if_end_269:
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0x1ff, %rax
     pushq %rax
@@ -9072,11 +8980,8 @@ apply_R031:
     movq %rax, -48(%rbp)
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $9, %rax
     pushq %rax
     movabsq $0x1ff, %rax
     pushq %rax
@@ -9100,11 +9005,8 @@ apply_R031:
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $9, %rax
     movl %eax, %eax
     pushq %rax
     popq %rcx
@@ -11119,7 +11021,6 @@ xii_rewrite_last_rule_fired:
     .section .iii.ring3,"n"
     .asciz "_xrw_trit_val_make"
     .text
-    .global L__xrw_trit_val_make
     .seh_proc L__xrw_trit_val_make
 L__xrw_trit_val_make:
     pushq %rbp
@@ -11165,7 +11066,6 @@ L__xrw_trit_val_make:
     .section .iii.ring3,"n"
     .asciz "_xrw_trit_val_get"
     .text
-    .global L__xrw_trit_val_get
     .seh_proc L__xrw_trit_val_get
 L__xrw_trit_val_get:
     pushq %rbp
@@ -11185,7 +11085,7 @@ L__xrw_trit_val_get:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -11208,7 +11108,6 @@ L__xrw_trit_val_get:
     .section .iii.ring3,"n"
     .asciz "_xrw_is_trit_val"
     .text
-    .global L__xrw_is_trit_val
     .seh_proc L__xrw_is_trit_val
 L__xrw_is_trit_val:
     pushq %rbp
@@ -12118,7 +12017,6 @@ apply_TRIT_MUL:
     .section .iii.ring3,"n"
     .asciz "xrw_apply_ranked"
     .text
-    .global L_xrw_apply_ranked
     .seh_proc L_xrw_apply_ranked
 L_xrw_apply_ranked:
     pushq %rbp

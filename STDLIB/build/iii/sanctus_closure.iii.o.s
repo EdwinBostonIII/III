@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "timing_safe.iiiseal_resolver.iiiseal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "timing_safe.iii\0"
 L_str_1:
-    .ascii "seal_resolver.iiiseal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_2:
-    .ascii "seal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_3:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_4:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_5:
     .ascii "mhash.iii\0"
     .section .rodata

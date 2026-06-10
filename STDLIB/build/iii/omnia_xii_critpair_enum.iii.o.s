@@ -4,13 +4,13 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_rule_patterns.iiixii_rule_overlap.iiixii_rule_overlap.iiixii_rule_overlap.iiixii_rule_overlap.iii\0"
+    .ascii "xii_rule_patterns.iii\0"
 L_str_1:
-    .ascii "xii_rule_overlap.iiixii_rule_overlap.iiixii_rule_overlap.iiixii_rule_overlap.iii\0"
+    .ascii "xii_rule_overlap.iii\0"
 L_str_2:
-    .ascii "xii_rule_overlap.iiixii_rule_overlap.iiixii_rule_overlap.iii\0"
+    .ascii "xii_rule_overlap.iii\0"
 L_str_3:
-    .ascii "xii_rule_overlap.iiixii_rule_overlap.iii\0"
+    .ascii "xii_rule_overlap.iii\0"
 L_str_4:
     .ascii "xii_rule_overlap.iii\0"
     .section .rodata
@@ -491,7 +491,6 @@ cpe_count:
     .section .iii.ring3,"n"
     .asciz "_cpe_stored"
     .text
-    .global L__cpe_stored
     .seh_proc L__cpe_stored
 L__cpe_stored:
     pushq %rbp
@@ -1014,7 +1013,6 @@ L_if_end_37:
     .section .iii.ring3,"n"
     .asciz "cpe_has_root_rids"
     .text
-    .global L_cpe_has_root_rids
     .seh_proc L_cpe_has_root_rids
 L_cpe_has_root_rids:
     pushq %rbp

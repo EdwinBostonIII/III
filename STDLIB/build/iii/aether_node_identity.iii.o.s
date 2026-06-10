@@ -4,21 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "keccak256.iiiidentifier.iiiidentifier.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iiicapability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "keccak256.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iiicapability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_2:
-    .ascii "identifier.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iiicapability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "identifier.iii\0"
 L_str_3:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iiicapability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_4:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iiicapability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_5:
-    .ascii "crypt_ed25519.iiicapability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "crypt_ed25519.iii\0"
 L_str_6:
-    .ascii "capability.iiiwitness_hook.iiiwitness_hook.iii\0"
+    .ascii "capability.iii\0"
 L_str_7:
-    .ascii "witness_hook.iiiwitness_hook.iii\0"
+    .ascii "witness_hook.iii\0"
 L_str_8:
     .ascii "witness_hook.iii\0"
     .section .rodata
@@ -153,7 +153,6 @@ L_NODEID_ST_CONCAT:
     .section .iii.ring3,"n"
     .asciz "ni_build_info"
     .text
-    .global L_ni_build_info
     .seh_proc L_ni_build_info
 L_ni_build_info:
     pushq %rbp
@@ -1191,7 +1190,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "ni_hkdf_expand"
     .text
-    .global L_ni_hkdf_expand
     .seh_proc L_ni_hkdf_expand
 L_ni_hkdf_expand:
     pushq %rbp
@@ -1369,7 +1367,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "ni_args_u64"
     .text
-    .global L_ni_args_u64
     .seh_proc L_ni_args_u64
 L_ni_args_u64:
     pushq %rbp
@@ -1385,11 +1382,7 @@ L_ni_args_u64:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1529,11 +1522,8 @@ L_ni_args_u64:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $8, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1541,11 +1531,8 @@ L_ni_args_u64:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $16, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1553,11 +1540,8 @@ L_ni_args_u64:
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $24, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1565,11 +1549,8 @@ L_ni_args_u64:
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $32, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1577,11 +1558,8 @@ L_ni_args_u64:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x28, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $40, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1589,11 +1567,8 @@ L_ni_args_u64:
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
-    movabsq $0x30, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $48, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1601,11 +1576,8 @@ L_ni_args_u64:
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shlq %cl, %rax
+    shlq $56, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1625,7 +1597,6 @@ L_ni_args_u64:
     .section .iii.ring3,"n"
     .asciz "ni_derive_role"
     .text
-    .global L_ni_derive_role
     .seh_proc L_ni_derive_role
 L_ni_derive_role:
     pushq %rbp
@@ -1787,7 +1758,6 @@ L_if_end_11:
     .section .iii.ring3,"n"
     .asciz "ni_make_node_seed"
     .text
-    .global L_ni_make_node_seed
     .seh_proc L_ni_make_node_seed
 L_ni_make_node_seed:
     pushq %rbp
@@ -2076,7 +2046,6 @@ L_loop_end_21:
     .section .iii.ring3,"n"
     .asciz "ni_witness_birth"
     .text
-    .global L_ni_witness_birth
     .seh_proc L_ni_witness_birth
 L_ni_witness_birth:
     pushq %rbp
@@ -2215,7 +2184,6 @@ L_if_end_23:
     .section .iii.ring3,"n"
     .asciz "ni_derive"
     .text
-    .global L_ni_derive
     .seh_proc L_ni_derive
 L_ni_derive:
     pushq %rbp
@@ -2666,7 +2634,6 @@ L_if_end_41:
     .section .iii.ring3,"n"
     .asciz "ni_copy_pub"
     .text
-    .global L_ni_copy_pub
     .seh_proc L_ni_copy_pub
 L_ni_copy_pub:
     pushq %rbp
@@ -2917,7 +2884,6 @@ ni_witness_pub:
     .section .iii.ring3,"n"
     .asciz "ni_sign_role"
     .text
-    .global L_ni_sign_role
     .seh_proc L_ni_sign_role
 L_ni_sign_role:
     pushq %rbp
@@ -3294,7 +3260,6 @@ ni_is_inited:
     .section .iii.ring3,"n"
     .asciz "ni_st_build_args"
     .text
-    .global L_ni_st_build_args
     .seh_proc L_ni_st_build_args
 L_ni_st_build_args:
     pushq %rbp
@@ -3402,11 +3367,8 @@ L_loop_top_58:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3552,11 +3514,8 @@ L_loop_top_60:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3686,7 +3645,6 @@ L_loop_end_61:
     .section .iii.ring3,"n"
     .asciz "ni_st_differs"
     .text
-    .global L_ni_st_differs
     .seh_proc L_ni_st_differs
 L_ni_st_differs:
     pushq %rbp
@@ -3808,7 +3766,6 @@ L_if_end_65:
     .section .iii.ring3,"n"
     .asciz "ni_st_eq32"
     .text
-    .global L_ni_st_eq32
     .seh_proc L_ni_st_eq32
 L_ni_st_eq32:
     pushq %rbp
@@ -3930,7 +3887,6 @@ L_if_end_69:
     .section .iii.ring3,"n"
     .asciz "ni_st_eq64"
     .text
-    .global L_ni_st_eq64
     .seh_proc L_ni_st_eq64
 L_ni_st_eq64:
     pushq %rbp

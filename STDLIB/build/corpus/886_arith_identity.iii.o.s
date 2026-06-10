@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "add0"
     .text
-    .global L_add0
     .seh_proc L_add0
 L_add0:
     pushq %rbp
@@ -19,11 +18,7 @@ L_add0:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -39,7 +34,6 @@ L_add0:
     .section .iii.ring3,"n"
     .asciz "mul1"
     .text
-    .global L_mul1
     .seh_proc L_mul1
 L_mul1:
     pushq %rbp
@@ -52,11 +46,7 @@ L_mul1:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -72,7 +62,6 @@ L_mul1:
     .section .iii.ring3,"n"
     .asciz "mul0"
     .text
-    .global L_mul0
     .seh_proc L_mul0
 L_mul0:
     pushq %rbp
@@ -105,7 +94,6 @@ L_mul0:
     .section .iii.ring3,"n"
     .asciz "zadd"
     .text
-    .global L_zadd
     .seh_proc L_zadd
 L_zadd:
     pushq %rbp
@@ -138,7 +126,6 @@ L_zadd:
     .section .iii.ring3,"n"
     .asciz "omul"
     .text
-    .global L_omul
     .seh_proc L_omul
 L_omul:
     pushq %rbp
@@ -171,7 +158,6 @@ L_omul:
     .section .iii.ring3,"n"
     .asciz "mul0e"
     .text
-    .global L_mul0e
     .seh_proc L_mul0e
 L_mul0e:
     pushq %rbp

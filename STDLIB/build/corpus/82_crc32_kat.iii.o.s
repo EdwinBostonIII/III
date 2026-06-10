@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcrc32.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcrc32.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
     .ascii "crc32.iii\0"
     .section .iii.ring3,"n"
@@ -204,11 +204,8 @@ L_if_end_1:
 L_if_end_3:
     movl -16(%rbp), %eax
     pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $24, %rax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax

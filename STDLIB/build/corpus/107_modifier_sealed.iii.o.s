@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "shielded"
     .text
-    .global L_shielded
     .seh_proc L_shielded
 L_shielded:
     pushq %rbp

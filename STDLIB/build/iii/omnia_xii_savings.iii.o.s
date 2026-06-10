@@ -67,7 +67,6 @@ L_XII_DK_INIT_DONE:
     .section .iii.ring3,"n"
     .asciz "_xii_dk_set_pair"
     .text
-    .global L__xii_dk_set_pair
     .seh_proc L__xii_dk_set_pair
 L__xii_dk_set_pair:
     pushq %rbp

@@ -4,51 +4,51 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtbench.iiibench.iiiresolution_init.iiiintent.iiipattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtbench.iiibench.iiiresolution_init.iiiintent.iiipattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "bench.iiibench.iiiresolution_init.iiiintent.iiipattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "bench.iii\0"
 L_str_3:
-    .ascii "bench.iiiresolution_init.iiiintent.iiipattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "bench.iii\0"
 L_str_4:
-    .ascii "resolution_init.iiiintent.iiipattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_5:
-    .ascii "intent.iiipattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "pattern_table.iiicall_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_7:
-    .ascii "call_context.iiiresolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "call_context.iii\0"
 L_str_8:
-    .ascii "resolver.iiiresolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver.iii\0"
 L_str_9:
-    .ascii "resolver.iiiresolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver.iii\0"
 L_str_10:
-    .ascii "resolver.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver.iii\0"
 L_str_11:
-    .ascii "resolver_memo.iiiresolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_12:
-    .ascii "resolver_memo.iiiresolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_13:
-    .ascii "resolver_memo.iiiresolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_14:
-    .ascii "resolver_memo.iiiintent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "resolver_memo.iii\0"
 L_str_15:
-    .ascii "intent.iiicall_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "intent.iii\0"
 L_str_16:
-    .ascii "call_context.iiikchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "call_context.iii\0"
 L_str_17:
-    .ascii "kchain.iiicall_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "kchain.iii\0"
 L_str_18:
-    .ascii "call_context.iii_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "call_context.iii\0"
 L_str_19:
-    .ascii "_unused.iiipattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "_unused.iii\0"
 L_str_20:
-    .ascii "pattern_table.iiiintent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_21:
-    .ascii "intent.iiicall_context.iiicpufeat.iii\0"
+    .ascii "intent.iii\0"
 L_str_22:
-    .ascii "call_context.iiicpufeat.iii\0"
+    .ascii "call_context.iii\0"
 L_str_23:
     .ascii "cpufeat.iii\0"
     .section .bss
@@ -64,7 +64,6 @@ L_BENCH_T1:
     .section .iii.ring3,"n"
     .asciz "bench_sort"
     .text
-    .global L_bench_sort
     .seh_proc L_bench_sort
 L_bench_sort:
     pushq %rbp
@@ -264,7 +263,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "bench_median"
     .text
-    .global L_bench_median
     .seh_proc L_bench_median
 L_bench_median:
     pushq %rbp

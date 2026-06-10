@@ -4,19 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtresolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtresolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "resolution_init.iiipattern_table.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "resolution_init.iii\0"
 L_str_3:
-    .ascii "pattern_table.iiiintent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "pattern_table.iii\0"
 L_str_4:
-    .ascii "intent.iiiintent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_5:
-    .ascii "intent.iiicall_context.iiiresolver_unit\0"
+    .ascii "intent.iii\0"
 L_str_6:
-    .ascii "call_context.iiiresolver_unit\0"
+    .ascii "call_context.iii\0"
 L_str_7:
     .ascii "resolver_unit\0"
     .section .iii.ring3,"n"
@@ -256,11 +256,8 @@ L_if_end_11:
     movq %rax, -56(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -275,11 +272,8 @@ L_if_end_11:
     movq %rax, -64(%rbp)
     movq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax

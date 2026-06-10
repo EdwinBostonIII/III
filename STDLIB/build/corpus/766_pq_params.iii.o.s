@@ -4,25 +4,25 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_1:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_2:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_3:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_4:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_5:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_6:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_7:
-    .ascii "pq_params.iiipq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_8:
-    .ascii "pq_params.iiipq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_9:
-    .ascii "pq_params.iiipq_params.iii\0"
+    .ascii "pq_params.iii\0"
 L_str_10:
     .ascii "pq_params.iii\0"
     .section .iii.ring3,"n"

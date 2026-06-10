@@ -4,19 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "call_context.iiicall_context.iiicapability.iiicapability.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_1:
-    .ascii "call_context.iiicapability.iiicapability.iiikchain.iii\0"
+    .ascii "call_context.iii\0"
 L_str_2:
-    .ascii "capability.iiicapability.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_3:
-    .ascii "capability.iiikchain.iii\0"
+    .ascii "capability.iii\0"
 L_str_4:
     .ascii "kchain.iii\0"
     .section .iii.ring3,"n"
     .asciz "_combined_op"
     .text
-    .global L__combined_op
     .seh_proc L__combined_op
 L__combined_op:
     pushq %rbp
@@ -102,7 +101,6 @@ L_kmax_ok_805306397:
     .section .iii.ring3,"n"
     .asciz "_outer_combined"
     .text
-    .global L__outer_combined
     .seh_proc L__outer_combined
 L__outer_combined:
     pushq %rbp

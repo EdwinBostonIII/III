@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cpufeat.iiicpufeat.iiicpufeat.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_1:
-    .ascii "cpufeat.iiicpufeat.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_2:
     .ascii "cpufeat.iii\0"
     .section .iii.ring3,"n"

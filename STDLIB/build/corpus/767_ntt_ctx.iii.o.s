@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ntt_ctx.iiintt_ctx.iiintt_ctx.iiintt_ctx.iiintt_ctx.iiintt_ctx.iii\0"
+    .ascii "ntt_ctx.iii\0"
 L_str_1:
-    .ascii "ntt_ctx.iiintt_ctx.iiintt_ctx.iiintt_ctx.iiintt_ctx.iii\0"
+    .ascii "ntt_ctx.iii\0"
 L_str_2:
-    .ascii "ntt_ctx.iiintt_ctx.iiintt_ctx.iiintt_ctx.iii\0"
+    .ascii "ntt_ctx.iii\0"
 L_str_3:
-    .ascii "ntt_ctx.iiintt_ctx.iiintt_ctx.iii\0"
+    .ascii "ntt_ctx.iii\0"
 L_str_4:
-    .ascii "ntt_ctx.iiintt_ctx.iii\0"
+    .ascii "ntt_ctx.iii\0"
 L_str_5:
     .ascii "ntt_ctx.iii\0"
     .section .iii.ring3,"n"

@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iii\0"
 L_str_3:
     .ascii "mhash.iii\0"
     .section .rodata
@@ -73,7 +73,6 @@ L_BABEL_DECIMAL_DIGITS:
     .section .iii.ring3,"n"
     .asciz "babel_buf_byte"
     .text
-    .global L_babel_buf_byte
     .seh_proc L_babel_buf_byte
 L_babel_buf_byte:
     pushq %rbp
@@ -144,7 +143,6 @@ L_if_end_1:
     .section .iii.ring3,"n"
     .asciz "babel_buf_str"
     .text
-    .global L_babel_buf_str
     .seh_proc L_babel_buf_str
 L_babel_buf_str:
     pushq %rbp
@@ -241,7 +239,6 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "babel_buf_hex16"
     .text
-    .global L_babel_buf_hex16
     .seh_proc L_babel_buf_hex16
 L_babel_buf_hex16:
     pushq %rbp
@@ -293,11 +290,8 @@ L_loop_top_4:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -350,7 +344,6 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "babel_buf_hex_bytes"
     .text
-    .global L_babel_buf_hex_bytes
     .seh_proc L_babel_buf_hex_bytes
 L_babel_buf_hex_bytes:
     pushq %rbp
@@ -414,11 +407,8 @@ L_loop_top_6:
     pushq %rax
     movzbq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $4, %rax
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -496,7 +486,6 @@ L_loop_end_7:
     .section .iii.ring3,"n"
     .asciz "babel_buf_decimal"
     .text
-    .global L_babel_buf_decimal
     .seh_proc L_babel_buf_decimal
 L_babel_buf_decimal:
     pushq %rbp

@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "keccak.iiikeccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_1:
-    .ascii "keccak.iiikeccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_2:
-    .ascii "keccak.iiikeccak.iii\0"
+    .ascii "keccak.iii\0"
 L_str_3:
     .ascii "keccak.iii\0"
     .section .rodata

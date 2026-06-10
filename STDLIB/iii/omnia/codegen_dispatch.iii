@@ -19,3 +19,32 @@ fn cg_dispatch_default(a: u64, b: u64, c: u64, ctx: u64) -> u64 @export {
     /* Successful selection signal (tag bit 0 == 0). */
     return 1u64
 }
+
+/* ===== harmony wave-4 M3: the AST-KIND UNIFIER -- the registry's claim made live ================
+ * Since boot, every AST-kind codegen pattern has DECLARED "I lower AST kind K" in
+ * binding_kinds[1] -- and nothing ever read it back (a write-only claim).  This is the
+ * production unify_fn (the item-29 Robinson gate's first boot-wired tenant): when the winning
+ * pattern carries an AST-kind claim and the intent ALSO claims a kind (partial arg slot 1,
+ * mask-gated), the two claims must Robinson-unify or the resolution REFUSES (E_RESOLVE_UNIFY)
+ * before dispatch -- a node can no longer be routed to the wrong lowering when the protocol
+ * speaks.  An intent that makes NO claim (mask bit 1 unset) passes vacuously: claims are
+ * verified WHEN MADE, so every legacy score-routed flow is byte-identical.
+ * Soundness of memoization: intent ids are construction-fresh and the memo key folds them, so
+ * differently-claimed intents never share a binding.  Mandate 7: structural comparison of two
+ * sealed declarations; no observation, no learning. */
+extern @abi(c-msvc-x64) fn pattern_binding_kind(p: u64, i: u32) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn intent_partial_args_mask(p: u64) -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_arg(p: u64, slot: u32) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn unify_make_const(buf: u64, payload: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify(buf: u64, a_in: u32, b_in: u32) -> u8 from "unify.iii"
+
+fn cg_unify_astkind(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export {
+    let _ctx2 : u64 = ctx
+    let mask : u32 = intent_partial_args_mask(intent)
+    if ((mask >> 1u32) & 1u32) == 0u32 { return 1u64 }   /* no claim made: legacy routing preserved */
+    let pk : u64 = pattern_binding_kind(pattern, 1u32) as u64
+    let ik : u64 = intent_partial_arg(intent, 1u32) & 0xFFu64
+    let ta : u32 = unify_make_const(buf, pk)
+    let tb : u32 = unify_make_const(buf, ik)
+    return unify(buf, ta, tb) as u64
+}

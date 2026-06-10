@@ -41,6 +41,7 @@ var CG_NAME_BUF : [u8; 32]
 /* Default codegen dispatch is defined in codegen_dispatch.iii (separate
  * file) so the fn-address operator produces a proper extern symbol. */
 extern @abi(c-msvc-x64) fn cg_dispatch_default(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
+extern @abi(c-msvc-x64) fn cg_unify_astkind(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
 
 /* W4.3: set when a codegen-pattern registration fails; codegen_register_all reports it. */
 var CG_REG_FAIL : u8 = 0u8
@@ -63,6 +64,14 @@ fn _cg_register(slot: u32, parent: u64, ast_kind_low: u8, name_b0: u8, name_b1: 
     pattern_template_set_dispatch((&CG_TEMPLATE_BUF) as u64, fp)
     /* Encode AST kind tag in binding_kinds[1] for lookup */
     pattern_template_set_binding_kind((&CG_TEMPLATE_BUF) as u64, 1u8, ast_kind_low)
+    /* harmony wave-4 M3: a REAL AST-kind claim (non-zero) is wired with the production
+     * Robinson unifier -- the item-29 gate verifies the claim at resolve time whenever an
+     * intent also claims a kind.  The call-family (ast_kind_low == 0: no claim) stays
+     * score-routed. */
+    if ast_kind_low != 0u8 {
+        let uf : u64 = cg_unify_astkind
+        pattern_template_set_unify((&CG_TEMPLATE_BUF) as u64, uf)
+    }
     let rok : u8 = pattern_register(slot, (&CG_TEMPLATE_BUF) as u64)
     if rok != 1u8 { CG_REG_FAIL = 1u8 }
     return 0i32

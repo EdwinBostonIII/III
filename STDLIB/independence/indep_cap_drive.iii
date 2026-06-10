@@ -12,10 +12,21 @@
  *
  * The command strings are NUL-terminated byte arrays (string literals carry no trailing NUL —
  * the documented msvcrt-boundary discipline).  msvcrt system() on Windows returns the child's
- * exit code directly. */
+ * exit code directly.
+ *
+ * harmony wave-4 M9 — THE WITNESSED VERDICT: when all three images return 99, the driver
+ * publishes the conjunction onto its witness spine — producer cad("capstone"), op
+ * cad("capstone.proof"), payload = the three verdicts (LE u64 x3), out_commit = cad(payload) —
+ * so the organism's complete health check is itself a content-addressed, provenance-bound fact.
+ * Pulling the spine costs ~1 GiB of BSS; the driver stays far under the 0x77000000 host law.
+ * Exit 99 = proven AND witnessed; 97 = proven but the spine refused (honest, distinct from any
+ * faculty index and from 98 spawn-failure). */
 module indep_cap_drive
 
 extern @abi(c-msvc-x64) fn system(cmd: *u8) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(domain: u32, msg: *u8, len: u64, out32: *u8) -> i32 from "cad.iii"
 
 /* ".\_cap_a_run.exe" + NUL (cmd-native relative form) */
 var CMD_A : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,97u8,95u8,114u8,117u8,110u8,46u8,101u8,120u8,101u8,0u8]
@@ -23,6 +34,16 @@ var CMD_A : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,97u8,95u8,114u8,117u
 var CMD_B : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,98u8,95u8,114u8,117u8,110u8,46u8,101u8,120u8,101u8,0u8]
 /* ".\_cap_c_run.exe" + NUL */
 var CMD_C : [u8; 17] = [46u8,92u8,95u8,99u8,97u8,112u8,95u8,99u8,95u8,114u8,117u8,110u8,46u8,101u8,120u8,101u8,0u8]
+
+/* "capstone" / "capstone.proof" (domain text for the producer/op digests) */
+var CW_PROD_TXT : [u8; 8]  = [99u8,97u8,112u8,115u8,116u8,111u8,110u8,101u8]
+var CW_OP_TXT   : [u8; 14] = [99u8,97u8,112u8,115u8,116u8,111u8,110u8,101u8,46u8,112u8,114u8,111u8,111u8,102u8]
+var CW_PROD : [u8; 32]
+var CW_OP   : [u8; 32]
+var CW_IN   : [u8; 32]
+var CW_OUT  : [u8; 32]
+var CW_PAY  : [u8; 24]
+var CW_FID  : [u8; 32]
 
 fn main() -> u64 {
     let ra : i32 = system((&CMD_A as u64) as *u8)
@@ -40,6 +61,26 @@ fn main() -> u64 {
         if rc2 < 0i32 { return 98u64 }
         return (rc2 as u64) & 0xFFu64
     }
-    /* All 49 faculties proved themselves, across the three images. */
+    /* All 49 faculties proved themselves, across the three images.  WITNESS the conjunction:
+     * the complete health check becomes a content-addressed, provenance-bound fact. */
+    wh_init(1u64)
+    cad_oneshot(1u32, (&CW_PROD_TXT as u64) as *u8, 8u64, (&CW_PROD as u64) as *u8)
+    cad_oneshot(1u32, (&CW_OP_TXT as u64) as *u8, 14u64, (&CW_OP as u64) as *u8)
+    let mut pi : u64 = 0u64
+    while pi < 8u64 {
+        CW_PAY[pi]         = ((  (ra as u64) >> (pi * 8u64)) & 0xFFu64) as u8
+        CW_PAY[pi + 8u64]  = ((  (rb as u64) >> (pi * 8u64)) & 0xFFu64) as u8
+        CW_PAY[pi + 16u64] = (( (rc2 as u64) >> (pi * 8u64)) & 0xFFu64) as u8
+        pi = pi + 1u64
+    }
+    cad_oneshot(1u32, (&CW_OP as u64) as *u8, 32u64, (&CW_IN as u64) as *u8)
+    cad_oneshot(1u32, (&CW_PAY as u64) as *u8, 24u64, (&CW_OUT as u64) as *u8)
+    let widx : u64 = wh_publish((&CW_PROD as u64) as *u8, (&CW_OP as u64) as *u8,
+               (&CW_IN as u64) as *u8, (&CW_OUT as u64) as *u8,
+               0u8, 0u8, 0u16,
+               (&CW_PROD as u64) as *u8, 0u32,
+               (&CW_PAY as u64) as *u8, 24u32,
+               (&CW_FID as u64) as *u8)
+    if widx == 0xFFFFFFFFFFFFFFFFu64 { return 97u64 }   /* proven but unwitnessed: honest */
     return 99u64
 }

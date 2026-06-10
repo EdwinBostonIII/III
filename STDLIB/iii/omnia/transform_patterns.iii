@@ -24,6 +24,8 @@ extern @abi(c-msvc-x64) fn pattern_template_set_ring(buf: u64, r: u8) -> i32 fro
 extern @abi(c-msvc-x64) fn pattern_template_set_k_value(buf: u64, k: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_specialisation_of(buf: u64, parent: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_binding_kind(buf: u64, slot: u8, k: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_unify(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn tp_unify_claim(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
 extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
 
 /* The 24 codec entry-point names -- extern declarations let us take their address */
@@ -134,6 +136,11 @@ fn _tx_register(slot: u32, src_form: u8, dst_form: u8, fn_ptr: u64) -> i32 {
     pattern_template_set_dispatch((&TX_TEMPLATE_BUF) as u64, fn_ptr)
     pattern_template_set_binding_kind((&TX_TEMPLATE_BUF) as u64, 1u8, src_form)
     pattern_template_set_binding_kind((&TX_TEMPLATE_BUF) as u64, 2u8, dst_form)
+    /* harmony wave-4 M6: the typed (src -> dst) declaration is a LIVE claim -- the compound
+     * Robinson unifier verifies both ends at resolve time whenever an intent claims a pair
+     * (partial-arg slots 2/3); claimless intents route exactly as before. */
+    let uf_tx : u64 = tp_unify_claim
+    pattern_template_set_unify((&TX_TEMPLATE_BUF) as u64, uf_tx)
     let rok : u8 = pattern_register(slot, (&TX_TEMPLATE_BUF) as u64)
     if rok != 1u8 { TX_REG_FAIL = 1u8 }
     /* Side table index = slot - 18 (transform base shifted with 18-primitive collapse). */

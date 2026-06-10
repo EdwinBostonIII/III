@@ -37,6 +37,9 @@ extern @abi(c-msvc-x64) fn intent_partial_args_mask(p: u64) -> u32 from "intent.
 extern @abi(c-msvc-x64) fn intent_partial_arg(p: u64, slot: u32) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn unify_make_const(buf: u64, payload: u64) -> u32 from "unify.iii"
 extern @abi(c-msvc-x64) fn unify(buf: u64, a_in: u32, b_in: u32) -> u8 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_struct(buf: u64, head: u32, args_first_idx: u32, arity: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_alloc_args(buf: u64, count: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_set_arg(buf: u64, args_first_idx: u32, slot: u8, term_id: u32) -> i32 from "unify.iii"
 
 fn cg_unify_astkind(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export {
     let _ctx2 : u64 = ctx
@@ -47,4 +50,48 @@ fn cg_unify_astkind(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @expor
     let ta : u32 = unify_make_const(buf, pk)
     let tb : u32 = unify_make_const(buf, ik)
     return unify(buf, ta, tb) as u64
+}
+
+/* ===== harmony wave-4 M6: the TRANSFORM claim unifier -- compound Robinson terms ================
+ * Transform patterns declare a TYPED claim at registration: binding_kinds[1] = src_form,
+ * binding_kinds[2] = dst_form ("I transform SRC into DST").  This unifier verifies the WHOLE
+ * structure in one Robinson unification of compound terms: tx(src, dst) built from the pattern's
+ * declaration vs tx(src, dst) built from the intent's claim (partial-arg slots 2 and 3,
+ * mask-gated; slot 1 belongs to the AST-kind convention).  Functor + arity + both fields must
+ * agree -- one mismatched END refuses the resolution before dispatch.  A HALF claim (one slot
+ * masked, the other not) is MALFORMED and refuses outright: the protocol is two-ended or silent.
+ * Claimless intents pass vacuously (claims are verified WHEN MADE).  This file remains the
+ * address-of-fn home for resolver-wired functions (the documented iiis quirk). */
+const TPU_TX_HEAD : u32 = 0x7478u32    /* the 'tx' functor symbol (shared by both sides) */
+
+fn tp_unify_claim(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export {
+    let _ctx3 : u64 = ctx
+    let mask : u32 = intent_partial_args_mask(intent)
+    let has_src : u32 = (mask >> 2u32) & 1u32
+    let has_dst : u32 = (mask >> 3u32) & 1u32
+    if has_src == 0u32 { if has_dst == 0u32 { return 1u64 } }   /* no claim: legacy routing */
+    if has_src != has_dst { return 0u64 }                       /* half a claim is malformed: refuse */
+    /* the pattern's declared pair, as the compound tx(src, dst) */
+    let p_src : u64 = pattern_binding_kind(pattern, 1u32) as u64
+    let p_dst : u64 = pattern_binding_kind(pattern, 2u32) as u64
+    let pa : u32 = unify_alloc_args(buf, 2u8)
+    if pa == 0xFFFFFFFFu32 { return 0u64 }
+    let pt1 : u32 = unify_make_const(buf, p_src)
+    let pt2 : u32 = unify_make_const(buf, p_dst)
+    unify_set_arg(buf, pa, 0u8, pt1)
+    unify_set_arg(buf, pa, 1u8, pt2)
+    let tp : u32 = unify_make_struct(buf, TPU_TX_HEAD, pa, 2u8)
+    /* the intent's claimed pair */
+    let i_src : u64 = intent_partial_arg(intent, 2u32) & 0xFFu64
+    let i_dst : u64 = intent_partial_arg(intent, 3u32) & 0xFFu64
+    let ia : u32 = unify_alloc_args(buf, 2u8)
+    if ia == 0xFFFFFFFFu32 { return 0u64 }
+    let it1 : u32 = unify_make_const(buf, i_src)
+    let it2 : u32 = unify_make_const(buf, i_dst)
+    unify_set_arg(buf, ia, 0u8, it1)
+    unify_set_arg(buf, ia, 1u8, it2)
+    let ti : u32 = unify_make_struct(buf, TPU_TX_HEAD, ia, 2u8)
+    if tp == 0xFFFFFFFFu32 { return 0u64 }
+    if ti == 0xFFFFFFFFu32 { return 0u64 }
+    return unify(buf, tp, ti) as u64
 }

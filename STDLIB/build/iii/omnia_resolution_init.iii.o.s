@@ -20,30 +20,34 @@ L_str_6:
 L_str_7:
     .ascii "pattern.iii\0"
 L_str_8:
-    .ascii "pattern_table.iii\0"
+    .ascii "pattern.iii\0"
 L_str_9:
-    .ascii "resolution_meta_dispatch.iii\0"
+    .ascii "codegen_dispatch.iii\0"
 L_str_10:
-    .ascii "resolution_meta_dispatch.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_11:
-    .ascii "pattern_table.iii\0"
+    .ascii "resolution_meta_dispatch.iii\0"
 L_str_12:
-    .ascii "calculus_v1.iii\0"
+    .ascii "resolution_meta_dispatch.iii\0"
 L_str_13:
-    .ascii "irreducibility_proof.iii\0"
-L_str_14:
     .ascii "pattern_table.iii\0"
+L_str_14:
+    .ascii "calculus_v1.iii\0"
 L_str_15:
-    .ascii "transform_patterns.iii\0"
+    .ascii "irreducibility_proof.iii\0"
 L_str_16:
-    .ascii "codegen_patterns.iii\0"
+    .ascii "pattern_table.iii\0"
 L_str_17:
-    .ascii "seal_resolver.iii\0"
+    .ascii "transform_patterns.iii\0"
 L_str_18:
-    .ascii "quality_q7.iii\0"
+    .ascii "codegen_patterns.iii\0"
 L_str_19:
-    .ascii "closure.iii\0"
+    .ascii "seal_resolver.iii\0"
 L_str_20:
+    .ascii "quality_q7.iii\0"
+L_str_21:
+    .ascii "closure.iii\0"
+L_str_22:
     .ascii "closure.iii\0"
     .section .rodata
 L_RES_INIT_OK:
@@ -379,6 +383,26 @@ L_if_end_5:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    leaq mu_unify_primitive(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq -64(%rbp), %rax
+    pushq %rax
+    leaq L_INIT_TEMPLATE_BUF(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq pattern_template_set_unify
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     leaq L_INIT_TEMPLATE_BUF(%rip), %rax
     pushq %rax
     popq %rax
@@ -393,8 +417,8 @@ L_if_end_5:
     movzbq %al, %rax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
-    movzbq -64(%rbp), %rax
+    movq %rax, -72(%rbp)
+    movzbq -72(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

@@ -251,6 +251,8 @@ extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 
 fn _cga_mx_lhs(shape: u32) -> u32 {
@@ -327,4 +329,124 @@ fn cga_mixed_seal_byte(i: u32, j: u32) -> u8 @export {
     if i >= CGA_MX_N[0u64] { return 0u8 }
     if j >= 32u32 { return 0u8 }
     return CGA_MX_SEAL[(i as u64) * 32u64 + (j as u64)]
+}
+
+/* ===== harmony wave-4 M2: THE SHIFT-COMBINING LAW FAMILY (domain byte 0xB7) =====================
+ * The peephole class a code generator combines shifts with -- certified parametrically, with the
+ * COUNT-MASK BOUNDARY enforced as the admission wall.  Authority: UNSAT via bv_bits (zero-clause
+ * literal shifts; the miter is pure bit-remap equality).  THE TRANSFER CONDITION, stated exactly:
+ * bv_bits models the MATHEMATICAL shift (k >= w yields 0) while silicon count-masks (k & 63), so
+ * a law proven here transfers to the machine ONLY where the two models agree -- every shift count
+ * involved (a, b, AND a+b) strictly below the width.  The disposer refuses anything else: the
+ * silicon 'law' (x>>40)>>40 == x>>((40+40)&63) is FALSE and must never be admitted; the honest
+ * law family is bounded, and the bound is part of the seal.
+ *   shape 1: (x>>a)>>b == x>>(a+b)                      (right-shift combining)
+ *   shape 2: (x<<a)<<b == x<<(a+b)                      (left-shift combining)
+ *   shape 3: (x<<k)>>k == x & (~0 >> k)                 (mask recovery; k = a, b ignored/0)
+ * Seals: cad(0xB7 || shape || a_le4 || b_le4).  Probe widths 8/16/32/64 with the PER-WIDTH bound
+ * (counts below EACH probe width are required for that width's miter to be meaningful, so probes
+ * narrower than the counts are SKIPPED -- w=64 is always probed and always sufficient-or-refusing). */
+
+var CGA_SH_SHAPE : [u32; 128]
+var CGA_SH_A     : [u32; 128]
+var CGA_SH_B     : [u32; 128]
+var CGA_SH_N     : [u32; 1]
+var CGA_SH_SEAL  : [u8; 4096]   /* 128 x 32-byte cad seals */
+var CGA_SH_MSG   : [u8; 13]     /* 0xB7 || shape(4) || a(4) || b(4) */
+
+fn _cga_sh_lhs(shape: u32, a: u32, b: u32) -> u32 {
+    let x : u32 = bb_var(0u32)
+    if shape == 1u32 { return bb_shr(bb_shr(x, a as u64), b as u64) }
+    if shape == 2u32 { return bb_shl(bb_shl(x, a as u64), b as u64) }
+    if shape == 3u32 { return bb_shr(bb_shl(x, a as u64), a as u64) }
+    return 0xFFFFFFFFu32
+}
+
+fn _cga_sh_rhs(shape: u32, a: u32, b: u32, w: u64) -> u32 {
+    let x : u32 = bb_var(0u32)
+    if shape == 1u32 { return bb_shr(x, (a as u64) + (b as u64)) }
+    if shape == 2u32 { return bb_shl(x, (a as u64) + (b as u64)) }
+    if shape == 3u32 {
+        /* the mask is PER-WIDTH: ~0_w >> a == (1 << (w-a)) - 1.  A 64-bit-fixed mask is WRONG at
+         * narrower probes -- the disposer itself caught that during bring-up (a w=16 countermodel
+         * refused the width-naive term): the falsifier widths are not decoration. */
+        let mask : u64 = (1u64 << (w - (a as u64))) - 1u64
+        return bb_and(x, bb_const(mask))
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn cga_dispose_shift(shape: u32, a: u32, b: u32, budget: u32) -> u8 @export {
+    if budget == 0u32 { return 0u8 }
+    if shape == 0u32 { return 0u8 }
+    if shape > 3u32 { return 0u8 }
+    /* THE COUNT-MASK WALL: every count strictly below the machine width, or refuse */
+    if a >= 64u32 { return 0u8 }
+    if b >= 64u32 { return 0u8 }
+    if a + b >= 64u32 { return 0u8 }
+    if shape == 3u32 { if b != 0u32 { return 0u8 } }     /* shape 3 is unary in a; b must be 0 */
+    let mut wi : u64 = 8u64
+    while wi <= 64u64 {
+        /* probe only widths where the counts are in-model (w=64 always qualifies) */
+        let mut skip : u32 = 0u32
+        if (a as u64) >= wi { skip = 1u32 }
+        if (b as u64) >= wi { skip = 1u32 }
+        if ((a as u64) + (b as u64)) >= wi { skip = 1u32 }
+        if skip == 0u32 {
+            bb_reset(wi)
+            let l : u32 = _cga_sh_lhs(shape, a, b)
+            let r : u32 = _cga_sh_rhs(shape, a, b, wi)
+            if l == 0xFFFFFFFFu32 { return 0u8 }
+            if r == 0xFFFFFFFFu32 { return 0u8 }
+            if bb_equal(l, r) != 1u8 { return 0u8 }
+        }
+        wi = wi * 2u64
+    }
+    let n : u32 = CGA_SH_N[0u64]
+    if n >= 128u32 { return 1u8 }
+    CGA_SH_MSG[0u64] = 0xB7u8
+    CGA_SH_MSG[1u64] = (shape & 0xFFu32) as u8
+    CGA_SH_MSG[2u64] = ((shape >> 8u32) & 0xFFu32) as u8
+    CGA_SH_MSG[3u64] = ((shape >> 16u32) & 0xFFu32) as u8
+    CGA_SH_MSG[4u64] = ((shape >> 24u32) & 0xFFu32) as u8
+    CGA_SH_MSG[5u64] = (a & 0xFFu32) as u8
+    CGA_SH_MSG[6u64] = ((a >> 8u32) & 0xFFu32) as u8
+    CGA_SH_MSG[7u64] = ((a >> 16u32) & 0xFFu32) as u8
+    CGA_SH_MSG[8u64] = ((a >> 24u32) & 0xFFu32) as u8
+    CGA_SH_MSG[9u64] = (b & 0xFFu32) as u8
+    CGA_SH_MSG[10u64] = ((b >> 8u32) & 0xFFu32) as u8
+    CGA_SH_MSG[11u64] = ((b >> 16u32) & 0xFFu32) as u8
+    CGA_SH_MSG[12u64] = ((b >> 24u32) & 0xFFu32) as u8
+    let outp : *u8 = ((&CGA_SH_SEAL as u64) + (n as u64) * 32u64) as *u8
+    cad_oneshot(1u32, (&CGA_SH_MSG as u64) as *u8, 13u64, outp)
+    CGA_SH_SHAPE[n as u64] = shape
+    CGA_SH_A[n as u64] = a
+    CGA_SH_B[n as u64] = b
+    CGA_SH_N[0u64] = n + 1u32
+    return 1u8
+}
+
+/* the discovery sweep: shapes 1-2 over the (a,b) grid 1..G with a+b < 64; shape 3 over a in 1..G.
+ * Every admission is individually UNSAT-proven; the count-mask wall bounds the family honestly. */
+fn cga_shift_discover(g: u32, budget: u32) -> u32 @export {
+    if budget == 0u32 { return 0u32 }
+    let mut adm : u32 = 0u32
+    let mut sa : u32 = 1u32
+    while sa <= g {
+        let mut sb : u32 = 1u32
+        while sb <= g {
+            if cga_dispose_shift(1u32, sa, sb, budget) == 1u8 { adm = adm + 1u32 }
+            if cga_dispose_shift(2u32, sa, sb, budget) == 1u8 { adm = adm + 1u32 }
+            sb = sb + 1u32
+        }
+        if cga_dispose_shift(3u32, sa, 0u32, budget) == 1u8 { adm = adm + 1u32 }
+        sa = sa + 1u32
+    }
+    return adm
+}
+
+fn cga_shift_count() -> u32 @export { return CGA_SH_N[0u64] }
+fn cga_shift_get_shape(i: u32) -> u32 @export {
+    if i >= CGA_SH_N[0u64] { return 0xFFFFFFFFu32 }
+    return CGA_SH_SHAPE[i as u64]
 }

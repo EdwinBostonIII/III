@@ -4,7 +4,7 @@
  * binding_kinds[2]=dst_form ("I transform SRC into DST") -- write-only until now.  M6 wires
  * tp_unify_claim through the item-29 gate: ONE Robinson unification of COMPOUND terms,
  * tx(p_src, p_dst) vs tx(i_src, i_dst) (functor + arity + both fields), refusing a mismatched
- * END before dispatch.  A HALF claim (slot 2 xor slot 3) is MALFORMED and refuses outright --
+ * END before dispatch.  A HALF claim (slot 13 xor slot 14) is MALFORMED and refuses outright --
  * the protocol is two-ended or silent.  Claimless intents route exactly as before.  Arms:
  *  (1) BOOT WIRING: transform slot 18 carries tp_unify_claim AND codegen slot 49 still carries
  *      cg_unify_astkind -- the two tenants coexist in one table;
@@ -92,8 +92,8 @@ fn main() -> u64 {
     /* (2) an intent CLAIMING the declared kind resolves */
     let i_right : u64 = intent_new(6u8)
     if i_right == 0u64 { return 6u64 }
-    intent_set_partial_arg(i_right, 2u32, 5u64)
-    intent_set_partial_arg(i_right, 3u32, 9u64)
+    intent_set_partial_arg(i_right, 13u32, 5u64)
+    intent_set_partial_arg(i_right, 14u32, 9u64)
     let ctx1 : u64 = call_context_new()
     let rc1 : u64 = resolve(set, i_right, ctx1)
     if rc1 != (0x4B4Bu64 << 1u64) { return 7u64 }
@@ -103,17 +103,17 @@ fn main() -> u64 {
     /* (3) THE REFUSAL: a mismatched claim refuses with the exact code, before dispatch */
     let i_wrong : u64 = intent_new(6u8)
     if i_wrong == 0u64 { return 10u64 }
-    intent_set_partial_arg(i_wrong, 2u32, 5u64)
-    intent_set_partial_arg(i_wrong, 3u32, 8u64)
+    intent_set_partial_arg(i_wrong, 13u32, 5u64)
+    intent_set_partial_arg(i_wrong, 14u32, 8u64)
     let ctx2 : u64 = call_context_new()
     let rc2 : u64 = resolve(set, i_wrong, ctx2)
     if rc2 != ((0xE109u64 << 1u64) | 1u64) { return 11u64 }
     if TEST_DISPATCHED != 1u64 { return 12u64 }
 
-    /* (4b) THE HALF CLAIM: slot 2 without slot 3 is malformed -- refuse */
+    /* (4b) THE HALF CLAIM: slot 13 without slot 14 is malformed -- refuse */
     let i_half : u64 = intent_new(6u8)
     if i_half == 0u64 { return 18u64 }
-    intent_set_partial_arg(i_half, 2u32, 5u64)
+    intent_set_partial_arg(i_half, 13u32, 5u64)
     let ctx_h : u64 = call_context_new()
     let rc_h : u64 = resolve(set, i_half, ctx_h)
     if rc_h != ((0xE109u64 << 1u64) | 1u64) { return 19u64 }

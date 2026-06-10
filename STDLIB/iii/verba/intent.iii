@@ -147,6 +147,10 @@ fn intent_new(goal_kind: u8) -> u64 @export {
     return p
 }
 
+/* CLAIM REGION (harmony wave-4): slots 13-15 are RESERVED for resolve-time routing claims
+ * (13/14 = transform src/dst pair, 15 = AST kind) and MUST NOT be used by payload constructors
+ * -- every constructor in this file uses slots 0-2 only.  A payload arg in the claim region
+ * would be misread as a structural claim by the Robinson gate's unifiers. */
 fn intent_set_partial_arg(intent_ptr: u64, slot: u32, value: u64) -> i32 @export {
     if slot >= 16u32 { return INTENT_E_RANGE }
     let off : u64 = 16u64 + ((slot as u64) & 0xFFFFFFFFu64) * 8u64

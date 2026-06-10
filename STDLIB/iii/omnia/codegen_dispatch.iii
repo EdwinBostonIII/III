@@ -24,8 +24,9 @@ fn cg_dispatch_default(a: u64, b: u64, c: u64, ctx: u64) -> u64 @export {
  * Since boot, every AST-kind codegen pattern has DECLARED "I lower AST kind K" in
  * binding_kinds[1] -- and nothing ever read it back (a write-only claim).  This is the
  * production unify_fn (the item-29 Robinson gate's first boot-wired tenant): when the winning
- * pattern carries an AST-kind claim and the intent ALSO claims a kind (partial arg slot 1,
- * mask-gated), the two claims must Robinson-unify or the resolution REFUSES (E_RESOLVE_UNIFY)
+ * pattern carries an AST-kind claim and the intent ALSO claims a kind (partial arg slot 15 --
+ * the CLAIM REGION: slots 13-15 are reserved for routing claims and no payload constructor
+ * touches them, so a payload arg can never be misread as a claim; mask-gated), the two claims must Robinson-unify or the resolution REFUSES (E_RESOLVE_UNIFY)
  * before dispatch -- a node can no longer be routed to the wrong lowering when the protocol
  * speaks.  An intent that makes NO claim (mask bit 1 unset) passes vacuously: claims are
  * verified WHEN MADE, so every legacy score-routed flow is byte-identical.
@@ -44,9 +45,9 @@ extern @abi(c-msvc-x64) fn unify_set_arg(buf: u64, args_first_idx: u32, slot: u8
 fn cg_unify_astkind(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export {
     let _ctx2 : u64 = ctx
     let mask : u32 = intent_partial_args_mask(intent)
-    if ((mask >> 1u32) & 1u32) == 0u32 { return 1u64 }   /* no claim made: legacy routing preserved */
+    if ((mask >> 15u32) & 1u32) == 0u32 { return 1u64 }  /* no claim made: legacy routing preserved */
     let pk : u64 = pattern_binding_kind(pattern, 1u32) as u64
-    let ik : u64 = intent_partial_arg(intent, 1u32) & 0xFFu64
+    let ik : u64 = intent_partial_arg(intent, 15u32) & 0xFFu64
     let ta : u32 = unify_make_const(buf, pk)
     let tb : u32 = unify_make_const(buf, ik)
     return unify(buf, ta, tb) as u64
@@ -56,8 +57,9 @@ fn cg_unify_astkind(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @expor
  * Transform patterns declare a TYPED claim at registration: binding_kinds[1] = src_form,
  * binding_kinds[2] = dst_form ("I transform SRC into DST").  This unifier verifies the WHOLE
  * structure in one Robinson unification of compound terms: tx(src, dst) built from the pattern's
- * declaration vs tx(src, dst) built from the intent's claim (partial-arg slots 2 and 3,
- * mask-gated; slot 1 belongs to the AST-kind convention).  Functor + arity + both fields must
+ * declaration vs tx(src, dst) built from the intent's claim (partial-arg slots 13 and 14 in
+ * the CLAIM REGION -- slots 13-15, untouched by every payload constructor; slot 15 belongs to
+ * the AST-kind convention).  Functor + arity + both fields must
  * agree -- one mismatched END refuses the resolution before dispatch.  A HALF claim (one slot
  * masked, the other not) is MALFORMED and refuses outright: the protocol is two-ended or silent.
  * Claimless intents pass vacuously (claims are verified WHEN MADE).  This file remains the
@@ -67,8 +69,8 @@ const TPU_TX_HEAD : u32 = 0x7478u32    /* the 'tx' functor symbol (shared by bot
 fn tp_unify_claim(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export {
     let _ctx3 : u64 = ctx
     let mask : u32 = intent_partial_args_mask(intent)
-    let has_src : u32 = (mask >> 2u32) & 1u32
-    let has_dst : u32 = (mask >> 3u32) & 1u32
+    let has_src : u32 = (mask >> 13u32) & 1u32
+    let has_dst : u32 = (mask >> 14u32) & 1u32
     if has_src == 0u32 { if has_dst == 0u32 { return 1u64 } }   /* no claim: legacy routing */
     if has_src != has_dst { return 0u64 }                       /* half a claim is malformed: refuse */
     /* the pattern's declared pair, as the compound tx(src, dst) */
@@ -82,8 +84,8 @@ fn tp_unify_claim(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 @export 
     unify_set_arg(buf, pa, 1u8, pt2)
     let tp : u32 = unify_make_struct(buf, TPU_TX_HEAD, pa, 2u8)
     /* the intent's claimed pair */
-    let i_src : u64 = intent_partial_arg(intent, 2u32) & 0xFFu64
-    let i_dst : u64 = intent_partial_arg(intent, 3u32) & 0xFFu64
+    let i_src : u64 = intent_partial_arg(intent, 13u32) & 0xFFu64
+    let i_dst : u64 = intent_partial_arg(intent, 14u32) & 0xFFu64
     let ia : u32 = unify_alloc_args(buf, 2u8)
     if ia == 0xFFFFFFFFu32 { return 0u64 }
     let it1 : u32 = unify_make_const(buf, i_src)

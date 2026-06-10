@@ -92,7 +92,7 @@ fn main() -> u64 {
     /* (2) an intent CLAIMING the declared kind resolves */
     let i_right : u64 = intent_new(6u8)
     if i_right == 0u64 { return 6u64 }
-    intent_set_partial_arg(i_right, 1u32, 7u64)
+    intent_set_partial_arg(i_right, 15u32, 7u64)
     let ctx1 : u64 = call_context_new()
     let rc1 : u64 = resolve(set, i_right, ctx1)
     if rc1 != (0x4B4Bu64 << 1u64) { return 7u64 }
@@ -102,7 +102,7 @@ fn main() -> u64 {
     /* (3) THE REFUSAL: a mismatched claim refuses with the exact code, before dispatch */
     let i_wrong : u64 = intent_new(6u8)
     if i_wrong == 0u64 { return 10u64 }
-    intent_set_partial_arg(i_wrong, 1u32, 9u64)
+    intent_set_partial_arg(i_wrong, 15u32, 9u64)
     let ctx2 : u64 = call_context_new()
     let rc2 : u64 = resolve(set, i_wrong, ctx2)
     if rc2 != ((0xE109u64 << 1u64) | 1u64) { return 11u64 }
@@ -115,6 +115,16 @@ fn main() -> u64 {
     let rc3 : u64 = resolve(set, i_silent, ctx3)
     if rc3 != (0x4B4Bu64 << 1u64) { return 14u64 }
     if TEST_DISPATCHED != 2u64 { return 15u64 }
+
+    /* (4c) THE PAYLOAD-COLLISION TOOTH: a payload arg in slot 1 (the intent_bind convention)
+     * is NOT a claim -- before the CLAIM REGION it would have been misread and refused; now it
+     * routes vacuously.  This arm pins the fix. */
+    let i_payload : u64 = intent_new(6u8)
+    if i_payload == 0u64 { return 21u64 }
+    intent_set_partial_arg(i_payload, 1u32, 0xDEADBEEFu64)
+    let ctx_p : u64 = call_context_new()
+    let rc_p : u64 = resolve(set, i_payload, ctx_p)
+    if rc_p != (0x4B4Bu64 << 1u64) { return 22u64 }
 
     /* (5) regression: the form-100 dynamic baseline still resolves */
     let base : u64 = dynamic_intent(intent_form(100u64))

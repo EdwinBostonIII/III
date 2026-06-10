@@ -143,6 +143,7 @@ const CCL_BVSHL    : u8 = 36u8   /* A=base, B=count : BV  (count masked &63; shl
 const CCL_BVADDOVF : u8 = 37u8   /* A=left, B=right : Bool  (unsigned add carry-out)                */
 const CCL_BVMULOVF : u8 = 38u8   /* A=left, B=right : Bool  (u64 full-product overflow)             */
 const CCL_BVLSHR   : u8 = 39u8   /* A=base, B=count : BV  (LOGICAL right shift; count masked &63 -- harmony 22) */
+const CCL_BVUDIV   : u8 = 40u8   /* A=dividend, B=divisor : BV  (UNSIGNED div; divisor 0 is STUCK -- wave-4 M11) */
 
 const CCL_BV_ONES : u64 = 0xFFFFFFFFFFFFFFFFu64   /* the all-ones 64-bit word (~0) */
 
@@ -227,6 +228,7 @@ fn ccl_bvshl_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVSHL, a, b) }
 fn ccl_bvaddovf_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVADDOVF, a, b) }
 fn ccl_bvmulovf_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVMULOVF, a, b) }
 fn ccl_bvlshr_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVLSHR, a, b) }
+fn ccl_bvudiv_c(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_BVUDIV, a, b) }
 
 fn ccl_iter_c() -> u32 @export { return ccl_mk(CCL_ITER, 0u32, 0u32) }
 fn ccl_natrec_c() -> u32 @export { return ccl_mk(CCL_NATREC, 0u32, 0u32) }
@@ -278,7 +280,7 @@ fn ccl_strengthen(v: u32) -> u32 {
      * any operand depends on #0); they are NOT weakening-invariant constants.  A BVLIT (tag 29) IS a
      * closed value and correctly hits the constant rule below.  Mirror of the COMP/PAIR strengthen. */
     if tag >= CCL_BVADD {
-        if tag <= CCL_BVLSHR {
+        if tag <= CCL_BVUDIV {
             let bsa : u32 = ccl_strengthen(CCL_A[v])
             if bsa == CCL_SENT { return CCL_SENT }
             let bsb : u32 = ccl_strengthen(CCL_B[v])
@@ -539,6 +541,7 @@ fn ccl_bv_eq(a: u32, b: u32, depth: u32) -> u8 {
     if at == CCL_BVXOR { binary = 1u8 }
     if at == CCL_BVSHL { binary = 1u8 }
     if at == CCL_BVLSHR { binary = 1u8 }
+    if at == CCL_BVUDIV { binary = 1u8 }
     if binary == 0u8 { return 0u8 }                /* outside the BV fragment: refuse (incomplete, never unsound) */
     if ccl_bv_eq(CCL_A[a], CCL_A[b], depth - 1u32) != 1u8 { return 0u8 }
     return ccl_bv_eq(CCL_B[a], CCL_B[b], depth - 1u32)
@@ -613,6 +616,27 @@ fn ccl_bv_fold(op: u8, a: u32, b: u32) -> u32 {
         if blit == 1u8 { if (vb & 63u64) == 0u64 { return a } }            /* x >> 0 = x (incl. masked counts) */
         return CCL_SENT
     }
+    if op == CCL_BVUDIV {
+        /* UNSIGNED division.  Divisor 0 is STUCK (no rule -- the machine traps; the kernel
+         * refuses to give 0/x a value).  THE DIV-STRENGTH IOTA (wave-4 M11): division by a
+         * power of two IS the logical right shift, unconditionally for unsigned -- the
+         * kernel-certified justification a cg division fold cites (the 1207/SHL precedent,
+         * division edition). */
+        if blit == 1u8 {
+            if vb != 0u64 {
+                if alit == 1u8 { return ccl_bvlit_v(va / vb) }             /* closed fold */
+                if vb == 1u64 { return a }                                 /* x / 1 = x */
+                if (vb & (vb - 1u64)) == 0u64 {
+                    /* vb == 2^k: find k (vb != 0, vb != 1 here -> k in 1..63) */
+                    let mut k : u64 = 0u64
+                    let mut t : u64 = vb
+                    while t > 1u64 { t = t >> 1u64 ; k = k + 1u64 }
+                    return ccl_bvlshr_c(a, ccl_bvlit_v(k))                 /* x / 2^k = x >> k */
+                }
+            }
+        }
+        return CCL_SENT
+    }
     if op == CCL_BVADDOVF {
         if alit == 1u8 { if blit == 1u8 {
             let sum : u64 = va + vb
@@ -660,7 +684,7 @@ fn ccl_step(t: u32) -> u32 {
      * leftmost-outermost, then fires a ring rule once both are normal. */
     if tag == CCL_BVLIT { return t }
     if tag >= CCL_BVADD {
-        if tag <= CCL_BVLSHR {
+        if tag <= CCL_BVUDIV {
             let bo_a : u32 = CCL_A[t]
             let bo_b : u32 = CCL_B[t]
             let bo_ra : u32 = ccl_step(bo_a)
@@ -765,7 +789,7 @@ fn ccl_step(t: u32) -> u32 {
          * literal value (its A,B are the u64 halves, not morphisms) and correctly weakens below.
          * SOUNDNESS: without this, a BV op under a substituted binder would drop the substitution. */
         if atag >= CCL_BVADD {
-            if atag <= CCL_BVLSHR {
+            if atag <= CCL_BVUDIV {
                 CCL_FIRED[0u64] = 1u32
                 return ccl_mk(atag, ccl_comp(CCL_A[a], b), ccl_comp(CCL_B[a], b))
             }

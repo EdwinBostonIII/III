@@ -1622,3 +1622,24 @@ recursion through the new tag) = 99. GATE: build_stdlib FAIL=0 + FULL corpus zer
 appended at commit).
 
 **§8.28 sealed at:** 2026-06-09.
+
+### §8.29 — BV64 kernel: unsigned division + the div-strength iota (TRUSTED-BASE reseal, 2026-06-10)
+
+Wave-4 M11. TC_BVUDIV(49)/CCL_BVUDIV(40): unsigned division enters the kernel model with exactly
+three laws — closed terms fold by native u64 division; x/1 = x; and THE DIV-STRENGTH IOTA,
+x / 2^k == x >> k (unconditionally sound for unsigned; phrasable because §8.28 gave the kernel
+BVLSHR) — the kernel-certified justification a cg division-strength fold cites (the 1207/SHL
+precedent, division edition). DIVISION BY ZERO IS STUCK: no rule gives x/0 a value, not even
+closed 5/0 — the kernel refuses where the machine traps. Deserializer fail-closed bound, the
+three CCL range checks, and the structural comparator all extended.
+
+| | Before | After |
+|---|---|---|
+| TRUSTED_BASE_ROOT | f155a7de0d19afddc141c361ade25c53c7c873a77745fec0f41964e68cc63374 | 5b66e5f025c3e867e128a1133a1b132de43d1b30c0613e4669b7bc7c5f9b39c7 |
+
+**Pre-reseal battery:** 1213 = 99; 1214 (the randomized differential soundness gate) = 99;
+1216 = 99; 1355 = 99; 1363 (the M11 falsifier: closed fold/false-refusal, open x/1, the iota at
+k=1/3/63, NO false strength on /3, /0 stuckness closed+open, comparator recursion, wire
+round-trip) = 99. GATE: build_stdlib FAIL=0 (575/0, lib 188b4699); FULL corpus PASS=967 FAIL=0; XII 92/0; NOUS GREEN (10 KATs + differential + propose-only).
+
+**§8.29 sealed at:** 2026-06-10.

@@ -73,6 +73,7 @@ extern @abi(c-msvc-x64) fn ccl_bvor_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_bvxor_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_bvshl_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_bvlshr_c(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_bvudiv_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_bvaddovf_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_bvmulovf_c(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_to_tc(c: u32) -> u32 from "ccl.iii"
@@ -153,6 +154,7 @@ const TC_BVSHL    : u8 = 45u8  /* A=base, B=count : BV  (count masked &63)      
 const TC_BVADDOVF : u8 = 46u8  /* A=left, B=right : Bool  (unsigned add carry-out) */
 const TC_BVMULOVF : u8 = 47u8  /* A=left, B=right : Bool  (u64 full-product ovf)   */
 const TC_BVLSHR   : u8 = 48u8  /* A=base, B=count : BV  (LOGICAL right shift, count masked &63 -- harmony 22) */
+const TC_BVUDIV   : u8 = 49u8  /* A=dividend, B=divisor : BV  (UNSIGNED div; divisor 0 stuck -- wave-4 M11) */
 
 const TC_ERR     : u32 = 0u32           /* the null / error node id (reserved) */
 const TC_CAP     : u32 = 131072u32      /* arena capacity (nodes) -- raised 16384->131072 (8x) so the
@@ -540,6 +542,7 @@ fn tc_bvshl(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVSHL, a, b) }
 fn tc_bvaddovf(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVADDOVF, a, b) }
 fn tc_bvmulovf(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVMULOVF, a, b) }
 fn tc_bvlshr(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVLSHR, a, b) }
+fn tc_bvudiv(a: u32, b: u32) -> u32 @export { return tc_mk(TC_BVUDIV, a, b) }
 
 /* both operands of a binary BV node must check against BV (= U0's bitvector type). */
 fn tc_bv_op2_ok(t: u32) -> u8 {
@@ -565,6 +568,7 @@ fn tc_infer(t: u32) -> u32 @export {
     if tag == TC_BVXOR { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
     if tag == TC_BVSHL { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
     if tag == TC_BVLSHR { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
+    if tag == TC_BVUDIV { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bv() }
     if tag == TC_BVADDOVF { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bool() }
     if tag == TC_BVMULOVF { if tc_bv_op2_ok(t) == 0u8 { return 0u32 } return tc_bool() }
     if tag == TC_VAR {
@@ -2021,6 +2025,7 @@ fn tc_to_ccl(t: u32) -> u32 {
     if tag == TC_BVXOR { return ccl_bvxor_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_BVSHL { return ccl_bvshl_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_BVLSHR { return ccl_bvlshr_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_BVUDIV { return ccl_bvudiv_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_BVADDOVF { return ccl_bvaddovf_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_BVMULOVF { return ccl_bvmulovf_c(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_LAM { return ccl_cur_d(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
@@ -2229,7 +2234,7 @@ fn tc_ds_walk() -> u32 {
     if m != 1u8 { TC_DS_ERR = 1u8 ; return 0u32 }
     let tag : u8 = tc_ds_byte()
     if tag == 0u8 { TC_DS_ERR = 1u8 ; return 0u32 }
-    if tag > TC_BVLSHR { TC_DS_ERR = 1u8 ; return 0u32 }   /* unknown tag: fail closed */
+    if tag > TC_BVUDIV { TC_DS_ERR = 1u8 ; return 0u32 }   /* unknown tag: fail closed */
     if tag == TC_VAR   { let v0 : u32 = tc_ds_u32() ; return tc_mk(tag, v0, 0u32) }
     if tag == TC_SORT  { let v1 : u32 = tc_ds_u32() ; return tc_mk(tag, v1, 0u32) }
     if tag == TC_REACH { let v2 : u32 = tc_ds_u32() ; return tc_mk(tag, v2, 0u32) }

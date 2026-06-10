@@ -1,0 +1,81 @@
+/* 1363_bvudiv_strength.iii -- UNSIGNED DIVISION + THE DIV-STRENGTH IOTA (wave-4 M11).
+ *
+ * TC_BVUDIV(49)/CCL_BVUDIV(40): unsigned division enters the BV64 kernel model.  Three laws,
+ * each exactly as strong as the mathematics permits and no stronger:
+ *   - closed terms fold by native u64 division;
+ *   - x/1 = x;
+ *   - THE DIV-STRENGTH IOTA: x / 2^k  ==  x >> k, unconditionally for unsigned -- the
+ *     kernel-certified justification a cg division-strength fold cites (the 1207/SHL precedent,
+ *     division edition; phrasable because item 22 gave the kernel BVLSHR).
+ * DIVISION BY ZERO IS STUCK: no rule gives x/0 a value -- not even closed 5/0 folds; the kernel
+ * refuses where the machine traps.  Arms:
+ *  (1) closed fold + false refusal;  (2) x/1 = x on an OPEN term;
+ *  (3) the iota on OPEN terms: x/8 == x>>3, x/2 == x>>1, x/2^63 == x>>63;
+ *  (4) NO false strength: x/3 is stuck (not x>>1, not x>>2);
+ *  (5) STUCKNESS of /0: closed 5/0 refuses every value; open x/0 refuses x and 0;
+ *  (6) the structural comparator recurses through the new tag: (x/2)-(x/2) == 0;
+ *  (7) the new tag travels the wire byte-identically.
+ * Exit 99 = the kernel knows unsigned division -- soundly, and no further. */
+module corpus_1363
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_deserialize(bytes: *u8, len: u64) -> u32 from "typecheck.iii"
+
+var W1 : [u8; 256]
+var W2 : [u8; 256]
+
+fn main() -> u64 {
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let z : u32 = tc_bvlit_u64(0u64)
+
+    /* (1) closed fold + false refusal */
+    if tc_conv(tc_bvudiv(tc_bvlit_u64(100u64), tc_bvlit_u64(5u64)), tc_bvlit_u64(20u64)) != 1u8 { return 1u64 }
+    if tc_conv(tc_bvudiv(tc_bvlit_u64(100u64), tc_bvlit_u64(5u64)), tc_bvlit_u64(21u64)) != 0u8 { return 2u64 }
+
+    /* (2) x/1 = x on an OPEN term */
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(1u64)), x) != 1u8 { return 3u64 }
+
+    /* (3) THE DIV-STRENGTH IOTA on OPEN terms */
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(8u64)), tc_bvlshr(x, tc_bvlit_u64(3u64))) != 1u8 { return 4u64 }
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(2u64)), tc_bvlshr(x, tc_bvlit_u64(1u64))) != 1u8 { return 5u64 }
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(0x8000000000000000u64)), tc_bvlshr(x, tc_bvlit_u64(63u64))) != 1u8 { return 6u64 }
+
+    /* (4) NO false strength on a non-power-of-two */
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(3u64)), tc_bvlshr(x, tc_bvlit_u64(1u64))) != 0u8 { return 7u64 }
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(3u64)), tc_bvlshr(x, tc_bvlit_u64(2u64))) != 0u8 { return 8u64 }
+
+    /* (5) STUCKNESS of division by zero -- the kernel refuses where the machine traps */
+    if tc_conv(tc_bvudiv(tc_bvlit_u64(5u64), z), tc_bvlit_u64(0u64)) != 0u8 { return 9u64 }
+    if tc_conv(tc_bvudiv(tc_bvlit_u64(5u64), z), tc_bvlit_u64(5u64)) != 0u8 { return 10u64 }
+    if tc_conv(tc_bvudiv(x, z), x) != 0u8 { return 11u64 }
+    if tc_conv(tc_bvudiv(x, z), z) != 0u8 { return 12u64 }
+
+    /* (6) the comparator recurses through the new tag */
+    let d1 : u32 = tc_bvudiv(x, tc_bvlit_u64(2u64))
+    let d2 : u32 = tc_bvudiv(x, tc_bvlit_u64(2u64))
+    if tc_conv(tc_bvsub(d1, d2), z) != 1u8 { return 13u64 }
+
+    /* (7) the new tag travels the wire byte-identically */
+    let term : u32 = tc_bvudiv(x, tc_bvlit_u64(16u64))
+    let n1 : u64 = tc_serialize(term, (&W1 as u64) as *u8, 256u64)
+    if n1 == 0xFFFFFFFFFFFFFFFFu64 { return 14u64 }
+    let back : u32 = tc_deserialize((&W1 as u64) as *u8, n1)
+    if back == 0u32 { return 15u64 }
+    let n2 : u64 = tc_serialize(back, (&W2 as u64) as *u8, 256u64)
+    if n2 != n1 { return 16u64 }
+    let mut i : u64 = 0u64
+    while i < n1 {
+        if W1[i] != W2[i] { return 17u64 }
+        i = i + 1u64
+    }
+
+    return 99u64
+}

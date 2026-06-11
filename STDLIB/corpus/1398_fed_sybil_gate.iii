@@ -1,0 +1,130 @@
+/* 1398_fed_sybil_gate.iii -- THE SYBIL GATE, FULL LIFECYCLE (burn-down tranche 7).
+ *
+ * The census flagged fed_sybil_admit / fed_sybil_count / fed_sybil_revoke_by_sovereign /
+ * fed_sybil_admission_difficulty as referenced nowhere: the planetary tier's hybrid
+ * PoW + sovereign-endorsement gate was an unproven claim.  This KAT runs the WHOLE organ:
+ *  (1) MINING -- a real >=16-bit SHA3 proof-of-work nonce is MINED at runtime over the
+ *      fixed peer-id (deterministic: the first qualifying nonce is a function of the id);
+ *  (2) BOTH GATES BITE, IN ORDER -- a failing nonce refuses E_BADPOW (the sig is never
+ *      consulted); a good nonce with a TAMPERED signature refuses E_BADSIG; both leave
+ *      ZERO state (count unchanged);
+ *  (3) ADMISSION -- a mined nonce + a REAL ed25519 sovereign signature over the peer-id
+ *      admits: admitted==1, count==1, admission_difficulty >= 16, score == d*1e6 + tenure0;
+ *  (4) RE-ADMISSION -- the same peer re-admits into the SAME slot (count stays 1) with a
+ *      bumped tenure (score grows by exactly 1);
+ *  (5) REVOCATION -- a DIFFERENT sovereign's pub cannot revoke (E_BADSIG: the slot binds
+ *      the endorser); a tampered sig cannot revoke; the RIGHT sovereign's sig revokes:
+ *      admitted==0, count==0; a second revoke refuses E_NOT_FOUND;
+ *  (6) NULL/UNKNOWN refusals -- E_NULL on null ptrs; difficulty/score of an unknown peer 0.
+ * Exit 99 = cloud compute alone cannot pass the signature gate, a stolen key alone cannot
+ * pass the cost wall, and the registry's bookkeeping is exact. */
+module corpus_1398
+
+extern @abi(c-msvc-x64) fn fed_sybil_pow_min_difficulty_bits() -> u32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_pow_verify(peer_id_ptr: u64, nonce: u64, bits: u32) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_admit(peer_id_ptr: u64, nonce: u64, sov_pub_ptr: u64, sov_sig_ptr: u64) -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_admitted(peer_id_ptr: u64) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_revoke_by_sovereign(peer_id_ptr: u64, sov_pub_ptr: u64, sov_sig_ptr: u64) -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_count() -> u32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_score(peer_id_ptr: u64) -> u64 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_admission_difficulty(peer_id_ptr: u64) -> u32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_clear_all() -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_slot_live(slot: u32) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+
+var PEER : [u8; 32]
+var SEED : [u8; 32]
+var PK   : [u8; 32]
+var SIG  : [u8; 64]
+var SEED2: [u8; 32]
+var PK2  : [u8; 32]
+var SIG2 : [u8; 64]
+
+fn main() -> u64 {
+    if fed_sybil_pow_min_difficulty_bits() != 16u32 { return 1u64 }
+
+    /* fixed identities */
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        PEER[i]  = (0x40u64 + i & 0xFFu64) as u8
+        SEED[i]  = (0x80u64 + i & 0xFFu64) as u8
+        SEED2[i] = (0xC0u64 + i & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    if ed25519_pubkey(((&SEED as u64)) as *u8, ((&PK as u64)) as *u8) != 1u8 { return 2u64 }
+    if ed25519_pubkey(((&SEED2 as u64)) as *u8, ((&PK2 as u64)) as *u8) != 1u8 { return 3u64 }
+    if ed25519_sign(((&SEED as u64)) as *u8, ((&PK as u64)) as *u8,
+                    ((&PEER as u64)) as *u8, 32u64, ((&SIG as u64)) as *u8) != 1u8 { return 4u64 }
+    if ed25519_sign(((&SEED2 as u64)) as *u8, ((&PK2 as u64)) as *u8,
+                    ((&PEER as u64)) as *u8, 32u64, ((&SIG2 as u64)) as *u8) != 1u8 { return 5u64 }
+
+    /* (1) MINE a >=16-bit nonce (deterministic for the fixed peer-id) and a FAILING nonce */
+    let mut nonce : u64 = 0u64
+    let mut good : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut mining : u8 = 1u8
+    while mining == 1u8 {
+        if fed_sybil_pow_verify((&PEER as u64), nonce, 16u32) == 1u8 {
+            good = nonce
+            mining = 0u8
+        } else {
+            nonce = nonce + 1u64
+            if nonce >= 16777216u64 { mining = 0u8 }     /* 2^24 wall: never spin forever */
+        }
+    }
+    if good == 0xFFFFFFFFFFFFFFFFu64 { return 6u64 }
+    let mut bad : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut bn : u64 = 0u64
+    let mut hunting : u8 = 1u8
+    while hunting == 1u8 {
+        if fed_sybil_pow_verify((&PEER as u64), bn, 16u32) == 0u8 {
+            bad = bn
+            hunting = 0u8
+        } else { bn = bn + 1u64 }
+    }
+    if bad == 0xFFFFFFFFFFFFFFFFu64 { return 7u64 }
+
+    /* (2) both gates bite, in order, with zero state change */
+    if fed_sybil_clear_all() != 0i32 { return 8u64 }
+    if fed_sybil_count() != 0u32 { return 9u64 }
+    if fed_sybil_admit(0u64, good, (&PK as u64), (&SIG as u64)) != -4i32 { return 10u64 }   /* E_NULL */
+    if fed_sybil_admit((&PEER as u64), bad, (&PK as u64), (&SIG as u64)) != -1i32 { return 11u64 }   /* E_BADPOW */
+    SIG[10u64] = SIG[10u64] ^ 0x5Au8
+    if fed_sybil_admit((&PEER as u64), good, (&PK as u64), (&SIG as u64)) != -2i32 { return 12u64 }  /* E_BADSIG */
+    SIG[10u64] = SIG[10u64] ^ 0x5Au8                                                  /* untamper */
+    if fed_sybil_count() != 0u32 { return 13u64 }                                     /* zero state */
+    if fed_sybil_admitted((&PEER as u64)) != 0u8 { return 14u64 }
+
+    /* (3) ADMISSION */
+    if fed_sybil_admit((&PEER as u64), good, (&PK as u64), (&SIG as u64)) != 0i32 { return 15u64 }
+    if fed_sybil_admitted((&PEER as u64)) != 1u8 { return 16u64 }
+    if fed_sybil_count() != 1u32 { return 17u64 }
+    if fed_sybil_slot_live(0u32) != 1u8 { return 18u64 }
+    let d : u32 = fed_sybil_admission_difficulty((&PEER as u64))
+    if d < 16u32 { return 19u64 }
+    let want_score : u64 = ((d as u64) & 0xFFFFFFFFu64) * 1000000u64
+    if fed_sybil_score((&PEER as u64)) != want_score { return 20u64 }   /* tenure 0 */
+
+    /* (4) RE-ADMISSION: same slot, bumped tenure */
+    if fed_sybil_admit((&PEER as u64), good, (&PK as u64), (&SIG as u64)) != 0i32 { return 21u64 }
+    if fed_sybil_count() != 1u32 { return 22u64 }                       /* SAME slot */
+    if fed_sybil_score((&PEER as u64)) != want_score + 1u64 { return 23u64 }   /* tenure 1 */
+
+    /* (5) REVOCATION: endorser-bound, sig-checked, exact bookkeeping */
+    if fed_sybil_revoke_by_sovereign((&PEER as u64), (&PK2 as u64), (&SIG2 as u64)) != -2i32 { return 24u64 }   /* wrong sovereign */
+    SIG[20u64] = SIG[20u64] ^ 0xA5u8
+    if fed_sybil_revoke_by_sovereign((&PEER as u64), (&PK as u64), (&SIG as u64)) != -2i32 { return 25u64 }     /* tampered sig */
+    SIG[20u64] = SIG[20u64] ^ 0xA5u8
+    if fed_sybil_admitted((&PEER as u64)) != 1u8 { return 26u64 }       /* failed revokes change nothing */
+    if fed_sybil_revoke_by_sovereign((&PEER as u64), (&PK as u64), (&SIG as u64)) != 0i32 { return 27u64 }
+    if fed_sybil_admitted((&PEER as u64)) != 0u8 { return 28u64 }
+    if fed_sybil_count() != 0u32 { return 29u64 }
+    if fed_sybil_slot_live(0u32) != 0u8 { return 30u64 }
+    if fed_sybil_revoke_by_sovereign((&PEER as u64), (&PK as u64), (&SIG as u64)) != -5i32 { return 31u64 }     /* E_NOT_FOUND */
+
+    /* (6) unknown-peer accessors */
+    if fed_sybil_admission_difficulty((&PEER as u64)) != 0u32 { return 32u64 }
+    if fed_sybil_score((&PEER as u64)) != 0u64 { return 33u64 }
+
+    return 99u64
+}

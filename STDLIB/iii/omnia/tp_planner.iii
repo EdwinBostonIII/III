@@ -1,0 +1,373 @@
+/* omnia/tp_planner.iii -- the PARETO-FRONTIER ROUTE PLANNER over the one category (harmony #3).
+ *
+ * tp_morphism.iii made every format transform a TYPED ARROW in the one category; costed_cat.iii
+ * bound 6-vector costs to its own arrow registry; pareto_extraction.iii computes honest
+ * non-dominated frontiers; cost_lattice.iii scalarizes by DECLARED orders.  What no organ offers
+ * alone: "I hold an artifact in format A and need format B -- what are ALL the non-dominated ways
+ * to get there, and which does my declared cost order pick?"  This module is that compound:
+ *
+ *   plan      = exhaustive DFS over SIMPLE paths (no object revisited) through every COSTED live
+ *               arrow of the one category, src -> dst, deterministic (morphism-slot order);
+ *   route cost = per-dim SATURATING sum of arrow costs (the costed_cat CC_SAT convention);
+ *   answer    = the Pareto ANTICHAIN of complete routes (pe_* organ marks non-dominated routes;
+ *               a scalar-min would hide the trade space -- C.8's whole point);
+ *   pick      = cl_dot_slot under a REGISTERED cost_lattice order chooses among frontier routes
+ *               (scalarization only ever applied AFTER the honest frontier; ties -> lowest index);
+ *   certify   = tpp_materialize composes a route's arrows IN the category (cat_compose), so the
+ *               category itself certifies every reported route as a lawful typed composition --
+ *               the empty route materializes as cat_identity (identity law, live).
+ *
+ * LAWS (each carried by a KAT arm in corpus/1390_tp_planner.iii):
+ *   L1 hop bound   : TPP_MAX_HOPS == CATEGORY_WORDCAP (16).  A route longer than 16 hops could
+ *                    never materialize as a composed morphism (the category refuses words > 16),
+ *                    so the bound is the category's own law, not a tuning knob.
+ *   L2 no silent caps: a plan whose route set would exceed the pool REFUSES whole (TPP_E_FULL);
+ *                    truncation could silently drop a frontier member.
+ *   L3 cost honesty: costs are immutable per epoch (re-bind -> TPP_E_REBIND); uncosted arrows are
+ *                    NOT traversed (the planner only certifies what it can cost); saturation never
+ *                    wraps (a wrapped sum could forge dominance).
+ *   L4 frontier first: tpp_pick only ever selects among on-frontier routes.
+ *
+ * NIH: category.iii + pareto_extraction.iii + cost_lattice.iii externs only; everything else
+ * hand-rolled here.  Compiler-UNREFERENCED -> LIBNATIVE.
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ * Discipline: module-scope scratch (W8); params spilled to locals; bounded loops (W14); no
+ * recursion (explicit DFS stack); ==/!= on status codes; unsigned u64 ordering only;
+ * flag-driven loop exits (no break); i64 compares via locals (no literal-before-brace). */
+module omnia_tp_planner
+
+extern @abi(c-msvc-x64) fn cat_object_id(slot: u32, out_id: *u8) -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_src(slot: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_dst(slot: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_id(slot: u32, out_id: *u8) -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_identity(obj_slot: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn pe_reset() -> i32 from "pareto_extraction.iii"
+extern @abi(c-msvc-x64) fn pe_add(c0: u64, c1: u64, c2: u64, c3: u64, c4: u64, c5: u64) -> i64 from "pareto_extraction.iii"
+extern @abi(c-msvc-x64) fn pe_pareto_frontier() -> u64 from "pareto_extraction.iii"
+extern @abi(c-msvc-x64) fn pe_on_frontier(i: u64) -> u8 from "pareto_extraction.iii"
+extern @abi(c-msvc-x64) fn cl_order_live(slot: u32) -> u8 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+
+const TPP_OK         : i32 = 0i32
+const TPP_E_FULL     : i64 = -1i64     /* route pool would overflow -> whole plan refused (L2) */
+const TPP_E_BAD      : i64 = -2i64     /* bad object/morphism/order slot */
+const TPP_E_EMPTY    : i64 = -4i64     /* pick on an empty frontier */
+const TPP_E_INTERNAL : i64 = -7i64     /* pe organ disagreed with the pool (should be impossible) */
+const TPP_EI_NULL    : i32 = -5i32     /* null pointer (i32 fns) */
+const TPP_EI_BAD     : i32 = -2i32     /* bad slot (i32 fns) */
+const TPP_EI_REBIND  : i32 = -6i32     /* cost re-bind within an epoch (L3) */
+
+const TPP_SENT      : u32 = 0xFFFFFFFFu32           /* == CATEGORY_SENT */
+const TPP_SENT64    : u64 = 0xFFFFFFFFFFFFFFFFu64
+const TPP_SAT       : u64 = 0xFFFFFFFFFFFFFFFFu64   /* saturating-add ceiling (== CC_SAT) */
+const TPP_DIM       : u64 = 6u64                    /* == CL_DIM == PE_DIMS == CC_DIM */
+const TPP_MAX_HOPS  : u64 = 16u64                   /* == CATEGORY_WORDCAP (L1) */
+const TPP_MAX_ROUTES: u64 = 256u64                  /* == PE_MAX (pe pool is the binding cap) */
+const TPP_MAX_MOR   : u64 = 16384u64                /* == CATEGORY_MAX_MOR */
+const TPP_MAX_OBJ   : u64 = 1024u64                 /* == CATEGORY_MAX_OBJ */
+
+/* --- per-epoch cost registry (dense by category morphism slot) --- */
+var TPP_COST  : [u64; 98304]   /* 16384 * 6, row-major: arrow m dim k @ m*6+k */
+var TPP_CLIVE : [u8; 16384]    /* 1 = arrow m has a bound cost this epoch */
+
+/* --- edge snapshot (rebuilt per plan; morphism-slot order = deterministic) --- */
+var TPP_EM : [u32; 16384]      /* morphism slot per edge */
+var TPP_ES : [u32; 16384]      /* src object slot per edge */
+var TPP_ED : [u32; 16384]      /* dst object slot per edge */
+var TPP_EC : u64 = 0u64        /* edge count */
+
+/* --- DFS state (explicit stack; depth d = hops taken so far) --- */
+var TPP_OBJ : [u32; 17]        /* object at each depth */
+var TPP_IT  : [u64; 16]        /* resume cursor into the edge snapshot per depth */
+var TPP_ARR : [u32; 16]        /* arrow chosen at each depth (current path) */
+var TPP_VIS : [u8; 1024]       /* visited-object mask (simple paths) */
+var TPP_PFX : [u64; 102]       /* 17 * 6 prefix cost rows (O(1) backtrack) */
+
+/* --- route pool (the plan's answer) --- */
+var TPP_RCOST : [u64; 1536]    /* 256 * 6 composed route costs */
+var TPP_RLEN  : [u64; 256]     /* hops per route */
+var TPP_RARR  : [u32; 4096]    /* 256 * 16 arrow slots per route */
+var TPP_RON   : [u8; 256]      /* 1 = route is on the Pareto frontier */
+var TPP_NR    : u64 = 0u64     /* routes found by the last plan */
+var TPP_FR    : u64 = 0u64     /* frontier size of the last plan */
+var TPP_PLAN_SRC : u32 = 0u32  /* last plan's src object (for empty-route identity) */
+var TPP_PLAN_DST : u32 = 0u32
+
+/* --- scratch --- */
+var TPP_IDSINK : [u8; 32]      /* cat_* out-id sink */
+var TPP_DOT    : [u64; 1]      /* cl_dot_slot out */
+
+/* saturating 6-dim vector add: o = a (+sat) b (the costed_cat CC_SAT convention; L3). */
+fn tpp_sat6(a: *u64, b: *u64, o: *u64) -> i32 {
+    let ap : *u64 = a
+    let bp : *u64 = b
+    let op : *u64 = o
+    let mut k : u64 = 0u64
+    while k < TPP_DIM {
+        let av : u64 = ap[k]
+        let bv : u64 = bp[k]
+        let mut s : u64 = av + bv
+        if s < av { s = TPP_SAT }
+        op[k] = s
+        k = k + 1u64
+    }
+    return TPP_OK
+}
+
+/* open a fresh cost epoch: all bindings cleared, last plan's answer cleared. */
+fn tpp_init() -> i32 @export {
+    let mut m : u64 = 0u64
+    while m < TPP_MAX_MOR { TPP_CLIVE[m] = 0u8  m = m + 1u64 }
+    let mut r : u64 = 0u64
+    while r < TPP_MAX_ROUTES { TPP_RON[r] = 0u8  TPP_RLEN[r] = 0u64  r = r + 1u64 }
+    TPP_NR = 0u64
+    TPP_FR = 0u64
+    TPP_EC = 0u64
+    return TPP_OK
+}
+
+/* bind a 6-vector cost to a LIVE category arrow; immutable for the epoch (L3). */
+fn tpp_set_cost(mor_slot: u32, cost: *u64) -> i32 @export {
+    let mslot : u32 = mor_slot
+    let cp : *u64 = cost
+    if (cp as u64) == 0u64 { return TPP_EI_NULL }
+    if cat_morphism_src(mslot) == TPP_SENT { return TPP_EI_BAD }
+    let mi : u64 = (mslot as u64) & 0xFFFFFFFFu64
+    if mi >= TPP_MAX_MOR { return TPP_EI_BAD }
+    if TPP_CLIVE[mi] == 1u8 { return TPP_EI_REBIND }
+    let row : *u64 = ((&TPP_COST as u64) + mi * 48u64) as *u64
+    let mut k : u64 = 0u64
+    while k < TPP_DIM { row[k] = cp[k]  k = k + 1u64 }
+    TPP_CLIVE[mi] = 1u8
+    return TPP_OK
+}
+
+/* 1 = arrow has a bound cost this epoch. */
+fn tpp_cost_live(mor_slot: u32) -> u8 @export {
+    let mi : u64 = (mor_slot as u64) & 0xFFFFFFFFu64
+    if mi >= TPP_MAX_MOR { return 0u8 }
+    return TPP_CLIVE[mi]
+}
+
+/* THE PLAN: enumerate every simple costed route src->dst (deterministic DFS), refuse on pool
+ * overflow (L2), then mark the Pareto frontier (pe organ).  Returns the frontier size (>=0)
+ * or a negative refusal. */
+fn tpp_plan(src_obj: u32, dst_obj: u32) -> i64 @export {
+    let s : u32 = src_obj
+    let d : u32 = dst_obj
+    let idp : *u8 = (&TPP_IDSINK as u64) as *u8
+    if cat_object_id(s, idp) != 0i32 { return TPP_E_BAD }
+    if cat_object_id(d, idp) != 0i32 { return TPP_E_BAD }
+    TPP_PLAN_SRC = s
+    TPP_PLAN_DST = d
+    TPP_NR = 0u64
+    TPP_FR = 0u64
+
+    /* src == dst: exactly the empty route (a simple path cannot revisit src, so no cycle
+     * competes); cost = the zero vector; materializes as cat_identity (identity law). */
+    if s == d {
+        let mut z : u64 = 0u64
+        while z < TPP_DIM { TPP_RCOST[z] = 0u64  z = z + 1u64 }
+        TPP_RLEN[0u64] = 0u64
+        TPP_NR = 1u64
+        pe_reset()
+        let pz : i64 = pe_add(0u64, 0u64, 0u64, 0u64, 0u64, 0u64)
+        let zwant : i64 = 0i64
+        if pz != zwant { return TPP_E_INTERNAL }
+        if pe_pareto_frontier() != 1u64 { return TPP_E_INTERNAL }
+        TPP_RON[0u64] = 1u8
+        TPP_FR = 1u64
+        return 1i64
+    }
+
+    /* edge snapshot: every COSTED live arrow, in morphism-slot order. */
+    TPP_EC = 0u64
+    let mut m : u64 = 0u64
+    while m < TPP_MAX_MOR {
+        if TPP_CLIVE[m] == 1u8 {
+            let mslot : u32 = (m & 0xFFFFFFFFu64) as u32
+            let ms : u32 = cat_morphism_src(mslot)
+            if ms != TPP_SENT {
+                TPP_EM[TPP_EC] = mslot
+                TPP_ES[TPP_EC] = ms
+                TPP_ED[TPP_EC] = cat_morphism_dst(mslot)
+                TPP_EC = TPP_EC + 1u64
+            }
+        }
+        m = m + 1u64
+    }
+
+    /* DFS over simple paths, hops < TPP_MAX_HOPS (L1). */
+    let mut v : u64 = 0u64
+    while v < TPP_MAX_OBJ { TPP_VIS[v] = 0u8  v = v + 1u64 }
+    let mut k0 : u64 = 0u64
+    while k0 < TPP_DIM { TPP_PFX[k0] = 0u64  k0 = k0 + 1u64 }
+    TPP_OBJ[0u64] = s
+    TPP_VIS[(s as u64) & 0x3FFu64] = 1u8
+    TPP_IT[0u64] = 0u64
+    let mut depth : u64 = 0u64
+    let mut run  : u8 = 1u8
+    let mut full : u8 = 0u8
+    while run == 1u8 {
+        let mut scan : u64 = TPP_IT[depth]
+        let mut pushed : u8 = 0u8
+        while scan < TPP_EC {
+            let cur : u32 = TPP_OBJ[depth]
+            if TPP_ES[scan] == cur {
+                let dd : u32 = TPP_ED[scan]
+                let ddi : u64 = (dd as u64) & 0x3FFu64
+                if TPP_VIS[ddi] == 0u8 {
+                    let arow : *u64 = ((&TPP_PFX as u64) + depth * 48u64) as *u64
+                    let em : u32 = TPP_EM[scan]
+                    let crow : *u64 = ((&TPP_COST as u64) + ((em as u64) & 0xFFFFFFFFu64) * 48u64) as *u64
+                    if dd == d {
+                        /* complete route */
+                        if TPP_NR >= TPP_MAX_ROUTES {
+                            full = 1u8
+                        } else {
+                            let orow : *u64 = ((&TPP_RCOST as u64) + TPP_NR * 48u64) as *u64
+                            tpp_sat6(arow, crow, orow)
+                            TPP_RLEN[TPP_NR] = depth + 1u64
+                            let mut q : u64 = 0u64
+                            while q < depth { TPP_RARR[TPP_NR * 16u64 + q] = TPP_ARR[q]  q = q + 1u64 }
+                            TPP_RARR[TPP_NR * 16u64 + depth] = em
+                            TPP_NR = TPP_NR + 1u64
+                        }
+                    } else {
+                        let dnext : u64 = depth + 1u64
+                        if dnext < TPP_MAX_HOPS {
+                            /* push */
+                            let prow : *u64 = ((&TPP_PFX as u64) + dnext * 48u64) as *u64
+                            tpp_sat6(arow, crow, prow)
+                            TPP_ARR[depth] = em
+                            TPP_IT[depth] = scan + 1u64
+                            TPP_OBJ[dnext] = dd
+                            TPP_VIS[ddi] = 1u8
+                            depth = dnext
+                            TPP_IT[depth] = 0u64
+                            pushed = 1u8
+                        }
+                        /* dnext == cap: extension impossible; route via dd would exceed the
+                         * category's own word bound -- out of scope BY LAW (L1), keep scanning */
+                    }
+                }
+            }
+            if full == 1u8 { scan = TPP_EC } else {
+                if pushed == 1u8 { scan = TPP_EC } else { scan = scan + 1u64 }
+            }
+        }
+        if full == 1u8 { run = 0u8 } else {
+            if pushed == 0u8 {
+                if depth == 0u64 { run = 0u8 } else {
+                    TPP_VIS[(TPP_OBJ[depth] as u64) & 0x3FFu64] = 0u8
+                    depth = depth - 1u64
+                }
+            }
+        }
+    }
+    if full == 1u8 { return TPP_E_FULL }
+    if TPP_NR == 0u64 { return 0i64 }
+
+    /* Pareto frontier over the route pool (the pe organ is the authority; marks copied out so
+     * the answer survives other pe users). */
+    pe_reset()
+    let mut r : u64 = 0u64
+    while r < TPP_NR {
+        let b : u64 = r * 6u64
+        let pidx : i64 = pe_add(TPP_RCOST[b], TPP_RCOST[b + 1u64], TPP_RCOST[b + 2u64],
+                                TPP_RCOST[b + 3u64], TPP_RCOST[b + 4u64], TPP_RCOST[b + 5u64])
+        let want : i64 = r as i64
+        if pidx != want { return TPP_E_INTERNAL }
+        r = r + 1u64
+    }
+    let fc : u64 = pe_pareto_frontier()
+    let mut r2 : u64 = 0u64
+    while r2 < TPP_NR { TPP_RON[r2] = pe_on_frontier(r2)  r2 = r2 + 1u64 }
+    TPP_FR = fc
+    return fc as i64
+}
+
+/* --- answer inspection --- */
+fn tpp_route_count() -> u64 @export { return TPP_NR }
+fn tpp_frontier_size() -> u64 @export { return TPP_FR }
+fn tpp_route_len(r: u64) -> u64 @export { if r >= TPP_NR { return TPP_SENT64 }  return TPP_RLEN[r] }
+fn tpp_route_on_frontier(r: u64) -> u8 @export { if r >= TPP_NR { return 0u8 }  return TPP_RON[r] }
+
+fn tpp_route_arrow(r: u64, k: u64) -> u32 @export {
+    let rr : u64 = r
+    let kk : u64 = k
+    if rr >= TPP_NR { return TPP_SENT }
+    if kk >= TPP_RLEN[rr] { return TPP_SENT }
+    return TPP_RARR[rr * 16u64 + kk]
+}
+
+fn tpp_route_cost(r: u64, out: *u64) -> i32 @export {
+    let rr : u64 = r
+    let op : *u64 = out
+    if (op as u64) == 0u64 { return TPP_EI_NULL }
+    if rr >= TPP_NR { return TPP_EI_BAD }
+    let b : u64 = rr * 6u64
+    let mut k : u64 = 0u64
+    while k < TPP_DIM { op[k] = TPP_RCOST[b + k]  k = k + 1u64 }
+    return TPP_OK
+}
+
+/* CERTIFY a route in the category: compose its arrows left-to-right (cat_compose enforces the
+ * type law + word cap at every step); the empty route is cat_identity(src).  Returns the
+ * composed morphism slot (out_id = its content-address id) or SENT if the category refuses. */
+fn tpp_materialize(r: u64, out_id: *u8) -> u32 @export {
+    let rr : u64 = r
+    let op : *u8 = out_id
+    if (op as u64) == 0u64 { return TPP_SENT }
+    if rr >= TPP_NR { return TPP_SENT }
+    let len : u64 = TPP_RLEN[rr]
+    if len == 0u64 { return cat_identity(TPP_PLAN_SRC, op) }
+    let mut cur : u32 = TPP_RARR[rr * 16u64]
+    let sink : *u8 = (&TPP_IDSINK as u64) as *u8
+    let mut k : u64 = 1u64
+    let mut dead : u8 = 0u8
+    while k < len {
+        cur = cat_compose(cur, TPP_RARR[rr * 16u64 + k], sink)
+        if cur == TPP_SENT { dead = 1u8  k = len } else { k = k + 1u64 }
+    }
+    if dead == 1u8 { return TPP_SENT }
+    if cat_morphism_id(cur, op) != 0i32 { return TPP_SENT }
+    return cur
+}
+
+/* pick among ON-FRONTIER routes only (L4) by a registered cost_lattice order: the route with
+ * the minimum saturating dot wins; ties -> lowest route index (deterministic).  Returns the
+ * route index, or TPP_E_BAD (dead order / dot refusal) / TPP_E_EMPTY (no frontier). */
+fn tpp_pick(order_slot: u32) -> i64 @export {
+    let os : u32 = order_slot
+    if cl_order_live(os) != 1u8 { return TPP_E_BAD }
+    if TPP_FR == 0u64 { return TPP_E_EMPTY }
+    let dp : *u64 = (&TPP_DOT as u64) as *u64
+    let mut best_r : u64 = 0u64
+    let mut best_dot : u64 = 0u64
+    let mut have : u8 = 0u8
+    let mut bad : u8 = 0u8
+    let mut r : u64 = 0u64
+    while r < TPP_NR {
+        if TPP_RON[r] == 1u8 {
+            let row : *u64 = ((&TPP_RCOST as u64) + r * 48u64) as *u64
+            if cl_dot_slot(os, row, dp) != 0i32 { bad = 1u8  r = TPP_NR } else {
+                let dv : u64 = TPP_DOT[0u64]
+                if have == 0u8 { best_r = r  best_dot = dv  have = 1u8 } else {
+                    if dv < best_dot { best_r = r  best_dot = dv }
+                }
+            }
+        }
+        if r < TPP_NR { r = r + 1u64 }
+    }
+    if bad == 1u8 { return TPP_E_BAD }
+    if have != 1u8 { return TPP_E_INTERNAL }
+    return best_r as i64
+}
+
+/* tp_planner is the categorical layer become NAVIGABLE: the one category supplies the typed
+ * graph and certifies every answer (materialize == cat_compose chain), pareto_extraction
+ * supplies the honest antichain, cost_lattice supplies the declared-order pick, and the
+ * costed_cat saturation convention carries the costs -- four organs, one capability none of
+ * them has alone, every law falsifiable in corpus/1390_tp_planner.iii. */

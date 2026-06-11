@@ -1,0 +1,712 @@
+/* STDLIB/iii/sanctus/corpus_coverage.iii -- the TEST-COVERAGE structural self-audit,
+ * performed BY III, IN III, on its OWN export surface.
+ *
+ * THE ROT THIS KILLS: coverage claims kept in prose decay.  _numera_audit_findings.txt
+ * (2026-06-03) listed ~30 untested exports; by 2026-06-11 every one had been closed by
+ * later waves and the file was silently wrong -- because NOTHING ENFORCED IT.  An
+ * untested @export is an unproven claim, and the ledger of unproven claims must be
+ * COMPUTED BY THE SYSTEM FROM THE TREE, never hand-maintained.  This organ is that
+ * computation: the sibling of sanctus/onelang (H13's structural half) for H-coverage.
+ *
+ * THE AUDIT (two passes over the source tree, via the aether/fs directory organ):
+ *   pass 1 (EXTRACT)   walk the modules root; for every .iii file, lex at CODE LEVEL
+ *                      (block comments -- nested, line comments, string literals all
+ *                      skipped) and register every exported fn: an identifier token
+ *                      whose previous code token is `fn` on a NON-extern line, whose
+ *                      declaration carries `@export` before the body `{` opens.
+ *   pass 2 (REFERENCE) rescan the modules root + walk the corpus root; every code-level
+ *                      identifier token that names a registered export MARKS it covered,
+ *                      EXCEPT the definition itself (a token preceded by `fn` on a
+ *                      non-extern line is a definition, not a use; the same token on an
+ *                      `extern` line IS a use -- a consumer declaring the import).
+ *
+ * POLICY (the findings-file methodology, made executable):
+ *   - omnia/prespec.iii is EXCLUDED from both passes: its &fn dispatch table takes
+ *     addresses without exercising semantics ("prespec only takes &fn addresses -- not
+ *     a test"), and its own exports are dispatch plumbing, not API surface.
+ *   - comment and string-literal mentions NEVER cover (the rot of prose, again).
+ *   - scratch/derived dirs are skipped, not audited: .git .claude build _audit_scratch
+ *     _quarantine_wip (the carto .claude-collision lesson, baked in).
+ *   - a file larger than the scan buffer is never half-scanned: it sets CV_TRUNC and
+ *     the verdict refuses to certify (honesty over convenience).
+ *
+ * VERDICT: COMPLETE  = every export referenced somewhere real (uncovered == 0).
+ *          VIOLATION = an uncovered export exists, or the audit could not certify
+ *                      (work-stack overflow / export-table overflow / truncated file).
+ *
+ * THE SEAL is order-independent: the uncovered set is insertion-sorted by name bytes
+ * and the census (exports, uncovered, files-scanned x2, dup-names, truncations as six
+ * u64 LE) plus the sorted names stream through ONE cad (begin/payload/final) -- the
+ * same walk on the same tree seals identically regardless of directory enumeration
+ * order.  cov_report_write emits the sorted uncovered names, one per line, through the
+ * capability-gated fs organ: the machine-written successor of the hand-written findings
+ * file that rotted.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: aether/fs + capability + cad only; the lexer, hash table, and sort are built
+ * here from bytes.  No ML, no float, no division (hash mask is power-of-two).
+ * Discipline: flag-driven loops (no break); params -> locals; module-global arrays
+ * (never function-local runtime-indexed); length-explicit literal reads; the
+ * insertion-sort placement flag drives its while condition itself. */
+module sanctus_corpus_coverage
+
+/* --- the directory + file organ (aether/fs) --- */
+extern @abi(c-msvc-x64) fn fs_dir_open(cap: u64, path: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_read(h: u64) -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name_len() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_is_dir() -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_size(h: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+const CV_COMPLETE  : u32 = 0u32
+const CV_VIOLATION : u32 = 2u32
+const CV_SUITE_SHA256 : u32 = 0u32
+
+const CV_PATH_MAX   : u64 = 512u64
+const CV_STACK_MAX  : u64 = 2048u64
+const CV_MAX_EXP    : u64 = 16384u64
+const CV_NAME_MAX   : u64 = 64u64        /* bytes per export name (incl. implicit bound) */
+const CV_HASH_MASK  : u64 = 32767u64     /* 32768 slots, power of two */
+const CV_FBUF_MAX   : u64 = 2097152u64   /* 2 MiB: far above any module; refusal, not truncation */
+const CV_HS_EMPTY   : u32 = 0xFFFFFFFFu32
+const CV_MODE_READ  : u32 = 1u32
+const CV_MODE_WRITE : u32 = 2u32
+const CV_FNV_BASIS  : u64 = 0xCBF29CE484222325u64
+const CV_FNV_PRIME  : u64 = 0x100000001B3u64
+
+/* --- walk state (the onelang work-stack discipline: one live search at a time) --- */
+var CV_STACK    : [u8; 1048576]    /* CV_STACK_MAX * CV_PATH_MAX dir paths */
+var CV_SP       : u64 = 0u64
+var CV_OVERFLOW : u8  = 0u8
+var CV_DIRBUF   : [u8; 512]
+var CV_CHILDBUF : [u8; 512]
+
+/* --- file scan buffer --- */
+var CV_FBUF : [u8; 2097152]
+
+/* --- the export table + open-addressed name index --- */
+var CV_EN   : [u8; 1048576]        /* CV_MAX_EXP * CV_NAME_MAX name bytes */
+var CV_ELEN : [u64; 16384]
+var CV_ECOV : [u8; 16384]
+var CV_HS   : [u32; 32768]
+var CV_NEXP : u64 = 0u64
+var CV_DUP  : u64 = 0u64           /* duplicate export names seen (cross-module collisions) */
+var CV_TRUNC : u64 = 0u64          /* files refused (> CV_FBUF_MAX) -- cannot certify */
+var CV_N_FILES    : u64 = 0u64     /* pass-1 module files scanned */
+var CV_N_REFFILES : u64 = 0u64     /* pass-2 files scanned */
+
+/* --- scanner state (module-scope; one scan at a time) --- */
+var CV_TOK    : [u8; 64]
+var CV_PEND   : [u8; 64]           /* pending definition name awaiting @export */
+var CV_PENDLEN : u64 = 0u64
+
+/* --- uncovered report (sorted indices), census + seal --- */
+var CV_UIDX   : [u32; 16384]
+var CV_NUNCOV : u64 = 0u64
+var CV_CENSUS : [u8; 48]
+var CV_NL     : [u8; 4]            /* newline byte for the report writer */
+
+/* === byte/string primitives (NIH; length-explicit where a literal is read) === */
+
+fn cv_strlen(p_addr: u64) -> u64 {
+    let p : *u8 = p_addr as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= CV_PATH_MAX { go = 0u8 }
+        if go == 1u8 { if p[i] == 0u8 { go = 0u8 } }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return i
+}
+
+fn cv_strcpy(dst_addr: u64, src_addr: u64) -> u64 {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= (CV_PATH_MAX - 1u64) { go = 0u8 }
+        if go == 1u8 { if s[i] == 0u8 { go = 0u8 } }
+        if go == 1u8 { d[i] = s[i]   i = i + 1u64 }
+    }
+    d[i] = 0u8
+    return i
+}
+
+/* name[0..len) equality against literal needle[0..nlen) */
+fn cv_byteseq_eq(a_addr: u64, alen: u64, b_addr: u64, blen: u64) -> u8 {
+    if alen != blen { return 0u8 }
+    let a : *u8 = a_addr as *u8
+    let b : *u8 = b_addr as *u8
+    let mut i : u64 = 0u64
+    let mut ok : u8 = 1u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= alen { go = 0u8 }
+        if go == 1u8 { if a[i] != b[i] { ok = 0u8   go = 0u8 } }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return ok
+}
+
+fn cv_is_dot(name_addr: u64, len: u64) -> u8 {
+    let p : *u8 = name_addr as *u8
+    if len == 1u64 { if p[0u64] == 0x2Eu8 { return 1u8 } }
+    if len == 2u64 { if p[0u64] == 0x2Eu8 { if p[1u64] == 0x2Eu8 { return 1u8 } } }
+    return 0u8
+}
+
+/* substring scan (for skip-dir names; O(h*n), names are tiny) */
+fn cv_contains(hay_addr: u64, hlen: u64, needle_addr: u64, nlen: u64) -> u8 {
+    if nlen == 0u64 { return 0u8 }
+    if nlen > hlen { return 0u8 }
+    let h : *u8 = hay_addr as *u8
+    let n : *u8 = needle_addr as *u8
+    let last : u64 = hlen - nlen
+    let mut i : u64 = 0u64
+    let mut found : u8 = 0u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i > last { go = 0u8 }
+        if go == 1u8 {
+            let mut j : u64 = 0u64
+            let mut m : u8 = 1u8
+            let mut jg : u8 = 1u8
+            while jg == 1u8 {
+                if j >= nlen { jg = 0u8 }
+                if jg == 1u8 { if h[i + j] != n[j] { m = 0u8   jg = 0u8 } }
+                if jg == 1u8 { j = j + 1u64 }
+            }
+            if m == 1u8 { found = 1u8   go = 0u8 }
+        }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return found
+}
+
+/* scratch/derived dirs: skipped, not audited */
+fn cv_is_skip_dir(name_addr: u64, len: u64) -> u8 {
+    if cv_contains(name_addr, len, (".git" as u64), 4u64) == 1u8 { return 1u8 }
+    if cv_contains(name_addr, len, (".claude" as u64), 7u64) == 1u8 { return 1u8 }
+    if len == 5u64 { if cv_contains(name_addr, len, ("build" as u64), 5u64) == 1u8 { return 1u8 } }
+    if cv_contains(name_addr, len, ("_audit_scratch" as u64), 14u64) == 1u8 { return 1u8 }
+    if cv_contains(name_addr, len, ("_quarantine_wip" as u64), 15u64) == 1u8 { return 1u8 }
+    return 0u8
+}
+
+fn cv_is_iii_file(name_addr: u64, len: u64) -> u8 {
+    if len < 4u64 { return 0u8 }
+    let p : *u8 = name_addr as *u8
+    if p[len - 4u64] != 0x2Eu8 { return 0u8 }   /* '.' */
+    if p[len - 3u64] != 0x69u8 { return 0u8 }   /* 'i' */
+    if p[len - 2u64] != 0x69u8 { return 0u8 }   /* 'i' */
+    if p[len - 1u64] != 0x69u8 { return 0u8 }   /* 'i' */
+    return 1u8
+}
+
+/* POLICY: omnia/prespec.iii is the &fn dispatch aggregator -- excluded from both passes */
+fn cv_is_excluded_file(name_addr: u64, len: u64) -> u8 {
+    if len == 11u64 {
+        if cv_contains(name_addr, len, ("prespec.iii" as u64), 11u64) == 1u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+/* === the work-stack === */
+
+fn cv_push(src_addr: u64) -> u8 {
+    if CV_SP >= CV_STACK_MAX { CV_OVERFLOW = 1u8   return 0u8 }
+    let dst : u64 = (&CV_STACK as u64) + CV_SP * CV_PATH_MAX
+    cv_strcpy(dst, src_addr)
+    CV_SP = CV_SP + 1u64
+    return 1u8
+}
+
+fn cv_pop() -> u8 {
+    if CV_SP == 0u64 { return 0u8 }
+    CV_SP = CV_SP - 1u64
+    let src : u64 = (&CV_STACK as u64) + CV_SP * CV_PATH_MAX
+    cv_strcpy((&CV_DIRBUF as u64), src)
+    return 1u8
+}
+
+fn cv_make_child(name_addr: u64, name_len: u64) {
+    let d : u64 = cv_strcpy((&CV_CHILDBUF as u64), (&CV_DIRBUF as u64))
+    let cb : *u8 = (&CV_CHILDBUF as u64) as *u8
+    let nm : *u8 = name_addr as *u8
+    let mut k : u64 = d
+    if k < (CV_PATH_MAX - 2u64) { cb[k] = 0x2Fu8   k = k + 1u64 }
+    let mut j : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if j >= name_len { go = 0u8 }
+        if go == 1u8 { if k >= (CV_PATH_MAX - 1u64) { go = 0u8 } }
+        if go == 1u8 { cb[k] = nm[j]   k = k + 1u64   j = j + 1u64 }
+    }
+    cb[k] = 0u8
+}
+
+/* === the export table === */
+
+fn cv_name_addr(idx: u64) -> u64 { return (&CV_EN as u64) + idx * CV_NAME_MAX }
+
+fn cv_fnv(p_addr: u64, len: u64) -> u64 {
+    let p : *u8 = p_addr as *u8
+    let mut h : u64 = CV_FNV_BASIS
+    let mut i : u64 = 0u64
+    while i < len {
+        h = h ^ (p[i] as u64)
+        h = h * CV_FNV_PRIME
+        i = i + 1u64
+    }
+    return h
+}
+
+/* find the export named tok[0..len); returns its index or CV_MAX_EXP if absent */
+fn cv_find(tok_addr: u64, len: u64) -> u64 {
+    let mut slot : u64 = cv_fnv(tok_addr, len) & CV_HASH_MASK
+    let mut res : u64 = CV_MAX_EXP
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let e : u32 = CV_HS[slot]
+        if e == CV_HS_EMPTY { go = 0u8 } else {
+            let ei : u64 = (e as u64) & 0xFFFFFFFFu64
+            if cv_byteseq_eq(cv_name_addr(ei), CV_ELEN[ei], tok_addr, len) == 1u8 {
+                res = ei
+                go = 0u8
+            } else { slot = (slot + 1u64) & CV_HASH_MASK }
+        }
+    }
+    return res
+}
+
+/* register an export name (pass 1); dedups (a cross-module name collision counts CV_DUP) */
+fn cv_register(tok_addr: u64, len: u64) {
+    if len == 0u64 { return }
+    if len >= CV_NAME_MAX { CV_OVERFLOW = 1u8   return }
+    let existing : u64 = cv_find(tok_addr, len)
+    if existing != CV_MAX_EXP { CV_DUP = CV_DUP + 1u64   return }
+    if CV_NEXP >= CV_MAX_EXP { CV_OVERFLOW = 1u8   return }
+    let idx : u64 = CV_NEXP
+    let dst : *u8 = cv_name_addr(idx) as *u8
+    let src : *u8 = tok_addr as *u8
+    let mut i : u64 = 0u64
+    while i < len { dst[i] = src[i]   i = i + 1u64 }
+    CV_ELEN[idx] = len
+    CV_ECOV[idx] = 0u8
+    let mut slot : u64 = cv_fnv(tok_addr, len) & CV_HASH_MASK
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if CV_HS[slot] == CV_HS_EMPTY { go = 0u8 } else { slot = (slot + 1u64) & CV_HASH_MASK }
+    }
+    CV_HS[slot] = (idx & 0xFFFFFFFFu64) as u32
+    CV_NEXP = CV_NEXP + 1u64
+}
+
+/* mark a referenced name covered (pass 2) */
+fn cv_mark(tok_addr: u64, len: u64) {
+    let idx : u64 = cv_find(tok_addr, len)
+    if idx != CV_MAX_EXP { CV_ECOV[idx] = 1u8 }
+}
+
+/* === the code-level lexer ===
+ *
+ * One forward pass over CV_FBUF[0..len): nested block comments, // line comments, and
+ * "..." string literals (backslash escapes; unterminated dies at newline) are skipped.
+ * Identifier tokens [A-Za-z_][A-Za-z0-9_]* are classified:
+ *   "extern"               -> the current line is an extern declaration
+ *   "fn"                   -> the NEXT identifier is a declaration name
+ *   ident after fn, extern line, pass 2  -> a REFERENCE (a consumer's import decl)
+ *   ident after fn, non-extern, pass 1   -> pending definition (await @export before '{')
+ *   ident after fn, non-extern, pass 2   -> the definition itself: NOT a reference
+ *   any other ident, pass 2              -> a REFERENCE if it names an export
+ * "@export" at code level registers the pending definition; '{' kills the pending
+ * definition (body opened unexported); '\n' ends an extern line. */
+
+fn cv_is_ident_start(c: u8) -> u8 {
+    if c >= 0x41u8 { if c <= 0x5Au8 { return 1u8 } }   /* A-Z */
+    if c >= 0x61u8 { if c <= 0x7Au8 { return 1u8 } }   /* a-z */
+    if c == 0x5Fu8 { return 1u8 }                      /* _ */
+    return 0u8
+}
+
+fn cv_is_ident_char(c: u8) -> u8 {
+    if cv_is_ident_start(c) == 1u8 { return 1u8 }
+    if c >= 0x30u8 { if c <= 0x39u8 { return 1u8 } }   /* 0-9 */
+    return 0u8
+}
+
+/* does FBUF[i..] start with "@export" (7 bytes + non-ident follow)? */
+fn cv_at_export(i: u64, len: u64) -> u8 {
+    if (i + 7u64) > len { return 0u8 }
+    if CV_FBUF[i]        != 0x40u8 { return 0u8 }   /* @ */
+    if CV_FBUF[i + 1u64] != 0x65u8 { return 0u8 }   /* e */
+    if CV_FBUF[i + 2u64] != 0x78u8 { return 0u8 }   /* x */
+    if CV_FBUF[i + 3u64] != 0x70u8 { return 0u8 }   /* p */
+    if CV_FBUF[i + 4u64] != 0x6Fu8 { return 0u8 }   /* o */
+    if CV_FBUF[i + 5u64] != 0x72u8 { return 0u8 }   /* r */
+    if CV_FBUF[i + 6u64] != 0x74u8 { return 0u8 }   /* t */
+    if (i + 7u64) < len {
+        if cv_is_ident_char(CV_FBUF[i + 7u64]) == 1u8 { return 0u8 }
+    }
+    return 1u8
+}
+
+/* scan CV_FBUF[0..len); phase 1 = extract exports, phase 2 = mark references */
+fn cv_scan_buf(len: u64, phase: u32) {
+    CV_PENDLEN = 0u64
+    let mut i : u64 = 0u64
+    let mut line_extern : u8 = 0u8
+    let mut prev_fn : u8 = 0u8
+    while i < len {
+        let c : u8 = CV_FBUF[i]
+        if c == 0x0Au8 {                       /* newline: extern scope ends */
+            line_extern = 0u8
+            i = i + 1u64
+        } else { if c == 0x2Fu8 {              /* '/': comment? */
+            let mut handled : u8 = 0u8
+            if (i + 1u64) < len {
+                if CV_FBUF[i + 1u64] == 0x2Au8 {        /* block comment, nested */
+                    let mut depth : u64 = 1u64
+                    let mut j : u64 = i + 2u64
+                    let mut bg : u8 = 1u8
+                    while bg == 1u8 {
+                        if j >= len { bg = 0u8 } else {
+                            if (j + 1u64) < len {
+                                if CV_FBUF[j] == 0x2Fu8 {
+                                    if CV_FBUF[j + 1u64] == 0x2Au8 { depth = depth + 1u64   j = j + 1u64 }
+                                }
+                            }
+                            if (j + 1u64) < len {
+                                if CV_FBUF[j] == 0x2Au8 {
+                                    if CV_FBUF[j + 1u64] == 0x2Fu8 {
+                                        depth = depth - 1u64
+                                        j = j + 1u64
+                                        if depth == 0u64 { bg = 0u8 }
+                                    }
+                                }
+                            }
+                            j = j + 1u64
+                        }
+                    }
+                    i = j
+                    handled = 1u8
+                } else { if CV_FBUF[i + 1u64] == 0x2Fu8 {   /* line comment */
+                    let mut j2 : u64 = i + 2u64
+                    let mut lg : u8 = 1u8
+                    while lg == 1u8 {
+                        if j2 >= len { lg = 0u8 } else {
+                            if CV_FBUF[j2] == 0x0Au8 { lg = 0u8 } else { j2 = j2 + 1u64 }
+                        }
+                    }
+                    i = j2
+                    handled = 1u8
+                } }
+            }
+            if handled == 0u8 { i = i + 1u64 }
+        } else { if c == 0x22u8 {              /* string literal: skip, esc-aware, dies at NL */
+            let mut j3 : u64 = i + 1u64
+            let mut sg : u8 = 1u8
+            while sg == 1u8 {
+                if j3 >= len { sg = 0u8 } else {
+                    let sc : u8 = CV_FBUF[j3]
+                    if sc == 0x5Cu8 { j3 = j3 + 2u64 } else {
+                        if sc == 0x22u8 { j3 = j3 + 1u64   sg = 0u8 } else {
+                            if sc == 0x0Au8 { sg = 0u8 } else { j3 = j3 + 1u64 }
+                        }
+                    }
+                }
+            }
+            i = j3
+        } else { if c == 0x40u8 {              /* '@': @export registers the pending def */
+            if cv_at_export(i, len) == 1u8 {
+                if phase == 1u32 {
+                    if CV_PENDLEN > 0u64 { cv_register((&CV_PEND as u64), CV_PENDLEN)   CV_PENDLEN = 0u64 }
+                }
+                i = i + 7u64
+            } else { i = i + 1u64 }
+        } else { if c == 0x7Bu8 {              /* '{': body opens -> pending def dies */
+            CV_PENDLEN = 0u64
+            i = i + 1u64
+        } else { if cv_is_ident_start(c) == 1u8 {
+            /* collect the token */
+            let mut tl : u64 = 0u64
+            let mut j4 : u64 = i
+            let mut tg : u8 = 1u8
+            while tg == 1u8 {
+                if j4 >= len { tg = 0u8 } else {
+                    if cv_is_ident_char(CV_FBUF[j4]) == 1u8 {
+                        if tl < 63u64 { CV_TOK[tl] = CV_FBUF[j4]   tl = tl + 1u64 }
+                        j4 = j4 + 1u64
+                    } else { tg = 0u8 }
+                }
+            }
+            /* classify */
+            let ta : u64 = (&CV_TOK as u64)
+            if cv_byteseq_eq(ta, tl, ("extern" as u64), 6u64) == 1u8 {
+                line_extern = 1u8
+                prev_fn = 0u8
+            } else { if cv_byteseq_eq(ta, tl, ("fn" as u64), 2u64) == 1u8 {
+                prev_fn = 1u8
+            } else {
+                if prev_fn == 1u8 {
+                    if line_extern == 1u8 {
+                        /* a consumer's import declaration: a real reference */
+                        if phase == 2u32 { cv_mark(ta, tl) }
+                    } else {
+                        /* a definition name: pass 1 holds it pending @export; pass 2 skips it */
+                        if phase == 1u32 {
+                            let mut q : u64 = 0u64
+                            while q < tl { CV_PEND[q] = CV_TOK[q]   q = q + 1u64 }
+                            CV_PENDLEN = tl
+                        }
+                    }
+                    prev_fn = 0u8
+                } else {
+                    if phase == 2u32 { cv_mark(ta, tl) }
+                }
+            } }
+            i = j4
+        } else {
+            i = i + 1u64
+        } } } } } }
+    }
+}
+
+/* === file + tree drivers === */
+
+/* scan one file (path in CV_CHILDBUF) under the given phase */
+fn cv_scan_file(cap_id: u64, phase: u32) {
+    let cap : u64 = cap_id
+    let h : u64 = fs_open(cap, (&CV_CHILDBUF as u64), CV_MODE_READ)
+    if h == 0u64 { return }
+    let sz : u64 = fs_size(h)
+    if sz > CV_FBUF_MAX {
+        CV_TRUNC = CV_TRUNC + 1u64       /* refuse, never half-scan */
+        fs_close(h)
+        return
+    }
+    let got : u64 = fs_read(h, (&CV_FBUF as u64), sz)
+    fs_close(h)
+    if got != sz { CV_TRUNC = CV_TRUNC + 1u64   return }
+    if phase == 1u32 { CV_N_FILES = CV_N_FILES + 1u64 } else { CV_N_REFFILES = CV_N_REFFILES + 1u64 }
+    cv_scan_buf(got, phase)
+}
+
+/* walk the tree rooted at root_addr; scan every .iii file under the given phase */
+fn cv_walk(cap_id: u64, root_addr: u64, phase: u32) {
+    let cap : u64 = cap_id
+    CV_SP = 0u64
+    cv_push(root_addr)
+    let mut more : u8 = cv_pop()
+    while more == 1u8 {
+        let dh : u64 = fs_dir_open(cap, (&CV_DIRBUF as u64))
+        if dh != 0u64 {
+            while fs_dir_read(dh) == 1u8 {
+                let nm  : u64 = fs_dir_name()
+                let ln  : u64 = fs_dir_name_len()
+                let isd : u8  = fs_dir_is_dir()
+                if cv_is_dot(nm, ln) == 0u8 {
+                    if isd == 1u8 {
+                        if cv_is_skip_dir(nm, ln) == 0u8 {
+                            cv_make_child(nm, ln)
+                            cv_push((&CV_CHILDBUF as u64))
+                        }
+                    }
+                    if isd == 0u8 {
+                        if cv_is_iii_file(nm, ln) == 1u8 {
+                            if cv_is_excluded_file(nm, ln) == 0u8 {
+                                cv_make_child(nm, ln)
+                                cv_scan_file(cap, phase)
+                            }
+                        }
+                    }
+                }
+            }
+            fs_dir_close(dh)
+        }
+        more = cv_pop()
+    }
+}
+
+/* === the audit === */
+
+fn cov_reset() @export {
+    let mut s : u64 = 0u64
+    while s < 32768u64 { CV_HS[s] = CV_HS_EMPTY   s = s + 1u64 }
+    CV_NEXP = 0u64
+    CV_DUP = 0u64
+    CV_TRUNC = 0u64
+    CV_N_FILES = 0u64
+    CV_N_REFFILES = 0u64
+    CV_NUNCOV = 0u64
+    CV_SP = 0u64
+    CV_OVERFLOW = 0u8
+}
+
+/* name-bytes lexicographic <= over export indices (for the deterministic sort) */
+fn cv_name_le(a_idx: u64, b_idx: u64) -> u8 {
+    let a : *u8 = cv_name_addr(a_idx) as *u8
+    let b : *u8 = cv_name_addr(b_idx) as *u8
+    let al : u64 = CV_ELEN[a_idx]
+    let bl : u64 = CV_ELEN[b_idx]
+    let mut n : u64 = al
+    if bl < n { n = bl }
+    let mut i : u64 = 0u64
+    let mut res : u8 = 2u8           /* 2 = undecided */
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= n { go = 0u8 } else {
+            if a[i] < b[i] { res = 1u8   go = 0u8 } else {
+                if a[i] > b[i] { res = 0u8   go = 0u8 } else { i = i + 1u64 }
+            }
+        }
+    }
+    if res == 2u8 { if al <= bl { res = 1u8 } else { res = 0u8 } }
+    return res
+}
+
+/* collect + insertion-sort the uncovered set (order-independent census; the placement
+ * flag drives the while condition itself -- the iiis-1 in-sort discipline) */
+fn cv_finalize() {
+    CV_NUNCOV = 0u64
+    let mut e : u64 = 0u64
+    while e < CV_NEXP {
+        if CV_ECOV[e] == 0u8 {
+            CV_UIDX[CV_NUNCOV] = (e & 0xFFFFFFFFu64) as u32
+            CV_NUNCOV = CV_NUNCOV + 1u64
+        }
+        e = e + 1u64
+    }
+    let mut i : u64 = 1u64
+    while i < CV_NUNCOV {
+        let key : u32 = CV_UIDX[i]
+        let ki : u64 = (key as u64) & 0xFFFFFFFFu64
+        let mut j : u64 = i
+        let mut placing : u8 = 1u8
+        while placing == 1u8 {
+            if j == 0u64 { placing = 0u8 } else {
+                let pj : u64 = (CV_UIDX[j - 1u64] as u64) & 0xFFFFFFFFu64
+                if cv_name_le(pj, ki) == 1u8 { placing = 0u8 } else {
+                    CV_UIDX[j] = CV_UIDX[j - 1u64]
+                    j = j - 1u64
+                }
+            }
+        }
+        CV_UIDX[j] = key
+        i = i + 1u64
+    }
+}
+
+/* THE AUDIT: pass 1 extracts every @export under modules_root; pass 2 marks references
+ * from modules_root + corpus_root; finalize sorts the uncovered set.  Returns the
+ * uncovered count (the census number that previously rotted in prose). */
+fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
+    let cap : u64 = cap_id
+    let mr : u64 = modules_root
+    let cr : u64 = corpus_root
+    cov_reset()
+    cv_walk(cap, mr, 1u32)
+    cv_walk(cap, mr, 2u32)
+    cv_walk(cap, cr, 2u32)
+    cv_finalize()
+    return CV_NUNCOV
+}
+
+fn cov_verdict() -> u32 @export {
+    if CV_OVERFLOW == 1u8 { return CV_VIOLATION }
+    if CV_TRUNC != 0u64 { return CV_VIOLATION }
+    if CV_NUNCOV != 0u64 { return CV_VIOLATION }
+    return CV_COMPLETE
+}
+
+fn cov_n_exports() -> u64 @export { return CV_NEXP }
+fn cov_n_uncovered() -> u64 @export { return CV_NUNCOV }
+fn cov_n_files() -> u64 @export { return CV_N_FILES }
+fn cov_n_reffiles() -> u64 @export { return CV_N_REFFILES }
+fn cov_n_dup() -> u64 @export { return CV_DUP }
+fn cov_n_trunc() -> u64 @export { return CV_TRUNC }
+fn cov_overflow() -> u8 @export { return CV_OVERFLOW }
+
+/* the i-th uncovered export name (sorted order) -> out (NUL-terminated); returns len, 0 if i OOB */
+fn cov_uncovered_name(i: u64, out_addr: u64) -> u64 @export {
+    let ii : u64 = i
+    let oa : u64 = out_addr
+    if oa == 0u64 { return 0u64 }
+    if ii >= CV_NUNCOV { return 0u64 }
+    let idx : u64 = (CV_UIDX[ii] as u64) & 0xFFFFFFFFu64
+    let src : *u8 = cv_name_addr(idx) as *u8
+    let dst : *u8 = oa as *u8
+    let len : u64 = CV_ELEN[idx]
+    let mut k : u64 = 0u64
+    while k < len { dst[k] = src[k]   k = k + 1u64 }
+    dst[len] = 0u8
+    return len
+}
+
+/* census put-u64 LE */
+fn cv_put_u64(off: u64, v: u64) {
+    CV_CENSUS[off]        = (v & 0xFFu64) as u8
+    CV_CENSUS[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    CV_CENSUS[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    CV_CENSUS[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    CV_CENSUS[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    CV_CENSUS[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    CV_CENSUS[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    CV_CENSUS[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+}
+
+/* ORDER-INDEPENDENT SEAL: census (6 u64 LE) + the sorted uncovered names stream
+ * through one cad (begin/payload/final).  Same tree -> same seal, any walk order. */
+fn cov_seal(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    cv_put_u64(0u64,  CV_NEXP)
+    cv_put_u64(8u64,  CV_NUNCOV)
+    cv_put_u64(16u64, CV_N_FILES)
+    cv_put_u64(24u64, CV_N_REFFILES)
+    cv_put_u64(32u64, CV_DUP)
+    cv_put_u64(40u64, CV_TRUNC)
+    cad_begin(CV_SUITE_SHA256)
+    cad_payload((&CV_CENSUS as u64), 48u64)
+    let mut i : u64 = 0u64
+    while i < CV_NUNCOV {
+        let idx : u64 = (CV_UIDX[i] as u64) & 0xFFFFFFFFu64
+        cad_payload(cv_name_addr(idx), CV_ELEN[idx])
+        i = i + 1u64
+    }
+    cad_final(out as u64)
+    return 0i32
+}
+
+/* write the sorted uncovered names, one per line, to `path` (capability-gated): the
+ * machine-written successor of the hand-written findings file that rotted. */
+fn cov_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
+    let cap : u64 = cap_id
+    let pa : u64 = path_addr
+    let h : u64 = fs_open(cap, pa, CV_MODE_WRITE)
+    if h == 0u64 { return -1i32 }
+    CV_NL[0u64] = 0x0Au8
+    let mut i : u64 = 0u64
+    while i < CV_NUNCOV {
+        let idx : u64 = (CV_UIDX[i] as u64) & 0xFFFFFFFFu64
+        fs_write(h, cv_name_addr(idx), CV_ELEN[idx])
+        fs_write(h, (&CV_NL as u64), 1u64)
+        i = i + 1u64
+    }
+    fs_close(h)
+    return 0i32
+}
+
+/* corpus_coverage EMBODIES the executable test-coverage ledger: III lexes its own
+ * source at code level, derives the export surface, derives the reference graph, and
+ * REFUSES to certify a tree holding an unproven @export -- the census is computed,
+ * sorted, cad-sealed, and machine-written, so it can never again rot in prose. */

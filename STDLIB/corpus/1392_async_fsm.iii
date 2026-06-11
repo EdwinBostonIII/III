@@ -1,0 +1,138 @@
+/* 1392_async_fsm.iii -- THE ASYNC TASK FSM, PROVEN (coverage burn-down tranche 1).
+ *
+ * The coverage census (DOCS/III-COVERAGE-LEDGER.md) found async_await / async_block /
+ * async_cancel / async_yield_now exported with ZERO references anywhere -- the cooperative
+ * runtime's four-state FSM { READY, BLOCKED, COMPLETE, CANCELLED } was an unproven claim.
+ * This KAT proves the WHOLE machine, with the four orphans load-bearing:
+ *  (1) lifecycle    -- runtime_new / spawn x3 / alive_count;
+ *  (2) round-robin  -- next_ready walks READY tasks in RR order and advances the head;
+ *  (3) BLOCK        -- async_block flips to BLOCKED(1); the scheduler SKIPS it; a
+ *      set_state(READY) resurrection is seen again (the unblock path);
+ *  (4) CANCEL       -- async_cancel flips to CANCELLED(3); the scheduler never returns it;
+ *  (5) AWAIT        -- await(incomplete)==0 (passive predicate, no spin); after
+ *      async_complete(0xCAFE) await returns 0xCAFE; await(blocked)==0; await(cancelled)==0;
+ *  (6) YIELD        -- yield_now advances the RR head: with {t1,t2} both READY, next_ready
+ *      after a yield returns t1 again (t2 was skipped) -- the head motion is OBSERVABLE;
+ *  (7) SELECT       -- over a vec {blocked, completed} returns the completed one; over
+ *      {blocked} alone returns 0;
+ *  (8) REFUSALS     -- dead rt id / dead task id / state>3 / spawn-past-cap all refuse with
+ *      the documented codes (E_BADID=-1, E_BADSTATE=-3, 0-sentinels);
+ *  (9) FREE         -- runtime_free invalidates the rt (accessors return sentinels).
+ * Exit 99 = the async surface is no longer unproven API. */
+module corpus_1392
+
+extern @abi(c-msvc-x64) fn async_runtime_new(arena_id: u64, max_tasks: u32) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_runtime_free(rt_id: u64) -> i32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_spawn(rt_id: u64, kind: u64, ctx: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_task_state(rt_id: u64, task_id: u64) -> u32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_task_kind(rt_id: u64, task_id: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_task_ctx(rt_id: u64, task_id: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_task_result(rt_id: u64, task_id: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_set_state(rt_id: u64, task_id: u64, state: u32) -> i32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_complete(rt_id: u64, task_id: u64, result: u64) -> i32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_block(rt_id: u64, task_id: u64) -> i32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_cancel(rt_id: u64, task_id: u64) -> i32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_yield_now(rt_id: u64) -> i32 from "async.iii"
+extern @abi(c-msvc-x64) fn async_next_ready(rt_id: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_await(rt_id: u64, task_id: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_select(rt_id: u64, tasks_vec: u64) -> u64 from "async.iii"
+extern @abi(c-msvc-x64) fn async_alive_count(rt_id: u64) -> u32 from "async.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_push(id: u64, v: u64) -> i32 from "vec.iii"
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(4096u64)
+    if ar == 0u64 { return 1u64 }
+
+    /* (1) lifecycle: rt with capacity 4; three tasks */
+    let rt : u64 = async_runtime_new(ar, 4u32)
+    if rt == 0u64 { return 2u64 }
+    let t1 : u64 = async_spawn(rt, 11u64, 100u64)
+    let t2 : u64 = async_spawn(rt, 22u64, 200u64)
+    let t3 : u64 = async_spawn(rt, 33u64, 300u64)
+    if t1 != 1u64 { return 3u64 }
+    if t2 != 2u64 { return 4u64 }
+    if t3 != 3u64 { return 5u64 }
+    if async_alive_count(rt) != 3u32 { return 6u64 }
+    if async_task_kind(rt, t2) != 22u64 { return 7u64 }
+    if async_task_ctx(rt, t3) != 300u64 { return 8u64 }
+    if async_task_state(rt, t1) != 0u32 { return 9u64 }     /* READY */
+
+    /* (2) round-robin from head 0: t1, then t2, then t3, then t1 again */
+    if async_next_ready(rt) != t1 { return 10u64 }
+    if async_next_ready(rt) != t2 { return 11u64 }
+    if async_next_ready(rt) != t3 { return 12u64 }
+    if async_next_ready(rt) != t1 { return 13u64 }          /* head wrapped */
+
+    /* (3) BLOCK: t2 blocked -> scheduler skips it; resurrection is seen again */
+    if async_block(rt, t2) != 0i32 { return 14u64 }
+    if async_task_state(rt, t2) != 1u32 { return 15u64 }    /* BLOCKED */
+    /* head is now at t2 (after returning t1): next_ready must skip t2 -> t3 */
+    if async_next_ready(rt) != t3 { return 16u64 }
+    if async_await(rt, t2) != 0u64 { return 17u64 }         /* await(blocked) == 0 */
+    if async_set_state(rt, t2, 0u32) != 0i32 { return 18u64 }   /* unblock */
+    /* head at t1: t1 READY -> t1; then t2 READY again (resurrected) */
+    if async_next_ready(rt) != t1 { return 19u64 }
+    if async_next_ready(rt) != t2 { return 20u64 }
+
+    /* (4) CANCEL: t3 cancelled -> never scheduled again */
+    if async_cancel(rt, t3) != 0i32 { return 21u64 }
+    if async_task_state(rt, t3) != 3u32 { return 22u64 }    /* CANCELLED */
+    /* head at t3: skip cancelled t3 -> wrap to t1 */
+    if async_next_ready(rt) != t1 { return 23u64 }
+    if async_await(rt, t3) != 0u64 { return 24u64 }         /* await(cancelled) == 0 */
+
+    /* (5) AWAIT: passive before completion; the result after */
+    if async_await(rt, t1) != 0u64 { return 25u64 }
+    if async_complete(rt, t1, 0xCAFEu64) != 0i32 { return 26u64 }
+    if async_task_state(rt, t1) != 2u32 { return 27u64 }    /* COMPLETE */
+    if async_await(rt, t1) != 0xCAFEu64 { return 28u64 }
+    if async_task_result(rt, t1) != 0xCAFEu64 { return 29u64 }
+
+    /* (7) SELECT: {t2 (ready/blocked-class: not complete), t1 (complete)} -> t1;
+     *            {t2 alone} -> 0 */
+    let v1 : u64 = vec_u64_new(ar, 8u64)
+    if v1 == 0u64 { return 30u64 }
+    if vec_u64_push(v1, t2) != 0i32 { return 31u64 }
+    if vec_u64_push(v1, t1) != 0i32 { return 32u64 }
+    if async_select(rt, v1) != t1 { return 33u64 }
+    let v2 : u64 = vec_u64_new(ar, 8u64)
+    if v2 == 0u64 { return 34u64 }
+    if vec_u64_push(v2, t2) != 0i32 { return 35u64 }
+    if async_select(rt, v2) != 0u64 { return 36u64 }
+
+    /* (6) YIELD: fresh rt, capacity 2, both READY.  next_ready -> u1 (head->u2).
+     * yield_now skips u2 (head wraps to u1): next_ready -> u1 AGAIN. */
+    let rt2 : u64 = async_runtime_new(ar, 2u32)
+    if rt2 == 0u64 { return 40u64 }
+    let u1 : u64 = async_spawn(rt2, 1u64, 0u64)
+    let u2 : u64 = async_spawn(rt2, 2u64, 0u64)
+    if u1 != 1u64 { return 41u64 }
+    if u2 != 2u64 { return 42u64 }
+    if async_next_ready(rt2) != u1 { return 43u64 }         /* head now at u2 */
+    if async_yield_now(rt2) != 0i32 { return 44u64 }        /* head wraps to u1 */
+    if async_next_ready(rt2) != u1 { return 45u64 }         /* u2 was skipped: head motion OBSERVED */
+    /* without a yield the alternation resumes: head at u2 -> u2 */
+    if async_next_ready(rt2) != u2 { return 46u64 }
+
+    /* (8) REFUSALS */
+    if async_runtime_new(ar, 0u32) != 0u64 { return 50u64 }        /* zero capacity refused */
+    if async_runtime_new(ar, 65u32) != 0u64 { return 51u64 }       /* above TASKS_PER_RT refused */
+    if async_spawn(0u64, 1u64, 0u64) != 0u64 { return 52u64 }      /* dead rt */
+    if async_block(99u64, t1) != -1i32 { return 53u64 }            /* E_BADID rt */
+    if async_block(rt, 99u64) != -1i32 { return 54u64 }            /* E_BADID task */
+    if async_set_state(rt, t1, 4u32) != -3i32 { return 55u64 }     /* E_BADSTATE */
+    if async_task_state(rt, 99u64) != 0xFFFFFFFFu32 { return 56u64 }
+    /* spawn past capacity: rt2 holds 2/2 live */
+    if async_spawn(rt2, 3u64, 0u64) != 0u64 { return 57u64 }
+    if async_alive_count(rt2) != 2u32 { return 58u64 }
+
+    /* (9) FREE invalidates */
+    if async_runtime_free(rt2) != 0i32 { return 60u64 }
+    if async_task_state(rt2, u1) != 0xFFFFFFFFu32 { return 61u64 }
+    if async_next_ready(rt2) != 0u64 { return 62u64 }
+    if async_runtime_free(rt2) != -1i32 { return 63u64 }    /* double-free refused */
+
+    return 99u64
+}

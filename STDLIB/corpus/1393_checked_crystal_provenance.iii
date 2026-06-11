@@ -1,0 +1,130 @@
+/* 1393_checked_crystal_provenance.iii -- CRYSTAL-ON-ERROR ARITHMETIC, PROVEN (burn-down tranche 2).
+ *
+ * The coverage census flagged checked_u32_mul/u32_sub/u64_add/u64_sub/u64_div_with_crystal and
+ * the crystal_msg_byte/crystal_set_msg accessors as referenced NOWHERE.  This KAT proves the
+ * whole provenance contract:
+ *  (1) PASS-THROUGH (differential): on in-range operands every wrapper returns EXACTLY what the
+ *      underlying checked_* returns (nonzero option handle) -- proven by calling both;
+ *  (2) FAILURE MODES: u32 mul overflow -> 0xC101; u32 sub underflow -> 0xC102; u64 add overflow
+ *      -> 0xC101; u64 sub underflow -> 0xC102; u64 div-by-zero -> 0xC103 -- each minting a
+ *      MAC-verified crystal (crystal_verify == 1) surfaced via checked_crystal_last_error;
+ *  (3) SITE BINDING: the same failing (op,a,b) twice -> two DISTINCT crystals with BYTE-IDENTICAL
+ *      32-byte site hashes; a different b -> a site hash that DIFFERS (the hash binds operands);
+ *  (4) MESSAGE: crystal_set_msg installs a 32-byte message hash read back byte-exact via
+ *      crystal_msg_byte; the MAC is recomputed (verify still 1); OOB index -> 0x100 sentinel;
+ *      dead crystal id -> set_msg refuses (-1), msg_byte -> 0x100.
+ * Exit 99 = arithmetic failure provenance is a proven mechanism, not an unproven claim. */
+module corpus_1393
+
+extern @abi(c-msvc-x64) fn checked_u32_add(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u32_sub(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u32_mul(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_add(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_sub(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_div(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u32_sub_with_crystal(a: u32, b: u32) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u32_mul_with_crystal(a: u32, b: u32) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u64_add_with_crystal(a: u64, b: u64) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u64_sub_with_crystal(a: u64, b: u64) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u64_div_with_crystal(a: u64, b: u64) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_crystal_last_error() -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_site_byte(id: u64, i: u32) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_msg_byte(id: u64, i: u32) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_set_msg(id: u64, msg_hash_ptr: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u64_unwrap_or(handle: u64, default: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_drop(handle: u64) -> u8 from "checked.iii"
+
+const U64MAX : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var MSG : [u8; 32]
+
+fn main() -> u64 {
+    /* (1) PASS-THROUGH differentials: wrapper == underlying, nonzero */
+    let s1 : u64 = checked_u32_sub_with_crystal(9u32, 4u32)
+    if s1 == 0u64 { return 1u64 }
+    if s1 != checked_u32_sub(9u32, 4u32) { return 2u64 }
+    let s2 : u64 = checked_u32_mul_with_crystal(7u32, 6u32)
+    if s2 == 0u64 { return 3u64 }
+    if s2 != checked_u32_mul(7u32, 6u32) { return 4u64 }
+    /* u64 wrappers return freshly-minted checked.iii handles: decode the VALUE via
+     * checked_u64_unwrap_or, never compare handle ids (each call mints a new handle);
+     * drop each handle after decode (the slot table is finite) */
+    let s3 : u64 = checked_u64_add_with_crystal(40u64, 2u64)
+    if s3 == 0u64 { return 5u64 }
+    if checked_u64_unwrap_or(s3, 0u64) != 42u64 { return 6u64 }
+    if checked_u64_drop(s3) != 1u8 { return 7u64 }
+    let s4 : u64 = checked_u64_sub_with_crystal(9u64, 4u64)
+    if s4 == 0u64 { return 8u64 }
+    if checked_u64_unwrap_or(s4, 0u64) != 5u64 { return 9u64 }
+    if checked_u64_drop(s4) != 1u8 { return 10u64 }
+    let s5 : u64 = checked_u64_div_with_crystal(10u64, 2u64)
+    if s5 == 0u64 { return 60u64 }
+    if checked_u64_unwrap_or(s5, 0u64) != 5u64 { return 61u64 }
+    if checked_u64_drop(s5) != 1u8 { return 62u64 }
+
+    /* (2) FAILURE MODES: each mints a verified crystal with the documented code */
+    if checked_u32_mul_with_crystal(0x10000u32, 0x10000u32) != 0u64 { return 11u64 }
+    let c1 : u64 = checked_crystal_last_error()
+    if c1 == 0u64 { return 12u64 }
+    if crystal_code(c1) != 0xC101u32 { return 13u64 }       /* OVERFLOW */
+    if crystal_verify(c1) != 1u8 { return 14u64 }
+
+    if checked_u32_sub_with_crystal(1u32, 2u32) != 0u64 { return 15u64 }
+    let c2 : u64 = checked_crystal_last_error()
+    if crystal_code(c2) != 0xC102u32 { return 16u64 }       /* UNDERFLOW */
+    if crystal_verify(c2) != 1u8 { return 17u64 }
+
+    if checked_u64_add_with_crystal(U64MAX, 1u64) != 0u64 { return 18u64 }
+    let c3 : u64 = checked_crystal_last_error()
+    if crystal_code(c3) != 0xC101u32 { return 19u64 }
+
+    if checked_u64_sub_with_crystal(0u64, 1u64) != 0u64 { return 20u64 }
+    let c4 : u64 = checked_crystal_last_error()
+    if crystal_code(c4) != 0xC102u32 { return 21u64 }
+
+    if checked_u64_div_with_crystal(5u64, 0u64) != 0u64 { return 22u64 }
+    let c5 : u64 = checked_crystal_last_error()
+    if crystal_code(c5) != 0xC103u32 { return 23u64 }       /* DIV BY ZERO */
+    if crystal_verify(c5) != 1u8 { return 24u64 }
+
+    /* (3) SITE BINDING: same (op,a,b) twice -> distinct crystals, identical sites */
+    if checked_u64_add_with_crystal(U64MAX, 1u64) != 0u64 { return 25u64 }
+    let r1 : u64 = checked_crystal_last_error()
+    if checked_u64_add_with_crystal(U64MAX, 1u64) != 0u64 { return 26u64 }
+    let r2 : u64 = checked_crystal_last_error()
+    if r1 == r2 { return 27u64 }                            /* distinct mints */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if crystal_site_byte(r1, i) != crystal_site_byte(r2, i) { return 28u64 }
+        i = i + 1u32
+    }
+    /* a different operand -> a different site hash (>=1 byte differs) */
+    if checked_u64_add_with_crystal(U64MAX, 2u64) != 0u64 { return 29u64 }
+    let r3 : u64 = checked_crystal_last_error()
+    let mut diff : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        if crystal_site_byte(r1, j) != crystal_site_byte(r3, j) { diff = diff + 1u32 }
+        j = j + 1u32
+    }
+    if diff == 0u32 { return 30u64 }                        /* the site hash binds operands */
+
+    /* (4) MESSAGE: set + byte-exact read-back; MAC recomputed; sentinels on OOB/dead */
+    let mut k : u64 = 0u64
+    while k < 32u64 { MSG[k] = (0xA0u64 + k & 0xFFu64) as u8   k = k + 1u64 }
+    if crystal_set_msg(r3, (&MSG as u64)) != 0i32 { return 31u64 }
+    let mut m : u32 = 0u32
+    while m < 32u32 {
+        let want : u32 = (0xA0u32 + m) & 0xFFu32
+        if crystal_msg_byte(r3, m) != want { return 32u64 }
+        m = m + 1u32
+    }
+    if crystal_verify(r3) != 1u8 { return 33u64 }           /* MAC recomputed after set_msg */
+    if crystal_msg_byte(r3, 32u32) != 0x100u32 { return 34u64 }   /* OOB index sentinel */
+    if crystal_set_msg(0u64, (&MSG as u64)) != -1i32 { return 35u64 }   /* dead id refused */
+    if crystal_msg_byte(0u64, 0u32) != 0x100u32 { return 36u64 }
+
+    return 99u64
+}

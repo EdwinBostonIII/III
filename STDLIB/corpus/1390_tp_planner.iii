@@ -1,0 +1,292 @@
+/* 1390_tp_planner.iii -- THE PARETO ROUTE PLANNER OVER THE ONE CATEGORY (harmony #3).
+ *
+ * tp_planner composes tp_morphism (the 24 typed format arrows) + category (the typed graph +
+ * composition law) + pareto_extraction (the honest antichain) + cost_lattice (declared-order
+ * scalarization) into route PLANNING: all non-dominated transform routes A->B, category-certified.
+ * Arms (each law has TEETH -- a faked planner fails the arm):
+ *  (A) registration + dense slot mapping sanity (mor 4 = iii->ast_bin, mor 18 = pe->hex);
+ *  (B) the REAL tp graph iii->hex has EXACTLY 2 simple routes ([6] direct, [3,17,18] via
+ *      asm/pe); with trade-off costs BOTH are on the frontier; costs compose exactly;
+ *      cl_dominates (an INDEPENDENT authority) confirms incomparability (2);
+ *  (J) route certification: materializing [3,17,18] yields a REAL morphism iii->hex in the
+ *      category; materializing [6] IS arrow 6 (cat_morph_eq);
+ *  (C) frontier-then-pick: the lowpower order picks the energy-cheap 3-hop route, the realtime
+ *      order picks the latency-cheap direct route; a dead order slot is refused;
+ *  (D) a dominated route is OFF the frontier (cl_dominates cross-check = 1) and pick avoids it;
+ *  (E) saturation law: a near-MAX arrow cost saturates (dim stays MAX, never wraps) -- a
+ *      wrapping adder would forge dominance and flip the frontier;
+ *  (F) uncosted arrows are NOT traversed (cost honesty: only the direct route is found);
+ *  (G) cost immutability: re-bind -> -6; dead arrow -> -2; null -> -5;
+ *  (H) unreachable dst -> 0 routes; pick on the empty frontier -> -4;
+ *  (I) the empty route (src==dst): one route, zero cost, materializes AS cat_identity;
+ *  (K) NO SILENT CAPS: complete digraph K7 has 326 simple s->t paths > 256 pool -> the whole
+ *      plan REFUSES (-1) rather than silently truncating a possible frontier member.
+ * Exit 99 = the categorical layer is navigable: plan -> honest frontier -> declared pick,
+ * every route certified by the category itself. */
+module corpus_1390
+
+extern @abi(c-msvc-x64) fn tpm_register_all() -> i32 from "tp_morphism.iii"
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_src(slot: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_dst(slot: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morph_eq(f_slot: u32, g_slot: u32) -> u8 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_identity(obj_slot: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_dominates(a: *u64, b: *u64) -> u8 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn tpp_init() -> i32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_set_cost(mor_slot: u32, cost: *u64) -> i32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_cost_live(mor_slot: u32) -> u8 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_plan(src_obj: u32, dst_obj: u32) -> i64 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_route_count() -> u64 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_frontier_size() -> u64 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_route_len(r: u64) -> u64 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_route_arrow(r: u64, k: u64) -> u32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_route_cost(r: u64, out: *u64) -> i32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_route_on_frontier(r: u64) -> u8 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_materialize(r: u64, out_id: *u8) -> u32 from "tp_planner.iii"
+extern @abi(c-msvc-x64) fn tpp_pick(order_slot: u32) -> i64 from "tp_planner.iii"
+
+/* object slots after tpm_register_all (fresh cat_init -> dense): F_III=0 ... F_HEX=12 */
+const OBJ_III : u32 = 0u32
+const OBJ_HEX : u32 = 12u32
+const SAT     : u64 = 0xFFFFFFFFFFFFFFFFu64
+const SENT    : u32 = 0xFFFFFFFFu32
+
+var COSTV  : [u64; 6]     /* staging cost row */
+var RC0    : [u64; 6]     /* route-0 cost readback */
+var RC1    : [u64; 6]     /* route-1 cost readback */
+var IDOUT  : [u8; 32]
+var IDOUT2 : [u8; 32]
+var OBJB   : [u8; 32]     /* K7 object-id staging */
+var OPB    : [u8; 32]     /* K7 op-word staging */
+var K7O    : [u32; 7]     /* K7 object slots */
+
+fn set6(c0: u64, c1: u64, c2: u64, c3: u64, c4: u64, c5: u64) -> i32 {
+    let a0 : u64 = c0
+    let a1 : u64 = c1
+    let a2 : u64 = c2
+    let a3 : u64 = c3
+    let a4 : u64 = c4
+    let a5 : u64 = c5
+    COSTV[0u64] = a0
+    COSTV[1u64] = a1
+    COSTV[2u64] = a2
+    COSTV[3u64] = a3
+    COSTV[4u64] = a4
+    COSTV[5u64] = a5
+    return 0i32
+}
+
+fn costp() -> *u64 { return ((&COSTV as u64)) as *u64 }
+
+/* bind (1,1,1,1,1,1) to every tp arrow EXCEPT 3/6/17/18 (those carry arm-specific costs). */
+fn cost_others_ones() -> i32 {
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    let mut t : u64 = 0u64
+    let mut bad : u8 = 0u8
+    while t < 24u64 {
+        let mut skip : u8 = 0u8
+        if t == 3u64 { skip = 1u8 }
+        if t == 6u64 { skip = 1u8 }
+        if t == 17u64 { skip = 1u8 }
+        if t == 18u64 { skip = 1u8 }
+        if skip == 0u8 {
+            if tpp_set_cost((t & 0xFFFFFFFFu64) as u32, costp()) != 0i32 { bad = 1u8 }
+        }
+        t = t + 1u64
+    }
+    if bad == 1u8 { return -1i32 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ---- (A) registration + slot mapping ---- */
+    let nreg : i32 = tpm_register_all()
+    if nreg != 24i32 { return 1u64 }
+    if cat_morphism_src(4u32) != 0u32 { return 2u64 }    /* mor 4 = iii -> ast_bin */
+    if cat_morphism_dst(4u32) != 6u32 { return 3u64 }
+    if cat_morphism_src(18u32) != 13u32 { return 4u64 }  /* mor 18 = pe -> hex */
+    if cat_morphism_dst(18u32) != 12u32 { return 5u64 }
+
+    /* ---- (B) the real tp graph: iii->hex, trade-off costs, both routes on the frontier ---- */
+    if tpp_init() != 0i32 { return 6u64 }
+    set6(2u64, 2u64, 2u64, 2u64, 2u64, 9u64)            /* direct: cheap latency, dear energy */
+    if tpp_set_cost(6u32, costp()) != 0i32 { return 7u64 }
+    set6(3u64, 1u64, 1u64, 1u64, 1u64, 0u64)
+    if tpp_set_cost(3u32, costp()) != 0i32 { return 8u64 }
+    set6(3u64, 1u64, 1u64, 1u64, 1u64, 0u64)
+    if tpp_set_cost(17u32, costp()) != 0i32 { return 9u64 }
+    set6(3u64, 1u64, 1u64, 1u64, 1u64, 1u64)            /* 3-hop total (9,3,3,3,3,1) */
+    if tpp_set_cost(18u32, costp()) != 0i32 { return 10u64 }
+    if cost_others_ones() != 0i32 { return 11u64 }
+    if tpp_cost_live(6u32) != 1u8 { return 12u64 }
+    let planb : i64 = tpp_plan(OBJ_III, OBJ_HEX)
+    let want2 : i64 = 2i64
+    if planb != want2 { return 13u64 }
+    if tpp_route_count() != 2u64 { return 14u64 }
+    if tpp_frontier_size() != 2u64 { return 15u64 }
+    if tpp_route_len(0u64) != 3u64 { return 16u64 }      /* DFS order: [3,17,18] found first */
+    if tpp_route_len(1u64) != 1u64 { return 17u64 }
+    if tpp_route_arrow(0u64, 0u64) != 3u32 { return 18u64 }
+    if tpp_route_arrow(0u64, 1u64) != 17u32 { return 19u64 }
+    if tpp_route_arrow(0u64, 2u64) != 18u32 { return 20u64 }
+    if tpp_route_arrow(1u64, 0u64) != 6u32 { return 21u64 }
+    if tpp_route_arrow(1u64, 1u64) != SENT { return 22u64 }   /* OOB hop refused */
+    if tpp_route_cost(0u64, ((&RC0 as u64)) as *u64) != 0i32 { return 23u64 }
+    if tpp_route_cost(1u64, ((&RC1 as u64)) as *u64) != 0i32 { return 24u64 }
+    if RC0[0u64] != 9u64 { return 25u64 }
+    if RC0[5u64] != 1u64 { return 26u64 }
+    if RC1[0u64] != 2u64 { return 27u64 }
+    if RC1[5u64] != 9u64 { return 28u64 }
+    if tpp_route_on_frontier(0u64) != 1u8 { return 29u64 }
+    if tpp_route_on_frontier(1u64) != 1u8 { return 30u64 }
+    /* independent authority: cost_lattice trichotomy says INCOMPARABLE (2) */
+    if cl_dominates(((&RC0 as u64)) as *u64, ((&RC1 as u64)) as *u64) != 2u8 { return 31u64 }
+
+    /* ---- (J) category certification of the live plan ---- */
+    let m1 : u32 = tpp_materialize(1u64, ((&IDOUT as u64)) as *u8)
+    if m1 == SENT { return 32u64 }
+    if cat_morph_eq(m1, 6u32) != 1u8 { return 33u64 }    /* 1-hop route IS arrow 6 */
+    let m0 : u32 = tpp_materialize(0u64, ((&IDOUT as u64)) as *u8)
+    if m0 == SENT { return 34u64 }
+    if cat_morphism_src(m0) != 0u32 { return 35u64 }     /* composed route is a REAL iii->hex arrow */
+    if cat_morphism_dst(m0) != 12u32 { return 36u64 }
+
+    /* ---- (C) frontier-then-pick under declared orders ---- */
+    if cl_init() != 0i32 { return 37u64 }
+    let pick_lp : i64 = tpp_pick(2u32)                   /* lowpower (2,1,1,1,1,8): 38 vs 84 */
+    let want0 : i64 = 0i64
+    if pick_lp != want0 { return 38u64 }
+    let pick_rt : i64 = tpp_pick(1u32)                   /* realtime (8,1,1,2,2,0): 90 vs 28 */
+    let want1 : i64 = 1i64
+    if pick_rt != want1 { return 39u64 }
+    let pick_dead : i64 = tpp_pick(63u32)                /* unseeded order slot */
+    let ebad : i64 = 0i64 - 2i64
+    if pick_dead != ebad { return 40u64 }
+
+    /* ---- (D) dominated route is OFF the frontier; pick avoids it ---- */
+    if tpp_init() != 0i32 { return 41u64 }
+    set6(2u64, 2u64, 2u64, 2u64, 2u64, 2u64)
+    if tpp_set_cost(6u32, costp()) != 0i32 { return 42u64 }
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(3u32, costp()) != 0i32 { return 43u64 }
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(17u32, costp()) != 0i32 { return 44u64 }
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(18u32, costp()) != 0i32 { return 45u64 }
+    let pland : i64 = tpp_plan(OBJ_III, OBJ_HEX)
+    let want1b : i64 = 1i64
+    if pland != want1b { return 46u64 }
+    if tpp_route_count() != 2u64 { return 47u64 }        /* both found, one dominated */
+    if tpp_route_on_frontier(0u64) != 0u8 { return 48u64 }   /* (3,3,3,3,3,3) dominated */
+    if tpp_route_on_frontier(1u64) != 1u8 { return 49u64 }
+    if tpp_route_cost(0u64, ((&RC0 as u64)) as *u64) != 0i32 { return 50u64 }
+    if tpp_route_cost(1u64, ((&RC1 as u64)) as *u64) != 0i32 { return 51u64 }
+    if cl_dominates(((&RC1 as u64)) as *u64, ((&RC0 as u64)) as *u64) != 1u8 { return 52u64 }
+    let pick_bal : i64 = tpp_pick(3u32)
+    let want1c : i64 = 1i64
+    if pick_bal != want1c { return 53u64 }               /* L4: only frontier members pickable */
+
+    /* ---- (E) saturation: near-MAX cost never wraps (a wrap would forge dominance) ---- */
+    if tpp_init() != 0i32 { return 54u64 }
+    set6(SAT, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(3u32, costp()) != 0i32 { return 55u64 }
+    set6(5u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(17u32, costp()) != 0i32 { return 56u64 }
+    set6(5u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(18u32, costp()) != 0i32 { return 57u64 }
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(6u32, costp()) != 0i32 { return 58u64 }
+    let plane : i64 = tpp_plan(OBJ_III, OBJ_HEX)
+    let want1d : i64 = 1i64
+    if plane != want1d { return 59u64 }
+    if tpp_route_cost(0u64, ((&RC0 as u64)) as *u64) != 0i32 { return 60u64 }
+    if RC0[0u64] != SAT { return 61u64 }                 /* saturated, not wrapped */
+    if tpp_route_on_frontier(0u64) != 0u8 { return 62u64 }
+
+    /* ---- (F) uncosted arrows are not traversed ---- */
+    if tpp_init() != 0i32 { return 63u64 }
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    if tpp_set_cost(6u32, costp()) != 0i32 { return 64u64 }
+    let planf : i64 = tpp_plan(OBJ_III, OBJ_HEX)
+    let want1e : i64 = 1i64
+    if planf != want1e { return 65u64 }
+    if tpp_route_count() != 1u64 { return 66u64 }
+    if tpp_route_len(0u64) != 1u64 { return 67u64 }
+    if tpp_route_arrow(0u64, 0u64) != 6u32 { return 68u64 }
+
+    /* ---- (G) cost immutability + refusals ---- */
+    set6(7u64, 7u64, 7u64, 7u64, 7u64, 7u64)
+    if tpp_set_cost(6u32, costp()) != -6i32 { return 69u64 }     /* re-bind refused */
+    if tpp_set_cost(9999u32, costp()) != -2i32 { return 70u64 }  /* dead arrow refused */
+    let np : *u64 = (0u64) as *u64
+    if tpp_set_cost(6u32, np) != -5i32 { return 71u64 }          /* null refused */
+
+    /* ---- (H) unreachable dst; empty-frontier pick ---- */
+    let planh : i64 = tpp_plan(OBJ_HEX, OBJ_III)         /* hex has no outgoing arrows */
+    let want0b : i64 = 0i64
+    if planh != want0b { return 72u64 }
+    if tpp_frontier_size() != 0u64 { return 73u64 }
+    let pick_e : i64 = tpp_pick(3u32)
+    let eempty : i64 = 0i64 - 4i64
+    if pick_e != eempty { return 74u64 }
+
+    /* ---- (I) the empty route: src==dst, zero cost, materializes AS the identity ---- */
+    let plani : i64 = tpp_plan(OBJ_III, OBJ_III)
+    let want1f : i64 = 1i64
+    if plani != want1f { return 75u64 }
+    if tpp_route_len(0u64) != 0u64 { return 76u64 }
+    if tpp_route_cost(0u64, ((&RC0 as u64)) as *u64) != 0i32 { return 77u64 }
+    if RC0[0u64] != 0u64 { return 78u64 }
+    if RC0[5u64] != 0u64 { return 79u64 }
+    let mi : u32 = tpp_materialize(0u64, ((&IDOUT as u64)) as *u8)
+    if mi == SENT { return 80u64 }
+    let idm : u32 = cat_identity(OBJ_III, ((&IDOUT2 as u64)) as *u8)
+    if idm == SENT { return 81u64 }
+    if cat_morph_eq(mi, idm) != 1u8 { return 82u64 }     /* identity law, live */
+
+    /* ---- (K) NO SILENT CAPS: K7 complete digraph -> 326 simple paths > 256 -> refuse whole ---- */
+    if cat_init() != 0i32 { return 83u64 }
+    let mut i : u64 = 0u64
+    while i < 7u64 {
+        let mut z : u64 = 0u64
+        while z < 32u64 { OBJB[z] = 0u8  z = z + 1u64 }
+        OBJB[0u64] = 0xB7u8                              /* K7 object domain tag */
+        OBJB[1u64] = (i & 0xFFu64) as u8
+        let oslot : u32 = cat_add_object(((&OBJB as u64)) as *u8)
+        if oslot == SENT { return 84u64 }
+        K7O[i] = oslot
+        i = i + 1u64
+    }
+    if tpp_init() != 0i32 { return 85u64 }
+    set6(1u64, 1u64, 1u64, 1u64, 1u64, 1u64)
+    let mut a : u64 = 0u64
+    let mut bad7 : u8 = 0u8
+    while a < 7u64 {
+        let mut b : u64 = 0u64
+        while b < 7u64 {
+            if a != b {
+                let mut z2 : u64 = 0u64
+                while z2 < 32u64 { OPB[z2] = 0u8  z2 = z2 + 1u64 }
+                OPB[0u64] = 0xC7u8                       /* K7 op domain tag */
+                OPB[1u64] = (a & 0xFFu64) as u8
+                OPB[2u64] = (b & 0xFFu64) as u8
+                let mslot : u32 = cat_add_morphism(K7O[a], K7O[b], ((&OPB as u64)) as *u8, ((&IDOUT as u64)) as *u8)
+                if mslot == SENT { bad7 = 1u8 }
+                if bad7 == 0u8 {
+                    if tpp_set_cost(mslot, costp()) != 0i32 { bad7 = 1u8 }
+                }
+            }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    if bad7 == 1u8 { return 86u64 }
+    let plank : i64 = tpp_plan(K7O[0u64], K7O[6u64])
+    let efull : i64 = 0i64 - 1i64
+    if plank != efull { return 87u64 }                   /* refused whole, never truncated */
+
+    return 99u64
+}

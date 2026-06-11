@@ -1038,6 +1038,10 @@ MODULES=(
     "omnia/caindex"
     # --- M23: below-OS behavioral quine-seal (capability 11); leaf, tiny BSS, appended last ---
     "katabasis/quine_seal"
+    # --- harmony #3: Pareto route planner over the one category (KAT 1390); appended last ---
+    "omnia/tp_planner"
+    # --- the executable coverage ledger (KAT 1391 + the ratchet gate below); appended last ---
+    "sanctus/corpus_coverage"
 )
 
 PASS=0
@@ -1189,6 +1193,52 @@ if [[ $FAIL -eq 0 ]]; then
         sha256sum "$BUILD_DIR/libiii_native.a" > "$BUILD_DIR/libiii_native.a.mhash"
         echo "[build_stdlib] mhash:"
         cat "$BUILD_DIR/libiii_native.a.mhash"
+    fi
+fi
+
+# --- Coverage ratchet gate (sanctus/corpus_coverage: the executable ledger) -------------
+# The hand-written untested-export ledger rotted in 8 days; this gate replaces it with a
+# computation: the cov_gate_driver walks STDLIB/iii + STDLIB/corpus, derives the export
+# surface and the reference graph at code level, and writes the sorted uncovered names to
+# $REPO_ROOT/_cov_report.txt.  The RATCHET: uncovered may only shrink -- a count above
+# scripts/coverage_pin.txt FAILS the build (lower the pin as the census burns down; raise
+# it never, except with an explicit, reviewed justification).
+if [[ $FAIL -eq 0 ]]; then
+    COV_REPO_ROOT="$(cd "$STDLIB_DIR/.." && pwd)"
+    COV_DRV_SRC="$SCRIPT_DIR/cov_gate_driver.iii"
+    COV_PIN_FILE="$SCRIPT_DIR/coverage_pin.txt"
+    COV_CC="${CC:-gcc}"
+    if [[ -f "$COV_DRV_SRC" && -f "$COV_PIN_FILE" ]]; then
+        COV_OBJ="$BUILD_DIR/cov_gate_driver.o"
+        COV_EXE="$BUILD_DIR/cov_gate_driver.exe"
+        COV_OK=1
+        "$IIIS" "$COV_DRV_SRC" --compile-only --out "$COV_OBJ" >/dev/null 2>&1 || COV_OK=0
+        if [[ $COV_OK -eq 1 ]]; then
+            "$COV_CC" "$COV_OBJ" "$BUILD_DIR/libiii_native.a" -lws2_32 -lkernel32 -o "$COV_EXE" >/dev/null 2>&1 || COV_OK=0
+        fi
+        if [[ $COV_OK -eq 1 && -x "$COV_EXE" ]]; then
+            COV_STAGED="/tmp/cov_gate_$$.exe"
+            cp "$COV_EXE" "$COV_STAGED"
+            rm -f "$COV_REPO_ROOT/_cov_report.txt"
+            ( cd "$COV_REPO_ROOT" && "$COV_STAGED" >/dev/null 2>&1 ) || true   # driver exits with the census count
+            rm -f "$COV_STAGED"
+            if [[ -f "$COV_REPO_ROOT/_cov_report.txt" ]]; then
+                COV_N=$(wc -l < "$COV_REPO_ROOT/_cov_report.txt" | tr -d ' ')
+                COV_PIN=$(tr -d ' \r\n' < "$COV_PIN_FILE")
+                if [[ "$COV_N" -gt "$COV_PIN" ]]; then
+                    echo "[build_stdlib] COVERAGE GATE FAIL: uncovered=$COV_N > pin=$COV_PIN (see _cov_report.txt)"
+                    FAIL=$((FAIL+1))
+                else
+                    echo "[build_stdlib] coverage gate OK: uncovered=$COV_N <= pin=$COV_PIN"
+                fi
+            else
+                echo "[build_stdlib] COVERAGE GATE FAIL: driver produced no report (overflow/truncation?)"
+                FAIL=$((FAIL+1))
+            fi
+        else
+            echo "[build_stdlib] COVERAGE GATE FAIL: cov_gate_driver did not compile/link"
+            FAIL=$((FAIL+1))
+        fi
     fi
 fi
 

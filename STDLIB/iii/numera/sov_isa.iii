@@ -40,6 +40,7 @@ extern @abi(c-msvc-x64) fn cga_dispose_shift(shape: u32, a: u32, b: u32, budget:
 extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
 extern @abi(c-msvc-x64) fn cga_bv_get_a(i: u32) -> u32 from "cg_autocatalyst.iii"
 extern @abi(c-msvc-x64) fn cga_bv_get_b(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn bvc_cite_strength(a: u32) -> i32 from "bv_commons.iii"
 extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
@@ -622,6 +623,44 @@ fn sov_isa_adopt_dream() -> u32 @export {
         i = i + 1u32
     }
     return adopted
+}
+
+/* ===== wave-4 M22: FEDERATED OPTIMIZER ADOPTION -- machines learn each other's dreams =========
+ * sov_isa_adopt_dream learns from the LOCAL count-mask registry; this learns from the COMMONS --
+ * so a strength law a PEER dreamed, received via tcom_receive into the local Theorem Commons,
+ * can drive a LOCAL optimizer rule the local dream never produced.  Federated optimization
+ * learning: the substrate optimizes using laws discovered on OTHER machines.
+ * DOUBLE-GATED, belt and suspenders: (1) the law must be PRESENT in the Commons
+ * (bvc_cite_strength(a) == 0 -- it was kernel-checked at admission, by us or by a peer's
+ * tcom_receive which re-proved it locally); (2) the local kernel RE-PROVES this exact (a,b)
+ * here -- so even a name collision or a malformed admission cannot register an unsound rule.
+ * Registers mul(?0, cpow_a) -> shl(?0, cnum_b); returns 1 adopted / 0 refused.  a<64 width-exact. */
+fn sov_isa_adopt_from_commons(a: u32, b: u32) -> u32 @export {
+    if a >= 64u32 { return 0u32 }
+    if bvc_cite_strength(a) != 0i32 { return 0u32 }       /* not in the Commons: nothing to learn */
+    tc_reset()
+    let kx : u32 = tc_var(0u32)
+    let pow : u64 = 1u64 << (a as u64)
+    let cit_l : u32 = tc_bvmul(kx, tc_bvlit_u64(pow))
+    let cit_r : u32 = tc_bvshl(kx, tc_bvlit_u64(b as u64))
+    if tc_conv(cit_l, cit_r) != 1u8 { return 0u32 }       /* local kernel re-proof: the safety net */
+    let s_pow : u32 = si_slot_pow(a as u8)
+    let s_cnt : u32 = si_slot_cnum(b as u8)
+    let s_mul2 : u32 = si_slot(SI_MUL)
+    let s_shl2 : u32 = si_slot(SI_SHL)
+    if s_pow == SI_SENT { return 0u32 }
+    if s_cnt == SI_SENT { return 0u32 }
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 3u32
+    SI_RULE[2u32] = si_enc_sym(s_mul2, 2u32)
+    SI_RULE[3u32] = si_enc_var(0u32)
+    SI_RULE[4u32] = si_enc_sym(s_pow, 0u32)
+    SI_RULE[5u32] = si_enc_sym(s_shl2, 2u32)
+    SI_RULE[6u32] = si_enc_var(0u32)
+    SI_RULE[7u32] = si_enc_sym(s_cnt, 0u32)
+    let rp : *u32 = (&SI_RULE) as u64 as *u32
+    if eg_register_rule(rp) == SI_SENT { return 0u32 }
+    return 1u32
 }
 
 /* KAT [wave-4 M13]: RULE REGISTRATION IS KERNEL CITATION -- the uniform contract.  Every core

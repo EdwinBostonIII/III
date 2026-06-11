@@ -1,0 +1,264 @@
+/* 1391_corpus_coverage.iii -- THE EXECUTABLE COVERAGE LEDGER (sanctus/corpus_coverage).
+ *
+ * The hand-written untested-export ledger (_numera_audit_findings.txt) rotted in 8 days;
+ * corpus_coverage replaces it with a computation III performs on its own tree.  This KAT is
+ * the HERMETIC FALSIFIER: a synthetic mini-tree under CWD proves every tooth of the lexer
+ * and the policy, then proves the ratchet closes to COMPLETE, then proves the seal is
+ * reproducible and census-sensitive.  Arms:
+ *  (1) EXTRACTION    -- 4 exports found (alpha_used, alpha_orphan, beta_used, gamma_orphan);
+ *      the unexported alpha_helper is NOT in the table (body '{' kills the pending def);
+ *      prespec.iii is excluded as a FILE (its pre_table export never registers).
+ *  (2) ORPHANS       -- exactly {alpha_orphan, gamma_orphan} are uncovered, SORTED;
+ *      teeth: alpha_orphan is named in a COMMENT and in a STRING LITERAL (neither covers),
+ *      gamma_orphan is named ONLY in prespec.iii (the &fn dispatch table never covers);
+ *      beta_used is covered ONLY by alpha's extern declaration line (an extern-line token
+ *      IS a reference); alpha_used is covered by the fake corpus test t1.
+ *  (3) DEFINITION /= REFERENCE -- every export's own `fn` definition token did not
+ *      self-cover (else arm 2 finds zero orphans and this KAT fails).
+ *  (4) THE RATCHET   -- adding corpus t2 (externs alpha_orphan) drops uncovered to 1;
+ *      adding t3 (externs gamma_orphan) drops it to 0 -> verdict COMPLETE.
+ *  (5) THE SEAL      -- re-auditing the same tree reproduces the seal byte-for-byte;
+ *      the VIOLATION-state seal differs from the COMPLETE-state seal (census-sensitive).
+ * Exit 99 = the coverage ledger is machine-computed, falsifiable, and can never again
+ * rot in prose. */
+module corpus_1391
+
+extern @abi(c-msvc-x64) fn cov_audit(cap: u64, modules_root: u64, corpus_root: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_verdict() -> u32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_exports() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_uncovered() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_files() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_reffiles() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_dup() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_trunc() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_overflow() -> u8 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_uncovered_name(i: u64, out_addr: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_seal(out: *u8) -> i32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_report_write(cap: u64, path: u64) -> i32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_size(h: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+/* --- synthetic tree paths --- */
+var P_ROOT : [u8; 64]
+var P_MODS : [u8; 64]
+var P_CORP : [u8; 64]
+var P_ALPHA : [u8; 64]
+var P_BETA  : [u8; 64]
+var P_GAMMA : [u8; 64]
+var P_PRES  : [u8; 64]
+var P_T1   : [u8; 64]
+var P_T2   : [u8; 64]
+var P_T3   : [u8; 64]
+var P_REP  : [u8; 64]
+
+/* --- content assembly --- */
+var KC      : [u8; 2048]
+var KC_LEN  : u64 = 0u64
+var NAMEBUF : [u8; 64]
+var SEAL_A  : [u8; 32]
+var SEAL_B  : [u8; 32]
+var SEAL_C  : [u8; 32]
+var REPBUF  : [u8; 256]
+
+fn setlit(dst_addr: u64, src_addr: u64, n: u64) {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]   i = i + 1u64 }
+    d[n] = 0u8
+}
+
+fn catlit(dst_addr: u64, a_addr: u64, b_addr: u64, bn: u64) {
+    let d : *u8 = dst_addr as *u8
+    let a : *u8 = a_addr as *u8
+    let mut al : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if al >= 63u64 { go = 0u8 } else { if a[al] == 0u8 { go = 0u8 } else { al = al + 1u64 } }
+    }
+    let mut i : u64 = 0u64
+    while i < al { d[i] = a[i]   i = i + 1u64 }
+    let b : *u8 = b_addr as *u8
+    let mut j : u64 = 0u64
+    while j < bn { d[al + j] = b[j]   j = j + 1u64 }
+    d[al + bn] = 0u8
+}
+
+fn kc_reset() { KC_LEN = 0u64 }
+fn kc_lit(src_addr: u64, n: u64) {
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { KC[KC_LEN + i] = s[i]   i = i + 1u64 }
+    KC_LEN = KC_LEN + n
+}
+fn kc_byte(b: u8) { KC[KC_LEN] = b   KC_LEN = KC_LEN + 1u64 }
+fn kc_nl() { kc_byte(0x0Au8) }
+
+fn kc_write(cap: u64, path_addr: u64) -> i32 {
+    let h : u64 = fs_open(cap, path_addr, 2u32)
+    if h == 0u64 { return -1i32 }
+    fs_write(h, (&KC as u64), KC_LEN)
+    fs_close(h)
+    return 0i32
+}
+
+fn name_is(i: u64, lit_addr: u64, n: u64) -> u8 {
+    let got : u64 = cov_uncovered_name(i, (&NAMEBUF as u64))
+    if got != n { return 0u8 }
+    let a : *u8 = (&NAMEBUF as u64) as *u8
+    let b : *u8 = lit_addr as *u8
+    let mut k : u64 = 0u64
+    let mut ok : u8 = 1u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if k >= n { go = 0u8 } else {
+            if a[k] != b[k] { ok = 0u8   go = 0u8 } else { k = k + 1u64 }
+        }
+    }
+    return ok
+}
+
+fn teardown(cap: u64) {
+    fs_delete(cap, (&P_ALPHA as u64))
+    fs_delete(cap, (&P_BETA as u64))
+    fs_delete(cap, (&P_GAMMA as u64))
+    fs_delete(cap, (&P_PRES as u64))
+    fs_delete(cap, (&P_T1 as u64))
+    fs_delete(cap, (&P_T2 as u64))
+    fs_delete(cap, (&P_T3 as u64))
+    fs_delete(cap, (&P_REP as u64))
+    fs_rmdir(cap, (&P_MODS as u64))
+    fs_rmdir(cap, (&P_CORP as u64))
+    fs_rmdir(cap, (&P_ROOT as u64))
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)   /* read|write|create */
+
+    setlit((&P_ROOT as u64), ("./iii_cov_kat" as u64), 13u64)
+    catlit((&P_MODS as u64), (&P_ROOT as u64), ("/mods" as u64), 5u64)
+    catlit((&P_CORP as u64), (&P_ROOT as u64), ("/corpus" as u64), 7u64)
+    catlit((&P_ALPHA as u64), (&P_MODS as u64), ("/alpha.iii" as u64), 10u64)
+    catlit((&P_BETA  as u64), (&P_MODS as u64), ("/beta.iii" as u64), 9u64)
+    catlit((&P_GAMMA as u64), (&P_MODS as u64), ("/gamma.iii" as u64), 10u64)
+    catlit((&P_PRES  as u64), (&P_MODS as u64), ("/prespec.iii" as u64), 12u64)
+    catlit((&P_T1 as u64), (&P_CORP as u64), ("/t1.iii" as u64), 7u64)
+    catlit((&P_T2 as u64), (&P_CORP as u64), ("/t2.iii" as u64), 7u64)
+    catlit((&P_T3 as u64), (&P_CORP as u64), ("/t3.iii" as u64), 7u64)
+    catlit((&P_REP as u64), (&P_ROOT as u64), ("/report.txt" as u64), 11u64)
+
+    teardown(cap)   /* pre-clean residue from a prior crashed run */
+
+    if fs_mkdir(cap, (&P_ROOT as u64)) != 0i32 { return 1u64 }
+    if fs_mkdir(cap, (&P_MODS as u64)) != 0i32 { return 2u64 }
+    if fs_mkdir(cap, (&P_CORP as u64)) != 0i32 { return 3u64 }
+
+    /* --- mods/alpha.iii: a comment naming alpha_orphan (no-cover), an extern line
+     * covering beta_used, an exported alpha_used whose body holds alpha_orphan ONLY
+     * inside a string literal (no-cover), an exported alpha_orphan, an unexported
+     * alpha_helper. --- */
+    kc_reset()
+    kc_lit(("module alpha" as u64), 12u64)   kc_nl()
+    kc_lit(("/* alpha_orphan named in a comment must not cover */" as u64), 52u64)   kc_nl()
+    kc_lit(("extern fn beta_used() -> u32" as u64), 28u64)   kc_nl()
+    kc_lit(("fn alpha_used() -> u32 @export { let s : u64 = (" as u64), 48u64)
+    kc_byte(0x22u8)   kc_lit(("alpha_orphan" as u64), 12u64)   kc_byte(0x22u8)
+    kc_lit((" as u64) return beta_used() }" as u64), 29u64)   kc_nl()
+    kc_lit(("fn alpha_orphan() -> u32 @export { return 7u32 }" as u64), 48u64)   kc_nl()
+    kc_lit(("fn alpha_helper() -> u32 { return 1u32 }" as u64), 40u64)   kc_nl()
+    if kc_write(cap, (&P_ALPHA as u64)) != 0i32 { teardown(cap)   return 4u64 }
+
+    /* --- mods/beta.iii --- */
+    kc_reset()
+    kc_lit(("module beta" as u64), 11u64)   kc_nl()
+    kc_lit(("fn beta_used() -> u32 @export { return 3u32 }" as u64), 45u64)   kc_nl()
+    if kc_write(cap, (&P_BETA as u64)) != 0i32 { teardown(cap)   return 5u64 }
+
+    /* --- mods/gamma.iii --- */
+    kc_reset()
+    kc_lit(("module gamma" as u64), 12u64)   kc_nl()
+    kc_lit(("fn gamma_orphan() -> u32 @export { return 9u32 }" as u64), 48u64)   kc_nl()
+    if kc_write(cap, (&P_GAMMA as u64)) != 0i32 { teardown(cap)   return 6u64 }
+
+    /* --- mods/prespec.iii: names gamma_orphan; the file is policy-EXCLUDED, so this
+     * reference must NOT cover and pre_table must NOT register as an export --- */
+    kc_reset()
+    kc_lit(("module prespec" as u64), 14u64)   kc_nl()
+    kc_lit(("fn pre_table() -> u64 @export { return gamma_orphan as u64 }" as u64), 60u64)   kc_nl()
+    if kc_write(cap, (&P_PRES as u64)) != 0i32 { teardown(cap)   return 7u64 }
+
+    /* --- corpus/t1.iii: covers alpha_used (extern decl + call) --- */
+    kc_reset()
+    kc_lit(("module t1" as u64), 9u64)   kc_nl()
+    kc_lit(("extern fn alpha_used() -> u32" as u64), 29u64)   kc_nl()
+    kc_lit(("fn main() -> u64 { return alpha_used() as u64 }" as u64), 47u64)   kc_nl()
+    if kc_write(cap, (&P_T1 as u64)) != 0i32 { teardown(cap)   return 8u64 }
+
+    /* ================= AUDIT #1: the orphans are caught ================= */
+    let unc1 : u64 = cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_overflow() != 0u8 { teardown(cap)   return 10u64 }
+    if cov_n_trunc() != 0u64 { teardown(cap)   return 11u64 }
+    if cov_n_exports() != 4u64 { teardown(cap)   return 12u64 }   /* helper + pre_table absent */
+    if cov_n_files() != 3u64 { teardown(cap)   return 13u64 }     /* prespec excluded */
+    if cov_n_reffiles() != 4u64 { teardown(cap)   return 14u64 }  /* 3 mods + t1 */
+    if cov_n_dup() != 0u64 { teardown(cap)   return 15u64 }
+    if unc1 != 2u64 { teardown(cap)   return 16u64 }
+    if cov_n_uncovered() != 2u64 { teardown(cap)   return 17u64 }
+    if cov_verdict() != 2u32 { teardown(cap)   return 18u64 }     /* VIOLATION */
+    /* sorted: alpha_orphan < gamma_orphan */
+    if name_is(0u64, ("alpha_orphan" as u64), 12u64) != 1u8 { teardown(cap)   return 19u64 }
+    if name_is(1u64, ("gamma_orphan" as u64), 12u64) != 1u8 { teardown(cap)   return 20u64 }
+    if cov_seal((&SEAL_A as u64) as *u8) != 0i32 { teardown(cap)   return 21u64 }
+
+    /* the machine-written report exists and has exactly the two sorted lines */
+    if cov_report_write(cap, (&P_REP as u64)) != 0i32 { teardown(cap)   return 22u64 }
+    let rh : u64 = fs_open(cap, (&P_REP as u64), 1u32)
+    if rh == 0u64 { teardown(cap)   return 23u64 }
+    let rsz : u64 = fs_size(rh)
+    let rgot : u64 = fs_read(rh, (&REPBUF as u64), rsz)
+    fs_close(rh)
+    if rgot != 26u64 { teardown(cap)   return 24u64 }   /* 12+1+12+1 bytes */
+    if REPBUF[0u64] != 0x61u8 { teardown(cap)   return 25u64 }    /* 'a' (alpha_ first) */
+    if REPBUF[13u64] != 0x67u8 { teardown(cap)   return 26u64 }   /* 'g' (gamma_ second) */
+
+    /* ================= AUDIT #2: the ratchet closes one orphan ================= */
+    kc_reset()
+    kc_lit(("module t2" as u64), 9u64)   kc_nl()
+    kc_lit(("extern fn alpha_orphan() -> u32" as u64), 31u64)   kc_nl()
+    kc_lit(("fn main() -> u64 { return alpha_orphan() as u64 }" as u64), 49u64)   kc_nl()
+    if kc_write(cap, (&P_T2 as u64)) != 0i32 { teardown(cap)   return 30u64 }
+    let unc2 : u64 = cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if unc2 != 1u64 { teardown(cap)   return 31u64 }
+    if name_is(0u64, ("gamma_orphan" as u64), 12u64) != 1u8 { teardown(cap)   return 32u64 }
+    if cov_verdict() != 2u32 { teardown(cap)   return 33u64 }
+
+    /* ================= AUDIT #3: COMPLETE + the seal laws ================= */
+    kc_reset()
+    kc_lit(("module t3" as u64), 9u64)   kc_nl()
+    kc_lit(("extern fn gamma_orphan() -> u32" as u64), 31u64)   kc_nl()
+    kc_lit(("fn main() -> u64 { return gamma_orphan() as u64 }" as u64), 49u64)   kc_nl()
+    if kc_write(cap, (&P_T3 as u64)) != 0i32 { teardown(cap)   return 40u64 }
+    let unc3 : u64 = cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if unc3 != 0u64 { teardown(cap)   return 41u64 }
+    if cov_verdict() != 0u32 { teardown(cap)   return 42u64 }     /* COMPLETE */
+    if cov_seal((&SEAL_B as u64) as *u8) != 0i32 { teardown(cap)   return 43u64 }
+    /* reproducible: the same tree re-audited seals identically */
+    cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_seal((&SEAL_C as u64) as *u8) != 0i32 { teardown(cap)   return 44u64 }
+    if cad_eq((&SEAL_B as u64) as *u8, (&SEAL_C as u64) as *u8) != 1u8 { teardown(cap)   return 45u64 }
+    /* census-sensitive: the VIOLATION-state seal differs from the COMPLETE-state seal */
+    if cad_eq((&SEAL_A as u64) as *u8, (&SEAL_B as u64) as *u8) != 0u8 { teardown(cap)   return 46u64 }
+
+    teardown(cap)
+    return 99u64
+}

@@ -1,0 +1,134 @@
+/* 1396_context_cap_csv.iii -- CALL-CONTEXT PROVENANCE + CAPABILITY TREE + CSV LIFECYCLE
+ * (burn-down tranche 5; ten census orphans closed with exact laws).
+ *
+ *  CALL CONTEXT (7): call_context_id (mhash-derived, slot-distinct), k_at_entry (== the live
+ *      kchain_current at mint), caller_pattern_id (0 at mint; set_caller_pattern_id writes it),
+ *      hexad_kind (the staged init byte read back), provenance_root_byte (all 32 bytes ==
+ *      witness_root_byte at mint; OOB index -> 0; null ctx -> 0), table_used / table_reset
+ *      (exact mint bookkeeping; reset reuses slot 0);
+ *  CAPABILITY (2): cap_parent (child -> exactly the parent id; root/dead -> 0),
+ *      cap_drop (dropped child dies -- rights 0, parent 0, slot dead; the ENV ROOT is
+ *      IMMORTAL: drop refuses CAP_E_DENIED; dead id -> CAP_E_BADID);
+ *  CSV (1): csv_drop (a parsed table dies exactly once: OK then E_BADID; accessors on the
+ *      dead id return 0-sentinels).
+ * Exit 99. */
+module corpus_1396
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena_id: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_k_at_entry(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_cap_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_caller_pattern_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_set_caller_pattern_id(p: u64, pat_id: u64) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_kchain_id(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_hexad_kind(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_ring(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_recursion_depth(p: u64) -> u16 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_provenance_root_byte(p: u64, i: u32) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_verify(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_table_used() -> u32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_table_reset() -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn witness_root_byte(i: u32) -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_rights(id: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_parent(id: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_drop(id: u64) -> i32 from "capability.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_row_count(id: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_count(id: u64, row: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_drop(id: u64) -> i32 from "csv.iii"
+
+fn main() -> u64 {
+    /* ---- CALL CONTEXT ---- */
+    if call_context_table_reset() != 0i32 { return 1u64 }
+    if call_context_table_used() != 0u32 { return 2u64 }
+    if call_context_init_set(0xC0FFEEu64, 2u8, 3u8, 5u8) != 0i32 { return 3u64 }
+    if call_context_init_set_extras(0xAAAAu64, 7u16) != 0i32 { return 4u64 }
+    let kc_now : u64 = kchain_current(2u64)
+    let p1 : u64 = call_context_new()
+    if p1 == 0u64 { return 5u64 }
+    if call_context_table_used() != 1u32 { return 6u64 }
+    if call_context_verify(p1) != 1u8 { return 7u64 }
+    if call_context_id(p1) == 0u64 { return 8u64 }                       /* mhash-derived */
+    if call_context_cap_id(p1) != 0xC0FFEEu64 { return 9u64 }
+    if call_context_kchain_id(p1) != 2u8 { return 10u64 }
+    if call_context_ring(p1) != 3u8 { return 11u64 }
+    if call_context_hexad_kind(p1) != 5u8 { return 12u64 }
+    if call_context_recursion_depth(p1) != 7u16 { return 13u64 }
+    if call_context_k_at_entry(p1) != kc_now { return 14u64 }            /* the kchain at mint */
+    if call_context_caller_pattern_id(p1) != 0u64 { return 15u64 }       /* unset at mint */
+    if call_context_set_caller_pattern_id(p1, 0xBEEFu64) != 0i32 { return 16u64 }
+    if call_context_caller_pattern_id(p1) != 0xBEEFu64 { return 17u64 }
+    /* provenance root: all 32 bytes == the live witness root at mint */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let want : u8 = (witness_root_byte(i) & 0xFFu32) as u8
+        if call_context_provenance_root_byte(p1, i) != want { return 18u64 }
+        i = i + 1u32
+    }
+    if call_context_provenance_root_byte(p1, 32u32) != 0u8 { return 19u64 }   /* OOB -> 0 */
+    if call_context_provenance_root_byte(0u64, 0u32) != 0u8 { return 20u64 }  /* null -> 0 */
+    /* slot-distinct ids + exact bookkeeping */
+    let p2 : u64 = call_context_new()
+    if p2 == 0u64 { return 21u64 }
+    if call_context_table_used() != 2u32 { return 22u64 }
+    if call_context_id(p1) == call_context_id(p2) { return 23u64 }       /* idx in the preimage */
+    /* reset: bookkeeping to zero, slot 0 reused */
+    if call_context_table_reset() != 0i32 { return 24u64 }
+    if call_context_table_used() != 0u32 { return 25u64 }
+    let p3 : u64 = call_context_new()
+    if p3 != p1 { return 26u64 }                                         /* same slot pointer */
+    if call_context_table_used() != 1u32 { return 27u64 }
+    /* null accessors */
+    if call_context_id(0u64) != 0u64 { return 28u64 }
+    if call_context_k_at_entry(0u64) != 0u64 { return 29u64 }
+    if call_context_hexad_kind(0u64) != 0u8 { return 30u64 }
+
+    /* ---- CAPABILITY: the parent chain + mortal children, immortal root ---- */
+    let root : u64 = cap_env_init()
+    if root == 0u64 { return 40u64 }
+    let child : u64 = cap_attenuate(root, 0x06u64, 0u64)
+    if child == 0u64 { return 41u64 }
+    let grand : u64 = cap_attenuate(child, 0x02u64, 0u64)
+    if grand == 0u64 { return 42u64 }
+    if cap_parent(child) != root { return 43u64 }
+    if cap_parent(grand) != child { return 44u64 }
+    if cap_parent(0xDEAD0000u64) != 0u64 { return 45u64 }                /* dead id -> 0 */
+    if cap_drop(grand) != 0i32 { return 46u64 }                          /* CAP_OK */
+    if cap_rights(grand) != 0u64 { return 47u64 }                        /* dropped: rights gone */
+    if cap_parent(grand) != 0u64 { return 48u64 }                        /* dropped: parent gone */
+    if cap_drop(grand) != -1i32 { return 49u64 }                         /* double-drop E_BADID */
+    if cap_drop(root) != -2i32 { return 50u64 }                          /* THE ROOT IS IMMORTAL */
+    if cap_drop(child) != 0i32 { return 51u64 }
+
+    /* ---- CSV: parse, read, die exactly once ---- */
+    let ar : u64 = arena_new(4096u64)
+    if ar == 0u64 { return 60u64 }
+    let raw : u64 = arena_alloc8(ar, 16u64)
+    if raw == 0u64 { return 61u64 }
+    /* "a,b\nc,d\n" = 8 bytes */
+    let rp : *u8 = raw as *u8
+    rp[0u64] = 0x61u8
+    rp[1u64] = 0x2Cu8
+    rp[2u64] = 0x62u8
+    rp[3u64] = 0x0Au8
+    rp[4u64] = 0x63u8
+    rp[5u64] = 0x2Cu8
+    rp[6u64] = 0x64u8
+    rp[7u64] = 0x0Au8
+    let tbl : u64 = csv_parse(ar, raw, 8u64)
+    if tbl == 0u64 { return 62u64 }
+    if csv_row_count(tbl) != 2u64 { return 63u64 }
+    if csv_field_count(tbl, 0u64) != 2u64 { return 64u64 }
+    if csv_drop(tbl) != 0i32 { return 65u64 }                            /* dies once: CSV_OK */
+    if csv_drop(tbl) != -1i32 { return 66u64 }                           /* double-drop E_BADID */
+    if csv_row_count(tbl) != 0u64 { return 67u64 }                       /* dead accessors -> 0 */
+
+    return 99u64
+}

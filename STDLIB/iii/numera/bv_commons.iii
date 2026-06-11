@@ -134,3 +134,71 @@ fn bvc_cite_all() -> u32 @export {
     }
     return ok
 }
+
+/* ===== wave-4 M21: THE DREAM'S DISCOVERIES BECOME FEDERATABLE THEOREMS =========================
+ * The discovery pipeline (M19/M20) teaches the optimizer; the Commons (M16) makes laws citable.
+ * M21 fuses them: every count-mask strength pair the dream certifies is admitted into the
+ * Theorem Commons as a refl-proven theorem -- Pi(BV). Id(BV, x*2^a, x<<b), proof
+ * lam(BV). refl(x*2^a) -- so a law the system DREAMED crosses the wire and re-proves on a peer
+ * that never saw the dream.  DOUBLE-GATED AGAIN: the registry certified the pair (UNSAT-grade);
+ * tcom_admit's tc_check RE-PROVES the refl in the local kernel.  A dynamic name is the canonical
+ * tag 'bv.dN' (N = the power a, two ASCII digits) -- collision-free across the discovered set
+ * and disjoint from the M16 hand-curated names.  The width-faithful guard (a<64) keeps 1<<a
+ * exact, so the federated theorem is the TRUE machine law, not an ideal one. */
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_get_a(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_get_b(i: u32) -> u32 from "cg_autocatalyst.iii"
+
+/* the dynamic name "bv.d" + two ASCII digits of the power a (a in 0..63 -> "00".."63") */
+fn _bvc_dream_name(a: u32) -> u64 {
+    BVC_NAME[0u64] = 98u8     /* b */
+    BVC_NAME[1u64] = 118u8    /* v */
+    BVC_NAME[2u64] = 46u8     /* . */
+    BVC_NAME[3u64] = 100u8    /* d */
+    BVC_NAME[4u64] = (48u32 + (a / 10u32)) as u8
+    BVC_NAME[5u64] = (48u32 + (a % 10u32)) as u8
+    BVC_NAME[6u64] = 0u8
+    BVC_NAME[7u64] = 0u8
+    BVC_NAME[8u64] = 0u8
+    BVC_NAME[9u64] = 0u8
+    BVC_NAME[10u64] = 0u8
+    BVC_NAME[11u64] = 0u8
+    return (&BVC_NAME) as u64
+}
+
+/* admit ONE discovered strength law x*2^a == x<<b into the Commons (refl-proven, kernel-rechecked).
+ * Returns the tcom_admit code (0 = admitted/present).  a<64 required (width-exact). */
+fn bvc_admit_strength(a: u32, b: u32) -> i32 @export {
+    if a >= 64u32 { return -2i32 }
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let pow : u64 = 1u64 << (a as u64)
+    let lhs : u32 = tc_bvmul(x, tc_bvlit_u64(pow))
+    let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, tc_bvshl(x, tc_bvlit_u64(b as u64))))
+    let proof : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    let np : u64 = _bvc_dream_name(a)
+    return tcom_admit(np, 12u64, proof, goal)
+}
+
+/* FEDERATE THE DREAM: walk the count-mask registry, admit every discovered law to the Commons.
+ * Returns the number ADMITTED (each double-gated: registry-certified + kernel-rechecked here). */
+fn bvc_federate_dream() -> u32 @export {
+    let n : u32 = cga_bv_count()
+    let mut ok : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let a : u32 = cga_bv_get_a(i)
+        let b : u32 = cga_bv_get_b(i)
+        if a < 64u32 {
+            if bvc_admit_strength(a, b) == 0i32 { ok = ok + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return ok
+}
+
+/* cite one discovered law back by its power a (the peer's discovery check) */
+fn bvc_cite_strength(a: u32) -> i32 @export {
+    let np : u64 = _bvc_dream_name(a)
+    return tcom_cite(np, 12u64)
+}

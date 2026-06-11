@@ -1,0 +1,183 @@
+/* 1395_introspection_sweep.iii -- THE INTROSPECTION ACCESSOR LAWS (burn-down tranche 4).
+ *
+ * Eleven more census orphans closed with exact laws (not smoke calls):
+ *  ARENA    arena_capacity / arena_remaining -- the conservation law used+remaining==capacity
+ *           holds at birth, after an allocation, and the capacity NEVER moves; dead id -> 0;
+ *  BIGINT   bigint_capacity_limbs (exactly the requested cap; dead id -> 0),
+ *           bigint_eq_u64 (it compares two BIGINTS, u64-coded verdict: equal values 1,
+ *           different 0 -- the name's trap is now documented by a test),
+ *           bigint_live_count (mint/mint/drop bookkeeping is exact; the 64-slot table
+ *           discipline made visible);
+ *  BUILDER  builder_capacity / builder_push_rune -- UTF-8 width law: 'A' +1, EUR sign +3,
+ *           emoji +4 (len exactly 8); capacity >= len always; dead id refused (-3);
+ *  DURATION duration_from_nanos / duration_to_nanos -- the identity representation law,
+ *           pinned (from==n, to==d, cross-unit to_millis agreement, DUR_MAX fixpoint);
+ *  CATEGORY cat_morph_eq_u64 -- u64-coded arrow identity (same arrow 1, distinct arrows 0,
+ *           dead slot 0);
+ *  COSTED   ccat_set_budget -- LIVE in both directions: a tight budget REFUSES the very
+ *           composition a raised budget then ADMITS (the over-budget refusal law).
+ * Exit 99. */
+module corpus_1395
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_used(arena_id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_capacity(arena_id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_remaining(arena_id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena_id: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_live_count() -> u32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_capacity_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq_u64(a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_rune(id: u64, cp: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_capacity(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn duration_from_nanos(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_to_nanos(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_millis(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_to_millis(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morph_eq_u64(f_slot: u32, g_slot: u32) -> u64 from "category.iii"
+extern @abi(c-msvc-x64) fn ccat_init() -> i32 from "costed_cat.iii"
+extern @abi(c-msvc-x64) fn ccat_set_budget(b: *u64) -> i32 from "costed_cat.iii"
+extern @abi(c-msvc-x64) fn pcat_add(src: u32, dst: u32, op: *u8, cost: *u64, out_id: *u8) -> u32 from "costed_cat.iii"
+extern @abi(c-msvc-x64) fn pcat_compose(f_own: u32, g_own: u32, out_id: *u8) -> u32 from "costed_cat.iii"
+
+const SENT32 : u32 = 0xFFFFFFFFu32
+const DURMAX : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var OBJ  : [u8; 32]
+var OPW  : [u8; 32]
+var IDS  : [u8; 32]
+var CV   : [u64; 6]
+var BV   : [u64; 6]
+
+fn obj_tag(t: u8) -> *u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { OBJ[i] = 0u8   i = i + 1u64 }
+    OBJ[0u64] = 0xD5u8
+    OBJ[1u64] = t
+    return ((&OBJ as u64)) as *u8
+}
+
+fn op_tag(t: u8) -> *u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { OPW[i] = 0u8   i = i + 1u64 }
+    OPW[0u64] = 0xD6u8
+    OPW[1u64] = t
+    return ((&OPW as u64)) as *u8
+}
+
+fn cost6(v: u64) -> *u64 {
+    let mut k : u64 = 0u64
+    while k < 6u64 { CV[k] = v   k = k + 1u64 }
+    return ((&CV as u64)) as *u64
+}
+
+fn budget6(v: u64) -> *u64 {
+    let mut k : u64 = 0u64
+    while k < 6u64 { BV[k] = v   k = k + 1u64 }
+    return ((&BV as u64)) as *u64
+}
+
+fn main() -> u64 {
+    /* ---- ARENA: the conservation law ---- */
+    let ar : u64 = arena_new(1024u64)
+    if ar == 0u64 { return 1u64 }
+    let cap0 : u64 = arena_capacity(ar)
+    if cap0 == 0u64 { return 2u64 }
+    if arena_used(ar) + arena_remaining(ar) != cap0 { return 3u64 }
+    let rem0 : u64 = arena_remaining(ar)
+    let p : u64 = arena_alloc8(ar, 100u64)
+    if p == 0u64 { return 4u64 }
+    if arena_capacity(ar) != cap0 { return 5u64 }          /* capacity never moves */
+    if arena_remaining(ar) >= rem0 { return 6u64 }          /* an allocation consumed */
+    if arena_used(ar) + arena_remaining(ar) != cap0 { return 7u64 }
+    if arena_capacity(0u64) != 0u64 { return 8u64 }         /* dead id -> 0 */
+    if arena_remaining(0u64) != 0u64 { return 9u64 }
+
+    /* ---- BIGINT: capacity exactness, value equality, live bookkeeping ---- */
+    let live0 : u32 = bigint_live_count()
+    let b1 : u64 = bigint_new(ar, 8u64)
+    if b1 == 0u64 { return 10u64 }
+    if bigint_capacity_limbs(b1) != 8u64 { return 11u64 }
+    if bigint_capacity_limbs(0u64) != 0u64 { return 12u64 }
+    let b2 : u64 = bigint_from_u64(ar, 77u64)
+    let b3 : u64 = bigint_from_u64(ar, 77u64)
+    let b4 : u64 = bigint_from_u64(ar, 78u64)
+    if b2 == 0u64 { return 13u64 }
+    if b3 == 0u64 { return 14u64 }
+    if b4 == 0u64 { return 15u64 }
+    if bigint_eq_u64(b2, b3) != 1u64 { return 16u64 }       /* equal VALUES -> 1 */
+    if bigint_eq_u64(b2, b4) != 0u64 { return 17u64 }       /* different -> 0 */
+    if bigint_live_count() != live0 + 4u32 { return 18u64 } /* exact mint bookkeeping */
+    if bigint_drop(b1) != 0i32 { return 19u64 }
+    if bigint_drop(b2) != 0i32 { return 20u64 }
+    if bigint_drop(b3) != 0i32 { return 21u64 }
+    if bigint_drop(b4) != 0i32 { return 22u64 }
+    if bigint_live_count() != live0 { return 23u64 }        /* exact drop bookkeeping */
+
+    /* ---- BUILDER: UTF-8 width law + capacity >= len ---- */
+    let bld : u64 = builder_new(ar, 4u64)
+    if bld == 0u64 { return 30u64 }
+    if builder_push_rune(bld, 0x41u32) != 0i32 { return 31u64 }      /* 'A'   +1 */
+    if builder_len(bld) != 1u64 { return 32u64 }
+    if builder_push_rune(bld, 0x20ACu32) != 0i32 { return 33u64 }    /* EUR   +3 */
+    if builder_len(bld) != 4u64 { return 34u64 }
+    if builder_push_rune(bld, 0x1F600u32) != 0i32 { return 35u64 }   /* emoji +4 */
+    if builder_len(bld) != 8u64 { return 36u64 }
+    if builder_capacity(bld) < builder_len(bld) { return 37u64 }
+    if builder_capacity(0u64) != 0u64 { return 38u64 }
+    if builder_push_rune(0u64, 0x41u32) != -3i32 { return 39u64 }    /* BLD_E_BADID */
+
+    /* ---- DURATION: the identity representation law, pinned ---- */
+    if duration_from_nanos(123456789u64) != 123456789u64 { return 40u64 }
+    if duration_to_nanos(123456789u64) != 123456789u64 { return 41u64 }
+    if duration_to_nanos(duration_from_nanos(5u64)) != 5u64 { return 42u64 }
+    if duration_to_millis(duration_from_nanos(5000000u64)) != 5u64 { return 43u64 }
+    if duration_from_nanos(DURMAX) != DURMAX { return 44u64 }        /* fixpoint */
+    if duration_to_nanos(duration_from_millis(7u64)) != 7000000u64 { return 45u64 }
+
+    /* ---- CATEGORY: u64-coded arrow identity ---- */
+    if cat_init() != 0i32 { return 50u64 }
+    let oa : u32 = cat_add_object(obj_tag(1u8))
+    let ob : u32 = cat_add_object(obj_tag(2u8))
+    let oc : u32 = cat_add_object(obj_tag(3u8))
+    if oa == SENT32 { return 51u64 }
+    if ob == SENT32 { return 52u64 }
+    if oc == SENT32 { return 53u64 }
+    let m1 : u32 = cat_add_morphism(oa, ob, op_tag(1u8), ((&IDS as u64)) as *u8)
+    let m2 : u32 = cat_add_morphism(ob, oc, op_tag(2u8), ((&IDS as u64)) as *u8)
+    if m1 == SENT32 { return 54u64 }
+    if m2 == SENT32 { return 55u64 }
+    if cat_morph_eq_u64(m1, m1) != 1u64 { return 56u64 }
+    if cat_morph_eq_u64(m1, m2) != 0u64 { return 57u64 }
+    if cat_morph_eq_u64(m1, 9999u32) != 0u64 { return 58u64 }   /* dead slot -> 0 */
+
+    /* ---- COSTED CATEGORY: the budget is LIVE in both directions ----
+     * ccat_init() resets the ONE category (it calls cat_init), so the costed arm
+     * re-registers its own objects AFTER the init. */
+    if ccat_init() != 0i32 { return 60u64 }
+    let pa : u32 = cat_add_object(obj_tag(7u8))
+    let pb : u32 = cat_add_object(obj_tag(8u8))
+    let pc : u32 = cat_add_object(obj_tag(9u8))
+    if pa == SENT32 { return 68u64 }
+    if pb == SENT32 { return 69u64 }
+    if pc == SENT32 { return 70u64 }
+    let f : u32 = pcat_add(pa, pb, op_tag(11u8), cost6(10u64), ((&IDS as u64)) as *u8)
+    let g : u32 = pcat_add(pb, pc, op_tag(12u8), cost6(10u64), ((&IDS as u64)) as *u8)
+    if f == SENT32 { return 61u64 }
+    if g == SENT32 { return 62u64 }
+    if ccat_set_budget(budget6(15u64)) != 0i32 { return 63u64 }
+    if pcat_compose(f, g, ((&IDS as u64)) as *u8) != SENT32 { return 64u64 }   /* 20 > 15 refused */
+    if ccat_set_budget(budget6(100u64)) != 0i32 { return 65u64 }
+    if pcat_compose(f, g, ((&IDS as u64)) as *u8) == SENT32 { return 66u64 }   /* 20 <= 100 admitted */
+    let np : *u64 = (0u64) as *u64
+    if ccat_set_budget(np) != -1i32 { return 67u64 }                            /* null refused */
+
+    return 99u64
+}

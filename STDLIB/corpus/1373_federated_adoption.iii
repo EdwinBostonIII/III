@@ -1,0 +1,76 @@
+/* 1373_federated_adoption.iii -- FEDERATED OPTIMIZER ADOPTION: machines learn each other's dreams (wave-4 M22).
+ *
+ * sov_isa_adopt_dream learns from the LOCAL count-mask registry; sov_isa_adopt_from_commons
+ * learns from the COMMONS -- so a strength law a PEER dreamed, received into the local Theorem
+ * Commons, drives a LOCAL optimizer rule the local dream NEVER produced.  The local count-mask
+ * registry stays EMPTY throughout: the optimizer learns purely from a federated theorem.
+ * Double-gated: Commons presence (kernel-checked at admission) + a local kernel re-proof here.
+ * Arms:
+ *  (1) the peer's law arrives: admit x*2^7 == x<<7 to the Commons via bvc_admit_strength (the
+ *      'received-from-peer' law) -- the LOCAL count-mask registry is never touched (count 0);
+ *  (2) sov_isa_adopt_from_commons(7,7) adopts it (Commons-present + kernel-reproven);
+ *  (3) THE PAYOFF: mul(x, 2^7) strength-reduces in the descent -- a rule from a law the LOCAL
+ *      system never dreamed, learned from the federated Commons;
+ *  (4) an UN-FEDERATED power refuses: adopt_from_commons(9,9) with no Commons entry -> 0;
+ *  (5) THE SAFETY NET: a Commons-present but FALSE (a,b) cannot register -- we admit the true
+ *      (3,3), then attempt adopt_from_commons(3,4) (x*8 == x<<4 = x*16 is FALSE): the local
+ *      kernel re-proof refuses (0) even though SOME bv.d03 theorem is present.
+ * Exit 99 = the substrate optimizes using discoveries made on other machines, soundly. */
+module corpus_1373
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn cga_bv_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn bvc_admit_strength(a: u32, b: u32) -> i32 from "bv_commons.iii"
+extern @abi(c-msvc-x64) fn sov_isa_adopt_from_commons(a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_adopt_dream() -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_node2(tag: u8, a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_slot(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf_pow(a: u8) -> u32 from "sov_isa.iii"
+
+var OUT  : [u32; 64]
+var OUTN : [u32; 1]
+
+fn main() -> u64 {
+    eg_init()
+    cl_init()
+    tcom_init()
+    cga_bv_reset()
+
+    let cx : u32 = si_leaf(12u8)
+    let cc1 : u32 = si_leaf(21u8)
+    let cc2 : u32 = si_leaf(22u8)
+    /* seed the mul/shl slots */
+    if si_node2(32u8, cx, cc1) == 0xFFFFFFFFu32 { return 1u64 }
+    if si_node2(31u8, cx, cc2) == 0xFFFFFFFFu32 { return 1u64 }
+    let p7 : u32 = si_leaf_pow(7u8)
+    if p7 == 0xFFFFFFFFu32 { return 2u64 }
+
+    /* (1) the peer's law arrives in the Commons; the LOCAL registry stays empty */
+    if bvc_admit_strength(7u32, 7u32) != 0i32 { return 3u64 }
+    if cga_bv_count() != 0u32 { return 4u64 }              /* never locally dreamed */
+    if sov_isa_adopt_dream() != 0u32 { return 5u64 }       /* local registry adopts nothing */
+
+    /* (2) adopt the federated law from the Commons */
+    if sov_isa_adopt_from_commons(7u32, 7u32) != 1u32 { return 6u64 }
+
+    /* (3) THE PAYOFF: mul(x, 2^7) reduces -- learned from another machine's dream */
+    let root : u32 = si_node2(31u8, cx, p7)
+    let otp : *u32 = (&OUT) as u64 as *u32
+    let onp : *u32 = (&OUTN) as u64 as *u32
+    if sov_isa_descend(root, otp, onp) != 0i32 { return 7u64 }
+    if OUT[0u32] != si_slot(32u8) { return 8u64 }          /* head shl: the federated rule fired */
+
+    /* (4) an un-federated power refuses */
+    if sov_isa_adopt_from_commons(9u32, 9u32) != 0u32 { return 9u64 }
+
+    /* (5) THE SAFETY NET: present-but-false cannot register */
+    if bvc_admit_strength(3u32, 3u32) != 0i32 { return 10u64 }    /* bv.d03 present (true: x*8==x<<3) */
+    if sov_isa_adopt_from_commons(3u32, 4u32) != 0u32 { return 11u64 }  /* x*8 == x<<4 FALSE -> refused */
+
+    return 99u64
+}

@@ -463,11 +463,19 @@ fn cv_scan_buf(len: u64, phase: u32) {
                         /* a consumer's import declaration: a real reference */
                         if phase == 2u32 { cv_mark(ta, tl) }
                     } else {
-                        /* a definition name: pass 1 holds it pending @export; pass 2 skips it */
+                        /* a definition name: pass 1 holds it pending @export; pass 2 skips it.
+                         * EXCEPT @specialize generic templates (`fn name<T>...`): their
+                         * instantiations are emitted lazily ON CALL, so an uncalled template
+                         * has NO ABI symbol -- it is not coverable surface and never
+                         * registers (the ident immediately followed by '<' marks it). */
+                        let mut is_generic : u8 = 0u8
+                        if j4 < len { if CV_FBUF[j4] == 0x3Cu8 { is_generic = 1u8 } }
                         if phase == 1u32 {
-                            let mut q : u64 = 0u64
-                            while q < tl { CV_PEND[q] = CV_TOK[q]   q = q + 1u64 }
-                            CV_PENDLEN = tl
+                            if is_generic == 0u8 {
+                                let mut q : u64 = 0u64
+                                while q < tl { CV_PEND[q] = CV_TOK[q]   q = q + 1u64 }
+                                CV_PENDLEN = tl
+                            }
                         }
                     }
                     prev_fn = 0u8

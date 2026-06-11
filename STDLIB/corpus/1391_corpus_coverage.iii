@@ -176,6 +176,7 @@ fn main() -> u64 {
     kc_lit((" as u64) return beta_used() }" as u64), 29u64)   kc_nl()
     kc_lit(("fn alpha_orphan() -> u32 @export { return 7u32 }" as u64), 48u64)   kc_nl()
     kc_lit(("fn alpha_helper() -> u32 { return 1u32 }" as u64), 40u64)   kc_nl()
+    kc_lit(("fn alpha_gen<T>(v: T) -> T @specialize(u32) @export { return v }" as u64), 64u64)   kc_nl()
     if kc_write(cap, (&P_ALPHA as u64)) != 0i32 { teardown(cap)   return 4u64 }
 
     /* --- mods/beta.iii --- */

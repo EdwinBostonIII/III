@@ -5372,3 +5372,131 @@ L_loop_end_175:
     popq %rbp
     retq
     .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cga_bv_get_a"
+    .text
+    .global cga_bv_get_a
+    .seh_proc cga_bv_get_a
+cga_bv_get_a:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    leaq L_CGA_BV_N(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_179
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_179:
+    leaq L_CGA_BV_A(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cga_bv_get_b"
+    .text
+    .global cga_bv_get_b
+    .seh_proc cga_bv_get_b
+cga_bv_get_b:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    leaq L_CGA_BV_N(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_181
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_181:
+    leaq L_CGA_BV_B(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc

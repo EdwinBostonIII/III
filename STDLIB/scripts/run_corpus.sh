@@ -970,6 +970,7 @@ declare -A EXPECTED=(
     [1394_endian_exact]=99
     [1395_introspection_sweep]=99
     [1396_context_cap_csv]=99
+    [1397_registry_probe_verdict]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

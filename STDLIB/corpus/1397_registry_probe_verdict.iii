@@ -1,0 +1,145 @@
+/* 1397_registry_probe_verdict.iii -- DREAM REGISTRIES, CPU PROBES, TERMINAL VERDICT,
+ * DEMOTION LEDGER, DYN-NAME COUNT, ATTESTATION EQUALITY (burn-down tranche 6; ten orphans).
+ *
+ *  CG-AUTOCATALYST (3): cga_entry_a / cga_entry_b / cga_bv_entry_b -- a kernel-certified
+ *      dream pair is read back EXACTLY from both tiers' registries; OOB index -> SENT;
+ *  CPUFEAT (2): cpufeat_has_sse41 / cpufeat_has_bmi2 -- boolean-valued (0/1), deterministic
+ *      across calls, and SSE4.1 >= AES-NI (every AES-NI x86 ships SSE4.1; this corpus's AES
+ *      KATs already require AES-NI hardware);
+ *  CHARTER TERMINAL (1): ct_verdict -- after a GREEN ct_run_charter (99) the sealed 32-byte
+ *      verdict copies out (CT_OK), is NONZERO, REPRODUCES on a re-run, null -> -1;
+ *  DEMOTE (2): demote_at_reason_byte / demote_at_seq_num -- reason bytes read back exactly,
+ *      seq numbers strictly monotone (+1), OOB seq/byte index -> 0x100 / 0;
+ *  RIPPLE-DYN (1): dn_count -- a fresh registry counts ZERO (the meta law: count is the
+ *      stored u64); a non-power-of-two capacity is REFUSED at init;
+ *  ATTEST (1): attest_eq -- constant-time 32-byte equality: equal 1, one-byte flip 0,
+ *      null either side 0.
+ * Exit 99. */
+module corpus_1397
+
+extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_entry_a(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_entry_b(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose_bv(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_entry_a(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_entry_b(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_sse41() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_aesni() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn ct_run_charter() -> u64 from "charter_terminal.iii"
+extern @abi(c-msvc-x64) fn ct_verdict(out: *u8) -> i32 from "charter_terminal.iii"
+extern @abi(c-msvc-x64) fn demote_clear() -> i32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_record(vocab_id: u64, reason_hash_32_ptr: u64) -> i32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_count() -> u32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_at_reason_byte(seq: u32, i: u32) -> u32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_at_seq_num(seq: u32) -> u64 from "demote.iii"
+extern @abi(c-msvc-x64) fn dn_init(meta: *u8, slots: *u8, cap: u64) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn dn_count(meta: *u8) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn attest_eq(addr_a: u64, addr_b: u64) -> u8 from "attest.iii"
+
+var REASON : [u8; 32]
+var V1 : [u8; 32]
+var V2 : [u8; 32]
+var AB1 : [u8; 32]
+var AB2 : [u8; 32]
+var DN_META  : [u8; 16]
+var DN_SLOTS : [u8; 768]    /* cap 4 * 192 */
+
+fn main() -> u64 {
+    /* ---- CG-AUTOCATALYST registries: certified pairs read back exactly ---- */
+    cga_reset()
+    if cga_count() != 0u32 { return 1u64 }
+    if cga_dispose(3u32, 3u32, 64u32) != 1u8 { return 2u64 }      /* a TRUE identity certifies */
+    if cga_dispose(2u32, 2u32, 64u32) != 1u8 { return 70u64 }     /* a second one */
+    if cga_count() != 2u32 { return 3u64 }
+    if cga_entry_a(0u32) != 3u32 { return 4u64 }
+    if cga_entry_b(0u32) != 3u32 { return 5u64 }
+    if cga_entry_a(1u32) != 2u32 { return 71u64 }
+    if cga_entry_b(1u32) != 2u32 { return 72u64 }
+    if cga_entry_a(2u32) != 0xFFFFFFFFu32 { return 6u64 }          /* OOB -> SENT */
+    if cga_entry_b(2u32) != 0xFFFFFFFFu32 { return 7u64 }
+    cga_bv_reset()
+    if cga_bv_count() != 0u32 { return 8u64 }
+    if cga_dispose_bv(3u32, 3u32, 64u32) != 1u8 { return 9u64 }    /* width-faithful diagonal */
+    if cga_bv_count() != 1u32 { return 10u64 }
+    if cga_bv_entry_a(0u32) != 3u32 { return 11u64 }
+    if cga_bv_entry_b(0u32) != 3u32 { return 12u64 }
+    if cga_bv_entry_b(1u32) != 0xFFFFFFFFu32 { return 13u64 }
+
+    /* ---- CPUFEAT probes: boolean, deterministic, SSE4.1 >= AES-NI ---- */
+    let f1 : u8 = cpufeat_has_sse41()
+    let f2 : u8 = cpufeat_has_bmi2()
+    if f1 > 1u8 { return 20u64 }
+    if f2 > 1u8 { return 21u64 }
+    if cpufeat_has_sse41() != f1 { return 22u64 }                  /* deterministic */
+    if cpufeat_has_bmi2() != f2 { return 23u64 }
+    if cpufeat_has_aesni() == 1u8 {
+        if f1 != 1u8 { return 24u64 }                              /* AES-NI implies SSE4.1 */
+    }
+
+    /* ---- CHARTER TERMINAL: GREEN -> sealed verdict copies, nonzero, reproducible ---- */
+    let g1 : u64 = ct_run_charter()
+    if g1 != 99u64 { return 30u64 }                                /* CT_VERDICT_GREEN */
+    if ct_verdict(((&V1 as u64)) as *u8) != 0i32 { return 31u64 }
+    let mut nz : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if V1[i] != 0u8 { nz = nz + 1u32 }
+        i = i + 1u64
+    }
+    if nz == 0u32 { return 32u64 }                                 /* a real seal, not zeros */
+    let g2 : u64 = ct_run_charter()
+    if g2 != 99u64 { return 33u64 }
+    if ct_verdict(((&V2 as u64)) as *u8) != 0i32 { return 34u64 }
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        if V1[j] != V2[j] { return 35u64 }                         /* reproducible */
+        j = j + 1u64
+    }
+    let np : *u8 = (0u64) as *u8
+    if ct_verdict(np) != -1i32 { return 36u64 }
+
+    /* ---- DEMOTE ledger: exact reason bytes + strictly monotone seq ---- */
+    if demote_clear() != 0i32 { return 40u64 }
+    if demote_count() != 0u32 { return 41u64 }
+    let mut r : u64 = 0u64
+    while r < 32u64 { REASON[r] = (0x30u64 + r & 0xFFu64) as u8   r = r + 1u64 }
+    if demote_record(0xABCu64, (&REASON as u64)) != 0i32 { return 42u64 }
+    if demote_record(0xDEFu64, (&REASON as u64)) != 0i32 { return 43u64 }
+    if demote_count() != 2u32 { return 44u64 }
+    let mut b : u32 = 0u32
+    while b < 32u32 {
+        let want : u32 = (0x30u32 + b) & 0xFFu32
+        if demote_at_reason_byte(0u32, b) != want { return 45u64 }
+        b = b + 1u32
+    }
+    let q0 : u64 = demote_at_seq_num(0u32)
+    let q1 : u64 = demote_at_seq_num(1u32)
+    if q1 != q0 + 1u64 { return 46u64 }                            /* strictly monotone */
+    if demote_at_reason_byte(2u32, 0u32) != 0x100u32 { return 47u64 }   /* OOB seq */
+    if demote_at_reason_byte(0u32, 32u32) != 0x100u32 { return 48u64 }  /* OOB byte */
+    if demote_at_seq_num(2u32) != 0u64 { return 49u64 }
+
+    /* ---- RIPPLE-DYN: fresh registry counts zero; non-pow2 cap refused ---- */
+    let mp : *u8 = ((&DN_META as u64)) as *u8
+    let sp : *u8 = ((&DN_SLOTS as u64)) as *u8
+    if dn_init(mp, sp, 3u64) != 1u64 { return 50u64 }              /* non-pow2 refused */
+    if dn_init(mp, sp, 0u64) != 1u64 { return 51u64 }
+    if dn_init(mp, sp, 4u64) != 0u64 { return 52u64 }
+    if dn_count(mp) != 0u64 { return 53u64 }                       /* the meta law */
+
+    /* ---- ATTEST: constant-time 32-byte equality ---- */
+    let mut k : u64 = 0u64
+    while k < 32u64 { AB1[k] = (k & 0xFFu64) as u8   AB2[k] = (k & 0xFFu64) as u8   k = k + 1u64 }
+    if attest_eq((&AB1 as u64), (&AB2 as u64)) != 1u8 { return 60u64 }
+    AB2[17u64] = 0xEEu8
+    if attest_eq((&AB1 as u64), (&AB2 as u64)) != 0u8 { return 61u64 }
+    if attest_eq(0u64, (&AB2 as u64)) != 0u8 { return 62u64 }
+    if attest_eq((&AB1 as u64), 0u64) != 0u8 { return 63u64 }
+
+    return 99u64
+}

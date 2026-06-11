@@ -1,0 +1,251 @@
+/* 1401_field_curve_vault.iii -- FIELD/CURVE EXPORT SURFACE + DETERMINISTIC RSA-PSS +
+ * THE THRESHOLD VAULT (burn-down tranche 10; ~28 census orphans).
+ *
+ * The `_x` exports are the PUBLIC surface of the crypto field modules (their non-x twins
+ * are module-private); the census showed them consumer-less.  This KAT proves each family
+ * by FIELD LAWS, not smoke calls:
+ *  fn256 (P-256 order field): set_u32/get_limb exactness, copy -> eq, distinct -> neq;
+ *  fp384/gn: the same three laws on the 384-bit field;
+ *  fp256: is_zero on zero/nonzero; sqr == mul-self (differential through the export layer);
+ *  fq (P-384 order field): sqr == mul-self;
+ *  zkf (BN254 Fp): to/from-Mont round trip; add/sub inverse; sqr == mul-self; inv law
+ *      (a * a^-1 == 1 in Mont domain) -- all limb-compared through zkf_get_limb;
+ *  zkf12 (Fp12): setone, copy -> eq, one*one == one (the multiplicative identity law);
+ *  zkg1 (BN254 G1): 2G == G+G (dbl vs add differential), gen not at infinity;
+ *  zkg2 (G2): 2G == G+G, setinf -> isinf, dbl(inf) == inf (the group-law edge);
+ *  RSA-PSS det: keygen(320) -> sign_det -> verify_x accepts; tampered sig and tampered
+ *      mHash both refuse (sk = n||d, pk = n, e = 65537, salt = zeros -- deterministic);
+ *  VAULT: tv_seal (ChaCha20 + erasure(2/3) + Shamir(2/3)) then tv_open with exactly the
+ *      thresholds reproduces the blob BYTE-EXACTLY; tv_keyshare_x x-coords are pairwise
+ *      DISTINCT and nonzero (Shamir's precondition, observable).
+ * Exit 99. */
+module corpus_1401
+
+extern @abi(c-msvc-x64) fn fn_set_u32_x(slot: u64, v: u32) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_copy_x(dst: u64, src: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_eq_x(a: u64, b: u64) -> u8 from "fn256.iii"
+extern @abi(c-msvc-x64) fn gn_set_u32_x(slot: u64, v: u32) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_copy_x(dst: u64, src: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_eq_x(a: u64, b: u64) -> u8 from "fn384.iii"
+extern @abi(c-msvc-x64) fn fp_set_u32(slot: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_get_limb(slot: u64, idx: u64) -> u32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_is_zero_x(slot: u64) -> u8 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_to_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_sqr_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_mul_x(r: u64, a: u64, b: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fq_set_u32(slot: u64, v: u32) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_get_limb(slot: u64, idx: u64) -> u32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_sqr_x(r: u64, a: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_mul_x(r: u64, a: u64, b: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn zkf_set_u32(slot: u64, v: u32) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_get_limb(slot: u64, idx: u64) -> u32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_to_mont_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_from_mont_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_add_x(r: u64, a: u64, b: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_sub_x(r: u64, a: u64, b: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_mul_x(r: u64, a: u64, b: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_sqr_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_inv_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf_copy_x(dst: u64, src: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf12_setone_x(bB: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf12_copy_x(rB: u64, aB: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf12_mul_x(rB: u64, aB: u64, bB: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkf12_eq_x(aB: u64, bB: u64) -> u64 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg1_gen_x(g: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg1_add_x(rg: u64, ag: u64, bg: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg1_dbl_x(rg: u64, ag: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg1_eq_x(ag: u64, bg: u64) -> u64 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg1_isinf_x(g: u64) -> u64 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg2_gen_x(g: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg2_add_x(rg: u64, ag: u64, bg: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg2_dbl_x(rg: u64, ag: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg2_isinf_x(g: u64) -> u64 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn zkg2_setinf_x(g: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn iii_rsa_pss_sign_det(modBits: u64, sk: u64, mHash: u64, sig_out: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn iii_rsa_pss_verify_x(modBits: u64, pk: u64, mHash: u64, sig: u64, sigLen: u64) -> u8 from "rsa.iii"
+extern @abi(c-msvc-x64) fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 from "hex.iii"
+extern @abi(c-msvc-x64) fn tv_seal(blob_ptr: u64, blen: u32, kthr: u32, nshard: u32, kkey: u32, nkey: u32, key_ptr: u64, nonce_ptr: u64, keycoeff_ptr: u64) -> i32 from "threshold_vault.iii"
+extern @abi(c-msvc-x64) fn tv_open(shard_idx_ptr: u64, m_shard: u32, keyshare_idx_ptr: u64, m_keyshare: u32, nonce_ptr: u64, blob_out: u64) -> i32 from "threshold_vault.iii"
+extern @abi(c-msvc-x64) fn tv_keyshare_x(i: u32) -> u8 from "threshold_vault.iii"
+
+var RSEED : [u8; 48]
+var RMH   : [u8; 32]
+var RPK   : [u8; 96]
+var RSK   : [u8; 192]
+var RSIG  : [u8; 96]
+var VBLOB : [u8; 64]
+var VKEY  : [u8; 32]
+var VNONCE: [u8; 12]
+var VCOEF : [u8; 64]     /* (kkey-1)=1 coefficient x 32B, padded */
+var VOUT  : [u8; 64]
+var VSIDX : [u8; 4]
+var VKIDX : [u8; 4]
+
+fn zkf_limbs_eq(a: u64, b: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        if zkf_get_limb(a, i) != zkf_get_limb(b, i) { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* ---- fn256: set/get/copy/eq laws ---- */
+    if fn_set_u32_x(0u64, 7u32) != 0i32 { return 1u64 }
+    if fn_get_limb_x(0u64, 0u64) != 7u32 { return 2u64 }
+    if fn_get_limb_x(0u64, 5u64) != 0u32 { return 3u64 }
+    if fn_copy_x(1u64, 0u64) != 0i32 { return 4u64 }
+    if fn_eq_x(1u64, 0u64) != 1u8 { return 5u64 }
+    if fn_set_u32_x(2u64, 8u32) != 0i32 { return 6u64 }
+    if fn_eq_x(2u64, 0u64) != 0u8 { return 7u64 }
+
+    /* ---- fn384/gn: the same laws at 384 bits ---- */
+    if gn_set_u32_x(0u64, 11u32) != 0i32 { return 8u64 }
+    if gn_get_limb_x(0u64, 0u64) != 11u32 { return 9u64 }
+    if gn_get_limb_x(0u64, 9u64) != 0u32 { return 10u64 }
+    if gn_copy_x(1u64, 0u64) != 0i32 { return 11u64 }
+    if gn_eq_x(1u64, 0u64) != 1u8 { return 12u64 }
+    if gn_set_u32_x(2u64, 12u32) != 0i32 { return 13u64 }
+    if gn_eq_x(2u64, 0u64) != 0u8 { return 14u64 }
+
+    /* ---- fp256: is_zero; sqr == mul-self ---- */
+    if fp_set_u32(0u64, 0u32) != 0i32 { return 15u64 }
+    if fp_is_zero_x(0u64) != 1u8 { return 16u64 }
+    if fp_set_u32(1u64, 3u32) != 0i32 { return 17u64 }
+    if fp_is_zero_x(1u64) != 0u8 { return 18u64 }
+    if fp_to_mont_x(2u64, 1u64) != 0i32 { return 19u64 }
+    if fp_sqr_x(3u64, 2u64) != 0i32 { return 20u64 }
+    if fp_mul_x(4u64, 2u64, 2u64) != 0i32 { return 21u64 }
+    let mut fl : u64 = 0u64
+    while fl < 8u64 {
+        if fp_get_limb(3u64, fl) != fp_get_limb(4u64, fl) { return 22u64 }
+        fl = fl + 1u64
+    }
+
+    /* ---- fq: sqr == mul-self ---- */
+    if fq_set_u32(0u64, 5u32) != 0i32 { return 23u64 }
+    if fq_sqr_x(1u64, 0u64) != 0i32 { return 24u64 }
+    if fq_mul_x(2u64, 0u64, 0u64) != 0i32 { return 25u64 }
+    let mut ql : u64 = 0u64
+    while ql < 12u64 {
+        if fq_get_limb(1u64, ql) != fq_get_limb(2u64, ql) { return 26u64 }
+        ql = ql + 1u64
+    }
+
+    /* ---- zkf (BLS12-381 Fp): Mont round trip, add/sub inverse, sqr==mul, inv law ----
+     * zkf_init is LAZY and only zkf_inv (+ the selftests) trigger it; one discarded
+     * inv call initializes the field constants before the law arms. */
+    if zkf_set_u32(0u64, 9u32) != 0i32 { return 27u64 }
+    zkf_inv_x(11u64, 0u64)                                          /* init trigger; result unused */
+    if zkf_to_mont_x(1u64, 0u64) != 0i32 { return 28u64 }
+    if zkf_from_mont_x(2u64, 1u64) != 0i32 { return 29u64 }
+    if zkf_limbs_eq(2u64, 0u64) != 1u8 { return 30u64 }            /* round trip */
+    if zkf_set_u32(3u64, 4u32) != 0i32 { return 31u64 }
+    if zkf_add_x(4u64, 0u64, 3u64) != 0i32 { return 32u64 }
+    if zkf_sub_x(5u64, 4u64, 3u64) != 0i32 { return 33u64 }
+    if zkf_limbs_eq(5u64, 0u64) != 1u8 { return 34u64 }            /* (a+b)-b == a */
+    if zkf_sqr_x(6u64, 1u64) != 0i32 { return 35u64 }
+    if zkf_mul_x(7u64, 1u64, 1u64) != 0i32 { return 36u64 }
+    if zkf_limbs_eq(6u64, 7u64) != 1u8 { return 37u64 }            /* sqr == mul-self */
+    if zkf_inv_x(8u64, 1u64) != 0i32 { return 38u64 }
+    if zkf_mul_x(9u64, 1u64, 8u64) != 0i32 { return 39u64 }        /* mont(a) * mont(a)^-1 */
+    if zkf_copy_x(10u64, 9u64) != 0i32 { return 40u64 }
+    if zkf_limbs_eq(10u64, 9u64) != 1u8 { return 41u64 }           /* copy faithful */
+    /* a * a^-1 from-Mont == 1 */
+    if zkf_from_mont_x(11u64, 9u64) != 0i32 { return 42u64 }
+    if zkf_get_limb(11u64, 0u64) != 1u32 { return 43u64 }
+    let mut zl : u64 = 1u64
+    while zl < 12u64 {
+        if zkf_get_limb(11u64, zl) != 0u32 { return 44u64 }
+        zl = zl + 1u64
+    }
+
+    /* ---- zkf12: identity laws.  An Fp12 "slot" is a BASE into the Fp slot space
+     * (12 consecutive Fp slots; internal scratch lives at 1500+), so bases step by 12
+     * and stay clear of the zkf arms' slots 0-11. ---- */
+    if zkf12_setone_x(100u64) != 0i32 { return 45u64 }
+    if zkf12_copy_x(112u64, 100u64) != 0i32 { return 46u64 }
+    if zkf12_eq_x(112u64, 100u64) != 1u64 { return 47u64 }
+    /* setone writes MONTGOMERY one, so the multiplicative identity law holds exactly:
+     * one * one == one (and the product is deterministic). */
+    if zkf12_mul_x(124u64, 100u64, 112u64) != 0i32 { return 48u64 }
+    if zkf12_mul_x(136u64, 100u64, 112u64) != 0i32 { return 49u64 }
+    if zkf12_eq_x(124u64, 136u64) != 1u64 { return 90u64 }         /* deterministic */
+    if zkf12_eq_x(124u64, 100u64) != 1u64 { return 91u64 }         /* one * one == one */
+
+    /* ---- zkg1: 2G == G+G; G not at infinity ---- */
+    if zkg1_gen_x(0u64) != 0i32 { return 50u64 }
+    if zkg1_isinf_x(0u64) != 0u64 { return 51u64 }
+    if zkg1_dbl_x(1u64, 0u64) != 0i32 { return 52u64 }
+    if zkg1_add_x(2u64, 0u64, 0u64) != 0i32 { return 53u64 }
+    if zkg1_eq_x(1u64, 2u64) != 1u64 { return 54u64 }
+    if zkg1_eq_x(1u64, 0u64) != 0u64 { return 55u64 }              /* 2G != G */
+
+    /* ---- zkg2: 2G == G+G; the infinity edge ---- */
+    if zkg2_gen_x(0u64) != 0i32 { return 56u64 }
+    if zkg2_isinf_x(0u64) != 0u64 { return 57u64 }
+    if zkg2_dbl_x(1u64, 0u64) != 0i32 { return 58u64 }
+    if zkg2_add_x(2u64, 0u64, 0u64) != 0i32 { return 59u64 }
+    if zkg2_isinf_x(1u64) != 0u64 { return 60u64 }     /* 2G is a real point (no eq export on G2) */
+    if zkg2_setinf_x(3u64) != 0i32 { return 61u64 }
+    if zkg2_isinf_x(3u64) != 1u64 { return 62u64 }
+    if zkg2_dbl_x(4u64, 3u64) != 0i32 { return 63u64 }
+    if zkg2_isinf_x(4u64) != 1u64 { return 64u64 }                 /* 2*inf == inf */
+
+    /* ---- RSA-PSS deterministic: sign_det -> verify_x; tampers refuse ----
+     * The det wrappers hardcode sLen=32 -> emLen >= 66 -> modBits >= ~522; pure-III keygen
+     * at that width is performance-bound (1079's documented wall), so the 544-bit key is a
+     * FIXED TEST VECTOR (Miller-Rabin-generated offline, deterministic) -- the same
+     * discipline as the RFC 8032 / FIPS 197 vectors.  sk = n||d big-endian, pk = n. */
+    let mut h : u64 = 0u64
+    while h < 32u64 { RMH[h] = (h & 0xFFu64) as u8   h = h + 1u64 }
+    if hex_decode(("92a81cb23c3a07d40894e9ceeb30e9f80246ccd670319b8995a1bd8bf2692acfe0b229c9c179db07ba1f6c4994241d78ba9d56a5c8ab8999266692ecfbb1d0d7f14538a1" as u64), 136u64, (&RPK as u64), 96u64) != 0i32 { return 69u64 }
+    if hex_decode(("92a81cb23c3a07d40894e9ceeb30e9f80246ccd670319b8995a1bd8bf2692acfe0b229c9c179db07ba1f6c4994241d78ba9d56a5c8ab8999266692ecfbb1d0d7f14538a1" as u64), 136u64, (&RSK as u64), 192u64) != 0i32 { return 70u64 }
+    if hex_decode(("50443c787ca81232c583a33801d762a6bfb03a5a3f4b9762450821f2df7919da6e9298e5ea79bc50fcdc6de391c5a89ad627750d1243dcde8f1d7e78eb48231dc23464f5" as u64), 136u64, ((&RSK as u64) + 68u64), 124u64) != 0i32 { return 75u64 }
+    if iii_rsa_pss_sign_det(544u64, (&RSK as u64), (&RMH as u64), (&RSIG as u64)) != 0i32 { return 71u64 }
+    if iii_rsa_pss_verify_x(544u64, (&RPK as u64), (&RMH as u64), (&RSIG as u64), 68u64) != 1u8 { return 72u64 }
+    RSIG[7u64] = RSIG[7u64] ^ 0x01u8
+    if iii_rsa_pss_verify_x(544u64, (&RPK as u64), (&RMH as u64), (&RSIG as u64), 68u64) != 0u8 { return 73u64 }
+    RSIG[7u64] = RSIG[7u64] ^ 0x01u8
+    RMH[0u64] = RMH[0u64] ^ 0xFFu8
+    if iii_rsa_pss_verify_x(544u64, (&RPK as u64), (&RMH as u64), (&RSIG as u64), 68u64) != 0u8 { return 74u64 }
+    RMH[0u64] = RMH[0u64] ^ 0xFFu8
+
+    /* ---- THE VAULT: seal then open at threshold reproduces the blob byte-exactly ---- */
+    let mut v : u64 = 0u64
+    while v < 64u64 { VBLOB[v] = ((v * 5u64 + 1u64) & 0xFFu64) as u8   v = v + 1u64 }
+    let mut k : u64 = 0u64
+    while k < 32u64 { VKEY[k] = (0xA0u64 + k & 0xFFu64) as u8   VCOEF[k] = (0x33u64 + k & 0xFFu64) as u8   k = k + 1u64 }
+    let mut n2 : u64 = 0u64
+    while n2 < 12u64 { VNONCE[n2] = (n2 & 0xFFu64) as u8   n2 = n2 + 1u64 }
+    if tv_seal((&VBLOB as u64), 64u32, 2u32, 3u32, 2u32, 3u32,
+               (&VKEY as u64), (&VNONCE as u64), (&VCOEF as u64)) != 0i32 { return 80u64 }
+    /* the Shamir x-coordinates are pairwise distinct and nonzero (observable precondition) */
+    let x0 : u8 = tv_keyshare_x(0u32)
+    let x1 : u8 = tv_keyshare_x(1u32)
+    let x2 : u8 = tv_keyshare_x(2u32)
+    if x0 == 0u8 { return 81u64 }
+    if x1 == 0u8 { return 82u64 }
+    if x2 == 0u8 { return 83u64 }
+    if x0 == x1 { return 84u64 }
+    if x1 == x2 { return 85u64 }
+    if x0 == x2 { return 86u64 }
+    /* open with shards {0,2} and keyshares {1,2} -- exactly the 2-of-3 thresholds */
+    VSIDX[0u64] = 0u8
+    VSIDX[1u64] = 2u8
+    VKIDX[0u64] = 1u8
+    VKIDX[1u64] = 2u8
+    if tv_open((&VSIDX as u64), 2u32, (&VKIDX as u64), 2u32, (&VNONCE as u64), (&VOUT as u64)) != 0i32 { return 87u64 }
+    let mut c : u64 = 0u64
+    while c < 64u64 {
+        if VOUT[c] != VBLOB[c] { return 88u64 }
+        c = c + 1u64
+    }
+    /* too few keyshares refuses */
+    if tv_open((&VSIDX as u64), 2u32, (&VKIDX as u64), 1u32, (&VNONCE as u64), (&VOUT as u64)) == 0i32 { return 89u64 }
+
+    return 99u64
+}

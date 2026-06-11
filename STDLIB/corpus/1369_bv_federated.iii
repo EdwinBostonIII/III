@@ -1,0 +1,78 @@
+/* 1369_bv_federated.iii -- THE BV LAWS CROSS THE WIRE (wave-4 M17).
+ *
+ * M16 made the machine-word laws theorems with addresses and CLAIMED federatability; this KAT
+ * verifies the claim end to end with the heaviest law in the library -- div-strength,
+ * Pi(BV). Id(BV, x/8, x>>3), whose proof is one refl and whose truth is the kernel's M11 iota.
+ * The law SERIALIZES (the item-5 injective wire encoding; BVUDIV/BVLSHR travel byte-identically
+ * per 1363), a GENUINELY FRESH receiving node deserializes BOTH goal and proof, and the LOCAL
+ * kernel re-proves the refl in one tc_check inside tcom_receive -- zero trust, nothing carried
+ * but bytes.  Arms:
+ *  (1) the goal round-trips byte-identically on the fresh node;
+ *  (2) tcom_receive admits the law (the wire crossing, re-proven locally);
+ *  (3) THE FALSE TWIN (Pi(BV). Id(x/8, x>>2)) is REFUSED with exactly E_UNPROVEN -- a peer
+ *      cannot smuggle a false machine-word law past the receiving kernel;
+ *  (4) re-receive is idempotent.
+ * Exit 99 = a machine's arithmetic laws, proven once, hold everywhere the wire reaches. */
+module corpus_1369
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ity: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_deserialize(bytes: *u8, len: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_receive(goal_bytes: u64, goal_len: u64, proof_bytes: u64, proof_len: u64) -> i32 from "theorem_commons.iii"
+
+var GW : [u8; 512]
+var PW : [u8; 512]
+var BW : [u8; 512]
+var RT : [u8; 512]
+
+fn main() -> u64 {
+    /* ---- the SENDING node: build + serialize div-strength and its false twin ---- */
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let lhs : u32 = tc_bvudiv(x, tc_bvlit_u64(8u64))
+    let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, tc_bvlshr(x, tc_bvlit_u64(3u64))))
+    let prf  : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    let badg : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, tc_bvlshr(x, tc_bvlit_u64(2u64))))
+    let glen : u64 = tc_serialize(goal, (&GW as u64) as *u8, 512u64)
+    let plen : u64 = tc_serialize(prf, (&PW as u64) as *u8, 512u64)
+    let blen : u64 = tc_serialize(badg, (&BW as u64) as *u8, 512u64)
+    if glen == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    if plen == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    if blen == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+
+    /* ---- the RECEIVING node: a genuinely fresh arena ---- */
+    tc_reset()
+    tcom_init()
+
+    /* (1) round-trip byte-identity */
+    let g2 : u32 = tc_deserialize((&GW as u64) as *u8, glen)
+    if g2 == 0u32 { return 2u64 }
+    let rlen : u64 = tc_serialize(g2, (&RT as u64) as *u8, 512u64)
+    if rlen != glen { return 3u64 }
+    let mut i : u64 = 0u64
+    while i < glen {
+        if RT[i] != GW[i] { return 4u64 }
+        i = i + 1u64
+    }
+
+    /* (2) the law crosses the wire: the LOCAL kernel re-proves the refl */
+    if tcom_receive((&GW as u64), glen, (&PW as u64), plen) != 0i32 { return 5u64 }
+
+    /* (3) the false twin refuses with exactly E_UNPROVEN */
+    if tcom_receive((&BW as u64), blen, (&PW as u64), plen) != -3i32 { return 6u64 }
+
+    /* (4) idempotent re-receive */
+    if tcom_receive((&GW as u64), glen, (&PW as u64), plen) != 0i32 { return 7u64 }
+
+    return 99u64
+}

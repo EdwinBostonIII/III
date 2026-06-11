@@ -52,6 +52,15 @@ fn main() -> u64 {
     if tc_conv(tc_bvudiv(x, tc_bvlit_u64(3u64)), tc_bvlshr(x, tc_bvlit_u64(1u64))) != 0u8 { return 7u64 }
     if tc_conv(tc_bvudiv(x, tc_bvlit_u64(3u64)), tc_bvlshr(x, tc_bvlit_u64(2u64))) != 0u8 { return 8u64 }
 
+    /* (4b) THE POW2 OFF-BY-ONE TEETH (M17 soundness regression -- the comparator hole): the
+     * pow2 strength fold must certify EXACTLY its own shift count.  Before the ccl_struct_eq
+     * range fix, any two stuck shr/udiv forms compared EQUAL (x/8 == x>>2 was provable).  These
+     * arms pin every future BV tag against the equal-tag fallthrough. */
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(8u64)), tc_bvlshr(x, tc_bvlit_u64(2u64))) != 0u8 { return 18u64 }
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(8u64)), tc_bvlshr(x, tc_bvlit_u64(4u64))) != 0u8 { return 19u64 }
+    if tc_conv(tc_bvlshr(x, tc_bvlit_u64(3u64)), tc_bvlshr(x, tc_bvlit_u64(2u64))) != 0u8 { return 20u64 }
+    if tc_conv(tc_bvudiv(x, tc_bvlit_u64(8u64)), tc_bvudiv(x, tc_bvlit_u64(16u64))) != 0u8 { return 21u64 }
+
     /* (5) STUCKNESS of division by zero -- the kernel refuses where the machine traps */
     if tc_conv(tc_bvudiv(tc_bvlit_u64(5u64), z), tc_bvlit_u64(0u64)) != 0u8 { return 9u64 }
     if tc_conv(tc_bvudiv(tc_bvlit_u64(5u64), z), tc_bvlit_u64(5u64)) != 0u8 { return 10u64 }

@@ -1643,3 +1643,31 @@ k=1/3/63, NO false strength on /3, /0 stuckness closed+open, comparator recursio
 round-trip) = 99. GATE: build_stdlib FAIL=0 (575/0, lib 188b4699); FULL corpus PASS=967 FAIL=0; XII 92/0; NOUS GREEN (10 KATs + differential + propose-only).
 
 **§8.29 sealed at:** 2026-06-10.
+
+### §8.30 — SOUNDNESS FIX: the comparator's BV range + the readback (TRUSTED-BASE reseal, 2026-06-10)
+
+Wave-4 M17. The federation falsifier (1369 arm 3: a peer must NOT smuggle a false machine-word
+law past the receiving kernel) EXPOSED a genuine soundness hole shipped in 8.28/8.29: BVLSHR(39)
+and BVUDIV(40) were missing from TWO tag-dispatch sites —
+
+1. **`ccl_struct_eq`** (the conversion's final comparator): its BV-op range stopped at
+   CCL_BVMULOVF(38), so the new tags FELL THROUGH to the nullary equal-tag⇒equal rule — any two
+   stuck shr (or udiv) forms compared EQUAL regardless of operands. `x/8 == x>>2` and
+   `x>>3 == x>>2` were PROVABLE.
+2. **`ccl_to_tc`** (the normal-form readback): stuck shr/udiv forms fell to the var(0) fallback
+   and silently lost their meaning (the adjacent comment warned of exactly this class).
+
+The 8.28/8.29 work extended "all three range checks" (strengthen/step/comp-distribute) — the
+comparator was the unlisted FOURTH site, and the readback the fifth. Why nothing caught it: 1214's
+randomized differential op set excludes lshr/udiv; 1355/1363 asserted positives and non-pow2
+negatives but never the pow2 OFF-BY-ONE negative. 1363 now carries four such teeth (x/8 vs x>>2,
+x/8 vs x>>4, x>>3 vs x>>2, x/8 vs x/16) pinning every future BV tag against the fallthrough.
+
+| | Before | After |
+|---|---|---|
+| TRUSTED_BASE_ROOT | 5b66e5f025c3e867e128a1133a1b132de43d1b30c0613e4669b7bc7c5f9b39c7 | ed4d5bc61a34fad38221bdaa77d100ab37202ef1038bec02975d7240e7debd40 |
+
+**Pre-reseal battery:** the conv isolate (x/8==x>>3 certified; x/8==x>>2 and x>>3==x>>2 refused);
+1213/1214/1216/1355/1363(+teeth)/1368/1369 ALL = 99 against the fixed kernel.
+
+**§8.30 sealed at:** 2026-06-10.

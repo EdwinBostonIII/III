@@ -84,6 +84,8 @@ extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
 
@@ -869,8 +871,14 @@ fn ccl_struct_eq(x: u32, y: u32) -> u8 @export {
         if CCL_B[x] != CCL_B[y] { return 0u8 }
         return 1u8
     }
+    /* wave-4 M17 SOUNDNESS FIX: the upper bound was CCL_BVMULOVF(38) -- BVLSHR(39) and
+     * BVUDIV(40), added in 8.28/8.29, FELL THROUGH to the nullary equal-tag rule below, so any
+     * two stuck shr (or udiv) forms compared EQUAL regardless of operands (x/8 == x>>2 was
+     * provable; x>>3 == x>>2 likewise).  This was the FOURTH tag-range site -- strengthen/step/
+     * comp-distribute were extended, the COMPARATOR was not.  Found by the federation falsifier
+     * (1369 arm 3); the pow2-negative teeth in 1363 now pin every future BV tag against it. */
     if tx >= CCL_BVADD {
-        if tx <= CCL_BVMULOVF {
+        if tx <= CCL_BVUDIV {
             if ccl_struct_eq(CCL_A[x], CCL_A[y]) == 0u8 { return 0u8 }
             return ccl_struct_eq(CCL_B[x], CCL_B[y])
         }
@@ -1067,6 +1075,12 @@ fn ccl_to_tc(c: u32) -> u32 @export {
     if tag == CCL_BVOR  { return tc_bvor(ccl_to_tc(CCL_A[c]),  ccl_to_tc(CCL_B[c])) }
     if tag == CCL_BVXOR { return tc_bvxor(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
     if tag == CCL_BVSHL { return tc_bvshl(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    /* wave-4 M17 SOUNDNESS FIX: BVLSHR (8.28) and BVUDIV (8.29) were missing from this readback
+     * switch -- a stuck shr/udiv normal form fell to the tc_var(0) fallback below and SILENTLY
+     * LOST ITS MEANING, so any two stuck forms compared conv-EQUAL (x/8 == x>>2 was provable).
+     * Found by the federation falsifier (1369 arm 3); the pow2-negative teeth now pin it. */
+    if tag == CCL_BVLSHR { return tc_bvlshr(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
+    if tag == CCL_BVUDIV { return tc_bvudiv(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
     if tag == CCL_BVADDOVF { return tc_bvaddovf(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
     if tag == CCL_BVMULOVF { return tc_bvmulovf(ccl_to_tc(CCL_A[c]), ccl_to_tc(CCL_B[c])) }
     if tag == CCL_ATOM {

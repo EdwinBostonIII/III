@@ -957,6 +957,7 @@ declare -A EXPECTED=(
     [1365_rules_are_citations]=99
     [1366_mixed_dispose]=99
     [1367_witnessed_dream]=99
+    [1368_bv_commons]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

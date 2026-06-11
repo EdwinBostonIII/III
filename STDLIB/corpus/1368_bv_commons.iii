@@ -1,0 +1,39 @@
+/* 1368_bv_commons.iii -- THE BV LAW LIBRARY IN THE THEOREM COMMONS (wave-4 M16).
+ *
+ * Every kernel-iota BV law is a conversion equality, so REFL UNDER A BINDER proves it in CIC:
+ * lam(BV). refl(lhs) : Pi(BV). Id(BV, lhs, rhs) -- one constructor, the whole weight on the
+ * kernel's iota.  numera/bv_commons admits the TEN-LAW machine-word library (self-cancellation
+ * x4, the identities x+0/x*1/x/1, strength x*2==x<<1, div-strength x/8==x>>3, and the SILICON
+ * law x>>64==x) into the Theorem Commons: goal-bound addresses, citable, federatable -- a peer's
+ * kernel re-proves any of them in one tc_check.  Arms: publish 10/10; cite 10/10; idempotent
+ * re-publish; THE FALSE LAW (x/3 == x>>1) refuses with exactly E_UNPROVEN; the library survives
+ * an arena clobber and still cites in full.  99 = the silicon's laws are theorems with addresses. */
+module corpus_1368
+extern @abi(c-msvc-x64) fn bvc_publish_all() -> u32 from "bv_commons.iii"
+extern @abi(c-msvc-x64) fn bvc_cite_all() -> u32 from "bv_commons.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ity: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_admit(stmt: u64, len: u64, proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+var FNAME : [u8; 12] = [98u8,118u8,46u8,102u8,97u8,107u8,101u8,46u8,108u8,97u8,119u8,0u8]
+fn main() -> u64 {
+    if bvc_publish_all() != 10u32 { return 1u64 }
+    if bvc_cite_all() != 10u32 { return 2u64 }
+    if bvc_publish_all() != 10u32 { return 3u64 }      /* idempotent re-publish */
+    /* THE FALSE LAW REFUSES: Pi(BV). Id(x/3, x>>1) with a refl proof -> E_UNPROVEN(-3) */
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let proof : u32 = tc_lam(tc_bv(), tc_refl(tc_bvudiv(x, tc_bvlit_u64(3u64))))
+    let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), tc_bvudiv(x, tc_bvlit_u64(3u64)), tc_bvlshr(x, tc_bvlit_u64(1u64))))
+    if tcom_admit((&FNAME) as u64, 12u64, proof, goal) != -3i32 { return 4u64 }
+    /* after the refusal + arena clobber, the library still cites in full */
+    if bvc_cite_all() != 10u32 { return 5u64 }
+    return 99u64
+}

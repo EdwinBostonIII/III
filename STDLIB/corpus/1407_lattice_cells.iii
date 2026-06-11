@@ -1,0 +1,110 @@
+/* 1407_lattice_cells.iii -- THE XII LATTICE CELL STORE (burn-down tranche 16; 9 orphans).
+ *
+ * The lattice is the sealed cell store behind the XII manifest: content-addressed cells
+ * (mhash + payload + ct_kind/prov_xform/flags) with a (horizon, circ-slot) lookup map.
+ * Laws:
+ *  (1) ALLOCATION  -- reset zeroes the world (used 0); each alloc returns a DENSE index,
+ *      used grows by exactly 1, and the payload arena advances by exactly the prior size
+ *      (payload_ptr(1) == payload_ptr(0) + size0);
+ *  (2) FIDELITY    -- every metadata byte reads back exactly (mhash 32B, payload bytes,
+ *      ct_kind, prov_xform, flags);
+ *  (3) BOUNDS      -- a dead cell index reads 0-sentinels on every accessor;
+ *  (4) LOOKUP      -- set/get round-trips exactly; horizon >= 144 and circ_slot >= 16
+ *      refuse (-1 / SENT);
+ *  (5) CIRC FOLD   -- xii_lattice_circ_to_slot is the pinned fold (c & 0xF) ^ ((c>>12) & 0xF)
+ *      (exact vectors, range <= 15 always).
+ * Exit 99. */
+module corpus_1407
+
+extern @abi(c-msvc-x64) fn xii_lattice_reset() -> i32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_capacity() -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_used() -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_alloc_cell(payload_ptr: *u8, payload_size: u32, ct_kind: u8, prov_xform_id: u8, flags: u8, mhash_ptr: *u8) -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_mhash_ptr(cell_idx: u32) -> u64 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_payload_ptr(cell_idx: u32) -> u64 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_payload_size(cell_idx: u32) -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_ct_kind(cell_idx: u32) -> u8 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_prov_xform(cell_idx: u32) -> u8 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_flags(cell_idx: u32) -> u8 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_lookup_set(horizon_id: u8, circ_slot: u32, cell_idx: u32) -> i32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_lookup(horizon_id: u8, circ_slot: u32) -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_circ_to_slot(circ: u32) -> u32 from "xii_lattice.iii"
+
+var PAY1 : [u8; 3]
+var PAY2 : [u8; 5]
+var MH   : [u8; 32]
+
+fn main() -> u64 {
+    /* (1) reset zeroes the world */
+    if xii_lattice_reset() != 0i32 { return 1u64 }
+    if xii_lattice_used() != 0u32 { return 2u64 }
+    let cap : u32 = xii_lattice_capacity()
+    if cap == 0u32 { return 3u64 }
+
+    PAY1[0u64] = 0xAAu8
+    PAY1[1u64] = 0xBBu8
+    PAY1[2u64] = 0xCCu8
+    let mut m : u64 = 0u64
+    while m < 32u64 { MH[m] = (0x10u64 + m & 0xFFu64) as u8   m = m + 1u64 }
+
+    let c0 : u32 = xii_lattice_alloc_cell(((&PAY1 as u64)) as *u8, 3u32, 7u8, 3u8, 5u8, ((&MH as u64)) as *u8)
+    if c0 != 0u32 { return 4u64 }                              /* dense from 0 */
+    if xii_lattice_used() != 1u32 { return 5u64 }
+
+    /* (2) fidelity: every byte reads back */
+    let mp : u64 = xii_lattice_cell_mhash_ptr(0u32)
+    if mp == 0u64 { return 6u64 }
+    let mb : *u8 = mp as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if mb[i] != MH[i] { return 7u64 }
+        i = i + 1u64
+    }
+    let pp : u64 = xii_lattice_cell_payload_ptr(0u32)
+    if pp == 0u64 { return 8u64 }
+    let pb : *u8 = pp as *u8
+    if pb[0u64] != 0xAAu8 { return 9u64 }
+    if pb[2u64] != 0xCCu8 { return 10u64 }
+    if xii_lattice_cell_payload_size(0u32) != 3u32 { return 11u64 }
+    if xii_lattice_cell_ct_kind(0u32) != 7u8 { return 12u64 }
+    if xii_lattice_cell_prov_xform(0u32) != 3u8 { return 13u64 }
+    if xii_lattice_cell_flags(0u32) != 5u8 { return 14u64 }
+
+    /* (1) the arena advances exactly */
+    PAY2[0u64] = 0x11u8
+    PAY2[4u64] = 0x55u8
+    let c1 : u32 = xii_lattice_alloc_cell(((&PAY2 as u64)) as *u8, 5u32, 8u8, 4u8, 6u8, ((&MH as u64)) as *u8)
+    if c1 != 1u32 { return 15u64 }
+    if xii_lattice_used() != 2u32 { return 16u64 }
+    if xii_lattice_cell_payload_ptr(1u32) != pp + 3u64 { return 17u64 }   /* +size0 exactly */
+    let qb : *u8 = xii_lattice_cell_payload_ptr(1u32) as *u8
+    if qb[0u64] != 0x11u8 { return 18u64 }
+    if qb[4u64] != 0x55u8 { return 19u64 }
+
+    /* (3) dead-index sentinels */
+    if xii_lattice_cell_mhash_ptr(2u32) != 0u64 { return 20u64 }
+    if xii_lattice_cell_payload_ptr(2u32) != 0u64 { return 21u64 }
+    if xii_lattice_cell_ct_kind(2u32) != 0u8 { return 22u64 }
+    if xii_lattice_cell_prov_xform(2u32) != 0u8 { return 23u64 }
+    if xii_lattice_cell_flags(2u32) != 0u8 { return 24u64 }
+
+    /* (4) lookup round trip + refusals */
+    if xii_lattice_lookup_set(5u8, 3u32, 1u32) != 0i32 { return 30u64 }
+    if xii_lattice_lookup(5u8, 3u32) != 1u32 { return 31u64 }
+    if xii_lattice_lookup_set(144u8, 0u32, 0u32) != -1i32 { return 32u64 }   /* horizon cap */
+    if xii_lattice_lookup_set(0u8, 16u32, 0u32) != -1i32 { return 33u64 }    /* slot cap */
+    if xii_lattice_lookup(144u8, 0u32) != 0xFFFFFFFFu32 { return 34u64 }
+    if xii_lattice_lookup(0u8, 16u32) != 0xFFFFFFFFu32 { return 35u64 }
+
+    /* (5) the circ fold, pinned */
+    if xii_lattice_circ_to_slot(0x5u32) != 5u32 { return 40u64 }
+    if xii_lattice_circ_to_slot(0x3007u32) != 4u32 { return 41u64 }          /* 7 ^ 3 */
+    if xii_lattice_circ_to_slot(0xF00Fu32) != 0u32 { return 42u64 }          /* F ^ F */
+    let mut c : u32 = 0u32
+    while c < 64u32 {
+        if xii_lattice_circ_to_slot(c) > 15u32 { return 43u64 }              /* range law */
+        c = c + 1u32
+    }
+
+    return 99u64
+}

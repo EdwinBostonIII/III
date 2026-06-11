@@ -1,0 +1,71 @@
+/* 1371_autonomous_cycle.iii -- THE AUTONOMOUS CYCLE: dream, witness, adopt, one call (wave-4 M20).
+ *
+ * daemon_dream_cycle chains the pipeline's stages under every gate they individually carry:
+ * the full-lattice dream, THE LEASH (anything unproven stops everything), THE WITNESS (the
+ * session a fact on the spine), then ADOPTION (the M19 bridge: each count-mask pair re-proven
+ * by the kernel, registered into the optimizer).  The organism dreams, checks itself, records
+ * the fact, and teaches its own optimizer -- one operator-invoked deterministic call.  Arms:
+ *  (1) the cycle runs: adopted == the count-mask registry's certified count (every dreamed
+ *      diagonal pair re-proves in the kernel and registers);
+ *  (2) THE PAYOFF: a dreamed multiplier strength-reduces in the descent -- the optimizer knows
+ *      a rule no hand wired, taught by its own dream;
+ *  (3) the witness spine advanced (the session is a fact);
+ *  (4) determinism: the same seed dreams, witnesses, and adopts identically;
+ *  (5) the lattice-wide leash still holds AFTER adoption (teaching changed no law).
+ * Exit 99 = the loop is closed: discovery feeds proof feeds provenance feeds optimization,
+ * and nothing moves without its citation. */
+module corpus_1371
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn daemon_dream_cycle(seed: u64, n_cycles: u32, budget: u32) -> u32 from "daemon_dream.iii"
+extern @abi(c-msvc-x64) fn daemon_dream_leash_all() -> u8 from "daemon_dream.iii"
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_get_a(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_node2(tag: u8, a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_slot(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf_pow(a: u8) -> u32 from "sov_isa.iii"
+
+var OUT  : [u32; 64]
+var OUTN : [u32; 1]
+
+fn main() -> u64 {
+    eg_init()
+    cl_init()
+    let cx : u32 = si_leaf(12u8)
+
+    /* (1) the cycle: dream -> leash -> witness -> adopt */
+    let adopted : u32 = daemon_dream_cycle(0xD1CEu64, 64u32, 1u32)
+    if adopted == 0xFFFFFFFFu32 { return 1u64 }
+    if adopted == 0xFFFFFFFEu32 { return 2u64 }
+    let certified : u32 = cga_bv_count()
+    if certified == 0u32 { return 3u64 }
+    if adopted != certified { return 4u64 }
+
+    /* (3) the session is a fact */
+    if wh_next_idx() == 0u64 { return 5u64 }
+    let idx1 : u64 = wh_next_idx()
+
+    /* (2) THE PAYOFF: a dreamed multiplier reduces -- taught by the dream, not by hand */
+    let a0 : u32 = cga_bv_get_a(0u32)
+    if a0 >= 64u32 { return 6u64 }
+    let pw : u32 = si_leaf_pow(a0 as u8)
+    let root : u32 = si_node2(31u8, cx, pw)            /* mul(x, cpow_a0) */
+    let otp : *u32 = (&OUT) as u64 as *u32
+    let onp : *u32 = (&OUTN) as u64 as *u32
+    if sov_isa_descend(root, otp, onp) != 0i32 { return 7u64 }
+    if OUT[0u32] != si_slot(32u8) { return 8u64 }      /* head shl: the dreamed reduction fired */
+
+    /* (4) determinism: the same seed cycles identically (a fresh fact each session) */
+    let adopted2 : u32 = daemon_dream_cycle(0xD1CEu64, 64u32, 1u32)
+    if adopted2 != adopted { return 9u64 }
+    if wh_next_idx() <= idx1 { return 10u64 }
+
+    /* (5) teaching changed no law */
+    if daemon_dream_leash_all() != 1u8 { return 11u64 }
+
+    return 99u64
+}

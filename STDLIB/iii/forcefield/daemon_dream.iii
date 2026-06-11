@@ -187,3 +187,25 @@ fn daemon_dream_run_full_witnessed(seed: u64, n_cycles: u32, budget: u32) -> u32
     if widx == 0xFFFFFFFFFFFFFFFFu64 { return 0xFFFFFFFEu32 }   /* proven but unwitnessed: honest */
     return total
 }
+
+/* ===== wave-4 M20: THE AUTONOMOUS CYCLE -- dream, witness, adopt, one call ======================
+ * The pipeline's stages, chained under every gate they individually carry: the full-lattice
+ * dream (hallucinate + certify across all four tiers), THE LEASH (every sealed law re-proven or
+ * nothing proceeds), THE WITNESS (the session a provenance-bound fact), then ADOPTION (each
+ * count-mask pair re-proven by the CIC kernel and registered into the optimizer's rule set --
+ * the M19 bridge).  One operator-invoked, deterministic, bounded call: the organism dreams,
+ * checks itself, records the fact, and TEACHES ITS OWN OPTIMIZER -- with every link cited and
+ * every refusal observable.  The caller owns the egraph session (eg_init + term seeds), exactly
+ * as in the manual flow; promotion beyond the runtime stays operator-gated (ADR-FORGE-4).
+ * Returns the ADOPTED count; 0xFFFFFFFF = the leash failed (nothing witnessed, nothing adopted);
+ * 0xFFFFFFFE = proven-but-unwitnessed (honest; adoption still proceeds -- the optimizer may
+ * learn from a session whose receipt could not be published, but the codes never lie). */
+extern @abi(c-msvc-x64) fn sov_isa_adopt_dream() -> u32 from "sov_isa.iii"
+
+fn daemon_dream_cycle(seed: u64, n_cycles: u32, budget: u32) -> u32 @export {
+    let w : u32 = daemon_dream_run_full_witnessed(seed, n_cycles, budget)
+    if w == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }     /* unleashed: full stop */
+    let adopted : u32 = sov_isa_adopt_dream()
+    if w == 0xFFFFFFFEu32 { return 0xFFFFFFFEu32 }     /* adopted, but honestly unwitnessed */
+    return adopted
+}

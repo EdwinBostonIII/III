@@ -321,6 +321,25 @@ fn sov_isa_rules() -> u32 @export {
     if s_shl == SI_SENT { return 2u32 }
     if s_add == SI_SENT { return 3u32 }
 
+    /* ===== wave-4 M13: RULE REGISTRATION IS KERNEL CITATION ======================================
+     * Every core rule was 'kernel-certified' in COMMENTS (corpus 875/1207) while only Rule I
+     * consulted the kernel live.  Unified: each rule's exact law is re-proven by the CIC kernel
+     * AT REGISTRATION, every boot.  The core six are FOUNDATIONAL -- a refused citation fails
+     * rules() LOUDLY (codes 20-25): an optimizer whose ground rules the kernel won't certify
+     * must not come up at all.  (The optional-symbol rules H/I keep their skip-on-refusal
+     * contract -- absence is sound; a broken foundation is not.)  Clobbers the tc arena. */
+    tc_reset()
+    let cit_x : u32 = tc_var(0u32)
+    let cit_0 : u32 = tc_bvlit_u64(0u64)
+    let cit_1 : u32 = tc_bvlit_u64(1u64)
+    let cit_2 : u32 = tc_bvlit_u64(2u64)
+    if tc_conv(tc_bvmul(cit_x, cit_2), tc_bvshl(cit_x, cit_1)) != 1u8 { return 20u32 }  /* A: x*2 == x<<1 */
+    if tc_conv(tc_bvadd(cit_x, cit_0), cit_x) != 1u8 { return 21u32 }                   /* B: x+0 == x */
+    if tc_conv(tc_bvmul(cit_x, cit_1), cit_x) != 1u8 { return 22u32 }                   /* C: x*1 == x */
+    if tc_conv(tc_bvmul(cit_x, cit_0), cit_0) != 1u8 { return 23u32 }                   /* D: x*0 == 0 */
+    if tc_conv(tc_bvadd(cit_1, cit_1), cit_2) != 1u8 { return 24u32 }                   /* F: 1+1 == 2 */
+    if tc_conv(tc_bvmul(cit_1, cit_2), cit_2) != 1u8 { return 25u32 }                   /* G: 1*2 == 2 */
+
     /* Rule A: LHS [mul/2, ?0, c2/0]  ->  RHS [shl/2, ?0, c1/0] */
     SI_RULE[0u32] = 3u32
     SI_RULE[1u32] = 3u32
@@ -518,6 +537,39 @@ fn sov_isa_kat() -> u64 @export {
     let s_add : u32 = si_slot(SI_ADD)
     if SI_OUT[0u32] != s_add { return 10u64 }      /* head still add: no fabricated equality */
 
+    return 99u64
+}
+
+/* KAT [wave-4 M13]: RULE REGISTRATION IS KERNEL CITATION -- the uniform contract.  Every core
+ * rule (A/B/C/D/F/G) is re-proven by the CIC kernel at registration, every boot; a refused
+ * citation fails rules() LOUDLY.  Teeth: (1) the citations PASS (rules() == 0 on a seeded
+ * graph); (2) the citations DISCRIMINATE -- the kernel REFUSES each family's wrong-shape twin
+ * (x*2 vs x<<2; x+0 vs 0; x*1 vs 1; 1+1 vs 1), so a corrupted rule could never come up.
+ * 99 = the optimizer's whole foundation is live-proven, not comment-trusted. */
+fn sov_isa_citation_kat() -> u64 @export {
+    eg_init()
+    cl_init()
+    let cx : u32 = si_leaf(SI_X)
+    let cc2 : u32 = si_leaf(SI_C2)
+    let cc0 : u32 = si_leaf(SI_C0)
+    let cc1 : u32 = si_leaf(SI_C1)
+    let seed1 : u32 = si_node2(SI_MUL, cx, cc2)
+    let seed2 : u32 = si_node2(SI_ADD, cx, cc0)
+    let seed3 : u32 = si_node2(SI_SHL, cx, cc1)
+    if seed1 == SI_SENT { return 1u64 }
+    if seed2 == SI_SENT { return 2u64 }
+    if seed3 == SI_SENT { return 3u64 }
+    if sov_isa_rules() != 0u32 { return 4u64 }      /* (1) every core citation passed */
+    /* (2) the wrong-shape twins are REFUSED by the kernel */
+    tc_reset()
+    let kx : u32 = tc_var(0u32)
+    let k0 : u32 = tc_bvlit_u64(0u64)
+    let k1 : u32 = tc_bvlit_u64(1u64)
+    let k2 : u32 = tc_bvlit_u64(2u64)
+    if tc_conv(tc_bvmul(kx, k2), tc_bvshl(kx, k2)) != 0u8 { return 5u64 }   /* x*2 != x<<2 */
+    if tc_conv(tc_bvadd(kx, k0), k0) != 0u8 { return 6u64 }                  /* x+0 != 0 */
+    if tc_conv(tc_bvmul(kx, k1), k1) != 0u8 { return 7u64 }                  /* x*1 != 1 */
+    if tc_conv(tc_bvadd(k1, k1), k1) != 0u8 { return 8u64 }                  /* 1+1 != 1 */
     return 99u64
 }
 

@@ -1,0 +1,20 @@
+/* 1365_rules_are_citations.iii -- RULE REGISTRATION IS KERNEL CITATION (wave-4 M13).
+ *
+ * sov_isa's core rules carried 'kernel-certified' in COMMENTS (corpus 875/1207) while only the
+ * wave-4 additions consulted the kernel live.  M13 unifies the contract: every core rule
+ * (A x*2==x<<1, B x+0==x, C x*1==x, D x*0==0, F 1+1==2, G 1*2==2) is RE-PROVEN by the CIC
+ * kernel at registration, every boot -- a refused citation fails rules() LOUDLY (an optimizer
+ * whose foundation the kernel won't certify must not come up), while the optional-symbol rules
+ * (H/I) keep skip-on-refusal (absence is sound; a broken foundation is not).
+ * Drives sov_isa_citation_kat: the citations PASS on a seeded graph AND DISCRIMINATE (the
+ * kernel refuses each family's wrong-shape twin -- x*2 vs x<<2, x+0 vs 0, x*1 vs 1, 1+1 vs 1
+ * -- so a corrupted rule could never register).  99 = the foundation is live-proven. */
+module corpus_1365
+
+extern @abi(c-msvc-x64) fn sov_isa_citation_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_isa_citation_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

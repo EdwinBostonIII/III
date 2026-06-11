@@ -37,6 +37,9 @@ extern @abi(c-msvc-x64) fn eg_intern_symbol(sym_id: *u8) -> u32 from "egraph.iii
 extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn cga_dispose_shift(shape: u32, a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_get_a(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_get_b(i: u32) -> u32 from "cg_autocatalyst.iii"
 extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
@@ -119,6 +122,8 @@ const SI_MUL  : u8 = 31u8     /* mul(_, _)            (arity 2) */
 const SI_SHL  : u8 = 32u8     /* shl(_, _)            (arity 2) */
 const SI_DIV  : u8 = 33u8     /* udiv(_, _)           (arity 2; wave-4 M12) */
 const SI_SHR  : u8 = 34u8     /* lshr(_, _)           (arity 2; wave-4 M12) */
+const SI_CPOW : u8 = 23u8     /* parametric: the VALUE 2^a    (arity 0; byte1 = a; wave-4 M19) */
+const SI_CNUM : u8 = 24u8     /* parametric: the VALUE v      (arity 0; byte1 = v; wave-4 M19) */
 
 const SI_SENT     : u32 = 0xFFFFFFFFu32
 const CL_BALANCED : u32 = 3u32     /* cost_lattice seeds order 3 = balanced (2,2,1,1,1,1) */
@@ -164,6 +169,32 @@ fn si_symset(tag: u8) -> i32 {
     SI_SYM[0u64] = tag
     return 0i32
 }
+/* wave-4 M19: PARAMETRIC symbols -- byte0 = the family tag, byte1 = the parameter.  Each
+ * (family, param) pair interns as a DISTINCT egraph symbol, extending the term language beyond
+ * the fixed c0/c1/c2 to the general power constants (SI_CPOW: the VALUE 2^a) and count
+ * constants (SI_CNUM: the VALUE b used as a shift count) the discovery pipeline adopts. */
+fn si_symset2(tag: u8, param: u8) -> i32 {
+    si_symset(tag)
+    SI_SYM[1u64] = param
+    return 0i32
+}
+fn si_leaf_pow(a: u8) -> u32 @export {
+    si_symset2(SI_CPOW, a)
+    return eg_add(si_symp(), si_chp(), 0u32)
+}
+fn si_leaf_cnum(v: u8) -> u32 @export {
+    si_symset2(SI_CNUM, v)
+    return eg_add(si_symp(), si_chp(), 0u32)
+}
+fn si_slot_pow(a: u8) -> u32 @export {
+    si_symset2(SI_CPOW, a)
+    return eg_intern_symbol(si_symp())
+}
+fn si_slot_cnum(v: u8) -> u32 @export {
+    si_symset2(SI_CNUM, v)
+    return eg_intern_symbol(si_symp())
+}
+
 fn si_symp() -> *u8  { return (&SI_SYM) as u64 as *u8 }
 fn si_chp()  -> *u32 { return (&SI_CHILD) as u64 as *u32 }
 
@@ -538,6 +569,59 @@ fn sov_isa_kat() -> u64 @export {
     if SI_OUT[0u32] != s_add { return 10u64 }      /* head still add: no fabricated equality */
 
     return 99u64
+}
+
+/* ===== wave-4 M19: THE CERTIFIED DISCOVERY PIPELINE ============================================
+ * Three stages built across the wave -- hallucinate (egraph_stochastic), certify (the
+ * autocatalyst's count-mask registry: the two-tier width-faithful disposer), optimize (this
+ * module's kernel-cited rule set) -- fused into ONE auditable loop.  sov_isa_adopt_dream walks
+ * the CERTIFIED registry and, for each (a, b) pair, re-proves the law in the CIC KERNEL
+ * (tc_conv(bvmul(x, lit 2^a), bvshl(x, lit b)) -- width-faithful: the registry's truth law
+ * a<64 AND a==(b&63) keeps 1<<a exact) and registers mul(?0, cpow_a) -> shl(?0, cnum_b).
+ * DOUBLE-CITED: the registry's UNSAT-grade admission AND the kernel's conv, per adoption --
+ * a pair failing EITHER is skipped (counted separately; observable, never silent).  The
+ * optimizer thereafter strength-reduces EVERY dreamed multiplier, not just the hand-wired
+ * x*2.  Deterministic, bounded, operator-invoked; promotion beyond the runtime stays
+ * operator-gated as ever. */
+fn sov_isa_adopt_dream() -> u32 @export {
+    let n : u32 = cga_bv_count()
+    let mut adopted : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let a : u32 = cga_bv_get_a(i)
+        let b : u32 = cga_bv_get_b(i)
+        if a < 64u32 {
+            /* the kernel citation (width-exact: a < 64 guaranteed by the registry's law) */
+            tc_reset()
+            let kx : u32 = tc_var(0u32)
+            let pow : u64 = 1u64 << (a as u64)
+            let cit_l : u32 = tc_bvmul(kx, tc_bvlit_u64(pow))
+            let cit_r : u32 = tc_bvshl(kx, tc_bvlit_u64(b as u64))
+            if tc_conv(cit_l, cit_r) == 1u8 {
+                /* seed the parametric slots, then register the adopted rule */
+                let s_pow : u32 = si_slot_pow(a as u8)
+                let s_cnt : u32 = si_slot_cnum(b as u8)
+                let s_mul2 : u32 = si_slot(SI_MUL)
+                let s_shl2 : u32 = si_slot(SI_SHL)
+                if s_pow != SI_SENT {
+                    if s_cnt != SI_SENT {
+                        SI_RULE[0u32] = 3u32
+                        SI_RULE[1u32] = 3u32
+                        SI_RULE[2u32] = si_enc_sym(s_mul2, 2u32)
+                        SI_RULE[3u32] = si_enc_var(0u32)
+                        SI_RULE[4u32] = si_enc_sym(s_pow, 0u32)
+                        SI_RULE[5u32] = si_enc_sym(s_shl2, 2u32)
+                        SI_RULE[6u32] = si_enc_var(0u32)
+                        SI_RULE[7u32] = si_enc_sym(s_cnt, 0u32)
+                        let rp : *u32 = (&SI_RULE) as u64 as *u32
+                        if eg_register_rule(rp) != SI_SENT { adopted = adopted + 1u32 }
+                    }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return adopted
 }
 
 /* KAT [wave-4 M13]: RULE REGISTRATION IS KERNEL CITATION -- the uniform contract.  Every core

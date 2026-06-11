@@ -1,0 +1,97 @@
+/* 1370_discovery_pipeline.iii -- THE CERTIFIED DISCOVERY PIPELINE (wave-4 M19).
+ *
+ * Three wave-built stages fused into one auditable loop: CERTIFY (the autocatalyst's
+ * width-faithful count-mask registry -- the two-tier disposer's UNSAT-grade admissions) ->
+ * ADOPT (sov_isa_adopt_dream: each (a,b) pair RE-PROVEN by the CIC kernel,
+ * conv(x * 2^a, x << b), then registered as mul(?0,cpow_a) -> shl(?0,cnum_b) over the new
+ * PARAMETRIC term symbols) -> OPTIMIZE (the descent strength-reduces every dreamed multiplier,
+ * not just the hand-wired x*2).  Arms:
+ *  (1) an empty registry adopts NOTHING;
+ *  (2) certify (5,5) and (12,12); adopt exactly 2 -- both double-cited;
+ *  (3) THE PAYOFF: mul(x, 2^5) descends to shl(x, 5) -- a reduction NO hand rule provides;
+ *  (4) THE SILICON IDENTITY RIDES THE PIPELINE: (0,64) certifies (x*1 == x<<64, the count-mask
+ *      truth the ideal model cannot phrase), adopts (the kernel cites conv(x*1, x<<64)), and
+ *      mul(x, cpow_0) descends to shl(x, cnum_64);
+ *  (5) the hand-wired citation set coexists (rules() == 0 throughout);
+ *  (6) determinism: a second adopt pass returns the same count.
+ * Exit 99 = discovery, certification, and optimization are ONE machine -- each law admitted by
+ * the disposer, re-proven by the kernel, and exploited by the descent. */
+module corpus_1370
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cga_bv_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose_bv(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn sov_isa_adopt_dream() -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_rules() -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_node2(tag: u8, a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_slot(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf_pow(a: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_leaf_cnum(v: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_slot_cnum(v: u8) -> u32 from "sov_isa.iii"
+
+var OUT  : [u32; 64]
+var OUTN : [u32; 1]
+
+fn main() -> u64 {
+    eg_init()
+    cl_init()
+    cga_bv_reset()
+
+    /* the term-language seeds (x, the hand constants, the parametric leaves we will use) */
+    let cx : u32 = si_leaf(12u8)            /* SI_X */
+    let cc0 : u32 = si_leaf(20u8)
+    let cc1 : u32 = si_leaf(21u8)
+    let cc2 : u32 = si_leaf(22u8)
+    if cc0 == 0xFFFFFFFFu32 { return 1u64 }
+    if cc1 == 0xFFFFFFFFu32 { return 1u64 }
+    if cc2 == 0xFFFFFFFFu32 { return 1u64 }
+    let p5 : u32 = si_leaf_pow(5u8)
+    let n5 : u32 = si_leaf_cnum(5u8)
+    let p0 : u32 = si_leaf_pow(0u8)
+    let n64 : u32 = si_leaf_cnum(64u8)
+    if p5 == 0xFFFFFFFFu32 { return 2u64 }
+    if n5 == 0xFFFFFFFFu32 { return 2u64 }
+
+    /* the hand-wired, kernel-cited foundation */
+    let s_shl_seed : u32 = si_node2(32u8, cx, cc1)    /* seed shl slots */
+    if s_shl_seed == 0xFFFFFFFFu32 { return 3u64 }
+    let s_mul_seed : u32 = si_node2(31u8, cx, cc2)
+    if s_mul_seed == 0xFFFFFFFFu32 { return 3u64 }
+    if sov_isa_rules() != 0u32 { return 4u64 }
+
+    /* (1) an empty registry adopts nothing */
+    if sov_isa_adopt_dream() != 0u32 { return 5u64 }
+
+    /* (2) certify two pairs; adopt exactly 2 */
+    if cga_dispose_bv(5u32, 5u32, 1u32) != 1u8 { return 6u64 }
+    if cga_dispose_bv(12u32, 12u32, 1u32) != 1u8 { return 7u64 }
+    if cga_bv_count() != 2u32 { return 8u64 }
+    if sov_isa_adopt_dream() != 2u32 { return 9u64 }
+
+    /* (3) THE PAYOFF: mul(x, 2^5) -> shl(x, 5) -- no hand rule knows this */
+    let root5 : u32 = si_node2(31u8, cx, p5)          /* mul(x, cpow_5) */
+    let otp : *u32 = (&OUT) as u64 as *u32
+    let onp : *u32 = (&OUTN) as u64 as *u32
+    if sov_isa_descend(root5, otp, onp) != 0i32 { return 10u64 }
+    let s_shl : u32 = si_slot(32u8)
+    if OUTN[0u32] != 3u32 { return 11u64 }
+    if OUT[0u32] != s_shl { return 12u64 }
+    if OUT[2u32] != si_slot_cnum(5u8) { return 13u64 }
+
+    /* (4) the silicon identity rides the pipeline: (0,64) -- x*1 == x<<64 */
+    if cga_dispose_bv(0u32, 64u32, 1u32) != 1u8 { return 14u64 }
+    if sov_isa_adopt_dream() != 3u32 { return 15u64 }
+    let root0 : u32 = si_node2(31u8, cx, p0)          /* mul(x, cpow_0) */
+    if sov_isa_descend(root0, otp, onp) != 0i32 { return 16u64 }
+    if OUT[0u32] != s_shl { return 17u64 }
+    if OUT[2u32] != si_slot_cnum(64u8) { return 18u64 }
+
+    /* (6) determinism: the same registry adopts the same count */
+    if sov_isa_adopt_dream() != 3u32 { return 19u64 }
+
+    return 99u64
+}

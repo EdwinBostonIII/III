@@ -479,3 +479,13 @@ fn cga_shift_verify_all() -> u8 @export {
     }
     return 1u8
 }
+
+/* wave-4 M19: the count-mask registry's pair getters -- the pipeline bridge reads them. */
+fn cga_bv_get_a(i: u32) -> u32 @export {
+    if i >= CGA_BV_N[0u64] { return 0xFFFFFFFFu32 }
+    return CGA_BV_A[i as u64]
+}
+fn cga_bv_get_b(i: u32) -> u32 @export {
+    if i >= CGA_BV_N[0u64] { return 0xFFFFFFFFu32 }
+    return CGA_BV_B[i as u64]
+}

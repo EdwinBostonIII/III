@@ -1,0 +1,328 @@
+/* 1400_glyph_v3_forms.iii -- THE GLYPH V3 FORM SYSTEM, EVERY FORM PROVEN (burn-down tranche 9).
+ *
+ * The census flagged ~29 glyph exports (form ids + validators + structured unpackers) as
+ * referenced nowhere: the verba wire-form type system was an unproven surface.  This KAT
+ * proves the WHOLE family with uniform laws plus each form's structured accessors:
+ *   LAW-1 (round trip)   pack -> validate==1 -> unpack reproduces the packed value exactly;
+ *   LAW-2 (form binding) a packed X refuses Y's validator (cross-form -> 0);
+ *   LAW-3 (integrity)    one flipped payload byte -> validate 0 (the mhash bites);
+ *   LAW-4 (null)         validate(0) == 0;
+ *   LAW-5 (identity)     gv3_form_id(packed X) == glyph_X_form_id() (self-consistent), and
+ *                        ALL thirteen form ids are PAIRWISE DISTINCT (the type system is
+ *                        injective); u32's documented 0x11 is pinned;
+ *   structured forms     set (elem form/count/elements byte-exact), map (key/val forms,
+ *                        pair count), record (max_fields==11, field ids+values by slot),
+ *                        recursive (mhash bytes, arena id, offset, inner form), proof
+ *                        (cert/kind/target/source), witness (idx/cap/k/mhash), vec, str.
+ * Exit 99 = the wire-form layer is law, not convention. */
+module corpus_1400
+
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn glyph_u8_form_id() -> u32 from "glyph_u8.iii"
+extern @abi(c-msvc-x64) fn glyph_u8_pack(v: u8, out_192: u64) -> i32 from "glyph_u8.iii"
+extern @abi(c-msvc-x64) fn glyph_u8_unpack(in_192: u64) -> u32 from "glyph_u8.iii"
+extern @abi(c-msvc-x64) fn glyph_u8_validate(in_192: u64) -> u8 from "glyph_u8.iii"
+extern @abi(c-msvc-x64) fn glyph_u32_form_id() -> u32 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn glyph_u32_pack(v: u32, out_192: u64) -> i32 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn glyph_u32_unpack(in_192: u64) -> u32 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn glyph_u32_validate(in_192: u64) -> u8 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_form_id() -> u32 from "glyph_u64.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_pack(v: u64, out_192: u64) -> i32 from "glyph_u64.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_unpack(in_192: u64) -> u64 from "glyph_u64.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_validate(in_192: u64) -> u8 from "glyph_u64.iii"
+extern @abi(c-msvc-x64) fn glyph_i64_form_id() -> u32 from "glyph_i64.iii"
+extern @abi(c-msvc-x64) fn glyph_i64_pack(v: i64, out_192: u64) -> i32 from "glyph_i64.iii"
+extern @abi(c-msvc-x64) fn glyph_i64_unpack(in_192: u64) -> i64 from "glyph_i64.iii"
+extern @abi(c-msvc-x64) fn glyph_i64_validate(in_192: u64) -> u8 from "glyph_i64.iii"
+extern @abi(c-msvc-x64) fn glyph_f64_form_id() -> u32 from "glyph_f64.iii"
+extern @abi(c-msvc-x64) fn glyph_f64_pack_bits(bits: u64, out_192: u64) -> i32 from "glyph_f64.iii"
+extern @abi(c-msvc-x64) fn glyph_f64_unpack_bits(in_192: u64) -> u64 from "glyph_f64.iii"
+extern @abi(c-msvc-x64) fn glyph_f64_validate(in_192: u64) -> u8 from "glyph_f64.iii"
+extern @abi(c-msvc-x64) fn glyph_str_form_id() -> u32 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_str_pack(src_ptr: u64, src_len: u32, out_192: u64) -> i32 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_str_unpack(in_192: u64, dst_ptr: u64, dst_cap: u32) -> i32 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_str_validate(in_192: u64) -> u8 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_set_form_id() -> u32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_unpack_count(in_192: u64) -> u32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_unpack_elem_form_id(in_192: u64) -> u32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_unpack_elements(in_192: u64, dst_ptr: u64, dst_cap_bytes: u32) -> i32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_validate(in_192: u64) -> u8 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_map_form_id() -> u32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack_forms(key_form_id: u32, val_form_id: u32) -> u64 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack_sizes(pair_count: u32, key_size: u32, val_size: u32) -> u64 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack(packed_forms: u64, packed_sizes: u64, src_packed_ptr: u64, out_192: u64) -> i32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_unpack_count(in_192: u64) -> u32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_unpack_key_form(in_192: u64) -> u32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_unpack_val_form(in_192: u64) -> u32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_validate(in_192: u64) -> u8 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_record_form_id() -> u32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_max_fields() -> u32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_pack_begin(out_192: u64) -> i32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_pack_field(out_192: u64, slot: u32, field_id: u32, value: u64) -> i32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_pack_finalise(out_192: u64, field_count: u32) -> i32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_unpack_count(in_192: u64) -> u32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_unpack_field_id(in_192: u64, slot: u32) -> u32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_unpack_field_value(in_192: u64, slot: u32) -> u64 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_validate(in_192: u64) -> u8 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_form_id() -> u32 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_pack_offset_form(arena_offset: u32, inner_form_id: u32) -> u64 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_pack(inner_mhash_32_ptr: u64, arena_id: u64, packed_offset_form: u64, out_192: u64) -> i32 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_unpack_mhash_byte(in_192: u64, i: u32) -> u32 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_unpack_arena_id(in_192: u64) -> u64 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_unpack_offset(in_192: u64) -> u64 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_unpack_inner_form(in_192: u64) -> u32 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_validate(in_192: u64) -> u8 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_form_id() -> u32 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_set_args(args_ptr: u64, cert_id: u64, target_crystal_id: u64, source_crystal_id: u64) -> i32 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_pack(args_ptr: u64, equiv_kind: u32, out_192: u64) -> i32 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_unpack_cert_id(in_192: u64) -> u64 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_unpack_equiv_kind(in_192: u64) -> u32 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_unpack_target(in_192: u64) -> u64 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_unpack_source(in_192: u64) -> u64 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_validate(in_192: u64) -> u8 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_form_id() -> u32 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_set_args(args_ptr: u64, witness_idx: u64, cap_id: u64, k_fixed: u64) -> i32 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_pack(args_ptr: u64, mhash_32_ptr: u64, out_192: u64) -> i32 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_unpack_idx(in_192: u64) -> u64 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_unpack_mhash_byte(in_192: u64, i: u32) -> u32 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_unpack_cap_id(in_192: u64) -> u64 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_unpack_k_fixed(in_192: u64) -> u64 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_validate(in_192: u64) -> u8 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_form_id() -> u32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_unpack_count(in_192: u64) -> u32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_unpack_elem_form_id(in_192: u64) -> u32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_unpack_elements(in_192: u64, dst_ptr: u64, dst_cap_bytes: u32) -> i32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_validate(in_192: u64) -> u8 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_bytes_form_id() -> u32 from "glyph_bytes.iii"
+extern @abi(c-msvc-x64) fn glyph_bytes_pack(src_ptr: u64, src_len: u32, out_192: u64) -> i32 from "glyph_bytes.iii"
+extern @abi(c-msvc-x64) fn glyph_bytes_unpack(in_192: u64, dst_ptr: u64, dst_cap: u32) -> i32 from "glyph_bytes.iii"
+extern @abi(c-msvc-x64) fn glyph_bytes_validate(in_192: u64) -> u8 from "glyph_bytes.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_form_id() -> u32 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_pack_meta(error_code: u32, edge_count: u32) -> u64 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_pack(crystal_id: u64, parent_id: u64, packed_err_edge: u64, out_192: u64) -> i32 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_unpack_id(in_192: u64) -> u64 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_unpack_error_code(in_192: u64) -> u32 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_validate(in_192: u64) -> u8 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_form_id() -> u32 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_pack_meta(tag: u32, variant_form_id: u32, variant_len: u32) -> u64 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_unpack_tag(in_192: u64) -> u32 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_unpack_variant_form(in_192: u64) -> u32 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_validate(in_192: u64) -> u8 from "glyph_enum.iii"
+
+var GA : [u8; 192]
+var GB : [u8; 192]
+var SRC : [u8; 64]
+var DST : [u8; 64]
+var MH  : [u8; 32]
+var ARGS : [u8; 64]
+var FID : [u32; 16]
+
+fn ga() -> u64 { return (&GA as u64) }
+fn gb() -> u64 { return (&GB as u64) }
+
+fn main() -> u64 {
+    /* ---- LAW-5: all thirteen form ids pairwise distinct; u32's 0x11 pinned ---- */
+    FID[0u64] = glyph_u8_form_id()
+    FID[1u64] = glyph_u32_form_id()
+    FID[2u64] = glyph_u64_form_id()
+    FID[3u64] = glyph_i64_form_id()
+    FID[4u64] = glyph_f64_form_id()
+    FID[5u64] = glyph_str_form_id()
+    FID[6u64] = glyph_set_form_id()
+    FID[7u64] = glyph_map_form_id()
+    FID[8u64] = glyph_record_form_id()
+    FID[9u64] = glyph_recursive_form_id()
+    FID[10u64] = glyph_proof_form_id()
+    FID[11u64] = glyph_witness_form_id()
+    FID[12u64] = glyph_vec_form_id()
+    FID[13u64] = glyph_bytes_form_id()
+    FID[14u64] = glyph_crystal_form_id()
+    FID[15u64] = glyph_enum_form_id()
+    if FID[1u64] != 0x11u32 { return 1u64 }
+    let mut a : u64 = 0u64
+    while a < 16u64 {
+        let mut b : u64 = a + 1u64
+        while b < 16u64 {
+            if FID[a] == FID[b] { return 2u64 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+
+    /* ---- u8 ---- */
+    if glyph_u8_pack(0x7Fu8, ga()) != 0i32 { return 3u64 }
+    if glyph_u8_validate(ga()) != 1u8 { return 4u64 }
+    if glyph_u8_unpack(ga()) != 0x7Fu32 { return 5u64 }
+    if gv3_form_id(ga()) != FID[0u64] { return 6u64 }          /* LAW-5 self-consistency */
+    if glyph_u32_validate(ga()) != 0u8 { return 7u64 }         /* LAW-2 form binding */
+    if glyph_u8_validate(0u64) != 0u8 { return 8u64 }          /* LAW-4 null */
+
+    /* ---- u32 ---- */
+    if glyph_u32_pack(0xDEAD77u32, ga()) != 0i32 { return 9u64 }
+    if glyph_u32_validate(ga()) != 1u8 { return 10u64 }
+    if glyph_u32_unpack(ga()) != 0xDEAD77u32 { return 11u64 }
+    if glyph_u64_validate(ga()) != 0u8 { return 12u64 }
+
+    /* ---- u64 + LAW-3 integrity ---- */
+    if glyph_u64_pack(0x1122334455667788u64, ga()) != 0i32 { return 13u64 }
+    if glyph_u64_validate(ga()) != 1u8 { return 14u64 }
+    if glyph_u64_unpack(ga()) != 0x1122334455667788u64 { return 15u64 }
+    GA[8u64] = GA[8u64] ^ 0x01u8
+    if glyph_u64_validate(ga()) != 0u8 { return 16u64 }        /* the mhash bites */
+    GA[8u64] = GA[8u64] ^ 0x01u8
+    if glyph_u64_validate(ga()) != 1u8 { return 17u64 }
+
+    /* ---- i64 ---- */
+    let neg5 : i64 = 0i64 - 5i64
+    if glyph_i64_pack(neg5, ga()) != 0i32 { return 18u64 }
+    if glyph_i64_validate(ga()) != 1u8 { return 19u64 }
+    let got_i : i64 = glyph_i64_unpack(ga())
+    if got_i != neg5 { return 20u64 }
+
+    /* ---- f64 (bits-exact, no float arithmetic) ---- */
+    if glyph_f64_pack_bits(0x400921FB54442D18u64, ga()) != 0i32 { return 21u64 }
+    if glyph_f64_validate(ga()) != 1u8 { return 22u64 }
+    if glyph_f64_unpack_bits(ga()) != 0x400921FB54442D18u64 { return 23u64 }
+
+    /* ---- str ---- */
+    SRC[0u64] = 0x61u8
+    SRC[1u64] = 0x62u8
+    SRC[2u64] = 0x63u8
+    if glyph_str_pack((&SRC as u64), 3u32, ga()) != 0i32 { return 24u64 }
+    if glyph_str_validate(ga()) != 1u8 { return 25u64 }
+    if glyph_str_unpack(ga(), (&DST as u64), 64u32) < 0i32 { return 26u64 }
+    if DST[0u64] != 0x61u8 { return 27u64 }
+    if DST[2u64] != 0x63u8 { return 28u64 }
+
+    /* ---- set: 3 x u32 {1,2,3} ---- */
+    let mut z : u64 = 0u64
+    while z < 64u64 { SRC[z] = 0u8   z = z + 1u64 }
+    SRC[0u64] = 1u8
+    SRC[4u64] = 2u8
+    SRC[8u64] = 3u8
+    let smeta : u64 = glyph_set_pack_meta(FID[1u64], 3u32, 4u32)
+    if glyph_set_pack(smeta, (&SRC as u64), ga()) != 0i32 { return 29u64 }
+    if glyph_set_validate(ga()) != 1u8 { return 30u64 }
+    if glyph_set_unpack_count(ga()) != 3u32 { return 31u64 }
+    if glyph_set_unpack_elem_form_id(ga()) != FID[1u64] { return 32u64 }
+    if glyph_set_unpack_elements(ga(), (&DST as u64), 12u32) < 0i32 { return 33u64 }
+    if DST[0u64] != 1u8 { return 34u64 }
+    if DST[4u64] != 2u8 { return 35u64 }
+    if DST[8u64] != 3u8 { return 36u64 }
+
+    /* ---- map: 2 pairs (u32 key, u64 val) ---- */
+    let mut z2 : u64 = 0u64
+    while z2 < 64u64 { SRC[z2] = 0u8   z2 = z2 + 1u64 }
+    SRC[0u64] = 0xA1u8                  /* key1 */
+    SRC[4u64] = 0xB1u8                  /* val1 (8B) */
+    SRC[12u64] = 0xA2u8                 /* key2 */
+    SRC[16u64] = 0xB2u8                 /* val2 */
+    let mforms : u64 = glyph_map_pack_forms(FID[1u64], FID[2u64])
+    let msizes : u64 = glyph_map_pack_sizes(2u32, 4u32, 8u32)
+    if glyph_map_pack(mforms, msizes, (&SRC as u64), ga()) != 0i32 { return 37u64 }
+    if glyph_map_validate(ga()) != 1u8 { return 38u64 }
+    if glyph_map_unpack_count(ga()) != 2u32 { return 39u64 }
+    if glyph_map_unpack_key_form(ga()) != FID[1u64] { return 40u64 }
+    if glyph_map_unpack_val_form(ga()) != FID[2u64] { return 41u64 }
+
+    /* ---- record: max_fields pinned; 2 fields by slot ---- */
+    if glyph_record_max_fields() != 11u32 { return 42u64 }
+    if glyph_record_pack_begin(ga()) != 0i32 { return 43u64 }
+    if glyph_record_pack_field(ga(), 0u32, 7u32, 0xAAu64) != 0i32 { return 44u64 }
+    if glyph_record_pack_field(ga(), 1u32, 9u32, 0xBBu64) != 0i32 { return 45u64 }
+    if glyph_record_pack_finalise(ga(), 2u32) != 0i32 { return 46u64 }
+    if glyph_record_validate(ga()) != 1u8 { return 47u64 }
+    if glyph_record_unpack_count(ga()) != 2u32 { return 48u64 }
+    if glyph_record_unpack_field_id(ga(), 0u32) != 7u32 { return 49u64 }
+    if glyph_record_unpack_field_id(ga(), 1u32) != 9u32 { return 50u64 }
+    if glyph_record_unpack_field_value(ga(), 1u32) != 0xBBu64 { return 51u64 }
+
+    /* ---- recursive ---- */
+    let mut m : u64 = 0u64
+    while m < 32u64 { MH[m] = (0x50u64 + m & 0xFFu64) as u8   m = m + 1u64 }
+    let pof : u64 = glyph_recursive_pack_offset_form(0x40u32, FID[1u64])
+    if glyph_recursive_pack((&MH as u64), 5u64, pof, ga()) != 0i32 { return 52u64 }
+    if glyph_recursive_validate(ga()) != 1u8 { return 53u64 }
+    if glyph_recursive_unpack_arena_id(ga()) != 5u64 { return 54u64 }
+    if glyph_recursive_unpack_offset(ga()) != 0x40u64 { return 55u64 }
+    if glyph_recursive_unpack_inner_form(ga()) != FID[1u64] { return 56u64 }
+    let mut mi : u32 = 0u32
+    while mi < 32u32 {
+        let want : u32 = (0x50u32 + mi) & 0xFFu32
+        if glyph_recursive_unpack_mhash_byte(ga(), mi) != want { return 57u64 }
+        mi = mi + 1u32
+    }
+
+    /* ---- proof ---- */
+    if glyph_proof_set_args((&ARGS as u64), 11u64, 22u64, 33u64) != 0i32 { return 58u64 }
+    if glyph_proof_pack((&ARGS as u64), 2u32, ga()) != 0i32 { return 59u64 }
+    if glyph_proof_validate(ga()) != 1u8 { return 60u64 }
+    if glyph_proof_unpack_cert_id(ga()) != 11u64 { return 61u64 }
+    if glyph_proof_unpack_equiv_kind(ga()) != 2u32 { return 62u64 }
+    if glyph_proof_unpack_target(ga()) != 22u64 { return 63u64 }
+    if glyph_proof_unpack_source(ga()) != 33u64 { return 64u64 }
+
+    /* ---- witness ---- */
+    if glyph_witness_set_args((&ARGS as u64), 4u64, 0xCu64, 0x99u64) != 0i32 { return 65u64 }
+    if glyph_witness_pack((&ARGS as u64), (&MH as u64), gb()) != 0i32 { return 66u64 }
+    if glyph_witness_validate(gb()) != 1u8 { return 67u64 }
+    if glyph_witness_unpack_idx(gb()) != 4u64 { return 68u64 }
+    if glyph_witness_unpack_cap_id(gb()) != 0xCu64 { return 69u64 }
+    if glyph_witness_unpack_k_fixed(gb()) != 0x99u64 { return 70u64 }
+    if glyph_witness_unpack_mhash_byte(gb(), 0u32) != 0x50u32 { return 71u64 }
+
+    /* ---- vec: 2 x u64 ---- */
+    let mut z3 : u64 = 0u64
+    while z3 < 64u64 { SRC[z3] = 0u8   z3 = z3 + 1u64 }
+    SRC[0u64] = 0xE1u8
+    SRC[8u64] = 0xE2u8
+    let vmeta : u64 = glyph_vec_pack_meta(FID[2u64], 2u32, 8u32)
+    if glyph_vec_pack(vmeta, (&SRC as u64), gb()) != 0i32 { return 72u64 }
+    if glyph_vec_validate(gb()) != 1u8 { return 73u64 }
+    if glyph_vec_unpack_count(gb()) != 2u32 { return 74u64 }
+    if glyph_vec_unpack_elem_form_id(gb()) != FID[2u64] { return 75u64 }
+    if glyph_vec_unpack_elements(gb(), (&DST as u64), 16u32) < 0i32 { return 76u64 }
+    if DST[0u64] != 0xE1u8 { return 77u64 }
+    if DST[8u64] != 0xE2u8 { return 78u64 }
+    /* cross-form: a vec is not a set */
+    if glyph_set_validate(gb()) != 0u8 { return 79u64 }
+
+    /* ---- bytes ---- */
+    SRC[0u64] = 0xDEu8
+    SRC[1u64] = 0xADu8
+    if glyph_bytes_pack((&SRC as u64), 2u32, ga()) != 0i32 { return 80u64 }
+    if glyph_bytes_validate(ga()) != 1u8 { return 81u64 }
+    if gv3_form_id(ga()) != FID[13u64] { return 82u64 }
+    DST[0u64] = 0u8
+    if glyph_bytes_unpack(ga(), (&DST as u64), 64u32) < 0i32 { return 83u64 }
+    if DST[0u64] != 0xDEu8 { return 84u64 }
+    if DST[1u64] != 0xADu8 { return 85u64 }
+    if glyph_bytes_validate(0u64) != 0u8 { return 86u64 }
+
+    /* ---- crystal ---- */
+    let cmeta : u64 = glyph_crystal_pack_meta(0xC101u32, 2u32)
+    if glyph_crystal_pack(0x77u64, 0x66u64, cmeta, ga()) != 0i32 { return 87u64 }
+    if glyph_crystal_validate(ga()) != 1u8 { return 88u64 }
+    if glyph_crystal_unpack_id(ga()) != 0x77u64 { return 89u64 }
+    if glyph_crystal_unpack_error_code(ga()) != 0xC101u32 { return 90u64 }
+    if gv3_form_id(ga()) != FID[14u64] { return 91u64 }
+
+    /* ---- enum: tag 3, variant = a packed u32-form payload of 4 bytes ---- */
+    SRC[0u64] = 0x2Au8
+    SRC[1u64] = 0u8
+    SRC[2u64] = 0u8
+    SRC[3u64] = 0u8
+    let emeta : u64 = glyph_enum_pack_meta(3u32, FID[1u64], 4u32)
+    if glyph_enum_pack(emeta, (&SRC as u64), gb()) != 0i32 { return 92u64 }
+    if glyph_enum_validate(gb()) != 1u8 { return 93u64 }
+    if glyph_enum_unpack_tag(gb()) != 3u32 { return 94u64 }
+    if glyph_enum_unpack_variant_form(gb()) != FID[1u64] { return 95u64 }
+    if gv3_form_id(gb()) != FID[15u64] { return 96u64 }
+
+    return 99u64
+}

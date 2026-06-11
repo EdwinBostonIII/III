@@ -973,6 +973,7 @@ declare -A EXPECTED=(
     [1397_registry_probe_verdict]=99
     [1398_fed_sybil_gate]=99
     [1399_anchor_store_wave]=99
+    [1400_glyph_v3_forms]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

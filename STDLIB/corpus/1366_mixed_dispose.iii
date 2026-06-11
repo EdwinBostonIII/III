@@ -1,0 +1,88 @@
+/* 1366_mixed_dispose.iii -- THE MIXED TIER: propose-by-refutation, dispose-by-UNSAT (wave-4 M14).
+ *
+ * bvd_admit_mixed extends the two-tier disposer architecture into the mixed fragment with two
+ * NEW independent authorities: sixteen seeded differential points through tc_eval (the native
+ * u64 ground truth -- the 1214 oracle formalized as an organ, a SIBLING reader: the trusted
+ * base did not move) refute cheaply with code 2; the bv_bits/CDCL UNSAT proof disposes
+ * sovereignly (1 admit / 0 refuse).  Unevaluable candidates (non-BV tags, /0 at a probe point)
+ * refuse outright -- no SAT time for what the oracle cannot even run.  Arms:
+ *  (1) tc_eval ground truth: closed and open evaluations match native arithmetic; the count
+ *      mask holds (x<<64-as-written evaluates as x<<0... built as lit 64 count); /0 sets ERR;
+ *      a non-BV tag sets ERR;
+ *  (2) the TRUE mixed law (x&y)+(x|y) == x+y ADMITS (code 1) at w=16;
+ *  (3) a BLATANT false law (x&y == x|y) is REFUTED BY A POINT (code 2 -- the cheap tier acted;
+ *      the solver was never consulted);
+ *  (4) an UNEVALUABLE candidate (x/0 on the lhs) REFUSES (code 0) before any tier;
+ *  (5) determinism: the same admit re-runs identically.
+ * Exit 99 = the disposer family now spans polynomial, kernel, and mixed fragments -- each law
+ * admitted by the cheapest authority that can kill it and the strongest that can prove it. */
+module corpus_1366
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval(t: u32, x0: u64, x1: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval_err() -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bvd_admit_mixed(t_l: u32, t_r: u32, bb_l: u32, bb_r: u32) -> u8 from "bv_dispose.iii"
+
+fn main() -> u64 {
+    /* (1) the ground-truth oracle */
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let y : u32 = tc_var(1u32)
+    let l7 : u32 = tc_bvlit_u64(7u64)
+    if tc_eval(tc_bvadd(l7, tc_bvlit_u64(5u64)), 0u64, 0u64) != 12u64 { return 1u64 }
+    if tc_eval_err() != 0u8 { return 2u64 }
+    if tc_eval(tc_bvand(x, y), 0xF0Fu64, 0xFFu64) != 0x0Fu64 { return 3u64 }
+    if tc_eval(tc_bvshl(x, tc_bvlit_u64(64u64)), 5u64, 0u64) != 5u64 { return 4u64 }   /* count mask */
+    tc_eval(tc_bvudiv(x, tc_bvlit_u64(0u64)), 5u64, 0u64)
+    if tc_eval_err() != 1u8 { return 5u64 }                                            /* /0 -> ERR */
+    tc_eval(tc_lam(tc_nat(), x), 1u64, 2u64)
+    if tc_eval_err() != 1u8 { return 6u64 }                                            /* non-BV -> ERR */
+
+    /* (2) the TRUE mixed law admits */
+    let t_l : u32 = tc_bvadd(tc_bvand(x, y), tc_bvor(x, y))
+    let t_r : u32 = tc_bvadd(x, y)
+    bb_reset(16u64)
+    let bx : u32 = bb_var(0u32)
+    let by : u32 = bb_var(1u32)
+    let b_l : u32 = bb_add(bb_and(bx, by), bb_or(bx, by))
+    let b_r : u32 = bb_add(bx, by)
+    if bvd_admit_mixed(t_l, t_r, b_l, b_r) != 1u8 { return 7u64 }
+
+    /* (3) a blatant false law dies at a POINT -- the solver is never consulted */
+    let f_l : u32 = tc_bvand(x, y)
+    let f_r : u32 = tc_bvor(x, y)
+    bb_reset(16u64)
+    let cx : u32 = bb_var(0u32)
+    let cy : u32 = bb_var(1u32)
+    if bvd_admit_mixed(f_l, f_r, bb_and(cx, cy), bb_or(cx, cy)) != 2u8 { return 8u64 }
+
+    /* (4) an unevaluable candidate refuses before any tier */
+    let u_l : u32 = tc_bvudiv(x, tc_bvlit_u64(0u64))
+    bb_reset(16u64)
+    let dx : u32 = bb_var(0u32)
+    if bvd_admit_mixed(u_l, x, dx, dx) != 0u8 { return 9u64 }
+
+    /* (5) determinism */
+    bb_reset(16u64)
+    let ex : u32 = bb_var(0u32)
+    let ey : u32 = bb_var(1u32)
+    let e_l : u32 = bb_add(bb_and(ex, ey), bb_or(ex, ey))
+    let e_r : u32 = bb_add(ex, ey)
+    if bvd_admit_mixed(t_l, t_r, e_l, e_r) != 1u8 { return 10u64 }
+
+    return 99u64
+}

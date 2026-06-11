@@ -196,3 +196,45 @@ fn bvd_register_rule(rule: *u32, lhs_bv: u32, rhs_bv: u32, lhs_tc: u32, rhs_tc: 
     if bvd_admit(lhs_tc, rhs_tc, lhs_bv, rhs_bv) != 1u8 { return BVD_RULE_REFUSED }
     return eg_register_rule(rule)
 }
+
+/* ===== wave-4 M14: THE MIXED TIER -- propose-by-refutation, dispose-by-UNSAT ====================
+ * The two-tier disposer covers the polynomial fragment (bv_ring proposes, the kernel disposes).
+ * Mixed identities (&,|,^ with arithmetic) have no ring phrasing and, beyond the self-laws, no
+ * kernel iota -- but they have TWO independent authorities of their own:
+ *   tier 1 (the cheap refuter): SIXTEEN seeded differential points through tc_eval -- the
+ *           native-u64 ground truth (the 1214 oracle as an organ).  One divergence kills the
+ *           candidate WITHOUT ever invoking the solver: returns 2 (refuted-by-point).
+ *   tier 2 (the sovereign): bv_bits/CDCL refutes 'some bit differs' exhaustively (UNSAT at the
+ *           caller-chosen width).  Admit 1 / refuse 0.
+ * The caller supplies BOTH forms: the kernel terms (the oracle's food) and the bb circuits (the
+ * solver's).  FAIL-CLOSED: an evaluator error (non-BV tag, /0 on a probe point, var > 1) refuses
+ * outright -- a candidate the oracle cannot even evaluate earns no SAT time.  Deterministic
+ * (fixed xorshift seed), observation-free (Mandate 7: fixed probes, exhaustive refutation). */
+extern @abi(c-msvc-x64) fn tc_eval(t: u32, x0: u64, x1: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval_err() -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+fn bvd_admit_mixed(t_l: u32, t_r: u32, bb_l: u32, bb_r: u32) -> u8 @export {
+    /* tier 1: the seeded differential refuter (xorshift64, fixed seed) */
+    let mut st : u64 = 0x9E3779B97F4A7C15u64
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        st = st ^ (st << 13u64)
+        st = st ^ (st >> 7u64)
+        st = st ^ (st << 17u64)
+        let px : u64 = st
+        st = st ^ (st << 13u64)
+        st = st ^ (st >> 7u64)
+        st = st ^ (st << 17u64)
+        let py : u64 = st
+        let vl : u64 = tc_eval(t_l, px, py)
+        if tc_eval_err() == 1u8 { return 0u8 }       /* unevaluable: refuse outright */
+        let vr : u64 = tc_eval(t_r, px, py)
+        if tc_eval_err() == 1u8 { return 0u8 }
+        if vl != vr { return 2u8 }                   /* refuted by a concrete point: no SAT time */
+        i = i + 1u32
+    }
+    /* tier 2: the sovereign UNSAT proof */
+    if bb_equal(bb_l, bb_r) != 1u8 { return 0u8 }
+    return 1u8
+}

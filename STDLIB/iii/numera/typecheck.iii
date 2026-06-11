@@ -2190,6 +2190,51 @@ fn tc_ser_walk(t: u32) -> u64 {
     tc_ser_walk(TC_D[t])
     return 0u64
 }
+/* ===== wave-4 M14: THE CONCRETE EVALUATOR -- the differential oracle as an organ ===============
+ * tc_eval interprets a BV-fragment kernel term at a concrete valuation (vars 0/1 -> x0/x1) with
+ * NATIVE u64 arithmetic -- the ground truth of Z/2^64, the same oracle 1214's randomized
+ * differential gate trusts, now first-class.  A SIBLING reader outside the sealed span (like
+ * tc_serialize): it never touches tc_to_ccl, so the trusted base does not move.  FAIL-CLOSED:
+ * any tag outside the BV fragment, a var index > 1, depth-out, or DIVISION BY ZERO sets
+ * TC_EV_ERR (the evaluator refuses exactly where the kernel is stuck -- /0 has no value here
+ * either).  Shifts use the x86 count mask (&63), matching the kernel's iota and the silicon. */
+var TC_EV_ERR : u8 = 0u8
+fn tc_eval_err() -> u8 @export { return TC_EV_ERR }
+fn tc_eval_walk(t: u32, x0: u64, x1: u64, depth: u32) -> u64 {
+    if TC_EV_ERR == 1u8 { return 0u64 }
+    if depth == 0u32 { TC_EV_ERR = 1u8 ; return 0u64 }
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR {
+        let k : u32 = TC_A[t]
+        if k == 0u32 { return x0 }
+        if k == 1u32 { return x1 }
+        TC_EV_ERR = 1u8
+        return 0u64
+    }
+    if tag == TC_BVLIT { return (TC_A[t] as u64) | ((TC_B[t] as u64) << 32u64) }
+    let va : u64 = tc_eval_walk(TC_A[t], x0, x1, depth - 1u32)
+    let vb : u64 = tc_eval_walk(TC_B[t], x0, x1, depth - 1u32)
+    if TC_EV_ERR == 1u8 { return 0u64 }
+    if tag == TC_BVADD { return va + vb }
+    if tag == TC_BVSUB { return va - vb }
+    if tag == TC_BVMUL { return va * vb }
+    if tag == TC_BVAND { return va & vb }
+    if tag == TC_BVOR  { return va | vb }
+    if tag == TC_BVXOR { return va ^ vb }
+    if tag == TC_BVSHL { return va << (vb & 63u64) }
+    if tag == TC_BVLSHR { return va >> (vb & 63u64) }
+    if tag == TC_BVUDIV {
+        if vb == 0u64 { TC_EV_ERR = 1u8 ; return 0u64 }
+        return va / vb
+    }
+    TC_EV_ERR = 1u8
+    return 0u64
+}
+fn tc_eval(t: u32, x0: u64, x1: u64) -> u64 @export {
+    TC_EV_ERR = 0u8
+    return tc_eval_walk(t, x0, x1, 64u32)
+}
+
 fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 @export {
     TC_SER_OUT = out as u64
     TC_SER_POS = 0u64

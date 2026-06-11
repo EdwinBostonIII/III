@@ -975,6 +975,7 @@ declare -A EXPECTED=(
     [1399_anchor_store_wave]=99
     [1400_glyph_v3_forms]=99
     [1401_field_curve_vault]=99
+    [1402_gov_charter_hexad]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

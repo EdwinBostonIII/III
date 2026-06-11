@@ -1,0 +1,34 @@
+/* 1367_witnessed_dream.iii -- THE WITNESSED DREAM (wave-4 M15).
+ *
+ * daemon_dream_run_full_witnessed makes each discovery session a content-addressed,
+ * provenance-bound fact: after the full-lattice dream, THE LEASH IS TAKEN FIRST (an unleashed
+ * registry witnesses NOTHING -- provenance is only for verified state), then one fragment
+ * publishes -- producer cad('dream'), op cad('dream.certified'), payload = (seed, total, the
+ * four per-tier counts) -- the discovery session replayable from the spine.  Honest codes:
+ * the certified total on success; 0xFFFFFFFE = proven-but-unwitnessed; 0xFFFFFFFF = the leash
+ * failed.  Arms:
+ *  (1) the witnessed dream returns the same total as the unwitnessed run (same seed -- the
+ *      witnessing changed nothing about the discovery);
+ *  (2) the total is at least the deterministic catalogs (84);
+ *  (3) the spine holds the fragment: wh_next_idx advanced past the publish;
+ *  (4) determinism: a second witnessed run returns the identical total.
+ * Exit 99 = the organism's self-discovery sessions are facts, not just effects. */
+module corpus_1367
+
+extern @abi(c-msvc-x64) fn daemon_dream_run_full(seed: u64, n_cycles: u32, budget: u32) -> u32 from "daemon_dream.iii"
+extern @abi(c-msvc-x64) fn daemon_dream_run_full_witnessed(seed: u64, n_cycles: u32, budget: u32) -> u32 from "daemon_dream.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+
+fn main() -> u64 {
+    let plain : u32 = daemon_dream_run_full(0xD1CEu64, 32u32, 1u32)
+    if plain < 84u32 { return 1u64 }
+    let w1 : u32 = daemon_dream_run_full_witnessed(0xD1CEu64, 32u32, 1u32)
+    if w1 != plain { return 2u64 }
+    let idx1 : u64 = wh_next_idx()
+    if idx1 == 0u64 { return 3u64 }                    /* the publish advanced the spine */
+    let w2 : u32 = daemon_dream_run_full_witnessed(0xD1CEu64, 32u32, 1u32)
+    if w2 != w1 { return 4u64 }
+    let idx2 : u64 = wh_next_idx()
+    if idx2 <= idx1 { return 5u64 }                    /* each session is its own fact */
+    return 99u64
+}

@@ -128,3 +128,62 @@ fn daemon_dream_leash_all() -> u8 @export {
     if cga_shift_verify_all() != 1u8 { return 0u8 }
     return 1u8
 }
+
+/* ===== wave-4 M15: THE WITNESSED DREAM -- the discovery session as a provenance-bound fact =====
+ * daemon_dream's contract SURFACES the certified set; the witnessed variant makes each session
+ * a content-addressed fact on the spine: producer cad('dream'), op cad('dream.certified'),
+ * payload = (seed, total, and the four per-tier counts -- Peano, count-mask, mixed, shift) as
+ * LE u64s, out_commit = cad(payload).  The leash is taken FIRST: an unleashed registry (any
+ * sealed law failing re-proof) witnesses NOTHING and returns 0xFFFFFFFF -- provenance is only
+ * for verified state.  An unpublishable fragment returns 0xFFFFFFFE with the dream's results
+ * STANDING (the item-6 honest-unwitnessed convention).  Otherwise returns the certified total. */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(domain: u32, msg: *u8, len: u64, out32: *u8) -> i32 from "cad.iii"
+
+var DW_PROD_TXT : [u8; 5]  = [100u8,114u8,101u8,97u8,109u8]                                          /* "dream" */
+var DW_OP_TXT   : [u8; 15] = [100u8,114u8,101u8,97u8,109u8,46u8,99u8,101u8,114u8,116u8,105u8,102u8,105u8,101u8,100u8] /* "dream.certified" */
+var DW_PROD : [u8; 32]
+var DW_OP   : [u8; 32]
+var DW_IN   : [u8; 32]
+var DW_OUT  : [u8; 32]
+var DW_PAY  : [u8; 48]
+var DW_FID  : [u8; 32]
+var DW_INITED : u8 = 0u8     /* the spine inits ONCE -- re-init would reset the index and orphan prior facts */
+
+fn _dw_pay_u64(off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        DW_PAY[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn daemon_dream_run_full_witnessed(seed: u64, n_cycles: u32, budget: u32) -> u32 @export {
+    let total : u32 = daemon_dream_run_full(seed, n_cycles, budget)
+    /* THE LEASH FIRST: provenance only for verified state */
+    if daemon_dream_leash_all() != 1u8 { return 0xFFFFFFFFu32 }
+    if DW_INITED == 0u8 {
+        wh_init(1u64)
+        DW_INITED = 1u8
+    }
+    cad_oneshot(1u32, (&DW_PROD_TXT as u64) as *u8, 5u64, (&DW_PROD as u64) as *u8)
+    cad_oneshot(1u32, (&DW_OP_TXT as u64) as *u8, 15u64, (&DW_OP as u64) as *u8)
+    _dw_pay_u64(0u64, seed)
+    _dw_pay_u64(8u64, total as u64)
+    _dw_pay_u64(16u64, cga_count() as u64)
+    _dw_pay_u64(24u64, cga_bv_count() as u64)
+    _dw_pay_u64(32u64, cga_mixed_count() as u64)
+    _dw_pay_u64(40u64, cga_shift_count() as u64)
+    cad_oneshot(1u32, (&DW_OP as u64) as *u8, 32u64, (&DW_IN as u64) as *u8)
+    cad_oneshot(1u32, (&DW_PAY as u64) as *u8, 48u64, (&DW_OUT as u64) as *u8)
+    let widx : u64 = wh_publish((&DW_PROD as u64) as *u8, (&DW_OP as u64) as *u8,
+               (&DW_IN as u64) as *u8, (&DW_OUT as u64) as *u8,
+               0u8, 0u8, 0u16,
+               (&DW_PROD as u64) as *u8, 0u32,
+               (&DW_PAY as u64) as *u8, 48u32,
+               (&DW_FID as u64) as *u8)
+    if widx == 0xFFFFFFFFFFFFFFFFu64 { return 0xFFFFFFFEu32 }   /* proven but unwitnessed: honest */
+    return total
+}

@@ -1,0 +1,82 @@
+/* 1408_intent_table.iii -- THE INTENT TABLE + PARENT CHAIN (burn-down tranche 17; 7 orphans).
+ *
+ * Intents are the resolve()-side request records; the census flagged the table bookkeeping,
+ * the two legacy compose-class constructors, the capability accessor, and the parent-chain
+ * pair as referenced nowhere.  Laws:
+ *  (1) TABLE     -- reset zeroes used; each constructor consumes exactly one slot; after a
+ *      reset the SAME slot pointer is re-issued (the call_context discipline);
+ *  (2) PAYLOAD   -- lower_call / lower_ast_node write args into slots 0-2 EXACTLY (and the
+ *      partial-args mask carries exactly bits 0-2); both are compose-class (their expected
+ *      hexads AGREE -- consistency without pinning the constant);
+ *  (3) CAPABILITY-- set_cap -> cap_id round-trips exactly;
+ *  (4) THE CHAIN -- set_parent_intent(child, id(parent)) -> parent_intent_id(child) ==
+ *      id(parent), and a fresh intent's parent is 0 (root);
+ *  (5) VERIFY    -- table pointers verify 1; null/foreign pointers verify 0.
+ * Exit 99. */
+module corpus_1408
+
+extern @abi(c-msvc-x64) fn intent_table_reset() -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_table_used() -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_new_lower_call(ast: u64, node: u64, stack_depth: u32) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_new_lower_ast_node(ast: u64, node: u64, kind: u32) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_arg(intent_ptr: u64, slot: u32) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_args_mask(intent_ptr: u64) -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_expected_hexad_kind(intent_ptr: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_cap(intent_ptr: u64, cap_id: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_cap_id(intent_ptr: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_id(intent_ptr: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_parent_intent(intent_ptr: u64, parent: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_parent_intent_id(intent_ptr: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_verify(intent_ptr: u64) -> u8 from "intent.iii"
+
+var FOREIGN : [u8; 256]
+
+fn main() -> u64 {
+    /* (1) table bookkeeping */
+    if intent_table_reset() != 0i32 { return 1u64 }
+    if intent_table_used() != 0u32 { return 2u64 }
+
+    /* (2) lower_call payload exactness */
+    let p1 : u64 = intent_new_lower_call(0xA57u64, 0x40DEu64, 9u32)
+    if p1 == 0u64 { return 3u64 }
+    if intent_table_used() != 1u32 { return 4u64 }
+    if intent_verify(p1) != 1u8 { return 5u64 }
+    if intent_partial_arg(p1, 0u32) != 0xA57u64 { return 6u64 }
+    if intent_partial_arg(p1, 1u32) != 0x40DEu64 { return 7u64 }
+    if intent_partial_arg(p1, 2u32) != 9u64 { return 8u64 }
+    if intent_partial_args_mask(p1) != 0x7u32 { return 9u64 }            /* exactly bits 0-2 */
+    if intent_partial_arg(p1, 16u32) != 0u64 { return 10u64 }            /* OOB slot -> 0 */
+
+    /* (2) lower_ast_node payload exactness + compose-class agreement */
+    let p2 : u64 = intent_new_lower_ast_node(1u64, 2u64, 3u32)
+    if p2 == 0u64 { return 11u64 }
+    if intent_table_used() != 2u32 { return 12u64 }
+    if intent_partial_arg(p2, 0u32) != 1u64 { return 13u64 }
+    if intent_partial_arg(p2, 1u32) != 2u64 { return 14u64 }
+    if intent_partial_arg(p2, 2u32) != 3u64 { return 15u64 }
+    if intent_expected_hexad_kind(p1) != intent_expected_hexad_kind(p2) { return 16u64 }
+
+    /* (3) capability round trip */
+    if intent_set_cap(p1, 0xCABu64) != 0i32 { return 20u64 }
+    if intent_cap_id(p1) != 0xCABu64 { return 21u64 }
+
+    /* (4) THE CHAIN: child -> parent by intent id; fresh intents are roots */
+    if intent_parent_intent_id(p2) != 0u64 { return 30u64 }             /* root */
+    let pid : u64 = intent_id(p1)
+    if pid == 0u64 { return 31u64 }
+    if intent_set_parent_intent(p2, pid) != 0i32 { return 32u64 }
+    if intent_parent_intent_id(p2) != pid { return 33u64 }
+
+    /* (5) verify: foreign pointers refuse */
+    if intent_verify((&FOREIGN as u64)) != 0u8 { return 40u64 }
+    if intent_verify(0u64) != 0u8 { return 41u64 }
+
+    /* (1) reset re-issues the same slot */
+    if intent_table_reset() != 0i32 { return 50u64 }
+    if intent_table_used() != 0u32 { return 51u64 }
+    let p3 : u64 = intent_new_lower_call(5u64, 6u64, 7u32)
+    if p3 != p1 { return 52u64 }                                         /* slot 0 reused */
+    if intent_table_used() != 1u32 { return 53u64 }
+
+    return 99u64
+}

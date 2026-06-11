@@ -32,6 +32,10 @@ extern @abi(c-msvc-x64) fn tc_bvand(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvor(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvxor(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlshr(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvudiv(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval(t: u32, x0: u64, x1: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval_err() -> u8 from "typecheck.iii"
 
 /* --- the INDEPENDENT sound oracle: numera/bv_ring (polynomial decider over Z/2^64) --- */
 extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
@@ -60,11 +64,22 @@ fn rng_next() -> u64 {
 /* build an all-literal TC BV tree of the given depth, consuming the rng stream. */
 fn gen_tc_lit(depth: u32) -> u32 {
     if depth == 0u32 { return tc_bvlit_u64(rng_next()) }
-    let op : u64 = rng_next() % 7u64
+    let op : u64 = rng_next() % 9u64
     let l : u32 = gen_tc_lit(depth - 1u32)
     if op == 6u64 {
         let k : u64 = rng_next() & 63u64
         return tc_bvshl(l, tc_bvlit_u64(k))
+    }
+    /* wave-4 M18 (the M17 closure): the differential covers the FULL BV op set -- the
+     * comparator hole survived because lshr/udiv were absent here.  udiv divisors are forced
+     * ODD (|1): never zero, never the pow2 strength path (1363 pins that directly). */
+    if op == 7u64 {
+        let k2 : u64 = rng_next() & 63u64
+        return tc_bvlshr(l, tc_bvlit_u64(k2))
+    }
+    if op == 8u64 {
+        let d : u64 = rng_next() | 1u64
+        return tc_bvudiv(l, tc_bvlit_u64(d))
     }
     let r : u32 = gen_tc_lit(depth - 1u32)
     if op == 0u64 { return tc_bvadd(l, r) }
@@ -77,11 +92,19 @@ fn gen_tc_lit(depth: u32) -> u32 {
 /* evaluate the SAME tree natively (same rng stream after the same reseed). */
 fn eval_lit(depth: u32) -> u64 {
     if depth == 0u32 { return rng_next() }
-    let op : u64 = rng_next() % 7u64
+    let op : u64 = rng_next() % 9u64
     let l : u64 = eval_lit(depth - 1u32)
     if op == 6u64 {
         let k : u64 = rng_next() & 63u64
         return l << k                      /* native u64 shift, k in [0,63] = l*2^k mod 2^64 */
+    }
+    if op == 7u64 {
+        let k2 : u64 = rng_next() & 63u64
+        return l >> k2                     /* native logical right shift: the lshr ground truth */
+    }
+    if op == 8u64 {
+        let d : u64 = rng_next() | 1u64
+        return l / d                       /* native unsigned division, divisor odd (never 0) */
     }
     let r : u64 = eval_lit(depth - 1u32)
     if op == 0u64 { return l + r }          /* all native u64 = Z/2^64 ground truth */
@@ -188,6 +211,109 @@ fn bv_kernel_differential() -> u64 @export {
     return 99u64
 }
 
+/* ===== (C) SYMBOLIC STUCK-FORM DISCRIMINATION (M18 -- the true M17 closure) ====================
+ * Arms (A)/(B) cannot catch a COMPARATOR hole: closed trees fold completely (no stuck form ever
+ * reaches the equality), and (B)'s fragment excludes lshr/udiv.  Arm (C) attacks the comparator
+ * itself: random OPEN trees over {x, lit} with the full op set leave STUCK shr/udiv normal forms,
+ * and the law is WHATEVER CONCRETE EVALUATION SEPARATES, CONVERSION MUST REFUSE TO EQUATE --
+ * tc_eval (the M14 oracle) probes eight seeded points; one separation obligates conv == 0.
+ * Against the pre-M17 kernel (the equal-tag fallthrough) this arm REDDENS: x>>2-shaped and
+ * x>>3-shaped stuck forms evaluate apart yet compared conv-EQUAL. */
+fn gen_tc_open(depth: u32) -> u32 {
+    if depth == 0u32 {
+        let r : u64 = rng_next() % 2u64
+        if r == 0u64 { return tc_var(0u32) }
+        return tc_bvlit_u64(rng_next())
+    }
+    let op : u64 = rng_next() % 9u64
+    let l : u32 = gen_tc_open(depth - 1u32)
+    if op == 6u64 { return tc_bvshl(l, tc_bvlit_u64(rng_next() & 63u64)) }
+    if op == 7u64 { return tc_bvlshr(l, tc_bvlit_u64(rng_next() & 63u64)) }
+    if op == 8u64 { return tc_bvudiv(l, tc_bvlit_u64(rng_next() | 1u64)) }
+    let r2 : u32 = gen_tc_open(depth - 1u32)
+    if op == 0u64 { return tc_bvadd(l, r2) }
+    if op == 1u64 { return tc_bvsub(l, r2) }
+    if op == 2u64 { return tc_bvmul(l, r2) }
+    if op == 3u64 { return tc_bvand(l, r2) }
+    if op == 4u64 { return tc_bvor(l, r2) }
+    return tc_bvxor(l, r2)
+}
+
+/* the stream-twin mutant: re-run the SAME rng stream, perturbing exactly one draw.  Parallel
+ * structure guarantees the compare-walk reaches same-tag node pairs -- the only geometry where
+ * the equal-tag fallthrough could fire -- while the perturbed draw (often an lshr count or udiv
+ * divisor) makes the twins evaluate apart. */
+var MUT_AT : u64 = 0xFFFFFFFFFFFFFFFFu64
+var MUT_CTR : u64 = 0u64
+fn rng_next_mut() -> u64 {
+    let v : u64 = rng_next()
+    let c : u64 = MUT_CTR
+    MUT_CTR = MUT_CTR + 1u64
+    if c == MUT_AT { return v ^ 0x5A5Au64 }
+    return v
+}
+fn gen_tc_twin(depth: u32) -> u32 {
+    if depth == 0u32 {
+        let r : u64 = rng_next_mut() % 2u64
+        if r == 0u64 { return tc_var(0u32) }
+        return tc_bvlit_u64(rng_next_mut())
+    }
+    let op : u64 = rng_next_mut() % 9u64
+    let l : u32 = gen_tc_twin(depth - 1u32)
+    if op == 6u64 { return tc_bvshl(l, tc_bvlit_u64(rng_next_mut() & 63u64)) }
+    if op == 7u64 { return tc_bvlshr(l, tc_bvlit_u64(rng_next_mut() & 63u64)) }
+    if op == 8u64 { return tc_bvudiv(l, tc_bvlit_u64(rng_next_mut() | 1u64)) }
+    let r2 : u32 = gen_tc_twin(depth - 1u32)
+    if op == 0u64 { return tc_bvadd(l, r2) }
+    if op == 1u64 { return tc_bvsub(l, r2) }
+    if op == 2u64 { return tc_bvmul(l, r2) }
+    if op == 3u64 { return tc_bvand(l, r2) }
+    if op == 4u64 { return tc_bvor(l, r2) }
+    return tc_bvxor(l, r2)
+}
+
+fn arm_c() -> u64 {
+    let mut pair : u32 = 0u32
+    while pair < 200u32 {
+        tc_reset()
+        /* twin generation: identical stream; the second pass perturbs draw (pair % 11) */
+        let seed_save : u64 = RNG[0u64]
+        MUT_AT = 0xFFFFFFFFFFFFFFFFu64
+        MUT_CTR = 0u64
+        let t1 : u32 = gen_tc_twin(3u32)
+        RNG[0u64] = seed_save
+        MUT_AT = (pair as u64) % 11u64
+        MUT_CTR = 0u64
+        let t2 : u32 = gen_tc_twin(3u32)
+        MUT_AT = 0xFFFFFFFFFFFFFFFFu64
+        rng_next()                              /* advance the stream so pairs differ */
+        /* reflexivity sanity on stuck forms */
+        if tc_conv(t1, t1) != 1u8 { return 3000u64 + (pair as u64) }
+        /* eight probe points: one separation obligates refusal */
+        let mut sep : u32 = 0u32
+        let mut pt : u32 = 0u32
+        while pt < 8u32 {
+            let px : u64 = rng_next()
+            let v1 : u64 = tc_eval(t1, px, 0u64)
+            let e1 : u8 = tc_eval_err()
+            let v2 : u64 = tc_eval(t2, px, 0u64)
+            let e2 : u8 = tc_eval_err()
+            if e1 == 0u8 { if e2 == 0u8 { if v1 != v2 { sep = 1u32 } } }
+            pt = pt + 1u32
+        }
+        if sep == 1u32 {
+            if tc_conv(t1, t2) != 0u8 { return 4000u64 + (pair as u64) }
+        }
+        pair = pair + 1u32
+    }
+    return 99u64
+}
+
 fn main() -> u64 {
-    return bv_kernel_differential()
+    let r : u64 = bv_kernel_differential()
+    if r != 99u64 { return r }
+    /* ===== (C) symbolic stuck-form discrimination (M18) ===== */
+    let rc_c : u64 = arm_c()
+    if rc_c != 99u64 { return rc_c }
+    return 99u64
 }

@@ -1,0 +1,96 @@
+/* 1418_fx_http_request.iii -- FIXED-POINT FAMILY LAWS + HTTP REQUEST HEADER SPANS
+ * (burn-down tranche 27; ~13 census orphans).
+ *
+ *  FX (8): the fx16/fx24/fx48 fixed-point family proven by INTEGER-EXACT laws through
+ *      from_int/to_int (no shift constants pinned): sub is add's inverse, mul/div are
+ *      exact on whole numbers (3*4==12, 12/4==3), each width independently;
+ *  HTTP REQUEST (5): parsing "GET / HTTP/1.1\r\nA: b\r\n\r\n" yields header 0 with
+ *      name span "A" (len 1) and value span "b" (len 1) at the EXACT source offsets;
+ *      an OOB header index reads 0-sentinels; http_request_drop frees the slot (the
+ *      accessors die) and a second drop refuses.
+ * Exit 99. */
+module corpus_1418
+
+extern @abi(c-msvc-x64) fn fx16_from_int(i: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_to_int(x: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_add(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_sub(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_from_int(i: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_to_int(x: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_add(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_sub(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_mul(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_div(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_from_int(i: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_to_int(x: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_add(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_sub(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_div(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_request(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_header_count(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_header_name_base(id: u64, hdr_idx: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_header_name_len(id: u64, hdr_idx: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_header_value_base(id: u64, hdr_idx: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_header_value_len(id: u64, hdr_idx: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_drop(id: u64) -> i32 from "http_server.iii"
+
+var REQ : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- FX: integer-exact arithmetic laws per width ---- */
+    /* fx16 */
+    let a16 : u64 = fx16_from_int(5u64)
+    let b16 : u64 = fx16_from_int(3u64)
+    if fx16_to_int(fx16_sub(a16, b16)) != 2u64 { return 1u64 }
+    if fx16_to_int(fx16_sub(fx16_add(a16, b16), b16)) != 5u64 { return 2u64 }   /* (a+b)-b == a */
+    /* fx24 */
+    let a24 : u64 = fx24_from_int(3u64)
+    let b24 : u64 = fx24_from_int(4u64)
+    if fx24_to_int(fx24_add(a24, b24)) != 7u64 { return 3u64 }
+    if fx24_to_int(fx24_sub(b24, a24)) != 1u64 { return 4u64 }
+    if fx24_to_int(fx24_mul(a24, b24)) != 12u64 { return 5u64 }
+    if fx24_to_int(fx24_div(fx24_from_int(12u64), b24)) != 3u64 { return 6u64 }
+    if fx24_to_int(fx24_div(fx24_mul(a24, b24), b24)) != 3u64 { return 7u64 }   /* (a*b)/b == a */
+    /* fx48 */
+    let a48 : u64 = fx48_from_int(1u64)
+    let b48 : u64 = fx48_from_int(2u64)
+    if fx48_to_int(fx48_add(a48, b48)) != 3u64 { return 8u64 }
+    if fx48_to_int(fx48_sub(fx48_add(a48, b48), b48)) != 1u64 { return 9u64 }
+    if fx48_to_int(fx48_div(fx48_from_int(10u64), b48)) != 5u64 { return 10u64 }
+
+    /* ---- HTTP REQUEST: exact header spans + drop lifecycle ---- */
+    /* "GET / HTTP/1.1\r\nA: b\r\n\r\n" = 24 bytes */
+    REQ[0u64] = 0x47u8    REQ[1u64] = 0x45u8    REQ[2u64] = 0x54u8    REQ[3u64] = 0x20u8
+    REQ[4u64] = 0x2Fu8    REQ[5u64] = 0x20u8    REQ[6u64] = 0x48u8    REQ[7u64] = 0x54u8
+    REQ[8u64] = 0x54u8    REQ[9u64] = 0x50u8    REQ[10u64] = 0x2Fu8   REQ[11u64] = 0x31u8
+    REQ[12u64] = 0x2Eu8   REQ[13u64] = 0x31u8   REQ[14u64] = 0x0Du8   REQ[15u64] = 0x0Au8
+    REQ[16u64] = 0x41u8   REQ[17u64] = 0x3Au8   REQ[18u64] = 0x20u8   REQ[19u64] = 0x62u8
+    REQ[20u64] = 0x0Du8   REQ[21u64] = 0x0Au8   REQ[22u64] = 0x0Du8   REQ[23u64] = 0x0Au8
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 20u64 }
+    let req : u64 = http_parse_request(ar, (&REQ as u64), 24u64)
+    if req == 0u64 { return 21u64 }
+    if http_request_header_count(req) != 1u64 { return 22u64 }
+    if http_request_header_name_len(req, 0u64) != 1u64 { return 23u64 }
+    let nb : u64 = http_request_header_name_base(req, 0u64)
+    if nb != (&REQ as u64) + 16u64 { return 24u64 }                  /* 'A' at byte 16 */
+    let np : *u8 = nb as *u8
+    if np[0u64] != 0x41u8 { return 25u64 }
+    if http_request_header_value_len(req, 0u64) != 1u64 { return 26u64 }
+    let vb : u64 = http_request_header_value_base(req, 0u64)
+    if vb != (&REQ as u64) + 19u64 { return 27u64 }                  /* 'b' at byte 19 */
+    let vp : *u8 = vb as *u8
+    if vp[0u64] != 0x62u8 { return 28u64 }
+    /* OOB header index -> 0-sentinels */
+    if http_request_header_name_base(req, 9u64) != 0u64 { return 29u64 }
+    if http_request_header_name_len(req, 9u64) != 0u64 { return 30u64 }
+    if http_request_header_value_base(req, 9u64) != 0u64 { return 31u64 }
+    if http_request_header_value_len(req, 9u64) != 0u64 { return 32u64 }
+    /* drop lifecycle */
+    if http_request_drop(req) != 0i32 { return 33u64 }
+    if http_request_header_count(req) != 0u64 { return 34u64 }      /* dead -> 0 */
+    if http_request_drop(req) == 0i32 { return 35u64 }              /* second drop refuses */
+
+    return 99u64
+}

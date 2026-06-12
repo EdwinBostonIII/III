@@ -1,0 +1,115 @@
+/* 1461_gate_outcomes_joinability.iii -- GATE BURN-DOWN v2.1: THE CRITICAL-PAIR
+ * JOINABILITY CHECKERS, THE EMPIRICAL CONFLUENCE GATE (3 gates).
+ *
+ * SCAN-THEN-ASSERT: the live XII rule set evolves, so instead of hardcoding slot
+ * literals this test first SCANS the enumerated critical-pair table for a witness of
+ * each verdict, then pins the verdict with a DIRECT comparison on a fresh call -- the
+ * assertions stay honest (each re-runs the gate) and the test survives rule growth.
+ *
+ *  xjn_check_root -- root-overlap joinability: an enumerated root pair JOINS (1,
+ *      route-S left every root critical pair convergent); a CROSS-MATCHED pair (rule i
+ *      from one overlap, rule j from another, no shared redex) yields NO WITNESS (2) --
+ *      the gate refuses to certify a join it cannot witness;
+ *  xjn_check_subterm -- inner/outer-redex joinability: a joining subterm pair is
+ *      certified (1); one of the documented lift-family residuals diverges (0,
+ *      XJN_NONJOIN) -- the honest non-join record the confluence certificate
+ *      discharges (813's selftest pins the residual count);
+ *  xii_antidrift_check_confluence_empirical -- the randomized two-path drift sentinel:
+ *      the live algebra converges on every sample (0, XAD_OK); the divergence verdict
+ *      (4, XAD_E_CONFLUENCE) is pinned NEVER to fire on a correct algebra -- an
+ *      always-4 stub or inverted polarity is caught by either arm.
+ * Exit 99. */
+module corpus_1461
+
+extern @abi(c-msvc-x64) fn xjn_check_root(slot_i: u32, slot_j: u32) -> u8 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_check_subterm(slot_i: u32, slot_j: u32, pos: u32) -> u8 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn cpe_enumerate() -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_kind_at(idx: u32) -> u64 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_si_at(idx: u32) -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_sj_at(idx: u32) -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_pos_at(idx: u32) -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn xii_antidrift_check_confluence_empirical(n_samples: u32, seed: u32) -> u32 from "xii_antidrift.iii"
+
+fn main() -> u64 {
+    let n : u32 = cpe_enumerate()
+    if n == 0u32 { return 1u64 }
+
+    /* ---- scan: a joining root pair ---- */
+    let mut rj_si : u32 = 0u32
+    let mut rj_sj : u32 = 0u32
+    let mut rj_found : u8 = 0u8
+    let mut k : u32 = 0u32
+    while k < n {
+        if rj_found == 0u8 {
+            if cpe_kind_at(k) == 0u64 {
+                let vr : u8 = xjn_check_root(cpe_si_at(k), cpe_sj_at(k))
+                if vr == 1u8 {
+                    rj_si = cpe_si_at(k)
+                    rj_sj = cpe_sj_at(k)
+                    rj_found = 1u8
+                }
+            }
+        }
+        k = k + 1u32
+    }
+    if rj_found != 1u8 { return 2u64 }
+
+    /* ---- scan: a cross-matched root pair with no shared redex (NO WITNESS) ---- */
+    let mut rw_si : u32 = 0u32
+    let mut rw_sj : u32 = 0u32
+    let mut rw_found : u8 = 0u8
+    let mut a : u32 = 0u32
+    while a < n {
+        if rw_found == 0u8 {
+            if cpe_kind_at(a) == 0u64 {
+                let mut b : u32 = 0u32
+                while b < n {
+                    if rw_found == 0u8 {
+                        if cpe_kind_at(b) == 0u64 {
+                            if a != b {
+                                let vw : u8 = xjn_check_root(cpe_si_at(a), cpe_sj_at(b))
+                                if vw == 2u8 {
+                                    rw_si = cpe_si_at(a)
+                                    rw_sj = cpe_sj_at(b)
+                                    rw_found = 1u8
+                                }
+                            }
+                        }
+                    }
+                    b = b + 1u32
+                }
+            }
+        }
+        a = a + 1u32
+    }
+    if rw_found != 1u8 { return 3u64 }
+
+    /* ---- scan: a joining subterm pair and a diverging (non-join) subterm pair ---- */
+    let mut sj_idx : u32 = 0u32
+    let mut sj_found : u8 = 0u8
+    let mut sn_idx : u32 = 0u32
+    let mut sn_found : u8 = 0u8
+    k = 0u32
+    while k < n {
+        if cpe_kind_at(k) != 0u64 {
+            let vs : u8 = xjn_check_subterm(cpe_si_at(k), cpe_sj_at(k), cpe_pos_at(k))
+            if vs == 1u8 { if sj_found == 0u8 { sj_idx = k   sj_found = 1u8 } }
+            if vs == 0u8 { if sn_found == 0u8 { sn_idx = k   sn_found = 1u8 } }
+        }
+        k = k + 1u32
+    }
+    if sj_found != 1u8 { return 4u64 }
+    if sn_found != 1u8 { return 5u64 }
+
+    /* ---- the DIRECT pins: each verdict re-proven on a fresh call ---- */
+    if xjn_check_root(rj_si, rj_sj) != 1u8 { return 6u64 }                  /* JOIN */
+    if xjn_check_root(rw_si, rw_sj) != 2u8 { return 7u64 }                  /* NO WITNESS */
+    if xjn_check_subterm(cpe_si_at(sj_idx), cpe_sj_at(sj_idx), cpe_pos_at(sj_idx)) != 1u8 { return 8u64 }
+    if xjn_check_subterm(cpe_si_at(sn_idx), cpe_sj_at(sn_idx), cpe_pos_at(sn_idx)) != 0u8 { return 9u64 }
+
+    /* ---- the empirical confluence sentinel: converges, and NEVER claims divergence ---- */
+    if xii_antidrift_check_confluence_empirical(8u32, 0xDEADBEEFu32) != 0u32 { return 10u64 }
+    if xii_antidrift_check_confluence_empirical(16u32, 0x5EED1234u32) == 4u32 { return 11u64 }
+
+    return 99u64
+}

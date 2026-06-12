@@ -1,0 +1,65 @@
+/* 1457_gate_outcomes_aether_guards.iii -- GATE BURN-DOWN v2.1: THE PREDICTIVE
+ * QUIESCENCE TRIGGER, THE ECLIPSE ANOMALY DETECTOR, THE FIRMWARE WRITE QUARANTINE
+ * (3 gates).
+ *
+ *  ca_check_quiescence -- the predictive-quiescence witness gate: a rising anomaly ramp
+ *      (metric mu+k over baseline (100, 1.0q16), scores k^2) projects past threshold 1
+ *      and triggers the witness (1); a flat all-zero window predicts 0 < 1 and does NOT
+ *      trigger (0) -- mirror of the module's own KAT-2/KAT-3, driven from the corpus;
+ *  fed_eclipse_anomaly_check -- the federation fingerprint-divergence sentinel:
+ *      maximally-divergent fingerprints (0xAA vs 0x55, 256 differing bits) exceed the
+ *      200-bit overlap budget (1, anomaly); identical fingerprints (0 bits) do not (0);
+ *  fquar_check_write -- the anti-bricking firmware quarantine: a write into ordinary
+ *      RAM does not intersect the forbidden sheaf (1, safe); a write into the firmware
+ *      ROM window 0xFFFFFFFFFF000000.. is refused (0) -- fail-closed both ways.
+ * Exit 99. */
+module corpus_1457
+
+extern @abi(c-msvc-x64) fn ca_init() -> i32 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn ca_set_baseline(metric: u32, mu: u64, sigma: u64) -> i32 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn ca_set_metric(metric: u32, value: u64) -> i32 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn ca_record_sample() -> u64 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn ca_check_quiescence(threshold: u64, horizon: u32) -> u8 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_anomaly_check(local_fingerprint_ptr: u64, peer_fingerprint_ptr: u64, expected_overlap_bits: u32) -> u8 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fquar_check_write(addr: u64, len: u64) -> u8 from "firmware_quarantine.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+
+var FP_L : [u8; 32]
+var FP_P : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- ca_check_quiescence: flat window does not trigger ---- */
+    ca_init()
+    let mut i : u32 = 0u32
+    while i < 64u32 { ca_record_sample()   i = i + 1u32 }       /* every score 0 */
+    wh_init(0u64)
+    if ca_check_quiescence(1u64, 4u32) != 0u8 { return 1u64 }   /* prediction 0 < 1: no trigger */
+
+    /* ---- ca_check_quiescence: rising ramp triggers and publishes the witness ---- */
+    ca_init()
+    ca_set_baseline(0u32, 100u64, 65536u64)                     /* mu=100, sigma=1.0 (Q16.16) */
+    let mut k : u32 = 0u32
+    while k < 64u32 {
+        ca_set_metric(0u32, (100u32 + k) as u64)                /* deviation k -> score k^2 */
+        ca_record_sample()
+        k = k + 1u32
+    }
+    if ca_check_quiescence(1u64, 4u32) != 1u8 { return 2u64 }   /* rising projection >= 1: trigger */
+
+    /* ---- fed_eclipse_anomaly_check: divergent vs identical fingerprints ---- */
+    let mut b : u64 = 0u64
+    while b < 32u64 { FP_L[b] = 0xAAu8   FP_P[b] = 0x55u8   b = b + 1u64 }
+    if fed_eclipse_anomaly_check((&FP_L as u64), (&FP_P as u64), 200u32) != 1u8 { return 3u64 }
+    b = 0u64
+    while b < 32u64 { FP_P[b] = 0xAAu8   b = b + 1u64 }
+    if fed_eclipse_anomaly_check((&FP_L as u64), (&FP_P as u64), 200u32) != 0u8 { return 4u64 }
+
+    /* ---- fquar_check_write: ordinary RAM safe, firmware ROM refused ---- */
+    wh_init(0u64)
+    cap_env_init()
+    if fquar_check_write(0x100000u64, 0x1000u64) != 1u8 { return 5u64 }            /* RAM: safe */
+    if fquar_check_write(0xFFFFFFFFFF000000u64, 1u64) != 0u8 { return 6u64 }       /* ROM: refused */
+
+    return 99u64
+}

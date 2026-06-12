@@ -294,3 +294,48 @@ matches -> 27 genuine verdict gates.  Producers (sign/seal/ratify -- they emit a
 accept-when-reject failure mode) stay EXCLUDED; only judgment-verb verdict gates are held to the
 both-ways rule.  Establishment: pin raised 0 -> 27 (justified: broadened scope = more gates in
 scope), build 578/0 (lib e25f2514), corpus 1038/0, both falsifiers (1391, 1427) still green.
+
+## Criterion v2.1 burn-down COMPLETE — verdict-family census 27 → 0 (2026-06-12)
+
+Tranches v2.1-1..3 (`1451`-`1453`, pin 27 -> **20**): k0_drift_check (the K_0 anchor
+immutability sentinel: true fingerprint 1, perturbed golden 0), tc_check (the CIC kernel
+type checker: refl against the reflexive goal 1, against zero=?succ-zero 0),
+bisim_prove_equiv (mul-vs-shift of the same value proven equivalent 1; a genuinely
+different pair 0), xii_antidrift_check_manifest + xii_antidrift_check_anchor_sig (the
+membrane sub-checks, including THE exact gate that was inverted, both driven over a real
+keypair manifest: valid 0, tampered/forged their error codes), tv_check (faithful
+translation kinds validate, the diverging kind caught), lbp_one_check (affine loop bound:
+fitting family safe 1, overflowing family caught 0).
+
+Tranches v2.1-4..9 (`1454`-`1459` + `1460`-`1461`, pin 20 -> **0**) — the remaining 20
+verdict gates, every recipe derived from a read-only 16-agent module fan-out then
+implemented + KAT-run in-session:
+- `1460` (proof vertical): prf_check_step (genuine LCF step 1, forged premise 0),
+  tcom_merkle_prove (3-leaf registry, leaf 0 -> 2-step path; absent idx -> -2),
+  unify_occurs_check (X in 42 safe 0; X in f(X) violation 1), cat_check_assoc
+  (composable chain holds 1; ed:E->D after g:B->C refused 0).
+- `1461` (joinability): xjn_check_root / xjn_check_subterm via SCAN-THEN-ASSERT (the
+  live cpe table is scanned for a witness of each verdict, then the verdict is pinned
+  with a direct fresh-call comparison -- survives rule-set growth): root JOIN 1 +
+  cross-matched NO-WITNESS 2; subterm JOIN 1 + a documented lift-family NONJOIN 0;
+  xii_antidrift_check_confluence_empirical (converges 0; the divergence verdict 4
+  pinned NEVER to fire on the live algebra -- an always-4 stub or inversion caught).
+- `1456` (governance/intent): governance_prove_equivalence (+_with_count) (sandboxed
+  proposal mints a nonzero cert + PROVEN; unknown id refused 0), intent_prove (fresh
+  table mints; 1024-capacity table refuses), mandate_check_m14_via_match (both arms).
+- `1457` (aether guards): ca_check_quiescence (rising k^2 ramp projects past threshold
+  -> 1; flat window 0 -- the module's KAT-2/3 driven from the corpus),
+  fed_eclipse_anomaly_check (256 differing bits > 200 anomaly 1; identical 0),
+  fquar_check_write (RAM safe 1; firmware ROM window refused 0).
+- `1458` (LDIL/pareto): ldil_typecheck_function (well-formed 1; unterminated entry
+  block 0), ldil_refine_check_function (const-anchored refinement 1; refined orphan 0),
+  hdl_opt_pareto_check (2<3 dominates 1; 3==3 refused 0).
+- `1454`/`1455` (concurrent-session pair, landed mid-burn via sync; verified green and
+  kept): mandate_check_m14_via_match + ldil gates; sov_census_certify (classes 0/8
+  certified 1, out-of-range refused 0) + fed_eclipse_anomaly_check (incl. null-pointer
+  refusal) + hdl_opt_pareto_check.
+
+**THE v2.1 BURN-DOWN IS COMPLETE.** Census: 0 v1-uncovered / 0 v2-under-proven across
+all six families (verify/admit/attest/launch/validate/authorize + check/certify/prove);
+pin lowered 20 -> **0** (the absolute floor).  Every judgment-verb verdict gate that
+takes input has been SEEN deciding both ways at a DIRECT corpus comparison.

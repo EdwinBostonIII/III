@@ -1,0 +1,41 @@
+/* 1455_gate_outcomes_census_eclipse_pareto.iii -- GATE BURN-DOWN v2.1 TRANCHE 5: THE
+ * STRENGTH-CENSUS CERTIFIER, THE ECLIPSE ANOMALY CHECK, THE HDL PARETO CHECK (3 gates; 17 -> 14).
+ *
+ *  sov_census_certify -- kernel-certifies each member of the optimization strength tower:
+ *      a valid census class (0..8) tc_checks to 1; an out-of-range class is refused (0);
+ *  fed_eclipse_anomaly_check -- popcount(local XOR peer) vs the expected-overlap threshold:
+ *      two divergent fingerprints over the threshold flag an anomaly (1); two identical
+ *      fingerprints under it do not (0); a null pointer refuses (0);
+ *  hdl_opt_pareto_check -- the Pareto dominance verdict: an optimized netlist with fewer
+ *      live gates DOMINATES the original (1); a worse one does not (0).
+ * Exit 99. */
+module corpus_1455
+
+extern @abi(c-msvc-x64) fn sov_census_certify(c: u32) -> u8 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_anomaly_check(local_fingerprint_ptr: u64, peer_fingerprint_ptr: u64, expected_overlap_bits: u32) -> u8 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn hdl_opt_pareto_check(opt_live: u64, orig_live: u64) -> u8 from "hdl_optimize.iii"
+
+var FPA : [u8; 32]
+var FPB : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- sov_census_certify: the certified strength tower ---- */
+    if sov_census_certify(0u32) != 1u8 { return 1u64 }            /* a certified class */
+    if sov_census_certify(8u32) != 1u8 { return 2u64 }            /* the last certified class */
+    if sov_census_certify(99u32) != 0u8 { return 3u64 }           /* out of range: refused */
+
+    /* ---- fed_eclipse_anomaly_check: XOR-popcount vs threshold ---- */
+    let mut i : u64 = 0u64
+    while i < 32u64 { FPA[i] = (0x55u64 + i & 0xFFu64) as u8   FPB[i] = FPA[i]   i = i + 1u64 }
+    if fed_eclipse_anomaly_check((&FPA as u64), (&FPB as u64), 0u32) != 0u8 { return 10u64 }   /* identical: no anomaly */
+    let mut j : u64 = 0u64
+    while j < 32u64 { FPB[j] = FPA[j] ^ 0xFFu8   j = j + 1u64 }    /* 256 differing bits */
+    if fed_eclipse_anomaly_check((&FPA as u64), (&FPB as u64), 10u32) != 1u8 { return 11u64 }  /* divergent: anomaly */
+    if fed_eclipse_anomaly_check(0u64, (&FPB as u64), 10u32) != 0u8 { return 12u64 }            /* null refused */
+
+    /* ---- hdl_opt_pareto_check: dominance ---- */
+    if hdl_opt_pareto_check(3u64, 5u64) != 1u8 { return 20u64 }   /* fewer gates DOMINATES */
+    if hdl_opt_pareto_check(5u64, 3u64) != 0u8 { return 21u64 }   /* more gates does NOT */
+
+    return 99u64
+}

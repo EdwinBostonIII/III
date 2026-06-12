@@ -1,0 +1,67 @@
+/* 1456_gate_outcomes_governance_intent.iii -- GATE BURN-DOWN v2.1: THE
+ * GOVERNANCE EQUIVALENCE PROVERS, THE INTENT PROVER, THE M14 MANDATE CHECK
+ * (4 gates).
+ *
+ *  governance_prove_equivalence -- the proposal-lifecycle proof gate: over a SANDBOXED
+ *      proposal the trivial old==new equivalence cert is minted (nonzero cert id) and
+ *      the proposal transitions to PROVEN; an unknown proposal id is refused
+ *      (GOV_INVALID_ID = 0) -- no proof without a sandboxed subject;
+ *  governance_prove_equivalence_with_count -- the packed-count variant (bits 0..31 =
+ *      new_pid, 32..63 = corpus count): same accept over a fresh sandboxed proposal,
+ *      same refusal on a never-proposed id;
+ *  intent_prove -- the PRIMITIVE_PROVE constructor: a fresh table mints the
+ *      equivalence-assertion intent (nonzero intent ptr); a table driven to its 1024
+ *      capacity refuses the 1025th (0) -- bounded sovereignty, no silent overwrite;
+ *  mandate_check_m14_via_match -- M14 (computation via pattern-match): the matched
+ *      verdict passes through (1); the unmatched is refused (0) -- pure, total, both
+ *      arms pinned.
+ * Exit 99. */
+module corpus_1456
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn governance_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_sandbox(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_prove_equivalence(proposal_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_prove_equivalence_with_count(proposal_id: u64, old_pid: u32, new_pid_and_count: u64, corpus_witness_ptr: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_status(proposal_id: u64) -> u8 from "governance.iii"
+extern @abi(c-msvc-x64) fn intent_table_reset() -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_prove(left_id: u64, right_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m14_via_match(matched: u8) -> u8 from "mandate.iii"
+
+fn main() -> u64 {
+    /* ---- governance_prove_equivalence: sandboxed proposal proves, unknown id refused ---- */
+    resolution_init()
+    governance_reset()
+    let pid1 : u64 = governance_propose(1u64, 0x1234u64, 0u64, 0u32)
+    if pid1 == 0u64 { return 1u64 }
+    if governance_sandbox(pid1) != 0i32 { return 2u64 }
+    if governance_prove_equivalence(pid1, 5u32, 5u32, 0u64) == 0u64 { return 3u64 }   /* cert minted */
+    if governance_status(pid1) != 2u8 { return 4u64 }                                 /* PROVEN */
+    if governance_prove_equivalence(999u64, 5u32, 5u32, 0u64) != 0u64 { return 5u64 } /* unknown id refused */
+
+    /* ---- governance_prove_equivalence_with_count: same lifecycle, packed variant ---- */
+    let pid2 : u64 = governance_propose(1u64, 0x5678u64, 0u64, 0u32)
+    if pid2 == 0u64 { return 6u64 }
+    if governance_sandbox(pid2) != 0i32 { return 7u64 }
+    if governance_prove_equivalence_with_count(pid2, 5u32, 5u64, 0u64) == 0u64 { return 8u64 }   /* new_pid 5, count 0 */
+    if governance_prove_equivalence_with_count(999u64, 5u32, 5u64, 0u64) != 0u64 { return 9u64 } /* unknown id refused */
+
+    /* ---- intent_prove: fresh table mints, exhausted table refuses ---- */
+    intent_table_reset()
+    if intent_prove(1u64, 2u64) == 0u64 { return 10u64 }     /* minted on a fresh table */
+    let mut i : u32 = 0u32
+    while i < 1024u32 {
+        intent_form(0u64)
+        i = i + 1u32
+    }
+    if intent_prove(3u64, 4u64) != 0u64 { return 11u64 }     /* 1024-capacity table refuses */
+    intent_table_reset()
+
+    /* ---- mandate_check_m14_via_match: both arms of the pure verdict ---- */
+    if mandate_check_m14_via_match(1u8) != 1u8 { return 12u64 }
+    if mandate_check_m14_via_match(0u8) != 0u8 { return 13u64 }
+
+    return 99u64
+}

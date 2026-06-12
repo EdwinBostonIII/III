@@ -1,0 +1,127 @@
+/* 1460_gate_outcomes_proof_vertical.iii -- GATE BURN-DOWN v2.1: THE LCF STEP
+ * CHECKER, THE THEOREM-COMMONS MERKLE PROVER, THE OCCURS CHECK, THE ASSOCIATIVITY LAW
+ * (4 gates).
+ *
+ *  prf_check_step -- the LCF replay checker for one inference step: over the genuine
+ *      4-step proof every step checks (1); after prf_forge_last (D forged from A via
+ *      C->D) the forged step is caught (0) -- the antecedent mismatch C != A;
+ *  tcom_merkle_prove -- the Theorem-Commons Merkle path prover: over a 3-theorem
+ *      registry leaf 0 yields its 2-step authentication path (2); an absent index is
+ *      refused (-2, TCOM_E_ABSENT) -- the registry proves only what it holds;
+ *  unify_occurs_check -- Robinson unification's infinite-term guard: X does not occur
+ *      in the constant 42 (0 = safe to bind); X DOES occur in f(X) (1 = occurs
+ *      violation, the bind that would build an infinite term is refused);
+ *  cat_check_assoc -- the category-law witness: a composable chain f:A->B, g:B->C,
+ *      h:C->D satisfies h.(g.f) == (h.g).f (1); a non-composable triple (ed: E->D
+ *      cannot follow g: B->C) is refused at composition (0).
+ * Exit 99. */
+module corpus_1460
+
+extern @abi(c-msvc-x64) fn prf_setup() -> i32 from "proof_replay.iii"
+extern @abi(c-msvc-x64) fn prf_forge_last() -> i32 from "proof_replay.iii"
+extern @abi(c-msvc-x64) fn prf_check_step(i: u32) -> u32 from "proof_replay.iii"
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_unit() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_tt() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_merkle_prove(idx: u32, proof_out: u64) -> i32 from "theorem_commons.iii"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn unify_buf_new(arena_id: u64) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_var(buf: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_const(buf: u64, payload: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_alloc_args(buf: u64, count: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_set_arg(buf: u64, args_first_idx: u32, slot: u8, term_id: u32) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_struct(buf: u64, head: u32, args_first_idx: u32, arity: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_occurs_check(buf: u64, var_id: u32, t_in: u32) -> u8 from "unify.iii"
+
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_check_assoc(f_slot: u32, g_slot: u32, h_slot: u32) -> u8 from "category.iii"
+
+var PROOF : [u8; 256]
+var OBJ_A : [u8; 32]
+var OBJ_B : [u8; 32]
+var OBJ_C : [u8; 32]
+var OBJ_D : [u8; 32]
+var OBJ_E : [u8; 32]
+var OP_F  : [u8; 32]
+var OP_G  : [u8; 32]
+var OP_H  : [u8; 32]
+var OP_ED : [u8; 32]
+var SINK  : [u8; 32]
+
+fn fill32(dst_addr: u64, b: u8) {
+    let d : *u8 = dst_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { d[i] = b   i = i + 1u64 }
+}
+
+fn main() -> u64 {
+    /* ---- prf_check_step: the genuine step checks, the forged step is caught ---- */
+    prf_setup()
+    if prf_check_step(0u32) != 1u32 { return 1u64 }      /* axiom A: the sole admissible axiom */
+    if prf_check_step(3u32) != 1u32 { return 2u64 }      /* genuine MP: D from C via C->D */
+    prf_forge_last()
+    if prf_check_step(3u32) != 0u32 { return 3u64 }      /* forged premise (A, not C) caught */
+
+    /* ---- tcom_merkle_prove: leaf path vs absent index ---- */
+    tc_reset()
+    tcom_init()
+    let kb : u32 = tc_bool()
+    let ku : u32 = tc_unit()
+    let g1 : u32 = tc_id(kb, tc_true(), tc_true())
+    let g2 : u32 = tc_id(kb, tc_false(), tc_false())
+    let g3 : u32 = tc_id(ku, tc_tt(), tc_tt())
+    if tcom_admit_goal(tc_refl(tc_true()), g1) != 0i32 { return 4u64 }
+    if tcom_admit_goal(tc_refl(tc_false()), g2) != 0i32 { return 5u64 }
+    if tcom_admit_goal(tc_refl(tc_tt()), g3) != 0i32 { return 6u64 }
+    if tcom_merkle_prove(0u32, (&PROOF as u64)) != 2i32 { return 7u64 }   /* 3 leaves -> 2-step path */
+    if tcom_merkle_prove(7u32, (&PROOF as u64)) != -2i32 { return 8u64 }  /* absent idx -> TCOM_E_ABSENT */
+
+    /* ---- unify_occurs_check: X in 42 (safe) vs X in f(X) (violation) ---- */
+    let a : u64 = arena_new(16384u64)
+    if a == 0u64 { return 9u64 }
+    let buf : u64 = unify_buf_new(a)
+    if buf == 0u64 { return 10u64 }
+    let x : u32 = unify_make_var(buf)
+    let c42 : u32 = unify_make_const(buf, 42u64)
+    if unify_occurs_check(buf, x, c42) != 0u8 { return 11u64 }    /* X not in 42: safe */
+    let ar : u32 = unify_alloc_args(buf, 1u8)
+    unify_set_arg(buf, ar, 0u8, x)
+    let fx : u32 = unify_make_struct(buf, 1u32, ar, 1u8)
+    if unify_occurs_check(buf, x, fx) != 1u8 { return 12u64 }     /* X in f(X): occurs violation */
+
+    /* ---- cat_check_assoc: composable chain holds vs non-composable triple refused ---- */
+    cat_init()
+    fill32((&OBJ_A as u64), 0x41u8)
+    fill32((&OBJ_B as u64), 0x42u8)
+    fill32((&OBJ_C as u64), 0x43u8)
+    fill32((&OBJ_D as u64), 0x44u8)
+    fill32((&OBJ_E as u64), 0x45u8)
+    fill32((&OP_F as u64), 0x66u8)
+    fill32((&OP_G as u64), 0x67u8)
+    fill32((&OP_H as u64), 0x68u8)
+    fill32((&OP_ED as u64), 0x6Au8)
+    let sa : u32 = cat_add_object((&OBJ_A as u64) as *u8)
+    let sb : u32 = cat_add_object((&OBJ_B as u64) as *u8)
+    let sc : u32 = cat_add_object((&OBJ_C as u64) as *u8)
+    let sd : u32 = cat_add_object((&OBJ_D as u64) as *u8)
+    let se : u32 = cat_add_object((&OBJ_E as u64) as *u8)
+    let f : u32 = cat_add_morphism(sa, sb, (&OP_F as u64) as *u8, (&SINK as u64) as *u8)
+    let g : u32 = cat_add_morphism(sb, sc, (&OP_G as u64) as *u8, (&SINK as u64) as *u8)
+    let h : u32 = cat_add_morphism(sc, sd, (&OP_H as u64) as *u8, (&SINK as u64) as *u8)
+    let ed : u32 = cat_add_morphism(se, sd, (&OP_ED as u64) as *u8, (&SINK as u64) as *u8)
+    if cat_check_assoc(f, g, h) != 1u8 { return 13u64 }    /* h.(g.f) == (h.g).f */
+    if cat_check_assoc(f, g, ed) != 0u8 { return 14u64 }   /* ed: E->D cannot follow g: B->C */
+
+    return 99u64
+}

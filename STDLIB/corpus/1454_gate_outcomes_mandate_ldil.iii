@@ -1,0 +1,65 @@
+/* 1454_gate_outcomes_mandate_ldil.iii -- GATE BURN-DOWN v2.1 TRANCHE 4: THE M14 MANDATE
+ * MATCH, THE LDIL TYPE CHECKER, THE LDIL REFINEMENT CHECKER (3 gates; 20 -> 17).
+ *
+ *  mandate_check_m14_via_match -- the M14 satisfaction predicate: a matched clause is
+ *      satisfied (1), an unmatched one is not (0);
+ *  ldil_typecheck_function -- a well-formed LDIL function (entry block set, instructions
+ *      type-walk clean) type-checks (1); a dead function id is refused (0);
+ *  ldil_refine_check_function -- every refined value must be anchored to a live defining
+ *      instruction in the function: a function whose values are all emit-anchored passes
+ *      (1); an ORPHAN refined value (a fresh value with a refinement but NO defining
+ *      instruction) is caught (0) -- a real refinement violation, not just a dead id.
+ * Exit 99. */
+module corpus_1454
+
+extern @abi(c-msvc-x64) fn mandate_check_m14_via_match(matched: u8) -> u8 from "mandate.iii"
+extern @abi(c-msvc-x64) fn ldil_init() -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_function(name_id: *u8, ret_width: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_block(parent_func: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_set_entry(func: u32, block: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_add_block(func: u32, block: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_const(block: u32, width: u8, signed: u8, imm: u64) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_load(block: u32, addr: u32, width: u8, signed: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_ret(block: u32, value_or_sent: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_typecheck_function(func: u32) -> u8 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_refine_check_function(func: u32) -> u8 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_value(width: u8, signed: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_set_refinement(value: u32, pred_slot: u32) -> i32 from "xii_ldil.iii"
+
+const LSENT : u32 = 0xFFFFFFFFu32
+
+var NAME : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- M14 mandate match ---- */
+    if mandate_check_m14_via_match(1u8) != 1u8 { return 1u64 }
+    if mandate_check_m14_via_match(0u8) != 0u8 { return 2u64 }
+
+    /* ---- LDIL: a well-formed function type-checks ---- */
+    if ldil_init() != 0i32 { return 3u64 }
+    let mut n : u64 = 0u64
+    while n < 32u64 { NAME[n] = (0x30u64 + n & 0xFFu64) as u8   n = n + 1u64 }
+    let f : u32 = ldil_new_function(((&NAME as u64)) as *u8, 64u8)
+    if f == LSENT { return 4u64 }
+    let b0 : u32 = ldil_new_block(f)
+    if b0 == LSENT { return 5u64 }
+    if ldil_fn_set_entry(f, b0) != 0i32 { return 6u64 }
+    if ldil_fn_add_block(f, b0) != 0i32 { return 7u64 }
+    let c1 : u32 = ldil_emit_const(b0, 64u8, 0u8, 0x1000u64)
+    if c1 == LSENT { return 8u64 }
+    let ld : u32 = ldil_emit_load(b0, c1, 32u8, 0u8)
+    if ld == LSENT { return 9u64 }
+    if ldil_emit_ret(b0, ld) != 0i32 { return 17u64 }           /* the block must terminate */
+    if ldil_typecheck_function(f) != 1u8 { return 10u64 }        /* well-formed: CHECKS */
+    if ldil_typecheck_function(9999u32) != 0u8 { return 11u64 }  /* dead func: refused */
+
+    /* ---- LDIL refinement: all values anchored, then an orphan violation ---- */
+    if ldil_refine_check_function(f) != 1u8 { return 12u64 }     /* emit-anchored values: clean */
+    if ldil_refine_check_function(9999u32) != 0u8 { return 13u64 }   /* dead func refused */
+    let orphan : u32 = ldil_new_value(64u8, 0u8)                 /* a fresh value: no defining instr */
+    if orphan == LSENT { return 14u64 }
+    if ldil_set_refinement(orphan, 0u32) != 0i32 { return 15u64 }    /* mark it refined -> now an orphan */
+    if ldil_refine_check_function(f) != 0u8 { return 16u64 }     /* the orphan refined value is CAUGHT */
+
+    return 99u64
+}

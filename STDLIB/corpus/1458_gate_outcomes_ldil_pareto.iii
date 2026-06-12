@@ -1,0 +1,89 @@
+/* 1458_gate_outcomes_ldil_pareto.iii -- GATE BURN-DOWN v2.1: THE LDIL IR
+ * TYPE CHECKER, THE LDIL REFINEMENT ANCHOR CHECK, THE PARETO DOMINANCE GATE
+ * (3 gates).
+ *
+ *  ldil_typecheck_function -- the typed-IR structural checker: a well-formed function
+ *      (entry block set, ret of a width-matched param, terminated) checks (1); a
+ *      function whose entry block has NO terminator is refused (0) -- falling off the
+ *      end of a block is unrepresentable, not undefined;
+ *  ldil_refine_check_function -- the refinement-anchor audit: a refined value anchored
+ *      by its live defining const instruction passes (1); a refined ORPHAN value (no
+ *      defining instruction) is refused (0) -- a refinement no instruction justifies
+ *      is a forged precondition;
+ *  hdl_opt_pareto_check -- strict Pareto dominance over live cost: 2 < 3 dominates (1);
+ *      3 == 3 does not (0) -- an "optimization" that saves nothing is not one.
+ * Exit 99. */
+module corpus_1458
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ldil_init() -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_function(name_id: *u8, ret_width: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_add_param(func: u32, width: u8, signed: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_block(parent_func: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_add_block(func: u32, block: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_set_entry(func: u32, block: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_const(block: u32, width: u8, signed: u8, imm: u64) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_ret(block: u32, value_or_sent: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_value(width: u8, signed: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_set_refinement(value: u32, pred_slot: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_typecheck_function(func: u32) -> u8 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_refine_check_function(func: u32) -> u8 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn hdl_opt_pareto_check(opt_live: u64, orig_live: u64) -> u8 from "hdl_optimize.iii"
+
+var NAME_IN  : [u8; 1]
+var NAME_OUT : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- ldil_typecheck_function: well-formed function checks ---- */
+    ldil_init()
+    NAME_IN[0u64] = 0x46u8                                       /* 'F' */
+    ident_from_bytes((&NAME_IN as u64) as *u8, 1u64, (&NAME_OUT as u64) as *u8)
+    let f1 : u32 = ldil_new_function((&NAME_OUT as u64) as *u8, 3u8)
+    let p1 : u32 = ldil_fn_add_param(f1, 3u8, 1u8)
+    let b1 : u32 = ldil_new_block(f1)
+    ldil_fn_add_block(f1, b1)
+    ldil_fn_set_entry(f1, b1)
+    ldil_emit_ret(b1, p1)
+    if ldil_typecheck_function(f1) != 1u8 { return 1u64 }        /* ret of width-matched param */
+
+    /* ---- ldil_typecheck_function: unterminated entry block refused ---- */
+    ldil_init()
+    NAME_IN[0u64] = 0x47u8                                       /* 'G' */
+    ident_from_bytes((&NAME_IN as u64) as *u8, 1u64, (&NAME_OUT as u64) as *u8)
+    let f2 : u32 = ldil_new_function((&NAME_OUT as u64) as *u8, 3u8)
+    let b2 : u32 = ldil_new_block(f2)
+    ldil_fn_add_block(f2, b2)
+    ldil_fn_set_entry(f2, b2)
+    if ldil_typecheck_function(f2) != 0u8 { return 2u64 }        /* no terminator: refused */
+
+    /* ---- ldil_refine_check_function: anchored refinement passes ---- */
+    ldil_init()
+    NAME_IN[0u64] = 0x48u8                                       /* 'H' */
+    ident_from_bytes((&NAME_IN as u64) as *u8, 1u64, (&NAME_OUT as u64) as *u8)
+    let f3 : u32 = ldil_new_function((&NAME_OUT as u64) as *u8, 3u8)
+    let b3 : u32 = ldil_new_block(f3)
+    ldil_fn_add_block(f3, b3)
+    ldil_fn_set_entry(f3, b3)
+    let c3 : u32 = ldil_emit_const(b3, 3u8, 1u8, 99u64)
+    ldil_set_refinement(c3, 3u32)
+    ldil_emit_ret(b3, c3)
+    if ldil_refine_check_function(f3) != 1u8 { return 3u64 }     /* const-anchored refinement */
+
+    /* ---- ldil_refine_check_function: refined orphan value refused ---- */
+    ldil_init()
+    NAME_IN[0u64] = 0x49u8                                       /* 'I' */
+    ident_from_bytes((&NAME_IN as u64) as *u8, 1u64, (&NAME_OUT as u64) as *u8)
+    let f4 : u32 = ldil_new_function((&NAME_OUT as u64) as *u8, 3u8)
+    let b4 : u32 = ldil_new_block(f4)
+    ldil_fn_add_block(f4, b4)
+    ldil_fn_set_entry(f4, b4)
+    let v4 : u32 = ldil_new_value(2u8, 0u8)
+    ldil_set_refinement(v4, 7u32)
+    if ldil_refine_check_function(f4) != 0u8 { return 4u64 }     /* no defining instr: refused */
+
+    /* ---- hdl_opt_pareto_check: strict dominance vs no-savings ---- */
+    if hdl_opt_pareto_check(2u64, 3u64) != 1u8 { return 5u64 }   /* 2 < 3: dominates */
+    if hdl_opt_pareto_check(3u64, 3u64) != 0u8 { return 6u64 }   /* equal: not an optimization */
+
+    return 99u64
+}

@@ -1,0 +1,113 @@
+/* 1459_gate_outcomes_sheaf_census_order.iii -- GATE BURN-DOWN v2.1:
+ * THE SHEAF GLUING GATE, THE SOVEREIGN CENSUS CERTIFIER, THE NF-SAFE ORDER CERTIFIER
+ * (3 gates; with 1451-1458 + the concurrent 1454/1455 pair the v2.1 census closes at 0).
+ *
+ *  sh_check_glue -- the sheaf condition made executable: two opens carrying the SAME
+ *      section agree on their registered intersection and glue to a global section (1);
+ *      sections that DISAGREE on the overlap are refused (0) -- no global truth from
+ *      locally-inconsistent data;
+ *  sov_census_certify -- the proof-carrying-optimization census: a cataloged class
+ *      (0, strength k=1) is certified by the CIC kernel (1); an out-of-range class 9
+ *      is refused (0) -- the catalog certifies exactly what it holds;
+ *  nol_certify_order -- the nous-lattice NF-safety certifier: an order drawn entirely
+ *      from the certified blocks (INERT 1-4 / R 5-44 / TRIT 101-105) is certified (1);
+ *      an order containing uncertified rule 50 is refused (0) -- reordering is allowed
+ *      only inside the proven-confluent fragment.
+ * Exit 99. */
+module corpus_1459
+
+extern @abi(c-msvc-x64) fn sh_init() -> i32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_open(open_id: *u8, parent_slot: u32) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_section(presheaf_id: *u8, open_slot: u32, section_id: *u8) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_intersection(a: u32, b: u32, inter: u32) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_restriction(parent: u32, child: u32, transform_id: *u8) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_check_glue(cover: *u8, parent_open: u32, out_global: *u8) -> u8 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sov_census_certify(c: u32) -> u8 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn nol_certify_order(order: *u64, n: u32) -> u8 from "nous_lattice.iii"
+
+var O0  : [u8; 32]
+var O1  : [u8; 32]
+var O01 : [u8; 32]
+var P   : [u8; 32]
+var T   : [u8; 32]
+var SA  : [u8; 32]
+var SB  : [u8; 32]
+var COVER : [u8; 64]
+var OUT : [u8; 32]
+var ORD : [u64; 5]
+
+fn fill32(dst_addr: u64, b: u8) {
+    let d : *u8 = dst_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { d[i] = b   i = i + 1u64 }
+}
+
+/* CoverReq aggregate: presheaf id [0..32) || n u64 LE [32..40) || slots u32 LE [40..) */
+fn pack_cover2(s0: u32, s1: u32) {
+    let mut i : u64 = 0u64
+    while i < 32u64 { COVER[i] = P[i]   i = i + 1u64 }
+    COVER[32u64] = 2u8
+    let mut z : u64 = 33u64
+    while z < 40u64 { COVER[z] = 0u8   z = z + 1u64 }
+    COVER[40u64] = (s0 & 0xFFu32) as u8
+    COVER[41u64] = ((s0 >> 8u32) & 0xFFu32) as u8
+    COVER[42u64] = ((s0 >> 16u32) & 0xFFu32) as u8
+    COVER[43u64] = ((s0 >> 24u32) & 0xFFu32) as u8
+    COVER[44u64] = (s1 & 0xFFu32) as u8
+    COVER[45u64] = ((s1 >> 8u32) & 0xFFu32) as u8
+    COVER[46u64] = ((s1 >> 16u32) & 0xFFu32) as u8
+    COVER[47u64] = ((s1 >> 24u32) & 0xFFu32) as u8
+}
+
+fn main() -> u64 {
+    fill32((&O0 as u64), 0x10u8)
+    fill32((&O1 as u64), 0x11u8)
+    fill32((&O01 as u64), 0x33u8)
+    fill32((&P as u64), 0x50u8)
+    fill32((&T as u64), 0x77u8)
+    fill32((&SA as u64), 0xA1u8)
+    fill32((&SB as u64), 0xB2u8)
+
+    /* ---- sh_check_glue: agreeing sections glue ---- */
+    sh_init()
+    let g0 : u32 = sh_add_open((&O0 as u64) as *u8, 0xFFFFFFFFu32)
+    let g1 : u32 = sh_add_open((&O1 as u64) as *u8, 0xFFFFFFFFu32)
+    let g01 : u32 = sh_add_open((&O01 as u64) as *u8, 0xFFFFFFFFu32)
+    if g01 == 0xFFFFFFFFu32 { return 1u64 }
+    sh_add_intersection(g0, g1, g01)
+    sh_add_restriction(g0, g01, (&T as u64) as *u8)
+    sh_add_restriction(g1, g01, (&T as u64) as *u8)
+    sh_add_section((&P as u64) as *u8, g0, (&SA as u64) as *u8)
+    sh_add_section((&P as u64) as *u8, g1, (&SA as u64) as *u8)
+    pack_cover2(g0, g1)
+    if sh_check_glue((&COVER as u64) as *u8, 0xFFFFFFFFu32, (&OUT as u64) as *u8) != 1u8 { return 2u64 }
+
+    /* ---- sh_check_glue: disagreeing sections refused ---- */
+    sh_init()
+    let h0 : u32 = sh_add_open((&O0 as u64) as *u8, 0xFFFFFFFFu32)
+    let h1 : u32 = sh_add_open((&O1 as u64) as *u8, 0xFFFFFFFFu32)
+    let h01 : u32 = sh_add_open((&O01 as u64) as *u8, 0xFFFFFFFFu32)
+    sh_add_intersection(h0, h1, h01)
+    sh_add_restriction(h0, h01, (&T as u64) as *u8)
+    sh_add_restriction(h1, h01, (&T as u64) as *u8)
+    sh_add_section((&P as u64) as *u8, h0, (&SA as u64) as *u8)
+    sh_add_section((&P as u64) as *u8, h1, (&SB as u64) as *u8)   /* SA != SB on the overlap */
+    pack_cover2(h0, h1)
+    if sh_check_glue((&COVER as u64) as *u8, 0xFFFFFFFFu32, (&OUT as u64) as *u8) != 0u8 { return 3u64 }
+
+    /* ---- sov_census_certify: cataloged class certified, out-of-range refused ---- */
+    if sov_census_certify(0u32) != 1u8 { return 4u64 }     /* strength k=1: kernel-certified */
+    if sov_census_certify(9u32) != 0u8 { return 5u64 }     /* class 9 does not exist: refused */
+
+    /* ---- nol_certify_order: certified blocks pass, uncertified rule refused ---- */
+    ORD[0u64] = 10u64
+    ORD[1u64] = 30u64
+    ORD[2u64] = 40u64
+    ORD[3u64] = 102u64
+    ORD[4u64] = 3u64
+    if nol_certify_order((&ORD as u64) as *u64, 5u32) != 1u8 { return 6u64 }
+    ORD[1u64] = 50u64                                      /* rule 50: outside every certified block */
+    if nol_certify_order((&ORD as u64) as *u64, 5u32) != 0u8 { return 7u64 }
+
+    return 99u64
+}

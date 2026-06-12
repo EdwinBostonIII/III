@@ -313,13 +313,60 @@ fn cv_find(tok_addr: u64, len: u64) -> u64 {
 
 /* gate-family classification: a name carrying one of the six gate stems makes a
  * SECURITY DECISION and is held to the v2 outcome criterion, not mere reference */
+/* 1u8 iff `stem` occurs in tok[0..len) as a WORD COMPONENT -- the byte immediately after
+ * the stem is `_` or the token ends.  This kills the substring false positives that a bare
+ * cv_contains produces on the verdict-verb stems: "prove" must match prove_equiv / intent_prove
+ * but NOT "provenance" (prove+n) or "underproven" (prove+n); "check" must match typecheck_fn /
+ * unify_occurs_check but NOT "checked" (check+e) or "checkpoint" (check+p).  Suffix-bounded
+ * (prefix is free) so typecheck (type+check_) and occurs_check (..._check) both qualify. */
+fn cv_stem_word(tok_addr: u64, len: u64, stem_addr: u64, stemlen: u64) -> u8 {
+    if stemlen > len { return 0u8 }
+    let t : *u8 = tok_addr as *u8
+    let s : *u8 = stem_addr as *u8
+    let last : u64 = len - stemlen
+    let mut i : u64 = 0u64
+    let mut found : u8 = 0u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i > last { go = 0u8 } else {
+            let mut j : u64 = 0u64
+            let mut m : u8 = 1u8
+            let mut jg : u8 = 1u8
+            while jg == 1u8 {
+                if j >= stemlen { jg = 0u8 } else {
+                    if t[i + j] != s[j] { m = 0u8   jg = 0u8 } else { j = j + 1u64 }
+                }
+            }
+            if m == 1u8 {
+                /* suffix boundary: the char after the stem is `_` or the token ends */
+                let after : u64 = i + stemlen
+                if after >= len { found = 1u8   go = 0u8 } else {
+                    if t[after] == 0x5Fu8 { found = 1u8   go = 0u8 }
+                }
+            }
+            if go == 1u8 { i = i + 1u64 }
+        }
+    }
+    return found
+}
+
 fn cv_is_gate_name(tok_addr: u64, len: u64) -> u8 {
+    /* v2 stems: the verify-family (the membrane bug's class).  Substring-matched -- none of
+     * these appear inside an unrelated common word in the export surface. */
     if cv_contains(tok_addr, len, ("verify" as u64), 6u64) == 1u8 { return 1u8 }
     if cv_contains(tok_addr, len, ("admit" as u64), 5u64) == 1u8 { return 1u8 }
     if cv_contains(tok_addr, len, ("attest" as u64), 6u64) == 1u8 { return 1u8 }
     if cv_contains(tok_addr, len, ("launch" as u64), 6u64) == 1u8 { return 1u8 }
     if cv_contains(tok_addr, len, ("validate" as u64), 8u64) == 1u8 { return 1u8 }
     if cv_contains(tok_addr, len, ("authorize" as u64), 9u64) == 1u8 { return 1u8 }
+    /* v2.1 stems: the broader inversion-class verdict families -- a `check`/`certify`/`prove`
+     * that always-passes (or is polarity-inverted) is as fatal as a bad `verify`.  WORD-bounded
+     * (suffix `_`/end) so "provenance"/"checkpoint"/"checked"-arithmetic do NOT mis-flag.
+     * Producers (sign/seal/ratify -- they emit an artifact, no accept-when-reject failure mode)
+     * are deliberately EXCLUDED; only verdict gates are held to the both-ways rule. */
+    if cv_stem_word(tok_addr, len, ("certify" as u64), 7u64) == 1u8 { return 1u8 }
+    if cv_stem_word(tok_addr, len, ("prove" as u64), 5u64) == 1u8 { return 1u8 }
+    if cv_stem_word(tok_addr, len, ("check" as u64), 5u64) == 1u8 { return 1u8 }
     return 0u8
 }
 

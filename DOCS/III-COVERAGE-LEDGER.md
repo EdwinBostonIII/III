@@ -281,3 +281,16 @@ anchor gate stay inverted.  The ratchet now permanently fails the build if any n
 export cannot be seen rejecting.  Two refinements made the criterion sound: the no-arg
 exemption (an observation no input can drive to refuse) and direct-comparison capture (a call
 whose result flows through a variable captures no outcome).  v1 coverage stayed 0 throughout.
+
+## Criterion v2.1 — broadened to the inversion-class verdict families (2026-06-12)
+
+The membrane lesson generalizes: an inverted `check`/`certify`/`prove` is as fatal as the
+membrane's inverted `verify`.  Those families were ungated.  cv_is_gate_name now also flags
+`certify` / `prove` / `check` -- but with WORD-BOUNDARY matching (cv_stem_word: the stem must
+be followed by `_` or end the token).  Substring matching mis-flagged "provenance" (prove+n),
+"underproven" (prove+n -- the coverage organ's OWN accessor!), "checkpoint" (check+p), and the
+"checked"-arithmetic family (check+e); the word boundary cleanly excludes all of them.  49 noisy
+matches -> 27 genuine verdict gates.  Producers (sign/seal/ratify -- they emit an artifact, no
+accept-when-reject failure mode) stay EXCLUDED; only judgment-verb verdict gates are held to the
+both-ways rule.  Establishment: pin raised 0 -> 27 (justified: broadened scope = more gates in
+scope), build 578/0 (lib e25f2514), corpus 1038/0, both falsifiers (1391, 1427) still green.

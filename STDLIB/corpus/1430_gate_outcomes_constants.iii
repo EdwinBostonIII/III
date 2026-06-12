@@ -1,0 +1,76 @@
+/* 1430_gate_outcomes_constants.iii -- GATE BURN-DOWN v2 TRANCHE 3: THE CONSTITUTIONAL
+ * CONSTANT VALIDATORS DECIDE BOTH WAYS (3 under-proven gates; 49 -> 46).
+ *
+ * The three tier-gated amendment validators over the REAL sealed ledger (lazy-built by
+ * constants_lookup), every refusal code pinned EXACTLY:
+ *  constants_validate_catalyst -- "LEX_KEYWORD_COUNT" (CATALYST tier, value 47):
+ *      48 >= 47 -> CV_OK(0); 46 < 47 -> CV_REGRESS(4); an AMEND-tier name
+ *      ("LEX_PUNCTUATOR_COUNT") -> CV_WRONG_TIER(2); unknown -> CV_NOT_FOUND(1);
+ *      a 4-byte value -> CV_INVALID(5);
+ *  constants_validate_amend -- "LEX_PUNCTUATOR_COUNT" (AMEND tier) -> CV_OK; a
+ *      CATALYST-tier name -> CV_WRONG_TIER; unknown -> CV_NOT_FOUND;
+ *  constants_validate_r2 -- "TYPE_UNIVERSE_COUNT" (R2 tier, value 7): 8 -> CV_OK;
+ *      an AMEND-tier name -> CV_WRONG_TIER; unknown -> CV_NOT_FOUND.
+ * Exit 99. */
+module corpus_1430
+
+extern @abi(c-msvc-x64) fn constants_validate_catalyst(name: *u8, nlen: u64, nv: *u8, nvl: u64) -> i32 from "constants.iii"
+extern @abi(c-msvc-x64) fn constants_validate_amend(name: *u8, nlen: u64, nv: *u8, nvl: u64) -> i32 from "constants.iii"
+extern @abi(c-msvc-x64) fn constants_validate_r2(name: *u8, nlen: u64, nv: *u8, nvl: u64) -> i32 from "constants.iii"
+
+var NCAT : [u8; 24]
+var NAMD : [u8; 24]
+var NR2  : [u8; 24]
+var NBAD : [u8; 24]
+var V8   : [u8; 8]
+
+fn setn(dst: u64, src: u64, n: u64) -> i32 {
+    let dl : u64 = dst
+    let sl : u64 = src
+    let nl : u64 = n
+    let d : *u8 = dl as *u8
+    let s : *u8 = sl as *u8
+    let mut i : u64 = 0u64
+    while i < nl { d[i] = s[i]   i = i + 1u64 }
+    return 0i32
+}
+
+fn setv(v: u64) -> i32 {
+    let vl : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 { V8[i] = ((vl >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    setn((&NCAT as u64), ("LEX_KEYWORD_COUNT" as u64), 17u64)
+    setn((&NAMD as u64), ("LEX_PUNCTUATOR_COUNT" as u64), 20u64)
+    setn((&NR2  as u64), ("TYPE_UNIVERSE_COUNT" as u64), 19u64)
+    setn((&NBAD as u64), ("NO_SUCH_CONSTANT_XYZ" as u64), 20u64)
+
+    /* ---- CATALYST: append-only monotone ---- */
+    setv(48u64)
+    if constants_validate_catalyst((&NCAT as u64) as *u8, 17u64, (&V8 as u64) as *u8, 8u64) != 0i32 { return 1u64 }   /* CV_OK */
+    setv(47u64)
+    if constants_validate_catalyst((&NCAT as u64) as *u8, 17u64, (&V8 as u64) as *u8, 8u64) != 0i32 { return 2u64 }   /* equal admitted */
+    setv(46u64)
+    if constants_validate_catalyst((&NCAT as u64) as *u8, 17u64, (&V8 as u64) as *u8, 8u64) != 4i32 { return 3u64 }   /* CV_REGRESS */
+    setv(48u64)
+    if constants_validate_catalyst((&NAMD as u64) as *u8, 20u64, (&V8 as u64) as *u8, 8u64) != 2i32 { return 4u64 }   /* CV_WRONG_TIER */
+    if constants_validate_catalyst((&NBAD as u64) as *u8, 20u64, (&V8 as u64) as *u8, 8u64) != 1i32 { return 5u64 }   /* CV_NOT_FOUND */
+    if constants_validate_catalyst((&NCAT as u64) as *u8, 17u64, (&V8 as u64) as *u8, 4u64) != 5i32 { return 6u64 }   /* CV_INVALID */
+
+    /* ---- AMEND: tier-gated apply ---- */
+    setv(26u64)
+    if constants_validate_amend((&NAMD as u64) as *u8, 20u64, (&V8 as u64) as *u8, 8u64) != 0i32 { return 10u64 }     /* CV_OK */
+    if constants_validate_amend((&NCAT as u64) as *u8, 17u64, (&V8 as u64) as *u8, 8u64) != 2i32 { return 11u64 }     /* CV_WRONG_TIER */
+    if constants_validate_amend((&NBAD as u64) as *u8, 20u64, (&V8 as u64) as *u8, 8u64) != 1i32 { return 12u64 }     /* CV_NOT_FOUND */
+
+    /* ---- R2: major-bump tier ---- */
+    setv(8u64)
+    if constants_validate_r2((&NR2 as u64) as *u8, 19u64, (&V8 as u64) as *u8, 8u64) != 0i32 { return 20u64 }         /* CV_OK */
+    if constants_validate_r2((&NAMD as u64) as *u8, 20u64, (&V8 as u64) as *u8, 8u64) != 2i32 { return 21u64 }        /* CV_WRONG_TIER */
+    if constants_validate_r2((&NBAD as u64) as *u8, 20u64, (&V8 as u64) as *u8, 8u64) != 1i32 { return 22u64 }        /* CV_NOT_FOUND */
+
+    return 99u64
+}

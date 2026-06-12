@@ -167,3 +167,9 @@ exactly and a wrong reason_code rejected; fa_catalyst_halt_verify with a wrong h
 rejected -- all live-signed, the 1399 discipline) and the 8-arg rsa_pss_verify CORE driven
 directly (OS2IP replicated via the exported bigint surface over the 1401 baked 544-bit
 key; flipped sig byte and wrong sigLen rejected) -- 4 closed, 53 -> **49** (pin 49).
+
+Tranche v2-3 (`1430_gate_outcomes_constants`=99): the three tier-gated constitutional
+constant validators over the REAL sealed ledger (lazy-built), every refusal code pinned
+EXACTLY -- catalyst: 48>=47 OK / equal OK / 46 REGRESS(4) / AMEND-tier name WRONG_TIER(2)
+/ unknown NOT_FOUND(1) / 4-byte value INVALID(5); amend: OK / WRONG_TIER / NOT_FOUND;
+r2: OK / WRONG_TIER / NOT_FOUND -- 3 closed, 49 -> **46** (pin 46; corpus 1018/0).

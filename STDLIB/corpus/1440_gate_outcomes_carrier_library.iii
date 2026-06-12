@@ -1,0 +1,126 @@
+/* 1440_gate_outcomes_carrier_library.iii -- GATE BURN-DOWN v2 TRANCHE 13: THE PROOF
+ * TERM, THE THEOREM CARRIER, THE LIBRARY ADMISSION (3 gates; 19 -> 16).
+ *
+ * The real 5-module vertical driven at the exports (mirrors mathlib_kat_admit):
+ *  pt_verify -- a single-axiom proof term constructs, finalizes, VERIFIES (0); an
+ *      arity-violating axiom (1 premise) is INVALID (-4); an unfinalized term is
+ *      NOT_FINAL (-5); null (-1) and absent (-3) refused;
+ *  tc_verify -- the carrier carrying that verified term re-attests (0); null (-1)
+ *      and absent (-3) refused;
+ *  lib_admit -- the constitutional library door: clause-absent refuses (-7) AND
+ *      populates the canonical label; after cons_ratify of that exact clause the
+ *      SAME carrier admits (0); re-admission refuses DUPLICATE (-4, append-only);
+ *      null refused (-1).
+ * Exit 99. */
+module corpus_1440
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn tc_init() -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_pack_alloc_req(req_out: *u8, statement: *u8, statement_len: u32, ptids_and_deps: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_verify(carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn lib_init() -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn lib_admit(carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+
+var TID   : [u8; 32]
+var TID2  : [u8; 32]
+var TID3  : [u8; 32]
+var ARGS  : [u8; 64]
+var PAB   : [u64; 3]
+var STMT  : [u8; 4]
+var REQ   : [u8; 48]
+var CID   : [u8; 32]
+var CAP   : [u8; 32]
+var OUT   : [u8; 32]
+var CREQ  : [u64; 16]
+var LABEL : [u8; 16]      /* "cp_library_admit" */
+var BAD   : [u8; 32]
+
+fn set_label() -> i32 {
+    LABEL[0u64]=0x63u8  LABEL[1u64]=0x70u8  LABEL[2u64]=0x5Fu8  LABEL[3u64]=0x6Cu8
+    LABEL[4u64]=0x69u8  LABEL[5u64]=0x62u8  LABEL[6u64]=0x72u8  LABEL[7u64]=0x61u8
+    LABEL[8u64]=0x72u8  LABEL[9u64]=0x79u8  LABEL[10u64]=0x5Fu8 LABEL[11u64]=0x61u8
+    LABEL[12u64]=0x64u8 LABEL[13u64]=0x6Du8 LABEL[14u64]=0x69u8 LABEL[15u64]=0x74u8
+    return 0i32
+}
+
+/* build the axiom-step args for term `tid` (kind 0x01, 0 premises, 1-byte conclusion) */
+fn axiom_args(tid: u64, concl: u8) -> i32 {
+    let tl : u64 = tid
+    let cl : u8 = concl
+    let ap : *u8 = (&ARGS as u64) as *u8
+    let tp : *u8 = tl as *u8
+    let mut z : u64 = 0u64
+    while z < 64u64 { ap[z] = 0u8   z = z + 1u64 }
+    let mut t : u64 = 0u64
+    while t < 32u64 { ap[t] = tp[t]   t = t + 1u64 }
+    ap[32u64] = 0x01u8                     /* PT_RULE_AXIOM */
+    ap[40u64] = 1u8                        /* clen = 1 */
+    ap[44u64] = cl
+    return 0i32
+}
+
+fn main() -> u64 {
+    pt_init()
+    tc_init()
+    wh_init(0u64)
+    lib_init()
+
+    /* ---- PT: the verifiable single-axiom term ---- */
+    if pt_alloc((&TID as u64) as *u8) != 0i32 { return 1u64 }
+    axiom_args((&TID as u64), 0x41u8)
+    if pt_add_inference((&ARGS as u64) as *u8) != 0i32 { return 2u64 }
+    if pt_finalize((&TID as u64) as *u8) != 0i32 { return 3u64 }
+    if pt_verify((&TID as u64) as *u8) != 0i32 { return 4u64 }     /* VERIFIES */
+    /* an arity-violating axiom (1 premise claimed) is INVALID */
+    if pt_alloc((&TID2 as u64) as *u8) != 0i32 { return 5u64 }
+    axiom_args((&TID2 as u64), 0x42u8)
+    ARGS[36u64] = 1u8                                              /* pcount = 1: arity violation */
+    if pt_add_inference((&ARGS as u64) as *u8) != 0i32 { return 6u64 }
+    if pt_finalize((&TID2 as u64) as *u8) != 0i32 { return 7u64 }
+    if pt_verify((&TID2 as u64) as *u8) != -4i32 { return 8u64 }   /* INVALID_INFERENCE */
+    /* an unfinalized term is NOT_FINAL; null and absent refuse */
+    if pt_alloc((&TID3 as u64) as *u8) != 0i32 { return 9u64 }
+    if pt_verify((&TID3 as u64) as *u8) != -5i32 { return 10u64 }  /* NOT_FINAL */
+    let np : *u8 = (0u64) as *u8
+    if pt_verify(np) != -1i32 { return 11u64 }
+    let mut b : u64 = 0u64
+    while b < 32u64 { BAD[b] = 0xEEu8   b = b + 1u64 }
+    if pt_verify((&BAD as u64) as *u8) != -3i32 { return 12u64 }   /* ABSENT */
+
+    /* ---- TC: the carrier re-attests the verified term ---- */
+    PAB[0u64] = &TID as u64
+    PAB[1u64] = &TID as u64
+    PAB[2u64] = 0u64
+    STMT[0u64] = 0x41u8
+    if tc_pack_alloc_req((&REQ as u64) as *u8, (&STMT as u64) as *u8, 1u32, (&PAB as u64) as *u8) != 0i32 { return 20u64 }
+    if tc_alloc((&REQ as u64) as *u8, (&CID as u64) as *u8) != 0i32 { return 21u64 }
+    if tc_verify((&CID as u64) as *u8) != 0i32 { return 22u64 }    /* RE-ATTESTS */
+    if tc_verify(np) != -1i32 { return 23u64 }
+    if tc_verify((&BAD as u64) as *u8) != -3i32 { return 24u64 }   /* ABSENT */
+
+    /* ---- LIB: the constitutional door, all four verdicts ---- */
+    if lib_admit((&CID as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != -7i32 { return 30u64 }   /* CLAUSE_ABSENT */
+    set_label()
+    let cr : u64 = &CREQ as u64
+    let cq : *u64 = cr as *u64
+    cq[0u64] = cr + 64u64
+    cq[1u64] = &LABEL as u64
+    cq[2u64] = 16u64
+    cq[3u64] = &LABEL as u64
+    cq[4u64] = 0u64
+    cq[5u64] = &LABEL as u64
+    cq[6u64] = 0u64
+    if cons_ratify(cr as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 31u64 }
+    if lib_admit((&CID as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != 0i32 { return 32u64 }    /* ADMITTED */
+    if lib_admit((&CID as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != -4i32 { return 33u64 }   /* DUPLICATE */
+    if lib_admit(np, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != -1i32 { return 34u64 }                     /* null */
+
+    return 99u64
+}

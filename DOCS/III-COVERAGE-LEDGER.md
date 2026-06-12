@@ -224,3 +224,10 @@ parameter is an OUT sink); recorded as a pin-floor candidate, NOT gamed.
 PROCESS FIX: a corpus FATAL recurred when a KAT file entered the glob before its
 EXPECTED entry (the compose-while-gating race) -- KAT file + EXPECTED entry are now
 written atomically, always.
+
+Tranche v2-13 (`1440_gate_outcomes_carrier_library`=99, corpus 1028/0, pin **16**): the
+REAL 5-module vertical at the exports -- pt_verify (a single-axiom term constructs,
+finalizes, VERIFIES; an arity-violating axiom INVALID -4; unfinalized NOT_FINAL -5;
+null/absent -1/-3), tc_verify (the carrier re-attests the verified term; null/absent),
+lib_admit (CLAUSE_ABSENT -7 which populates the canonical label -> cons_ratify of that
+exact clause -> the SAME carrier ADMITS 0 -> re-admission DUPLICATE -4 -> null -1).

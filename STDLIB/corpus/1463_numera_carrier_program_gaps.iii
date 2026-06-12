@@ -1,0 +1,116 @@
+/* 1463_numera_carrier_program_gaps.iii -- NUMERA AUDIT GAP CLOSURE II: THE PROOF-TERM
+ * PROGRAM EXTRACTOR, THE COEFFICIENT LEAF, THE CERTIFICATE CHAIN ROOT (3 exports with
+ * ZERO corpus references, confirmed live against the tree before writing).
+ *
+ *  pt_to_program -- Curry-Howard extraction from a VERIFIED proof-term: the 1-step
+ *      axiom term yields a non-empty program (PT_OK, len > 0); an absent term id is
+ *      refused (PT_E_ABSENT); an allocated-but-never-verified term is refused
+ *      (PT_E_INVALID_INFERENCE) -- only proofs become programs; null term/prog/len are
+ *      each refused (PT_E_NULL); a 1-byte out buffer reports pt_to_program's OWN
+ *      contract code (PT_E_BUF_TOO_SMALL), not a leaked currying-layer code;
+ *  pc_coeff_leaf -- the polynomial-commitment leaf hash over a bigint's limbs:
+ *      deterministic across two bigints holding the same value, distinct for a
+ *      different value, null-refused, and a 151-limb bigint exceeds PROOFC_MAX_LIMBS
+ *      128 (PROOFC_E_TOO_BIG);
+ *  pc_cert_chain_root -- the certificate's [64..96) chain-root window copies out
+ *      byte-identically; null cert / null out are refused (PROOFC_E_NULL).
+ * Exit 99. */
+module corpus_1463
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_to_program(term_id: *u8, out_prog: *u8, out_cap: u64, out_len: *u64) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn pc_coeff_leaf(arena: u64, bid: u64, out_leaf: *u8) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_cert_chain_root(certificate: *u8, out_root: *u8) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var TID1  : [u8; 32]
+var TID2  : [u8; 32]
+var BADID : [u8; 32]
+var ARG   : [u8; 64]
+var PROG  : [u8; 4096]
+var PLEN  : [u64; 1]
+var LEAF1 : [u8; 32]
+var LEAF2 : [u8; 32]
+var LEAF3 : [u8; 32]
+var CERT  : [u8; 128]
+var ROOT  : [u8; 32]
+
+/* build the 1-step AXIOM inference for TID1 (pcount=0, conclusion "A") -- 680's layout:
+ * term id [0..32) || rule 0x01 [32] || pad [33..40) || conclusion_len 1 LE4 [40..44) ||
+ * conclusion byte 'A' [44]. */
+fn build_axiom() -> i32 {
+    let a : *u8 = (&ARG as u64) as *u8
+    let tp : *u8 = (&TID1 as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { a[i] = tp[i]   i = i + 1u64 }
+    a[32u64] = 0x01u8
+    a[33u64] = 0u8   a[34u64] = 0u8   a[35u64] = 0u8
+    a[36u64] = 0u8   a[37u64] = 0u8   a[38u64] = 0u8   a[39u64] = 0u8
+    a[40u64] = 1u8   a[41u64] = 0u8   a[42u64] = 0u8   a[43u64] = 0u8
+    a[44u64] = 0x41u8
+    return pt_add_inference(a)
+}
+
+fn main() -> u64 {
+    /* ==== pt_to_program over a real verified axiom term ==== */
+    pt_init()
+    if pt_alloc((&TID1 as u64) as *u8) != 0i32 { return 1u64 }
+    if build_axiom() != 0i32 { return 2u64 }
+    if pt_finalize((&TID1 as u64) as *u8) != 0i32 { return 3u64 }
+    if pt_verify((&TID1 as u64) as *u8) != 0i32 { return 4u64 }
+    PLEN[0u64] = 0u64
+    if pt_to_program((&TID1 as u64) as *u8, (&PROG as u64) as *u8, 4096u64, (&PLEN as u64) as *u64) != 0i32 { return 5u64 }
+    if PLEN[0u64] == 0u64 { return 6u64 }                  /* the proof became a non-empty program */
+
+    /* the refusals, each with its exact contract code */
+    let mut b : u64 = 0u64
+    while b < 32u64 { BADID[b] = 0xABu8   b = b + 1u64 }
+    if pt_to_program((&BADID as u64) as *u8, (&PROG as u64) as *u8, 4096u64, (&PLEN as u64) as *u64) != -3i32 { return 7u64 }   /* ABSENT */
+    if pt_alloc((&TID2 as u64) as *u8) != 0i32 { return 8u64 }
+    if pt_to_program((&TID2 as u64) as *u8, (&PROG as u64) as *u8, 4096u64, (&PLEN as u64) as *u64) != -4i32 { return 9u64 }    /* never verified */
+    if pt_to_program(0u64 as *u8, (&PROG as u64) as *u8, 4096u64, (&PLEN as u64) as *u64) != -1i32 { return 10u64 }
+    if pt_to_program((&TID1 as u64) as *u8, 0u64 as *u8, 4096u64, (&PLEN as u64) as *u64) != -1i32 { return 11u64 }
+    if pt_to_program((&TID1 as u64) as *u8, (&PROG as u64) as *u8, 4096u64, 0u64 as *u64) != -1i32 { return 12u64 }
+    if pt_to_program((&TID1 as u64) as *u8, (&PROG as u64) as *u8, 1u64, (&PLEN as u64) as *u64) != -7i32 { return 13u64 }      /* OWN too-small code */
+
+    /* ==== pc_coeff_leaf: deterministic, value-sensitive, null + too-big refused ==== */
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 14u64 }
+    let b7a : u64 = bigint_from_u64(ar, 7u64)
+    let b7b : u64 = bigint_from_u64(ar, 7u64)
+    let b8  : u64 = bigint_from_u64(ar, 8u64)
+    if pc_coeff_leaf(ar, b7a, (&LEAF1 as u64) as *u8) != 0i32 { return 15u64 }
+    if pc_coeff_leaf(ar, b7b, (&LEAF2 as u64) as *u8) != 0i32 { return 16u64 }
+    if cad_eq((&LEAF1 as u64) as *u8, (&LEAF2 as u64) as *u8) != 1u8 { return 17u64 }   /* same value, same leaf */
+    if pc_coeff_leaf(ar, b8, (&LEAF3 as u64) as *u8) != 0i32 { return 18u64 }
+    if cad_eq((&LEAF1 as u64) as *u8, (&LEAF3 as u64) as *u8) != 0u8 { return 19u64 }   /* different value, different leaf */
+    if pc_coeff_leaf(ar, b7a, 0u64 as *u8) != -4i32 { return 20u64 }                    /* null out */
+    let big : u64 = bigint_new(ar, 200u64)
+    if big == 0u64 { return 21u64 }
+    if bigint_set_limb(big, 150u64, 1u64) != 0i32 { return 22u64 }                      /* len -> 151 > 128 */
+    if pc_coeff_leaf(ar, big, (&LEAF1 as u64) as *u8) != -5i32 { return 23u64 }         /* TOO_BIG */
+    bigint_drop(b7a)
+    bigint_drop(b7b)
+    bigint_drop(b8)
+    bigint_drop(big)
+
+    /* ==== pc_cert_chain_root: the [64..96) window, byte-identical ==== */
+    let mut c : u64 = 0u64
+    while c < 128u64 { CERT[c] = (c & 0xFFu64) as u8   c = c + 1u64 }
+    if pc_cert_chain_root((&CERT as u64) as *u8, (&ROOT as u64) as *u8) != 0i32 { return 24u64 }
+    let mut r : u64 = 0u64
+    while r < 32u64 { if ROOT[r] != ((64u64 + r) & 0xFFu64) as u8 { return 25u64 }   r = r + 1u64 }
+    if pc_cert_chain_root(0u64 as *u8, (&ROOT as u64) as *u8) != -4i32 { return 26u64 }
+    if pc_cert_chain_root((&CERT as u64) as *u8, 0u64 as *u8) != -4i32 { return 27u64 }
+
+    return 99u64
+}

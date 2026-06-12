@@ -1,0 +1,34 @@
+NUMERA MATH CLUSTER AUDIT — genuine untested-export gaps (read-only)
+
+Methodology: many modules expose a *_selftest()/*_kat() that the corpus invokes;
+those transitively exercise most exports. Confirmed each gap is (a) not named in any
+corpus/*.iii, (b) not called by the module's selftest, (c) not called by any other
+tested stdlib module. prespec.iii only takes &fn addresses (dispatch table) — not a test.
+
+q128.iii (NO selftest; only 31_q128_add_shift + 144_q128_to_f64):
+  q128_mul (215), q128_sub (152), q128_cmp (118), q128_shr (191), q128_or (256), q128_and (276)
+field.iii: fp_div (123) — 49 tests add/sub/mul/pow/inv but not fp_div
+modular.iii: mod_u32_add (27), mod_u32_sub (37), mod_u64_sub (86), mod_u64_pow (112)
+  [mod_u64_add EXCLUDED — called by mod_u64_mul which 986 tests]
+checked.iii: checked_u64_unwrap_or (89), checked_u64_drop (98) — 145 mints a u64 handle but never reads/drops it
+fixed.iii: fix_to_u32_round (27), fix_frac (32), fix_eq (105), fix_lt (110)
+proof_term.iii: pt_to_program (def ~line; only in comments + PT_LEN_SINK var, never called)
+memo_lattice.iii: ml_slot_count (376), ml_slot_is_live (380), ml_slot_chain_eq (386), ml_slot_key (395)
+synthesis_spec.iii: ss_propose (526), ss_ratify (559) — witness-publish, not in ss_selftest
+proof_carrying.iii: pc_coeff_leaf (158) [selftest uses pc_poly_leaf instead], pc_cert_chain_root (501)
+cad.iii: cad_branch_key (104) — cad_selftest reaches begin/compose/compute/domain/final/payload/oneshot/eq, not branch_key
+identifier.iii: ident_encode_seq (99) [ident_encode_u64/pair covered via branch_anchor/proof_carrying]
+egraph.iii: eg_class_count (1107) — selftest uses eg_node_count only; zero refs anywhere
+ntt.iii: ntt_set (89), ntt_get (90), ntt_set_b (92) — public coeff-staging API; selftest stages via NTT_W direct
+
+EXCLUDED (transitively covered — do NOT report):
+  galois gf128_pow (called by gf128_inv, tested KAT3); mont_* raw helpers + modctx accessors
+  (758/759 differential KATs); mod_u64_add; ident_encode_u64/pair; eg_sym_count/eg_class_size
+  (used by sov_isa.iii); eg_integrity_holds (h10 charter 691).
+
+CLOSED 2026-06-12 (corpus 1462_numera_slot_witness_gaps + 1463_numera_carrier_program_gaps):
+  ml_slot_count / ml_slot_is_live / ml_slot_chain_eq / ml_slot_key, eg_class_count,
+  cad_branch_key, ident_encode_seq, pt_to_program, pc_coeff_leaf, pc_cert_chain_root.
+STALE ON RE-VERIFY (already corpus-covered by the v1 430->0 burn-down, 14xx KATs):
+  q128_* (6), fp_div, mod_u32_add/sub, mod_u64_sub/pow, checked_u64_unwrap_or/drop,
+  fix_to_u32_round/fix_frac/fix_eq/fix_lt, ss_propose/ss_ratify, ntt_set/ntt_get/ntt_set_b.

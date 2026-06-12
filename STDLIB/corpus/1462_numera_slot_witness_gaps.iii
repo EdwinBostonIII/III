@@ -1,0 +1,180 @@
+/* 1462_numera_slot_witness_gaps.iii -- NUMERA AUDIT GAP CLOSURE I: THE MEMO-LATTICE SLOT
+ * ACCESSORS, THE E-GRAPH CLASS CENSUS, THE BRANCH KEY, THE SEQUENCE ENCODER (7 exports
+ * with ZERO corpus references, confirmed live against the tree before writing).
+ *
+ *  ml_slot_count / ml_slot_is_live / ml_slot_chain_eq / ml_slot_key -- the lattice's
+ *      audit surface: after the full admission vertical (cp_memo_admit ratified, chain
+ *      fragment on the spine, one entry admitted) exactly ONE slot is live; its chain
+ *      matches the registered fragment and ONLY that fragment; its key copies out
+ *      byte-identically; a dead slot, an out-of-range slot, and a null out-buffer are
+ *      each refused with their exact contract codes;
+ *  eg_class_count -- the live-class tally: empty graph 0, two distinct nullary nodes 2,
+ *      re-adding an existing node is hash-consed (still 2 -- the census does not double
+ *      count);
+ *  cad_branch_key -- keccak(canonical || branch): deterministic, ORDER-SENSITIVE
+ *      (swapped inputs give a different key), null-refused;
+ *  ident_encode_seq -- keccak over a 32-byte-item sequence: deterministic,
+ *      order-sensitive, null-items-refused (count > 0), and the empty sequence is a
+ *      VALID encoding (count 0 reads no bytes).
+ * Exit 99. */
+module corpus_1462
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_count() -> u64 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_is_live(slot: u64) -> u8 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_chain_eq(slot: u64, chain_id: *u8) -> u8 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_key(slot: u64, out_key: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_class_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cad_branch_key(canonical: *u8, branch_id: *u8, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn ident_encode_seq(items: *u8, item_count: u64, out: *u8) -> i32 from "identifier.iii"
+
+var LABEL  : [u8; 13]          /* "cp_memo_admit" */
+var RATBUF : [u64; 16]
+var ZID    : [u8; 32]
+var PAY    : [u8; 72]
+var CHAIN  : [u8; 32]
+var KEY    : [u8; 32]
+var COMMIT : [u8; 32]
+var BOGUS  : [u8; 32]
+var OUTK   : [u8; 32]
+var SYM_A  : [u8; 32]
+var SYM_B  : [u8; 32]
+var CHILD0 : [u32; 1]
+var CANON  : [u8; 32]
+var BRANCH : [u8; 32]
+var BK1    : [u8; 32]
+var BK2    : [u8; 32]
+var BK3    : [u8; 32]
+var SEQ    : [u8; 64]
+var SQ1    : [u8; 32]
+var SQ2    : [u8; 32]
+var SQ3    : [u8; 32]
+var SQ4    : [u8; 32]
+
+fn set_label() {
+    LABEL[0u64]  = 0x63u8   LABEL[1u64]  = 0x70u8   LABEL[2u64]  = 0x5Fu8
+    LABEL[3u64]  = 0x6Du8   LABEL[4u64]  = 0x65u8   LABEL[5u64]  = 0x6Du8
+    LABEL[6u64]  = 0x6Fu8   LABEL[7u64]  = 0x5Fu8   LABEL[8u64]  = 0x61u8
+    LABEL[9u64]  = 0x64u8   LABEL[10u64] = 0x6Du8   LABEL[11u64] = 0x69u8
+    LABEL[12u64] = 0x74u8
+}
+
+fn main() -> u64 {
+    /* ==== the full memo-lattice admission vertical (1340's pattern) ==== */
+    wh_init(0u64)
+    ws_init()
+    ml_init()
+    cons_init()
+    set_label()
+    let reqbase : u64 = &RATBUF as u64
+    let labaddr : u64 = &LABEL as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = labaddr
+    rqp[2u64] = 13u64
+    rqp[3u64] = labaddr
+    rqp[4u64] = 0u64
+    rqp[5u64] = labaddr
+    rqp[6u64] = 0u64
+    if cons_ratify(reqbase as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    ident_zero((&ZID as u64) as *u8)
+    let zp : *u8 = (&ZID as u64) as *u8
+    let idxc : u64 = wh_publish(zp, zp, zp, zp, 0u8, 0u8, 1u16, zp, 0u32, (&PAY as u64) as *u8, 72u32, (&CHAIN as u64) as *u8)
+    if idxc == 0xFFFFFFFFFFFFFFFFu64 { return 2u64 }
+    ws_register(idxc)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        KEY[i] = 0x55u8
+        COMMIT[i] = 0x66u8
+        BOGUS[i] = 0x21u8
+        i = i + 1u64
+    }
+    if ml_admit((&KEY as u64) as *u8, (&COMMIT as u64) as *u8, (&CHAIN as u64) as *u8) != 0i32 { return 3u64 }
+
+    /* ---- ml_slot_count: the lattice's declared audit width ---- */
+    if ml_slot_count() != 65536u64 { return 4u64 }
+
+    /* ---- exactly ONE live slot; find it ---- */
+    let n : u64 = ml_slot_count()
+    let mut live_n : u64 = 0u64
+    let mut ls : u64 = 0u64
+    let mut s : u64 = 0u64
+    while s < n {
+        if ml_slot_is_live(s) == 1u8 { live_n = live_n + 1u64   ls = s }
+        s = s + 1u64
+    }
+    if live_n != 1u64 { return 5u64 }
+
+    /* ---- the live slot's chain matches the registered fragment, and ONLY it ---- */
+    if ml_slot_is_live(ls) != 1u8 { return 6u64 }
+    if ml_slot_chain_eq(ls, (&CHAIN as u64) as *u8) != 1u8 { return 7u64 }
+    if ml_slot_chain_eq(ls, (&BOGUS as u64) as *u8) != 0u8 { return 8u64 }
+    if ml_slot_key(ls, (&OUTK as u64) as *u8) != 0i32 { return 9u64 }
+    let mut k : u64 = 0u64
+    while k < 32u64 { if OUTK[k] != KEY[k] { return 10u64 }   k = k + 1u64 }
+
+    /* ---- the dead slot, the out-of-range slot, the null out-buffer: each refused ---- */
+    let mut ds : u64 = ls + 1u64
+    if ds >= n { ds = 0u64 }
+    if ml_slot_is_live(ds) != 0u8 { return 11u64 }
+    if ml_slot_chain_eq(ds, (&CHAIN as u64) as *u8) != 0u8 { return 12u64 }
+    if ml_slot_key(ds, (&OUTK as u64) as *u8) != -2i32 { return 13u64 }       /* E_ABSENT */
+    if ml_slot_is_live(65536u64) != 0u8 { return 14u64 }
+    if ml_slot_key(65536u64, (&OUTK as u64) as *u8) != -2i32 { return 15u64 } /* OOB -> E_ABSENT */
+    if ml_slot_key(ls, 0u64 as *u8) != -1i32 { return 16u64 }                 /* null -> E_NULL */
+
+    /* ==== eg_class_count: empty 0, two distinct 2, hash-cons does not double count ==== */
+    eg_init()
+    if eg_class_count() != 0u32 { return 17u64 }
+    let mut y : u64 = 0u64
+    while y < 32u64 { SYM_A[y] = 0xA0u8   SYM_B[y] = 0xB0u8   y = y + 1u64 }
+    let na : u32 = eg_add((&SYM_A as u64) as *u8, (&CHILD0 as u64) as *u32, 0u32)
+    if na == 0xFFFFFFFFu32 { return 18u64 }
+    if eg_class_count() != 1u32 { return 19u64 }
+    let nb : u32 = eg_add((&SYM_B as u64) as *u8, (&CHILD0 as u64) as *u32, 0u32)
+    if nb == 0xFFFFFFFFu32 { return 20u64 }
+    if eg_class_count() != 2u32 { return 21u64 }
+    let na2 : u32 = eg_add((&SYM_A as u64) as *u8, (&CHILD0 as u64) as *u32, 0u32)
+    if na2 != na { return 22u64 }                          /* hash-consed: the SAME node */
+    if eg_class_count() != 2u32 { return 23u64 }           /* census not double-counted */
+
+    /* ==== cad_branch_key: deterministic, order-sensitive, null-refused ==== */
+    let mut c : u64 = 0u64
+    while c < 32u64 { CANON[c] = (c + 1u64) as u8   BRANCH[c] = (c + 101u64) as u8   c = c + 1u64 }
+    if cad_branch_key((&CANON as u64) as *u8, (&BRANCH as u64) as *u8, (&BK1 as u64) as *u8) != 0i32 { return 24u64 }
+    if cad_branch_key((&CANON as u64) as *u8, (&BRANCH as u64) as *u8, (&BK2 as u64) as *u8) != 0i32 { return 25u64 }
+    if cad_eq((&BK1 as u64) as *u8, (&BK2 as u64) as *u8) != 1u8 { return 26u64 }   /* deterministic */
+    if cad_branch_key((&BRANCH as u64) as *u8, (&CANON as u64) as *u8, (&BK3 as u64) as *u8) != 0i32 { return 27u64 }
+    if cad_eq((&BK1 as u64) as *u8, (&BK3 as u64) as *u8) != 0u8 { return 28u64 }   /* order matters */
+    if cad_branch_key(0u64 as *u8, (&BRANCH as u64) as *u8, (&BK1 as u64) as *u8) != -1i32 { return 29u64 }
+    if cad_branch_key((&CANON as u64) as *u8, 0u64 as *u8, (&BK1 as u64) as *u8) != -1i32 { return 30u64 }
+    if cad_branch_key((&CANON as u64) as *u8, (&BRANCH as u64) as *u8, 0u64 as *u8) != -1i32 { return 31u64 }
+
+    /* ==== ident_encode_seq: deterministic, order-sensitive, null-refused, empty valid ==== */
+    let mut q : u64 = 0u64
+    while q < 32u64 { SEQ[q] = 0x11u8   SEQ[32u64 + q] = 0x22u8   q = q + 1u64 }
+    if ident_encode_seq((&SEQ as u64) as *u8, 2u64, (&SQ1 as u64) as *u8) != 0i32 { return 32u64 }
+    if ident_encode_seq((&SEQ as u64) as *u8, 2u64, (&SQ2 as u64) as *u8) != 0i32 { return 33u64 }
+    if cad_eq((&SQ1 as u64) as *u8, (&SQ2 as u64) as *u8) != 1u8 { return 34u64 }   /* deterministic */
+    q = 0u64
+    while q < 32u64 { SEQ[q] = 0x22u8   SEQ[32u64 + q] = 0x11u8   q = q + 1u64 }
+    if ident_encode_seq((&SEQ as u64) as *u8, 2u64, (&SQ3 as u64) as *u8) != 0i32 { return 35u64 }
+    if cad_eq((&SQ1 as u64) as *u8, (&SQ3 as u64) as *u8) != 0u8 { return 36u64 }   /* order matters */
+    if ident_encode_seq(0u64 as *u8, 2u64, (&SQ4 as u64) as *u8) != -1i32 { return 37u64 }  /* null items */
+    if ident_encode_seq((&SEQ as u64) as *u8, 2u64, 0u64 as *u8) != -1i32 { return 38u64 }  /* null out */
+    if ident_encode_seq(0u64 as *u8, 0u64, (&SQ4 as u64) as *u8) != 0i32 { return 39u64 }   /* empty seq VALID */
+    if cad_eq((&SQ4 as u64) as *u8, (&SQ1 as u64) as *u8) != 0u8 { return 40u64 }   /* and distinct */
+
+    return 99u64
+}

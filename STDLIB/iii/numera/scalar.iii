@@ -50,25 +50,27 @@ fn scalar_u32_mul_wrap(a: u32, b: u32) -> u32 @export {
 /* --- u32 overflow detection --- */
 
 fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 @export {
-    let am : u32 = a & 0xFFFFFFFFu32
-    let bm : u32 = b & 0xFFFFFFFFu32
-    let r : u32 = (am + bm) & 0xFFFFFFFFu32
+    /* [CUT-8/W3.29] the former `& 0xFFFFFFFFu32` masks here were type-level no-ops
+     * on already-u32 values (u32 arithmetic wraps natively; corpus 01 pins it) */
+    let am : u32 = a
+    let bm : u32 = b
+    let r : u32 = am + bm
     if r < am { return 1u8 }
     return 0u8
 }
 
 fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 @export {
-    let am : u32 = a & 0xFFFFFFFFu32
-    let bm : u32 = b & 0xFFFFFFFFu32
+    let am : u32 = a
+    let bm : u32 = b
     if bm > am { return 1u8 }
     return 0u8
 }
 
 fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 @export {
-    let am : u32 = a & 0xFFFFFFFFu32
-    let bm : u32 = b & 0xFFFFFFFFu32
+    let am : u32 = a
+    let bm : u32 = b
     if bm == 0u32 { return 0u8 }
-    let r : u32 = (am * bm) & 0xFFFFFFFFu32
+    let r : u32 = am * bm
     let q : u32 = r / bm
     if q != am { return 1u8 }
     return 0u8
@@ -77,26 +79,26 @@ fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 @export {
 /* --- u32 saturating --- */
 
 fn scalar_u32_add_sat(a: u32, b: u32) -> u32 @export {
-    let am : u32 = a & 0xFFFFFFFFu32
-    let bm : u32 = b & 0xFFFFFFFFu32
-    let r : u32 = (am + bm) & 0xFFFFFFFFu32
+    let am : u32 = a
+    let bm : u32 = b
+    let r : u32 = am + bm
     if r < am { return SCALAR_U32_MAX }
     return r
 }
 
 fn scalar_u32_sub_sat(a: u32, b: u32) -> u32 @export {
-    let am : u32 = a & 0xFFFFFFFFu32
-    let bm : u32 = b & 0xFFFFFFFFu32
+    let am : u32 = a
+    let bm : u32 = b
     if bm > am { return 0u32 }
-    return (am - bm) & 0xFFFFFFFFu32
+    return am - bm
 }
 
 fn scalar_u32_mul_sat(a: u32, b: u32) -> u32 @export {
-    let am : u32 = a & 0xFFFFFFFFu32
-    let bm : u32 = b & 0xFFFFFFFFu32
+    let am : u32 = a
+    let bm : u32 = b
     if bm == 0u32 { return 0u32 }
     if am == 0u32 { return 0u32 }
-    let r : u32 = (am * bm) & 0xFFFFFFFFu32
+    let r : u32 = am * bm
     let q : u32 = r / bm
     if q != am { return SCALAR_U32_MAX }
     return r

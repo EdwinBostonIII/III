@@ -74,7 +74,7 @@ fn sha256_dispatch_select() -> u32 {
 /* Pin a path for tests/benchmarking.  Returns the RESULTING active path:
  *   force(SOFTWARE) -> 0 ; force(SHA_NI) -> cpufeat_has_sha() ; bogus -> unchanged. */
 fn sha256_dispatch_force_path(p: u32) -> u32 @export {
-    let p_l : u32 = p & 0xFFFFFFFFu32
+    let p_l : u32 = p               /* [CUT-8] mask was a u32 no-op; the local copy stays */
     if p_l == SHA_PATH_SOFTWARE { SHA_DISPATCH_OV = SHA_OV_SOFTWARE ; return sha256_dispatch_select() }
     if p_l == SHA_PATH_SHA_NI   { SHA_DISPATCH_OV = SHA_OV_SHA_NI   ; return sha256_dispatch_select() }
     return sha256_dispatch_select()   /* bogus -> override unchanged */

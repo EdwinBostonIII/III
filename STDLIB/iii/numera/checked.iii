@@ -26,19 +26,19 @@ extern @abi(c-msvc-x64) fn option_u64_drop(o: u64) -> u8 from "option.iii"
 
 fn checked_u32_add(a: u32, b: u32) -> u64 @provenance_linked_error @export {
     if scalar_u32_add_did_overflow(a, b) == 1u8 { return 0u64 }
-    let r : u32 = (a + b) & 0xFFFFFFFFu32
+    let r : u32 = a + b      /* [CUT-8] mask was a u32 no-op */
     return ((r as u64) << 1u64) | 1u64
 }
 
 fn checked_u32_sub(a: u32, b: u32) -> u64 @provenance_linked_error @export {
     if scalar_u32_sub_did_underflow(a, b) == 1u8 { return 0u64 }
-    let r : u32 = (a - b) & 0xFFFFFFFFu32
+    let r : u32 = a - b
     return ((r as u64) << 1u64) | 1u64
 }
 
 fn checked_u32_mul(a: u32, b: u32) -> u64 @provenance_linked_error @export {
     if scalar_u32_mul_did_overflow(a, b) == 1u8 { return 0u64 }
-    let r : u32 = (a * b) & 0xFFFFFFFFu32
+    let r : u32 = a * b
     return ((r as u64) << 1u64) | 1u64
 }
 

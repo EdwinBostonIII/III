@@ -30,7 +30,7 @@ fn fold_u8_u32_sum(iter_id: u64) -> u32 @export {
         let v : u32 = iter_u8_next(iter_id)
         if v == FOLD_END { done = 1u8 }
         if done == 0u8 {
-            acc = (acc + v) & 0xFFFFFFFFu32
+            acc = acc + v               /* [CUT-8] mask was a u32 no-op */
         }
     }
     return acc
@@ -43,7 +43,7 @@ fn fold_u8_u32_xor(iter_id: u64) -> u32 @export {
         let v : u32 = iter_u8_next(iter_id)
         if v == FOLD_END { done = 1u8 }
         if done == 0u8 {
-            acc = (acc ^ v) & 0xFFFFFFFFu32
+            acc = acc ^ v
         }
     }
     return acc
@@ -101,7 +101,7 @@ fn fold_u8_u32_via_fn(iter_id: u64, init: u32, step: u64) -> u32 @export {
         let v : u32 = iter_u8_next(iter_id)
         if v == FOLD_END { done = 1u8 }
         if done == 0u8 {
-            acc = (f(acc, v)) & 0xFFFFFFFFu32
+            acc = f(acc, v)
         }
     }
     return acc

@@ -107,12 +107,34 @@ var CV_N_REFFILES : u64 = 0u64     /* pass-2 files scanned */
 var CV_TOK    : [u8; 64]
 var CV_PEND   : [u8; 64]           /* pending definition name awaiting @export */
 var CV_PENDLEN : u64 = 0u64
+var CV_PENDARG : u8 = 0u8          /* 1 iff the pending def takes parameters (v2: a
+                                    * no-arg export cannot be driven to refuse -- it is
+                                    * an OBSERVATION, not a gate; its falsifier is its
+                                    * charter's canary, so it is exempt from the
+                                    * outcome criterion and stays under v1 reference) */
 
 /* --- uncovered report (sorted indices), census + seal --- */
 var CV_UIDX   : [u32; 16384]
 var CV_NUNCOV : u64 = 0u64
-var CV_CENSUS : [u8; 48]
+var CV_CENSUS : [u8; 64]
 var CV_NL     : [u8; 4]            /* newline byte for the report writer */
+
+/* --- CRITERION v2: the gate-family OUTCOME census (the membrane lesson, 2026-06-12).
+ * xii_sml/xii_antidrift's anchor gates were REFERENCED yet fully INVERTED -- valid
+ * signatures rejected, forgeries accepted -- because no test had ever pinned the accept
+ * arm.  Reference-coverage cannot see that.  v2: an export whose name carries a gate
+ * stem (verify/admit/attest/launch/validate/authorize) must appear at corpus call sites
+ * whose adjacent comparison pins at least TWO DISTINCT outcomes -- `f(...) == A` and
+ * `f(...) != A` are distinct, as are two different literals.  A gate that can only ever
+ * be seen saying ONE thing (or nothing) is UNDER-PROVEN: an always-accept stub or an
+ * inverted polarity pins exactly one outcome and is caught.  Outcomes are counted from
+ * the CORPUS tree only -- a production module comparing a gate is use, not proof. --- */
+var CV_EGATE : [u8; 16384]         /* 1 iff the export name carries a gate stem */
+var CV_OKEY  : [u64; 65536]        /* 4 outcome keys per export (FNV of op||literal) */
+var CV_ONC   : [u8; 16384]         /* distinct outcomes seen (saturates at 4) */
+var CV_GIDX  : [u32; 16384]        /* sorted under-proven gate indices */
+var CV_NGUND : u64 = 0u64
+var CV_NGATE : u64 = 0u64
 
 /* === byte/string primitives (NIH; length-explicit where a literal is read) === */
 
@@ -289,6 +311,18 @@ fn cv_find(tok_addr: u64, len: u64) -> u64 {
     return res
 }
 
+/* gate-family classification: a name carrying one of the six gate stems makes a
+ * SECURITY DECISION and is held to the v2 outcome criterion, not mere reference */
+fn cv_is_gate_name(tok_addr: u64, len: u64) -> u8 {
+    if cv_contains(tok_addr, len, ("verify" as u64), 6u64) == 1u8 { return 1u8 }
+    if cv_contains(tok_addr, len, ("admit" as u64), 5u64) == 1u8 { return 1u8 }
+    if cv_contains(tok_addr, len, ("attest" as u64), 6u64) == 1u8 { return 1u8 }
+    if cv_contains(tok_addr, len, ("launch" as u64), 6u64) == 1u8 { return 1u8 }
+    if cv_contains(tok_addr, len, ("validate" as u64), 8u64) == 1u8 { return 1u8 }
+    if cv_contains(tok_addr, len, ("authorize" as u64), 9u64) == 1u8 { return 1u8 }
+    return 0u8
+}
+
 /* register an export name (pass 1); dedups (a cross-module name collision counts CV_DUP) */
 fn cv_register(tok_addr: u64, len: u64) {
     if len == 0u64 { return }
@@ -303,6 +337,13 @@ fn cv_register(tok_addr: u64, len: u64) {
     while i < len { dst[i] = src[i]   i = i + 1u64 }
     CV_ELEN[idx] = len
     CV_ECOV[idx] = 0u8
+    /* a gate must BOTH carry a gate stem AND take parameters: a no-arg "verify" is a
+     * system-state observation whose negative arm no input can drive (h1..h13 family) */
+    CV_EGATE[idx] = 0u8
+    if cv_is_gate_name(tok_addr, len) == 1u8 {
+        if CV_PENDARG == 1u8 { CV_EGATE[idx] = 1u8 }
+    }
+    CV_ONC[idx] = 0u8
     let mut slot : u64 = cv_fnv(tok_addr, len) & CV_HASH_MASK
     let mut go : u8 = 1u8
     while go == 1u8 {
@@ -316,6 +357,127 @@ fn cv_register(tok_addr: u64, len: u64) {
 fn cv_mark(tok_addr: u64, len: u64) {
     let idx : u64 = cv_find(tok_addr, len)
     if idx != CV_MAX_EXP { CV_ECOV[idx] = 1u8 }
+}
+
+/* v2 outcome capture (pass 3, PURE LOOKAHEAD -- the main scan position never moves).
+ * At a gate-export ident ending at `pos`: expect '(' (a CALL, not a bare mention), walk
+ * the balanced argument parens (string-aware, bounded), then -- on the same logical
+ * line, spaces/tabs only -- expect `==` or `!=` and a literal/const token.  The outcome
+ * key is FNV(op || token bytes); two textually-identical outcomes collide INTO ONE
+ * (asserting `!= 1u8` twice proves nothing new); two distinct keys = the gate has been
+ * seen saying two different things = positive-arm proven.  An extern declaration never
+ * captures (after its parens comes `->`, not a comparison). */
+fn cv_outcome_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
+    let idx : u64 = cv_find(tok_addr, tok_len)
+    if idx == CV_MAX_EXP { return }
+    if CV_EGATE[idx] == 0u8 { return }
+    if CV_ONC[idx] >= 2u8 { return }                  /* already proven */
+    let mut p : u64 = pos
+    let mut wg : u8 = 1u8
+    while wg == 1u8 {                                  /* skip space/tab */
+        if p >= len { wg = 0u8 } else {
+            let wc : u8 = CV_FBUF[p]
+            if wc == 0x20u8 { p = p + 1u64 } else {
+                if wc == 0x09u8 { p = p + 1u64 } else { wg = 0u8 }
+            }
+        }
+    }
+    if p >= len { return }
+    if CV_FBUF[p] != 0x28u8 { return }                 /* '(' -- a call site */
+    let mut bound : u64 = p + 2048u64
+    if bound > len { bound = len }
+    let mut depth : u64 = 1u64
+    p = p + 1u64
+    let mut bg : u8 = 1u8
+    while bg == 1u8 {
+        if depth == 0u64 { bg = 0u8 } else {
+            if p >= bound { bg = 0u8 } else {
+                let bc : u8 = CV_FBUF[p]
+                if bc == 0x22u8 {                      /* skip a string arg */
+                    let mut q : u64 = p + 1u64
+                    let mut sg : u8 = 1u8
+                    while sg == 1u8 {
+                        if q >= bound { sg = 0u8 } else {
+                            let sc : u8 = CV_FBUF[q]
+                            if sc == 0x5Cu8 { q = q + 2u64 } else {
+                                if sc == 0x22u8 { sg = 0u8 } else {
+                                    if sc == 0x0Au8 { sg = 0u8 } else { q = q + 1u64 }
+                                }
+                            }
+                        }
+                    }
+                    p = q + 1u64
+                } else {
+                    if bc == 0x28u8 { depth = depth + 1u64 }
+                    if bc == 0x29u8 { depth = depth - 1u64 }
+                    p = p + 1u64
+                }
+            }
+        }
+    }
+    if depth != 0u64 { return }                        /* unbalanced within bound */
+    let mut wg2 : u8 = 1u8
+    while wg2 == 1u8 {                                 /* space/tab only: same line */
+        if p >= len { wg2 = 0u8 } else {
+            let w2 : u8 = CV_FBUF[p]
+            if w2 == 0x20u8 { p = p + 1u64 } else {
+                if w2 == 0x09u8 { p = p + 1u64 } else { wg2 = 0u8 }
+            }
+        }
+    }
+    if (p + 1u64) >= len { return }
+    let o1 : u8 = CV_FBUF[p]
+    let o2 : u8 = CV_FBUF[p + 1u64]
+    let mut op : u8 = 0u8
+    if o1 == 0x3Du8 { if o2 == 0x3Du8 { op = 0x3Du8 } }    /* == */
+    if o1 == 0x21u8 { if o2 == 0x3Du8 { op = 0x21u8 } }    /* != */
+    if op == 0u8 { return }
+    p = p + 2u64
+    let mut wg3 : u8 = 1u8
+    while wg3 == 1u8 {
+        if p >= len { wg3 = 0u8 } else {
+            let w3 : u8 = CV_FBUF[p]
+            if w3 == 0x20u8 { p = p + 1u64 } else {
+                if w3 == 0x09u8 { p = p + 1u64 } else { wg3 = 0u8 }
+            }
+        }
+    }
+    /* fold op + the outcome token ('-'? then ident/number chars) into one FNV key */
+    let mut h : u64 = CV_FNV_BASIS
+    h = h ^ (op as u64)
+    h = h * CV_FNV_PRIME
+    let mut tn : u64 = 0u64
+    if p < len {
+        if CV_FBUF[p] == 0x2Du8 {                      /* leading '-' */
+            h = h ^ 0x2Du64
+            h = h * CV_FNV_PRIME
+            p = p + 1u64
+            tn = tn + 1u64
+        }
+    }
+    let mut tg : u8 = 1u8
+    while tg == 1u8 {
+        if p >= len { tg = 0u8 } else {
+            if cv_is_ident_char(CV_FBUF[p]) == 1u8 {
+                if tn < 24u64 {
+                    h = h ^ (CV_FBUF[p] as u64)
+                    h = h * CV_FNV_PRIME
+                }
+                p = p + 1u64
+                tn = tn + 1u64
+            } else { tg = 0u8 }
+        }
+    }
+    if tn == 0u64 { return }                           /* no outcome token */
+    let base : u64 = idx * 4u64
+    let nc : u64 = (CV_ONC[idx] as u64) & 0xFFu64
+    let mut s : u64 = 0u64
+    while s < nc {
+        if CV_OKEY[base + s] == h { return }           /* same outcome again: no new proof */
+        s = s + 1u64
+    }
+    CV_OKEY[base + nc] = h
+    CV_ONC[idx] = ((nc + 1u64) & 0xFFu64) as u8
 }
 
 /* === the code-level lexer ===
@@ -343,6 +505,36 @@ fn cv_is_ident_char(c: u8) -> u8 {
     if cv_is_ident_start(c) == 1u8 { return 1u8 }
     if c >= 0x30u8 { if c <= 0x39u8 { return 1u8 } }   /* 0-9 */
     return 0u8
+}
+
+/* does the definition whose name ends at `pos` take parameters?  Lookahead: skip
+ * spaces/tabs, expect '(', skip spaces/tabs -- ')' immediately = NO parameters. */
+fn cv_def_has_args(pos: u64, len: u64) -> u8 {
+    let mut p : u64 = pos
+    let mut g1 : u8 = 1u8
+    while g1 == 1u8 {
+        if p >= len { g1 = 0u8 } else {
+            let c1 : u8 = CV_FBUF[p]
+            if c1 == 0x20u8 { p = p + 1u64 } else {
+                if c1 == 0x09u8 { p = p + 1u64 } else { g1 = 0u8 }
+            }
+        }
+    }
+    if p >= len { return 0u8 }
+    if CV_FBUF[p] != 0x28u8 { return 0u8 }
+    p = p + 1u64
+    let mut g2 : u8 = 1u8
+    while g2 == 1u8 {
+        if p >= len { g2 = 0u8 } else {
+            let c2 : u8 = CV_FBUF[p]
+            if c2 == 0x20u8 { p = p + 1u64 } else {
+                if c2 == 0x09u8 { p = p + 1u64 } else { g2 = 0u8 }
+            }
+        }
+    }
+    if p >= len { return 0u8 }
+    if CV_FBUF[p] == 0x29u8 { return 0u8 }
+    return 1u8
 }
 
 /* does FBUF[i..] start with "@export" (7 bytes + non-ident follow)? */
@@ -460,7 +652,8 @@ fn cv_scan_buf(len: u64, phase: u32) {
             } else {
                 if prev_fn == 1u8 {
                     if line_extern == 1u8 {
-                        /* a consumer's import declaration: a real reference */
+                        /* a consumer's import declaration: a real reference (never an
+                         * outcome -- after an extern's parens comes `->`, not `==`) */
                         if phase == 2u32 { cv_mark(ta, tl) }
                     } else {
                         /* a definition name: pass 1 holds it pending @export; pass 2 skips it.
@@ -475,12 +668,14 @@ fn cv_scan_buf(len: u64, phase: u32) {
                                 let mut q : u64 = 0u64
                                 while q < tl { CV_PEND[q] = CV_TOK[q]   q = q + 1u64 }
                                 CV_PENDLEN = tl
+                                CV_PENDARG = cv_def_has_args(j4, len)
                             }
                         }
                     }
                     prev_fn = 0u8
                 } else {
                     if phase == 2u32 { cv_mark(ta, tl) }
+                    if phase == 3u32 { cv_outcome_try(ta, tl, j4, len) }
                 }
             } }
             i = j4
@@ -506,7 +701,10 @@ fn cv_scan_file(cap_id: u64, phase: u32) {
     let got : u64 = fs_read(h, (&CV_FBUF as u64), sz)
     fs_close(h)
     if got != sz { CV_TRUNC = CV_TRUNC + 1u64   return }
-    if phase == 1u32 { CV_N_FILES = CV_N_FILES + 1u64 } else { CV_N_REFFILES = CV_N_REFFILES + 1u64 }
+    /* census counters: pass 3 (outcomes) must NOT perturb the v1 census -- 1391 pins
+     * reffiles == pass-2 file count exactly (caught 2026-06-12 when pass 3 double-counted) */
+    if phase == 1u32 { CV_N_FILES = CV_N_FILES + 1u64 }
+    if phase == 2u32 { CV_N_REFFILES = CV_N_REFFILES + 1u64 }
     cv_scan_buf(got, phase)
 }
 
@@ -615,8 +813,46 @@ fn cv_finalize() {
     }
 }
 
+/* collect + insertion-sort the v2 under-proven gate set: every gate-stem export whose
+ * corpus outcome count is < 2 (an uncovered gate has 0 outcomes -- it lands in BOTH
+ * censuses, double pressure by design) */
+fn cv_finalize_gates() {
+    CV_NGUND = 0u64
+    CV_NGATE = 0u64
+    let mut e : u64 = 0u64
+    while e < CV_NEXP {
+        if CV_EGATE[e] == 1u8 {
+            CV_NGATE = CV_NGATE + 1u64
+            if CV_ONC[e] < 2u8 {
+                CV_GIDX[CV_NGUND] = (e & 0xFFFFFFFFu64) as u32
+                CV_NGUND = CV_NGUND + 1u64
+            }
+        }
+        e = e + 1u64
+    }
+    let mut i : u64 = 1u64
+    while i < CV_NGUND {
+        let key : u32 = CV_GIDX[i]
+        let ki : u64 = (key as u64) & 0xFFFFFFFFu64
+        let mut j : u64 = i
+        let mut placing : u8 = 1u8
+        while placing == 1u8 {
+            if j == 0u64 { placing = 0u8 } else {
+                let pj : u64 = (CV_GIDX[j - 1u64] as u64) & 0xFFFFFFFFu64
+                if cv_name_le(pj, ki) == 1u8 { placing = 0u8 } else {
+                    CV_GIDX[j] = CV_GIDX[j - 1u64]
+                    j = j - 1u64
+                }
+            }
+        }
+        CV_GIDX[j] = key
+        i = i + 1u64
+    }
+}
+
 /* THE AUDIT: pass 1 extracts every @export under modules_root; pass 2 marks references
- * from modules_root + corpus_root; finalize sorts the uncovered set.  Returns the
+ * from modules_root + corpus_root; pass 3 captures gate OUTCOMES from the corpus root
+ * ONLY (production use is not proof); finalize sorts both censuses.  Returns the
  * uncovered count (the census number that previously rotted in prose). */
 fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
     let cap : u64 = cap_id
@@ -626,7 +862,9 @@ fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
     cv_walk(cap, mr, 1u32)
     cv_walk(cap, mr, 2u32)
     cv_walk(cap, cr, 2u32)
+    cv_walk(cap, cr, 3u32)
     cv_finalize()
+    cv_finalize_gates()
     return CV_NUNCOV
 }
 
@@ -644,6 +882,33 @@ fn cov_n_reffiles() -> u64 @export { return CV_N_REFFILES }
 fn cov_n_dup() -> u64 @export { return CV_DUP }
 fn cov_n_trunc() -> u64 @export { return CV_TRUNC }
 fn cov_overflow() -> u8 @export { return CV_OVERFLOW }
+fn cov_n_gates() -> u64 @export { return CV_NGATE }
+fn cov_n_underproven() -> u64 @export { return CV_NGUND }
+
+/* the v2 verdict: COMPLETE iff certifiable AND every gate-stem export has been seen
+ * saying two different things in the corpus (the anti-inversion, anti-stub criterion) */
+fn cov_gate_verdict() -> u32 @export {
+    if CV_OVERFLOW == 1u8 { return CV_VIOLATION }
+    if CV_TRUNC != 0u64 { return CV_VIOLATION }
+    if CV_NGUND != 0u64 { return CV_VIOLATION }
+    return CV_COMPLETE
+}
+
+/* the i-th under-proven gate name (sorted) -> out (NUL-terminated); len, 0 if OOB */
+fn cov_underproven_name(i: u64, out_addr: u64) -> u64 @export {
+    let ii : u64 = i
+    let oa : u64 = out_addr
+    if oa == 0u64 { return 0u64 }
+    if ii >= CV_NGUND { return 0u64 }
+    let idx : u64 = (CV_GIDX[ii] as u64) & 0xFFFFFFFFu64
+    let src : *u8 = cv_name_addr(idx) as *u8
+    let dst : *u8 = oa as *u8
+    let len : u64 = CV_ELEN[idx]
+    let mut k : u64 = 0u64
+    while k < len { dst[k] = src[k]   k = k + 1u64 }
+    dst[len] = 0u8
+    return len
+}
 
 /* the i-th uncovered export name (sorted order) -> out (NUL-terminated); returns len, 0 if i OOB */
 fn cov_uncovered_name(i: u64, out_addr: u64) -> u64 @export {
@@ -673,8 +938,9 @@ fn cv_put_u64(off: u64, v: u64) {
     CV_CENSUS[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
 }
 
-/* ORDER-INDEPENDENT SEAL: census (6 u64 LE) + the sorted uncovered names stream
- * through one cad (begin/payload/final).  Same tree -> same seal, any walk order. */
+/* ORDER-INDEPENDENT SEAL (v2 layout): census (8 u64 LE -- exports, uncovered, files x2,
+ * dup, trunc, gates, under-proven) + the sorted uncovered names + the sorted under-proven
+ * gate names stream through one cad.  Same tree -> same seal, any walk order. */
 fn cov_seal(out: *u8) -> i32 @export {
     if (out as u64) == 0u64 { return -1i32 }
     cv_put_u64(0u64,  CV_NEXP)
@@ -683,13 +949,21 @@ fn cov_seal(out: *u8) -> i32 @export {
     cv_put_u64(24u64, CV_N_REFFILES)
     cv_put_u64(32u64, CV_DUP)
     cv_put_u64(40u64, CV_TRUNC)
+    cv_put_u64(48u64, CV_NGATE)
+    cv_put_u64(56u64, CV_NGUND)
     cad_begin(CV_SUITE_SHA256)
-    cad_payload((&CV_CENSUS as u64), 48u64)
+    cad_payload((&CV_CENSUS as u64), 64u64)
     let mut i : u64 = 0u64
     while i < CV_NUNCOV {
         let idx : u64 = (CV_UIDX[i] as u64) & 0xFFFFFFFFu64
         cad_payload(cv_name_addr(idx), CV_ELEN[idx])
         i = i + 1u64
+    }
+    let mut g : u64 = 0u64
+    while g < CV_NGUND {
+        let gdx : u64 = (CV_GIDX[g] as u64) & 0xFFFFFFFFu64
+        cad_payload(cv_name_addr(gdx), CV_ELEN[gdx])
+        g = g + 1u64
     }
     cad_final(out as u64)
     return 0i32
@@ -714,7 +988,27 @@ fn cov_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
     return 0i32
 }
 
+/* write the sorted under-proven gate names, one per line (the v2 report) */
+fn cov_gate_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
+    let cap : u64 = cap_id
+    let pa : u64 = path_addr
+    let h : u64 = fs_open(cap, pa, CV_MODE_WRITE)
+    if h == 0u64 { return -1i32 }
+    CV_NL[0u64] = 0x0Au8
+    let mut i : u64 = 0u64
+    while i < CV_NGUND {
+        let idx : u64 = (CV_GIDX[i] as u64) & 0xFFFFFFFFu64
+        fs_write(h, cv_name_addr(idx), CV_ELEN[idx])
+        fs_write(h, (&CV_NL as u64), 1u64)
+        i = i + 1u64
+    }
+    fs_close(h)
+    return 0i32
+}
+
 /* corpus_coverage EMBODIES the executable test-coverage ledger: III lexes its own
  * source at code level, derives the export surface, derives the reference graph, and
  * REFUSES to certify a tree holding an unproven @export -- the census is computed,
- * sorted, cad-sealed, and machine-written, so it can never again rot in prose. */
+ * sorted, cad-sealed, and machine-written, so it can never again rot in prose.
+ * v2 (the membrane lesson): a security gate must additionally be SEEN DECIDING BOTH
+ * WAYS in the corpus -- reference alone could not catch an inverted anchor gate. */

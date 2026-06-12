@@ -1,0 +1,245 @@
+/* 1427_coverage_gate_outcomes.iii -- COVERAGE CRITERION v2: THE GATE OUTCOME CENSUS
+ * (the membrane lesson made executable and falsifiable).
+ *
+ * xii_sml/xii_antidrift's anchor gates were REFERENCED yet fully INVERTED -- reference
+ * coverage (v1) cannot see that.  v2: every gate-stem export (verify/admit/attest/
+ * launch/validate/authorize) must be seen at corpus call sites pinning >= 2 DISTINCT
+ * comparison outcomes -- a gate that can only ever be seen saying ONE thing (an
+ * always-accept stub, an inverted polarity) is UNDER-PROVEN.  Hermetic synthetic tree:
+ *
+ *  (1) DISCRIMINATION -- g_open_verify pins {!= 0u32, == 3u32} -> PROVEN;
+ *      g_one_admit pins {!= 0u32} TWICE -> the SAME outcome counts ONCE -> under-proven;
+ *      g_naked_attest is CALLED but never compared -> 0 outcomes -> under-proven;
+ *      g_plain_used has no gate stem -> not in the gate census at all;
+ *      g_mod_only_launch is compared ONLY inside a module -> covered (v1 COMPLETE)
+ *      yet 0 corpus outcomes (production use is not proof) -> under-proven.
+ *      Census: 5 exports / 0 uncovered / 4 gates / 3 under-proven, SORTED;
+ *      cov_verdict == COMPLETE while cov_gate_verdict == VIOLATION (v2 sees deeper).
+ *  (2) THE REPORT -- machine-written, sorted, byte-checked.
+ *  (3) THE RATCHET -- corpus t2 gives g_one_admit a second outcome (== 5u32) and
+ *      g_naked_attest two (one through a NESTED call's balanced parens) -> under-proven
+ *      drops to exactly {g_mod_only_launch}; the corpus-only law holds.
+ *  (4) THE SEAL -- reproducible on re-audit; the 3-under-proven seal differs from the
+ *      1-under-proven seal (the v2 census is seal-bound).
+ * Exit 99. */
+module corpus_1427
+
+extern @abi(c-msvc-x64) fn cov_audit(cap: u64, modules_root: u64, corpus_root: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_verdict() -> u32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_gate_verdict() -> u32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_exports() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_uncovered() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_gates() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_underproven() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_overflow() -> u8 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_trunc() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_underproven_name(i: u64, out_addr: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_gate_report_write(cap: u64, path: u64) -> i32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_seal(out: *u8) -> i32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_size(h: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var P_ROOT : [u8; 64]
+var P_MODS : [u8; 64]
+var P_CORP : [u8; 64]
+var P_G    : [u8; 64]
+var P_T1   : [u8; 64]
+var P_T2   : [u8; 64]
+var P_REP  : [u8; 64]
+
+var KC      : [u8; 2048]
+var KC_LEN  : u64 = 0u64
+var NAMEBUF : [u8; 64]
+var SEAL_A  : [u8; 32]
+var SEAL_B  : [u8; 32]
+var SEAL_C  : [u8; 32]
+var REPBUF  : [u8; 128]
+
+fn setlit(dst_addr: u64, src_addr: u64, n: u64) {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]   i = i + 1u64 }
+    d[n] = 0u8
+}
+
+fn catlit(dst_addr: u64, a_addr: u64, b_addr: u64, bn: u64) {
+    let d : *u8 = dst_addr as *u8
+    let a : *u8 = a_addr as *u8
+    let mut al : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if al >= 63u64 { go = 0u8 } else { if a[al] == 0u8 { go = 0u8 } else { al = al + 1u64 } }
+    }
+    let mut i : u64 = 0u64
+    while i < al { d[i] = a[i]   i = i + 1u64 }
+    let b : *u8 = b_addr as *u8
+    let mut j : u64 = 0u64
+    while j < bn { d[al + j] = b[j]   j = j + 1u64 }
+    d[al + bn] = 0u8
+}
+
+fn kc_reset() { KC_LEN = 0u64 }
+fn kc_lit(src_addr: u64, n: u64) {
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { KC[KC_LEN + i] = s[i]   i = i + 1u64 }
+    KC_LEN = KC_LEN + n
+}
+fn kc_nl() { KC[KC_LEN] = 0x0Au8   KC_LEN = KC_LEN + 1u64 }
+
+fn kc_write(cap: u64, path_addr: u64) -> i32 {
+    let h : u64 = fs_open(cap, path_addr, 2u32)
+    if h == 0u64 { return -1i32 }
+    fs_write(h, (&KC as u64), KC_LEN)
+    fs_close(h)
+    return 0i32
+}
+
+fn gname_is(i: u64, lit_addr: u64, n: u64) -> u8 {
+    let got : u64 = cov_underproven_name(i, (&NAMEBUF as u64))
+    if got != n { return 0u8 }
+    let a : *u8 = (&NAMEBUF as u64) as *u8
+    let b : *u8 = lit_addr as *u8
+    let mut k : u64 = 0u64
+    let mut ok : u8 = 1u8
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if k >= n { go = 0u8 } else {
+            if a[k] != b[k] { ok = 0u8   go = 0u8 } else { k = k + 1u64 }
+        }
+    }
+    return ok
+}
+
+fn teardown(cap: u64) {
+    fs_delete(cap, (&P_G as u64))
+    fs_delete(cap, (&P_T1 as u64))
+    fs_delete(cap, (&P_T2 as u64))
+    fs_delete(cap, (&P_REP as u64))
+    fs_rmdir(cap, (&P_MODS as u64))
+    fs_rmdir(cap, (&P_CORP as u64))
+    fs_rmdir(cap, (&P_ROOT as u64))
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+
+    setlit((&P_ROOT as u64), ("./iii_cov2_kat" as u64), 14u64)
+    catlit((&P_MODS as u64), (&P_ROOT as u64), ("/mods" as u64), 5u64)
+    catlit((&P_CORP as u64), (&P_ROOT as u64), ("/corpus" as u64), 7u64)
+    catlit((&P_G  as u64), (&P_MODS as u64), ("/g.iii" as u64), 6u64)
+    catlit((&P_T1 as u64), (&P_CORP as u64), ("/t1.iii" as u64), 7u64)
+    catlit((&P_T2 as u64), (&P_CORP as u64), ("/t2.iii" as u64), 7u64)
+    catlit((&P_REP as u64), (&P_ROOT as u64), ("/greport.txt" as u64), 12u64)
+
+    teardown(cap)
+
+    if fs_mkdir(cap, (&P_ROOT as u64)) != 0i32 { return 1u64 }
+    if fs_mkdir(cap, (&P_MODS as u64)) != 0i32 { return 2u64 }
+    if fs_mkdir(cap, (&P_CORP as u64)) != 0i32 { return 3u64 }
+
+    /* --- mods/g.iii: four gate-stem exports + one plain; helper compares
+     * g_mod_only_launch IN THE MODULE (covers it; must NOT count as an outcome) --- */
+    kc_reset()
+    kc_lit(("module g" as u64), 8u64)   kc_nl()
+    kc_lit(("fn g_open_verify(x: u32) -> u32 @export { return x }" as u64), 52u64)   kc_nl()
+    kc_lit(("fn g_one_admit(x: u32) -> u32 @export { return x }" as u64), 50u64)   kc_nl()
+    kc_lit(("fn g_naked_attest(x: u32) -> u32 @export { return x }" as u64), 53u64)   kc_nl()
+    kc_lit(("fn g_plain_used(x: u32) -> u32 @export { return x }" as u64), 51u64)   kc_nl()
+    kc_lit(("fn g_mod_only_launch(x: u32) -> u32 @export { return x }" as u64), 56u64)   kc_nl()
+    kc_lit(("fn g_noarg_verify() -> u32 @export { return 1u32 }" as u64), 50u64)   kc_nl()
+    kc_lit(("fn helper() -> u32 { if g_mod_only_launch(1u32) == 7u32 { return 1u32 } return 0u32 }" as u64), 85u64)   kc_nl()
+    if kc_write(cap, (&P_G as u64)) != 0i32 { teardown(cap)   return 4u64 }
+
+    /* --- corpus/t1.iii: verify pins TWO outcomes; admit pins the SAME outcome twice;
+     * attest is called but never compared; plain is used (covers everything) --- */
+    kc_reset()
+    kc_lit(("module t1" as u64), 9u64)   kc_nl()
+    kc_lit(("extern fn g_open_verify(x: u32) -> u32" as u64), 38u64)   kc_nl()
+    kc_lit(("extern fn g_one_admit(x: u32) -> u32" as u64), 36u64)   kc_nl()
+    kc_lit(("extern fn g_naked_attest(x: u32) -> u32" as u64), 39u64)   kc_nl()
+    kc_lit(("extern fn g_plain_used(x: u32) -> u32" as u64), 37u64)   kc_nl()
+    kc_lit(("extern fn g_noarg_verify() -> u32" as u64), 33u64)   kc_nl()
+    kc_lit(("fn main() -> u64 {" as u64), 18u64)   kc_nl()
+    kc_lit(("if g_noarg_verify() != 1u32 { return 9u64 }" as u64), 43u64)   kc_nl()
+    kc_lit(("if g_open_verify(1u32) != 0u32 { return 1u64 }" as u64), 46u64)   kc_nl()
+    kc_lit(("if g_open_verify(2u32) == 3u32 { return 2u64 }" as u64), 46u64)   kc_nl()
+    kc_lit(("if g_one_admit(1u32) != 0u32 { return 3u64 }" as u64), 44u64)   kc_nl()
+    kc_lit(("if g_one_admit(2u32) != 0u32 { return 4u64 }" as u64), 44u64)   kc_nl()
+    kc_lit(("let v : u32 = g_naked_attest(5u32)" as u64), 34u64)   kc_nl()
+    kc_lit(("return g_plain_used(v) as u64 }" as u64), 31u64)   kc_nl()
+    if kc_write(cap, (&P_T1 as u64)) != 0i32 { teardown(cap)   return 5u64 }
+
+    /* ============ AUDIT #1: v1 COMPLETE, v2 sees the three under-proven ============ */
+    let unc1 : u64 = cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_overflow() != 0u8 { teardown(cap)   return 10u64 }
+    if cov_n_trunc() != 0u64 { teardown(cap)   return 11u64 }
+    if cov_n_exports() != 6u64 { teardown(cap)   return 12u64 }
+    if unc1 != 0u64 { teardown(cap)   return 13u64 }              /* every export referenced */
+    if cov_verdict() != 0u32 { teardown(cap)   return 14u64 }     /* v1: COMPLETE */
+    /* plain_used has no stem; g_noarg_verify has the stem but NO parameters -- an
+     * observation no input can drive to refuse: EXEMPT from the outcome criterion */
+    if cov_n_gates() != 4u64 { teardown(cap)   return 15u64 }
+    if cov_n_underproven() != 3u64 { teardown(cap)   return 16u64 }
+    if cov_gate_verdict() != 2u32 { teardown(cap)   return 17u64 }   /* v2: VIOLATION */
+    /* sorted: g_mod_only_launch < g_naked_attest < g_one_admit */
+    if gname_is(0u64, ("g_mod_only_launch" as u64), 17u64) != 1u8 { teardown(cap)   return 18u64 }
+    if gname_is(1u64, ("g_naked_attest" as u64), 14u64) != 1u8 { teardown(cap)   return 19u64 }
+    if gname_is(2u64, ("g_one_admit" as u64), 11u64) != 1u8 { teardown(cap)   return 20u64 }
+    if cov_seal((&SEAL_A as u64) as *u8) != 0i32 { teardown(cap)   return 21u64 }
+
+    /* the machine-written v2 report: 3 sorted lines, byte-checked */
+    if cov_gate_report_write(cap, (&P_REP as u64)) != 0i32 { teardown(cap)   return 22u64 }
+    let rh : u64 = fs_open(cap, (&P_REP as u64), 1u32)
+    if rh == 0u64 { teardown(cap)   return 23u64 }
+    let rsz : u64 = fs_size(rh)
+    let rgot : u64 = fs_read(rh, (&REPBUF as u64), rsz)
+    fs_close(rh)
+    if rgot != 45u64 { teardown(cap)   return 24u64 }   /* 17+1 + 14+1 + 11+1 */
+    if REPBUF[0u64] != 0x67u8 { teardown(cap)   return 25u64 }    /* 'g' */
+    if REPBUF[2u64] != 0x6Du8 { teardown(cap)   return 26u64 }    /* 'm' (mod_only first) */
+    if REPBUF[20u64] != 0x6Eu8 { teardown(cap)   return 27u64 }   /* 'n' (naked second) */
+    if REPBUF[35u64] != 0x6Fu8 { teardown(cap)   return 28u64 }   /* 'o' (one_admit third) */
+
+    /* ============ AUDIT #2: the ratchet -- t2 proves admit + attest ============
+     * g_one_admit gains a SECOND outcome (== 5u32); g_naked_attest gains TWO, one
+     * through a NESTED call's balanced parens; g_mod_only_launch stays under-proven
+     * (its only comparison lives in a module -- the corpus-only law). */
+    kc_reset()
+    kc_lit(("module t2" as u64), 9u64)   kc_nl()
+    kc_lit(("extern fn g_one_admit(x: u32) -> u32" as u64), 36u64)   kc_nl()
+    kc_lit(("extern fn g_naked_attest(x: u32) -> u32" as u64), 39u64)   kc_nl()
+    kc_lit(("extern fn g_plain_used(x: u32) -> u32" as u64), 37u64)   kc_nl()
+    kc_lit(("fn main() -> u64 {" as u64), 18u64)   kc_nl()
+    kc_lit(("if g_one_admit(9u32) == 5u32 { return 1u64 }" as u64), 44u64)   kc_nl()
+    kc_lit(("if g_naked_attest(g_plain_used(1u32)) != 7u32 { return 2u64 }" as u64), 61u64)   kc_nl()
+    kc_lit(("if g_naked_attest(2u32) == 0u32 { return 3u64 }" as u64), 47u64)   kc_nl()
+    kc_lit(("return 0u64 }" as u64), 13u64)   kc_nl()
+    if kc_write(cap, (&P_T2 as u64)) != 0i32 { teardown(cap)   return 30u64 }
+
+    cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_n_underproven() != 1u64 { teardown(cap)   return 31u64 }
+    if gname_is(0u64, ("g_mod_only_launch" as u64), 17u64) != 1u8 { teardown(cap)   return 32u64 }
+    if cov_gate_verdict() != 2u32 { teardown(cap)   return 33u64 }   /* one still unproven */
+    if cov_seal((&SEAL_B as u64) as *u8) != 0i32 { teardown(cap)   return 34u64 }
+    /* the v2 census is seal-bound: 3-under-proven != 1-under-proven */
+    if cad_eq((&SEAL_A as u64) as *u8, (&SEAL_B as u64) as *u8) != 0u8 { teardown(cap)   return 35u64 }
+    /* reproducible on re-audit */
+    cov_audit(cap, (&P_MODS as u64), (&P_CORP as u64))
+    if cov_seal((&SEAL_C as u64) as *u8) != 0i32 { teardown(cap)   return 36u64 }
+    if cad_eq((&SEAL_B as u64) as *u8, (&SEAL_C as u64) as *u8) != 1u8 { teardown(cap)   return 37u64 }
+
+    teardown(cap)
+    return 99u64
+}

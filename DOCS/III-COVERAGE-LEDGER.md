@@ -125,3 +125,45 @@ any future `@export` without a referencing corpus KAT FAILS the build. The burn-
 biggest catch was saved for last: the Sovereign Membrane's Founders-Anchor signature gate
 was INVERTED in both organs (xii_sml + xii_antidrift) — valid signatures rejected, forgeries
 accepted — found because the coverage criterion demanded the first-ever positive launch.
+
+## Criterion v2 — the gate-outcome census (2026-06-12)
+
+The membrane inversion proved reference-coverage insufficient for SECURITY GATES: both
+anchor-sig checkers were referenced, compiled, and aggregated -- and fully inverted.
+**v2**: an export whose name carries a gate stem (`verify` / `admit` / `attest` /
+`launch` / `validate` / `authorize`) must be seen at CORPUS call sites whose adjacent
+comparison pins **>= 2 distinct outcomes** (`op` + literal; `!= 1u8` twice counts ONCE;
+a call with no comparison counts ZERO; a module-side comparison is use, not proof).
+A gate that can only ever be seen saying one thing -- an always-accept stub, an inverted
+polarity -- is UNDER-PROVEN and fails the new ratchet.
+
+Mechanics: `corpus_coverage.iii` pass 3 (corpus root only) walks each gate call's
+balanced argument parens (string-aware, nested-call-safe) and folds `op || outcome-token`
+into a per-export FNV outcome set; `cov_gate_verdict` / `cov_n_gates` /
+`cov_n_underproven` / `cov_underproven_name` / `cov_gate_report_write` expose it; the
+seal binds both censuses (v2 layout: 8 u64 census + uncovered + under-proven names).
+The driver writes `_cov_gate_report.txt`; build_stdlib compares it against
+`scripts/coverage_gate_pin.txt` -- the same down-only ratchet discipline as v1.
+
+Hermetic falsifier: `1427_coverage_gate_outcomes`=99 (proven/same-outcome-twice/naked-call/
+module-only discrimination; the NO-ARG EXEMPTION -- a parameterless "verify" is an
+observation no input can drive to refuse (h1..h13 charter arms); its falsifier is its
+charter's canary-RED, so it stays under v1 reference only; sorted census + byte-checked
+report; the nested-paren ratchet; seal binding).  First census: **171 gate-family exports,
+105 under-proven** (negative arm proven: pin 104 -> BUILD RC=1).  Among the proven:
+ed25519_verify, handle_verify, sats_verify, crystal_verify, xii_sml_launch,
+rva_audit_and_admit, proof_ripple_corpus_equiv_verify, pfk_anchor_invariant_xii.
+
+Burn-down: tranche v2-1 (`1428_gate_outcomes_glyph_membrane`=99) gave REAL reject arms to
+the 13 glyph validators (one-byte mhash tampers; invalid-UTF-8; duplicate set element),
+the membrane verifier quartet (wrong size / manifest tamper / forged sig / cell tamper
+over the 1425 fixtures), and ks_attest (anchor flip) -- 18 closed, 105 -> 87.  The arity
+refinement then exempted 34 no-arg observations: **53 remain** (pin 53), every one an
+input-driven gate with a constructible refusal.
+
+Tranche v2-2 (`1429_gate_outcomes_anchor_rsa`=99): the Founders-Anchor verifier trio
+(fa_verify raw-directive tamper; fa_drtm_reset_verify with the 70-byte directive rebuilt
+exactly and a wrong reason_code rejected; fa_catalyst_halt_verify with a wrong halt_until
+rejected -- all live-signed, the 1399 discipline) and the 8-arg rsa_pss_verify CORE driven
+directly (OS2IP replicated via the exported bigint surface over the 1401 baked 544-bit
+key; flipped sig byte and wrong sigLen rejected) -- 4 closed, 53 -> **49** (pin 49).

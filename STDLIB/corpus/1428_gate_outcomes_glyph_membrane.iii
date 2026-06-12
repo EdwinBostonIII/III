@@ -1,0 +1,242 @@
+/* 1428_gate_outcomes_glyph_membrane.iii -- GATE BURN-DOWN v2 TRANCHE 1: THE GLYPH
+ * VALIDATORS REJECT, THE MEMBRANE VERIFIERS REJECT, THE ATTESTOR REJECTS
+ * (18 under-proven gates given REAL both-arm proofs; 105 -> 87).
+ *
+ * KAT 1400 proved every Glyph V3 validator ACCEPTING a well-formed glyph -- but except
+ * set/u64 none was ever seen REJECTING.  The v2 outcome census flagged exactly those:
+ * an accept-only proof cannot distinguish a real validator from `return 1`.  Each of
+ * the 13 here now: packs valid -> 1, then a ONE-BYTE payload tamper (the mhash bites)
+ * -> 0, then restores -> 1.  str_utf8 additionally rejects an invalid UTF-8 payload
+ * (0xFF lead byte) packed STRUCTURALLY valid; set_uniqueness rejects a true duplicate.
+ * The membrane verifiers (atm cell/manifest, sml manifest/anchor-sig) and ks_attest get
+ * direct accept+reject call sites over the 1425-style fixtures (real keypair, real
+ * detached signature, real tampers).  Exit 99. */
+module corpus_1428
+
+extern @abi(c-msvc-x64) fn glyph_u32_form_id() -> u32 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_form_id() -> u32 from "glyph_u64.iii"
+extern @abi(c-msvc-x64) fn glyph_i64_pack(v: i64, out_192: u64) -> i32 from "glyph_i64.iii"
+extern @abi(c-msvc-x64) fn glyph_i64_validate(in_192: u64) -> u8 from "glyph_i64.iii"
+extern @abi(c-msvc-x64) fn glyph_f64_pack_bits(bits: u64, out_192: u64) -> i32 from "glyph_f64.iii"
+extern @abi(c-msvc-x64) fn glyph_f64_validate(in_192: u64) -> u8 from "glyph_f64.iii"
+extern @abi(c-msvc-x64) fn glyph_str_pack(src_ptr: u64, src_len: u32, out_192: u64) -> i32 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_str_validate(in_192: u64) -> u8 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_str_validate_utf8(in_192: u64) -> u8 from "glyph_str.iii"
+extern @abi(c-msvc-x64) fn glyph_set_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_set_validate_uniqueness(in_192: u64) -> u8 from "glyph_set.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack_forms(key_form_id: u32, val_form_id: u32) -> u64 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack_sizes(pair_count: u32, key_size: u32, val_size: u32) -> u64 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack(packed_forms: u64, packed_sizes: u64, src_packed_ptr: u64, out_192: u64) -> i32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_validate(in_192: u64) -> u8 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_record_pack_begin(out_192: u64) -> i32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_pack_field(out_192: u64, slot: u32, field_id: u32, value: u64) -> i32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_pack_finalise(out_192: u64, field_count: u32) -> i32 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_record_validate(in_192: u64) -> u8 from "glyph_record.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_pack_offset_form(arena_offset: u32, inner_form_id: u32) -> u64 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_pack(inner_mhash_32_ptr: u64, arena_id: u64, packed_offset_form: u64, out_192: u64) -> i32 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_validate(in_192: u64) -> u8 from "glyph_recursive.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_set_args(args_ptr: u64, cert_id: u64, target_crystal_id: u64, source_crystal_id: u64) -> i32 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_pack(args_ptr: u64, equiv_kind: u32, out_192: u64) -> i32 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_validate(in_192: u64) -> u8 from "glyph_proof.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_set_args(args_ptr: u64, witness_idx: u64, cap_id: u64, k_fixed: u64) -> i32 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_pack(args_ptr: u64, mhash_32_ptr: u64, out_192: u64) -> i32 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_validate(in_192: u64) -> u8 from "glyph_witness.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_validate(in_192: u64) -> u8 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_pack_meta(error_code: u32, edge_count: u32) -> u64 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_pack(crystal_id: u64, parent_id: u64, packed_err_edge: u64, out_192: u64) -> i32 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_validate(in_192: u64) -> u8 from "glyph_crystal.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_pack_meta(tag: u32, variant_form_id: u32, variant_len: u32) -> u64 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn glyph_enum_validate(in_192: u64) -> u8 from "glyph_enum.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_seed(seed: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn xii_atm_verify_cell(cell_ptr: *u8, cell_size: u32, expected_mhash: *u8) -> u32 from "xii_atm.iii"
+extern @abi(c-msvc-x64) fn xii_atm_verify_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 from "xii_atm.iii"
+extern @abi(c-msvc-x64) fn xii_sml_verify_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 from "xii_sml.iii"
+extern @abi(c-msvc-x64) fn xii_sml_verify_anchor_signature(manifest_ptr: *u8) -> u32 from "xii_sml.iii"
+extern @abi(c-msvc-x64) fn ks_attest(base: u64, len: u64, expected: u64) -> u8 from "quine_seal.iii"
+extern @abi(c-msvc-x64) fn ks_measure(base: u64, len: u64, out: u64) -> i32 from "quine_seal.iii"
+
+var GA   : [u8; 192]
+var SRC  : [u8; 64]
+var MH   : [u8; 32]
+var ARGS : [u8; 64]
+var SEED : [u8; 32]
+var MAN  : [u8; 1040]
+var GOLD : [u8; 32]
+var CELL : [u8; 64]
+var CH   : [u8; 32]
+var KD   : [u8; 32]
+
+fn ga() -> u64 { return (&GA as u64) }
+
+/* tamper one payload byte; the validator under test must flip 1 -> 0 -> 1 */
+fn flip8() { GA[8u64] = GA[8u64] ^ 0x01u8 }
+
+fn main() -> u64 {
+    let fu32 : u32 = glyph_u32_form_id()
+    let fu64 : u32 = glyph_u64_form_id()
+
+    /* ---- i64: accept / tamper-reject / restore ---- */
+    let neg5 : i64 = 0i64 - 5i64
+    if glyph_i64_pack(neg5, ga()) != 0i32 { return 1u64 }
+    if glyph_i64_validate(ga()) != 1u8 { return 2u64 }
+    flip8()
+    if glyph_i64_validate(ga()) != 0u8 { return 3u64 }
+    flip8()
+    if glyph_i64_validate(ga()) != 1u8 { return 4u64 }
+
+    /* ---- f64 ---- */
+    if glyph_f64_pack_bits(0x400921FB54442D18u64, ga()) != 0i32 { return 5u64 }
+    if glyph_f64_validate(ga()) != 1u8 { return 6u64 }
+    flip8()
+    if glyph_f64_validate(ga()) != 0u8 { return 7u64 }
+
+    /* ---- str ---- */
+    SRC[0u64] = 0x61u8
+    SRC[1u64] = 0x62u8
+    SRC[2u64] = 0x63u8
+    if glyph_str_pack((&SRC as u64), 3u32, ga()) != 0i32 { return 8u64 }
+    if glyph_str_validate(ga()) != 1u8 { return 9u64 }
+    if glyph_str_validate_utf8(ga()) != 1u8 { return 10u64 }
+    flip8()
+    if glyph_str_validate(ga()) != 0u8 { return 11u64 }
+    flip8()
+    /* structurally VALID glyph whose payload is NOT UTF-8: 0xFF can never appear */
+    SRC[1u64] = 0xFFu8
+    if glyph_str_pack((&SRC as u64), 3u32, ga()) != 0i32 { return 12u64 }
+    if glyph_str_validate(ga()) != 1u8 { return 13u64 }            /* structure holds */
+    if glyph_str_validate_utf8(ga()) != 0u8 { return 14u64 }       /* well-formedness bites */
+    SRC[1u64] = 0x62u8
+
+    /* ---- set uniqueness: {1,2,2} is a multiset, not a set ---- */
+    let mut z : u64 = 0u64
+    while z < 64u64 { SRC[z] = 0u8   z = z + 1u64 }
+    SRC[0u64] = 1u8
+    SRC[4u64] = 2u8
+    SRC[8u64] = 2u8                                                /* duplicate */
+    let smeta : u64 = glyph_set_pack_meta(fu32, 3u32, 4u32)
+    if glyph_set_pack(smeta, (&SRC as u64), ga()) != 0i32 { return 15u64 }
+    if glyph_set_validate_uniqueness(ga()) != 0u8 { return 16u64 } /* rejected */
+    SRC[8u64] = 3u8
+    if glyph_set_pack(smeta, (&SRC as u64), ga()) != 0i32 { return 17u64 }
+    if glyph_set_validate_uniqueness(ga()) != 1u8 { return 18u64 } /* accepted */
+
+    /* ---- map ---- */
+    let mut z2 : u64 = 0u64
+    while z2 < 64u64 { SRC[z2] = 0u8   z2 = z2 + 1u64 }
+    SRC[0u64] = 0xA1u8
+    SRC[4u64] = 0xB1u8
+    SRC[12u64] = 0xA2u8
+    SRC[16u64] = 0xB2u8
+    let mforms : u64 = glyph_map_pack_forms(fu32, fu64)
+    let msizes : u64 = glyph_map_pack_sizes(2u32, 4u32, 8u32)
+    if glyph_map_pack(mforms, msizes, (&SRC as u64), ga()) != 0i32 { return 19u64 }
+    if glyph_map_validate(ga()) != 1u8 { return 20u64 }
+    flip8()
+    if glyph_map_validate(ga()) != 0u8 { return 21u64 }
+
+    /* ---- record ---- */
+    if glyph_record_pack_begin(ga()) != 0i32 { return 22u64 }
+    if glyph_record_pack_field(ga(), 0u32, 7u32, 0xAAu64) != 0i32 { return 23u64 }
+    if glyph_record_pack_finalise(ga(), 1u32) != 0i32 { return 24u64 }
+    if glyph_record_validate(ga()) != 1u8 { return 25u64 }
+    flip8()
+    if glyph_record_validate(ga()) != 0u8 { return 26u64 }
+
+    /* ---- recursive ---- */
+    let mut m : u64 = 0u64
+    while m < 32u64 { MH[m] = (0x50u64 + m & 0xFFu64) as u8   m = m + 1u64 }
+    let pof : u64 = glyph_recursive_pack_offset_form(0x40u32, fu32)
+    if glyph_recursive_pack((&MH as u64), 5u64, pof, ga()) != 0i32 { return 27u64 }
+    if glyph_recursive_validate(ga()) != 1u8 { return 28u64 }
+    flip8()
+    if glyph_recursive_validate(ga()) != 0u8 { return 29u64 }
+
+    /* ---- proof ---- */
+    if glyph_proof_set_args((&ARGS as u64), 11u64, 22u64, 33u64) != 0i32 { return 30u64 }
+    if glyph_proof_pack((&ARGS as u64), 2u32, ga()) != 0i32 { return 31u64 }
+    if glyph_proof_validate(ga()) != 1u8 { return 32u64 }
+    flip8()
+    if glyph_proof_validate(ga()) != 0u8 { return 33u64 }
+
+    /* ---- witness ---- */
+    if glyph_witness_set_args((&ARGS as u64), 4u64, 0xCu64, 0x99u64) != 0i32 { return 34u64 }
+    if glyph_witness_pack((&ARGS as u64), (&MH as u64), ga()) != 0i32 { return 35u64 }
+    if glyph_witness_validate(ga()) != 1u8 { return 36u64 }
+    flip8()
+    if glyph_witness_validate(ga()) != 0u8 { return 37u64 }
+
+    /* ---- vec ---- */
+    let mut z3 : u64 = 0u64
+    while z3 < 64u64 { SRC[z3] = 0u8   z3 = z3 + 1u64 }
+    SRC[0u64] = 0xE1u8
+    SRC[8u64] = 0xE2u8
+    let vmeta : u64 = glyph_vec_pack_meta(fu64, 2u32, 8u32)
+    if glyph_vec_pack(vmeta, (&SRC as u64), ga()) != 0i32 { return 38u64 }
+    if glyph_vec_validate(ga()) != 1u8 { return 39u64 }
+    flip8()
+    if glyph_vec_validate(ga()) != 0u8 { return 40u64 }
+
+    /* ---- crystal ---- */
+    let cmeta : u64 = glyph_crystal_pack_meta(0xC101u32, 2u32)
+    if glyph_crystal_pack(0x77u64, 0x66u64, cmeta, ga()) != 0i32 { return 41u64 }
+    if glyph_crystal_validate(ga()) != 1u8 { return 42u64 }
+    flip8()
+    if glyph_crystal_validate(ga()) != 0u8 { return 43u64 }
+
+    /* ---- enum ---- */
+    SRC[0u64] = 0x2Au8
+    SRC[1u64] = 0u8
+    SRC[2u64] = 0u8
+    SRC[3u64] = 0u8
+    let emeta : u64 = glyph_enum_pack_meta(3u32, fu32, 4u32)
+    if glyph_enum_pack(emeta, (&SRC as u64), ga()) != 0i32 { return 44u64 }
+    if glyph_enum_validate(ga()) != 1u8 { return 45u64 }
+    flip8()
+    if glyph_enum_validate(ga()) != 0u8 { return 46u64 }
+
+    /* ---- THE MEMBRANE VERIFIERS: direct accept + reject ---- */
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = (0x42u64 + i & 0xFFu64) as u8   i = i + 1u64 }
+    let mut mm : u64 = 0u64
+    while mm < 1040u64 { MAN[mm] = (((mm * 3u64) + 1u64) & 0xFFu64) as u8   mm = mm + 1u64 }
+    if ed25519_pubkey((&SEED as u64) as *u8, ((&MAN as u64) + 0x310u64) as *u8) != 1u8 { return 50u64 }
+    if ed25519_sign_seed((&SEED as u64) as *u8, (&MAN as u64) as *u8, 0x330u64, ((&MAN as u64) + 0x330u64) as *u8) != 1u8 { return 51u64 }
+    sha256_oneshot((&MAN as u64) as *u8, 1040u64, (&GOLD as u64) as *u8)
+    if xii_sml_verify_manifest((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8) != 0u32 { return 52u64 }
+    if xii_sml_verify_manifest((&MAN as u64) as *u8, 999u32, (&GOLD as u64) as *u8) != 2u32 { return 53u64 }    /* wrong size */
+    let mv : u8 = MAN[5u64]
+    MAN[5u64] = mv + 1u8
+    if xii_sml_verify_manifest((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8) != 3u32 { return 54u64 }   /* tamper */
+    MAN[5u64] = mv
+    if xii_sml_verify_anchor_signature((&MAN as u64) as *u8) != 0u32 { return 55u64 }                           /* VALID accepted */
+    let sv : u8 = MAN[0x335u64]
+    MAN[0x335u64] = sv + 1u8
+    if xii_sml_verify_anchor_signature((&MAN as u64) as *u8) != 4u32 { return 56u64 }                           /* forged rejected */
+    MAN[0x335u64] = sv
+    if xii_atm_verify_manifest((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8) != 0u32 { return 57u64 }
+    MAN[5u64] = mv + 1u8
+    if xii_atm_verify_manifest((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8) != 1u32 { return 58u64 }
+    MAN[5u64] = mv
+    let mut c : u64 = 0u64
+    while c < 48u64 { CELL[c] = (((c * 5u64) + 9u64) & 0xFFu64) as u8   c = c + 1u64 }
+    sha256_oneshot((&CELL as u64) as *u8, 48u64, (&CH as u64) as *u8)
+    if xii_atm_verify_cell((&CELL as u64) as *u8, 48u32, (&CH as u64) as *u8) != 0u32 { return 59u64 }
+    let cv : u8 = CELL[10u64]
+    CELL[10u64] = cv + 1u8
+    if xii_atm_verify_cell((&CELL as u64) as *u8, 48u32, (&CH as u64) as *u8) != 2u32 { return 60u64 }
+    CELL[10u64] = cv
+
+    /* ---- ks_attest: the external-anchor attestor, both arms ---- */
+    if ks_measure((&CELL as u64), 48u64, (&KD as u64)) != 0i32 { return 61u64 }
+    if ks_attest((&CELL as u64), 48u64, (&KD as u64)) != 1u8 { return 62u64 }    /* matches */
+    KD[0u64] = KD[0u64] ^ 0xFFu8
+    if ks_attest((&CELL as u64), 48u64, (&KD as u64)) != 0u8 { return 63u64 }    /* differs */
+
+    return 99u64
+}

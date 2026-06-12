@@ -1231,6 +1231,24 @@ if [[ $FAIL -eq 0 ]]; then
                 else
                     echo "[build_stdlib] coverage gate OK: uncovered=$COV_N <= pin=$COV_PIN"
                 fi
+                # v2 (the membrane lesson): gate-stem exports (verify/admit/attest/launch/
+                # validate/authorize) must pin >= 2 DISTINCT corpus outcomes -- an inverted
+                # or always-accept gate pins one and FAILS here.  Same ratchet: down only.
+                COV_GPIN_FILE="$SCRIPT_DIR/coverage_gate_pin.txt"
+                if [[ -f "$COV_REPO_ROOT/_cov_gate_report.txt" && -f "$COV_GPIN_FILE" ]]; then
+                    COV_GN=$(wc -l < "$COV_REPO_ROOT/_cov_gate_report.txt" | tr -d ' ')
+                    COV_GPIN=$(tr -d ' 
+' < "$COV_GPIN_FILE")
+                    if [[ "$COV_GN" -gt "$COV_GPIN" ]]; then
+                        echo "[build_stdlib] GATE-OUTCOME RATCHET FAIL: under-proven=$COV_GN > pin=$COV_GPIN (see _cov_gate_report.txt)"
+                        FAIL=$((FAIL+1))
+                    else
+                        echo "[build_stdlib] gate-outcome ratchet OK: under-proven=$COV_GN <= pin=$COV_GPIN"
+                    fi
+                elif [[ -f "$COV_GPIN_FILE" ]]; then
+                    echo "[build_stdlib] GATE-OUTCOME RATCHET FAIL: driver produced no gate report"
+                    FAIL=$((FAIL+1))
+                fi
             else
                 echo "[build_stdlib] COVERAGE GATE FAIL: driver produced no report (overflow/truncation?)"
                 FAIL=$((FAIL+1))

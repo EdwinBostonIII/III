@@ -1,0 +1,114 @@
+/* 1446_gate_outcomes_branch_bisim.iii -- GATE BURN-DOWN v2 TRANCHE 19: THE BRANCH-ANCHOR
+ * BISIMULATION RE-VERIFIER (1 gate; the hard one).
+ *
+ * The full merge vertical over REAL anchored witness fragments (replicates ba_kat_merge
+ * through the public surface): a branch is constructed at an anchor; a canonical target
+ * carrying the SAME proof window [64,160) is proposed; ba_verify_bisimulation
+ * INDEPENDENTLY re-derives the bisimulation (re-runs cg_bisimulate from the recorded
+ * head+target and byte-matches the witness, M10) and returns BANCHOR_OK (0).  The
+ * negative arm: an unknown proposal id has no recorded slot, so the re-verifier returns
+ * NOT_BISIMILAR (-5) -- two distinct, real outcomes (a genuine re-derivation pass, not a
+ * stored-flag check; the prove-the-negative for a merge that was never proposed).  A
+ * target with one flipped window byte is also REFUSED at propose time (NOT_BISIMILAR).
+ * Exit 99. */
+module corpus_1446
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cg_init() -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cg_anchor_declare(fid: *u8, clause_id: *u8) -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ba_init() -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ba_construct(anchor_fid: *u8, out_branch_id: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ba_merge_propose(branch_id: *u8, canonical_target_fid: *u8, out_proposal_fid: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ba_verify_bisimulation(proposal_fid: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ba_merge_commit(proposal_fid: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ident_zero(p: *u8) -> i32 from "identifier.iii"
+
+var LABEL : [u8; 16]      /* "cp_branch_merge_" */
+var REQ   : [u64; 16]
+var PL    : [u8; 192]
+var ZID   : [u8; 32]
+var ANC   : [u8; 32]
+var BID   : [u8; 32]
+var TGT   : [u8; 32]
+var TGTN  : [u8; 32]
+var PID   : [u8; 32]
+var PID2  : [u8; 32]
+var OC    : [u8; 32]
+var UNK   : [u8; 32]
+
+fn set_label() -> i32 {
+    LABEL[0u64]=0x63u8  LABEL[1u64]=0x70u8  LABEL[2u64]=0x5Fu8  LABEL[3u64]=0x62u8
+    LABEL[4u64]=0x72u8  LABEL[5u64]=0x61u8  LABEL[6u64]=0x6Eu8  LABEL[7u64]=0x63u8
+    LABEL[8u64]=0x68u8  LABEL[9u64]=0x5Fu8  LABEL[10u64]=0x6Du8 LABEL[11u64]=0x65u8
+    LABEL[12u64]=0x72u8 LABEL[13u64]=0x67u8 LABEL[14u64]=0x65u8 LABEL[15u64]=0x5Fu8
+    return 0i32
+}
+
+/* emit a branch witness fragment with the shared window; out_fid receives the id */
+fn emit(oc_byte0: u8, out_fid: u64) -> i32 {
+    ident_zero((&OC as u64) as *u8)
+    OC[0u64] = oc_byte0
+    let zp : *u8 = (&ZID as u64) as *u8
+    let idx : u64 = wh_publish(zp, zp, zp, (&OC as u64) as *u8, 0u8, 0u8, 1u16, zp, 0u32, (&PL as u64) as *u8, 160u32, out_fid as *u8)
+    if idx == 0xFFFFFFFFFFFFFFFFu64 { return -1i32 }
+    return ws_register(idx)
+}
+
+fn main() -> u64 {
+    wh_init(0u64)
+    at_init(0u64)
+    ws_init()
+    cg_init()
+    cons_init()
+    ba_init()
+    ident_zero((&ZID as u64) as *u8)
+
+    /* ratify "cp_branch_merge_" -> cid */
+    set_label()
+    let rb : u64 = &REQ as u64
+    let rq : *u64 = rb as *u64
+    rq[0u64] = rb + 64u64
+    rq[1u64] = &LABEL as u64
+    rq[2u64] = 16u64
+    rq[3u64] = &LABEL as u64
+    rq[4u64] = 0u64
+    rq[5u64] = &LABEL as u64
+    rq[6u64] = 0u64
+    if cons_ratify(rb as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    let cid : *u8 = (rb + 64u64) as *u8
+
+    /* shared payload window [64,160) = 0xAA */
+    let mut z : u64 = 0u64
+    while z < 192u64 { PL[z] = 0u8   z = z + 1u64 }
+    let mut w : u64 = 64u64
+    while w < 160u64 { PL[w] = 0xAAu8   w = w + 1u64 }
+
+    /* anchor fragment -> declare -> construct branch */
+    if emit(0xA0u8, &ANC as u64) != 0i32 { return 2u64 }
+    if cg_anchor_declare((&ANC as u64) as *u8, cid) != 0i32 { return 3u64 }
+    if ba_construct((&ANC as u64) as *u8, (&BID as u64) as *u8) != 0i32 { return 4u64 }
+
+    /* target with the SAME window -> propose -> VERIFY (the positive arm) -> commit */
+    if emit(0xB0u8, &TGT as u64) != 0i32 { return 5u64 }
+    if ba_merge_propose((&BID as u64) as *u8, (&TGT as u64) as *u8, (&PID as u64) as *u8) != 0i32 { return 6u64 }
+    if ba_verify_bisimulation((&PID as u64) as *u8) != 0i32 { return 7u64 }       /* RE-DERIVED: OK */
+    if ba_merge_commit((&PID as u64) as *u8) != 0i32 { return 8u64 }
+
+    /* the negative arm: an unknown proposal has no slot -> NOT_BISIMILAR */
+    let mut u : u64 = 0u64
+    while u < 32u64 { UNK[u] = 0x5Eu8   u = u + 1u64 }
+    if ba_verify_bisimulation((&UNK as u64) as *u8) != -5i32 { return 9u64 }      /* NOT_BISIMILAR */
+
+    /* a target with one flipped window byte is refused at propose time */
+    PL[100u64] = 0x55u8
+    if emit(0xC0u8, &TGTN as u64) != 0i32 { return 10u64 }
+    if ba_merge_propose((&BID as u64) as *u8, (&TGTN as u64) as *u8, (&PID2 as u64) as *u8) != -5i32 { return 11u64 }
+
+    return 99u64
+}

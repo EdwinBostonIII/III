@@ -1,0 +1,69 @@
+/* 1444_gate_outcomes_bv_dispose.iii -- GATE BURN-DOWN v2 TRANCHE 17: THE TWO-TIER
+ * BIT-VECTOR DISPOSER (1 gate; 9 -> 8).
+ *
+ *  bvd_admit -- the soundness disposer: bv_ring (Tier 1, cheap refutation) AND the
+ *      width-faithful kernel BV iota (Tier 2, sole arbiter) must agree.  Over real
+ *      TC + bv_ring terms (mirrors bvd_selftest): x*2 == x<<1 ADMITS (1); x<<1 == x*3
+ *      is Tier-1 VETOED (0, the kernel is never consulted); x+1 == x is refused (0);
+ *      x-x == 0 -- which bv_ring DECIDES true but the syntactic kernel does NOT fold --
+ *      is DECLINED (0): Tier 2 is sovereign, bv_ring may propose more than the kernel
+ *      certifies, never less.
+ * Exit 99. */
+module corpus_1444
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn bvd_admit(lhs_tc: u32, rhs_tc: u32, lhs_bv: u32, rhs_bv: u32) -> u8 from "bv_dispose.iii"
+
+fn main() -> u64 {
+    /* ---- x*2 == x<<1 : ADMITTED ---- */
+    bv_reset()
+    let b_x2  : u32 = bv_mul(bv_var(0u32), bv_const(2u64))
+    let b_xs1 : u32 = bv_shl(bv_var(0u32), 1u32)
+    tc_reset()
+    let t_x2  : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(2u64))
+    let t_xs1 : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    if bvd_admit(t_x2, t_xs1, b_x2, b_xs1) != 1u8 { return 1u64 }
+
+    /* ---- x<<1 == x*3 : Tier-1 VETO ---- */
+    bv_reset()
+    let b_f1l : u32 = bv_shl(bv_var(0u32), 1u32)
+    let b_f1r : u32 = bv_mul(bv_var(0u32), bv_const(3u64))
+    tc_reset()
+    let t_f1l : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    let t_f1r : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(3u64))
+    if bvd_admit(t_f1l, t_f1r, b_f1l, b_f1r) != 0u8 { return 2u64 }
+
+    /* ---- x+1 == x : refused ---- */
+    bv_reset()
+    let b_f2l : u32 = bv_add(bv_var(0u32), bv_const(1u64))
+    let b_f2r : u32 = bv_var(0u32)
+    tc_reset()
+    let t_f2l : u32 = tc_bvadd(tc_var(0u32), tc_bvlit_u64(1u64))
+    let t_f2r : u32 = tc_var(0u32)
+    if bvd_admit(t_f2l, t_f2r, b_f2l, b_f2r) != 0u8 { return 3u64 }
+
+    /* ---- x-x == 0 : bv_ring decides true, the kernel does NOT fold it -> DECLINED ---- */
+    bv_reset()
+    let b_xx : u32 = bv_sub(bv_var(0u32), bv_var(0u32))
+    let b_z  : u32 = bv_const(0u64)
+    if bv_equal(b_xx, b_z) != 1u8 { return 4u64 }              /* bv_ring DOES decide x-x==0 */
+    tc_reset()
+    let t_xx : u32 = tc_var(0u32)                              /* kernel cannot prove x-x==0 syntactically */
+    let t_z  : u32 = tc_bvlit_u64(0u64)
+    if bvd_admit(t_xx, t_z, b_xx, b_z) != 0u8 { return 5u64 }  /* Tier 2 sovereign: DECLINED */
+
+    return 99u64
+}

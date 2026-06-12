@@ -1,0 +1,107 @@
+/* 1449_gate_outcomes_symreg.iii -- GATE BURN-DOWN v2 TRANCHE 22: THE SYMBOLIC-REGRESSION
+ * INDEPENDENT VERIFIER (1 gate).
+ *
+ *  symreg_verify -- the M12/M10 independent verifier, pure over the found expression and
+ *      the dataset mirror.  Over a real identity dataset {1->1, 2->2, 5->5} (Q32.32),
+ *      symreg_regress finds y = x0 and symreg_verify CONFIRMS it (1); a bogus expression
+ *      y = x0 + 1 does NOT verify on identity data (0) -- the verifier rejects a wrong
+ *      model, exactly as a fitter must not be trusted to grade itself.
+ * Exit 99. */
+module corpus_1449
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn symreg_init() -> i32 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn symreg_regress(req: *u8, out_expr: *u8, out_expr_cap: u32, out_len: *u32) -> i32 from "symbolic_regression.iii"
+extern @abi(c-msvc-x64) fn symreg_verify(expr: *u8, expr_len: u32, data: *u8, data_len: u32, tol_q: u64) -> u8 from "symbolic_regression.iii"
+
+const Q : u64 = 0x100000000u64        /* SYMREG_VALUE_DENOM (Q32.32) */
+
+var SIG   : [u8; 16]
+var DATA  : [u8; 64]
+var REQ   : [u8; 64]
+var OUT   : [u8; 320]
+var OLEN  : [u32; 1]
+var BOGUS : [u8; 32]
+
+fn pu32(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+fn pu64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+    return 0i32
+}
+/* a dataset value: sign byte + 8-byte LE magnitude (9 bytes) */
+fn pval(base: u64, off: u64, mag: u64) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    p[0u64] = 0u8
+    pu64(base, off + 1u64, mag)
+    return 0i32
+}
+
+fn main() -> u64 {
+    wh_init(0u64)                                         /* the witness hook backs symreg_emit_witness */
+    symreg_init()
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0800u64, 0u64)   /* ATTEST right */
+
+    /* signature: magic, n_ops=0, n_consts=0 (12 bytes) */
+    let sb : u64 = &SIG as u64
+    pu32(sb, 0u64, 0x53524731u32)
+    pu32(sb, 4u64, 0u32)
+    pu32(sb, 8u64, 0u32)
+
+    /* dataset: 3 identity rows {1->1},{2->2},{5->5}, each value 9 bytes */
+    let db : u64 = &DATA as u64
+    pval(db, 0u64,  1u64 * Q)
+    pval(db, 9u64,  1u64 * Q)
+    pval(db, 18u64, 2u64 * Q)
+    pval(db, 27u64, 2u64 * Q)
+    pval(db, 36u64, 5u64 * Q)
+    pval(db, 45u64, 5u64 * Q)
+
+    /* request: magic, n_vars=1, n_points=3, [12]=0, tol=0, max_depth=1, data, sig, sig_len=12, cap */
+    let rb : u64 = &REQ as u64
+    pu32(rb, 0u64, 0x53525231u32)
+    pu32(rb, 4u64, 1u32)
+    pu32(rb, 8u64, 3u32)
+    let rp : *u8 = (rb + 12u64) as *u8
+    rp[0u64] = 0u8
+    pu64(rb, 13u64, 0u64)               /* tol */
+    pu32(rb, 21u64, 1u32)               /* max_depth */
+    pu64(rb, 25u64, db)                 /* data ptr */
+    pu64(rb, 33u64, sb)                 /* sig ptr */
+    pu32(rb, 41u64, 12u32)              /* sig_len */
+    pu64(rb, 45u64, cap)                /* cap */
+
+    if symreg_regress((&REQ as u64) as *u8, (&OUT as u64) as *u8, 320u32, (&OLEN as u64) as *u32) != 0i32 { return 1u64 }
+    if OLEN[0u64] != 3u32 { return 2u64 }
+    if OUT[0u64] != 0x01u8 { return 3u64 }                 /* OP_VAR */
+    if OUT[1u64] != 0x00u8 { return 4u64 }                 /* var 0 */
+    if OUT[2u64] != 0x00u8 { return 5u64 }                 /* OP_END */
+
+    /* ---- the verifier confirms the found expr ---- */
+    if symreg_verify((&OUT as u64) as *u8, OLEN[0u64], (&DATA as u64) as *u8, 54u32, 0u64) != 1u8 { return 6u64 }
+
+    /* ---- a bogus y = x0 + 1 does NOT verify on identity data ---- */
+    let bb : u64 = &BOGUS as u64
+    let bp : *u8 = bb as *u8
+    bp[0u64] = 0x01u8                   /* OP_VAR 0 */
+    bp[1u64] = 0x00u8
+    bp[2u64] = 0x02u8                   /* OP_CONST */
+    bp[3u64] = 0x00u8
+    pu64(bb, 4u64, 1u64 * Q)           /* +1.0 */
+    bp[12u64] = 0x10u8                  /* OP_ADD */
+    bp[13u64] = 0x00u8                  /* OP_END */
+    if symreg_verify((&BOGUS as u64) as *u8, 14u32, (&DATA as u64) as *u8, 54u32, 0u64) != 0u8 { return 7u64 }
+
+    return 99u64
+}

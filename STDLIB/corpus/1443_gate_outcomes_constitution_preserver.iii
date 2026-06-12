@@ -1,0 +1,46 @@
+/* 1443_gate_outcomes_constitution_preserver.iii -- GATE BURN-DOWN v2 TRANCHE 16: THE
+ * CONSTITUTION-PRESERVER TEMPORAL VERIFIERS (2 gates; 11 -> 9).
+ *
+ * The constitution preserver evaluates every live attached temporal formula at every
+ * position of a segment / epoch (mirrors cpres_selftest's deps + the GAP-2 failing-formula
+ * arm):
+ *  cp_verify_segment -- the empty attachment table is vacuously TRUE over any range (1);
+ *      attaching a clause to an UNALLOCATED formula slot (tl_eval short-circuits to 0 at
+ *      every position) makes the segment DETECT the failure and return 0;
+ *  cp_verify_epoch -- the same over the epoch cursor: empty -> 1 (cursor advances); the
+ *      dead-formula clause -> 0.
+ * Exit 99. */
+module corpus_1443
+
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cp_init() -> i32 from "constitution_preserver.iii"
+extern @abi(c-msvc-x64) fn cp_clear() -> i32 from "constitution_preserver.iii"
+extern @abi(c-msvc-x64) fn cp_attach_clause(clause_slot: u32, formula_slot: u32) -> i32 from "constitution_preserver.iii"
+extern @abi(c-msvc-x64) fn cp_detach_clause(clause_slot: u32) -> i32 from "constitution_preserver.iii"
+extern @abi(c-msvc-x64) fn cp_verify_segment(start: u64, end: u64) -> u8 from "constitution_preserver.iii"
+extern @abi(c-msvc-x64) fn cp_verify_epoch(epoch_end: u64) -> u8 from "constitution_preserver.iii"
+
+fn main() -> u64 {
+    at_init(0u64)
+    wh_init(0u64)
+    cp_init()
+
+    /* ---- empty table: vacuous truth ---- */
+    if cp_verify_segment(0u64, 100u64) != 1u8 { return 1u64 }
+    if cp_verify_epoch(100u64) != 1u8 { return 2u64 }
+    cp_clear()                                              /* reset epoch cursor to 0 */
+
+    /* ---- a clause bound to an UNALLOCATED formula (slot 11) fails everywhere ---- */
+    if cp_attach_clause(7u32, 11u32) != 0i32 { return 3u64 }
+    if cp_verify_segment(0u64, 5u64) != 0u8 { return 4u64 }   /* the failure is DETECTED */
+    if cp_verify_epoch(5u64) != 0u8 { return 5u64 }           /* same over the epoch */
+    cp_detach_clause(7u32)
+
+    /* ---- after detach, vacuous truth is restored ---- */
+    cp_clear()
+    if cp_verify_segment(0u64, 5u64) != 1u8 { return 6u64 }
+    if cp_verify_epoch(5u64) != 1u8 { return 7u64 }
+
+    return 99u64
+}

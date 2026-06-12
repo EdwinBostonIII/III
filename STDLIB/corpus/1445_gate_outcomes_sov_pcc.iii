@@ -1,0 +1,28 @@
+/* 1445_gate_outcomes_sov_pcc.iii -- GATE BURN-DOWN v2 TRANCHE 18: THE PROOF-CARRYING
+ * KERNEL VERIFIER CORE (1 gate; 8 -> 7).
+ *
+ *  sov_pcc_verify_core -- translation validation, the kernel as SOLE arbiter: an
+ *      optimization in_model -> out_model is sound iff the CIC kernel proves in == out
+ *      (the cert (lam x:Nat. refl in) checks against Pi(x:Nat). Id Nat in out).  Over
+ *      real TC models: core(zero, zero) is CERTIFIED (1) and core(succ zero, succ zero)
+ *      is CERTIFIED (1); core(zero, succ zero) is REJECTED (0) and core(succ zero,
+ *      succ succ zero) is REJECTED (0) -- a behaviour change never passes.
+ * Exit 99. */
+module corpus_1445
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn sov_pcc_verify_core(in_model: u32, out_model: u32) -> u8 from "sov_isa.iii"
+
+fn main() -> u64 {
+    tc_reset()
+    let z  : u32 = tc_zero()
+    let s0 : u32 = tc_succ(z)
+    let s1 : u32 = tc_succ(s0)
+    if sov_pcc_verify_core(z, z)   != 1u8 { return 1u64 }      /* zero == zero: CERTIFIED */
+    if sov_pcc_verify_core(s0, s0) != 1u8 { return 2u64 }      /* s0 == s0: CERTIFIED */
+    if sov_pcc_verify_core(z, s0)  != 0u8 { return 3u64 }      /* zero != succ zero: REJECTED */
+    if sov_pcc_verify_core(s0, s1) != 0u8 { return 4u64 }      /* s0 != s1: REJECTED */
+    return 99u64
+}

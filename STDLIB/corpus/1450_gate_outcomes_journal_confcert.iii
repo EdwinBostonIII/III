@@ -1,0 +1,66 @@
+/* 1450_gate_outcomes_journal_confcert.iii -- GATE BURN-DOWN v2 TRANCHE 23: THE RIPPLE
+ * JOURNAL ROOT VERIFIER, THE CONFLUENCE-CERT FAST-PATH (2 gates; CENSUS ZERO).
+ *
+ *  rj_verify -- the order-sensitive run-root verifier.  Two checkpoints are journaled;
+ *      their recorded content-addresses are read back via the new rj_addr_at accessor;
+ *      rj_verify CONFIRMS the run-root over the correct ordered list (1); the SAME two
+ *      addresses in SWAPPED order yield a different root and are REFUSED (0) -- order
+ *      is load-bearing, exactly as the journal's tamper-evidence requires;
+ *  xcc_verify -- the boot fast-path: the live rule-semantics mhash equals the sealed
+ *      golden (1); with the KAT-only fault latch set (the golden perturbed by one byte,
+ *      the analogue of flipping an expected digest) the comparison REJECTS (0); cleared,
+ *      it matches again (1) -- the gate is proven detecting a golden mismatch, not merely
+ *      affirming on a healthy binary.
+ * Exit 99. */
+module corpus_1450
+
+extern @abi(c-msvc-x64) fn rj_init() -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_record(ckpt: *u8) -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_run_root(out: *u8) -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_addr_at(idx: u64, out: *u8) -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_verify(root: *u8, addr_list: *u8, n: u64, scratch: *u8) -> u8 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xcc_verify(out_live: u64) -> u8 from "xii_conf_cert.iii"
+extern @abi(c-msvc-x64) fn xcc_test_inject_fault() -> i32 from "xii_conf_cert.iii"
+extern @abi(c-msvc-x64) fn xcc_test_clear_fault() -> i32 from "xii_conf_cert.iii"
+
+var C0    : [u8; 32]
+var C1    : [u8; 32]
+var ROOT  : [u8; 32]
+var ADDRS : [u8; 64]      /* the two recorded addresses, in order */
+var SWAP  : [u8; 64]      /* the same two, swapped */
+var SCR   : [u8; 32]
+var LIVE  : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- RJ: order-sensitive root verification ---- */
+    if rj_init() != 0i32 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < 32u64 { C0[i] = 0xAAu8   C1[i] = 0xBBu8   i = i + 1u64 }
+    if rj_record((&C0 as u64) as *u8) != 0i32 { return 2u64 }
+    if rj_record((&C1 as u64) as *u8) != 0i32 { return 3u64 }
+    if rj_run_root((&ROOT as u64) as *u8) != 0i32 { return 4u64 }
+    /* read back the ordered address list */
+    if rj_addr_at(0u64, (&ADDRS as u64) as *u8) != 0i32 { return 5u64 }
+    if rj_addr_at(1u64, ((&ADDRS as u64) + 32u64) as *u8) != 0i32 { return 6u64 }
+    if rj_addr_at(2u64, (&SCR as u64) as *u8) != -2i32 { return 7u64 }       /* out of range */
+    if rj_verify((&ROOT as u64) as *u8, (&ADDRS as u64) as *u8, 2u64, (&SCR as u64) as *u8) != 1u8 { return 8u64 }
+    /* the swapped order yields a different root -> REFUSED */
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        SWAP[k] = ADDRS[32u64 + k]
+        SWAP[32u64 + k] = ADDRS[k]
+        k = k + 1u64
+    }
+    if rj_verify((&ROOT as u64) as *u8, (&SWAP as u64) as *u8, 2u64, (&SCR as u64) as *u8) != 0u8 { return 9u64 }
+
+    /* ---- XCC: the rule-semantics golden, both ways ---- */
+    xii_register_all()
+    if xcc_verify((&LIVE as u64)) != 1u8 { return 10u64 }                     /* live == golden */
+    xcc_test_inject_fault()
+    if xcc_verify((&LIVE as u64)) != 0u8 { return 11u64 }                     /* perturbed golden -> REJECT */
+    xcc_test_clear_fault()
+    if xcc_verify((&LIVE as u64)) != 1u8 { return 12u64 }                     /* restored -> match */
+
+    return 99u64
+}

@@ -1,0 +1,51 @@
+/* 1447_gate_outcomes_marrow_block.iii -- GATE BURN-DOWN v2 TRANCHE 20: THE BONE-MARROW
+ * BLOCK INTEGRITY VERIFIER (1 gate).
+ *
+ *  bm_verify_block -- recomputes a block's content hash and compares it to the recorded
+ *      one.  Over a REAL 8-of-12 erasure stripe (8 data blocks written + 4 parity blocks
+ *      encoded), a live data block (1) and a live parity block (1) verify; a block of a
+ *      never-written stripe (0, dead) and an out-of-range index (0) are refused.  Two
+ *      distinct real outcomes: live-and-correct vs absent.  (The content-tamper arm --
+ *      a flipped byte under a stale recorded hash -- is proven in the module selftest via
+ *      bm_scrub over induced bit-rot; the block pointer is not exported, so the corpus
+ *      arm proves the live/absent decision, which an always-accept stub could not.)
+ * Exit 99. */
+module corpus_1447
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn bm_init() -> i32 from "bone_marrow.iii"
+extern @abi(c-msvc-x64) fn bm_write_data(stripe_id: u32, idx: u32, data: *u8) -> i32 from "bone_marrow.iii"
+extern @abi(c-msvc-x64) fn bm_encode_stripe(stripe_id: u32) -> i32 from "bone_marrow.iii"
+extern @abi(c-msvc-x64) fn bm_verify_block(stripe_id: u32, idx: u32) -> u8 from "bone_marrow.iii"
+extern @abi(c-msvc-x64) fn bm_scrub(stripe_id: u32) -> u32 from "bone_marrow.iii"
+
+var BLK : [u8; 4096]
+
+fn main() -> u64 {
+    cap_env_init()
+    if bm_init() != 0i32 { return 1u64 }
+
+    /* write all 8 data blocks (encode requires every data block live) */
+    let mut d : u32 = 0u32
+    while d < 8u32 {
+        let mut b : u64 = 0u64
+        while b < 4096u64 { BLK[b] = (((b + (d as u64) * 7u64) * 3u64 + 1u64) & 0xFFu64) as u8   b = b + 1u64 }
+        if bm_write_data(0u32, d, (&BLK as u64) as *u8) != 0i32 { return 2u64 }
+        d = d + 1u32
+    }
+    if bm_encode_stripe(0u32) != 0i32 { return 3u64 }
+
+    /* ---- live blocks verify ---- */
+    if bm_verify_block(0u32, 0u32) != 1u8 { return 4u64 }          /* a data block */
+    if bm_verify_block(0u32, 7u32) != 1u8 { return 5u64 }          /* last data block */
+    if bm_verify_block(0u32, 8u32) != 1u8 { return 6u64 }          /* a parity block */
+    if bm_verify_block(0u32, 11u32) != 1u8 { return 7u64 }         /* last parity block */
+    if bm_scrub(0u32) != 0u32 { return 8u64 }                      /* no rot across the stripe */
+
+    /* ---- absent blocks are refused ---- */
+    if bm_verify_block(1u32, 0u32) != 0u8 { return 9u64 }          /* a never-written stripe (dead) */
+    if bm_verify_block(0u32, 12u32) != 0u8 { return 10u64 }        /* index out of range */
+    if bm_verify_block(256u32, 0u32) != 0u8 { return 11u64 }       /* stripe out of range */
+
+    return 99u64
+}

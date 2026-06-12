@@ -153,11 +153,21 @@ fn _xcc_load_golden() -> i32 {
     return 0i32
 }
 
+/* KAT-only fault latch: when set, xcc_verify compares the live rule-semantics mhash against a
+ * ONE-BYTE-PERTURBED golden, exercising the inequality (REJECT) path -- the analogue of flipping
+ * an expected-digest byte (cf. ks_attest, eg_test_flip_bit).  Off on every boot/production path,
+ * so the fast-path behaviour is unchanged; it exists only so the reject arm is honestly provable
+ * (gate-outcome criterion v2: a gate must be SEEN deciding both ways). */
+var XCC_TEST_FAULT : u8 = 0u8
+fn xcc_test_inject_fault() -> i32 @export { XCC_TEST_FAULT = 1u8  return 0i32 }
+fn xcc_test_clear_fault() -> i32 @export { XCC_TEST_FAULT = 0u8  return 0i32 }
+
 /* BOOT FAST-PATH: 1 iff the live rule-semantics mhash equals the sealed golden.  Writes the live
  * mhash to out_live (32 bytes) as a side output for the caller / charter (C.4). */
 fn xcc_verify(out_live: u64) -> u8 @export {
     xcc_rule_mhash(out_live)
     _xcc_load_golden()
+    if XCC_TEST_FAULT == 1u8 { XCC_GOLDEN[0u64] = XCC_GOLDEN[0u64] ^ 0x01u8 }   /* perturb the expected value */
     return cad_eq(out_live as *u8, (&XCC_GOLDEN as u64) as *u8)
 }
 

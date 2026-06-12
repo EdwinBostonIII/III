@@ -1,0 +1,18 @@
+/* 1448_gate_outcomes_graph_integrity.iii -- GATE BURN-DOWN v2 TRANCHE 21: THE SURGICAL
+ * REWRITE SAFETY GATE (1 gate).
+ *
+ *  cg_verify_graph_integrity -- a rewrite legacy(a) -> optimal(b) is SAFE to rewire iff
+ *      the pair is kernel-proven OBSOLETE (universally equivalent AND strictly cheaper).
+ *      Two distinct implementations of the same value (a==b==3: multiply vs shift) are
+ *      proven equivalent + cheaper -> SAFE (1); a genuinely-different pair (3,4) is NOT
+ *      proven equivalent -> UNSAFE, the legacy is left alone (0).
+ * Exit 99. */
+module corpus_1448
+
+extern @abi(c-msvc-x64) fn cg_verify_graph_integrity(a: u32, b: u32) -> u8 from "cg_surgical_strike.iii"
+
+fn main() -> u64 {
+    if cg_verify_graph_integrity(3u32, 3u32) != 1u8 { return 1u64 }   /* obsolete -> SAFE */
+    if cg_verify_graph_integrity(3u32, 4u32) != 0u8 { return 2u64 }   /* not equivalent -> UNSAFE */
+    return 99u64
+}

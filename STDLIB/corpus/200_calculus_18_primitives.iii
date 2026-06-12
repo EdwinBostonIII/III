@@ -178,6 +178,18 @@ fn main() -> u64 {
         free(buf)
         return 41u64
     }
+    /* gate-outcome v2: prove the completeness gate decides BOTH ways at direct call
+     * sites (the verdict above flows through a variable, so it captures no outcome).
+     * REFUSE: a positive count over a NULL intent list is not vacuously complete (0).
+     * ACCEPT: a zero count over a NULL list IS vacuously complete (1). */
+    if calculus_verify_completeness(0u64, 1u32) == 1u8 {
+        free(buf)
+        return 44u64
+    }
+    if calculus_verify_completeness(0u64, 0u32) != 1u8 {
+        free(buf)
+        return 45u64
+    }
 
     /* 4. proof_run_full_matrix == 0 (every pair irreducible). */
     let failures : u32 = proof_run_full_matrix()

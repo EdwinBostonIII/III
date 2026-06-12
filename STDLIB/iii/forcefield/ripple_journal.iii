@@ -68,6 +68,19 @@ fn rj_run_root(out: *u8) -> i32 @export {
     return 0i32
 }
 
+/* copy the recorded 32-byte content-address at index idx into out (read-only; the sibling
+ * of rj_resolve, which returns the CHECKPOINT -- this returns its ADDRESS).  Lets an
+ * external verifier reconstruct the ordered address list that rj_verify recomputes its
+ * root over.  Returns 0 ok / -1 null / -2 out of range. */
+fn rj_addr_at(idx: u64, out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    if idx >= RJ_N[0u64] { return -2i32 }
+    let src : *u8 = ((&RJ_ADDRS as u64) + idx * 32u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { out[i] = src[i]   i = i + 1u64 }
+    return 0i32
+}
+
 /* resolve the original 32-byte checkpoint at index idx (tamper-evident).
  * returns 32 on success, or RJ_GAP if out of range / absent / tampered. */
 fn rj_resolve(idx: u64, out: *u8, vbuf: *u8) -> u64 @export {

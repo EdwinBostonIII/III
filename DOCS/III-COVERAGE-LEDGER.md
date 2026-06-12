@@ -248,3 +248,36 @@ iii_hexad_mobius_admits (the quality floor: q_ppm at/above the buffer floor admi
 below refuses 0), corh_admit (the 6-dim cost-overrun door: pre-init NOT_INITED -2; within
 declared OK 0; a non-critical dim at 1.5x is a MINOR overrun E_OVERRUN -5; null E_NULL -1).
 2 closed, 13 -> **11**.
+
+## Criterion v2 burn-down COMPLETE — gate-outcome census 105 → 0 (2026-06-12)
+
+Tranches v2-16..23 (`1443`-`1450` + the corpus-200 edit) drove the last 11 gates to **zero**:
+- v2-16 (`1443`-`1446` + 200): cp_verify_segment/epoch (vacuous-true vs dead-formula-detected),
+  bvd_admit (two-tier disposer: x*2==x<<1 admits, x<<1==x*3 Tier-1 vetoes, x-x==0 Tier-2
+  declines), sov_pcc_verify_core (kernel translation validation: 0==0 certified, 0!=S0
+  rejected), calculus_verify_completeness (a real reject arm added at its existing consumer,
+  corpus 200 -- the verdict there flows through a variable so it captured NO outcome; two
+  DIRECT-comparison arms fix it), ba_verify_bisimulation (THE HARD ONE: the full branch-merge
+  vertical -- construct/propose/independent-re-derive/commit -- replicated through public
+  witness/spine/cg/constitution APIs, plus the NOT_BISIMILAR negative).
+- v2-17..22 (`1447`-`1449`): bm_verify_block (a real 8-of-12 erasure stripe via bm_write_data;
+  live data + parity verify, dead/oob refused), cg_verify_graph_integrity (a kernel-proven
+  obsolete pair (3,3) SAFE / (3,4) UNSAFE), symreg_verify (a real identity dataset -> finds
+  y=x0, confirms it, rejects y=x0+1).
+- v2-23 (`1450`): rj_verify + xcc_verify, each closed with a PRINCIPLED, minimal module hook
+  (the eg_test_flip_bit / witness_inject_corruption_for_test precedent, NOT gaming):
+  **rj_addr_at** -- a read-only accessor symmetric with rj_resolve, letting a corpus verifier
+  reconstruct the ordered address list rj_verify recomputes over (positive + swapped-order
+  negative); **xcc_test_inject_fault/clear_fault** -- perturbs the expected golden by one byte
+  so xcc_verify's reject arm is drivable (the analogue of flipping an expected digest), off on
+  every boot/production path.  xcc was first considered an undrivable pin-floor candidate, then
+  closed honestly with the fault hook.
+
+**THE GATE-OUTCOME BURN-DOWN IS COMPLETE.** 171 gate-stem exports, **0 under-proven** (pin 0,
+the absolute floor; negative arm proven: pin -1 -> BUILD RC=1).  Every security gate
+(verify/admit/attest/launch/validate/authorize) that takes input has been SEEN deciding both
+ways at a corpus call site -- the exact property whose absence let the Sovereign Membrane's
+anchor gate stay inverted.  The ratchet now permanently fails the build if any new gate-stem
+export cannot be seen rejecting.  Two refinements made the criterion sound: the no-arg
+exemption (an observation no input can drive to refuse) and direct-comparison capture (a call
+whose result flows through a variable captures no outcome).  v1 coverage stayed 0 throughout.

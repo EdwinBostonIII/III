@@ -1,0 +1,102 @@
+/* 1415_xii_rewrite_rules.iii -- THE XII ASSOCIATIVITY REWRITE RULES A1-A4
+ * (burn-down tranche 24; 9 census orphans -- match_R001-4, apply_R001-4, rule_count).
+ *
+ * R001-R004 are the calculus's associativity axioms over the four fusion operators
+ * (COMPOSE/THEN/WITH right-assoc; UNDER left-assoc).  NOTE: xii_term_make_fusion2 is the
+ * SMART constructor -- it auto-normalizes these four kinds at build time, so the
+ * non-canonical LHS pattern the matchers recognise can only arrive via a raw build; this
+ * KAT constructs it by re-pointing a real fusion node's child with xii_term_set_child_a/b
+ * (the path an externally-deserialized term takes).  For each rule: the left/right-nested
+ * LHS MATCHES (1), a flat single-level term does NOT (0), no cross-rule false fire, and
+ * after apply the distinct leaf refs sit at the precise RHS positions:
+ *  R001 (a∘b)∘c -> a∘(b∘c)   R002 (a;b);c -> a;(b;c)
+ *  R003 (a&b)&c -> a&(b&c)   R004 a/(b/c) -> (a/b)/c   [left-assoc]
+ * Plus xii_rewrite_rule_count == 44.  Exit 99. */
+module corpus_1415
+
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, child_a: u32, child_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn match_R001(t: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn apply_R001(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn match_R002(t: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn apply_R002(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn match_R003(t: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn apply_R003(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn match_R004(t: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn apply_R004(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_rule_count() -> u32 from "xii_rewrite.iii"
+
+const FCOMPOSE : u8 = 18u8
+const FTHEN    : u8 = 19u8
+const FWITH    : u8 = 20u8
+const FUNDER   : u8 = 21u8
+
+fn main() -> u64 {
+    if xii_rewrite_rule_count() != 44u32 { return 1u64 }
+
+    let a : u32 = xii_term_make_basis(0u8, 1u32)
+    let b : u32 = xii_term_make_basis(0u8, 2u32)
+    let c : u32 = xii_term_make_basis(0u8, 3u32)
+    if a == 0xFFFFFFFFu32 { return 2u64 }
+    if b == 0xFFFFFFFFu32 { return 3u64 }
+    if c == 0xFFFFFFFFu32 { return 4u64 }
+
+    /* ---- R001 COMPOSE right-assoc: build LHS (a∘b)∘c by re-pointing child_a ---- */
+    let inner1 : u32 = xii_term_make_fusion2(FCOMPOSE, a, b)      /* leaves -> stays COMPOSE(a,b) */
+    let t1 : u32 = xii_term_make_fusion2(FCOMPOSE, a, c)          /* a real COMPOSE node to re-point */
+    xii_term_set_child_a(t1, inner1)                             /* now COMPOSE(COMPOSE(a,b), c) */
+    let flat1 : u32 = xii_term_make_fusion2(FCOMPOSE, a, c)       /* child_a is a leaf -> no match */
+    if match_R001(t1) != 1u8 { return 10u64 }
+    if match_R001(flat1) != 0u8 { return 11u64 }
+    apply_R001(t1)
+    if xii_term_get_child_a(t1) != a { return 12u64 }            /* RHS: a ∘ (b ∘ c) */
+    let r1 : u32 = xii_term_get_child_b(t1)
+    if xii_term_get_child_a(r1) != b { return 13u64 }
+    if xii_term_get_child_b(r1) != c { return 14u64 }
+
+    /* ---- R002 THEN right-assoc ---- */
+    let inner2 : u32 = xii_term_make_fusion2(FTHEN, a, b)
+    let t2 : u32 = xii_term_make_fusion2(FTHEN, a, c)
+    xii_term_set_child_a(t2, inner2)
+    let flat2 : u32 = xii_term_make_fusion2(FTHEN, a, c)
+    if match_R002(t2) != 1u8 { return 20u64 }
+    if match_R002(flat2) != 0u8 { return 21u64 }
+    if match_R001(t2) != 0u8 { return 22u64 }                    /* R001 is COMPOSE-only */
+    apply_R002(t2)
+    if xii_term_get_child_a(t2) != a { return 23u64 }
+    let r2 : u32 = xii_term_get_child_b(t2)
+    if xii_term_get_child_a(r2) != b { return 24u64 }
+    if xii_term_get_child_b(r2) != c { return 25u64 }
+
+    /* ---- R003 WITH right-assoc ---- */
+    let inner3 : u32 = xii_term_make_fusion2(FWITH, a, b)
+    let t3 : u32 = xii_term_make_fusion2(FWITH, a, c)
+    xii_term_set_child_a(t3, inner3)
+    let flat3 : u32 = xii_term_make_fusion2(FWITH, a, c)
+    if match_R003(t3) != 1u8 { return 30u64 }
+    if match_R003(flat3) != 0u8 { return 31u64 }
+    apply_R003(t3)
+    if xii_term_get_child_a(t3) != a { return 32u64 }
+    let r3 : u32 = xii_term_get_child_b(t3)
+    if xii_term_get_child_a(r3) != b { return 33u64 }
+    if xii_term_get_child_b(r3) != c { return 34u64 }
+
+    /* ---- R004 UNDER left-assoc: build LHS a/(b/c) by re-pointing child_b ---- */
+    let inner4 : u32 = xii_term_make_fusion2(FUNDER, b, c)        /* leaves -> stays UNDER(b,c) */
+    let t4 : u32 = xii_term_make_fusion2(FUNDER, a, c)
+    xii_term_set_child_b(t4, inner4)                            /* now UNDER(a, UNDER(b,c)) */
+    let flat4 : u32 = xii_term_make_fusion2(FUNDER, a, c)        /* child_b is a leaf -> no match */
+    if match_R004(t4) != 1u8 { return 40u64 }
+    if match_R004(flat4) != 0u8 { return 41u64 }
+    apply_R004(t4)
+    if xii_term_get_child_b(t4) != c { return 42u64 }           /* RHS: (a/b) / c */
+    let r4 : u32 = xii_term_get_child_a(t4)
+    if xii_term_get_child_a(r4) != a { return 43u64 }
+    if xii_term_get_child_b(r4) != b { return 44u64 }
+
+    return 99u64
+}

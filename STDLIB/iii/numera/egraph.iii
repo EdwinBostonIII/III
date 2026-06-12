@@ -78,6 +78,26 @@ var EGRAPH_CL_USED   : u32 = 0u32
 var EGRAPH_HT_LIVE   : [u8;  262144]
 var EGRAPH_HT_NODE   : [u32; 262144]
 
+/* --- [W3.7] incremental rebuild: the egg-style parents index + dirty worklist.
+ * Every node is registered as a PARENT of each of its child classes; eg_union marks
+ * the absorbed root's parents DIRTY and concatenates its parent list onto the
+ * survivor (O(1) splice via tails).  eg_rebuild then re-keys ONLY dirty nodes --
+ * the full 262144-slot hashcons wipe + all-node re-key happens only as a gated
+ * fallback (table pressure / parents-arena overflow).  Stale hashcons entries left
+ * by re-keyed nodes are semantically harmless: eg_node_matches verifies the FULL
+ * canonical key through eg_find on every probe, and an absorbed root is never
+ * canonical again, so a fresh lookup can never produce a stale key.  Stale entries
+ * only consume slots -- hence the pressure gate. */
+var EGRAPH_PAR_NODE  : [u32; 1048576]   /* parent entry: the parent node id */
+var EGRAPH_PAR_NEXT  : [u32; 1048576]   /* next entry index (SENT = end) */
+var EGRAPH_PAR_HEAD  : [u32; 131072]    /* per-class-root list head (SENT = empty) */
+var EGRAPH_PAR_TAIL  : [u32; 131072]    /* per-class-root list tail (O(1) splice) */
+var EGRAPH_PAR_USED  : u64 = 0u64
+var EGRAPH_PAR_OVF   : u8  = 0u8        /* arena exhausted -> full-rebuild fallback */
+var EGRAPH_DIRTY     : [u8; 131072]     /* node-id dirty flags (re-key pending) */
+var EGRAPH_DIRTY_ANY : u8  = 0u8
+var EGRAPH_HT_USED   : u64 = 0u64       /* live hashcons slots, stale garbage included */
+
 /* Rewrite rules: flat preorder skeletons in a shared arena. */
 var EGRAPH_RULE_LIVE    : [u8;  256]
 var EGRAPH_RULE_LHS_OFF : [u32; 256]
@@ -166,8 +186,28 @@ fn eg_new_class() -> u32 {
     EGRAPH_CL_PAR[c]  = c
     EGRAPH_CL_RANK[c] = 0u32
     EGRAPH_CL_LIVE[c] = 1u8
+    EGRAPH_PAR_HEAD[c] = EGRAPH_SENT
+    EGRAPH_PAR_TAIL[c] = EGRAPH_SENT
     EGRAPH_CL_USED = EGRAPH_CL_USED + 1u32
     return c
+}
+
+/* [W3.7] register `node` as a parent of class root `cls` (append to its list). */
+fn eg_par_append(cls: u32, node: u32) {
+    if EGRAPH_PAR_USED >= 1048576u64 { EGRAPH_PAR_OVF = 1u8   return }
+    let e : u64 = EGRAPH_PAR_USED
+    EGRAPH_PAR_USED = EGRAPH_PAR_USED + 1u64
+    EGRAPH_PAR_NODE[e] = node
+    EGRAPH_PAR_NEXT[e] = EGRAPH_SENT
+    let cb : u64 = (cls as u64) & EGRAPH_U32MASK
+    if EGRAPH_PAR_HEAD[cb] == EGRAPH_SENT {
+        EGRAPH_PAR_HEAD[cb] = (e & EGRAPH_U32MASK) as u32
+        EGRAPH_PAR_TAIL[cb] = (e & EGRAPH_U32MASK) as u32
+    } else {
+        let tb : u64 = (EGRAPH_PAR_TAIL[cb] as u64) & EGRAPH_U32MASK
+        EGRAPH_PAR_NEXT[tb] = (e & EGRAPH_U32MASK) as u32
+        EGRAPH_PAR_TAIL[cb] = (e & EGRAPH_U32MASK) as u32
+    }
 }
 
 /* Serialize (sym, canonicalized args) into EGRAPH_KEYBUF, hash once via
@@ -265,6 +305,7 @@ fn eg_ht_insert(sym: u32, args: *u32, n: u32, node: u32) -> i32 {
             if EGRAPH_HT_LIVE[slot] == 0u8 {
                 EGRAPH_HT_LIVE[slot] = 1u8
                 EGRAPH_HT_NODE[slot] = node
+                EGRAPH_HT_USED = EGRAPH_HT_USED + 1u64   /* [W3.7] pressure census */
                 rc = EGRAPH_OK
                 going = 0u8
             } else {
@@ -323,6 +364,7 @@ fn eg_init() -> i32 @export {
     while i < EGRAPH_MAX_NODES {
         EGRAPH_N_LIVE[i] = 0u8
         EGRAPH_CL_LIVE[i] = 0u8
+        EGRAPH_DIRTY[i] = 0u8                       /* [W3.7] */
         i = i + 1u32
     }
     let mut j : u64 = 0u64
@@ -333,6 +375,12 @@ fn eg_init() -> i32 @export {
     EGRAPH_N_USED    = 0u32
     EGRAPH_CL_USED   = 0u32
     EGRAPH_RULE_USED = 0u32
+    /* [W3.7] incremental-rebuild state (class PAR_HEAD/TAIL are initialized per
+     * class by eg_new_class; heads beyond CL_USED are unreachable) */
+    EGRAPH_PAR_USED  = 0u64
+    EGRAPH_PAR_OVF   = 0u8
+    EGRAPH_DIRTY_ANY = 0u8
+    EGRAPH_HT_USED   = 0u64
     return EGRAPH_OK
 }
 
@@ -434,6 +482,13 @@ fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 @export {
     EGRAPH_N_USED = EGRAPH_N_USED + 1u32
     let cp2 : *u32 = (&EGRAPH_CANON) as u64 as *u32
     eg_ht_insert(sym, cp2, n, node)
+    /* [W3.7] the node is a parent of each canonical child class */
+    let mut pk : u32 = 0u32
+    while pk < n {
+        let pkb : u64 = (pk as u64) & EGRAPH_U32MASK
+        eg_par_append(cp2[pkb], node)
+        pk = pk + 1u32
+    }
     return cl
 }
 
@@ -459,6 +514,29 @@ fn eg_union(a: u32, b: u32) -> u32 @export {
     }
     let lob : u64 = (lo as u64) & EGRAPH_U32MASK
     EGRAPH_CL_PAR[lob] = hi
+    /* [W3.7] the absorbed root's parents now have a changed canonical child: mark
+     * each DIRTY (re-key pending), then splice lo's parent list onto hi's (O(1)). */
+    let mut pe : u32 = EGRAPH_PAR_HEAD[lob]
+    while pe != EGRAPH_SENT {
+        let peb : u64 = (pe as u64) & EGRAPH_U32MASK
+        let pn : u64 = (EGRAPH_PAR_NODE[peb] as u64) & EGRAPH_U32MASK
+        EGRAPH_DIRTY[pn] = 1u8
+        EGRAPH_DIRTY_ANY = 1u8
+        pe = EGRAPH_PAR_NEXT[peb]
+    }
+    let hib2 : u64 = (hi as u64) & EGRAPH_U32MASK
+    if EGRAPH_PAR_HEAD[lob] != EGRAPH_SENT {
+        if EGRAPH_PAR_HEAD[hib2] == EGRAPH_SENT {
+            EGRAPH_PAR_HEAD[hib2] = EGRAPH_PAR_HEAD[lob]
+            EGRAPH_PAR_TAIL[hib2] = EGRAPH_PAR_TAIL[lob]
+        } else {
+            let htb : u64 = (EGRAPH_PAR_TAIL[hib2] as u64) & EGRAPH_U32MASK
+            EGRAPH_PAR_NEXT[htb] = EGRAPH_PAR_HEAD[lob]
+            EGRAPH_PAR_TAIL[hib2] = EGRAPH_PAR_TAIL[lob]
+        }
+        EGRAPH_PAR_HEAD[lob] = EGRAPH_SENT
+        EGRAPH_PAR_TAIL[lob] = EGRAPH_SENT
+    }
     return hi
 }
 
@@ -491,7 +569,10 @@ fn eg_rebuild_node(ni: u32) -> u32 {
     return 1u32
 }
 
-fn eg_rebuild() -> u32 @export {
+/* [W3.7] the original full re-key: wipe the hashcons, re-canonicalize and re-insert
+ * EVERY node, repeat to fixpoint.  Now the gated fallback (table pressure / parents
+ * overflow) and the differential ORACLE for the incremental path (corpus 1479). */
+fn eg_rebuild_full() -> u32 @export {
     let mut passes : u32 = 0u32
     let mut going : u8 = 1u8
     while going == 1u8 {
@@ -501,6 +582,7 @@ fn eg_rebuild() -> u32 @export {
             /* wipe hashcons for this pass */
             let mut s : u64 = 0u64
             while s < EGRAPH_HT_SIZE { EGRAPH_HT_LIVE[s] = 0u8 ; s = s + 1u64 }
+            EGRAPH_HT_USED = 0u64
             let mut changed : u8 = 0u8
             let mut ni : u32 = 0u32
             while ni < EGRAPH_N_USED {
@@ -511,6 +593,49 @@ fn eg_rebuild() -> u32 @export {
             if changed == 0u8 { going = 0u8 }
         }
     }
+    /* every key is freshly canonical: nothing is pending */
+    let mut d : u32 = 0u32
+    while d < EGRAPH_N_USED {
+        EGRAPH_DIRTY[d] = 0u8
+        d = d + 1u32
+    }
+    EGRAPH_DIRTY_ANY = 0u8
+    return passes
+}
+
+/* [W3.7] incremental congruence restoration: drain the DIRTY worklist in ascending
+ * node order per pass -- the same merge-discovery order the full wipe used -- and
+ * re-key only nodes whose canonical children changed.  Unions performed while
+ * draining mark further parents dirty (possibly behind the scan), so passes repeat
+ * until a sweep finds nothing.  Clean nodes' hashcons entries are still at their
+ * canonical slots (unchanged key -> unchanged hash), so congruent dirty nodes find
+ * them; stale entries from re-keyed nodes are unreachable by fresh lookups (see the
+ * state-block comment) and only cost slots, gated below. */
+fn eg_rebuild() -> u32 @export {
+    if EGRAPH_PAR_OVF == 1u8 { return eg_rebuild_full() }
+    if EGRAPH_HT_USED > 196608u64 { return eg_rebuild_full() }   /* 3/4 of EGRAPH_HT_SIZE */
+    if EGRAPH_DIRTY_ANY == 0u8 { return 0u32 }
+    let mut passes : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if passes >= EGRAPH_MAX_PASSES { going = 0u8 }
+        if going == 1u8 {
+            passes = passes + 1u32
+            let mut processed : u8 = 0u8
+            let mut ni : u32 = 0u32
+            while ni < EGRAPH_N_USED {
+                let nb : u64 = (ni as u64) & EGRAPH_U32MASK
+                if EGRAPH_DIRTY[nb] == 1u8 {
+                    EGRAPH_DIRTY[nb] = 0u8
+                    processed = 1u8
+                    eg_rebuild_node(ni)
+                }
+                ni = ni + 1u32
+            }
+            if processed == 0u8 { going = 0u8 }
+        }
+    }
+    EGRAPH_DIRTY_ANY = 0u8
     return passes
 }
 

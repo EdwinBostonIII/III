@@ -472,3 +472,21 @@ reachability / boundary-refusal-inverse tranches) all pinned at 0 with down-only
 ratchets, three discovery waves adversarially verified, the final wave finding nothing
 real.  Future coverage work should be DRIVEN by new code landing (the ratchets catch
 it automatically), not by further discovery sweeps of this tree.
+
+## W3.7 — the egraph incremental rebuild (2026-06-12)
+
+The structural-audit re-verification (4-agent fan-out over the stale plan docs: ~40
+items classified, most DONE-stale-doc, the W3.21 micro-fixes all already live) found
+W3.7 genuinely open: eg_rebuild wiped all 262144 hashcons slots and re-keyed every
+node on every pass.  LANDED: the egg-style parents index (1M-entry arena, O(1) splice
+on union) + DIRTY worklist; eg_rebuild drains dirty nodes ascending per pass;
+eg_rebuild_full keeps the original algorithm as the pressure-gated fallback and the
+differential ORACLE.  Three structural proofs made byte-identity achievable: stale
+entries are semantically harmless (matching re-verifies through eg_find; absorbed
+roots are never canonical again), eg_union is arg-order symmetric (rank/lower-id
+survivor -- the seal folds raw ranks), and clean nodes contribute no unions in either
+strategy.  Falsifier `1479`: an engineered rank-boosted merge dirties a node BEHIND
+the scan (asserted >= 2 drain passes), identical workloads through both strategies
+must seal cad-equal; the no-dirty fast path returns 0 and mutates nothing.  All six
+existing egraph consumers re-verified standalone (incl. the sovereign optimizer and
+the 131072-node capacity fill); corpus 1067/0.

@@ -6,9 +6,15 @@
 >   W3.14 xoshiro jump (961), W3.15 bv_ring colstack (962), W3.16 sov_pcc wired, W3.17 Merkle
 >   domain-sep (966), W3.19 ecdsa low-s/slhdsa/fe25519, W3.20 pq nibble guard (967),
 >   W3.22-COMBINE-10 (murmur3→endian), W3.23/24/27/28 dead-matter cuts (CUT-1/2/5/6 gone).
-> - **⛔ GAP:** W3.1 caindex consumer migrations (theorem_carrier/computation_graph/ripple_metric/
->   ripple_loop/unify/lru all still linear), W3.7 egraph incremental rebuild (no dirty worklist),
->   W3.9 Knuth Alg-D bigint division (still bit-serial), W3.22-COMBINE-8 (checked→option table).
+> - **RE-VERIFIED 2026-06-12 (live-tree fan-out + W3.7 landed):** W3.1 DONE (see body),
+>   **W3.7 DONE** — egg-style parents index + dirty worklist landed in egraph.iii (eg_par_append/
+>   EGRAPH_DIRTY, eg_rebuild incremental with eg_rebuild_full as gated fallback + oracle;
+>   differential falsifier corpus 1479 proves byte-identical seal vs full wipe on a forced
+>   cross-pass cascade), W3.9 DONE (bigint_div.iii Knuth Alg-D, corpus 757/990), W3.5 DONE
+>   (optinvoke mhash_domain), W3.26 DONE (CUT-4 collapsed).
+> - **⛔ GAP (re-verified open):** W3.22-COMBINE-8 (checked→option table), W3.18 AES gmul
+>   data-dependent branch + S-box (PARTIAL), W3.21 three micro-fixes (PARTIAL), W3.12/13
+>   perf sub-items (PARTIAL), W3.29 dead u32 masks, W3.30 CUT-10 residue.
 > - **✅ W3.25 CUT-3 — NOW CLOSED (this pass):** code-fix was already in (`ma_in_flight` deleted,
 >   O(1) `NEXT_ISSUE − RETIRED_COUNT`); its **missing mandatory ROB-saturation falsifier** is now
 >   added — corpus 952 (ROB_CAP=2 vs 8 back-pressure proves issue gates on the in-flight counter).

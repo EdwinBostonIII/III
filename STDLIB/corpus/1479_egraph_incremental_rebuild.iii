@@ -1,0 +1,126 @@
+/* 1479_egraph_incremental_rebuild.iii -- W3.7 FALSIFIER: THE INCREMENTAL REBUILD IS
+ * BYTE-IDENTICAL TO THE FULL WIPE.  eg_rebuild now drains an egg-style dirty worklist
+ * (parents index, ascending node order) instead of wiping all 262144 hashcons slots
+ * and re-keying every node each pass; eg_rebuild_full keeps the original algorithm as
+ * the gated fallback and as THE ORACLE here.
+ *
+ * The workload is engineered to be adversarial to the worklist:
+ *   leaves a, b, x;  f(a)=n3, ff(a)=n4 created BEFORE f(b)=n5, ff(b)=n6;
+ *   union(f(b), x) bumps f(b)'s class rank so that when congruence later merges
+ *   f(a)~f(b), the SURVIVOR is f(b)'s class and the ABSORBED side's parent ff(a)
+ *   (node id BEHIND the scan position where the merge fires) is dirtied -- forcing
+ *   a SECOND drain pass.  Then union(a, b) triggers the cascade:
+ *     pass 1: f(a)/f(b) re-key -> merge (rank flip), ff(b) re-keys ahead;
+ *     pass 2: ff(a) re-keys -> finds ff(b) -> the second-order merge.
+ *
+ * Run A executes the workload with the INCREMENTAL eg_rebuild (asserting >= 2 passes
+ * -- the cascade actually crossed passes -- and the no-dirty fast path returns 0);
+ * run B re-executes it from eg_init with eg_rebuild_full.  The final canonical
+ * partitions are asserted pairwise in both runs, and the SEALS (which fold canonical
+ * children, canonical class roots, AND raw ranks) must be cad-equal: the worklist
+ * reproduced the full wipe's state to the byte.
+ * Exit 99. */
+module corpus_1479
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild_full() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_class_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_node_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_seal(out32: *u8) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var SYM_A : [u8; 32]
+var SYM_B : [u8; 32]
+var SYM_X : [u8; 32]
+var SYM_F : [u8; 32]
+var CH    : [u32; 2]
+var SEAL_A : [u8; 32]
+var SEAL_B : [u8; 32]
+
+var W_CA  : u32 = 0u32     /* the workload's class handles (module scope: filled per run) */
+var W_CB  : u32 = 0u32
+var W_CX  : u32 = 0u32
+var W_FA  : u32 = 0u32
+var W_FFA : u32 = 0u32
+var W_FB  : u32 = 0u32
+var W_FFB : u32 = 0u32
+
+fn fillsym(dst_addr: u64, b: u8) {
+    let d : *u8 = dst_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { d[i] = b   i = i + 1u64 }
+}
+
+/* build the workload up to (but not including) the rebuild; 0 = OK */
+fn build_workload() -> u64 {
+    eg_init()
+    fillsym((&SYM_A as u64), 0xA1u8)
+    fillsym((&SYM_B as u64), 0xB2u8)
+    fillsym((&SYM_X as u64), 0x5Cu8)
+    fillsym((&SYM_F as u64), 0xF0u8)
+    let chp : *u32 = (&CH as u64) as *u32
+    W_CA = eg_add((&SYM_A as u64) as *u8, chp, 0u32)
+    W_CB = eg_add((&SYM_B as u64) as *u8, chp, 0u32)
+    W_CX = eg_add((&SYM_X as u64) as *u8, chp, 0u32)
+    if W_CA == 0xFFFFFFFFu32 { return 1u64 }
+    if W_CB == 0xFFFFFFFFu32 { return 2u64 }
+    if W_CX == 0xFFFFFFFFu32 { return 3u64 }
+    /* f(a), ff(a) FIRST (lower node ids than the f(b) twins) */
+    CH[0u64] = W_CA
+    W_FA = eg_add((&SYM_F as u64) as *u8, chp, 1u32)
+    CH[0u64] = W_FA
+    W_FFA = eg_add((&SYM_F as u64) as *u8, chp, 1u32)
+    CH[0u64] = W_CB
+    W_FB = eg_add((&SYM_F as u64) as *u8, chp, 1u32)
+    CH[0u64] = W_FB
+    W_FFB = eg_add((&SYM_F as u64) as *u8, chp, 1u32)
+    if W_FFB == 0xFFFFFFFFu32 { return 4u64 }
+    /* rank-boost f(b)'s class so it SURVIVES the congruence merge, dirtying the
+     * already-scanned side (ff(a)) and forcing a second drain pass */
+    if eg_union(W_FB, W_CX) == 0xFFFFFFFFu32 { return 5u64 }
+    /* the trigger */
+    if eg_union(W_CA, W_CB) == 0xFFFFFFFFu32 { return 6u64 }
+    return 0u64
+}
+
+/* assert the post-rebuild canonical partition; 0 = OK */
+fn check_partition() -> u64 {
+    if eg_find(W_CA) != eg_find(W_CB) { return 1u64 }          /* the user union */
+    if eg_find(W_FA) != eg_find(W_FB) { return 2u64 }          /* first-order congruence */
+    if eg_find(W_FA) != eg_find(W_CX) { return 3u64 }          /* the rank-boost union */
+    if eg_find(W_FFA) != eg_find(W_FFB) { return 4u64 }        /* second-order (cross-pass) */
+    if eg_find(W_FFA) == eg_find(W_FA) { return 5u64 }         /* distinct levels stay distinct */
+    if eg_find(W_FA) == eg_find(W_CA) { return 6u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* ==== run A: the incremental worklist ==== */
+    let ba : u64 = build_workload()
+    if ba != 0u64 { return ba }
+    let passes_a : u32 = eg_rebuild()
+    if passes_a < 2u32 { return 10u64 }                        /* the cascade crossed passes */
+    let pa : u64 = check_partition()
+    if pa != 0u64 { return 20u64 + pa }
+    if eg_rebuild() != 0u32 { return 11u64 }                   /* no-dirty fast path */
+    let pa2 : u64 = check_partition()
+    if pa2 != 0u64 { return 30u64 + pa2 }                      /* fast path mutated nothing */
+    if eg_seal((&SEAL_A as u64) as *u8) != 0i32 { return 12u64 }
+
+    /* ==== run B: the original full wipe, same workload from scratch ==== */
+    let bb : u64 = build_workload()
+    if bb != 0u64 { return 40u64 + bb }
+    if eg_rebuild_full() < 1u32 { return 13u64 }
+    let pb : u64 = check_partition()
+    if pb != 0u64 { return 50u64 + pb }
+    if eg_seal((&SEAL_B as u64) as *u8) != 0i32 { return 14u64 }
+
+    /* ==== the differential: byte-identical state (canonical content + raw ranks) ==== */
+    if cad_eq((&SEAL_A as u64) as *u8, (&SEAL_B as u64) as *u8) != 1u8 { return 15u64 }
+
+    return 99u64
+}

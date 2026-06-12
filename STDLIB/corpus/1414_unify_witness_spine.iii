@@ -1,0 +1,105 @@
+/* 1414_unify_witness_spine.iii -- ROBINSON SUBSTITUTION EXPORT, WITNESS K, SPINE CHAIN ROOT
+ * (burn-down tranche 23; 4 census orphans on the resolver's proof-trail surface).
+ *
+ *  UNIFY (2): unify_lookup_var resolves a bound variable to its term (tagged term_id<<1) and
+ *      returns the unbound sentinel 0x1 for a free var; unify_export_subst_to_resolver_buf
+ *      flattens the substitution into the resolver's 64-entry table EXACTLY -- bound pairs
+ *      first, 0xFFFFFFFF sentinels after, so the resolver reads the same substitution the
+ *      unifier built;
+ *  WITNESS (1): witness_entry_k reads back the k value stored by witness_append_k exactly
+ *      (and an out-of-range index reads 0);
+ *  SPINE (1): ws_chain_root delegates the authoritative chain root -- it writes a 32-byte
+ *      root, is reproducible across calls, and a published fragment MOVES the root
+ *      (growth-evidence: the spine is tamper- and append-evident).
+ * Exit 99. */
+module corpus_1414
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn unify_buf_new(arena_id: u64) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn subst_bind(buf: u64, var_id: u32, term_id: u32) -> u8 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_lookup_var(buf: u64, var_id: u32) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_export_subst_to_resolver_buf(buf: u64, dst_256b: u64) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn witness_init() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_append_k(mhash_ptr: u64, cap_id: u64, k_fixed: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_entry_k(idx: u32) -> u64 from "witness.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_epoch_close() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_chain_root(out_root: *u8) -> i32 from "witness_spine.iii"
+
+var DSTBUF : [u8; 512]      /* 64 entries * 8 bytes */
+var MH     : [u8; 32]
+var PROD   : [u8; 32]
+var OPID   : [u8; 32]
+var INC    : [u8; 32]
+var OUTC   : [u8; 32]
+var PAY    : [u8; 16]
+var FID    : [u8; 32]
+var R1     : [u8; 32]
+var R2     : [u8; 32]
+var R3     : [u8; 32]
+
+fn rd_u32(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    let b0 : u32 = (p[0u64] as u32) & 0xFFu32
+    let b1 : u32 = ((p[1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((p[2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((p[3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+fn main() -> u64 {
+    /* ---- UNIFY: lookup + export ---- */
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 1u64 }
+    let buf : u64 = unify_buf_new(ar)
+    if buf == 0u64 { return 2u64 }
+    if unify_lookup_var(buf, 5u32) != 0x1u64 { return 3u64 }       /* free var -> sentinel */
+    if subst_bind(buf, 5u32, 42u32) != 1u8 { return 4u64 }
+    if subst_bind(buf, 9u32, 7u32) != 1u8 { return 5u64 }
+    if unify_lookup_var(buf, 5u32) != (42u64 << 1u64) { return 6u64 }   /* term_id << 1 */
+    if unify_lookup_var(buf, 9u32) != (7u64 << 1u64) { return 7u64 }
+    if unify_lookup_var(buf, 99u32) != 0x1u64 { return 8u64 }      /* still free */
+
+    if unify_export_subst_to_resolver_buf(buf, (&DSTBUF as u64)) != 0i32 { return 9u64 }
+    if rd_u32((&DSTBUF as u64), 0u64) != 5u32 { return 10u64 }     /* entry 0 = (5,42) */
+    if rd_u32((&DSTBUF as u64), 4u64) != 42u32 { return 11u64 }
+    if rd_u32((&DSTBUF as u64), 8u64) != 9u32 { return 12u64 }     /* entry 1 = (9,7) */
+    if rd_u32((&DSTBUF as u64), 12u64) != 7u32 { return 13u64 }
+    if rd_u32((&DSTBUF as u64), 16u64) != 0xFFFFFFFFu32 { return 14u64 }   /* sentinel after */
+    if rd_u32((&DSTBUF as u64), 20u64) != 0xFFFFFFFFu32 { return 15u64 }
+
+    /* ---- WITNESS: k round trip ---- */
+    witness_init()
+    let c0 : u32 = witness_count()
+    let mut i : u64 = 0u64
+    while i < 32u64 { MH[i] = (0x20u64 + i & 0xFFu64) as u8   i = i + 1u64 }
+    if witness_append_k((&MH as u64), 0x77u64, 0x12345678u64) != 0i32 { return 20u64 }
+    if witness_entry_k(c0) != 0x12345678u64 { return 21u64 }
+    if witness_entry_k(c0 + 100u32) != 0u64 { return 22u64 }       /* OOB -> 0 */
+
+    /* ---- SPINE: chain root reproducible + growth-evident ---- */
+    if wh_init(1u64) != 0i32 { return 30u64 }
+    if ws_chain_root(((&R1 as u64)) as *u8) != 0i32 { return 31u64 }
+    if ws_chain_root(((&R2 as u64)) as *u8) != 0i32 { return 32u64 }
+    let mut k : u64 = 0u64
+    while k < 32u64 { if R1[k] != R2[k] { return 33u64 }   k = k + 1u64 }   /* reproducible */
+    /* publish a fragment -> the root moves */
+    let mut z : u64 = 0u64
+    while z < 32u64 { PROD[z] = 0x11u8   OPID[z] = 0x22u8   INC[z] = 0x33u8   OUTC[z] = 0x44u8   z = z + 1u64 }
+    PAY[0u64] = 0xABu8
+    let fid : u64 = wh_publish(((&PROD as u64)) as *u8, ((&OPID as u64)) as *u8,
+                              ((&INC as u64)) as *u8, ((&OUTC as u64)) as *u8,
+                              0u8, 0u8, 0u16, ((&PROD as u64)) as *u8, 0u32,
+                              ((&PAY as u64)) as *u8, 1u32, ((&FID as u64)) as *u8)
+    if fid == 0xFFFFFFFFFFFFFFFFu64 { return 34u64 }
+    wh_epoch_close()                                               /* folds the fragment into the root */
+    if ws_chain_root(((&R3 as u64)) as *u8) != 0i32 { return 35u64 }
+    let mut moved : u32 = 0u32
+    let mut m : u64 = 0u64
+    while m < 32u64 { if R3[m] != R1[m] { moved = moved + 1u32 }   m = m + 1u64 }
+    if moved == 0u32 { return 36u64 }                              /* append-evident */
+
+    return 99u64
+}

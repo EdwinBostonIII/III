@@ -66,14 +66,18 @@ fn xii_sml_verify_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: 
 
 /* Step 4: verify Founders-Anchor Ed25519 signature.
  * Signature covers manifest bytes [0..0x32F]; signature stored at [0x330..0x36F]. */
-extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, signature: *u8) -> u32 from "crypt_ed25519.iii"
+/* crypt_ed25519's verifier returns u8: 1 = VALID, 0 = invalid (the founders_anchor /
+ * fed_sybil convention).  This extern was previously typed `-> u32` with an
+ * `rc != 0` failure test -- an INVERTED gate that rejected valid signatures and
+ * accepted forgeries.  Fixed 2026-06-12; corpus 1425 proves both arms. */
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, signature: *u8) -> u8 from "crypt_ed25519.iii"
 
 fn xii_sml_verify_anchor_signature(manifest_ptr: *u8) -> u32 @export {
     let pubkey : *u8 = (manifest_ptr as u64 + 0x310u64) as *u8
     let signature : *u8 = (manifest_ptr as u64 + 0x330u64) as *u8
     let signed_len : u64 = 0x330u64
-    let rc : u32 = ed25519_verify(pubkey, manifest_ptr, signed_len, signature)
-    if rc != 0u32 {
+    let rc : u8 = ed25519_verify(pubkey, manifest_ptr, signed_len, signature)
+    if rc != 1u8 {
         XSL_LAST_ERROR = XSL_E_ANCHOR_SIG
         return XSL_E_ANCHOR_SIG
     }

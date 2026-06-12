@@ -1,0 +1,227 @@
+/* 1426_dispatch_admit_crystal.iii -- NATIVE RIPPLE DISPATCH TABLE, PROOF-RIPPLE SITE SEAL,
+ * ATOMIC PROVE-THEN-ADMIT, FOUNDERS-ANCHOR PFK AGGREGATE, HTTP CRYSTAL ROUND-TRIP
+ * (burn-down tranche 35; the FINAL 7 census orphans -- the ledger reaches ZERO).
+ *
+ *  RIPPLE (2): ripple_execute_native records (crystal_id, mode) into the side table read
+ *      back EXACTLY by _at_crystal_id/_at_mode in order; OOB index reads 0; the 1024-entry
+ *      cap REFUSES (-1) without clobbering; clear resets;
+ *  PROOF-RIPPLE (1): a corpus-equivalence cert's sealed site is readable byte-wise --
+ *      stable, in-range, verifier-corroborated (verify==1 over the same replay); i>=32,
+ *      cert 0, and an unverifiable id all read the 0x100 sentinel;
+ *  RVA (1): rva_audit_and_admit is ATOMIC prove-then-admit: a reversible BV pair (UNSAT
+ *      disequality) with an AMEND-capable ctx admits the op-id (membership proven); a
+ *      NON-reversible pair FAILS the audit (-2) and admits NOTHING; a reversible pair
+ *      with a null cap passes audit but is REFUSED admission (-4, M8 gate);
+ *  PFK (1): the 7-sub-check aggregate ACCEPTS matching R1 roots (all system invariants
+ *      green) and pinpoints sub-check 5 on a root mismatch;
+ *  HTTP (2): a real parsed response carrying X-Crystal-HTTP round-trips the 32-byte root
+ *      EXACTLY through the module's own hex formatter (format -> parse -> byte); a
+ *      response WITHOUT the header has no crystal (0x100); id 0 / i>=32 refused.
+ * Exit 99. */
+module corpus_1426
+
+extern @abi(c-msvc-x64) fn ripple_execute_native(crystal_id: u64, mode: u32) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_dispatch_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_at_crystal_id(idx: u32) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_at_mode(idx: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_clear() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv(old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u64 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_verify(cert_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u8 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_site_byte(cert_id: u64, i: u32) -> u32 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn rva_init() -> i32 from "reversibility_audit.iii"
+extern @abi(c-msvc-x64) fn rva_audit_and_admit(width: u32, x: u32, z: u32, ctx: *u8) -> i32 from "reversibility_audit.iii"
+extern @abi(c-msvc-x64) fn rva_is_admitted(op_id: *u8) -> u8 from "reversibility_audit.iii"
+extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_new_var(width: u32) -> u32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_add_eq(a: u32, b: u32) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xii_chd_set_hash(idx: u32, hash_lo: u32, hash_hi: u32) -> i32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_construct() -> u8 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn pfk_anchor_invariant_xii(manifest_r1: *u8, current_r1: *u8) -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_format_crystal_header(out_buf: u64, out_cap: u64, root_ptr: u64) -> u64 from "http.iii"
+extern @abi(c-msvc-x64) fn http_response_with_crystal(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http.iii"
+extern @abi(c-msvc-x64) fn http_response_crystal_root_byte(id: u64, i: u32) -> u32 from "http.iii"
+
+var RD_TEMPLATE : [u8; 168]
+var RD_WIT  : [u64; 4] = [11u64, 22u64, 33u64, 44u64]
+var CTX_A   : [u8; 40]
+var CTX_B   : [u8; 40]
+var CTX_C   : [u8; 40]
+var R1A     : [u8; 32]
+var R1B     : [u8; 32]
+var ROOT    : [u8; 32]
+var RAW     : [u8; 128]
+var RAW2    : [u8; 48]
+var SITE1   : [u32; 32]
+
+/* Two equivalent dispatch fns (the 942 fn-pointer form). */
+fn rd_dispatch_a(a: u64, b: u64, c: u64, d: u64) -> u64 { return a + 1u64 }
+fn rd_dispatch_b(a: u64, b: u64, c: u64, d: u64) -> u64 { return a + 1u64 }
+
+fn _rd_put_q(off: u32, v: u64) -> i32 {
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        RD_TEMPLATE[off + i] = ((v >> (((i & 0x7u32) as u64) * 8u64)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn _rd_register(slot: u32, pid: u64, fp: u64) -> u8 {
+    let mut i : u32 = 0u32
+    while i < 168u32 { RD_TEMPLATE[i] = 0u8  i = i + 1u32 }
+    _rd_put_q(0u32, pid)
+    _rd_put_q(96u32, fp)
+    return pattern_register(slot, (&RD_TEMPLATE) as u64)
+}
+
+/* Fill a 40-byte admit ctx: [0..32) = op-id pattern, [32..40) = cap LE u64. */
+fn _ctx_fill(base: u64, tag: u8, cap: u64) -> i32 {
+    let b : *u8 = base as *u8
+    let t : u8 = tag
+    let c : u64 = cap
+    let mut i : u64 = 0u64
+    while i < 32u64 { b[i] = t + (i as u8)   i = i + 1u64 }
+    let mut j : u64 = 0u64
+    while j < 8u64 { b[32u64 + j] = ((c >> (j * 8u64)) & 0xFFu64) as u8   j = j + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ---- RIPPLE: the native dispatch side table, exact bookkeeping ---- */
+    ripple_execute_native_clear()
+    if ripple_execute_native_dispatch_count() != 0u32 { return 1u64 }
+    if ripple_execute_native_at_crystal_id(0u32) != 0u64 { return 2u64 }      /* empty */
+    if ripple_execute_native(0xC0FFEEu64, 2u32) != 0i32 { return 3u64 }
+    if ripple_execute_native_dispatch_count() != 1u32 { return 4u64 }
+    if ripple_execute_native_at_crystal_id(0u32) != 0xC0FFEEu64 { return 5u64 }
+    if ripple_execute_native_at_mode(0u32) != 2u32 { return 6u64 }
+    if ripple_execute_native(0xBEEFu64, 7u32) != 0i32 { return 7u64 }
+    if ripple_execute_native_at_crystal_id(1u32) != 0xBEEFu64 { return 8u64 }
+    if ripple_execute_native_at_crystal_id(2u32) != 0u64 { return 9u64 }      /* OOB */
+    let mut f : u32 = 0u32
+    while f < 1022u32 {
+        if ripple_execute_native(0x1000u64 + (f as u64), 1u32) != 0i32 { return 10u64 }
+        f = f + 1u32
+    }
+    if ripple_execute_native_dispatch_count() != 1024u32 { return 11u64 }
+    if ripple_execute_native(0xFFu64, 1u32) != -1i32 { return 12u64 }         /* cap refusal */
+    if ripple_execute_native_dispatch_count() != 1024u32 { return 13u64 }     /* nothing clobbered */
+    if ripple_execute_native_at_crystal_id(1023u32) != 0x1000u64 + 1021u64 { return 14u64 }
+    ripple_execute_native_clear()
+    if ripple_execute_native_dispatch_count() != 0u32 { return 15u64 }
+
+    /* ---- PROOF-RIPPLE: the sealed site is readable, stable, corroborated ---- */
+    if _rd_register(5u32, 0xA5A50005u64, (&rd_dispatch_a) as u64) != 1u8 { return 20u64 }
+    if _rd_register(6u32, 0xA5A50006u64, (&rd_dispatch_b) as u64) != 1u8 { return 21u64 }
+    let wit : u64 = (&RD_WIT) as u64
+    let cert : u64 = proof_ripple_corpus_equiv(5u32, 6u32, wit, 4u32)
+    if cert == 0u64 { return 22u64 }
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 6u32, wit, 4u32) != 1u8 { return 23u64 }
+    let mut nz : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < 32u32 {
+        let sb : u32 = proof_ripple_corpus_equiv_site_byte(cert, s)
+        if sb == 0x100u32 { return 24u64 }                                    /* in-range read */
+        if sb != 0u32 { nz = nz + 1u32 }
+        SITE1[s] = sb
+        s = s + 1u32
+    }
+    if nz == 0u32 { return 25u64 }                                            /* a real seal */
+    let mut s2 : u32 = 0u32
+    while s2 < 32u32 {
+        if proof_ripple_corpus_equiv_site_byte(cert, s2) != SITE1[s2] { return 26u64 }   /* stable */
+        s2 = s2 + 1u32
+    }
+    if proof_ripple_corpus_equiv_site_byte(cert, 32u32) != 0x100u32 { return 27u64 }
+    if proof_ripple_corpus_equiv_site_byte(0u64, 0u32) != 0x100u32 { return 28u64 }
+    if proof_ripple_corpus_equiv_site_byte(0xDEADBEEFu64, 0u32) != 0x100u32 { return 29u64 }
+
+    /* ---- RVA: atomic prove-then-admit, all three gates ---- */
+    rva_init()
+    cap_env_init()
+    smt_init()
+    let x1 : u32 = smt_bv_new_var(4u32)
+    let y1 : u32 = smt_bv_new_var(4u32)
+    let z1 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(x1, y1)
+    smt_bv_add_eq(y1, z1)                                  /* g(f(x)) == x everywhere */
+    _ctx_fill((&CTX_A as u64), 0xA0u8, 1u64)               /* cap 1 = CAP_ENV_ROOT (AMEND) */
+    if rva_audit_and_admit(4u32, x1, z1, (&CTX_A as u64) as *u8) != 0i32 { return 40u64 }
+    if rva_is_admitted((&CTX_A as u64) as *u8) != 1u8 { return 41u64 }        /* admitted */
+    smt_init()
+    let x2 : u32 = smt_bv_new_var(4u32)
+    let y2 : u32 = smt_bv_new_var(4u32)
+    let z2 : u32 = smt_bv_new_var(4u32)
+    let k2 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(x2, y2)
+    smt_bv_add_eq(k2, z2)                                  /* z unconstrained vs x -> SAT */
+    _ctx_fill((&CTX_B as u64), 0xB0u8, 1u64)
+    if rva_audit_and_admit(4u32, x2, z2, (&CTX_B as u64) as *u8) != -2i32 { return 42u64 }   /* audit FAILS */
+    if rva_is_admitted((&CTX_B as u64) as *u8) != 0u8 { return 43u64 }        /* nothing admitted */
+    smt_init()
+    let x3 : u32 = smt_bv_new_var(4u32)
+    let y3 : u32 = smt_bv_new_var(4u32)
+    let z3 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(x3, y3)
+    smt_bv_add_eq(y3, z3)
+    _ctx_fill((&CTX_C as u64), 0xC0u8, 0u64)               /* null cap */
+    if rva_audit_and_admit(4u32, x3, z3, (&CTX_C as u64) as *u8) != -4i32 { return 44u64 }   /* M8 refusal */
+    if rva_is_admitted((&CTX_C as u64) as *u8) != 0u8 { return 45u64 }
+
+    /* ---- PFK: the aggregate accepts; a root mismatch pinpoints sub-check 5 ---- */
+    xii_horizon_init()
+    xii_register_all()
+    let mut c : u32 = 0u32
+    while c < 144u32 {
+        let lo : u32 = (c * 2654435761u32) ^ 0x9E3779B9u32
+        let hi : u32 = (c * 0x85EBCA77u32) ^ 0xC2B2AE3Du32
+        xii_chd_set_hash(c, lo, hi)
+        c = c + 1u32
+    }
+    if xii_chd_construct() != 1u8 { return 50u64 }
+    let mut r : u64 = 0u64
+    while r < 32u64 { R1A[r] = (0x30u64 + r & 0xFFu64) as u8   R1B[r] = (0x30u64 + r & 0xFFu64) as u8   r = r + 1u64 }
+    if pfk_anchor_invariant_xii((&R1A as u64) as *u8, (&R1B as u64) as *u8) != 0u8 { return 51u64 }
+    R1B[7u64] = 0xEEu8
+    if pfk_anchor_invariant_xii((&R1A as u64) as *u8, (&R1B as u64) as *u8) != 5u8 { return 52u64 }
+    R1B[7u64] = 0x37u8                                     /* restore (0x30 + 7) */
+    if pfk_anchor_invariant_xii((&R1A as u64) as *u8, (&R1B as u64) as *u8) != 0u8 { return 53u64 }
+
+    /* ---- HTTP: the crystal root round-trips its own wire encoding ---- */
+    let arena : u64 = arena_new(65536u64)
+    if arena == 0u64 { return 60u64 }
+    let mut q : u64 = 0u64
+    while q < 32u64 { ROOT[q] = ((q * 11u64 + 5u64) & 0xFFu64) as u8   q = q + 1u64 }
+    /* RAW = "HTTP/1.1 200 OK\r\n" + <82-byte crystal header> + "Content-Length: 0\r\n\r\n" */
+    let sl : *u8 = ("HTTP/1.1 200 OK" as u64) as *u8
+    let mut w : u64 = 0u64
+    while w < 15u64 { RAW[w] = sl[w]   RAW2[w] = sl[w]   w = w + 1u64 }
+    RAW[15u64] = 13u8   RAW[16u64] = 10u8
+    if http_format_crystal_header((&RAW as u64) + 17u64, 82u64, (&ROOT as u64)) != 82u64 { return 61u64 }
+    let cl : *u8 = ("Content-Length: 0" as u64) as *u8
+    let mut v : u64 = 0u64
+    while v < 17u64 { RAW[99u64 + v] = cl[v]   RAW2[17u64 + v] = cl[v]   v = v + 1u64 }
+    RAW[116u64] = 13u8   RAW[117u64] = 10u8   RAW[118u64] = 13u8   RAW[119u64] = 10u8
+    let resp : u64 = http_response_with_crystal(arena, (&RAW as u64), 120u64)
+    if resp == 0u64 { return 62u64 }
+    let mut h : u32 = 0u32
+    while h < 32u32 {
+        if http_response_crystal_root_byte(resp, h) != (ROOT[(h as u64) & 0x1Fu64] as u32) { return 63u64 }
+        h = h + 1u32
+    }
+    if http_response_crystal_root_byte(resp, 32u32) != 0x100u32 { return 64u64 }
+    if http_response_crystal_root_byte(0u64, 0u32) != 0x100u32 { return 65u64 }
+    /* RAW2 = the same response WITHOUT the crystal header -> no crystal cached. */
+    RAW2[15u64] = 13u8   RAW2[16u64] = 10u8
+    RAW2[34u64] = 13u8   RAW2[35u64] = 10u8   RAW2[36u64] = 13u8   RAW2[37u64] = 10u8
+    let resp2 : u64 = http_response_with_crystal(arena, (&RAW2 as u64), 38u64)
+    if resp2 == 0u64 { return 66u64 }
+    if http_response_crystal_root_byte(resp2, 0u32) != 0x100u32 { return 67u64 }
+
+    return 99u64
+}

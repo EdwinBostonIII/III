@@ -277,13 +277,13 @@ xii_sml_verify_anchor_signature:
     subq $32, %rsp
     callq ed25519_verify
     addq $32, %rsp
-    movl %eax, %eax
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movl -40(%rbp), %eax
+    movzbq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax

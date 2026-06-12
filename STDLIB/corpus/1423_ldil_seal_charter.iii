@@ -1,0 +1,142 @@
+/* 1423_ldil_seal_charter.iii -- THE LDIL BLOCK IR, LAYERED SEAL RECORD, NOUS CHARTER,
+ * LINT CORRUPTION HOOK, PATTERN PROOF-ID, FEDERATION CAPACITY
+ * (burn-down tranche 32; ~10 census orphans).
+ *
+ *  LDIL (5): a function/block/instruction graph built live -- new_function + new_block +
+ *      add_block round-trips through fn_n_blocks/fn_block_at; block_parent is the owning
+ *      function; emit_const + emit_load append instructions read back by block_instr_at
+ *      in ORDER; every accessor refuses dead refs with LDIL_SENT/0;
+ *  LAYERED SEAL (1): before any emit the record reads 0x100 sentinels; after
+ *      layered_seal_emit(prev,new) bytes [0..32) == prev and [32..64) == new EXACTLY,
+ *      OOB index -> 0x100;
+ *  NOUS CHARTER (1): after init, run_charter is GREEN (99) and nous_ch_verdict copies the
+ *      EXACT content-address cad(KECCAK, count_LE4) -- recomputed independently in-KAT;
+ *      reproducible; null refused;
+ *  QUALITY (1): witness_inject_corruption_for_test drops the lint latch to 0 (the negative
+ *      hook pairs with the set: set->1, inject->0, set->1);
+ *  PATTERN (2): pattern_template_set_proof_id writes the u64 at offset 152 EXACTLY (byte
+ *      readback); pattern_set_fed_capacity == 64 (the sealed federation dimension).
+ * Exit 99. */
+module corpus_1423
+
+extern @abi(c-msvc-x64) fn ldil_init() -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_function(name_id: *u8, ret_width: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_new_block(parent_func: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_add_block(func: u32, block: u32) -> i32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_n_blocks(func: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_fn_block_at(func: u32, idx: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_block_parent(block: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_const(block: u32, width: u8, signed: u8, imm: u64) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_emit_load(block: u32, addr: u32, width: u8, signed: u8) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_block_n_instrs(block: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn ldil_block_instr_at(block: u32, idx: u32) -> u32 from "xii_ldil.iii"
+extern @abi(c-msvc-x64) fn layered_seal_has() -> u8 from "layered_seal.iii"
+extern @abi(c-msvc-x64) fn layered_seal_emit(prev_root_ptr: u64, new_root_ptr: u64) -> i32 from "layered_seal.iii"
+extern @abi(c-msvc-x64) fn layered_seal_byte(i: u32) -> u32 from "layered_seal.iii"
+extern @abi(c-msvc-x64) fn nous_ch_init() -> i32 from "nous_charter.iii"
+extern @abi(c-msvc-x64) fn nous_ch_run_charter() -> u64 from "nous_charter.iii"
+extern @abi(c-msvc-x64) fn nous_ch_verdict(out: *u8) -> i32 from "nous_charter.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn quality_resolver_lint_passed() -> u8 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn witness_inject_corruption_for_test() -> i32 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn pattern_template_zero(buf_168: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_proof_id(buf_168: u64, proof_crystal_id: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_capacity() -> u32 from "pattern_set_federation.iii"
+
+const LSENT : u32 = 0xFFFFFFFFu32
+
+var NAME : [u8; 32]
+var PREV : [u8; 32]
+var NEWR : [u8; 32]
+var V1   : [u8; 32]
+var V2   : [u8; 32]
+var ZB4  : [u8; 4]
+var EXP  : [u8; 32]
+var TPL  : [u8; 168]
+
+fn main() -> u64 {
+    /* ---- LDIL: live IR construction with exact bookkeeping ---- */
+    if ldil_init() != 0i32 { return 1u64 }
+    let mut n : u64 = 0u64
+    while n < 32u64 { NAME[n] = (0x30u64 + n & 0xFFu64) as u8   n = n + 1u64 }
+    let f : u32 = ldil_new_function(((&NAME as u64)) as *u8, 64u8)
+    if f == LSENT { return 2u64 }
+    if ldil_fn_n_blocks(f) != 0u32 { return 3u64 }
+    let b0 : u32 = ldil_new_block(f)
+    if b0 == LSENT { return 4u64 }
+    if ldil_block_parent(b0) != f { return 5u64 }                  /* the owning function */
+    if ldil_fn_add_block(f, b0) != 0i32 { return 6u64 }
+    if ldil_fn_n_blocks(f) != 1u32 { return 7u64 }
+    if ldil_fn_block_at(f, 0u32) != b0 { return 8u64 }
+    if ldil_fn_block_at(f, 1u32) != LSENT { return 9u64 }          /* OOB */
+    if ldil_block_n_instrs(b0) != 0u32 { return 10u64 }
+    let c1 : u32 = ldil_emit_const(b0, 64u8, 0u8, 0x1000u64)
+    if c1 == LSENT { return 11u64 }
+    if ldil_block_n_instrs(b0) != 1u32 { return 12u64 }
+    let ld : u32 = ldil_emit_load(b0, c1, 32u8, 0u8)
+    if ld == LSENT { return 13u64 }
+    if ldil_block_n_instrs(b0) != 2u32 { return 14u64 }            /* load appended */
+    if ldil_block_instr_at(b0, 0u32) == LSENT { return 15u64 }     /* order preserved */
+    if ldil_block_instr_at(b0, 1u32) == LSENT { return 16u64 }
+    if ldil_block_instr_at(b0, 2u32) != LSENT { return 17u64 }     /* OOB */
+    if ldil_block_parent(9999u32) != LSENT { return 18u64 }        /* dead block */
+    if ldil_fn_n_blocks(9999u32) != 0u32 { return 19u64 }
+    if ldil_emit_load(b0, 999999u32, 32u8, 0u8) != LSENT { return 20u64 }   /* dead addr value */
+
+    /* ---- LAYERED SEAL: pre-emit sentinels; post-emit exact root bytes ---- */
+    if layered_seal_has() != 0u8 { return 30u64 }
+    if layered_seal_byte(0u32) != 0x100u32 { return 31u64 }        /* nothing sealed yet */
+    let mut r : u64 = 0u64
+    while r < 32u64 { PREV[r] = (0x10u64 + r & 0xFFu64) as u8   NEWR[r] = (0x70u64 + r & 0xFFu64) as u8   r = r + 1u64 }
+    if layered_seal_emit((&PREV as u64), (&NEWR as u64)) != 0i32 { return 32u64 }
+    if layered_seal_has() != 1u8 { return 33u64 }
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if layered_seal_byte(k) != (PREV[(k as u64) & 0x1Fu64] as u32) { return 34u64 }
+        if layered_seal_byte(k + 32u32) != (NEWR[(k as u64) & 0x1Fu64] as u32) { return 35u64 }
+        k = k + 1u32
+    }
+    if layered_seal_byte(128u32) != 0x100u32 { return 36u64 }      /* OOB */
+
+    /* ---- NOUS CHARTER: GREEN -> the EXACT seal cad(KECCAK, count_LE4) ---- */
+    if nous_ch_init() != 0i32 { return 39u64 }
+    if nous_ch_run_charter() != 99u64 { return 40u64 }
+    if nous_ch_verdict(((&V1 as u64)) as *u8) != 0i32 { return 41u64 }
+    ZB4[0u64] = 0u8
+    ZB4[1u64] = 0u8
+    ZB4[2u64] = 0u8
+    ZB4[3u64] = 0u8
+    if cad_oneshot(1u32, ((&ZB4 as u64)) as *u8, 4u64, ((&EXP as u64)) as *u8) != 0i32 { return 42u64 }
+    let mut z : u64 = 0u64
+    while z < 32u64 { if V1[z] != EXP[z] { return 43u64 }   z = z + 1u64 }   /* the seal formula */
+    let mut nz : u32 = 0u32
+    let mut y : u64 = 0u64
+    while y < 32u64 { if V1[y] != 0u8 { nz = nz + 1u32 }   y = y + 1u64 }
+    if nz == 0u32 { return 47u64 }                                           /* and it is nonzero */
+    if nous_ch_run_charter() != 99u64 { return 44u64 }
+    if nous_ch_verdict(((&V2 as u64)) as *u8) != 0i32 { return 45u64 }
+    let mut q : u64 = 0u64
+    while q < 32u64 { if V1[q] != V2[q] { return 46u64 }   q = q + 1u64 }    /* reproducible */
+    let np : *u8 = (0u64) as *u8
+    if nous_ch_verdict(np) != -1i32 { return 48u64 }
+
+    /* ---- QUALITY: the corruption hook drops the latch ---- */
+    if quality_set_resolver_lint_passed() != 0i32 { return 50u64 }
+    if quality_resolver_lint_passed() != 1u8 { return 51u64 }
+    if witness_inject_corruption_for_test() != 0i32 { return 52u64 }
+    if quality_resolver_lint_passed() != 0u8 { return 53u64 }      /* the hook bites */
+    if quality_set_resolver_lint_passed() != 0i32 { return 54u64 }
+    if quality_resolver_lint_passed() != 1u8 { return 55u64 }      /* restorable */
+
+    /* ---- PATTERN: proof-id write exact at offset 152; federation capacity 64 ---- */
+    if pattern_template_zero((&TPL as u64)) != 0i32 { return 60u64 }
+    if pattern_template_set_proof_id((&TPL as u64), 0x1122334455667788u64) != 0i32 { return 61u64 }
+    if TPL[152u64] != 0x88u8 { return 62u64 }                      /* LE byte 0 */
+    if TPL[159u64] != 0x11u8 { return 63u64 }                      /* LE byte 7 */
+    if TPL[151u64] != 0u8 { return 64u64 }                         /* the write stayed in bounds */
+    if TPL[160u64] != 0u8 { return 65u64 }
+    if pattern_set_fed_capacity() != 64u32 { return 66u64 }
+
+    return 99u64
+}

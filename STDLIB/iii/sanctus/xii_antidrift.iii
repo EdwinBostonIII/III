@@ -31,7 +31,9 @@ extern @abi(c-msvc-x64) fn xii_savings_init() -> i32 from "xii_savings.iii"
 extern @abi(c-msvc-x64) fn xii_savings_symmetry_check() -> u32 from "xii_savings.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_reach_productive_count() -> u32 from "xii_horizon_reach.iii"
 extern @abi(c-msvc-x64) fn xii_chd_verify_collision_free() -> u32 from "xii_chd.iii"
-extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, signature: *u8) -> u32 from "crypt_ed25519.iii"
+/* Returns u8: 1 = VALID (founders_anchor convention).  Was mistyped `-> u32` with an
+ * inverted `!= 0` failure test in check_anchor_sig -- fixed 2026-06-12 (corpus 1425). */
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, signature: *u8) -> u8 from "crypt_ed25519.iii"
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
@@ -238,8 +240,8 @@ fn xii_antidrift_check_confluence_empirical(n_samples: u32, seed: u32) -> u32 @e
 fn xii_antidrift_check_anchor_sig(manifest_ptr: *u8) -> u32 @export {
     let pubkey : *u8 = (manifest_ptr as u64 + 0x310u64) as *u8
     let signature : *u8 = (manifest_ptr as u64 + 0x330u64) as *u8
-    let rc : u32 = ed25519_verify(pubkey, manifest_ptr, 0x330u64, signature)
-    if rc != 0u32 { return XAD_E_ANCHOR_SIG }
+    let rc : u8 = ed25519_verify(pubkey, manifest_ptr, 0x330u64, signature)
+    if rc != 1u8 { return XAD_E_ANCHOR_SIG }
     return XAD_OK
 }
 

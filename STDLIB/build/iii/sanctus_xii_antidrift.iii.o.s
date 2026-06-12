@@ -1662,13 +1662,13 @@ xii_antidrift_check_anchor_sig:
     subq $32, %rsp
     callq ed25519_verify
     addq $32, %rsp
-    movl %eax, %eax
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movl -32(%rbp), %eax
+    movzbq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax

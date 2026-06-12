@@ -1,0 +1,147 @@
+/* 1425_membrane_launch.iii -- THE SOVEREIGN MEMBRANE, ALL THREE ORGANS, REAL SIGNATURE
+ * (burn-down tranche 34; 3 census orphans + the inverted-anchor-gate FIX proven).
+ *
+ * THE FIX UNDER PROOF: xii_sml_verify_anchor_signature and xii_antidrift_check_anchor_sig
+ * both mistyped crypt_ed25519's verifier as `-> u32` and treated `rc != 0` as failure --
+ * an INVERTED gate (valid signatures rejected, forgeries accepted) that nothing exercised
+ * positively (corpus 372 deliberately skipped the sig check).  This KAT builds the FIRST
+ * fully-valid manifest: a real Ed25519 keypair (fixed seed), pubkey embedded at [0x310),
+ * a real detached signature over [0..0x330) at [0x330), golden = sha256(manifest, 1040).
+ *
+ *  SML (1): xii_sml_launch == 0 on the valid manifest (POSITIVE -- impossible pre-fix);
+ *      manifest tamper -> 3; a FORGED signature (re-goldened so only the sig is wrong)
+ *      -> 4 (the gate still says no -- the fix is not return-0-always); cell tamper -> 6;
+ *      an audit record_count past the wrap-safe bound -> 7; last_error tracks each;
+ *  ATM (1): xii_atm_tick is silent for 1023 ops and fires the integrity check on the
+ *      1024th: intact -> 0; manifest tampered at the fire -> 1; cell tampered -> 2;
+ *      restored -> 0 again; last_error tracks;
+ *  ANTIDRIFT (1): xii_antidrift_check_all == 0 over the valid manifest + seeded curation
+ *      tables (all NINE checks green, including the real anchor sig); manifest tamper -> 1;
+ *      cell tamper -> 2; forged sig -> 8; oversized record_count -> 9.
+ * Exit 99. */
+module corpus_1425
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_seed(seed: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn xii_sml_launch(manifest_ptr: *u8, golden_mhash: *u8, text_section: *u8, audit_records: *u8, record_count: u32) -> u32 from "xii_sml.iii"
+extern @abi(c-msvc-x64) fn xii_sml_last_error() -> u32 from "xii_sml.iii"
+extern @abi(c-msvc-x64) fn xii_atm_tick(text_section: *u8, audit_records: *u8, record_count: u32, manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 from "xii_atm.iii"
+extern @abi(c-msvc-x64) fn xii_atm_last_error() -> u32 from "xii_atm.iii"
+extern @abi(c-msvc-x64) fn xii_antidrift_check_all(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8, text_section: *u8, audit_records: *u8, record_count: u32, confluence_samples: u32) -> u32 from "xii_antidrift.iii"
+extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xii_chd_set_hash(idx: u32, hash_lo: u32, hash_hi: u32) -> i32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_construct() -> u8 from "xii_chd.iii"
+
+var SEED : [u8; 32]
+var MAN  : [u8; 1040]
+var GOLD : [u8; 32]
+var GOLD2: [u8; 32]
+var TEXT : [u8; 256]
+var AREC : [u8; 64]
+var CELLH: [u8; 32]
+
+/* LE u32 store through *u8. */
+fn mw32(p: u64, v: u32) -> i32 {
+    let pl : u64 = p
+    let vl : u32 = v
+    let b : *u8 = pl as *u8
+    b[0u64] = (vl & 0xFFu32) as u8
+    b[1u64] = ((vl >> 8u32) & 0xFFu32) as u8
+    b[2u64] = ((vl >> 16u32) & 0xFFu32) as u8
+    b[3u64] = ((vl >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* Drive tick to one firing: 1023 silent ops MUST return 0 (else 1u32 sentinel),
+ * then return the 1024th (firing) result. */
+fn atm_cycle() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 1023u32 {
+        let r : u32 = xii_atm_tick((&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32,
+                                   (&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8)
+        if r != 0u32 { return 0xEEu32 }
+        i = i + 1u32
+    }
+    return xii_atm_tick((&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32,
+                        (&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8)
+}
+
+fn main() -> u64 {
+    /* ---- Build the FIRST fully-valid sovereign manifest ---- */
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = (0x42u64 + i & 0xFFu64) as u8   i = i + 1u64 }
+    let mut m : u64 = 0u64
+    while m < 1040u64 { MAN[m] = (((m * 3u64) + 1u64) & 0xFFu64) as u8   m = m + 1u64 }
+    if ed25519_pubkey((&SEED as u64) as *u8, ((&MAN as u64) + 0x310u64) as *u8) != 1u8 { return 1u64 }
+    if ed25519_sign_seed((&SEED as u64) as *u8, (&MAN as u64) as *u8, 0x330u64, ((&MAN as u64) + 0x330u64) as *u8) != 1u8 { return 2u64 }
+    sha256_oneshot((&MAN as u64) as *u8, 1040u64, (&GOLD as u64) as *u8)
+    /* The text section: one 48-byte cell at offset 32. */
+    let mut t : u64 = 0u64
+    while t < 256u64 { TEXT[t] = (((t * 5u64) + 9u64) & 0xFFu64) as u8   t = t + 1u64 }
+    let ab : u64 = &AREC as u64
+    mw32(ab, 32u32)                    /* text_offset LE u64 low half */
+    mw32(ab + 4u64, 0u32)              /* high half */
+    mw32(ab + 16u64, 48u32)            /* payload_size */
+    sha256_oneshot(((&TEXT as u64) + 32u64) as *u8, 48u64, ((&AREC as u64) + 24u64) as *u8)
+
+    /* ---- SML: the measured launch accepts the valid image (THE FIX) ---- */
+    if xii_sml_launch((&MAN as u64) as *u8, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32) != 0u32 { return 10u64 }
+    if xii_sml_last_error() != 0u32 { return 11u64 }
+    let mv : u8 = MAN[5u64]
+    MAN[5u64] = mv + 1u8                                       /* manifest tamper */
+    if xii_sml_launch((&MAN as u64) as *u8, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32) != 3u32 { return 12u64 }
+    if xii_sml_last_error() != 3u32 { return 13u64 }
+    MAN[5u64] = mv
+    let sv : u8 = MAN[0x335u64]
+    MAN[0x335u64] = sv + 1u8                                   /* forge the SIGNATURE only */
+    sha256_oneshot((&MAN as u64) as *u8, 1040u64, (&GOLD2 as u64) as *u8)   /* re-golden */
+    if xii_sml_launch((&MAN as u64) as *u8, (&GOLD2 as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32) != 4u32 { return 14u64 }
+    if xii_sml_last_error() != 4u32 { return 15u64 }           /* the gate still says NO */
+    MAN[0x335u64] = sv
+    let tv : u8 = TEXT[40u64]
+    TEXT[40u64] = tv + 1u8                                     /* cell tamper */
+    if xii_sml_launch((&MAN as u64) as *u8, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32) != 6u32 { return 16u64 }
+    TEXT[40u64] = tv
+    if xii_sml_launch((&MAN as u64) as *u8, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 0x04000000u32) != 7u32 { return 17u64 }
+    if xii_sml_launch((&MAN as u64) as *u8, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32) != 0u32 { return 18u64 }   /* restored */
+
+    /* ---- ATM: the membrane ticks 1023 times silently, then bites ---- */
+    if atm_cycle() != 0u32 { return 30u64 }                    /* intact fire */
+    if xii_atm_last_error() != 0u32 { return 31u64 }
+    MAN[5u64] = mv + 1u8
+    if atm_cycle() != 1u32 { return 32u64 }                    /* manifest tamper at the fire */
+    if xii_atm_last_error() != 1u32 { return 33u64 }
+    MAN[5u64] = mv
+    TEXT[40u64] = tv + 1u8
+    if atm_cycle() != 2u32 { return 34u64 }                    /* cell tamper at the fire */
+    if xii_atm_last_error() != 2u32 { return 35u64 }
+    TEXT[40u64] = tv
+    if atm_cycle() != 0u32 { return 36u64 }                    /* restored -> green */
+    if xii_atm_last_error() != 0u32 { return 37u64 }
+
+    /* ---- ANTIDRIFT: all nine checks green over the REAL signature ---- */
+    xii_register_all()
+    let mut c : u32 = 0u32
+    while c < 144u32 {
+        let lo : u32 = (c * 2654435761u32) ^ 0x9E3779B9u32
+        let hi : u32 = (c * 0x85EBCA77u32) ^ 0xC2B2AE3Du32
+        xii_chd_set_hash(c, lo, hi)
+        c = c + 1u32
+    }
+    if xii_chd_construct() != 1u8 { return 50u64 }
+    if xii_antidrift_check_all((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32, 8u32) != 0u32 { return 51u64 }
+    MAN[5u64] = mv + 1u8
+    if xii_antidrift_check_all((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32, 8u32) != 1u32 { return 52u64 }
+    MAN[5u64] = mv
+    TEXT[40u64] = tv + 1u8
+    if xii_antidrift_check_all((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32, 8u32) != 2u32 { return 53u64 }
+    TEXT[40u64] = tv
+    MAN[0x335u64] = sv + 1u8
+    sha256_oneshot((&MAN as u64) as *u8, 1040u64, (&GOLD2 as u64) as *u8)
+    if xii_antidrift_check_all((&MAN as u64) as *u8, 1040u32, (&GOLD2 as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 1u32, 8u32) != 8u32 { return 54u64 }
+    MAN[0x335u64] = sv
+    if xii_antidrift_check_all((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8, (&TEXT as u64) as *u8, (&AREC as u64) as *u8, 0x04000000u32, 8u32) != 9u32 { return 55u64 }
+
+    return 99u64
+}

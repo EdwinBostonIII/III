@@ -231,3 +231,14 @@ finalizes, VERIFIES; an arity-violating axiom INVALID -4; unfinalized NOT_FINAL 
 null/absent -1/-3), tc_verify (the carrier re-attests the verified term; null/absent),
 lib_admit (CLAUSE_ABSENT -7 which populates the canonical label -> cons_ratify of that
 exact clause -> the SAME carrier ADMITS 0 -> re-admission DUPLICATE -4 -> null -1).
+
+Tranche v2-14 (`1441_gate_outcomes_federation_admit`=99, corpus 1029/0, pin **13**): the
+planetary federation admission vertical at the exports.  fed_admit_planetary_gate_status
+(pre-admission bits != ALL; after a real sybil admission -- 16-bit PoW mined live +
+ed25519 sovereign endorsement, difficulty 16 -> score 16e6 == MIN_SCORE, eclipse quiet --
+the bits are exactly FED_ADMIT_BIT_ALL 0x07), fed_admit_eligible (admitted peer eligible 1;
+stranger + null refused), fed_admit_with_qc_proof (the hardened path: PLANETARY tier with
+a ONE-TIME OFFLINE-MINED 32-bit PoW [nonce 494012290 over 0x42||31x00, baked like the RSA
+key] + score>=threshold + a REAL 4-peer HotStuff QC ADMITS 0; each refusal pinned in
+checked order: null qc -1, unknown tier -5, wrong nonce -4, over-threshold -6, truncated
+qc -7).  3 closed, 16 -> **13**.

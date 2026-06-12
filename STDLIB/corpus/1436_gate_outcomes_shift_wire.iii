@@ -1,0 +1,112 @@
+/* 1436_gate_outcomes_shift_wire.iii -- GATE BURN-DOWN v2 TRANCHE 9: THE GOLDEN SHIFT,
+ * THE CALL-CONTEXT MEMBERSHIP, THE BABEL WIRE TRIAD (5 gates; 30 -> 25).
+ *
+ *  gs_shift_admit -- the kernel rotation gate over a real K0 fixture: a K0-verified
+ *      AND strictly-cheaper kernel rotates (1); an equal-cost bisimilar kernel is
+ *      refused (0); a non-bisimilar kernel is refused (0) -- both refusal CAUSES;
+ *  call_context_verify -- a context minted by call_context_new is table-member (1);
+ *      a misaligned interior pointer (0), null (0), and one-past-the-span (0) refused;
+ *  babel_wire_verify_crc -- a finalized wire's CRC verifies (1); one flipped payload
+ *      byte is caught (0); restored -> 1;
+ *  babel_wire_verify_seal -- the header seal-id matches (1) and a wrong expectation
+ *      is refused (0); null refused;
+ *  idoc_validate -- a structurally-sound facet walk over a CRC-valid wire (1); a
+ *      facet length FORGED past the payload end -- with the CRC RE-FINALIZED so only
+ *      structure is bad -- is rejected (0); a CRC-broken wire is rejected (0).
+ * Exit 99. */
+module corpus_1436
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn gs_init() -> i32 from "golden_shift.iii"
+extern @abi(c-msvc-x64) fn gs_shift_admit(proposed: u32) -> u32 from "golden_shift.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_verify(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 from "idoc.iii"
+
+var WIRE : [u8; 256]
+
+fn main() -> u64 {
+    /* ---- GS: rotation admits only verified-AND-cheaper ---- */
+    if k0_reset() != 0i32 { return 1u64 }
+    let a0 : u32 = k0_register(10u32)            /* anchor, cost 10 */
+    let k1 : u32 = k0_register(7u32)             /* bisimilar, CHEAPER */
+    let k2 : u32 = k0_register(10u32)            /* bisimilar, equal cost */
+    let k3 : u32 = k0_register(5u32)             /* cheaper but NOT bisimilar */
+    if k3 != 3u32 { return 2u64 }
+    let mut x : u32 = 0u32
+    while x < 16u32 {
+        k0_set_behav(0u32, x, x + 9u32)
+        k0_set_behav(1u32, x, x + 9u32)
+        k0_set_behav(2u32, x, x + 9u32)
+        k0_set_behav(3u32, x, x + 9u32)
+        x = x + 1u32
+    }
+    k0_set_behav(3u32, 4u32, 0xDDu32)            /* k3 diverges at x=4 */
+    k0_freeze_anchor()
+    if gs_init() != 0i32 { return 3u64 }
+    if gs_shift_admit(k2) != 0u32 { return 4u64 }   /* bisimilar but NOT cheaper */
+    if gs_shift_admit(k3) != 0u32 { return 5u64 }   /* cheaper but NOT bisimilar */
+    if gs_shift_admit(k1) != 1u32 { return 6u64 }   /* verified AND cheaper: ROTATES */
+    if a0 != 0u32 { return 7u64 }
+
+    /* ---- CC: table membership ---- */
+    call_context_init_set(1u64, 1u8, 3u8, 2u8)
+    let p : u64 = call_context_new()
+    if p == 0u64 { return 10u64 }
+    if call_context_verify(p) != 1u8 { return 11u64 }
+    if call_context_verify(p + 1u64) != 0u8 { return 12u64 }    /* misaligned */
+    if call_context_verify(0u64) != 0u8 { return 13u64 }        /* below base */
+
+    /* ---- BABEL WIRE: build one facet (id 1, 4 data bytes) at header+0 ---- */
+    babel_wire_init((&WIRE as u64))
+    babel_wire_set_seal_id((&WIRE as u64), 7u64)
+    babel_wire_set_facet((&WIRE as u64), 1u8)
+    let pb : u64 = (&WIRE as u64) + 68u64        /* payload base (header is 68 bytes) */
+    let pp : *u8 = pb as *u8
+    pp[0u64] = 1u8                                /* facet id */
+    pp[1u64] = 4u8                                /* flen = 4 LE */
+    pp[2u64] = 0u8
+    pp[3u64] = 0u8
+    pp[4u64] = 0u8
+    pp[5u64] = 0xAAu8
+    pp[6u64] = 0xBBu8
+    pp[7u64] = 0xCCu8
+    pp[8u64] = 0xDDu8
+    let total : u32 = idoc_finalize((&WIRE as u64), 9u32)
+    if total == 0u32 { return 20u64 }
+    if babel_wire_verify_crc((&WIRE as u64), total) != 1u8 { return 21u64 }
+    /* the CRC covers the 64-byte HEADER (by design): flip a header byte */
+    WIRE[10u64] = WIRE[10u64] ^ 0x01u8
+    if babel_wire_verify_crc((&WIRE as u64), total) != 0u8 { return 22u64 }   /* CRC bites */
+    WIRE[10u64] = WIRE[10u64] ^ 0x01u8
+    if babel_wire_verify_crc((&WIRE as u64), total) != 1u8 { return 23u64 }
+    if babel_wire_verify_seal((&WIRE as u64), 7u64) != 1u8 { return 24u64 }
+    if babel_wire_verify_seal((&WIRE as u64), 8u64) != 0u8 { return 25u64 }
+    if babel_wire_verify_seal(0u64, 7u64) != 0u8 { return 26u64 }
+
+    /* ---- IDOC: structure walks; a forged facet length is caught even with a
+     * RE-FINALIZED (valid) CRC -- the structural arm, isolated from the CRC arm ---- */
+    if idoc_validate((&WIRE as u64), total) != 1u8 { return 30u64 }
+    pp[1u64] = 200u8                              /* flen forged past payload end */
+    let total2 : u32 = idoc_finalize((&WIRE as u64), 9u32)
+    if total2 == 0u32 { return 31u64 }
+    if idoc_validate((&WIRE as u64), total2) != 0u8 { return 32u64 }          /* structure bites */
+    pp[1u64] = 4u8
+    idoc_finalize((&WIRE as u64), 9u32)
+    if idoc_validate((&WIRE as u64), total) != 1u8 { return 33u64 }
+    WIRE[10u64] = WIRE[10u64] ^ 0x01u8                                        /* header tamper */
+    if idoc_validate((&WIRE as u64), total) != 0u8 { return 34u64 }           /* CRC bites */
+    WIRE[10u64] = WIRE[10u64] ^ 0x01u8
+
+    return 99u64
+}

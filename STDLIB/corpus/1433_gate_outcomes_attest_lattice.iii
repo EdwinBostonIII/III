@@ -1,0 +1,82 @@
+/* 1433_gate_outcomes_attest_lattice.iii -- GATE BURN-DOWN v2 TRANCHE 6: THE ATTESTOR'S
+ * RIGHT GATE, THE COST-LATTICE ADMISSION, THE REVERSIBILITY ADMISSION (3 gates; 39 -> 36).
+ *
+ *  attest_self -- a capability carrying ATTEST (0x0800) attests (0); one without is
+ *      DENIED (-1) -- the M8 right gate both ways;
+ *  cls_admit -- the synthesis cost-lattice admission over the 14-dimension vectors:
+ *      declared == bound admits (0); a resource dimension (0..7) EXCEEDING the bound
+ *      refuses E_BOUND (-3); a K-dimension (8..12) DROPPING below the bound refuses
+ *      E_BOUND (the reversed order is the no-K-decay law); null refuses E_NULL (-1);
+ *  rva_admit -- the capability-gated registry admission driven directly: AMEND-capable
+ *      cap admits (0, membership 1); a null cap refuses E_CAP (-4, nothing admitted).
+ * Exit 99. */
+module corpus_1433
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn attest_self(attest_cap: u64, closure_root_ptr: u64, nonce: u64) -> i32 from "attest.iii"
+extern @abi(c-msvc-x64) fn cls_admit(declared: *u8, bound: *u8) -> i32 from "cost_lattice_synth.iii"
+extern @abi(c-msvc-x64) fn cls_dimension_set(v: *u8, dim: u8, value: u64) -> i32 from "cost_lattice_synth.iii"
+extern @abi(c-msvc-x64) fn rva_init() -> i32 from "reversibility_audit.iii"
+extern @abi(c-msvc-x64) fn rva_admit(op_id: *u8, cap: u64) -> i32 from "reversibility_audit.iii"
+extern @abi(c-msvc-x64) fn rva_is_admitted(op_id: *u8) -> u8 from "reversibility_audit.iii"
+
+var CROOT : [u8; 32]
+var DECL  : [u8; 112]
+var BOUND : [u8; 112]
+var OPA   : [u8; 32]
+var OPB   : [u8; 32]
+
+fn vset(base: u64, dim: u64, v: u64) -> i32 {
+    let bl : u64 = base
+    let dl : u64 = dim
+    let vl : u64 = v
+    let p : *u8 = (bl + dl * 8u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { p[i] = ((vl >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ---- attest_self: the ATTEST right both ways ---- */
+    let env : u64 = cap_env_init()
+    let acap : u64 = cap_attenuate(env, 0x0800u64, 0u64)
+    let ncap : u64 = cap_attenuate(env, 0x4u64, 0u64)
+    let mut r : u64 = 0u64
+    while r < 32u64 { CROOT[r] = (0x60u64 + r & 0xFFu64) as u8   r = r + 1u64 }
+    if attest_self(acap, (&CROOT as u64), 7u64) != 0i32 { return 1u64 }     /* attests */
+    if attest_self(ncap, (&CROOT as u64), 7u64) != -1i32 { return 2u64 }    /* DENIED */
+
+    /* ---- cls_admit: the 14-dim lattice order, all four arms.  Dimensions are set
+     * via the module's OWN accessor (resource dims = u64 slots; K-dims = packed
+     * single bytes -- a raw u64 writer misses them, caught live at exit 12). ---- */
+    let db : u64 = &DECL as u64
+    let bb : u64 = &BOUND as u64
+    let mut d : u8 = 0u8
+    while d < 14u8 {
+        cls_dimension_set(db as *u8, d, 10u64)
+        cls_dimension_set(bb as *u8, d, 10u64)
+        d = d + 1u8
+    }
+    if cls_admit(db as *u8, bb as *u8) != 0i32 { return 10u64 }             /* equal admits */
+    cls_dimension_set(db as *u8, 3u8, 11u64)                                /* resource dim exceeds */
+    if cls_admit(db as *u8, bb as *u8) != -3i32 { return 11u64 }
+    cls_dimension_set(db as *u8, 3u8, 10u64)
+    cls_dimension_set(db as *u8, 9u8, 9u64)                                 /* K-dim DROPS */
+    if cls_admit(db as *u8, bb as *u8) != -3i32 { return 12u64 }
+    cls_dimension_set(db as *u8, 9u8, 10u64)
+    if cls_admit(db as *u8, bb as *u8) != 0i32 { return 13u64 }             /* restored admits */
+    let np : *u8 = (0u64) as *u8
+    if cls_admit(np, bb as *u8) != -1i32 { return 14u64 }                   /* null refused */
+
+    /* ---- rva_admit: the AMEND gate driven directly ---- */
+    rva_init()
+    let mut a : u64 = 0u64
+    while a < 32u64 { OPA[a] = (0xA0u64 + a & 0xFFu64) as u8   OPB[a] = (0xB0u64 + a & 0xFFu64) as u8   a = a + 1u64 }
+    if rva_admit((&OPA as u64) as *u8, 1u64) != 0i32 { return 20u64 }       /* env root has AMEND */
+    if rva_is_admitted((&OPA as u64) as *u8) != 1u8 { return 21u64 }
+    if rva_admit((&OPB as u64) as *u8, 0u64) != -4i32 { return 22u64 }      /* null cap E_CAP */
+    if rva_is_admitted((&OPB as u64) as *u8) != 0u8 { return 23u64 }        /* nothing admitted */
+
+    return 99u64
+}

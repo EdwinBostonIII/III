@@ -188,3 +188,21 @@ pc_verify_poly (the coefficient-Merkle opening through the FULL prover path -- b
 coeffs -> commit -> the 64-byte open request; tampered evaluation leaf rejected),
 pc_verify_proof (the 96-byte certificate binds the payload hash; one flipped payload
 byte rejected; null cert refused) -- 3 closed, 42 -> **39** (pin 39; corpus 1020/0).
+
+Tranches v2-6..9 (`1433`-`1436`, one gated cycle, corpus 1024/0, pin **27**):
+v2-6 attest_self (ATTEST right both ways), cls_admit (the 14-dim lattice: equal admits,
+resource-dim excess refused, K-dim DROP refused -- the no-K-decay law; K-dims are PACKED
+BYTES, caught live when a raw u64 writer missed them), rva_admit direct (AMEND cap admits,
+null cap E_CAP).  v2-7 mf_verify/mf_verify_by_idx over a real attached manifest fragment
+(re-derivation accepts; artifact tamper / wrong length / dead index / unknown id refused).
+v2-8 eg_verify_seal (the module's own fault injector flips one node bit -> detected),
+es_verify_shard (direct shard tamper via es_shard_ptr caught), merkle_pack_verify_meta
+(exact bit-field + mask laws as named-const outcomes -- variable/parenthesized comparisons
+are invisible to the outcome capture, a discovered criterion subtlety), hs_verify_qc (a
+REAL 4-peer ed25519 quorum; the sub-quorum arm FORGES the attacker-controlled n_sigs
+field because the honest composer refuses to build a bad cert; tampered sig + truncation
++ pre-init refused).  v2-9 gs_shift_admit (rotation only when K0-verified AND strictly
+cheaper -- both refusal causes), call_context_verify (membership: misaligned/null
+refused), babel_wire_verify_crc (HEADER-only CRC by design -- header flip caught),
+babel_wire_verify_seal, idoc_validate (structural facet-walk arm isolated from the CRC
+arm by re-finalizing after the forge).

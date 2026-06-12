@@ -1,0 +1,65 @@
+/* 1434_gate_outcomes_manifest.iii -- GATE BURN-DOWN v2 TRANCHE 7: THE MANIFEST
+ * ARTIFACT VERIFIERS DECIDE BOTH WAYS (2 gates; 36 -> 34).
+ *
+ * A REAL manifest fragment is attached (the 40-byte mf_attach aggregate publishes the
+ * 144-byte manifest payload binding K256(artifact) at offset 112 and registers the
+ * fragment id in the reverse index), then:
+ *  mf_verify_by_idx -- the artifact re-derives the stored commitment (1); a one-byte
+ *      artifact tamper (0), a wrong length (0), and a dead index (0) are rejected;
+ *  mf_verify -- the id-keyed path resolves the SAME fragment and accepts (1); an
+ *      unknown id (0) and a null id (0) are refused.
+ * Exit 99. */
+module corpus_1434
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn mf_attach(req: *u8) -> u64 from "manifest.iii"
+extern @abi(c-msvc-x64) fn mf_verify_by_idx(idx: u64, artifact_payload: *u8, payload_len: u64) -> u8 from "manifest.iii"
+extern @abi(c-msvc-x64) fn mf_verify(manifest_id: *u8, artifact_payload: *u8, payload_len: u64) -> u8 from "manifest.iii"
+
+var ART  : [u8; 64]
+var PROD : [u8; 32]
+var OP   : [u8; 32]
+var MID  : [u8; 32]
+var BAD  : [u8; 32]
+var REQ  : [u8; 40]
+
+fn qw64(p: u64, v: u64) -> i32 {
+    let pl : u64 = p
+    let vl : u64 = v
+    let b : *u8 = pl as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { b[i] = ((vl >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    if wh_init(1u64) != 0i32 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < 64u64 { ART[i] = (((i * 9u64) + 5u64) & 0xFFu64) as u8   i = i + 1u64 }
+    let mut p : u64 = 0u64
+    while p < 32u64 { PROD[p] = 0x33u8   OP[p] = 0x44u8   BAD[p] = 0xEEu8   p = p + 1u64 }
+    let rq : u64 = &REQ as u64
+    qw64(rq, (&ART as u64))
+    qw64(rq + 8u64, 64u64)
+    qw64(rq + 16u64, (&PROD as u64))
+    qw64(rq + 24u64, (&OP as u64))
+    qw64(rq + 32u64, (&MID as u64))
+    let idx : u64 = mf_attach(rq as *u8)
+    if idx == 0xFFFFFFFFFFFFFFFFu64 { return 2u64 }
+
+    /* ---- by-idx: re-derivation both ways ---- */
+    if mf_verify_by_idx(idx, (&ART as u64) as *u8, 64u64) != 1u8 { return 3u64 }
+    ART[10u64] = ART[10u64] ^ 0x01u8
+    if mf_verify_by_idx(idx, (&ART as u64) as *u8, 64u64) != 0u8 { return 4u64 }     /* tamper */
+    ART[10u64] = ART[10u64] ^ 0x01u8
+    if mf_verify_by_idx(idx, (&ART as u64) as *u8, 63u64) != 0u8 { return 5u64 }     /* wrong len */
+    if mf_verify_by_idx(999999u64, (&ART as u64) as *u8, 64u64) != 0u8 { return 6u64 } /* dead idx */
+
+    /* ---- id-keyed: the reverse index resolves the same fragment ---- */
+    if mf_verify((&MID as u64) as *u8, (&ART as u64) as *u8, 64u64) != 1u8 { return 7u64 }
+    if mf_verify((&BAD as u64) as *u8, (&ART as u64) as *u8, 64u64) != 0u8 { return 8u64 }   /* unknown id */
+    let np : *u8 = (0u64) as *u8
+    if mf_verify(np, (&ART as u64) as *u8, 64u64) != 0u8 { return 9u64 }                     /* null id */
+
+    return 99u64
+}

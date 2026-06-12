@@ -1,0 +1,124 @@
+/* 1435_gate_outcomes_seal_quorum.iii -- GATE BURN-DOWN v2 TRANCHE 8: THE EGRAPH SEAL,
+ * THE ERASURE SHARDS, THE MERKLE META LAWS, THE HOTSTUFF QUORUM (4 gates; 34 -> 30).
+ *
+ *  eg_verify_seal -- the live canonical digest matches its own export (1); after the
+ *      module's OWN fault injector flips one node-symbol bit the seal detects it (0);
+ *      restored -> 1;
+ *  es_verify_shard -- every shard of a real 2-of-4 erasure encoding re-hashes to its
+ *      stored content address (1); one byte tampered through es_shard_ptr is caught
+ *      (0); restored -> 1;
+ *  merkle_pack_verify_meta -- the exact bit-field law (size<<40 | index<<20 | steps)
+ *      and the 24/20/20-bit masks, pinned by independent recomputation;
+ *  hs_verify_qc -- a REAL HotStuff QC: 4 peers (live ed25519 keypairs), the 40-byte
+ *      sig-input signed by 3 (= the 2f+1 quorum) verifies (1); 2 signatures fall
+ *      below quorum (0); one tampered signature drops the count below quorum (0);
+ *      a truncated QC (0); pre-init refused (0).
+ * Exit 99. */
+module corpus_1435
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_seal(out32: *u8) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_verify_seal(expected32: *u8) -> u8 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_test_flip_bit(node_idx: u32) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn es_encode(blob_ptr: u64, dlen: u32, k: u32, n: u32) -> i32 from "erasure_store.iii"
+extern @abi(c-msvc-x64) fn es_verify_shard(i: u32) -> u8 from "erasure_store.iii"
+extern @abi(c-msvc-x64) fn es_shard_ptr(i: u32) -> u64 from "erasure_store.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_seed(seed: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn hs_init(node_id: u32, peers: *u8, n_peers: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_compose_qc(block_mhash: *u8, view: u64, sigs: *u8, n_sigs: u32, out_qc: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_verify_qc(qc: *u8, qc_len: u32) -> u8 from "hotstuff.iii"
+
+/* the exact packed-meta laws, precomputed: (size<<40)|(idx<<20)|steps and the masks */
+const MPV_EXACT  : u64 = 0x120034500321u64
+const MPV_M24    : u64 = 0xFFFFFF0000000000u64
+const MPV_M20    : u64 = 0xFFFFF00000u64
+
+var SYM   : [u8; 32]
+var SEAL  : [u8; 32]
+var BLOB  : [u8; 64]
+var SEEDS : [u8; 128]      /* 4 x 32-byte peer seeds */
+var PEERS : [u8; 128]      /* 4 x 32-byte peer pubkeys */
+var MH    : [u8; 32]
+var SIGIN : [u8; 40]
+var SIGS  : [u8; 192]      /* 3 x 64-byte signatures */
+var QC    : [u8; 256]
+
+fn main() -> u64 {
+    /* ---- HS pre-init refusal FIRST (order matters: hs_init latches) ---- */
+    if hs_verify_qc((&QC as u64) as *u8, 44u32) != 0u8 { return 1u64 }
+
+    /* ---- EG: the seal detects a single flipped bit ---- */
+    if eg_init() != 0i32 { return 2u64 }
+    let mut s : u64 = 0u64
+    while s < 32u64 { SYM[s] = (0x41u64 + s & 0xFFu64) as u8   s = s + 1u64 }
+    let nc : *u32 = (0u64) as *u32
+    let node : u32 = eg_add((&SYM as u64) as *u8, nc, 0u32)
+    if node == 0xFFFFFFFFu32 { return 3u64 }
+    if eg_seal((&SEAL as u64) as *u8) != 0i32 { return 4u64 }
+    if eg_verify_seal((&SEAL as u64) as *u8) != 1u8 { return 5u64 }
+    eg_test_flip_bit(node)
+    if eg_verify_seal((&SEAL as u64) as *u8) != 0u8 { return 6u64 }
+    eg_test_flip_bit(node)
+    if eg_verify_seal((&SEAL as u64) as *u8) != 1u8 { return 7u64 }
+
+    /* ---- ES: every shard content-addressed; tamper caught ---- */
+    let mut b : u64 = 0u64
+    while b < 64u64 { BLOB[b] = (((b * 11u64) + 2u64) & 0xFFu64) as u8   b = b + 1u64 }
+    if es_encode((&BLOB as u64), 64u32, 2u32, 4u32) != 0i32 { return 10u64 }
+    if es_verify_shard(0u32) != 1u8 { return 11u64 }
+    if es_verify_shard(3u32) != 1u8 { return 12u64 }
+    let sp : *u8 = es_shard_ptr(1u32) as *u8
+    sp[2u64] = sp[2u64] ^ 0x01u8
+    if es_verify_shard(1u32) != 0u8 { return 13u64 }            /* tamper caught */
+    sp[2u64] = sp[2u64] ^ 0x01u8
+    if es_verify_shard(1u32) != 1u8 { return 14u64 }
+
+    /* ---- MERKLE META: the exact bit-field law + masks (named consts so each
+     * outcome is a distinct capture token; the recomputation cross-check keeps
+     * the consts honest) ---- */
+    let want : u64 = (0x12u64 << 40u64) | (0x345u64 << 20u64) | 0x321u64
+    if want != MPV_EXACT { return 19u64 }                                       /* const honesty */
+    if merkle_pack_verify_meta(0x12u32, 0x345u32, 0x321u32) != MPV_EXACT { return 20u64 }
+    if merkle_pack_verify_meta(0xFFFFFFFFu32, 0u32, 0u32) != MPV_M24 { return 21u64 }   /* 24-bit mask */
+    if merkle_pack_verify_meta(0u32, 0xFFFFFFFFu32, 0u32) != MPV_M20 { return 22u64 }   /* 20-bit mask */
+
+    /* ---- HS: a real 2f+1 quorum certificate ---- */
+    let mut i : u64 = 0u64
+    while i < 128u64 { SEEDS[i] = ((0x10u64 + i) & 0xFFu64) as u8   i = i + 1u64 }
+    let mut pi : u64 = 0u64
+    while pi < 4u64 {
+        if ed25519_pubkey(((&SEEDS as u64) + pi * 32u64) as *u8, ((&PEERS as u64) + pi * 32u64) as *u8) != 1u8 { return 30u64 }
+        pi = pi + 1u64
+    }
+    if hs_init(0u32, (&PEERS as u64) as *u8, 4u32) != 0i32 { return 31u64 }
+    let mut m : u64 = 0u64
+    while m < 32u64 { MH[m] = (0x90u64 + m & 0xFFu64) as u8   SIGIN[m] = MH[m]   m = m + 1u64 }
+    let view : u64 = 5u64
+    let mut v : u64 = 0u64
+    while v < 8u64 { SIGIN[32u64 + v] = ((view >> (v * 8u64)) & 0xFFu64) as u8   v = v + 1u64 }
+    let mut sg : u64 = 0u64
+    while sg < 3u64 {
+        if ed25519_sign_seed(((&SEEDS as u64) + sg * 32u64) as *u8, (&SIGIN as u64) as *u8, 40u64, ((&SIGS as u64) + sg * 64u64) as *u8) != 1u8 { return 32u64 }
+        sg = sg + 1u64
+    }
+    if hs_compose_qc((&MH as u64) as *u8, view, (&SIGS as u64) as *u8, 3u32, (&QC as u64) as *u8) != 0i32 { return 33u64 }
+    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 1u8 { return 34u64 }    /* 44 + 3*64 */
+    /* the honest composer itself refuses a sub-quorum cert (E_BAD_QC) ... */
+    if hs_compose_qc((&MH as u64) as *u8, view, (&SIGS as u64) as *u8, 2u32, (&QC as u64) as *u8) != -2i32 { return 35u64 }
+    if hs_compose_qc((&MH as u64) as *u8, view, (&SIGS as u64) as *u8, 3u32, (&QC as u64) as *u8) != 0i32 { return 37u64 }
+    /* ... so the verifier's sub-quorum arm is driven ADVERSARIALLY: forge the
+     * attacker-controlled n_sigs field of an otherwise-valid QC down to 2 */
+    QC[40u64] = 2u8
+    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 0u8 { return 36u64 }    /* below quorum */
+    QC[40u64] = 3u8
+    QC[50u64] = QC[50u64] ^ 0x01u8                                          /* tamper sig 0 */
+    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 0u8 { return 38u64 }    /* count drops below quorum */
+    QC[50u64] = QC[50u64] ^ 0x01u8
+    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 1u8 { return 39u64 }
+    if hs_verify_qc((&QC as u64) as *u8, 100u32) != 0u8 { return 40u64 }    /* truncated */
+
+    return 99u64
+}

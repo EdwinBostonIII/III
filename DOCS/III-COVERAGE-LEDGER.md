@@ -206,3 +206,21 @@ cheaper -- both refusal causes), call_context_verify (membership: misaligned/nul
 refused), babel_wire_verify_crc (HEADER-only CRC by design -- header flip caught),
 babel_wire_verify_seal, idoc_validate (structural facet-walk arm isolated from the CRC
 arm by re-finalizing after the forge).
+
+Tranches v2-10..12 (`1437`-`1439`, one gated cycle, corpus 1027/0, pin **19**):
+v2-10 ch_verify_correspondence (tag-toggle + body equality, all four refusals),
+ripple_verify (K-provenance decides: an edges_init'd crystal verifies, a K-less one is
+refused), ml_revalidate (the FULL lattice vertical; codes -8/-1/-2/-7 exact; BONUS
+invariant: M17 chain verification refuses unregistered chains at ADMISSION too),
+mq_admit_predicate_gated (predicate-false -3 / inner-gate -6 / unknown clause -2 /
+null -1 / the full end-to-end ADMIT 0).  v2-11 nous_train_admit (the poison wall),
+sopt_verify_branch_dead (module-pinned crossval vectors), cg_admit (the conserving
+contract admits; the leaking + minting contracts are refused by the exhaustive walk).
+v2-12 sov_admit (proof-preserving descent admitted; behaviour change rejected;
+proven-equal same-cost admitted).  **xcc_verify EXCLUDED with justification**: its rule
+registry is read-only + force-link-registered at process start -- no input can honestly
+drive the reject arm in a healthy binary (a boot self-consistency observation whose
+parameter is an OUT sink); recorded as a pin-floor candidate, NOT gamed.
+PROCESS FIX: a corpus FATAL recurred when a KAT file entered the glob before its
+EXPECTED entry (the compose-while-gating race) -- KAT file + EXPECTED entry are now
+written atomically, always.

@@ -490,3 +490,21 @@ the scan (asserted >= 2 drain passes), identical workloads through both strategi
 must seal cad-equal; the no-dirty fast path returns 0 and mutates nothing.  All six
 existing egraph consumers re-verified standalone (incl. the sovereign optimizer and
 the 131072-node capacity fill); corpus 1067/0.
+
+## W3.18 + W3.22 — AES gmul hygiene, the checked->option table fold (2026-06-12)
+
+W3.18 (severity CORRECTED on implementation): aes_gmul's data-dependent branch is now
+branch-free (the aes_xtime mask idiom) -- but tracing the call graph showed its only
+live caller is the GF(2^8) inverse during S-BOX TABLE INIT (all 256 public bytes;
+MixColumns uses xtime chains directly), so the old branch was never a live secret
+channel.  Hygiene + robustness for future callers; FIPS-197/192 KATs byte-identical.
+The real deferred constant-time item remains the S-box table lookups (APOTHEOSIS S.5).
+
+W3.22/COMBINE-8/D-CHK-2: checked.iii's private 64-slot u64 side table DELETED --
+checked u64 handles now ARE option_u64 handles (one table, identical encoding and
+guard semantics; capacity 64 -> 256 shared; option's distinct table-full sentinel
+maps to checked's 0-on-any-failure contract).  Falsifier `1480` pins the unity in
+BOTH directions: option reads/frees checked's mints and vice versa, and a freed slot
+is RE-ISSUED across the API boundary (impossible with two tables); the failure
+contract pinned through all four ops.  Existing 1000/1057 lifecycle tests green
+unchanged; corpus 1068/0.

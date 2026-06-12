@@ -1,0 +1,107 @@
+/* 1477_numeric_edge_laws.iii -- NUMERIC EDGES: Q128 SHIFT WALLS, MODULAR NEAR-MAX,
+ * BIGINT SUB-TO-ZERO (wave-2 findings 5/6/7).
+ *
+ *  q128 shifts -- shift 127 takes the >= 64 branch at maximal s2 = 63 (corpus 31
+ *      covered only {0, 1, 64, 128}): 1 << 127 = (hi 2^63, lo 0); 2^127 >> 127 = 1
+ *      (DISCRIMINATING against the >= 128 clamp, which would give 0); and the
+ *      previously-untested < 64 CROSS-LIMB arm: 3 << 63 = (hi 1, lo 2^63) -- bit 1
+ *      crosses into hi while bit 0 lands on lo's top;
+ *  mod_u64_{add,mul} with m > 2^63 -- the wrap arm of mod_u64_add (s < am) is
+ *      REACHABLE ONLY for such m, and no corpus modulus exceeded 2^61: over
+ *      m = 2^64 - 59 (the largest prime below 2^64): (m-1) + (m-1) = m-2;
+ *      3 * 2^63 = 2^63 + 59 (the doubling wraps the accumulator to exactly 0
+ *      mid-loop); (m-1)^2 = 1 -- the Fermat square sweeps ~63 wrap iterations;
+ *  bigint_sub a - a -- bigint_sub carries its OWN inline normalize loop (distinct
+ *      from the exported bigint_normalize that add uses): a 3-limb self-subtraction
+ *      drives that loop through all three zero limbs to length 0, observed DIRECTLY
+ *      (len_limbs == 0, eq to the zero bigint); the near-miss negative arm (high
+ *      limb differing by 1) keeps length 3 with the high limb exactly 1.
+ * Exit 99. */
+module corpus_1477
+
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_from_pair(hi: u64, lo: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_hi(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_lo(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_shl(a: u64, n: u32) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_shr(a: u64, n: u32) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_drop(id: u64) -> u8 from "q128.iii"
+extern @abi(c-msvc-x64) fn mod_u64_add(a: u64, b: u64, m: u64) -> u64 from "modular.iii"
+extern @abi(c-msvc-x64) fn mod_u64_mul(a: u64, b: u64, m: u64) -> u64 from "modular.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+
+fn main() -> u64 {
+    /* ==== q128: the shift walls ==== */
+    let a : u64 = q128_from_u64(1u64)
+    let r : u64 = q128_shl(a, 127u32)                       /* >= 64 branch, s2 = 63 */
+    if q128_hi(r) != 0x8000000000000000u64 { return 1u64 }
+    if q128_lo(r) != 0u64 { return 2u64 }
+    q128_drop(r)
+    q128_drop(a)
+    let b : u64 = q128_from_pair(0x8000000000000000u64, 0u64)    /* 2^127 */
+    let s : u64 = q128_shr(b, 127u32)                       /* nonzero: NOT the >=128 clamp */
+    if q128_hi(s) != 0u64 { return 3u64 }
+    if q128_lo(s) != 1u64 { return 4u64 }
+    q128_drop(s)
+    q128_drop(b)
+    let c : u64 = q128_from_pair(0u64, 3u64)
+    let t : u64 = q128_shl(c, 63u32)                        /* the < 64 CROSS-LIMB arm */
+    if q128_hi(t) != 1u64 { return 5u64 }                   /* bit 1 crossed into hi */
+    if q128_lo(t) != 0x8000000000000000u64 { return 6u64 }  /* bit 0 on lo's top */
+    q128_drop(t)
+    q128_drop(c)
+
+    /* ==== modular: m > 2^63 reaches the wrap arm for the first time ==== */
+    if mod_u64_add(0xFFFFFFFFFFFFFFC4u64, 0xFFFFFFFFFFFFFFC4u64, 0xFFFFFFFFFFFFFFC5u64) != 0xFFFFFFFFFFFFFFC3u64 { return 7u64 }
+    if mod_u64_mul(0x8000000000000000u64, 3u64, 0xFFFFFFFFFFFFFFC5u64) != 0x800000000000003Bu64 { return 8u64 }
+    if mod_u64_mul(0xFFFFFFFFFFFFFFC4u64, 0xFFFFFFFFFFFFFFC4u64, 0xFFFFFFFFFFFFFFC5u64) != 1u64 { return 9u64 }
+
+    /* ==== bigint: sub-to-zero through the inline normalize, observed directly ==== */
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 10u64 }
+    /* single-limb: 42 - 42 -> length 0 */
+    let one : u64 = bigint_from_u64(ar, 42u64)
+    let d1 : u64 = bigint_sub(ar, one, one)
+    if d1 == 0u64 { return 11u64 }
+    if bigint_len_limbs(d1) != 0u64 { return 12u64 }
+    /* 3-limb: identical values -> the loop walks all three zero limbs to length 0 */
+    let x : u64 = bigint_new(ar, 3u64)
+    let y : u64 = bigint_new(ar, 3u64)
+    bigint_set_limb(x, 0u64, 0xDEADBEEFCAFEBABEu64)
+    bigint_set_limb(x, 1u64, 0x0123456789ABCDEFu64)
+    bigint_set_limb(x, 2u64, 7u64)
+    bigint_set_limb(y, 0u64, 0xDEADBEEFCAFEBABEu64)
+    bigint_set_limb(y, 1u64, 0x0123456789ABCDEFu64)
+    bigint_set_limb(y, 2u64, 7u64)
+    let d2 : u64 = bigint_sub(ar, x, y)
+    if d2 == 0u64 { return 13u64 }
+    if bigint_len_limbs(d2) != 0u64 { return 14u64 }
+    /* the near-miss negative arm: high limb differs by 1 -> length stays 3, high limb 1 */
+    let w : u64 = bigint_new(ar, 3u64)
+    bigint_set_limb(w, 0u64, 0xDEADBEEFCAFEBABEu64)
+    bigint_set_limb(w, 1u64, 0x0123456789ABCDEFu64)
+    bigint_set_limb(w, 2u64, 6u64)
+    let d3 : u64 = bigint_sub(ar, x, w)
+    if d3 == 0u64 { return 15u64 }
+    if bigint_len_limbs(d3) != 3u64 { return 16u64 }
+    if bigint_get_limb(d3, 2u64) != 1u64 { return 17u64 }
+    if bigint_get_limb(d3, 0u64) != 0u64 { return 18u64 }
+    bigint_drop(one)
+    bigint_drop(d1)
+    bigint_drop(x)
+    bigint_drop(y)
+    bigint_drop(d2)
+    bigint_drop(w)
+    bigint_drop(d3)
+    arena_drop(ar)
+
+    return 99u64
+}

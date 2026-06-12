@@ -1,0 +1,33 @@
+/* 1478_rscode_uninit_refusal.iii -- THE HOSTILE-REVIEWER DEFECT (wave-2 finding 8):
+ * with rs_init NEVER called (k = 0 from zero BSS), rs_encode / rs_decode_prepare /
+ * rs_decode_apply all SILENTLY SUCCEEDED -- every loop skips vacuously, prepare's
+ * rank check inverts a 0x0 matrix trivially, apply's `RS_PREP[0] != k` staleness
+ * guard is VACUOUS at 0 == 0 -- so a caller that forgot rs_init received RS_OK and
+ * all-zero "recovered" data: a false-positive success in an ERASURE-RECOVERY organ.
+ *
+ * This KAT was written BEFORE the fix and FAILED against the unfixed module (all
+ * three arms returned 0); the fix adds k >= 1 guards at all three entries:
+ *   rs_encode          -> RS_E_DIM  (-1)
+ *   rs_decode_prepare  -> RS_E_DIM  (-1)
+ *   rs_decode_apply    -> RS_E_SING (-2)  (the prepared-state can never be valid)
+ * A fresh process (zero BSS) IS the uninitialized state -- no setup calls at all.
+ * Exit 99. */
+module corpus_1478
+
+extern @abi(c-msvc-x64) fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 from "rscode.iii"
+extern @abi(c-msvc-x64) fn rs_decode_prepare(present_idx: u64, m_present: u32) -> i32 from "rscode.iii"
+extern @abi(c-msvc-x64) fn rs_decode_apply(present_sym: u64, data_out: u64) -> i32 from "rscode.iii"
+
+var DATA : [u8; 32]
+var CW   : [u8; 64]
+var IDX  : [u8; 32]
+var SYM  : [u8; 32]
+var OUT  : [u8; 32]
+
+fn main() -> u64 {
+    /* NO rs_init anywhere in this process: k == 0 (BSS) */
+    if rs_encode((&DATA as u64), (&CW as u64)) != -1i32 { return 1u64 }            /* RS_E_DIM */
+    if rs_decode_prepare((&IDX as u64), 6u32) != -1i32 { return 2u64 }             /* RS_E_DIM */
+    if rs_decode_apply((&SYM as u64), (&OUT as u64)) != -2i32 { return 3u64 }      /* RS_E_SING */
+    return 99u64
+}

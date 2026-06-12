@@ -228,6 +228,10 @@ fn rs_init(n: u32, k: u32) -> i32 @export {
 fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 @export {
     let n : u32 = RS_PN[0u32]
     let k : u32 = RS_PN[1u32]
+    /* uninitialized module (rs_init never called): k = 0 from zero BSS made every
+     * loop skip vacuously and returned RS_OK with NOTHING written -- a silent
+     * false-positive success in an erasure-recovery organ (corpus 1478). */
+    if k < 1u32 { return RS_E_DIM }
     let dp : *u8 = data_ptr as *u8
     let op : *u8 = cw_out as *u8
     let mut i : u32 = 0u32
@@ -252,6 +256,7 @@ fn rs_encode(data_ptr: u64, cw_out: u64) -> i32 @export {
 fn rs_decode_prepare(present_idx: u64, m_present: u32) -> i32 @export {
     let n : u32 = RS_PN[0u32]
     let k : u32 = RS_PN[1u32]
+    if k < 1u32 { RS_PREP[0u32] = 0u32   return RS_E_DIM }   /* uninit: refuse (1478) */
     if m_present < k { RS_PREP[0u32] = 0u32 ; return RS_E_FEW }
     let idxp : *u8 = present_idx as *u8
     let w : u32 = 2u32 * k
@@ -288,6 +293,9 @@ fn rs_decode_prepare(present_idx: u64, m_present: u32) -> i32 @export {
  * for the current code's k. Cheap (one k x k mat-vec) -- call once per stripe/byte-offset. */
 fn rs_decode_apply(present_sym: u64, data_out: u64) -> i32 @export {
     let k : u32 = RS_PN[1u32]
+    /* k = 0 made the staleness guard below VACUOUS (0 == 0): apply silently
+     * succeeded even with prepare never called.  Refuse first (corpus 1478). */
+    if k < 1u32 { return RS_E_SING }
     if RS_PREP[0u32] != k { return RS_E_SING }
     let symp : *u8 = present_sym as *u8
     let dop  : *u8 = data_out as *u8

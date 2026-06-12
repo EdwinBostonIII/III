@@ -72,6 +72,10 @@ fn main() -> u64 {
 
     if governance_proposal_count() != 1u32 { free(rat); return 5u64 }
     if governance_status(pid) != 0u8 { free(rat); return 6u64 }   /* PENDING */
+
+    /* illegal seal from PENDING: exact -3 (GOV_E_BAD_STATE), state untouched */
+    if governance_seal(pid) != -3i32 { free(rat); return 70u64 }
+    if governance_status(pid) != 0u8 { free(rat); return 71u64 }
     if governance_intent(pid) != intent_a { free(rat); return 7u64 }
     if governance_proposer_cap(pid) != cap_alice { free(rat); return 8u64 }
 
@@ -79,6 +83,10 @@ fn main() -> u64 {
     /* (we are in PENDING; sandbox should succeed) */
     if governance_sandbox(pid) != 0i32 { free(rat); return 9u64 }
     if governance_status(pid) != 1u8 { free(rat); return 10u64 }   /* SANDBOXED */
+
+    /* illegal seal from SANDBOXED */
+    if governance_seal(pid) != -3i32 { free(rat); return 72u64 }
+    if governance_status(pid) != 1u8 { free(rat); return 73u64 }
 
     /* Re-sandbox should fail (status no longer PENDING). */
     if governance_sandbox(pid) == 0i32 { free(rat); return 11u64 }
@@ -89,6 +97,10 @@ fn main() -> u64 {
     let cert : u64 = governance_prove_equivalence_with_count(pid, 5u32, new_pid_and_count, 0u64)
     if cert == 0u64 { free(rat); return 12u64 }
     if governance_status(pid) != 2u8 { free(rat); return 13u64 }   /* PROVEN */
+
+    /* illegal seal from PROVEN (not yet voted/promoted) */
+    if governance_seal(pid) != -3i32 { free(rat); return 74u64 }
+    if governance_status(pid) != 2u8 { free(rat); return 75u64 }
     if governance_cert(pid) != cert { free(rat); return 14u64 }
     if governance_new_pid(pid) != 5u32 { free(rat); return 15u64 }
 
@@ -117,7 +129,7 @@ fn main() -> u64 {
     if governance_status(pid) != 5u8 { free(rat); return 41u64 }   /* SEALED */
 
     /* Re-seal should fail (status no longer ACCEPTED). */
-    if governance_seal(pid) == 0i32 { free(rat); return 42u64 }
+    if governance_seal(pid) != -3i32 { free(rat); return 42u64 }   /* exact: GOV_E_BAD_STATE */
 
     /* ---- 8. Quorum-fail path. ---- */
     let pid2 : u64 = governance_propose(cap_alice, 0x9999u64, 0u64, 0u32)
@@ -136,6 +148,10 @@ fn main() -> u64 {
     /* Promote should return non-zero error AND mark as REJECTED. */
     if governance_promote(pid2) == 0i32 { free(rat); return 53u64 }
     if governance_status(pid2) != 4u8 { free(rat); return 54u64 }   /* REJECTED */
+
+    /* illegal seal from REJECTED */
+    if governance_seal(pid2) != -3i32 { free(rat); return 76u64 }
+    if governance_status(pid2) != 4u8 { free(rat); return 77u64 }
 
     /* ---- 9. Bad-state error paths. ---- */
     /* Propose-with-null-intent fails. */

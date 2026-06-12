@@ -1,0 +1,34 @@
+/* 1475_quarantine_rollback_abort.iii -- STATE-MACHINE WALLS II: ROLLBACK-AFTER-ABORT
+ * (wave-2 finding 3).  The quarantine selftest aborts slot 1 and rolls back slot 2 --
+ * on DISJOINT slots; q_rollback had never been invoked on a non-COMMIT slot, so the
+ * QUAR_E_STATE arm of the line-508 guard (rollback requires COMMIT) had never fired
+ * against ABORT:
+ *
+ *  enter -> abort -> rollback REFUSED (-3 QUAR_E_STATE) with the state still ABORT
+ *  (the refused rollback mutates nothing); the bounds arm q_rollback(cap, 300)
+ *  refused (-2 QUAR_E_BAD).
+ * Exit 99. */
+module corpus_1475
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn q_init() -> i32 from "quarantine.iii"
+extern @abi(c-msvc-x64) fn q_enter(cap: u64, region_ptr: u64, region_len: u64) -> u32 from "quarantine.iii"
+extern @abi(c-msvc-x64) fn q_abort(slot: u32) -> i32 from "quarantine.iii"
+extern @abi(c-msvc-x64) fn q_rollback(cap: u64, slot: u32) -> i32 from "quarantine.iii"
+extern @abi(c-msvc-x64) fn q_status(slot: u32) -> u8 from "quarantine.iii"
+
+var REGION : [u8; 256]
+
+fn main() -> u64 {
+    wh_init(0u64)
+    q_init()
+    let cap : u64 = cap_env_init()
+    let slot : u32 = q_enter(cap, (&REGION as u64), 256u64)
+    if slot != 0u32 { return 1u64 }
+    if q_abort(slot) != 0i32 { return 2u64 }
+    if q_rollback(cap, slot) != -3i32 { return 3u64 }     /* QUAR_E_STATE: not COMMIT */
+    if q_status(slot) != 2u8 { return 4u64 }              /* still ABORT: refusal mutated nothing */
+    if q_rollback(cap, 300u32) != -2i32 { return 5u64 }   /* QUAR_E_BAD: the bounds arm */
+    return 99u64
+}

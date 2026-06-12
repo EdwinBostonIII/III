@@ -1,0 +1,67 @@
+/* 1476_glyph_v3_offset_contract.iii -- LAYOUT CONTRACTS: THE 192-BYTE GLYPH FRAME
+ * (wave-2 finding 4).  The frame layout (form_id LE4 @0 | payload_len LE4 @4 |
+ * payload @8..160 | mhash @160..192) is shared by every verba glyph_* packer and the
+ * glyph_core validator -- but each side HARDCODES its offsets (the GV3_OFF_* constants
+ * are documentation-only), and no test ever byte-pinned the contract from OUTSIDE:
+ * an offset drift in one module would silently corrupt instead of failing a test.
+ *
+ * Here the offsets are pinned with TEST-OWNED arithmetic and an INDEPENDENT hash:
+ * pack a u32 glyph, then (a) reassemble form_id/len from raw bytes @0/@4; (b) check
+ * the LE payload bytes @8; (c) check the zero-fill through @159; (d) recompute
+ * sha256 over [0..160) with sha256_oneshot and require byte-identity with [160..192)
+ * -- the mhash sits EXACTLY there; (e) sentinels at [192..200) untouched -- pack
+ * writes exactly 192 bytes; (f) the negative arm: flipping byte 191 (the LAST mhash
+ * byte) breaks both the recomputed-hash identity AND gv3_validate; restoring heals.
+ * Exit 99. */
+module corpus_1476
+
+extern @abi(c-msvc-x64) fn glyph_u32_pack(v: u32, out_192: u64) -> i32 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn glyph_u32_form_id() -> u32 from "glyph_u32.iii"
+extern @abi(c-msvc-x64) fn gv3_total_bytes() -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+var BUF : [u8; 200]
+var EXP : [u8; 32]
+
+fn main() -> u64 {
+    let mut s : u64 = 192u64
+    while s < 200u64 { BUF[s] = 0x5Au8   s = s + 1u64 }             /* sentinels */
+
+    if glyph_u32_pack(0xCAFEBABEu32, (&BUF as u64)) != 0i32 { return 1u64 }
+
+    /* (a) form id @0, LE4 -- test-owned reassembly, no gv3 reader involved */
+    let fid : u32 = (BUF[0u64] as u32) | ((BUF[1u64] as u32) << 8u32) | ((BUF[2u64] as u32) << 16u32) | ((BUF[3u64] as u32) << 24u32)
+    if fid != glyph_u32_form_id() { return 2u64 }
+    /* (b) payload_len @4, LE4 == 4 */
+    let plen : u32 = (BUF[4u64] as u32) | ((BUF[5u64] as u32) << 8u32) | ((BUF[6u64] as u32) << 16u32) | ((BUF[7u64] as u32) << 24u32)
+    if plen != 4u32 { return 3u64 }
+    /* (c) the LE payload @8 */
+    if BUF[8u64] != 0xBEu8 { return 4u64 }
+    if BUF[9u64] != 0xBAu8 { return 5u64 }
+    if BUF[10u64] != 0xFEu8 { return 6u64 }
+    if BUF[11u64] != 0xCAu8 { return 7u64 }
+    /* zero-fill through the payload region's end */
+    let mut z : u64 = 12u64
+    while z < 160u64 { if BUF[z] != 0u8 { return 8u64 }   z = z + 1u64 }
+
+    /* (d) the mhash sits EXACTLY at [160..192): independent sha256 over [0..160) */
+    sha256_oneshot((&BUF as u64) as *u8, 160u64, (&EXP as u64) as *u8)
+    let mut m : u64 = 0u64
+    while m < 32u64 { if EXP[m] != BUF[160u64 + m] { return 9u64 }   m = m + 1u64 }
+
+    /* (e) pack wrote exactly 192 bytes */
+    let mut t : u64 = 192u64
+    while t < 200u64 { if BUF[t] != 0x5Au8 { return 10u64 }   t = t + 1u64 }
+    if gv3_total_bytes() != 192u32 { return 11u64 }
+    if gv3_validate((&BUF as u64)) != 1u8 { return 12u64 }
+
+    /* (f) the negative arm: the LAST mhash byte is load-bearing */
+    BUF[191u64] = BUF[191u64] ^ 0x01u8
+    if gv3_validate((&BUF as u64)) != 0u8 { return 13u64 }
+    if EXP[31u64] == BUF[191u64] { return 14u64 }                   /* the identity broke at byte 31 */
+    BUF[191u64] = BUF[191u64] ^ 0x01u8
+    if gv3_validate((&BUF as u64)) != 1u8 { return 15u64 }          /* restoring heals */
+
+    return 99u64
+}

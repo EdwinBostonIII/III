@@ -417,3 +417,39 @@ confirmed findings + both residuals closed in eight tests, every one green first
   REGION partition (exactly 64 live, the 65th refused, release recovers) + the three
   DISTINCT slot_of refusal arms (forged out-of-bounds raw, forged type byte, dead
   handle) each mapped to REG_E_BADID.
+
+## Wave 2 — transition walls, layout contracts, numeric edges, and a REAL DEFECT (2026-06-12)
+
+Second 4-lens discovery (state-machine transitions / cross-module byte layouts /
+numeric edges / hostile reviewer) + adversarial verify: 19 claims -> 9 confirmed,
+10 refuted.  One verifier ran MUTATION ANALYSIS: the governance-seal guard mutant
+`!= GOV_ACCEPTED` -> `> GOV_ACCEPTED` (allowing PREMATURE sealing) survived the entire
+corpus -- naive branch coverage looked complete because re-seal-of-SEALED exercised the
+reject branch once, from the wrong side.  Closures:
+
+- corpus 205 EDITED: four illegal-seal probes (PENDING/SANDBOXED/PROVEN/REJECTED ->
+  exactly -3 GOV_E_BAD_STATE, status untouched) -- kills the premature-seal mutant;
+- `1474` the governance transition matrix: promote refused -7 from all five non-PROVEN
+  states (incl. no-double-promote and the REJECTED ladder where the FIRST promote is
+  the -6 rejection and the SECOND is -7 -- the codes proven distinct and ordered);
+  re-prove refused through both gates with the minted cert intact; bad id -1;
+- `1475` quarantine rollback-after-abort refused (-3 QUAR_E_STATE, state still ABORT)
+  + the bounds arm -- the selftest had aborted and rolled back only DISJOINT slots;
+- `1476` the 192-byte glyph frame layout pinned from OUTSIDE: test-owned offset
+  arithmetic + an independent sha256 over [0..160) byte-identical to [160..192),
+  write-exactly-192 sentinels, and the last-mhash-byte negative arm -- an offset
+  drift in any glyph module now FAILS a test instead of silently corrupting;
+- `1477` numeric edges: q128 shifts 127 (>= 64 branch at maximal s2, discriminated
+  against the >= 128 clamp) and the never-tested < 64 CROSS-LIMB arm (3 << 63);
+  mod_u64_{add,mul} over m = 2^64 - 59 -- the wrap arm of mod_u64_add is REACHABLE
+  ONLY for m > 2^63 and no corpus modulus had exceeded 2^61 ((m-1)^2 = 1 sweeps ~63
+  wrap iterations); bigint sub-to-zero through bigint_sub's own INLINE normalize
+  (distinct from the exported bigint_normalize), len observed 0 directly + near-miss;
+- **THE DEFECT** -- `1478` + rscode.iii FIXED: with rs_init never called (k = 0 BSS),
+  rs_encode / rs_decode_prepare / rs_decode_apply all SILENTLY returned RS_OK --
+  apply's staleness guard `RS_PREP[0] != k` was VACUOUS at 0 == 0, so an
+  erasure-recovery caller that forgot init received success and all-zero "recovered"
+  data.  The KAT was written FIRST and FAILED against the unfixed module (exit 1);
+  three k >= 1 guards added (encode/prepare -> RS_E_DIM, apply -> RS_E_SING); the KAT
+  then passed (99) and the existing positive tests 1217/1223 still pass -- the fix
+  refuses only the uninitialized state.

@@ -453,3 +453,22 @@ reject branch once, from the wrong side.  Closures:
   three k >= 1 guards added (encode/prepare -> RS_E_DIM, apply -> RS_E_SING); the KAT
   then passed (99) and the existing positive tests 1217/1223 still pass -- the fix
   refuses only the uninitialized state.
+
+## Wave 3 — SATURATION (2026-06-12)
+
+Third discovery wave (hostile-reviewer round 2 over crypto/witness/resolver/XII,
+duplicate-implementation differentials, error-path slot leaks): 14 claims -> **0
+confirmed, 14 refuted**.  Every "unchecked cad_* return" was statically unreachable
+(compile-time constant suites whose only failure mode is an unknown suite; module-BSS
+pointers that are never null; digests ALWAYS written), the claimed slot leaks do not
+exist (acquisition/release traced balanced on all paths), and the in-tree duplicate
+implementations are already differentially pinned through other corpus routes (953,
+146/1055, 757...).  Verifiers explicitly marked the four optional "belt-and-suspenders"
+closures as NOT defect closures; per the anti-bloat principle they are not built.
+
+Confirmed-yield curve across the waves: 16 -> 9 -> 0.  **The test-coverage axis is
+saturated at the floor**: four criteria (reference / gate-outcome both-ways /
+reachability / boundary-refusal-inverse tranches) all pinned at 0 with down-only build
+ratchets, three discovery waves adversarially verified, the final wave finding nothing
+real.  Future coverage work should be DRIVEN by new code landing (the ratchets catch
+it automatically), not by further discovery sweeps of this tree.

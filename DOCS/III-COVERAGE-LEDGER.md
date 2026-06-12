@@ -339,3 +339,40 @@ implemented + KAT-run in-session:
 all six families (verify/admit/attest/launch/validate/authorize + check/certify/prove);
 pin lowered 20 -> **0** (the absolute floor).  Every judgment-verb verdict gate that
 takes input has been SEEN deciding both ways at a DIRECT corpus comparison.
+
+## Criterion v3 — transitive corpus REACHABILITY (the numera-audit lesson, 2026-06-12)
+
+The manual numera cluster audit found 10 exports v1 called covered that no test had ever
+executed: v1 counts a reference from ANYWHERE, so an export consumed only by module-side
+code the corpus never runs reads as covered while being completely untested.  v3 computes
+what that audit checked by hand: **an export is TESTED only if some corpus USE SITE
+reaches it through the call graph.**  Implementation (sanctus/corpus_coverage.iii):
+pass 3's use-site tokens seed the roots (definitions and extern decls are not use);
+pass 4 walks the module tree tracking the ENCLOSING fn by brace depth and records
+caller->callee edges in three forms -- a call `name(...)`, a fn-pointer take `&name`,
+and III's BARE address-of-fn assignment `let f : u64 = name` (the transform_patterns
+dispatch idiom; the first real-tree run mis-flagged 16 tp_* exports until this form was
+captured -- callees resolve to the unique export surface first, else intern as
+file-local nodes); a breadth fixpoint marks reach; the sorted unreachable exports are
+the DARK SURFACE.  Statement keywords (return/if/while/else/select) are excluded as
+callees; `from` is a reserved word (edge params renamed src_node/dst_node).  Census
+state: ~5 MB of BSS (interned nodes, deduped edge list + FNV sets); overflow anywhere
+fails LOUD (CV_OVERFLOW), never under-reports.  Driver writes _cov_reach_report.txt;
+build_stdlib gained the THIRD down-only ratchet vs scripts/coverage_reach_pin.txt.
+Falsifier `1464_coverage_reachability`=99: hermetic tree where v1 reads COMPLETE while
+v3 flags exactly the dark export; all three edge forms proven (internal-helper bridge,
+&-take, bare assignment); the ratchet (a corpus use site moves ROOTS, never edges); the
+seal binds the v3 census and reproduces.
+
+First real-tree census: 32 -> (bare-assignment fix) -> **13 genuinely dark exports**,
+each verified to have zero call sites anywhere: bitops_rotr64, dij_n (declared by
+topology_atlas, never called), frq_from_mont_x, hl_footprint, ini_key_base,
+mp_default_or_fail_dispatch, nl_token_span_start/end, obs_observatory_value,
+pattern_predicate_fn, pattern_template_set_predicate,
+proof_ripple_corpus_equiv_old_pid/new_pid (declared by governance, never called).
+All 13 closed in `1465_dark_surface_gaps`=99 with known-answer laws (exact rotations,
+Montgomery round-trip over BLS12-381 Fr, packed-token field laws, INI key addresses,
+heaplet footprint bits, real equivalence certs minted over registered dispatch pairs --
+pattern slots must stay < PATTERN_REGISTRY_USED_MAX 100).  Pin established at **0**:
+the dark surface starts and stays at the absolute floor; any future export no corpus
+test reaches FAILS the build.

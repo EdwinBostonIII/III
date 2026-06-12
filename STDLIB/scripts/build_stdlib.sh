@@ -1249,6 +1249,25 @@ if [[ $FAIL -eq 0 ]]; then
                     echo "[build_stdlib] GATE-OUTCOME RATCHET FAIL: driver produced no gate report"
                     FAIL=$((FAIL+1))
                 fi
+                # v3 (the numera-audit lesson): every export must be REACHABLE from a corpus
+                # use site through the call graph -- an export consumed only by module-side
+                # code no test runs is dark surface v1 reference-coverage cannot see.
+                # Same ratchet: down only.
+                COV_RPIN_FILE="$SCRIPT_DIR/coverage_reach_pin.txt"
+                if [[ -f "$COV_REPO_ROOT/_cov_reach_report.txt" && -f "$COV_RPIN_FILE" ]]; then
+                    COV_RN=$(wc -l < "$COV_REPO_ROOT/_cov_reach_report.txt" | tr -d ' ')
+                    COV_RPIN=$(tr -d ' 
+' < "$COV_RPIN_FILE")
+                    if [[ "$COV_RN" -gt "$COV_RPIN" ]]; then
+                        echo "[build_stdlib] REACHABILITY RATCHET FAIL: dark-surface=$COV_RN > pin=$COV_RPIN (see _cov_reach_report.txt)"
+                        FAIL=$((FAIL+1))
+                    else
+                        echo "[build_stdlib] reachability ratchet OK: dark-surface=$COV_RN <= pin=$COV_RPIN"
+                    fi
+                elif [[ -f "$COV_RPIN_FILE" ]]; then
+                    echo "[build_stdlib] REACHABILITY RATCHET FAIL: driver produced no reach report"
+                    FAIL=$((FAIL+1))
+                fi
             else
                 echo "[build_stdlib] COVERAGE GATE FAIL: driver produced no report (overflow/truncation?)"
                 FAIL=$((FAIL+1))

@@ -116,7 +116,7 @@ var CV_PENDARG : u8 = 0u8          /* 1 iff the pending def takes parameters (v2
 /* --- uncovered report (sorted indices), census + seal --- */
 var CV_UIDX   : [u32; 16384]
 var CV_NUNCOV : u64 = 0u64
-var CV_CENSUS : [u8; 64]
+var CV_CENSUS : [u8; 80]
 var CV_NL     : [u8; 4]            /* newline byte for the report writer */
 
 /* --- CRITERION v2: the gate-family OUTCOME census (the membrane lesson, 2026-06-12).
@@ -135,6 +135,35 @@ var CV_ONC   : [u8; 16384]         /* distinct outcomes seen (saturates at 4) */
 var CV_GIDX  : [u32; 16384]        /* sorted under-proven gate indices */
 var CV_NGUND : u64 = 0u64
 var CV_NGATE : u64 = 0u64
+
+/* --- CRITERION v3: transitive corpus REACHABILITY (the numera-audit lesson, 2026-06-12).
+ * v1 counts a reference from ANYWHERE -- so an export consumed only by a module-internal
+ * helper that no corpus test ever runs reads as covered while being completely untested
+ * (the manual numera cluster audit found 10 such: ml_slot_*, eg_class_count, ...).  v3
+ * computes the property that audit checked by hand: an export is TESTED only if some
+ * corpus USE SITE reaches it through the call graph.  Pass 3's use-site tokens seed the
+ * roots (a definition or extern decl is not use); pass 4 walks the module tree tracking
+ * the ENCLOSING fn (brace depth) and records caller->callee edges at call sites
+ * (`name(...)`) and fn-pointer takes (`&name`) -- callees resolve to the unique export
+ * surface first, else intern as file-local nodes (module-internal helpers; cross-file
+ * linkage is export-only).  A breadth fixpoint then marks reach; exports never reached
+ * are the DARK SURFACE -- referenced, compiled, and never once executed by the corpus. */
+var CV_EROOT    : [u8; 16384]      /* 1 iff a corpus use site names this export */
+var CV_EREACH   : [u8; 16384]      /* reach flag (exports) */
+var CV_INKEY    : [u64; 65536]     /* open-addressed file-local node keys (0 = empty) */
+var CV_INREACH  : [u8; 65536]      /* reach flag (internal nodes) */
+var CV_NINT     : u64 = 0u64
+var CV_EFROM    : [u32; 262144]    /* call-graph edges (deduped) */
+var CV_ETO      : [u32; 262144]
+var CV_NEDGE    : u64 = 0u64
+var CV_ESEEN    : [u64; 524288]    /* open-addressed edge-dedup keys (0 = empty) */
+var CV_RIDX     : [u32; 16384]     /* sorted unreachable-export indices */
+var CV_NUNREACH : u64 = 0u64
+var CV_CUR_FILE : u64 = 0u64       /* pass-4 file ordinal (scopes internal node keys) */
+var CV_ENC      : u32 = 0xFFFFFFFFu32   /* enclosing-fn node id (sentinel = none) */
+var CV_ENCPEND  : [u8; 64]         /* def name awaiting its '{' */
+var CV_ENCPLEN  : u64 = 0u64
+var CV_DEPTH    : u64 = 0u64       /* brace depth (pass 4) */
 
 /* === byte/string primitives (NIH; length-explicit where a literal is read) === */
 
@@ -391,6 +420,8 @@ fn cv_register(tok_addr: u64, len: u64) {
         if CV_PENDARG == 1u8 { CV_EGATE[idx] = 1u8 }
     }
     CV_ONC[idx] = 0u8
+    CV_EROOT[idx] = 0u8
+    CV_EREACH[idx] = 0u8
     let mut slot : u64 = cv_fnv(tok_addr, len) & CV_HASH_MASK
     let mut go : u8 = 1u8
     while go == 1u8 {
@@ -417,6 +448,7 @@ fn cv_mark(tok_addr: u64, len: u64) {
 fn cv_outcome_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
     let idx : u64 = cv_find(tok_addr, tok_len)
     if idx == CV_MAX_EXP { return }
+    CV_EROOT[idx] = 1u8                                /* v3: a corpus USE SITE roots reach */
     if CV_EGATE[idx] == 0u8 { return }
     if CV_ONC[idx] >= 2u8 { return }                  /* already proven */
     let mut p : u64 = pos
@@ -525,6 +557,110 @@ fn cv_outcome_try(tok_addr: u64, tok_len: u64, pos: u64, len: u64) {
     }
     CV_OKEY[base + nc] = h
     CV_ONC[idx] = ((nc + 1u64) & 0xFFu64) as u8
+}
+
+/* === CRITERION v3 primitives: node interning, edge dedup, the reference handler === */
+
+/* intern a file-local node: key = FNV(name) folded with the file ordinal (internal fns
+ * are file-scoped; two files may share a helper name without sharing a node).  Returns
+ * the slot, or 0xFFFFFFFFFFFFFFFF on table overflow (flags CV_OVERFLOW: a census that
+ * cannot hold the graph must refuse, not under-report). */
+fn cv_intern(tok_addr: u64, len: u64) -> u64 {
+    let mut k : u64 = cv_fnv(tok_addr, len)
+    k = k ^ (CV_CUR_FILE * CV_FNV_PRIME)
+    if k == 0u64 { k = 1u64 }                          /* 0 is the empty sentinel */
+    let mut s : u64 = k & 65535u64
+    let mut probes : u64 = 0u64
+    while probes < 65536u64 {
+        if CV_INKEY[s] == k { return s }
+        if CV_INKEY[s] == 0u64 {
+            CV_INKEY[s] = k
+            CV_NINT = CV_NINT + 1u64
+            return s
+        }
+        s = (s + 1u64) & 65535u64
+        probes = probes + 1u64
+    }
+    CV_OVERFLOW = 1u8
+    return 0xFFFFFFFFFFFFFFFFu64
+}
+
+/* append a deduplicated caller->callee edge (node ids: export idx < 16384, internal
+ * slot + 16384).  A full edge store flags CV_OVERFLOW -- a dropped edge could mark a
+ * tested export dark, so the census fails loud instead of lying. */
+fn cv_edge_add(src_node: u32, dst_node: u32) {
+    if src_node == dst_node { return }
+    let mut k : u64 = CV_FNV_BASIS
+    k = k ^ (src_node as u64)
+    k = k * CV_FNV_PRIME
+    k = k ^ (dst_node as u64)
+    k = k * CV_FNV_PRIME
+    if k == 0u64 { k = 1u64 }
+    let mut s : u64 = k & 524287u64
+    let mut probes : u64 = 0u64
+    while probes < 524288u64 {
+        if CV_ESEEN[s] == k { return }                 /* already recorded */
+        if CV_ESEEN[s] == 0u64 {
+            if CV_NEDGE >= 262144u64 { CV_OVERFLOW = 1u8   return }
+            CV_ESEEN[s] = k
+            CV_EFROM[CV_NEDGE] = src_node
+            CV_ETO[CV_NEDGE] = dst_node
+            CV_NEDGE = CV_NEDGE + 1u64
+            return
+        }
+        s = (s + 1u64) & 524287u64
+        probes = probes + 1u64
+    }
+    CV_OVERFLOW = 1u8
+}
+
+/* pass-4 reference handler: inside an enclosing fn, an EXPORT-matching token edges on
+ * ANY use -- a call `name(...)`, a fn-pointer take `&name`, or III's bare address-of-fn
+ * assignment `let f : u64 = name` (the transform_patterns dispatch idiom; export fn
+ * names are tree-unique, so a bare body token IS a reference).  A non-export token
+ * edges only when call-shaped ('(' after or '&' before) and interns as a file-local
+ * node -- variable/type tokens match neither shape; a builtin like select(...) interns
+ * one junk node with no out-edges, bounded and never reported. */
+fn cv_reach_ref_try(tok_addr: u64, tok_len: u64, start_pos: u64, after_pos: u64, len: u64) {
+    if CV_ENC == 0xFFFFFFFFu32 { return }              /* module top level: no caller */
+    /* statement keywords legally precede '(' (`return (expr)`, `if (cond)`) yet can
+     * never name an export -- they are not callees */
+    if cv_byteseq_eq(tok_addr, tok_len, ("return" as u64), 6u64) == 1u8 { return }
+    if cv_byteseq_eq(tok_addr, tok_len, ("if" as u64), 2u64) == 1u8 { return }
+    if cv_byteseq_eq(tok_addr, tok_len, ("while" as u64), 5u64) == 1u8 { return }
+    if cv_byteseq_eq(tok_addr, tok_len, ("else" as u64), 4u64) == 1u8 { return }
+    if cv_byteseq_eq(tok_addr, tok_len, ("select" as u64), 6u64) == 1u8 { return }
+    let idx : u64 = cv_find(tok_addr, tok_len)
+    if idx != CV_MAX_EXP {
+        cv_edge_add(CV_ENC, (idx & 0xFFFFFFFFu64) as u32)
+        return
+    }
+    let mut is_edge : u8 = 0u8
+    let mut p : u64 = after_pos
+    let mut wg : u8 = 1u8
+    while wg == 1u8 {                                  /* skip space/tab to '(' */
+        if p >= len { wg = 0u8 } else {
+            let wc : u8 = CV_FBUF[p]
+            if wc == 0x20u8 { p = p + 1u64 } else {
+                if wc == 0x09u8 { p = p + 1u64 } else { wg = 0u8 }
+            }
+        }
+    }
+    if p < len { if CV_FBUF[p] == 0x28u8 { is_edge = 1u8 } }
+    if start_pos > 0u64 { if CV_FBUF[start_pos - 1u64] == 0x26u8 { is_edge = 1u8 } }
+    if is_edge == 0u8 { return }
+    let slot : u64 = cv_intern(tok_addr, tok_len)
+    if slot == 0xFFFFFFFFFFFFFFFFu64 { return }
+    cv_edge_add(CV_ENC, ((slot + 16384u64) & 0xFFFFFFFFu64) as u32)
+}
+
+/* resolve the pending definition name to its node id (export idx, else interned). */
+fn cv_enc_resolve() -> u32 {
+    let idx : u64 = cv_find((&CV_ENCPEND as u64), CV_ENCPLEN)
+    if idx != CV_MAX_EXP { return (idx & 0xFFFFFFFFu64) as u32 }
+    let slot : u64 = cv_intern((&CV_ENCPEND as u64), CV_ENCPLEN)
+    if slot == 0xFFFFFFFFFFFFFFFFu64 { return 0xFFFFFFFFu32 }
+    return ((slot + 16384u64) & 0xFFFFFFFFu64) as u32
 }
 
 /* === the code-level lexer ===
@@ -675,6 +811,20 @@ fn cv_scan_buf(len: u64, phase: u32) {
             } else { i = i + 1u64 }
         } else { if c == 0x7Bu8 {              /* '{': body opens -> pending def dies */
             CV_PENDLEN = 0u64
+            if phase == 4u32 {                 /* v3: depth-0 '{' binds the enclosing fn */
+                if CV_DEPTH == 0u64 {
+                    if CV_ENCPLEN > 0u64 { CV_ENC = cv_enc_resolve()   CV_ENCPLEN = 0u64 }
+                }
+                CV_DEPTH = CV_DEPTH + 1u64
+            }
+            i = i + 1u64
+        } else { if c == 0x7Du8 {              /* '}': body closes (v3 depth tracking) */
+            if phase == 4u32 {
+                if CV_DEPTH > 0u64 {
+                    CV_DEPTH = CV_DEPTH - 1u64
+                    if CV_DEPTH == 0u64 { CV_ENC = 0xFFFFFFFFu32 }
+                }
+            }
             i = i + 1u64
         } else { if cv_is_ident_start(c) == 1u8 {
             /* collect the token */
@@ -718,17 +868,26 @@ fn cv_scan_buf(len: u64, phase: u32) {
                                 CV_PENDARG = cv_def_has_args(j4, len)
                             }
                         }
+                        if phase == 4u32 {
+                            /* v3: the def name awaits its '{' to become the enclosing fn */
+                            if CV_DEPTH == 0u64 {
+                                let mut q4 : u64 = 0u64
+                                while q4 < tl { CV_ENCPEND[q4] = CV_TOK[q4]   q4 = q4 + 1u64 }
+                                CV_ENCPLEN = tl
+                            }
+                        }
                     }
                     prev_fn = 0u8
                 } else {
                     if phase == 2u32 { cv_mark(ta, tl) }
                     if phase == 3u32 { cv_outcome_try(ta, tl, j4, len) }
+                    if phase == 4u32 { cv_reach_ref_try(ta, tl, i, j4, len) }
                 }
             } }
             i = j4
         } else {
             i = i + 1u64
-        } } } } } }
+        } } } } } } }
     }
 }
 
@@ -752,6 +911,13 @@ fn cv_scan_file(cap_id: u64, phase: u32) {
      * reffiles == pass-2 file count exactly (caught 2026-06-12 when pass 3 double-counted) */
     if phase == 1u32 { CV_N_FILES = CV_N_FILES + 1u64 }
     if phase == 2u32 { CV_N_REFFILES = CV_N_REFFILES + 1u64 }
+    if phase == 4u32 {
+        /* v3: a fresh file ordinal scopes internal-node keys; enclosing state resets */
+        CV_CUR_FILE = CV_CUR_FILE + 1u64
+        CV_ENC = 0xFFFFFFFFu32
+        CV_ENCPLEN = 0u64
+        CV_DEPTH = 0u64
+    }
     cv_scan_buf(got, phase)
 }
 
@@ -804,6 +970,18 @@ fn cov_reset() @export {
     CV_NUNCOV = 0u64
     CV_SP = 0u64
     CV_OVERFLOW = 0u8
+    /* v3 graph state */
+    let mut t : u64 = 0u64
+    while t < 65536u64 { CV_INKEY[t] = 0u64   CV_INREACH[t] = 0u8   t = t + 1u64 }
+    let mut u : u64 = 0u64
+    while u < 524288u64 { CV_ESEEN[u] = 0u64   u = u + 1u64 }
+    CV_NINT = 0u64
+    CV_NEDGE = 0u64
+    CV_NUNREACH = 0u64
+    CV_CUR_FILE = 0u64
+    CV_ENC = 0xFFFFFFFFu32
+    CV_ENCPLEN = 0u64
+    CV_DEPTH = 0u64
 }
 
 /* name-bytes lexicographic <= over export indices (for the deterministic sort) */
@@ -897,10 +1075,73 @@ fn cv_finalize_gates() {
     }
 }
 
+/* v3 reach fixpoint: seed every corpus-rooted export, then sweep the edge list until
+ * no flag moves (passes bounded by call-chain depth; edges are deduped so each sweep is
+ * one linear scan).  Node ids: export idx < 16384; internal slot + 16384. */
+fn cv_reach_fixpoint() {
+    let mut e : u64 = 0u64
+    while e < CV_NEXP {
+        if CV_EROOT[e] == 1u8 { CV_EREACH[e] = 1u8 }
+        e = e + 1u64
+    }
+    let mut moving : u8 = 1u8
+    while moving == 1u8 {
+        moving = 0u8
+        let mut k : u64 = 0u64
+        while k < CV_NEDGE {
+            let f : u64 = (CV_EFROM[k] as u64) & 0xFFFFFFFFu64
+            let mut from_reached : u8 = 0u8
+            if f < 16384u64 { from_reached = CV_EREACH[f] } else { from_reached = CV_INREACH[f - 16384u64] }
+            if from_reached == 1u8 {
+                let t : u64 = (CV_ETO[k] as u64) & 0xFFFFFFFFu64
+                if t < 16384u64 {
+                    if CV_EREACH[t] == 0u8 { CV_EREACH[t] = 1u8   moving = 1u8 }
+                } else {
+                    if CV_INREACH[t - 16384u64] == 0u8 { CV_INREACH[t - 16384u64] = 1u8   moving = 1u8 }
+                }
+            }
+            k = k + 1u64
+        }
+    }
+}
+
+/* collect + insertion-sort the v3 dark surface: exports no corpus use site reaches */
+fn cv_finalize_reach() {
+    cv_reach_fixpoint()
+    CV_NUNREACH = 0u64
+    let mut e : u64 = 0u64
+    while e < CV_NEXP {
+        if CV_EREACH[e] == 0u8 {
+            CV_RIDX[CV_NUNREACH] = (e & 0xFFFFFFFFu64) as u32
+            CV_NUNREACH = CV_NUNREACH + 1u64
+        }
+        e = e + 1u64
+    }
+    let mut i : u64 = 1u64
+    while i < CV_NUNREACH {
+        let key : u32 = CV_RIDX[i]
+        let ki : u64 = (key as u64) & 0xFFFFFFFFu64
+        let mut j : u64 = i
+        let mut placing : u8 = 1u8
+        while placing == 1u8 {
+            if j == 0u64 { placing = 0u8 } else {
+                let pj : u64 = (CV_RIDX[j - 1u64] as u64) & 0xFFFFFFFFu64
+                if cv_name_le(pj, ki) == 1u8 { placing = 0u8 } else {
+                    CV_RIDX[j] = CV_RIDX[j - 1u64]
+                    j = j - 1u64
+                }
+            }
+        }
+        CV_RIDX[j] = key
+        i = i + 1u64
+    }
+}
+
 /* THE AUDIT: pass 1 extracts every @export under modules_root; pass 2 marks references
- * from modules_root + corpus_root; pass 3 captures gate OUTCOMES from the corpus root
- * ONLY (production use is not proof); finalize sorts both censuses.  Returns the
- * uncovered count (the census number that previously rotted in prose). */
+ * from modules_root + corpus_root; pass 3 captures gate OUTCOMES + reach ROOTS from the
+ * corpus root ONLY (production use is not proof); pass 4 builds the module call graph;
+ * the reach fixpoint then finds the dark surface; finalize sorts all three censuses.
+ * Returns the uncovered count (the census number that previously rotted in prose). */
 fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
     let cap : u64 = cap_id
     let mr : u64 = modules_root
@@ -910,8 +1151,10 @@ fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 @export {
     cv_walk(cap, mr, 2u32)
     cv_walk(cap, cr, 2u32)
     cv_walk(cap, cr, 3u32)
+    cv_walk(cap, mr, 4u32)
     cv_finalize()
     cv_finalize_gates()
+    cv_finalize_reach()
     return CV_NUNCOV
 }
 
@@ -973,6 +1216,55 @@ fn cov_uncovered_name(i: u64, out_addr: u64) -> u64 @export {
     return len
 }
 
+/* === v3 accessors: the dark-surface census === */
+
+fn cov_n_unreachable() -> u64 @export { return CV_NUNREACH }
+fn cov_n_edges() -> u64 @export { return CV_NEDGE }
+fn cov_n_internal_nodes() -> u64 @export { return CV_NINT }
+
+/* the v3 verdict: COMPLETE iff certifiable AND every export is reachable from a corpus
+ * use site through the call graph (the anti-dark-surface criterion) */
+fn cov_reach_verdict() -> u32 @export {
+    if CV_OVERFLOW == 1u8 { return CV_VIOLATION }
+    if CV_TRUNC != 0u64 { return CV_VIOLATION }
+    if CV_NUNREACH != 0u64 { return CV_VIOLATION }
+    return CV_COMPLETE
+}
+
+/* the i-th unreachable export name (sorted) -> out (NUL-terminated); len, 0 if OOB */
+fn cov_unreachable_name(i: u64, out_addr: u64) -> u64 @export {
+    let ii : u64 = i
+    let oa : u64 = out_addr
+    if oa == 0u64 { return 0u64 }
+    if ii >= CV_NUNREACH { return 0u64 }
+    let idx : u64 = (CV_RIDX[ii] as u64) & 0xFFFFFFFFu64
+    let src : *u8 = cv_name_addr(idx) as *u8
+    let dst : *u8 = oa as *u8
+    let len : u64 = CV_ELEN[idx]
+    let mut k : u64 = 0u64
+    while k < len { dst[k] = src[k]   k = k + 1u64 }
+    dst[len] = 0u8
+    return len
+}
+
+/* write the sorted unreachable names, one per line (the v3 report) */
+fn cov_reach_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
+    let cap : u64 = cap_id
+    let pa : u64 = path_addr
+    let h : u64 = fs_open(cap, pa, CV_MODE_WRITE)
+    if h == 0u64 { return -1i32 }
+    CV_NL[0u64] = 0x0Au8
+    let mut i : u64 = 0u64
+    while i < CV_NUNREACH {
+        let idx : u64 = (CV_RIDX[i] as u64) & 0xFFFFFFFFu64
+        fs_write(h, cv_name_addr(idx), CV_ELEN[idx])
+        fs_write(h, (&CV_NL as u64), 1u64)
+        i = i + 1u64
+    }
+    fs_close(h)
+    return 0i32
+}
+
 /* census put-u64 LE */
 fn cv_put_u64(off: u64, v: u64) {
     CV_CENSUS[off]        = (v & 0xFFu64) as u8
@@ -985,9 +1277,10 @@ fn cv_put_u64(off: u64, v: u64) {
     CV_CENSUS[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
 }
 
-/* ORDER-INDEPENDENT SEAL (v2 layout): census (8 u64 LE -- exports, uncovered, files x2,
- * dup, trunc, gates, under-proven) + the sorted uncovered names + the sorted under-proven
- * gate names stream through one cad.  Same tree -> same seal, any walk order. */
+/* ORDER-INDEPENDENT SEAL (v3 layout): census (10 u64 LE -- exports, uncovered, files x2,
+ * dup, trunc, gates, under-proven, unreachable, edges) + the sorted uncovered names +
+ * the sorted under-proven gate names + the sorted unreachable names stream through one
+ * cad.  Same tree -> same seal, any walk order. */
 fn cov_seal(out: *u8) -> i32 @export {
     if (out as u64) == 0u64 { return -1i32 }
     cv_put_u64(0u64,  CV_NEXP)
@@ -998,8 +1291,10 @@ fn cov_seal(out: *u8) -> i32 @export {
     cv_put_u64(40u64, CV_TRUNC)
     cv_put_u64(48u64, CV_NGATE)
     cv_put_u64(56u64, CV_NGUND)
+    cv_put_u64(64u64, CV_NUNREACH)
+    cv_put_u64(72u64, CV_NEDGE)
     cad_begin(CV_SUITE_SHA256)
-    cad_payload((&CV_CENSUS as u64), 64u64)
+    cad_payload((&CV_CENSUS as u64), 80u64)
     let mut i : u64 = 0u64
     while i < CV_NUNCOV {
         let idx : u64 = (CV_UIDX[i] as u64) & 0xFFFFFFFFu64
@@ -1011,6 +1306,12 @@ fn cov_seal(out: *u8) -> i32 @export {
         let gdx : u64 = (CV_GIDX[g] as u64) & 0xFFFFFFFFu64
         cad_payload(cv_name_addr(gdx), CV_ELEN[gdx])
         g = g + 1u64
+    }
+    let mut r : u64 = 0u64
+    while r < CV_NUNREACH {
+        let rdx : u64 = (CV_RIDX[r] as u64) & 0xFFFFFFFFu64
+        cad_payload(cv_name_addr(rdx), CV_ELEN[rdx])
+        r = r + 1u64
     }
     cad_final(out as u64)
     return 0i32
@@ -1058,4 +1359,7 @@ fn cov_gate_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
  * REFUSES to certify a tree holding an unproven @export -- the census is computed,
  * sorted, cad-sealed, and machine-written, so it can never again rot in prose.
  * v2 (the membrane lesson): a security gate must additionally be SEEN DECIDING BOTH
- * WAYS in the corpus -- reference alone could not catch an inverted anchor gate. */
+ * WAYS in the corpus -- reference alone could not catch an inverted anchor gate.
+ * v3 (the numera-audit lesson): an export must be REACHABLE from a corpus use site
+ * through the call graph -- a reference from module-side code no test runs is dark
+ * surface; the fixpoint over call-site + fn-pointer edges finds it. */

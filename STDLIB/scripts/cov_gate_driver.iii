@@ -14,6 +14,8 @@ extern @abi(c-msvc-x64) fn cov_report_write(cap: u64, path: u64) -> i32 from "co
 extern @abi(c-msvc-x64) fn cov_n_gates() -> u64 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn cov_n_underproven() -> u64 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn cov_gate_report_write(cap: u64, path: u64) -> i32 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_unreachable() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_reach_report_write(cap: u64, path: u64) -> i32 from "corpus_coverage.iii"
 extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
 
@@ -21,6 +23,7 @@ var MODS : [u8; 32]
 var CORP : [u8; 32]
 var REPT : [u8; 32]
 var GREP : [u8; 32]
+var RREP : [u8; 32]
 
 fn setl(dst_addr: u64, src_addr: u64, n: u64) {
     let d : *u8 = dst_addr as *u8
@@ -37,11 +40,13 @@ fn main() -> u64 {
     setl((&CORP as u64), ("STDLIB/corpus" as u64), 13u64)
     setl((&REPT as u64), ("./_cov_report.txt" as u64), 17u64)
     setl((&GREP as u64), ("./_cov_gate_report.txt" as u64), 22u64)
+    setl((&RREP as u64), ("./_cov_reach_report.txt" as u64), 23u64)
     let unc : u64 = cov_audit(cap, (&MODS as u64), (&CORP as u64))
     if cov_overflow() == 1u8 { return 255u64 }
     if cov_n_trunc() != 0u64 { return 254u64 }
     cov_report_write(cap, (&REPT as u64))
     cov_gate_report_write(cap, (&GREP as u64))   /* v2: under-proven gate-stem exports */
+    cov_reach_report_write(cap, (&RREP as u64))  /* v3: corpus-unreachable dark surface */
     /* census to stderr-less world: counts live in the reports; exit = uncovered count */
     return unc
 }

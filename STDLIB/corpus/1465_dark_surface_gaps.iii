@@ -1,0 +1,228 @@
+/* 1465_dark_surface_gaps.iii -- DARK-SURFACE CLOSURE: the 13 exports the v3 transitive-
+ * reachability census (1464) found on the real tree -- declared or prose-documented,
+ * never once executed by anything the corpus reaches.  Each closed with a known-answer
+ * law derived from its body, not a smoke call:
+ *
+ *  bitops_rotr64 -- exact rotations (1 -> top bit; nibble rotate of the 0123.. pattern);
+ *  dij_n -- the dijkstra fixture census (5 vertices, invariant);
+ *  mp_default_or_fail_dispatch -- the resolution catch-all: E_RESOLVE_NOMATCH packed as
+ *      result_err = ((0xE100 << 1) | 1) = 115201, input-independent;
+ *  nl_token_span_start / nl_token_span_end -- the packed-token field laws (pack then
+ *      extract, exact packed u64s pinned);
+ *  pattern_template_set_predicate -- writes the fn ptr LE at offset 80, byte-checked;
+ *  obs_observatory_value -- update/read round-trip per family, OOB family -> 0;
+ *  hl_footprint -- empty heaplet 0; singleton at cell 5 = exactly bit 5 (32);
+ *  ini_key_base -- parsed-INI key addresses point at the trimmed keys in the raw
+ *      buffer (host/port/timeout), invalid id / OOB / beyond-count -> 0;
+ *  frq_from_mont_x -- BLS12-381 Fr Montgomery round-trip: to_mont then from_mont
+ *      restores the plain value exactly (all 8 limbs, two values);
+ *  pattern_predicate_fn -- reads the predicate fn ptr (offset 80) of a REGISTERED
+ *      pattern via the live table;
+ *  proof_ripple_corpus_equiv_old_pid / _new_pid -- cert-cause unpacking: a real
+ *      corpus-equivalence cert minted over registered dispatch pairs yields exactly
+ *      the pids it was minted with (two certs).
+ * Exit 99. */
+module corpus_1465
+
+extern @abi(c-msvc-x64) fn bitops_rotr64(v: u64, n: u32) -> u64 from "bitops.iii"
+extern @abi(c-msvc-x64) fn dij_n() -> u32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn mp_default_or_fail_dispatch(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "resolution_meta_dispatch.iii"
+extern @abi(c-msvc-x64) fn nl_token_pack(type_id: u8, word_id: u32, span_start: u32, span_end: u32) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_span_start(tok: u64) -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_span_end(tok: u64) -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn pattern_template_zero(buf_168: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_predicate(buf_168: u64, fn_ptr: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_clear() -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_update(family: u32, v: u64) -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_value(family: u32) -> u64 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn hl_init() -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_empty() -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_singleton(a: u32, v: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_footprint(h: u32) -> u64 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn ini_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_count(id: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_key_base(id: u64, i: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_drop(id: u64) -> i32 from "ini.iii"
+extern @abi(c-msvc-x64) fn frq_boot() -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn frq_set_u32(slot: u64, v: u32) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn frq_to_mont_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn frq_from_mont_x(r: u64, a: u64) -> i32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn frq_get_limb(slot: u64, idx: u64) -> u32 from "zk_field.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_predicate_fn(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv(old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u64 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_old_pid(cert_id: u64) -> u32 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_new_pid(cert_id: u64) -> u32 from "proof_ripple_resolution.iii"
+
+var BUF168   : [u8; 168]
+var RAWINI   : [u8; 56]
+var CORPUSW  : [u64; 2]
+var TEMPLATE : [u8; 168]
+
+fn dispatch_a(a: u64, b: u64, c: u64, d: u64) -> u64 { return a + 1u64 }
+fn dispatch_b(a: u64, b: u64, c: u64, d: u64) -> u64 { return a + 1u64 }
+
+/* pack a u64 little-endian at TEMPLATE[off..off+8) */
+fn put_q(off: u32, v: u64) {
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        TEMPLATE[(off + i) as u64] = ((v >> (((i & 0x7u32) as u64) * 8u64)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+}
+
+/* register a dispatch pattern: pid at offset 0, dispatch fn ptr at offset 96 (942's recipe) */
+fn reg_pat(slot: u32, pid: u64, fp: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 168u64 { TEMPLATE[i] = 0u8   i = i + 1u64 }
+    put_q(0u32, pid)
+    put_q(96u32, fp)
+    return pattern_register(slot, (&TEMPLATE as u64))
+}
+
+/* "[server]\nhost=example.com\nport=8080\n[client]\ntimeout=30\n" -- 56 bytes */
+fn fill_ini() {
+    RAWINI[0u64] = 91u8    RAWINI[1u64] = 115u8   RAWINI[2u64] = 101u8   RAWINI[3u64] = 114u8
+    RAWINI[4u64] = 118u8   RAWINI[5u64] = 101u8   RAWINI[6u64] = 114u8   RAWINI[7u64] = 93u8
+    RAWINI[8u64] = 10u8
+    RAWINI[9u64] = 104u8   RAWINI[10u64] = 111u8  RAWINI[11u64] = 115u8  RAWINI[12u64] = 116u8
+    RAWINI[13u64] = 61u8   RAWINI[14u64] = 101u8  RAWINI[15u64] = 120u8  RAWINI[16u64] = 97u8
+    RAWINI[17u64] = 109u8  RAWINI[18u64] = 112u8  RAWINI[19u64] = 108u8  RAWINI[20u64] = 101u8
+    RAWINI[21u64] = 46u8   RAWINI[22u64] = 99u8   RAWINI[23u64] = 111u8  RAWINI[24u64] = 109u8
+    RAWINI[25u64] = 10u8
+    RAWINI[26u64] = 112u8  RAWINI[27u64] = 111u8  RAWINI[28u64] = 114u8  RAWINI[29u64] = 116u8
+    RAWINI[30u64] = 61u8   RAWINI[31u64] = 56u8   RAWINI[32u64] = 48u8   RAWINI[33u64] = 56u8
+    RAWINI[34u64] = 48u8   RAWINI[35u64] = 10u8
+    RAWINI[36u64] = 91u8   RAWINI[37u64] = 99u8   RAWINI[38u64] = 108u8  RAWINI[39u64] = 105u8
+    RAWINI[40u64] = 101u8  RAWINI[41u64] = 110u8  RAWINI[42u64] = 116u8  RAWINI[43u64] = 93u8
+    RAWINI[44u64] = 10u8
+    RAWINI[45u64] = 116u8  RAWINI[46u64] = 105u8  RAWINI[47u64] = 109u8  RAWINI[48u64] = 101u8
+    RAWINI[49u64] = 111u8  RAWINI[50u64] = 117u8  RAWINI[51u64] = 116u8  RAWINI[52u64] = 61u8
+    RAWINI[53u64] = 51u8   RAWINI[54u64] = 48u8   RAWINI[55u64] = 10u8
+}
+
+fn main() -> u64 {
+    /* ---- bitops_rotr64: exact rotations ---- */
+    if bitops_rotr64(0x0000000000000001u64, 1u32) != 0x8000000000000000u64 { return 1u64 }
+    if bitops_rotr64(0x0123456789ABCDEFu64, 4u32) != 0xF0123456789ABCDEu64 { return 2u64 }
+    if bitops_rotr64(0xDEADBEEFCAFEF00Du64, 0u32) != 0xDEADBEEFCAFEF00Du64 { return 3u64 }
+
+    /* ---- dij_n: the fixture census, invariant ---- */
+    if dij_n() != 5u32 { return 4u64 }
+
+    /* ---- mp_default_or_fail_dispatch: E_RESOLVE_NOMATCH, input-independent ---- */
+    if mp_default_or_fail_dispatch(0u64, 0u64, 0u64, 0u64) != 115201u64 { return 5u64 }
+    if mp_default_or_fail_dispatch(0x0123456789ABCDEFu64, 0xFEDCBA9876543210u64, 0xDEADBEEFCAFEBABEu64, 0x1111222233334444u64) != 115201u64 { return 6u64 }
+
+    /* ---- nl_token_span_start / _end: the packed-token field laws ---- */
+    let tok1 : u64 = nl_token_pack(1u8, 0u32, 5u32, 10u32)
+    if tok1 != 0x000A000500000001u64 { return 7u64 }
+    if nl_token_span_start(tok1) != 5u32 { return 8u64 }
+    if nl_token_span_end(tok1) != 10u32 { return 9u64 }
+    let tok2 : u64 = nl_token_pack(7u8, 123u32, 1000u32, 2500u32)
+    if tok2 != 0x09C403E800007B07u64 { return 10u64 }
+    if nl_token_span_start(tok2) != 1000u32 { return 11u64 }
+    if nl_token_span_end(tok2) != 2500u32 { return 12u64 }
+
+    /* ---- pattern_template_set_predicate: fn ptr LE at offset 80, byte-checked ---- */
+    let b : u64 = (&BUF168 as u64)
+    let p80 : *u8 = (b + 80u64) as *u8
+    pattern_template_zero(b)
+    if pattern_template_set_predicate(b, 0x0102030405060708u64) != 0i32 { return 13u64 }
+    if p80[0u64] != 0x08u8 { return 14u64 }
+    if p80[3u64] != 0x05u8 { return 15u64 }
+    if p80[7u64] != 0x01u8 { return 16u64 }
+    pattern_template_zero(b)
+    if pattern_template_set_predicate(b, 0x0F0E0D0C0B0A0908u64) != 0i32 { return 17u64 }
+    if p80[0u64] != 0x08u8 { return 18u64 }
+    if p80[7u64] != 0x0Fu8 { return 19u64 }
+
+    /* ---- obs_observatory_value: per-family round-trip, OOB -> 0 ---- */
+    obs_observatory_clear()
+    obs_observatory_update(3u32, 12345u64)
+    if obs_observatory_value(3u32) != 12345u64 { return 20u64 }
+    obs_observatory_update(7u32, 99999u64)
+    if obs_observatory_value(7u32) != 99999u64 { return 21u64 }
+    if obs_observatory_value(3u32) != 12345u64 { return 22u64 }     /* families independent */
+    if obs_observatory_value(12u32) != 0u64 { return 23u64 }        /* OOB family refused */
+
+    /* ---- hl_footprint: empty 0; singleton at cell 5 = exactly bit 5 ---- */
+    hl_init()
+    let hempty : u32 = hl_empty()
+    if hl_footprint(hempty) != 0u64 { return 24u64 }
+    let hsingle : u32 = hl_singleton(5u32, 200u32)
+    if hl_footprint(hsingle) != 32u64 { return 25u64 }
+
+    /* ---- ini_key_base: trimmed key addresses into the raw buffer ---- */
+    fill_ini()
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 26u64 }
+    let iid : u64 = ini_parse(ar, (&RAWINI as u64), 56u64)
+    if iid == 0u64 { return 27u64 }
+    if ini_count(iid) != 3u64 { return 28u64 }
+    let k0 : *u8 = ini_key_base(iid, 0u64) as *u8
+    if k0[0u64] != 104u8 { return 29u64 }                           /* 'h'ost */
+    let k1 : *u8 = ini_key_base(iid, 1u64) as *u8
+    if k1[0u64] != 112u8 { return 30u64 }                           /* 'p'ort */
+    let k2 : *u8 = ini_key_base(iid, 2u64) as *u8
+    if k2[0u64] != 116u8 { return 31u64 }                           /* 't'imeout */
+    if ini_key_base(0u64, 0u64) != 0u64 { return 32u64 }            /* invalid id */
+    if ini_key_base(iid, 512u64) != 0u64 { return 33u64 }           /* OOB index */
+    if ini_key_base(iid, 3u64) != 0u64 { return 34u64 }             /* beyond count */
+    ini_drop(iid)
+
+    /* ---- frq_from_mont_x: BLS12-381 Fr Montgomery round-trip, all 8 limbs ---- */
+    if frq_boot() != 0i32 { return 35u64 }
+    if frq_set_u32(0u64, 5u32) != 0i32 { return 36u64 }
+    if frq_to_mont_x(1u64, 0u64) != 0i32 { return 37u64 }
+    if frq_from_mont_x(2u64, 1u64) != 0i32 { return 38u64 }
+    if frq_get_limb(2u64, 0u64) != 5u32 { return 39u64 }
+    let mut lz : u64 = 1u64
+    while lz < 8u64 {
+        if frq_get_limb(2u64, lz) != 0u32 { return 40u64 }
+        lz = lz + 1u64
+    }
+    if frq_set_u32(3u64, 0x12345678u32) != 0i32 { return 41u64 }
+    if frq_to_mont_x(4u64, 3u64) != 0i32 { return 42u64 }
+    if frq_from_mont_x(5u64, 4u64) != 0i32 { return 43u64 }
+    if frq_get_limb(5u64, 0u64) != 0x12345678u32 { return 44u64 }
+    lz = 1u64
+    while lz < 8u64 {
+        if frq_get_limb(5u64, lz) != 0u32 { return 45u64 }
+        lz = lz + 1u64
+    }
+
+    /* ---- pattern_predicate_fn: the registered pattern's predicate ptr (offset 80) ---- */
+    let mut t : u64 = 0u64
+    while t < 168u64 { TEMPLATE[t] = 0u8   t = t + 1u64 }
+    put_q(0u32, 0x3Cu64)                                            /* pid 60: non-zero id */
+    put_q(80u32, 0xDEADBEEF00000001u64)                             /* the predicate fn slot */
+    if pattern_register(60u32, (&TEMPLATE as u64)) != 1u8 { return 46u64 }
+    let pat : u64 = pattern_table_get(60u32)
+    if pat == 0u64 { return 47u64 }
+    if pattern_predicate_fn(pat) != 0xDEADBEEF00000001u64 { return 48u64 }
+
+    /* ---- proof_ripple cert-cause unpacking: two real equivalence certs ---- */
+    CORPUSW[0u64] = 42u64
+    CORPUSW[1u64] = 99u64
+    let fa : u64 = dispatch_a
+    let fb : u64 = dispatch_b
+    if reg_pat(50u32, 0x0Au64, fa) != 1u8 { return 49u64 }
+    if reg_pat(51u32, 0x0Bu64, fb) != 1u8 { return 50u64 }
+    if reg_pat(70u32, 0x64u64, fa) != 1u8 { return 54u64 }    /* all pairs BEFORE minting: */
+    if reg_pat(71u32, 0x65u64, fb) != 1u8 { return 55u64 }    /* the first cert SEALS the registry */
+    let cert1 : u64 = proof_ripple_corpus_equiv(50u32, 51u32, (&CORPUSW as u64), 2u32)
+    if cert1 == 0u64 { return 51u64 }
+    if proof_ripple_corpus_equiv_old_pid(cert1) != 50u32 { return 52u64 }
+    if proof_ripple_corpus_equiv_new_pid(cert1) != 51u32 { return 53u64 }
+    let cert2 : u64 = proof_ripple_corpus_equiv(70u32, 71u32, (&CORPUSW as u64), 2u32)
+    if cert2 == 0u64 { return 56u64 }
+    if proof_ripple_corpus_equiv_old_pid(cert2) != 70u32 { return 57u64 }
+    if proof_ripple_corpus_equiv_new_pid(cert2) != 71u32 { return 58u64 }
+    if proof_ripple_corpus_equiv_old_pid(0xFFFFFFFFu64) != 0u32 { return 59u64 }   /* invalid cert */
+    if proof_ripple_corpus_equiv_new_pid(0xFFFFFFFFu64) != 0u32 { return 60u64 }
+
+    return 99u64
+}

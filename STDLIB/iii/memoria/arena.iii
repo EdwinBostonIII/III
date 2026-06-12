@@ -40,7 +40,9 @@ extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
 
 const ARENA_OK         : i32 =  0i32
-const ARENA_E_BADID    : i32 = -2i32
+/* bad-id refusals FORWARD region_release's REG_E_BADID (-3) -- arena_drop never had its
+ * own code.  The former ARENA_E_BADID = -2 constant documented a code that was never
+ * produced (dead since the region delegation); corpus 1471 pins the real -3 contract. */
 const ARENA_E_WITNESS  : i32 = -7i32   /* held witness != current incarnation */
 
 /* Create an arena backed by a fresh region of `bytes` capacity. */

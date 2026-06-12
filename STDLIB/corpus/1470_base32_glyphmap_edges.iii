@@ -1,0 +1,118 @@
+/* 1470_base32_glyphmap_edges.iii -- INVERSE-LAW EDGES: BASE32 ROUND-TRIP, GLYPH-MAP
+ * PAIR EDGES (frontier findings 10/11).
+ *
+ *  base32_encode / base32_decode -- the round-trip law decode(encode(x)) == x had
+ *      never been proven over encoder OUTPUT (949 decodes known-good literals only).
+ *      Every RFC 4648 remainder class: source lengths 0..6 (empty, rem 1..4, exact
+ *      block, block+1) with the padded length law len == ceil(L/5)*8 pinned per class,
+ *      plus a 23-byte multi-block payload -- byte-for-byte recovery each time;
+ *  glyph_map pair edges -- the under-tested unpack_pairs surface: the EMPTY map
+ *      (0 pairs round-trips, 0 bytes out), a single pair byte-exact, the EXACT
+ *      capacity map (35 pairs x (2+2) = 140 payload bytes, the maximum that fits),
+ *      36 pairs refused at pack (-3), oversize/zero pair geometry refused (-2),
+ *      null src with nonzero count refused (-1), and unpack_pairs' own arms: a
+ *      packed VEC pushed through the MAP unpacker refused (-2), a 1-byte-short dst
+ *      refused (-5).
+ * Exit 99. */
+module corpus_1470
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn base32_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base32.iii"
+extern @abi(c-msvc-x64) fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base32.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack_forms(key_form_id: u32, val_form_id: u32) -> u64 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack_sizes(pair_count: u32, key_size: u32, val_size: u32) -> u64 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack(packed_forms: u64, packed_sizes: u64, src_packed_ptr: u64, out_192: u64) -> i32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_unpack_count(in_192: u64) -> u32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_unpack_pairs(in_192: u64, dst_ptr: u64, dst_cap_bytes: u32) -> i32 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_map_validate(in_192: u64) -> u8 from "glyph_map.iii"
+extern @abi(c-msvc-x64) fn glyph_bytes_form_id() -> u32 from "glyph_bytes.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_form_id() -> u32 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 from "glyph_vec.iii"
+extern @abi(c-msvc-x64) fn glyph_vec_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 from "glyph_vec.iii"
+
+var SRC   : [u8; 32]
+var GSRC  : [u8; 160]
+var GOUT  : [u8; 192]
+var VOUT  : [u8; 192]
+var DST   : [u8; 160]
+
+/* one round-trip leg for source length L; returns 0 = OK, else a distinct step code */
+fn b32_leg(ar: u64, l: u64) -> u64 {
+    let be : u64 = builder_new(ar, 64u64)
+    if be == 0u64 { return 1u64 }
+    if base32_encode(be, (&SRC as u64), l) != 0i32 { return 2u64 }
+    let want : u64 = ((l + 4u64) / 5u64) * 8u64
+    if builder_len(be) != want { return 3u64 }                      /* padded-length law */
+    let elen : u64 = builder_len(be)
+    let ebase : u64 = builder_seal(be)
+    if elen > 0u64 { if ebase == 0u64 { return 4u64 } }
+    let bd : u64 = builder_new(ar, 64u64)
+    if bd == 0u64 { return 5u64 }
+    if base32_decode(bd, ebase, elen) != 0i32 { return 6u64 }
+    if builder_len(bd) != l { return 7u64 }                         /* exact recovery length */
+    let dbase : u64 = builder_seal(bd)
+    let dp : *u8 = dbase as *u8
+    let mut i : u64 = 0u64
+    while i < l { if dp[i] != SRC[i] { return 8u64 }   i = i + 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 1u64 }
+    let mut s : u64 = 0u64
+    while s < 32u64 { SRC[s] = ((s * 7u64 + 3u64) & 0xFFu64) as u8   s = s + 1u64 }
+
+    /* ==== base32: every remainder class round-trips ==== */
+    let mut l : u64 = 0u64
+    while l <= 6u64 {
+        let rc : u64 = b32_leg(ar, l)
+        if rc != 0u64 { return 10u64 + l }                          /* 10..16: which length failed */
+        l = l + 1u64
+    }
+    if b32_leg(ar, 23u64) != 0u64 { return 17u64 }                  /* multi-block: 4 blocks + rem 3 */
+
+    /* ==== glyph_map: the pair-edge arms ==== */
+    let kf : u32 = glyph_bytes_form_id()
+    let vf : u32 = glyph_vec_form_id()
+    let mut g : u64 = 0u64
+    while g < 160u64 { GSRC[g] = ((g + 1u64) & 0xFFu64) as u8   g = g + 1u64 }
+
+    /* empty map: 0 pairs round-trips to 0 bytes */
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(0u32, 4u32, 4u32), 0u64, (&GOUT as u64)) != 0i32 { return 20u64 }
+    if glyph_map_validate((&GOUT as u64)) != 1u8 { return 21u64 }
+    if glyph_map_unpack_count((&GOUT as u64)) != 0u32 { return 22u64 }
+    if glyph_map_unpack_pairs((&GOUT as u64), (&DST as u64), 160u32) != 0i32 { return 23u64 }
+    /* null src with NONZERO count refused */
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(1u32, 4u32, 4u32), 0u64, (&GOUT as u64)) != -1i32 { return 24u64 }
+
+    /* single pair: byte-exact recovery */
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(1u32, 4u32, 4u32), (&GSRC as u64), (&GOUT as u64)) != 0i32 { return 25u64 }
+    if glyph_map_unpack_count((&GOUT as u64)) != 1u32 { return 26u64 }
+    if glyph_map_unpack_pairs((&GOUT as u64), (&DST as u64), 160u32) != 8i32 { return 27u64 }
+    let mut p1 : u64 = 0u64
+    while p1 < 8u64 { if DST[p1] != GSRC[p1] { return 28u64 }   p1 = p1 + 1u64 }
+
+    /* EXACT capacity: 35 pairs x (2+2) = 140 payload bytes round-trip; 36 refused */
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(35u32, 2u32, 2u32), (&GSRC as u64), (&GOUT as u64)) != 0i32 { return 29u64 }
+    if glyph_map_unpack_count((&GOUT as u64)) != 35u32 { return 30u64 }
+    if glyph_map_unpack_pairs((&GOUT as u64), (&DST as u64), 160u32) != 140i32 { return 31u64 }
+    let mut p2 : u64 = 0u64
+    while p2 < 140u64 { if DST[p2] != GSRC[p2] { return 32u64 }   p2 = p2 + 1u64 }
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(36u32, 2u32, 2u32), (&GSRC as u64), (&GOUT as u64)) != -3i32 { return 33u64 }
+    /* degenerate pair geometry refused */
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(1u32, 0u32, 4u32), (&GSRC as u64), (&GOUT as u64)) != -2i32 { return 34u64 }
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(1u32, 137u32, 4u32), (&GSRC as u64), (&GOUT as u64)) != -2i32 { return 35u64 }
+
+    /* unpack_pairs' own gates: a packed VEC through the MAP unpacker; a short dst */
+    if glyph_vec_pack(glyph_vec_pack_meta(kf, 3u32, 4u32), (&GSRC as u64), (&VOUT as u64)) != 0i32 { return 36u64 }
+    if glyph_map_unpack_pairs((&VOUT as u64), (&DST as u64), 160u32) != -2i32 { return 37u64 }   /* form gate */
+    /* re-pack the single-pair map, then a dst one byte short */
+    if glyph_map_pack(glyph_map_pack_forms(kf, vf), glyph_map_pack_sizes(1u32, 4u32, 4u32), (&GSRC as u64), (&GOUT as u64)) != 0i32 { return 38u64 }
+    if glyph_map_unpack_pairs((&GOUT as u64), (&DST as u64), 7u32) != -5i32 { return 39u64 }     /* cap gate */
+
+    return 99u64
+}

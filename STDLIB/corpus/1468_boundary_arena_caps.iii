@@ -1,0 +1,71 @@
+/* 1468_boundary_arena_caps.iii -- BOUNDARY PROOFS III: THE BIG ARENAS (frontier
+ * findings 3/4).  Two node arenas whose exact capacity boundary had never been
+ * asserted (1107 proved egraph saturation-incompleteness but pinned no count; a
+ * regression shrinking capacity to 1000 -- or an off-by-one writing OOB at the wall --
+ * would have passed):
+ *
+ *  eg_add / EGRAPH_MAX_NODES = 131072 -- a hash-consed f-chain from one leaf admits
+ *      exactly 131071 chain nodes (total 131072 == CAP, node 131071 ACCEPTED); the
+ *      next add returns SENT (REJECTED), stably (twice); eg_class_count is exact
+ *      (union-free fill: every node its own class);
+ *  ccl_atom / CCL_CAP = 65536 -- the reducer arena admits ids up to EXACTLY 65535
+ *      (the last call returns node 65535; ccl_reset starts the arena at n=1); the
+ *      65536th allocation is refused (0), stably.
+ * Exit 99. */
+module corpus_1468
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_node_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_class_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn ccl_reset() -> u64 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_atom(id: u32) -> u32 from "ccl.iii"
+
+var SYM_X : [u8; 32]
+var SYM_F : [u8; 32]
+var CH    : [u32; 1]
+
+fn main() -> u64 {
+    /* ==== egraph: fill to the wall, assert the exact boundary ==== */
+    eg_init()
+    let mut z : u64 = 0u64
+    while z < 32u64 { SYM_X[z] = 0xAAu8   SYM_F[z] = 0xF0u8   z = z + 1u64 }
+    let leaf : u32 = eg_add((&SYM_X as u64) as *u8, (&CH as u64) as *u32, 0u32)
+    if leaf == 0xFFFFFFFFu32 { return 1u64 }
+    let mut prev : u32 = leaf
+    let mut adds : u32 = 0u32
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        CH[0u64] = prev
+        let n : u32 = eg_add((&SYM_F as u64) as *u8, (&CH as u64) as *u32, 1u32)
+        if n == 0xFFFFFFFFu32 { go = 0u8 } else {
+            prev = n
+            adds = adds + 1u32
+            if adds >= 200000u32 { return 2u64 }     /* runaway guard: the wall never came */
+        }
+    }
+    if adds != 131071u32 { return 3u64 }             /* 1 leaf + 131071 chain == CAP exactly */
+    if eg_node_count() != 131072u32 { return 4u64 }  /* node 131071 ACCEPTED */
+    if eg_class_count() != 131072u32 { return 5u64 } /* union-free: every node its own class */
+    CH[0u64] = prev
+    if eg_add((&SYM_F as u64) as *u8, (&CH as u64) as *u32, 1u32) != 0xFFFFFFFFu32 { return 6u64 }
+    if eg_node_count() != 131072u32 { return 7u64 }  /* stable rejection, no phantom node */
+
+    /* ==== ccl: the reducer arena boundary ==== */
+    ccl_reset()
+    let mut i : u32 = 1u32
+    let mut last : u32 = 0u32
+    while i <= 65535u32 {
+        let c : u32 = ccl_atom(i)
+        if c == 0u32 { return 8u64 }                 /* premature refusal */
+        last = c
+        i = i + 1u32
+    }
+    if last != 65535u32 { return 9u64 }              /* the last admissible node id */
+    if ccl_atom(7u32) != 0u32 { return 10u64 }       /* arena full: refused */
+    if ccl_atom(8u32) != 0u32 { return 11u64 }       /* stably refused */
+    ccl_reset()
+    if ccl_atom(7u32) == 0u32 { return 12u64 }       /* reset recovers */
+
+    return 99u64
+}

@@ -1,0 +1,136 @@
+/* 1467_boundary_parser_caps.iii -- BOUNDARY PROOFS II: THE PARSER CAPS (frontier
+ * findings 1/2/5).  Three parsers whose capacity guards had never fired:
+ *
+ *  csv_parse / CSV_ROW_MAX = 1024 -- exactly 1024 one-cell rows parse (row_count 1024,
+ *      the last row readable); 1025 rows are refused at parse time (0, the slot
+ *      self-frees); the sibling CSV_COL_MAX = 32 likewise: a 32-field row parses
+ *      (field_count 32), a 33-field row is refused;
+ *  json_parse / JSON_MAX_NODES = 2048 -- a document of EXACTLY 2048 nodes (1 root
+ *      array + 9 sub-arrays + 2038 numbers) parses with node_count 2048 (slot 2047
+ *      granted); the same document with one extra number (2049 nodes) is refused (0)
+ *      with the table having filled then refused (node_count still 2048);
+ *  nl_lex_register_hash / NL_LEXICON_CAP = 4096 -- the null-hash refusal (-1); 4096
+ *      distinct hashes register (used == capacity == 4096, no off-by-one); the 4097th
+ *      distinct hash is refused (-2 E_FULL) with used unchanged; at-full UPDATE of an
+ *      existing key is ALSO refused (-2 fires before the update probe) leaving the
+ *      stored packing untouched; below cap the in-place update arm is live (used stays
+ *      1, the packing changes).
+ * Exit 99. */
+module corpus_1467
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_row_count(id: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_count(id: u64, row: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_drop(id: u64) -> i32 from "csv.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_node_count() -> u32 from "json.iii"
+extern @abi(c-msvc-x64) fn nl_lex_reset() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_register_hash(hash: u64, type_id: u8, word_id: u32) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_lookup_hash(hash: u64) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_used() -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_capacity() -> u32 from "nl_lex.iii"
+
+var CSVBUF : [u8; 2050]
+var COLBUF : [u8; 66]
+var JBUF   : [u8; 8192]
+
+/* build a root array of 9 sub-arrays holding `numbers` one-digit values; returns len.
+ * nodes = 1 root + 9 sub-arrays + numbers. */
+fn build_json(numbers: u64) -> u64 {
+    let mut w : u64 = 0u64
+    JBUF[w] = 0x5Bu8   w = w + 1u64                  /* '[' root */
+    let mut remaining : u64 = numbers
+    let mut sub : u64 = 0u64
+    while sub < 9u64 {
+        if sub > 0u64 { JBUF[w] = 0x2Cu8   w = w + 1u64 }
+        JBUF[w] = 0x5Bu8   w = w + 1u64              /* '[' sub-array */
+        let mut take : u64 = 227u64                  /* 8 x 227 + tail keeps every */
+        if remaining < take { take = remaining }     /* container under the scratch cap */
+        if sub == 8u64 { take = remaining }
+        let mut n : u64 = 0u64
+        while n < take {
+            if n > 0u64 { JBUF[w] = 0x2Cu8   w = w + 1u64 }
+            JBUF[w] = 0x31u8   w = w + 1u64          /* '1' */
+            n = n + 1u64
+        }
+        remaining = remaining - take
+        JBUF[w] = 0x5Du8   w = w + 1u64              /* ']' */
+        sub = sub + 1u64
+    }
+    JBUF[w] = 0x5Du8   w = w + 1u64                  /* ']' root */
+    return w
+}
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(1048576u64)
+    if ar == 0u64 { return 1u64 }
+
+    /* ==== csv: ROW_MAX both ways ==== */
+    let mut i : u64 = 0u64
+    while i < 1025u64 {
+        CSVBUF[i * 2u64] = 0x61u8                    /* 'a' */
+        CSVBUF[i * 2u64 + 1u64] = 0x0Au8             /* newline */
+        i = i + 1u64
+    }
+    let t1024 : u64 = csv_parse(ar, (&CSVBUF as u64), 2048u64)      /* exactly 1024 rows */
+    if t1024 == 0u64 { return 2u64 }
+    if csv_row_count(t1024) != 1024u64 { return 3u64 }
+    if csv_field_count(t1024, 1023u64) != 1u64 { return 4u64 }      /* the last row is real */
+    if csv_drop(t1024) != 0i32 { return 5u64 }
+    if csv_parse(ar, (&CSVBUF as u64), 2050u64) != 0u64 { return 6u64 }   /* 1025 rows refused */
+
+    /* ==== csv: COL_MAX both ways ==== */
+    let mut f : u64 = 0u64
+    while f < 32u64 {
+        COLBUF[f * 2u64] = 0x61u8                    /* 'a' */
+        COLBUF[f * 2u64 + 1u64] = 0x2Cu8             /* ',' */
+        f = f + 1u64
+    }
+    COLBUF[63u64] = 0x0Au8                           /* 32 fields: a,a,...,a\n (63 bytes + NL) */
+    let t32 : u64 = csv_parse(ar, (&COLBUF as u64), 64u64)
+    if t32 == 0u64 { return 7u64 }
+    if csv_field_count(t32, 0u64) != 32u64 { return 8u64 }
+    if csv_drop(t32) != 0i32 { return 9u64 }
+    COLBUF[63u64] = 0x2Cu8                           /* now 33 fields: ...,a\n */
+    COLBUF[64u64] = 0x61u8
+    COLBUF[65u64] = 0x0Au8
+    if csv_parse(ar, (&COLBUF as u64), 66u64) != 0u64 { return 10u64 }    /* 33 fields refused */
+
+    /* ==== json: MAX_NODES both ways ==== */
+    let len_ok : u64 = build_json(2038u64)           /* 1 + 9 + 2038 = 2048 nodes exactly */
+    let root : u64 = json_parse(ar, (&JBUF as u64), len_ok)
+    if root == 0u64 { return 11u64 }
+    if json_node_count() != 2048u32 { return 12u64 }                /* slot 2047 granted */
+    let len_over : u64 = build_json(2039u64)         /* 2049 nodes: one too many */
+    if json_parse(ar, (&JBUF as u64), len_over) != 0u64 { return 13u64 }
+    if json_node_count() != 2048u32 { return 14u64 }                /* filled, then refused */
+
+    /* ==== nl_lex: the lexicon cap, update semantics both sides of full ==== */
+    if nl_lex_reset() != 0i32 { return 15u64 }
+    if nl_lex_used() != 0u32 { return 16u64 }
+    if nl_lex_register_hash(0u64, 2u8, 1u32) != -1i32 { return 17u64 }    /* null hash refused */
+    if nl_lex_used() != 0u32 { return 18u64 }
+    let mut h : u64 = 1u64
+    while h <= 4096u64 {
+        if nl_lex_register_hash(h, 2u8, (h & 0xFFFFFFFFu64) as u32) != 0i32 { return 19u64 }
+        h = h + 1u64
+    }
+    if nl_lex_used() != 4096u32 { return 20u64 }
+    if nl_lex_used() != nl_lex_capacity() { return 21u64 }          /* no off-by-one */
+    if nl_lex_register_hash(5000u64, 2u8, 5000u32) != -2i32 { return 22u64 }   /* E_FULL */
+    if nl_lex_used() != 4096u32 { return 23u64 }
+    let before : u64 = nl_lex_lookup_hash(1u64)
+    if nl_lex_register_hash(1u64, 3u8, 9u32) != -2i32 { return 24u64 }    /* at-full update ALSO refused */
+    if nl_lex_lookup_hash(1u64) != before { return 25u64 }                /* packing untouched */
+    if nl_lex_reset() != 0i32 { return 26u64 }
+    if nl_lex_register_hash(7u64, 2u8, 9u32) != 0i32 { return 27u64 }
+    let l1 : u64 = nl_lex_lookup_hash(7u64)
+    if nl_lex_register_hash(7u64, 3u8, 11u32) != 0i32 { return 28u64 }    /* below cap: update OK */
+    if nl_lex_used() != 1u32 { return 29u64 }                             /* in place, not a new slot */
+    let l2 : u64 = nl_lex_lookup_hash(7u64)
+    if l1 == l2 { return 30u64 }                                          /* the packing CHANGED */
+    nl_lex_reset()
+
+    return 99u64
+}

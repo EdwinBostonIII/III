@@ -376,3 +376,44 @@ heaplet footprint bits, real equivalence certs minted over registered dispatch p
 pattern slots must stay < PATTERN_REGISTRY_USED_MAX 100).  Pin established at **0**:
 the dark surface starts and stays at the absolute floor; any future export no corpus
 test reaches FAILS the build.
+
+## The frontier tranche — boundary walls, refusal arms, inverse laws (2026-06-12)
+
+A 4-lens read-only discovery (boundary-value proofs at capacity constants /
+error-vocabulary completeness / inverse-law pairs / free structural audit) with
+per-finding ADVERSARIAL verification: 30 claims -> 16 confirmed + 14 refuted (the
+verify layer caught wrong evidence, dead-constant red herrings, and two unimplementable
+closures -- and two refutations still carved out real, narrower residuals).  All 16
+confirmed findings + both residuals closed in eight tests, every one green first try:
+
+- `1466` registry caps: pattern_register USED_MAX=100 (slot 99 admits / 100 refused as
+  a NON-WRITE), cat_add_object 1024 objects (deterministic slots, the 1025th SENT, the
+  read gates exact at 1024), fed_seal_anchor 256 (the 257th -3 E_FULL, clear recovers);
+- `1467` parser caps: csv ROW_MAX=1024 + COL_MAX=32 both ways, json MAX_NODES=2048 (a
+  procedurally-built EXACTLY-2048-node document parses; 2049 refused with the table
+  filled-then-refused), nl_lex LEXICON_CAP=4096 (fill, E_FULL, at-full update REFUSED
+  with the packing untouched, below-cap in-place update live);
+- `1468` arena caps: egraph EGRAPH_MAX_NODES=131072 (the hash-consed f-chain admits
+  exactly 131071 + the leaf == CAP; SENT stably; class census exact -- 1107 had pinned
+  no count, so a capacity regression to 1000 would have passed), ccl CCL_CAP=65536
+  (last node 65535, then refused, reset recovers);
+- `1469` FS_E_DENIED (all four mutating gates + the READ-less handle seek, plus
+  NON-VACUITY under the full cap) and PT_E_ALREADY_FINAL (both sites, non-destructive);
+- `1470` base32 round-trip law over encoder OUTPUT (every RFC 4648 remainder class
+  0..6 + multi-block, padded-length law pinned per class) and the glyph_map pair edges
+  (empty map, exact 140-byte capacity, 36 pairs -3, degenerate geometry -2, the VEC
+  form through the MAP unpacker -2, the short dst -5);
+- `1471` deallocation contracts: arena_drop/region_release bad-id+double-drop (-3),
+  handle close-RETAINS/drop-FREES asymmetry (close idempotent by design, double drop
+  -1, close-after-drop -1, slot scrubbed, neighbors untouched), fs_close null/double
+  (-4).  Plus the bonus defect the verification surfaced: arena.iii's ARENA_E_BADID=-2
+  documented a code NEVER produced (arena_drop forwards REG_E_BADID=-3) -- the dead
+  constant is removed, the real contract pinned by the test;
+- `1472` bit-width edges: rotation by width-1 (the ONLY shift that discriminates a
+  wrong mask constant), width, width+1, 2*width -- hand-derived literal expectations,
+  not tautological identity comparisons; next_pow2 at 2^63 / 2^63+1 / max / 0;
+- `1473` the residuals: WITNESS_E_FULL actually TAKEN through both append variants at
+  the exact 1024 wall (1027 pre-flighted and stopped 2 short), and the tempaloc
+  REGION partition (exactly 64 live, the 65th refused, release recovers) + the three
+  DISTINCT slot_of refusal arms (forged out-of-bounds raw, forged type byte, dead
+  handle) each mapped to REG_E_BADID.

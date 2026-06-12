@@ -1,0 +1,77 @@
+/* 1473_witness_full_tempaloc_edges.iii -- REFUSAL ARMS III: THE RESIDUALS the
+ * adversarial verification carved out of two REFUTED frontier claims (the refutations
+ * were right about the claims and still surfaced real, narrower gaps):
+ *
+ *  WITNESS_E_FULL (-1) -- 1027 fills the chain to remaining == 2 and pre-flights via
+ *      witness_remaining, so the exact reject arm at witness.iii:123/144 was never
+ *      TAKEN.  Here: fill to remaining == 0 (every append asserted OK), then the
+ *      1025th append refuses (-1) through BOTH variants (witness_append and
+ *      witness_append_k), with the count pinned at the 1024 cap throughout;
+ *  tempaloc partition edges -- the global 512-slot table is PARTITIONED (REGION
+ *      [0,64)); 'fill to 512' was impossible as claimed.  The real arms: the REGION
+ *      sub-range admits exactly 64 live regions (the 65th create returns 0); release
+ *      recovers the sub-range; and the slot_of BOUNDS arm (tempaloc.iii:119) fires on
+ *      a FORGED handle -- correct type byte, raw index past the global cap -- which
+ *      region_release maps to REG_E_BADID (-3), distinct from the type-check and
+ *      liveness arms also pinned here.
+ * Exit 99. */
+module corpus_1473
+
+extern @abi(c-msvc-x64) fn witness_append(mhash_ptr: u64, cap_id: u64, epoch: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_append_k(mhash_ptr: u64, cap_id: u64, k_fixed: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_remaining() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+
+var DUMMY : [u8; 32]
+var RIDS  : [u64; 70]
+
+fn main() -> u64 {
+    /* ==== WITNESS_E_FULL: the arm 1027 stopped two slots short of ==== */
+    let mut d : u64 = 0u64
+    while d < 32u64 { DUMMY[d] = 0x5Au8   d = d + 1u64 }
+    let mut cap : u64 = 0xA00000u64
+    while witness_remaining() > 0u32 {
+        if witness_append((&DUMMY as u64), cap, 0u64) != 0i32 { return 1u64 }   /* every accept asserted */
+        cap = cap + 1u64
+    }
+    if witness_count() != 1024u32 { return 2u64 }                  /* the cap, exactly */
+    if witness_append((&DUMMY as u64), cap, 0u64) != -1i32 { return 3u64 }      /* E_FULL: site 1 */
+    if witness_append_k((&DUMMY as u64), cap, 1000000000u64) != -1i32 { return 4u64 }   /* site 2 */
+    if witness_count() != 1024u32 { return 5u64 }                  /* refusals admitted nothing */
+    if witness_remaining() != 0u32 { return 6u64 }
+
+    /* ==== tempaloc REGION partition: exactly 64 live, the 65th refused, recovery ==== */
+    let mut n : u32 = 0u32
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let r : u64 = region_create(4096u64)
+        if r == 0u64 { go = 0u8 } else {
+            if n < 70u32 { RIDS[n as u64] = r }
+            n = n + 1u32
+            if n >= 70u32 { return 7u64 }                          /* runaway: no partition wall */
+        }
+    }
+    if n != 64u32 { return 8u64 }                                  /* REGION sub-range cap exactly */
+    let mut k : u32 = 0u32
+    while k < 64u32 {
+        if region_release(RIDS[k as u64]) != 0i32 { return 9u64 }
+        k = k + 1u32
+    }
+    let r2 : u64 = region_create(4096u64)
+    if r2 == 0u64 { return 10u64 }                                 /* release recovered the range */
+
+    /* ==== the three distinct slot_of refusal arms, via region_release ==== */
+    /* (a) BOUNDS: correct type byte (REGION = 1), raw index past the 512 global cap */
+    let forged_oob : u64 = (1u64 << 56u64) | 600u64
+    if region_release(forged_oob) != -3i32 { return 11u64 }
+    /* (b) TYPE: wrong type byte on a structurally-valid raw */
+    let forged_type : u64 = (9u64 << 56u64) | 1u64
+    if region_release(forged_type) != -3i32 { return 12u64 }
+    /* (c) LIVENESS: a correctly-formed, already-released handle (r2 released here first) */
+    if region_release(r2) != 0i32 { return 13u64 }
+    if region_release(r2) != -3i32 { return 14u64 }
+
+    return 99u64
+}

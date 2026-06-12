@@ -1,0 +1,44 @@
+/* 1472_bitops_boundary.iii -- BOUNDARY PROOFS IV: THE BIT-WIDTH EDGES (frontier
+ * findings 13/14).  Rotation by the type width and the next-pow2 overflow wall had
+ * never been exercised (corpus shifts were {0,1,4,8}; next_pow2 inputs topped at 513):
+ *
+ *  rot{l,r}{32,64} -- shift == width-1 (the ONLY value that discriminates a wrong
+ *      mask constant: 63 & 31 = 31 != 63), shift == width (masked to 0: identity),
+ *      width+1 (== shift 1), 2*width (identity again).  Expected constants are
+ *      hand-derived literals, NOT identity comparisons through the same masked path
+ *      (those would pass tautologically with a wrong mask);
+ *  bitops_next_pow2_64 -- 2^63 exactly (a power of two: returns itself); 2^63 + 1
+ *      (would need 2^64: the overflow guard returns 0); u64-max (0); and the v == 0
+ *      special case (0).
+ * Exit 99. */
+module corpus_1472
+
+extern @abi(c-msvc-x64) fn bitops_rotl64(v: u64, n: u32) -> u64 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotr64(v: u64, n: u32) -> u64 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotl32(v: u32, n: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotr32(v: u32, n: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_next_pow2_64(v: u64) -> u64 from "bitops.iii"
+
+fn main() -> u64 {
+    /* ---- 64-bit: shift 63 discriminates the mask; 64/65/128 pin the wrap ---- */
+    if bitops_rotl64(0x0123456789ABCDEFu64, 63u32) != 0x8091A2B3C4D5E6F7u64 { return 1u64 }
+    if bitops_rotr64(0x0123456789ABCDEFu64, 63u32) != 0x02468ACF13579BDEu64 { return 2u64 }
+    if bitops_rotl64(0x0123456789ABCDEFu64, 64u32) != 0x0123456789ABCDEFu64 { return 3u64 }
+    if bitops_rotr64(0x0123456789ABCDEFu64, 64u32) != 0x0123456789ABCDEFu64 { return 4u64 }
+    if bitops_rotl64(0x0123456789ABCDEFu64, 65u32) != 0x02468ACF13579BDEu64 { return 5u64 }
+    if bitops_rotl64(0x0123456789ABCDEFu64, 128u32) != 0x0123456789ABCDEFu64 { return 6u64 }
+
+    /* ---- 32-bit: the same edges with the 31 mask ---- */
+    if bitops_rotl32(0x12345678u32, 31u32) != 0x091A2B3Cu32 { return 7u64 }
+    if bitops_rotl32(0x12345678u32, 32u32) != 0x12345678u32 { return 8u64 }
+    if bitops_rotr32(0x12345678u32, 32u32) != 0x12345678u32 { return 9u64 }
+    if bitops_rotl32(0x12345678u32, 33u32) != 0x2468ACF0u32 { return 10u64 }
+
+    /* ---- next_pow2: the overflow wall and the zero case ---- */
+    if bitops_next_pow2_64(0x8000000000000000u64) != 0x8000000000000000u64 { return 11u64 }
+    if bitops_next_pow2_64(0x8000000000000001u64) != 0u64 { return 12u64 }
+    if bitops_next_pow2_64(0xFFFFFFFFFFFFFFFFu64) != 0u64 { return 13u64 }
+    if bitops_next_pow2_64(0u64) != 0u64 { return 14u64 }
+
+    return 99u64
+}

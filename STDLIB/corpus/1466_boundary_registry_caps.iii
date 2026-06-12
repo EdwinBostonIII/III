@@ -1,0 +1,103 @@
+/* 1466_boundary_registry_caps.iii -- BOUNDARY PROOFS I: THE REGISTRY CAPS (frontier
+ * findings 0/6/7).  Three registries whose capacity guards had never been seen firing --
+ * each pinned at the EXACT boundary, both ways, with the refusal proven a NON-WRITE:
+ *
+ *  pattern_register / PATTERN_REGISTRY_USED_MAX = 100 -- slot 99 (the last admissible)
+ *      registers (1) and reads back non-zero; slot 100 is refused (0) and wrote NOTHING
+ *      (table_get still 0, used unchanged) -- the guard that surprised the 1465 work;
+ *  cat_add_object / CATEGORY_MAX_OBJ = 1024 -- 1024 distinct objects fill slots 0..1023
+ *      deterministically; slot 1023 reads back byte-identically and is findable; the
+ *      1025th DISTINCT id is refused (SENT); the read gates refuse slot 1024 exactly;
+ *  fed_seal_anchor / FED_SEAL_SLOTS = 256 -- 256 distinct child roots anchor (0); the
+ *      257th distinct root is refused (-3 E_FULL) with the count unchanged; clear
+ *      recovers (count 0, a fresh anchor admits again).
+ * Exit 99. */
+module corpus_1466
+
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_used() -> u32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_find_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_object_id(slot: u32, out_id: *u8) -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn fed_seal_clear() -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_count() -> u32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_byte(slot: u32, child_or_parent: u32, idx: u32) -> u32 from "fed_seal.iii"
+
+var TPL    : [u8; 168]
+var OID    : [u8; 32]
+var OIDREAD: [u8; 32]
+var CROOT  : [u8; 32]
+var PROOT  : [u8; 32]
+
+fn main() -> u64 {
+    /* ==== pattern_register: the USED_MAX boundary, both ways, refusal is a non-write ==== */
+    let mut t : u64 = 0u64
+    while t < 168u64 { TPL[t] = 0u8   t = t + 1u64 }
+    TPL[0u64] = 0xCDu8                                              /* non-zero PATTERN_ID */
+    if pattern_register(99u32, (&TPL as u64)) != 1u8 { return 1u64 }     /* last admissible slot */
+    if pattern_table_get(99u32) == 0u64 { return 2u64 }
+    let used99 : u32 = pattern_registry_used()
+    if pattern_register(100u32, (&TPL as u64)) != 0u8 { return 3u64 }    /* USED_MAX guard fires */
+    if pattern_table_get(100u32) != 0u64 { return 4u64 }                 /* refusal wrote NOTHING */
+    if pattern_registry_used() != used99 { return 5u64 }                 /* census unchanged */
+    if pattern_register(4096u32, (&TPL as u64)) != 0u8 { return 6u64 }   /* the CAP arm (subsumed) */
+
+    /* ==== cat_add_object: 1024 objects, the 1025th refused, read gates exact ==== */
+    cat_init()
+    let mut i : u32 = 0u32
+    while i < 1024u32 {
+        let mut z : u64 = 0u64
+        while z < 32u64 { OID[z] = 0u8   z = z + 1u64 }
+        OID[0u64] = (i & 0xFFu32) as u8
+        OID[1u64] = ((i >> 8u32) & 0xFFu32) as u8
+        let s : u32 = cat_add_object((&OID as u64) as *u8)
+        if s != i { return 7u64 }                                   /* first-free-slot determinism */
+        i = i + 1u32
+    }
+    /* slot 1023 accepted: read back byte-identical + findable */
+    if cat_object_id(1023u32, (&OIDREAD as u64) as *u8) != 0i32 { return 8u64 }
+    if OIDREAD[0u64] != 0xFFu8 { return 9u64 }                      /* 1023 & 0xFF */
+    if OIDREAD[1u64] != 0x03u8 { return 10u64 }                     /* 1023 >> 8 */
+    if cat_find_object((&OIDREAD as u64) as *u8) != 1023u32 { return 11u64 }
+    /* the 1025th DISTINCT id: table full -> SENT */
+    let mut z2 : u64 = 0u64
+    while z2 < 32u64 { OID[z2] = 0u8   z2 = z2 + 1u64 }
+    OID[0u64] = 0xEEu8
+    OID[2u64] = 0x01u8
+    if cat_add_object((&OID as u64) as *u8) != 0xFFFFFFFFu32 { return 12u64 }
+    /* the read gates refuse the exact boundary slot */
+    if cat_object_id(1024u32, (&OIDREAD as u64) as *u8) != -2i32 { return 13u64 }
+    if cat_object_id(0xFFFFFFFFu32, (&OIDREAD as u64) as *u8) != -2i32 { return 14u64 }
+
+    /* ==== fed_seal_anchor: 256 slots, the 257th E_FULL, clear recovers ==== */
+    fed_seal_clear()
+    let mut p : u64 = 0u64
+    while p < 32u64 { PROOT[p] = 0x42u8   p = p + 1u64 }
+    let mut a : u32 = 0u32
+    while a < 256u32 {
+        let mut c : u64 = 0u64
+        while c < 32u64 { CROOT[c] = 0u8   c = c + 1u64 }
+        CROOT[0u64] = (a & 0xFFu32) as u8                           /* distinct child roots: */
+        CROOT[1u64] = 0x5Au8                                        /* E_ALREADY checks the root */
+        if fed_seal_anchor(1u32, (&CROOT as u64), 2u32, (&PROOT as u64)) != 0i32 { return 15u64 }
+        a = a + 1u32
+    }
+    if fed_seal_anchor_count() != 256u32 { return 16u64 }
+    if fed_seal_anchor_byte(255u32, 0u32, 0u32) != 0xFFu32 { return 17u64 }   /* slot 255 live */
+    let mut c2 : u64 = 0u64
+    while c2 < 32u64 { CROOT[c2] = 0u8   c2 = c2 + 1u64 }
+    CROOT[0u64] = 0x99u8
+    CROOT[1u64] = 0x77u8                                            /* distinct from all 256 */
+    if fed_seal_anchor(1u32, (&CROOT as u64), 2u32, (&PROOT as u64)) != -3i32 { return 18u64 }
+    if fed_seal_anchor_count() != 256u32 { return 19u64 }           /* refusal admitted nothing */
+    if fed_seal_clear() != 0i32 { return 20u64 }
+    if fed_seal_anchor_count() != 0u32 { return 21u64 }
+    if fed_seal_anchor(1u32, (&CROOT as u64), 2u32, (&PROOT as u64)) != 0i32 { return 22u64 }
+    if fed_seal_anchor_count() != 1u32 { return 23u64 }             /* recovery: admits again */
+    fed_seal_clear()
+
+    return 99u64
+}

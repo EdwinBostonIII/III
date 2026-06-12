@@ -1,0 +1,95 @@
+/* 1471_drop_lifecycle_arms.iii -- REFUSAL ARMS II: THE DEALLOCATION CONTRACTS
+ * (frontier findings 12/15).  arena_drop / handle_drop / fs_close return i32 error
+ * codes that EVERY corpus call site discarded -- the error arms had never once been
+ * asserted, and the double-drop lifecycle never driven:
+ *
+ *  arena_drop -- bad id refused (-3, REG_E_BADID: arena_drop FORWARDS region_release's
+ *      code; arena.iii's own ARENA_E_BADID = -2 was a dead constant documenting a code
+ *      that is never produced -- removed in this change); drop accepted once (0);
+ *      DOUBLE drop refused (-3) with no intervening create (no ABA masking);
+ *  region_create / region_release -- the same contract at the layer below;
+ *  handle_alloc / handle_close / handle_drop -- close marks CLOSED but RETAINS the
+ *      slot (close-while-closed stays 0: idempotent by design); drop frees (0);
+ *      double drop refused (-1 HANDLE_E_BADID); close-after-drop refused (-1); the
+ *      slot is scrubbed (is_open 0, kind 0); an INDEPENDENT handle allocated before
+ *      the storm is untouched by it;
+ *  fs_close -- the null handle refused (-4 FS_E_IO); a real write handle closes (0);
+ *      double close refused (-4, the slot was reaped).
+ * Exit 99. */
+module corpus_1471
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_close(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_drop(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_is_open(id: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_kind(id: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+var SPATH : [u8; 32]
+var WB    : [u8; 8]
+
+fn setp(dst_addr: u64, src_addr: u64, n: u64) {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]   i = i + 1u64 }
+    d[n] = 0u8
+}
+
+fn main() -> u64 {
+    /* ==== arena: bad id / accept / double-drop ==== */
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 1u64 }
+    if arena_drop(0u64) != -3i32 { return 2u64 }          /* bad id: REG_E_BADID forwarded */
+    if arena_drop(a) != 0i32 { return 3u64 }              /* the one true drop */
+    if arena_drop(a) != -3i32 { return 4u64 }             /* DOUBLE drop refused, no ABA */
+
+    /* ==== region: the layer below, same contract ==== */
+    let r : u64 = region_create(4096u64)
+    if r == 0u64 { return 5u64 }
+    if region_release(r) != 0i32 { return 6u64 }
+    if region_release(r) != -3i32 { return 7u64 }
+    if region_release(0u64) != -3i32 { return 8u64 }
+
+    /* ==== handle: close-retains, drop-frees, the storm leaves neighbors alone ==== */
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x06u64, 0u64)
+    let h2 : u64 = handle_alloc(1u8, 0x1111u64, cap)      /* the independent neighbor, FIRST */
+    if h2 == 0u64 { return 9u64 }
+    let h : u64 = handle_alloc(1u8, 0xBEEFu64, cap)
+    if h == 0u64 { return 10u64 }
+    if handle_close(h) != 0i32 { return 11u64 }           /* close marks CLOSED, retains slot */
+    if handle_close(h) != 0i32 { return 12u64 }           /* close-while-closed: idempotent */
+    if handle_drop(0u64) != -1i32 { return 13u64 }        /* null id */
+    if handle_drop(65u64) != -1i32 { return 14u64 }       /* out of range */
+    if handle_drop(h) != 0i32 { return 15u64 }            /* the one true drop */
+    if handle_drop(h) != -1i32 { return 16u64 }           /* DOUBLE drop refused */
+    if handle_close(h) != -1i32 { return 17u64 }          /* close-after-drop refused */
+    if handle_is_open(h) != 0u8 { return 18u64 }          /* slot scrubbed */
+    if handle_kind(h) != 0u8 { return 19u64 }
+    if handle_is_open(h2) != 1u8 { return 20u64 }         /* the neighbor survived the storm */
+    if handle_drop(h2) != 0i32 { return 21u64 }
+
+    /* ==== fs_close: null / accept / double ==== */
+    if fs_close(0u64) != -4i32 { return 22u64 }           /* null handle: FS_E_IO */
+    setp((&SPATH as u64), ("./iii_1471_s.txt" as u64), 16u64)
+    let full : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let hw : u64 = fs_open(full, (&SPATH as u64), 2u32)
+    if hw == 0u64 { return 23u64 }
+    WB[0u64] = 0x59u8
+    fs_write(hw, (&WB as u64), 1u64)
+    if fs_close(hw) != 0i32 { return 24u64 }              /* the one true close */
+    if fs_close(hw) != -4i32 { return 25u64 }             /* double close: slot reaped */
+    if fs_delete(full, (&SPATH as u64)) != 0i32 { return 26u64 }
+
+    return 99u64
+}

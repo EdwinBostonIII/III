@@ -90,7 +90,11 @@ The census ratchet enforces monotone progress; the report names the next target,
 | 2026-06-11 | 19: semver field spans (pre/build off+len exact), uri parse+drop lifecycle, sha512 streaming update_byte == oneshot differential, transform table exact registered (src,dst) pairs + bad-idx refusal | `1410_semver_uri_sha512_tp`=99 | 11 | 148 | 148 |
 | 2026-06-11 | 20: THE CONSTANTLY-RUNNING SOVEREIGN OPTIMIZER observed (monotone+enhancing, convergent fixpoint at the full strength space with no churn, exact tick count, deterministic same-seed fixpoint, non-impairing totals) — the "perfect system enhances itself even while working perfectly" loop proven | `1411_sovereign_optimizer`=99 | 5 | **143** | **143** |
 
-**Day-1 summary (2026-06-11)**: first census 430 → **143** across twenty tranches (KATs 1390–1411), full corpus 957 → **999 PASS / 0 FAIL** throughout, ratchet never regressed, scanner refined once (generics excluded). 287 export claims either proven by a falsifiable KAT or removed as non-surface.
+| 2026-06-11 | 21: XII circumstance cube (hexad bit-extract + the full-2^20 feasible enumeration == 363224, **catching a stale "16,128" module comment**) + horizon manifest (count 144, construct productive→term/guard→NULL, reach bitmap len/ptr + 126-productive boundary) | `1412_circ_horizon`=99 | 9 | 137 | 137 |
+| 2026-06-11 | 22: transform pack/unpack inverse + pattern_set global identity + buffer src==dst OK, sep-logic sl_pure no-footprint, taint_set_imm trusted-constant flow law, tempaloc type tags, seal_instant_id | `1413_transform_taint_seal`=99 | 10 | 128 | 128 |
+| 2026-06-11 | 23: unify_lookup_var (term<<1 / 0x1 free) + export_subst_to_resolver_buf exact flatten, witness_entry_k round trip, ws_chain_root reproducible + append-evident (moves on publish+epoch-close) | `1414_unify_witness_spine`=99 | 4 | **124** | **124** |
+
+**Day-1 summary (2026-06-11)**: first census 430 → **124** across twenty-three tranches (KATs 1390–1414), full corpus 957 → **1002 PASS / 0 FAIL** throughout, ratchet never regressed, scanner refined once (generics excluded), one stale module comment caught and binary-pinned (circ feasible 363224 ≠ the comment's 16,128). 306 export claims either proven by a falsifiable KAT or removed as non-surface.
 
 Notable API truths the burn-down has already pinned: `checked_u64_*` returns checked.iii
 handles (decode via `checked_u64_unwrap_or`, drop after use — never compare handle ids);

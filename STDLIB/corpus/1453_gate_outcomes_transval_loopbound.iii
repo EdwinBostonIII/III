@@ -1,0 +1,31 @@
+/* 1453_gate_outcomes_transval_loopbound.iii -- GATE BURN-DOWN v2.1 TRANCHE 3: THE
+ * TRANSLATION VALIDATOR, THE LOOP-BOUNDS PROVER (2 gates; 22 -> 20).
+ *
+ *  tv_check -- exhaustive source-vs-candidate equality over the validation domain: a
+ *      faithful translation kind passes (1); a kind whose candidate diverges from the
+ *      source on at least one input is caught (0, with the witness recorded);
+ *  lbp_one_check -- the affine loop-bound prover: the single n=N check that an iteration
+ *      family a*i+b stays < size.  A family that fits (a=1,b=0 over [0,5), size 10) is
+ *      proven safe (1); one that overflows (the same affine over [0,20), size 10) is
+ *      caught (0).
+ * Exit 99. */
+module corpus_1453
+
+extern @abi(c-msvc-x64) fn tv_check(kind: u32) -> u32 from "translation_validation.iii"
+extern @abi(c-msvc-x64) fn lbp_one_check(a: u32, b: u32, cap_n: u32, size: u32) -> u32 from "loop_bounds_prover.iii"
+
+fn main() -> u64 {
+    /* ---- tv_check: faithful vs diverging translation ---- */
+    if tv_check(0u32) != 1u32 { return 1u64 }            /* a faithful kind validates */
+    if tv_check(1u32) != 1u32 { return 2u64 }
+    if tv_check(3u32) != 1u32 { return 3u64 }
+    if tv_check(2u32) != 0u32 { return 4u64 }            /* a diverging kind is caught */
+
+    /* ---- lbp_one_check: safe vs overflowing affine family ---- */
+    if lbp_one_check(1u32, 0u32, 5u32, 10u32) != 1u32 { return 5u64 }    /* 1*i, i<5 -> max 4 < 10: safe */
+    if lbp_one_check(1u32, 0u32, 20u32, 10u32) != 0u32 { return 6u64 }   /* i reaches 10 >= 10: overflow */
+    if lbp_one_check(3u32, 1u32, 3u32, 10u32) != 1u32 { return 7u64 }    /* 3*2+1=7 < 10: safe */
+    if lbp_one_check(3u32, 1u32, 4u32, 10u32) != 0u32 { return 8u64 }    /* 3*3+1=10 >= 10: overflow */
+
+    return 99u64
+}

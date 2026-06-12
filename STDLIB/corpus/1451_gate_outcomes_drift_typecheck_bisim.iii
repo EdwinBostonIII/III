@@ -1,0 +1,51 @@
+/* 1451_gate_outcomes_drift_typecheck_bisim.iii -- GATE BURN-DOWN v2.1 TRANCHE 1: THE
+ * KERNEL DRIFT CHECK, THE CIC TYPE CHECKER, THE BISIMULATION PROVER (3 gates; 27 -> 24).
+ *
+ * The criterion now covers the broader inversion-class verdict families (check/certify/
+ * prove) -- an inverted `check` or `prove` is as fatal as the membrane's inverted `verify`.
+ *  k0_drift_check -- 1 iff the live K_0 fingerprint equals the supplied golden: the true
+ *      fingerprint matches (1); a perturbed golden drifts (0) -- the anchor immutability
+ *      sentinel both ways;
+ *  tc_check -- the CIC kernel type checker: the refl cert checks against the reflexive
+ *      identity goal (1); against a NON-reflexive goal (zero =? succ zero) it does NOT (0);
+ *  bisim_prove_equiv -- the kernel equivalence prover: two distinct implementations of the
+ *      same value (a==b==3: multiply vs shift) are PROVEN universally equivalent (1); a
+ *      genuinely-different pair (3,4) is NOT (0).
+ * Exit 99. */
+module corpus_1451
+
+extern @abi(c-msvc-x64) fn k0_fingerprint() -> u64 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_drift_check(golden: u64) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn bisim_prove_equiv(a: u32, b: u32) -> u8 from "proof_bisimulation.iii"
+
+fn main() -> u64 {
+    /* ---- k0_drift_check: the anchor immutability sentinel ---- */
+    let fp : u64 = k0_fingerprint()
+    if k0_drift_check(fp) != 1u32 { return 1u64 }                  /* the true fingerprint matches */
+    if k0_drift_check(fp ^ 0x1u64) != 0u32 { return 2u64 }        /* a perturbed golden drifts */
+
+    /* ---- tc_check: the CIC kernel type checker ---- */
+    tc_reset()
+    let z  : u32 = tc_zero()
+    let s0 : u32 = tc_succ(z)
+    let cert : u32 = tc_lam(tc_nat(), tc_refl(z))
+    let goal_ok  : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), z, z))
+    let goal_bad : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), z, s0))
+    if tc_check(cert, goal_ok) != 1u8 { return 3u64 }             /* refl : Id z z  -- CHECKS */
+    if tc_check(cert, goal_bad) != 0u8 { return 4u64 }            /* refl : Id z s0 -- does NOT */
+
+    /* ---- bisim_prove_equiv: the kernel equivalence prover ---- */
+    if bisim_prove_equiv(3u32, 3u32) != 1u8 { return 5u64 }       /* mul vs shift: PROVEN equivalent */
+    if bisim_prove_equiv(3u32, 4u32) != 0u8 { return 6u64 }       /* genuinely different: NOT */
+
+    return 99u64
+}

@@ -1,0 +1,53 @@
+/* 1452_gate_outcomes_antidrift_subchecks.iii -- GATE BURN-DOWN v2.1 TRANCHE 2: THE
+ * ANTI-DRIFT MEMBRANE SUB-CHECKS (2 gates; 24 -> 22).
+ *
+ * THE MEMBRANE RESIDUALS: xii_antidrift_check_all was proven both ways in 1425, but its
+ * individual sub-checks -- including check_anchor_sig, the EXACT gate that was inverted --
+ * were never driven directly with two outcomes.  Closing them at the sub-check level
+ * hardens the precise functions that carried the original membrane bug.  Over the
+ * 1425-style fully-valid manifest (real keypair, pubkey@0x310, detached sig over
+ * [0..0x330)@0x330, golden = sha256(manifest, 1040)):
+ *  xii_antidrift_check_manifest -- the golden mhash matches (XAD_OK 0); one tampered
+ *      byte -> XAD_E_MANIFEST (1);
+ *  xii_antidrift_check_anchor_sig -- THE FIXED GATE: the valid Founders-Anchor signature
+ *      verifies (XAD_OK 0); a forged signature -> XAD_E_ANCHOR_SIG (8).  Pre-fix this
+ *      gate was INVERTED; this proves, at the sub-check, that it now decides correctly
+ *      both ways.
+ * Exit 99. */
+module corpus_1452
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_seed(seed: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn xii_antidrift_check_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 from "xii_antidrift.iii"
+extern @abi(c-msvc-x64) fn xii_antidrift_check_anchor_sig(manifest_ptr: *u8) -> u32 from "xii_antidrift.iii"
+
+var SEED : [u8; 32]
+var MAN  : [u8; 1040]
+var GOLD : [u8; 32]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = (0x42u64 + i & 0xFFu64) as u8   i = i + 1u64 }
+    let mut m : u64 = 0u64
+    while m < 1040u64 { MAN[m] = (((m * 3u64) + 1u64) & 0xFFu64) as u8   m = m + 1u64 }
+    if ed25519_pubkey((&SEED as u64) as *u8, ((&MAN as u64) + 0x310u64) as *u8) != 1u8 { return 1u64 }
+    if ed25519_sign_seed((&SEED as u64) as *u8, (&MAN as u64) as *u8, 0x330u64, ((&MAN as u64) + 0x330u64) as *u8) != 1u8 { return 2u64 }
+    sha256_oneshot((&MAN as u64) as *u8, 1040u64, (&GOLD as u64) as *u8)
+
+    /* ---- check_manifest: golden match vs tamper ---- */
+    if xii_antidrift_check_manifest((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8) != 0u32 { return 3u64 }
+    let mv : u8 = MAN[5u64]
+    MAN[5u64] = mv + 1u8
+    if xii_antidrift_check_manifest((&MAN as u64) as *u8, 1040u32, (&GOLD as u64) as *u8) != 1u32 { return 4u64 }
+    MAN[5u64] = mv
+
+    /* ---- check_anchor_sig: THE FIXED GATE, valid vs forged ---- */
+    if xii_antidrift_check_anchor_sig((&MAN as u64) as *u8) != 0u32 { return 5u64 }     /* valid sig accepted */
+    let sv : u8 = MAN[0x335u64]
+    MAN[0x335u64] = sv + 1u8
+    if xii_antidrift_check_anchor_sig((&MAN as u64) as *u8) != 8u32 { return 6u64 }     /* forged sig rejected */
+    MAN[0x335u64] = sv
+
+    return 99u64
+}

@@ -985,6 +985,7 @@ declare -A EXPECTED=(
     [1409_scalar64_sat_counters]=99
     [1410_semver_uri_sha512_tp]=99
     [1411_sovereign_optimizer]=99
+    [1412_circ_horizon]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

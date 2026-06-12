@@ -593,3 +593,27 @@ D-FN-1; compiler W6.2-6.5.
 
 build_stdlib GATE PASS + FAIL=0; corpus **1074/0** + xii 92/0 + nous GREEN (incl. the
 keystone differential) + bench 7/0/0.
+
+## A-CC-1 + A-PL-1 — the two O(big) -> O(linear) walks, oracle-adjudicated (2026-06-12)
+
+**A-CC-1** (`numera/cost_calculus.iii`, differential `1487`): register pressure's
+O(n^2) peak sweep -> an O(n + dep_n) difference array over the live intervals
+[m, LIVE_UNTIL[m]] (+1 at m, -1 past the clamped end, prefix-max; partial sums never
+negative so u64 wrap is exact).  The sweep STAYS as the in-module ORACLE
+(cc_regpressure_oracle/_fast exports); 1487 pins analytic fixtures (empty=0, single=1,
+chain=2, all-live=n, past-block clamp=2 -- never oracle-vs-oracle), LCG fixtures at
+n=64 and the full n=1024 block, refusal symmetry, and determinism.  The shared fill
+gained a defensive producer bound (the public path was already cc_check_deps-guarded).
+
+**A-PL-1** (`forcefield/pleroma.iii`, differential `1488`): pleroma_cohere's spanning
+forest re-scanned ALL edges per popped vertex (O(V*E)) -> a CSR incidence index
+(one ascending stable counting-sort pass; src-side entry = FORWARD, dst-side only when
+dst != src = BACKWARD, mirroring the scan's else-guard so a self-loop stays
+forward-only).  Visit sequence, gauge assignments, and obstruction choice are
+byte-identical by construction; the original walk is exported as pleroma_cohere_scan
+(the ORACLE).  1488 pins coherent/non-gluing/malformed/backward-edge/self-loop
+fixtures with verdict + root-byte + obstruction identity and analytic verdict pins.
+New shared guard: edge_count bounded (the u32 dir-bit + 2E-entry allocation), applied
+to BOTH strategies so the differential covers every input.
+
+Gates: build GATE PASS FAIL=0; corpus **1076/0**; xii 92/0; nous GREEN; bench 7/0/0.

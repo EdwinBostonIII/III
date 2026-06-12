@@ -1,0 +1,137 @@
+/* 1488_pleroma_csr_differential.iii -- A-PL-1 DIFFERENTIAL: the CSR incidence
+ * forest walk (pleroma_cohere, O(V+E)) is verdict-, root-, and obstruction-
+ * identical to the original full-scan walk (pleroma_cohere_scan, O(V*E), the
+ * in-module ORACLE).
+ *
+ * Fixtures exercise every traversal shape the CSR must reproduce exactly:
+ *   (1) coherent identity triangle           -> ADMIT both, root bytes EQUAL;
+ *   (2) non-gluing triangle                  -> REJECT both, SAME obstruction;
+ *   (3) malformed permutation (duplicate)    -> ERROR both;
+ *   (4) multi-component forest w/ BACKWARD tree edges -> ADMIT both, roots equal
+ *       (backward = dst-side incidence, the inverse-compose path);
+ *   (5) non-identity SELF-LOOP               -> REJECT at edge 0 both (analytic
+ *       pin; the scan's else-guard runs the forward branch only -- the CSR must
+ *       emit a single src-side entry for a self-loop or it diverges);
+ *   (6) identity self-loop + tree edge       -> ADMIT both.
+ * Analytic verdict pins on (1)(3)(5)(6) keep this from degrading to
+ * oracle-vs-oracle.  Exit 99. */
+module corpus_1488
+
+extern @abi(c-msvc-x64) fn pleroma_cohere(obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8, edge_perm: *u8, deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u64 from "pleroma.iii"
+extern @abi(c-msvc-x64) fn pleroma_cohere_scan(obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8, edge_perm: *u8, deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u64 from "pleroma.iii"
+
+const PL_ADMIT  : u64 = 1u64
+const PL_REJECT : u64 = 0u64
+const PL_ERROR  : u64 = 2u64
+
+var PC_SRC   : [u8; 32]     /* up to 8 edges of u32 LE */
+var PC_DST   : [u8; 32]
+var PC_PERM  : [u8; 32]     /* up to 8 edges x deg<=3 */
+var PC_OBJ   : [u8; 192]    /* up to 6 objects x 32 id bytes */
+var PC_ROOTA : [u8; 32]
+var PC_ROOTB : [u8; 32]
+var PC_OBSA  : [u8; 4]
+var PC_OBSB  : [u8; 4]
+
+fn pc_set_u32(arr: *u8, idx: u64, v: u32) {
+    arr[idx * 4u64]        = (v & 0xFFu32) as u8
+    arr[idx * 4u64 + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    arr[idx * 4u64 + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    arr[idx * 4u64 + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+}
+
+fn pc_fill_ids(n: u64) {
+    let mut i : u64 = 0u64
+    while i < n * 32u64 {
+        PC_OBJ[i] = ((i * 7u64 + 13u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+}
+
+/* run both paths; return 0xFE on any divergence (verdict, root bytes on ADMIT,
+ * obstruction u32 on REJECT), else the agreed verdict. */
+fn pc_both(obj_n: u64, edge_n: u64, deg: u64) -> u64 {
+    let src : *u8 = (&PC_SRC as u64) as *u8
+    let dst : *u8 = (&PC_DST as u64) as *u8
+    let prm : *u8 = (&PC_PERM as u64) as *u8
+    let oid : *u8 = (&PC_OBJ as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 32u64 { PC_ROOTA[z] = 0xAAu8  PC_ROOTB[z] = 0x55u8  z = z + 1u64 }
+    PC_OBSA[0u64] = 0u8  PC_OBSA[1u64] = 0u8  PC_OBSA[2u64] = 0u8  PC_OBSA[3u64] = 0u8
+    PC_OBSB[0u64] = 9u8  PC_OBSB[1u64] = 9u8  PC_OBSB[2u64] = 9u8  PC_OBSB[3u64] = 9u8
+    let va : u64 = pleroma_cohere(obj_n, edge_n, src, dst, prm, deg, oid, (&PC_ROOTA as u64) as *u8, (&PC_OBSA as u64) as *u8)
+    let vb : u64 = pleroma_cohere_scan(obj_n, edge_n, src, dst, prm, deg, oid, (&PC_ROOTB as u64) as *u8, (&PC_OBSB as u64) as *u8)
+    if va != vb { return 0xFEu64 }
+    if va == PL_ADMIT {
+        let mut k : u64 = 0u64
+        while k < 32u64 {
+            if PC_ROOTA[k] != PC_ROOTB[k] { return 0xFEu64 }
+            k = k + 1u64
+        }
+    }
+    if va == PL_REJECT {
+        let mut q : u64 = 0u64
+        while q < 4u64 {
+            if PC_OBSA[q] != PC_OBSB[q] { return 0xFEu64 }
+            q = q + 1u64
+        }
+    }
+    return va
+}
+
+fn pc_id3(e: u64) { PC_PERM[e*3u64] = 0u8  PC_PERM[e*3u64+1u64] = 1u8  PC_PERM[e*3u64+2u64] = 2u8 }
+fn pc_swap3(e: u64) { PC_PERM[e*3u64] = 1u8  PC_PERM[e*3u64+1u64] = 0u8  PC_PERM[e*3u64+2u64] = 2u8 }
+
+fn main() -> u64 {
+    let src : *u8 = (&PC_SRC as u64) as *u8
+    let dst : *u8 = (&PC_DST as u64) as *u8
+
+    /* ---- (1) coherent identity triangle: 0->1, 1->2, 0->2 all id ---- */
+    pc_fill_ids(3u64)
+    pc_set_u32(src, 0u64, 0u32)  pc_set_u32(dst, 0u64, 1u32)
+    pc_set_u32(src, 1u64, 1u32)  pc_set_u32(dst, 1u64, 2u32)
+    pc_set_u32(src, 2u64, 0u32)  pc_set_u32(dst, 2u64, 2u32)
+    pc_id3(0u64)  pc_id3(1u64)  pc_id3(2u64)
+    if pc_both(3u64, 3u64, 3u64) != PL_ADMIT { return 1u64 }
+
+    /* ---- (2) non-gluing triangle: edge 2 carries swap01 ---- */
+    pc_swap3(2u64)
+    if pc_both(3u64, 3u64, 3u64) != PL_REJECT { return 2u64 }
+
+    /* ---- (3) malformed perm (duplicate image) -> ERROR both ---- */
+    PC_PERM[6u64] = 1u8  PC_PERM[7u64] = 1u8  PC_PERM[8u64] = 2u8
+    if pc_both(3u64, 3u64, 3u64) != PL_ERROR { return 3u64 }
+
+    /* ---- (4) two components with BACKWARD tree edges:
+     *      objects 5; edges (1->0 id), (2->3 swap), (4->3 swap) ---- */
+    pc_fill_ids(5u64)
+    pc_set_u32(src, 0u64, 1u32)  pc_set_u32(dst, 0u64, 0u32)
+    pc_set_u32(src, 1u64, 2u32)  pc_set_u32(dst, 1u64, 3u32)
+    pc_set_u32(src, 2u64, 4u32)  pc_set_u32(dst, 2u64, 3u32)
+    pc_id3(0u64)  pc_swap3(1u64)  pc_swap3(2u64)
+    if pc_both(5u64, 3u64, 3u64) != PL_ADMIT { return 4u64 }
+
+    /* ---- (5) non-identity self-loop -> REJECT at edge 0, both ---- */
+    pc_fill_ids(2u64)
+    pc_set_u32(src, 0u64, 0u32)  pc_set_u32(dst, 0u64, 0u32)
+    pc_set_u32(src, 1u64, 0u32)  pc_set_u32(dst, 1u64, 1u32)
+    pc_swap3(0u64)  pc_id3(1u64)
+    if pc_both(2u64, 2u64, 3u64) != PL_REJECT { return 5u64 }
+    /* the obstruction is analytically edge 0 (gauge[0].swap != gauge[0]) */
+    if PC_OBSA[0u64] != 0u8 { return 6u64 }
+    if PC_OBSA[1u64] != 0u8 { return 6u64 }
+
+    /* ---- (6) identity self-loop + tree edge -> ADMIT both ---- */
+    pc_id3(0u64)
+    if pc_both(2u64, 2u64, 3u64) != PL_ADMIT { return 7u64 }
+
+    /* determinism: repeat (1) ---- */
+    pc_fill_ids(3u64)
+    pc_set_u32(src, 0u64, 0u32)  pc_set_u32(dst, 0u64, 1u32)
+    pc_set_u32(src, 1u64, 1u32)  pc_set_u32(dst, 1u64, 2u32)
+    pc_set_u32(src, 2u64, 0u32)  pc_set_u32(dst, 2u64, 2u32)
+    pc_id3(0u64)  pc_id3(1u64)  pc_id3(2u64)
+    if pc_both(3u64, 3u64, 3u64) != PL_ADMIT { return 8u64 }
+
+    return 99u64
+}

@@ -1,0 +1,97 @@
+/* 1487_regpressure_differential.iii -- A-CC-1 DIFFERENTIAL: the O(n + dep_n)
+ * difference-array register-pressure path is value-identical to the original
+ * O(n^2) peak sweep (retained in-module as the ORACLE, the eg_rebuild_full idiom).
+ *
+ * Pins: (a) analytic fixtures with hand-computed pressures (empty=0, single=1,
+ * chain=2, all-live-to-end=n, past-block consumer clamp=2) so the test can never
+ * degrade to oracle-vs-oracle; (b) oracle==fast over deterministic LCG fixtures
+ * (n=64/dep_n=128 and the full n=1024 block); (c) both surfaces refuse n>1024
+ * and a null deps pointer identically.  A broken difference array (wrong clamp,
+ * missing pair, off-by-one prefix) diverges from the sweep on (b) and reddens.
+ * Exit 99. */
+module corpus_1487
+
+extern @abi(c-msvc-x64) fn cc_regpressure_fast(deps: *u32, dep_n: u64, n: u64) -> u64 from "cost_calculus.iii"
+extern @abi(c-msvc-x64) fn cc_regpressure_oracle(deps: *u32, dep_n: u64, n: u64) -> u64 from "cost_calculus.iii"
+
+var RP_DEPS : [u32; 2048]   /* (consumer, producer) pairs, flat */
+
+fn rp_both_eq(dep_n: u64, n: u64) -> u64 {
+    /* returns the agreed value, or 0xFFFFFFFFFFFFFFFE on divergence */
+    let p : *u32 = (&RP_DEPS as u64) as *u32
+    let f : u64 = cc_regpressure_fast(p, dep_n, n)
+    let o : u64 = cc_regpressure_oracle(p, dep_n, n)
+    if f != o { return 0xFFFFFFFFFFFFFFFEu64 }
+    return f
+}
+
+fn main() -> u64 {
+    /* ---- analytic pins ---- */
+    if rp_both_eq(0u64, 0u64) != 0u64 { return 1u64 }            /* empty */
+    if rp_both_eq(0u64, 1u64) != 1u64 { return 2u64 }            /* single op */
+
+    /* chain 0->1->2->3: peak 2 */
+    RP_DEPS[0u64] = 1u32  RP_DEPS[1u64] = 0u32
+    RP_DEPS[2u64] = 2u32  RP_DEPS[3u64] = 1u32
+    RP_DEPS[4u64] = 3u32  RP_DEPS[5u64] = 2u32
+    if rp_both_eq(3u64, 4u64) != 2u64 { return 3u64 }
+
+    /* all live to the end: deps (7, m) for m=0..6 -> peak 8 */
+    let mut m : u64 = 0u64
+    while m < 7u64 {
+        RP_DEPS[m * 2u64] = 7u32
+        RP_DEPS[m * 2u64 + 1u64] = m as u32
+        m = m + 1u64
+    }
+    if rp_both_eq(7u64, 8u64) != 8u64 { return 4u64 }
+
+    /* consumer index past the block: liveness clamps to the end in BOTH paths */
+    RP_DEPS[0u64] = 5000u32  RP_DEPS[1u64] = 0u32
+    if rp_both_eq(1u64, 4u64) != 2u64 { return 5u64 }
+
+    /* ---- LCG differential, n=64 dep_n=128 ---- */
+    let mut x : u32 = 12345u32
+    let mut d : u64 = 0u64
+    while d < 128u64 {
+        x = x * 1103515245u32 + 12345u32
+        let c : u32 = (x >> 8u32) & 63u32
+        x = x * 1103515245u32 + 12345u32
+        let pr : u32 = (x >> 8u32) & 63u32
+        RP_DEPS[d * 2u64] = c
+        RP_DEPS[d * 2u64 + 1u64] = pr
+        d = d + 1u64
+    }
+    let v64 : u64 = rp_both_eq(128u64, 64u64)
+    if v64 == 0xFFFFFFFFFFFFFFFEu64 { return 6u64 }
+    if v64 == 0u64 { return 7u64 }                               /* n=64 always has pressure >= 1 */
+
+    /* ---- the full block, n=1024 dep_n=512 ---- */
+    d = 0u64
+    while d < 512u64 {
+        x = x * 1103515245u32 + 12345u32
+        let c2 : u32 = (x >> 8u32) & 1023u32
+        x = x * 1103515245u32 + 12345u32
+        let p2 : u32 = (x >> 8u32) & 1023u32
+        RP_DEPS[d * 2u64] = c2
+        RP_DEPS[d * 2u64 + 1u64] = p2
+        d = d + 1u64
+    }
+    let v1k : u64 = rp_both_eq(512u64, 1024u64)
+    if v1k == 0xFFFFFFFFFFFFFFFEu64 { return 8u64 }
+    if v1k == 0u64 { return 9u64 }
+
+    /* ---- refusal symmetry ---- */
+    let p : *u32 = (&RP_DEPS as u64) as *u32
+    if cc_regpressure_fast(p, 1u64, 1025u64) != 0xFFFFFFFFFFFFFFFFu64 { return 10u64 }
+    if cc_regpressure_oracle(p, 1u64, 1025u64) != 0xFFFFFFFFFFFFFFFFu64 { return 11u64 }
+    let znull : u64 = 0u64
+    let nullp : *u32 = znull as *u32
+    if cc_regpressure_fast(nullp, 1u64, 4u64) != 0xFFFFFFFFFFFFFFFFu64 { return 12u64 }
+    if cc_regpressure_oracle(nullp, 1u64, 4u64) != 0xFFFFFFFFFFFFFFFFu64 { return 13u64 }
+
+    /* determinism: re-run the full block, identical */
+    let v1k2 : u64 = rp_both_eq(512u64, 1024u64)
+    if v1k2 != v1k { return 14u64 }
+
+    return 99u64
+}

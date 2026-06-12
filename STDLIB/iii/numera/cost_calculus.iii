@@ -85,6 +85,7 @@ var CCALC_ENERGY     : [u32; 4096]
 var CCALC_SIZE       : [u32; 4096]
 var CCALC_DCACHE     : [u32; 4096]
 var CCALC_LIVE_UNTIL : [u32; 1024]
+var CCALC_DIFF       : [u64; 1026]  /* [A-CC-1] difference array over live intervals (n+1 <= 1025 used) */
 var CCALC_CYCLES     : [u64; 1]
 
 /* --- witnessed-variant module scratch (Trap 7; serialized, not reentrant) --- */
@@ -188,9 +189,18 @@ fn cc_check_deps(deps: *u32, dep_n: u64, n32: u32) -> i32 {
 /* --- Register pressure: exact max simultaneously-live operands.
  * LIVE_UNTIL[i] = last index a value defined at i stays live; extended by
  * each (consumer,producer) dep (a value lives until its last consumer).
- * Peak sweep: at point k, count values m in [0,k] with LIVE_UNTIL[m] >= k.
- * O(n^2), n <= 1024 (bounded, M19).  All compares unsigned (Trap 3 safe). --- */
-fn cc_regpressure(deps: *u32, dep_n: u64, n: u64) -> u64 {
+ * Semantics: at point k, count values m in [0,k] with LIVE_UNTIL[m] >= k --
+ * i.e. value m is live over the interval [m, LIVE_UNTIL[m]] (LU[m] >= m by
+ * construction: init m, extended only upward).  All compares unsigned (Trap 3
+ * safe).  Two implementations, differentially pinned by corpus 1487:
+ *   - the [A-CC-1] difference-array path, O(n + dep_n): +1 at m, -1 past
+ *     LU[m] (clamped to n), prefix-sum max.  The LIVE path.
+ *   - the original O(n^2) peak sweep, kept as the ORACLE (the eg_rebuild_full
+ *     idiom: the slow proven algorithm adjudicates the fast one). --- */
+
+/* Shared LIVE_UNTIL fill.  pidx is bounded defensively (cc_evaluate validates
+ * deps via cc_check_deps; the direct differential exports may not). */
+fn _cc_live_until_fill(deps: *u32, dep_n: u64, n: u64) {
     let mut i : u64 = 0u64
     while i < n {
         CCALC_LIVE_UNTIL[i] = i as u32
@@ -201,9 +211,16 @@ fn cc_regpressure(deps: *u32, dep_n: u64, n: u64) -> u64 {
         let consumer : u32 = cc_load_u32(deps, d * 2u64)
         let producer : u32 = cc_load_u32(deps, d * 2u64 + 1u64)
         let pidx : u64 = (producer as u64) & 0xFFFFFFFFu64
-        if consumer > CCALC_LIVE_UNTIL[pidx] { CCALC_LIVE_UNTIL[pidx] = consumer }
+        if pidx < n {
+            if consumer > CCALC_LIVE_UNTIL[pidx] { CCALC_LIVE_UNTIL[pidx] = consumer }
+        }
         d = d + 1u64
     }
+}
+
+/* [A-CC-1 ORACLE] the original O(n^2) peak sweep. */
+fn _cc_regpressure_sweep(deps: *u32, dep_n: u64, n: u64) -> u64 {
+    _cc_live_until_fill(deps, dep_n, n)
     let mut max_live : u64 = 0u64
     let mut k : u64 = 0u64
     while k < n {
@@ -218,6 +235,54 @@ fn cc_regpressure(deps: *u32, dep_n: u64, n: u64) -> u64 {
         k = k + 1u64
     }
     return max_live
+}
+
+/* [A-CC-1] difference-array peak, O(n + dep_n).  Value m contributes +1 over
+ * [m, LU[m]]; the decrement lands at LU[m]+1 (clamped to n -- a consumer index
+ * past the block extends liveness to the end in BOTH paths).  Partial sums are
+ * never negative (every -1 at p+1 pairs with a +1 at some m <= p), so u64
+ * wrap-around arithmetic is exact. */
+fn _cc_regpressure_diff(deps: *u32, dep_n: u64, n: u64) -> u64 {
+    _cc_live_until_fill(deps, dep_n, n)
+    let mut z : u64 = 0u64
+    while z <= n {
+        CCALC_DIFF[z] = 0u64
+        z = z + 1u64
+    }
+    let mut m : u64 = 0u64
+    while m < n {
+        CCALC_DIFF[m] = CCALC_DIFF[m] + 1u64
+        let mut lu1 : u64 = (CCALC_LIVE_UNTIL[m] as u64) + 1u64
+        if lu1 > n { lu1 = n }
+        CCALC_DIFF[lu1] = CCALC_DIFF[lu1] - 1u64
+        m = m + 1u64
+    }
+    let mut acc : u64 = 0u64
+    let mut max_live : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < n {
+        acc = acc + CCALC_DIFF[k]
+        if acc > max_live { max_live = acc }
+        k = k + 1u64
+    }
+    return max_live
+}
+
+fn cc_regpressure(deps: *u32, dep_n: u64, n: u64) -> u64 {
+    return _cc_regpressure_diff(deps, dep_n, n)
+}
+
+/* [A-CC-1] the differential surfaces (corpus 1487): same args, bounded n.
+ * 0xFFFFFFFFFFFFFFFF = refused (n over the 1024-op block bound / null deps). */
+fn cc_regpressure_fast(deps: *u32, dep_n: u64, n: u64) -> u64 @export {
+    if n > 1024u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if dep_n != 0u64 { if (deps as u64) == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 } }
+    return _cc_regpressure_diff(deps, dep_n, n)
+}
+fn cc_regpressure_oracle(deps: *u32, dep_n: u64, n: u64) -> u64 @export {
+    if n > 1024u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if dep_n != 0u64 { if (deps as u64) == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 } }
+    return _cc_regpressure_sweep(deps, dep_n, n)
 }
 
 /* --- Sum a per-opcode u32 table over ops[0..n) into a u64 (footprint/energy).

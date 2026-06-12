@@ -150,8 +150,20 @@ fn pl_perm_eq(a: *u8, aoff: u64, b: *u8, boff: u64, deg: u64) -> u8 {
 
 /* ============================================================
  *  pleroma_cohere - the gate.
+ *
+ *  [A-PL-1] one shared body, two edge-iteration strategies (corpus 1488 is
+ *  the differential): use_csr=1 walks a CSR incidence index (O(V+E) forest
+ *  build), use_csr=0 is the original full-scan-per-vertex (O(V*E)) kept as
+ *  the ORACLE (the eg_rebuild_full idiom).  The CSR is filled by ONE
+ *  ascending edge pass (stable counting sort), so per vertex the incident
+ *  edges appear in ascending edge-index order with the src-side entry
+ *  meaning FORWARD and the dst-side entry (emitted only when dst != src,
+ *  mirroring the scan's else-guard -- a self-loop runs the forward branch
+ *  only) meaning BACKWARD: the visit sequence, gauge assignments, stack
+ *  contents, and obstruction choice are byte-identical to the scan.
  * ============================================================ */
-fn pleroma_cohere(
+fn _pl_cohere_impl(
+    use_csr: u64,
     obj_count: u64,
     edge_count: u64,
     edge_src: *u8,
@@ -161,7 +173,7 @@ fn pleroma_cohere(
     obj_id: *u8,
     root_out: *u8,
     obstr_out: *u8
-) -> u64 @export {
+) -> u64 {
     /* --- precondition: a usable permutation degree --- */
     if deg == 0u64   { return PLEROMA_ERROR }
     if deg > 256u64  { return PLEROMA_ERROR }
@@ -171,6 +183,10 @@ fn pleroma_cohere(
      * (-> later OOB writes into gauge/stack).  deg is in [1,256] here so the division is safe. */
     if obj_count > (0xFFFFFFFFFFFFFFF7u64 / deg) { return PLEROMA_ERROR }   /* obj_count*deg (+1) */
     if obj_count > 0x1FFFFFFFFFFFFFFEu64 { return PLEROMA_ERROR }           /* obj_count*8 (+8) */
+    /* [A-PL-1] the incidence index stores the edge id with a direction bit in a u32 and
+     * allocates 2*edge_count entries -- bound edge_count on BOTH strategies so the two
+     * paths agree on every input (the differential demands verdict identity). */
+    if edge_count > 0x7FFFFFFEu64 { return PLEROMA_ERROR }
 
     /* --- validate every transition is a genuine permutation of 0..deg-1, and
      *     every edge endpoint is in range.  A malformed cover is an ERROR, not a
@@ -206,6 +222,68 @@ fn pleroma_cohere(
     pl_free(seen)
     if malformed != 0u64 { return PLEROMA_ERROR }
 
+    /* --- [A-PL-1] CSR incidence index (use_csr=1 only): inc_ptr[u]..inc_ptr[u+1]
+     *     spans u's entries in inc_ent; an entry is edge_id | (dir<<31), dir 0 =
+     *     forward (u is src), dir 1 = backward (u is dst, src != dst). --- */
+    let zp : u64 = 0u64
+    let mut inc_ptr : *u8 = zp as *u8
+    let mut inc_cur : *u8 = zp as *u8
+    let mut inc_ent : *u8 = zp as *u8
+    if use_csr == 1u64 {
+        inc_ptr = pl_malloc(obj_count * 4u64 + 8u64)
+        inc_cur = pl_malloc(obj_count * 4u64 + 8u64)
+        inc_ent = pl_malloc(edge_count * 8u64 + 8u64)
+        let mut ibad : u64 = 0u64
+        if inc_ptr as u64 == 0u64 { ibad = 1u64 }
+        if inc_cur as u64 == 0u64 { ibad = 1u64 }
+        if inc_ent as u64 == 0u64 { ibad = 1u64 }
+        if ibad != 0u64 {
+            pl_free(inc_ptr)
+            pl_free(inc_cur)
+            pl_free(inc_ent)
+            return PLEROMA_ERROR
+        }
+        /* pass 1: per-vertex incidence counts (into inc_cur as scratch) */
+        let mut cz : u64 = 0u64
+        while cz < obj_count {
+            pl_st_u32(inc_cur, cz, 0u32)
+            cz = cz + 1u64
+        }
+        let mut ce1 : u64 = 0u64
+        while ce1 < edge_count {
+            let sa : u64 = pl_ld_u32(edge_src, ce1) as u64
+            let sb : u64 = pl_ld_u32(edge_dst, ce1) as u64
+            pl_st_u32(inc_cur, sa, pl_ld_u32(inc_cur, sa) + 1u32)
+            if sb != sa { pl_st_u32(inc_cur, sb, pl_ld_u32(inc_cur, sb) + 1u32) }
+            ce1 = ce1 + 1u64
+        }
+        /* prefix: inc_ptr[u] = start of u's span; inc_ptr[obj_count] = total */
+        let mut run : u32 = 0u32
+        let mut pz : u64 = 0u64
+        while pz < obj_count {
+            pl_st_u32(inc_ptr, pz, run)
+            run = run + pl_ld_u32(inc_cur, pz)
+            pl_st_u32(inc_cur, pz, pl_ld_u32(inc_ptr, pz))   /* cursor = span start */
+            pz = pz + 1u64
+        }
+        pl_st_u32(inc_ptr, obj_count, run)
+        /* pass 2: one ascending edge sweep -> stable per-vertex ascending order */
+        let mut ce2 : u64 = 0u64
+        while ce2 < edge_count {
+            let fa : u64 = pl_ld_u32(edge_src, ce2) as u64
+            let fb : u64 = pl_ld_u32(edge_dst, ce2) as u64
+            let fpos : u64 = pl_ld_u32(inc_cur, fa) as u64
+            pl_st_u32(inc_ent, fpos, ce2 as u32)
+            pl_st_u32(inc_cur, fa, (fpos + 1u64) as u32)
+            if fb != fa {
+                let bpos : u64 = pl_ld_u32(inc_cur, fb) as u64
+                pl_st_u32(inc_ent, bpos, (ce2 as u32) | 0x80000000u32)
+                pl_st_u32(inc_cur, fb, (bpos + 1u64) as u32)
+            }
+            ce2 = ce2 + 1u64
+        }
+    }
+
     /* --- working buffers (heap, never function-local arrays) --- */
     let gauge   : *u8 = pl_malloc(obj_count * deg + 1u64)
     let visited : *u8 = pl_malloc(obj_count + 1u64)
@@ -225,6 +303,9 @@ fn pleroma_cohere(
         pl_free(stack)
         pl_free(tmp)
         pl_free(tmpinv)
+        pl_free(inc_ptr)
+        pl_free(inc_cur)
+        pl_free(inc_ent)
         return PLEROMA_ERROR
     }
 
@@ -246,31 +327,64 @@ fn pleroma_cohere(
             while sp > 0u64 {
                 sp = sp - 1u64
                 let u : u64 = pl_ld_u64(stack, sp * 8u64)
-                let mut ee : u64 = 0u64
-                while ee < edge_count {
-                    let a : u64 = pl_ld_u32(edge_src, ee) as u64
-                    let b : u64 = pl_ld_u32(edge_dst, ee) as u64
-                    if a == u {
-                        if visited[b] == 0u8 {
-                            /* gauge[b] = gauge[u] . g_ee */
-                            pl_perm_compose(gauge, b * deg, gauge, u * deg, edge_perm, ee * deg, deg)
-                            visited[b] = 1u8
-                            pl_st_u64(stack, sp * 8u64, b)
-                            sp = sp + 1u64
-                        }
-                    } else {
-                        if b == u {
-                            if visited[a] == 0u8 {
-                                /* gauge[a] = gauge[u] . g_ee^-1 */
-                                pl_perm_inverse(tmpinv, 0u64, edge_perm, ee * deg, deg)
-                                pl_perm_compose(gauge, a * deg, gauge, u * deg, tmpinv, 0u64, deg)
-                                visited[a] = 1u8
-                                pl_st_u64(stack, sp * 8u64, a)
+                if use_csr == 1u64 {
+                    /* [A-PL-1] only u's incident edges, ascending edge index --
+                     * the same edges the full scan would act on, in the same order. */
+                    let jlo : u64 = pl_ld_u32(inc_ptr, u) as u64
+                    let jhi : u64 = pl_ld_u32(inc_ptr, u + 1u64) as u64
+                    let mut j : u64 = jlo
+                    while j < jhi {
+                        let ent : u32 = pl_ld_u32(inc_ent, j)
+                        let ee2 : u64 = (ent & 0x7FFFFFFFu32) as u64
+                        if (ent & 0x80000000u32) == 0u32 {
+                            let fb2 : u64 = pl_ld_u32(edge_dst, ee2) as u64
+                            if visited[fb2] == 0u8 {
+                                /* gauge[dst] = gauge[u] . g_ee */
+                                pl_perm_compose(gauge, fb2 * deg, gauge, u * deg, edge_perm, ee2 * deg, deg)
+                                visited[fb2] = 1u8
+                                pl_st_u64(stack, sp * 8u64, fb2)
+                                sp = sp + 1u64
+                            }
+                        } else {
+                            let fa2 : u64 = pl_ld_u32(edge_src, ee2) as u64
+                            if visited[fa2] == 0u8 {
+                                /* gauge[src] = gauge[u] . g_ee^-1 */
+                                pl_perm_inverse(tmpinv, 0u64, edge_perm, ee2 * deg, deg)
+                                pl_perm_compose(gauge, fa2 * deg, gauge, u * deg, tmpinv, 0u64, deg)
+                                visited[fa2] = 1u8
+                                pl_st_u64(stack, sp * 8u64, fa2)
                                 sp = sp + 1u64
                             }
                         }
+                        j = j + 1u64
                     }
-                    ee = ee + 1u64
+                } else {
+                    let mut ee : u64 = 0u64
+                    while ee < edge_count {
+                        let a : u64 = pl_ld_u32(edge_src, ee) as u64
+                        let b : u64 = pl_ld_u32(edge_dst, ee) as u64
+                        if a == u {
+                            if visited[b] == 0u8 {
+                                /* gauge[b] = gauge[u] . g_ee */
+                                pl_perm_compose(gauge, b * deg, gauge, u * deg, edge_perm, ee * deg, deg)
+                                visited[b] = 1u8
+                                pl_st_u64(stack, sp * 8u64, b)
+                                sp = sp + 1u64
+                            }
+                        } else {
+                            if b == u {
+                                if visited[a] == 0u8 {
+                                    /* gauge[a] = gauge[u] . g_ee^-1 */
+                                    pl_perm_inverse(tmpinv, 0u64, edge_perm, ee * deg, deg)
+                                    pl_perm_compose(gauge, a * deg, gauge, u * deg, tmpinv, 0u64, deg)
+                                    visited[a] = 1u8
+                                    pl_st_u64(stack, sp * 8u64, a)
+                                    sp = sp + 1u64
+                                }
+                            }
+                        }
+                        ee = ee + 1u64
+                    }
                 }
             }
         }
@@ -296,6 +410,9 @@ fn pleroma_cohere(
     pl_free(stack)
     pl_free(tmp)
     pl_free(tmpinv)
+    pl_free(inc_ptr)
+    pl_free(inc_cur)
+    pl_free(inc_ent)
 
     if bad < edge_count {
         pl_st_u32(obstr_out, 0u64, bad as u32)
@@ -345,4 +462,35 @@ fn pleroma_cohere(
 
     pl_st_u32(obstr_out, 0u64, 0xFFFFFFFFu32)
     return PLEROMA_ADMIT
+}
+
+/* The LIVE gate: the [A-PL-1] CSR incidence walk, O(V + E) forest build. */
+fn pleroma_cohere(
+    obj_count: u64,
+    edge_count: u64,
+    edge_src: *u8,
+    edge_dst: *u8,
+    edge_perm: *u8,
+    deg: u64,
+    obj_id: *u8,
+    root_out: *u8,
+    obstr_out: *u8
+) -> u64 @export {
+    return _pl_cohere_impl(1u64, obj_count, edge_count, edge_src, edge_dst, edge_perm, deg, obj_id, root_out, obstr_out)
+}
+
+/* [A-PL-1 ORACLE] the original O(V*E) full-scan walk, kept as the adjudicating
+ * differential surface (corpus 1488 proves verdict/root/obstruction identity). */
+fn pleroma_cohere_scan(
+    obj_count: u64,
+    edge_count: u64,
+    edge_src: *u8,
+    edge_dst: *u8,
+    edge_perm: *u8,
+    deg: u64,
+    obj_id: *u8,
+    root_out: *u8,
+    obstr_out: *u8
+) -> u64 @export {
+    return _pl_cohere_impl(0u64, obj_count, edge_count, edge_src, edge_dst, edge_perm, deg, obj_id, root_out, obstr_out)
 }

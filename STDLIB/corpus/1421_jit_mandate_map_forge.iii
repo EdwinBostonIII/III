@@ -1,0 +1,136 @@
+/* 1421_jit_mandate_map_forge.iii -- JIT SWAP REGISTRY, MANDATE MASKS, MAP INTEGRITY,
+ * CAP FORGE SPLIT, MODCTX, HANDLE RIGHTS, OBSERVE/CONJECTURE ACCESSORS
+ * (burn-down tranche 30; ~13 census orphans).
+ *
+ *  JIT (3): jit_swap_register stores (code_addr, size) read back EXACTLY by the query pair;
+ *      dead ids read 0-sentinels; id 0 refuses;
+ *  MANDATE (2): mandate_m22_bit == 0x00200000 and mandate_process_mask == 0x001F9CEE
+ *      (sealed constitution constants, pinned);
+ *  MAP (2): map_u32u32_max is the registered hard cap; map_integrity_is_valid is 0 before
+ *      integrity_compute and 1 after (dead id 0);
+ *  FORGE (2): cf_forge_split mints a live child cap (slot != SENT; out_cap nonzero;
+ *      cf_slot_of_cap finds the SAME slot); a null parent refuses (SENT, out 0);
+ *  MODCTX (1): modctx_arena returns the bound arena exactly (dead id 0);
+ *  HANDLE (1): handle_set_rights stores the rights gate (verify passes the set right and
+ *      refuses a missing one); a dead id refuses (-1);
+ *  OBSERVE (1): obs_mode is total + stable;
+ *  CONJECTURE (2): nc_rule_count deterministic; ntm_is_f discriminates f-terms from leaves
+ *      at the exact 0x10000 boundary.
+ * Exit 99. */
+module corpus_1421
+
+extern @abi(c-msvc-x64) fn jit_swap_register(id: u64, code_addr: u64, code_size: u32) -> i32 from "jit_swap.iii"
+extern @abi(c-msvc-x64) fn jit_swap_query_code_addr(id: u64) -> u64 from "jit_swap.iii"
+extern @abi(c-msvc-x64) fn jit_swap_query_size(id: u64) -> u32 from "jit_swap.iii"
+extern @abi(c-msvc-x64) fn mandate_m22_bit() -> u32 from "mandate_m22.iii"
+extern @abi(c-msvc-x64) fn mandate_process_mask() -> u32 from "mandate.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_new(arena_id: u64, hard_max: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_put(id: u64, key: u32, value: u32) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_max(id: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_integrity_compute(id: u64, out_32: u64) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_integrity_is_valid(id: u64) -> u8 from "map.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cf_forge_split(cap_a: u64, partition_pred: u32, partition_index: u32, out_cap: *u64) -> u32 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn cf_slot_of_cap(cap: u64) -> u32 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn modctx_new(arena: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_arena(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn handle_set_rights(id: u64, required: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_verify(id: u64, required: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn obs_mode() -> u8 from "observe.iii"
+extern @abi(c-msvc-x64) fn nc_rule_count() -> u32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn ntm_is_f(t: u32) -> u8 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_leaf(s: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_f(p: u32, q: u32) -> u32 from "nous_conjecture_term.iii"
+
+var OUTCAP : [u64; 1]
+var DIG    : [u8; 32]
+var FPATH  : [u8; 20]
+var FDATA  : [u8; 4]
+
+fn main() -> u64 {
+    /* ---- JIT SWAP: register -> exact query; sentinels ---- */
+    if jit_swap_register(0u64, 0x1000u64, 4u32) != 0i32 { } else { return 1u64 }   /* id 0 refuses */
+    if jit_swap_register(0x77u64, 0xC0DEu64, 128u32) != 0i32 { return 2u64 }
+    if jit_swap_query_code_addr(0x77u64) != 0xC0DEu64 { return 3u64 }
+    if jit_swap_query_size(0x77u64) != 128u32 { return 4u64 }
+    if jit_swap_query_code_addr(0x9999u64) != 0u64 { return 5u64 }                 /* dead id */
+    if jit_swap_query_size(0x9999u64) != 0u32 { return 6u64 }
+
+    /* ---- MANDATE: sealed constitution constants ---- */
+    if mandate_m22_bit() != 0x00200000u32 { return 10u64 }
+    if mandate_process_mask() != 0x001F9CEEu32 { return 11u64 }
+
+    /* ---- MAP: hard cap + integrity lifecycle ---- */
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 20u64 }
+    let mp : u64 = map_u32u32_new(ar, 32u64)
+    if mp == 0u64 { return 21u64 }
+    if map_u32u32_max(mp) != 32u64 { return 22u64 }
+    if map_u32u32_max(0xDEAD00u64) != 0u64 { return 23u64 }
+    if map_integrity_is_valid(mp) != 0u8 { return 24u64 }            /* not yet computed */
+    if map_u32u32_put(mp, 7u32, 70u32) != 0i32 { return 25u64 }
+    if map_integrity_compute(mp, (&DIG as u64)) != 0i32 { return 26u64 }
+    if map_integrity_is_valid(mp) != 1u8 { return 27u64 }            /* sealed */
+    if map_integrity_is_valid(0xDEAD00u64) != 0u8 { return 28u64 }
+
+    /* ---- FORGE: split mints a tracked child; null refuses ---- */
+    let env : u64 = cap_env_init()
+    let parent : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let slot : u32 = cf_forge_split(parent, 2u32, 1u32, ((&OUTCAP as u64)) as *u64)
+    if slot == 0xFFFFFFFFu32 { return 30u64 }
+    if OUTCAP[0u64] == 0u64 { return 31u64 }
+    if cf_slot_of_cap(OUTCAP[0u64]) != slot { return 32u64 }         /* the registry finds it */
+    let bad : u32 = cf_forge_split(0u64, 1u32, 0u32, ((&OUTCAP as u64)) as *u64)
+    if bad != 0xFFFFFFFFu32 { return 33u64 }
+    if OUTCAP[0u64] != 0u64 { return 34u64 }
+    if cf_slot_of_cap(0u64) != 0xFFFFFFFFu32 { return 35u64 }
+
+    /* ---- MODCTX: the bound arena ---- */
+    let mc : u64 = modctx_new(ar)
+    if mc == 0u64 { return 40u64 }
+    if modctx_arena(mc) != ar { return 41u64 }
+    if modctx_arena(0xDEAD00u64) != 0u64 { return 42u64 }
+
+    /* ---- HANDLE: the rights gate ---- */
+    FPATH[0u64] = 0x2Eu8     /* "./i1421.tmp" */
+    FPATH[1u64] = 0x2Fu8
+    FPATH[2u64] = 0x69u8
+    FPATH[3u64] = 0x31u8
+    FPATH[4u64] = 0x34u8
+    FPATH[5u64] = 0x32u8
+    FPATH[6u64] = 0x31u8
+    FPATH[7u64] = 0x2Eu8
+    FPATH[8u64] = 0x74u8
+    FPATH[9u64] = 0x6Du8
+    FPATH[10u64] = 0x70u8
+    FPATH[11u64] = 0u8
+    fs_delete(parent, (&FPATH as u64))
+    let h : u64 = fs_open(parent, (&FPATH as u64), 2u32)
+    if h == 0u64 { return 50u64 }
+    if handle_set_rights(h, 0x4u64) != 0i32 { return 51u64 }         /* records the requirement */
+    if handle_verify(h, 0x4u64) != 1u8 { return 52u64 }              /* cap 0x0E admits 0x4 */
+    if handle_verify(h, 0x100u64) != 0u8 { return 53u64 }            /* TIME right not in the cap */
+    if handle_set_rights(0xDEAD00u64, 1u64) != -1i32 { return 54u64 }
+    FDATA[0u64] = 0x78u8
+    fs_write(h, (&FDATA as u64), 1u64)
+    fs_close(h)
+    fs_delete(parent, (&FPATH as u64))
+
+    /* ---- OBSERVE + CONJECTURE accessors ---- */
+    let om : u8 = obs_mode()
+    if obs_mode() != om { return 60u64 }                             /* stable */
+    let rc1 : u32 = nc_rule_count()
+    if nc_rule_count() != rc1 { return 61u64 }                       /* deterministic */
+    if ntm_is_f(ntm_leaf(5u32)) != 0u8 { return 62u64 }              /* a leaf is not f */
+    if ntm_is_f(ntm_f(1u32, 2u32)) != 1u8 { return 63u64 }           /* an f-term is f */
+    if ntm_is_f(0xFFFFu32) != 0u8 { return 64u64 }                   /* below the boundary */
+    if ntm_is_f(0x10000u32) != 1u8 { return 65u64 }                  /* the exact boundary */
+
+    return 99u64
+}

@@ -508,3 +508,26 @@ BOTH directions: option reads/frees checked's mints and vice versa, and a freed 
 is RE-ISSUED across the API boundary (impossible with two tables); the failure
 contract pinned through all four ops.  Existing 1000/1057 lifecycle tests green
 unchanged; corpus 1068/0.
+
+## W0.6 — the dijkstra extraction + THE eg_find OOB DEFECT (2026-06-12)
+
+eg_extract_dijkstra LANDED: the Knuth monotone-worklist extraction (a class FINALIZES
+at its first heap pop -- node cost = base + sum(children) is a superior function) over
+the [W3.7] parents index and the canonical omnia/pq heap (packed (cost<<32|class) keys:
+a deterministic total order); the Bellman fixpoint stays as eg_extract (the pinned
+default), the fallback, and the ORACLE.  Falsifier `1481` compares both extractors
+BYTE-FOR-BYTE over five adversarial fixtures (union-cycle, duplicate-child diamond,
+equal-cost tie with the lowest-node-id rule, a cost-table flip, the out-of-range-root
+refusal) plus a ran-probe so the differential can never silently degrade to
+fixpoint-vs-fixpoint.
+
+Getting 1481 green surfaced THE DAY'S THIRD REAL DEFECT: eg_find had NO bounds check --
+an out-of-range class id walked EGRAPH_CL_PAR straight off the 131072-entry array, an
+OOB READ reachable through EVERY eg_find-routed export (eg_union / eg_class_size /
+extraction root resolution) with an attacker-supplied id, and it segfaulted the
+ORIGINAL eg_extract too.  Fixed at the source (>= MAX_CLASS -> SENT, refusing cleanly
+through every downstream gate); 1481's refusal fixture is the permanent regression.
+Two implementation bugs caught pre-commit by the falsifier: pq pop returns the
+OPTION-ENCODED payload ((v<<1)|1 -- the raw truncation doubled class ids), and the
+heap must be sized to the true offer bound (leaves + parent edges), not a constant.
+All seven egraph consumers re-verified; corpus 1069/0.

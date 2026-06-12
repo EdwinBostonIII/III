@@ -1,0 +1,128 @@
+/* 1481_egraph_dijkstra_extract.iii -- W0.6 FALSIFIER: eg_extract_dijkstra (the Knuth
+ * monotone-worklist extraction over the W3.7 parents index + the omnia/pq heap) is
+ * RESULT-IDENTICAL to the Bellman fixpoint eg_extract.
+ *
+ * Fixtures chosen to be adversarial to a worklist extractor:
+ *   - a CYCLE through union: class {a, f(a)} -- the self-referential candidate
+ *     f(cost 2 + class) can never undercut the leaf (cost 1); both extractors must
+ *     settle the class at the leaf;
+ *   - a DIAMOND: g(fa_cls, fa_cls) shares one child class twice (the parents index
+ *     lists g twice on that class -- offers must be idempotent);
+ *   - a TIE: two distinct leaves united into one class with EQUAL costs -- the
+ *     lowest-node-id representative rule, identical on both sides;
+ *   - a COST FLIP: the same graph re-extracted under a second cost table that
+ *     reverses the cheap alternative -- proves the result tracks costs, not a
+ *     frozen path;
+ *   - the EMPTY refusal: an out-of-range root refuses E_BAD identically.
+ * Terms are compared BYTE-FOR-BYTE (same length, same entries) between the two
+ * extractors on every fixture.
+ * Exit 99. */
+module corpus_1481
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sym_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_extract_dijkstra(req: *u32, out_term: *u32, out_n: *u32, arena_id: u64) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn eg_extract_dijkstra_ran() -> u8 from "egraph.iii"
+
+var SYM_A : [u8; 32]
+var SYM_B : [u8; 32]
+var SYM_F : [u8; 32]
+var SYM_G : [u8; 32]
+var CH    : [u32; 2]
+var REQ   : [u32; 16]
+var OUT1  : [u32; 64]
+var OUT2  : [u32; 64]
+var N1    : [u32; 1]
+var N2    : [u32; 1]
+
+var ROOTCLS : u32 = 0u32
+
+fn fillsym(dst_addr: u64, b: u8) {
+    let d : *u8 = dst_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { d[i] = b   i = i + 1u64 }
+}
+
+/* run both extractors on REQ; 0 = identical, else a distinct step code */
+fn differential(ar: u64) -> u64 {
+    let mut z : u64 = 0u64
+    while z < 64u64 { OUT1[z] = 0u32   OUT2[z] = 0u32   z = z + 1u64 }
+    N1[0u64] = 0u32
+    N2[0u64] = 0u32
+    let r1 : i32 = eg_extract((&REQ as u64) as *u32, (&OUT1 as u64) as *u32, (&N1 as u64) as *u32)
+    let r2 : i32 = eg_extract_dijkstra((&REQ as u64) as *u32, (&OUT2 as u64) as *u32, (&N2 as u64) as *u32, ar)
+    if r1 != r2 { return 1u64 }
+    if r1 != 0i32 { return 0u64 }                  /* both refused identically: done */
+    if eg_extract_dijkstra_ran() != 1u8 { return 5u64 }   /* the REAL worklist ran, no fallback */
+    if N1[0u64] != N2[0u64] { return 2u64 }
+    let mut k : u64 = 0u64
+    while k < (N1[0u64] as u64) {
+        if OUT1[k] != OUT2[k] { return 3u64 }
+        k = k + 1u64
+    }
+    if N1[0u64] == 0u32 { return 4u64 }            /* a successful emit is non-empty */
+    return 0u64
+}
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(1048576u64)
+    if ar == 0u64 { return 1u64 }
+
+    eg_init()
+    fillsym((&SYM_A as u64), 0xA1u8)
+    fillsym((&SYM_B as u64), 0xB2u8)
+    fillsym((&SYM_F as u64), 0xF0u8)
+    fillsym((&SYM_G as u64), 0x60u8)
+    let chp : *u32 = (&CH as u64) as *u32
+
+    let ca : u32 = eg_add((&SYM_A as u64) as *u8, chp, 0u32)        /* leaf a   (sym 0) */
+    let cb : u32 = eg_add((&SYM_B as u64) as *u8, chp, 0u32)        /* leaf b   (sym 1) */
+    if ca == 0xFFFFFFFFu32 { return 2u64 }
+    if cb == 0xFFFFFFFFu32 { return 3u64 }
+    CH[0u64] = ca
+    let cfa : u32 = eg_add((&SYM_F as u64) as *u8, chp, 1u32)       /* f(a)     (sym 2) */
+    if cfa == 0xFFFFFFFFu32 { return 4u64 }
+    /* the CYCLE: a ~ f(a) -- the class holds both a leaf and a self-referential node */
+    if eg_union(ca, cfa) == 0xFFFFFFFFu32 { return 5u64 }
+    /* the TIE: b joins the same class -- two leaves, equal costs under table 1 */
+    if eg_union(ca, cb) == 0xFFFFFFFFu32 { return 6u64 }
+    eg_rebuild()
+    /* the DIAMOND: g(cls, cls) shares the merged class twice */
+    let cyc : u32 = eg_find(ca)
+    CH[0u64] = cyc
+    CH[1u64] = cyc
+    let cg : u32 = eg_add((&SYM_G as u64) as *u8, chp, 2u32)        /* g        (sym 3) */
+    if cg == 0xFFFFFFFFu32 { return 7u64 }
+    eg_rebuild()
+    ROOTCLS = eg_find(cg)
+    if eg_sym_count() != 4u32 { return 8u64 }
+
+    /* ---- cost table 1: a=1, b=1 (the tie), f=2, g=3 ---- */
+    REQ[0u64] = ROOTCLS
+    REQ[1u64] = 4u32
+    REQ[2u64] = 1u32      /* a */
+    REQ[3u64] = 1u32      /* b: EQUAL -> lowest-node-id representative */
+    REQ[4u64] = 2u32      /* f */
+    REQ[5u64] = 3u32      /* g */
+    let d1 : u64 = differential(ar)
+    if d1 != 0u64 { return 10u64 + d1 }
+
+    /* ---- cost table 2: the FLIP -- b becomes the cheap leaf ---- */
+    REQ[2u64] = 9u32      /* a now expensive */
+    REQ[3u64] = 1u32      /* b wins */
+    let d2 : u64 = differential(ar)
+    if d2 != 0u64 { return 20u64 + d2 }
+
+    /* ---- the empty refusal: an out-of-range root refuses identically ---- */
+    REQ[0u64] = 0x7FFFFFFFu32
+    let d3 : u64 = differential(ar)
+    if d3 != 0u64 { return 30u64 + d3 }
+
+    return 99u64
+}

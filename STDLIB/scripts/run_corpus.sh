@@ -1054,6 +1054,7 @@ declare -A EXPECTED=(
     [1478_rscode_uninit_refusal]=99
     [1479_egraph_incremental_rebuild]=99
     [1480_checked_option_unity]=99
+    [1481_egraph_dijkstra_extract]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

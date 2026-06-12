@@ -30,6 +30,12 @@ extern @abi(c-msvc-x64) fn tb_cmp_u32(a: u32, b: u32) -> i32 from "tiebreak.iii"
 extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
 extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
 extern @abi(c-msvc-x64) fn gf8_pow(base: u32, exp: u32) -> u32 from "galois.iii"
+/* [W0.6] the canonical min-heap for the dijkstra extraction (omnia/pq). */
+extern @abi(c-msvc-x64) fn pq_u64u32_new(arena_id: u64, hard_max: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_drop(id: u64) -> i32 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_push(id: u64, prio: u64, payload: u32) -> i32 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_pop_min_payload(id: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_len(id: u64) -> u64 from "pq.iii"
 
 const EGRAPH_OK           : i32 =  0i32
 const EGRAPH_E_FULL       : i32 = -1i32
@@ -131,6 +137,16 @@ var EGRAPH_SYMBUF    : [u8;  32]
 var EGRAPH_IARGS     : [u32; 8]
 var EGRAPH_CLASS_COST : [u32; 131072]
 var EGRAPH_CLASS_NODE : [u32; 131072]
+/* [W0.6] tentative state for the dijkstra extraction (final costs live in
+ * EGRAPH_CLASS_COST/NODE; tentative candidates here until a class finalizes).
+ * Declared HERE in the top state block with every other module var -- a first
+ * attempt declared these mid-file between functions, which produced erratic
+ * BSS behavior in linking programs (1481 crashed or refused depending on the
+ * consumer's own layout); all egraph state lives in this block by convention. */
+var EGRAPH_TENT_COST : [u32; 131072]
+var EGRAPH_TENT_NODE : [u32; 131072]
+var EGRAPH_DJ_RAN    : u8 = 0u8     /* 1 iff the last dijkstra call completed without
+                                     * the fixpoint fallback (1481 differential) */
 
 /* Explicit worklist stacks (W15 recursion elimination). */
 var EGRAPH_M_POS     : [u32; 8192]
@@ -417,6 +433,13 @@ fn eg_intern_symbol(sym_id: *u8) -> u32 @export {
 
 fn eg_find(a: u32) -> u32 @export {
     if a == EGRAPH_SENT { return EGRAPH_SENT }
+    /* [1481 defect] BOUNDS: an out-of-range class id (>= MAX_CLASS) walked
+     * EGRAPH_CL_PAR straight off the array -- an OOB read reachable through EVERY
+     * eg_find-routed export (eg_union/eg_class_size/eg_extract root resolution...)
+     * with an attacker-supplied id.  Found by 1481's out-of-range-root fixture,
+     * which segfaulted the ORIGINAL eg_extract too.  SENT refuses cleanly through
+     * every downstream gate (rootc >= CL_USED, union's SENT guards). */
+    if a >= EGRAPH_MAX_CLASS { return EGRAPH_SENT }
     let mut root : u32 = a
     let mut going : u8 = 1u8
     while going == 1u8 {
@@ -1179,6 +1202,42 @@ fn eg_extract_emit(cl: u32) -> i32 {
     return EGRAPH_OK
 }
 
+/* [W0.6] shared emit tail: resolve + validate the root class, drain the preorder
+ * stack through eg_extract_emit, write the emitted count.  Used by both the
+ * fixpoint and the dijkstra extraction (the DP tables are already final). */
+fn eg_extract_emit_root(root: u32, out_term: *u32, out_n: *u32) -> i32 {
+    let nodep : *u32 = (&EGRAPH_CLASS_NODE) as u64 as *u32
+    EGRAPH_EOUT = (out_term as u64)
+    EGRAPH_ESP = 0u32
+    EGRAPH_EEMIT = 0u32
+    EGRAPH_ERC = EGRAPH_OK
+    let rootc : u32 = eg_find(root)
+    /* Reject an unmapped / out-of-range root class (negative-case gate, KAT 4).
+     * The DP-init loop only covers [0, EGRAPH_CL_USED), so EGRAPH_CLASS_NODE is
+     * only SENT-initialized for live classes; an out-of-range root (e.g. on an
+     * empty graph, where EGRAPH_CL_USED == 0) would otherwise read a stale
+     * (BSS-zero / prior-run) node id and emit garbage instead of refusing.
+     * Range-check first, THEN the per-class representative sentinel. */
+    if rootc >= EGRAPH_CL_USED { return EGRAPH_E_BAD }
+    let rcb : u64 = (rootc as u64) & EGRAPH_U32MASK
+    if nodep[rcb] == EGRAPH_SENT { return EGRAPH_E_BAD }
+    EGRAPH_EXT_STK[0u64] = rootc
+    EGRAPH_ESP = 1u32
+    let mut running : u8 = 1u8
+    while running == 1u8 {
+        if EGRAPH_ESP == 0u32 { running = 0u8 }
+        if EGRAPH_ERC != EGRAPH_OK { running = 0u8 }
+        if running == 1u8 {
+            EGRAPH_ESP = EGRAPH_ESP - 1u32
+            let spb : u64 = (EGRAPH_ESP as u64) & EGRAPH_U32MASK
+            let cl : u32 = EGRAPH_EXT_STK[spb]
+            eg_extract_emit(cl)
+        }
+    }
+    if EGRAPH_ERC == EGRAPH_OK { out_n[0u64] = EGRAPH_EEMIT }
+    return EGRAPH_ERC
+}
+
 fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 @export {
     if (req as u64) == 0u64 { return EGRAPH_E_BAD }
     if (out_term as u64) == 0u64 { return EGRAPH_E_BAD }
@@ -1212,36 +1271,119 @@ fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 @export {
             if changed == 0u8 { going = 0u8 }
         }
     }
-    /* preorder emit via explicit stack (module emit state) */
-    EGRAPH_EOUT = (out_term as u64)
-    EGRAPH_ESP = 0u32
-    EGRAPH_EEMIT = 0u32
-    EGRAPH_ERC = EGRAPH_OK
-    let rootc : u32 = eg_find(root)
-    /* Reject an unmapped / out-of-range root class (negative-case gate, KAT 4).
-     * The DP-init loop only covers [0, EGRAPH_CL_USED), so EGRAPH_CLASS_NODE is
-     * only SENT-initialized for live classes; an out-of-range root (e.g. on an
-     * empty graph, where EGRAPH_CL_USED == 0) would otherwise read a stale
-     * (BSS-zero / prior-run) node id and emit garbage instead of refusing.
-     * Range-check first, THEN the per-class representative sentinel. */
-    if rootc >= EGRAPH_CL_USED { return EGRAPH_E_BAD }
-    let rcb : u64 = (rootc as u64) & EGRAPH_U32MASK
-    if nodep[rcb] == EGRAPH_SENT { return EGRAPH_E_BAD }
-    EGRAPH_EXT_STK[0u64] = rootc
-    EGRAPH_ESP = 1u32
-    let mut running : u8 = 1u8
-    while running == 1u8 {
-        if EGRAPH_ESP == 0u32 { running = 0u8 }
-        if EGRAPH_ERC != EGRAPH_OK { running = 0u8 }
-        if running == 1u8 {
-            EGRAPH_ESP = EGRAPH_ESP - 1u32
-            let spb : u64 = (EGRAPH_ESP as u64) & EGRAPH_U32MASK
-            let cl : u32 = EGRAPH_EXT_STK[spb]
-            eg_extract_emit(cl)
+    return eg_extract_emit_root(root, out_term, out_n)
+}
+
+/* [W0.6] offer node `ni` (computed cost `c`) to its class: strict cost improvement,
+ * lowest node id on ties -- the same representative the fixpoint converges to for
+ * single-pass-achievable optima.  Pushes (cost<<32 | class) on improvement; every
+ * key is unique (class id disambiguates), so heap order is a deterministic total
+ * order.  Returns 0 on heap-capacity failure (caller falls back to the fixpoint). */
+fn eg_dj_offer(heap: u64, cls: u32, c: u32, ni: u32) -> u32 {
+    let costp : *u32 = (&EGRAPH_CLASS_COST) as u64 as *u32
+    let tcost : *u32 = (&EGRAPH_TENT_COST) as u64 as *u32
+    let tnode : *u32 = (&EGRAPH_TENT_NODE) as u64 as *u32
+    let cb : u64 = (cls as u64) & EGRAPH_U32MASK
+    if costp[cb] != EGRAPH_INF_COST { return 1u32 }            /* already final */
+    let mut better : u8 = 0u8
+    if c < tcost[cb] { better = 1u8 }
+    if c == tcost[cb] { if ni < tnode[cb] { better = 1u8 } }
+    if better == 0u8 { return 1u32 }
+    tcost[cb] = c
+    tnode[cb] = ni
+    let key : u64 = ((c as u64) << 32u64) | ((cls as u64) & EGRAPH_U32MASK)
+    if pq_u64u32_push(heap, key, cls) != 0i32 { return 0u32 }
+    return 1u32
+}
+
+fn eg_extract_dijkstra_ran() -> u8 @export { return EGRAPH_DJ_RAN }
+
+/* [W0.6] Knuth-style monotone extraction (the grammar generalization of Dijkstra):
+ * a class FINALIZES at its first heap pop -- node cost = base + sum(child class
+ * costs) is a superior (monotone, non-negative) function, so no later candidate can
+ * undercut the current global minimum.  Seeds are the leaves; each finalization
+ * relaxes exactly the parents of that class through the [W3.7] parents index, so
+ * total relaxation work is proportional to the parent-edge count instead of
+ * nodes x passes.  Same signature contract as eg_extract plus the caller's arena
+ * for the pq heap; identical results (corpus 1481 differential), INF/unreachable
+ * classes refuse identically.  Any heap failure falls back to the fixpoint. */
+fn eg_extract_dijkstra(req: *u32, out_term: *u32, out_n: *u32, arena_id: u64) -> i32 @export {
+    if (req as u64) == 0u64 { return EGRAPH_E_BAD }
+    if (out_term as u64) == 0u64 { return EGRAPH_E_BAD }
+    if (out_n as u64) == 0u64 { return EGRAPH_E_BAD }
+    let root : u32 = req[0u64]
+    let sym_count : u32 = req[1u64]
+    let costp : *u32 = (&EGRAPH_CLASS_COST) as u64 as *u32
+    let nodep : *u32 = (&EGRAPH_CLASS_NODE) as u64 as *u32
+    let tcost : *u32 = (&EGRAPH_TENT_COST) as u64 as *u32
+    let tnode : *u32 = (&EGRAPH_TENT_NODE) as u64 as *u32
+    let mut c : u32 = 0u32
+    while c < EGRAPH_CL_USED {
+        let cb : u64 = (c as u64) & EGRAPH_U32MASK
+        costp[cb] = EGRAPH_INF_COST
+        nodep[cb] = EGRAPH_SENT
+        tcost[cb] = EGRAPH_INF_COST
+        tnode[cb] = EGRAPH_SENT
+        c = c + 1u32
+    }
+    /* total pushes are bounded by leaf seeds + one offer per parent edge */
+    let hard : u64 = ((EGRAPH_N_USED as u64) & EGRAPH_U32MASK) + EGRAPH_PAR_USED + 16u64
+    let heap : u64 = pq_u64u32_new(arena_id, hard)
+    if heap == 0u64 { return eg_extract(req, out_term, out_n) }
+    EGRAPH_DJ_RAN = 0u8
+    /* seed: every live leaf offers its base cost to its class */
+    let mut ok : u32 = 1u32
+    let mut ni : u32 = 0u32
+    while ni < EGRAPH_N_USED {
+        let nb : u64 = (ni as u64) & EGRAPH_U32MASK
+        if EGRAPH_N_LIVE[nb] == 1u8 {
+            if EGRAPH_N_NARGS[nb] == 0u32 {
+                let lc : u32 = eg_extract_node_cost(ni, req, sym_count)
+                if lc != EGRAPH_INF_COST {
+                    let lcl : u32 = eg_find(EGRAPH_N_ECLASS[nb])
+                    if eg_dj_offer(heap, lcl, lc, ni) == 0u32 { ok = 0u32 }
+                }
+            }
+        }
+        ni = ni + 1u32
+    }
+    /* drain: first pop of a class is its optimum; relax its parents */
+    let mut guard : u64 = 0u64
+    while ok == 1u32 {
+        if pq_u64u32_len(heap) == 0u64 { ok = 2u32 } else {
+            guard = guard + 1u64
+            if guard > 2097152u64 { ok = 0u32 } else {
+                /* pop returns the option_u32 ENCODING ((payload << 1) | 1); decode it --
+                 * the raw truncation read doubled class ids straight off the heap and
+                 * indexed past the class arrays (the 1481 segfault, caught pre-commit) */
+                let pv : u64 = pq_u64u32_pop_min_payload(heap)
+                let cls : u32 = ((pv >> 1u64) & EGRAPH_U32MASK) as u32
+                let cb2 : u64 = (cls as u64) & EGRAPH_U32MASK
+                if costp[cb2] == EGRAPH_INF_COST {
+                    costp[cb2] = tcost[cb2]                       /* FINALIZE */
+                    nodep[cb2] = tnode[cb2]
+                    let mut pe : u32 = EGRAPH_PAR_HEAD[cb2]
+                    while pe != EGRAPH_SENT {
+                        let peb : u64 = (pe as u64) & EGRAPH_U32MASK
+                        let pn : u32 = EGRAPH_PAR_NODE[peb]
+                        let pnb : u64 = (pn as u64) & EGRAPH_U32MASK
+                        if EGRAPH_N_LIVE[pnb] == 1u8 {
+                            let pc : u32 = eg_extract_node_cost(pn, req, sym_count)
+                            if pc != EGRAPH_INF_COST {
+                                let pcl : u32 = eg_find(EGRAPH_N_ECLASS[pnb])
+                                if eg_dj_offer(heap, pcl, pc, pn) == 0u32 { ok = 0u32 }
+                            }
+                        }
+                        pe = EGRAPH_PAR_NEXT[peb]
+                    }
+                }
+            }
         }
     }
-    if EGRAPH_ERC == EGRAPH_OK { out_n[0u64] = EGRAPH_EEMIT }
-    return EGRAPH_ERC
+    pq_u64u32_drop(heap)
+    if ok != 2u32 { return eg_extract(req, out_term, out_n) }   /* heap wall -> the fixpoint */
+    EGRAPH_DJ_RAN = 1u8
+    return eg_extract_emit_root(root, out_term, out_n)
 }
 
 fn eg_class_count() -> u32 @export {

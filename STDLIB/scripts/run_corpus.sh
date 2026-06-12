@@ -989,6 +989,7 @@ declare -A EXPECTED=(
     [1413_transform_taint_seal]=99
     [1414_unify_witness_spine]=99
     [1415_xii_rewrite_rules]=99
+    [1416_pq_dispatch_c4]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

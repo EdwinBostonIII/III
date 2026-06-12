@@ -1,0 +1,96 @@
+/* 1416_pq_dispatch_c4.iii -- THE UNIFORM POST-QUANTUM SURFACE (c4 composition wrappers)
+ * (burn-down tranche 25; 6 census orphans: pq_keygen/encaps/decaps/sign/verify_c4 + params_suite).
+ *
+ * pq_dispatch routes a FIPS suite id to ML-KEM / ML-DSA / SLH-DSA; the *_c4 wrappers are the
+ * 4-arg composition-table entry points (overflow args via an `ext` u64-array).  The census
+ * flagged them consumer-less; this KAT exercises the full crypto contract THROUGH the c4
+ * surface:
+ *  KEM  (ML-KEM-512, 0x0101): keygen -> encaps -> decaps recovers the IDENTICAL 32-byte
+ *       shared secret (encaps/decaps agreement -- the KEM correctness law), all via _c4;
+ *  SIGN (ML-DSA-44, 0x0111): keygen -> sign -> verify ACCEPTS, and a 1-bit-flipped signature
+ *       VERIFY-REJECTS (EUF-CMA teeth), all via _c4 with the ext-marshalled msglen/sig/siglen;
+ *  PARAMS: pq_params_suite(0) is a valid suite (nonzero, low-nibble 1..3) and an OOB row -> 0.
+ * Exit 99 = the post-quantum primitives are reachable + correct through the uniform dispatcher. */
+module corpus_1416
+
+extern @abi(c-msvc-x64) fn pq_keygen_c4(suite: u64, seed: u64, pk: u64, sk: u64) -> u64 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn pq_encaps_c4(suite: u64, pk: u64, coins: u64, ext: u64) -> u64 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn pq_decaps_c4(suite: u64, sk: u64, ct: u64, ss: u64) -> u64 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn pq_sign_c4(suite: u64, sk: u64, msg: u64, ext: u64) -> u64 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn pq_verify_c4(suite: u64, pk: u64, msg: u64, ext: u64) -> u64 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn pq_params_init() -> i32 from "pq_params.iii"
+extern @abi(c-msvc-x64) fn pq_params_suite(row: u64) -> u64 from "pq_params.iii"
+
+var SEED  : [u8; 64]
+var PK    : [u8; 2048]
+var SK    : [u8; 5120]
+var CT    : [u8; 2048]
+var COINS : [u8; 32]
+var SS1   : [u8; 32]
+var SS2   : [u8; 32]
+var SIG   : [u8; 4096]
+var SLB   : [u8; 16]
+var MSG   : [u8; 64]
+var EXT   : [u8; 32]      /* 4 u64 LE slots for the c4 overflow args */
+
+fn ext_put(idx: u64, v: u64) {
+    let mut i : u64 = 0u64
+    while i < 8u64 { EXT[idx * 8u64 + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+}
+
+fn rd_u64(base: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((p[i] as u64) << (i * 8u64))   i = i + 1u64 }
+    return v
+}
+
+fn main() -> u64 {
+    /* ---- PARAMS (the descriptor table is lazy: init first) ---- */
+    if pq_params_init() != 0i32 { return 1u64 }
+    if pq_params_suite(0u64) != 0x0101u64 { return 2u64 }         /* row 0 = ML-KEM-512 */
+    if pq_params_suite(3u64) != 0x0111u64 { return 3u64 }         /* row 3 = ML-DSA-44 */
+    if pq_params_suite(0xFFFFu64) != 0u64 { return 4u64 }         /* OOB -> 0 */
+
+    /* ---- KEM: ML-KEM-512 keygen/encaps/decaps agreement via c4 ---- */
+    let mut i : u64 = 0u64
+    while i < 64u64 { SEED[i] = ((0x33u64 + i) & 0xFFu64) as u8   i = i + 1u64 }
+    let mut j : u64 = 0u64
+    while j < 32u64 { COINS[j] = ((j * 11u64 + 5u64) & 0xFFu64) as u8   j = j + 1u64 }
+    if pq_keygen_c4(0x0101u64, (&SEED as u64), (&PK as u64), (&SK as u64)) != 0u64 { return 10u64 }
+    ext_put(0u64, (&CT as u64))
+    ext_put(1u64, (&SS1 as u64))
+    if pq_encaps_c4(0x0101u64, (&PK as u64), (&COINS as u64), (&EXT as u64)) != 0u64 { return 11u64 }
+    if pq_decaps_c4(0x0101u64, (&SK as u64), (&CT as u64), (&SS2 as u64)) != 0u64 { return 12u64 }
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if SS1[k] != SS2[k] { return 13u64 }                     /* shared-secret agreement */
+        k = k + 1u64
+    }
+    /* non-vacuous: the shared secret is not all-zero */
+    let mut nz : u32 = 0u32
+    let mut z : u64 = 0u64
+    while z < 32u64 { if SS1[z] != 0u8 { nz = nz + 1u32 }   z = z + 1u64 }
+    if nz == 0u32 { return 14u64 }
+
+    /* ---- SIGN: ML-DSA-44 keygen/sign/verify via c4; tamper rejects ---- */
+    let mut m : u64 = 0u64
+    while m < 32u64 { MSG[m] = ((m * 7u64 + 1u64) & 0xFFu64) as u8   m = m + 1u64 }
+    if pq_keygen_c4(0x0111u64, (&SEED as u64), (&PK as u64), (&SK as u64)) != 0u64 { return 20u64 }
+    ext_put(0u64, 32u64)               /* msglen */
+    ext_put(1u64, (&SIG as u64))       /* sig out */
+    ext_put(2u64, (&SLB as u64))       /* siglen out-pointer */
+    if pq_sign_c4(0x0111u64, (&SK as u64), (&MSG as u64), (&EXT as u64)) != 0u64 { return 21u64 }
+    let siglen : u64 = rd_u64((&SLB as u64))
+    if siglen == 0u64 { return 22u64 }
+    ext_put(0u64, 32u64)               /* msglen */
+    ext_put(1u64, (&SIG as u64))       /* sig in */
+    ext_put(2u64, siglen)              /* siglen VALUE for verify */
+    if pq_verify_c4(0x0111u64, (&PK as u64), (&MSG as u64), (&EXT as u64)) != 0u64 { return 23u64 }
+    /* tamper -> reject */
+    SIG[0u64] = SIG[0u64] ^ 0x01u8
+    if pq_verify_c4(0x0111u64, (&PK as u64), (&MSG as u64), (&EXT as u64)) == 0u64 { return 24u64 }
+
+    return 99u64
+}

@@ -94,7 +94,11 @@ The census ratchet enforces monotone progress; the report names the next target,
 | 2026-06-11 | 22: transform pack/unpack inverse + pattern_set global identity + buffer src==dst OK, sep-logic sl_pure no-footprint, taint_set_imm trusted-constant flow law, tempaloc type tags, seal_instant_id | `1413_transform_taint_seal`=99 | 10 | 128 | 128 |
 | 2026-06-11 | 23: unify_lookup_var (term<<1 / 0x1 free) + export_subst_to_resolver_buf exact flatten, witness_entry_k round trip, ws_chain_root reproducible + append-evident (moves on publish+epoch-close) | `1414_unify_witness_spine`=99 | 4 | **124** | **124** |
 
-**Day-1 summary (2026-06-11)**: first census 430 → **124** across twenty-three tranches (KATs 1390–1414), full corpus 957 → **1002 PASS / 0 FAIL** throughout, ratchet never regressed, scanner refined once (generics excluded), one stale module comment caught and binary-pinned (circ feasible 363224 ≠ the comment's 16,128). 306 export claims either proven by a falsifiable KAT or removed as non-surface.
+| 2026-06-11 | 24: the XII associativity rewrite rules A1-A4 (match/apply R001-4 sound + falsifiable; smart-constructor normalization documented — LHS built via set_child re-pointing; rule_count 44) | `1415_xii_rewrite_rules`=99 | 9 | 115 | 115 |
+| 2026-06-11 | 25: the uniform post-quantum c4 surface (ML-KEM-512 encaps/decaps shared-secret agreement; ML-DSA-44 sign/verify + 1-bit tamper rejection; pq_params lazy table pinned) | `1416_pq_dispatch_c4`=99 | 6 | 109 | 109 |
+| 2026-06-12 | 26: option-FULL sentinel (256-slot exhaustion law; drop idempotent-on-valid), path_join one-separator law, pq peek-without-pop, regex recompile determinism, q128 rounding crystals (faithful round_dir transcription), pointer provenance split identity | `1417_option_path_pq_prov`=99 | 10 | **99** | **99** |
+
+**Summary through tranche 26**: first census 430 → **99** (KATs 1390–1417), full corpus 957 → **1005 PASS / 0 FAIL** throughout, ratchet never regressed, scanner refined once (generics excluded), one stale module comment caught and binary-pinned (circ feasible 363224 ≠ the comment's 16,128). 331 export claims either proven by a falsifiable KAT or removed as non-surface.
 
 Notable API truths the burn-down has already pinned: `checked_u64_*` returns checked.iii
 handles (decode via `checked_u64_unwrap_or`, drop after use — never compare handle ids);

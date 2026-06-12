@@ -1,0 +1,118 @@
+/* 1431_gate_outcomes_referee_spine.iii -- GATE BURN-DOWN v2 TRANCHE 4: THE K0 REFEREE,
+ * THE SEALED PATTERN SET, THE SEALED INSTANT, THE SPINE REPLAY (4 gates; 46 -> 42).
+ *
+ *  k0_verify -- the immutable-anchor bisimulation referee, every verdict pinned: nothing
+ *      trusted pre-freeze (0); a behaviorally-IDENTICAL kernel verifies (1); one that
+ *      differs on a single input is rejected (0); the anchor itself is firewalled (0);
+ *      an out-of-range id is rejected (0);
+ *  pattern_set_verify -- 0 while the registry is unsealed, 1 once sealed, null 0;
+ *  instant_verify -- a TIME-capability-minted instant's seal recomputes (1); null/dead
+ *      ids and a DROPPED instant are refused (0); the mint itself refuses a cap
+ *      without the TIME right;
+ *  ws_chain_replay_verify -- the epoch-by-epoch replay reproduces the authoritative
+ *      chain root (1) and rejects a one-byte-tampered root (0) -- the spine selftest's
+ *      scenario driven directly at the export.
+ * Exit 99. */
+module corpus_1431
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_freeze_anchor() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_verify(proposed: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_unseal_for_test() -> i32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_set_verify(set_ptr: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn instant_now_sealed(time_cap: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_verify(id: u64) -> u8 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_epoch_close() -> u64 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_chain_root(out_root: *u8) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_chain_replay_verify(expected_root: *u8) -> u8 from "witness_spine.iii"
+
+var PROD : [u8; 32]
+var OPID : [u8; 32]
+var INC  : [u8; 32]
+var OUTC : [u8; 32]
+var PAY  : [u8; 8]
+var FID  : [u8; 32]
+var ROOT : [u8; 32]
+
+fn main() -> u64 {
+    /* ---- K0: the referee's full verdict surface ---- */
+    if k0_reset() != 0i32 { return 1u64 }
+    let a0 : u32 = k0_register(10u32)
+    if a0 != 0u32 { return 2u64 }                                /* the anchor is id 0 */
+    let k1 : u32 = k0_register(8u32)
+    let k2 : u32 = k0_register(9u32)
+    if k1 != 1u32 { return 3u64 }
+    if k2 != 2u32 { return 4u64 }
+    let mut x : u32 = 0u32
+    while x < 16u32 {
+        k0_set_behav(0u32, x, (x * 3u32) + 1u32)
+        k0_set_behav(1u32, x, (x * 3u32) + 1u32)                 /* identical */
+        k0_set_behav(2u32, x, (x * 3u32) + 1u32)
+        x = x + 1u32
+    }
+    k0_set_behav(2u32, 7u32, 0xEEu32)                            /* k2 differs at x=7 */
+    if k0_verify(k1) != 0u32 { return 5u64 }                     /* pre-freeze: trust nothing */
+    if k0_freeze_anchor() != 0i32 { return 6u64 }
+    if k0_verify(k1) != 1u32 { return 7u64 }                     /* bisimilar -> ACCEPT */
+    if k0_verify(k2) != 0u32 { return 8u64 }                     /* one input differs -> reject */
+    if k0_verify(0u32) != 0u32 { return 9u64 }                   /* the firewall: never the anchor */
+    if k0_verify(99u32) != 0u32 { return 10u64 }                 /* out of range */
+
+    /* ---- PATTERN SET: sealed-state gate ---- */
+    pattern_registry_unseal_for_test()
+    if pattern_set_verify(pattern_set_global()) != 0u8 { return 20u64 }   /* unsealed refused */
+    pattern_registry_seal_global()
+    if pattern_set_verify(pattern_set_global()) != 1u8 { return 21u64 }   /* sealed accepted */
+    if pattern_set_verify(0u64) != 0u8 { return 22u64 }                   /* null refused */
+
+    /* ---- INSTANT: the sealed timestamp ---- */
+    let env : u64 = cap_env_init()
+    let tcap : u64 = cap_attenuate(env, 0x0100u64, 0u64)         /* TIME right */
+    let ncap : u64 = cap_attenuate(env, 0x4u64, 0u64)            /* no TIME right */
+    if instant_now_sealed(ncap) != 0u64 { return 30u64 }         /* mint gate refuses */
+    let inst : u64 = instant_now_sealed(tcap)
+    if inst == 0u64 { return 31u64 }
+    if instant_verify(inst) != 1u8 { return 32u64 }              /* the seal recomputes */
+    if instant_verify(0u64) != 0u8 { return 33u64 }              /* null */
+    if instant_verify(0xDEAD00u64) != 0u8 { return 34u64 }       /* dead id */
+    instant_drop(inst)
+    if instant_verify(inst) != 0u8 { return 35u64 }              /* dropped -> refused */
+
+    /* ---- SPINE REPLAY: recompute the root from the zero seed ---- */
+    if wh_init(1u64) != 0i32 { return 40u64 }
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        PROD[i] = 0x11u8
+        OPID[i] = 0x22u8
+        INC[i]  = 0x33u8
+        OUTC[i] = 0x44u8
+        i = i + 1u64
+    }
+    PAY[0u64] = 0x5Au8
+    let f0 : u64 = wh_publish((&PROD as u64) as *u8, (&OPID as u64) as *u8, (&INC as u64) as *u8, (&OUTC as u64) as *u8, 0u8, 0u8, 0u16, (&PROD as u64) as *u8, 0u32, (&PAY as u64) as *u8, 1u32, (&FID as u64) as *u8)
+    if f0 == 0xFFFFFFFFFFFFFFFFu64 { return 41u64 }
+    PAY[0u64] = 0x5Bu8
+    let f1 : u64 = wh_publish((&PROD as u64) as *u8, (&OPID as u64) as *u8, (&INC as u64) as *u8, (&OUTC as u64) as *u8, 0u8, 0u8, 0u16, (&PROD as u64) as *u8, 0u32, (&PAY as u64) as *u8, 1u32, (&FID as u64) as *u8)
+    if f1 == 0xFFFFFFFFFFFFFFFFu64 { return 42u64 }
+    if ws_init() != 0i32 { return 43u64 }
+    ws_register(0u64)
+    ws_register(1u64)
+    ws_epoch_close()
+    if ws_chain_root((&ROOT as u64) as *u8) != 0i32 { return 44u64 }
+    if ws_chain_replay_verify((&ROOT as u64) as *u8) != 1u8 { return 45u64 }   /* replay reproduces */
+    ROOT[3u64] = ROOT[3u64] ^ 0x01u8
+    if ws_chain_replay_verify((&ROOT as u64) as *u8) != 0u8 { return 46u64 }   /* tamper rejected */
+
+    return 99u64
+}

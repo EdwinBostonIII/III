@@ -173,3 +173,11 @@ constant validators over the REAL sealed ledger (lazy-built), every refusal code
 EXACTLY -- catalyst: 48>=47 OK / equal OK / 46 REGRESS(4) / AMEND-tier name WRONG_TIER(2)
 / unknown NOT_FOUND(1) / 4-byte value INVALID(5); amend: OK / WRONG_TIER / NOT_FOUND;
 r2: OK / WRONG_TIER / NOT_FOUND -- 3 closed, 49 -> **46** (pin 46; corpus 1018/0).
+
+Tranche v2-4 (`1431_gate_outcomes_referee_spine`=99): k0_verify with its FULL verdict
+surface (pre-freeze distrust / bisimilar ACCEPT / single-input divergence reject / the
+anchor firewall / out-of-range), pattern_set_verify (unsealed-refuse / sealed-accept /
+null), instant_verify (TIME-cap-minted seal recomputes; null/dead/DROPPED refused; the
+mint refuses a right-less cap), ws_chain_replay_verify (the epoch replay reproduces the
+authoritative root; one-byte tamper rejected) -- 4 closed, 46 -> **42** (pin 42; corpus
+1019/0).

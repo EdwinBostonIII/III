@@ -1004,6 +1004,7 @@ declare -A EXPECTED=(
     [1428_gate_outcomes_glyph_membrane]=99
     [1429_gate_outcomes_anchor_rsa]=99
     [1430_gate_outcomes_constants]=99
+    [1431_gate_outcomes_referee_spine]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

@@ -11,8 +11,8 @@
  *                   so its key pins this addr.
  *   version      -- pins the policy <-> rule-set pairing; a rule extension forces a
  *                   reseal + reversion (guardrail 6).
- *   cost-bound   -- the policy's bounded per-call work (selection sort over 49 rules),
- *                   so engaging nous can never blow an unbounded cost.
+ *   cost-bound   -- the policy's bounded per-call work (a linear block-reorder over
+ *                   the live rule set), so engaging nous can never blow an unbounded cost.
  *
  * (Full sovval-cell construction via sv_make is the user's M5 surface; this module
  * exposes the facets so that wrapping is a drop-in, without coupling to a churning M5.)
@@ -31,7 +31,7 @@ const NOUS_VAL_CAD_KECCAK : u32 = 1u32
 const NOUS_VAL_RBASE      : u64 = 200u64    /* mirrors nous_policy (params, not behaviour) */
 const NOUS_VAL_BONUS_TRIT : u64 = 1000u64
 const NOUS_VAL_BONUS_FUS  : u64 = 500u64
-const NOUS_VAL_COST_BOUND : u64 = 2401u64   /* [CUT-10] conservative bound; ranker is a linear block-reorder over <=49 rules (was mislabeled 49*49 selection-sort) */
+const NOUS_VAL_COST_BOUND : u64 = 2401u64   /* [CUT-10] conservative bound; ranker is a linear block-reorder over <=45 live rules (was mislabeled 49*49 selection-sort; bound kept at 2401, conservative) */
 const NOUS_VAL_OK         : i32 = 0i32
 
 var NOUS_VAL_WBUF   : [u8; 32]

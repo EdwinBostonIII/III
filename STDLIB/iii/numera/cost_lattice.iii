@@ -576,7 +576,7 @@ fn cl_selftest() -> u64 @export {
 }
 
 /* Integration B KAT: exact rational microarch weights.  Proves the division-
- * free primitives (cl_udiv binary long-division, cl_gcd subtractive Euclid),
+ * free primitives (cl_udiv binary long-division, cl_gcd Stein binary GCD),
  * the exact common-denominator scaling of cl_register_order_q, that the result
  * STRICTLY orders cost vectors an integer-FLOOR order would tie (the value of
  * rationals), and -- prove the negative -- that a zero denominator, a scaling

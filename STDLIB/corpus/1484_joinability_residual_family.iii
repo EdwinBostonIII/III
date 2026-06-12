@@ -1,0 +1,110 @@
+/* 1484_joinability_residual_family.iii -- B-JN-1 FALSIFIER: xjn_nj_unexpected names the
+ * TRUE residual family, and the residual record IS the certified-discharged set.
+ *
+ * THE STALENESS: the old filter counted a non-join as EXPECTED iff (rewriter in assoc
+ * R001-R003 AND rewritten in lift R005-R012).  Route-S retired R001-R004 -- no recorded
+ * non-join can carry a retired rewriter -- so the old filter flagged ALL 20 residual
+ * non-joins as "unexpected", i.e. the export returned the raw non-join count and its
+ * docstring was false.  Behaviorally invisible to 1422 (which only pins determinism).
+ *
+ * THE RE-EXPRESSION: expected = overlap kind SUBTERM and rewritten rule in lift
+ * R005-R012 (the exact set the confluence certificate's C.1 step discharges); a ROOT
+ * non-join is always unexpected (the root set is certified confluent).
+ *
+ * Arms: (1) gate runs, 20 residual non-joins; (2) xjn_nj_unexpected()==0 -- FAILS (=20)
+ * against the pre-fix module; (3) the residual record is pinned element-wise to the
+ * certified set: 10 (rewriter, rewritten) pairs x subterm positions {cb, cc}, all kind
+ * SUBTERM, rewritten always in 5..12 -- if a future rule-set change shifts the residual,
+ * this reddens until re-certified; (4) the OLD filter is demonstrated dead on the same
+ * records (it matches NONE of the 20); (5) determinism across a gate re-run.
+ * Exit 99. */
+module corpus_1484
+
+extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_nonjoin_count() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_nj_unexpected() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_i(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_j(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_p(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_k(k: u32) -> u64 from "xii_joinability.iii"
+
+/* The certified residual family: 10 (rewriter, rewritten) pairs, each at subterm
+ * positions cb(1) and cc(2).  Transcribed from the gate's own record (njdump probe,
+ * 2026-06-12), cross-checked against the C.1 discharge set. */
+var RF_EXP_I : [u64; 10]
+var RF_EXP_J : [u64; 10]
+var RF_SEEN  : [u8; 32]    /* pair-slot p*2 + (pos-1) seen exactly once */
+
+fn _rf_fill() {
+    RF_EXP_I[0u64] = 16u64  RF_EXP_J[0u64] = 10u64
+    RF_EXP_I[1u64] = 17u64  RF_EXP_J[1u64] = 7u64
+    RF_EXP_I[2u64] = 20u64  RF_EXP_J[2u64] = 12u64
+    RF_EXP_I[3u64] = 21u64  RF_EXP_J[3u64] = 6u64
+    RF_EXP_I[4u64] = 22u64  RF_EXP_J[4u64] = 5u64
+    RF_EXP_I[5u64] = 36u64  RF_EXP_J[5u64] = 9u64
+    RF_EXP_I[6u64] = 37u64  RF_EXP_J[6u64] = 8u64
+    RF_EXP_I[7u64] = 39u64  RF_EXP_J[7u64] = 11u64
+    RF_EXP_I[8u64] = 43u64  RF_EXP_J[8u64] = 6u64
+    RF_EXP_I[9u64] = 44u64  RF_EXP_J[9u64] = 5u64
+}
+
+fn main() -> u64 {
+    _rf_fill()
+
+    /* ---- arm 1: the full gate runs; the residual is exactly 20 non-joins ---- */
+    xjn_gate()
+    if xjn_nonjoin_count() != 20u64 { return 1u64 }
+
+    /* ---- arm 2: ZERO unexpected -- every residual non-join is in the certified
+     *      family.  Against the pre-fix module this returns 20 (the dead filter). ---- */
+    if xjn_nj_unexpected() != 0u64 { return 2u64 }
+
+    /* ---- arm 3: pin the record element-wise to the certified set ---- */
+    let mut s : u64 = 0u64
+    while s < 32u64 { RF_SEEN[s] = 0u8  s = s + 1u64 }
+    let mut k : u32 = 0u32
+    while k < 20u32 {
+        let iv : u64 = xjn_njtab_i(k)
+        let jv : u64 = xjn_njtab_j(k)
+        let pv : u64 = xjn_njtab_p(k)
+        let kv : u64 = xjn_njtab_k(k)
+        if kv != 1u64 { return 3u64 }                       /* all SUBTERM overlaps */
+        if jv < 5u64 { return 4u64 }                        /* rewritten in lift 5..12 */
+        if jv > 12u64 { return 4u64 }
+        if pv < 1u64 { return 5u64 }                        /* positions cb(1)/cc(2) */
+        if pv > 2u64 { return 5u64 }
+        /* the (I,J) pair must be one of the 10 certified pairs, each pos seen once */
+        let mut p : u64 = 0u64
+        let mut hit : u64 = 10u64
+        while p < 10u64 {
+            if RF_EXP_I[p] == iv { if RF_EXP_J[p] == jv { hit = p  p = 10u64 } }
+            p = p + 1u64
+        }
+        if hit == 10u64 { return 6u64 }                     /* an uncertified pair */
+        let slot : u64 = hit * 2u64 + (pv - 1u64)
+        if RF_SEEN[slot] != 0u8 { return 7u64 }             /* duplicate record */
+        RF_SEEN[slot] = 1u8
+        k = k + 1u32
+    }
+    s = 0u64
+    while s < 20u64 { if RF_SEEN[s] != 1u8 { return 8u64 }  s = s + 1u64 }
+
+    /* ---- arm 4: the OLD filter is dead on these records -- (rewriter in 1..3 AND
+     *      rewritten in 5..12) matches NONE of the 20 (the retired ids never appear) ---- */
+    k = 0u32
+    let mut old_expected : u64 = 0u64
+    while k < 20u32 {
+        let iv2 : u64 = xjn_njtab_i(k)
+        let jv2 : u64 = xjn_njtab_j(k)
+        if iv2 >= 1u64 { if iv2 <= 3u64 { if jv2 >= 5u64 { if jv2 <= 12u64 { old_expected = old_expected + 1u64 } } } }
+        k = k + 1u32
+    }
+    if old_expected != 0u64 { return 9u64 }
+
+    /* ---- arm 5: determinism across a gate re-run ---- */
+    xjn_gate()
+    if xjn_nonjoin_count() != 20u64 { return 10u64 }
+    if xjn_nj_unexpected() != 0u64 { return 11u64 }
+
+    return 99u64
+}

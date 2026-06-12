@@ -1,0 +1,120 @@
+/* 1485_modpow_exhaustion_refusal.iii -- J-BIG-1 FALSIFIER: bigint_modpow under
+ * handle-table exhaustion REFUSES (returns the 0 INVALID handle) -- it never
+ * completes with a silently corrupted value.
+ *
+ * THE DEFECT (pre-fix): the Montgomery ladder (and the even-modulus schoolbook
+ * ladder) never checked the per-step allocations (mont_mul_sq / mont_mul_ctx /
+ * bigint_mul / bigint_mod).  When the 64-slot bigint handle table fills mid-ladder,
+ * the step yields handle 0; the degenerate slot reads as ZERO and rides every later
+ * multiply -- modpow then returns a VALID handle holding the WRONG value.  A caller
+ * (RSA verify, primality witness) gets garbage with no error signal.
+ *
+ * THE SWEEP: create operands, fill the table to capacity with fillers, then for each
+ * leftover L in 0..11 free exactly L slots and call modpow.  LAW: the result is
+ * EITHER the refusal (handle 0) OR the correct value -- NEVER a wrong-value handle.
+ * Pre-fix, mid-ladder L values return a nonzero handle whose value is not the true
+ * power -> this KAT FAILS there.  Post-fix both outcomes occur across the sweep
+ * (non-vacuity asserted: at least one refusal AND at least one completion), and a
+ * post-refusal full-table run still computes correctly (the failure paths drop
+ * every intermediate -- no slot leak).
+ *
+ * Odd modulus (Montgomery path):  7^23 mod 11 = 2.
+ * Even modulus (schoolbook path): 7^23 mod 12 = 7   (7^2 = 49 == 1 mod 12).
+ * Exit 99. */
+module corpus_1485
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 from "bigint_div.iii"
+
+var MX_FILL : [u64; 128]   /* filler handles (the 64-slot table fits well inside) */
+
+/* Sweep one modulus: returns 0 on law violation, else (refusals<<8)|completions. */
+fn mx_sweep(arena: u64, b: u64, e: u64, n: u64, want: u64) -> u64 {
+    let mut refusals : u64 = 0u64
+    let mut completions : u64 = 0u64
+    let mut l : u64 = 0u64
+    while l < 12u64 {
+        /* fill the table to capacity */
+        let mut nfill : u64 = 0u64
+        let mut more : u8 = 1u8
+        while more == 1u8 {
+            let h : u64 = bigint_from_u64(arena, 7u64)
+            if h == 0u64 { more = 0u8 } else { MX_FILL[nfill] = h  nfill = nfill + 1u64  if nfill >= 128u64 { more = 0u8 } }
+        }
+        if nfill >= 128u64 { return 0u64 }            /* table larger than the harness assumes */
+        /* free exactly L slots */
+        let mut d : u64 = 0u64
+        let mut freed : u64 = l
+        if freed > nfill { freed = nfill }
+        while d < freed {
+            bigint_drop(MX_FILL[nfill - 1u64 - d])
+            d = d + 1u64
+        }
+        /* the law: refusal or the truth -- never a wrong-value handle */
+        let r : u64 = bigint_modpow(arena, b, e, n)
+        if r == 0u64 {
+            refusals = refusals + 1u64
+        } else {
+            if bigint_get_limb(r, 0u64) != want { return 0u64 }
+            if bigint_msb_position(r) > 64u64 { return 0u64 }
+            completions = completions + 1u64
+            bigint_drop(r)
+        }
+        /* restore: drop the remaining fillers */
+        let mut z : u64 = 0u64
+        while z < (nfill - freed) {
+            bigint_drop(MX_FILL[z])
+            z = z + 1u64
+        }
+        l = l + 1u64
+    }
+    return (refusals << 8u64) | completions
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 20u64)
+    if arena == 0u64 { return 1u64 }
+
+    let b : u64 = bigint_from_u64(arena, 7u64)
+    let e : u64 = bigint_from_u64(arena, 23u64)
+    let n_odd : u64 = bigint_from_u64(arena, 11u64)
+    let n_even : u64 = bigint_from_u64(arena, 12u64)
+    if b == 0u64 { return 2u64 }
+    if e == 0u64 { return 2u64 }
+    if n_odd == 0u64 { return 2u64 }
+    if n_even == 0u64 { return 2u64 }
+
+    /* ---- arm 1: sanity on a free table (both paths) ---- */
+    let r1 : u64 = bigint_modpow(arena, b, e, n_odd)
+    if r1 == 0u64 { return 3u64 }
+    if bigint_get_limb(r1, 0u64) != 2u64 { return 4u64 }
+    bigint_drop(r1)
+    let r2 : u64 = bigint_modpow(arena, b, e, n_even)
+    if r2 == 0u64 { return 5u64 }
+    if bigint_get_limb(r2, 0u64) != 7u64 { return 6u64 }
+    bigint_drop(r2)
+
+    /* ---- arm 2: the exhaustion law on the MONTGOMERY path (odd modulus) ---- */
+    let sw1 : u64 = mx_sweep(arena, b, e, n_odd, 2u64)
+    if sw1 == 0u64 { return 7u64 }                       /* a wrong-value handle escaped */
+    if (sw1 >> 8u64) == 0u64 { return 8u64 }             /* non-vacuity: some L must refuse */
+    if (sw1 & 0xFFu64) == 0u64 { return 9u64 }           /* non-vacuity: some L must complete */
+
+    /* ---- arm 3: the exhaustion law on the SCHOOLBOOK path (even modulus) ---- */
+    let sw2 : u64 = mx_sweep(arena, b, e, n_even, 7u64)
+    if sw2 == 0u64 { return 10u64 }
+    if (sw2 >> 8u64) == 0u64 { return 11u64 }
+    if (sw2 & 0xFFu64) == 0u64 { return 12u64 }
+
+    /* ---- arm 4: post-refusal recovery -- the failure paths leak no slots ---- */
+    let r3 : u64 = bigint_modpow(arena, b, e, n_odd)
+    if r3 == 0u64 { return 13u64 }
+    if bigint_get_limb(r3, 0u64) != 2u64 { return 14u64 }
+    bigint_drop(r3)
+
+    return 99u64
+}

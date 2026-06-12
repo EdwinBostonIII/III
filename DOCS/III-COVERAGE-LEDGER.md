@@ -531,3 +531,65 @@ Two implementation bugs caught pre-commit by the falsifier: pq pop returns the
 OPTION-ENCODED payload ((v<<1)|1 -- the raw truncation doubled class ids), and the
 heap must be sized to the true offer bound (leaves + parent edges), not a constant.
 All seven egraph consumers re-verified; corpus 1069/0.
+
+## The J-contract + live-set wave — 6 findings, falsifiers 1482-1486 (2026-06-12)
+
+Recovered the prior session's stranded tail (the CUT-8/W3.29 mask cuts built+gated but
+uncommitted, and falsifier 1482 written with its fix NEVER APPLIED), then a 6-finding
+batch, each old-lib/new-lib differential-proven:
+
+**J-RESULT-1** (`omnia/result.iii`, falsifier `1482`, old-lib exit=1): result__ok's
+`(v as u64) << 1` SIGN-extended a negative i8/i16/i32 and clipped bit 63 -- the
+unwrapped u64 was neither extension image.  Contract fixed at source: the ok payload
+is the WIDTH-truncated, ZERO-extended image (`sizeof T` mask), both unwrap_or arms;
+`as T` at the call site re-sign-extends so 395's truncation law is unchanged.
+
+**J-ITER** (`omnia/iter.iii`, falsifier `1486`, old-lib exit=2): iter__next returned
+the sign-extended image for signed elements -- contract-inconsistent with J-RESULT-1.
+Aligned to the one width law; the 64-bit lanes BYPASS the mask (x86 SHL masks the
+shift count: 1u64<<64 == 1, the C-BV-1 lesson -- a naive mask would zero every i64).
+W6.1's STDLIB half is hereby discharged AT SOURCE: 1482/1486 pass without a compiler
+reseal; only the @specialize stride re-verify remains compiler-side.
+
+**CUT-10 nous live-set** (`nous_socket/nous_policy/nous_value`, falsifier `1483`,
+old-lib exit=1): all three rank tables still emitted the route-S-retired R001-R004 --
+invisible to every behavioral gate BY CONSTRUCTION (a retired rule has no representable
+redex), only a STRUCTURAL pin can see it.  Swept to the live set (cascade 50->46,
+ascend 49->45, policy 49->45); the socket's "EXACT firing sequence" claim is true
+again; 1483 pins the emitted orders element-wise against the cascade transcribed from
+apply_one's text + the absence law + NOL certification + the policy's full permutation
+over the live set.  Keystone differential gate stays GREEN (the behavioral identity).
+
+**B-JN-1** (`omnia/xii_joinability.iii`, falsifier `1484`, old filter returned 20):
+xjn_nj_unexpected tested the REWRITER against retired assoc ids -- no record can match,
+so it flagged ALL 20 residual non-joins, contradicting its docstring (1422 only pins
+determinism).  Dumped the live record (njdump probe): 10 (collapse/sort x lift) pairs
+x subterm positions {cb,cc}.  Re-expressed: expected = kind SUBTERM and rewritten in
+lift R005-R012 (the C.1-discharge set); a ROOT non-join is always unexpected.  Added
+the XJN_NJ_K kind recorder (pos alone cannot separate root from a ca-subterm) +
+xjn_njtab_k; 1484 pins the 20 records element-wise to the certified set and
+demonstrates the old filter dead inline (matches 0 of 20).
+
+**J-BIG-1** (`numera/bigint_div.iii`, falsifier `1485`, old-lib exit=7 = a WRONG-VALUE
+handle escaped): the discovery-workflow survivor -- both modpow ladders never checked
+per-step allocations; 64-slot handle-table exhaustion mid-ladder rode a degenerate 0
+handle through every later multiply and returned a VALID handle holding GARBAGE (RSA
+verify gets no error signal).  Refuse-whole on every step + leak-free failure paths
+(ctx/one/b_cur/result all dropped); 1485 sweeps leftover-slot counts 0..11 on BOTH
+ladder paths: refusal or the truth, never a wrong value, plus non-vacuity both ways
+and post-refusal full recovery (no slot leak).
+
+Hygiene: nous_value/cost_lattice stale labels ("49x49 selection sort", "subtractive
+Euclid") corrected.  Adjudicated NOT-edited: fed_seal streaming-hash claim is a latent
+cg_r0-only hazard (cg_r3 reads exactly 4 bytes; fed_seal is in no Ring-0 build) --
+revisit when fed_seal joins a KATABASIS image.
+
+Queue re-verify (verify-still-open caught five MORE already-closed items): W3.21 all
+four CLOSED (merkle MERKLE-2, bv_ring C-BV-1, proof_carrying C-PC-3, nous_search
+C-NS-1), COMBINE-10 murmur3 CLOSED, CUT-11 CLOSED, fold's dead extern CLOSED.  Open
+perf vein: fe25519 E-FE-2/3, mldsa E-MLD-3, cost_calculus A-CC-1, pleroma A-PL-1,
+math D-ML-1, uncertainty F-UNC-1, groebner F-GB-2, combinator F-CB-1, fn256/384
+D-FN-1; compiler W6.2-6.5.
+
+build_stdlib GATE PASS + FAIL=0; corpus **1074/0** + xii 92/0 + nous GREEN (incl. the
+keystone differential) + bench 7/0/0.

@@ -8,7 +8,9 @@
  *     the ok value (or the err code).  The inline ops are the single generic
  *     `result__<op><T>` specialised over the integer alphabet via @specialize,
  *     emitting `result_<type>_<op>`.  err codes are always u32; unwrap_or
- *     returns the raw u64 ok payload (caller casts).
+ *     returns the raw u64 ok payload (caller casts).  Payload contract
+ *     (J-RESULT-1, corpus 1482): the WIDTH-truncated, ZERO-extended image of
+ *     the element -- both arms of unwrap_or honour it.
  *
  *   u64  -- side-table (u63 < u64); a 256-slot table holding ok value, err
  *     code, and tag.  Kept hand-written since the encoding differs per width.
@@ -45,11 +47,29 @@ const RESOLUTION_E_DETERMINISM_BUG : u32 = 0xE112u32
 
 /* ─── inline tag-in-low-bit, @specialize over the integer alphabet ───── */
 
-fn result__ok<T>(v: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { return ((v as u64) << 1u64) | RES_TAG_OK }
+/* J-RESULT-1: the ok payload is the value's WIDTH-truncated, ZERO-extended image.
+ * A bare `v as u64` SIGN-extends a negative i8/i16/i32; the << 1 then clips bit 63,
+ * so the unwrapped u64 was neither the sign- nor the zero-extended image (corpus 1482
+ * is the falsifier).  Masking by the element width before the shift restores a total
+ * contract: ok(-1i32) unwraps to 0xFFFFFFFF; `as T` at the call site re-sign-extends. */
+fn result__ok<T>(v: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export {
+    let w : u64 = sizeof T
+    let m : u64 = (1u64 << (w * 8u64)) - 1u64
+    return (((v as u64) & m) << 1u64) | RES_TAG_OK
+}
 fn result__err<T>(code: u32) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { return ((code as u64) << 1u64) | RES_TAG_ERR }
 fn result__is_ok<T>(r: u64) -> u8 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) == 0u64 { return 1u8 } return 0u8 }
 fn result__is_err<T>(r: u64) -> u8 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) == 1u64 { return 1u8 } return 0u8 }
-fn result__unwrap_or<T>(r: u64, default: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) != 0u64 { return default as u64 } return r >> 1u64 }
+/* J-RESULT-1: the err-arm default obeys the SAME width contract as the ok arm, so the
+ * two arms are interchangeable to a caller comparing the raw u64. */
+fn result__unwrap_or<T>(r: u64, default: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export {
+    if (r & 1u64) != 0u64 {
+        let w : u64 = sizeof T
+        let m : u64 = (1u64 << (w * 8u64)) - 1u64
+        return (default as u64) & m
+    }
+    return r >> 1u64
+}
 fn result__err_code<T>(r: u64) -> u32 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) == 0u64 { return 0u32 } return ((r >> 1u64) & 0xFFFFFFFFu64) as u32 }
 
 /* ─── u64 ok payloads: side-table (u63 < u64) ───────────────────────── */

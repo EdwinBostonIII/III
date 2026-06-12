@@ -32,8 +32,8 @@
 module nous_socket
 
 const NOUS_OK          : i32 = 0i32
-const NOUS_RANK_N      : u32 = 50u32     /* cascade order length (R040 twice + trit) */
-const NOUS_ASCEND_N    : u32 = 49u32     /* 1..44 + 101..105 */
+const NOUS_RANK_N      : u32 = 46u32     /* live cascade order length (R040 twice + trit; route-S retired R001-R004 EXCLUDED) */
+const NOUS_ASCEND_N    : u32 = 45u32     /* 5..44 + 101..105 (the live set) */
 const NOUS_ENGAGE_KMAX : u32 = 17u32     /* basis kernels <=17: cascade handles them */
 const NOUS_TRIT_VAL    : u32 = 24u32     /* a bare TRIT_VAL leaf: no rule fires */
 
@@ -75,35 +75,38 @@ fn nous_should_engage(kind: u32) -> u8 @export {
 }
 
 /* Fill the two order tables once.  The cascade table mirrors xii_rewrite_apply_one's
- * firing sequence EXACTLY (verified against omnia/xii_rewrite.iii:1138-1191): R038,
- * R040 first (null-cascade specializations), then R001-R012, R041, R013-R023, R043,
- * R044, R024-R032, R042, R033-R037, R039, R040 (again, as in the cascade), trit
- * 101-105.  A transcription error here is caught by the P2 differential gate (a
+ * LIVE firing sequence EXACTLY (verified against omnia/xii_rewrite.iii's route-S
+ * cascade): R038, R040 first (null-cascade specializations), then R005-R012, R041,
+ * R013-R023, R043, R044, R024-R032, R042, R033-R037, R039, R040 (again, as in the
+ * cascade), trit 101-105.  The route-S-retired R001-R004 are EXCLUDED -- apply_one no
+ * longer probes them, so emitting them here would make "EXACT mirror" false and waste
+ * four dead match calls per engaged node (CUT-10; corpus 1483 is the structural
+ * falsifier).  A transcription error here is caught by the P2 differential gate (a
  * multi-match term would fire a different rule than the cascade). */
 fn _nous_fill_orders() {
     NOUS_CASCADE[0u64] = 38u64
     NOUS_CASCADE[1u64] = 40u64
     let mut i : u64 = 0u64
-    while i < 12u64 { NOUS_CASCADE[2u64 + i] = 1u64 + i  i = i + 1u64 }    /* R001-R012 -> idx 2..13 */
-    NOUS_CASCADE[14u64] = 41u64
+    while i < 8u64 { NOUS_CASCADE[2u64 + i] = 5u64 + i  i = i + 1u64 }     /* R005-R012 -> idx 2..9 */
+    NOUS_CASCADE[10u64] = 41u64
     i = 0u64
-    while i < 11u64 { NOUS_CASCADE[15u64 + i] = 13u64 + i  i = i + 1u64 }  /* R013-R023 -> idx 15..25 */
-    NOUS_CASCADE[26u64] = 43u64
-    NOUS_CASCADE[27u64] = 44u64
+    while i < 11u64 { NOUS_CASCADE[11u64 + i] = 13u64 + i  i = i + 1u64 }  /* R013-R023 -> idx 11..21 */
+    NOUS_CASCADE[22u64] = 43u64
+    NOUS_CASCADE[23u64] = 44u64
     i = 0u64
-    while i < 9u64 { NOUS_CASCADE[28u64 + i] = 24u64 + i  i = i + 1u64 }   /* R024-R032 -> idx 28..36 */
-    NOUS_CASCADE[37u64] = 42u64
+    while i < 9u64 { NOUS_CASCADE[24u64 + i] = 24u64 + i  i = i + 1u64 }   /* R024-R032 -> idx 24..32 */
+    NOUS_CASCADE[33u64] = 42u64
     i = 0u64
-    while i < 5u64 { NOUS_CASCADE[38u64 + i] = 33u64 + i  i = i + 1u64 }   /* R033-R037 -> idx 38..42 */
-    NOUS_CASCADE[43u64] = 39u64
-    NOUS_CASCADE[44u64] = 40u64
+    while i < 5u64 { NOUS_CASCADE[34u64 + i] = 33u64 + i  i = i + 1u64 }   /* R033-R037 -> idx 34..38 */
+    NOUS_CASCADE[39u64] = 39u64
+    NOUS_CASCADE[40u64] = 40u64
     i = 0u64
-    while i < 5u64 { NOUS_CASCADE[45u64 + i] = 101u64 + i  i = i + 1u64 }  /* trit -> idx 45..49 */
-    /* ascending: 1..44, 101..105 (the permuted-keystone probe order) */
+    while i < 5u64 { NOUS_CASCADE[41u64 + i] = 101u64 + i  i = i + 1u64 }  /* trit -> idx 41..45 */
+    /* ascending: 5..44, 101..105 (the permuted-keystone probe order, live set only) */
     i = 0u64
-    while i < 44u64 { NOUS_ASCEND[i] = 1u64 + i  i = i + 1u64 }
+    while i < 40u64 { NOUS_ASCEND[i] = 5u64 + i  i = i + 1u64 }
     i = 0u64
-    while i < 5u64 { NOUS_ASCEND[44u64 + i] = 101u64 + i  i = i + 1u64 }
+    while i < 5u64 { NOUS_ASCEND[40u64 + i] = 101u64 + i  i = i + 1u64 }
 }
 
 /* Emit the ranked rule-id order into out_order (caller buffer, cap entries).  Inert
@@ -170,28 +173,40 @@ fn nous_socket_selftest() -> u64 @export {
 
     let p : *u64 = (&NOUS_ST_BUF as u64) as *u64
 
-    /* inert (cascade) order reproduces apply_one's firing sequence exactly */
+    /* inert (cascade) order reproduces apply_one's LIVE firing sequence exactly */
     nous_set_order_mode(0u8)
     let n0 : u32 = nous_rank(0u32, 26u32, p, 64u32)
     if n0 != NOUS_RANK_N { return 8u64 }
     if NOUS_ST_BUF[0u64]  != 38u64  { return 9u64 }
     if NOUS_ST_BUF[1u64]  != 40u64  { return 10u64 }
-    if NOUS_ST_BUF[2u64]  != 1u64   { return 11u64 }
-    if NOUS_ST_BUF[13u64] != 12u64  { return 12u64 }
-    if NOUS_ST_BUF[14u64] != 41u64  { return 13u64 }
-    if NOUS_ST_BUF[27u64] != 44u64  { return 14u64 }
-    if NOUS_ST_BUF[37u64] != 42u64  { return 15u64 }
-    if NOUS_ST_BUF[44u64] != 40u64  { return 16u64 }
-    if NOUS_ST_BUF[45u64] != 101u64 { return 17u64 }
-    if NOUS_ST_BUF[49u64] != 105u64 { return 18u64 }
+    if NOUS_ST_BUF[2u64]  != 5u64   { return 11u64 }
+    if NOUS_ST_BUF[9u64]  != 12u64  { return 12u64 }
+    if NOUS_ST_BUF[10u64] != 41u64  { return 13u64 }
+    if NOUS_ST_BUF[23u64] != 44u64  { return 14u64 }
+    if NOUS_ST_BUF[33u64] != 42u64  { return 15u64 }
+    if NOUS_ST_BUF[40u64] != 40u64  { return 16u64 }
+    if NOUS_ST_BUF[41u64] != 101u64 { return 17u64 }
+    if NOUS_ST_BUF[45u64] != 105u64 { return 18u64 }
+    /* CUT-10 absence law: no route-S-retired id (R001-R004) is ever emitted */
+    let mut sca : u64 = 0u64
+    while sca < (n0 as u64) {
+        if NOUS_ST_BUF[sca] >= 1u64 { if NOUS_ST_BUF[sca] <= 4u64 { return 25u64 } }
+        sca = sca + 1u64
+    }
 
     /* permuted (ascending) order */
     nous_set_order_mode(1u8)
     let n1 : u32 = nous_rank(0u32, 26u32, p, 64u32)
     if n1 != NOUS_ASCEND_N { return 19u64 }
-    if NOUS_ST_BUF[0u64]  != 1u64   { return 20u64 }
-    if NOUS_ST_BUF[43u64] != 44u64  { return 21u64 }
-    if NOUS_ST_BUF[44u64] != 101u64 { return 22u64 }
+    if NOUS_ST_BUF[0u64]  != 5u64   { return 20u64 }
+    if NOUS_ST_BUF[39u64] != 44u64  { return 21u64 }
+    if NOUS_ST_BUF[40u64] != 101u64 { return 22u64 }
+    /* CUT-10 absence law (ascending) */
+    let mut saa : u64 = 0u64
+    while saa < (n1 as u64) {
+        if NOUS_ST_BUF[saa] >= 1u64 { if NOUS_ST_BUF[saa] <= 4u64 { return 26u64 } }
+        saa = saa + 1u64
+    }
     nous_set_order_mode(0u8)
 
     /* caller cap respected (never writes past cap) */

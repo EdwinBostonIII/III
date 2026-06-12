@@ -40,7 +40,7 @@ module nous_policy
 
 extern @abi(c-msvc-x64) fn nous_feat_kind(t: u32) -> u32 from "nous_features.iii"
 
-const NOUS_POL_N          : u32 = 49u32   /* 44 R-rule slots (R001-R004 retired by route S, retained inert for cascade/permutation + differential-gate stability) + 5 trit */
+const NOUS_POL_N          : u32 = 45u32   /* 40 LIVE R-rule slots (R001-R004 retired by route S are EXCLUDED -- the proposer emits only the live set; CUT-10) + 5 trit */
 const NOUS_POL_TRIT_LO    : u32 = 101u32
 const NOUS_POL_TRIT_HI    : u32 = 105u32
 const NOUS_POL_KTRIT_LO   : u32 = 24u32   /* trit kinds 24-29 */
@@ -52,29 +52,30 @@ const NOUS_POL_BONUS_TRIT : u64 = 1000u64
 const NOUS_POL_BONUS_FUS  : u64 = 500u64
 const NOUS_POL_U32MASK    : u64 = 0xFFFFFFFFu64
 
-var NOUS_POL_RCASC : [u64; 64]   /* the 44 R-rules in cascade order (filled lazily) */
+var NOUS_POL_RCASC : [u64; 64]   /* the 40 live R-rules in cascade order (filled lazily) */
 var NOUS_POL_OUT   : [u64; 64]   /* selftest scratch */
 var NOUS_POL_OUT2  : [u64; 64]
 var NOUS_POL_SEEN  : [u8;  128]
 
-/* Fill the R-block in EXACT cascade order (matches xii_rewrite_apply_one, minus the
- * trit block and the dead second R040): 38,40,1..12,41,13..23,43,44,24..32,42,33..37,39. */
+/* Fill the R-block in EXACT LIVE cascade order (matches xii_rewrite_apply_one, minus
+ * the trit block and the dead second R040; route-S retired R001-R004 EXCLUDED, CUT-10):
+ * 38,40,5..12,41,13..23,43,44,24..32,42,33..37,39. */
 fn _nous_pol_fill() {
     NOUS_POL_RCASC[0u64] = 38u64
     NOUS_POL_RCASC[1u64] = 40u64
     let mut i : u64 = 0u64
-    while i < 12u64 { NOUS_POL_RCASC[2u64 + i] = 1u64 + i  i = i + 1u64 }
-    NOUS_POL_RCASC[14u64] = 41u64
+    while i < 8u64 { NOUS_POL_RCASC[2u64 + i] = 5u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[10u64] = 41u64
     i = 0u64
-    while i < 11u64 { NOUS_POL_RCASC[15u64 + i] = 13u64 + i  i = i + 1u64 }
-    NOUS_POL_RCASC[26u64] = 43u64
-    NOUS_POL_RCASC[27u64] = 44u64
+    while i < 11u64 { NOUS_POL_RCASC[11u64 + i] = 13u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[22u64] = 43u64
+    NOUS_POL_RCASC[23u64] = 44u64
     i = 0u64
-    while i < 9u64 { NOUS_POL_RCASC[28u64 + i] = 24u64 + i  i = i + 1u64 }
-    NOUS_POL_RCASC[37u64] = 42u64
+    while i < 9u64 { NOUS_POL_RCASC[24u64 + i] = 24u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[33u64] = 42u64
     i = 0u64
-    while i < 5u64 { NOUS_POL_RCASC[38u64 + i] = 33u64 + i  i = i + 1u64 }
-    NOUS_POL_RCASC[43u64] = 39u64
+    while i < 5u64 { NOUS_POL_RCASC[34u64 + i] = 33u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[39u64] = 39u64
 }
 
 /* Advisory kind-affinity (NOT used for ordering -- see header).  Higher = a likelier
@@ -98,8 +99,8 @@ fn nous_policy_score(rule_id: u32, kind: u32) -> u64 @export {
     return base + bonus
 }
 
-/* The confluence-safe block reorder.  Returns a FULL PERMUTATION of the 49 certified
- * rules: trit block first for a trit-kind context, else the cascade order. */
+/* The confluence-safe block reorder.  Returns a FULL PERMUTATION of the 45 LIVE
+ * certified rules: trit block first for a trit-kind context, else the cascade order. */
 fn nous_policy_rank(ctx_term: u32, kind: u32, out: *u64, cap: u32) -> u32 @export {
     if (out as u64) == 0u64 { return 0u32 }
     if NOUS_POL_RCASC[0u64] == 0u64 { _nous_pol_fill() }
@@ -116,13 +117,13 @@ fn nous_policy_rank(ctx_term: u32, kind: u32, out: *u64, cap: u32) -> u32 @expor
             i = i + 1u64
         }
         i = 0u64
-        while i < 44u64 {
+        while i < 40u64 {
             if w < capn { out[w] = NOUS_POL_RCASC[i]  w = w + 1u64 }
             i = i + 1u64
         }
     } else {
         let mut i : u64 = 0u64
-        while i < 44u64 {
+        while i < 40u64 {
             if w < capn { out[w] = NOUS_POL_RCASC[i]  w = w + 1u64 }
             i = i + 1u64
         }
@@ -153,14 +154,14 @@ fn nous_policy_selftest() -> u64 @export {
     nous_policy_rank(0u32, 20u32, buf, 64u32)
     if NOUS_POL_OUT[0u64] != 38u64 { return 8u64 }     /* R038 first, as the cascade demands */
     if NOUS_POL_OUT[1u64] != 40u64 { return 9u64 }     /* R040 second */
-    if NOUS_POL_OUT[44u64] != 101u64 { return 10u64 }  /* trit block after all 44 R-rules */
+    if NOUS_POL_OUT[40u64] != 101u64 { return 10u64 }  /* trit block after all 40 live R-rules */
 
-    /* FULL PERMUTATION: every certified rule exactly once (no drop, no dup) */
+    /* FULL PERMUTATION: every LIVE certified rule exactly once (no drop, no dup) */
     let mut z : u64 = 0u64
     while z < 128u64 { NOUS_POL_SEEN[z] = 0u8  z = z + 1u64 }
     let mut i : u64 = 0u64
     let mut cnt : u32 = 0u32
-    while i < 49u64 {
+    while i < 45u64 {
         let rid : u64 = NOUS_POL_OUT[i]
         if rid >= 128u64 { return 11u64 }
         if NOUS_POL_SEEN[rid] != 0u8 { return 12u64 }
@@ -168,11 +169,14 @@ fn nous_policy_selftest() -> u64 @export {
         cnt = cnt + 1u32
         i = i + 1u64
     }
-    if cnt != 49u32 { return 13u64 }
-    i = 1u64
+    if cnt != 45u32 { return 13u64 }
+    i = 5u64
     while i < 45u64 { if NOUS_POL_SEEN[i] != 1u8 { return 14u64 }  i = i + 1u64 }
     i = 101u64
     while i < 106u64 { if NOUS_POL_SEEN[i] != 1u8 { return 15u64 }  i = i + 1u64 }
+    /* CUT-10 absence law: the retired R001-R004 are NEVER emitted */
+    i = 1u64
+    while i < 5u64 { if NOUS_POL_SEEN[i] != 0u8 { return 17u64 }  i = i + 1u64 }
 
     /* determinism: re-rank, byte-identical */
     let buf2 : *u64 = (&NOUS_POL_OUT2 as u64) as *u64
@@ -180,7 +184,7 @@ fn nous_policy_selftest() -> u64 @export {
     /* OUT currently holds the fusion order; recompute the trit order into OUT to match */
     nous_policy_rank(0u32, 26u32, buf, 64u32)
     i = 0u64
-    while i < 49u64 { if NOUS_POL_OUT[i] != NOUS_POL_OUT2[i] { return 16u64 }  i = i + 1u64 }
+    while i < 45u64 { if NOUS_POL_OUT[i] != NOUS_POL_OUT2[i] { return 16u64 }  i = i + 1u64 }
 
     return 99u64
 }

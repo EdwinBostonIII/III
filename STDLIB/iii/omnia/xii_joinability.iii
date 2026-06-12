@@ -61,7 +61,9 @@ const XJN_NOWIT    : u8  = 2u8
 var XJN_TALLY : [u64; 4]   /* [0]=join  [1]=no_witness  [2]=nonjoin  [3]=total */
 var XJN_NJ_I  : [u64; 128] /* every NONJOIN: rewriter rule-id (rid_i) */
 var XJN_NJ_J  : [u64; 128] /* every NONJOIN: rewritten rule-id (rid_j) */
-var XJN_NJ_P  : [u64; 128] /* every NONJOIN: position */
+var XJN_NJ_P  : [u64; 128] /* every NONJOIN: position (0=ca 1=cb 2=cc for subterm; 0 for root) */
+var XJN_NJ_K  : [u64; 128] /* every NONJOIN: overlap kind (0=root 1=subterm) -- B-JN-1: pos alone
+                            * cannot separate a root non-join from a ca-position subterm one */
 
 /* A guard-firing instance of an XII kind (the kind->sentinel map). */
 fn _xjn_inst(kind: u64) -> u32 {
@@ -175,7 +177,7 @@ fn xjn_gate() -> u32 @export {
         if v == 1u8 { join = join + 1u64 }
         if v == 2u8 { nowit = nowit + 1u64 }
         if v == 0u8 {
-            if nonjoin < 128u64 { XJN_NJ_I[nonjoin] = xrp_rid_at(cpe_si_at(k as u32)) as u64  XJN_NJ_J[nonjoin] = xrp_rid_at(cpe_sj_at(k as u32)) as u64  XJN_NJ_P[nonjoin] = cpe_pos_at(k as u32) as u64 }
+            if nonjoin < 128u64 { XJN_NJ_I[nonjoin] = xrp_rid_at(cpe_si_at(k as u32)) as u64  XJN_NJ_J[nonjoin] = xrp_rid_at(cpe_sj_at(k as u32)) as u64  XJN_NJ_P[nonjoin] = cpe_pos_at(k as u32) as u64  XJN_NJ_K[nonjoin] = cpe_kind_at(k as u32) }
             nonjoin = nonjoin + 1u64
         }
         k = k + 1u64
@@ -194,19 +196,26 @@ fn xjn_nonjoin_count() -> u64 @export { return XJN_TALLY[2u64] }
 fn xjn_njtab_i(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_I[i] }
 fn xjn_njtab_j(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_J[i] }
 fn xjn_njtab_p(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_P[i] }
+fn xjn_njtab_k(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_K[i] }
 
 /* v in [lo,hi] (unsigned compares -- safe). */
 fn _xjn_in(v: u64, lo: u64, hi: u64) -> u8 { if v < lo { return 0u8 } if v > hi { return 0u8 } return 1u8 }
 
-/* count of recorded NONJOINs that are NOT (rewriter in assoc R001-R003 AND rewritten in
- * guarded-lift R005-R012) -- i.e., outside the associativity x lift conflict family. */
+/* count of recorded NONJOINs OUTSIDE the certified residual family: the lift-family
+ * SUBTERM non-joins (overlap kind SUBTERM, rewritten rule in guarded-lift R005-R012) --
+ * exactly the set the confluence certificate's C.1 step discharges.  A ROOT non-join is
+ * ALWAYS unexpected (the root set is certified confluent, xjn_gate_root).
+ * B-JN-1: re-expressed post-route-S.  The old filter tested the REWRITER against the
+ * retired assoc ids R001-R003 -- no recorded non-join can match a retired rewriter, so
+ * it flagged ALL 20 residual non-joins as unexpected, contradicting its own docstring
+ * (corpus 1484 is the falsifier; it also pins the residual records to the certified set). */
 fn xjn_nj_unexpected() -> u64 @export {
     let mut lim : u64 = XJN_TALLY[2u64]
     if lim > 128u64 { lim = 128u64 }
     let mut bad : u64 = 0u64
     let mut k : u64 = 0u64
     while k < lim {
-        if _xjn_in(XJN_NJ_I[k], 1u64, 3u64) == 0u8 { bad = bad + 1u64 } else { if _xjn_in(XJN_NJ_J[k], 5u64, 12u64) == 0u8 { bad = bad + 1u64 } }
+        if XJN_NJ_K[k] != 1u64 { bad = bad + 1u64 } else { if _xjn_in(XJN_NJ_J[k], 5u64, 12u64) == 0u8 { bad = bad + 1u64 } }
         k = k + 1u64
     }
     return bad
@@ -260,6 +269,8 @@ fn xjn_selftest() -> u64 @export {
      * claim is retracted (DOCS/III-XII.md S9.2); this gate is the honest, re-runnable residual record. */
     xjn_gate()
     if xjn_nonjoin_count() != 20u64 { return 35u64 }
+    /* B-JN-1: every residual non-join is INSIDE the certified lift-subterm family */
+    if xjn_nj_unexpected() != 0u64 { return 36u64 }
 
     /* the full gate is deterministic, and the partition is non-trivial (some pairs join). */
     xjn_gate()

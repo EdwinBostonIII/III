@@ -1,0 +1,55 @@
+/* 1482_result_signed_payload.iii -- J-RESULT-1 FALSIFIER: the result ok-payload
+ * contract for SIGNED element types.
+ *
+ * THE DEFECT: result__ok<T> computed ((v as u64) << 1) | TAG -- `v as u64`
+ * SIGN-extends a negative i8/i16/i32 to 64 bits, the << 1 then drops bit 63, and
+ * unwrap_or's >> 1 brings back a zero there: the unwrapped u64 was a BIT-63-CLIPPED
+ * sign extension (0x7FFFFFFFFFFFFFFF for -1i32) -- neither the sign-extended nor the
+ * zero-extended image of the payload.  Callers comparing the full u64 against
+ * `(-1i32) as u64` silently mismatched; only the truncating `as i32` path (the one
+ * thing 395 pins) happened to survive.
+ *
+ * THE CONTRACT (post-fix): the ok payload is the value's WIDTH-truncated,
+ * ZERO-extended image -- result_i32 ok(-1) unwraps to 0xFFFFFFFF, i16 -3 to 0xFFFD,
+ * i8 -2 to 0xFE -- and the err-arm default obeys the SAME width contract, so both
+ * arms of unwrap_or are interchangeable to a caller.  `as T` at the call site
+ * re-sign-extends to the element type, so 395's truncated round-trip still holds.
+ *
+ * This KAT was written BEFORE the fix and FAILED against the unfixed module (the
+ * first u64 assertion saw the bit-63-clipped value).
+ * Exit 99. */
+module corpus_1482
+
+extern @abi(c-msvc-x64) fn result_i32_ok(v: i32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_unwrap_or(r: u64, d: i32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_err(c: u32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i16_ok(v: i16) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i16_unwrap_or(r: u64, d: i16) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i8_ok(v: i8) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i8_unwrap_or(r: u64, d: i8) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u16_ok(v: u16) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u16_unwrap_or(r: u64, d: u16) -> u64 from "result.iii"
+
+fn main() -> u64 {
+    /* ---- i32: the full-u64 contract, the discriminating assertions ---- */
+    let b : u64 = result_i32_ok(-1i32)
+    if result_i32_unwrap_or(b, 0i32) != 0xFFFFFFFFu64 { return 1u64 }     /* zero-extended image */
+    let b5 : u64 = result_i32_ok(-5i32)
+    if result_i32_unwrap_or(b5, 0i32) != 0xFFFFFFFBu64 { return 2u64 }
+    if (result_i32_unwrap_or(b5, 0i32)) as i32 != -5i32 { return 3u64 }   /* 395's truncation law */
+    /* the err-arm default obeys the SAME width contract */
+    let e : u64 = result_i32_err(0xE100u32)
+    if result_i32_unwrap_or(e, -1i32) != 0xFFFFFFFFu64 { return 4u64 }
+
+    /* ---- i16 / i8: the same law at the narrower widths ---- */
+    let h : u64 = result_i16_ok(-3i16)
+    if result_i16_unwrap_or(h, 0i16) != 0xFFFDu64 { return 5u64 }
+    let c : u64 = result_i8_ok(-2i8)
+    if result_i8_unwrap_or(c, 0i8) != 0xFEu64 { return 6u64 }
+
+    /* ---- unsigned regression: untouched by the fix ---- */
+    let u : u64 = result_u16_ok(40000u16)
+    if result_u16_unwrap_or(u, 0u16) != 40000u64 { return 7u64 }
+
+    return 99u64
+}

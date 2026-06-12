@@ -1,0 +1,108 @@
+/* 1432_gate_outcomes_proof_carrying.iii -- GATE BURN-DOWN v2 TRANCHE 5: THE
+ * PROOF-CARRYING VERIFIERS DECIDE BOTH WAYS (3 gates; 42 -> 39).
+ *
+ *  pc_verify_vec -- a real Merkle inclusion proof (commit 4 leaves, open idx 1)
+ *      ACCEPTS (1); a tampered leaf, a tampered root, and an out-of-range idx are
+ *      rejected (0);
+ *  pc_verify_poly -- the coefficient-Merkle opening through the FULL prover path
+ *      (bigint coeffs -> pc_commit_poly -> pc_open_poly via the 64-byte request
+ *      aggregate) ACCEPTS; a tampered evaluation leaf is rejected;
+ *  pc_verify_proof -- the 96-byte certificate binds the payload hash: attach ->
+ *      verify (1); one payload byte flipped -> rejected (0); null cert refused.
+ * Exit 99. */
+module corpus_1432
+
+extern @abi(c-msvc-x64) fn pc_commit_vec(items: *u8, n: u64, out_root: *u8) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_open_vec(items: *u8, n: u64, idx: u64, out_path: *u8, out_path_len: *u64) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_verify_vec(root: *u8, leaf: *u8, idx: u64, n: u64, path: *u8, path_len: u64) -> u8 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_commit_poly(coeffs: u64, n_coeffs: u64, p: u64, out_root: *u8) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_open_poly(arena: u64, req: *u8) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_verify_poly(root: *u8, z_leaf: *u8, idx: u64, n_coeffs: u64, path: *u8, path_len: u64) -> u8 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_attach_proof(payload: *u8, payload_len: u64, producer: *u8, out_certificate: *u8) -> i32 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn pc_verify_proof(payload: *u8, payload_len: u64, certificate: *u8) -> u8 from "proof_carrying.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+
+var ITEMS : [u8; 128]
+var ROOT  : [u8; 32]
+var PATH  : [u8; 256]
+var PLEN  : [u64; 1]
+var CIDS  : [u64; 4]
+var ROOTP : [u8; 32]
+var EVALL : [u8; 32]
+var PATHP : [u8; 256]
+var PLENP : [u64; 1]
+var REQ   : [u8; 64]
+var PAY   : [u8; 8]
+var PROD  : [u8; 32]
+var CERT  : [u8; 96]
+
+fn rw64(p: u64, v: u64) -> i32 {
+    let pl : u64 = p
+    let vl : u64 = v
+    let b : *u8 = pl as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { b[i] = ((vl >> (i * 8u64)) & 0xFFu64) as u8   i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ---- pc_verify_vec: real inclusion, real rejections ---- */
+    let mut i : u64 = 0u64
+    while i < 128u64 { ITEMS[i] = (((i * 7u64) + 3u64) & 0xFFu64) as u8   i = i + 1u64 }
+    if pc_commit_vec((&ITEMS as u64) as *u8, 4u64, (&ROOT as u64) as *u8) != 0i32 { return 1u64 }
+    if pc_open_vec((&ITEMS as u64) as *u8, 4u64, 1u64, (&PATH as u64) as *u8, (&PLEN as u64) as *u64) != 0i32 { return 2u64 }
+    let pl : u64 = PLEN[0u64]
+    if pl != 2u64 { return 3u64 }                                  /* ceil(log2 4) */
+    if pc_verify_vec((&ROOT as u64) as *u8, ((&ITEMS as u64) + 32u64) as *u8, 1u64, 4u64, (&PATH as u64) as *u8, pl) != 1u8 { return 4u64 }
+    ITEMS[33u64] = ITEMS[33u64] ^ 0x01u8
+    if pc_verify_vec((&ROOT as u64) as *u8, ((&ITEMS as u64) + 32u64) as *u8, 1u64, 4u64, (&PATH as u64) as *u8, pl) != 0u8 { return 5u64 }
+    ITEMS[33u64] = ITEMS[33u64] ^ 0x01u8
+    ROOT[2u64] = ROOT[2u64] ^ 0x01u8
+    if pc_verify_vec((&ROOT as u64) as *u8, ((&ITEMS as u64) + 32u64) as *u8, 1u64, 4u64, (&PATH as u64) as *u8, pl) != 0u8 { return 6u64 }
+    ROOT[2u64] = ROOT[2u64] ^ 0x01u8
+    if pc_verify_vec((&ROOT as u64) as *u8, ((&ITEMS as u64) + 32u64) as *u8, 5u64, 4u64, (&PATH as u64) as *u8, pl) != 0u8 { return 7u64 }
+
+    /* ---- pc_verify_poly: the full prover path through the request aggregate ---- */
+    let arena : u64 = arena_new(1048576u64)
+    if arena == 0u64 { return 10u64 }
+    CIDS[0u64] = bigint_from_u64(arena, 11u64)
+    CIDS[1u64] = bigint_from_u64(arena, 22u64)
+    CIDS[2u64] = bigint_from_u64(arena, 33u64)
+    CIDS[3u64] = bigint_from_u64(arena, 44u64)
+    if CIDS[3u64] == 0u64 { return 11u64 }
+    if pc_commit_poly((&CIDS as u64), 4u64, 0u64, (&ROOTP as u64) as *u8) != 0i32 { return 12u64 }
+    let rq : u64 = &REQ as u64
+    rw64(rq, (&CIDS as u64))
+    rw64(rq + 8u64, 4u64)
+    rw64(rq + 16u64, 2u64)                                         /* open coefficient z=2 */
+    rw64(rq + 24u64, 0u64)
+    rw64(rq + 32u64, (&EVALL as u64))
+    rw64(rq + 40u64, (&PATHP as u64))
+    rw64(rq + 48u64, (&PLENP as u64))
+    rw64(rq + 56u64, 0u64)
+    if pc_open_poly(arena, rq as *u8) != 0i32 { return 13u64 }
+    let plp : u64 = PLENP[0u64]
+    if plp != 2u64 { return 14u64 }
+    if pc_verify_poly((&ROOTP as u64) as *u8, (&EVALL as u64) as *u8, 2u64, 4u64, (&PATHP as u64) as *u8, plp) != 1u8 { return 15u64 }
+    EVALL[5u64] = EVALL[5u64] ^ 0x01u8
+    if pc_verify_poly((&ROOTP as u64) as *u8, (&EVALL as u64) as *u8, 2u64, 4u64, (&PATHP as u64) as *u8, plp) != 0u8 { return 16u64 }
+    EVALL[5u64] = EVALL[5u64] ^ 0x01u8
+
+    /* ---- pc_verify_proof: the certificate binds the payload ---- */
+    wh_init(1u64)
+    let mut p : u64 = 0u64
+    while p < 8u64 { PAY[p] = (0xB0u64 + p & 0xFFu64) as u8   p = p + 1u64 }
+    let mut q : u64 = 0u64
+    while q < 32u64 { PROD[q] = 0x77u8   q = q + 1u64 }
+    if pc_attach_proof((&PAY as u64) as *u8, 8u64, (&PROD as u64) as *u8, (&CERT as u64) as *u8) != 0i32 { return 20u64 }
+    if pc_verify_proof((&PAY as u64) as *u8, 8u64, (&CERT as u64) as *u8) != 1u8 { return 21u64 }
+    PAY[0u64] = PAY[0u64] ^ 0x01u8
+    if pc_verify_proof((&PAY as u64) as *u8, 8u64, (&CERT as u64) as *u8) != 0u8 { return 22u64 }
+    PAY[0u64] = PAY[0u64] ^ 0x01u8
+    let np : *u8 = (0u64) as *u8
+    if pc_verify_proof((&PAY as u64) as *u8, 8u64, np) != 0u8 { return 23u64 }
+
+    return 99u64
+}

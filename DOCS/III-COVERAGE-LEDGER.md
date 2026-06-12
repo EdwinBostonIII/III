@@ -181,3 +181,10 @@ null), instant_verify (TIME-cap-minted seal recomputes; null/dead/DROPPED refuse
 mint refuses a right-less cap), ws_chain_replay_verify (the epoch replay reproduces the
 authoritative root; one-byte tamper rejected) -- 4 closed, 46 -> **42** (pin 42; corpus
 1019/0).
+
+Tranche v2-5 (`1432_gate_outcomes_proof_carrying`=99): pc_verify_vec (real Merkle
+inclusion accepts; tampered leaf / tampered root / out-of-range idx rejected),
+pc_verify_poly (the coefficient-Merkle opening through the FULL prover path -- bigint
+coeffs -> commit -> the 64-byte open request; tampered evaluation leaf rejected),
+pc_verify_proof (the 96-byte certificate binds the payload hash; one flipped payload
+byte rejected; null cert refused) -- 3 closed, 42 -> **39** (pin 39; corpus 1020/0).

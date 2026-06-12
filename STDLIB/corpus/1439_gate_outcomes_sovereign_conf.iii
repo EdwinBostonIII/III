@@ -1,0 +1,39 @@
+/* 1439_gate_outcomes_sovereign_conf.iii -- GATE BURN-DOWN v2 TRANCHE 12: THE SOVEREIGN
+ * MORPHISM (1 gate; 20 -> 19).
+ *
+ *  sov_admit -- the load-bearing soundness gate of the self-optimizer: the proof-
+ *      preserving, cost-descending realization of (lam x:Bool. x) true is ADMITTED (1);
+ *      a behaviour-CHANGING "optimization" (true -> false) is REJECTED (0); a proven-
+ *      equal same-cost realization is admitted (1) -- the module-KAT vectors driven
+ *      directly at the export.
+ *
+ * (xcc_verify was probed and EXCLUDED here: its rule registry is read-only and
+ *  force-link-registered at process start, so no input can honestly drive the
+ *  reject arm in a healthy binary -- it is a boot self-consistency observation
+ *  whose parameter is an OUT sink.  It is recorded as a pin-floor candidate in
+ *  the ledger rather than closed with a gamed second outcome.)
+ * Exit 99. */
+module corpus_1439
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn sov_best(t: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn sov_admit(t: u32, ts: u32) -> u8 from "typecheck.iii"
+
+fn main() -> u64 {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+    let t1 : u32 = tc_app(tc_lam(kb, tc_var(0u32)), tt)
+    let best1 : u32 = sov_best(t1)
+    if sov_admit(t1, best1) != 1u8 { return 2u64 }       /* proof-preserving descent ADMITTED */
+    if sov_admit(t1, ff) != 0u8 { return 3u64 }          /* behaviour change REJECTED */
+    if sov_admit(tt, tt) != 1u8 { return 4u64 }          /* proven-equal same-cost admitted */
+    return 99u64
+}

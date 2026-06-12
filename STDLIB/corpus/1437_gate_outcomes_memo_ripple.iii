@@ -1,0 +1,173 @@
+/* 1437_gate_outcomes_memo_ripple.iii -- GATE BURN-DOWN v2 TRANCHE 10: THE CURRY-HOWARD
+ * CORRESPONDENCE, THE RIPPLE RESULT VERIFIER, THE MEMO-LATTICE REVALIDATION, THE
+ * PREDICATE-GATED ADMISSION (4 gates; 27 -> 23).
+ *
+ *  ch_verify_correspondence -- program/proof with the SAME body under the 0x50/0x54
+ *      tag toggle correspond (1); a diverging body byte (0), a wrong tag (0), and a
+ *      length mismatch (0) are refused;
+ *  ripple_verify -- a minted crystal WITH an initialized edge set (K = 1.0) verifies
+ *      (1); one withOUT K provenance is refused (0); null refused (0);
+ *  ml_revalidate -- the FULL lattice vertical (clause ratified, fragment published +
+ *      spine-registered, entry admitted, marked stale): revalidation replays the chain
+ *      and clears the mark (0); pre-init (-8), null (-1), absent key (-2), and an
+ *      entry whose chain id was never spine-registered (-7 VERIFY_FAIL) all refuse;
+ *  mq_admit_predicate_gated -- the constitution's predicate VM gates admission: the
+ *      ratified [COP_PHASE_GE 1] clause REJECTS a phase-0 op-view (-3), passes phase-1
+ *      into ml_admit's own clause gate (-6 before cp_memo_admit is ratified), refuses
+ *      an unknown gating clause (-2) and a null arg (-1), and -- with BOTH clauses
+ *      ratified and a registered chain -- ADMITS end to end (0).
+ * Exit 99. */
+module corpus_1437
+
+extern @abi(c-msvc-x64) fn ch_verify_correspondence(program: *u8, program_len: u64, proof: *u8, proof_len: u64) -> u8 from "curry_howard.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal_edges.iii"
+extern @abi(c-msvc-x64) fn ripple_verify(result_id: u64) -> u8 from "ripple.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_mark_stale(key: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_revalidate(key: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ident_zero(p: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn mq_admit_predicate_gated(key: *u8, out_commit: *u8, chain_id: *u8, clause_id: *u8, opv: *u8, ante_ids: *u8, n_ante: u32) -> i32 from "memo_query.iii"
+
+var PROG  : [u8; 16]
+var PROOF : [u8; 16]
+var SITE  : [u8; 32]
+var LBLCP : [u8; 13]     /* "cp_memo_admit" */
+var LBLPG : [u8; 13]     /* "mq_phase_gate" */
+var PRED  : [u8; 3]
+var RAT   : [u64; 16]
+var RAT2  : [u64; 16]
+var ZID   : [u8; 32]
+var PAY   : [u8; 72]
+var CHAIN : [u8; 32]
+var KEY   : [u8; 32]
+var KEY2  : [u8; 32]
+var KEY3  : [u8; 32]
+var COMMIT: [u8; 32]
+var BOGUS : [u8; 32]
+var OPV   : [u8; 68]
+
+fn set_lblcp() -> i32 {
+    LBLCP[0u64]=0x63u8  LBLCP[1u64]=0x70u8  LBLCP[2u64]=0x5Fu8  LBLCP[3u64]=0x6Du8
+    LBLCP[4u64]=0x65u8  LBLCP[5u64]=0x6Du8  LBLCP[6u64]=0x6Fu8  LBLCP[7u64]=0x5Fu8
+    LBLCP[8u64]=0x61u8  LBLCP[9u64]=0x64u8  LBLCP[10u64]=0x6Du8 LBLCP[11u64]=0x69u8
+    LBLCP[12u64]=0x74u8
+    return 0i32
+}
+fn set_lblpg() -> i32 {
+    LBLPG[0u64]=0x6Du8  LBLPG[1u64]=0x71u8  LBLPG[2u64]=0x5Fu8  LBLPG[3u64]=0x70u8
+    LBLPG[4u64]=0x68u8  LBLPG[5u64]=0x61u8  LBLPG[6u64]=0x73u8  LBLPG[7u64]=0x65u8
+    LBLPG[8u64]=0x5Fu8  LBLPG[9u64]=0x67u8  LBLPG[10u64]=0x61u8 LBLPG[11u64]=0x74u8
+    LBLPG[12u64]=0x65u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ---- ML pre-init refusal FIRST (init latches for the process) ---- */
+    if ml_revalidate((&KEY as u64) as *u8) != -8i32 { return 1u64 }
+
+    /* ---- CH: the tag-toggle correspondence ---- */
+    let mut c : u64 = 0u64
+    while c < 16u64 { PROG[c] = (0x10u64 + c & 0xFFu64) as u8   PROOF[c] = PROG[c]   c = c + 1u64 }
+    PROG[0u64] = 0x50u8
+    PROOF[0u64] = 0x54u8
+    if ch_verify_correspondence((&PROG as u64) as *u8, 16u64, (&PROOF as u64) as *u8, 16u64) != 1u8 { return 2u64 }
+    PROOF[5u64] = PROOF[5u64] ^ 0x01u8
+    if ch_verify_correspondence((&PROG as u64) as *u8, 16u64, (&PROOF as u64) as *u8, 16u64) != 0u8 { return 3u64 }
+    PROOF[5u64] = PROOF[5u64] ^ 0x01u8
+    PROOF[0u64] = 0x50u8
+    if ch_verify_correspondence((&PROG as u64) as *u8, 16u64, (&PROOF as u64) as *u8, 16u64) != 0u8 { return 4u64 }
+    PROOF[0u64] = 0x54u8
+    if ch_verify_correspondence((&PROG as u64) as *u8, 16u64, (&PROOF as u64) as *u8, 15u64) != 0u8 { return 5u64 }
+
+    /* ---- RIPPLE: K provenance decides ---- */
+    let mut s : u64 = 0u64
+    while s < 32u64 { SITE[s] = (0x70u64 + s & 0xFFu64) as u8   s = s + 1u64 }
+    let bare : u64 = crystal_mint(0xC1u32, (&SITE as u64), 1u64, 1u64)
+    if bare == 0u64 { return 10u64 }
+    if ripple_verify(bare) != 0u8 { return 11u64 }                 /* no K provenance */
+    let arena : u64 = arena_new(65536u64)
+    if arena == 0u64 { return 12u64 }
+    let plan : u64 = crystal_mint(0xC2u32, (&SITE as u64), 1u64, 2u64)
+    if plan == 0u64 { return 13u64 }
+    if crystal_edges_init(plan, arena) != 0i32 { return 14u64 }
+    if ripple_verify(plan) != 1u8 { return 15u64 }                 /* K = 1.0 verifies */
+    if ripple_verify(0u64) != 0u8 { return 16u64 }                 /* null */
+
+    /* ---- the lattice vertical comes up ---- */
+    wh_init(0u64)
+    ws_init()
+    cons_init()
+    ml_init()
+    set_lblcp()
+    set_lblpg()
+
+    /* ---- MQ: the predicate VM gates admission (before cp_memo_admit exists) ---- */
+    PRED[0u64] = 0x00u8                                            /* const_count 0 */
+    PRED[1u64] = 0x13u8                                            /* COP_PHASE_GE */
+    PRED[2u64] = 0x01u8                                            /* phase >= 1 */
+    let r2 : u64 = &RAT2 as u64
+    let q2 : *u64 = r2 as *u64
+    q2[0u64] = r2 + 64u64
+    q2[1u64] = &LBLPG as u64
+    q2[2u64] = 13u64
+    q2[3u64] = &LBLPG as u64
+    q2[4u64] = 0u64
+    q2[5u64] = &PRED as u64
+    q2[6u64] = 3u64
+    if cons_ratify(r2 as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 20u64 }
+    let cid : *u8 = (r2 + 64u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { KEY[k] = 0x55u8   KEY2[k] = 0x58u8   KEY3[k] = 0x59u8   COMMIT[k] = 0x66u8   BOGUS[k] = 0x21u8   k = k + 1u64 }
+    let mut z : u64 = 0u64
+    while z < 68u64 { OPV[z] = 0u8   z = z + 1u64 }
+    let kp : *u8 = (&KEY as u64) as *u8
+    let cp : *u8 = (&COMMIT as u64) as *u8
+    let ov : *u8 = (&OPV as u64) as *u8
+    OPV[64u64] = 0u8
+    if mq_admit_predicate_gated(kp, cp, (&CHAIN as u64) as *u8, cid, ov, ov, 0u32) != -3i32 { return 21u64 }   /* predicate false */
+    OPV[64u64] = 1u8
+    if mq_admit_predicate_gated(kp, cp, (&CHAIN as u64) as *u8, cid, ov, ov, 0u32) != -6i32 { return 22u64 }   /* ml's own gate fires */
+    if mq_admit_predicate_gated(kp, cp, (&CHAIN as u64) as *u8, (&BOGUS as u64) as *u8, ov, ov, 0u32) != -2i32 { return 23u64 }  /* unknown clause */
+    let np : *u8 = (0u64) as *u8
+    if mq_admit_predicate_gated(np, cp, (&CHAIN as u64) as *u8, cid, ov, ov, 0u32) != -1i32 { return 24u64 }   /* null */
+
+    /* ---- ratify cp_memo_admit + a real registered chain ---- */
+    let r1 : u64 = &RAT as u64
+    let q1 : *u64 = r1 as *u64
+    q1[0u64] = r1 + 64u64
+    q1[1u64] = &LBLCP as u64
+    q1[2u64] = 13u64
+    q1[3u64] = &LBLCP as u64
+    q1[4u64] = 0u64
+    q1[5u64] = &LBLCP as u64
+    q1[6u64] = 0u64
+    if cons_ratify(r1 as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 30u64 }
+    ident_zero((&ZID as u64) as *u8)
+    let zp : *u8 = (&ZID as u64) as *u8
+    let idxc : u64 = wh_publish(zp, zp, zp, zp, 0u8, 0u8, 1u16, zp, 0u32, (&PAY as u64) as *u8, 72u32, (&CHAIN as u64) as *u8)
+    if idxc == 0xFFFFFFFFFFFFFFFFu64 { return 31u64 }
+    ws_register(idxc)
+
+    /* ---- the FULL end-to-end ADMIT through the predicate gate ---- */
+    if mq_admit_predicate_gated((&KEY2 as u64) as *u8, cp, (&CHAIN as u64) as *u8, cid, ov, ov, 0u32) != 0i32 { return 32u64 }
+
+    /* ---- ML: admit, stale, revalidate; every refusal exact ---- */
+    if ml_admit(kp, cp, (&CHAIN as u64) as *u8) != 0i32 { return 40u64 }
+    if ml_mark_stale(kp) != 0i32 { return 41u64 }
+    if ml_revalidate(kp) != 0i32 { return 42u64 }                  /* the chain replays */
+    if ml_revalidate(np) != -1i32 { return 43u64 }                 /* null */
+    if ml_revalidate((&BOGUS as u64) as *u8) != -2i32 { return 44u64 }   /* absent key */
+    /* M17 holds at ADMISSION too: an unregistered chain id never enters the lattice */
+    if ml_admit((&KEY3 as u64) as *u8, cp, (&BOGUS as u64) as *u8) != -7i32 { return 45u64 }
+
+    return 99u64
+}

@@ -1,0 +1,35 @@
+/* 1438_gate_outcomes_train_fold_conserve.iii -- GATE BURN-DOWN v2 TRANCHE 11: THE
+ * TRAINING POISON WALL, THE BRANCH-FOLD CROSSVAL, THE CONSERVATION GATE (3 gates).
+ *
+ *  nous_train_admit -- the poison wall: a certified commons entry is admitted (1),
+ *      an uncertified one is refused (0) -- learning input is certificate-gated;
+ *  sopt_verify_branch_dead -- the defense-in-depth conjunction (abstract range verdict
+ *      AND exhaustive concrete walkback): the module-pinned vectors (0,5,c=20) admit
+ *      the fold (1) and (0,10,c=10) refuse it (0);
+ *  cg_admit -- the conservation gate over the three reference contracts: the conserving
+ *      transfer (0) admits (1); the leaking (1) and minting (2) contracts are refused
+ *      (0) with the exhaustive counterexample walk having run.
+ * Exit 99. */
+module corpus_1438
+
+extern @abi(c-msvc-x64) fn nous_train_admit(has_cert: u8) -> u8 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn sopt_verify_branch_dead(lo: u32, hi: u32, c: u32) -> u32 from "sovereign_optimizer.iii"
+extern @abi(c-msvc-x64) fn cg_admit(contract: u32) -> u32 from "contract_gate.iii"
+
+fn main() -> u64 {
+    /* ---- the poison wall ---- */
+    if nous_train_admit(1u8) != 1u8 { return 1u64 }
+    if nous_train_admit(0u8) != 0u8 { return 2u64 }
+
+    /* ---- branch-fold crossval (the module-pinned vectors) ---- */
+    if sopt_verify_branch_dead(0u32, 5u32, 20u32) != 1u32 { return 10u64 }
+    if sopt_verify_branch_dead(10u32, 20u32, 15u32) != 1u32 { return 11u64 }
+    if sopt_verify_branch_dead(0u32, 10u32, 10u32) != 0u32 { return 12u64 }
+
+    /* ---- conservation: one honest contract, two thieves ---- */
+    if cg_admit(0u32) != 1u32 { return 20u64 }
+    if cg_admit(1u32) != 0u32 { return 21u64 }
+    if cg_admit(2u32) != 0u32 { return 22u64 }
+
+    return 99u64
+}

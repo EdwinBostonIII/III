@@ -1012,6 +1012,7 @@ declare -A EXPECTED=(
     [1436_gate_outcomes_shift_wire]=99
     [1437_gate_outcomes_memo_ripple]=99
     [1438_gate_outcomes_train_fold_conserve]=99
+    [1439_gate_outcomes_sovereign_conf]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

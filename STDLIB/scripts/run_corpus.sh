@@ -992,6 +992,7 @@ declare -A EXPECTED=(
     [1416_pq_dispatch_c4]=99
     [1417_option_path_pq_prov]=99
     [1418_fx_http_request]=99
+    [1419_xii_tables]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

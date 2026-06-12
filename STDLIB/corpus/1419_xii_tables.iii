@@ -1,0 +1,103 @@
+/* 1419_xii_tables.iii -- THE XII SEALED-TABLE ACCESSOR SWEEP (burn-down tranche 28; ~16 orphans).
+ *
+ *  CHD (5): the five perfect-hash arrays (primary/secondary/bucket_sizes/occupied/order)
+ *      expose nonzero, STABLE, PAIRWISE-DISTINCT base pointers (five different arrays);
+ *  HJ (2): the hexad-join table ptr is stable and len == 49; the sealed static content's
+ *      first byte is 1 and last is 7 (pinned from the initializer);
+ *  SAVINGS (2): table ptr stable, len == 576 (the full descent-kernel table);
+ *  CURATE (1): the trinity-admit buffer pointer is nonzero + stable;
+ *  REGISTER (1): xii_register_done is the registration latch -- 1 after xii_register_all
+ *      (idempotent);
+ *  SUBFORMS (4): reflect_scope and grant_atten and mean_kind are identity codecs over their
+ *      sealed constant ranges; lift_encode is the pinned bit layout from|to<<4|cap<<8;
+ *  HORIZON (1): template_kind of a live pattern is a valid kind (<=7) and deterministic;
+ *      an OOB id returns the 7 sentinel.
+ * Exit 99. */
+module corpus_1419
+
+extern @abi(c-msvc-x64) fn xii_chd_primary_ptr() -> u64 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_secondary_ptr() -> u64 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_bucket_sizes_ptr() -> u64 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_occupied_ptr() -> u64 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_order_ptr() -> u64 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_hj_table_ptr() -> u64 from "xii_hj.iii"
+extern @abi(c-msvc-x64) fn xii_hj_table_len() -> u32 from "xii_hj.iii"
+extern @abi(c-msvc-x64) fn xii_savings_table_ptr() -> u64 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_savings_table_len() -> u32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_curate_trinity_admit_ptr() -> u64 from "xii_curate.iii"
+extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xii_register_done() -> u8 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xii_subforms_reflect_scope(scope: u8) -> u32 from "xii_subforms.iii"
+extern @abi(c-msvc-x64) fn xii_subforms_grant_atten(kind: u32) -> u32 from "xii_subforms.iii"
+extern @abi(c-msvc-x64) fn xii_subforms_mean_kind(kind: u32) -> u32 from "xii_subforms.iii"
+extern @abi(c-msvc-x64) fn xii_subforms_lift_encode(from_ring: u8, to_ring: u8, cap_ref: u32) -> u32 from "xii_subforms.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_template_kind(id: u32) -> u8 from "xii_horizon.iii"
+
+fn main() -> u64 {
+    /* ---- CHD: five distinct stable pointers ---- */
+    let p1 : u64 = xii_chd_primary_ptr()
+    let p2 : u64 = xii_chd_secondary_ptr()
+    let p3 : u64 = xii_chd_bucket_sizes_ptr()
+    let p4 : u64 = xii_chd_occupied_ptr()
+    let p5 : u64 = xii_chd_order_ptr()
+    if p1 == 0u64 { return 1u64 }
+    if p2 == 0u64 { return 2u64 }
+    if p3 == 0u64 { return 3u64 }
+    if p4 == 0u64 { return 4u64 }
+    if p5 == 0u64 { return 5u64 }
+    if xii_chd_primary_ptr() != p1 { return 6u64 }
+    if p1 == p2 { return 7u64 }
+    if p1 == p3 { return 8u64 }
+    if p1 == p4 { return 9u64 }
+    if p1 == p5 { return 10u64 }
+    if p2 == p3 { return 11u64 }
+    if p2 == p4 { return 12u64 }
+    if p2 == p5 { return 13u64 }
+    if p3 == p4 { return 14u64 }
+    if p3 == p5 { return 15u64 }
+    if p4 == p5 { return 16u64 }
+
+    /* ---- HJ: len 49, sealed content boundaries ---- */
+    let hj : u64 = xii_hj_table_ptr()
+    if hj == 0u64 { return 20u64 }
+    if xii_hj_table_ptr() != hj { return 21u64 }
+    if xii_hj_table_len() != 49u32 { return 22u64 }
+    let hjp : *u8 = hj as *u8
+    if hjp[0u64] != 1u8 { return 23u64 }
+    if hjp[48u64] != 7u8 { return 24u64 }
+
+    /* ---- SAVINGS: len 576, stable ptr ---- */
+    let sv : u64 = xii_savings_table_ptr()
+    if sv == 0u64 { return 30u64 }
+    if xii_savings_table_ptr() != sv { return 31u64 }
+    if xii_savings_table_len() != 576u32 { return 32u64 }
+
+    /* ---- CURATE: stable trinity-admit buffer ---- */
+    let cu : u64 = xii_curate_trinity_admit_ptr()
+    if cu == 0u64 { return 40u64 }
+    if xii_curate_trinity_admit_ptr() != cu { return 41u64 }
+
+    /* ---- REGISTER: the latch ---- */
+    if xii_register_all() != 0i32 { return 50u64 }
+    if xii_register_done() != 1u8 { return 51u64 }
+    if xii_register_all() != 0i32 { return 52u64 }        /* idempotent */
+    if xii_register_done() != 1u8 { return 53u64 }
+
+    /* ---- SUBFORMS: identity codecs + the lift bit layout ---- */
+    if xii_subforms_reflect_scope(3u8) != 3u32 { return 60u64 }
+    if xii_subforms_reflect_scope(8u8) != 8u32 { return 61u64 }
+    if xii_subforms_grant_atten(0u32) != 0u32 { return 62u64 }
+    if xii_subforms_grant_atten(8u32) != 8u32 { return 63u64 }
+    if xii_subforms_mean_kind(6u32) != 6u32 { return 64u64 }
+    if xii_subforms_lift_encode(3u8, 0u8, 0u32) != 3u32 { return 65u64 }
+    if xii_subforms_lift_encode(0u8, 3u8, 0u32) != 0x30u32 { return 66u64 }
+    if xii_subforms_lift_encode(1u8, 2u8, 0xABu32) != (1u32 | (2u32 << 4u32) | (0xABu32 << 8u32)) { return 67u64 }
+
+    /* ---- HORIZON: template kind total + OOB sentinel ---- */
+    let k0 : u8 = xii_horizon_template_kind(0u32)
+    if k0 > 7u8 { return 70u64 }
+    if xii_horizon_template_kind(0u32) != k0 { return 71u64 }
+    if xii_horizon_template_kind(999u32) != 7u8 { return 72u64 }     /* OOB sentinel */
+
+    return 99u64
+}

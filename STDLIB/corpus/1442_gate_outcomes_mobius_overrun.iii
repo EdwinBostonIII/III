@@ -1,0 +1,46 @@
+/* 1442_gate_outcomes_mobius_overrun.iii -- GATE BURN-DOWN v2 TRANCHE 15: THE MOBIUS
+ * FLOOR ADMISSION, THE COST-OVERRUN HANDLER (2 gates; 13 -> 11).
+ *
+ *  iii_hexad_mobius_admits -- the quality-floor gate: a q_ppm at or above the buffer's
+ *      floor (buf[2]) is admitted (1); below it is refused (0);
+ *  corh_admit -- the cost-overrun enforcement door over 6-dim cost vectors: pre-init
+ *      refuses NOT_INITED (-2); after init, observed within declared is OK (0); a
+ *      non-critical dim at 1.5x declared (exceed, not 2x) is a MINOR overrun (E_OVERRUN
+ *      -5); a null op-id / declared / observed refuses E_NULL (-1).
+ * Exit 99. */
+module corpus_1442
+
+extern @abi(c-msvc-x64) fn iii_hexad_mobius_admits(buf_addr: u64, current_q_ppm: u32) -> u8 from "hexad_mobius.iii"
+extern @abi(c-msvc-x64) fn corh_init() -> i32 from "cost_overrun_handler.iii"
+extern @abi(c-msvc-x64) fn corh_admit(op_id: *u8, declared: *u64, observed: *u64, cap: u64) -> i32 from "cost_overrun_handler.iii"
+
+var MBUF : [u32; 3]
+var OPID : [u8; 32]
+var DECL : [u64; 6]
+var OBS  : [u64; 6]
+
+fn main() -> u64 {
+    /* ---- MOBIUS: the quality floor ---- */
+    MBUF[0u64] = 0x1234u32          /* forward */
+    MBUF[1u64] = 0x5678u32          /* inverse */
+    MBUF[2u64] = 500000u32          /* floor_ppm */
+    if iii_hexad_mobius_admits((&MBUF as u64), 600000u32) != 1u8 { return 1u64 }   /* above floor */
+    if iii_hexad_mobius_admits((&MBUF as u64), 500000u32) != 1u8 { return 2u64 }   /* at floor */
+    if iii_hexad_mobius_admits((&MBUF as u64), 400000u32) != 0u8 { return 3u64 }   /* below floor */
+
+    /* ---- CORH: pre-init refusal, then the cost gate ---- */
+    let mut i : u64 = 0u64
+    while i < 32u64 { OPID[i] = (0x70u64 + i & 0xFFu64) as u8   i = i + 1u64 }
+    let mut k : u64 = 0u64
+    while k < 6u64 { DECL[k] = 100u64   OBS[k] = 100u64   k = k + 1u64 }
+    if corh_admit((&OPID as u64) as *u8, (&DECL as u64) as *u64, (&OBS as u64) as *u64, 0u64) != -2i32 { return 10u64 }   /* NOT_INITED */
+    if corh_init() != 0i32 { return 11u64 }
+    if corh_admit((&OPID as u64) as *u8, (&DECL as u64) as *u64, (&OBS as u64) as *u64, 0u64) != 0i32 { return 12u64 }   /* within budget OK */
+    OBS[1u64] = 150u64                                                /* dim 1 (non-critical) 1.5x: MINOR */
+    if corh_admit((&OPID as u64) as *u8, (&DECL as u64) as *u64, (&OBS as u64) as *u64, 0u64) != -5i32 { return 13u64 }   /* E_OVERRUN */
+    OBS[1u64] = 100u64
+    let np : *u8 = (0u64) as *u8
+    if corh_admit(np, (&DECL as u64) as *u64, (&OBS as u64) as *u64, 0u64) != -1i32 { return 14u64 }                    /* E_NULL */
+
+    return 99u64
+}

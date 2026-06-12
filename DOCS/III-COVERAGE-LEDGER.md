@@ -242,3 +242,9 @@ a ONE-TIME OFFLINE-MINED 32-bit PoW [nonce 494012290 over 0x42||31x00, baked lik
 key] + score>=threshold + a REAL 4-peer HotStuff QC ADMITS 0; each refusal pinned in
 checked order: null qc -1, unknown tier -5, wrong nonce -4, over-threshold -6, truncated
 qc -7).  3 closed, 16 -> **13**.
+
+Tranche v2-15 (`1442_gate_outcomes_mobius_overrun`=99, corpus 1030/0, pin **11**):
+iii_hexad_mobius_admits (the quality floor: q_ppm at/above the buffer floor admits 1,
+below refuses 0), corh_admit (the 6-dim cost-overrun door: pre-init NOT_INITED -2; within
+declared OK 0; a non-critical dim at 1.5x is a MINOR overrun E_OVERRUN -5; null E_NULL -1).
+2 closed, 13 -> **11**.

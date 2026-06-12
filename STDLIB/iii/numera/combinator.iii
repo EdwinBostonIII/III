@@ -84,11 +84,52 @@ fn cb_case_c() -> u32 @export { return cb_mk(CB_CASE, 0u32, 0u32) }
 fn cb_j_c() -> u32 @export { return cb_mk(CB_J, 0u32, 0u32) }
 fn cb_refl_c() -> u32 @export { return cb_mk(CB_REFL, 0u32, 0u32) }
 
+/* [F-CB-1] is de Bruijn #0 free in a COMBINATOR term (no LAMs -> no level
+ * counting: every VAR sits at the same binder depth)? */
+fn cb_free0(m: u32) -> u8 {
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_VAR {
+        if CB_A[m] == 0u32 { return 1u8 }
+        return 0u8
+    }
+    if tag == CB_APP {
+        if cb_free0(CB_A[m]) == 1u8 { return 1u8 }
+        return cb_free0(CB_B[m])
+    }
+    return 0u8
+}
+
+/* [F-CB-1] shift every free VAR index down by one (the binder being abstracted
+ * is gone).  #0 must NOT be free (caller guarantees via cb_free0).  Structural
+ * sharing: a subtree with no VARs is returned UNCHANGED, so the var-free common
+ * case allocates nothing. */
+fn cb_shift_down(m: u32) -> u32 {
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_VAR {
+        return cb_var(CB_A[m] - 1u32)
+    }
+    if tag == CB_APP {
+        let f0 : u32 = CB_A[m]
+        let a0 : u32 = CB_B[m]
+        let f1 : u32 = cb_shift_down(f0)
+        let a1 : u32 = cb_shift_down(a0)
+        if f1 == f0 { if a1 == a0 { return m } }
+        return cb_app(f1, a1)
+    }
+    return m
+}
+
 /* bracket abstraction: abstract de Bruijn #0 out of a COMBINATOR term (no LAMs).
- *   lambda*#0. #0      = I
- *   lambda*#0. #k (k>0) = K #(k-1)        (the var is not #0; drop a binder level)
- *   lambda*#0. (f a)    = S (lambda*#0.f) (lambda*#0.a)
- *   lambda*#0. c        = K c             (c = atom/S/K/I; #0 not free) */
+ * [F-CB-1] Curry-optimized (the abf rules) -- the naive translation tripled the
+ * term at EVERY binder (3^k blow-up over k nested lambdas, corpus 1491 measures
+ * it); the optimized rules stop descending the moment #0 is not free:
+ *   lambda*#0. #0                    = I
+ *   lambda*#0. M        (#0 not free) = K (shift-down M)    -- NO descent
+ *   lambda*#0. (M #0)   (#0 not free in M) = shift-down M   -- eta
+ *   lambda*#0. #k (k>0)              = K #(k-1)
+ *   lambda*#0. (f a)    (otherwise)  = S (lambda*#0.f) (lambda*#0.a)
+ * The shift-down keeps the de Bruijn discipline the naive per-var decrement
+ * provided.  Reduction-equivalent to the naive form (1491's conv arms). */
 fn cb_abstract(m: u32) -> u32 {
     let tag : u8 = CB_TAG[m]
     if tag == CB_VAR {
@@ -96,9 +137,36 @@ fn cb_abstract(m: u32) -> u32 {
         if k == 0u32 { return cb_i() }
         return cb_app(cb_k(), cb_var(k - 1u32))
     }
+    if cb_free0(m) == 0u8 {
+        return cb_app(cb_k(), cb_shift_down(m))
+    }
     if tag == CB_APP {
-        let f : u32 = cb_abstract(CB_A[m])
-        let a : u32 = cb_abstract(CB_B[m])
+        let fm : u32 = CB_A[m]
+        let am : u32 = CB_B[m]
+        /* eta: lambda*#0.(M #0) with #0 not free in M  =  M */
+        if CB_TAG[am] == CB_VAR {
+            if CB_A[am] == 0u32 {
+                if cb_free0(fm) == 0u8 { return cb_shift_down(fm) }
+            }
+        }
+        let f : u32 = cb_abstract(fm)
+        let a : u32 = cb_abstract(am)
+        return cb_app(cb_app(cb_s(), f), a)
+    }
+    return cb_app(cb_k(), m)
+}
+
+/* [F-CB-1 ORACLE] the naive translation, kept verbatim for the differential. */
+fn _cb_abstract_naive(m: u32) -> u32 {
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_VAR {
+        let k : u32 = CB_A[m]
+        if k == 0u32 { return cb_i() }
+        return cb_app(cb_k(), cb_var(k - 1u32))
+    }
+    if tag == CB_APP {
+        let f : u32 = _cb_abstract_naive(CB_A[m])
+        let a : u32 = _cb_abstract_naive(CB_B[m])
         return cb_app(cb_app(cb_s(), f), a)
     }
     return cb_app(cb_k(), m)
@@ -119,6 +187,31 @@ fn cb_compile(m: u32) -> u32 @export {
         return cb_abstract(body)
     }
     return m
+}
+
+/* [F-CB-1] the naive compile (the differential ORACLE, corpus 1491). */
+fn cb_compile_naive(m: u32) -> u32 @export {
+    if m >= CB_CAP { return 0u32 }
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_APP {
+        let f : u32 = cb_compile_naive(CB_A[m])
+        let a : u32 = cb_compile_naive(CB_B[m])
+        return cb_app(f, a)
+    }
+    if tag == CB_LAM {
+        let body : u32 = cb_compile_naive(CB_A[m])
+        return _cb_abstract_naive(body)
+    }
+    return m
+}
+
+/* [F-CB-1] node count (the blow-up measure, corpus 1491). */
+fn cb_size(m: u32) -> u64 @export {
+    if m >= CB_CAP { return 0u64 }
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_APP { return 1u64 + cb_size(CB_A[m]) + cb_size(CB_B[m]) }
+    if tag == CB_LAM { return 1u64 + cb_size(CB_A[m]) }
+    return 1u64
 }
 
 /* one leftmost-outermost first-order rewrite step; sets CB_FIRED if a redex fired.

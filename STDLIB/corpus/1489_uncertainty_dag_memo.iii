@@ -1,0 +1,92 @@
+/* 1489_uncertainty_dag_memo.iii -- F-UNC-1 FALSIFIER: the provenance walkers
+ * memoize the DAG -- root_causes returns the root SET, and the silent-drop
+ * window is closed.
+ *
+ * THE DEFECTS (pre-fix): unc_root_causes/unc_well_formed walked the gap DAG
+ * with NO visited memo.  (a) A shared sub-DAG was re-walked once PER PATH --
+ * a k-layer diamond cascade popped ~2^k nodes; (b) the same root was emitted
+ * once per path, so `count` was path multiplicity, not the root-set size
+ * (the smallest diamond derived(g1,g1) reported TWO root causes for ONE
+ * root); (c) under stack pressure the full-stack guard SILENTLY DROPPED
+ * subtrees -- unc_well_formed could answer 1 without verifying a dropped
+ * branch.  With the memo each gid expands once, so at most UNC_NEXT (<= the
+ * stack capacity) pushes ever occur and the drop guard is structurally
+ * unreachable.
+ *
+ * Arms: (1) smallest diamond -> exactly ONE root cause (pre-fix: 2 -- the
+ * differential); (2) a 20-layer diamond cascade -> still exactly 1 (pre-fix:
+ * ~2^20 pops, count saturates the cap); (3) two distinct roots under a
+ * shared diamond -> count 2 + exact membership; (4) well-formed on diamonds
+ * + chain regression; (5) the antecedent-existence guard refuses a junk id
+ * (regression pin).  Exit 99. */
+module corpus_1489
+
+extern @abi(c-msvc-x64) fn unc_init() -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_gap_root(kind: u8, reason: u32) -> u32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_gap_derived(a0: u32, a1: u32, na: u8, reason: u32) -> u32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_root_causes(gid: u32, out_ids: *u32, cap: u32) -> u32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_well_formed(gid: u32) -> u8 from "uncertainty.iii"
+
+const UNC_HOLE : u8 = 1u8
+
+var UD_ROOTS : [u32; 16]
+
+fn main() -> u64 {
+    unc_init()
+    let rc : *u32 = (&UD_ROOTS as u64) as *u32
+
+    /* ---- (1) the smallest diamond: d1 = derived(g1, g1) ---- */
+    let g1 : u32 = unc_gap_root(UNC_HOLE, 11u32)
+    if g1 == 0u32 { return 1u64 }
+    let d1 : u32 = unc_gap_derived(g1, g1, 2u8, 12u32)
+    if d1 == 0u32 { return 2u64 }
+    let n1 : u32 = unc_root_causes(d1, rc, 8u32)
+    if n1 != 1u32 { return 3u64 }                 /* pre-fix: 2 (path multiplicity) */
+    if UD_ROOTS[0u64] != g1 { return 4u64 }
+    if unc_well_formed(d1) != 1u8 { return 5u64 }
+
+    /* ---- (2) a 20-layer diamond cascade: STILL exactly one root ---- */
+    let mut dk : u32 = d1
+    let mut layer : u64 = 0u64
+    while layer < 20u64 {
+        let dn : u32 = unc_gap_derived(dk, dk, 2u8, 13u32)
+        if dn == 0u32 { return 6u64 }
+        dk = dn
+        layer = layer + 1u64
+    }
+    let n2 : u32 = unc_root_causes(dk, rc, 8u32)
+    if n2 != 1u32 { return 7u64 }                 /* pre-fix: cap-saturated (2^21 paths) */
+    if UD_ROOTS[0u64] != g1 { return 8u64 }
+    if unc_well_formed(dk) != 1u8 { return 9u64 }
+
+    /* ---- (3) two distinct roots under a shared diamond ---- */
+    let ga : u32 = unc_gap_root(UNC_HOLE, 14u32)
+    let gb : u32 = unc_gap_root(UNC_HOLE, 15u32)
+    if ga == 0u32 { return 10u64 }
+    if gb == 0u32 { return 10u64 }
+    let mm : u32 = unc_gap_derived(ga, gb, 2u8, 16u32)
+    if mm == 0u32 { return 11u64 }
+    let dd : u32 = unc_gap_derived(mm, mm, 2u8, 17u32)
+    if dd == 0u32 { return 12u64 }
+    let n3 : u32 = unc_root_causes(dd, rc, 8u32)
+    if n3 != 2u32 { return 13u64 }
+    /* membership (order is the deterministic walk order; pin the SET) */
+    let r0 : u32 = UD_ROOTS[0u64]
+    let r1 : u32 = UD_ROOTS[1u64]
+    if r0 == r1 { return 14u64 }
+    if r0 != ga { if r0 != gb { return 15u64 } }
+    if r1 != ga { if r1 != gb { return 15u64 } }
+
+    /* ---- (4) chain regression: g1 <- c2 <- c3 still one root ---- */
+    let c2 : u32 = unc_gap_derived(g1, 0u32, 1u8, 18u32)
+    let c3 : u32 = unc_gap_derived(c2, 0u32, 1u8, 19u32)
+    if c3 == 0u32 { return 16u64 }
+    if unc_root_causes(c3, rc, 8u32) != 1u32 { return 17u64 }
+    if UD_ROOTS[0u64] != g1 { return 18u64 }
+    if unc_well_formed(c3) != 1u8 { return 19u64 }
+
+    /* ---- (5) the antecedent-existence guard (regression pin) ---- */
+    if unc_gap_derived(60000u32, 0u32, 1u8, 20u32) != 0u32 { return 20u64 }
+
+    return 99u64
+}

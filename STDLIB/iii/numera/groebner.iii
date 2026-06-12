@@ -89,6 +89,15 @@ var GROEBNER_AR_LE        : [u32; 16]
 var GROEBNER_AR_LT        : [u32; 16]
 var GROEBNER_DG_BUF       : [u8; 256]
 
+// [F-GB-2] Buchberger chain criterion (Criterion 2) state.
+var GROEBNER_PAIR_DONE : [u8; 1048576]  /* (i,j) TREATED bitmap, i*1024 + j with i<j (basis cap 1024) */
+var GROEBNER_USE_C2    : u8  = 1u8      /* 1 = chain criterion LIVE; 0 = C1-only (the differential oracle) */
+var GROEBNER_C2_PRUNED : u64 = 0u64     /* pairs pruned by the chain criterion (the non-vacuity witness) */
+var GROEBNER_C2_LTI    : [u32; 16]
+var GROEBNER_C2_LTJ    : [u32; 16]
+var GROEBNER_C2_LTK    : [u32; 16]
+var GROEBNER_C2_LCM    : [u32; 16]
+
 // KAT scratch (module scope; selftest is single-threaded, runs last).
 var GROEBNER_KAT_EXPS     : [u32; 16]
 var GROEBNER_KAT_OUT      : [u32; 16]
@@ -122,7 +131,12 @@ fn gb_init(nvars: u32) -> i32 @export {
 
 // Record the field session (arena handle + modulus bigint id).  W2 fix:
 // removes arena,p from every per-op signature.  Reversible via gb_init.
+/* p is a bigint HANDLE to the prime modulus (caller-created via
+ * bigint_from_u64 -- gb_begin never creates one itself).  A RAW prime value
+ * here silently aliases a handle slot and corrupts every gfp_* op downstream
+ * (E_INV at best) -- refuse the one detectable case (corpus 1490 pins it). */
 fn gb_begin(arena: u64, p: u64) -> i32 @export {
+    if p == 0u64 { return GROEBNER_E_BAD }
     GROEBNER_ARENA = arena
     GROEBNER_MOD_P = p
     GROEBNER_SESS = 1u8
@@ -1002,6 +1016,13 @@ fn gb_buchberger(generators: *u32, gen_n: u32, out_basis: *u32, out_n: *u32) -> 
         j = j + 1u32
     }
     if rc != GROEBNER_OK { return rc }
+    /* [F-GB-2] fresh TREATED bitmap + prune counter for this closure run. */
+    let mut dz : u64 = 0u64
+    while dz < 1048576u64 {
+        GROEBNER_PAIR_DONE[dz] = 0u8
+        dz = dz + 1u64
+    }
+    GROEBNER_C2_PRUNED = 0u64
     let mut head : u32 = 0u32
     let mut running : u8 = 1u8
     while running == 1u8 {
@@ -1019,10 +1040,22 @@ fn gb_buchberger(generators: *u32, gen_n: u32, out_basis: *u32, out_n: *u32) -> 
                 if res == GROEBNER_E_INV { rc = GROEBNER_E_INV }
             }
             pql = GROEBNER_PQL_OUT
+            /* [F-GB-2] (ix,jx) is now TREATED -- by S-poly, by C1, or by the
+             * chain criterion itself (strict pop order keeps citations acyclic). */
+            GROEBNER_PAIR_DONE[(ix as u64) * 1024u64 + (jx as u64)] = 1u8
         }
     }
     if rc != GROEBNER_OK { return rc }
     return gb_autoreduce(bptr, bn, out_basis, out_n)
+}
+
+/* [F-GB-2] the differential surfaces (corpus 1490). */
+fn gb_c2_pruned() -> u64 @export { return GROEBNER_C2_PRUNED }
+fn gb_buchberger_c1only(generators: *u32, gen_n: u32, out_basis: *u32, out_n: *u32) -> i32 @export {
+    GROEBNER_USE_C2 = 0u8
+    let r : i32 = gb_buchberger(generators, gen_n, out_basis, out_n)
+    GROEBNER_USE_C2 = 1u8
+    return r
 }
 
 // Per-pair processing for gb_buchberger (kept flat to respect the parser
@@ -1039,6 +1072,52 @@ fn gb_buch_step(bptr: *u32, ix: u32, jx: u32) -> i32 {
     let fpoly : u32 = bptr[(ix as u64) & GROEBNER_U32MASK]
     let gpoly : u32 = bptr[(jx as u64) & GROEBNER_U32MASK]
     if gb_disjoint_supports(fpoly, gpoly) == 1u8 { return GROEBNER_OK }
+    if GROEBNER_USE_C2 == 1u8 {
+        /* [F-GB-2] the chain criterion: skip (i,j) if some k != i,j has
+         * LT(b_k) | lcm(LT(b_i), LT(b_j)) and BOTH (i,k) and (j,k) are already
+         * TREATED (popped earlier).  The FIFO pop order is a strict total order,
+         * so three mutual citations cannot cycle -- the earliest of the three
+         * cannot have cited the later two (Becker-Weispfenning 5.66/5.68: the
+         * pruned S-polynomial is a combination of the two treated ones and
+         * reduces to zero in the final basis).  Corpus 1490 is the differential
+         * (digest identity vs the C1-only oracle + the analytic Groebner-ness
+         * arm + the pruned>0 non-vacuity witness). */
+        let lti : *u32 = &GROEBNER_C2_LTI[0u32]
+        let ltj : *u32 = &GROEBNER_C2_LTJ[0u32]
+        let ltk : *u32 = &GROEBNER_C2_LTK[0u32]
+        let lcm : *u32 = &GROEBNER_C2_LCM[0u32]
+        gb_lead_exp(fpoly, lti)
+        gb_lead_exp(gpoly, ltj)
+        gb_lcm(lti, ltj, lcm)
+        let mut kk : u32 = 0u32
+        let mut pruned : u8 = 0u8
+        while kk < bn {
+            if pruned == 0u8 {
+                if kk != ix {
+                    if kk != jx {
+                        let kslot : u32 = bptr[(kk as u64) & GROEBNER_U32MASK]
+                        gb_lead_exp(kslot, ltk)
+                        if gb_div_exp(ltk, lcm) == 1u8 {
+                            let mut pa : u32 = ix
+                            let mut pb : u32 = kk
+                            if kk < ix { pa = kk  pb = ix }
+                            let mut qa : u32 = jx
+                            let mut qb : u32 = kk
+                            if kk < jx { qa = kk  qb = jx }
+                            if GROEBNER_PAIR_DONE[(pa as u64) * 1024u64 + (pb as u64)] == 1u8 {
+                                if GROEBNER_PAIR_DONE[(qa as u64) * 1024u64 + (qb as u64)] == 1u8 { pruned = 1u8 }
+                            }
+                        }
+                    }
+                }
+            }
+            kk = kk + 1u32
+        }
+        if pruned == 1u8 {
+            GROEBNER_C2_PRUNED = GROEBNER_C2_PRUNED + 1u64
+            return GROEBNER_OK
+        }
+    }
     let s : u32 = gb_spoly(fpoly, gpoly)
     if s == GROEBNER_SENT { return GROEBNER_SPOLY_STATUS }   /* faithful: E_FULL (storage) vs E_INV (field) vs E_BAD/NOSESS, not a blanket E_INV */
     let r : u32 = gb_reduce(s, bptr, bn)

@@ -1,0 +1,114 @@
+/* 1491_bracket_abstraction_opt.iii -- F-CB-1 DIFFERENTIAL: the Curry-optimized
+ * bracket abstraction is reduction-equivalent to the naive translation and
+ * kills the 3^k blow-up.
+ *
+ * THE BLOW-UP (oracle, kept as cb_compile_naive): the naive rules rebuild
+ * EVERY application as S (abs f) (abs a) even when #0 is not free -- each
+ * nested binder roughly triples the term (k lambdas over a var-free body ->
+ * ~3^k nodes).  The optimized rules (K-without-descent + eta, with the
+ * de-Bruijn shift-down the naive per-var decrement provided) stop at the
+ * first var-free subtree.
+ *
+ * Arms: (1) STRUCTURAL pins -- compile(lambda lambda. #1) IS the K combinator
+ * and compile(lambda. atom #0) IS the atom (eta), exact terms, not just
+ * convertible; (2) the de-Bruijn shift law -- lambda lambda. (#0 #1) applied
+ * to two distinct atoms reduces to (b a) under BOTH compilers; (3) the
+ * MEASURED blow-up -- 6 nested lambdas over (atom1 atom2): naive > 500 nodes,
+ * optimized < 20, both reduction-equal when saturated with 6 arguments;
+ * (4) iota composition regression (compile(lambda b. IF b c d) still selects).
+ * Exit 99. */
+module corpus_1491
+
+extern @abi(c-msvc-x64) fn cb_reset() -> u64 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_app(f: u32, a: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_var(k: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_lam(body: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_atom(id: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_k() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_true() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_false() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_if_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_compile(m: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_compile_naive(m: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_size(m: u32) -> u64 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_reduce(m: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_struct_eq(x: u32, y: u32) -> u8 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_conv(x: u32, y: u32) -> u8 from "combinator.iii"
+
+fn main() -> u64 {
+    cb_reset()
+
+    /* ---- (1a) compile(lambda lambda. #1) IS K, structurally ---- */
+    let tk : u32 = cb_lam(cb_lam(cb_var(1u32)))
+    let ok1 : u32 = cb_compile(tk)
+    if cb_struct_eq(ok1, cb_k()) != 1u8 { return 1u64 }
+    /* the naive form is bigger but convertible once applied */
+    let nk : u32 = cb_compile_naive(cb_lam(cb_lam(cb_var(1u32))))
+    if cb_size(nk) <= cb_size(ok1) { return 2u64 }
+    let aa : u32 = cb_atom(10u32)
+    let ab : u32 = cb_atom(11u32)
+    if cb_conv(cb_app(cb_app(ok1, aa), ab), cb_app(cb_app(nk, aa), ab)) != 1u8 { return 3u64 }
+    if cb_struct_eq(cb_reduce(cb_app(cb_app(ok1, aa), ab)), aa) != 1u8 { return 4u64 }
+
+    /* ---- (1b) eta: compile(lambda. atom #0) IS the atom ---- */
+    let ax : u32 = cb_atom(20u32)
+    let te : u32 = cb_lam(cb_app(ax, cb_var(0u32)))
+    let oe : u32 = cb_compile(te)
+    if cb_struct_eq(oe, ax) != 1u8 { return 5u64 }
+
+    /* ---- (2) the shift law: lambda lambda. (#0 #1) -> applied (a,b) = (b a) ---- */
+    let tf : u32 = cb_lam(cb_lam(cb_app(cb_var(0u32), cb_var(1u32))))
+    let of2 : u32 = cb_compile(tf)
+    let nf2 : u32 = cb_compile_naive(cb_lam(cb_lam(cb_app(cb_var(0u32), cb_var(1u32)))))
+    let pa : u32 = cb_atom(30u32)
+    let pb : u32 = cb_atom(31u32)
+    let want : u32 = cb_app(pb, pa)
+    if cb_struct_eq(cb_reduce(cb_app(cb_app(of2, pa), pb)), want) != 1u8 { return 6u64 }
+    if cb_struct_eq(cb_reduce(cb_app(cb_app(nf2, pa), pb)), want) != 1u8 { return 7u64 }
+
+    /* ---- (3) the measured blow-up: 5 binders over a var-free body (5 keeps the
+     *      naive tower's REDUCTION inside the 16384-node arena; the blow-up is
+     *      already >500 nodes vs <20 optimized) ---- */
+    let body : u32 = cb_app(cb_atom(40u32), cb_atom(41u32))
+    let mut t6 : u32 = body
+    let mut bi : u64 = 0u64
+    while bi < 5u64 {
+        t6 = cb_lam(t6)
+        bi = bi + 1u64
+    }
+    let o6 : u32 = cb_compile(t6)
+    let so : u64 = cb_size(o6)
+    if so >= 20u64 { return 8u64 }                    /* optimized stays linear */
+    /* rebuild the lambda term for the naive run (sharing hygiene) */
+    let mut t6b : u32 = cb_app(cb_atom(40u32), cb_atom(41u32))
+    bi = 0u64
+    while bi < 5u64 {
+        t6b = cb_lam(t6b)
+        bi = bi + 1u64
+    }
+    let n6 : u32 = cb_compile_naive(t6b)
+    let sn : u64 = cb_size(n6)
+    if sn <= 500u64 { return 9u64 }                   /* the naive 3^k blow-up is REAL */
+    /* saturate both with 5 arguments: the SAME var-free body must emerge */
+    let mut capp_o : u32 = o6
+    let mut capp_n : u32 = n6
+    let mut ai : u64 = 0u64
+    while ai < 5u64 {
+        capp_o = cb_app(capp_o, cb_atom((50u64 + ai) as u32))
+        capp_n = cb_app(capp_n, cb_atom((50u64 + ai) as u32))
+        ai = ai + 1u64
+    }
+    let ro : u32 = cb_reduce(capp_o)
+    if cb_conv(ro, capp_n) != 1u8 { return 10u64 }
+    if cb_size(ro) != 3u64 { return 11u64 }           /* (atom40 atom41), 3 nodes */
+
+    /* ---- (4) iota composition: compile(lambda b. IF b c d) still selects ---- */
+    let cT : u32 = cb_atom(60u32)
+    let cE : u32 = cb_atom(61u32)
+    let tif : u32 = cb_lam(cb_app(cb_app(cb_app(cb_if_c(), cb_var(0u32)), cT), cE))
+    let oif : u32 = cb_compile(tif)
+    if cb_struct_eq(cb_reduce(cb_app(oif, cb_true())), cT) != 1u8 { return 12u64 }
+    if cb_struct_eq(cb_reduce(cb_app(oif, cb_false())), cE) != 1u8 { return 13u64 }
+
+    return 99u64
+}

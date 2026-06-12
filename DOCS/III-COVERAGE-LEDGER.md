@@ -617,3 +617,43 @@ New shared guard: edge_count bounded (the u32 dir-bit + 2E-entry allocation), ap
 to BOTH strategies so the differential covers every input.
 
 Gates: build GATE PASS FAIL=0; corpus **1076/0**; xii 92/0; nous GREEN; bench 7/0/0.
+
+## F-UNC-1 + F-GB-2 + F-CB-1 — memo, chain criterion, bracket optimization (2026-06-12)
+
+**F-UNC-1** (`numera/uncertainty.iii`, falsifier `1489`, old exit=3): the provenance
+walkers had NO visited memo -- a shared sub-DAG re-walked once PER PATH (a 20-layer
+diamond cascade = ~2^21 pops), root_causes returned path multiplicity instead of the
+root SET (the smallest diamond reported its one root twice), and -- the soundness
+half -- the full-stack guard SILENTLY DROPPED subtrees, so unc_well_formed could
+vouch for a branch it never visited.  The memo expands each gid once: at most
+UNC_NEXT (<= the stack capacity) pushes, the drop guard structurally unreachable.
+The antecedent-existence guard was already present (refuted my third-hole claim).
+
+**F-GB-2** (`numera/groebner.iii`, differential `1490`): Buchberger's chain
+criterion -- skip (i,j) when some k has LT(k) | lcm and both (i,k),(j,k) already
+TREATED; the FIFO pop order is strict, so mutual citations cannot cycle.  Pruned
+pairs counted (gb_c2_pruned, the non-vacuity witness); the C1-only path exported as
+the ORACLE.  1490 = prune>0 + digest identity (live vs oracle, fresh sessions) +
+the ANALYTIC arm (every S-poly of the output reduces to zero -- the definition, so
+an agreed-wrong basis cannot pass) + the linear regression fixture.
+
+**THE 1490 DEBUGGING SAGA (falsification discipline receipts):** the first draft
+E_INV'd; hypotheses killed in order by probes gbprobe1-13: fixture-too-big ->
+handle exhaustion (instrumented live-count: FAIL with only 4 live = NOT exhaustion)
+-> closure handle leak -> nested-extern-call ABI defect -> ROOT CAUSE: the harness
+passed a RAW prime where gb_begin expects a bigint HANDLE (raw 7 aliased slot 7 ->
+garbage modulus -> E_INV deep in gfp_inv).  BOTH defect theories retracted on clean
+differentials (nested and local-bound styles both pass with the correct handle).
+Hardened: gb_begin now refuses p==0 + documents the handle contract (1490 pins it),
+so the next caller gets E_BAD at the door instead of a deep E_INV mystery.
+
+**F-CB-1** (`numera/combinator.iii`, differential `1491`): Curry-optimized bracket
+abstraction (K-without-descent + eta, with the de-Bruijn shift-down the naive
+per-var decrement provided; structural sharing -- a var-free subtree is returned
+unchanged).  The naive translation tripled the term at every binder (3^k); kept as
+cb_compile_naive (the ORACLE).  1491 = structural pins (compile(lambda lambda. #1)
+IS K; eta yields the atom itself), the shift law applied, the MEASURED blow-up
+(5 binders: naive >500 nodes vs optimized <20, reduction-equal saturated), and the
+iota composition regression.
+
+Gates: build GATE PASS FAIL=0; corpus **1079/0**; xii 92/0; nous GREEN; bench 7/0/0.

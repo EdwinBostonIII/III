@@ -1,0 +1,106 @@
+/* 1413_transform_taint_seal.iii -- TRANSFORM PACK/SET, SEPARATION-LOGIC PURITY, TAINT FLOW,
+ * TEMPALOC TYPES + SEAL INSTANT (burn-down tranche 22; ~10 census orphans).
+ *
+ *  TRANSFORM (4): transform_pack / transform_unpack_dst are inverse on the low-48 dst handle
+ *      (unpack_dst(pack(d,p)) == d & 0xFFFF_FFFF_FFFF, prov in the high 16); pattern_set_init
+ *      registers the global set and pattern_set_get returns EXACTLY it; transform_buffer with
+ *      src_form == dst_form short-circuits to an OK result (low bit 0);
+ *  SEP-LOGIC (1): sl_pure has NO heap footprint (sl_footprint(sl_pure(x)) == 0), distinguishing
+ *      it from a spatial points-to (sl_footprint(sl_pt(3,v)) == 1<<3) -- the export's meaning;
+ *  TAINT (1): taint_set_imm marks a TRUSTED constant (taint 0); with a source(0) + imm(1) +
+ *      op(2)=combine(0,1), propagation taints 0 and 2 but NOT 1 (imm stays clean) -- the
+ *      information-flow law;
+ *  TEMPALOC (2): tempaloc_type_deadline / tempaloc_type_seal are DISTINCT nonzero type tags
+ *      (3 and 4);
+ *  SEAL (1): seal_instant mints a handle whose seal_instant_id is nonzero, equals itself on
+ *      re-read, and a dead handle reads 0.
+ * Exit 99. */
+module corpus_1413
+
+extern @abi(c-msvc-x64) fn transform_pack(dst_handle: u64, prov_id: u64) -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn transform_unpack_dst(packed: u64) -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn transform_pattern_set_init(arena: u64) -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn transform_pattern_set_get() -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn transform_buffer(src_bytes: u64, src_len: u64, src_form: u32, dst_form: u32, ctx: u64) -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn sl_reset() -> i32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sl_pure(b: u32) -> u32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sl_pt(a: u32, v: u32) -> u32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sl_footprint(node: u32) -> u64 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn taint_reset(n: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_source(i: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_imm(i: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_op(i: u32, a: u32, b: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_propagate() -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_tainted(i: u32) -> u32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn tempaloc_type_deadline() -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_type_seal() -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn seal_instant(time_cap: u64, unix_seconds: u64) -> u64 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_instant_id(handle: u64) -> u64 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena_id: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_table_reset() -> i32 from "call_context.iii"
+
+fn main() -> u64 {
+    /* ---- TRANSFORM: pack/unpack inverse; global set identity; buffer identity ---- */
+    let packed : u64 = transform_pack(0x1234567890ABu64, 0xBEEFu64)
+    if transform_unpack_dst(packed) != 0x1234567890ABu64 { return 1u64 }
+    if (packed >> 48u64) != 0xBEEFu64 { return 2u64 }
+    /* high dst bits are masked off by pack */
+    let packed2 : u64 = transform_pack(0xFFFFFFFFFFFFFFFFu64, 0x1u64)
+    if transform_unpack_dst(packed2) != 0xFFFFFFFFFFFFu64 { return 3u64 }
+
+    let ar : u64 = arena_new(65536u64)
+    if ar == 0u64 { return 4u64 }
+    let set : u64 = transform_pattern_set_init(ar)
+    if set == 0u64 { return 5u64 }
+    if transform_pattern_set_get() != set { return 6u64 }          /* global identity */
+
+    /* transform_buffer with src==dst short-circuits to an OK result (low bit 0) */
+    call_context_table_reset()
+    call_context_init_set(0u64, 0u8, 3u8, 0u8)
+    call_context_init_set_extras(ar, 0u16)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 7u64 }
+    let r : u64 = transform_buffer(0xCAFEu64, 2u64, 12u32, 12u32, ctx)   /* hex->hex identity */
+    if (r & 1u64) != 0u64 { return 8u64 }                          /* result_ok -> low bit 0 */
+
+    /* ---- SEP-LOGIC: pure has no footprint; spatial does ---- */
+    sl_reset()
+    let pure : u32 = sl_pure(1u32)
+    if sl_footprint(pure) != 0u64 { return 10u64 }
+    let pt : u32 = sl_pt(3u32, 9u32)
+    if sl_footprint(pt) != 8u64 { return 11u64 }                   /* 1 << 3 */
+
+    /* ---- TAINT: imm is a trusted constant; flow law ---- */
+    if taint_reset(3u32) != 0i32 { return 20u64 }
+    if taint_set_source(0u32) != 0i32 { return 21u64 }
+    if taint_set_imm(1u32) != 0i32 { return 22u64 }
+    if taint_set_op(2u32, 0u32, 1u32) != 0i32 { return 23u64 }     /* combine source + imm */
+    if taint_propagate() != 0i32 { return 24u64 }
+    if taint_tainted(0u32) != 1u32 { return 25u64 }                /* source tainted */
+    if taint_tainted(1u32) != 0u32 { return 26u64 }                /* imm trusted */
+    if taint_tainted(2u32) != 1u32 { return 27u64 }                /* taint spreads */
+
+    /* ---- TEMPALOC: distinct type tags ---- */
+    let td : u64 = tempaloc_type_deadline()
+    let ts : u64 = tempaloc_type_seal()
+    if td != 3u64 { return 30u64 }
+    if ts != 4u64 { return 31u64 }
+    if td == ts { return 32u64 }
+
+    /* ---- SEAL: instant id nonzero, stable, dead-handle 0 ---- */
+    let env : u64 = cap_env_init()
+    let time_cap : u64 = cap_attenuate(env, 0x100u64, 0u64)
+    let h : u64 = seal_instant(time_cap, 1700000000u64)
+    if h == 0u64 { return 40u64 }
+    let iid : u64 = seal_instant_id(h)
+    if iid == 0u64 { return 41u64 }
+    if seal_instant_id(h) != iid { return 42u64 }                  /* stable */
+    if seal_instant_id(0xDEAD0000u64) != 0u64 { return 43u64 }     /* dead handle -> 0 */
+
+    return 99u64
+}

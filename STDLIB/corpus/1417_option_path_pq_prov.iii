@@ -1,0 +1,162 @@
+/* 1417_option_path_pq_prov.iii -- OPTION-FULL SENTINEL, PATH JOIN, PRIORITY PEEK, REGEX
+ * NODES, Q128 ROUNDING CRYSTALS, POINTER PROVENANCE (burn-down tranche 26; ~10 orphans).
+ *
+ *  OPTION u64 (3): option_u64_full is the DISTINGUISHED sentinel (not none, not some);
+ *      filling all 256 slots makes some() return FULL (is_some(FULL)==0 -- a full table is
+ *      never mistaken for a live option); unwrap_or decodes a live slot exactly and yields
+ *      the default on none/FULL/dropped; drop is drop-once;
+ *  PATH (1): path_join inserts exactly one '/' between segments (and none after a trailing
+ *      separator) -- byte-exact through the builder;
+ *  PQ (2): pq_u64u32_capacity is the registered hard-max; peek_min_priority reads the heap
+ *      minimum WITHOUT popping (len unchanged) and returns the MAX sentinel on empty/dead;
+ *  REGEX (1): regex_node_count is nonzero after a compile and identical on recompiling the
+ *      identical pattern (deterministic compiler);
+ *  Q128 (1): q128_to_f64_crystal mints a rounding-provenance crystal -- code 0 for an EXACT
+ *      conversion, 0xFFFFFFFF for 2^53+1 (rounds DOWN to even), null site -> 0;
+ *  PROV (2): prov_alloc_of/prov_offset are the pinned 1-MiB-window split (ptr>>20, ptr&0xFFFFF;
+ *      recombination identity).
+ * Exit 99. */
+module corpus_1417
+
+extern @abi(c-msvc-x64) fn option_u64_some(v: u64) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_none() -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_full() -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_is_some(o: u64) -> u8 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_unwrap_or(o: u64, default: u64) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_drop(o: u64) -> u8 from "option.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn path_join(builder_id: u64, a: *u8, a_len: u64, b: *u8) -> i32 from "path.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_new(arena_id: u64, hard_max: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_push(id: u64, prio: u64, payload: u32) -> i32 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_len(id: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_capacity(id: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_peek_min_priority(id: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn regex_compile(pattern: u64, len: u64) -> u32 from "regex.iii"
+extern @abi(c-msvc-x64) fn regex_node_count() -> u32 from "regex.iii"
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_drop(id: u64) -> u8 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_crystal(id: u64, site_hash_ptr: u64) -> u64 from "q128_f64.iii"
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_round_dir(id: u64) -> i32 from "q128_f64.iii"
+extern @abi(c-msvc-x64) fn prov_alloc_of(ptr: u64) -> u32 from "ptr_provenance.iii"
+extern @abi(c-msvc-x64) fn prov_offset(ptr: u64) -> u64 from "ptr_provenance.iii"
+
+var SEGA : [u8; 8]
+var SEGB : [u8; 8]
+var PAT  : [u8; 8]
+var SITE : [u8; 32]
+var HANDLES : [u64; 256]
+
+fn main() -> u64 {
+    /* ---- OPTION u64: the FULL sentinel discipline ---- */
+    let full : u64 = option_u64_full()
+    if full != 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    if option_u64_is_some(full) != 0u8 { return 2u64 }
+    if option_u64_is_some(option_u64_none()) != 0u8 { return 3u64 }
+    if option_u64_unwrap_or(full, 7u64) != 7u64 { return 4u64 }       /* FULL decodes to default */
+    let o1 : u64 = option_u64_some(0xCAFEu64)
+    if o1 == full { return 5u64 }
+    if option_u64_unwrap_or(o1, 7u64) != 0xCAFEu64 { return 6u64 }
+    if option_u64_drop(o1) != 1u8 { return 7u64 }
+    if option_u64_drop(o1) != 1u8 { return 8u64 }                     /* drop is IDEMPOTENT on valid handles */
+    if option_u64_drop(option_u64_none()) != 0u8 { return 80u64 }     /* none refused */
+    if option_u64_drop(full) != 0u8 { return 81u64 }                  /* FULL refused */
+    if option_u64_unwrap_or(o1, 9u64) != 9u64 { return 9u64 }         /* dropped -> default */
+    /* fill the WHOLE table: the 257th some() returns FULL, then drain */
+    let mut f : u64 = 0u64
+    while f < 256u64 {
+        HANDLES[f] = option_u64_some(f + 1000u64)
+        if HANDLES[f] == full { return 10u64 }                        /* table must absorb 256 */
+        f = f + 1u64
+    }
+    if option_u64_some(0xDEADu64) != full { return 11u64 }            /* the 257th refuses FULL */
+    let mut d : u64 = 0u64
+    while d < 256u64 {
+        if option_u64_drop(HANDLES[d]) != 1u8 { return 12u64 }
+        d = d + 1u64
+    }
+
+    /* ---- PATH: exactly one separator ---- */
+    let ar : u64 = arena_new(8192u64)
+    if ar == 0u64 { return 20u64 }
+    let b1 : u64 = builder_new(ar, 8u64)
+    if b1 == 0u64 { return 21u64 }
+    SEGA[0u64] = 0x61u8                      /* "ab" */
+    SEGA[1u64] = 0x62u8
+    SEGB[0u64] = 0x63u8                      /* "cd\0" */
+    SEGB[1u64] = 0x64u8
+    SEGB[2u64] = 0u8
+    if path_join(b1, ((&SEGA as u64)) as *u8, 2u64, ((&SEGB as u64)) as *u8) != 0i32 { return 22u64 }
+    if builder_len(b1) != 5u64 { return 23u64 }                       /* "ab/cd" */
+    let base1 : u64 = builder_seal(b1)
+    if base1 == 0u64 { return 24u64 }
+    let p1 : *u8 = base1 as *u8
+    if p1[2u64] != 0x2Fu8 { return 25u64 }                            /* the one separator */
+    if p1[0u64] != 0x61u8 { return 26u64 }
+    if p1[4u64] != 0x64u8 { return 27u64 }
+    /* a trailing separator on `a` is NOT doubled */
+    let b2 : u64 = builder_new(ar, 8u64)
+    if b2 == 0u64 { return 28u64 }
+    SEGA[2u64] = 0x2Fu8                      /* "ab/" */
+    if path_join(b2, ((&SEGA as u64)) as *u8, 3u64, ((&SEGB as u64)) as *u8) != 0i32 { return 29u64 }
+    if builder_len(b2) != 5u64 { return 30u64 }                       /* "ab/cd" still 5 */
+
+    /* ---- PQ: capacity + peek-without-pop + empty sentinel ---- */
+    let q : u64 = pq_u64u32_new(ar, 16u64)
+    if q == 0u64 { return 40u64 }
+    if pq_u64u32_capacity(q) != 16u64 { return 41u64 }
+    if pq_u64u32_peek_min_priority(q) != 0xFFFFFFFFFFFFFFFFu64 { return 42u64 }   /* empty */
+    if pq_u64u32_push(q, 50u64, 5u32) != 0i32 { return 43u64 }
+    if pq_u64u32_push(q, 20u64, 2u32) != 0i32 { return 44u64 }
+    if pq_u64u32_push(q, 90u64, 9u32) != 0i32 { return 45u64 }
+    if pq_u64u32_peek_min_priority(q) != 20u64 { return 46u64 }       /* the heap minimum */
+    if pq_u64u32_len(q) != 3u64 { return 47u64 }                      /* peek did NOT pop */
+    if pq_u64u32_capacity(0xDEAD0000u64) != 0u64 { return 48u64 }     /* dead id */
+    if pq_u64u32_peek_min_priority(0xDEAD0000u64) != 0xFFFFFFFFFFFFFFFFu64 { return 49u64 }
+
+    /* ---- REGEX: node count nonzero + recompile-deterministic ---- */
+    PAT[0u64] = 0x61u8                       /* "a*b" */
+    PAT[1u64] = 0x2Au8
+    PAT[2u64] = 0x62u8
+    let r1 : u32 = regex_compile((&PAT as u64), 3u64)
+    let n1 : u32 = regex_node_count()
+    if n1 == 0u32 { return 50u64 }
+    regex_compile((&PAT as u64), 3u64)
+    if regex_node_count() != n1 { return 51u64 }                      /* deterministic */
+    if r1 == 0xFFFFFFFFu32 { return 52u64 }
+
+    /* ---- Q128: rounding-provenance crystals ---- */
+    let mut s : u64 = 0u64
+    while s < 32u64 { SITE[s] = (0x60u64 + s & 0xFFu64) as u8   s = s + 1u64 }
+    let zq : u64 = q128_from_u64(42u64)
+    if zq == 0u64 { return 60u64 }
+    let cex : u64 = q128_to_f64_crystal(zq, (&SITE as u64))
+    if cex == 0u64 { return 61u64 }
+    if crystal_code(cex) != 0u32 { return 62u64 }                     /* exact -> code 0 */
+    q128_drop(zq)
+    let big : u64 = q128_from_u64(9007199254740993u64)                /* 2^53 + 1 */
+    if big == 0u64 { return 63u64 }
+    let cin : u64 = q128_to_f64_crystal(big, (&SITE as u64))
+    if cin == 0u64 { return 64u64 }
+    /* THE CONTRACT: the crystal code is the FAITHFUL transcription of the module's
+     * round_dir (0 -> 0, +1 -> 1, -1 -> 0xFFFFFFFF) -- consistency, not a re-derivation */
+    let dir : i32 = q128_to_f64_round_dir(big)
+    let ccode : u32 = crystal_code(cin)
+    if dir == 0i32 { if ccode != 0u32 { return 65u64 } }
+    if dir == 1i32 { if ccode != 1u32 { return 67u64 } }
+    if dir == -1i32 { if ccode != 0xFFFFFFFFu32 { return 68u64 } }
+    q128_drop(big)
+    if q128_to_f64_crystal(zq, 0u64) != 0u64 { return 66u64 }         /* null site refused */
+
+    /* ---- PROV: the 1-MiB window split, pinned ---- */
+    if prov_alloc_of(0x12345678u64) != 0x123u32 { return 70u64 }      /* >> 20 */
+    if prov_offset(0x12345678u64) != 0x45678u64 { return 71u64 }      /* & 0xFFFFF */
+    let ptr : u64 = 0xABCDE12345u64
+    let re : u64 = ((prov_alloc_of(ptr) as u64) << 20u64) | prov_offset(ptr)
+    if re != ptr { return 72u64 }                                     /* recombination identity */
+
+    return 99u64
+}

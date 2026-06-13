@@ -60,9 +60,15 @@ fn ad_loop_aligned(base: u32, stride: u32, w: u32) -> u32 @export {
 
 /* ground truth: exhaustively scan the first n iterations for a misaligned access. */
 fn ad_loop_aligned_scan(base: u32, stride: u32, w: u32, n: u32) -> u32 @export {
+    let nonpow2 : u32 = w & (w - 1u32)           /* [W32] 0 iff w is a power of two (or 0); hoisted out of the loop */
     let mut i : u32 = 0u32
     while i < n {
-        if ((base + (i * stride)) & (w - 1u32)) != 0u32 { return 0u32 }
+        let addr : u32 = base + (i * stride)
+        if nonpow2 != 0u32 {                      /* [W32] non-power-of-2 w: (addr & (w-1)) != addr mod w -- use real modulo to AGREE with ad_aligned/ad_loop_aligned (W31) instead of false-negatives */
+            if (addr % w) != 0u32 { return 0u32 }
+        } else {
+            if (addr & (w - 1u32)) != 0u32 { return 0u32 }
+        }
         i = i + 1u32
     }
     return 1u32

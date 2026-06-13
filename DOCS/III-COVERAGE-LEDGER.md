@@ -1401,3 +1401,30 @@ hits were correct power-of-2 CHECKS `(x & (x-1))==0` or STARK power-of-2 FRI dom
 
 Gates: build GATE PASS FAIL=0; 1527 + 1528 teeth exit 30 vs old lib, 99 vs new; corpus green.  Count
 1113 -> **1115**.
+
+## Wave-32 — ad_loop_aligned_scan (the W31 miss) + bitio bitr_get OOB read (W40) (2026-06-13)
+
+W40 (other-doc-precondition / unit-mismatch / sibling-disagreement) found 3; 2 land, 1 deferred.
+
+**W32-FIX-A** (numera/align_domain.iii ad_loop_aligned_scan; falsifier 1529) -- a W31 COMPLETION.  W31's
+grep EXCLUDED align_domain (I wrongly treated it as "done"), missing the THIRD bitmask-modulo instance:
+the "ground truth" exhaustive scan tests `(base+i*stride) & (w-1)` unconditionally.  After W31 ad_loop_
+aligned uses ad_aligned's modulo, so for a non-power-of-2 w the scan DISAGREED with its own sibling
+(ad_loop_aligned(0,3,3)=1 but scan(0,3,3,3)=0 -- all of 0,3,6 are 3-aligned).  align_domain_kat only
+exercises power-of-2 widths, so it never caught the divergence.  FIX: hoisted pow2-dispatch + real modulo
+for non-power-of-2 (matches ad_aligned).  LESSON: do NOT exclude a module from the sibling-sweep grep just
+because one of its functions was fixed -- sweep the WHOLE module.
+
+**W32-FIX-B** (numera/bitio.iii bitr_get; falsifier 1530) -- a writer/reader bounds ASYMMETRY.  bitr_get
+reads `bp[byte]` (byte = pos>>3) with NO `byte < BIO_RLEN` check, so requesting more bits than the
+len-byte buffer holds reads OOB; the symmetric writer bitw guards `byte >= cap -> BIO_E_OVF` (line 54),
+the reader did not.  FIX: `if byte >= BIO_RLEN[0] { return v }` (stop at the buffer end, return bits read
+so far).  1530 teeth (controlled OOB byte): bitr_init(BUF,10) then bitr_get(81) -- bit 80 is in byte 10
+(0xFF); pre-fix reads it -> v low bit 1 (exit 30) / post-fix stops -> 0.
+
+rscode rs_decode_apply DEFERRED: a present_sym/present_idx ORDERING contract between two @exports
+(rs_decode_prepare/apply); violating it corrupts data, but it is a caller-protocol precondition (the
+fix is an API redesign or a cross-call order check) -- not a clean single-function teeth.  REVISIT.
+
+Gates: build GATE PASS FAIL=0; 1529 + 1530 teeth exit 30 vs old lib, 99 vs new; corpus green (align_domain
+KAT + bitio roundtrip).  Count 1115 -> **1117**.

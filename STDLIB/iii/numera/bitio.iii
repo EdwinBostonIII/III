@@ -77,6 +77,7 @@ fn bitr_get(n: u32) -> u64 @export {
     while c < n {
         let p : u32 = BIO_RPOS[0u64]
         let byte : u32 = p >> 3u32
+        if byte >= BIO_RLEN[0u64] { return v }   /* [W32] stop at the len-byte buffer end -- bitr_get must not read bp[byte] OOB when more bits are requested than the buffer holds (bitw guards the symmetric write at line 54; the reader did not).  Returns the bits read so far. */
         let bitpos : u32 = 7u32 - (p & 7u32)
         let bit : u64 = (((bp[byte as u64] as u32) >> bitpos) & 1u32) as u64
         v = (v << 1u64) | bit

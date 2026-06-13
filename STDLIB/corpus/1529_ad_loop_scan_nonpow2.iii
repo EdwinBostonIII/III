@@ -1,0 +1,37 @@
+/* 1529_ad_loop_scan_nonpow2.iii -- W32 FALSIFIER (W31 completion): the "ground
+ * truth" ad_loop_aligned_scan must AGREE with ad_loop_aligned for a non-power-of-2
+ * width, not give false-negatives via the bitmask.
+ *
+ * THE DEFECT (the 3rd bitmask-modulo instance -- W31 missed it because the grep
+ * excluded align_domain): ad_loop_aligned_scan (align_domain.iii line 62, @export,
+ * the "ground truth" exhaustive scan) tests `(base + i*stride) & (w-1) != 0`
+ * unconditionally.  After W31 ad_loop_aligned uses ad_aligned's modulo, so for a
+ * non-power-of-2 w the scan now DISAGREES with ad_loop_aligned: e.g. base=0,
+ * stride=3, w=3 -- all addresses 0,3,6 are 3-aligned (each mod 3 == 0), so the
+ * answer is 1, but the scan returns 0 (3 & 2 = 2 != 0).  A real (non-vacuous)
+ * wrong boolean.  (align_domain_kat only exercises power-of-2 widths.)
+ *
+ * THE FIX: real modulo for a non-power-of-2 w (matching ad_aligned), bitmask fast
+ * path for power-of-2.
+ *
+ * TEETH: ad_loop_aligned_scan(0,3,3,3) must be 1 (pre-fix 0 -> exit 30) and must
+ * AGREE with ad_loop_aligned(0,3,3)=1.  Sanity: power-of-2 widths unchanged. */
+module corpus_1529
+
+extern @abi(c-msvc-x64) fn ad_loop_aligned_scan(base: u32, stride: u32, w: u32, n: u32) -> u32 from "align_domain.iii"
+extern @abi(c-msvc-x64) fn ad_loop_aligned(base: u32, stride: u32, w: u32) -> u32 from "align_domain.iii"
+
+fn main() -> u64 {
+    /* ---- TEETH: non-power-of-2 w=3, all addrs 0,3,6 are 3-aligned ---- */
+    if ad_loop_aligned_scan(0u32, 3u32, 3u32, 3u32) != 1u32 { return 30u64 }   /* pre-fix (3&2)=2 -> 0 */
+    if ad_loop_aligned(0u32, 3u32, 3u32) != 1u32 { return 31u64 }              /* the sibling must agree */
+
+    /* ---- sanity: a genuinely misaligned non-pow2 case -> 0 ---- */
+    if ad_loop_aligned_scan(1u32, 3u32, 3u32, 3u32) != 0u32 { return 32u64 }   /* addr 1 mod 3 = 1 */
+
+    /* ---- sanity: power-of-2 widths unchanged (the KAT cases) ---- */
+    if ad_loop_aligned_scan(16u32, 8u32, 8u32, 4u32) != 1u32 { return 33u64 }  /* 16,24,32,40 all 8-aligned */
+    if ad_loop_aligned_scan(16u32, 12u32, 8u32, 4u32) != 0u32 { return 34u64 } /* 28 & 7 = 4 -> not 8-aligned */
+
+    return 99u64
+}

@@ -1,0 +1,41 @@
+/* 1530_bitr_get_oob.iii -- W32 FALSIFIER: bitr_get must stop at the len-byte
+ * buffer end, not read past it (the writer/reader bounds asymmetry).
+ *
+ * THE DEFECT (OOB read; writer guards, reader does not): bitr_init(buf, len)
+ * records a len-BYTE buffer (= len*8 bits).  bitr_get(n) reads n bits, computing
+ * `byte = pos >> 3` and reading bp[byte] (bitio.iii line 81) with NO check that
+ * byte < BIO_RLEN -- so requesting more bits than the buffer holds reads OOB.
+ * The symmetric writer bitw guards `byte >= cap -> BIO_E_OVF` (line 54); the
+ * reader was missing it.
+ *
+ * THE FIX: `if byte >= BIO_RLEN[0u64] { return v }` -- stop at the buffer end,
+ * returning the bits read so far.
+ *
+ * TEETH (value differential via a controlled OOB byte): a 16-byte BUF with bytes
+ * 0..9 = 0 and byte 10 = 0xFF; bitr_init(BUF, 10) (a 10-byte / 80-bit buffer).
+ *   - bitr_get(81): bit 80 lives in byte 10 (the first OOB byte).  Pre-fix reads
+ *     it (the high bit of 0xFF = 1) -> v's low bit = 1 -> arm reddens (exit 30).
+ *   - post-fix stops at byte 10 -> v = the 80 in-bounds (zero) bits = 0.
+ * Sanity: reading exactly 80 in-bounds bits returns 0. */
+module corpus_1530
+
+extern @abi(c-msvc-x64) fn bitr_init(buf_ptr: u64, len: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitr_get(n: u32) -> u64 from "bitio.iii"
+
+var BUF : [u8; 16]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 16u64 { BUF[i] = 0u8 ; i = i + 1u64 }
+    BUF[10u64] = 0xFFu8                                     /* the OOB sentinel (past the 10-byte len) */
+
+    /* ---- TEETH: 81 bits from an 80-bit buffer -- bit 80 is OOB ---- */
+    bitr_init((&BUF as u64), 10u32)
+    if bitr_get(81u32) != 0u64 { return 30u64 }            /* pre-fix reads byte 10 -> v low bit 1 -> reddens */
+
+    /* ---- sanity: exactly 80 in-bounds bits -> 0 (bytes 0..9 are all zero) ---- */
+    bitr_init((&BUF as u64), 10u32)
+    if bitr_get(80u32) != 0u64 { return 31u64 }
+
+    return 99u64
+}

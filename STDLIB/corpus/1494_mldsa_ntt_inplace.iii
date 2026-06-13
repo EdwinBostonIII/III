@@ -1,0 +1,22 @@
+/* 1494_mldsa_ntt_inplace.iii -- E-MLD-3 DIFFERENTIAL: the in-place pool-slot
+ * NTT/invNTT is slot-identical to the copy-in/transform/copy-out ORACLE, and
+ * the round trip is the identity.
+ *
+ * THE COST (pre-fix): every transform copied 256 coefficients into MLDSA_WORK
+ * and back -- 512 copy-moves per NTT across keygen/sign/verify's many
+ * polynomial transforms.  The shared organ takes a base address (*u32, the
+ * same packed layout), so the transform now runs AT the pool slot.
+ *
+ * The differential lives in-module (the pool is private state):
+ * mldsa_ntt_inplace_kat fills a slot deterministically, runs the in-place and
+ * scratch paths on identical copies, compares all 256 coefficients after
+ * forward AND inverse, then pins the round-trip identity against an untouched
+ * third copy.  The FIPS-204 vectors (corpus 198/769) re-pin the end-to-end
+ * behavior through the live path.  Exit 99. */
+module corpus_1494
+
+extern @abi(c-msvc-x64) fn mldsa_ntt_inplace_kat() -> u64 from "mldsa.iii"
+
+fn main() -> u64 {
+    return mldsa_ntt_inplace_kat()
+}

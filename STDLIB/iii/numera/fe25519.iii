@@ -349,6 +349,34 @@ fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 @export {
     fz_mul(&FZ_E as u64, &FZ_H as u64, rt)  fz_mul(&FZ_F as u64, &FZ_G as u64, rz)
     return 0i32
 }
+/* [E-FE-3] dedicated doubling (dbl-2008-hwcd, a = -1): 4M+4S vs the unified
+ * add's 9M when both operands are the same point -- and S is the cheap fz_sq.
+ * Projective consistency vs ed_pt_add(p,p): every output component scales by
+ * the SAME -4 (E by -2, F/H by 2, G by -2), so the point AND its T-coherence
+ * are identical (T = XY/Z survives the common scalar).  The ladder's
+ * unconditional double routes here; corpus 1495 pins compress-equality vs
+ * ed_pt_add(p,p) AND T-coherence through a follow-on add, and the RFC-8032
+ * vectors re-pin the full signature path. */
+fn ed_pt_dbl(p: u64, r: u64) -> i32 @export {
+    let px : u64 = p          let py : u64 = p + 64u64   let pz : u64 = p + 128u64
+    let rx : u64 = r          let ry : u64 = r + 64u64   let rz : u64 = r + 128u64  let rt : u64 = r + 192u64
+    fz_sq(px, &FZ_A as u64)                                /* A = X^2 */
+    fz_sq(py, &FZ_B as u64)                                /* B = Y^2 */
+    fz_sq(pz, &FZ_T1 as u64)
+    fz_add(&FZ_T1 as u64, &FZ_T1 as u64, &FZ_C as u64)     /* C = 2*Z^2 */
+    fz_add(px, py, &FZ_T2 as u64)
+    fz_sq(&FZ_T2 as u64, &FZ_DT as u64)                    /* (X+Y)^2 */
+    fz_add(&FZ_A as u64, &FZ_B as u64, &FZ_H as u64)       /* H = A+B */
+    fz_sub(&FZ_H as u64, &FZ_DT as u64, &FZ_E as u64)      /* E = H-(X+Y)^2 = -2XY */
+    fz_sub(&FZ_A as u64, &FZ_B as u64, &FZ_G as u64)       /* G = A-B */
+    fz_add(&FZ_C as u64, &FZ_G as u64, &FZ_F as u64)       /* F = C+G */
+    fz_mul(&FZ_E as u64, &FZ_F as u64, rx)
+    fz_mul(&FZ_G as u64, &FZ_H as u64, ry)
+    fz_mul(&FZ_E as u64, &FZ_H as u64, rt)
+    fz_mul(&FZ_F as u64, &FZ_G as u64, rz)
+    return 0i32
+}
+
 fn ed_pt_copy(src: u64, dst: u64) -> i32 {
     let sp : *u64 = src as *u64
     let dp : *u64 = dst as *u64
@@ -370,7 +398,7 @@ fn ed_scalar_mul_pt(scalar: u64, base: u64, r: u64) -> i32 @export {
     let mut j : u64 = 0u64
     while j < 256u64 {
         let bit_idx : u64 = 255u64 - j
-        ed_pt_add(r, r, &FZ_PACC as u64)
+        ed_pt_dbl(r, &FZ_PACC as u64)        /* [E-FE-3] dedicated 4M+4S doubling */
         ed_pt_copy(&FZ_PACC as u64, r)
         let byte : u64 = sp[bit_idx >> 3u64] as u64
         let bit : u64 = (byte >> (bit_idx & 7u64)) & 1u64

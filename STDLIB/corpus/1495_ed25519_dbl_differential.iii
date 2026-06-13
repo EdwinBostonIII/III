@@ -1,0 +1,107 @@
+/* 1495_ed25519_dbl_differential.iii -- E-FE-3 DIFFERENTIAL: the dedicated
+ * dbl-2008-hwcd doubling (4M+4S, S = the cheap fz_sq) equals ed_pt_add(p,p)
+ * as a POINT (compress equality -- extended coordinates are projective, the
+ * tuples legitimately differ by the common -4 scalar) AND in T-coherence
+ * (a follow-on add using the result's T must agree).
+ *
+ * Fixture points are built via ADD ONLY from the RFC-8032 base-point
+ * decompression (0x58 then 31 x 0x66) -- fully independent of the dbl-routed
+ * ladder, so the differential cannot be circular.  Arms: (1) dbl(p) ==
+ * add(p,p) compressed, for B, 2B, 3B; (2) T-coherence: add(dbl(p), B) ==
+ * add(add(p,p), B) compressed; (3) the identity doubles to itself; (4) the
+ * LADDER routing: scalar_mul_base(4) == ((B+B)+B)+B compressed (the new
+ * doubling inside the real ladder).  RFC-8032 vectors (388/973) re-pin the
+ * full signature path in the same corpus run.  Exit 99. */
+module corpus_1495
+
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_pt_dbl(p: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_compress(p: u64, out: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_decompress(comp: u64, pout: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_scalar_mul_base(scalar: u64, r: u64) -> i32 from "fe25519.iii"
+
+var EP_B    : [u64; 32]    /* the base point (decompressed) */
+var EP_P2   : [u64; 32]    /* 2B via add */
+var EP_P3   : [u64; 32]    /* 3B via add */
+var EP_D    : [u64; 32]    /* dbl result */
+var EP_A    : [u64; 32]    /* add result */
+var EP_T1   : [u64; 32]
+var EP_T2   : [u64; 32]
+var EP_I    : [u64; 32]    /* the identity */
+var EC_BUF  : [u8; 32]
+var EC_C1   : [u8; 32]
+var EC_C2   : [u8; 32]
+var EC_SCAL : [u8; 32]
+
+fn ec_eq() -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if EC_C1[i] != EC_C2[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* compress(dbl(p)) vs compress(add(p,p)); then T-coherence via +B. 0 = ok. */
+fn ep_dbl_diff(p: u64) -> u64 {
+    ed_pt_dbl(p, &EP_D as u64)
+    ed_pt_add(p, p, &EP_A as u64)
+    ed_compress(&EP_D as u64, &EC_C1 as u64)
+    ed_compress(&EP_A as u64, &EC_C2 as u64)
+    if ec_eq() != 1u8 { return 1u64 }
+    ed_pt_add(&EP_D as u64, &EP_B as u64, &EP_T1 as u64)
+    ed_pt_add(&EP_A as u64, &EP_B as u64, &EP_T2 as u64)
+    ed_compress(&EP_T1 as u64, &EC_C1 as u64)
+    ed_compress(&EP_T2 as u64, &EC_C2 as u64)
+    if ec_eq() != 1u8 { return 2u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    fe25519_init()
+
+    /* the RFC-8032 base point: 0x58 then 31 x 0x66 */
+    EC_BUF[0u64] = 0x58u8
+    let mut i : u64 = 1u64
+    while i < 32u64 { EC_BUF[i] = 0x66u8  i = i + 1u64 }
+    if ed_decompress(&EC_BUF as u64, &EP_B as u64) != 0i32 { return 1u64 }
+
+    /* 2B and 3B via ADD only (independent of the dbl-routed ladder) */
+    ed_pt_add(&EP_B as u64, &EP_B as u64, &EP_P2 as u64)
+    ed_pt_add(&EP_P2 as u64, &EP_B as u64, &EP_P3 as u64)
+
+    /* ---- (1)+(2): the differential at B, 2B, 3B ---- */
+    let d1 : u64 = ep_dbl_diff(&EP_B as u64)
+    if d1 != 0u64 { return 10u64 + d1 }
+    let d2 : u64 = ep_dbl_diff(&EP_P2 as u64)
+    if d2 != 0u64 { return 20u64 + d2 }
+    let d3 : u64 = ep_dbl_diff(&EP_P3 as u64)
+    if d3 != 0u64 { return 30u64 + d3 }
+
+    /* ---- (3) the identity doubles to itself ---- */
+    i = 0u64
+    while i < 32u64 { EC_BUF[i] = 0u8  i = i + 1u64 }
+    EC_BUF[0u64] = 1u8                              /* y = 1, x = 0 */
+    if ed_decompress(&EC_BUF as u64, &EP_I as u64) != 0i32 { return 40u64 }
+    ed_pt_dbl(&EP_I as u64, &EP_D as u64)
+    ed_compress(&EP_D as u64, &EC_C1 as u64)
+    if EC_C1[0u64] != 1u8 { return 41u64 }
+    i = 1u64
+    while i < 32u64 {
+        if EC_C1[i] != 0u8 { return 42u64 }
+        i = i + 1u64
+    }
+
+    /* ---- (4) the ladder routing: 4B via scalar mul == ((B+B)+B)+B ---- */
+    i = 0u64
+    while i < 32u64 { EC_SCAL[i] = 0u8  i = i + 1u64 }
+    EC_SCAL[0u64] = 4u8
+    ed_scalar_mul_base(&EC_SCAL as u64, &EP_T1 as u64)
+    ed_pt_add(&EP_P3 as u64, &EP_B as u64, &EP_T2 as u64)
+    ed_compress(&EP_T1 as u64, &EC_C1 as u64)
+    ed_compress(&EP_T2 as u64, &EC_C2 as u64)
+    if ec_eq() != 1u8 { return 50u64 }
+
+    return 99u64
+}

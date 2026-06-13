@@ -687,3 +687,31 @@ exactly as fz_equal/ed_compress do).  The module needed no fixes.
 Gates: build GATE PASS FAIL=0; corpus green through 1493 (the run's terminal FATAL
 is the not-yet-wired 1494's EXPECTED bookkeeping, nothing failed); xii 92/0; nous
 GREEN; bench 7/0/0.  Full count re-pins next cycle.
+
+## E-MLD-3 + E-FE-3 — in-place NTT, dedicated point doubling (2026-06-12)
+
+**E-MLD-3** (`numera/mldsa.iii`, differential `1494`): every slot transform copied
+256 coefficients into MLDSA_WORK and back (512 copy-moves per NTT across keygen/
+sign/verify).  The shared organ takes a base address (*u32, 4-byte stride -- the
+packed layout the typed pool access uses), so the transform now runs AT the pool
+slot; the copy path retained as mldsa_ntt_scratch/mldsa_invntt_scratch (the ORACLE).
+1494 = the in-module differential (slot-identical forward AND inverse vs the oracle
+on identical copies + the round-trip identity); FIPS-204 vectors (198/769) re-pin
+the live path.
+
+**E-FE-3** (`numera/fe25519.iii`, differential `1495`): the scalar ladder doubled
+via the unified 9M add; dedicated dbl-2008-hwcd (a=-1) doubling = 4M+4S with S the
+new fz_sq.  Projective consistency PROVEN symbolically (every output component of
+add(p,p) is exactly -4x the dbl output -- E by -2, F/H by 2, G by -2 -- so the point
+and its T-coherence are identical) and pinned empirically: 1495 compress-equality at
+B/2B/3B (fixtures built via ADD ONLY from the RFC-8032 base decompression -- the
+differential cannot be circular vs the dbl-routed ladder), T-coherence through
+follow-on adds, identity self-doubling, and scalar_mul(4) == ((B+B)+B)+B.  RFC-8032
+sign/verify vectors re-pin end-to-end in the same run.
+
+**D-FN-1 DECLINED-as-immaterial:** fn256's 6-iteration Newton n' runs ONCE per
+process at init; 4 iterations suffice (3*2^k bit doubling: 3->6->12->24->48 >= 32).
+The saving is two 32-bit multiplies, once -- touching crypto init for that fails the
+latent-gain triage rule.  Same verdict applies to fn384's mirror.
+
+Gates: build GATE PASS FAIL=0; corpus **1083/0**; xii 92/0; nous GREEN; bench 7/0/0.

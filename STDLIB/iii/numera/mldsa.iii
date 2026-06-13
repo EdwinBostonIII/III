@@ -122,20 +122,88 @@ fn mldsa_invntt_work() -> i32 {
     return 0i32
 }
 
-/* slot-level NTT/invNTT (copy-in, transform, copy-out) */
+/* slot-level NTT/invNTT.  [E-MLD-3] IN PLACE at the pool slot: the shared organ
+ * takes a base address (it indexes *u32, 4-byte stride -- the same packed
+ * layout the typed MLDSA_POOL[i] access uses), so the 512 copy-moves per
+ * transform (work_in + work_out) are gone.  The copy path is retained below
+ * as the ORACLE (mldsa_ntt_scratch/mldsa_invntt_scratch); corpus 1494 drives
+ * the in-module differential KAT proving slot-identical results both ways
+ * plus the round-trip identity. */
 fn mldsa_ntt(s: u64) -> i32 {
+    mldsa_init_zetas()
+    let base : u64 = (&MLDSA_POOL as u64) + s * 1024u64
+    return ntt_ctx_forward(ntt_ctx_mldsa(), base, (&MLDSA_ZETAS_MONT as u64))
+}
+fn mldsa_invntt(s: u64) -> i32 {
+    mldsa_init_zetas()
+    let base : u64 = (&MLDSA_POOL as u64) + s * 1024u64
+    ntt_ctx_inverse(ntt_ctx_mldsa(), base, (&MLDSA_ZETAS_MONT as u64))
+    /* Dilithium-specific final inverse scale (x 256^-1 mod q), in place. */
+    let f : u64 = mldsa_powmod(256u64, MLDSA_Q - 2u64)
+    let pbase : u64 = s * 256u64
+    let mut i : u64 = 0u64
+    while i < 256u64 {
+        MLDSA_POOL[pbase + i] = ((f * (MLDSA_POOL[pbase + i] as u64)) % MLDSA_Q) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* [E-MLD-3 ORACLE] the original copy-in/transform/copy-out path, verbatim. */
+fn mldsa_ntt_scratch(s: u64) -> i32 {
     mldsa_init_zetas()
     mldsa_work_in(s)
     mldsa_ntt_work()
     mldsa_work_out(s)
     return 0i32
 }
-fn mldsa_invntt(s: u64) -> i32 {
+fn mldsa_invntt_scratch(s: u64) -> i32 {
     mldsa_init_zetas()
     mldsa_work_in(s)
     mldsa_invntt_work()
     mldsa_work_out(s)
     return 0i32
+}
+
+/* [E-MLD-3] the differential KAT (corpus 1494): the in-place transforms are
+ * slot-identical to the scratch ORACLE, and ntt -> invntt is the identity.
+ * Uses pool slots 0/1/2 as scratch (KAT-process only).  99 = pass. */
+fn mldsa_ntt_inplace_kat() -> u64 @export {
+    mldsa_init_zetas()
+    /* deterministic fill < q into slot 0, copies into slots 1 and 2 */
+    let mut x : u64 = 0x12345u64
+    let mut i : u64 = 0u64
+    while i < 256u64 {
+        x = (x * 1103515245u64 + 12345u64) & 0x7FFFFFFFu64
+        let v : u32 = (x % MLDSA_Q) as u32
+        MLDSA_POOL[i] = v
+        MLDSA_POOL[256u64 + i] = v
+        MLDSA_POOL[512u64 + i] = v
+        i = i + 1u64
+    }
+    /* forward: in-place slot 0 vs scratch slot 1 */
+    mldsa_ntt(0u64)
+    mldsa_ntt_scratch(1u64)
+    i = 0u64
+    while i < 256u64 {
+        if MLDSA_POOL[i] != MLDSA_POOL[256u64 + i] { return 1u64 }
+        i = i + 1u64
+    }
+    /* inverse: in-place slot 0 vs scratch slot 1 */
+    mldsa_invntt(0u64)
+    mldsa_invntt_scratch(1u64)
+    i = 0u64
+    while i < 256u64 {
+        if MLDSA_POOL[i] != MLDSA_POOL[256u64 + i] { return 2u64 }
+        i = i + 1u64
+    }
+    /* round-trip identity: slot 0 == the untouched original in slot 2 */
+    i = 0u64
+    while i < 256u64 {
+        if MLDSA_POOL[i] != MLDSA_POOL[512u64 + i] { return 3u64 }
+        i = i + 1u64
+    }
+    return 99u64
 }
 
 /* pointwise r = a (.) b ; add r = a + b ; sub r = a - b ; all mod q, slot-indexed */

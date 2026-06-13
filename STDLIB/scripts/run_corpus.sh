@@ -1084,6 +1084,7 @@ declare -A EXPECTED=(
     [1508_accessor_bounds_heaplet_liveness_matrix]=99
     [1509_accessor_bounds_bvbits_omega_seplogic_csl]=99
     [1510_temporal_logic_trace_oob]=99
+    [1511_governance_vote_state_wall]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

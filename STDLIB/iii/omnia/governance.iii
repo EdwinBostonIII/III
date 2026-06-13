@@ -257,6 +257,13 @@ fn governance_vote(voter_cap: u64, proposal_id: u64, vote: u8) -> i32 @export {
     let l_v   : u8  = vote
     let s : u32 = _gov_slot_of(l_id)
     if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    /* [W21] State-machine wall: votes are tallied ONLY in PROVEN (between
+     * prove_equivalence and promote -- the lifecycle's voting window).  Without
+     * this every other transition (sandbox/prove/promote/seal) checks its exact
+     * precondition state, but voting did not: a vote on a PENDING/SANDBOXED
+     * (premature) or ACCEPTED/REJECTED/SEALED (closed) proposal was wrongly
+     * accepted, mutating the tally of a terminal proposal. */
+    if GOV_STATUS[s] != GOV_PROVEN { return GOV_E_BAD_STATE }
     if l_v == GOV_VOTE_YES_CODE {
         GOV_VOTE_YES[s] = GOV_VOTE_YES[s] + 1u32
         return GOV_OK

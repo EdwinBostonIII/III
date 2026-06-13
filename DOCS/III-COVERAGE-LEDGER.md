@@ -1079,3 +1079,32 @@ Gates: build GATE PASS FAIL=0; 1510 99 vs new / exit 5 vs old; only temporal_log
 representative consumers (temporal KAT + constitution/constitution_preserver/constitution_holds/
 cons_run_charter/hotstuff/hotstuff_safety/hotstuff_liveness/gate_outcomes_constitution_preserver) +
 1510 GREEN.  Count 1097 -> **1098**.
+
+## Wave-21 — governance_vote missing terminal-state guard (a state-machine invariant gap) (2026-06-13)
+
+THE PIVOT PAID OFF: after the memory-safety + arithmetic-correctness axes saturated (W21-byte-ptr=0,
+W22-correctness=0 real), a fresh PROTOCOL-INVARIANT discovery (5 lifecycle lenses: governance/sandbox-
+cap/resource/federation/intent, hunting "an illegal state transition wrongly ACCEPTED") found a real
+state-machine gap on its first run.
+
+**W21-FIX** (`omnia/governance.iii` governance_vote, falsifier `1511`, old exit=30): every governance
+transition checks its exact precondition state -- sandbox requires PENDING, prove requires SANDBOXED,
+promote requires PROVEN, seal requires ACCEPTED -- EXCEPT governance_vote, which checked only the slot
+id, then incremented the tally and returned GOV_OK for ANY state.  So a vote on a PENDING/SANDBOXED
+proposal (premature, before the proof) or on an ACCEPTED/REJECTED/SEALED proposal (closed, after
+promotion) was wrongly accepted, mutating the tally of a terminal proposal.  Fix: GOV_STATUS[s] !=
+GOV_PROVEN -> GOV_E_BAD_STATE before the tally (PROVEN is the voting window: prove -> [vote*] ->
+promote).  Byte-identical for every legitimate vote -- 205 + 1474 both vote ONLY in PROVEN, never after
+promote (verified by reading both).
+
+1511 teeth (clean state differential): arm 3 votes on a PENDING proposal -> fixed GOV_E_BAD_STATE (-3)
+/ pre-fix GOV_OK (0) -> reddens (exit 30).  Arm 1-2 prove a legitimate PROVEN vote still tallies (guard
+not over-tight, with the resolution_init()+governance_reset() setup the proof-cert needs); arm 4-5 pin
+the TERMINAL wall (after promote drives the proposal to REJECTED, a further vote is refused).
+
+Note: the same W23 run flagged sandbox_exec use-after-drop and a region/bigint cross-arena reuse; those
+are triaged separately (the region/bigint one is likely the DOCUMENTED arena-ABA caller contract --
+the arena WITNESS guards realloc, not a plain reset; refuted-on-read like the ripple_search/R029 FPs).
+
+Gates: build GATE PASS FAIL=0; 1511 99 vs new / exit 30 vs old; only governance.iii changed, all 7
+governance consumers (205/1474/1456/1402/206/229) + 1511 GREEN.  Count 1098 -> **1099**.

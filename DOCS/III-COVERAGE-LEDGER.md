@@ -1528,3 +1528,35 @@ n>0 verdicts (safe 2,1,5,16; unsafe 3,2,8,16) unchanged, AND the crucial non-emp
 The same-function-asymmetry lens generalizes to CROSS-WITNESS disagreement: when a module ships two analyses
 that must agree, the corner where they diverge is a self-certified defect.  Gates: build GATE PASS FAIL=0, all
 three ratchets OK; 1534 teeth exit 30 vs old lib, 99 vs new; corpus green.  Count 1120 -> **1121**.
+
+## Wave-37/38 — defect-axis SATURATION (honest negative) + ec256/ec384 group-law coverage enhancement (2026-06-13)
+
+**W37 (differential divergence, 0 confirmed):** Workflow over ~70 dual-path modules (a fast/abstract path +
+a reference/exhaustive path documented to agree) found ZERO divergence -- not even a raw candidate survived
+the self-gate.  loop_optimizer (W36) was the lone outlier; the rest agree on their corners.
+
+**Saturation sweep (this session, all CLEAN after W35/W36 landed 1 bug each):** the cheap teeth-bearing
+defect fingerprints are mined to the floor --
+ - i32 signed-ordering sign-test (`>=0i32` on a maybe-negative i32): only a comment + two CORRECT avoidances
+   (theorem_commons uses `!= -1i32` and documents the trap).  Clean.
+ - accessor underflow (`[l_pid - 1]` etc.): calculus_v1's 4 CALC_* accessors all guard `l_pid==0` first.  Clean.
+ - string last-byte underflow (`p[len-1]`): path/ini/onelang/corpus_coverage all guard (`a_len>0`, `e<=start`
+   early-out, `len<2`, `len<4`).  Clean.
+ - inclusive-`<=` loop bound (off-by-one write): the 87 hits are the correct DP/Fenwick N+1-sized-table idiom.
+ - bigint_div (the hardest, most corner-bug-prone module): corpus 757 ALREADY ships a deep differential
+   (Knuth-D vs bit-serial reference) + invariant KAT INCLUDING the D6 add-back trigger across 300 random pairs.
+The III stdlib is genuinely mature: coverage ratchets at 0/0/0, deep differential KATs, external RFC/FIPS
+vectors, exception-free RCB crypto, systematic guards.  Honest conclusion: the easy-to-medium defect veins are
+saturated; the loop pivots from defect-hunting to externally-anchored coverage ENHANCEMENT.
+
+**W38 ENHANCEMENT (1535 ec256 + 1536 ec384 group laws):** the two NIST EC modules had only a single ECDSA
+vector each (208/209) -- their GROUP LAWS were never asserted against ground truth.  RCB Alg.4 (~12 mults
+across temp slots) is transcription-bug-prone in paths one ECDSA (u1*G+u2*Q) vector may not exercise.  Each
+KAT pairs (1) an EXTERNAL ANCHOR -- 1*G affine == the NIST published base point (Gx,Gy), pinning the whole
+field/point/Montgomery pipeline to ground truth -- with (2) INTERNAL DIFFERENTIALS on the complete-add formula
+through different operand sequences: homomorphism 2G+3G==5G, commutativity 3G+2G==5G, doubling-as-add
+2G+2G==4G; plus pairwise-distinct non-vacuity.  Both pass =99 (the RCB add + ladder are correct); they are now
+permanent externally-anchored regression oracles on the most security-critical modules.  (1536 first hit the
+documented `*/`-in-comment trap -- `fq_*/384` closed the block comment; fixed.)
+
+No source change -> no rebuild; corpus green with both KATs + 208/209 unchanged.  Count 1121 -> **1123**.

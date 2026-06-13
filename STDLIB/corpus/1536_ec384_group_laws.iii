@@ -1,0 +1,141 @@
+/* 1536_ec384_group_laws.iii -- W38 ENHANCEMENT: external-anchored group-law KAT for
+ * NIST P-384 point arithmetic (numera::ec384, Renes-Costello-Batina COMPLETE addition).
+ * The ec256 (1535) sibling on the second NIST curve -- structurally identical RCB Alg.4
+ * retargeted to fq_ ops and 384-bit scalars, prior coverage only 209_ecdsa_p384 (1 vector).
+ *
+ * ORACLES (mirror 1535):
+ *  (1) EXTERNAL ANCHOR: 1*G affine == the NIST P-384 published base point (Gx,Gy, 48 BE).
+ *  (2) INTERNAL DIFFERENTIAL on complete-add: 2G+3G==5G (homomorphism), 3G+2G==5G
+ *      (commutativity), 2G+2G==4G (doubling-as-add).
+ *  Non-vacuity: 1G/2G/3G/5G affine-x pairwise DISTINCT.
+ *
+ * 99 = every law holds.  Slots: points in 23..37 (clear of regs 0..8, RCB temps 10..17,
+ * affine scratch 20..22, constants 40..43; fp384 usable 0..44). */
+module corpus_1536
+
+extern @abi(c-msvc-x64) fn ec384_scalar_mul_base(out: u64, k_bytes: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_add_x(out: u64, a: u64, bp: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 from "ec384.iii"
+
+var K   : [u8; 48]
+var GX  : [u8; 48]
+var GY  : [u8; 48]
+var AX  : [u8; 48]
+var AY  : [u8; 48]
+var BX  : [u8; 48]
+var BY  : [u8; 48]
+var X1  : [u8; 48]
+var X2  : [u8; 48]
+var X3  : [u8; 48]
+var X5  : [u8; 48]
+
+fn k_small(v: u8) {
+    let mut i : u64 = 0u64
+    while i < 48u64 { K[i] = 0u8  i = i + 1u64 }
+    K[47u64] = v
+}
+
+fn eq48(p: u64, q: u64) -> u8 {
+    let a : *u8 = p as *u8
+    let b : *u8 = q as *u8
+    let mut i : u64 = 0u64
+    while i < 48u64 { if a[i] != b[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn cp48(dst: u64, src: u64) {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < 48u64 { d[i] = s[i]  i = i + 1u64 }
+}
+
+fn main() -> u64 {
+    /* ---- NIST P-384 base point (FIPS 186-4 / SEC2), big-endian ---- */
+    GX[0u64]=0xAAu8  GX[1u64]=0x87u8  GX[2u64]=0xCAu8  GX[3u64]=0x22u8
+    GX[4u64]=0xBEu8  GX[5u64]=0x8Bu8  GX[6u64]=0x05u8  GX[7u64]=0x37u8
+    GX[8u64]=0x8Eu8  GX[9u64]=0xB1u8  GX[10u64]=0xC7u8 GX[11u64]=0x1Eu8
+    GX[12u64]=0xF3u8 GX[13u64]=0x20u8 GX[14u64]=0xADu8 GX[15u64]=0x74u8
+    GX[16u64]=0x6Eu8 GX[17u64]=0x1Du8 GX[18u64]=0x3Bu8 GX[19u64]=0x62u8
+    GX[20u64]=0x8Bu8 GX[21u64]=0xA7u8 GX[22u64]=0x9Bu8 GX[23u64]=0x98u8
+    GX[24u64]=0x59u8 GX[25u64]=0xF7u8 GX[26u64]=0x41u8 GX[27u64]=0xE0u8
+    GX[28u64]=0x82u8 GX[29u64]=0x54u8 GX[30u64]=0x2Au8 GX[31u64]=0x38u8
+    GX[32u64]=0x55u8 GX[33u64]=0x02u8 GX[34u64]=0xF2u8 GX[35u64]=0x5Du8
+    GX[36u64]=0xBFu8 GX[37u64]=0x55u8 GX[38u64]=0x29u8 GX[39u64]=0x6Cu8
+    GX[40u64]=0x3Au8 GX[41u64]=0x54u8 GX[42u64]=0x5Eu8 GX[43u64]=0x38u8
+    GX[44u64]=0x72u8 GX[45u64]=0x76u8 GX[46u64]=0x0Au8 GX[47u64]=0xB7u8
+
+    GY[0u64]=0x36u8  GY[1u64]=0x17u8  GY[2u64]=0xDEu8  GY[3u64]=0x4Au8
+    GY[4u64]=0x96u8  GY[5u64]=0x26u8  GY[6u64]=0x2Cu8  GY[7u64]=0x6Fu8
+    GY[8u64]=0x5Du8  GY[9u64]=0x9Eu8  GY[10u64]=0x98u8 GY[11u64]=0xBFu8
+    GY[12u64]=0x92u8 GY[13u64]=0x92u8 GY[14u64]=0xDCu8 GY[15u64]=0x29u8
+    GY[16u64]=0xF8u8 GY[17u64]=0xF4u8 GY[18u64]=0x1Du8 GY[19u64]=0xBDu8
+    GY[20u64]=0x28u8 GY[21u64]=0x9Au8 GY[22u64]=0x14u8 GY[23u64]=0x7Cu8
+    GY[24u64]=0xE9u8 GY[25u64]=0xDAu8 GY[26u64]=0x31u8 GY[27u64]=0x13u8
+    GY[28u64]=0xB5u8 GY[29u64]=0xF0u8 GY[30u64]=0xB8u8 GY[31u64]=0xC0u8
+    GY[32u64]=0x0Au8 GY[33u64]=0x60u8 GY[34u64]=0xB1u8 GY[35u64]=0xCEu8
+    GY[36u64]=0x1Du8 GY[37u64]=0x7Eu8 GY[38u64]=0x81u8 GY[39u64]=0x9Du8
+    GY[40u64]=0x7Au8 GY[41u64]=0x43u8 GY[42u64]=0x1Du8 GY[43u64]=0x7Cu8
+    GY[44u64]=0x90u8 GY[45u64]=0xEAu8 GY[46u64]=0x0Eu8 GY[47u64]=0x5Fu8
+
+    let gxa : u64 = (&GX as u64)
+    let gya : u64 = (&GY as u64)
+    let ka  : u64 = (&K  as u64)
+    let axa : u64 = (&AX as u64)
+    let aya : u64 = (&AY as u64)
+    let bxa : u64 = (&BX as u64)
+    let bya : u64 = (&BY as u64)
+
+    /* ---- (1) EXTERNAL ANCHOR: 1*G == published base point ---- */
+    k_small(1u8)
+    if ec384_scalar_mul_base(32u64, ka) != 0i32 { return 10u64 }
+    ec384_affine_xy(axa, aya, 32u64)
+    if eq48(axa, gxa) != 1u8 { return 30u64 }
+    if eq48(aya, gya) != 1u8 { return 31u64 }
+    cp48((&X1 as u64), axa)
+
+    /* ---- 2G, 3G, 5G ---- */
+    k_small(2u8)
+    if ec384_scalar_mul_base(23u64, ka) != 0i32 { return 11u64 }
+    ec384_affine_xy(axa, aya, 23u64)
+    cp48((&X2 as u64), axa)
+
+    k_small(3u8)
+    if ec384_scalar_mul_base(26u64, ka) != 0i32 { return 12u64 }
+    ec384_affine_xy(axa, aya, 26u64)
+    cp48((&X3 as u64), axa)
+
+    k_small(5u8)
+    if ec384_scalar_mul_base(29u64, ka) != 0i32 { return 13u64 }
+    ec384_affine_xy(bxa, bya, 29u64)
+    cp48((&X5 as u64), bxa)
+
+    /* ---- (2a) HOMOMORPHISM: 2G + 3G == 5G ---- */
+    if ec384_add_x(35u64, 23u64, 26u64) != 0i32 { return 14u64 }
+    ec384_affine_xy(axa, aya, 35u64)
+    if eq48(axa, bxa) != 1u8 { return 40u64 }
+    if eq48(aya, bya) != 1u8 { return 41u64 }
+
+    /* ---- (2b) COMMUTATIVITY: 3G + 2G == 5G ---- */
+    if ec384_add_x(32u64, 26u64, 23u64) != 0i32 { return 15u64 }
+    ec384_affine_xy(axa, aya, 32u64)
+    if eq48(axa, bxa) != 1u8 { return 42u64 }
+    if eq48(aya, bya) != 1u8 { return 43u64 }
+
+    /* ---- (2c) DOUBLING-AS-ADD: 2G + 2G == 4G ---- */
+    if ec384_add_x(35u64, 23u64, 23u64) != 0i32 { return 16u64 }
+    ec384_affine_xy(axa, aya, 35u64)
+    k_small(4u8)
+    if ec384_scalar_mul_base(32u64, ka) != 0i32 { return 17u64 }
+    ec384_affine_xy(bxa, bya, 32u64)
+    if eq48(axa, bxa) != 1u8 { return 44u64 }
+    if eq48(aya, bya) != 1u8 { return 45u64 }
+
+    /* ---- NON-VACUITY: distinct multiples have distinct x ---- */
+    if eq48((&X1 as u64), (&X2 as u64)) == 1u8 { return 50u64 }
+    if eq48((&X2 as u64), (&X3 as u64)) == 1u8 { return 51u64 }
+    if eq48((&X3 as u64), (&X5 as u64)) == 1u8 { return 52u64 }
+    if eq48((&X1 as u64), (&X5 as u64)) == 1u8 { return 53u64 }
+
+    return 99u64
+}

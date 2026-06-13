@@ -1,0 +1,56 @@
+/* 1496_k0_bounds_guard.iii -- W9-K0 FALSIFIER: the immutable-base-kernel referee
+ * REFUSES an out-of-domain kernel id instead of an OOB write/read.
+ *
+ * THE DEFECT: k0_set_behav validated x (< 16) but NOT k (< 32) before writing
+ * K0_BEHAV[k*16+x] -- a referee that "trusts NOTHING" had an unbounded OOB WRITE
+ * in its own setter (k=32 -> index 512, one past the 512-slot array, into
+ * K0_COST).  k0_behav / k0_cost had the symmetric OOB read.
+ *
+ * THE GUARD (post-fix): k>=K0_KMAX(32) -> set returns -3, behav/cost return 0.
+ *
+ * Teeth: the BOUNDARY is pinned -- k=31 (the last valid slot, index 511) is
+ * accepted and round-trips; k=32 (index 512, one past) is rejected.  A misplaced
+ * guard (>=33) would let k=32 corrupt K0_COST and this KAT reddens.  Against the
+ * pre-fix lib k0_set_behav(32,0,..) returns 0 (having done the 1-past write), so
+ * arm 3 FAILS there -- a clean prove-the-negative with no wild access (every OOB
+ * probe here is exactly one slot past the array).  Exit 99. */
+module corpus_1496
+
+extern @abi(c-msvc-x64) fn k0_reset() -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_register(cost: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_behav(k: u32, x: u32) -> u32 from "k0_referee.iii"
+extern @abi(c-msvc-x64) fn k0_cost(k: u32) -> u32 from "k0_referee.iii"
+
+fn main() -> u64 {
+    k0_reset()
+    /* register a couple of kernels so k0_cost(0/1) are meaningful */
+    if k0_register(11u32) != 0u32 { return 1u64 }
+    if k0_register(22u32) != 1u32 { return 2u64 }
+
+    /* ---- arm 1: the BOUNDARY-valid slot round-trips (k=31, x=15 -> index 511) ---- */
+    if k0_set_behav(31u32, 15u32, 0xABCDu32) != 0i32 { return 3u64 }
+    if k0_behav(31u32, 15u32) != 0xABCDu32 { return 4u64 }
+    /* a normal slot too */
+    if k0_set_behav(1u32, 3u32, 0x55u32) != 0i32 { return 5u64 }
+    if k0_behav(1u32, 3u32) != 0x55u32 { return 6u64 }
+
+    /* ---- arm 2: existing x-guard still rejects (both libs) ---- */
+    if k0_set_behav(0u32, 16u32, 7u32) != -1i32 { return 7u64 }
+
+    /* ---- arm 3: the NEW k-guard refuses k=32 (index 512, one past) ----
+     * Pre-fix this returns 0 (did the 1-past write) -> the KAT reddens here. */
+    if k0_set_behav(32u32, 0u32, 0xDEADu32) != -3i32 { return 8u64 }
+    if k0_behav(32u32, 0u32) != 0u32 { return 9u64 }
+    if k0_cost(32u32) != 0u32 { return 10u64 }
+    /* a larger id is refused identically (no wild access -- the guard short-circuits) */
+    if k0_set_behav(1000u32, 0u32, 1u32) != -3i32 { return 11u64 }
+    if k0_behav(1000u32, 0u32) != 0u32 { return 12u64 }
+
+    /* ---- arm 4: the valid slots are UNCORRUPTED by the refused writes ---- */
+    if k0_behav(31u32, 15u32) != 0xABCDu32 { return 13u64 }
+    if k0_cost(0u32) != 11u32 { return 14u64 }
+    if k0_cost(1u32) != 22u32 { return 15u64 }
+
+    return 99u64
+}

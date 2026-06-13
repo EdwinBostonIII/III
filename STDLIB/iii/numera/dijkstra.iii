@@ -40,7 +40,10 @@ fn dij_setup() -> i32 @export {
     return 0i32
 }
 
-fn dij_edge(u: u32, v: u32) -> u32 @export { return DIJ_W[((u * DIJ_N) + v) as u64] }
+/* [W9-DIJ] out-of-range node ids -> the no-edge sentinel, never an OOB read.  Internal callers
+ * (dij_compute) always pass u,v < DIJ_N, so the guard is byte-identical there; external consumers
+ * (aether::topology_atlas weighted routing) that pass a bad node id now get INF, not garbage. */
+fn dij_edge(u: u32, v: u32) -> u32 @export { if u >= DIJ_N { return DIJ_INF } if v >= DIJ_N { return DIJ_INF } return DIJ_W[((u * DIJ_N) + v) as u64] }
 
 /* ---- mutable-graph API (for external consumers, e.g. aether::topology_atlas weighted routing): clear to a
  * fresh all-INF matrix, then set individual directed edge weights.  dij_setup (the baked example graph) and
@@ -51,6 +54,8 @@ fn dij_reset() -> i32 @export {
     return 0i32
 }
 fn dij_set_edge(u: u32, v: u32, w: u32) -> i32 @export {
+    if u >= DIJ_N { return -1i32 }       /* [W9-DIJ] out-of-range node -> refuse, never an OOB WRITE */
+    if v >= DIJ_N { return -1i32 }
     DIJ_W[((u * DIJ_N) + v) as u64] = w
     return 0i32
 }
@@ -58,6 +63,7 @@ fn dij_n() -> u32 @export { return DIJ_N }
 
 /* compute shortest distances from src by repeatedly settling the nearest unsettled node. */
 fn dij_compute(src: u32) -> i32 @export {
+    if src >= DIJ_N { return -1i32 }     /* [W9-DIJ] out-of-range source -> refuse before DIJ_DIST[src] OOB WRITE */
     let mut i : u32 = 0u32
     while i < DIJ_N { DIJ_DIST[i as u64] = DIJ_INF ; DIJ_VIS[i as u64] = 0u32 ; i = i + 1u32 }
     DIJ_DIST[src as u64] = 0u32
@@ -90,7 +96,7 @@ fn dij_compute(src: u32) -> i32 @export {
     return 0i32
 }
 
-fn dij_dist(node: u32) -> u32 @export { return DIJ_DIST[node as u64] }
+fn dij_dist(node: u32) -> u32 @export { if node >= DIJ_N { return DIJ_INF } return DIJ_DIST[node as u64] }   /* [W9-DIJ] out-of-range -> INF, never an OOB read */
 
 /* =====================================================================================
  * dijkstra_kat -- 99 = single-source shortest paths are correct, self-checked:

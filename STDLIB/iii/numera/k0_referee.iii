@@ -63,6 +63,9 @@ fn k0_register(cost: u32) -> u32 @export {
 
 fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 @export {
     if x >= K0_D { return -1i32 }
+    if k >= K0_KMAX { return -3i32 }     /* [W9-K0] the kernel id indexes K0_BEHAV[k*16+x]; k>=32 is an
+                                          * OOB WRITE past the 512-slot array.  A referee that "trusts
+                                          * NOTHING" must refuse the out-of-domain id, not corrupt K0_COST. */
     if k == K0_ANCHOR {
         if K0_FROZEN[0u32] == 1u32 { return -2i32 }      /* FIREWALL: the anchor is immutable once frozen */
     }
@@ -71,8 +74,9 @@ fn k0_set_behav(k: u32, x: u32, v: u32) -> i32 @export {
 }
 
 fn k0_freeze_anchor() -> i32 @export { K0_FROZEN[0u32] = 1u32 ; return 0i32 }
-fn k0_behav(k: u32, x: u32) -> u32 @export { return K0_BEHAV[((k * K0_D) + x) as u64] }
-fn k0_cost(k: u32) -> u32 @export { return K0_COST[k as u64] }
+/* [W9-K0] out-of-domain (k,x) -> the default behavior value 0, never an OOB read. */
+fn k0_behav(k: u32, x: u32) -> u32 @export { if k >= K0_KMAX { return 0u32 } if x >= K0_D { return 0u32 } return K0_BEHAV[((k * K0_D) + x) as u64] }
+fn k0_cost(k: u32) -> u32 @export { if k >= K0_KMAX { return 0u32 } return K0_COST[k as u64] }
 fn k0_is_frozen() -> u32 @export { return K0_FROZEN[0u32] }
 fn k0_count() -> u32 @export { return K0_N[0u32] }
 

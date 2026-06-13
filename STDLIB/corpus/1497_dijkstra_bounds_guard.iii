@@ -1,0 +1,73 @@
+/* 1497_dijkstra_bounds_guard.iii -- W9-DIJ FALSIFIER: the shortest-path API
+ * REFUSES out-of-range node ids instead of OOB read/write.
+ *
+ * THE DEFECT: dij_edge / dij_set_edge / dij_compute / dij_dist took unvalidated
+ * node ids and indexed the 5x5 DIJ_W (or DIJ_DIST) directly.  The module header
+ * invites external consumers (aether::topology_atlas weighted routing); a bad
+ * node id was an OOB read (dij_edge/dij_dist) or WRITE (dij_set_edge writes
+ * DIJ_W[u*5+v]; dij_compute writes DIJ_DIST[src]).
+ *
+ * THE GUARD (post-fix): out-of-range (>= DIJ_N = 5) -> dij_edge/dij_dist return
+ * INF (the no-edge / unreachable sentinel), dij_set_edge/dij_compute return -1.
+ *
+ * Teeth: the BOUNDARY is pinned -- node 4 (last valid) works, node 5 (one past,
+ * index 25 for edges / DIJ_DIST[5]) is refused.  Against the pre-fix lib
+ * dij_set_edge(5,0,w) returns 0 (did the 1-past write into DIJ_DIST[0]) so arm 2
+ * FAILS there; dij_compute(5) returns 0 (wrote DIJ_DIST[5]=DIJ_VIS[0]) so arm 3
+ * FAILS.  Every OOB probe is exactly one slot past -- no wild access.  The real
+ * shortest-path computation (the 1290 graph) is re-pinned to prove valid inputs
+ * are byte-identical.  Exit 99. */
+module corpus_1497
+
+extern @abi(c-msvc-x64) fn dij_setup() -> i32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn dij_reset() -> i32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn dij_edge(u: u32, v: u32) -> u32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn dij_set_edge(u: u32, v: u32, w: u32) -> i32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn dij_compute(src: u32) -> i32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn dij_dist(node: u32) -> u32 from "dijkstra.iii"
+extern @abi(c-msvc-x64) fn dij_n() -> u32 from "dijkstra.iii"
+
+const DIJ_INF : u32 = 65535u32
+
+fn main() -> u64 {
+    if dij_n() != 5u32 { return 1u64 }
+
+    /* ---- arm 1: the real shortest-path computation is byte-identical (valid) ---- */
+    dij_setup()
+    dij_compute(0u32)
+    if dij_dist(0u32) != 0u32 { return 2u64 }
+    if dij_dist(1u32) != 2u32 { return 3u64 }
+    if dij_dist(2u32) != 1u32 { return 4u64 }
+    if dij_dist(3u32) != 3u32 { return 5u64 }
+    if dij_dist(4u32) != 6u32 { return 6u64 }
+    /* the BOUNDARY edge (node 4) reads fine */
+    if dij_edge(3u32, 4u32) != 3u32 { return 7u64 }
+
+    /* ---- arm 2: dij_set_edge refuses an out-of-range node (one past) ----
+     * Pre-fix returns 0 (1-past write into DIJ_DIST[0]) -> reddens here. */
+    if dij_set_edge(5u32, 0u32, 9u32) != -1i32 { return 8u64 }
+    if dij_set_edge(0u32, 5u32, 9u32) != -1i32 { return 9u64 }
+    /* dij_edge out-of-range -> INF (no edge), never a garbage read */
+    if dij_edge(5u32, 0u32) != DIJ_INF { return 10u64 }
+    if dij_edge(0u32, 5u32) != DIJ_INF { return 11u64 }
+
+    /* ---- arm 3: dij_compute refuses an out-of-range source ----
+     * Pre-fix returns 0 (wrote DIJ_DIST[5]) -> reddens here. */
+    if dij_compute(5u32) != -1i32 { return 12u64 }
+    if dij_dist(5u32) != DIJ_INF { return 13u64 }
+    if dij_dist(99u32) != DIJ_INF { return 14u64 }
+
+    /* ---- arm 4: a fresh valid computation still works after the refusals ---- */
+    dij_setup()
+    dij_compute(2u32)
+    if dij_dist(1u32) != 1u32 { return 15u64 }     /* 2->1 directly */
+    if dij_dist(4u32) != 5u32 { return 16u64 }     /* 2->1->3->4 */
+    if dij_dist(0u32) != DIJ_INF { return 17u64 }  /* 0 unreachable from 2 */
+
+    /* ---- arm 5: the mutable-graph path (dij_reset/set_edge) round-trips ---- */
+    dij_reset()
+    if dij_set_edge(0u32, 1u32, 7u32) != 0i32 { return 18u64 }
+    if dij_edge(0u32, 1u32) != 7u32 { return 19u64 }
+
+    return 99u64
+}

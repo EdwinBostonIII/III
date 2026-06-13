@@ -1,0 +1,89 @@
+/* 1498_fe25519_cold_invert.iii -- W9-FE FALSIFIER: fz_invert is robust to call
+ * ORDER -- a COLD invert (before any explicit fe25519_init) equals a WARM one.
+ *
+ * THE DEFECT: fz_invert = fz_pow(a, FZ_PM2).  FZ_PM2 (the p-2 Fermat exponent)
+ * is written ONLY by fe25519_init.  Called cold, FZ_PM2 is all-zero, so fz_pow
+ * computes a^0 = 1 for EVERY a -- a silent cryptographic failure (the "inverse"
+ * is the constant 1, indistinguishable from success by the return code).
+ *
+ * THE FIX: every constant-reading @export lazily materializes the constants once
+ * (_fz_ensure_init); byte-identical for the documented "call init first" caller.
+ *
+ * This KAT runs WITHOUT calling fe25519_init first.
+ *   arm 1: cold invert == warm invert (call-order robustness).  Pre-fix the cold
+ *          result is enc(1), the warm result is enc(a^-1) -> they DIFFER and this
+ *          reddens.  (This KAT is safe to run vs the pre-fix lib: no memory
+ *          hazard, only a wrong arithmetic value.)
+ *   arm 2: absolute correctness -- a * (warm inverse) == 1 (mod p), so the test
+ *          cannot pass vacuously (a wrong-but-equal cold/warm pair is impossible
+ *          because the warm inverse is pinned to the true inverse).
+ *   arm 3: a * (cold inverse) == 1 (mod p) too (post-fix the cold inverse is real).
+ * Exit 99. */
+module corpus_1498
+
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_decode(src: u64, dst: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_encode(src: u64, dst: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_invert(a: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_mul(a: u64, b: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_freeze(r: u64) -> i32 from "fe25519.iii"
+
+var FB_A      : [u8; 32]
+var FA        : [u64; 8]
+var FINV_COLD : [u64; 8]
+var FINV_WARM : [u64; 8]
+var FE_COLD   : [u8; 32]
+var FE_WARM   : [u8; 32]
+var FPROD     : [u64; 8]
+var FE_PROD   : [u8; 32]
+
+fn main() -> u64 {
+    /* a = 0x1307 (nonzero, multi-byte; a^-1 mod p is a 255-bit value != 1) */
+    let mut i : u64 = 0u64
+    while i < 32u64 { FB_A[i] = 0u8  i = i + 1u64 }
+    FB_A[0u64] = 0x07u8
+    FB_A[1u64] = 0x13u8
+    fz_decode(&FB_A as u64, &FA as u64)
+
+    /* ---- COLD invert: NO fe25519_init called yet ----
+     * post-fix: fz_invert lazily inits -> the true inverse.
+     * pre-fix:  FZ_PM2 is all-zero -> a^0 = 1. */
+    fz_invert(&FA as u64, &FINV_COLD as u64)
+    fz_encode(&FINV_COLD as u64, &FE_COLD as u64)
+
+    /* ---- now force init explicitly, then WARM invert (correct on both libs) ---- */
+    fe25519_init()
+    fz_invert(&FA as u64, &FINV_WARM as u64)
+    fz_encode(&FINV_WARM as u64, &FE_WARM as u64)
+
+    /* ---- arm 1: cold == warm (the robustness property; pre-fix diverges) ---- */
+    i = 0u64
+    while i < 32u64 {
+        if FE_COLD[i] != FE_WARM[i] { return 1u64 }
+        i = i + 1u64
+    }
+
+    /* ---- arm 2: a * warm_inverse == 1 (mod p) -- absolute correctness pin ---- */
+    fz_mul(&FA as u64, &FINV_WARM as u64, &FPROD as u64)
+    fz_freeze(&FPROD as u64)
+    fz_encode(&FPROD as u64, &FE_PROD as u64)
+    if FE_PROD[0u64] != 1u8 { return 2u64 }
+    i = 1u64
+    while i < 32u64 {
+        if FE_PROD[i] != 0u8 { return 3u64 }
+        i = i + 1u64
+    }
+
+    /* ---- arm 3: a * cold_inverse == 1 (mod p) -- the cold path is REAL ---- */
+    fz_mul(&FA as u64, &FINV_COLD as u64, &FPROD as u64)
+    fz_freeze(&FPROD as u64)
+    fz_encode(&FPROD as u64, &FE_PROD as u64)
+    if FE_PROD[0u64] != 1u8 { return 4u64 }
+    i = 1u64
+    while i < 32u64 {
+        if FE_PROD[i] != 0u8 { return 5u64 }
+        i = i + 1u64
+    }
+
+    return 99u64
+}

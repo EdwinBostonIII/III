@@ -749,3 +749,50 @@ differential for both edits); NEGATIVE ARM: a one-byte emit sabotage (pushq %rax
 BIT-EXACT 8dae39fd (determinism); check-rm2 + cg_r0 gates green; then the full
 STDLIB rebuild + corpora under the resealed compiler: GATE PASS FAIL=0, corpus
 **1083/0**, xii 92/0, nous GREEN, bench 7/0/0.
+
+## Wave-9 — @export memory-safety + crypto call-order hazards (2026-06-12)
+
+A read-only 5-lens discovery (init-order / handle-contract / error-collision / wrap-gaps /
+quadratic-scans, 28 agents, 8 survivors of 23) over fresh axes distilled from this session's
+own KAT-craft lessons.  Implemented the three verified-open memory-safety + correctness
+hazards (the eg_find-OOB class from last session); declined two with recorded reasoning.
+
+**W9-K0** (`numera/k0_referee.iii`, falsifier `1496`, old exit=8): the immutable-base-kernel
+referee -- the module whose entire purpose is "it trusts NOTHING" -- had an UNBOUNDED OOB
+WRITE in its own setter: k0_set_behav validated x(<16) but NOT k(<32) before writing
+K0_BEHAV[k*16+x], so k>=32 wrote past the 512-slot array into K0_COST.  k0_behav/k0_cost had
+the symmetric OOB read.  Guarded all three (k>=K0_KMAX -> set returns -3, reads return 0).
+1496 pins the BOUNDARY (k=31 slot 511 round-trips; k=32 slot 512 refused) -- a misplaced guard
+reddens; the existing 1247 referee KAT proves the valid path byte-identical.
+
+**W9-DIJ** (`numera/dijkstra.iii`, falsifier `1497`, old exit=8): the shortest-path API, whose
+header invites external consumers (aether::topology_atlas weighted routing), had four unguarded
+@exports: dij_edge (OOB read), dij_set_edge (OOB WRITE to DIJ_W[u*5+v]), dij_compute (OOB WRITE
+to DIJ_DIST[src]), dij_dist (OOB read).  Guarded all four (out-of-range -> INF for reads, -1 for
+mutators).  1497 pins the boundary + re-pins the real shortest-path computation byte-identical;
+internal callers always pass valid ids so the guard never fires there.
+
+**W9-FE** (`numera/fe25519.iii`, falsifier `1498`, old exit=1): fz_invert = fz_pow(a, FZ_PM2),
+and FZ_PM2 (the p-2 Fermat exponent) is written ONLY by fe25519_init.  Called cold, FZ_PM2 is
+all-zero -> a^0 = 1 for EVERY a: a SILENT cryptographic failure (the "inverse" is the constant 1,
+the return code says success).  The whole module is init-dependent (FZ_P/FZ_2P/FZ_2D/...).  Fix:
+a lazy-init guard (_fz_ensure_init, idempotent) at every constant-reading @export
+(fz_add/sub/freeze/invert, ed_pt_add/dbl, ed_scalar_mul_pt/base, ed_compress/decompress); the pure
+pseudo-Mersenne fz_mul/fz_sq and byte-shuffle fz_decode/encode stay guard-free (the hot inner
+multiply).  Byte-identical for the documented "call init first" caller (init is idempotent).  1498
+runs WITHOUT init: arm 1 cold-invert == warm-invert (pre-fix the cold result is enc(1), diverges);
+arms 2-3 pin a*inv == 1 (mod p) absolutely so it cannot pass vacuously.
+
+**DECLINED (recorded):** bitio bitw_bytelen u32 wrap -- BIO_WPOS has no setter; reaching
+0xFFFFFFF9 needs a 512MB+ fully-written buffer, unreachable through any @export path (same verdict
+as the sibling lzss/huffman wraps); no teeth-bearing falsifier exists.  cap_forge cf_slot_of_cap
+reverse-index -- needs tombstone/rebuild handling under cf_deforge_cascade deletion on a SECURITY
+(capability) module for a marginal gain on the rare forge path; cf_alloc USED early-exit is
+byte-identical and helps only the full-table edge case.  Both risk/reward-unfavorable.
+
+Gates: build GATE PASS FAIL=0 (carto: no @export collision; _fz_ensure_init is module-local);
+the 3 falsifiers 99 vs new / fail vs old (8/8/1); xii 92/0; nous GREEN; bench 7/0/0.  Corpus delta
+verified race-free: only THREE .o changed content (k0_referee/dijkstra/fe25519 -- the lib is an
+archive of independent objects, so no untouched test can regress), and all 15 tests that extern
+those modules (388/973/993/1247/1290/1403/1431/1436/1451/1465/1493/1495 + the 3 new) re-run
+GREEN against the new lib.  Count 1083 -> **1086**.

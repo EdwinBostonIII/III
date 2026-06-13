@@ -36,6 +36,7 @@ var FZ_P   : [u64; 8]
 var FZ_2P  : [u64; 8]
 var FZ_PM2 : [u8; 32]
 var FZ_PP3D8 : [u8; 32]
+var FZ_INITED : [u32; 1]    /* [W9-FE] 1 once fe25519_init has run (constants materialized) */
 var FZ_ACC : [u64; 8]
 var FZ_TMP : [u64; 8]
 var FZ_2D  : [u64; 8]
@@ -214,6 +215,7 @@ fn fz_sq(a: u64, r: u64) -> i32 @export {
     return _fz_fold38(rp)
 }
 fn fz_add(a: u64, b: u64, r: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] reads FZ_P/FZ_2P */
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64
     let rp : *u64 = r as *u64
@@ -236,6 +238,7 @@ fn fz_add(a: u64, b: u64, r: u64) -> i32 @export {
     return 0i32
 }
 fn fz_sub(a: u64, b: u64, r: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] reads FZ_2P */
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64
     let rp : *u64 = r as *u64
@@ -301,6 +304,7 @@ fn fz_subm(r: u64, m: u64) -> i32 {
     return 0i32
 }
 fn fz_freeze(r: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] reads FZ_P */
     if fz_ge(r, &FZ_P as u64) == 1u8 { fz_subm(r, &FZ_P as u64) }
     if fz_ge(r, &FZ_P as u64) == 1u8 { fz_subm(r, &FZ_P as u64) }
     return 0i32
@@ -326,7 +330,7 @@ fn fz_pow(a: u64, exp: u64, r: u64) -> i32 {
     fz_copy(&FZ_ACC as u64, r)
     return 0i32
 }
-fn fz_invert(a: u64, r: u64) -> i32 @export { return fz_pow(a, &FZ_PM2 as u64, r) }
+fn fz_invert(a: u64, r: u64) -> i32 @export { _fz_ensure_init() ; return fz_pow(a, &FZ_PM2 as u64, r) }
 fn fz_eq(a: u64, b: u64) -> u8 {
     fz_copy(a, &FZ_EQ1 as u64)  fz_copy(b, &FZ_EQ2 as u64)
     fz_freeze(&FZ_EQ1 as u64)   fz_freeze(&FZ_EQ2 as u64)
@@ -337,6 +341,7 @@ fn fz_eq(a: u64, b: u64) -> u8 {
 
 fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 @export {
     let px : u64 = p          let py : u64 = p + 64u64   let pz : u64 = p + 128u64  let pt : u64 = p + 192u64
+    _fz_ensure_init()        /* [W9-FE] reads FZ_2D/FZ_TWO */
     let qx : u64 = q          let qy : u64 = q + 64u64   let qz : u64 = q + 128u64  let qt : u64 = q + 192u64
     let rx : u64 = r          let ry : u64 = r + 64u64   let rz : u64 = r + 128u64  let rt : u64 = r + 192u64
     fz_sub(py, px, &FZ_T1 as u64)  fz_sub(qy, qx, &FZ_T2 as u64)  fz_mul(&FZ_T1 as u64, &FZ_T2 as u64, &FZ_A as u64)
@@ -358,6 +363,7 @@ fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 @export {
  * ed_pt_add(p,p) AND T-coherence through a follow-on add, and the RFC-8032
  * vectors re-pin the full signature path. */
 fn ed_pt_dbl(p: u64, r: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] the fz_add/fz_sub it calls read FZ_P/FZ_2P */
     let px : u64 = p          let py : u64 = p + 64u64   let pz : u64 = p + 128u64
     let rx : u64 = r          let ry : u64 = r + 64u64   let rz : u64 = r + 128u64  let rt : u64 = r + 192u64
     fz_sq(px, &FZ_A as u64)                                /* A = X^2 */
@@ -393,6 +399,7 @@ fn ed_set_identity(p: u64) -> i32 {
     return 0i32
 }
 fn ed_scalar_mul_pt(scalar: u64, base: u64, r: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] ed_set_identity + the ladder read init constants */
     let sp : *u8 = scalar as *u8
     ed_set_identity(r)
     let mut j : u64 = 0u64
@@ -411,9 +418,11 @@ fn ed_scalar_mul_pt(scalar: u64, base: u64, r: u64) -> i32 @export {
     return 0i32
 }
 fn ed_scalar_mul_base(scalar: u64, r: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] FZ_BASE is materialized by init; ensure before passing its address */
     return ed_scalar_mul_pt(scalar, &FZ_BASE as u64, r)
 }
 fn ed_compress(p: u64, out: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] fz_invert/fz_freeze read init constants */
     fz_invert(p + 128u64, &FZ_ZINV as u64)
     fz_mul(p, &FZ_ZINV as u64, &FZ_AX as u64)
     fz_mul(p + 64u64, &FZ_ZINV as u64, &FZ_AY as u64)
@@ -440,6 +449,7 @@ fn fz_is_canonical(b: u64) -> u8 @export {
 }
 
 fn ed_decompress(comp: u64, pout: u64) -> i32 @export {
+    _fz_ensure_init()        /* [W9-FE] reads FZ_DD/FZ_SQRTM1/FZ_PP3D8/FZ_ONE directly */
     let cp : *u8 = comp as *u8
     let mut k : u64 = 0u64
     while k < 32u64 { FZ_DCMP[k] = cp[k]  k = k + 1u64 }
@@ -525,5 +535,17 @@ fn fe25519_init() -> i32 @export {
     FZ_CB[16u64]=0x7du8 FZ_CB[17u64]=0xe3u8 FZ_CB[18u64]=0xabu8 FZ_CB[19u64]=0x64u8 FZ_CB[20u64]=0x8eu8 FZ_CB[21u64]=0x4eu8 FZ_CB[22u64]=0xeau8 FZ_CB[23u64]=0x66u8
     FZ_CB[24u64]=0x65u8 FZ_CB[25u64]=0x76u8 FZ_CB[26u64]=0x8bu8 FZ_CB[27u64]=0xd7u8 FZ_CB[28u64]=0x0fu8 FZ_CB[29u64]=0x5fu8 FZ_CB[30u64]=0x87u8 FZ_CB[31u64]=0x67u8
     fz_decode(&FZ_CB as u64, (&FZ_BASE as u64) + 192u64)
+    FZ_INITED[0u64] = 1u32
+    return 0i32
+}
+
+/* [W9-FE] make the module robust to call ORDER: fz_invert (and the other constant-reading
+ * operations) silently computed a^0 = 1 if called before fe25519_init, because FZ_PM2 (the p-2
+ * exponent) and FZ_P/FZ_2D/... are written only by init.  This lazily materializes the constants
+ * exactly once; byte-identical for the documented "call init first" caller (init is idempotent),
+ * and correct for a cold caller.  fz_mul/fz_sq/fz_decode/fz_encode are pure (pseudo-Mersenne /
+ * byte shuffles) and read no init constant, so they stay guard-free (the hot inner multiply). */
+fn _fz_ensure_init() -> i32 {
+    if FZ_INITED[0u64] == 0u32 { fe25519_init() }
     return 0i32
 }

@@ -1356,3 +1356,22 @@ knowledge -- revisit when constructible).
 
 Gates: build GATE PASS FAIL=0; 1525 teeth exit 30 vs old lib, 99 vs new; corpus (the load-bearing gate --
 many mhash/seal/witness tests) green.  Count 1111 -> **1112**.
+
+## Wave-30 — merkle_tree_build_u32 power-of-2 precondition guard (silent wrong root) (W36) (2026-06-13)
+
+W36 (cad-inspired zero-flag-collision / cross-module-init-2 / tree-index) found 1: a merkle tree-index bug.
+
+**W30-FIX** (numera/merkle.iii merkle_tree_build_u32; falsifier 1526): the builder is documented "n a power
+of two" (line 374/391) but does NOT enforce it.  Its 1-indexed tree-index math (node i -> children 2i/2i+1,
+leaf i at node n+i) is correct ONLY for a power-of-two leaf count; for n=3 it computes node2=hash(L1,L2)
+then node1=hash(node2, L0) -- mixing a RAW leaf with a parent hash -> a WRONG merkle root, returned MK_OK.
+An integrity bug (a commitment to the wrong tree shape, reported success), reachable via the @export with a
+plausible non-power-of-2 count.  The general sibling merkle_compute_root DUPLICATES the last leaf on odd
+counts (lines 148/240) -- so build is the power-of-2-only fast path, compute the general one.  FIX: enforce
+build's documented precondition -- reject n==0 and (n & (n-1))!=0 with MK_E_BADLEN.  (Enforce the contract,
+NOT extend it -- duplication is compute's job.)  In-tree callers (ntt_fri_organ/zk_air/zk_stark/1003) all
+use power-of-2 (STARK/FRI domains, n=8) -> byte-identical.  1526 teeth: n=3/6/0 pre-fix MK_OK -> reddens
+(exit 30) / post-fix MK_E_BADLEN; sanity n=8/4/1 still build (guard not over-tight).
+
+Gates: build GATE PASS FAIL=0; 1526 teeth exit 30 vs old lib, 99 vs new; corpus green (zk-STARK/merkle
+load-bearing).  Count 1112 -> **1113**.

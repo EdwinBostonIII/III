@@ -1,0 +1,42 @@
+/* 1526_merkle_build_pow2_guard.iii -- W30 FALSIFIER: merkle_tree_build_u32 must
+ * REJECT a non-power-of-2 leaf count, not silently build a wrong-rooted tree.
+ *
+ * THE DEFECT (unenforced documented precondition -> silent wrong root):
+ * merkle_tree_build_u32 (merkle.iii line 393, @export) is documented "n a power
+ * of two" but does not enforce it.  Its 1-indexed tree-index math (node i ->
+ * children 2i/2i+1, leaf i at node n+i) is correct ONLY for a power-of-two n.
+ * For n=3 it computes node2=hash(L1,L2) then node1=hash(node2, L0) -- mixing a
+ * raw leaf L0 with a parent hash -> a WRONG merkle root, returned MK_OK.  An
+ * integrity bug (a commitment to the wrong tree shape, reported success).  The
+ * general sibling merkle_compute_root duplicates the last leaf on odd counts.
+ *
+ * THE FIX: reject n==0 and (n & (n-1))!=0 with MK_E_BADLEN before building.
+ *
+ * TEETH (GENTLE value differential): non-power-of-2 n must return MK_E_BADLEN.
+ *   - pre-fix: builds a wrong tree, returns MK_OK (0) -> arm reddens (exit 30).
+ *   - post-fix: MK_E_BADLEN (-2) -> passes.
+ * Sanity arms: power-of-2 n (8,4,1) still build (MK_OK) -- guard not over-tight.
+ * MK_OK == 0, MK_E_BADLEN == -2.  In-tree callers all use power-of-2 (n=8 etc.). */
+module corpus_1526
+
+extern @abi(c-msvc-x64) fn merkle_tree_build_u32(arrBase: u64, leafOff: u64, n: u64, poolBase: u64, treeOff: u64) -> i32 from "merkle.iii"
+
+var LEAVES : [u32; 8]
+var POOL   : [u8; 1024]      /* a power-of-2-8 tree spans nodes 1..15 -> bytes 32..512 */
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { LEAVES[i] = ((i + 1u64) as u32) ; i = i + 1u64 }
+
+    /* ---- TEETH: non-power-of-2 / zero counts must be rejected ---- */
+    if merkle_tree_build_u32((&LEAVES as u64), 0u64, 3u64, (&POOL as u64), 0u64) != -2i32 { return 30u64 }   /* pre-fix MK_OK -> reddens */
+    if merkle_tree_build_u32((&LEAVES as u64), 0u64, 6u64, (&POOL as u64), 0u64) != -2i32 { return 31u64 }
+    if merkle_tree_build_u32((&LEAVES as u64), 0u64, 0u64, (&POOL as u64), 0u64) != -2i32 { return 32u64 }
+
+    /* ---- sanity: power-of-2 counts still build (guard not over-tight) ---- */
+    if merkle_tree_build_u32((&LEAVES as u64), 0u64, 8u64, (&POOL as u64), 0u64) != 0i32 { return 33u64 }
+    if merkle_tree_build_u32((&LEAVES as u64), 0u64, 4u64, (&POOL as u64), 0u64) != 0i32 { return 34u64 }
+    if merkle_tree_build_u32((&LEAVES as u64), 0u64, 1u64, (&POOL as u64), 0u64) != 0i32 { return 35u64 }
+
+    return 99u64
+}

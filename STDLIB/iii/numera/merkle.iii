@@ -391,6 +391,8 @@ fn _mk_u32_leaf_hash(v: u32, out_ptr: u64) -> u32 {
 /* Build the complete binary tree (n a power of two) at byte offset treeOff in the
  * caller's pool, leaves = u32 at (arrBase + (leafOff+i)*4). */
 fn merkle_tree_build_u32(arrBase: u64, leafOff: u64, n: u64, poolBase: u64, treeOff: u64) -> i32 @export {
+    if n == 0u64 { return MK_E_BADLEN }                  /* [W30] no leaves */
+    if (n & (n - 1u64)) != 0u64 { return MK_E_BADLEN }   /* [W30] the 1-indexed tree-index math (node i -> children 2i/2i+1, leaf i at node n+i) is correct ONLY for a power-of-two leaf count; a non-power-of-2 n silently mixes raw leaves with parent hashes -> a WRONG merkle root (doc: "n a power of two").  merkle_compute_root is the general, last-leaf-duplicating sibling. */
     MK_ACTIVE_SUITE = MK_SUITE_SHA256
     let ab : u64 = arrBase
     let lo : u64 = leafOff

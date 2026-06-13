@@ -8,7 +8,7 @@
  * The proof is structural plus identity-based:
  *
  *   For every ordered pair (i, j) of primitives with i != j:
- *     - i and j have distinct primitive_id values (1..18). By
+ *     - i and j have distinct primitive_id values (1..19). By
  *       construction, this alone establishes irreducibility: two
  *       primitives with different ids are distinguishable in any
  *       extensional encoding.
@@ -39,7 +39,7 @@
  *     within HEXAD_COMPOSE). Otherwise 0.
  *
  *   proof_run_full_matrix() -> u32
- *     Exhausts all 18 * 18 = 324 pairs. Returns count of failures
+ *     Exhausts all 19 * 19 = 361 pairs. Returns count of failures
  *     (must be 0 for the proof to hold).
  *
  * Hexad: kind_essence (proof). Ring: R0. K: 1.00.
@@ -224,7 +224,7 @@ fn proof_pair(i: u32, j: u32) -> u32 @export {
 /* ---------------------------------------------------------------- */
 /* proof_run_full_matrix                                              */
 /*                                                                   */
-/* Exhausts all 18 * 18 = 324 ordered pairs. For each:                */
+/* Exhausts all 19 * 19 = 361 ordered pairs. For each:                */
 /*   1. proof_pair returns PROOF_OK (= 0).                            */
 /*   2. For i != j: structural mask must be nonzero OR the pair is   */
 /*      in the operational-distinction table.                         */
@@ -292,9 +292,9 @@ fn proof_first_failure() -> u32 @export {
 /* proof_count_irreducible                                            */
 /*                                                                   */
 /* Convenience: returns the count of irreducible ordered pairs.      */
-/* For the calculus to hold, this must equal 18 * 17 = 306 (every    */
-/* distinct ordered pair is irreducible) plus 18 (trivial i == j) =  */
-/* 324 total.                                                         */
+/* For the calculus to hold, this must equal 19 * 18 = 342 (every    */
+/* distinct ordered pair is irreducible) plus 19 (trivial i == j) =  */
+/* 361 total.                                                         */
 /* ---------------------------------------------------------------- */
 
 fn proof_count_irreducible() -> u32 @export {

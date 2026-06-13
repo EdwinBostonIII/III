@@ -1,0 +1,22 @@
+/* 1520_rms_ceil_div_zero.iii -- W27 FALSIFIER: rms_ceil_div must not divide by 0.
+ *
+ * THE DEFECT (division by zero): rms_ceil_div (rms.iii line 42, @export) returns
+ * `((a + b) - 1) / b` with no b==0 guard (the comment says "for b > 0" but does
+ * not enforce it).  An external caller passing b=0 traps (SIGFPE).
+ *
+ * THE FIX: `if b == 0u32 { return 0u32 }` (ceil(a/0) is undefined -> 0).
+ *
+ * TEETH (crash-class -- the standard falsifier for a div-by-zero guard): arm 3
+ * calls rms_ceil_div(5, 0) -> pre-fix SIGFPE (process dies, exit != 99); post-fix
+ * returns 0.  Sanity arms pin the normal ceil-division (divisor 4, as the KAT). */
+module corpus_1520
+
+extern @abi(c-msvc-x64) fn rms_ceil_div(a: u32, b: u32) -> u32 from "rms.iii"
+
+fn main() -> u64 {
+    if rms_ceil_div(7u32, 4u32) != 2u32 { return 10u64 }   /* ceil(7/4)=2 */
+    if rms_ceil_div(8u32, 4u32) != 2u32 { return 11u64 }   /* ceil(8/4)=2 */
+    let r : u32 = rms_ceil_div(5u32, 0u32)                  /* TEETH: pre-fix SIGFPE */
+    if r != 0u32 { return 30u64 }                          /* post-fix r==0 */
+    return 99u64
+}

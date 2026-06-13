@@ -1,0 +1,40 @@
+/* 1522_temporal_subf_overflow.iii -- W27 FALSIFIER: tl_trace_set/holds must
+ * reject a subformula index whose *TLOGIC_MAX_SEG overflows, not write/read a
+ * wrapped (wrong-but-in-range) slot.  A W20 COMPLETION.
+ *
+ * THE DEFECT (multiply overflow bypasses the byte-bound guard): tl_val_set /
+ * tl_val_get (called by @export tl_trace_set / tl_trace_holds) compute
+ * `idx = s * TLOGIC_MAX_SEG + p` and then guard `idx >= MAX_SUBF*MAX_SEG` (the
+ * W20 byte-bound).  But `s * TLOGIC_MAX_SEG` WRAPS u64 for huge s: s =
+ * 0x10000000000001 -> *4096 = 0x10000000000001000 -> low64 = 0x1000 = 4096.  So
+ * idx = 4096 < 4194304 PASSES the guard, and tl_trace_set writes TL_VAL[4096] (a
+ * valid-but-WRONG slot) returning 0 (success) for a nonsense index.
+ *
+ * THE FIX: bound s and p BEFORE the multiply (the true contract s<MAX_SUBF,
+ * p<MAX_SEG): `if s >= TLOGIC_MAX_SUBF { return <oob> }` + the p check, in both
+ * tl_val_set (returns -1) and tl_val_get (returns 0).
+ *
+ * TEETH (GENTLE value differential, no OOB): arm 1 = tl_trace_set(huge_s, 0, 1).
+ *   - pre-fix: writes the wrapped slot, returns 0 -> the arm sees 0 != -1 and
+ *     reddens (exit 30).
+ *   - post-fix: the s-guard returns -1 -> the arm passes.
+ * Arms 2-3 pin a valid (s,p) set+holds round-trip (guard not over-tight); arm 4
+ * pins the get-side guard (huge s -> 0). */
+module corpus_1522
+
+extern @abi(c-msvc-x64) fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_trace_holds(node: u64, pos: u64) -> u8 from "temporal_logic.iii"
+
+fn main() -> u64 {
+    /* ---- arm 1 (TEETH): huge subformula index must be rejected (-1), not a wrapped write ---- */
+    if tl_trace_set(0x10000000000001u64, 0u64, 1u8) != -1i32 { return 30u64 }   /* pre-fix returns 0 -> reddens */
+
+    /* ---- arm 2-3 (sanity): a valid (s,p) set succeeds and round-trips ---- */
+    if tl_trace_set(2u64, 3u64, 1u8) != 0i32 { return 31u64 }
+    if tl_trace_holds(2u64, 3u64) != 1u8 { return 32u64 }
+
+    /* ---- arm 4 (get-side guard): huge node -> 0, not a wrapped read ---- */
+    if tl_trace_holds(0x10000000000001u64, 0u64) != 0u8 { return 33u64 }
+
+    return 99u64
+}

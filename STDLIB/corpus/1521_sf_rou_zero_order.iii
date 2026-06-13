@@ -1,0 +1,23 @@
+/* 1521_sf_rou_zero_order.iii -- W27 FALSIFIER: sf_rou must not divide by 0.
+ *
+ * THE DEFECT (division by zero): sf_rou (ntt_fri_organ.iii line 62, @export)
+ * computes `frm_pow(3, 998244352 / n, p)` with no n==0 guard -- the `998244352 /
+ * (n as u64)` traps (SIGFPE) when n=0.
+ *
+ * THE FIX: `if n == 0u32 { return 1u32 }` (the 0th root of unity is undefined ->
+ * the multiplicative identity 1 is the safe value).
+ *
+ * TEETH (crash-class): arm 2 calls sf_rou(0) -> pre-fix SIGFPE; post-fix 1.  The
+ * sanity arm pins a valid order (sf_rou(2) = the primitive 2nd root = p-1 = a
+ * nonzero value), as the selftest uses powers of two. */
+module corpus_1521
+
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+
+fn main() -> u64 {
+    let r2 : u32 = sf_rou(2u32)                            /* valid 2nd root of unity */
+    if r2 == 0u32 { return 10u64 }                        /* a real root is nonzero */
+    let r0 : u32 = sf_rou(0u32)                            /* TEETH: pre-fix SIGFPE (998244352/0) */
+    if r0 != 1u32 { return 30u64 }                        /* post-fix r0==1 (identity) */
+    return 99u64
+}

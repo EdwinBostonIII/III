@@ -59,7 +59,7 @@ fn sf_neg(x: u32) -> u32 @export { if x == 0u32 { return 0u32 } return 998244353
 fn sf_mul(x: u32, y: u32) -> u32 @export { return ntt_mult_field_elem(x, y, 998244353u32) }
 fn sf_pow(x: u32, e: u64) -> u32 @export { return frm_pow(x, e, 998244353u32) }
 fn sf_inv(x: u32) -> u32 @export { return frm_pow(x, 998244351u64, 998244353u32) }
-fn sf_rou(n: u32) -> u32 @export { return frm_pow(3u32, 998244352u64 / (n as u64), 998244353u32) }
+fn sf_rou(n: u32) -> u32 @export { if n == 0u32 { return 1u32 }  /* [W27] the `998244352 / n` below traps (SIGFPE) on n==0; the 0th root of unity is undefined -> identity 1 */  return frm_pow(3u32, 998244352u64 / (n as u64), 998244353u32) }
 
 /* Exhaustive non-tautological falsifier for the consolidated STARK base field GF(998244353).
  * Proves the field axioms AND the load-bearing NTT property — ω_n is a PRIMITIVE n-th root

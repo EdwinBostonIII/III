@@ -1275,3 +1275,29 @@ discriminator vs threshold_vault's store-then-validate, which WAS reachable).
 
 Gates: build GATE PASS FAIL=0; 1518 teeth exit 127 vs old lib, 1519 exit 30 vs old lib, both 99 vs new.
 Count 1104 -> **1106**.
+
+## Wave-27 — rms_ceil_div + sf_rou div-by-zero, temporal_logic s*4096 overflow (W30; a W20 completion) (2026-06-13)
+
+W30 (store-then-validate / div-by-zero-2 / unsigned-underflow / capacity-overflow) found 3, all
+landing.  Each contract-pre-checked (existing KATs use safe inputs -> guards are no-ops).
+
+**W27-FIX-A** (numera/rms.iii rms_ceil_div; 1520): `((a+b)-1)/b` @export with no b==0 guard -> SIGFPE.
+FIX `if b == 0u32 { return 0u32 }`.  KAT (rms_kat) tests divisor 4 only; internal callers pass RMS_T
+{4,6,8}.  1520 teeth: rms_ceil_div(5,0) SIGFPE(127) -> 0.
+
+**W27-FIX-B** (numera/ntt_fri_organ.iii sf_rou; 1521): `frm_pow(3, 998244352 / n, p)` @export with no
+n==0 guard -> SIGFPE.  FIX `if n == 0u32 { return 1u32 }` (0th root of unity undefined -> identity).
+Selftest uses powers of 2; zk_stark/zk_air callers use AIR_N/AIR_B (nonzero).  1521 teeth: sf_rou(0)
+SIGFPE(127) -> 1.
+
+**W27-FIX-C** (numera/temporal_logic.iii tl_val_set + tl_val_get; 1522) -- a W20 COMPLETION.  W20 added
+the byte-bound guard `idx >= MAX_SUBF*MAX_SEG` on idx = s*TLOGIC_MAX_SEG + p.  But `s * TLOGIC_MAX_SEG`
+WRAPS u64 for huge s (0x10000000000001*4096 -> 4096), so a nonsense s yields a SMALL idx that PASSES the
+W20 guard and writes/reads a wrong-but-in-range slot.  FIX: bound s and p BEFORE the multiply (the true
+contract s<MAX_SUBF, p<MAX_SEG) in both accessors.  tl_kat callers use s in {0,1,2}, p<8.  1522 teeth
+(GENTLE): tl_trace_set(huge_s,0,1) pre-fix writes the wrapped slot + returns 0 -> arm asserts -1, the 0
+reddens (exit 30); post-fix -1.  Same lesson as W23/W24/W25: validate the INPUTS, not the derived
+quantity -- a guard placed AFTER an overflowing computation is structurally blind.
+
+Gates: build GATE PASS FAIL=0; 1520/1521 teeth exit 127 vs old lib, 1522 exit 30, all 99 vs new.
+Count 1106 -> **1109**.

@@ -847,3 +847,26 @@ so the bound is provably not over-tight.
 Gates: build GATE PASS FAIL=0; 1502 99 vs new / exit 2 vs old; corpus delta verified
 race-free -- only 12 .o changed content, all 17 tests externing them + 1502 GREEN against the
 new lib.  Count 1089 -> **1090**.
+
+## Wave-13 — fix_div large-operand precision (the FIRST non-OOB find; numeric axis) (2026-06-12)
+
+After the OOB/@export-bounds axis saturated (waves 9-11 swept it; wave-12 returned only
+(ptr,len)-convention false positives, all refuted on inspection -- the length IS the contract,
+unguardable), the loop PIVOTED off it.  A 5-lens fresh-axis discovery (numeric-precision /
+lifecycle-leak / cross-module-misuse / seal-determinism / weak-gate) yielded one real find
+(the 3 tempora lifecycle candidates refuted -- alloc-then-slot_of cannot fail, no teeth).
+
+**W13-FIX** (`numera/fixed.iii` fix_div, falsifier `1503`, old exit=4): the Q32.32 fractional
+long division maintained the invariant acc < b but computed `acc = acc << 1` unconditionally.
+When acc >= 2^63 (reachable iff b > 2^63, since acc < b) the shift OVERFLOWS u64 and drops the
+top bit, so the subtract-and-set never fires and the fractional part collapses toward zero:
+fix_div(2^63, 2^63+1) returned 0 instead of 0xFFFFFFFF (the true ratio is just under 1.0).
+Fix: capture the lost carry (`carry = acc >> 63`); when carry=1 the true 65-bit value exceeds
+any u64 b so the subtract is unconditional ((true-b) reduces to (acc-b) in wrapping u64 because
+true-b = 2^64+acc-b < 2^64).  For b <= 2^63 (ALL normal Q32.32 use) carry is always 0 ->
+byte-identical (corpus 30/1056/1330 stay green).  1503 pins the law fix_div(b-1,b)==0xFFFFFFFF
+(exact for any b > 2^32; the large-b instances exercise the overflow path) + the headline +
+exact small-operand regressions.
+
+Gates: build GATE PASS FAIL=0; 1503 99 vs new / exit 4 vs old; only fixed.iii changed content,
+the 3 existing fixed.iii KATs + 1503 GREEN.  Count 1090 -> **1091**.

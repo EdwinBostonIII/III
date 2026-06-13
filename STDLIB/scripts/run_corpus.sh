@@ -1076,6 +1076,7 @@ declare -A EXPECTED=(
     [1500_zkfield_accessor_bounds]=99
     [1501_knap_seg_bounds]=99
     [1502_analysis_accessor_bounds]=99
+    [1503_fix_div_large_operand]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

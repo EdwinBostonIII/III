@@ -1,0 +1,58 @@
+/* 1503_fix_div_large_operand.iii -- W13 FALSIFIER: Q32.32 fix_div is correct for
+ * LARGE operands (b > 2^63), where the bit-by-bit fractional long division used to
+ * silently lose precision.
+ *
+ * THE DEFECT: the fractional loop maintained the invariant acc < b but computed
+ * acc = acc << 1 unconditionally.  When acc >= 2^63 (reachable iff b > 2^63), the
+ * shift OVERFLOWS u64 and drops the top bit, so the subtract-and-set never fires
+ * and the fractional part collapses to (near) zero.  fix_div(2^63, 2^63+1)
+ * returned 0 instead of ~0xFFFFFFFF (the true ratio is just under 1.0).
+ *
+ * THE FIX: capture the bit lost by the shift (carry = acc >> 63); when carry=1 the
+ * true 65-bit value exceeds any u64 b so the subtract is unconditional.  For
+ * b <= 2^63 (all normal Q32.32 use) carry is always 0 -> byte-identical.
+ *
+ * THE LAW (teeth): for ANY b > 2^32, fix_div(b-1, b) == 0xFFFFFFFF
+ *   (= floor((b-1)*2^32 / b) = 2^32 - ceil(...) = 2^32 - 1, since 0 < 2^32/b < 1).
+ * The LARGE-b instances exercise the overflow path; pre-fix they return a corrupted
+ * value (the headline case returns 0), so arms 3-6 redden against the old lib.  The
+ * small-b instance and the exact-ratio regressions are byte-identical (the existing
+ * corpus 30/1056/1330 use only small operands).  Exit 99. */
+module corpus_1503
+
+extern @abi(c-msvc-x64) fn fix_div(a: u64, b: u64) -> u64 from "fixed.iii"
+
+const FX_ONE : u64 = 0x100000000u64    /* 1.0 in Q32.32 */
+
+fn main() -> u64 {
+    /* ---- exact small-operand regressions (byte-identical old/new) ---- */
+    if fix_div(10u64 << 32u64, 4u64 << 32u64) != 0x280000000u64 { return 1u64 }   /* 10/4 = 2.5 */
+    if fix_div(1u64 << 32u64, 2u64 << 32u64) != 0x80000000u64 { return 2u64 }      /* 1/2 = 0.5 */
+
+    /* ---- the (b-1)/b == 0xFFFFFFFF law, small b (byte-identical) ---- */
+    let bs : u64 = 2u64 << 32u64                                                   /* b = 2^33 > 2^32 */
+    if fix_div(bs - 1u64, bs) != 0xFFFFFFFFu64 { return 3u64 }
+
+    /* ---- the law, LARGE b > 2^63 (the overflow path; TEETH) ---- */
+    /* headline: a = 2^63, b = 2^63+1 -> ~1.0 fractional = 0xFFFFFFFF (pre-fix: 0) */
+    if fix_div(0x8000000000000000u64, 0x8000000000000001u64) != 0xFFFFFFFFu64 { return 4u64 }
+    /* b = 1.5 * 2^63 */
+    if fix_div(0xBFFFFFFFFFFFFFFFu64, 0xC000000000000000u64) != 0xFFFFFFFFu64 { return 5u64 }
+    /* b = 2^64 - 1 (the largest possible divisor) */
+    if fix_div(0xFFFFFFFFFFFFFFFEu64, 0xFFFFFFFFFFFFFFFFu64) != 0xFFFFFFFFu64 { return 6u64 }
+
+    /* ---- a large-operand case with a nonzero integer part + fractional bits ----
+     * a = 1.5*2^63, b = 2^63 -> a/b = 1.5 exactly = 0x180000000 (int 1, frac 0.5).
+     * acc reaches 2^63 here too, exercising the carry path; the answer is exact. */
+    if fix_div(0xC000000000000000u64, 0x8000000000000000u64) != 0x180000000u64 { return 7u64 }
+
+    /* ---- the result is a real ratio near 1.0, strictly below FX_ONE, not 0 ---- */
+    let q : u64 = fix_div(0x8000000000000000u64, 0x8000000000000001u64)
+    if q == 0u64 { return 8u64 }                 /* the pre-fix collapse */
+    if q >= FX_ONE { return 9u64 }               /* a/b < 1 so the result is < 1.0 */
+
+    /* ---- div-by-zero sentinel unchanged ---- */
+    if fix_div(FX_ONE, 0u64) != 0xFFFFFFFFFFFFFFFFu64 { return 10u64 }
+
+    return 99u64
+}

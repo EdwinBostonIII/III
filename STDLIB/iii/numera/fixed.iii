@@ -90,12 +90,24 @@ fn fix_div(a: u64, b: u64) -> u64 @export {
         let mut bit : u32 = 32u32
         while bit > 0u32 {
             bit = bit - 1u32
+            /* [W13-FIX] acc<<1 drops the top bit when acc >= 2^63 (reachable when b > 2^63,
+             * since the invariant is acc < b).  Capture that bit: the true 65-bit value is
+             * carry*2^64 + (acc<<1).  When carry=1 the true value exceeds any u64 b, so the
+             * subtract is unconditional; (true - b) reduces to (acc - b) in wrapping u64
+             * because true - b = 2^64 + acc - b and that is < 2^64 (true < 2b).  For b <= 2^63
+             * (all normal Q32.32 use) carry is always 0 -> byte-identical to the old path. */
+            let carry : u64 = acc >> 63u64
             acc = acc << 1u64
-            if acc >= b {
+            let bit_u64 : u64 = bit as u64
+            let one_shifted : u64 = 1u64 << bit_u64
+            if carry == 1u64 {
                 acc = acc - b
-                let bit_u64 : u64 = bit as u64
-                let one_shifted : u64 = 1u64 << bit_u64
                 frac_part = frac_part | one_shifted
+            } else {
+                if acc >= b {
+                    acc = acc - b
+                    frac_part = frac_part | one_shifted
+                }
             }
         }
     }

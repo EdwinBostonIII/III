@@ -1,0 +1,28 @@
+/* 1528_vz_covers_nonpow2.iii -- W31 FALSIFIER (sibling of 1527): vz_covers must
+ * answer "n is a multiple of w" correctly for a non-power-of-2 width.
+ *
+ * THE DEFECT (same as ad_aligned): vz_covers (vectorizer.iii line 34, @export)
+ * computes `(n & (w-1)) == 0` -- doc "the trip count n is a multiple of the
+ * width W (W is a power of two)".  The mask equals n mod w ONLY for a power-of-2
+ * w; for a non-power-of-2 w it is WRONG: vz_covers(1,3) -> (1&2)=0 -> 1 but
+ * 1 mod 3 != 0; vz_covers(6,3) -> (6&2)=2 -> 0 but 6 mod 3 = 0.
+ *
+ * THE FIX: real modulo for a non-power-of-2 w; keep the bitmask fast path for
+ * power-of-2 (in-tree callers pass a power-of-2 ad_max_vector_width).
+ *
+ * TEETH (value differential): arm 1 vz_covers(1,3)!=0 (pre-fix 1 -> exit 30);
+ * arm 2 vz_covers(6,3)!=1 (pre-fix 0).  Sanity: power-of-2 path unchanged. */
+module corpus_1528
+
+extern @abi(c-msvc-x64) fn vz_covers(n: u32, w: u32) -> u32 from "vectorizer.iii"
+
+fn main() -> u64 {
+    if vz_covers(1u32, 3u32) != 0u32 { return 30u64 }    /* 1 mod 3 = 1 -> not a multiple; pre-fix 1 */
+    if vz_covers(6u32, 3u32) != 1u32 { return 31u64 }    /* 6 mod 3 = 0 -> multiple; pre-fix 0 */
+    if vz_covers(9u32, 3u32) != 1u32 { return 32u64 }    /* 9 mod 3 = 0 */
+    if vz_covers(5u32, 6u32) != 0u32 { return 33u64 }    /* 5 mod 6 = 5 */
+
+    if vz_covers(8u32, 4u32) != 1u32 { return 34u64 }    /* power-of-2: 8 mod 4 = 0 (unchanged) */
+    if vz_covers(6u32, 4u32) != 0u32 { return 35u64 }    /* power-of-2: 6 mod 4 = 2 (unchanged) */
+    return 99u64
+}

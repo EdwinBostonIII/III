@@ -1375,3 +1375,29 @@ use power-of-2 (STARK/FRI domains, n=8) -> byte-identical.  1526 teeth: n=3/6/0 
 
 Gates: build GATE PASS FAIL=0; 1526 teeth exit 30 vs old lib, 99 vs new; corpus green (zk-STARK/merkle
 load-bearing).  Count 1112 -> **1113**.
+
+## Wave-31 — ad_aligned non-power-of-2 width: bitmask != modulo (W39; the W30 pattern again) (2026-06-13)
+
+W37 dry, W38 deferred (vacuous), but W39's documented-precondition lens (the merkle vein) hit again.
+
+**W31-FIX** (numera/align_domain.iii ad_aligned; falsifier 1527): ad_aligned(x,w) computes `(x & (w-1))
+== 0`.  Its doc is "is x aligned to width w?  (x mod w == 0, via mask since w is a power of two)" -- so the
+STATED semantics is x mod w == 0, and the mask is a power-of-2 optimization.  For a non-power-of-2 w the
+mask is WRONG (a real, non-vacuous wrong boolean BOTH ways): ad_aligned(1,3) -> (1&2)=0 -> 1 (aligned) but
+1 mod 3 = 1; ad_aligned(6,3) -> (6&2)=2 -> 0 (not aligned) but 6 mod 3 = 0.  Reachable @export.  FIX: honor
+the stated modulo semantics -- use real `x % w` for a non-power-of-2 w; keep the bitmask fast path for
+power-of-2 (and w==0/1/2 stay on it -> the modulo path only runs for w>=3 -> no div-by-zero).  NOT a
+contract extension -- the doc already says "x mod w == 0".  In-tree callers (align_domain:52/53) pass a
+power-of-2 w from ad_max_vector_width (the SIMD width = lowest set bit of gcd) -> byte-identical.
+
+1527 teeth: ad_aligned(1,3)!=0 (pre-fix 1 -> exit 30) + ad_aligned(6,3)!=1 (pre-fix 0); sanity 8/4, 5/4,
+0/8, 3/1 on the unchanged power-of-2 path.
+
+**SIBLING (same commit): vectorizer.iii vz_covers** -- a targeted grep `& \(X - 1\)` for the same bitmask-
+modulo pattern found vz_covers(n,w) "n is a multiple of the width W (W power of two)" with the IDENTICAL
+`(n & (w-1)) == 0` bug.  Same fix (modulo for non-power-of-2 w); in-tree callers pass a power-of-2
+ad_max_vector_width -> byte-identical.  Falsifier 1528 (vz_covers(1,3)!=0 / (6,3)!=1).  (The other grep
+hits were correct power-of-2 CHECKS `(x & (x-1))==0` or STARK power-of-2 FRI domains -- not bugs.)
+
+Gates: build GATE PASS FAIL=0; 1527 + 1528 teeth exit 30 vs old lib, 99 vs new; corpus green.  Count
+1113 -> **1115**.

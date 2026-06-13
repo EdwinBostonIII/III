@@ -32,6 +32,10 @@ extern @abi(c-msvc-x64) fn ad_loop_aligned(base: u32, stride: u32, w: u32) -> u3
 
 /* clean coverage: the trip count n is a multiple of the width W (W is a power of two). */
 fn vz_covers(n: u32, w: u32) -> u32 @export {
+    if (w & (w - 1u32)) != 0u32 {                /* [W31] sibling of ad_aligned: (n & (w-1)) equals n mod w ONLY for a power-of-two w; for a non-power-of-2 w use real modulo (doc: "n is a multiple of the width W").  w>=3 here -> no div-by-zero; w==0/1/2/pow2 keep the fast path. */
+        if (n % w) == 0u32 { return 1u32 }
+        return 0u32
+    }
     if (n & (w - 1u32)) == 0u32 { return 1u32 }
     return 0u32
 }

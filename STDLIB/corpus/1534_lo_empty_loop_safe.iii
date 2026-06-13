@@ -1,0 +1,50 @@
+/* 1534_lo_empty_loop_safe.iii -- W36 FALSIFIER: loop_optimizer's interval safety analysis
+ * must report an EMPTY loop (n=0) as SAFE, agreeing with the affine ground truth.
+ *
+ * THE DEFECT (law/roundtrip + same-function disagreement): loop_optimizer's whole contract
+ * is that TWO analyses agree (doc lines 11-12: "a disagreement would itself be a bug signal").
+ * lo_safe_interval(a,b,n,size) used `lo_access_max(a,b,n) < size`.  For an empty loop
+ * lo_access_max returns the SENTINEL 0 ("no address touched"), but `0 < size` then conflates
+ * that with "address 0 is touched": for size>=1 it is accidentally right (0<size true -> safe),
+ * but for size=0 it returns 0 (UNSAFE).  The affine exhaustive scan ac_in_bounds(a,b,0,size)
+ * correctly returns 1 (SAFE -- `while i<0` never runs) for ANY size.  So at (1,0,0,0) the two
+ * analyses DISAGREE: interval=0, affine=1.  An empty loop touches no memory and is safe.
+ *
+ * THE FIX: `if n == 0u32 { return 1u32 }` at the top of lo_safe_interval.
+ *
+ * TEETH (value differential, via the @export boundary): the empty-loop verdict must be SAFE/agree.
+ *   - pre-fix: lo_safe(1,0,0,0)=0, lo_analyses_agree(1,0,0,0)=0 -> arm reddens (exit 30/31).
+ *   - post-fix: 1 / 1.
+ * ORACLE: ac_in_bounds(1,0,0,0)==1 (affine ground truth) proves the empty loop IS safe, so the
+ * interval path's 0 was the wrong value.  Sanity: n>0 verdicts (safe 2,1,5,16; unsafe 3,2,8,16),
+ * and the crucial NON-empty-loop-into-size-0-array case (1,0,3,0) must STAY unsafe -- the fix is
+ * empty-LOOP (n=0), not empty-ARRAY (size=0). */
+module corpus_1534
+
+extern @abi(c-msvc-x64) fn lo_safe(a: u32, b: u32, n: u32, size: u32) -> u32 from "loop_optimizer.iii"
+extern @abi(c-msvc-x64) fn lo_analyses_agree(a: u32, b: u32, n: u32, size: u32) -> u32 from "loop_optimizer.iii"
+extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
+
+fn main() -> u64 {
+    /* ---- ORACLE: the affine ground truth says an empty loop is SAFE for size 0 ---- */
+    if ac_in_bounds(1u32, 0u32, 0u32, 0u32) != 1u32 { return 40u64 }   /* empty loop, any size -> safe */
+
+    /* ---- TEETH: the interval path must AGREE (empty loop = safe, analyses agree) ---- */
+    if lo_safe(1u32, 0u32, 0u32, 0u32) != 1u32 { return 30u64 }        /* pre-fix: 0 (UNSAFE, wrong) */
+    if lo_analyses_agree(1u32, 0u32, 0u32, 0u32) != 1u32 { return 31u64 } /* pre-fix: 0 (DISAGREE) */
+
+    /* ---- sanity: n>0 verdicts unchanged (guard not over-tight) ---- */
+    if lo_safe(2u32, 1u32, 5u32, 16u32) != 1u32 { return 32u64 }       /* in bounds -> safe */
+    if lo_safe(3u32, 2u32, 8u32, 16u32) != 0u32 { return 33u64 }       /* out of bounds -> unsafe */
+    if lo_analyses_agree(2u32, 1u32, 5u32, 16u32) != 1u32 { return 34u64 }
+
+    /* ---- sanity: empty loop with size>=1 was already safe (stays safe + agreeing) ---- */
+    if lo_safe(1u32, 0u32, 0u32, 16u32) != 1u32 { return 35u64 }
+    if lo_analyses_agree(1u32, 0u32, 0u32, 16u32) != 1u32 { return 36u64 }
+
+    /* ---- CRUCIAL sanity: a NON-empty loop into a size-0 array stays UNSAFE (touches addr 0) ---- */
+    if lo_safe(1u32, 0u32, 3u32, 0u32) != 0u32 { return 37u64 }        /* n=3>0, size=0 -> unsafe both ways */
+    if ac_in_bounds(1u32, 0u32, 3u32, 0u32) != 0u32 { return 38u64 }   /* affine agrees: unsafe */
+
+    return 99u64
+}

@@ -1106,6 +1106,7 @@ declare -A EXPECTED=(
     [1531_ntt_pow2_guard]=99
     [1532_ntt_tabled_pow2_guard]=99
     [1533_rp_count_empty_interval]=99
+    [1534_lo_empty_loop_safe]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

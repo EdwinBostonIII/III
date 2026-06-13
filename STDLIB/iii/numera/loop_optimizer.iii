@@ -42,6 +42,7 @@ fn lo_access_max(a: u32, b: u32, n: u32) -> u32 @export {
 
 /* both analyses must agree the loop is in bounds. */
 fn lo_safe_interval(a: u32, b: u32, n: u32, size: u32) -> u32 {
+    if n == 0u32 { return 1u32 }                 /* [W36] an empty loop touches NO memory -> safe for ANY size (incl. 0); matches ac_in_bounds's empty-loop=1 affine ground truth. Without this, lo_access_max's sentinel 0 ("no address") is conflated with "address 0", so `0 < size` mis-reports size=0 as UNSAFE and the two analyses DISAGREE (the doc's own bug signal). */
     if lo_access_max(a, b, n) < size { return 1u32 }
     return 0u32
 }

@@ -1499,3 +1499,32 @@ already correct) unchanged.
 
 Gates: build GATE PASS FAIL=0, all three ratchets OK; 1533 teeth exit 30 vs old lib, 99 vs new; corpus
 green.  Count 1119 -> **1120**.
+
+## Wave-36 — loop_optimizer empty-loop safety disagreement (the same-function-asymmetry lens extends to cross-witness disagreement) (2026-06-13)
+
+W35's algebraic-law axis continued onto the numera groups it had not reached (symmetric crypto, compiler-opt
+x2, proof-logic x2, deeper codes/dp/misc), with the **same-function-asymmetry** lens (the rp_count fingerprint)
+promoted to highest priority + a WRONG-VALUE-not-contract-only hard gate to pre-filter the fenwick-class noise.
+Read-only Workflow wp0kswzyq: 1 confirmed of 2 raw; the refuted one was shake256_oneshot (its NULL-with-len>0
+"deref" is guarded at the ROOT by keccak_absorb line 377, so the shake128/shake256 asymmetry is redundant
+defense-in-depth, contract-only -- a correct kill).
+
+**W36-FIX** (numera/loop_optimizer.iii lo_safe_interval; falsifier 1534): loop_optimizer's contract is that
+TWO independent analyses agree (doc lines 11-12: "a disagreement would itself be a bug signal") -- an interval
+abstraction and the exhaustive affine scan.  lo_safe_interval used `lo_access_max(a,b,n) < size`.  For an EMPTY
+loop (n=0) lo_access_max returns the SENTINEL 0 ("no address touched"), but `0 < size` conflates that with
+"address 0 is touched": for size>=1 it is accidentally correct (0<size -> safe), but for size=0 it returns 0
+(UNSAFE).  The affine ground truth ac_in_bounds(a,b,0,size) correctly returns 1 (SAFE -- `while i<0` never
+runs) for ANY size.  So at (1,0,0,0) interval=0 disagrees with affine=1 -> lo_analyses_agree=0 (the module's
+own false bug-signal about itself).  An empty loop touches no memory and is safe.  FIX: `if n == 0u32
+{ return 1u32 }` at the top of lo_safe_interval -- matches the affine empty-loop semantics, restores agreement
+for all (a,b,size).  n>0 unchanged; KAT (n=5,n=8) byte-identical.
+
+1534 teeth (via @export, with the affine cross-witness as oracle): ac_in_bounds(1,0,0,0)==1 proves the empty
+loop is safe; lo_safe(1,0,0,0)/lo_analyses_agree(1,0,0,0) pre-fix return 0 (exit 30/31) -> post-fix 1.  Sanity:
+n>0 verdicts (safe 2,1,5,16; unsafe 3,2,8,16) unchanged, AND the crucial non-empty-loop-into-size-0-array case
+(1,0,3,0) STAYS unsafe -- the fix is empty-LOOP (n=0), not empty-ARRAY (size=0).
+
+The same-function-asymmetry lens generalizes to CROSS-WITNESS disagreement: when a module ships two analyses
+that must agree, the corner where they diverge is a self-certified defect.  Gates: build GATE PASS FAIL=0, all
+three ratchets OK; 1534 teeth exit 30 vs old lib, 99 vs new; corpus green.  Count 1120 -> **1121**.

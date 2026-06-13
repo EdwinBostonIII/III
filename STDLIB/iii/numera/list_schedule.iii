@@ -93,7 +93,7 @@ fn lsch_valid() -> u32 @export {
     return 1u32
 }
 
-fn lsch_start(i: u32) -> u32 @export { return LSCH_START[i as u64] }
+fn lsch_start(i: u32) -> u32 @export { if i >= LSCH_N { return 0u32 } return LSCH_START[i as u64] }   /* [OOB-W11] @export idx into LSCH_START[5] */
 
 /* =====================================================================================
  * list_schedule_kat -- 99 = critical-path instruction scheduling is correct, self-checked:

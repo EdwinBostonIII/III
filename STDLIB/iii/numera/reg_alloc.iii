@@ -122,7 +122,7 @@ fn ra_color() -> i32 @export {
 }
 
 fn ra_regs_used() -> u32 @export { return RA_USED[0u64] }
-fn ra_reg(i: u32) -> u32 @export { return RA_REG[i as u64] }
+fn ra_reg(i: u32) -> u32 @export { if i >= RA_N { return 0u32 } return RA_REG[i as u64] }   /* [OOB-W11] @export idx into RA_REG[4] */
 
 /* the colouring is valid iff every interfering pair has distinct registers. */
 fn ra_valid() -> u32 @export {

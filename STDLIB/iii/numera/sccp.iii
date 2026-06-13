@@ -118,8 +118,8 @@ fn sccp_solve() -> i32 @export {
     return 0i32
 }
 
-fn sccp_state(i: u32) -> u32 @export { return SCCP_STATE[i as u64] }
-fn sccp_const(i: u32) -> u32 @export { return SCCP_VAL[i as u64] }
+fn sccp_state(i: u32) -> u32 @export { if i >= SCCP_N { return 0u32 } return SCCP_STATE[i as u64] }   /* [OOB-W11] @export idx into SCCP_STATE[8] */
+fn sccp_const(i: u32) -> u32 @export { if i >= SCCP_N { return 0u32 } return SCCP_VAL[i as u64] }
 
 /* =====================================================================================
  * sccp_kat -- 99 = constant propagation over the lattice is correct, self-checked:

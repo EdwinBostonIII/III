@@ -825,3 +825,25 @@ Gates: build GATE PASS FAIL=0; the 3 falsifiers 99 vs new / fail vs old (5/3/3);
 delta verified race-free -- only FIVE .o changed content (fp256/fn256/zk_field/knapsack/
 segment_tree), all 19 tests externing them + the 3 new re-run GREEN against the new lib.
 Count 1086 -> **1089**.
+
+## Wave-11 — the EXHAUSTIVE single-line accessor-bounds sweep (2026-06-12)
+
+A direct tree-wide grep (faster + more complete than a fuzzy agent for this mechanical
+pattern) enumerated every single-line @export accessor `ARR[param...]` lacking a leading
+bounds guard.  The prior audit + waves 9-10 had covered only a fraction; this closes the
+class.  Guarded 23 accessors across 12 modules to the array cap (getters -> 0, setters -> -1):
+dce (set_side/live), dominators (dom_set), gvn (vn/redundant), kmp (fail), list_schedule
+(start), reg_alloc (reg), rewrite_schedule (order), sccp (state/const), congruence_closure
+(pcc_path/expl), taint_analysis (set_source/imm/op/sanitize/sink/tainted), threshold_vault
+(tv_keyshare_x), sieve (is_prime).  A re-sweep confirms ZERO unguarded single-line
+accessors remain.
+
+Falsifier `1502`: clean old/new teeth via the SETTER guards (dce_set_side(6,..) and
+taint_set_source(64) return 0 pre-fix having done the 1-past write, -1 post-fix -- arms 2/5
+redden against the old lib, exit 2); every getter guard pinned on the new lib (OOB index ->
+0); sieve's boundary anchored to real primality (2/47 prime, 50 composite valid, 51 guarded)
+so the bound is provably not over-tight.
+
+Gates: build GATE PASS FAIL=0; 1502 99 vs new / exit 2 vs old; corpus delta verified
+race-free -- only 12 .o changed content, all 17 tests externing them + 1502 GREEN against the
+new lib.  Count 1089 -> **1090**.

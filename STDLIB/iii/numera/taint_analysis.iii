@@ -59,11 +59,11 @@ fn taint_reset(n: u32) -> i32 @export {
     }
     return 0i32
 }
-fn taint_set_source(i: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_SOURCE ; return 0i32 }
-fn taint_set_imm(i: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_IMM ; return 0i32 }
-fn taint_set_op(i: u32, a: u32, b: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_OP ; TNT_A[i as u64]=a ; TNT_B[i as u64]=b ; return 0i32 }
-fn taint_set_sanitize(i: u32, a: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_SANITIZE ; TNT_A[i as u64]=a ; return 0i32 }
-fn taint_set_sink(i: u32, a: u32) -> i32 @export { TNT_OP_[i as u64]=TNT_SINK ; TNT_A[i as u64]=a ; return 0i32 }
+fn taint_set_source(i: u32) -> i32 @export { if i >= TNT_CAP { return -1i32 } TNT_OP_[i as u64]=TNT_SOURCE ; return 0i32 }   /* [OOB-W11] @export idx into TNT_*[64] */
+fn taint_set_imm(i: u32) -> i32 @export { if i >= TNT_CAP { return -1i32 } TNT_OP_[i as u64]=TNT_IMM ; return 0i32 }
+fn taint_set_op(i: u32, a: u32, b: u32) -> i32 @export { if i >= TNT_CAP { return -1i32 } TNT_OP_[i as u64]=TNT_OP ; TNT_A[i as u64]=a ; TNT_B[i as u64]=b ; return 0i32 }
+fn taint_set_sanitize(i: u32, a: u32) -> i32 @export { if i >= TNT_CAP { return -1i32 } TNT_OP_[i as u64]=TNT_SANITIZE ; TNT_A[i as u64]=a ; return 0i32 }
+fn taint_set_sink(i: u32, a: u32) -> i32 @export { if i >= TNT_CAP { return -1i32 } TNT_OP_[i as u64]=TNT_SINK ; TNT_A[i as u64]=a ; return 0i32 }
 
 fn taint_step(i: u32) -> i32 {
     let op : u32 = TNT_OP_[i as u64]
@@ -93,7 +93,7 @@ fn taint_propagate() -> i32 @export {
     return 0i32
 }
 
-fn taint_tainted(i: u32) -> u32 @export { return TNT_TAINT[i as u64] }
+fn taint_tainted(i: u32) -> u32 @export { if i >= TNT_CAP { return 0u32 } return TNT_TAINT[i as u64] }   /* [OOB-W11] @export idx into TNT_TAINT[64] */
 
 /* a sink is a violation iff the value it consumes is still tainted. */
 fn taint_sink_violates(i: u32) -> u32 @export {

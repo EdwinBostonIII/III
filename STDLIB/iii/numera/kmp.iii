@@ -105,7 +105,7 @@ fn kmp_search() -> u32 @export {
     return KMP_NONE
 }
 
-fn kmp_fail(i: u32) -> u32 @export { return KMP_FAIL[i as u64] }
+fn kmp_fail(i: u32) -> u32 @export { if i >= 4u32 { return 0u32 } return KMP_FAIL[i as u64] }   /* [OOB-W11] @export idx into KMP_FAIL[4] */
 
 /* =====================================================================================
  * kmp_kat -- 99 = KMP matching is correct, verified against the naive reference:

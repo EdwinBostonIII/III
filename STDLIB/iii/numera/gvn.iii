@@ -93,8 +93,8 @@ fn gvn_number() -> i32 @export {
     return 0i32
 }
 
-fn gvn_vn(i: u32) -> u32 @export { return GVN_VN[i as u64] }
-fn gvn_redundant(i: u32) -> u32 @export { return GVN_RED[i as u64] }
+fn gvn_vn(i: u32) -> u32 @export { if i >= GVN_N { return 0u32 } return GVN_VN[i as u64] }   /* [OOB-W11] @export idx into GVN_VN[7] */
+fn gvn_redundant(i: u32) -> u32 @export { if i >= GVN_N { return 0u32 } return GVN_RED[i as u64] }
 fn gvn_redundant_count() -> u32 @export {
     let mut c : u32 = 0u32
     let mut i : u32 = 0u32

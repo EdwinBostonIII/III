@@ -1,0 +1,75 @@
+/* 1502_analysis_accessor_bounds.iii -- W11 FALSIFIER: the analysis-module @export
+ * accessors REFUSE out-of-range indices (the exhaustive sweep of the single-line
+ * accessor-bounds class -- a prior audit guarded the prime fields but left the
+ * dataflow/SSA/structure demos unguarded).
+ *
+ * THE DEFECT: 23 @export getters/setters across dce/dominators/gvn/kmp/
+ * list_schedule/reg_alloc/rewrite_schedule/sccp/congruence_closure/taint_analysis/
+ * threshold_vault/sieve indexed a fixed array by an unvalidated u32 -> OOB read
+ * (getters) or WRITE (setters) on a caller-supplied index.
+ *
+ * THE GUARD: idx >= cap -> getters return 0, setters return -1.
+ *
+ * Teeth: the SETTER guards give a clean old/new differential -- dce_set_side(6,..)
+ * and taint_set_source(64) return 0 on the pre-fix lib (having done the 1-past
+ * write) and -1 post-fix; arms 2/5 redden against the old lib.  Every OOB probe is
+ * exactly one slot past.  The getter guards are pinned on the new lib (OOB index ->
+ * 0) with sieve's boundary anchored to a real prime/composite (2,47 prime; 50
+ * composite valid; 51 guarded) so the bound is not over-tight.  Exit 99. */
+module corpus_1502
+
+extern @abi(c-msvc-x64) fn dce_set_side(i: u32, v: u32) -> i32 from "dce.iii"
+extern @abi(c-msvc-x64) fn dce_live(i: u32) -> u32 from "dce.iii"
+extern @abi(c-msvc-x64) fn dom_set(n: u32) -> u32 from "dominators.iii"
+extern @abi(c-msvc-x64) fn gvn_vn(i: u32) -> u32 from "gvn.iii"
+extern @abi(c-msvc-x64) fn gvn_redundant(i: u32) -> u32 from "gvn.iii"
+extern @abi(c-msvc-x64) fn kmp_fail(i: u32) -> u32 from "kmp.iii"
+extern @abi(c-msvc-x64) fn lsch_start(i: u32) -> u32 from "list_schedule.iii"
+extern @abi(c-msvc-x64) fn ra_reg(i: u32) -> u32 from "reg_alloc.iii"
+extern @abi(c-msvc-x64) fn rs_order(k: u32) -> u32 from "rewrite_schedule.iii"
+extern @abi(c-msvc-x64) fn sccp_state(i: u32) -> u32 from "sccp.iii"
+extern @abi(c-msvc-x64) fn sccp_const(i: u32) -> u32 from "sccp.iii"
+extern @abi(c-msvc-x64) fn pcc_path(i: u32) -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_expl(i: u32) -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn taint_set_source(i: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_op(i: u32, a: u32, b: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_tainted(i: u32) -> u32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn tv_keyshare_x(i: u32) -> u8 from "threshold_vault.iii"
+extern @abi(c-msvc-x64) fn sieve_run() -> i32 from "sieve.iii"
+extern @abi(c-msvc-x64) fn sieve_is_prime(n: u32) -> u32 from "sieve.iii"
+
+fn main() -> u64 {
+    /* ---- clean teeth: setter guards (OOB -> -1 new / 0 old, 1-past write) ---- */
+    if dce_set_side(5u32, 1u32) != 0i32 { return 1u64 }       /* DCE_SIDE[5] last valid */
+    if dce_set_side(6u32, 1u32) != -1i32 { return 2u64 }      /* DCE_SIDE[6] one past -- TEETH */
+    if dce_set_side(1000u32, 1u32) != -1i32 { return 3u64 }
+    if taint_set_source(63u32) != 0i32 { return 4u64 }        /* TNT[63] last valid */
+    if taint_set_source(64u32) != -1i32 { return 5u64 }       /* TNT[64] one past -- TEETH */
+    if taint_set_op(64u32, 1u32, 2u32) != -1i32 { return 6u64 }
+
+    /* ---- sieve: valid boundary anchored to real primality ---- */
+    sieve_run()
+    if sieve_is_prime(2u32) != 1u32 { return 7u64 }           /* 2 prime */
+    if sieve_is_prime(47u32) != 1u32 { return 8u64 }          /* 47 prime (near the boundary) */
+    if sieve_is_prime(50u32) != 0u32 { return 9u64 }          /* 50 composite (the boundary index, valid) */
+    if sieve_is_prime(51u32) != 0u32 { return 10u64 }         /* one past -> guarded */
+    if sieve_is_prime(1000u32) != 0u32 { return 11u64 }
+
+    /* ---- getter guards pinned on the new lib (OOB index -> 0) ---- */
+    if dce_live(6u32) != 0u32 { return 12u64 }
+    if dom_set(6u32) != 0u32 { return 13u64 }
+    if gvn_vn(7u32) != 0u32 { return 14u64 }
+    if gvn_redundant(7u32) != 0u32 { return 15u64 }
+    if kmp_fail(4u32) != 0u32 { return 16u64 }
+    if lsch_start(5u32) != 0u32 { return 17u64 }
+    if ra_reg(4u32) != 0u32 { return 18u64 }
+    if rs_order(6u32) != 0u32 { return 19u64 }
+    if sccp_state(8u32) != 0u32 { return 20u64 }
+    if sccp_const(8u32) != 0u32 { return 21u64 }
+    if pcc_path(64u32) != 0u32 { return 22u64 }
+    if pcc_expl(64u32) != 0u32 { return 23u64 }
+    if taint_tainted(64u32) != 0u32 { return 24u64 }
+    if tv_keyshare_x(16u32) != 0u8 { return 25u64 }
+
+    return 99u64
+}

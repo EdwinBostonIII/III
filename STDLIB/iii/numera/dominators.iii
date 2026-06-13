@@ -91,7 +91,7 @@ fn dom_idom(n: u32) -> u32 @export {
     return best
 }
 
-fn dom_set(n: u32) -> u32 @export { return DOM[n as u64] }
+fn dom_set(n: u32) -> u32 @export { if n >= DOM_N { return 0u32 } return DOM[n as u64] }   /* [OOB-W11] @export idx into DOM[6] */
 
 /* =====================================================================================
  * dominators_kat -- 99 = dominator analysis is correct, self-checked:

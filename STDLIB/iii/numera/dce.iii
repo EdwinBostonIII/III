@@ -44,7 +44,7 @@ fn dce_setup() -> i32 @export {
     return 0i32
 }
 
-fn dce_set_side(i: u32, v: u32) -> i32 @export { DCE_SIDE[i as u64] = v ; return 0i32 }
+fn dce_set_side(i: u32, v: u32) -> i32 @export { if i >= DCE_N { return -1i32 } DCE_SIDE[i as u64] = v ; return 0i32 }   /* [OOB-W11] @export idx into DCE_SIDE[6] */
 
 /* mark-and-sweep liveness: start from the side-effecting roots, propagate to operands to a fixpoint. */
 fn dce_analyze() -> i32 @export {
@@ -67,7 +67,7 @@ fn dce_analyze() -> i32 @export {
     return 0i32
 }
 
-fn dce_live(i: u32) -> u32 @export { return DCE_LIVE[i as u64] }
+fn dce_live(i: u32) -> u32 @export { if i >= DCE_N { return 0u32 } return DCE_LIVE[i as u64] }
 fn dce_dead_count() -> u32 @export {
     let mut c : u32 = 0u32
     let mut i : u32 = 0u32

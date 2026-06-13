@@ -103,7 +103,7 @@ fn rs_order_valid() -> u32 @export {
     return 1u32
 }
 
-fn rs_order(k: u32) -> u32 @export { return RS_ORDER[k as u64] }
+fn rs_order(k: u32) -> u32 @export { if k >= RS_N { return 0u32 } return RS_ORDER[k as u64] }   /* [OOB-W11] @export idx into RS_ORDER[6] */
 
 /* =====================================================================================
  * rewrite_schedule_kat -- 99 = verified phase-ordering is correct, self-checked:

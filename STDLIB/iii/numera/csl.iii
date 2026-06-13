@@ -58,9 +58,11 @@ var CSL_RLEN : [u32; 1]
 
 fn csl_lens(na: u32, nb: u32) -> i32 @export { CSL_NA[0u32] = na ; CSL_NB[0u32] = nb ; return 0i32 }
 fn csl_set_a(i: u32, op: u32, cell: u32, val: u32) -> i32 @export {
+    if i >= 8u32 { return -1i32 }             /* [W19] untrusted index: A_OP/A_CELL/A_VAL[8] OOB WRITE otherwise */
     A_OP[i as u64] = op ; A_CELL[i as u64] = cell ; A_VAL[i as u64] = val ; return 0i32
 }
 fn csl_set_b(i: u32, op: u32, cell: u32, val: u32) -> i32 @export {
+    if i >= 8u32 { return -1i32 }             /* [W19] untrusted index: B_OP/B_CELL/B_VAL[8] OOB WRITE otherwise */
     B_OP[i as u64] = op ; B_CELL[i as u64] = cell ; B_VAL[i as u64] = val ; return 0i32
 }
 

@@ -108,7 +108,10 @@ fn omega_run(kid: u32) -> i32 @export {
     return 0i32
 }
 
-fn omega_mem(x: u32) -> u32 @export { return OMEGA_MEM[x as u64] }
+fn omega_mem(x: u32) -> u32 @export {
+    if x >= OM_D { return 0u32 }              /* [W19] OMEGA_MEM[16] OOB read on an untrusted index */
+    return OMEGA_MEM[x as u64]
+}
 
 fn omega_cost(kid: u32) -> u32 @export {
     OMEGA_OPS[0u64] = 0u64

@@ -1,0 +1,102 @@
+/* 1509_accessor_bounds_bvbits_omega_seplogic_csl.iii -- W19 FALSIFIER: the @export
+ * accessors of bv_bits / omega_engine / sep_logic / csl REFUSE an out-of-range node/
+ * index instead of indexing their fixed internal arrays out of bounds.
+ *
+ * THE DEFECT (more wave-11-sweep gaps, surfaced by the W19 tree-wide re-sweep + the
+ * sibling-of-recent-fix lens on the wave-18 consumers sep_logic/csl):
+ *   - bv_bits: bb_and/or/xor/not/shl/shr/add/sub/mul took node ids a/b and called
+ *     bb_bit(a,i) = BB_BITVAR[a*64+i] (BB_BITVAR[8192], BB_MAX_NODES=128) with no
+ *     a/b >= BB_MAX_NODES guard -- bb_node_alloc bounds the NEW node, not the operands.
+ *   - omega_engine: omega_mem(x) read OMEGA_MEM[16] by an unvalidated x.
+ *   - sep_logic: sl_footprint(node)/sl_sat(node,h) indexed SL_KIND/SL_A/SL_B[512] by
+ *     an unvalidated node (sl_node bounds the internal counter, not the @export arg).
+ *   - csl: csl_set_a(i)/csl_set_b(i) WROTE the 8-slot A_ and B_ op arrays by an
+ *     unvalidated i -- an OOB WRITE.
+ *
+ * THE GUARDS: refuse the out-of-range index up front (bv_bits ops -> BB_SENT + BB_ERR;
+ * csl setters -> -1; omega/sep_logic getters -> 0).
+ *
+ * TEETH (clean differentials): csl_set_a(8,..) / csl_set_b(8,..) return -1 on the fixed
+ * lib and 0 on the pre-fix lib (after a bounded 1-past WRITE) -- arm T1 reddens the
+ * fully-pre-fix lib (exit 30).  bb_and(BB_MAX_NODES, n0) returns BB_SENT on the fixed
+ * lib but a freshly-allocated NODE id (!= BB_SENT) on the pre-fix lib (the sentinel
+ * differential is layout-independent; the incidental OOB read of BB_BITVAR[8192..] is
+ * bounded) -- arm T3 pins the bv_bits guards against a bv_bits-only regression.  The
+ * omega/sep_logic getters are PINNED (their 1-past READ is benign-valued).  Arms 1-9
+ * pin the valid in-range fixpoint (incl. sl_pt's footprint 1<<3, a real bb_and node).
+ * Exit 99. */
+module corpus_1509
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+
+extern @abi(c-msvc-x64) fn omega_mem(x: u32) -> u32 from "omega_engine.iii"
+
+extern @abi(c-msvc-x64) fn sl_reset() -> i32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sl_pt(a: u32, v: u32) -> u32 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sl_footprint(node: u32) -> u64 from "sep_logic.iii"
+extern @abi(c-msvc-x64) fn sl_sat(node: u32, h: u32) -> u32 from "sep_logic.iii"
+
+extern @abi(c-msvc-x64) fn csl_set_a(i: u32, op: u32, cell: u32, val: u32) -> i32 from "csl.iii"
+extern @abi(c-msvc-x64) fn csl_set_b(i: u32, op: u32, cell: u32, val: u32) -> i32 from "csl.iii"
+
+const BB_MAX_NODES : u32 = 128u32
+const BB_SENT      : u32 = 0xFFFFFFFFu32
+const SL_NODES     : u32 = 512u32
+const OM_D         : u32 = 16u32
+
+fn main() -> u64 {
+    /* ===== valid in-range use (both libs; guards not over-tight) ===== */
+    bb_reset(64u64)
+    let n0 : u32 = bb_const(5u64)
+    let n1 : u32 = bb_const(3u64)
+    if n0 == BB_SENT { return 1u64 }
+    if n1 == BB_SENT { return 2u64 }
+    if bb_and(n0, n1) == BB_SENT { return 3u64 }          /* a valid op returns a real node */
+
+    sl_reset()
+    let pt : u32 = sl_pt(3u32, 7u32)                       /* { 3 |-> 7 } */
+    if sl_footprint(pt) != (1u64 << 3u64) { return 4u64 } /* footprint = {3} = 8 */
+
+    if csl_set_a(0u32, 0u32, 1u32, 2u32) != 0i32 { return 5u64 }
+    if csl_set_a(7u32, 0u32, 1u32, 2u32) != 0i32 { return 6u64 }   /* last valid index */
+    if csl_set_b(7u32, 0u32, 1u32, 2u32) != 0i32 { return 7u64 }
+
+    /* ===== TEETH T1 (csl setter WRITE): OOB index -> fixed -1 / pre-fix 0 (after a bounded
+     * 1-past write to A_*[8]).  Reddens the fully-pre-fix lib. ===== */
+    if csl_set_a(8u32, 9u32, 9u32, 9u32) != -1i32 { return 30u64 }
+    if csl_set_b(8u32, 9u32, 9u32, 9u32) != -1i32 { return 31u64 }
+
+    /* ===== TEETH T3 (bv_bits sentinel): OOB node id -> fixed BB_SENT / pre-fix a node id.
+     * Pins the bv_bits guards against a bv_bits-only regression. ===== */
+    if bb_and(BB_MAX_NODES, n0) != BB_SENT { return 32u64 }
+
+    /* ===== fixed-lib pins: every other guarded accessor refuses the out-of-range index ===== */
+    /* bv_bits ops (sentinel) */
+    if bb_or(BB_MAX_NODES, n0) != BB_SENT { return 40u64 }
+    if bb_xor(BB_MAX_NODES, n0) != BB_SENT { return 41u64 }
+    if bb_not(BB_MAX_NODES) != BB_SENT { return 42u64 }
+    if bb_shl(BB_MAX_NODES, 1u64) != BB_SENT { return 43u64 }
+    if bb_shr(BB_MAX_NODES, 1u64) != BB_SENT { return 44u64 }
+    if bb_add(BB_MAX_NODES, n0) != BB_SENT { return 45u64 }
+    if bb_sub(n0, BB_MAX_NODES) != BB_SENT { return 46u64 }   /* b OOB -> guarded before bb_not(b) */
+    if bb_mul(BB_MAX_NODES, n0) != BB_SENT { return 47u64 }
+    /* omega getter (benign-valued OOB read -> pinned) */
+    if omega_mem(OM_D) != 0u32 { return 50u64 }
+    if omega_mem(1000u32) != 0u32 { return 51u64 }
+    /* sep_logic getters (benign-valued OOB read -> pinned) */
+    if sl_footprint(SL_NODES) != 0u64 { return 52u64 }
+    if sl_sat(SL_NODES, 0u32) != 0u32 { return 53u64 }
+    if sl_footprint(1000000u32) != 0u64 { return 54u64 }
+
+    return 99u64
+}

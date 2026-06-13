@@ -205,6 +205,8 @@ fn bb_const(c: u64) -> u32 @export {
 }
 
 fn bb_and(a: u32, b: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] node ids are untrusted: bb_bit(a/b,i) reads BB_BITVAR[id*64+i] OOB otherwise */
+    if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
     let n : u32 = bb_node_alloc()
     let mut i : u64 = 0u64
     while i < BB_W {
@@ -216,6 +218,8 @@ fn bb_and(a: u32, b: u32) -> u32 @export {
     return n
 }
 fn bb_or(a: u32, b: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node ids */
+    if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
     let n : u32 = bb_node_alloc()
     let mut i : u64 = 0u64
     while i < BB_W {
@@ -227,6 +231,8 @@ fn bb_or(a: u32, b: u32) -> u32 @export {
     return n
 }
 fn bb_xor(a: u32, b: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node ids */
+    if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
     let n : u32 = bb_node_alloc()
     let mut i : u64 = 0u64
     while i < BB_W {
@@ -238,6 +244,7 @@ fn bb_xor(a: u32, b: u32) -> u32 @export {
     return n
 }
 fn bb_not(a: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node id */
     let n : u32 = bb_node_alloc()
     let mut i : u64 = 0u64
     while i < BB_W {
@@ -251,6 +258,7 @@ fn bb_not(a: u32) -> u32 @export {
 
 /* logical shifts by a CONSTANT: pure bit remapping, vacated bits alias pinned ZERO. */
 fn bb_shl(a: u32, k: u64) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node id */
     let n : u32 = bb_node_alloc()
     let mut i : u64 = 0u64
     while i < BB_W {
@@ -260,6 +268,7 @@ fn bb_shl(a: u32, k: u64) -> u32 @export {
     return n
 }
 fn bb_shr(a: u32, k: u64) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node id */
     let n : u32 = bb_node_alloc()
     let mut i : u64 = 0u64
     while i < BB_W {
@@ -282,12 +291,22 @@ fn bb_add_core(a: u32, b: u32, cin: u32) -> u32 {
     }
     return n
 }
-fn bb_add(a: u32, b: u32) -> u32 @export { return bb_add_core(a, b, BB_ZVAR) }
+fn bb_add(a: u32, b: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node ids */
+    if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
+    return bb_add_core(a, b, BB_ZVAR)
+}
 /* a - b = a + ~b + 1 */
-fn bb_sub(a: u32, b: u32) -> u32 @export { return bb_add_core(a, bb_not(b), BB_OVAR) }
+fn bb_sub(a: u32, b: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] guard b BEFORE bb_not(b) reads OOB */
+    if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
+    return bb_add_core(a, bb_not(b), BB_OVAR)
+}
 
 /* mul: shift-add accumulation.  Row j (a's bit j gating b), truncated adders from bit j upward. */
 fn bb_mul(a: u32, b: u32) -> u32 @export {
+    if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node ids */
+    if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
     /* row 0: acc_i = a_0 AND b_i */
     let a0 : u32 = bb_bit(a, 0u64)
     let mut i : u64 = 0u64

@@ -78,6 +78,7 @@ fn sl_star(p: u32, q: u32) -> u32 @export { return sl_node(SL_STAR, p, q) }
 fn sl_pure(b: u32) -> u32 @export { return sl_node(SL_PURE, b, 0u32) }
 
 fn sl_footprint(node: u32) -> u64 @export {
+    if node >= 512u32 { return 0u64 }         /* [W19] SL_KIND/SL_A/SL_B[512] OOB read on an untrusted node id */
     let k : u32 = SL_KIND[node as u64]
     if k == SL_EMP { return 0u64 }
     if k == SL_PURE { return 0u64 }
@@ -102,6 +103,7 @@ fn hl_restrict(h: u32, mask: u64) -> u32 {
 fn hl_copy(h: u32) -> u32 { return hl_restrict(h, SL_ALL) }
 
 fn sl_sat(node: u32, h: u32) -> u32 @export {
+    if node >= 512u32 { return 0u32 }         /* [W19] SL_KIND/SL_A/SL_B[512] OOB read on an untrusted node id */
     let k : u32 = SL_KIND[node as u64]
     if k == SL_EMP {
         if hl_size(h) == 0u32 { return 1u32 }

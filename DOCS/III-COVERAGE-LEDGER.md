@@ -1019,3 +1019,36 @@ fixpoint (incl. heaplet's separation laws, the liveness {x,y}/{x,z} dataflow val
 Gates: build GATE PASS FAIL=0; 1508 99 vs new / exit 20 vs old; only heaplet/liveness/matrix_ring
 changed, all 10 consumers (direct KATs + sep_logic/csl/reg_alloc/reg_alloc_liveness/transform_taint_
 seal/1502) + 1508 GREEN.  Count 1095 -> **1096**.
+
+## Wave-19 — accessor-bounds OOB in bv_bits / omega_engine / sep_logic / csl (more sweep gaps) (2026-06-13)
+
+Found by a directory-partitioned tree-wide @export accessor RE-sweep (6 slices) + a sibling-of-
+recent-fix lens (15 confirmed of 15 examined, all real -- ALL in numera/; the omnia/aether/nous/
+sanctus slices came back clean).  The sibling lens specifically caught sep_logic + csl -- the wave-18
+CONSUMERS had their OWN unguarded accessors (the method law: a fixed module's neighbours carry the
+same bug).  14 accessors guarded across 4 modules:
+  - **bv_bits** (9: bb_and/or/xor/not/shl/shr/add/sub/mul): took node ids a/b and called
+    bb_bit(a,i) = BB_BITVAR[a*64+i] (BB_BITVAR[8192], BB_MAX_NODES=128) with no a/b >= BB_MAX_NODES
+    guard -- bb_node_alloc bounds the NEW node, never the operands.  Guard -> BB_SENT + BB_ERR.
+  - **omega_engine** (omega_mem): read OMEGA_MEM[16] by an unvalidated x.  Guard -> 0.
+  - **sep_logic** (sl_footprint/sl_sat): indexed SL_KIND/SL_A/SL_B[512] by an unvalidated node
+    (sl_node bounds the internal counter, not the @export arg).  Guard -> 0.
+  - **csl** (csl_set_a/csl_set_b): WROTE the 8-slot A_ / B_ op arrays by an unvalidated i -- OOB
+    WRITE.  Guard -> -1.
+
+Combined falsifier 1509 (setter-teeth + sentinel-teeth + read-pin): csl_set_a(8,..)/csl_set_b(8,..)
+return -1 fixed / 0 pre-fix (after a bounded 1-past WRITE) -- T1 reddens the fully-pre-fix lib (exit
+30).  bb_and(BB_MAX_NODES, n0) returns BB_SENT fixed / a fresh NODE id pre-fix -- a LAYOUT-INDEPENDENT
+sentinel differential (the op returns its error sentinel; the incidental OOB read of BB_BITVAR[8192..]
+is bounded) -- T3 + the bb_or/xor/not/shl/shr/add/sub/mul pins protect the bv_bits guards against a
+bv_bits-only regression.  The omega/sep_logic getters are PINNED (benign-valued 1-past read).  Arms
+1-7 pin valid in-range use (a real bb_and node, sl_pt's footprint 1<<3, csl slots 0/7).
+
+NOTE -- the bv_bits SENTINEL teeth is a new shape: an OOB-READ accessor that returns a distinct ERROR
+SENTINEL on guard (vs a computed result pre-fix) IS falsifiable even when the read value is benign,
+because the differential is the sentinel, not the read.  (liveness/omega/sep_logic getters return the
+read value directly, so they stay benign-pinned.)
+
+Gates: build GATE PASS FAIL=0; 1509 99 vs new / exit 30 vs old; only bv_bits/omega_engine/sep_logic/
+csl changed, 12 representative consumers (4 module KATs + bv_dispose/cg_autocatalyst/bvd_rule_gate/
+mixed_dispose/transform_taint_seal/gate_outcomes_bv_dispose) + 1509 GREEN.  Count 1096 -> **1097**.

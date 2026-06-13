@@ -1,0 +1,70 @@
+/* 1514_scalar_reduce_cold_init.iii -- W23 FALSIFIER: the scalar-field reduce
+ * @exports must REDUCE a cold-process scalar, not leave it un-reduced.
+ *
+ * THE DEFECT (use-before-init, W22 sibling): fn256 fn_reduce / fn384 gn_reduce
+ * read the curve order FN_N / GN_N, populated ONLY by fn256_init / fn384_init.
+ * Unlike *_to_mont (W22-guarded) a reduce is a NATURAL cold FIRST call -- a
+ * caller reduces a raw scalar mod n with no to_mont before it (e.g. ecdsa's
+ * r,s).  Called cold the order reads as 0, so the conditional subtract takes
+ * "x - 0 = x": NO reduction.  A value >= n is returned unreduced -> a wrong
+ * residue -> a forgeable / invalid signature scalar.
+ *
+ * THE FIX: idempotent *_init() as the first line of fn_reduce / gn_reduce
+ * (matching *_to_mont / *_inv, which already guard).  The sole in-tree callers
+ * (ecdsa_p256 / ecdsa_p384) already boot first, so the guard is a no-op there
+ * and protective for every other caller.
+ *
+ * TEETH: set slot 0 = all-FF (= 2^k - 1, which is in [n, 2n) so ONE csub gives
+ * the canonical residue), reduce COLD, read limb 0.
+ *   - pre-fix: order = 0, no subtract, limb0 stays 0xFFFFFFFF  -> arm reddens.
+ *   - post-fix: order set, limb0 = 0xFFFFFFFF - n[0]            -> arm passes.
+ * fn256: 0xFFFFFFFF - 0xFC632551 = 0x039CDAAE.
+ * fn384: 0xFFFFFFFF - 0xCCC52973 = 0x333AD68C.
+ * Arms 3-4 re-pin the exact residue after an explicit boot (both libs agree).
+ * Exit 99 = all good. */
+module corpus_1514
+
+extern @abi(c-msvc-x64) fn fn256_boot() -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_set_bytes_x(slot: u64, src: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_reduce_x(slot: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn256.iii"
+
+extern @abi(c-msvc-x64) fn fn384_boot() -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_set_bytes_x(slot: u64, src: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_reduce_x(slot: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn384.iii"
+
+var ALLFF32 : [u8; 32]      /* 2^256 - 1, all bytes 0xFF */
+var ALLFF48 : [u8; 48]      /* 2^384 - 1, all bytes 0xFF */
+
+fn main() -> u64 {
+    /* fill the all-FF buffers (module-level arrays -> runtime index is safe) */
+    let mut i : u64 = 0u64
+    while i < 32u64 { ALLFF32[i] = 0xFFu8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { ALLFF48[i] = 0xFFu8 ; i = i + 1u64 }
+
+    /* ---- arm 1 (TEETH fn256): cold reduce of all-FF must reduce limb0 ---- */
+    fn_set_bytes_x(0u64, (&ALLFF32 as u64))
+    fn_reduce_x(0u64)                                       /* COLD: no boot precedes this */
+    if fn_get_limb_x(0u64, 0u64) == 0xFFFFFFFFu32 { return 30u64 }   /* pre-fix: un-reduced -> reddens */
+
+    /* ---- arm 2 (TEETH fn384): cold reduce of all-FF must reduce limb0 ---- */
+    gn_set_bytes_x(0u64, (&ALLFF48 as u64))
+    gn_reduce_x(0u64)                                       /* COLD */
+    if gn_get_limb_x(0u64, 0u64) == 0xFFFFFFFFu32 { return 31u64 }   /* pre-fix: un-reduced -> reddens */
+
+    /* ---- arm 3 (positive pin fn256): explicit boot -> exact residue ---- */
+    fn256_boot()
+    fn_set_bytes_x(0u64, (&ALLFF32 as u64))
+    fn_reduce_x(0u64)
+    if fn_get_limb_x(0u64, 0u64) != 0x039CDAAEu32 { return 32u64 }   /* 0xFFFFFFFF - 0xFC632551 */
+
+    /* ---- arm 4 (positive pin fn384): explicit boot -> exact residue ---- */
+    fn384_boot()
+    gn_set_bytes_x(0u64, (&ALLFF48 as u64))
+    gn_reduce_x(0u64)
+    if gn_get_limb_x(0u64, 0u64) != 0x333AD68Cu32 { return 33u64 }   /* 0xFFFFFFFF - 0xCCC52973 */
+
+    return 99u64
+}

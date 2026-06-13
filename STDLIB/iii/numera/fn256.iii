@@ -232,6 +232,7 @@ fn fn_get_bytes(dst: u64, slot: u64) -> i32 {
 /* reduce slot in place: x mod n via ONE constant-time conditional subtract
  * (valid when x < 2n, e.g. the curve x-coord which is < p256 < 2n). */
 fn fn_reduce(slot: u64) -> i32 {
+    fn256_init()                                            /* [W23] cold-call guard: fn_csub_n reads init-only FN_N; reduce is a cold FIRST call on a raw scalar (no to_mont precedes it) */
     fn_csub_n((&FN as u64) + slot * 8u64 * 4u64, 0u64)
     return 0i32
 }

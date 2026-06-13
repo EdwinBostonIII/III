@@ -180,7 +180,7 @@ fn gn_get_bytes(dst: u64, slot: u64) -> i32 {
     }
     return 0i32
 }
-fn gn_reduce(slot: u64) -> i32 { gn_csub_n((&GN as u64) + slot * 12u64 * 4u64, 0u64) return 0i32 }
+fn gn_reduce(slot: u64) -> i32 { fn384_init()  /* [W23] cold-call guard: gn_csub_n reads init-only GN_N; reduce is a cold FIRST call on a raw scalar */  gn_csub_n((&GN as u64) + slot * 12u64 * 4u64, 0u64) return 0i32 }
 fn gn_is_zero(slot: u64) -> u8 {
     let b : u64 = slot * 12u64
     let mut acc : u32 = 0u32

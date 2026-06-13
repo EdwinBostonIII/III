@@ -1142,3 +1142,37 @@ Gates: build GATE PASS FAIL=0; 1512 99/exit30, 1513 99/exit30 vs old; only the 5
 representative consumers (field_mont_organ/field_curve_vault/field256_accessor_bounds/383_hotstuff/
 hotstuff_safety/liveness/fed_qc_gate/seal_quorum/federation_admit) + 1512 + 1513 GREEN.  Count 1099 ->
 **1101**.
+
+## Wave-23 — scalar-field reduce cold-init (fn_reduce/gn_reduce); the W22 completion + caller-decides-scope (2026-06-13)
+
+A round-2 init-order discovery (sibling-of-W22 lens) proved W22 was scoped too narrowly: the OTHER
+modular @exports in fp256/fn256/fp384/fn384 (mul/add/sub/reduce) also read the init-only modulus/order
+cold.  But the SCOPE is decided by the CALLER, not the finding:
+
+  - **fn256 fn_reduce / fn384 gn_reduce** -- read the curve order FN_N/GN_N (init-only).  A reduce is a
+    NATURAL cold FIRST call: a caller reduces a raw scalar mod n with NO to_mont before it (ecdsa's r,s).
+    Cold the order reads 0, so the conditional-subtract takes "x - 0 = x" -> NO reduction -> a residue
+    >= n is returned (a wrong/forgeable signature scalar).  O(1) per use (one reduce per signature), and
+    the worker has ZERO internal callers (only the _x wrapper) -> FIX: idempotent fn256_init()/fn384_init()
+    at the top of the worker.  Sole in-tree callers ecdsa_p256/ecdsa_p384 already fn256_boot() first
+    (line 52/…), so the guard is a no-op there and protective for every other caller.
+
+  - **fp_mul/add/sub + fn/fq/gn mul/add/sub (the hot primitives) -- DELIBERATELY NOT guarded.**  ec256
+    boots the field (fp256_boot at ec256.iii:40) BEFORE its scalar-mult loop, and an external caller
+    reaches them only AFTER to_mont (W22 made to_mont auto-init).  So they are always reached WARM; a
+    per-mul init-check would be pure tax on the hottest crypto path for a state that cannot occur.  The
+    caller decides the scope: guard the O(1) entries reachable cold-first (to_mont/from_mont/reduce), not
+    the warm hot primitives.
+
+1514 teeth (all-FF differential): set slot0 = all-FF (= 2^k-1, which lies in [n, 2n) so ONE csub yields
+the canonical residue), reduce COLD, read limb0.  Pre-fix order=0 -> no subtract -> limb0 stays
+0xFFFFFFFF -> arm 1 (fn256) reddens (verified exit 30 vs the pre-W23 lib).  Post-fix limb0 = 0xFFFFFFFF
+- n[0] = 0x039CDAAE (fn256) / 0x333AD68C (fn384).  Arms 3-4 re-pin the exact residue after an explicit
+boot (both libs agree).
+
+Byte-identical for ecdsa_p256/ecdsa_p384 (both boot the scalar field before any reduce).
+
+Gates: build GATE PASS FAIL=0; 1514 teeth exit 30 vs old lib, 99 vs new; only fn256/fn384 changed.
+Count 1101 -> **1102**.  The init-order axis is now SATURATED for the field/curve modules
+(to_mont/from_mont W22 + reduce W23 done; hot primitives principled-skip; precomputed-tables and
+other-curve lenses came up dry) -> the next wave switches axis.

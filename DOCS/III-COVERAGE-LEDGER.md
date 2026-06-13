@@ -870,3 +870,30 @@ exact small-operand regressions.
 
 Gates: build GATE PASS FAIL=0; 1503 99 vs new / exit 4 vs old; only fixed.iii changed content,
 the 3 existing fixed.iii KATs + 1503 GREEN.  Count 1090 -> **1091**.
+
+## Wave-14 — fs_open OS-handle leak on table-full (resource lifecycle) (2026-06-13)
+
+A 5-lens fresh-axis discovery whose CENTERPIECE -- protocol/state-machine invariants in the
+consensus/federation modules (hotstuff quorums, fed_seal tiers, branch_governance) -- came back
+CLEAN (every candidate refuted as intentional-documented or teeth-less: the consensus logic is
+sound under adversarial review).  The one real survivor was a resource lifecycle leak.
+
+**W14-FIX** (`aether/fs.iii` fs_open + fs_dir_open, falsifier `1504`, old exit=4): fs_open opened
+the OS file handle (CreateFileA) then returned handle_alloc(...) directly.  When the 64-slot
+handle table is full handle_alloc returns 0 -- and the OS handle was LEAKED (never CloseHandle'd),
+leaving the file open (locked) until process exit (reachable: onelang hit the 65th open in a deep
+dir walk).  fs_dir_open had the identical leak (FindFirstFileA search handle, FindClose path).
+Fix: on handle_alloc==0, CloseHandle (fs_open) / FindClose + clear FS_FIND_PENDING (fs_dir_open)
+-- the standard cleanup net_tcp_connect_ipv4 already does.  Byte-identical for the success path
+(all 18 fs.iii consumers stay green, incl. 1471 the lifecycle KAT).
+
+1504 teeth (constructible + observable): fill the 64-slot table with dummy handle_alloc calls
+(handle_alloc is @export, does not validate cap_id), then fs_open an EXISTING file -- handle_alloc
+fails so fs_open returns 0 on both libs, but the OS handle's fate differs: opened with FS_SHARE_RW
+(no FILE_SHARE_DELETE), a LEAKED handle blocks deletion, so fs_delete returns FS_E_IO pre-fix (file
+still locked) and FS_OK post-fix.  fs_dir_open's fix rides the identical structural argument (its
+leak is harder to observe; the verifier itself found no teeth -- so 1504 falsifies the fs_open
+representative and the sibling fix is byte-identical-for-success + structurally identical).
+
+Gates: build GATE PASS FAIL=0; 1504 99 vs new / exit 4 vs old; only fs.iii changed, all 18 fs.iii
+consumers + 1504 GREEN.  Count 1091 -> **1092**.

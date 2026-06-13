@@ -164,7 +164,12 @@ fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 @export {
     let p_path : *u8 = path as *u8
     let h : u64 = CreateFileA(p_path, access, FS_SHARE_RW, 0u64, disp, FS_ATTR_NORMAL, 0u64)
     if h == FS_INVALID_HANDLE { return 0u64 }
-    return handle_alloc(1u8, h, cap_id)
+    let id : u64 = handle_alloc(1u8, h, cap_id)
+    if id == 0u64 { CloseHandle(h) }   /* [W14-FIX] handle table full -> close the OS file handle
+                                        * we just opened instead of leaking it (the file would stay
+                                        * locked until process exit; net_tcp_connect_ipv4 already
+                                        * does this on its own alloc-fail path). */
+    return id
 }
 
 /* Delete a file by path. Deletion is a write-class mutation, so it requires
@@ -291,7 +296,11 @@ fn fs_dir_open(cap_id: u64, path: u64) -> u64 @export {
     let h : u64 = FindFirstFileA((&FS_DIRPAT as u64) as *u8, (&FS_FIND as u64))
     if h == FS_INVALID_HANDLE { return 0u64 }   /* INVALID_HANDLE_VALUE = -1, never 0 */
     FS_FIND_PENDING = 1u8
-    return handle_alloc(FS_DIR_KIND, h, cap)
+    let id : u64 = handle_alloc(FS_DIR_KIND, h, cap)
+    if id == 0u64 { FS_FIND_PENDING = 0u8 ; FindClose(h) }   /* [W14-FIX] table full -> release the
+                                        * search handle (FindClose, not CloseHandle) + clear the
+                                        * pending flag, instead of leaking the dir-search handle. */
+    return id
 }
 
 /* Advance the search.  1 if FS_FIND now holds a valid entry, 0 if exhausted or

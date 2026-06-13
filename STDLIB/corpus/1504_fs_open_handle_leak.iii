@@ -1,0 +1,77 @@
+/* 1504_fs_open_handle_leak.iii -- W14 FALSIFIER: fs_open does NOT leak the OS file
+ * handle when the handle table is full.
+ *
+ * THE DEFECT: fs_open opened the OS handle (CreateFileA) and then returned
+ * handle_alloc(...) directly.  When the 64-slot handle table is full,
+ * handle_alloc returns 0 -- and the OS file handle was LEAKED (never CloseHandle'd),
+ * leaving the file open (locked) until process exit.  Reachable: onelang hit the
+ * 65th open during a deep directory walk.
+ *
+ * THE FIX: if handle_alloc returns 0, CloseHandle the OS handle before returning 0.
+ *
+ * TEETH (constructible + observable): fill the 64-slot handle table with dummy
+ * handle_alloc calls (handle_alloc is @export and does not validate cap_id), then
+ * fs_open an EXISTING file -- CreateFileA succeeds but handle_alloc fails, so the
+ * READ handle is opened.  fs_open returns 0 on both libs (table full), but the OS
+ * handle's fate differs: opened with FS_SHARE_RW (no FILE_SHARE_DELETE), a LEAKED
+ * handle blocks deletion.  fs_delete therefore returns FS_E_IO on the pre-fix lib
+ * (the file is still locked) and FS_OK on the fixed lib (the handle was closed).
+ * Arm 4 reddens against the old lib.  Exit 99. */
+module corpus_1504
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+const FS_MODE_READ  : u32 = 1u32
+const FS_MODE_WRITE : u32 = 2u32
+
+var SPATH : [u8; 32]
+var WB    : [u8; 8]
+
+fn setp(dst_addr: u64, src_addr: u64, n: u64) {
+    let d : *u8 = dst_addr as *u8
+    let s : *u8 = src_addr as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]   i = i + 1u64 }
+    d[n] = 0u8
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)   /* READ|WRITE|CREATE */
+    setp((&SPATH as u64), ("./iii_1504_leak.txt" as u64), 19u64)
+
+    /* ---- 1. create the file on disk (so the later READ open succeeds) ---- */
+    let hw : u64 = fs_open(cap, (&SPATH as u64), FS_MODE_WRITE)
+    if hw == 0u64 { return 1u64 }
+    WB[0u64] = 0x5Au8
+    fs_write(hw, (&WB as u64), 1u64)
+    fs_close(hw)
+
+    /* ---- 2. FILL the 64-slot handle table (handle_alloc -> 0 when full) ---- */
+    let mut filled : u32 = 0u32
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let dummy : u64 = handle_alloc(1u8, 0x1111u64, cap)
+        if dummy == 0u64 { go = 0u8 } else { filled = filled + 1u32 }
+    }
+    if filled == 0u32 { return 2u64 }                   /* sanity: the table did fill */
+
+    /* ---- 3. fs_open the EXISTING file with the table full ----
+     * CreateFileA succeeds; handle_alloc fails -> fs_open returns 0 on BOTH libs.
+     * Pre-fix: the READ handle is leaked (file locked).  Post-fix: it is closed. */
+    let hr : u64 = fs_open(cap, (&SPATH as u64), FS_MODE_READ)
+    if hr != 0u64 { return 3u64 }                       /* must fail (table full) */
+
+    /* ---- 4. THE OBSERVABLE: delete the file ----
+     * FS_SHARE_RW has no FILE_SHARE_DELETE, so a leaked open handle blocks delete.
+     * Pre-fix: FS_E_IO (-4, still locked) -> reddens here.  Post-fix: FS_OK (0). */
+    if fs_delete(cap, (&SPATH as u64)) != 0i32 { return 4u64 }
+
+    return 99u64
+}

@@ -1560,3 +1560,27 @@ permanent externally-anchored regression oracles on the most security-critical m
 documented `*/`-in-comment trap -- `fq_*/384` closed the block comment; fixed.)
 
 No source change -> no rebuild; corpus green with both KATs + 208/209 unchanged.  Count 1121 -> **1123**.
+
+## Wave-39/40 — non-numera defect saturation (GLOBAL) + x25519 RFC7748 DH-agreement coverage (2026-06-13)
+
+**W39 (non-numera sweep, 0 confirmed):** a 9-group / ~335-module workflow over EVERY non-numera subsystem
+(verba parse/codecs, sanctus fs, aether net/wire, tempora date/time, omnia, forcefield, nous, katabasis,
+memoria) with the full lens battery found 0 confirmed of 3 raw.  The 3 refuted were all correct kills:
+nl_lex _nl_scan_number (the value lives in a doc'd 24-bit word_id field; the u32 overflow is subsumed by the
+documented mask -- contract-only), ripple_metric rm_extract_improves (overflow needs ~2^64 source LINE counts
+-- physically unreachable), lru lru_new (the capacity*8 overflow is pre-empted by the capacity*1 `occ`
+allocation failing region's bounds check FIRST -> returns sentinel 0; unreachable).  Conclusion: the defect
+saturation is GLOBAL, not numera-local -- across W37 (70 dual-path modules), W39 (335 non-numera modules),
+4 grep-axes, and bigint_div's pre-existing deep differential, the whole stdlib is corner-clean on the
+teeth-bearing defect axes.  Also verified: ALL crypto verifiers (ed25519/mldsa/slhdsa/rsa_pss/chacha-poly/
+aes-gcm) ALREADY ship tamper-rejection arms (194/198/199/200/373/72/974) -- the "prove-the-negative" gap is
+already closed.  The loop stays in coverage-ENHANCEMENT mode (W38 opened it).
+
+**W40 ENHANCEMENT (1537 x25519 RFC7748 Section 6.1 DH):** 73_x25519_rfc7748_test1 covers only Section 5.2
+Test 1 (one scalar-mult vector); the DIFFIE-HELLMAN AGREEMENT -- the security-DEFINING property -- was
+unasserted.  1537 adds three EXTERNAL published-vector anchors (Alice pub = X25519(a,9), Bob pub = X25519(b,9),
+shared K = X25519(a,Bpub) = X25519(b,Apub)) pinning the Montgomery ladder + clamping to RFC ground truth, PLUS
+the agreement K1==K2 (both sides derive the same secret) and non-vacuity (distinct pubs, K != a pub).  Passes
+=99 (the ladder is RFC-correct); a permanent externally-anchored oracle on the DH property.
+
+No source change -> no rebuild; corpus green.  Count 1123 -> **1124**.

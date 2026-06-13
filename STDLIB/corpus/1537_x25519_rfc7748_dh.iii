@@ -1,0 +1,122 @@
+/* 1537_x25519_rfc7748_dh.iii -- W40 ENHANCEMENT: RFC 7748 Section 6.1 Diffie-Hellman
+ * AGREEMENT for X25519.  73_x25519_rfc7748_test1 covers only Section 5.2 Test 1 (a single
+ * scalar-mult vector); the DH agreement -- that Alice and Bob independently derive the SAME
+ * published shared secret -- is X25519's security-DEFINING property and was unasserted.
+ *
+ * RFC 7748 Section 6.1 (byte order as published = the little-endian wire order x25519 takes):
+ *   Alice private a  = 77076d0a...1db92c2a ; Alice public X25519(a,9) = 8520f009...aa9b4e6a
+ *   Bob   private b  = 5dab087e...ff88e0eb ; Bob   public X25519(b,9) = de9edb7d...6f882b4f
+ *   shared K = X25519(a, Bpub) = X25519(b, Apub) = 4a5d9d5b...1e161742
+ *   base point u = 9 (byte[0]=9, rest 0).
+ *
+ * ORACLES: (1) three EXTERNAL published-vector anchors (Apub, Bpub, K) pin the Montgomery
+ * ladder + clamping to RFC ground truth; (2) the DH AGREEMENT K1==K2 (both sides match).
+ * Non-vacuity: Apub != Bpub, K != Apub.  99 = every law holds. */
+module corpus_1537
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+var SA   : [u8; 32]    /* Alice private */
+var SB   : [u8; 32]    /* Bob private */
+var U9   : [u8; 32]    /* base point u = 9 */
+var EA   : [u8; 32]    /* expected Alice public */
+var EB   : [u8; 32]    /* expected Bob public */
+var EK   : [u8; 32]    /* expected shared secret K */
+var APUB : [u8; 32]
+var BPUB : [u8; 32]
+var K1   : [u8; 32]
+var K2   : [u8; 32]
+
+fn eq32(p: u64, q: u64) -> u8 {
+    let a : *u8 = p as *u8
+    let b : *u8 = q as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if a[i] != b[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* Alice private a */
+    SA[0u64]=0x77u8 SA[1u64]=0x07u8 SA[2u64]=0x6Du8 SA[3u64]=0x0Au8
+    SA[4u64]=0x73u8 SA[5u64]=0x18u8 SA[6u64]=0xA5u8 SA[7u64]=0x7Du8
+    SA[8u64]=0x3Cu8 SA[9u64]=0x16u8 SA[10u64]=0xC1u8 SA[11u64]=0x72u8
+    SA[12u64]=0x51u8 SA[13u64]=0xB2u8 SA[14u64]=0x66u8 SA[15u64]=0x45u8
+    SA[16u64]=0xDFu8 SA[17u64]=0x4Cu8 SA[18u64]=0x2Fu8 SA[19u64]=0x87u8
+    SA[20u64]=0xEBu8 SA[21u64]=0xC0u8 SA[22u64]=0x99u8 SA[23u64]=0x2Au8
+    SA[24u64]=0xB1u8 SA[25u64]=0x77u8 SA[26u64]=0xFBu8 SA[27u64]=0xA5u8
+    SA[28u64]=0x1Du8 SA[29u64]=0xB9u8 SA[30u64]=0x2Cu8 SA[31u64]=0x2Au8
+
+    /* Bob private b */
+    SB[0u64]=0x5Du8 SB[1u64]=0xABu8 SB[2u64]=0x08u8 SB[3u64]=0x7Eu8
+    SB[4u64]=0x62u8 SB[5u64]=0x4Au8 SB[6u64]=0x8Au8 SB[7u64]=0x4Bu8
+    SB[8u64]=0x79u8 SB[9u64]=0xE1u8 SB[10u64]=0x7Fu8 SB[11u64]=0x8Bu8
+    SB[12u64]=0x83u8 SB[13u64]=0x80u8 SB[14u64]=0x0Eu8 SB[15u64]=0xE6u8
+    SB[16u64]=0x6Fu8 SB[17u64]=0x3Bu8 SB[18u64]=0xB1u8 SB[19u64]=0x29u8
+    SB[20u64]=0x26u8 SB[21u64]=0x18u8 SB[22u64]=0xB6u8 SB[23u64]=0xFDu8
+    SB[24u64]=0x1Cu8 SB[25u64]=0x2Fu8 SB[26u64]=0x8Bu8 SB[27u64]=0x27u8
+    SB[28u64]=0xFFu8 SB[29u64]=0x88u8 SB[30u64]=0xE0u8 SB[31u64]=0xEBu8
+
+    /* expected Alice public = X25519(a, 9) */
+    EA[0u64]=0x85u8 EA[1u64]=0x20u8 EA[2u64]=0xF0u8 EA[3u64]=0x09u8
+    EA[4u64]=0x89u8 EA[5u64]=0x30u8 EA[6u64]=0xA7u8 EA[7u64]=0x54u8
+    EA[8u64]=0x74u8 EA[9u64]=0x8Bu8 EA[10u64]=0x7Du8 EA[11u64]=0xDCu8
+    EA[12u64]=0xB4u8 EA[13u64]=0x3Eu8 EA[14u64]=0xF7u8 EA[15u64]=0x5Au8
+    EA[16u64]=0x0Du8 EA[17u64]=0xBFu8 EA[18u64]=0x3Au8 EA[19u64]=0x0Du8
+    EA[20u64]=0x26u8 EA[21u64]=0x38u8 EA[22u64]=0x1Au8 EA[23u64]=0xF4u8
+    EA[24u64]=0xEBu8 EA[25u64]=0xA4u8 EA[26u64]=0xA9u8 EA[27u64]=0x8Eu8
+    EA[28u64]=0xAAu8 EA[29u64]=0x9Bu8 EA[30u64]=0x4Eu8 EA[31u64]=0x6Au8
+
+    /* expected Bob public = X25519(b, 9) */
+    EB[0u64]=0xDEu8 EB[1u64]=0x9Eu8 EB[2u64]=0xDBu8 EB[3u64]=0x7Du8
+    EB[4u64]=0x7Bu8 EB[5u64]=0x7Du8 EB[6u64]=0xC1u8 EB[7u64]=0xB4u8
+    EB[8u64]=0xD3u8 EB[9u64]=0x5Bu8 EB[10u64]=0x61u8 EB[11u64]=0xC2u8
+    EB[12u64]=0xECu8 EB[13u64]=0xE4u8 EB[14u64]=0x35u8 EB[15u64]=0x37u8
+    EB[16u64]=0x3Fu8 EB[17u64]=0x83u8 EB[18u64]=0x43u8 EB[19u64]=0xC8u8
+    EB[20u64]=0x5Bu8 EB[21u64]=0x78u8 EB[22u64]=0x67u8 EB[23u64]=0x4Du8
+    EB[24u64]=0xADu8 EB[25u64]=0xFCu8 EB[26u64]=0x7Eu8 EB[27u64]=0x14u8
+    EB[28u64]=0x6Fu8 EB[29u64]=0x88u8 EB[30u64]=0x2Bu8 EB[31u64]=0x4Fu8
+
+    /* expected shared secret K */
+    EK[0u64]=0x4Au8 EK[1u64]=0x5Du8 EK[2u64]=0x9Du8 EK[3u64]=0x5Bu8
+    EK[4u64]=0xA4u8 EK[5u64]=0xCEu8 EK[6u64]=0x2Du8 EK[7u64]=0xE1u8
+    EK[8u64]=0x72u8 EK[9u64]=0x8Eu8 EK[10u64]=0x3Bu8 EK[11u64]=0xF4u8
+    EK[12u64]=0x80u8 EK[13u64]=0x35u8 EK[14u64]=0x0Fu8 EK[15u64]=0x25u8
+    EK[16u64]=0xE0u8 EK[17u64]=0x7Eu8 EK[18u64]=0x21u8 EK[19u64]=0xC9u8
+    EK[20u64]=0x47u8 EK[21u64]=0xD1u8 EK[22u64]=0x9Eu8 EK[23u64]=0x33u8
+    EK[24u64]=0x76u8 EK[25u64]=0xF0u8 EK[26u64]=0x9Bu8 EK[27u64]=0x3Cu8
+    EK[28u64]=0x1Eu8 EK[29u64]=0x16u8 EK[30u64]=0x17u8 EK[31u64]=0x42u8
+
+    /* base point u = 9 */
+    U9[0u64]=0x09u8
+    let mut i : u64 = 1u64
+    while i < 32u64 { U9[i] = 0u8  i = i + 1u64 }
+
+    let sa : u64 = (&SA as u64)
+    let sb : u64 = (&SB as u64)
+    let u9 : u64 = (&U9 as u64)
+    let apub : u64 = (&APUB as u64)
+    let bpub : u64 = (&BPUB as u64)
+    let k1 : u64 = (&K1 as u64)
+    let k2 : u64 = (&K2 as u64)
+
+    /* ---- (1) ANCHOR: Alice/Bob public keys == published ---- */
+    if x25519((apub as *u8), (sa as *u8), (u9 as *u8)) != 0i32 { return 10u64 }
+    if eq32(apub, (&EA as u64)) != 1u8 { return 30u64 }          /* X25519(a,9) == Alice pub */
+    if x25519((bpub as *u8), (sb as *u8), (u9 as *u8)) != 0i32 { return 11u64 }
+    if eq32(bpub, (&EB as u64)) != 1u8 { return 31u64 }          /* X25519(b,9) == Bob pub */
+
+    /* ---- ANCHOR: shared secret from each side == published K ---- */
+    if x25519((k1 as *u8), (sa as *u8), (bpub as *u8)) != 0i32 { return 12u64 }
+    if eq32(k1, (&EK as u64)) != 1u8 { return 32u64 }            /* X25519(a, Bpub) == K */
+    if x25519((k2 as *u8), (sb as *u8), (apub as *u8)) != 0i32 { return 13u64 }
+    if eq32(k2, (&EK as u64)) != 1u8 { return 33u64 }            /* X25519(b, Apub) == K */
+
+    /* ---- (2) DH AGREEMENT: both sides derive the SAME secret ---- */
+    if eq32(k1, k2) != 1u8 { return 34u64 }
+
+    /* ---- NON-VACUITY ---- */
+    if eq32(apub, bpub) == 1u8 { return 50u64 }                  /* distinct public keys */
+    if eq32(k1, apub) == 1u8 { return 51u64 }                    /* secret != a public key */
+
+    return 99u64
+}

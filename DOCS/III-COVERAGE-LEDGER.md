@@ -1205,3 +1205,73 @@ KK_E_NULL = DECLINED (latent NULL-precondition on load-bearing PQ crypto; docume
 
 Gates: build GATE PASS FAIL=0; 1515 teeth exit 139 vs old lib, 99 vs new; only bigint.iii changed
 (+ the irreducibility_proof.iii comment-only doc commit).  Count 1102 -> **1103**.
+
+## Wave-25 — option double-free + threshold_vault kkey OOB (fresh axes 2: double-free + missing-validation) (2026-06-13)
+
+W28 (double-free/UAF / TOCTOU / aliasing / error-swallow round 2) surfaced a rich vein; the two with
+the cleanest GENTLE teeth land here, the rest queue.
+
+**W25-FIX-A REFUTED by the corpus gate (a FALSE POSITIVE I implemented, then reverted).**  W28 flagged
+option_u64_drop returning 1u8 unconditionally (no LIVE re-check, unlike is_some/unwrap_or) as a double-
+free.  I implemented `if OPT_U64_LIVE[si]==0u8 { return 0u8 }` + falsifier 1516 (teeth proven 30->99) --
+but the full corpus REDDENED: 1417_option_path_pq_prov exit 8.  Line 64 of 1417 is `if option_u64_drop(o1)
+!= 1u8 { return 8 }  /* drop is IDEMPOTENT on valid handles */`, and the header says "drop is drop-once".
+The unconditional 1u8 is the DOCUMENTED, contract-tested semantics: the return signals handle VALIDITY
+(none/FULL/out-of-range -> 0; any valid slot handle -> 1, safe to call twice), NOT liveness -- the slot is
+cleared once (drop-once) but a re-drop of a valid handle still returns 1.  My sibling-gap reasoning was
+wrong: is_some/unwrap_or guard LIVE because they answer "is there a live VALUE?"; drop answers "is this a
+valid HANDLE?".  REVERTED option.iii; deleted 1516.  **LESSON: before "fixing" a missing guard, grep the
+existing corpus for that function -- a contract test encodes the INTENDED behavior.**  (W22-24 + the
+threshold_vault fix were all corpus-validated; only this one violated a contract -- the gate is why.)
+
+**W25-FIX-B** (numera/threshold_vault.iii tv_seal + tv_open; falsifier 1517): tv_seal validates nkey
+(line 73) but NOT kkey, and stores kkey into TV_PN[2] (line 76) BEFORE shamir_split (line 88) can fail.
+tv_open reads that kkey as a loop bound (`while t < kkey`) and writes TV_PKXS[t] (a [u8;16]) + TV_PKS[
+t*32+b] (a [u8;512]) -- a stored kkey of 100 writes TV_PKXS[0..99]/TV_PKS[0..3199], corrupting adjacent
+globals (reachable via a caller that ignores tv_seal's failure and calls tv_open, since the bad kkey
+persists on a failed seal).  FIX: `if kkey > TV_MAX_NK { return TV_E_DIM }` in tv_seal (before storing
+TV_PN) + the same defensive recheck at the top of tv_open.  1517 teeth (GENTLE -- no OOB triggered):
+tv_seal(kkey=100) pre-fix stores it then shamir(thr=100>n=16) fails -> TV_E_SUB(-3); post-fix the guard
+returns TV_E_DIM(-1) -> arm 1 asserts -1, the pre-fix -3 reddens (exit 30).  Arm 2 (kkey=16==TV_MAX_NK)
+proves the guard is not over-tight.
+
+W25-FIX-B has a clean VALUE-differential teeth at the ENTRY (no crash, no OOB triggered) -- prove the
+guard rejects the dangerous input before the unsafe code downstream runs.  Lands as ONE commit (only
+threshold_vault.iii; the option half was reverted as a false positive).
+
+W28 remaining (queued for W26+, pending verification): error-swallow trio fed_seal_compute_chain_root /
+reach_emit / wh_compute_frag_id (discard mhash/cad/backend i32 returns -> report success on a corrupted
+seal -- need failure-inducibility check); identifier ident_copy forward-copy aliasing (need an in-tree
+aliased caller, else it's a must-not-alias contract).
+
+Gates: build GATE PASS FAIL=0; 1517 teeth exit 30 vs old lib, 99 vs new; the option false-positive caught
+by 1417 (the gate doing its job) and reverted.  Count 1103 -> **1104** (only 1517 added).
+
+## Wave-26 — crt_solve zero-modulus + rn_graph_root cell-count overflow (W29 missing-validation vein) (2026-06-13)
+
+W29 (div/mod-by-zero / unchecked count->loop / unsigned-underflow / capacity-overflow) found 3; 2 land,
+es_reconstruct declined.  Both fixes CONTRACT-PRE-CHECKED first (the option lesson): grep the existing
+corpus + in-tree callers before guarding.
+
+**W26-FIX-A** (numera/crt.iii crt_solve; falsifier 1518): crt_solve validates each modulus `>= CRT_2P32
+-> reject` (lines 70, 76) but NOT `== 0`.  A zero modulus reaches a `%`/`/`: line 71 `rp[0] % mp[0]`
+traps (SIGFPE) when mp[0]=0; the loop's line 77 `bigp > (CRT_U64MAX / mi)` traps when mi=0.  FIX: reject
+`== 0` alongside the too-large check (both the head modulus and the loop modulus).  Pre-check: NO corpus
+test calls crt_solve; the only in-tree callers are crt's own self-test (lines 149/163) with nonzero RSA-CRT
+moduli -> guard is a no-op for them.  1518 teeth: mp[0]=0 -> pre-fix SIGFPE (exit 127, process dies);
+post-fix CRT_E_DIM(-1).  Arm 2 = loop modulus zero; arm 3 = valid coprime moduli not rejected.
+
+**W26-FIX-B** (forcefield/ripple.iii rn_graph_root; falsifier 1519): the "holographic root" hashes
+`ncells * 32u64` bytes with no range check.  For ncells >= 2^59 the product WRAPS mod 2^64
+(0x0800000000000001*32 -> 0x20), so rn_hash commits to only 32 bytes -- the root silently collapses to
+the hash of one cell and different address lists collide (integrity break).  FIX: `if ncells >
+0x07FFFFFFFFFFFFFFu64 { return RN_GAP }` before hashing.  Pre-check: corpus 837 + ripple_journal call it
+with ncells=6 / RJ_N[0] (small) -> guard is a no-op.  1519 teeth (GENTLE value differential): pre-fix
+returns 0 (RN_OK) with a truncated root -> arm asserts RN_GAP, the 0 reddens (exit 30); post-fix RN_GAP.
+
+es_reconstruct DECLINED: es_encode validates `k > ES_MAX_K` (line 87) BEFORE storing ES_PN[1] (line 91)
+-- validate-then-store, so ES_PN[1]<=16 always; the missing guard is unfalsifiable defense-in-depth (the
+discriminator vs threshold_vault's store-then-validate, which WAS reachable).
+
+Gates: build GATE PASS FAIL=0; 1518 teeth exit 127 vs old lib, 1519 exit 30 vs old lib, both 99 vs new.
+Count 1104 -> **1106**.

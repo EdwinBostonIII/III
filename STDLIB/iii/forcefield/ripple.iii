@@ -252,6 +252,7 @@ fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cel
 
 /* holographic root: one hash committing to every cell's current address */
 fn rn_graph_root(ncells: u64, cell_addr: *u8, out: *u8) -> u64 @export {
+    if ncells > 0x07FFFFFFFFFFFFFFu64 { return RN_GAP }   /* [W26] ncells*32 would WRAP u64 -> a truncated hash that silently collapses the holographic root (different graphs collide); reject before hashing.  0x07FFFFFFFFFFFFFF*32 = 0xFFFFFFFFFFFFFFE0 is the largest non-wrapping length. */
     rn_hash(cell_addr, 0u64, ncells * 32u64, out, 0u64)
     return 0u64
 }

@@ -71,6 +71,7 @@ fn tv_seal(blob_ptr: u64, blen: u32, kthr: u32, nshard: u32, kkey: u32, nkey: u3
     if blen == 0u32 { return TV_E_DIM }
     if blen > TV_MAX_BL { return TV_E_DIM }
     if nkey > TV_MAX_NK { return TV_E_DIM }
+    if kkey > TV_MAX_NK { return TV_E_DIM }   /* [W25] kkey is stored unvalidated and later drives tv_open's loop bound (writes TV_PKXS[16]/TV_PKS[512]); reject kkey > TV_MAX_NK here, BEFORE storing TV_PN, so a bad kkey can never reach tv_open */
     TV_PN[0u32] = kthr
     TV_PN[1u32] = nshard
     TV_PN[2u32] = kkey
@@ -94,6 +95,7 @@ fn tv_open(shard_idx_ptr: u64, m_shard: u32, keyshare_idx_ptr: u64, m_keyshare: 
     let kkey : u32 = TV_PN[2u32]
     let nkey : u32 = TV_PN[3u32]
     let blen : u32 = TV_PN[4u32]
+    if kkey > TV_MAX_NK { return TV_E_DIM }   /* [W25] defense-in-depth: the loop below writes TV_PKXS[t]/TV_PKS[t*TV_KEYLEN] for t<kkey; never iterate past the [u8;16]/[u8;512] buffers even if TV_PN was corrupted */
     if m_keyshare < kkey { return TV_E_FEW }
     if m_shard < kthr { return TV_E_FEW }
 

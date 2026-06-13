@@ -1,0 +1,54 @@
+/* 1517_threshold_vault_kkey_bound.iii -- W25 FALSIFIER: tv_seal must REJECT a
+ * key-threshold kkey > TV_MAX_NK, not store it for tv_open to OOB-iterate on.
+ *
+ * THE DEFECT (missing input validation -> latent OOB write): tv_seal
+ * (threshold_vault.iii line 70) validates `nkey > TV_MAX_NK` (line 73) but NOT
+ * kkey, and stores kkey into TV_PN[2] (line 76) BEFORE shamir_split (line 88)
+ * can fail.  tv_open then reads that kkey as a loop bound (line 103 `while t <
+ * kkey`) and writes TV_PKXS[t] (a [u8;16] buffer, line 106) + TV_PKS[t*32+b]
+ * (a [u8;512] buffer, line 109).  With a stored kkey of 100 the loop writes
+ * TV_PKXS[0..99] and TV_PKS[0..3199] -- far past both buffers, corrupting
+ * adjacent module globals.  (Reachable via a caller that ignores tv_seal's
+ * failure return and calls tv_open, since the bad kkey is persisted even on a
+ * failed seal.)
+ *
+ * THE FIX: `if kkey > TV_MAX_NK { return TV_E_DIM }` in tv_seal (with the nkey
+ * check, before storing TV_PN) + the same defensive re-check at the top of
+ * tv_open.
+ *
+ * TEETH (value differential, no OOB triggered): tv_seal with kkey=100 > 16.
+ *   - pre-fix: kkey unchecked -> stored -> shamir_split(thr=100 > n=16) fails
+ *     (or "succeeds" on garbage) -> returns TV_E_SUB (-3) or TV_OK (0), never -1.
+ *   - post-fix: the kkey guard returns TV_E_DIM (-1) immediately.
+ * Arm 1 asserts the return is TV_E_DIM, so any pre-fix code reddens (exit 30).
+ * Arm 2 (boundary): kkey=16 == TV_MAX_NK must NOT be rejected by the guard
+ * (rc != TV_E_DIM) -- proves the guard is not over-tight.  blen/nkey are valid
+ * in both arms so a -1 can only come from the kkey guard. */
+module corpus_1517
+
+extern @abi(c-msvc-x64) fn tv_seal(blob_ptr: u64, blen: u32, kthr: u32, nshard: u32, kkey: u32, nkey: u32, key_ptr: u64, nonce_ptr: u64, keycoeff_ptr: u64) -> i32 from "threshold_vault.iii"
+
+var BLOB  : [u8; 32]
+var KEY   : [u8; 32]
+var NONCE : [u8; 12]
+var COEFF : [u8; 512]
+
+fn main() -> u64 {
+    /* fill minimal buffers (module-level arrays -> runtime index is safe) */
+    let mut i : u64 = 0u64
+    while i < 32u64 { BLOB[i] = (i as u8) ; KEY[i] = ((i + 1u64) as u8) ; i = i + 1u64 }
+    i = 0u64
+    while i < 12u64 { NONCE[i] = 0u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 512u64 { COEFF[i] = 1u8 ; i = i + 1u64 }
+
+    /* ---- arm 1 (TEETH): kkey=100 > TV_MAX_NK(16) must be rejected with TV_E_DIM ---- */
+    let rc : i32 = tv_seal((&BLOB as u64), 32u32, 2u32, 4u32, 100u32, 16u32, (&KEY as u64), (&NONCE as u64), (&COEFF as u64))
+    if rc != -1i32 { return 30u64 }                        /* pre-fix rc=-3/0 -> reddens; post-fix rc=-1 -> pass */
+
+    /* ---- arm 2 (boundary): kkey=16 == TV_MAX_NK must NOT be guard-rejected ---- */
+    let rc2 : i32 = tv_seal((&BLOB as u64), 32u32, 2u32, 4u32, 16u32, 16u32, (&KEY as u64), (&NONCE as u64), (&COEFF as u64))
+    if rc2 == -1i32 { return 31u64 }                       /* guard must accept the max valid kkey */
+
+    return 99u64
+}

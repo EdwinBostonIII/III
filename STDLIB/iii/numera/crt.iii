@@ -68,12 +68,14 @@ fn crt_solve(mod_ptr: u64, res_ptr: u64, k: u32, out_ptr: u64) -> i32 @export {
     let rp : *u64 = res_ptr as *u64
     let op : *u64 = out_ptr as *u64
     if mp[0u64] >= CRT_2P32 { return CRT_E_DIM }
+    if mp[0u64] == 0u64 { return CRT_E_DIM }   /* [W26] a zero modulus traps the next `% mp[0]` (SIGFPE); reject alongside the too-large check */
     let mut x : u64 = rp[0u64] % mp[0u64]
     let mut bigp : u64 = mp[0u64]
     let mut i : u32 = 1u32
     while i < k {
         let mi : u64 = mp[i as u64]
         if mi >= CRT_2P32 { return CRT_E_DIM }
+        if mi == 0u64 { return CRT_E_DIM }   /* [W26] a zero modulus traps `CRT_U64MAX / mi` below + the later `% mi` (SIGFPE) */
         if bigp > (CRT_U64MAX / mi) { return CRT_E_DIM }   /* product would overflow u64 -- guard FIRST */
         /* coprimality with the running product */
         if crt_gcd(bigp % mi, mi) != 1u64 { return CRT_E_COPRIME }

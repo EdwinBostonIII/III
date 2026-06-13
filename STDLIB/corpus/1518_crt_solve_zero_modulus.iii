@@ -1,0 +1,51 @@
+/* 1518_crt_solve_zero_modulus.iii -- W26 FALSIFIER: crt_solve must REJECT a zero
+ * modulus, not divide by it (SIGFPE).
+ *
+ * THE DEFECT (division by zero): crt_solve (crt.iii line 65) validates each
+ * modulus `mp[i] >= CRT_2P32 -> reject` (lines 70, 76) but NOT `== 0`.  A zero
+ * modulus then reaches a `%`/`/`: line 71 `rp[0] % mp[0]` traps (SIGFPE) when
+ * mp[0]=0; in the loop, line 77 `bigp > (CRT_U64MAX / mi)` traps when mi=0.
+ *
+ * THE FIX: reject a zero modulus alongside the too-large check --
+ *   if mp[0u64] == 0u64 { return CRT_E_DIM }     (before line 71)
+ *   if mi == 0u64 { return CRT_E_DIM }            (before line 77)
+ *
+ * TEETH (crash-class -- the standard falsifier for a divide-by-zero guard):
+ *   arm 1: mp[0]=0 -> pre-fix SIGFPE at line 71 (process dies, exit != 99);
+ *          post-fix returns CRT_E_DIM (-1) -> the arm sees -1 and continues.
+ *   arm 2: mp[0] valid, mp[1]=0 -> pre-fix SIGFPE in the loop; post-fix -1.
+ *   arm 3 (sanity): valid coprime moduli (3,5) must NOT be rejected by the new
+ *          zero-guard (rc != -1).  CRT_E_DIM == -1. */
+module corpus_1518
+
+extern @abi(c-msvc-x64) fn crt_solve(mod_ptr: u64, res_ptr: u64, k: u32, out_ptr: u64) -> i32 from "crt.iii"
+
+var MODS : [u64; 4]
+var RESS : [u64; 4]
+var OUT  : [u64; 4]
+
+fn main() -> u64 {
+    /* ---- arm 1 (TEETH): mp[0] = 0 -> pre-fix `rp[0] % 0` SIGFPE ---- */
+    MODS[0u64] = 0u64
+    RESS[0u64] = 5u64
+    let rc : i32 = crt_solve((&MODS as u64), (&RESS as u64), 1u32, (&OUT as u64))
+    if rc != -1i32 { return 30u64 }                        /* pre-fix crashes; post-fix CRT_E_DIM */
+
+    /* ---- arm 2 (TEETH): mp[0] valid, mp[1] = 0 -> pre-fix SIGFPE in the loop ---- */
+    MODS[0u64] = 7u64
+    MODS[1u64] = 0u64
+    RESS[0u64] = 3u64
+    RESS[1u64] = 2u64
+    let rc2 : i32 = crt_solve((&MODS as u64), (&RESS as u64), 2u32, (&OUT as u64))
+    if rc2 != -1i32 { return 31u64 }
+
+    /* ---- arm 3 (sanity): valid coprime moduli 3,5 must NOT be guard-rejected ---- */
+    MODS[0u64] = 3u64
+    MODS[1u64] = 5u64
+    RESS[0u64] = 2u64
+    RESS[1u64] = 3u64
+    let rc3 : i32 = crt_solve((&MODS as u64), (&RESS as u64), 2u32, (&OUT as u64))
+    if rc3 == -1i32 { return 32u64 }                       /* zero-guard must not reject nonzero moduli */
+
+    return 99u64
+}

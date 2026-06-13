@@ -1,0 +1,43 @@
+/* 1519_rn_graph_root_overflow.iii -- W26 FALSIFIER: rn_graph_root must REJECT a
+ * cell count whose byte length overflows u64, not silently hash a truncated span.
+ *
+ * THE DEFECT (integer overflow -> truncated integrity hash): rn_graph_root
+ * (ripple.iii line 254) hashes `ncells * 32u64` bytes with NO range check.  For
+ * ncells >= 2^59 the product WRAPS mod 2^64: 0x0800000000000001 * 32 =
+ * 0x10000000000000020 -> low64 = 0x20.  rn_hash then commits to only 32 bytes
+ * instead of ~2^63 -- the "holographic root" silently collapses to the hash of a
+ * single cell, so two vastly different address lists whose first 32 bytes match
+ * collide.  The @export takes ncells from its caller (rj_verify) unchecked.
+ *
+ * THE FIX: reject any ncells whose *32 would wrap, BEFORE hashing --
+ *   if ncells > 0x07FFFFFFFFFFFFFFu64 { return RN_GAP }
+ * (0x07FFFFFFFFFFFFFF * 32 = 0xFFFFFFFFFFFFFFE0 is the largest non-wrapping len.)
+ *
+ * TEETH (GENTLE value differential, no crash): rn_graph_root normally returns 0
+ * (OK).  Arm 1 calls it with the wrapping ncells:
+ *   - pre-fix: ncells*32 -> 32, hashes 32 in-bounds bytes, returns 0 (a wrong,
+ *     truncated root) -> the arm sees 0 != RN_GAP and reddens (exit 30).
+ *   - post-fix: the overflow guard returns RN_GAP -> the arm passes.
+ * Arm 2 (sanity): a valid ncells=2 must still compute a root (returns 0, not the
+ * guard's RN_GAP).  RN_GAP == 0xFFFFFFFFFFFFFFFF. */
+module corpus_1519
+
+extern @abi(c-msvc-x64) fn rn_graph_root(ncells: u64, cell_addr: *u8, out: *u8) -> u64 from "ripple.iii"
+
+var CELLS : [u8; 64]      /* two 32-byte cells */
+var OUT   : [u8; 32]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 64u64 { CELLS[i] = (i as u8) ; i = i + 1u64 }
+
+    /* ---- arm 1 (TEETH): ncells*32 wraps to 32 -> pre-fix truncated root returns 0 ---- */
+    let rc : u64 = rn_graph_root(0x0800000000000001u64, (&CELLS as u64) as *u8, (&OUT as u64) as *u8)
+    if rc != 0xFFFFFFFFFFFFFFFFu64 { return 30u64 }        /* pre-fix returns 0 -> reddens; post-fix RN_GAP */
+
+    /* ---- arm 2 (sanity): valid ncells=2 must compute a root (return 0, not RN_GAP) ---- */
+    let rc2 : u64 = rn_graph_root(2u64, (&CELLS as u64) as *u8, (&OUT as u64) as *u8)
+    if rc2 != 0u64 { return 31u64 }                        /* guard must not reject a valid count */
+
+    return 99u64
+}

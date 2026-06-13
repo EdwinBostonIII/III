@@ -1,0 +1,52 @@
+/* 1525_cad_cold_no_begin.iii -- W29 FALSIFIER: cad_payload/cad_domain must NOT
+ * report success when the hash backend was never begun (cross-module init hole).
+ *
+ * THE DEFECT (cross-module init-order + error-swallow): cad_begin(suite) records
+ * CAD_ACTIVE and inits the backend (sha256_init).  But CAD_ACTIVE defaults to 0,
+ * which COINCIDES with CAD_SUITE_SHA256 (== 0).  So a cad_payload called WITHOUT
+ * cad_begin (a fresh process) takes the SHA256 branch and calls
+ * sha256_dispatch_update on an UN-INIT'd backend, which DETECTS it (SHA_INIT==0
+ * -> returns 1) -- but cad SWALLOWED that return and reported CAD_OK, computing a
+ * silently-WRONG (empty) digest.  Reachable cold via the public @export (e.g.
+ * zk_proof_seal_absorb without zk_proof_seal_begin).  (A probe confirmed sha256
+ * is genuinely cold at a corpus-test entry.)
+ *
+ * THE FIX: cad_payload/cad_domain/cad_final propagate the backend return as
+ * CAD_E_BAD_SUITE.  Byte-identical for begun callers (SHA_INIT==1 -> backend
+ * returns 0 -> CAD_OK).
+ *
+ * TEETH (GENTLE value differential): arm 1/2 call cad_payload/cad_domain COLD.
+ *   - pre-fix: backend uninit, swallowed -> CAD_OK (0) -> arm reddens (exit 30).
+ *   - post-fix: CAD_E_BAD_SUITE (-2) -> passes.
+ * Arms 3-6: after cad_begin(SHA256) the full cycle works + yields a NONZERO
+ * digest (the guard is not over-tight; begun callers are unaffected).
+ * CAD_OK == 0, CAD_E_BAD_SUITE == -2, CAD_SUITE_SHA256 == 0. */
+module corpus_1525
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_domain(domain: u64, domain_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+var DATA : [u8; 32]
+var OUT  : [u8; 32]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { DATA[i] = 0xAAu8 ; OUT[i] = 0u8 ; i = i + 1u64 }
+
+    /* ---- arm 1/2 (TEETH): COLD cad_* (no begin) must NOT report CAD_OK ---- */
+    if cad_payload((&DATA as u64), 32u64) == 0i32 { return 30u64 }   /* pre-fix CAD_OK (swallowed) -> reddens */
+    if cad_domain((&DATA as u64), 8u64) == 0i32 { return 31u64 }
+
+    /* ---- arm 3-6 (sanity): begun cycle works + yields a real (nonzero) digest ---- */
+    if cad_begin(0u32) != 0i32 { return 32u64 }
+    if cad_payload((&DATA as u64), 32u64) != 0i32 { return 33u64 }   /* inited -> CAD_OK (unchanged) */
+    if cad_final((&OUT as u64)) != 0i32 { return 34u64 }
+    let mut acc : u8 = 0u8
+    i = 0u64
+    while i < 32u64 { acc = acc | OUT[i] ; i = i + 1u64 }
+    if acc == 0u8 { return 35u64 }                                   /* a real digest is nonzero */
+
+    return 99u64
+}

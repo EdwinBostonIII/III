@@ -1330,3 +1330,29 @@ pattern_template_set_id DECLINED: its mhash_payload error-swallow only triggers 
 with name_len>0 -- a contract-violating NULL+len no real caller passes (the mldsa NULL-pk decline class).
 
 Gates: build GATE PASS FAIL=0; 1523/1524 teeth exit 30 vs old lib, 99 vs new.  Count 1109 -> **1111**.
+
+## Wave-29 — cad cross-module-init error-swallow: a silently-wrong digest when un-begun (W35) (2026-06-13)
+
+After 3/4 dry rounds (W31/33/34), W35's fresh axes (stale-buffer / cross-module-init / narrow-int) still
+hit 2 reachable -- the supply thins but isn't gone.  1 lands; nl_parse deferred.
+
+**W29-FIX** (numera/cad.iii cad_payload + cad_domain + cad_final; falsifier 1525): cad_begin(suite) records
+CAD_ACTIVE and inits the backend.  But `var CAD_ACTIVE = 0` COINCIDES with `CAD_SUITE_SHA256 = 0`, so a
+cad_payload called WITHOUT cad_begin (fresh process) takes the SHA256 branch and calls
+sha256_dispatch_update on an UN-INIT'd backend, which DETECTS it (SHA_INIT==0 -> returns 1) -- but cad
+SWALLOWED the return and reported CAD_OK, computing a silently-WRONG (empty) digest.  An INTEGRITY bug: a
+seal/witness/content-address that commits to the wrong data but reports success (reachable cold via e.g.
+zk_proof_seal_absorb without zk_proof_seal_begin).  FIX: propagate the sha256 backend return as
+CAD_E_BAD_SUITE in all three SHA256 branches.  Byte-identical for BEGUN callers (SHA_INIT==1 -> backend
+returns 0 -> CAD_OK) -- which is why the load-bearing mhash->cad->everything path stays green.
+
+A standalone probe (cold cad_payload+final -> OUT) CONFIRMED sha256 is genuinely COLD at a corpus-test
+entry (the side-effect objects do not warm it) -- so the teeth is feasible: 1525 cold cad_payload pre-fix
+returns CAD_OK (exit 30) / post-fix CAD_E_BAD_SUITE; arms 3-6 pin the begun cycle + a NONZERO digest.
+
+nl_parse _np_pack_rhq DEFERRED (real: head-token index masked `& 0xFFFF` where the record spec is u32 ->
+indices > 65535 truncate; fix trivial `0xFFFFFFFF`, but the teeth needs a 65536+-token parse + grammar
+knowledge -- revisit when constructible).
+
+Gates: build GATE PASS FAIL=0; 1525 teeth exit 30 vs old lib, 99 vs new; corpus (the load-bearing gate --
+many mhash/seal/witness tests) green.  Count 1111 -> **1112**.

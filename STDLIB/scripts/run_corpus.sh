@@ -1097,6 +1097,7 @@ declare -A EXPECTED=(
     [1522_temporal_subf_overflow]=99
     [1523_governance_drop_accepted_wall]=99
     [1524_csl_lens_count_bound]=99
+    [1525_cad_cold_no_begin]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

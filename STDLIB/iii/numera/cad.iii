@@ -247,7 +247,7 @@ fn cad_domain(domain: u64, domain_len: u64) -> i32 @export {
     let dp : *u8 = domain as *u8
     let dl : u64 = domain_len
     if CAD_ACTIVE == CAD_SUITE_SHA256 {
-        sha256_dispatch_update(dp, dl)
+        if sha256_dispatch_update(dp, dl) != 0u32 { return CAD_E_BAD_SUITE }   /* [W29] backend uninit (cold/un-begun) was swallowed -> wrong digest */
         sha256_dispatch_update((&CAD_ZERO as u64) as *u8, 1u64)
         return CAD_OK
     }
@@ -265,7 +265,7 @@ fn cad_payload(payload: u64, payload_len: u64) -> i32 @export {
     let pp : *u8 = payload as *u8
     let pl : u64 = payload_len
     if CAD_ACTIVE == CAD_SUITE_SHA256 {
-        sha256_dispatch_update(pp, pl)
+        if sha256_dispatch_update(pp, pl) != 0u32 { return CAD_E_BAD_SUITE }   /* [W29] cold/un-begun: CAD_ACTIVE==0 coincides with CAD_SUITE_SHA256, so a no-begin call reaches here with SHA_INIT==0 -> the backend returns 1; swallowing it returned CAD_OK with a silently-WRONG (empty) digest.  Byte-identical for begun callers (SHA_INIT==1 -> 0). */
         return CAD_OK
     }
     if CAD_ACTIVE == CAD_SUITE_KECCAK256 {
@@ -279,7 +279,7 @@ fn cad_final(out_32: u64) -> i32 @export {
     if out_32 == 0u64 { return CAD_E_NULL }
     let op : *u8 = out_32 as *u8
     if CAD_ACTIVE == CAD_SUITE_SHA256 {
-        sha256_dispatch_final(op)
+        if sha256_dispatch_final(op) != 0u32 { return CAD_E_BAD_SUITE }   /* [W29] backend uninit (cold/un-begun) was swallowed */
         return CAD_OK
     }
     if CAD_ACTIVE == CAD_SUITE_KECCAK256 {

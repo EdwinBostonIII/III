@@ -437,6 +437,7 @@ fn governance_drop(proposal_id: u64) -> i32 @export {
     let l_id : u64 = proposal_id
     let s : u32 = _gov_slot_of(l_id)
     if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    if GOV_STATUS[s] == GOV_ACCEPTED { return GOV_E_BAD_STATE }   /* [W28] "every promotion is sealed" (header line 9): an ACCEPTED proposal must be governance_seal'd (-> GOV_SEALED, witness emitted) BEFORE its slot may be erased; dropping it un-sealed would lose the promotion without a witness.  Every peer state-changer checks GOV_STATUS; drop alone omitted it. */
     GOV_INTENT[s]       = 0u64
     GOV_PROPOSER_CAP[s] = 0u64
     GOV_STATUS[s]       = 0u8

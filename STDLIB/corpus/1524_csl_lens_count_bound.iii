@@ -1,0 +1,29 @@
+/* 1524_csl_lens_count_bound.iii -- W28 FALSIFIER: csl_lens must reject a cell
+ * count > 8, not store it for csl_footprints_disjoint to OOB-read on.
+ *
+ * THE DEFECT (count not validated -> OOB read): csl_lens(na, nb) (csl.iii line
+ * 59, @export) stores CSL_NA[0]=na, CSL_NB[0]=nb with NO bound, and
+ * csl_footprints_disjoint then loops `while i < na { hl_set(ha, A_CELL[i], 1) }`
+ * over A_CELL/B_CELL which are [u32; 8] -- a stored na of 100 reads A_CELL[8..99]
+ * out of bounds.  csl_set_a/csl_set_b already guard `i >= 8` (W19), but the
+ * count path (csl_lens) did not.  Reachable: csl_lens(100,50) -> footprints().
+ *
+ * THE FIX: `if na > 8u32 { return -1i32 }` + the nb check in csl_lens (the
+ * setter), + a defensive recheck in csl_footprints_disjoint.
+ *
+ * TEETH (GENTLE value differential, no OOB triggered): arm 1 = csl_lens(100,50).
+ *   - pre-fix: stores it, returns 0 -> the arm sees 0 != -1 and reddens (30).
+ *   - post-fix: the count guard returns -1 -> passes.
+ * Arm 2 (boundary): na=nb=8 == the cell count must be ACCEPTED (returns 0, valid
+ * indices 0..7).  Arm 3: 0 is valid. */
+module corpus_1524
+
+extern @abi(c-msvc-x64) fn csl_lens(na: u32, nb: u32) -> i32 from "csl.iii"
+
+fn main() -> u64 {
+    if csl_lens(100u32, 50u32) != -1i32 { return 30u64 }   /* TEETH: pre-fix returns 0 -> reddens */
+    if csl_lens(8u32, 8u32) != 0i32 { return 31u64 }       /* boundary: 8 cells (idx 0..7) is valid -- guard not over-tight */
+    if csl_lens(0u32, 0u32) != 0i32 { return 32u64 }       /* empty is valid */
+    if csl_lens(3u32, 9u32) != -1i32 { return 33u64 }      /* nb side guarded too */
+    return 99u64
+}

@@ -56,7 +56,11 @@ var CSL_RES : [u32; 64]
 var CSL_REF : [u32; 64]
 var CSL_RLEN : [u32; 1]
 
-fn csl_lens(na: u32, nb: u32) -> i32 @export { CSL_NA[0u32] = na ; CSL_NB[0u32] = nb ; return 0i32 }
+fn csl_lens(na: u32, nb: u32) -> i32 @export {
+    if na > 8u32 { return -1i32 }             /* [W28] na/nb are stored then used as loop bounds over A_CELL/B_CELL[8] in csl_footprints_disjoint -> a count > 8 OOB-reads the cell arrays; reject here (the setter), mirroring csl_set_a/csl_set_b's index guard */
+    if nb > 8u32 { return -1i32 }
+    CSL_NA[0u32] = na ; CSL_NB[0u32] = nb ; return 0i32
+}
 fn csl_set_a(i: u32, op: u32, cell: u32, val: u32) -> i32 @export {
     if i >= 8u32 { return -1i32 }             /* [W19] untrusted index: A_OP/A_CELL/A_VAL[8] OOB WRITE otherwise */
     A_OP[i as u64] = op ; A_CELL[i as u64] = cell ; A_VAL[i as u64] = val ; return 0i32
@@ -73,6 +77,8 @@ fn csl_footprints_disjoint() -> u32 @export {
     let hb : u32 = hl_empty()
     let na : u32 = CSL_NA[0u32]
     let nb : u32 = CSL_NB[0u32]
+    if na > 8u32 { return 0u32 }              /* [W28] defense-in-depth: never loop A_CELL[8] OOB even if CSL_NA was set out of range */
+    if nb > 8u32 { return 0u32 }
     let mut i : u32 = 0u32
     while i < na { hl_set(ha, A_CELL[i as u64], 1u32) ; i = i + 1u32 }
     let mut j : u32 = 0u32

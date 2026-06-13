@@ -1,0 +1,67 @@
+/* 1523_governance_drop_accepted_wall.iii -- W28 FALSIFIER: governance_drop must
+ * REFUSE to erase an ACCEPTED (un-sealed) proposal.  A W21 sibling.
+ *
+ * THE DEFECT (state-machine gap): governance_drop (governance.iii line 436,
+ * @export) erases a proposal slot after only an id-validity check -- it does NOT
+ * check GOV_STATUS, unlike every peer state-changer (sandbox/vote/promote/seal
+ * all gate on GOV_STATUS).  The header contract (line 9) is "every promotion is
+ * sealed": an ACCEPTED proposal MUST be governance_seal'd (-> GOV_SEALED, witness
+ * emitted) before its slot is freed.  Dropping it while ACCEPTED loses the
+ * promotion with no witness -- a contract violation reachable via the public API
+ * (propose -> sandbox -> prove -> vote -> promote -> drop).
+ *
+ * THE FIX: `if GOV_STATUS[s] == GOV_ACCEPTED { return GOV_E_BAD_STATE }` in
+ * governance_drop.
+ *
+ * TEETH (GENTLE value differential): drive a proposal to ACCEPTED, then drop it.
+ *   - pre-fix: drop returns GOV_OK (0) and erases it -> arm sees 0 != -3, reddens.
+ *   - post-fix: drop returns GOV_E_BAD_STATE (-3) -> passes; the proposal stays
+ *     ACCEPTED; seal then drop succeeds (SEALED is droppable -- guard is
+ *     ACCEPTED-specific, not over-tight). */
+module corpus_1523
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn governance_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_sandbox(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_prove_equivalence_with_count(proposal_id: u64, old_pid: u32, new_pid_and_count: u64, corpus_witness_ptr: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_vote(voter_cap: u64, proposal_id: u64, vote: u8) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_promote(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_seal(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_status(proposal_id: u64) -> u8 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_drop(proposal_id: u64) -> i32 from "governance.iii"
+
+var RAT : [u8; 16]
+
+fn main() -> u64 {
+    resolution_init()
+    governance_reset()
+    let mut k : u64 = 0u64
+    while k < 16u64 { RAT[k] = ((65u64 + k) as u8) ; k = k + 1u64 }
+
+    /* drive PENDING -> SANDBOXED -> PROVEN */
+    let pid : u64 = governance_propose(0x4000u64, 0xABCDu64, (&RAT as u64), 16u32)
+    if pid == 0u64 { return 10u64 }
+    if governance_sandbox(pid) != 0i32 { return 11u64 }
+    if governance_prove_equivalence_with_count(pid, 5u32, 5u64, 0u64) == 0u64 { return 12u64 }
+    if governance_status(pid) != 2u8 { return 13u64 }       /* PROVEN */
+
+    /* 4 yes, 1 no -> threshold met (4*3=12 >= 2*5=10) */
+    governance_vote(0x10u64, pid, 1u8)
+    governance_vote(0x11u64, pid, 1u8)
+    governance_vote(0x12u64, pid, 1u8)
+    governance_vote(0x13u64, pid, 1u8)
+    governance_vote(0x14u64, pid, 0u8)
+    if governance_promote(pid) != 0i32 { return 14u64 }
+    if governance_status(pid) != 3u8 { return 15u64 }       /* ACCEPTED */
+
+    /* ---- TEETH: drop on ACCEPTED must be refused with GOV_E_BAD_STATE (-3) ---- */
+    if governance_drop(pid) != -3i32 { return 30u64 }       /* pre-fix returns 0 (erases) -> reddens */
+    if governance_status(pid) != 3u8 { return 31u64 }       /* refused -> still ACCEPTED, untouched */
+
+    /* ---- sanity: seal (ACCEPTED -> SEALED), then SEALED is droppable ---- */
+    if governance_seal(pid) != 0i32 { return 32u64 }        /* ACCEPTED -> SEALED */
+    if governance_drop(pid) != 0i32 { return 33u64 }        /* SEALED is droppable -- guard is ACCEPTED-specific */
+
+    return 99u64
+}

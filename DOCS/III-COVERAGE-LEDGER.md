@@ -1301,3 +1301,32 @@ quantity -- a guard placed AFTER an overflowing computation is structurally blin
 
 Gates: build GATE PASS FAIL=0; 1520/1521 teeth exit 127 vs old lib, 1522 exit 30, all 99 vs new.
 Count 1106 -> **1109**.
+
+## Wave-28 — governance_drop ACCEPTED-state guard + csl_lens count-bound (W32 fresh axes; NOT saturated) (2026-06-13)
+
+W31 was all-declined (its leak cluster was UNREACHABLE), but W32's FRESH lenses (state-machine /
+paired-validation / inducible-error-swallow, with a `reachable_via_api` gate) found 3 reachable -- the
+"switch the axis" method holds.  2 land; pattern_template_set_id declined.
+
+**W28-FIX-A** (omnia/governance.iii governance_drop; 1523) -- a W21 sibling.  governance_drop erases a
+proposal slot after only an id check -- NO GOV_STATUS gate, unlike every peer (sandbox/vote/promote/seal).
+The header contract (line 9) is "every promotion is sealed": an ACCEPTED(3) proposal MUST be
+governance_seal'd (-> SEALED(5), witness emitted) before its slot is freed; dropping it un-sealed loses
+the promotion with no witness.  FIX: `if GOV_STATUS[s] == GOV_ACCEPTED { return GOV_E_BAD_STATE }`.
+Reachable: propose->sandbox->prove->vote(4y/1n)->promote->drop.  1523 teeth (GENTLE): drop on ACCEPTED
+pre-fix returns 0 + erases -> arm asserts -3, the 0 reddens (exit 30); post-fix -3, proposal stays
+ACCEPTED, and seal-then-drop still works (SEALED is droppable -- guard is ACCEPTED-specific).  205/1402
+drop only PENDING/SEALED -> unaffected.
+
+**W28-FIX-B** (numera/csl.iii csl_lens + csl_footprints_disjoint; 1524) -- a W19 sibling.  csl_lens(na,nb)
+stores the counts with NO bound, and csl_footprints_disjoint loops `while i<na { hl_set(ha, A_CELL[i]..) }`
+over A_CELL/B_CELL[8] -> a count of 100 OOB-reads the cell arrays.  csl_set_a/csl_set_b already guard
+`i>=8` (W19); the COUNT path did not.  FIX: `if na>8 / nb>8 { return -1 }` in csl_lens + a defensive guard
+in csl_footprints_disjoint.  1524 teeth (GENTLE): csl_lens(100,50) pre-fix stores it + returns 0 -> arm
+asserts -1, the 0 reddens (exit 30); post-fix -1; boundary na=nb=8 accepted (not over-tight).  Existing
+csl tests use na/nb<=4 -> unaffected.
+
+pattern_template_set_id DECLINED: its mhash_payload error-swallow only triggers on symbol_name=0 (NULL)
+with name_len>0 -- a contract-violating NULL+len no real caller passes (the mldsa NULL-pk decline class).
+
+Gates: build GATE PASS FAIL=0; 1523/1524 teeth exit 30 vs old lib, 99 vs new.  Count 1109 -> **1111**.

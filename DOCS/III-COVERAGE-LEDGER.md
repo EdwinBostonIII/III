@@ -1176,3 +1176,32 @@ Gates: build GATE PASS FAIL=0; 1514 teeth exit 30 vs old lib, 99 vs new; only fn
 Count 1101 -> **1102**.  The init-order axis is now SATURATED for the field/curve modules
 (to_mont/from_mont W22 + reduce W23 done; hot primitives principled-skip; precomputed-tables and
 other-curve lenses came up dry) -> the next wave switches axis.
+
+## Wave-24 — bigint_new cap*8 u64-overflow guard (a FRESH axis: integer-overflow in size math) (2026-06-13)
+
+Init-order saturated -> switched the discovery axis to integer-overflow / error-swallow / off-by-one /
+signed-sentinel.  One real find of three confirmed (the ~2/3 false-positive rate held).
+
+**W24-FIX** (bigint.iii bigint_new; falsifier 1515): the backing byte size is computed as `cap_limbs *
+8u64` (line 147) with NO overflow check.  For cap_limbs >= 2^61 the product WRAPS mod 2^64 --
+0x2000000000000001 * 8 = 0x10000000000000008 -> low64 = 0x8.  arena_alloc1 then returns a real 8-byte
+block (the `p == 0` guard at line 148 passes), and the zero-init loop `while i < cap` (line 151) runs
+~2^61 iterations writing 8 bytes each FAR past the 8-byte block -> a massive OOB write (heap corruption
++ crash).  FIX: `if cap > 0x1FFFFFFFFFFFFFFFu64 { return BIGINT_INVALID }` before allocating
+(0x1FFFFFFFFFFFFFFF * 8 = 0xFFFFFFFFFFFFFFF8 is the largest non-wrapping product).
+
+1515 teeth (crash-class -- the standard falsifier for a memory-safety guard): a small 16KB arena, then
+bigint_new(arena, 0x2000000000000001).  Pre-fix the wrapped 8-byte alloc + OOB zero-loop SEGFAULTS
+within a few thousand writes -> exit 139 (verified vs the pre-W24 lib).  Post-fix the overflow guard
+returns BIGINT_INVALID (0) before allocating -> the arm sees bad==0 and continues -> exit 99.  Arm 2
+pins the wrap-to-zero boundary (cap=0x2000000000000000, also rejected); the sanity arm proves a normal
+small cap still allocates (guard not over-tight).  Contained userland probe, not a kernel crash.
+
+W27 triage (read-only Explore fan-out): (1) this = real.  (2) irreducibility_proof off-by-one =
+FALSE POSITIVE (the verifier read a stale "18*18=324" comment; calculus_primitive_count()=19 is the
+source of truth, the code loops 1..19 correctly) -- fixed the 4 stale comments to 19*19=361 in a
+separate doc commit; the code was always right.  (3) mldsa iii_mldsa_verify swallowing keccak_absorb's
+KK_E_NULL = DECLINED (latent NULL-precondition on load-bearing PQ crypto; document-and-separate).
+
+Gates: build GATE PASS FAIL=0; 1515 teeth exit 139 vs old lib, 99 vs new; only bigint.iii changed
+(+ the irreducibility_proof.iii comment-only doc commit).  Count 1102 -> **1103**.

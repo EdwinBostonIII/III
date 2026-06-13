@@ -1,0 +1,47 @@
+/* 1515_bigint_new_cap_overflow.iii -- W24 FALSIFIER: bigint_new must REJECT a
+ * limb-count whose byte size overflows u64, not allocate-small-then-OOB-write.
+ *
+ * THE DEFECT (integer overflow in size math): bigint_new computes the backing
+ * byte size as `cap_limbs * 8u64` (bigint.iii line 147) with NO overflow check.
+ * For cap_limbs >= 2^61 the product wraps mod 2^64:
+ *   cap = 0x2000000000000001 -> cap*8 = 0x10000000000000008 -> low64 = 0x8.
+ * arena_alloc1 then returns a real 8-byte block (the `p == 0` guard at line 148
+ * passes), and the zero-init loop `while i < cap` (line 151) runs ~2^61 times,
+ * writing 8 bytes per step FAR past the 8-byte block -> a massive OOB write.
+ *
+ * THE FIX: reject any cap whose *8 would wrap, BEFORE allocating:
+ *   if cap > 0x1FFFFFFFFFFFFFFFu64 { return BIGINT_INVALID }
+ * (0x1FFFFFFFFFFFFFFF * 8 = 0xFFFFFFFFFFFFFFF8, the largest product that fits.)
+ *
+ * TEETH (crash-class, the standard falsifier for a memory-safety guard): arm 1
+ * calls bigint_new with the wrapping cap.
+ *   - pre-fix: 8-byte alloc + 2^61-iteration OOB zero-loop -> SEGV before return
+ *     (a small arena makes it segfault within a few thousand writes) -> exit != 99.
+ *   - post-fix: the overflow guard returns BIGINT_INVALID (0) immediately -> the
+ *     arm sees bad == 0 and continues -> exit 99.
+ * Arm 2 pins the wrap-to-zero boundary (also rejected post-fix).  The sanity arm
+ * proves a normal small cap still allocates (the guard is not over-tight).
+ * BIGINT_INVALID == 0u64. */
+module corpus_1515
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(16384u64)
+    if arena == 0u64 { return 10u64 }                       /* arena setup failed */
+
+    /* sanity: a normal small cap allocates (handle != BIGINT_INVALID == 0) */
+    let ok : u64 = bigint_new(arena, 4u64)
+    if ok == 0u64 { return 11u64 }                          /* guard must NOT reject a valid cap */
+
+    /* ---- arm 1 (TEETH): cap*8 wraps to 8 -> pre-fix OOB segfaults; post-fix INVALID ---- */
+    let bad : u64 = bigint_new(arena, 0x2000000000000001u64)
+    if bad != 0u64 { return 30u64 }                         /* pre-fix never returns here (SEGV); post-fix bad==0 */
+
+    /* ---- arm 2: cap*8 wraps to 0 (the exact boundary) -> also rejected ---- */
+    let bad2 : u64 = bigint_new(arena, 0x2000000000000000u64)
+    if bad2 != 0u64 { return 31u64 }
+
+    return 99u64
+}

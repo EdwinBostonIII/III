@@ -144,6 +144,7 @@ fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 @export {
     if s == 0xFFFFFFFFu32 { return BIGINT_INVALID }
     let mut cap : u64 = cap_limbs
     if cap == 0u64 { cap = 1u64 }
+    if cap > 0x1FFFFFFFFFFFFFFFu64 { return BIGINT_INVALID }  /* [W24] cap*8 would WRAP u64 (0x2000…*8 = 0 mod 2^64) -> a small/zero alloc + a 2^61-iteration OOB zero-loop below; reject before allocating.  0x1FFFFFFFFFFFFFFF*8 = 0xFFFFFFFFFFFFFFF8 is the largest non-wrapping product. */
     let p : u64 = arena_alloc1(arena_id, cap * 8u64)
     if p == 0u64 { return BIGINT_INVALID }
     /* Zero the limbs. */

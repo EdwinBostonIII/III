@@ -65,9 +65,16 @@ fn lv_solve() -> i32 @export {
     return 0i32
 }
 
-fn lv_in(b: u32) -> u32 @export { return LV_IN[b as u64] }
-fn lv_out(b: u32) -> u32 @export { return LV_OUT[b as u64] }
+fn lv_in(b: u32) -> u32 @export {
+    if b >= LV_N { return 0u32 }                     /* [W18] LV_IN[b] OOB read on an untrusted block id */
+    return LV_IN[b as u64]
+}
+fn lv_out(b: u32) -> u32 @export {
+    if b >= LV_N { return 0u32 }                     /* [W18] LV_OUT[b] OOB read on an untrusted block id */
+    return LV_OUT[b as u64]
+}
 fn lv_live_at_out(b: u32, vbit: u32) -> u32 @export {
+    if b >= LV_N { return 0u32 }                     /* [W18] LV_OUT[b] OOB read on an untrusted block id */
     if ((LV_OUT[b as u64] >> vbit) & 1u32) == 1u32 { return 1u32 }
     return 0u32
 }

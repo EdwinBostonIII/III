@@ -987,3 +987,35 @@ OOB) almost always has an un-fixed sibling on the adjacent code path (the node-i
 
 Gates: build GATE PASS FAIL=0; 1507 99 vs new / exit 3 vs old; only egraph.iii changed, all 17
 egraph consumers + 1507 GREEN.  Count 1094 -> **1095**.
+
+## Wave-18 — accessor-bounds OOB in heaplet / liveness / matrix_ring (the wave-11 sweep gap) (2026-06-13)
+
+Found by a read-only discovery WORKFLOW (5 lenses, adversarially refuted: 13 confirmed of 17
+examined, all in these 3 modules; the other lenses came back clean).  Wave-11's "exhaustive"
+single-line accessor-bounds sweep covered the analysis modules but MISSED three separation-algebra /
+dataflow / ring modules whose @export accessors index a fixed internal array by an unvalidated
+caller index:
+  - **heaplet** (8: hl_has/get/set/footprint/size/disjoint/union/equal): hl_alloc bounds the handle
+    (h >= HL_POOL -> HL_NONE) but the accessors indexed HL_FP[256] / HL_VAL[16384] by the handle h
+    checking only the CELL a, never h >= HL_POOL.  hl_set is an OOB WRITE.
+  - **liveness** (3: lv_in/out/live_at_out): indexed LV_IN/LV_OUT ([u32;4]) by a block b with no
+    b >= LV_N guard -- an OOB read.
+  - **matrix_ring** (2: mat_set/get): indexed MAT_E ([u32;32]) by s*4+i with no s >= MAT_SLOTS guard.
+    mat_set is an OOB WRITE.
+
+**W18-FIX**: each @export accessor refuses an out-of-range index up front (set -> -1, get ->
+zero/sentinel), the wave-9/10/11 convention.  Byte-identical for every in-range caller (sep_logic /
+csl / reg_alloc / the three module KATs all pass unchanged).
+
+Combined falsifier 1508 (wave-11's 1502 shape -- SETTER teeth + getter pins): hl_set(HL_POOL,..) and
+mat_set(MAT_SLOTS,..) each return -1 on the fixed lib and 0 on the pre-fix lib (after a bounded
+1-past write) -- the heaplet setter reddens the fully-pre-fix lib (exit 20, verified), the matrix
+setter additionally pins the matrix guard against a matrix-only regression.  The liveness getters
+(and every getter) are PINNED on the fixed lib: their gentle 1-past READ is benign-VALUED (adjacent
+BSS reads 0, verified) so they carry no value-differential of their own -- exactly the setter-teeth/
+getter-pin asymmetry 1502 already used for the OOB-read getters.  Arms 1-11 pin the valid in-range
+fixpoint (incl. heaplet's separation laws, the liveness {x,y}/{x,z} dataflow values, matrix slot 7).
+
+Gates: build GATE PASS FAIL=0; 1508 99 vs new / exit 20 vs old; only heaplet/liveness/matrix_ring
+changed, all 10 consumers (direct KATs + sep_logic/csl/reg_alloc/reg_alloc_liveness/transform_taint_
+seal/1502) + 1508 GREEN.  Count 1095 -> **1096**.

@@ -31,6 +31,7 @@ var MAT_E    : [u32; 32]          /* 8 matrices * 4 elements (a,b,c,d) */
 var MAT_MULS : [u32; 1]           /* matrix-multiply counter (the algebraic cost) */
 
 fn mat_set(s: u32, a: u32, b: u32, c: u32, d: u32) -> i32 @export {
+    if s >= MAT_SLOTS { return -1i32 }               /* [W18] s is an untrusted slot: guards the 4 MAT_E[s*4+k] WRITES */
     let base : u32 = s * 4u32
     MAT_E[(base + 0u32) as u64] = a & 0xFFu32
     MAT_E[(base + 1u32) as u64] = b & 0xFFu32
@@ -38,7 +39,11 @@ fn mat_set(s: u32, a: u32, b: u32, c: u32, d: u32) -> i32 @export {
     MAT_E[(base + 3u32) as u64] = d & 0xFFu32
     return 0i32
 }
-fn mat_get(s: u32, i: u32) -> u32 @export { return MAT_E[((s * 4u32) + i) as u64] }
+fn mat_get(s: u32, i: u32) -> u32 @export {
+    if s >= MAT_SLOTS { return 0u32 }                /* [W18] s,i untrusted: MAT_E[s*4+i] OOB read otherwise */
+    if i >= 4u32 { return 0u32 }
+    return MAT_E[((s * 4u32) + i) as u64]
+}
 
 fn mat_copy(d: u32, s: u32) {
     let mut i : u32 = 0u32

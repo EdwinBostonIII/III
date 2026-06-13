@@ -1,0 +1,104 @@
+/* 1508_accessor_bounds_heaplet_liveness_matrix.iii -- W18 FALSIFIER: the @export
+ * accessors of heaplet / liveness / matrix_ring REFUSE an out-of-range handle/block/
+ * slot instead of indexing their fixed internal arrays out of bounds.
+ *
+ * THE DEFECT (the wave-11 accessor-bounds sweep missed these 3 modules): each module
+ * allocates/bounds its index internally but the @export accessors took a caller-supplied
+ * index and indexed a FIXED array with only a SECONDARY check (or none):
+ *   - heaplet: hl_has/get/set/footprint/size/disjoint/union/equal indexed HL_FP[256] /
+ *     HL_VAL[16384] by a handle h, checking only the cell a -- never h >= HL_POOL.
+ *     hl_set is an OOB WRITE.
+ *   - liveness: lv_in/out/live_at_out indexed LV_IN/LV_OUT ([u32;4]) by a block b, no
+ *     b >= LV_N guard -- an OOB read.
+ *   - matrix_ring: mat_set/get indexed MAT_E ([u32;32]) by s*4+i, no s >= MAT_SLOTS
+ *     guard.  mat_set is an OOB WRITE.
+ *
+ * THE GUARDS: each accessor refuses an out-of-range index up front (set -> -1, get ->
+ * zero/sentinel), mirroring the wave-9/10/11 convention.
+ *
+ * TEETH (clean SETTER differentials, gentle minimal-invalid index): hl_set(HL_POOL,..)
+ * and mat_set(MAT_SLOTS,..) each return -1 on the fixed lib and 0 on the pre-fix lib
+ * (after a bounded 1-past write).  Arm "T1" reddens the fully-pre-fix lib (exit 20);
+ * the matrix setter teeth (arm "T2") additionally pins the matrix guard against a
+ * matrix-only regression.  The liveness getters (and every other getter) are PINNED on
+ * the fixed lib: their 1-past read is benign-VALUED (adjacent BSS reads 0) so they
+ * carry no value-differential of their own -- the same setter-teeth + getter-pin shape
+ * as wave-11's 1502.  Arms 1-9 prove valid in-range use works (guards not over-tight).
+ * Exit 99. */
+module corpus_1508
+
+extern @abi(c-msvc-x64) fn hl_init() -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_empty() -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_set(h: u32, a: u32, v: u32) -> i32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_get(h: u32, a: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_has(h: u32, a: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_footprint(h: u32) -> u64 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_size(h: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_disjoint(h1: u32, h2: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_union(h1: u32, h2: u32) -> u32 from "heaplet.iii"
+extern @abi(c-msvc-x64) fn hl_equal(h1: u32, h2: u32) -> u32 from "heaplet.iii"
+
+extern @abi(c-msvc-x64) fn lv_setup() -> i32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_solve() -> i32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_in(b: u32) -> u32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_out(b: u32) -> u32 from "liveness.iii"
+extern @abi(c-msvc-x64) fn lv_live_at_out(b: u32, vbit: u32) -> u32 from "liveness.iii"
+
+extern @abi(c-msvc-x64) fn mat_set(s: u32, a: u32, b: u32, c: u32, d: u32) -> i32 from "matrix_ring.iii"
+extern @abi(c-msvc-x64) fn mat_get(s: u32, i: u32) -> u32 from "matrix_ring.iii"
+
+const HL_POOL   : u32 = 256u32
+const HL_NONE   : u32 = 0xFFFFFFFFu32
+const LV_N      : u32 = 4u32
+const MAT_SLOTS : u32 = 8u32
+
+fn main() -> u64 {
+    /* ===== valid in-range use across all three modules (both libs; not over-tight) ===== */
+    hl_init()
+    let h : u32 = hl_empty()
+    if h == HL_NONE { return 1u64 }
+    if hl_set(h, 5u32, 0xABu32) != 0i32 { return 2u64 }
+    if hl_get(h, 5u32) != 0xABu32 { return 3u64 }
+    if hl_has(h, 5u32) != 1u32 { return 4u64 }
+
+    lv_setup()
+    lv_solve()
+    if lv_in(2u32) != 3u32 { return 5u64 }                 /* live-in(b2)  = {x,y} = 3 */
+    if lv_out(2u32) != 5u32 { return 6u64 }                /* live-out(b2) = {x,z} = 5 */
+    if lv_live_at_out(0u32, 0u32) != 1u32 { return 7u64 }  /* x live at exit of b0 */
+
+    if mat_set(0u32, 11u32, 22u32, 33u32, 44u32) != 0i32 { return 8u64 }
+    if mat_get(0u32, 0u32) != 11u32 { return 9u64 }
+    if mat_get(0u32, 3u32) != 44u32 { return 10u64 }
+    if mat_set(MAT_SLOTS - 1u32, 1u32, 2u32, 3u32, 4u32) != 0i32 { return 11u64 }   /* slot 7, last valid */
+
+    /* ===== TEETH T1 (heaplet setter): OOB handle -> fixed -1 / pre-fix 0 (after a bounded
+     * 1-past write to HL_FP[256] + HL_VAL[16384]).  Reddens the fully-pre-fix lib. ===== */
+    if hl_set(HL_POOL, 0u32, 0xCDu32) != -1i32 { return 20u64 }
+
+    /* ===== TEETH T2 (matrix setter): OOB slot -> fixed -1 / pre-fix 0 (after a bounded
+     * write to MAT_E[32..35]).  Pins the matrix guard against a matrix-only regression. ===== */
+    if mat_set(MAT_SLOTS, 9u32, 9u32, 9u32, 9u32) != -1i32 { return 21u64 }
+
+    /* ===== fixed-lib getter pins: an out-of-range index yields the safe zero/sentinel ===== */
+    /* heaplet getters */
+    if hl_footprint(HL_POOL) != 0u64 { return 30u64 }
+    if hl_size(HL_POOL) != 0u32 { return 31u64 }
+    if hl_get(HL_POOL, 0u32) != HL_NONE { return 32u64 }
+    if hl_has(HL_POOL, 0u32) != 0u32 { return 33u64 }
+    if hl_disjoint(HL_POOL, h) != 0u32 { return 34u64 }    /* invalid handle fails closed */
+    if hl_equal(HL_POOL, h) != 0u32 { return 35u64 }
+    if hl_union(HL_POOL, h) != HL_NONE { return 36u64 }
+    if hl_footprint(1000000u32) != 0u64 { return 37u64 }   /* far-past */
+    /* liveness getters (benign-valued OOB read -> pinned, no independent teeth) */
+    if lv_in(LV_N) != 0u32 { return 40u64 }
+    if lv_out(LV_N) != 0u32 { return 41u64 }
+    if lv_live_at_out(LV_N, 0u32) != 0u32 { return 42u64 }
+    if lv_in(1000u32) != 0u32 { return 43u64 }             /* far-past */
+    /* matrix getters */
+    if mat_get(MAT_SLOTS, 0u32) != 0u32 { return 50u64 }
+    if mat_get(MAT_SLOTS - 1u32, 4u32) != 0u32 { return 51u64 }   /* slot 7 valid, element 4 one-past */
+    if mat_get(1000u32, 0u32) != 0u32 { return 52u64 }     /* far-past */
+
+    return 99u64
+}

@@ -62,17 +62,20 @@ fn hl_alloc() -> u32 {
 fn hl_empty() -> u32 @export { return hl_alloc() }
 
 fn hl_has(h: u32, a: u32) -> u32 @export {
+    if h >= HL_POOL { return 0u32 }                  /* [W18] handle is untrusted: hl_alloc bounds it, the @export entry does not */
     if a >= HL_CELLS { return 0u32 }
     if (HL_FP[h as u64] & (1u64 << (a as u64))) != 0u64 { return 1u32 }
     return 0u32
 }
 
 fn hl_get(h: u32, a: u32) -> u32 @export {
+    if h >= HL_POOL { return HL_NONE }               /* [W18] guard the HL_VAL[h*64+a] read below */
     if hl_has(h, a) == 0u32 { return HL_NONE }
     return HL_VAL[((h * HL_CELLS) + a) as u64] as u32
 }
 
 fn hl_set(h: u32, a: u32, v: u32) -> i32 @export {
+    if h >= HL_POOL { return -1i32 }                 /* [W18] guard the HL_FP[h] / HL_VAL[h*64+a] WRITES below */
     if a >= HL_CELLS { return -1i32 }
     HL_FP[h as u64] = HL_FP[h as u64] | (1u64 << (a as u64))
     HL_VAL[((h * HL_CELLS) + a) as u64] = (v & 0xFFu32) as u8
@@ -86,9 +89,13 @@ fn hl_singleton(a: u32, v: u32) -> u32 @export {
     return h
 }
 
-fn hl_footprint(h: u32) -> u64 @export { return HL_FP[h as u64] }
+fn hl_footprint(h: u32) -> u64 @export {
+    if h >= HL_POOL { return 0u64 }                  /* [W18] HL_FP[h] OOB read on an untrusted handle */
+    return HL_FP[h as u64]
+}
 
 fn hl_size(h: u32) -> u32 @export {
+    if h >= HL_POOL { return 0u32 }                  /* [W18] HL_FP[h] OOB read on an untrusted handle */
     let mut fp : u64 = HL_FP[h as u64]
     let mut n : u32 = 0u32
     while fp != 0u64 { n = n + ((fp & 1u64) as u32) ; fp = fp >> 1u64 }
@@ -96,12 +103,16 @@ fn hl_size(h: u32) -> u32 @export {
 }
 
 fn hl_disjoint(h1: u32, h2: u32) -> u32 @export {
+    if h1 >= HL_POOL { return 0u32 }                 /* [W18] both HL_FP[] reads are on untrusted handles; */
+    if h2 >= HL_POOL { return 0u32 }                 /* an invalid handle fails CLOSED (treated as not-disjoint) */
     if (HL_FP[h1 as u64] & HL_FP[h2 as u64]) == 0u64 { return 1u32 }
     return 0u32
 }
 
 /* h1 ⊎ h2 : a NEW heaplet, defined ONLY when disjoint (else HL_NONE). */
 fn hl_union(h1: u32, h2: u32) -> u32 @export {
+    if h1 >= HL_POOL { return HL_NONE }              /* [W18] (hl_disjoint also guards, but be explicit at the entry) */
+    if h2 >= HL_POOL { return HL_NONE }
     if hl_disjoint(h1, h2) == 0u32 { return HL_NONE }
     let h : u32 = hl_alloc()
     if h == HL_NONE { return HL_NONE }
@@ -115,6 +126,8 @@ fn hl_union(h1: u32, h2: u32) -> u32 @export {
 }
 
 fn hl_equal(h1: u32, h2: u32) -> u32 @export {
+    if h1 >= HL_POOL { return 0u32 }                 /* [W18] both HL_FP[] reads below are on untrusted handles */
+    if h2 >= HL_POOL { return 0u32 }
     if HL_FP[h1 as u64] != HL_FP[h2 as u64] { return 0u32 }
     let mut a : u32 = 0u32
     while a < HL_CELLS {

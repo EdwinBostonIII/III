@@ -307,6 +307,13 @@ var SEMA_DECLS_NAME_LEN : [u32; 1024]
 var SEMA_DECLS_NODE     : [u32; 1024]
 var SEMA_DECLS_KIND     : [u32; 1024]
 var SEMA_DECL_COUNT     : u32 = 0u32
+/* [W6.3 G-SEMA-1] open-addressed decl-name index: entry = decl row + 1, 0 = empty.
+ * 2048 = 2x SEMA_DECL_CAP (load <= 0.5, probes terminate), power of two for mask
+ * probing.  Filled at s_decl_table_add ONLY-IF-ABSENT, so each name maps to its
+ * FIRST row -- byte-identical answers to the old first-match linear scan (the
+ * stage1_corpus byte-equivalence gate is the proof).  FNV-1a over the interned
+ * arena bytes; equality through the SAME comparators the scan used. */
+var SEMA_DECL_IDX       : [u32; 2048]
 
 /* Anno table — SoA, one row per decl that has annotations. */
 var SEMA_ANNO_NODE      : [u32; 1024]
@@ -588,28 +595,81 @@ fn s_init_ename_table() -> u32 {
 
 /* ─── Decl table ──────────────────────────────────────────────────── */
 
-fn s_decl_table_lookup(name_off: u32, name_len: u32) -> u32 {
+/* [W6.3 G-SEMA-1] FNV-1a over `len` interned-arena bytes at `off`. */
+fn s_decl_hash(off: u32, len: u32) -> u32 {
+    let a : u64 = s_arena_addr(off)
+    let mut h : u32 = 2166136261u32
     let mut i : u32 = 0u32
-    while i < SEMA_DECL_COUNT {
-        if s_arena_slice_eq(SEMA_DECLS_NAME_OFF[i], SEMA_DECLS_NAME_LEN[i], name_off, name_len) == 1u32 {
-            return SEMA_DECLS_NODE[i]
-        }
+    while i < len {
+        h = (h ^ s_load_u8(a + (i as u64))) * 16777619u32
+        i = i + 1u32
+    }
+    return h
+}
+
+/* [W6.3 G-SEMA-1] FNV-1a over a NUL-terminated C string (same byte stream
+ * as s_decl_hash for equal names -> equal hashes). */
+fn s_decl_hash_cstr(cstr_addr: u64) -> u32 {
+    let mut h : u32 = 2166136261u32
+    let mut i : u64 = 0u64
+    let mut c : u32 = s_load_u8(cstr_addr)
+    while c != 0u32 {
+        h = (h ^ c) * 16777619u32
+        i = i + 1u64
+        c = s_load_u8(cstr_addr + i)
+    }
+    return h
+}
+
+fn s_decl_idx_clear() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 2048u32 {
+        SEMA_DECL_IDX[i] = 0u32
         i = i + 1u32
     }
     return 0u32
 }
 
-fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
-    let mut i : u32 = 0u32
-    while i < SEMA_DECL_COUNT {
-        let off : u32 = SEMA_DECLS_NAME_OFF[i]
-        let len : u32 = SEMA_DECLS_NAME_LEN[i]
-        if s_arena_eq_cstr(off, len, cstr_addr) == 1u32 {
-            return SEMA_DECLS_NODE[i]
+/* [W6.3 G-SEMA-1] indexed lookup: probe from the name hash to the first empty
+ * entry.  Each name maps to its FIRST decl row (insert-only-if-absent below),
+ * so the answer is byte-identical to the old first-match linear scan.  The
+ * equality predicate is the SAME comparator the scan used. */
+fn s_decl_table_lookup(name_off: u32, name_len: u32) -> u32 {
+    let mut k : u32 = s_decl_hash(name_off, name_len) & 2047u32
+    let mut found : u32 = 0u32
+    let mut going : u32 = 1u32
+    while going == 1u32 {
+        let e : u32 = SEMA_DECL_IDX[k]
+        if e == 0u32 { going = 0u32 }
+        else {
+            if s_arena_slice_eq(SEMA_DECLS_NAME_OFF[e - 1u32], SEMA_DECLS_NAME_LEN[e - 1u32], name_off, name_len) == 1u32 {
+                found = SEMA_DECLS_NODE[e - 1u32]
+                going = 0u32
+            } else {
+                k = (k + 1u32) & 2047u32
+            }
         }
-        i = i + 1u32
     }
-    return 0u32
+    return found
+}
+
+fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
+    let mut k : u32 = s_decl_hash_cstr(cstr_addr) & 2047u32
+    let mut found : u32 = 0u32
+    let mut going : u32 = 1u32
+    while going == 1u32 {
+        let e : u32 = SEMA_DECL_IDX[k]
+        if e == 0u32 { going = 0u32 }
+        else {
+            if s_arena_eq_cstr(SEMA_DECLS_NAME_OFF[e - 1u32], SEMA_DECLS_NAME_LEN[e - 1u32], cstr_addr) == 1u32 {
+                found = SEMA_DECLS_NODE[e - 1u32]
+                going = 0u32
+            } else {
+                k = (k + 1u32) & 2047u32
+            }
+        }
+    }
+    return found
 }
 
 fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
@@ -620,6 +680,24 @@ fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
     SEMA_DECLS_NODE[slot]     = node
     SEMA_DECLS_KIND[slot]     = kind
     SEMA_DECL_COUNT = slot + 1u32
+    /* [W6.3 G-SEMA-1] index insert, ONLY-IF-ABSENT: a duplicate name keeps its
+     * FIRST row, mirroring the old scan's first-match answer exactly.  Load is
+     * <= 1024/2048 = 0.5, so an empty probe slot always exists. */
+    let mut k : u32 = s_decl_hash(name_off, name_len) & 2047u32
+    let mut going : u32 = 1u32
+    while going == 1u32 {
+        let e : u32 = SEMA_DECL_IDX[k]
+        if e == 0u32 {
+            SEMA_DECL_IDX[k] = slot + 1u32
+            going = 0u32
+        } else {
+            if s_arena_slice_eq(SEMA_DECLS_NAME_OFF[e - 1u32], SEMA_DECLS_NAME_LEN[e - 1u32], name_off, name_len) == 1u32 {
+                going = 0u32
+            } else {
+                k = (k + 1u32) & 2047u32
+            }
+        }
+    }
     return 1u32
 }
 
@@ -1936,6 +2014,7 @@ fn iii_sema_create(ast: u64) -> u64 @export {
     SEMA_AST = ast
     SEMA_RAN = 0u8
     SEMA_DECL_COUNT = 0u32
+    s_decl_idx_clear()
     SEMA_ANNO_COUNT = 0u32
     SEMA_STRUCT_COUNT = 0u32
     SEMA_ERR_COUNT = 0u32
@@ -1954,6 +2033,7 @@ fn iii_sema_destroy(s: u64) -> u32 @export {
     SEMA_AST = 0u64
     SEMA_RAN = 0u8
     SEMA_DECL_COUNT = 0u32
+    s_decl_idx_clear()
     SEMA_ANNO_COUNT = 0u32
     SEMA_STRUCT_COUNT = 0u32
     SEMA_ERR_COUNT = 0u32

@@ -715,3 +715,37 @@ The saving is two 32-bit multiplies, once -- touching crypto init for that fails
 latent-gain triage rule.  Same verdict applies to fn384's mirror.
 
 Gates: build GATE PASS FAIL=0; corpus **1083/0**; xii 92/0; nous GREEN; bench 7/0/0.
+
+## W6.2-6.5 — the compiler batch: CUT-9 + G-SEMA-1, one reseal (2026-06-12)
+
+The structural audit's last major open item, executed per the BOOTSTRAP_SEAL doctrine
+(golden hash moves exactly once: 7480c725 -> **8dae39fd**).
+
+**W6.2 CUT-9** (`COMPILER/BOOT/cg_r3.iii`): DEAD-STACK-1 R3_G_MAX_STACK_DEPTH deleted
+(write-only: maintained, reset twice, read NOWHERE; decision recorded -- delete, not
+wire: no consumer or failure semantics were ever defined).  DEAD-D7-1 duplicate-label
+gate deleted (r3_label_already_defined/r3_label_record + four arrays ~580KB BSS +
+counter + orphaned R3_MAX_LABELS): deadness proven at BOTH levels -- source (zero
+callers, zero address-of, tree-wide) and binary (not @export -> absent from the
+object symbol table -> no cross-TU path; intra-TU census complete).  R3_E_DUP_LABEL
+kept (the C seed still raises it; the ENAME LUT stays total).  SEPARATE-4 (the cg_r3
+split) DECLINED per the verification's own low-confidence recommendation -- recorded.
+
+**W6.3 G-SEMA-1** (`COMPILER/BOOT/sema.iii`): the per-identifier decl lookups
+(s_decl_table_lookup/_cstr -- full first-match scans) -> an open-addressed FNV index
+(2048 entries, load <= 0.5, no tombstones), filled at s_decl_table_add
+ONLY-IF-ABSENT so each name maps to its FIRST row; equality runs through the SAME
+comparators the scans used.  Byte-identical resolutions BY CONSTRUCTION, proven by
+the gate below.  **G-SEMA-2 (Aho-Corasick raw-opcode scan) DECLINED-as-immaterial:**
+16 short patterns over rare, short metal-asm blocks.
+
+**W6.4:** cg_rm2's C9 fix verified ALREADY DONE -- the audit's own text cites it as
+the historical golden move (4e1384 -> 53ce03).  No other confirmed BOOTSTRAP_SEAL
+edits remained (W6.1's STDLIB half was discharged at source by 1482/1486).
+
+**W6.5 receipts:** seal-gated build GREEN, stage1 byte-equivalence **59/0** (the
+differential for both edits); NEGATIVE ARM: a one-byte emit sabotage (pushq %rax ->
+%rbx) reddened ALL 59 (exit 5) -- the gate has teeth; restore rebuilt to the
+BIT-EXACT 8dae39fd (determinism); check-rm2 + cg_r0 gates green; then the full
+STDLIB rebuild + corpora under the resealed compiler: GATE PASS FAIL=0, corpus
+**1083/0**, xii 92/0, nous GREEN, bench 7/0/0.

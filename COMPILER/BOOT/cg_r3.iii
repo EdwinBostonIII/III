@@ -22,7 +22,6 @@ const R3_E_INTERNAL: u32 = 99u32
 
 const R3_FRAME_RESERVE: u32 = 256u32
 const R3_MAX_LOCALS: u32 = 64u32
-const R3_MAX_LABELS: u32 = 4096u32
 const R3_RING_MASK_R3: u32 = 1u32
 
 const R3_K_MODULE: u32 = 1u32
@@ -250,7 +249,10 @@ var R3_G_WALLOC: u64 = 0u64
 var R3_G_OUT: u64 = 0u64
 var R3_G_LOCAL_COUNT: u32 = 0u32
 var R3_G_STACK_DEPTH: u32 = 0u32
-var R3_G_MAX_STACK_DEPTH: u32 = 0u32
+/* [W6.2 CUT-9 DEAD-STACK-1] R3_G_MAX_STACK_DEPTH DELETED: write-only bookkeeping
+ * (maintained in r3_push_rax, reset twice, READ NOWHERE tree-wide; not extern'd by
+ * any other TU).  Decision recorded per the audit: delete rather than wire -- no
+ * consumer and no failure semantics were ever defined for a depth bound. */
 var R3_G_LABEL_COUNTER: u32 = 0u32
 var R3_G_LAST_ERROR: u32 = 0u32
 var R3_G_ERROR_COUNT: u32 = 0u32
@@ -268,14 +270,14 @@ var R3_G_LOOP_END_STK: [u32; 16] = [0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u
  * The extract helpers cannot return a tuple in Stage-0 .iii, so they
  * set this flag on hit and return the u64 value (0 if not found). */
 var R3_G_MOD_FOUND: u32 = 0u32
-var R3_G_DEFINED_LABEL_COUNT: u32 = 0u32
+/* [W6.2 CUT-9 DEAD-D7-1] the duplicate-label gate DELETED: r3_label_already_defined
+ * and r3_label_record had ZERO callers tree-wide (and zero address-of references --
+ * no indirect path), were NOT @export (absent from the object symbol table, so no
+ * cross-TU path exists), and their four backing arrays (~580KB BSS) were referenced
+ * by nothing else.  The gate never participated in any corpus-verified behavior. */
 
 var R3_LOCAL_OFF: [u32; 64]
 var R3_LOCAL_LEN: [u32; 64]
-var R3_DEFINED_LABEL_OFF: [u32; 4096]
-var R3_DEFINED_LABEL_LEN: [u32; 4096]
-var R3_DEFINED_LABEL_BUF: [u8; 65536]
-var R3_DEFINED_LABEL_BUFUSE: u32 = 0u32
 
 var R3_NUMBUF: [u8; 32]
 var R3_TMPNAME: [u8; 256]
@@ -837,7 +839,7 @@ fn r3_local_add(off: u32, len: u32) -> u32 { if R3_G_LOCAL_COUNT >= R3_MAX_LOCAL
 fn r3_reserve_slot() -> u32 { if R3_G_LOCAL_COUNT >= R3_MAX_LOCALS { R3_G_LAST_ERROR = R3_E_INTERNAL; return R3_MAX_LOCALS - 1u32 }; let s: u32 = R3_G_LOCAL_COUNT; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32; return s }
 
 /* ─────────────── stack-machine helpers ─────────────── */
-fn r3_push_rax() -> u32 { r3_emit_arr(&R3_STR_PUSHRAX as u64, R3_STR_PUSHRAX_LEN); R3_G_STACK_DEPTH = R3_G_STACK_DEPTH + 1u32; if R3_G_STACK_DEPTH > R3_G_MAX_STACK_DEPTH { R3_G_MAX_STACK_DEPTH = R3_G_STACK_DEPTH }; return R3_OK }
+fn r3_push_rax() -> u32 { r3_emit_arr(&R3_STR_PUSHRAX as u64, R3_STR_PUSHRAX_LEN); R3_G_STACK_DEPTH = R3_G_STACK_DEPTH + 1u32; return R3_OK }
 fn r3_pop_rax() -> u32 { r3_emit_arr(&R3_STR_POPRAX as u64, R3_STR_POPRAX_LEN); if R3_G_STACK_DEPTH > 0u32 { R3_G_STACK_DEPTH = R3_G_STACK_DEPTH - 1u32 }; return R3_OK }
 fn r3_pop_rcx() -> u32 { r3_emit_arr(&R3_STR_POPRCX as u64, R3_STR_POPRCX_LEN); if R3_G_STACK_DEPTH > 0u32 { R3_G_STACK_DEPTH = R3_G_STACK_DEPTH - 1u32 }; return R3_OK }
 fn r3_pop_rdx() -> u32 { r3_emit_arr(&R3_STR_POPRDX as u64, R3_STR_POPRDX_LEN); if R3_G_STACK_DEPTH > 0u32 { R3_G_STACK_DEPTH = R3_G_STACK_DEPTH - 1u32 }; return R3_OK }
@@ -1755,12 +1757,10 @@ fn r3_addr_is_raw_sym(ident_node: u32) -> u32 {
 
 fn r3_ring_ok_for_r3(node: u32, kind: u32) -> u32 { let m: u32 = r3_mod_find(node, kind, &R3_MOD_RING as u64, R3_MOD_RING_LEN); if m == 0u32 { return 1u32 }; let mask: u32 = iii_ast_modifier_ring_mask(R3_G_AST, m); if mask == 0u32 { return 1u32 }; if (mask & R3_RING_MASK_R3) != 0u32 { return 1u32 }; return 0u32 }
 
-/* ─────────────── label dedup (4096-entry, linear scan via byte arena) ─────────────── */
-fn r3_label_already_defined(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(R3_G_AST); let mut i: u32 = 0u32; while i < R3_G_DEFINED_LABEL_COUNT { if R3_DEFINED_LABEL_LEN[i] == len { if iii_emit_memcmp_c((&R3_DEFINED_LABEL_BUF as u64) + (R3_DEFINED_LABEL_OFF[i] as u64), src + (off as u64), len as u64) == 0i32 { return 1u32 } }; i = i + 1u32 }; return 0u32 }
+/* [W6.2 CUT-9 DEAD-D7-1] the 4096-entry label-dedup gate (r3_label_already_defined /
+ * r3_label_record) DELETED here -- zero callers, zero address-of, not @export. */
 
-fn r3_label_record(off: u32, len: u32) -> u32 { if R3_G_DEFINED_LABEL_COUNT >= R3_MAX_LABELS { R3_G_LAST_ERROR = R3_E_INTERNAL; return R3_E_INTERNAL }; if (R3_DEFINED_LABEL_BUFUSE + len) > 65536u32 { R3_G_LAST_ERROR = R3_E_INTERNAL; return R3_E_INTERNAL }; let src: u64 = iii_ast_source_buf(R3_G_AST); iii_emit_memcpy_c((&R3_DEFINED_LABEL_BUF as u64) + (R3_DEFINED_LABEL_BUFUSE as u64), src + (off as u64), len as u64); R3_DEFINED_LABEL_OFF[R3_G_DEFINED_LABEL_COUNT] = R3_DEFINED_LABEL_BUFUSE; R3_DEFINED_LABEL_LEN[R3_G_DEFINED_LABEL_COUNT] = len; R3_DEFINED_LABEL_BUFUSE = R3_DEFINED_LABEL_BUFUSE + len; R3_G_DEFINED_LABEL_COUNT = R3_G_DEFINED_LABEL_COUNT + 1u32; return R3_OK }
-
-fn r3_reset_for_function() -> u32 { R3_G_LOCAL_COUNT = 0u32; R3_G_STACK_DEPTH = 0u32; R3_G_MAX_STACK_DEPTH = 0u32; return R3_OK }
+fn r3_reset_for_function() -> u32 { R3_G_LOCAL_COUNT = 0u32; R3_G_STACK_DEPTH = 0u32; return R3_OK }
 
 /* ─────────────── error name lookup (D14 reporting) ─────────────── */
 fn iii_cg_r3_error_name(code: u32) -> u64 @export { if code == R3_OK { return &R3_ENAME_OK as u64 }; if code == R3_E_NULL_ARG { return &R3_ENAME_NULL_ARG as u64 }; if code == R3_E_IO { return &R3_ENAME_IO as u64 }; if code == R3_E_UNSUPPORTED { return &R3_ENAME_UNSUPPORTED as u64 }; if code == R3_E_ABI_ALIGN { return &R3_ENAME_ABI_ALIGN as u64 }; if code == R3_E_DUP_LABEL { return &R3_ENAME_DUP_LABEL as u64 }; if code == R3_E_WITNESS_MISMATCH { return &R3_ENAME_WITNESS_MISMATCH as u64 }; if code == R3_E_INTERNAL { return &R3_ENAME_INTERNAL as u64 }; return &R3_ENAME_UNKNOWN as u64 }
@@ -3268,7 +3268,7 @@ fn r3_emit_runtime_checks(decl_node: u32) -> u32 {
 }
 
 fn r3_emit_function(node: u32, kind: u32) -> u32 {
-    R3_G_LOCAL_COUNT = 0u32; R3_G_STACK_DEPTH = 0u32; R3_G_MAX_STACK_DEPTH = 0u32; R3_G_DEFINED_LABEL_COUNT = 0u32
+    R3_G_LOCAL_COUNT = 0u32; R3_G_STACK_DEPTH = 0u32
     R3_PE_COUNT = 0u32
     R3_G_CUR_DECL_NODE = node
     r3_chk_sovereign(node, kind)
@@ -3588,8 +3588,7 @@ fn iii_cg_r3_create(ast: u64, sema: u64, sid: u64, walloc: u64) -> u64 @export {
     if ast == 0u64 { return 0u64 }
     R3_G_AST = ast; R3_G_SEMA = sema; R3_G_SID = sid; R3_G_WALLOC = walloc; R3_G_OUT = 0u64
     R3_G_LAST_ERROR = R3_OK; R3_G_ERROR_COUNT = 0u32
-    R3_G_LOCAL_COUNT = 0u32; R3_G_STACK_DEPTH = 0u32; R3_G_MAX_STACK_DEPTH = 0u32; R3_G_LABEL_COUNTER = 0u32
-    R3_G_DEFINED_LABEL_COUNT = 0u32; R3_DEFINED_LABEL_BUFUSE = 0u32
+    R3_G_LOCAL_COUNT = 0u32; R3_G_STACK_DEPTH = 0u32; R3_G_LABEL_COUNTER = 0u32
     R3_G_HAS_EXPECTED_WITNESS = 0u32
     iii_cg_r3_sha_init_c()
     return &R3_SENTINEL as u64

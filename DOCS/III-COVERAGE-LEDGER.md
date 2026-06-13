@@ -1108,3 +1108,37 @@ the arena WITNESS guards realloc, not a plain reset; refuted-on-read like the ri
 
 Gates: build GATE PASS FAIL=0; 1511 99 vs new / exit 30 vs old; only governance.iii changed, all 7
 governance consumers (205/1474/1456/1402/206/229) + 1511 GREEN.  Count 1098 -> **1099**.
+
+## Wave-22 — use-before-init: *_to_mont cold-call + hotstuff false-safety (a FRESH, rich axis) (2026-06-13)
+
+After the protocol axis thinned, a USE-BEFORE-INIT discovery (the fe25519 fz_invert class, generalized:
+an @export reads an init-only global with no lazy guard -> WRONG cold result) found a rich coherent
+vein -- proving the bug supply was not exhausted, just the axes I'd tried.
+
+**W22-FIX** (fp256/fn256/fp384/fn384 *_to_mont + *_from_mont, hotstuff x2; falsifiers 1512+1513):
+  - The Montgomery conversion entries *_to_mont read the init-only R^2 table (FP_R2/FN_R2/FQ_R2/GN_R2,
+    populated only by *_init), and *_from_mont call *_mul (init-only modulus/n').  The *_inv siblings
+    ALREADY guard with *_init() -- the to_mont/from_mont entries did not (a sibling gap, like wave-10's
+    384/256).  COLD (before *_boot / fresh process), R^2=0 so to_mont(a) = a*0 = 0 instead of a*R.  Fix:
+    *_init() (idempotent) at the top of each, matching *_inv.  Guarded the O(1) conversion ENTRIES, NOT
+    the hot internal *_mul (which fp_inv/ec scalar-mult loop -- a per-mul init-check would tax the
+    hottest crypto path; the conversion entries are O(1) per operation).
+  - hotstuff hs_quorum_safety_verify (reads HS_FAULT) + hs_verify_vote_count_bounds (reads HS_PEER_COUNT)
+    omitted the HS_INITED check that every OTHER hs @export has.  COLD they read 0 and bq_safe(0)==1
+    FALSELY ASSERTS Byzantine safety for an unconfigured engine (verified: 1513 old exit 30 -> cold
+    returns 1).  Fix: HS_INITED==0 -> return 0 (not verified).
+
+1512 teeth (cold differential): set slot1=1, to_mont into slot0 WITHOUT booting, check the low limbs of
+the result are not all 0 (the Montgomery form of 1 is R, nonzero).  Fixed -> lazy-init -> R; pre-fix ->
+R^2=0 -> 0 -> arm 1 (fp256) reddens (exit 30).  Arms 2-4 pin/protect the fn256/fp384/fn384 siblings
+(each module has its own init flag -> each conversion is independently cold).  1513 teeth: cold
+hs_quorum_safety_verify -> fixed 0 / pre-fix 1 (false safety) -> exit 30; arms 3-5 pin the configured
+path (hs_init 4 peers -> both verdicts 1, byte-identical).
+
+Byte-identical for every inited caller (ec256/ec384/ecdsa_p256/ecdsa_p384 + 760_field_mont_organ +
+1401_field_curve_vault + the hotstuff safety KAT all boot first).
+
+Gates: build GATE PASS FAIL=0; 1512 99/exit30, 1513 99/exit30 vs old; only the 5 modules changed, 11
+representative consumers (field_mont_organ/field_curve_vault/field256_accessor_bounds/383_hotstuff/
+hotstuff_safety/liveness/fed_qc_gate/seal_quorum/federation_admit) + 1512 + 1513 GREEN.  Count 1099 ->
+**1101**.

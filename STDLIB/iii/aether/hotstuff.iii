@@ -608,10 +608,16 @@ fn hs_selftest() -> u64 @export {
 var HS_SP_BUF : [u8; 2048]    /* scratch peer-key buffer for the safety-proof init (key bytes do not affect the proof) */
 
 /* the live Byzantine-safety verdict for the configured fault tolerance f (2f+1 quorums always honest-intersect). */
-fn hs_quorum_safety_verify() -> u32 @export { return bq_safe(HS_FAULT) }
+fn hs_quorum_safety_verify() -> u32 @export {
+    if HS_INITED == 0u8 { return 0u32 }   /* [W22] cold-call guard: HS_FAULT is set only by hs_init; uninitialised it reads 0 and bq_safe(0) falsely asserts "safe" for an unconfigured engine.  Every other hs @export checks HS_INITED; these two did not. */
+    return bq_safe(HS_FAULT)
+}
 
 /* the live vote-count-fits-the-peer-set verdict: every tally (n in 0..PEER_COUNT, times 1) fits PEER_COUNT. */
-fn hs_verify_vote_count_bounds() -> u32 @export { return vrp_no_overflow(HS_PEER_COUNT, 1u32, HS_PEER_COUNT) }
+fn hs_verify_vote_count_bounds() -> u32 @export {
+    if HS_INITED == 0u8 { return 0u32 }   /* [W22] cold-call guard: HS_PEER_COUNT init-only; uninitialised it reads 0 and the bound check falsely passes */
+    return vrp_no_overflow(HS_PEER_COUNT, 1u32, HS_PEER_COUNT)
+}
 
 /* THE CONSENSUS SAFETY-PROOF KAT -- 99 = the quorum-intersection + vote-bound proofs hold for the LIVE
  * configuration after hs_init, tracking the configured params (not a hard-coded f):

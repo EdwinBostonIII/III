@@ -185,12 +185,14 @@ fn fp_sqr(r: u64, a: u64) -> i32 { return fp_mul(r, a, a) }
 
 /* to/from Montgomery form */
 fn fp_to_mont(r: u64, a: u64) -> i32 {
+    fp256_init()                  /* [W22] cold-call guard: FP_R2/FP_P/FP_NPRIME are init-only (fp_inv already guards; this conversion entry did not -> cold fp_to_mont read R2=0 and returned 0 instead of a*R).  Idempotent: byte-identical once inited. */
     /* r = a * R^2 * R^-1 = a*R = mont_mul(a, R2).  Load R2 into a temp slot 63. */
     let mut i : u64 = 0u64
     while i < 8u64 { FP[63u64*8u64 + i] = FP_R2[i] ; i = i + 1u64 }
     return fp_mul(r, a, 63u64)
 }
 fn fp_from_mont(r: u64, a: u64) -> i32 {
+    fp256_init()                  /* [W22] cold-call guard: fp_mul below reads init-only FP_P/FP_NPRIME */
     /* r = mont_mul(a, 1): set slot 63 = integer 1 (limb0=1) */
     let mut i : u64 = 0u64
     while i < 8u64 { FP[63u64*8u64 + i] = 0u32 ; i = i + 1u64 }

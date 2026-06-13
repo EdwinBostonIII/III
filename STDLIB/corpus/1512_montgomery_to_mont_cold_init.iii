@@ -1,0 +1,66 @@
+/* 1512_montgomery_to_mont_cold_init.iii -- W22 FALSIFIER: the Montgomery conversion
+ * entries *_to_mont LAZY-INIT before reading the init-only R^2 table, so a COLD call
+ * (before *_boot) returns the correct a*R instead of 0.
+ *
+ * THE DEFECT (the fe25519 fz_invert use-before-init class, generalized): in fp256/fn256/
+ * fp384/fn384 the *_inv functions call *_init() first, but *_to_mont / *_from_mont did
+ * NOT -- they read the Montgomery R^2 table (FP_R2/FN_R2/FQ_R2/GN_R2), which is populated
+ * ONLY by *_init().  Called COLD (before *_boot, or in a fresh process), R^2 is BSS-zero,
+ * so to_mont(a) = a * 0 = 0 instead of a*R.  The corpus always boots first, so the bug is
+ * latent -- but a caller that converts before booting silently gets 0.
+ *
+ * THE FIX: *_init() (idempotent) at the top of *_to_mont / *_from_mont, matching *_inv.
+ * Byte-identical once inited.
+ *
+ * TEETH (cold differential): each arm sets slot 1 = integer 1, converts it to Montgomery
+ * into slot 0 WITHOUT booting, and checks the low limbs of the result are NOT all zero
+ * (the Montgomery form of 1 is R, a nonzero value).  Fixed lib -> lazy-init -> R (low
+ * limbs nonzero).  Pre-fix lib -> R^2=0 -> result 0 -> arm 1 (fp256) reddens (exit 30).
+ * Arms 2-4 pin the sibling modules (fn256/fp384/fn384) on the fixed lib + protect their
+ * guards against regression.  Each module has its own init flag, so each cold conversion
+ * is independently cold.  Exit 99. */
+module corpus_1512
+
+extern @abi(c-msvc-x64) fn fp_set_u32(slot: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_get_limb(slot: u64, idx: u64) -> u32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_to_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
+
+extern @abi(c-msvc-x64) fn fn_set_u32_x(slot: u64, v: u32) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_to_mont_x(r: u64, a: u64) -> i32 from "fn256.iii"
+
+extern @abi(c-msvc-x64) fn fq_set_u32(slot: u64, v: u32) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_get_limb(slot: u64, idx: u64) -> u32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_to_mont_x(r: u64, a: u64) -> i32 from "fp384.iii"
+
+extern @abi(c-msvc-x64) fn gn_set_u32_x(slot: u64, v: u32) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_to_mont_x(r: u64, a: u64) -> i32 from "fn384.iii"
+
+fn main() -> u64 {
+    /* ---- arm 1 (TEETH): fp256 cold to_mont(1) must be R (low limbs not all 0) ---- */
+    fp_set_u32(1u64, 1u32)
+    fp_to_mont_x(0u64, 1u64)
+    let f0 : u32 = fp_get_limb(0u64, 0u64) | fp_get_limb(0u64, 1u64) | fp_get_limb(0u64, 2u64) | fp_get_limb(0u64, 3u64)
+    if f0 == 0u32 { return 30u64 }                 /* pre-fix: R^2=0 -> result 0 -> reddens */
+
+    /* ---- arm 2: fn256 cold (sibling pin + regression) ---- */
+    fn_set_u32_x(1u64, 1u32)
+    fn_to_mont_x(0u64, 1u64)
+    let n0 : u32 = fn_get_limb_x(0u64, 0u64) | fn_get_limb_x(0u64, 1u64) | fn_get_limb_x(0u64, 2u64) | fn_get_limb_x(0u64, 3u64)
+    if n0 == 0u32 { return 31u64 }
+
+    /* ---- arm 3: fp384 cold ---- */
+    fq_set_u32(1u64, 1u32)
+    fq_to_mont_x(0u64, 1u64)
+    let q0 : u32 = fq_get_limb(0u64, 0u64) | fq_get_limb(0u64, 1u64) | fq_get_limb(0u64, 2u64) | fq_get_limb(0u64, 3u64)
+    if q0 == 0u32 { return 32u64 }
+
+    /* ---- arm 4: fn384 cold ---- */
+    gn_set_u32_x(1u64, 1u32)
+    gn_to_mont_x(0u64, 1u64)
+    let g0 : u32 = gn_get_limb_x(0u64, 0u64) | gn_get_limb_x(0u64, 1u64) | gn_get_limb_x(0u64, 2u64) | gn_get_limb_x(0u64, 3u64)
+    if g0 == 0u32 { return 33u64 }
+
+    return 99u64
+}

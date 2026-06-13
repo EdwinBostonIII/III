@@ -123,11 +123,13 @@ fn gn_mul(r: u64, a: u64, b: u64) -> i32 {
 }
 fn gn_sqr(r: u64, a: u64) -> i32 { return gn_mul(r, a, a) }
 fn gn_to_mont(r: u64, a: u64) -> i32 {
+    fn384_init()                  /* [W22] cold-call guard: GN_R2/GN_N/GN_NPRIME init-only (gn_inv guards, this did not) */
     let mut i : u64 = 0u64
     while i < 12u64 { GN[47u64*12u64 + i] = GN_R2[i] ; i = i + 1u64 }
     return gn_mul(r, a, 47u64)
 }
 fn gn_from_mont(r: u64, a: u64) -> i32 {
+    fn384_init()                  /* [W22] cold-call guard: gn_mul below reads init-only GN_N/GN_NPRIME */
     let mut i : u64 = 0u64
     while i < 12u64 { GN[47u64*12u64 + i] = 0u32 ; i = i + 1u64 }
     GN[47u64*12u64] = 1u32

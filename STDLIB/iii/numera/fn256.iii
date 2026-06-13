@@ -168,11 +168,13 @@ fn fn_mul(r: u64, a: u64, b: u64) -> i32 {
 fn fn_sqr(r: u64, a: u64) -> i32 { return fn_mul(r, a, a) }
 
 fn fn_to_mont(r: u64, a: u64) -> i32 {
+    fn256_init()                  /* [W22] cold-call guard: FN_R2/FN_N/FN_NPRIME init-only (fn_inv guards, this did not) */
     let mut i : u64 = 0u64
     while i < 8u64 { FN[63u64*8u64 + i] = FN_R2[i] ; i = i + 1u64 }
     return fn_mul(r, a, 63u64)
 }
 fn fn_from_mont(r: u64, a: u64) -> i32 {
+    fn256_init()                  /* [W22] cold-call guard: fn_mul below reads init-only FN_N/FN_NPRIME */
     let mut i : u64 = 0u64
     while i < 8u64 { FN[63u64*8u64 + i] = 0u32 ; i = i + 1u64 }
     FN[63u64*8u64] = 1u32

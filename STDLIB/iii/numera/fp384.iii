@@ -149,11 +149,13 @@ fn fq_mul(r: u64, a: u64, b: u64) -> i32 {
 }
 fn fq_sqr(r: u64, a: u64) -> i32 { return fq_mul(r, a, a) }
 fn fq_to_mont(r: u64, a: u64) -> i32 {
+    fp384_init()                  /* [W22] cold-call guard: FQ_R2/FQ_P/FQ_NPRIME init-only (fq_inv guards, this did not) */
     let mut i : u64 = 0u64
     while i < 12u64 { FQ[47u64*12u64 + i] = FQ_R2[i] ; i = i + 1u64 }
     return fq_mul(r, a, 47u64)
 }
 fn fq_from_mont(r: u64, a: u64) -> i32 {
+    fp384_init()                  /* [W22] cold-call guard: fq_mul below reads init-only FQ_P/FQ_NPRIME */
     let mut i : u64 = 0u64
     while i < 12u64 { FQ[47u64*12u64 + i] = 0u32 ; i = i + 1u64 }
     FQ[47u64*12u64] = 1u32

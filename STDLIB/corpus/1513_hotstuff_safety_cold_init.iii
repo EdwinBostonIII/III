@@ -1,0 +1,35 @@
+/* 1513_hotstuff_safety_cold_init.iii -- W22 FALSIFIER: the hotstuff safety-verdict
+ * @exports REFUSE to assert safety on an UNINITIALISED engine.
+ *
+ * THE DEFECT (use-before-init): every hotstuff @export checks HS_INITED first EXCEPT
+ * hs_quorum_safety_verify (read HS_FAULT) and hs_verify_vote_count_bounds (read
+ * HS_PEER_COUNT).  Both globals are set only by hs_init.  Called COLD they read 0, and
+ * bq_safe(0) / vrp_no_overflow(0,1,0) FALSELY assert "safe"/"bounded" for an engine that
+ * has no configured peer set -- a false safety verdict.
+ *
+ * THE FIX: HS_INITED == 0 -> return 0 (not verified), matching every other hs @export.
+ *
+ * TEETH: cold hs_quorum_safety_verify() -> fixed 0 / pre-fix bq_safe(0).  Arm 1 asserts 0,
+ * so if the pre-fix lib returns 1 (a false safety assertion) it reddens (exit 30).  Arms
+ * 3-5 pin the configured path: after hs_init(4 peers, f=1) both verdicts are 1 (byte-
+ * identical -- the guard only fires when uninitialised).  Exit 99. */
+module corpus_1513
+
+extern @abi(c-msvc-x64) fn hs_init(node_id: u32, peers: u64, n_peers: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_quorum_safety_verify() -> u32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_verify_vote_count_bounds() -> u32 from "hotstuff.iii"
+
+var HS_PEERBUF : [u8; 256]
+
+fn main() -> u64 {
+    /* ---- arm 1-2 (TEETH + sibling): COLD safety verdicts must be 0 (not verified) ---- */
+    if hs_quorum_safety_verify() != 0u32 { return 30u64 }      /* pre-fix bq_safe(0) asserts safe -> reddens */
+    if hs_verify_vote_count_bounds() != 0u32 { return 31u64 }
+
+    /* ---- arm 3-5: after hs_init the configured verdicts hold (both libs; not over-tight) ---- */
+    if hs_init(1u32, (&HS_PEERBUF as u64), 4u32) != 0i32 { return 32u64 }   /* 4 peers -> f = 1 */
+    if hs_quorum_safety_verify() != 1u32 { return 33u64 }       /* 2f+1 quorums intersect */
+    if hs_verify_vote_count_bounds() != 1u32 { return 34u64 }
+
+    return 99u64
+}

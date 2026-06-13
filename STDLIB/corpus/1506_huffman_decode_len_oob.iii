@@ -1,0 +1,77 @@
+/* 1506_huffman_decode_len_oob.iii -- W16 FALSIFIER: huff_decode REJECTS a code-length
+ * table whose entries exceed 64 (the canonical-table bound), instead of indexing the
+ * fixed [;65] decode tables out of bounds.
+ *
+ * THE DEFECT: huff_decode reads the 256-byte code-length header straight from the
+ * (untrusted) compressed input -- `HF_LEN[s] = ip[s] as u32`, range 0..255 -- with NO
+ * bound check, then calls hf_canon().  hf_canon indexes HF_BL/HF_NEXT/HF_FIRST/HF_OFF
+ * (all `[...; 65]`, valid lengths 1..64) BY those lengths: `HF_BL[HF_LEN[s2]] += 1`
+ * and the `while bL <= maxl` first-code loop.  A corrupt/malicious stream with any
+ * length byte > 64 drives maxl > 64 -> OOB WRITE past the 65-entry tables into the
+ * adjacent module BSS.  huff_encode is safe (it returns HF_E_LEN when ml > 64, so a
+ * legitimately-produced stream never exceeds 64); the hole is reachable only on the
+ * decode side from input the encoder never produced.
+ *
+ * THE FIX: after reading the length header, reject if any HF_LEN[s] > 64 -> return
+ * HF_E_LEN (the exact mirror of the encoder's own ml>64 guard).
+ *
+ * TEETH (gentle, exactly-one-past -- never a wild stomp): a 260-byte header with a
+ * SINGLE length byte = 65 (one past the max) and orig=0 (so the decode loop never
+ * runs).  Fixed lib -> HF_E_LEN (-1), validated before hf_canon, no OOB at all.
+ * Pre-fix lib -> hf_canon does exactly-one-past writes (HF_BL[65]/HF_NEXT[65]/... land
+ * in the immediately-adjacent BSS var, no crash) and huff_decode returns orig (0).
+ * Arm 4 asserts the return is HF_E_LEN; the old lib returns 0 -> reddens.  Arm 3 pins
+ * the boundary the OTHER way (length 64 is ACCEPTED, return 0) so the guard is not
+ * over-tight, and arm 1-2 prove a real round-trip still decodes.  Exit 99. */
+module corpus_1506
+
+extern @abi(c-msvc-x64) fn huff_encode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "huffman.iii"
+extern @abi(c-msvc-x64) fn huff_decode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "huffman.iii"
+
+const HF_E_LEN : i32 = -1i32
+
+var SRC  : [u8; 32]
+var ENC  : [u8; 512]
+var DEC  : [u8; 64]
+var HDR  : [u8; 260]
+
+fn main() -> u64 {
+    /* ---- 1. real round-trip: 4 equal-frequency symbols (all code length 2) ---- */
+    let mut i : u32 = 0u32
+    while i < 16u32 { SRC[i as u64] = (i & 3u32) as u8   i = i + 1u32 }      /* 0,1,2,3,0,1,... */
+
+    let enclen : i32 = huff_encode((&SRC as u64), 16u32, (&ENC as u64), 512u32)
+    if enclen <= 0i32 { return 1u64 }                                       /* encode succeeded */
+
+    let declen : i32 = huff_decode((&ENC as u64), enclen as u32, (&DEC as u64), 64u32)
+    if declen != 16i32 { return 2u64 }                                      /* decompressed length */
+    let mut v : u32 = 0u32
+    while v < 16u32 {
+        if DEC[v as u64] != SRC[v as u64] { return 3u64 }                   /* byte-exact round-trip */
+        v = v + 1u32
+    }
+
+    /* ---- 2/3. boundary header: one length byte, orig (bytes 256-259) = 0 ----
+     * orig=0 means the decode loop never runs; the return is purely a function of the
+     * length-table validation + hf_canon. */
+    let mut z : u32 = 0u32
+    while z < 260u32 { HDR[z as u64] = 0u8   z = z + 1u32 }
+
+    /* ---- 3. length 64 (the max valid) is ACCEPTED -> return 0 (both libs) ---- */
+    HDR[0u64] = 64u8
+    let r64 : i32 = huff_decode((&HDR as u64), 260u32, (&DEC as u64), 64u32)
+    if r64 != 0i32 { return 4u64 }                                          /* not over-tight */
+
+    /* ---- 4. THE TEETH: length 65 (one past max) -> fixed REJECTS (HF_E_LEN) ----
+     * pre-fix: hf_canon does the exactly-1-past writes, decode returns orig=0. */
+    HDR[0u64] = 65u8
+    let r65 : i32 = huff_decode((&HDR as u64), 260u32, (&DEC as u64), 64u32)
+    if r65 != HF_E_LEN { return 5u64 }                                      /* old lib returns 0 -> reddens */
+
+    /* ---- 5. a length far past the bound is likewise rejected (not just 65) ---- */
+    HDR[0u64] = 200u8
+    let r200 : i32 = huff_decode((&HDR as u64), 260u32, (&DEC as u64), 64u32)
+    if r200 != HF_E_LEN { return 6u64 }
+
+    return 99u64
+}

@@ -927,3 +927,36 @@ the pre-fix lib A would carry seq 4 and B (seq 2) would be the wrong victim.
 
 Gates: build GATE PASS FAIL=0; 1505 99 vs new / exit 11 vs old; only resolver_memo.iii changed,
 all 4 existing memo consumers (202/230/242/943) + 1505 GREEN.  Count 1092 -> **1093**.
+
+## Wave-16 — huff_decode untrusted code-length OOB write (deserialization memory safety) (2026-06-13)
+
+A fresh axis -- length-field over-read/over-write in decoders -- whose survivor was a real
+out-of-bounds WRITE reachable from untrusted compressed input.  (The reusable structures on the
+same hunt were CLEAN: queue_u32_pop/peek and pq_*_pop_min already empty-guard before the
+decrement; crt.iii:142's `crt_rng() % bigp` is a self-test with a materialized local, not the
+single-use-param modulo-after-call trap -- both refuted on read.)
+
+**W16-FIX** (`numera/huffman.iii` huff_decode, falsifier `1506`, old exit=5): huff_decode reads the
+256-byte canonical code-length header straight from the (untrusted) input -- `HF_LEN[s] = ip[s]`,
+range 0..255 -- with NO bound check, then calls hf_canon().  hf_canon indexes the canonical decode
+tables HF_BL/HF_NEXT/HF_FIRST/HF_OFF (all `[...; 65]`, valid lengths 1..64) BY those lengths
+(`HF_BL[HF_LEN[s2]] += 1`; the `while bL <= maxl` first-code loop).  A stream with any length byte
+> 64 drives maxl > 64 -> OOB WRITE past the 65-entry tables into the adjacent module BSS.  The
+encoder is SAFE (it returns HF_E_LEN when the built max length ml > 64, so a legitimately-produced
+stream never exceeds 64); the hole is reachable only on the decode side from input the encoder never
+emits.  Fix: after the read loop, reject `HF_LEN[s] > 64` -> return HF_E_LEN (the exact mirror of
+the encoder's own ml>64 guard), BEFORE hf_canon.  Byte-identical for every valid stream (lengths
+<= 64 never trip the guard) -- 1230_huffman + 1231_lzh (LZ+Huffman, the transitive consumer) stay
+green.
+
+1506 teeth (GENTLE, exactly-one-past -- never a wild stomp, per the crash protocol): a 260-byte
+header with a SINGLE length byte = 65 (one past max) and orig=0 (so the decode loop never runs).
+Fixed lib -> HF_E_LEN (-1), validated before hf_canon, NO OOB.  Pre-fix lib -> hf_canon does
+exactly-one-past writes (HF_BL[65]/HF_NEXT[65]/... land in the immediately-adjacent BSS var, no
+crash -- confirmed: the old lib returns cleanly) and huff_decode returns orig=0; arm 4 asserts the
+return is HF_E_LEN so the old lib (0) reddens (exit 5).  Arm 3 pins the boundary the other way
+(length 64 ACCEPTED, return 0 -- guard not over-tight); arms 1-2 a real 4-symbol round-trip still
+decodes byte-exact; arm 5 a far-past length (200) is likewise rejected.
+
+Gates: build GATE PASS FAIL=0; 1506 99 vs new / exit 5 vs old; only huffman.iii changed, both
+huffman consumers (1230_huffman + 1231_lzh) + 1506 GREEN.  Count 1093 -> **1094**.

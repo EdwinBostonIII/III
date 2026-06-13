@@ -196,7 +196,17 @@ fn huff_decode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 @exp
     let ip : *u8 = in_ptr as *u8
     let op : *u8 = out_ptr as *u8
     let mut s : u32 = 0u32
-    while s < 256u32 { HF_LEN[s] = ip[s as u64] as u32 ; s = s + 1u32 }
+    while s < 256u32 {
+        /* The length table comes from UNTRUSTED input.  hf_canon indexes the
+         * canonical decode tables (HF_BL/HF_NEXT/HF_FIRST/HF_OFF, all [;65]) by
+         * these lengths, so a byte > 64 would drive an out-of-bounds WRITE.  The
+         * encoder never emits a length > 64 (it returns HF_E_LEN when ml > 64), so
+         * any such byte is a malformed/hostile stream -- reject it before hf_canon. */
+        let cl : u32 = ip[s as u64] as u32
+        if cl > 64u32 { return HF_E_LEN }
+        HF_LEN[s] = cl
+        s = s + 1u32
+    }
     let orig : u32 = (ip[256u64] as u32) | ((ip[257u64] as u32) << 8u32) | ((ip[258u64] as u32) << 16u32) | ((ip[259u64] as u32) << 24u32)
     if orig > out_cap { return HF_E_CAP }
     hf_canon()

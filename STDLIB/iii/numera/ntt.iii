@@ -176,6 +176,8 @@ fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 @export {
  * conditional subtract (NO % after the mont_redc call -- modulo-after-call trap;
  * also faster).  Byte-identical to the prior `(z*b)%q` form. */
 fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 @export {
+    if n == 0u64 { return -1i32 }
+    if (n & (n - 1u64)) != 0u64 { return -1i32 }   /* [W34] the tabled CT levels (len=n>>1 down to min_len) + the per-block zeta-index advance are power-of-two-only; a non-pow2 n butterflies w[j+len] past [0..n) AND over-reads the zeta table -> wrong/OOB.  In-tree mlkem/mldsa use fixed pow2 n. */
     let w : *u32 = base as *u32
     let zt : *u64 = zbase as *u64
     let qinv : u64 = mont_n_inv_neg(q)
@@ -212,6 +214,8 @@ fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) ->
  * negated-zeta * (a-b) form gives the identical residue z*(b-a), proven).  Caller
  * applies the final n^-1 / Kyber scale afterward. */
 fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 @export {
+    if n == 0u64 { return -1i32 }
+    if (n & (n - 1u64)) != 0u64 { return -1i32 }   /* [W34] the tabled GS levels (len=min_len up to n>>1) are power-of-two-only; a non-pow2 n butterflies past [0..n) + mis-advances the zeta index.  In-tree mlkem/mldsa use fixed pow2 n. */
     let w : *u32 = base as *u32
     let zt : *u64 = zbase as *u64
     let qinv : u64 = mont_n_inv_neg(q)

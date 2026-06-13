@@ -1448,3 +1448,22 @@ caller zeta table, mlkem/mldsa use fixed pow2 n -- left for a separate wave with
 
 Gates: build GATE PASS FAIL=0; 1531 teeth exit 30 vs old lib, 99 vs new; corpus green (ntt_selftest +
 zk-STARK pipeline).  Count 1117 -> **1118**.
+
+## Wave-34 — tabled FIPS NTT (mlkem/mldsa) power-of-2 guard -- completes the NTT-family hardening (2026-06-13)
+
+The W33 sibling on the OTHER NTT core: the tabled FIPS family (Kyber/Dilithium, post-quantum).
+
+**W34-FIX** (numera/ntt.iii ntt_ct_forward_tabled + ntt_gs_inverse_tabled; falsifier 1532): same
+documented-power-of-2 class.  The tabled CT/GS levels (len=n>>1 down to min_len / min_len up to n>>1) +
+the per-block zeta-index advance are power-of-two-only; a non-pow2 n (e.g. 6) runs a len=3 level that
+butterflies w[j+3] past [0..6) (w[6..8]) AND over-reads the zeta table -> wrong/OOB, returned 0.  FIX:
+reject n==0 and (n & (n-1))!=0 with -1 at entry of both.  In-tree mlkem/mldsa use fixed pow2 n (256) ->
+byte-identical.  1532 teeth (dummy zeta table + base[16], q=8380417 mldsa prime): ct/gs(6/0) pre-fix run
+the wrong level + return 0 (exit 30) / post-fix -1; sanity n=8 accepted.
+
+The NTT family is now FULLY power-of-2-guarded (DIT core W33 + tabled FIPS W34), and the documented-power-
+of-2 vein is COMPLETE: merkle(W30), ad_aligned+vz_covers(W31), ad_loop_aligned_scan(W32), ntt DIT(W33),
+ntt tabled(W34) -- plus the already-enforced ripple/ripple_dyn + fixed-pow2-const modules.
+
+Gates: build GATE PASS FAIL=0; 1532 teeth exit 30 vs old lib, 99 vs new; corpus green (mlkem/mldsa
+roundtrips).  Count 1118 -> **1119**.

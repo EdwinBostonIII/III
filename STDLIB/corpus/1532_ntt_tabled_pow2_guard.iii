@@ -1,0 +1,42 @@
+/* 1532_ntt_tabled_pow2_guard.iii -- W34 FALSIFIER (completes W33): the tabled
+ * FIPS NTT (mlkem/mldsa core) must REJECT a non-power-of-2 size.
+ *
+ * THE DEFECT (same documented-power-of-2 class as W33): ntt_ct_forward_tabled /
+ * ntt_gs_inverse_tabled use levels `len = n>>1` (down to min_len) / `min_len`
+ * (up to n>>1) with a per-block zeta-index advance -- power-of-two-only.  For a
+ * non-pow2 n (e.g. 6) the level runs with len=3 and butterflies w[j+3] past the
+ * logical [0..6) range (w[6..8]) AND advances the zeta index wrongly (over-reads
+ * the table) -> a wrong/corrupt transform, returned 0.  Reachable @exports.
+ *
+ * THE FIX: reject n==0 and (n & (n-1))!=0 with -1 at entry of both.
+ *
+ * TEETH (value differential): non-power-of-2 n must return -1.
+ *   - pre-fix: runs the (wrong) tabled level, returns 0 -> arm reddens (exit 30).
+ *   - post-fix: -1.
+ * Sanity: power-of-2 n accepted.  q = the mldsa prime 8380417 (so the pre-fix
+ * mont_n_inv_neg + mont_redc are well-defined); the zeta table is a dummy (the
+ * teeth only checks the return code, not the transform). */
+module corpus_1532
+
+extern @abi(c-msvc-x64) fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 from "ntt.iii"
+
+var BASE : [u32; 16]
+var ZT   : [u64; 16]
+
+fn main() -> u64 {
+    let q : u64 = 8380417u64                               /* mldsa prime (valid Montgomery modulus) */
+    let mut i : u64 = 0u64
+    while i < 16u64 { ZT[i] = 1u64 ; BASE[i] = ((i + 1u64) as u32) ; i = i + 1u64 }
+
+    /* ---- TEETH: non-power-of-2 / zero sizes must be rejected ---- */
+    if ntt_ct_forward_tabled((&BASE as u64), 6u64, q, (&ZT as u64), 2u64) != -1i32 { return 30u64 }
+    if ntt_gs_inverse_tabled((&BASE as u64), 6u64, q, (&ZT as u64), 2u64, 4u64) != -1i32 { return 31u64 }
+    if ntt_ct_forward_tabled((&BASE as u64), 0u64, q, (&ZT as u64), 2u64) != -1i32 { return 32u64 }
+
+    /* ---- sanity: power-of-2 n accepted (guard not over-tight) ---- */
+    if ntt_ct_forward_tabled((&BASE as u64), 8u64, q, (&ZT as u64), 2u64) == -1i32 { return 33u64 }
+    if ntt_gs_inverse_tabled((&BASE as u64), 8u64, q, (&ZT as u64), 2u64, 7u64) == -1i32 { return 34u64 }
+
+    return 99u64
+}

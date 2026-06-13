@@ -164,8 +164,13 @@ fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 @export {
     let l_pid : u32 = p_id
     let l_fp  : u64 = fp
 
-    /* Bump current seq first so all stored seqs are positive. */
-    MEMO_CURRENT_SEQ = MEMO_CURRENT_SEQ + 1u64
+    /* The sequence is bumped ONLY when a fresh entry is created (the
+     * new-slot and eviction branches below).  An update of an existing
+     * key must NOT bump it: re-storing a key leaves its FIFO eviction
+     * rank at its FIRST insertion, per the contract above ("update in
+     * place, same seq") and resolver.iii's "FIFO order stable" hit path.
+     * A start-of-call bump would advance an updated entry's rank and so
+     * change which entry FIFO evicts -- a contract violation. */
 
     /* O(1) hashed open-addressing — MUST match memo_lookup's probe. */
     let init  : u32 = _memo_initial_slot(l_key)
@@ -173,6 +178,9 @@ fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 @export {
     while probe < MEMO_CAP {
         let i : u32 = (init + probe) & 0xFFFu32
         if MEMO_LIVE[i] == 0u8 {
+            /* Fresh entry: bump the sequence so its FIFO rank reflects
+             * THIS insertion (positive, strictly increasing). */
+            MEMO_CURRENT_SEQ    = MEMO_CURRENT_SEQ + 1u64
             MEMO_KEY_HASH[i]    = l_key
             MEMO_PATTERN_ID[i]  = l_pid
             MEMO_DISPATCH_FP[i] = l_fp
@@ -182,9 +190,11 @@ fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 @export {
             return i
         }
         if MEMO_KEY_HASH[i] == l_key {
+            /* Update in place: KEEP MEMO_SEQ[i] (the original insertion
+             * rank) so a re-store never changes the entry's FIFO eviction
+             * priority.  Only pattern_id / dispatch_fp change. */
             MEMO_PATTERN_ID[i]  = l_pid
             MEMO_DISPATCH_FP[i] = l_fp
-            MEMO_SEQ[i]         = MEMO_CURRENT_SEQ
             return i
         }
         probe = probe + 1u32
@@ -202,6 +212,9 @@ fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 @export {
         }
         k = k + 1u32
     }
+    /* The replacement is a fresh insertion (the victim was the lowest
+     * seq); bump so the new entry sorts as most-recent. */
+    MEMO_CURRENT_SEQ             = MEMO_CURRENT_SEQ + 1u64
     MEMO_KEY_HASH[victim_idx]    = l_key
     MEMO_PATTERN_ID[victim_idx]  = l_pid
     MEMO_DISPATCH_FP[victim_idx] = l_fp

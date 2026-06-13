@@ -897,3 +897,33 @@ representative and the sibling fix is byte-identical-for-success + structurally 
 
 Gates: build GATE PASS FAIL=0; 1504 99 vs new / exit 4 vs old; only fs.iii changed, all 18 fs.iii
 consumers + 1504 GREEN.  Count 1091 -> **1092**.
+
+## Wave-15 — memo update bumps FIFO seq (data-structure contract violation) (2026-06-13)
+
+A fresh-axis discovery whose survivor was a contract/implementation divergence in the resolve()
+memoization cache: `memo_insert` (omnia/resolver_memo.iii) bumped MEMO_CURRENT_SEQ unconditionally
+at the START of every call, and the update-existing branch then wrote that fresh (high) value into
+the entry's MEMO_SEQ.  So re-storing an already-cached key advanced its sequence to "most recent"
+-- contradicting the module's own contract ("update in place, same seq", line 156) AND resolver.iii's
+HOT-path note ("memo_insert ... FIFO order stable", line 622).  Because MEMO_SEQ is the eviction key
+(lowest seq evicted first), the bug makes a re-stored entry survive a later overflow that should have
+spared an OLDER, un-touched entry instead -- and memo_seq() (documented "read insertion sequence")
+returns a demonstrably wrong rank after any update.
+
+**W15-FIX** (`omnia/resolver_memo.iii` memo_insert, falsifier `1505`, old exit=11): bump
+MEMO_CURRENT_SEQ ONLY in the new-slot and eviction branches (true fresh insertions); the update
+branch leaves MEMO_SEQ untouched.  PROVABLY ZERO production drift: the sole production caller
+(resolver.iii:912) only inserts on a COLD miss -- it skips memo_insert entirely on a hit (line 622)
+-- so it never exercises the update path, and for any distinct-key sequence the bump fires on every
+call exactly as before -> byte-identical.  The defect is reachable only by a direct caller that
+re-stores a key.  Existing memo KATs stay green: 202's update arm checks slot/used/pattern/fp but
+not seq; its 256-key seq loop uses only distinct keys; 943's FIFO-eviction fill uses distinct keys.
+
+1505 teeth (arm 6, clean + deterministic): insert A,B,C (seq 1,2,3), update A -> memo_seq(A) is 1 on
+the fixed lib (original rank kept) but 4 on the pre-fix lib (bumped) -> arm 6 reddens the old lib
+(exit 11).  Arms 16-21 then VERIFY the fix propagates to eviction: fill the 4096-slot table and
+overflow by one; the victim is A (the genuine oldest, seq 1) so A is gone and B/C/D survive -- on
+the pre-fix lib A would carry seq 4 and B (seq 2) would be the wrong victim.
+
+Gates: build GATE PASS FAIL=0; 1505 99 vs new / exit 11 vs old; only resolver_memo.iii changed,
+all 4 existing memo consumers (202/230/242/943) + 1505 GREEN.  Count 1092 -> **1093**.

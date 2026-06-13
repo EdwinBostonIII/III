@@ -1,0 +1,103 @@
+/* 1505_resolver_memo_fifo.iii -- W15 FALSIFIER: re-storing an existing memo key
+ * (an "update in place") does NOT change its FIFO eviction rank.
+ *
+ * THE DEFECT: memo_insert bumped MEMO_CURRENT_SEQ unconditionally at the start of
+ * EVERY call, and the update-existing branch then wrote that fresh (high) value into
+ * the entry's MEMO_SEQ.  So updating an already-cached key advanced its sequence to
+ * "most recent" -- directly contradicting the module's own contract ("update in
+ * place, same seq") and resolver.iii's HOT-path note ("memo_insert ... FIFO order
+ * stable").  Because MEMO_SEQ is the eviction key (lowest seq evicted first), the bug
+ * makes a re-stored entry survive a later overflow that should have spared an OLDER,
+ * un-touched entry instead.  The sole production caller never hits the update path
+ * (it skips memo_insert on a hit), so every real call is byte-identical; the defect
+ * is reachable only by a direct caller that re-stores a key -- exactly this KAT.
+ *
+ * THE FIX: bump MEMO_CURRENT_SEQ only in the new-slot and eviction branches (true
+ * fresh insertions); the update branch leaves MEMO_SEQ untouched.
+ *
+ * TEETH (arm 6, clean + deterministic): insert A,B,C (seq 1,2,3), then update A.
+ * memo_seq(A) is 1 on the fixed lib (original rank kept) but 4 on the pre-fix lib
+ * (bumped) -> arm 6 reddens against the old lib.  Arms 11-15 then VERIFY the fix
+ * propagates to eviction: fill the 4096-slot table and overflow by one; the victim
+ * is A (the genuine oldest, seq 1) -- so A is gone and B/C survive.  On the pre-fix
+ * lib A would carry seq 4 and B (seq 2) would be the victim, but execution never
+ * reaches there (it died at arm 6).  Exit 99. */
+module corpus_1505
+
+extern @abi(c-msvc-x64) fn memo_lookup(key: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_pattern_id(slot: u32) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_dispatch_fp(slot: u32) -> u64 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_seq(slot: u32) -> u64 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_used() -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_reset() -> i32 from "resolver_memo.iii"
+
+const NOT_FOUND : u32 = 0xFFFFFFFFu32
+
+const KEY_A : u64 = 0xAu64
+const KEY_B : u64 = 0xBu64
+const KEY_C : u64 = 0xCu64
+const KEY_D : u64 = 0xD00000u64        /* the overflow key (distinct from A/B/C and the fill range) */
+
+fn main() -> u64 {
+    memo_reset()
+    if memo_used() != 0u32 { return 1u64 }
+
+    /* ---- 1. three distinct fresh inserts -> seq 1,2,3 (baseline, both libs) ---- */
+    memo_insert(KEY_A, 10u32, 0xA1u64)
+    memo_insert(KEY_B, 20u32, 0xB1u64)
+    memo_insert(KEY_C, 30u32, 0xC1u64)
+    if memo_used() != 3u32 { return 2u64 }
+
+    let sa0 : u32 = memo_lookup(KEY_A)
+    let sb0 : u32 = memo_lookup(KEY_B)
+    let sc0 : u32 = memo_lookup(KEY_C)
+    if sa0 == NOT_FOUND { return 3u64 }
+    if sb0 == NOT_FOUND { return 4u64 }
+    if sc0 == NOT_FOUND { return 5u64 }
+    if memo_seq(sa0) != 1u64 { return 6u64 }     /* (pre-update baseline; both libs) */
+    if memo_seq(sb0) != 2u64 { return 7u64 }
+    if memo_seq(sc0) != 3u64 { return 8u64 }
+
+    /* ---- 2. UPDATE key A in place (re-store with new pattern_id/fp) ---- */
+    let sa1 : u32 = memo_insert(KEY_A, 11u32, 0xA2u64)
+    if sa1 != sa0 { return 9u64 }                /* same slot (in-place) */
+    if memo_used() != 3u32 { return 10u64 }      /* no new entry */
+
+    /* ---- 3. THE TEETH: the updated key keeps its ORIGINAL seq (1), not a bump ----
+     * fixed lib -> 1 ; pre-fix lib -> 4 (the unconditional start-of-call bump that
+     * the update branch wrote into MEMO_SEQ).  This arm reddens the old lib. */
+    if memo_seq(sa1) != 1u64 { return 11u64 }
+
+    /* the update DID take effect on pattern_id / dispatch_fp (same-seq != stale) */
+    if memo_pattern_id(sa1) != 11u32 { return 12u64 }
+    if memo_dispatch_fp(sa1) != 0xA2u64 { return 13u64 }
+    /* and B / C are undisturbed */
+    if memo_seq(memo_lookup(KEY_B)) != 2u64 { return 14u64 }
+    if memo_seq(memo_lookup(KEY_C)) != 3u64 { return 15u64 }
+
+    /* ---- 4. fill the table to capacity with 4093 more distinct keys ----
+     * 3 (A,B,C) + 4093 = 4096 = MEMO_CAP.  None collide with A/B/C (< 0x10000) or
+     * KEY_D (> 0x10FFC).  Each is a fresh insert (seq 4..4096), all higher than the
+     * untouched A/B/C seqs 1/2/3. */
+    let mut j : u32 = 0u32
+    while j < 4093u32 {
+        let fk : u64 = 0x10000u64 + (j as u64)
+        memo_insert(fk, 1u32, 1u64)
+        j = j + 1u32
+    }
+    if memo_used() != 4096u32 { return 16u64 }
+
+    /* ---- 5. overflow by one -> FIFO-evict the lowest seq ----
+     * Under the fix, A (seq 1) is the unique oldest -> A is evicted; B/C/D survive.
+     * (A direct memo_seq diagnostic could not show this -- the bug's PAYOFF is the
+     * eviction victim, which this arm pins on the corrected lib.) */
+    let sd : u32 = memo_insert(KEY_D, 99u32, 0xD1u64)
+    if sd == NOT_FOUND { return 17u64 }
+    if memo_lookup(KEY_A) != NOT_FOUND { return 18u64 }   /* A (oldest) WAS evicted */
+    if memo_lookup(KEY_B) == NOT_FOUND { return 19u64 }   /* B survives */
+    if memo_lookup(KEY_C) == NOT_FOUND { return 20u64 }   /* C survives */
+    if memo_lookup(KEY_D) == NOT_FOUND { return 21u64 }   /* D present (just inserted) */
+
+    return 99u64
+}

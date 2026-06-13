@@ -1052,3 +1052,30 @@ read value directly, so they stay benign-pinned.)
 Gates: build GATE PASS FAIL=0; 1509 99 vs new / exit 30 vs old; only bv_bits/omega_engine/sep_logic/
 csl changed, 12 representative consumers (4 module KATs + bv_dispose/cg_autocatalyst/bvd_rule_gate/
 mixed_dispose/transform_taint_seal/gate_outcomes_bv_dispose) + 1509 GREEN.  Count 1096 -> **1097**.
+
+## Wave-20 — temporal_logic tl_trace_set/holds BYTE-INDEX OOB (a new sub-class) (2026-06-13)
+
+A finer numera re-sweep + sibling lens (2 confirmed of 6 examined -- the yield is dropping as numera
+saturates).  ONE real find (temporal_logic); the other candidate (ripple_search rs_strict_best) was a
+WORKFLOW FALSE POSITIVE -- refuted on read: rs_add bounds RS_N to RS_MAX(4096), so rs_argmax passes
+count<=4096 to tb_max_by_u64 and the returned index is always < 4096, making RS_V[b] in-bounds (the
+fn's own line-44 comment "best < n <= 4096" confirms it).  verify-still-open caught it.
+
+**W20-FIX** (`numera/temporal_logic.iii` tl_val_set + tl_val_get, falsifier `1510`, old exit=5): the
+LTL explicit-trace accessors tl_trace_set(atom,pos)->tl_val_set (WRITE) and tl_trace_holds(node,pos)->
+tl_val_get (READ -- the method-law sibling) compute idx = s*TLOGIC_MAX_SEG+p and access TL_VAL through
+a BYTE pointer ((&TL_VAL as u64 + idx) as *u8; bp[0]).  TL_VAL is [u64;524288] = 4194304 BYTES, so the
+bound is the array's BYTE size TLOGIC_MAX_SUBF*TLOGIC_MAX_SEG (=1024*4096=4194304), NOT its element
+count -- a NEW sub-class (byte-pointer addressing of a typed array).  Neither accessor checked it; the
+@export trace API took untrusted s/p.  Fix: idx >= TLOGIC_MAX_SUBF*TLOGIC_MAX_SEG -> set -1, get 0.
+Byte-identical for the internal LTL evaluator (always in-range s<1024, p<4096).
+
+1510 teeth (clean WRITE, gentle exactly-1-past BYTE): tl_trace_set(TLOGIC_MAX_SUBF,0,1) -> idx=4194304
+= one byte past.  Fixed -> -1 (NO OOB); pre-fix -> writes byte 4194304 (one byte into adjacent BSS,
+no crash) + returns 0 -> arm 5 reddens the old lib (exit 5).  Arm 1 a real round-trip; arm 2 the LAST
+valid byte (idx 4194303 = (1023,4095), accepted -> not over-tight); arm 4 pins the read sibling.
+
+Gates: build GATE PASS FAIL=0; 1510 99 vs new / exit 5 vs old; only temporal_logic.iii changed, 10
+representative consumers (temporal KAT + constitution/constitution_preserver/constitution_holds/
+cons_run_charter/hotstuff/hotstuff_safety/hotstuff_liveness/gate_outcomes_constitution_preserver) +
+1510 GREEN.  Count 1097 -> **1098**.

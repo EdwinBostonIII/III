@@ -96,12 +96,19 @@ var TL_T_A1  : [u8; 8]
 
 fn tl_val_get(s: u64, p: u64) -> u8 {
     let idx : u64 = s * TLOGIC_MAX_SEG + p
+    /* [W19/W20] TL_VAL is byte-addressed here (the *u8 cast), so the bound is the
+     * array's BYTE size = TLOGIC_MAX_SUBF*TLOGIC_MAX_SEG (= 524288 u64 = 4194304 B).
+     * @export tl_trace_holds(node,pos) / tl_trace_set(atom,pos) pass untrusted s/p;
+     * an out-of-range pair indexes TL_VAL OOB.  Byte-identical for every valid
+     * (s<MAX_SUBF, p<MAX_SEG) caller -- the internal evaluator stays in range. */
+    if idx >= (TLOGIC_MAX_SUBF as u64) * TLOGIC_MAX_SEG { return 0u8 }
     let bp : *u8 = (&TL_VAL as u64 + idx) as *u8
     return bp[0u64]
 }
 
 fn tl_val_set(s: u64, p: u64, v: u8) -> i32 {
     let idx : u64 = s * TLOGIC_MAX_SEG + p
+    if idx >= (TLOGIC_MAX_SUBF as u64) * TLOGIC_MAX_SEG { return -1i32 }   /* [W20] OOB WRITE guard (see tl_val_get) */
     let bp : *u8 = (&TL_VAL as u64 + idx) as *u8
     bp[0u64] = v
     return 0i32

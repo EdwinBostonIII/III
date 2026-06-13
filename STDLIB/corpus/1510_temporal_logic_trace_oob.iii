@@ -1,0 +1,50 @@
+/* 1510_temporal_logic_trace_oob.iii -- W20 FALSIFIER: the LTL explicit-trace @export
+ * accessors REFUSE an out-of-range (atom_node, pos) instead of byte-indexing TL_VAL
+ * out of bounds.
+ *
+ * THE DEFECT: tl_trace_set(atom_node,pos,truth) -> tl_val_set and tl_trace_holds(node,
+ * pos) -> tl_val_get compute idx = s*TLOGIC_MAX_SEG + p and access TL_VAL through a
+ * BYTE pointer (the *u8 cast: bp[0]).  TL_VAL is [u64; 524288] = 4194304 bytes, so the
+ * real bound is the byte size TLOGIC_MAX_SUBF*TLOGIC_MAX_SEG (=1024*4096=4194304).
+ * Neither accessor checked it -- the @export trace API took untrusted s/p, so an
+ * out-of-range pair was an OOB WRITE (tl_trace_set) or OOB read (tl_trace_holds).  The
+ * internal LTL evaluator only ever passes in-range (s<1024, p<4096) indices, so the
+ * guard is byte-identical for it.  (The read sibling tl_trace_holds is the method-law
+ * twin of the write tl_trace_set.)
+ *
+ * THE GUARD: idx >= TLOGIC_MAX_SUBF*TLOGIC_MAX_SEG -> set returns -1, get returns 0.
+ *
+ * TEETH (clean setter WRITE differential, gentle exactly-1-past BYTE): tl_trace_set(
+ * TLOGIC_MAX_SUBF, 0, 1) -> idx = 1024*4096 = 4194304 = exactly one byte past the array.
+ * Fixed lib -> -1 (guard fires, NO OOB).  Pre-fix lib -> writes byte 4194304 (one byte
+ * into adjacent BSS, no crash) and returns 0.  Arm 3 asserts -1, so the old lib (0)
+ * reddens (exit 3).  Arm 1 a real round-trip (set then holds); arm 2 the LAST valid
+ * byte (idx 4194303 = (1023,4095), accepted -> guard not over-tight); arm 4 pins the
+ * read sibling + a far-past write on the fixed lib.  Exit 99. */
+module corpus_1510
+
+extern @abi(c-msvc-x64) fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_trace_holds(node: u64, pos: u64) -> u8 from "temporal_logic.iii"
+
+const TLOGIC_MAX_SUBF : u64 = 1024u64
+const TLOGIC_MAX_SEG  : u64 = 4096u64
+
+fn main() -> u64 {
+    /* ---- 1. a real in-range round-trip (both libs) ---- */
+    if tl_trace_set(0u64, 5u64, 1u8) != 0i32 { return 1u64 }
+    if tl_trace_holds(0u64, 5u64) != 1u8 { return 2u64 }
+
+    /* ---- 2. the LAST valid byte (idx = 1023*4096+4095 = 4194303) is accepted (not over-tight) ---- */
+    if tl_trace_set(TLOGIC_MAX_SUBF - 1u64, TLOGIC_MAX_SEG - 1u64, 1u8) != 0i32 { return 3u64 }
+    if tl_trace_holds(TLOGIC_MAX_SUBF - 1u64, TLOGIC_MAX_SEG - 1u64) != 1u8 { return 4u64 }
+
+    /* ---- 3. THE TEETH: one byte past -> fixed REFUSES (-1); old writes OOB + returns 0 ---- */
+    if tl_trace_set(TLOGIC_MAX_SUBF, 0u64, 1u8) != -1i32 { return 5u64 }   /* idx = 4194304, 1-past; old returns 0 */
+
+    /* ---- 4. fixed-lib pins: the read sibling + a far-past write ---- */
+    if tl_trace_holds(TLOGIC_MAX_SUBF, 0u64) != 0u8 { return 6u64 }        /* OOB read -> 0 */
+    if tl_trace_set(999999u64, 0u64, 1u8) != -1i32 { return 7u64 }         /* far-past write -> -1 */
+    if tl_trace_holds(999999u64, 0u64) != 0u8 { return 8u64 }
+
+    return 99u64
+}

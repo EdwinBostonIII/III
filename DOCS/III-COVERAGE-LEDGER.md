@@ -1428,3 +1428,23 @@ fix is an API redesign or a cross-call order check) -- not a clean single-functi
 
 Gates: build GATE PASS FAIL=0; 1529 + 1530 teeth exit 30 vs old lib, 99 vs new; corpus green (align_domain
 KAT + bitio roundtrip).  Count 1115 -> **1117**.
+
+## Wave-33 — ntt_forward_at/inverse_at power-of-2 guard (the last documented-pow2 precondition) (2026-06-13)
+
+After W41 + W42 dry rounds on fresh axes, I converted the deferred ntt power-of-2 precondition (the last
+merkle/W30-pattern instance) -- and on close reading it was a CLEAN fix, not the "complex" I'd assumed.
+
+**W33-FIX** (numera/ntt.iii ntt_forward_at + ntt_inverse_at; falsifier 1531): both @exports are documented
+"n must be a power of two" (line 296) but did not enforce it.  The radix-2 DIT butterfly
+(`while len <= n { len <<= 1 }` + `w[i+k+half]`) is power-of-two-only: for n=3 it runs ONE stage (len=2)
+and at i=2 reads/writes w[3] -- PAST the logical [0..n) range -> a WRONG NTT result AND it corrupts w[3..]
+(adjacent NTT_W data), returning 0 (OK).  ntt_inverse_at calls forward_at but IGNORES its return, so it
+needs its own guard.  FIX: reject n==0 and (n & (n-1))!=0 with -1 in both.  In-tree callers (zk-STARK,
+poly-mult) use power-of-2 n -> byte-identical.  1531 teeth: ntt_forward/inverse(3/6/0) pre-fix run the
+partial butterfly + return 0 (exit 30) / post-fix -1; sanity n=8/4/1 accepted.
+
+(The tabled FIPS NTT family ntt_ct_forward_tabled/ntt_gs_inverse_tabled is a SEPARATE core -- n tied to a
+caller zeta table, mlkem/mldsa use fixed pow2 n -- left for a separate wave with a tabled teeth.)
+
+Gates: build GATE PASS FAIL=0; 1531 teeth exit 30 vs old lib, 99 vs new; corpus green (ntt_selftest +
+zk-STARK pipeline).  Count 1117 -> **1118**.

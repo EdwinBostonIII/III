@@ -117,6 +117,8 @@ fn ntt_bitrev_at(base: u64, n: u64) -> i32 {
 
 /* Forward NTT over GF(q) on base[0..n); omega a primitive n-th root of unity mod q. */
 fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 @export {
+    if n == 0u64 { return -1i32 }
+    if (n & (n - 1u64)) != 0u64 { return -1i32 }   /* [W33] the radix-2 DIT butterfly is power-of-two-only (doc: "n must be a power of two"); a non-pow2 n bit-reverses wrong AND butterflies w[i+k+half] past [0..n) -> a wrong NTT + adjacent corruption, formerly returned OK */
     let w : *u32 = base as *u32
     ntt_bitrev_at(base, n)
     let mut len : u64 = 2u64
@@ -144,6 +146,8 @@ fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 @export {
 
 /* Inverse NTT on base[0..n): forward with inv(omega), then scale by inv(n). */
 fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 @export {
+    if n == 0u64 { return -1i32 }
+    if (n & (n - 1u64)) != 0u64 { return -1i32 }   /* [W33] power-of-two-only (forward_at below + the n^-1 scale assume it); guard directly since forward_at's reject return is not propagated here */
     let w : *u32 = base as *u32
     let iw : u32 = ntt_inv(omega, q)
     ntt_forward_at(base, n, q, iw)

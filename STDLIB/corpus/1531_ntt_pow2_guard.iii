@@ -1,0 +1,41 @@
+/* 1531_ntt_pow2_guard.iii -- W33 FALSIFIER: the radix-2 NTT must REJECT a
+ * non-power-of-2 transform size, not run a partial/corrupting butterfly.
+ *
+ * THE DEFECT (the merkle/W30 pattern, last instance): ntt_forward_at /
+ * ntt_inverse_at (ntt.iii, @export) are documented "n must be a power of two"
+ * (line 296) but do not enforce it.  The radix-2 DIT butterfly
+ * (`while len <= n { len <<= 1 }` + `w[i+k+half]`) is power-of-two-only: for
+ * n=3 it runs one stage (len=2) and, at i=2, reads/writes w[3] -- PAST the
+ * logical [0..3) range -> a WRONG NTT result AND it corrupts w[3.. ] (adjacent
+ * data in NTT_W), returning 0 (OK).  Reachable via ntt_forward(n, q, omega).
+ *
+ * THE FIX: reject n==0 and (n & (n-1))!=0 with -1 in both forward_at and
+ * inverse_at (inverse_at guards directly since forward_at's reject isn't
+ * propagated).
+ *
+ * TEETH (value differential): non-power-of-2 n must return -1.
+ *   - pre-fix: runs the wrong butterfly, returns 0 -> arm reddens (exit 30).
+ *   - post-fix: -1.
+ * Sanity: power-of-2 n is accepted (the guard is not over-tight).  q = the
+ * Goldilocks-ish NTT prime 998244353; omega is irrelevant to the guard. */
+module corpus_1531
+
+extern @abi(c-msvc-x64) fn ntt_forward(n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_inverse(n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+
+fn main() -> u64 {
+    let q : u32 = 998244353u32
+
+    /* ---- TEETH: non-power-of-2 / zero sizes must be rejected ---- */
+    if ntt_forward(3u64, q, 5u32) != -1i32 { return 30u64 }   /* pre-fix runs partial butterfly, returns 0 */
+    if ntt_forward(6u64, q, 5u32) != -1i32 { return 31u64 }
+    if ntt_inverse(3u64, q, 5u32) != -1i32 { return 32u64 }
+    if ntt_forward(0u64, q, 5u32) != -1i32 { return 33u64 }
+
+    /* ---- sanity: power-of-2 sizes accepted (guard not over-tight) ---- */
+    if ntt_forward(8u64, q, 5u32) == -1i32 { return 34u64 }
+    if ntt_inverse(4u64, q, 5u32) == -1i32 { return 35u64 }
+    if ntt_forward(1u64, q, 5u32) == -1i32 { return 36u64 }   /* 1 = 2^0 */
+
+    return 99u64
+}

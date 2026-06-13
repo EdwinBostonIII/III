@@ -1103,6 +1103,7 @@ declare -A EXPECTED=(
     [1528_vz_covers_nonpow2]=99
     [1529_ad_loop_scan_nonpow2]=99
     [1530_bitr_get_oob]=99
+    [1531_ntt_pow2_guard]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

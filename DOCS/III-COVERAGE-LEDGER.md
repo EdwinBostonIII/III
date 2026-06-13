@@ -1646,3 +1646,19 @@ DEFERRED (genuinely): the PQ keygen-from-seed FIPS-EXACT pk/sk/ct/sig vectors (N
 impractical to hand-transcribe + unfetchable here; rsa_pss / drbg exact-vector KATs (need the modulus/seed).
 
 No source change -> no rebuild; corpus green, 198/199/200 + 72 unchanged.  Count 1127 -> **1128**.
+
+## Wave-45 — weak-KAT audit: strengthen partial spot-check crypto KATs to full-output (2026-06-13)
+
+The W42 lesson (79/157/158 verified only 4-9 of N output bytes -> a bug in the unchecked bytes survives)
+generalized into a build-free META-vein: audit the corpus for crypto/hash KATs that spot-check a few indexed
+bytes with NO full-loop verify.  10 candidates found; the 3 cleanest hash KATs strengthened (all dump-verified
+against III's actual output via a putchar probe, then asserted against the published vector):
+- **155 SHA3-256("abc")**: 8 -> full 32 bytes (FIPS 202).
+- **156 SHA3-512("abc")**: 8 -> full 64 bytes.
+- **83 BLAKE2s("abc")**: 7 -> full 32 bytes (RFC 7693).
+III dump byte-exact to the published vectors (sha3-256 3a985da7...11431532, sha3-512 b751850b...eec53f0,
+blake2s 508c5e8c...86675982) -> III's hashes are fully correct, now the WHOLE digest is pinned (a future
+regression in any byte reddens it, where before only the spot-checked prefix did).  EXPECTED unchanged
+(155/156=99, 83=80, no table edit).  Remaining weak candidates (60 aes128 / 71 poly1305 / 81 hkdf / 86 pbkdf2
+/ 62 gcm) are a follow-on.  No source change -> no rebuild.  Count 1128 (unchanged -- these strengthen
+existing tests, not add new ones).

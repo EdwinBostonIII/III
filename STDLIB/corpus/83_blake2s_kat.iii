@@ -2,7 +2,7 @@
  *   input  = "abc"
  *   output = 50 8c 5e 8c 32 7c 14 e2 e1 a7 2b a3 4e eb 45 2f
  *            37 45 8b 20 9e d6 3a 29 4d 99 9b 4c 86 67 59 82
- *
+ * W45 strengthen: was 7 of 32 bytes -> now the FULL RFC 7693 digest (dump-verified vs III).
  * Exit = first byte = 0x50 = 80.
  */
 module corpus_83
@@ -11,18 +11,26 @@ extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn blake2s_oneshot(input: *u8, len: u64, out: *u8, out_len: u64) -> u32 from "blake2s.iii"
 
+var EXP : [u8; 32]
+
 fn main() -> u64 {
+    EXP[0u64]=0x50u8  EXP[1u64]=0x8cu8  EXP[2u64]=0x5eu8  EXP[3u64]=0x8cu8
+    EXP[4u64]=0x32u8  EXP[5u64]=0x7cu8  EXP[6u64]=0x14u8  EXP[7u64]=0xe2u8
+    EXP[8u64]=0xe1u8  EXP[9u64]=0xa7u8  EXP[10u64]=0x2bu8 EXP[11u64]=0xa3u8
+    EXP[12u64]=0x4eu8 EXP[13u64]=0xebu8 EXP[14u64]=0x45u8 EXP[15u64]=0x2fu8
+    EXP[16u64]=0x37u8 EXP[17u64]=0x45u8 EXP[18u64]=0x8bu8 EXP[19u64]=0x20u8
+    EXP[20u64]=0x9eu8 EXP[21u64]=0xd6u8 EXP[22u64]=0x3au8 EXP[23u64]=0x29u8
+    EXP[24u64]=0x4du8 EXP[25u64]=0x99u8 EXP[26u64]=0x9bu8 EXP[27u64]=0x4cu8
+    EXP[28u64]=0x86u8 EXP[29u64]=0x67u8 EXP[30u64]=0x59u8 EXP[31u64]=0x82u8
+
     let inp : *u8 = malloc(3u64)
     let out : *u8 = malloc(32u64)
     inp[0] = 97u8; inp[1] = 98u8; inp[2] = 99u8   /* "abc" */
     blake2s_oneshot(inp, 3u64, out, 32u64)
-    if out[0]  != 0x50u8 { return 1u64 }
-    if out[1]  != 0x8Cu8 { return 2u64 }
-    if out[2]  != 0x5Eu8 { return 3u64 }
-    if out[3]  != 0x8Cu8 { return 4u64 }
-    if out[15] != 0x2Fu8 { return 5u64 }
-    if out[16] != 0x37u8 { return 6u64 }
-    if out[31] != 0x82u8 { return 7u64 }
+
+    let mut i : u64 = 0u64
+    while i < 32u64 { if out[i] != EXP[i] { return 8u64 + i }  i = i + 1u64 }
+
     let result : u64 = out[0] as u64
     free(inp); free(out)
     return result

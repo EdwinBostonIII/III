@@ -1615,3 +1615,34 @@ published vector.
 
 No source change -> no rebuild; corpus 1127/0 with 83/155/156/169 (the pre-existing hash KATs) unchanged.
 Count 1124 -> **1127**.
+
+## Wave-43/44 — AEAD AAD-binding negative + PQ keygen determinism/seed-dependence (the W41 residual, hand-filtered) (2026-06-13)
+
+The W41 residual gaps were hand-verified to avoid duplicating existing coverage (the blake2s-constant lesson):
+all 3 AEADs already tamper-reject (72 tag / 206 tag+hchacha-cross-check / 207 IV); 913 ecdsa already does
+det-sign + msg-tamper; the chacha20 keystream is externally anchored via 72's 114-byte RFC8439 ciphertext.
+Two GENUINE, self-contained, non-redundant properties remained:
+
+**W43 (72 strengthen):** added an AAD-TAMPER-rejection arm to 72_chacha20_poly1305.  Distinct from the
+existing tag-tamper: it flips one AAD bit (keeping the correct ct+tag) and asserts open() REJECTS -- proving
+the AAD is bound into the Poly1305 authentication (RFC 8439 2.8: AAD is authenticated though not encrypted),
+a separate code path from the ciphertext/tag.  Behavioral, no external constant; III passes (AAD authenticated).
+EXPECTED 99 unchanged.
+
+**W44 (1541 NEW):** PQ keygen DETERMINISM + SEED-DEPENDENCE for ML-KEM-512 / ML-DSA-44 / SLH-DSA-128s (the
+913-ecdsa-determinism pattern).  GAP: 198/199/200 call keygen ONCE then round-trip; a seed-IGNORING or
+non-deterministic keygen would STILL pass the round-trip (the keypair is internally consistent regardless of
+the seed) -- a catastrophic class the round-trip structurally cannot catch.  1541 asserts, per scheme, (1)
+keygen(seed) twice -> byte-identical (pk,sk), and (2) keygen(seed') -> a DIFFERENT pk (the seed is consumed).
+Pre-zeroed whole-buffer compares, no external vector.  All 3 pass.
+
+**NON-GAP verified (read-before-fetch avoided a wrong KAT):** the W41 "ecdsa RFC6979 exact-bytes" item is NOT
+applicable -- III's iii_ecdsa_p256_sign_det derives its nonce via SP800-90A HMAC-DRBG seeded from (d,z) (the
+comment says "RFC6979-STYLE"), NOT RFC6979's exact int2octets/bits2octets construction, so III's deterministic
+signature legitimately differs from the RFC6979 published vector; an exact-bytes KAT would mis-fire on a
+non-bug.  913 already covers determinism + (d,z)-dependence + tamper comprehensively.
+
+DEFERRED (genuinely): the PQ keygen-from-seed FIPS-EXACT pk/sk/ct/sig vectors (NIST ACVP) -- kilobyte-scale,
+impractical to hand-transcribe + unfetchable here; rsa_pss / drbg exact-vector KATs (need the modulus/seed).
+
+No source change -> no rebuild; corpus green, 198/199/200 + 72 unchanged.  Count 1127 -> **1128**.

@@ -150,6 +150,16 @@ fn main() -> u64 {
     aead_chacha20_poly1305_aad(aad, 12u64)
     let ok_bad : u8 = aead_chacha20_poly1305_open(ct, 114u64, pt2, tag)
     if ok_bad != 0u8 { return 200u64 }
+    /* AAD-tamper rejection (W42): restore the correct tag, flip an AAD bit, and open.  A tampered
+     * AAD with the original (correct) ct+tag must REJECT -- proving the AAD is bound into the
+     * Poly1305 authentication (distinct from the tag/ciphertext path).  This is the security
+     * property RFC 8439 2.8 names: the AAD is authenticated though not encrypted. */
+    tag[0] = (tag[0] as u32 ^ 1u32) as u8        /* un-flip -> original correct tag */
+    aad[0] = (aad[0] as u32 ^ 1u32) as u8        /* flip one AAD bit */
+    aead_chacha20_poly1305_init(key, nonce)
+    aead_chacha20_poly1305_aad(aad, 12u64)       /* tampered AAD */
+    let ok_aad : u8 = aead_chacha20_poly1305_open(ct, 114u64, pt2, tag)
+    if ok_aad != 0u8 { return 201u64 }
     free(key); free(nonce); free(aad); free(pt); free(ct); free(tag); free(pt2)
     return 99u64
 }

@@ -1,0 +1,91 @@
+/* 1541_pq_keygen_determinism.iii -- W44 ENHANCEMENT: PQ keygen is a DETERMINISTIC, SEED-BOUND
+ * function (the 913-ecdsa-determinism pattern, for ML-KEM / ML-DSA / SLH-DSA).
+ *
+ * GAP: 198/199/200 call keygen ONCE with a fixed seed then round-trip.  A seed-IGNORING or
+ * non-deterministic keygen would STILL pass the round-trip (the keypair is internally
+ * consistent regardless of the seed) -- a catastrophic class the round-trip cannot catch.
+ *
+ * This KAT asserts, per scheme, two defining properties (no external vector needed):
+ *   (1) DETERMINISM   -- keygen(seed) twice yields byte-identical (pk, sk).
+ *   (2) SEED-DEPENDENCE -- keygen(seed') with a different seed yields a different pk
+ *       (so the seed is actually consumed; a constant/seed-ignoring keygen reddens this).
+ * Buffers are pre-zeroed and compared whole, so the key region + the zeroed tail both
+ * participate without needing the exact FIPS key sizes.  Exit 99 = all hold. */
+module corpus_1541
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+
+fn zero(p: u64, n: u64) {
+    let b : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < n { b[i] = 0u8  i = i + 1u64 }
+}
+fn eq(p: u64, q: u64, n: u64) -> u8 {
+    let a : *u8 = p as *u8
+    let b : *u8 = q as *u8
+    let mut i : u64 = 0u64
+    while i < n { if a[i] != b[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let seedA : *u8 = malloc(64u64)
+    let seedB : *u8 = malloc(64u64)
+    let mut i : u64 = 0u64
+    while i < 64u64 { seedA[i] = ((0x33u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 64u64 { seedB[i] = ((0x9Cu64 + i * 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    let sa : u64 = seedA as u64
+    let sb : u64 = seedB as u64
+
+    /* ===== ML-KEM-512 (k=2): pk<=800, sk<=1632 -> 2048/4096 buffers ===== */
+    let kp1 : u64 = malloc(2048u64) as u64
+    let ks1 : u64 = malloc(4096u64) as u64
+    let kp2 : u64 = malloc(2048u64) as u64
+    let ks2 : u64 = malloc(4096u64) as u64
+    let kpb : u64 = malloc(2048u64) as u64
+    let ksb : u64 = malloc(4096u64) as u64
+    zero(kp1, 2048u64) zero(ks1, 4096u64) zero(kp2, 2048u64) zero(ks2, 4096u64) zero(kpb, 2048u64) zero(ksb, 4096u64)
+    iii_mlkem_keygen(2u64, sa, kp1, ks1)
+    iii_mlkem_keygen(2u64, sa, kp2, ks2)
+    if eq(kp1, kp2, 2048u64) != 1u8 { return 10u64 }      /* DETERMINISM pk */
+    if eq(ks1, ks2, 4096u64) != 1u8 { return 11u64 }      /* DETERMINISM sk */
+    iii_mlkem_keygen(2u64, sb, kpb, ksb)
+    if eq(kp1, kpb, 2048u64) == 1u8 { return 12u64 }      /* SEED-DEPENDENCE: pk must change */
+
+    /* ===== ML-DSA-44 (level 2): pk<=1312, sk<=2560 -> 2048/5120 buffers ===== */
+    let dp1 : u64 = malloc(2048u64) as u64
+    let ds1 : u64 = malloc(5120u64) as u64
+    let dp2 : u64 = malloc(2048u64) as u64
+    let ds2 : u64 = malloc(5120u64) as u64
+    let dpb : u64 = malloc(2048u64) as u64
+    let dsb : u64 = malloc(5120u64) as u64
+    zero(dp1, 2048u64) zero(ds1, 5120u64) zero(dp2, 2048u64) zero(ds2, 5120u64) zero(dpb, 2048u64) zero(dsb, 5120u64)
+    iii_mldsa_keygen(2u64, sa, dp1, ds1)
+    iii_mldsa_keygen(2u64, sa, dp2, ds2)
+    if eq(dp1, dp2, 2048u64) != 1u8 { return 20u64 }
+    if eq(ds1, ds2, 5120u64) != 1u8 { return 21u64 }
+    iii_mldsa_keygen(2u64, sb, dpb, dsb)
+    if eq(dp1, dpb, 2048u64) == 1u8 { return 22u64 }
+
+    /* ===== SLH-DSA-128s (lv 0): pk<=32, sk<=64 -> 128/256 buffers ===== */
+    let lp1 : u64 = malloc(128u64) as u64
+    let ls1 : u64 = malloc(256u64) as u64
+    let lp2 : u64 = malloc(128u64) as u64
+    let ls2 : u64 = malloc(256u64) as u64
+    let lpb : u64 = malloc(128u64) as u64
+    let lsb : u64 = malloc(256u64) as u64
+    zero(lp1, 128u64) zero(ls1, 256u64) zero(lp2, 128u64) zero(ls2, 256u64) zero(lpb, 128u64) zero(lsb, 256u64)
+    iii_slhdsa_keygen(0u64, sa, lp1, ls1)
+    iii_slhdsa_keygen(0u64, sa, lp2, ls2)
+    if eq(lp1, lp2, 128u64) != 1u8 { return 30u64 }
+    if eq(ls1, ls2, 256u64) != 1u8 { return 31u64 }
+    iii_slhdsa_keygen(0u64, sb, lpb, lsb)
+    if eq(lp1, lpb, 128u64) == 1u8 { return 32u64 }
+
+    return 99u64
+}

@@ -1113,6 +1113,7 @@ declare -A EXPECTED=(
     [1538_sha3_512_empty]=99
     [1539_blake2s_empty]=99
     [1540_sha3_256_multiblock]=99
+    [1541_pq_keygen_determinism]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

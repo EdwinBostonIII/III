@@ -1659,6 +1659,15 @@ against III's actual output via a putchar probe, then asserted against the publi
 III dump byte-exact to the published vectors (sha3-256 3a985da7...11431532, sha3-512 b751850b...eec53f0,
 blake2s 508c5e8c...86675982) -> III's hashes are fully correct, now the WHOLE digest is pinned (a future
 regression in any byte reddens it, where before only the spot-checked prefix did).  EXPECTED unchanged
-(155/156=99, 83=80, no table edit).  Remaining weak candidates (60 aes128 / 71 poly1305 / 81 hkdf / 86 pbkdf2
-/ 62 gcm) are a follow-on.  No source change -> no rebuild.  Count 1128 (unchanged -- these strengthen
-existing tests, not add new ones).
+(155/156=99, 83=80, no table edit).  No source change -> no rebuild.  Count 1128 (unchanged -- these
+strengthen existing tests, not add new ones).
+
+**W46 follow-on (81/86):** strengthened the two genuinely-weak KDF KATs to full-output -- 81 HKDF-SHA256
+RFC5869 TC1 OKM (9 -> full 42 bytes), 86 PBKDF2-HMAC-SHA256 RFC7914 DK (7 -> full 64 bytes).  Both
+dump-verified vs III (OKM 3cb25f25...5865, DK 55ac046e...d3a19783).  Re-audit findings: 71_poly1305 was a
+FALSE POSITIVE (check_tag already verifies all 16 tag bytes, just via a helper fn not a loop); 60_aes128
+already verifies all 16 ciphertext bytes; 62_aes_gcm is adequately covered.  **DUMP CAVEAT learned:**
+putchar-to-stdout on Windows is TEXT mode -> 0x0a output bytes get a spurious 0x0d prepended (CRLF
+translation); the HKDF OKM's 0x0a at byte 18 exposed it.  Read dumps modulo this artifact (or fwrite binary);
+the digests without 0x0a bytes (sha3/blake2s/pbkdf2-DK) dumped cleanly.  EXPECTED unchanged (81=60, 86=85).
+The weak-KAT audit is now COMPLETE (all 10 candidates addressed: 6 strengthened, 4 were already-full).

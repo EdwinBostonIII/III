@@ -1,10 +1,8 @@
 /* PBKDF2-HMAC-SHA256 KAT: RFC 7914 §11.
- *   P = "passwd"
- *   S = "salt"
- *   c = 1
- *   dkLen = 64
- *   expected = 55 ac 04 6e 56 e3 08 9f ec 16 91 c2 25 44 b6 05 ...
- *
+ *   P = "passwd"  S = "salt"  c = 1  dkLen = 64
+ *   DK = 55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc
+ *        49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783
+ * W45 strengthen: was 7 of 64 bytes -> now the FULL RFC 7914 derived key (dump-verified vs III).
  * Exit = first byte = 0x55 = 85.
  */
 module corpus_86
@@ -15,7 +13,26 @@ extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_salt(salt: *u8, salt_len: u64) -> i
 extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_iter(iterations: u32) -> i32 from "pbkdf2.iii"
 extern @abi(c-msvc-x64) fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) -> i32 from "pbkdf2.iii"
 
+var EXP : [u8; 64]
+
 fn main() -> u64 {
+    EXP[0u64]=0x55u8  EXP[1u64]=0xacu8  EXP[2u64]=0x04u8  EXP[3u64]=0x6eu8
+    EXP[4u64]=0x56u8  EXP[5u64]=0xe3u8  EXP[6u64]=0x08u8  EXP[7u64]=0x9fu8
+    EXP[8u64]=0xecu8  EXP[9u64]=0x16u8  EXP[10u64]=0x91u8 EXP[11u64]=0xc2u8
+    EXP[12u64]=0x25u8 EXP[13u64]=0x44u8 EXP[14u64]=0xb6u8 EXP[15u64]=0x05u8
+    EXP[16u64]=0xf9u8 EXP[17u64]=0x41u8 EXP[18u64]=0x85u8 EXP[19u64]=0x21u8
+    EXP[20u64]=0x6du8 EXP[21u64]=0xdeu8 EXP[22u64]=0x04u8 EXP[23u64]=0x65u8
+    EXP[24u64]=0xe6u8 EXP[25u64]=0x8bu8 EXP[26u64]=0x9du8 EXP[27u64]=0x57u8
+    EXP[28u64]=0xc2u8 EXP[29u64]=0x0du8 EXP[30u64]=0xacu8 EXP[31u64]=0xbcu8
+    EXP[32u64]=0x49u8 EXP[33u64]=0xcau8 EXP[34u64]=0x9cu8 EXP[35u64]=0xccu8
+    EXP[36u64]=0xf1u8 EXP[37u64]=0x79u8 EXP[38u64]=0xb6u8 EXP[39u64]=0x45u8
+    EXP[40u64]=0x99u8 EXP[41u64]=0x16u8 EXP[42u64]=0x64u8 EXP[43u64]=0xb3u8
+    EXP[44u64]=0x9du8 EXP[45u64]=0x77u8 EXP[46u64]=0xefu8 EXP[47u64]=0x31u8
+    EXP[48u64]=0x7cu8 EXP[49u64]=0x71u8 EXP[50u64]=0xb8u8 EXP[51u64]=0x45u8
+    EXP[52u64]=0xb1u8 EXP[53u64]=0xe3u8 EXP[54u64]=0x0bu8 EXP[55u64]=0xd5u8
+    EXP[56u64]=0x09u8 EXP[57u64]=0x11u8 EXP[58u64]=0x20u8 EXP[59u64]=0x41u8
+    EXP[60u64]=0xd3u8 EXP[61u64]=0xa1u8 EXP[62u64]=0x97u8 EXP[63u64]=0x83u8
+
     let pw   : *u8 = malloc(6u64)
     let salt : *u8 = malloc(4u64)
     let dk   : *u8 = malloc(64u64)
@@ -24,13 +41,10 @@ fn main() -> u64 {
     pbkdf2_sha256_set_salt(salt, 4u64)
     pbkdf2_sha256_set_iter(1u32)
     pbkdf2_sha256_derive(pw, 6u64, dk, 64u64)
-    if dk[0]  != 0x55u8 { return 1u64 }
-    if dk[1]  != 0xACu8 { return 2u64 }
-    if dk[2]  != 0x04u8 { return 3u64 }
-    if dk[3]  != 0x6Eu8 { return 4u64 }
-    if dk[15] != 0x05u8 { return 5u64 }
-    if dk[31] != 0xBCu8 { return 6u64 }
-    if dk[63] != 0x83u8 { return 7u64 }
+
+    let mut i : u64 = 0u64
+    while i < 64u64 { if dk[i] != EXP[i] { return 8u64 + i }  i = i + 1u64 }
+
     let result : u64 = dk[0] as u64
     free(pw); free(salt); free(dk)
     return result

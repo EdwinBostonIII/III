@@ -1,0 +1,57 @@
+/* 1501_knap_seg_bounds.iii -- W10 FALSIFIER: the knapsack DP and segment-tree
+ * @export APIs REFUSE out-of-range indices.
+ *
+ * THE DEFECT: knap_dp(cap) zeroed and indexed KNAP_DP[0..cap] with cap unbounded
+ * (KNAP_DP[17] -> cap>=17 is OOB write+read); seg_update(i,v) wrote SEG_VAL[i]
+ * (SEG_VAL[8]) and SEG_TREE[SEG_N+i] (SEG_TREE[16]) with i unbounded; seg_query
+ * indexed SEG_TREE by SEG_N+l..SEG_N+r unbounded.
+ *
+ * THE GUARD: knap_dp cap>=17 -> 0; seg_update i>=8 -> -1; seg_query l/r>=8 -> INF.
+ *
+ * Teeth: boundaries pinned (cap 16 = KNAP_DP[16] last valid; i=7 = SEG_VAL[7]/
+ * SEG_TREE[15] last valid; one past refused).  Against the pre-fix lib
+ * knap_dp(17) returns 18 (all items fit, did the 1-past write+read) so arm 3
+ * FAILS there; seg_update(8,..) returns 0 (did the 1-past write) so arm 6 FAILS.
+ * knap_dp == knap_brute is pinned for a valid cap so the test is non-vacuous.
+ * Exit 99. */
+module corpus_1501
+
+extern @abi(c-msvc-x64) fn knap_setup() -> i32 from "knapsack.iii"
+extern @abi(c-msvc-x64) fn knap_dp(cap: u32) -> u32 from "knapsack.iii"
+extern @abi(c-msvc-x64) fn knap_brute(cap: u32) -> u32 from "knapsack.iii"
+extern @abi(c-msvc-x64) fn seg_build() -> i32 from "segment_tree.iii"
+extern @abi(c-msvc-x64) fn seg_update(i: u32, v: u32) -> i32 from "segment_tree.iii"
+extern @abi(c-msvc-x64) fn seg_query(l: u32, r: u32) -> u32 from "segment_tree.iii"
+
+const SEG_INF : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    knap_setup()
+
+    /* ---- arm 1: the DP is correct (non-vacuous: matches the brute reference) ---- */
+    if knap_dp(10u32) != knap_brute(10u32) { return 1u64 }
+    /* ---- arm 2: cap 16 (last valid, all 4 items fit: 3+4+5+6 = 18) ---- */
+    if knap_dp(16u32) != 18u32 { return 2u64 }
+    /* ---- arm 3: cap 17 (KNAP_DP[17], one past) refused -> 0 ----
+     * Pre-fix returns 18 (did the 1-past write+read) -> reddens here. */
+    if knap_dp(17u32) != 0u32 { return 3u64 }
+    if knap_dp(1000u32) != 0u32 { return 4u64 }
+
+    /* ---- segment tree ---- */
+    seg_build()
+    /* arm 4: boundary-valid update + query */
+    if seg_update(7u32, 5u32) != 0i32 { return 5u64 }
+    let q : u32 = seg_query(0u32, 7u32)
+    if q == SEG_INF { return 6u64 }                  /* a real min over the leaves, not empty */
+    /* arm 5: the query guard returns INF for an out-of-range range */
+    if seg_query(0u32, 8u32) != SEG_INF { return 7u64 }
+    if seg_query(8u32, 8u32) != SEG_INF { return 8u64 }
+    /* arm 6: the update guard refuses i=8 (SEG_VAL[8]/SEG_TREE[16], one past) ----
+     * Pre-fix returns 0 (did the 1-past write) -> reddens here. */
+    if seg_update(8u32, 99u32) != -1i32 { return 9u64 }
+    if seg_update(1000u32, 99u32) != -1i32 { return 10u64 }
+    /* arm 7: the valid leaf is uncorrupted by the refused update */
+    if seg_query(0u32, 7u32) != q { return 11u64 }
+
+    return 99u64
+}

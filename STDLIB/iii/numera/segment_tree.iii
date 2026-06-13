@@ -50,6 +50,7 @@ fn seg_build() -> i32 @export {
 
 /* set element i to v; recompute the path to the root. */
 fn seg_update(i: u32, v: u32) -> i32 @export {
+    if i >= SEG_N { return -1i32 }       /* [OOB-W10] i writes SEG_VAL[i] (SEG_VAL[8]) + SEG_TREE[SEG_N+i] (SEG_TREE[16]) */
     SEG_VAL[i as u64] = v
     let mut p : u32 = SEG_N + i
     SEG_TREE[p as u64] = v
@@ -63,6 +64,8 @@ fn seg_update(i: u32, v: u32) -> i32 @export {
 
 /* range minimum over [l, r] (inclusive) by the iterative half-open sweep. */
 fn seg_query(l: u32, r: u32) -> u32 @export {
+    if l >= SEG_N { return SEG_INF }     /* [OOB-W10] l/r index SEG_TREE[SEG_N+l .. SEG_N+r]; out-of-range -> empty (INF) */
+    if r >= SEG_N { return SEG_INF }
     let mut res : u32 = SEG_INF
     let mut lo : u32 = SEG_N + l
     let mut hi : u32 = (SEG_N + r) + 1u32

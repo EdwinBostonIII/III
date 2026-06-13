@@ -1,0 +1,56 @@
+/* 1499_field256_accessor_bounds.iii -- W10 FALSIFIER: the 256-bit prime-field
+ * limb accessors REFUSE out-of-range slot/idx (the 384-bit siblings fp384/fn384
+ * were guarded by a prior audit; the 256-bit fp256/fn256 were missed).
+ *
+ * THE DEFECT: fp_set_limb / fp_get_limb (FP[512]=64*8) and fn_get_limb_x /
+ * fn_set_u32_x (FN[512]=64*8) indexed the array with unvalidated u64 slot/idx --
+ * an OOB write (set) or read (get) on a caller-supplied index.
+ *
+ * THE GUARD: slot>=64 or idx>=8 -> set returns -1, get returns 0.
+ *
+ * Teeth: the boundary is pinned (slot 63 idx 7 = FP[511] last valid round-trips;
+ * slot 64 = FP[512] one past is refused).  Against the pre-fix lib fp_set_limb
+ * (64,0,..) returns 0 (did the 1-past write) so arm 2 FAILS there; every OOB
+ * probe is exactly one slot past.  Exit 99. */
+module corpus_1499
+
+extern @abi(c-msvc-x64) fn fp_set_limb(slot: u64, idx: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_get_limb(slot: u64, idx: u64) -> u32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fn_set_u32_x(slot: u64, v: u32) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_get_limb_x(slot: u64, idx: u64) -> u32 from "fn256.iii"
+
+fn main() -> u64 {
+    /* ---- fp256: the boundary-valid slot round-trips ---- */
+    if fp_set_limb(63u64, 7u64, 0xABCDu32) != 0i32 { return 1u64 }
+    if fp_get_limb(63u64, 7u64) != 0xABCDu32 { return 2u64 }
+    if fp_set_limb(0u64, 0u64, 0x55u32) != 0i32 { return 3u64 }
+    if fp_get_limb(0u64, 0u64) != 0x55u32 { return 4u64 }
+
+    /* ---- fp256: the slot guard (slot 64 -> FP[512], one past) ----
+     * Pre-fix returns 0 (did the 1-past write) -> reddens here. */
+    if fp_set_limb(64u64, 0u64, 0xDEADu32) != -1i32 { return 5u64 }
+    if fp_get_limb(64u64, 0u64) != 0u32 { return 6u64 }
+    /* the idx guard (idx 8 -> bleeds the next slot; refused) */
+    if fp_set_limb(0u64, 8u64, 0xBEEFu32) != -1i32 { return 7u64 }
+    if fp_get_limb(0u64, 8u64) != 0u32 { return 8u64 }
+    /* a larger id refused identically (guard short-circuits, no wild access) */
+    if fp_set_limb(1000u64, 0u64, 1u32) != -1i32 { return 9u64 }
+
+    /* the valid slots are uncorrupted by the refused writes */
+    if fp_get_limb(63u64, 7u64) != 0xABCDu32 { return 10u64 }
+    if fp_get_limb(0u64, 0u64) != 0x55u32 { return 11u64 }
+
+    /* ---- fn256: same shape (FN[512]=64*8) ---- */
+    if fn_set_u32_x(63u64, 0x99u32) != 0i32 { return 12u64 }
+    if fn_get_limb_x(63u64, 0u64) != 0x99u32 { return 13u64 }
+    if fn_get_limb_x(63u64, 1u64) != 0u32 { return 14u64 }   /* set_u32 zeroes limbs 1..7 */
+
+    if fn_set_u32_x(64u64, 0x11u32) != -1i32 { return 15u64 }   /* slot 64 -> FN[512] one past, refused */
+    if fn_get_limb_x(64u64, 0u64) != 0u32 { return 16u64 }
+    if fn_get_limb_x(0u64, 8u64) != 0u32 { return 17u64 }       /* idx 8 refused */
+
+    /* fn256 valid slot uncorrupted */
+    if fn_get_limb_x(63u64, 0u64) != 0x99u32 { return 18u64 }
+
+    return 99u64
+}

@@ -796,3 +796,32 @@ verified race-free: only THREE .o changed content (k0_referee/dijkstra/fe25519 -
 archive of independent objects, so no untouched test can regress), and all 15 tests that extern
 those modules (388/973/993/1247/1290/1403/1431/1436/1451/1465/1493/1495 + the 3 new) re-run
 GREEN against the new lib.  Count 1083 -> **1086**.
+
+## Wave-10 — accessor-bounds OOB guards (the 384-bit-sibling-was-guarded gap) (2026-06-12)
+
+A read-only 5-lens discovery (reentrancy / exhaustion-degenerate / numeric-edges /
+oob-guards-other / determinism-seal2; 14 agents, 6 survivors of 9 -- the reentrancy,
+numeric-edge, and CIOS-carry candidates all refuted as intentional/correct) surfaced a
+coherent cluster: a PRIOR audit guarded the 384-bit prime fields (fp384 fq_set/get_limb,
+fn384 gn_get_limb_x all `if slot>=48 / idx>=12`) but MISSED the structurally-identical
+256-bit fields and the zk/combinatorial structures.  Hardened the whole accessor family
+per module to the sibling form (set -> -1, get -> 0):
+
+- `numera/fp256.iii` -- fp_get_limb / fp_set_limb (FP[512]=64*8): slot>=64, idx>=8.
+- `numera/fn256.iii` -- fn_get_limb_x / fn_set_u32_x (FN[512]=64*8): slot>=64, idx>=8.
+- `numera/zk_field.iii` -- frq_set/get_limb (ZKFR[4096]=512*8: slot>=512,idx>=8) +
+  zkf_set/get_limb (ZKF[49152]=4096*12: slot>=4096,idx>=12).  BLS12-381 Fr/Fp.
+- `numera/knapsack.iii` -- knap_dp(cap): cap>=17 -> 0 (KNAP_DP[17], cap indexes [0..cap]).
+- `numera/segment_tree.iii` -- seg_update(i): i>=8 -> -1 (SEG_VAL[8]/SEG_TREE[16]);
+  seg_query(l,r): l/r>=8 -> INF.
+
+All OOB write/read on @export with caller-supplied indices (same class as wave-9 k0/dijkstra
+and the prior eg_find defect).  Falsifiers `1499` (256-bit fields), `1500` (zk-field),
+`1501` (knapsack+segment-tree): boundary-pinned (last valid index round-trips, one-past
+refused), gentle 1-past OOB probes, 1501 pins knap_dp==knap_brute so it cannot pass
+vacuously.  Old-lib teeth: 5/3/3 (missing guards returned 0 or the OOB-computed 18).
+
+Gates: build GATE PASS FAIL=0; the 3 falsifiers 99 vs new / fail vs old (5/3/3); corpus
+delta verified race-free -- only FIVE .o changed content (fp256/fn256/zk_field/knapsack/
+segment_tree), all 19 tests externing them + the 3 new re-run GREEN against the new lib.
+Count 1086 -> **1089**.

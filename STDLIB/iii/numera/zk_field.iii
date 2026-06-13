@@ -1474,8 +1474,8 @@ fn frq_set_u32(slot: u64, v: u32) -> i32 @export {
     while i < 8u64 { ZKFR[b + i] = 0u32 ; i = i + 1u64 }
     return 0i32
 }
-fn frq_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { ZKFR[slot*8u64 + idx] = v ; return 0i32 }
-fn frq_get_limb(slot: u64, idx: u64) -> u32 @export { return ZKFR[slot*8u64 + idx] }
+fn frq_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { if slot >= 512u64 { return -1i32 } if idx >= 8u64 { return -1i32 } ZKFR[slot*8u64 + idx] = v ; return 0i32 }   /* [OOB-W10] @export idx into ZKFR[4096]=512*8 */
+fn frq_get_limb(slot: u64, idx: u64) -> u32 @export { if slot >= 512u64 { return 0u32 } if idx >= 8u64 { return 0u32 } return ZKFR[slot*8u64 + idx] }
 fn frq_add_x(r: u64, a: u64, b: u64) -> i32 @export { return frq_add(r, a, b) }
 fn frq_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return frq_sub(r, a, b) }
 fn frq_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return frq_mul(r, a, b) }
@@ -1537,8 +1537,8 @@ fn zkf_set_u32(slot: u64, v: u32) -> i32 @export {
     while i < 12u64 { ZKF[b + i] = 0u32 ; i = i + 1u64 }
     return 0i32
 }
-fn zkf_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { ZKF[slot * 12u64 + idx] = v ; return 0i32 }
-fn zkf_get_limb(slot: u64, idx: u64) -> u32 @export { return ZKF[slot * 12u64 + idx] }
+fn zkf_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { if slot >= 4096u64 { return -1i32 } if idx >= 12u64 { return -1i32 } ZKF[slot * 12u64 + idx] = v ; return 0i32 }   /* [OOB-W10] @export idx into ZKF[49152]=4096*12 */
+fn zkf_get_limb(slot: u64, idx: u64) -> u32 @export { if slot >= 4096u64 { return 0u32 } if idx >= 12u64 { return 0u32 } return ZKF[slot * 12u64 + idx] }
 fn zkf_add_x(r: u64, a: u64, b: u64) -> i32 @export { return zkf_add(r, a, b) }
 fn zkf_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return zkf_sub(r, a, b) }
 fn zkf_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return zkf_mul(r, a, b) }

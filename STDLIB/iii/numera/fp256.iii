@@ -233,8 +233,8 @@ fn fp_set_u32(slot: u64, v: u32) -> i32 @export {
     while i < 8u64 { FP[b + i] = 0u32 ; i = i + 1u64 }
     return 0i32
 }
-fn fp_get_limb(slot: u64, idx: u64) -> u32 @export { return FP[slot * 8u64 + idx] }
-fn fp_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { FP[slot * 8u64 + idx] = v ; return 0i32 }
+fn fp_get_limb(slot: u64, idx: u64) -> u32 @export { if slot >= 64u64 { return 0u32 } if idx >= 8u64 { return 0u32 } return FP[slot * 8u64 + idx] }   /* [OOB-W10] @export idx into FP[512]=64*8 */
+fn fp_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { if slot >= 64u64 { return -1i32 } if idx >= 8u64 { return -1i32 } FP[slot * 8u64 + idx] = v ; return 0i32 }
 fn fp_is_zero(slot: u64) -> u8 @export {
     let b : u64 = slot * 8u64
     let mut acc : u32 = 0u32

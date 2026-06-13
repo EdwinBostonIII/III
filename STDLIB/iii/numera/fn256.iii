@@ -264,8 +264,9 @@ fn fn_inv_x(r: u64, a: u64) -> i32 @export { return fn_inv(r, a) }
 fn fn_copy_x(dst: u64, src: u64) -> i32 @export { return fn_copy(dst, src) }
 fn fn_is_zero_x(slot: u64) -> u8 @export { return fn_is_zero(slot) }
 fn fn_eq_x(a: u64, b: u64) -> u8 @export { return fn_eq(a, b) }
-fn fn_get_limb_x(slot: u64, idx: u64) -> u32 @export { return FN[slot * 8u64 + idx] }
+fn fn_get_limb_x(slot: u64, idx: u64) -> u32 @export { if slot >= 64u64 { return 0u32 } if idx >= 8u64 { return 0u32 } return FN[slot * 8u64 + idx] }   /* [OOB-W10] @export idx into FN[512]=64*8 */
 fn fn_set_u32_x(slot: u64, v: u32) -> i32 @export {
+    if slot >= 64u64 { return -1i32 }    /* [OOB-W10] slot writes FN[slot*8 .. +8) */
     let b : u64 = slot * 8u64
     FN[b] = v
     let mut i : u64 = 1u64

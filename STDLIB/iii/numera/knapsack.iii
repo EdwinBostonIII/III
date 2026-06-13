@@ -41,6 +41,7 @@ fn knap_max2(a: u32, b: u32) -> u32 @export {
 
 /* the pseudo-polynomial DP: dp[w] best value within weight w; capacity swept downward per item. */
 fn knap_dp(cap: u32) -> u32 @export {
+    if cap >= 17u32 { return 0u32 }      /* [OOB-W10] cap indexes KNAP_DP[0..cap]; KNAP_DP[17] -> cap<=16 */
     let mut z : u32 = 0u32
     while z <= cap { KNAP_DP[z as u64] = 0u32 ; z = z + 1u32 }
     let mut i : u32 = 0u32

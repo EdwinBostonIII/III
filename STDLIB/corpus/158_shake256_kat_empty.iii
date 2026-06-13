@@ -1,5 +1,9 @@
-/* SHAKE256("", 32) = 46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762f
- * First 4 bytes: 46 b9 dd 2b
+/* SHAKE256("", N) KAT -- W42 strengthen (was 4 of 32 bytes).
+ *   SHAKE256("",32) = 46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762f
+ *   SHAKE256("",64) = ...continues... d75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be
+ * Now asserts (1) the full published 32-byte vector, (2) the 64-byte continuation (the new
+ * squeezed bytes 32..63), and (3) XOF prefix-stability: SHAKE256("",32) == first 32 of
+ * SHAKE256("",64).  Exit 99 = all hold (EXPECTED unchanged).
  */
 module corpus_158
 
@@ -7,15 +11,40 @@ extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn shake256_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 from "shake256.iii"
 
+var EXP : [u8; 64]
+
 fn main() -> u64 {
-    let out : *u8 = malloc(32u64)
-    shake256_oneshot(0u64, 0u64, out as u64, 32u64)
+    /* SHAKE256("",64) full 64 bytes */
+    EXP[0u64]=0x46u8  EXP[1u64]=0xb9u8  EXP[2u64]=0xddu8  EXP[3u64]=0x2bu8
+    EXP[4u64]=0x0bu8  EXP[5u64]=0xa8u8  EXP[6u64]=0x8du8  EXP[7u64]=0x13u8
+    EXP[8u64]=0x23u8  EXP[9u64]=0x3bu8  EXP[10u64]=0x3fu8 EXP[11u64]=0xebu8
+    EXP[12u64]=0x74u8 EXP[13u64]=0x3eu8 EXP[14u64]=0xebu8 EXP[15u64]=0x24u8
+    EXP[16u64]=0x3fu8 EXP[17u64]=0xcdu8 EXP[18u64]=0x52u8 EXP[19u64]=0xeau8
+    EXP[20u64]=0x62u8 EXP[21u64]=0xb8u8 EXP[22u64]=0x1bu8 EXP[23u64]=0x82u8
+    EXP[24u64]=0xb5u8 EXP[25u64]=0x0cu8 EXP[26u64]=0x27u8 EXP[27u64]=0x64u8
+    EXP[28u64]=0x6eu8 EXP[29u64]=0xd5u8 EXP[30u64]=0x76u8 EXP[31u64]=0x2fu8
+    EXP[32u64]=0xd7u8 EXP[33u64]=0x5du8 EXP[34u64]=0xc4u8 EXP[35u64]=0xddu8
+    EXP[36u64]=0xd8u8 EXP[37u64]=0xc0u8 EXP[38u64]=0xf2u8 EXP[39u64]=0x00u8
+    EXP[40u64]=0xcbu8 EXP[41u64]=0x05u8 EXP[42u64]=0x01u8 EXP[43u64]=0x9du8
+    EXP[44u64]=0x67u8 EXP[45u64]=0xb5u8 EXP[46u64]=0x92u8 EXP[47u64]=0xf6u8
+    EXP[48u64]=0xfcu8 EXP[49u64]=0x82u8 EXP[50u64]=0x1cu8 EXP[51u64]=0x49u8
+    EXP[52u64]=0x47u8 EXP[53u64]=0x9au8 EXP[54u64]=0xb4u8 EXP[55u64]=0x86u8
+    EXP[56u64]=0x40u8 EXP[57u64]=0x29u8 EXP[58u64]=0x2eu8 EXP[59u64]=0xacu8
+    EXP[60u64]=0xb3u8 EXP[61u64]=0xb7u8 EXP[62u64]=0xc4u8 EXP[63u64]=0xbeu8
 
-    if out[0] != 0x46u8 { return 1u64 }
-    if out[1] != 0xb9u8 { return 2u64 }
-    if out[2] != 0xddu8 { return 3u64 }
-    if out[3] != 0x2bu8 { return 4u64 }
+    let o32 : *u8 = malloc(32u64)
+    let o64 : *u8 = malloc(64u64)
+    shake256_oneshot(0u64, 0u64, o32 as u64, 32u64)        /* SHAKE256("",32) */
+    shake256_oneshot(0u64, 0u64, o64 as u64, 64u64)        /* SHAKE256("",64) */
 
-    free(out)
+    /* (1)+(2) full published 64-byte vector */
+    let mut i : u64 = 0u64
+    while i < 64u64 { if o64[i] != EXP[i] { return 1u64 + i }  i = i + 1u64 }
+
+    /* (3) XOF prefix-stability: 32-byte squeeze == first 32 of the 64-byte squeeze */
+    let mut j : u64 = 0u64
+    while j < 32u64 { if o32[j] != o64[j] { return 80u64 + j }  j = j + 1u64 }
+
+    free(o32) free(o64)
     return 99u64
 }

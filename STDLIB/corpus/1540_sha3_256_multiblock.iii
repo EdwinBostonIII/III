@@ -1,0 +1,39 @@
+/* 1540_sha3_256_multiblock.iii -- W42 ENHANCEMENT: FIPS 202 SHA3-256 of a MULTI-BLOCK message.
+ * 155_sha3_256_kat_abc ("abc", 3 bytes) and 169_sha3_256_empty (0 bytes) both stay within a
+ * single sponge block; neither fires keccak_absorb's rate-block loop.  The NIST example
+ * Msg = 0xA3 repeated 200 times (1600 bits, 200 > rate 136) drives one full 136-byte block
+ * absorb + a 64-byte tail -- the multi-block path, previously unasserted.
+ *
+ * SHA3-256(0xA3 x 200) = 79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787
+ * (NIST CSRC SHA-3 example; verified via hashlib.sha3_256.)  Exit 99 = match. */
+module corpus_1540
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+
+var MSG : [u8; 200]
+var EXP : [u8; 32]
+
+fn main() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 200u64 { MSG[k] = 0xA3u8  k = k + 1u64 }
+
+    EXP[0u64]=0x79u8  EXP[1u64]=0xf3u8  EXP[2u64]=0x8au8  EXP[3u64]=0xdeu8
+    EXP[4u64]=0xc5u8  EXP[5u64]=0xc2u8  EXP[6u64]=0x03u8  EXP[7u64]=0x07u8
+    EXP[8u64]=0xa9u8  EXP[9u64]=0x8eu8  EXP[10u64]=0xf7u8 EXP[11u64]=0x6eu8
+    EXP[12u64]=0x83u8 EXP[13u64]=0x24u8 EXP[14u64]=0xafu8 EXP[15u64]=0xbfu8
+    EXP[16u64]=0xd4u8 EXP[17u64]=0x6cu8 EXP[18u64]=0xfdu8 EXP[19u64]=0x81u8
+    EXP[20u64]=0xb2u8 EXP[21u64]=0x2eu8 EXP[22u64]=0x39u8 EXP[23u64]=0x73u8
+    EXP[24u64]=0xc6u8 EXP[25u64]=0x5fu8 EXP[26u64]=0xa1u8 EXP[27u64]=0xbdu8
+    EXP[28u64]=0x9du8 EXP[29u64]=0xe3u8 EXP[30u64]=0x17u8 EXP[31u64]=0x87u8
+
+    let out : *u8 = malloc(32u64)
+    sha3_256_oneshot((&MSG as u64), 200u64, out as u64)
+
+    let mut i : u64 = 0u64
+    while i < 32u64 { if out[i] != EXP[i] { return 1u64 + i }  i = i + 1u64 }
+
+    free(out)
+    return 99u64
+}

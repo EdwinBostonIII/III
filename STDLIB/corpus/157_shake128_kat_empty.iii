@@ -1,5 +1,9 @@
-/* SHAKE128("", 32) = 7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26
- * First 4 bytes: 7f 9c 2b a4
+/* SHAKE128("", N) KAT -- W42 strengthen (was 4 of 32 bytes).
+ *   SHAKE128("",32) = 7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26
+ * Now asserts (1) the FULL published 32-byte vector and (2) the XOF prefix-stability
+ * property: SHAKE128("",16) equals the first 16 bytes of SHAKE128("",32).  Arm (2) catches
+ * any impl that bakes out_len into the absorb/pad or re-seeds the sponge per length.
+ * Exit 99 = both hold (EXPECTED unchanged).
  */
 module corpus_157
 
@@ -7,15 +11,31 @@ extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn shake128_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 from "shake128.iii"
 
+var EXP : [u8; 32]
+
 fn main() -> u64 {
-    let out : *u8 = malloc(32u64)
-    shake128_oneshot(0u64, 0u64, out as u64, 32u64)
+    EXP[0u64]=0x7fu8  EXP[1u64]=0x9cu8  EXP[2u64]=0x2bu8  EXP[3u64]=0xa4u8
+    EXP[4u64]=0xe8u8  EXP[5u64]=0x8fu8  EXP[6u64]=0x82u8  EXP[7u64]=0x7du8
+    EXP[8u64]=0x61u8  EXP[9u64]=0x60u8  EXP[10u64]=0x45u8 EXP[11u64]=0x50u8
+    EXP[12u64]=0x76u8 EXP[13u64]=0x05u8 EXP[14u64]=0x85u8 EXP[15u64]=0x3eu8
+    EXP[16u64]=0xd7u8 EXP[17u64]=0x3bu8 EXP[18u64]=0x80u8 EXP[19u64]=0x93u8
+    EXP[20u64]=0xf6u8 EXP[21u64]=0xefu8 EXP[22u64]=0xbcu8 EXP[23u64]=0x88u8
+    EXP[24u64]=0xebu8 EXP[25u64]=0x1au8 EXP[26u64]=0x6eu8 EXP[27u64]=0xacu8
+    EXP[28u64]=0xfau8 EXP[29u64]=0x66u8 EXP[30u64]=0xefu8 EXP[31u64]=0x26u8
 
-    if out[0] != 0x7fu8 { return 1u64 }
-    if out[1] != 0x9cu8 { return 2u64 }
-    if out[2] != 0x2bu8 { return 3u64 }
-    if out[3] != 0xa4u8 { return 4u64 }
+    let o16 : *u8 = malloc(16u64)
+    let o32 : *u8 = malloc(32u64)
+    shake128_oneshot(0u64, 0u64, o16 as u64, 16u64)        /* SHAKE128("",16) */
+    shake128_oneshot(0u64, 0u64, o32 as u64, 32u64)        /* SHAKE128("",32) */
 
-    free(out)
+    /* (1) full published 32-byte vector */
+    let mut i : u64 = 0u64
+    while i < 32u64 { if o32[i] != EXP[i] { return 1u64 + i }  i = i + 1u64 }
+
+    /* (2) XOF prefix-stability: the 16-byte squeeze == first 16 of the 32-byte squeeze */
+    let mut j : u64 = 0u64
+    while j < 16u64 { if o16[j] != o32[j] { return 50u64 + j }  j = j + 1u64 }
+
+    free(o16) free(o32)
     return 99u64
 }

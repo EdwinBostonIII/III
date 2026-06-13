@@ -1584,3 +1584,34 @@ the agreement K1==K2 (both sides derive the same secret) and non-vacuity (distin
 =99 (the ladder is RFC-correct); a permanent externally-anchored oracle on the DH property.
 
 No source change -> no rebuild; corpus green.  Count 1123 -> **1124**.
+
+## Wave-41/42 — crypto coverage-gap audit + the hash/MAC/XOF KAT-strengthening batch (2026-06-13)
+
+**W41 (crypto defining-property audit):** a 5-group workflow (KDF/AEAD/sig/hash-XOF/PQ) over every
+security-critical primitive, with a confirm-stage ruling out already-covered, found 20 confirmed
+published-vector/defining-property gaps.  The PQ keygen-from-seed gaps (mlkem/mldsa/slhdsa) need external
+NIST ACVP files -> DEFERRED.  The self-contained hash/MAC/XOF gaps were filled as W42.
+
+**W42 (6 KATs landed; corpus 1124 -> 1127):** all run-before-register, each anchored to an authoritative
+published vector.
+- **STRENGTHENED 3 weak existing KATs (test-strengthening -- the prior versions would pass even with a bug
+  in the unchecked bytes):** 79_hmac_sha256_rfc4231 (was 9 of 32 tag bytes -> all 32, RFC4231 TC1);
+  157_shake128_kat_empty (was 4 of 32 -> full 32 + XOF prefix-stability SHAKE128("",16)==first16 of ",32");
+  158_shake256_kat_empty (was 4 of 32 -> full 64 + prefix-stability across the rate boundary).
+- **NEW:** 1538 SHA3-512("") (FIPS202, full 64 bytes -- 156 covered only "abc"); 1540 SHA3-256(0xA3 x 200)
+  (the NIST 1600-bit example -- the MULTI-BLOCK path 155/169 never reach, >rate 136); 1539 BLAKE2s("")
+  (full 32 + the published "abc" vector as the anchor arm).
+- **THE BLAKE2s CONSTANT-CORRECTION (run-before-register earned its keep):** 1539 first FAILED at byte 4 --
+  the W41 audit's recalled empty-digest constant (69217a3049cfe7e8...) was WRONG past the 4-byte prefix.
+  Disambiguated by DUMPING III's actual output: III's BLAKE2s("abc") is BYTE-EXACT to the published
+  canonical (508c5e8c...), proving III's blake2s spec-faithful; therefore its empty output
+  (69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9) IS the canonical empty digest, and the
+  AUDIT CONSTANT was the error -- NOT a III bug.  Corrected 1539 to the verified bytes + kept the "abc"
+  published-vector anchor so the test is non-circular.  **LESSON: a discovery-agent's recalled published
+  CONSTANT is as fallible as a recalled code-fact -- run-before-register + dump-the-actual-output + an
+  independent spec-correctness anchor (abc) distinguishes a bad constant from a real impl bug.  The agent
+  ITSELF flagged its first sha3-512 recall as wrong and self-corrected; the blake2s one slipped through to
+  the KAT, where the gate caught it.**
+
+No source change -> no rebuild; corpus 1127/0 with 83/155/156/169 (the pre-existing hash KATs) unchanged.
+Count 1124 -> **1127**.

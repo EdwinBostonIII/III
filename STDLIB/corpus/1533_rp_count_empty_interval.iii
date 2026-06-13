@@ -1,0 +1,41 @@
+/* 1533_rp_count_empty_interval.iii -- W35 FALSIFIER: reduced_product::rp_count must
+ * return 0 for an EMPTY interval (lo > hi) in EVERY parity mode, not wrapping garbage.
+ *
+ * THE DEFECT (same-function asymmetry): rp_count(lo,hi,p) is documented as "the exact
+ * number of concrete values in the reduced product [lo,hi] with parity p".  The parity
+ * branches (RP_EVEN/RP_ODD) collapse an empty interval to 0 via the `rlo > rhi` guard
+ * (line 57), AND rp_reduce_hi's own comment (line 48) RELIES on rp_count to do so.  But
+ * the RP_ANY branch (line 54) computes `(hi - lo) + 1u32` with no `hi < lo` guard, so for
+ * lo=10,hi=5 it evaluates (5-10)+1 in u32 = 0xFFFFFFFB + 1 = 4294967292 -- a wrong, huge
+ * cardinality.  A caller sizing a loop/alloc from this count over-runs catastrophically.
+ *
+ * THE FIX: `if hi < lo { return 0u32 }` at the top of rp_count -- unifies all three modes
+ * (the parity branches already return 0 for lo>hi; this makes RP_ANY consistent).
+ *
+ * TEETH (value differential): empty-interval RP_ANY count must be 0.
+ *   - pre-fix: 4294967292 / 4294967295 -> arm reddens (exit 30/31).
+ *   - post-fix: 0.
+ * Sanity: non-empty counts (RP_ANY=8, RP_EVEN=4, single-elem=1) and empty-in-parity (=0,
+ * already correct pre-fix) are unchanged -- the guard is not over-tight. */
+module corpus_1533
+
+extern @abi(c-msvc-x64) fn rp_count(lo: u32, hi: u32, p: u32) -> u32 from "reduced_product.iii"
+
+fn main() -> u64 {
+    let RP_EVEN : u32 = 0u32
+    let RP_ANY  : u32 = 2u32
+
+    /* ---- TEETH: empty interval (lo>hi) in RP_ANY mode must be 0, not a wrapped count ---- */
+    if rp_count(10u32, 5u32, RP_ANY) != 0u32 { return 30u64 }   /* pre-fix: (5-10)+1 = 4294967292 */
+    if rp_count(5u32,  3u32, RP_ANY) != 0u32 { return 31u64 }   /* pre-fix: (3-5)+1 = 4294967295 */
+
+    /* ---- sanity: non-empty counts unchanged (guard not over-tight) ---- */
+    if rp_count(2u32, 9u32, RP_ANY)  != 8u32 { return 32u64 }   /* [2,9] = 8 values */
+    if rp_count(2u32, 9u32, RP_EVEN) != 4u32 { return 33u64 }   /* {2,4,6,8} = 4 */
+    if rp_count(7u32, 7u32, RP_ANY)  != 1u32 { return 34u64 }   /* singleton */
+
+    /* ---- sanity: empty interval in a PARITY mode was already 0 (stays 0) ---- */
+    if rp_count(10u32, 5u32, RP_EVEN) != 0u32 { return 35u64 }  /* parity branch rlo>rhi guard */
+
+    return 99u64
+}

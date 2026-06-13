@@ -1467,3 +1467,35 @@ ntt tabled(W34) -- plus the already-enforced ripple/ripple_dyn + fixed-pow2-cons
 
 Gates: build GATE PASS FAIL=0; 1532 teeth exit 30 vs old lib, 99 vs new; corpus green (mlkem/mldsa
 roundtrips).  Count 1118 -> **1119**.
+
+## Wave-35 — reduced_product::rp_count empty-interval cardinality wrap (a FRESH axis: algebraic-law / corner-input oracles) (2026-06-13)
+
+The documented-power-of-2 vein (W30-34) was mined to the floor, so the discovery AXIS switched from
+guard-presence (~2/3 FP, each candidate needs a contract judgment) to **algebraic-law / round-trip oracles**
+on the numerics core -- self-validating (a concrete law holds on a concrete corner input or it does not, no
+judgment), so structurally near-zero FP.  Read-only Workflow w7fey1eqr fanned out over ~70 numera files
+(6 groups: asym crypto / pq / bigint-field / ntt-zk / codes / dp-algo) on three angles -- law_or_roundtrip,
+overflow_before_use, unenforced_precondition -- with an adversarial REFUTE stage.  6 raw candidates -> 1
+confirmed; the 5 refuted were barrett (k=limbs(m) physically bounded, 2^57 corner unconstructable),
+crt_modinv (documented [0,m) contract + the m=0 SIGFPE already pinned by 1518), gf_poly (len>=1 is the
+representation invariant -> len-0 vacuous/unreachable), and fenwick x3 (uniform caller-honors-precondition,
+contract-only delta = NOT a wrong-value defect).  The verifier independently re-derived the same
+"vacuous / documented-contract / unreachable" triage my own prior notes had on crt + reduced_product.
+
+**W35-FIX** (numera/reduced_product.iii rp_count; falsifier 1533): rp_count(lo,hi,p) is documented as
+"the exact number of concrete values in [lo,hi] with parity p".  Its parity branches (RP_EVEN/RP_ODD)
+collapse an EMPTY interval (lo>hi) to 0 via the `rlo > rhi` guard (line 57) -- and rp_reduce_hi's own
+comment (line 48) RELIES on rp_count doing so.  But the RP_ANY branch (line 54) computed `(hi - lo) + 1u32`
+with no `hi < lo` guard, so rp_count(10,5,RP_ANY) = (5-10)+1 in u32 = **4294967292** -- a wrong, ~4.29e9
+cardinality (a caller sizing a loop/alloc from it over-runs).  A same-FUNCTION asymmetry, not a uniform
+precondition: the tell of a real defect vs. a hardening nicety.  FIX: `if hi < lo { return 0u32 }` at the
+top of rp_count -- unifies all three modes (parity branches already return 0 for lo>hi; this makes RP_ANY
+consistent).  In-tree callers (the module KAT lines 97-98; sovereign_optimizer uses only rp_reduce_lo/hi)
+all pass lo<=hi -> reduced_product_kat + 1272 + 1313 byte-unchanged.
+
+1533 teeth (value differential): rp_count(10,5,RP_ANY) / (5,3,RP_ANY) pre-fix return 4294967292 / 4294967295
+(exit 30) -> post-fix 0; sanity non-empty (RP_ANY=8, RP_EVEN=4, singleton=1) and empty-in-parity (=0,
+already correct) unchanged.
+
+Gates: build GATE PASS FAIL=0, all three ratchets OK; 1533 teeth exit 30 vs old lib, 99 vs new; corpus
+green.  Count 1119 -> **1120**.

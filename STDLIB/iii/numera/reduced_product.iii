@@ -51,6 +51,7 @@ fn rp_reduce_hi(hi: u32, p: u32) -> u32 @export {
 
 /* the exact number of concrete values in the reduced product [lo,hi] with parity p. */
 fn rp_count(lo: u32, hi: u32, p: u32) -> u32 @export {
+    if hi < lo { return 0u32 }                   /* [W35] empty interval has 0 concrete values in EVERY mode; the parity branch already collapses (rlo>rhi below), so RP_ANY must too -- (hi-lo)+1 wraps to ~4.29e9 for lo>hi otherwise */
     if p >= RP_ANY { return (hi - lo) + 1u32 }
     let rlo : u32 = rp_reduce_lo(lo, p)
     let rhi : u32 = rp_reduce_hi(hi, p)

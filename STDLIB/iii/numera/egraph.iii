@@ -1742,6 +1742,13 @@ fn eg_verify_seal(expected32: *u8) -> u8 @export {
  * path -- present only so the falsifier arm of the integrity KAT is real. */
 fn eg_test_flip_bit(node_idx: u32) -> i32 @export {
     let nb : u64 = (node_idx as u64) & EGRAPH_U32MASK
+    /* [W17 -- the node-index sibling of the 1481 eg_find class-id OOB] node_idx is
+     * untrusted and EGRAPH_U32MASK is a 32-bit TRUNCATION, not a bound, so nb can
+     * reach ~4.29e9 and index EGRAPH_N_SYM (131072 slots) far out of range -- an
+     * OOB read+write into adjacent module BSS through an @export.  Mirror eg_find's
+     * `>= EGRAPH_MAX_CLASS` guard: refuse an out-of-range node index.  Byte-identical
+     * for every in-range caller (the RS self-heal fixtures flip live nodes << MAX). */
+    if nb >= (EGRAPH_MAX_NODES as u64) { return -1i32 }
     EGRAPH_N_SYM[nb] = EGRAPH_N_SYM[nb] ^ 0x1u32
     return 0i32
 }

@@ -1080,6 +1080,7 @@ declare -A EXPECTED=(
     [1504_fs_open_handle_leak]=99
     [1505_resolver_memo_fifo]=99
     [1506_huffman_decode_len_oob]=99
+    [1507_egraph_flip_node_oob]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

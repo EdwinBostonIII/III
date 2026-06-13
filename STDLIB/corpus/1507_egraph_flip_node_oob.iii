@@ -1,0 +1,45 @@
+/* 1507_egraph_flip_node_oob.iii -- W17 FALSIFIER: eg_test_flip_bit REFUSES an
+ * out-of-range node index instead of indexing EGRAPH_N_SYM out of bounds.
+ *
+ * THE DEFECT (the node-index sibling of the 1481/3eaf0634 eg_find class-id OOB):
+ * eg_test_flip_bit(node_idx) computed `nb = node_idx & EGRAPH_U32MASK` -- but
+ * EGRAPH_U32MASK is 0xFFFFFFFF, a 32-bit TRUNCATION, not a bound -- then did
+ * `EGRAPH_N_SYM[nb] = EGRAPH_N_SYM[nb] ^ 1`.  EGRAPH_N_SYM has 131072 slots, so any
+ * node_idx >= 131072 is an OOB read+write into adjacent module BSS, reachable through
+ * this @export with an attacker-supplied index.  The 1481 fix guarded eg_find's
+ * class-id path (`a >= EGRAPH_MAX_CLASS -> SENT`) but left this node-index @export
+ * unguarded.
+ *
+ * THE FIX: `if nb >= EGRAPH_MAX_NODES { return -1 }` before the access -- the exact
+ * mirror of eg_find's guard.  Byte-identical for every in-range caller (the RS
+ * self-heal fixtures flip live nodes, indices << 131072).
+ *
+ * TEETH (gentle, exactly-one-past -- per the crash protocol, never a wild stomp):
+ * eg_test_flip_bit(131072) is exactly one slot past the array.  Fixed lib -> -1
+ * (guard fires, NO OOB).  Pre-fix lib -> writes EGRAPH_N_SYM[131072] (one u32 into
+ * the adjacent BSS var, no crash) and returns 0.  Arm 3 asserts -1, so the old lib
+ * (0) reddens (exit 3) having done a single 1-past write.  Arm 2 pins the boundary
+ * the other way (131071, the LAST valid slot, accepted -> 0, guard not over-tight);
+ * arm 1 a normal in-range flip; arm 4 a far-past index (reached only on the FIXED
+ * lib, where the guard returns -1 with NO OOB).  Exit 99. */
+module corpus_1507
+
+extern @abi(c-msvc-x64) fn eg_test_flip_bit(node_idx: u32) -> i32 from "egraph.iii"
+
+const EG_MAX_NODES : u32 = 131072u32          /* = EGRAPH_N_SYM slot count */
+
+fn main() -> u64 {
+    /* ---- 1. a normal in-range flip succeeds (both libs) ---- */
+    if eg_test_flip_bit(0u32) != 0i32 { return 1u64 }
+
+    /* ---- 2. the LAST valid slot is accepted (guard not over-tight; both libs) ---- */
+    if eg_test_flip_bit(EG_MAX_NODES - 1u32) != 0i32 { return 2u64 }   /* 131071 -> 0 */
+
+    /* ---- 3. THE TEETH: one past the end -> fixed REFUSES (-1); old writes OOB + returns 0 ---- */
+    if eg_test_flip_bit(EG_MAX_NODES) != -1i32 { return 3u64 }         /* 131072 -> old 0 reddens */
+
+    /* ---- 4. a far-past index is likewise refused (reached only on the fixed lib) ---- */
+    if eg_test_flip_bit(999999u32) != -1i32 { return 4u64 }
+
+    return 99u64
+}

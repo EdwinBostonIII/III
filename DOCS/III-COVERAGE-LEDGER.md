@@ -960,3 +960,30 @@ decodes byte-exact; arm 5 a far-past length (200) is likewise rejected.
 
 Gates: build GATE PASS FAIL=0; 1506 99 vs new / exit 5 vs old; only huffman.iii changed, both
 huffman consumers (1230_huffman + 1231_lzh) + 1506 GREEN.  Count 1093 -> **1094**.
+
+## Wave-17 — eg_test_flip_bit node-index OOB write (the sibling the 1481 eg_find fix missed) (2026-06-13)
+
+A SIBLING HUNT off the most recent commit (3eaf0634, which fixed an eg_find class-id OOB via
+`a >= EGRAPH_MAX_CLASS -> SENT`): the recent fix guarded the CLASS-id path through eg_find, but the
+NODE-index path had an identical unguarded @export.
+
+**W17-FIX** (`numera/egraph.iii` eg_test_flip_bit, falsifier `1507`, old exit=3): eg_test_flip_bit
+computed `nb = node_idx & EGRAPH_U32MASK` -- but EGRAPH_U32MASK is 0xFFFFFFFF, a 32-bit TRUNCATION
+(the iiis high-bit-garbage dodge), NOT a bound -- then did `EGRAPH_N_SYM[nb] = EGRAPH_N_SYM[nb] ^ 1`.
+EGRAPH_N_SYM has 131072 slots, so any node_idx >= 131072 is an OOB read+write into adjacent module
+BSS, reachable through this @export with an attacker-supplied index.  Fix: `if nb >= EGRAPH_MAX_NODES
+{ return -1 }` before the access -- the exact mirror of eg_find's guard.  Byte-identical for every
+in-range caller (1435 + the internal RS-self-heal fixtures flip live nodes, indices 0/1/65 << 131072).
+
+1507 teeth (GENTLE, exactly-one-past): eg_test_flip_bit(131072) is one slot past the array.  Fixed
+lib -> -1 (guard fires, NO OOB).  Pre-fix lib -> writes EGRAPH_N_SYM[131072] (one u32 into the
+adjacent BSS var, no crash -- confirmed clean exit 3) and returns 0.  Arm 3 asserts -1 so the old
+lib (0) reddens.  Arm 2 pins the boundary the other way (131071, the LAST valid slot, accepted);
+arm 1 a normal in-range flip; arm 4 a far-past index (reached only on the fixed lib -> -1, no OOB).
+
+This is the WHY-IT-MATTERS of the sibling-hunt method: a freshly-fixed defect class (eg_find class-id
+OOB) almost always has an un-fixed sibling on the adjacent code path (the node-index @export).  All
+17 egraph consumers (incl. 1481 the dijkstra falsifier + 1435 the flip_bit user) stay byte-identical.
+
+Gates: build GATE PASS FAIL=0; 1507 99 vs new / exit 3 vs old; only egraph.iii changed, all 17
+egraph consumers + 1507 GREEN.  Count 1094 -> **1095**.

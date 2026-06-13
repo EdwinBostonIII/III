@@ -76,7 +76,13 @@ const MATHLIB_SLOTS           : u64 = 65536u64
 const MATHLIB_ID_BYTES        : u64 = 32u64
 const MATHLIB_MAX_DEPS        : u64 = 64u64
 const MATHLIB_DEP_BUF_BYTES   : u64 = 2048u64
-const MATHLIB_CONS_SENT       : u32 = 0xFFFFFFFFu32
+const MATHLIB_CONS_SENT      : u32 = 0xFFFFFFFFu32
+/* [D-ML-1] open-addressed id index: 2x the slot count (load <= 0.5 -> probes
+ * terminate), power of two for mask probing.  Entry = slot+1; 0 = empty.
+ * The library is MONOTONE (entries are never removed; lib_init is the only
+ * reset), so linear probing needs no tombstones. */
+const MATHLIB_IDX_CAP         : u64 = 131072u64
+const MATHLIB_IDX_MASK        : u64 = 131071u64
 
 /* ---- module-scope state ----
  *
@@ -98,7 +104,8 @@ var MATHLIB_INITED        : u8  = 0u8
 var MATHLIB_CARRIER_IDS   : [u64; 262144]    /* 65536 * 32 bytes -- admitted carrier ids */
 var MATHLIB_LIVE          : [u8; 65536]      /* 1 = slot occupied */
 var MATHLIB_REFINES       : [u64; 262144]    /* 65536 * 32 bytes -- refinee id (zero = base admission) */
-var MATHLIB_COUNT         : u64 = 0u64       /* live carrier count */
+var MATHLIB_COUNT         : u64 = 0u64       /* live carrier count == the next free slot (monotone) */
+var MATHLIB_IDX           : [u32; 131072]    /* [D-ML-1] carrier-id hash index (slot+1; 0 empty) */
 
 /* --- serialized scratch (lib_admit/lib_refine are non-reentrant) --- */
 var MATHLIB_S_CLAUSE_ID   : [u8; 32]         /* cp_library_admit clause id */
@@ -132,9 +139,42 @@ fn lib_init() -> i32 @export {
         MATHLIB_LIVE[i] = 0u8
         i = i + 1u64
     }
+    let mut x : u64 = 0u64
+    while x < MATHLIB_IDX_CAP {
+        MATHLIB_IDX[x] = 0u32
+        x = x + 1u64
+    }
     MATHLIB_COUNT = 0u64
     MATHLIB_INITED = 1u8
     return MATHLIB_OK
+}
+
+/* [D-ML-1] hash a 32-byte carrier id: the first 8 bytes LE.  Carrier ids are
+ * content addresses (cad/keccak outputs), so the prefix is already uniform. */
+fn _lib_hash(carrier_id: *u8) -> u64 {
+    let mut h : u64 = 0u64
+    let mut b : u64 = 0u64
+    while b < 8u64 {
+        h = h | ((carrier_id[b] as u64) << (b * 8u64))
+        b = b + 1u64
+    }
+    return h
+}
+
+/* [D-ML-1] insert an OCCUPIED slot into the index (linear probe; load <= 0.5
+ * by construction, so an empty entry always exists). */
+fn _lib_idx_insert(slot: u64) {
+    let idp : *u8 = ((&MATHLIB_CARRIER_IDS as u64) + slot * 32u64) as *u8
+    let mut k : u64 = _lib_hash(idp) & MATHLIB_IDX_MASK
+    let mut placed : u8 = 0u8
+    while placed == 0u8 {
+        if MATHLIB_IDX[k] == 0u32 {
+            MATHLIB_IDX[k] = (slot as u32) + 1u32
+            placed = 1u8
+        } else {
+            k = (k + 1u64) & MATHLIB_IDX_MASK
+        }
+    }
 }
 
 /* =====================================================================
@@ -143,7 +183,36 @@ fn lib_init() -> i32 @export {
  * Sentinel compared only by == / != (W11 -- no signed ordering).
  * No recursion (W15). Sentinel-loop (W14 -- no break).
  * ===================================================================*/
+/* [D-ML-1] indexed find: probe from the id hash to the first empty entry.
+ * O(1) expected (load <= 0.5) vs the old full-table scan that walked all
+ * 65536 slots with a 32-byte compare per live slot on EVERY admission gate,
+ * citation, and refinement lookup.  Corpus 1492 is the differential. */
 fn lib_find(carrier_id: *u8) -> i64 {
+    let mut k : u64 = _lib_hash(carrier_id) & MATHLIB_IDX_MASK
+    let mut found : i64 = -1i64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let e : u32 = MATHLIB_IDX[k]
+        if e == 0u32 {
+            going = 0u8
+        } else {
+            let slot : u64 = (e as u64) - 1u64
+            if MATHLIB_LIVE[slot] == 1u8 {
+                let slot_p : *u8 = ((&MATHLIB_CARRIER_IDS as u64) + slot * 32u64) as *u8
+                if ident_eq(slot_p, carrier_id) == 1u8 {
+                    found = slot as i64
+                    going = 0u8
+                }
+            }
+            if going == 1u8 { k = (k + 1u64) & MATHLIB_IDX_MASK }
+        }
+    }
+    return found
+}
+
+/* [D-ML-1 ORACLE] the original full-table scan, exported as the differential
+ * adjudicator (corpus 1492 proves find == find_scan over the live library). */
+fn lib_find_scan(carrier_id: *u8) -> i64 @export {
     let mut i : u64 = 0u64
     let mut found : i64 = -1i64
     let mut sentinel : u8 = 0u8
@@ -243,21 +312,12 @@ fn lib_admit(carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 
     }
     if ok == 0u8 { return MATHLIB_E_DEP_ABSENT }
 
-    /* Step 6 -- find first free slot. */
-    let mut si : u64 = 0u64
-    let mut slot : i64 = -1i64
-    let mut sfound : u8 = 0u8
-    while si < MATHLIB_SLOTS {
-        if sfound == 0u8 {
-            if MATHLIB_LIVE[si] == 0u8 {
-                slot = si as i64
-                sfound = 1u8
-            }
-        }
-        si = si + 1u64
-    }
-    if slot == -1i64 { return MATHLIB_E_FULL }
-    let s : u64 = (slot as u64) & 0xFFFFFFFFFFFFFFFFu64
+    /* Step 6 -- the next free slot.  [D-ML-1] the library is MONOTONE (no
+     * removal path exists), so the slots are dense in [0, COUNT) and the
+     * first free slot IS the count -- the 65536-iteration scan was O(slots)
+     * for a constant. */
+    if MATHLIB_COUNT >= MATHLIB_SLOTS { return MATHLIB_E_FULL }
+    let s : u64 = MATHLIB_COUNT
 
     /* Step 7 -- build witness payload and emit (emit BEFORE slot commit, G6).
      * Payload layout (72 bytes used, 80 allocated):
@@ -310,6 +370,7 @@ fn lib_admit(carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 
     ident_zero(refine_slot_p)
     MATHLIB_LIVE[s] = 1u8
     MATHLIB_COUNT = MATHLIB_COUNT + 1u64
+    _lib_idx_insert(s)          /* [D-ML-1] the index commits WITH the slot */
 
     return MATHLIB_OK
 }
@@ -487,6 +548,12 @@ fn mathlib_selftest() -> u64 @export {
         MATHLIB_LIVE[ki] = 0u8
         ki = ki + 1u64
     }
+    /* [D-ML-1] the white-box clear must keep the id index coherent */
+    let mut kx : u64 = 0u64
+    while kx < MATHLIB_IDX_CAP {
+        MATHLIB_IDX[kx] = 0u32
+        kx = kx + 1u64
+    }
 
     /* Build a dummy carrier id: hash of byte 0x01. */
     let m0p : *u8 = (&MATHLIB_ST_MSG0 as u64) as *u8
@@ -546,6 +613,7 @@ fn mathlib_selftest() -> u64 @export {
     ident_copy(id0p, manual_slot_p)
     MATHLIB_LIVE[0u64] = 1u8
     MATHLIB_COUNT = 1u64
+    _lib_idx_insert(0u64)       /* [D-ML-1] the white-box insert maintains the index */
 
     /* lib_find must find slot 0. */
     let fnd0 : i64 = lib_find(id0p)

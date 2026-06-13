@@ -1,0 +1,140 @@
+/* 1492_mathlib_index_differential.iii -- D-ML-1 DIFFERENTIAL: the math library's
+ * O(1) hash-indexed lib_find agrees with the O(slots) scan ORACLE over the real
+ * admission vertical, and admission no longer walks the table.
+ *
+ * THE COST (pre-fix): every admission ran lib_find (a FULL 65536-slot walk --
+ * the sentinel only skipped work, the loop always ran all slots) once per
+ * duplicate gate + once per dependency + a second 65536-walk for the free
+ * slot.  The library is MONOTONE, so the free slot IS the count and the id
+ * lookup is one hash probe (load <= 0.5, no tombstones).
+ *
+ * The REAL 5-module vertical (proof term -> carrier -> ratify -> admit) builds
+ * TWO distinct carriers; arms: (a) admitted ids: lib_find == lib_find_scan ==
+ * the admission order; (b) an absent id: both -1; (c) duplicate admission
+ * still refused (the indexed duplicate gate); (d) lib_cite/lib_at agree with
+ * the indexed find.  Exit 99. */
+module corpus_1492
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn tc_init() -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_pack_alloc_req(req_out: *u8, statement: *u8, statement_len: u32, ptids_and_deps: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_verify(carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn lib_init() -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn lib_admit(carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn lib_find_scan(carrier_id: *u8) -> i64 from "math_library.iii"
+extern @abi(c-msvc-x64) fn lib_cite(carrier_id: *u8) -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn lib_at(index: u64, out_carrier_id: *u8) -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn lib_refine(prior_carrier_id: *u8, new_carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "ident.iii"
+
+var TID   : [u8; 32]
+var TID2  : [u8; 32]
+var ARGS  : [u8; 64]
+var PAB   : [u64; 3]
+var STMT  : [u8; 4]
+var REQ   : [u8; 48]
+var CID   : [u8; 32]
+var CID2  : [u8; 32]
+var CAP   : [u8; 32]
+var OUT   : [u8; 32]
+var CREQ  : [u64; 16]
+var LABEL : [u8; 16]
+var BAD   : [u8; 32]
+var ATBUF : [u8; 32]
+
+fn set_label() -> i32 {
+    LABEL[0u64]=0x63u8  LABEL[1u64]=0x70u8  LABEL[2u64]=0x5Fu8  LABEL[3u64]=0x6Cu8
+    LABEL[4u64]=0x69u8  LABEL[5u64]=0x62u8  LABEL[6u64]=0x72u8  LABEL[7u64]=0x61u8
+    LABEL[8u64]=0x72u8  LABEL[9u64]=0x79u8  LABEL[10u64]=0x5Fu8 LABEL[11u64]=0x61u8
+    LABEL[12u64]=0x64u8 LABEL[13u64]=0x6Du8 LABEL[14u64]=0x69u8 LABEL[15u64]=0x74u8
+    return 0i32
+}
+
+/* axiom-step args for term `tid` (kind 0x01, 0 premises, 1-byte conclusion) */
+fn axiom_args(tid: u64, concl: u8) -> i32 {
+    let ap : *u8 = (&ARGS as u64) as *u8
+    let tp : *u8 = tid as *u8
+    let mut z : u64 = 0u64
+    while z < 64u64 { ap[z] = 0u8   z = z + 1u64 }
+    let mut t : u64 = 0u64
+    while t < 32u64 { ap[t] = tp[t]   t = t + 1u64 }
+    ap[32u64] = 0x01u8
+    ap[40u64] = 1u8
+    ap[44u64] = concl
+    return 0i32
+}
+
+/* build one verified carrier for the 1-byte statement `concl` -> out_cid */
+fn make_carrier(tid_addr: u64, concl: u8, out_cid: *u8) -> u64 {
+    if pt_alloc(tid_addr as *u8) != 0i32 { return 1u64 }
+    axiom_args(tid_addr, concl)
+    if pt_add_inference((&ARGS as u64) as *u8) != 0i32 { return 2u64 }
+    if pt_finalize(tid_addr as *u8) != 0i32 { return 3u64 }
+    if pt_verify(tid_addr as *u8) != 0i32 { return 4u64 }
+    PAB[0u64] = tid_addr
+    PAB[1u64] = tid_addr
+    PAB[2u64] = 0u64
+    STMT[0u64] = concl
+    if tc_pack_alloc_req((&REQ as u64) as *u8, (&STMT as u64) as *u8, 1u32, (&PAB as u64) as *u8) != 0i32 { return 5u64 }
+    if tc_alloc((&REQ as u64) as *u8, out_cid) != 0i32 { return 6u64 }
+    if tc_verify(out_cid) != 0i32 { return 7u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    pt_init()
+    tc_init()
+    wh_init(0u64)
+    lib_init()
+
+    if make_carrier(&TID as u64, 0x41u8, (&CID as u64) as *u8) != 0u64 { return 1u64 }
+    if make_carrier(&TID2 as u64, 0x43u8, (&CID2 as u64) as *u8) != 0u64 { return 2u64 }
+
+    /* ratify the admission clause, then admit BOTH carriers */
+    set_label()
+    let cr : u64 = &CREQ as u64
+    let cq : *u64 = cr as *u64
+    cq[0u64] = cr + 64u64
+    cq[1u64] = &LABEL as u64
+    cq[2u64] = 16u64
+    cq[3u64] = &LABEL as u64
+    cq[4u64] = 0u64
+    cq[5u64] = &LABEL as u64
+    cq[6u64] = 0u64
+    if cons_ratify(cr as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 3u64 }
+    if lib_admit((&CID as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != 0i32 { return 4u64 }
+    if lib_admit((&CID2 as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != 0i32 { return 5u64 }
+
+    /* ---- (a) the differential: indexed find == scan == admission order ----
+     * (lib_cite returns OK iff found; lib_find itself is internal -- the
+     *  exported surfaces that ROUTE through it are cite/at/refine/admit.) */
+    if lib_find_scan((&CID as u64) as *u8) != 0i64 { return 6u64 }
+    if lib_find_scan((&CID2 as u64) as *u8) != 1i64 { return 7u64 }
+    if lib_cite((&CID as u64) as *u8) != 0i32 { return 8u64 }       /* indexed path: found */
+    if lib_cite((&CID2 as u64) as *u8) != 0i32 { return 9u64 }
+    if lib_at(0u64, (&ATBUF as u64) as *u8) != 0i32 { return 10u64 }
+    if ident_eq((&ATBUF as u64) as *u8, (&CID as u64) as *u8) != 1u8 { return 11u64 }
+    if lib_at(1u64, (&ATBUF as u64) as *u8) != 0i32 { return 12u64 }
+    if ident_eq((&ATBUF as u64) as *u8, (&CID2 as u64) as *u8) != 1u8 { return 13u64 }
+
+    /* ---- (b) absent id: both surfaces agree on -1/absent ---- */
+    let mut b : u64 = 0u64
+    while b < 32u64 { BAD[b] = 0xEEu8   b = b + 1u64 }
+    if lib_find_scan((&BAD as u64) as *u8) != -1i64 { return 14u64 }
+    if lib_cite((&BAD as u64) as *u8) == 0i32 { return 15u64 }      /* indexed path: absent */
+
+    /* ---- (c) the indexed duplicate gate still refuses ---- */
+    if lib_admit((&CID as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != -4i32 { return 16u64 }
+
+    /* ---- (d) lib_refine routes prior-lookup through the index ---- */
+    if lib_refine((&BAD as u64) as *u8, (&CID2 as u64) as *u8, (&CAP as u64) as *u8, (&OUT as u64) as *u8) != -3i32 { return 17u64 }
+
+    return 99u64
+}

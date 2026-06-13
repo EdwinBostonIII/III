@@ -1,0 +1,107 @@
+/* 1493_fe25519_sqr_differential.iii -- E-FE-2 DIFFERENTIAL: the dedicated
+ * fz_sq (cross products computed once and doubled, ~half the limb multiplies)
+ * is BIT-IDENTICAL to fz_mul(a,a) through the same *38 fold.
+ *
+ * fz_pow routes all 256 ladder squarings per inversion through fz_sq, so this
+ * pins the hot path of invert/decompress/scalar-mul.  Arms: (1) edge elements
+ * (0, 1, p-1, all-FF bytes) -- encoded outputs byte-equal; (2) 64 LCG-random
+ * field elements -- byte-equal; (3) the algebra end-to-end: x * x^-1 encodes
+ * to 1 (the inversion ladder running entirely on the NEW squaring); (4) a
+ * known anchor: 2^2 = 4.  Exit 99. */
+module corpus_1493
+
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_decode(src: u64, dst: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_encode(src: u64, dst: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_mul(a: u64, b: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_sq(a: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_invert(a: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_freeze(r: u64) -> i32 from "fe25519.iii"
+
+var FQ_BYTES : [u8; 32]
+var FQ_A     : [u64; 8]
+var FQ_R1    : [u64; 8]
+var FQ_R2    : [u64; 8]
+var FQ_E1    : [u8; 32]
+var FQ_E2    : [u8; 32]
+
+/* decode FQ_BYTES, square both ways, encode, compare. 0 = identical. */
+fn fq_diff_one() -> u64 {
+    fz_decode(&FQ_BYTES as u64, &FQ_A as u64)
+    fz_sq(&FQ_A as u64, &FQ_R1 as u64)
+    fz_mul(&FQ_A as u64, &FQ_A as u64, &FQ_R2 as u64)
+    fz_encode(&FQ_R1 as u64, &FQ_E1 as u64)
+    fz_encode(&FQ_R2 as u64, &FQ_E2 as u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if FQ_E1[i] != FQ_E2[i] { return 1u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn fq_fill(v: u8) {
+    let mut i : u64 = 0u64
+    while i < 32u64 { FQ_BYTES[i] = v  i = i + 1u64 }
+}
+
+fn main() -> u64 {
+    fe25519_init()    /* FZ_PM2 (the p-2 ladder exponent) lives here */
+    /* ---- (1) edges ---- */
+    fq_fill(0u8)
+    if fq_diff_one() != 0u64 { return 1u64 }                /* 0^2 */
+    FQ_BYTES[0u64] = 1u8
+    if fq_diff_one() != 0u64 { return 2u64 }                /* 1^2 */
+    /* p-1 = 2^255 - 20: bytes ec ff .. ff 7f */
+    fq_fill(0xFFu8)
+    FQ_BYTES[0u64] = 0xECu8
+    FQ_BYTES[31u64] = 0x7Fu8
+    if fq_diff_one() != 0u64 { return 3u64 }
+    fq_fill(0xFFu8)
+    if fq_diff_one() != 0u64 { return 4u64 }                /* non-canonical input */
+
+    /* ---- (4) the anchor: 2^2 == 4 ---- */
+    fq_fill(0u8)
+    FQ_BYTES[0u64] = 2u8
+    fz_decode(&FQ_BYTES as u64, &FQ_A as u64)
+    fz_sq(&FQ_A as u64, &FQ_R1 as u64)
+    fz_encode(&FQ_R1 as u64, &FQ_E1 as u64)
+    if FQ_E1[0u64] != 4u8 { return 5u64 }
+    let mut z : u64 = 1u64
+    while z < 32u64 {
+        if FQ_E1[z] != 0u8 { return 6u64 }
+        z = z + 1u64
+    }
+
+    /* ---- (2) 64 LCG-random elements ---- */
+    let mut x : u32 = 0xC0FFEE11u32
+    let mut t : u64 = 0u64
+    while t < 64u64 {
+        let mut b : u64 = 0u64
+        while b < 32u64 {
+            x = x * 1103515245u32 + 12345u32
+            FQ_BYTES[b] = ((x >> 16u32) & 0xFFu32) as u8
+            b = b + 1u64
+        }
+        if fq_diff_one() != 0u64 { return 7u64 }
+        t = t + 1u64
+    }
+
+    /* ---- (3) end-to-end: x * x^-1 == 1 through the new ladder ---- */
+    fq_fill(0u8)
+    FQ_BYTES[0u64] = 0x35u8
+    FQ_BYTES[7u64] = 0xA1u8
+    fz_decode(&FQ_BYTES as u64, &FQ_A as u64)
+    fz_invert(&FQ_A as u64, &FQ_R1 as u64)
+    fz_mul(&FQ_A as u64, &FQ_R1 as u64, &FQ_R2 as u64)
+    fz_freeze(&FQ_R2 as u64)    /* fe25519 defers the freeze; canonical bytes need it */
+    fz_encode(&FQ_R2 as u64, &FQ_E1 as u64)
+    if FQ_E1[0u64] != 1u8 { return 8u64 }
+    z = 1u64
+    while z < 32u64 {
+        if FQ_E1[z] != 0u8 { return 9u64 }
+        z = z + 1u64
+    }
+
+    return 99u64
+}

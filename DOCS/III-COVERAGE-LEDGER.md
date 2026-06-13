@@ -657,3 +657,33 @@ IS K; eta yields the atom itself), the shift law applied, the MEASURED blow-up
 iota composition regression.
 
 Gates: build GATE PASS FAIL=0; corpus **1079/0**; xii 92/0; nous GREEN; bench 7/0/0.
+
+## D-ML-1 + E-FE-2 — the math-library index, the dedicated field squaring (2026-06-12)
+
+**D-ML-1** (`numera/math_library.iii`, differential `1492`): lib_find walked ALL
+65536 slots (no early exit -- the sentinel only skipped work) with a 32-byte compare
+per live slot, run once per duplicate gate + once per DEPENDENCY per admission, plus
+a second full walk for the free slot.  Now: a 131072-entry open-addressed id index
+(first 8 bytes of the content address; load <= 0.5; the library is MONOTONE so no
+tombstones), free slot == COUNT, the scan exported as lib_find_scan (the ORACLE),
+the white-box selftest arms co-maintain the index, and a stale index entry is
+harmless by the LIVE re-check (the egraph-hashcons property).  1492 drives the real
+proof-term -> carrier -> ratify -> admit vertical with two carriers: find == scan ==
+admission order, absent agreement, the indexed duplicate gate, indexed refine.
+
+**E-FE-2** (`numera/fe25519.iii`, differential `1493`): dedicated fz_sq -- cross
+products computed once and DOUBLED (+ the diagonal), ~half the limb multiplies; the
+*38 fold extracted as _fz_fold38 (ONE reduction proof surface for mul and sqr);
+fz_pow already routes every ladder squaring through fz_sq, so the win lands on
+invert/decompress/scalar-mul (256 squarings per inversion).  1493 pins bit-identity
+vs fz_mul(a,a) on edges + 64 decoded elements; a raw-limb probe extended the
+differential over the UNFROZEN fold-output domain (all-0xFFFFFFFF limbs + 256
+full-domain LCG cases) that fz_decode cannot reach but the ladder lives in.
+KAT-craft receipts: two arm failures were MY contract violations against the
+module's deliberate design (fe25519_init owns the ladder exponent; fz_encode is a
+raw serializer under the DEFERRED-freeze law -- canonical bytes require fz_freeze,
+exactly as fz_equal/ed_compress do).  The module needed no fixes.
+
+Gates: build GATE PASS FAIL=0; corpus green through 1493 (the run's terminal FATAL
+is the not-yet-wired 1494's EXPECTED bookkeeping, nothing failed); xii 92/0; nous
+GREEN; bench 7/0/0.  Full count re-pins next cycle.

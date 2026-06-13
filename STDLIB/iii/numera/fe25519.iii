@@ -102,6 +102,37 @@ fn fz_encode(src: u64, dst: u64) -> i32 @export {
  * where the algebra is the same, sovereign specialization where it genuinely
  * differs."  A future "unify everything" pass MUST NOT absorb this into the
  * Montgomery organ -- it would be strictly slower.  Protected by 388/973/992. */
+/* The shared 2^256 == 38 (mod p) fold: FZ_T[0..16) -> rp[0..8) 32-bit limbs.
+ * [E-FE-2] extracted verbatim from fz_mul so the dedicated squaring shares ONE
+ * reduction proof surface with the multiply. */
+fn _fz_fold38(rp: *u64) -> i32 {
+    let mut carry : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let acc : u64 = FZ_T[k] + 38u64 * FZ_T[k + 8u64] + carry
+        rp[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    let mut extra : u64 = 38u64 * carry
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    extra = 38u64 * extra
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+
 fn fz_mul(a: u64, b: u64, r: u64) -> i32 @export {
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64
@@ -129,33 +160,59 @@ fn fz_mul(a: u64, b: u64, r: u64) -> i32 @export {
         k = k + 1u64
     }
     FZ_T[15u64] = clo
-    let mut carry : u64 = 0u64
-    k = 0u64
-    while k < 8u64 {
-        let acc : u64 = FZ_T[k] + 38u64 * FZ_T[k + 8u64] + carry
-        rp[k] = acc & 0xFFFFFFFFu64
-        carry = acc >> 32u64
-        k = k + 1u64
-    }
-    let mut extra : u64 = 38u64 * carry
-    k = 0u64
-    while k < 8u64 {
-        let acc : u64 = rp[k] + extra
-        rp[k] = acc & 0xFFFFFFFFu64
-        extra = acc >> 32u64
-        k = k + 1u64
-    }
-    extra = 38u64 * extra
-    k = 0u64
-    while k < 8u64 {
-        let acc : u64 = rp[k] + extra
-        rp[k] = acc & 0xFFFFFFFFu64
-        extra = acc >> 32u64
-        k = k + 1u64
-    }
-    return 0i32
+    return _fz_fold38(rp)
 }
-fn fz_sq(a: u64, r: u64) -> i32 { return fz_mul(a, a, r) }
+
+/* [E-FE-2] dedicated squaring: column k = 2*sum_{i < k-i} a_i*a_{k-i} (+ the
+ * diagonal a_{k/2}^2 when k is even) -- the cross products are computed ONCE
+ * and doubled, cutting ~half the limb multiplies of the generic path.  The
+ * running column carry joins AFTER the doubling (it must not be doubled).
+ * Accumulator bounds: <=4 cross products before the shift -> <=8 after (the
+ * multiply's own bound), 32-bit input limbs as everywhere in this file; the
+ * *38 fold is the SAME _fz_fold38.  fz_pow routes every ladder squaring here
+ * (256 per inversion), so the win lands on invert/decompress/scalar-mul.
+ * Corpus 1493 pins bit-identity against fz_mul(a,a) over edges + random
+ * field elements. */
+fn fz_sq(a: u64, r: u64) -> i32 @export {
+    let ap : *u64 = a as *u64
+    let rp : *u64 = r as *u64
+    let mut k : u64 = 0u64
+    while k < 16u64 { FZ_T[k] = 0u64  k = k + 1u64 }
+    k = 0u64
+    let mut clo : u64 = 0u64
+    while k < 15u64 {
+        let mut acc_lo : u64 = 0u64
+        let mut acc_hi : u64 = 0u64
+        let mut i : u64 = 0u64
+        if k > 7u64 { i = k - 7u64 }
+        while (i * 2u64) < k {
+            let prod : u64 = ap[i] * ap[k - i]
+            let tmp : u64 = acc_lo + prod
+            if tmp < acc_lo { acc_hi = acc_hi + 1u64 }
+            acc_lo = tmp
+            i = i + 1u64
+        }
+        acc_hi = (acc_hi << 1u64) | (acc_lo >> 63u64)
+        acc_lo = acc_lo << 1u64
+        if (k & 1u64) == 0u64 {
+            let h : u64 = k >> 1u64
+            if h <= 7u64 {
+                let dsq : u64 = ap[h] * ap[h]
+                let tmp2 : u64 = acc_lo + dsq
+                if tmp2 < acc_lo { acc_hi = acc_hi + 1u64 }
+                acc_lo = tmp2
+            }
+        }
+        let tmp3 : u64 = acc_lo + clo
+        if tmp3 < acc_lo { acc_hi = acc_hi + 1u64 }
+        acc_lo = tmp3
+        FZ_T[k] = acc_lo & 0xFFFFFFFFu64
+        clo = (acc_lo >> 32u64) | (acc_hi << 32u64)
+        k = k + 1u64
+    }
+    FZ_T[15u64] = clo
+    return _fz_fold38(rp)
+}
 fn fz_add(a: u64, b: u64, r: u64) -> i32 @export {
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64

@@ -1982,3 +1982,23 @@ valid JSON number carries an integer leading zero).
 
 A real product-code DEFECT FIXED (json.iii +3 lines), not a coverage closure -- the first since W53.
 Count 1141 -> **1142**.
+
+## Wave-73 — json_parse RFC 8259 §7 raw-control-char-in-string FALSE-ACCEPT: a second DEFECT FIXED (2026-06-14)
+
+The false-accept vein is rich -- the SECOND probe found another real json conformance hole.  RFC 8259 §7:
+a string `char` is `unescaped` (%x20-21 / %x23-5B / %x5D-10FFFF) or an escape -- the control characters
+U+0000 through U+001F MUST be escaped.  But json_parse_string's scan loop accepted ANY byte that is not '"'
+or '\', including raw control bytes 0x00..0x1F.  Probe (STDLIB/build/_json_ctl_probe, exit 91) confirmed a
+string containing a raw TAB (0x09) was ACCEPTED.
+
+**THE FIX (json.iii, json_parse_string scan loop, after the close-quote check):** `if c < 0x20u32 { bad =
+1u8 ; closed = 1u8 }` -- a raw control byte sets the bad flag (-> JSON_INVALID).  ESCAPED control chars
+("\t", "\n") are unaffected: their source bytes are 0x5C 0x74 etc., both >= 0x20, so they take the escape
+path, not the raw-byte path.
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1556_json_string_ctrl asserts raw 0x09 / 0x0A / 0x1F
+are rejected AND a plain string "a" + an escaped "\t" still parse.  Against the PRE-FIX lib it returned
+**10** (raw TAB accepted); against the POST-FIX lib **99**.  No regression: all json positives (1555 / 52 /
+53 / 54 / 1048 / 1403) stay 99.
+
+A second real product-code DEFECT FIXED (json.iii +1 line).  Count 1142 -> **1143**.

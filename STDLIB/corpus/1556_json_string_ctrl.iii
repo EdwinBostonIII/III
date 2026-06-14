@@ -1,0 +1,53 @@
+/* 1556_json_string_ctrl.iii -- W73 FIX falsifier: json_parse must REJECT a raw (unescaped) control
+ * character inside a string per RFC 8259 §7 ("the control characters U+0000 through U+001F MUST be escaped").
+ *
+ * THE DEFECT (false-accept, sibling of W72): json_parse_string's scan loop accepts any byte that is not '"'
+ * or '\' -- including raw control bytes 0x00..0x1F.  A probe confirmed json_parse of a string containing a
+ * raw TAB (0x09) was ACCEPTED.  The module claims "RFC 8259 JSON parser", and RFC 8259 §7's `unescaped`
+ * production is %x20-21 / %x23-5B / %x5D-10FFFF -- control chars are excluded.
+ *
+ * THE FIX (json.iii json_parse_string scan loop): after the close-quote check, if c < 0x20 -> bad=1 (reject).
+ * ESCAPED control chars ("\t", "\n") are unaffected -- their source bytes are 0x5C 0x74 etc., both >= 0x20.
+ *
+ * 99 = raw control chars are rejected AND legitimate strings (plain + escaped control) still parse.  TEETH:
+ * this falsifier returns 10 against the PRE-FIX lib (raw TAB wrongly accepted) and 99 against the POST-FIX lib. */
+module corpus_1556
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 from "json.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let b : *u8 = malloc(8u64)
+
+    /* positive: "a" -> a valid string */
+    b[0u64]=0x22u8 b[1u64]=0x61u8 b[2u64]=0x22u8
+    let rs : u64 = json_parse(a, b as u64, 3u64)
+    if rs == 0u64 { free(b) arena_drop(a) return 30u64 }
+
+    /* positive: "\t" (ESCAPED tab) -> valid (the escape form is allowed; source bytes 0x5C 0x74 >= 0x20) */
+    b[0u64]=0x22u8 b[1u64]=0x5Cu8 b[2u64]=0x74u8 b[3u64]=0x22u8
+    let re : u64 = json_parse(a, b as u64, 4u64)
+    if re == 0u64 { free(b) arena_drop(a) return 31u64 }
+
+    /* (A) raw TAB (0x09) inside a string -> INVALID per RFC 8259 §7 */
+    b[0u64]=0x22u8 b[1u64]=0x09u8 b[2u64]=0x22u8
+    let ra : u64 = json_parse(a, b as u64, 3u64)
+    if ra != 0u64 { free(b) arena_drop(a) return 10u64 }
+
+    /* (B) raw newline (0x0A) inside a string -> INVALID */
+    b[0u64]=0x22u8 b[1u64]=0x0Au8 b[2u64]=0x22u8
+    let rb : u64 = json_parse(a, b as u64, 3u64)
+    if rb != 0u64 { free(b) arena_drop(a) return 20u64 }
+
+    /* (C) raw 0x1F (unit separator, the top of the control range) -> INVALID */
+    b[0u64]=0x22u8 b[1u64]=0x1Fu8 b[2u64]=0x22u8
+    let rc : u64 = json_parse(a, b as u64, 3u64)
+    if rc != 0u64 { free(b) arena_drop(a) return 40u64 }
+
+    free(b) arena_drop(a)
+    return 99u64
+}

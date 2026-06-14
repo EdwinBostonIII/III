@@ -574,6 +574,7 @@ fn json_parse_string() -> u64 {
         if closed == 0u8 {
             let c : u32 = p[scan_pos] as u32
             if c == 0x22u32 { closed = 1u8 }       /* '"' end */
+            if c < 0x20u32 { bad = 1u8 ; closed = 1u8 }   /* RFC 8259 §7: an unescaped control char (U+0000-001F) is INVALID */
             if closed == 0u8 {
                 if c == 92u32 {                    /* '\' escape (simple or \uXXXX) */
                     json_scan_escape(JSON_INPUT_BASE, scan_pos, JSON_INPUT_LEN)

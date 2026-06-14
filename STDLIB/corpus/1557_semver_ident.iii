@@ -1,0 +1,53 @@
+/* 1557_semver_ident.iii -- W74 FIX falsifier: semver_parse must reject malformed pre-release / build
+ * IDENTIFIERS per SemVer 2.0.0 §9/§10 (https://semver.org/spec/v2.0.0.html).
+ *
+ * THE DEFECT (false-accept, 3rd/4th of the false-accept axis): semver_parse validated only that the WHOLE
+ * pre-release / build span is non-empty -- it never validated the dot-separated IDENTIFIERS.  §9: each
+ * identifier MUST be non-empty, and a NUMERIC identifier MUST NOT have a leading zero.  A probe confirmed
+ * "1.2.3-01" (numeric pre-release ident with leading zero) and "1.2.3-a..b" (empty middle ident) were both
+ * ACCEPTED; "1.2.3+a..b" (empty build ident, §10) likewise.
+ *
+ * THE FIX: a semver_validate_idents() helper walks the dot-separated identifiers -- each MUST be non-empty;
+ * when check_numzero=1 (pre-release) a purely-numeric identifier MUST NOT have a leading zero.  Called on
+ * the pre-release (check_numzero=1) and build metadata (check_numzero=0; §10 allows leading zeros).
+ *
+ * 99 = the malformed identifiers are rejected AND legitimate versions still parse.  TEETH: this falsifier
+ * returns a redden code against the PRE-FIX lib and 99 against the POST-FIX lib. */
+module corpus_1557
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn semver_parse(src: u64, src_len: u64) -> i32 from "semver.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(32u64)
+
+    /* baseline OK code from a known-valid version "1.2.3" */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8
+    let ok : i32 = semver_parse(buf as u64, 5u64)
+
+    /* === positive controls (must parse == ok under the fix) === */
+    /* "1.2.3-alpha.1" */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8 buf[5u64]=0x2Du8 buf[6u64]=0x61u8 buf[7u64]=0x6Cu8 buf[8u64]=0x70u8 buf[9u64]=0x68u8 buf[10u64]=0x61u8 buf[11u64]=0x2Eu8 buf[12u64]=0x31u8
+    if semver_parse(buf as u64, 13u64) != ok { free(buf) return 30u64 }
+    /* "1.2.3-0" (a single zero is a valid numeric identifier) */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8 buf[5u64]=0x2Du8 buf[6u64]=0x30u8
+    if semver_parse(buf as u64, 7u64) != ok { free(buf) return 31u64 }
+    /* "1.2.3+01" (build metadata MAY have leading zeros, §10) */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8 buf[5u64]=0x2Bu8 buf[6u64]=0x30u8 buf[7u64]=0x31u8
+    if semver_parse(buf as u64, 8u64) != ok { free(buf) return 32u64 }
+
+    /* === negatives (must be REJECTED, != ok) === */
+    /* "1.2.3-01" numeric pre-release identifier with a leading zero -> INVALID (§9) */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8 buf[5u64]=0x2Du8 buf[6u64]=0x30u8 buf[7u64]=0x31u8
+    if semver_parse(buf as u64, 8u64) == ok { free(buf) return 10u64 }
+    /* "1.2.3-a..b" empty middle pre-release identifier -> INVALID (§9) */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8 buf[5u64]=0x2Du8 buf[6u64]=0x61u8 buf[7u64]=0x2Eu8 buf[8u64]=0x2Eu8 buf[9u64]=0x62u8
+    if semver_parse(buf as u64, 10u64) == ok { free(buf) return 20u64 }
+    /* "1.2.3+a..b" empty middle build identifier -> INVALID (§10) */
+    buf[0u64]=0x31u8 buf[1u64]=0x2Eu8 buf[2u64]=0x32u8 buf[3u64]=0x2Eu8 buf[4u64]=0x33u8 buf[5u64]=0x2Bu8 buf[6u64]=0x61u8 buf[7u64]=0x2Eu8 buf[8u64]=0x2Eu8 buf[9u64]=0x62u8
+    if semver_parse(buf as u64, 10u64) == ok { free(buf) return 40u64 }
+
+    free(buf)
+    return 99u64
+}

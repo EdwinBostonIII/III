@@ -2002,3 +2002,29 @@ are rejected AND a plain string "a" + an escaped "\t" still parse.  Against the 
 53 / 54 / 1048 / 1403) stay 99.
 
 A second real product-code DEFECT FIXED (json.iii +1 line).  Count 1142 -> **1143**.
+
+## Wave-74 — semver_parse SemVer 2.0.0 §9 pre-release-IDENTIFIER false-accepts: 3rd/4th DEFECT FIXED (2026-06-14)
+
+The false-accept axis is a repeatable rich methodology -- a third spec-claiming parser (semver.iii claims
+"Semantic Versioning 2.0.0") yielded TWO more.  A 7-case probe (SEMVER_MASK=40, bits 3+5) found that
+semver_parse validated only that the WHOLE pre-release / build span is non-empty -- it never validated the
+dot-separated IDENTIFIERS:
+  - "1.2.3-01" ACCEPTED: a NUMERIC pre-release identifier with a leading zero (§9: "Numeric identifiers
+    MUST NOT include leading zeroes").
+  - "1.2.3-a..b" ACCEPTED: an EMPTY middle identifier (§9: "identifiers MUST NOT be empty").
+  - "1.2.3+a..b" (build) has the same empty-identifier hole (§10).
+(The other 5 probed cases -- 2/4 numeric components, empty pre "1.2.3-", empty build "1.2.3+", major
+leading-zero "01.2.3" -- were already correctly rejected.)
+
+**THE FIX:** a new `semver_validate_idents(src, start, end, check_numzero)` helper walks the dot-separated
+identifiers: each MUST be non-empty; when check_numzero=1 (pre-release) a purely-numeric identifier MUST NOT
+have a leading zero.  Called on the pre-release span (check_numzero=1, §9) and the build-metadata span
+(check_numzero=0, §10 allows leading zeros).
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1557_semver_ident asserts "1.2.3-01" / "1.2.3-a..b" /
+"1.2.3+a..b" are rejected AND "1.2.3-alpha.1" / "1.2.3-0" / "1.2.3+01" still parse.  Against the PRE-FIX lib
+it returned **10**; POST-FIX **99**.  No regression: 127_semver / 1410_semver_uri_sha512_tp stay 99.
+
+The 3rd/4th real product-code DEFECT FIXED via the false-accept axis (semver.iii +~24 lines: a validation
+helper + 2 call sites).  Across W72-74 the axis netted 4 real spec-conformance defects in 3 parsers
+(json x2, semver x2) -- a repeatable methodology, not a one-off.  Count 1143 -> **1144**.

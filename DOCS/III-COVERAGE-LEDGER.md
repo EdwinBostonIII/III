@@ -1671,3 +1671,26 @@ putchar-to-stdout on Windows is TEXT mode -> 0x0a output bytes get a spurious 0x
 translation); the HKDF OKM's 0x0a at byte 18 exposed it.  Read dumps modulo this artifact (or fwrite binary);
 the digests without 0x0a bytes (sha3/blake2s/pbkdf2-DK) dumped cleanly.  EXPECTED unchanged (81=60, 86=85).
 The weak-KAT audit is now COMPLETE (all 10 candidates addressed: 6 strengthened, 4 were already-full).
+
+## Wave-47/48 — algorithmic perf-headroom hunt: vein CLOSED TREE-WIDE (0 wins) (2026-06-13)
+
+After defects + coverage saturated, opened the measured-perf vein.  Two read-only workflows over the whole
+algorithm surface (W47 numera/omnia ~70 modules; W48 aether/sanctus/forcefield/verba/nous ~70 modules), each
+gating on REAL + byte-IDENTICAL output + genuinely HOT (caller-controllable large n) + KAT-anchored, with
+adversarial refute.  Result: **0 confirmed wins tree-wide.**  Every candidate refuted on a designed gate:
+- **NOT HOT (the dominant kill):** the loop bound traces to a tiny fixed constant -- huffman hf_build_tree
+  (n=distinct bytes <=256, called once per <=4KB compress), witness_compactor wc_mark_retain (zero production
+  callers; only selftests n<=3), corpus_coverage cv_finalize (bound = CV_NUNCOV, ratcheted to 0 by the build
+  -- runs zero iterations at the real call site).
+- **BYTE-IDENTITY FALSE:** huffman's heap would change the (freq,index) tie-break -> different code-length
+  multiset -> different compressed bytes, SILENTLY (only round-trip is KAT'd, not the stream).
+- **ALREADY-OPTIMAL / mis-read:** pleroma's quadratic scan is already replaced by the CSR build in the live
+  path (the scan is retained only as the differential oracle).
+- **NAIVE LOAD-BEARING:** pleroma's exhaustive edge check is the independent-verification half of a
+  build-then-verify trust gate; cv_finalize's insertion-sort is shaped to dodge the iiis-1 compiler trap.
+
+CONCLUSION: the tree is algorithmically optimal where it is hot.  Its hot loops are crypto/compiler (already
+instruction-optimized) or bounded by small fixed constants / ratcheted-to-zero; its quadratic forms are either
+non-hot by-design (spec-documented), the slow half of a differential oracle, or load-bearing verification.  The
+perf vein joins defects + coverage as EXHAUSTED.  The III stdlib is comprehensively mature across every
+autonomous-discoverable axis this session probed.

@@ -2099,3 +2099,38 @@ wrong-separator string was accepted); POST-FIX **99**.  No regression: 95_rfc333
 
 The 6th real product-code DEFECT FIXED via the false-accept axis (now across json/semver/utf8/mlkem/rfc3339
 in verba/numera/tempora).  Count 1146 -> **1147**.
+
+## Wave-79 — rsa_pss_verify RFC 8017 §8.1.2 step-1 s<n check: RSA signature MALLEABILITY FIXED (7th defect) (2026-06-14)
+
+The false-accept axis reaches RSA.  rsa_pss_verify (numera/rsa.iii:840, @export) computed the signature
+representative `s = OS2IP(sig)` then `m = s^e mod n` (RSAVP1) WITHOUT the RFC 8017 §8.1.2 step-1 range check
+("If the signature representative s is not between 0 and n-1, output 'invalid signature'").  Because RSAVP1
+reduces mod n, the non-canonical `s' = s_valid + n` (when it still fits in k bytes) satisfies
+`s' ≡ s_valid (mod n)`, so `s'^e mod n == s_valid^e mod n` == the valid EM -- and the forged second encoding
+VERIFIES.  That is exactly the signature **malleability** RFC 8017 forbids: a distinct k-byte string that is
+accepted as a valid signature for the same message.
+
+**THE FIX (rsa.iii, after OS2IP, before RSAVP1):** `if bigint_cmp(s, n) != -1i32 { return 0u8 }`.
+bigint_cmp returns exactly -1 (s<n) / 0 (s==n) / +1 (s>n), so `!= -1` rejects precisely when `s >= n`.
+A genuine signature always has `s < n`, so no valid signature is ever rejected.
+
+**COMPILER TRAP encountered + root-caused (this is the durable finding).**  The natural spelling
+`if bigint_cmp(s, n) >= 0i32` REJECTED valid signatures (corpus 373/1429/1561 reddened to 24/16/4).  Root cause:
+iiis-2 does NOT sign-extend a **direct i32 call-result** used as an ORDERING operand against 0 -- the -1 return
+(`0xFFFFFFFF`) reads as `4294967295`, so `-1 >= 0i32` fires TRUE.  (Equality is fine: `!= -1i32` works because
+the compare is value-exact.)  This is the call-result/param-spill family, NOT a blanket "i32 ordering is
+unsigned" rule -- the same compare on a value first bound to a LOCAL is signed-correct.  A fresh 3-case probe
+`STDLIB/build/_w79_i32probe.iii` (a fn returning runtime -1i32, compared direct-ordering / local-ordering /
+direct-equality, result as a bitmask) returns **exit 1** -- ONLY the direct-call-result ordering misbehaves;
+the local-bound ordering and the equality compare are both correct.  Memory
+`feedback-iii-i32-signed-ordering-unsigned` was re-rooted from its earlier (mis-)RESOLVED state to record the
+exact reproducing shape.
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1561_rsa_noncanon_sig keygens+signs at RSA-320/sLen=0 (the
+fast bigint-ABI path, as corpus 373), asserts the canonical signature verifies AND that the byte-constructed
+non-canonical `s_valid + n` is REJECTED.  Against the PRE-FIX lib it returned **10** (the non-canonical sig was
+wrongly accepted); POST-FIX **99**.  No regression: 373_rsa_pss_sign_verify / 1079_rsa_wrappers /
+413_rsa_sign_pool_exhaustion / 1429_gate_outcomes_anchor_rsa all stay 99.
+
+The 7th real product-code DEFECT FIXED via the false-accept axis (json/semver/utf8/mlkem/rfc3339/**rsa**,
+across verba/numera/tempora).  Count 1147 -> **1148**.

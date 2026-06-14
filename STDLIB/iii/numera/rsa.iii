@@ -844,6 +844,12 @@ fn rsa_pss_verify(arena: u64, n: u64, e: u64, modBits: u64, mHash: u64, sig: u64
     let emLen : u64 = (emBits + 7u64) / 8u64
     let s : u64 = rsa_os2ip(arena, sig, sigLen)
     if s == 0u64 { return 0u8 }   /* scan-7: pool exhausted -> FAIL CLOSED (reject), never let an all-zero EM accidentally verify */
+    /* RFC 8017 §8.1.2 step 1: if the signature representative s is not in [0, n-1], reject.  RSAVP1 reduces
+     * mod n, so without this s'=s+n (a distinct k-byte encoding of the same signature) would also verify --
+     * signature malleability.  A genuine signature always has s < n, so this never rejects a valid one.
+     * bigint_cmp returns exactly -1 (s<n) / 0 (s==n) / +1 (s>n); we test `!= -1` (inequality, NOT ordering --
+     * iiis-2 still compiles i32 `>=`/`<` UNSIGNED so `-1 >= 0` would be wrongly TRUE and reject valid sigs). */
+    if bigint_cmp(s, n) != -1i32 { return 0u8 }
     let m : u64 = rsa_modexp(arena, s, e, n)
     if m == 0u64 { return 0u8 }
     rsa_i2osp(m, &RSA_EM as u64, emLen)

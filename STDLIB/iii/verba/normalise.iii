@@ -494,18 +494,33 @@ fn normalise_nfc(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         pos = pos + NORM_LAST_LEN
         norm_decompose_into(cp)
         let mut at_starter : u8 = 0u8
+        let mut next_cp : u32 = 0u32
+        let mut have_next : u8 = 0u8
         if pos >= src_len { at_starter = 1u8 }
-        if at_starter == 0u8 {
-            let next_cp : u32 = utf8_decode(src_base, src_len, pos)
+        if pos < src_len {
+            next_cp = utf8_decode(src_base, src_len, pos)
             if next_cp == 0xFFFFFFFFu32 { return NORM_E_BADUTF8 }
+            have_next = 1u8
             if ccc_lookup(next_cp) == 0u32 { at_starter = 1u8 }
         }
         if at_starter == 1u8 {
             norm_canonical_reorder()
             norm_compose_buffer()
-            let er : i32 = norm_emit_buffer(builder_id)
-            if er != NORM_OK { return er }
-            NORM_DECOMP_LEN = 0u32
+            /* [W84] Hangul L+V / LV+T composition spans STARTER boundaries (L, V, T are all CCC 0).  Defer
+             * the emit while the composed buffer's last starter can still compose with the next codepoint --
+             * norm_compose_pair is non-zero for two starters ONLY for Hangul -- so the jamo accumulate and
+             * compose instead of being split + emitted alone.  Without this NFC(NFD(syllable)) != syllable. */
+            let mut defer : u8 = 0u8
+            if have_next == 1u8 {
+                if NORM_DECOMP_LEN > 0u32 {
+                    if norm_compose_pair(NORM_DECOMP_BUF[NORM_DECOMP_LEN - 1u32], next_cp) != 0u32 { defer = 1u8 }
+                }
+            }
+            if defer == 0u8 {
+                let er : i32 = norm_emit_buffer(builder_id)
+                if er != NORM_OK { return er }
+                NORM_DECOMP_LEN = 0u32
+            }
         }
     }
     return NORM_OK

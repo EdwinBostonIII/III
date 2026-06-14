@@ -1,0 +1,69 @@
+/* 1566_nfc_hangul_roundtrip.iii -- W84 FIX falsifier: NFC canonical-equivalence / recomposition round-trip
+ * for Hangul (UAX #15 §16).  NFC(NFD(x)) == x must hold; canonically-equivalent inputs map to byte-identical NFC.
+ *
+ * THE DEFECT (idempotence-verba-text lens, ultracode workflow, unanimous 0/3 refute): normalise_nfc segments
+ * input per starter-led group and FLUSHES (composes + emits) the buffer the instant the NEXT codepoint has CCC 0
+ * (normalise.iii:496-509, same flush as NFD).  But Hangul jamo L (U+1100..) and V (U+1161..) and T (U+11A8..) are
+ * ALL starters (CCC 0), and NFC composition L+V->LV, LV+T->LVT spans those starter boundaries.  So for the
+ * decomposed input L.V (which is exactly normalise_nfd(U+AC00)), the L jamo is composed ALONE and emitted before
+ * V is ever appended -> output = the input bytes unchanged.  norm_compose_pair's Hangul branches (361-386) are
+ * DEAD for cross-codepoint jamo.  Result: NFC(NFD(가)) = E1 84 80 E1 85 A1 (6 bytes) != 가 = EA B0 80 (3 bytes) --
+ * the definitional failure of a normal form, for ALL 11172 Hangul syllables.
+ *
+ * THE FIX (normalise_nfc): after norm_compose_buffer at the flush point, DEFER the emit when the composed buffer's
+ * last starter can still compose with the next codepoint (norm_compose_pair != 0, non-zero for two starters only
+ * for Hangul) -- so L,V,T accumulate and compose across the boundary.  Bounded (Hangul <= 3 jamo); café /
+ * precomposed paths unchanged.
+ *
+ * 99 = NFC(NFD(가))==가 AND NFC(NFD(각))==각 (with trailing T) AND NFC(가)==가 (precomposed control).
+ * TEETH: against the PRE-FIX lib NFC(NFD(가)) is 6 bytes (unchanged L.V), not 3 -> return 10. */
+module corpus_1566
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn normalise_nfd(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "normalise.iii"
+extern @abi(c-msvc-x64) fn normalise_nfc(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "normalise.iii"
+
+var GA  : [u8; 3]    /* 가 U+AC00 = EA B0 80 */
+var GAK : [u8; 3]    /* 각 U+AC01 = EA B0 81 (가 + trailing T jamo) */
+
+fn rt_eq(a: u64, src: u64, slen: u64, e0: u8, e1: u8, e2: u8) -> u32 {
+    /* nfc(nfd(src)) and compare to the 3 expected bytes; returns 1 on match, 0 otherwise */
+    let bd : u64 = builder_new(a, 32u64)
+    if normalise_nfd(bd, src, slen) != 0i32 { return 0u32 }
+    let nlen : u64 = builder_len(bd)
+    let nptr : u64 = builder_seal(bd)        /* stable arena ptr */
+    let bc : u64 = builder_new(a, 32u64)
+    if normalise_nfc(bc, nptr, nlen) != 0i32 { return 0u32 }
+    if builder_len(bc) != 3u64 { return 0u32 }
+    let out : *u8 = builder_seal(bc) as *u8
+    if out[0u64] != e0 { return 0u32 }
+    if out[1u64] != e1 { return 0u32 }
+    if out[2u64] != e2 { return 0u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    GA[0u64]  = 0xEAu8 ; GA[1u64]  = 0xB0u8 ; GA[2u64]  = 0x80u8
+    GAK[0u64] = 0xEAu8 ; GAK[1u64] = 0xB0u8 ; GAK[2u64] = 0x81u8
+
+    /* (A) round-trip 가 (L+V): NFC(NFD(가)) == 가.  PRE-FIX the NFD output stays 6 bytes -> 0 -> return 10 */
+    if rt_eq(a, &GA as u64, 3u64, 0xEAu8, 0xB0u8, 0x80u8) != 1u32 { return 10u64 }
+
+    /* (B) round-trip 각 (L+V+T): NFC(NFD(각)) == 각 -- exercises the LV+T branch across two boundaries */
+    if rt_eq(a, &GAK as u64, 3u64, 0xEAu8, 0xB0u8, 0x81u8) != 1u32 { return 20u64 }
+
+    /* (C) POSITIVE control: NFC(가) on the already-precomposed syllable == 가 (unchanged by the fix) */
+    let bc3 : u64 = builder_new(a, 32u64)
+    if normalise_nfc(bc3, &GA as u64, 3u64) != 0i32 { return 30u64 }
+    if builder_len(bc3) != 3u64 { return 31u64 }
+    let o3 : *u8 = builder_seal(bc3) as *u8
+    if o3[0u64] != 0xEAu8 { return 32u64 }
+    if o3[1u64] != 0xB0u8 { return 33u64 }
+    if o3[2u64] != 0x80u8 { return 34u64 }
+
+    return 99u64
+}

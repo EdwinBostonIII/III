@@ -1138,6 +1138,7 @@ declare -A EXPECTED=(
     [1563_nfd_canonical_reorder]=99
     [1564_span_cmp_reflexive]=99
     [1565_pcc_congruence_app]=99
+    [1566_nfc_hangul_roundtrip]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

@@ -2288,3 +2288,42 @@ Count 1151 -> **1152**.
 This closes the W81/W82 ultracode identity-violation arc: 5 real wrong-result defects fixed across the
 math-identity / semantics-preservation axis (matrix M^0, NFD reorder, span reflexivity, pcc closure + the RSA
 malleability that opened it), each adversarially refuted then in-session compile-probe confirmed before any edit.
+
+## Wave-84 — NFC Hangul recomposition: NFC(NFD(syllable)) != syllable for ALL Hangul, FIXED (3rd ultracode Workflow) (2026-06-14)
+
+A 3rd 45-agent ultracode Workflow extended the W82 single-instance lenses to SIBLING modules.  One unanimous
+in-contract wrong-result fixed here; a 2nd (gb_reduce) carried to W85; the XII-residual denotational lens returned
+10 candidates ALL refuted (every residual non-join denotes equally -> the W81 benign finding generalises, no
+miscompilation escalation); 5 lenses clean (total-order comparators, ring-distributivity, canonical-form,
+homomorphism, inverse-roundtrip).
+
+**THE DEFECT (verba/normalise.iii, idempotence-verba-text lens, UNANIMOUS 0/3 refute):** normalise_nfc segmented
+input per starter-led group and FLUSHED (composed + emitted) the buffer the instant the NEXT codepoint had CCC 0
+(:496-509, the same flush as NFD).  But Hangul jamo L (U+1100+), V (U+1161+), T (U+11A8+) are ALL starters (CCC 0),
+and NFC composition L+V->LV / LV+T->LVT spans those starter boundaries.  So for the decomposed input L.V (which is
+exactly normalise_nfd(U+AC00)), the L jamo was composed ALONE and emitted before V was ever appended -- output =
+the input bytes unchanged.  norm_compose_pair's Hangul branches (:361-386) were DEAD CODE for cross-codepoint jamo
+(they fired only for a single precomposed syllable, whose algorithmic decomposition lands both jamo in ONE buffer).
+Result: NFC(NFD(가)) = E1 84 80 E1 85 A1 (6 bytes) != 가 = EA B0 80 (3 bytes) -- the definitional failure of a normal
+form, for ALL 11172 Hangul syllables.  In-contract: L.V is the module's OWN normalise_nfd(가) output; NFD of Hangul
+is explicitly in-scope.  Uncovered: KAT 78 tests only Latin café (a CCC-230 combining mark, never a CCC-0
+cross-starter boundary).
+
+**THE FIX (normalise_nfc):** after norm_compose_buffer at the flush point, DEFER the emit while the composed
+buffer's last starter can still compose with the next codepoint -- `if norm_compose_pair(NORM_DECOMP_BUF[LEN-1],
+next_cp) != 0 { defer }` -- so the jamo accumulate and compose across the boundary (norm_compose_pair is non-zero
+for two STARTERS only for Hangul, so only Hangul defers).  Bounded (a syllable is <= 3 jamo, well under the [u32;32]
+buffer); café / precomposed / NFD paths byte-unchanged.
+
+TEETH: falsifier 1566_nfc_hangul_roundtrip -- NFC(NFD(가))==가, NFC(NFD(각))==각 (the LV+T branch across two
+boundaries), NFC(가)==가 (precomposed control).  Against the PRE-FIX lib NFC(NFD(가)) stays 6 bytes -> 10; POST-FIX
+99.  No regression: 78_normalise (café NFC) / 1563_nfd_canonical_reorder / 1558_utf8_validate all stay 99.
+Count 1152 -> **1153**.  (3rd normalise.iii defect of the program after W75 utf8-overlong + W82 NFD-reorder.)
+
+**DEFECT 2 (numera/groebner.iii gb_reduce) -- DEFERRED to W85, real but a larger fix:** gb_reduce only TOP-reduces
+(reduces LT(work) while a basis LT divides it, then returns `work` whole the moment LT is irreducible -- including
+TAIL terms that ARE reducible).  So NF(x^2+y mod {y}) = x^2+y not x^2 (the tail y is divisible by LT(g)=y),
+violating the unique-remainder theorem (two congruent inputs get different normal forms).  1490 only reduces
+S-polys to zero (ideal members reduce to 0 under top-reduction regardless), so the tail-reducible non-ideal case is
+uncovered.  Fix = full multivariate division (accumulate an irreducible LT into a remainder, keep reducing the tail)
+-- a loop restructure, W85.

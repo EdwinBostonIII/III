@@ -1,0 +1,40 @@
+/* 1544_bce_overflow_unsound.iii -- W53 FALSIFIER: verified bounds-check elimination must NOT
+ * eliminate a needed check on an affine stream that overflows u32 (a false-SAFE verdict).
+ *
+ * THE DEFECT (interval_lattice-class sibling, in the affine_check ground truth): ac_max_access
+ * computed the closed-form max a*(n-1)+b in raw u32.  For a stream that wraps (a*(n-1)+b > 2^32)
+ * it returned the WRAPPED (small) value, so bce_redundant -- which eliminates a check when
+ * ac_max_access < size -- declared the check REDUNDANT and a pass would STRIP it, though the
+ * access actually touches a high address.  bce is documented two-sided sound ("an eliminated
+ * check provably never fires"); this breaks it, and the module's exhaustive witness ac_in_bounds
+ * DISAGREES.
+ *
+ * THE FIX: ac_max_access computes in u64 and reports MAX (0xFFFFFFFF) on overflow, so the
+ * redundancy test fails CLOSED (keep the check) -- agreeing with ac_in_bounds.
+ *
+ * TEETH: for a=2, b=0xFFFFFFFE, n=3, size=3, the stream touches A[0xFFFFFFFE] at i=0 (>= 3).
+ *   - ac_max_access(2,0xFFFFFFFE,3): pre-fix 2 (wrapped) / post-fix 0xFFFFFFFF.
+ *   - bce_redundant(2,0xFFFFFFFE,3,3): pre-fix 1 (REDUNDANT, eliminate -- UNSOUND) / post-fix 0 (keep).
+ * ORACLE: ac_in_bounds(2,0xFFFFFFFE,3,3)==0 (the exhaustive scan proves the stream is OUT of bounds),
+ * so the redundant verdict MUST be 0.  Sanity: non-overflow streams unchanged. */
+module corpus_1544
+
+extern @abi(c-msvc-x64) fn ac_max_access(a: u32, b: u32, n: u32) -> u32 from "affine_check.iii"
+extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
+extern @abi(c-msvc-x64) fn bce_redundant(a: u32, b: u32, n: u32, size: u32) -> u32 from "bce.iii"
+
+fn main() -> u64 {
+    /* ---- ORACLE: the exhaustive scan proves the overflowing stream is OUT of bounds ---- */
+    if ac_in_bounds(2u32, 4294967294u32, 3u32, 3u32) != 0u32 { return 40u64 }   /* i=0 -> 0xFFFFFFFE >= 3 */
+
+    /* ---- TEETH: the closed-form max must report MAX on overflow, and bce must KEEP the check ---- */
+    if ac_max_access(2u32, 4294967294u32, 3u32) != 4294967295u32 { return 30u64 }   /* pre-fix: wraps to 2 */
+    if bce_redundant(2u32, 4294967294u32, 3u32, 3u32) != 0u32 { return 31u64 }       /* pre-fix: 1 (UNSOUND eliminate) */
+
+    /* ---- sanity: non-overflow streams unchanged (byte-identical) ---- */
+    if ac_max_access(2u32, 1u32, 5u32) != 9u32 { return 32u64 }                      /* 2*4+1 = 9 */
+    if bce_redundant(2u32, 1u32, 5u32, 16u32) != 1u32 { return 33u64 }               /* in bounds -> redundant */
+    if bce_redundant(3u32, 2u32, 8u32, 16u32) != 0u32 { return 34u64 }               /* out of bounds -> keep */
+
+    return 99u64
+}

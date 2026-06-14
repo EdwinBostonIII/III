@@ -1736,3 +1736,31 @@ class, on the bitio substrate.  FIX: return bitw_put's code (-1 on overflow).  S
 1543 teeth: bitw_init(2-byte buf); elias_gamma_put(1500) [bitlen 11 -> 21 bits > 16] / elias_delta_put(1500)
 [17 bits > 16] -- pre-fix swallow -> 0 (exit 30/31), post-fix -> -1.  Sanity: a fitting codeword returns 0
 (guard not over-tight) + a large-buffer round-trip is unchanged.  Count 1129 -> **1130**.
+
+## Wave-53 — affine_check ac_max_access overflow -> UNSOUND bounds-check ELIMINATION (the W49 sibling the sibling-hunt MISSED; highest-value find) (2026-06-13)
+
+The prover-verdict-soundness lens (a prover returning a FALSE-POSITIVE SAFE verdict -- the highest-value
+soundness hole) found a real one, and it is the interval_lattice (W49) SIBLING that the W49 sibling-hunt missed
+(I treated affine_check as the exhaustive WITNESS, not a closed-form-bound PRODUCER -- but it ships both).
+The W49 lesson re-applies (W31/W32): a sibling-hunt can miss an instance; the FRESH LENS caught it.
+
+**W53-FIX (numera/affine_check.iii ac_max_access; falsifier 1544):** ac_max_access(a,b,n) computed the closed
+form a*(n-1)+b in raw u32 -- WRAPS on overflow, reporting a small max for a stream that wraps high.  The
+CONSUMER makes it a memory-safety hole: numera::bce (VERIFIED bounds-check ELIMINATION, doc "an eliminated
+check provably never fires") eliminates a check when `ac_max_access(a,b,n) < size` (bce_redundant, bce.iii:44).
+For a=2, b=0xFFFFFFFE, n=3, size=3: ac_max_access wraps to 2 -> bce_redundant=1 (REDUNDANT -> STRIP the check),
+but i=0 touches A[0xFFFFFFFE] >= 3 -> the stripped check was NEEDED -> a bce-driven pass produces memory-unsafe
+code.  The module's exhaustive witness ac_in_bounds=0 (UNSAFE) DISAGREES; bce's own two-sided invariant breaks.
+FIX (same as W49): compute in u64, on overflow report MAX (0xFFFFFFFF) so `< size` fails CLOSED (keep the
+check).  This ALSO aligns ac_max_access with the W49-fixed lo_access_max (which already saturates to MAX) ->
+lo_analyses_agree stays consistent on overflow inputs (it would otherwise have silently diverged).  KATs use
+small values (bce_setup max 38) -> byte-identical; bce_kat/affine_check_kat/loop_optimizer_kat green.
+
+1544 teeth (oracle ac_in_bounds==0): ac_max_access(2,0xFFFFFFFE,3) pre-fix 2 / post-fix 0xFFFFFFFF (exit 30);
+bce_redundant(2,0xFFFFFFFE,3,3) pre-fix 1 (unsound eliminate) / post-fix 0 (keep) (exit 31).  Sanity: non-
+overflow ac_max_access/bce_redundant unchanged.  Count 1130 -> **1131**.
+
+**THE W49+W53 PAIR is the complete overflow-soundness fix for the bounds-analysis stack:** interval_lattice
+il_add/il_mul (W49) + affine_check ac_max_access (W53) are the TWO closed-form-bound producers both consumed by
+loop_optimizer (lo_safe = lo_access_max AND ac_in_bounds) and bce (ac_max_access).  Both now saturate-to-TOP on
+overflow; both ground-truth scans (ac_in_bounds) already did -> the whole stack is sound under overflow.

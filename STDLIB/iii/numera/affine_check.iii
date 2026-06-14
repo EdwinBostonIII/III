@@ -29,7 +29,15 @@ var AC_WIT_J : [u32; 1]      /* colliding j */
 /* the maximum address touched by A[a*i+b] over i in [0,n) (a>=0); 0 if the loop is empty. */
 fn ac_max_access(a: u32, b: u32, n: u32) -> u32 @export {
     if n == 0u32 { return 0u32 }
-    return (a * (n - 1u32)) + b
+    /* [W53] the closed form a*(n-1)+b in raw u32 WRAPS on overflow, so it would report a small max for a
+     * stream that actually wraps high -> bce_redundant would ELIMINATE a needed bounds check (unsound).
+     * Compute exactly in u64; on overflow report MAX so any `< size` redundancy test fails CLOSED (keep the
+     * check).  This matches the affine ground truth ac_in_bounds (which catches the high access) AND the
+     * W49-fixed interval path lo_access_max (which also saturates to MAX), keeping lo_analyses_agree consistent.
+     * KATs use small values (<2^32) -> byte-identical. */
+    let m : u64 = ((a as u64) * ((n - 1u32) as u64)) + (b as u64)
+    if m > 0xFFFFFFFFu64 { return 0xFFFFFFFFu32 }
+    return (m as u32)
 }
 
 /* 1 iff every iteration's access a*i+b lies in [0,size); else 0 with the first offending i witnessed. */

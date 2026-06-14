@@ -1817,3 +1817,33 @@ the valid KAT stays green), and it is non-tautological (a concrete OOB the entir
 
 No defect to fix (both guards are present + correct); a negative-path coverage closure on an untrusted-input
 decompressor.  Count 1132 -> **1133**.
+
+## Wave-63 — huff_decode malformed-stream REJECTION oracle (the DEFLATE-class untrusted parser; W62 sibling) (2026-06-14)
+
+Sibling-hunt of W62 across the other untrusted-input codec.  huff_decode is @export and parses UNTRUSTED
+input, but its only test (1230_huffman) is roundtrip identity huff_decode(huff_encode(x))==x on VALID streams
+only -- so FOUR rejection guards are unexercised: truncated header (huffman.iii:195 in_len<260 -> HF_E_DEC),
+HOSTILE code-length (206 cl>64 -> HF_E_LEN), capacity (211 orig>out_cap -> HF_E_CAP), undecodable bitstream
+(236 found==0 -> HF_E_DEC).  Covered the two highest-value cleanly-craftable distinct CLASSES (per the
+distinct-class-not-every-line discipline):
+
+**W63-FIX (falsifier 1547_huff_reject):**
+  (A) TRUNCATED HEADER: in_len=10 (<260) -> must return HF_E_DEC (-3).
+  (B) HOSTILE CODE-LENGTH: in_len=280 with byte[0]=0xFF (code length 255 > 64) -> must return HF_E_LEN (-1).
+      The module comment is explicit: hf_canon indexes HF_BL/HF_NEXT/HF_FIRST/HF_OFF (all [;65]) by these
+      lengths, so a byte > 64 drives an OUT-OF-BOUNDS WRITE -- the guard is a real memory-safety gate.
+
+RIGOROUS TEETH (each guard independently load-bearing + the suite misses both):
+  - removed line 195, rebuilt -> 1547 = **10** (an all-zero length table decodes to empty output, returns 0
+    not -3) while 1230 stayed **99**; reverted.
+  - removed line 206, rebuilt -> 1547 = **20** (hf_canon OOB-writes its [;65] tables at index 255, returns a
+    non-HF_E_LEN value) while 1230 stayed **99** (separate process; a valid stream never carries cl>64);
+    reverted.
+huffman.iii is byte-identical to HEAD (git diff empty, no TEETH residue).  3-gate: gap real (1230 roundtrip-only),
+teeth proven, non-tautological (a concrete OOB the suite waves through).
+
+NOTE: lzss_decompress (W62) covers the LZ layer; lzh_decompress composes a Huffman pre-pass (now W63) + lzss
+(W62), so the DEFLATE recipe's untrusted-input rejection is covered at both primitive layers.
+
+No defect to fix (all guards present + correct); a negative-path coverage closure on the Huffman decoder.
+Count 1133 -> **1134**.

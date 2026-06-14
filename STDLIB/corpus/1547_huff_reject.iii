@@ -1,0 +1,44 @@
+/* 1547_huff_reject.iii -- W63 COVERAGE: huff_decode malformed-stream REJECTION (the DEFLATE-class
+ * untrusted Huffman parser; sibling of W62/1546 for lzss).
+ *
+ * THE GAP (proven non-tautological): huff_decode(in,in_len,out,out_cap) is an @export that parses
+ * UNTRUSTED input.  Its only test, 1230_huffman, drives huff_kat() = ROUNDTRIP identity
+ * huff_decode(huff_encode(x))==x on VALID streams only -- so a stream huff_encode() never emits (a
+ * malformed one) is never fed to the decoder, leaving its rejection guards entirely unexercised.  Two
+ * distinct, security-relevant rejection CLASSES:
+ *
+ *   (A) TRUNCATED HEADER (huffman.iii:195  `if in_len < 260 { return HF_E_DEC }`): the header is a
+ *       256-byte code-length table + a 4-byte original length, so any stream < 260 bytes is incomplete.
+ *       Without the guard, the s<256 length-table loop reads past a short buffer.
+ *   (B) HOSTILE CODE-LENGTH (huffman.iii:206  `if cl > 64 { return HF_E_LEN }`): a code-length byte
+ *       > 64.  The module comment is explicit -- hf_canon indexes HF_BL/HF_NEXT/HF_FIRST/HF_OFF (all
+ *       [;65]) by these lengths, so a byte > 64 drives an OUT-OF-BOUNDS WRITE.  The encoder never emits
+ *       a length > 64, so such a byte is a malformed/hostile stream.
+ *
+ * THE ORACLE: feed one crafted stream per class and assert huff_decode returns the right rejection.
+ *   A: in_len=10 (< 260) -> HF_E_DEC (-3).
+ *   B: in_len=280 with byte[0]=0xFF (code length 255 > 64) -> HF_E_LEN (-1).
+ *
+ * 99 = both rejected.  TEETH (proven, then reverted): removing line 195 makes A return 0 (an all-zero
+ * length table decodes to an empty output) not -3 (this test returns 10) while 1230 stays 99; removing
+ * line 206 makes B OOB-write hf_canon's [;65] tables (crash / garbage, rb != -1 -> this test returns 20)
+ * while 1230 stays 99 (a valid stream never carries a length > 64). */
+module corpus_1547
+
+extern @abi(c-msvc-x64) fn huff_decode(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "huffman.iii"
+
+var HR_IN  : [u8; 280]
+var HR_OUT : [u8; 512]
+
+fn main() -> u64 {
+    /* (A) truncated header: in_len 10 < 260 -> HF_E_DEC */
+    let ra : i32 = huff_decode(&HR_IN as u64, 10u32, &HR_OUT as u64, 512u32)
+    if ra != -3i32 { return 10u64 }    /* the in_len<260 truncation guard must reject (HF_E_DEC) */
+
+    /* (B) hostile code-length byte > 64 (would OOB-write hf_canon's [;65] tables) -> HF_E_LEN */
+    HR_IN[0u32] = 0xFFu8               /* code length 255 > 64 at symbol 0 */
+    let rb : i32 = huff_decode(&HR_IN as u64, 280u32, &HR_OUT as u64, 512u32)
+    if rb != -1i32 { return 20u64 }    /* the cl>64 hostile-length guard must reject (HF_E_LEN) */
+
+    return 99u64                         /* both malformed streams correctly rejected */
+}

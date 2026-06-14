@@ -1119,6 +1119,7 @@ declare -A EXPECTED=(
     [1544_bce_overflow_unsound]=99
     [1545_blake2s_sigma_perm]=99
     [1546_lzss_reject]=99
+    [1547_huff_reject]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

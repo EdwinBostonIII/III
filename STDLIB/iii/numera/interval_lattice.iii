@@ -50,12 +50,21 @@ fn il_leq(l1: u32, h1: u32, l2: u32, h2: u32) -> u32 @export {
     if h1 > h2 { return 0u32 }
     return 1u32
 }
-/* SOUND transfer functions: the abstract result contains every concrete result. */
+/* SOUND transfer functions: the abstract result contains every concrete result.
+ * [W49] On u32 overflow the wrapped bound would INVERT the interval and stop containing the
+ * concrete (wrapped) results -- unsound, as il_add_sound/il_mul_sound witness.  When the upper
+ * bound carries out, the wrapped product set spans the modulus, so the only sound abstraction is
+ * TOP [0, 0xFFFFFFFF] (contains every u32).  Non-overflowing inputs are byte-identical.  (For
+ * non-negative ranges l1<=h1,l2<=h2 the lower bound cannot overflow unless the upper does, so
+ * checking the upper bound suffices.) */
 fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
+    if (h1 + h2) < h1 { IL_LO[0u64] = 0u32 ; IL_HI[0u64] = 0xFFFFFFFFu32 ; return 0i32 }   /* carry-out -> TOP */
     IL_LO[0u64] = l1 + l2 ; IL_HI[0u64] = h1 + h2 ; return 0i32
 }
 fn il_mul(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 @export {
-    IL_LO[0u64] = l1 * l2 ; IL_HI[0u64] = h1 * h2 ; return 0i32      /* non-negative ranges */
+    let hp : u64 = (h1 as u64) * (h2 as u64)                          /* exact product (u32*u32 fits u64) */
+    if hp > 0xFFFFFFFFu64 { IL_LO[0u64] = 0u32 ; IL_HI[0u64] = 0xFFFFFFFFu32 ; return 0i32 }  /* overflow -> TOP */
+    IL_LO[0u64] = l1 * l2 ; IL_HI[0u64] = (hp as u32) ; return 0i32   /* non-negative ranges */
 }
 
 /* ===== KAT ===== */

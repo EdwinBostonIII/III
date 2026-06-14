@@ -1,0 +1,54 @@
+/* 1542_interval_lattice_overflow_sound.iii -- W49 FALSIFIER: interval_lattice's add/mul transfer
+ * functions must stay SOUND under u32 overflow (the abstract interval must contain every concrete
+ * result), per the module contract (line 53 "the abstract result contains every concrete result").
+ *
+ * THE DEFECT: il_add did `IL_HI = h1 + h2` and il_mul `IL_HI = h1 * h2` with raw u32 arithmetic.
+ * When the upper bound overflows it WRAPS to a small value, INVERTING the interval so it no longer
+ * contains the concrete results -- exactly what il_add_sound/il_mul_sound (the module's own
+ * witnesses) reject.  Reachable: loop_optimizer's il_mul(a,a,0,n-1) overflows for large strides.
+ *
+ * THE FIX: detect overflow (carry-out for add, u64 product for mul) -> saturate to TOP
+ * [0, 0xFFFFFFFF], which soundly contains every u32.
+ *
+ * TEETH (soundness, via the @export API): a concrete (x,y) in the input ranges whose wrapped
+ * sum/product is OUTSIDE the abstract [il_lo, il_hi] proves unsoundness.
+ *   - pre-fix: the wrapped bound inverts the interval -> the concrete result is outside -> exit 30/31.
+ *   - post-fix: TOP contains it.
+ * Sanity: non-overflowing add/mul are byte-identical (unchanged [lo,hi]). */
+module corpus_1542
+
+extern @abi(c-msvc-x64) fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_mul(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+
+fn main() -> u64 {
+    /* ---- TEETH 1: ADD overflow.  x in [4294967290, 4294967295], y in [0,5].
+     * concrete (x=4294967290, y=0) -> s=4294967290 must lie in the abstract interval. ---- */
+    il_add(4294967290u32, 4294967295u32, 0u32, 5u32)
+    let s : u32 = 4294967290u32                              /* a real concrete wrapped sum (no wrap here) */
+    if s < il_lo() { return 30u64 }                          /* pre-fix [4294967290,4]: s>hi=4 -> below-or-above */
+    if s > il_hi() { return 30u64 }                          /* pre-fix: 4294967290 > 4 -> UNSOUND */
+
+    /* ---- TEETH 2: MUL overflow.  x in [65535, 65536], y in [65535, 65536].
+     * concrete (x=65535, y=65535) -> p=4294836225 (fits u32) must lie in the abstract interval. ---- */
+    il_mul(65535u32, 65536u32, 65535u32, 65536u32)
+    let p : u32 = 65535u32 * 65535u32                        /* 4294836225, no wrap */
+    if p < il_lo() { return 31u64 }                          /* pre-fix [4294836225,0]: p>hi=0 -> UNSOUND */
+    if p > il_hi() { return 31u64 }
+
+    /* ---- sanity: non-overflowing transfer functions unchanged (byte-identical) ---- */
+    il_add(2u32, 5u32, 3u32, 8u32)
+    if il_lo() != 5u32 { return 32u64 }
+    if il_hi() != 13u32 { return 33u64 }
+    il_mul(2u32, 3u32, 4u32, 5u32)
+    if il_lo() != 8u32 { return 34u64 }
+    if il_hi() != 15u32 { return 35u64 }
+
+    /* ---- post-fix TOP is sound: a huge concrete result lands in [0, 0xFFFFFFFF] ---- */
+    il_add(4294967290u32, 4294967295u32, 0u32, 5u32)
+    if il_lo() != 0u32 { return 36u64 }                      /* post-fix TOP lo */
+    if il_hi() != 4294967295u32 { return 37u64 }             /* post-fix TOP hi */
+
+    return 99u64
+}

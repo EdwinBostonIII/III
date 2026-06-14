@@ -1693,4 +1693,28 @@ CONCLUSION: the tree is algorithmically optimal where it is hot.  Its hot loops 
 instruction-optimized) or bounded by small fixed constants / ratcheted-to-zero; its quadratic forms are either
 non-hot by-design (spec-documented), the slow half of a differential oracle, or load-bearing verification.  The
 perf vein joins defects + coverage as EXHAUSTED.  The III stdlib is comprehensively mature across every
-autonomous-discoverable axis this session probed.
+autonomous-discoverable axis this session probed.  [SUPERSEDED by W49 -- the spec/precision axis was NOT yet
+probed when this was written, and it found a real defect; saturation is per-LENS, never global.]
+
+## Wave-49 — interval_lattice il_add/il_mul OVERFLOW UNSOUNDNESS (the fresh spec/precision axis re-opened the vein) (2026-06-13)
+
+The "all axes exhausted" claim above was PREMATURE -- written before probing the spec-conformance /
+numerical-precision axis, which the corner-input/coverage/perf lenses never touched.  A fresh-axis workflow
+(W49: spec_incomplete + precision_loss + doc_vs_code over the math/numeric core) found a REAL soundness defect
+on round 1 -- the THIRD time this session that switching the AXIS re-opened a "saturated" vein (after W22
+use-before-init).  LESSON RE-CONFIRMED: saturation is per-LENS, never global.
+
+**W49-FIX (numera/interval_lattice.iii il_add + il_mul; falsifier 1542):** the interval abstract-domain transfer
+functions are documented SOUND ("the abstract result contains every concrete result", line 53) but computed the
+bounds with raw u32 `+`/`*`.  Under u32 OVERFLOW the upper bound WRAPS to a small value, INVERTING the interval
+so it no longer contains the concrete (wrapped) results -- exactly what the module's own witnesses
+il_add_sound / il_mul_sound reject.  Witness: il_add(2^31,2^31,0,0) -> IL_HI=(2^32)mod 2^32=0 -> [2^31,0]
+inverted; concrete 2^31 not contained.  Reachable: loop_optimizer's il_mul(a,a,0,n-1) overflows for large
+strides (a~n~70000 -> ~4.9e9 > 2^32) -> an unsound array-bound -> the optimizer could admit an unsafe rewrite.
+FIX: detect overflow (carry-out `(h1+h2)<h1` for add; u64 product `(h1 as u64)*(h2 as u64) > 0xFFFFFFFF` for
+mul) and saturate to TOP [0, 0xFFFFFFFF], which soundly contains every u32.  Non-overflowing inputs are
+byte-identical -> 1265 + loop_optimizer/affine consumers stay green.
+
+1542 teeth (soundness via @export): il_add(4294967290,4294967295,0,5) -- concrete (4294967290,0)=4294967290
+must lie in [il_lo,il_hi]; pre-fix [4294967290,4] excludes it (exit 30) / post-fix TOP contains it.  Mul analog
+il_mul(65535,65536,65535,65536) (exit 31).  Sanity: non-overflow add/mul unchanged.  Count 1128 -> **1129**.

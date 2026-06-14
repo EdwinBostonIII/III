@@ -1127,6 +1127,7 @@ declare -A EXPECTED=(
     [1552_http_reject]=99
     [1553_json_reject]=99
     [1554_parse_decimal_reject]=99
+    [1555_json_leading_zero]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

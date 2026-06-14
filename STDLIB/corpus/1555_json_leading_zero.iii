@@ -1,0 +1,63 @@
+/* 1555_json_leading_zero.iii -- W72 FIX falsifier: json_parse must REJECT a leading-zero integer per
+ * RFC 8259 §6 (the number grammar is int = zero / digit1-9 *DIGIT -- a '0' may only stand alone or be
+ * followed by '.'/'e', never by another digit).
+ *
+ * THE DEFECT (false-accept, claim-vs-behavior): json.iii claims "RFC 8259 JSON parser" / "Parse an RFC 8259
+ * number", but json_parse_number intakes integer digits greedily with NO leading-zero check, so "01" parses
+ * to NUM(1), "00" -> NUM(0), "-01" -> NUM(-1) -- all INVALID per RFC 8259, yet ACCEPTED.  (The exponent and
+ * fraction MAY carry leading zeros per the grammar, and "+1" is already rejected at the value dispatch, so
+ * the integer part is the lone hole.)
+ *
+ * THE FIX (json.iii, after the digits==0 guard): if more than one integer digit was read and the first is
+ * '0', return JSON_INVALID.
+ *
+ * 99 = leading-zero integers are rejected AND legitimate forms ("0", "10", "0.5") still parse.  TEETH: this
+ * falsifier returns 10 against the PRE-FIX lib ("01" wrongly accepted) and 99 against the POST-FIX lib. */
+module corpus_1555
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let b : *u8 = malloc(8u64)
+
+    /* positive: "0" -> NUM 0 (a lone zero is valid) */
+    b[0u64]=0x30u8
+    let r0 : u64 = json_parse(a, b as u64, 1u64)
+    if r0 == 0u64 { free(b) arena_drop(a) return 30u64 }
+    if json_int(r0) != 0i64 { free(b) arena_drop(a) return 31u64 }
+
+    /* positive: "10" -> NUM 10 (a non-zero leading digit is valid) */
+    b[0u64]=0x31u8 b[1u64]=0x30u8
+    let r10 : u64 = json_parse(a, b as u64, 2u64)
+    if r10 == 0u64 { free(b) arena_drop(a) return 32u64 }
+    if json_int(r10) != 10i64 { free(b) arena_drop(a) return 33u64 }
+
+    /* positive: "0.5" -> a valid FRAC node ('0' followed by '.' is valid) */
+    b[0u64]=0x30u8 b[1u64]=0x2Eu8 b[2u64]=0x35u8
+    let rf : u64 = json_parse(a, b as u64, 3u64)
+    if rf == 0u64 { free(b) arena_drop(a) return 34u64 }
+
+    /* (A) leading zero "01" -> INVALID per RFC 8259 §6 */
+    b[0u64]=0x30u8 b[1u64]=0x31u8
+    let ra : u64 = json_parse(a, b as u64, 2u64)
+    if ra != 0u64 { free(b) arena_drop(a) return 10u64 }
+
+    /* (B) "00" -> INVALID */
+    b[0u64]=0x30u8 b[1u64]=0x30u8
+    let rb : u64 = json_parse(a, b as u64, 2u64)
+    if rb != 0u64 { free(b) arena_drop(a) return 20u64 }
+
+    /* (C) "-01" -> INVALID */
+    b[0u64]=0x2Du8 b[1u64]=0x30u8 b[2u64]=0x31u8
+    let rc : u64 = json_parse(a, b as u64, 3u64)
+    if rc != 0u64 { free(b) arena_drop(a) return 40u64 }
+
+    free(b) arena_drop(a)
+    return 99u64
+}

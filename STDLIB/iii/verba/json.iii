@@ -270,6 +270,9 @@ fn json_parse_number() -> u64 {
         }
     }
     if digits == 0u64 { return JSON_INVALID }
+    /* RFC 8259 §6: int = zero / (digit1-9 *DIGIT) -- a multi-digit integer with a leading '0' ("01", "00",
+     * "-01") is INVALID.  Only the integer part is checked; the fraction/exponent may carry leading zeros. */
+    if digits > 1u64 { if p[start] == 0x30u8 { return JSON_INVALID } }
     /* Fractional / exponential extension: a '.' or [eE] after the integer part makes this a FRAC token. */
     let nc : u32 = json_peek()
     let mut is_frac : u8 = 0u8

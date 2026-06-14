@@ -1954,3 +1954,31 @@ without its guard -- a real over-acceptance the suite waves through).
 
 No defect to fix (all guards present + correct); three negative-path coverage closures on untrusted-input
 systems-layer parsers.  Count 1138 -> **1141**.
+
+## Wave-72 — json_parse RFC 8259 leading-zero FALSE-ACCEPT: a real DEFECT FIXED (first code change since W53) (2026-06-14)
+
+After ~12 commits of pure negative-path COVERAGE (which proved guards REJECT bad input), the genuinely-fresh
+axis is the DUAL: a malformed input that NO guard catches and the parser wrongly ACCEPTS (a false-accept /
+spec-conformance hole -- a real defect, not a coverage gap).  First probe found one.
+
+**THE DEFECT (claim-vs-behavior, the W49/W50 pattern):** json.iii claims "RFC 8259 JSON parser" /
+"Parse an RFC 8259 number", but json_parse_number intook integer digits greedily with NO leading-zero check.
+RFC 8259 §6: number = [minus] int [frac] [exp], int = zero / (digit1-9 *DIGIT) -- a '0' may only stand alone
+or be followed by '.'/'e', never another digit.  Probe (STDLIB/build/_json_lz_probe, exit 91) confirmed
+json_parse("01") was ACCEPTED as NUM(1); "00"->NUM(0), "-01"->NUM(-1) likewise -- all INVALID per RFC 8259.
+Scope verified: the fraction/exponent MAY carry leading zeros (1.01 / 1e01 valid), and "+1" is already
+rejected at the value dispatch (only '-' and 0-9 route to the number parser), so the integer part is the
+lone hole -- one fix covers 01 / 00 / 007 / -01 / 01.5 / 01e5.
+
+**THE FIX (json.iii, after the digits==0 guard):** `if digits > 1u64 { if p[start] == 0x30u8 { return
+JSON_INVALID } }` -- p[start] is the first integer digit (after an optional minus); a multi-digit integer
+beginning with '0' is rejected.
+
+TEETH (the W53 fix-with-falsifier pattern -- reddens pre-fix, passes post-fix): falsifier
+1555_json_leading_zero asserts "01"/"00"/"-01" are rejected AND "0"/"10"/"0.5" still parse.  Against the
+PRE-FIX lib it returned **10** ("01" wrongly accepted -> sub-case A reddens); against the POST-FIX lib it
+returns **99**.  No regression: json positives 52_json_parse_primitives / 1327_json_frac_exp stay 99 (no
+valid JSON number carries an integer leading zero).
+
+A real product-code DEFECT FIXED (json.iii +3 lines), not a coverage closure -- the first since W53.
+Count 1141 -> **1142**.

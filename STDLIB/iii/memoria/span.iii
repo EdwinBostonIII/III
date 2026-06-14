@@ -78,7 +78,7 @@ fn span_u8_cmp(a: u64, a_len: u64, b: u64, b_len: u64, n: u64) -> i32 @export {
     let bp : *u8 = b as *u8
     let mut i : u64 = 0u64
     while i < n {
-        if i >= a_len { return -1i32 }
+        if i >= a_len { if i >= b_len { return 0i32 } return -1i32 }   /* [W82] both exhausted at the same index = equal over min(n,lens); the old unconditional -1 made cmp(a,a) with n>len return -1 (reflexivity / antisymmetry violated) */
         if i >= b_len { return  1i32 }
         let av : u8 = ap[i]
         let bv : u8 = bp[i]

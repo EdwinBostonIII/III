@@ -1,0 +1,52 @@
+/* 1564_span_cmp_reflexive.iii -- W82 FIX falsifier: span_u8_cmp total-order REFLEXIVITY + ANTISYMMETRY.
+ *
+ * THE DEFECT (total-order-sort lens, ultracode workflow): span_u8_cmp (span.iii:74-90) checks the two
+ * exhaustion cases in order `if i>=a_len {return -1}` (line 81) BEFORE `if i>=b_len {return 1}` (line 82),
+ * with NO both-exhausted case.  When a_len==b_len==L and n>L with equal content, the loop compares all L
+ * equal bytes, then at i==L line 81 fires -> returns -1, even though b is exhausted at the SAME index.  Per
+ * the documented contract (:72-73, "lexicographic compare result over min(n,lens): ... 0 equal") and any
+ * total order, equal-content equal-length spans are EQUAL -> 0.  So a span compared to ITSELF returns -1
+ * (reflexivity cmp(a,a)==0 violated), and two equal spans give cmp(a,b)==-1 AND cmp(b,a)==-1 (antisymmetry
+ * cmp(a,b)==-cmp(b,a) violated).
+ *
+ * THE FIX (span.iii:81): `if i >= a_len { if i >= b_len { return 0i32 } return -1i32 }` -- both exhausted at
+ * the same index = equal over the common prefix.  KAT-safe: the OOB path is only reached when n>len, and the
+ * genuinely-shorter case (a_len<b_len) still returns -1.
+ *
+ * 99 = reflexive (cmp(a,a)==0), equal-content symmetric, AND the positive controls (n==len, genuinely-shorter,
+ * differing-content) unchanged.  TEETH: against the PRE-FIX lib cmp(P,2,P,2,5) == -1 -> return 10. */
+module corpus_1564
+
+extern @abi(c-msvc-x64) fn span_u8_cmp(a: u64, a_len: u64, b: u64, b_len: u64, n: u64) -> i32 from "span.iii"
+
+var P : [u8; 2]
+var Q : [u8; 2]
+var R : [u8; 2]
+
+fn main() -> u64 {
+    P[0u64] = 1u8 ; P[1u64] = 2u8
+    Q[0u64] = 1u8 ; Q[1u64] = 2u8       /* equal content, distinct buffer */
+    R[0u64] = 1u8 ; R[1u64] = 5u8       /* differs at byte 1 */
+    let p : u64 = &P as u64
+    let q : u64 = &Q as u64
+
+    /* (A) REFLEXIVITY: a span vs ITSELF, n>len, must be 0.  PRE-FIX returns -1 -> TEETH. */
+    if span_u8_cmp(p, 2u64, p, 2u64, 5u64) != 0i32 { return 10u64 }
+
+    /* (B) equal-content equal-length, n>len -> 0; ANTISYMMETRY (both directions 0) */
+    if span_u8_cmp(p, 2u64, q, 2u64, 5u64) != 0i32 { return 11u64 }
+    if span_u8_cmp(q, 2u64, p, 2u64, 5u64) != 0i32 { return 12u64 }
+
+    /* (C) POSITIVE controls -- unchanged by the fix:
+     *  n==len equal -> 0 (loop exits before the OOB check) */
+    if span_u8_cmp(p, 2u64, p, 2u64, 2u64) != 0i32 { return 20u64 }
+    /*  a genuinely shorter (a_len<b_len) -> -1 */
+    if span_u8_cmp(p, 1u64, p, 2u64, 5u64) != (0i32 - 1i32) { return 21u64 }
+    /*  b genuinely shorter -> +1 */
+    if span_u8_cmp(p, 2u64, p, 1u64, 5u64) != 1i32 { return 22u64 }
+    /*  differing content: P[1]=2 < R[1]=5 -> -1 ; reverse -> +1 */
+    if span_u8_cmp(p, 2u64, &R as u64, 2u64, 2u64) != (0i32 - 1i32) { return 23u64 }
+    if span_u8_cmp(&R as u64, 2u64, p, 2u64, 2u64) != 1i32 { return 24u64 }
+
+    return 99u64
+}

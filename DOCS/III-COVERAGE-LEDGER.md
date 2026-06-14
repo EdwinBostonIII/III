@@ -2222,3 +2222,43 @@ under all environments).  So the cert gap is CONFIRMED BENIGN: XII never emits a
 syntactic "every root pair joins" prose over-reads what xjn_gate_root samples.  The escalation condition (any residual
 non-join denoting DIFFERENTLY -> a real miscompilation) did NOT fire for this pair.  No code fix warranted; xii task
 stays a low-priority cert-prose precision nit.  This upgrades the W81 disposition from reasoned-benign to probe-proven-benign.
+
+## Wave-82 — TWO identity-violation fixes from the fresh-classes ultracode Workflow: NFD canonical reorder + span_u8_cmp reflexivity (2026-06-14)
+
+A second 18-agent ultracode Workflow swept 8 FRESH identity classes (idempotence/involution, ring distributivity,
+total-order/sort, canonical-form equality, fixed-point closure, homomorphism, associativity-folds, inverse-roundtrip).
+Three survivors; the two squarely-in-contract wrong-results FIXED here, the weakest (pcc) carried to W83.
+
+**DEFECT 1 (verba/normalise.iii, idempotence-involution lens, UNANIMOUS 0/3 refute):** norm_canonical_reorder
+(normalise.iii:333-358, the UAX #15 canonical-CCC bubble sort) had a post-swap BACKUP of two SEQUENTIAL ifs --
+`if i > 1u32 { i = i - 1u32 }  if i == 1u32 { i = i + 1u32 }` -- which are NOT mutually exclusive: after a swap at
+i==2 the first sets i=1, then the second (i==1) bumps it straight back to 2, SKIPPING the BUF[1]-vs-BUF[0] re-compare.
+On a leading combining run of >=3 marks whose min-CCC mark must travel past index 1, NFD emitted NON-canonical order.
+Concretely the defective sequence U+0301(CCC230) U+0316(220) U+031B(216) came out CC 96 CC 9B CC 81 (220 before 216)
+instead of canonical CC 9B CC 96 CC 81 -- violating UAX #15 canonical ordering AND NFD idempotence (NFD(NFD(x))!=NFD(x),
+since the second pass re-sorts).  In-contract: all three marks are in the declared U+0300..U+036F support + CCC table.
+Harmless for starter-led strings (BUF[0] is a CCC-0 base, never swaps) -- which is why the one existing KAT 78
+("cafe"+single mark) missed it.  FIX: `if i > 1u32 { i = i - 1u32 } else { i = i + 1u32 }` (changes ONLY the i==2
+backup).  Falsifier 1563_nfd_canonical_reorder (+ an idempotence arm); teeth 10->99; 78 stays 99.
+
+**DEFECT 2 (memoria/span.iii, total-order-sort lens):** span_u8_cmp (span.iii:74-90) checked `if i>=a_len {return -1}`
+(line 81) BEFORE `if i>=b_len {return 1}` with NO both-exhausted case.  For equal-length equal-content spans both
+shorter than n, the loop compares all bytes equal, then at i==L line 81 returns -1 -- so cmp(a,a) with n>len returns
+-1 (a span reports "a < a": REFLEXIVITY broken) and two equal spans give cmp(a,b)==cmp(b,a)==-1 (ANTISYMMETRY broken),
+contradicting the documented "result over min(n,lens): ... 0 equal" (:72-73).  Latent (only corpus-internal callers)
+but an indefensible total-order violation.  FIX: `if i >= a_len { if i >= b_len { return 0i32 } return -1i32 }`
+(both exhausted = equal over the common prefix).  KAT-safe: the OOB path is only reached when n>len; genuinely-shorter
+(a_len<b_len) still returns -1.  Falsifier 1564_span_cmp_reflexive (+ antisymmetry + 5 positive controls); teeth 10->99;
+1059 stays 99.  Count 1149 -> **1151**.
+
+**DEFECT 3 (numera/congruence_closure.iii, fixed-point-closure lens) -- DEFERRED to W83 (real, clean fix):**
+pcc_congruence_close() runs only from pcc_merge, not from pcc_app1/pcc_app2, so an application built AFTER its
+arguments were merged is not congruence-closed (pcc_eq(f(a),f(b))==0 though a=b) until the next unrelated merge
+re-runs closure and flips it -- the header's unconditional "Congruence is closed to fixpoint" (:12-13) is not upheld.
+Under-approximates (sound, never a false equality) and NO consumer uses pcc_app (all use leaf/merge/eq), so it is
+latent.  Clean 2-line fix (call pcc_congruence_close() at the end of pcc_app1/pcc_app2) -- W83.
+
+**LENSES CLEAN (this round): ring-distributivity, canonical-form-equality, homomorphism-structure, associativity-folds,
+inverse-pair-roundtrip (0 found).** Completeness critic: each FOUND lens was single-instance (idempotence probed only
+normalise; total-order only span_u8_cmp; fixed-point only pcc) -- the verba text family (glyph/markup/regex), the
+pq/heaplet/list comparators, and kleene/widening/sat fixpoints are unprobed siblings for W84+.

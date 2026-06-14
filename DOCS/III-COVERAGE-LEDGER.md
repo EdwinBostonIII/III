@@ -1882,3 +1882,37 @@ gap real (grep-confirmed zero negative tests), teeth proven, non-tautological.
 
 No defect to fix (all guards present + correct); three negative-path coverage closures on untrusted-input
 codec decoders.  Count 1134 -> **1137**.
+
+## Wave-68 — ML-DSA (FIPS 204) verify anti-malleability / canonical-encoding hint guards (the deepest W64 gap) (2026-06-14)
+
+The highest-value W64-confirmed gap: iii_mldsa_verify decodes an UNTRUSTED signature, and FIPS 204
+HintBitUnpack mandates two canonical-encoding / anti-malleability invariants that NO test exercised --
+strictly-increasing hint indices within each polynomial (mldsa.iii:1180 `cur<=prv`) and zero padding bytes
+(mldsa.iii:1190 `sp[hoff+j2]!=0`).  The 3 verify tests (198/769 tamper sig[0]=c_seed; 995 tampers siglen)
+never touch the hint section [hoff, hoff+omega+k).  ML-DSA-44: hoff = 32 + l*pzp = 32 + 4*576 = 2336,
+omega = 80, k = 4; counts at sig[2416..2420), index bytes at sig[2336..2416), total count sig[2419].
+
+**W68-FIX (falsifier 1551_mldsa_hint_reject): a SET-PRESERVING craft** (the discriminator from W64's refute --
+an arbitrary overwrite changes the hint bit-SET so verify still returns -1 via the final Fiat-Shamir c_check,
+leaving the guard unfalsified = tautological).  keygen->sign a genuine ML-DSA-44 sig, then:
+  (1180) REORDER two genuine strictly-increasing ADJACENT index bytes in one poly (located by a runtime scan
+         for the first poly with >=2 hints).  Decode sets MLDSA_POOL membership order-independently (line
+         1182), so the hint set H is BYTE-IDENTICAL -- only the strict-increase guard differs.  Accepting a
+         reordered encoding of the SAME signature IS signature malleability.
+  (1190) corrupt ONE padding byte at sig[hoff+idx_total] (never read by the decode loop, which reads only
+         [0,idx_total)) -- so H is identical; only the padding-zero guard sees it.
+Both tampers are restored before the next (isolation).  A probe (STDLIB/build/_w68_probe, exit 99) first
+confirmed the 0x42 seed yields a poly with >=2 hints AND padding (idx_total<omega), so the craft is
+constructible.
+
+RIGOROUS TEETH (each guard independently load-bearing; the set-preserving craft is what gives them teeth):
+  - removed line 1190, rebuilt -> 1551 = **10** (the padding-tampered sig ACCEPTS, verify==0) while
+    198/995 stayed **99**; reverted.
+  - removed line 1180, rebuilt -> 1551 = **20** (the reordered-hint sig ACCEPTS) while 198/995 stayed **99**;
+    reverted.
+mldsa.iii is byte-identical to HEAD (git diff empty, no TEETH residue).  3-gate: gap real (grep: no hint-
+section negative test), teeth proven, non-tautological (the reorder/padding accept-without-guard is a real
+malleability/non-canonical-encoding acceptance the suite waves through).
+
+No defect to fix (both guards present + correct); a negative-path coverage closure on the ML-DSA verifier's
+FIPS 204 anti-malleability surface.  Count 1137 -> **1138**.

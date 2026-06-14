@@ -1123,6 +1123,7 @@ declare -A EXPECTED=(
     [1548_hex_reject]=99
     [1549_leb128_overflow_reject]=99
     [1550_lzh_reject]=99
+    [1551_mldsa_hint_reject]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

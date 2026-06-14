@@ -1,0 +1,85 @@
+/* 1551_mldsa_hint_reject.iii -- W68 COVERAGE: ML-DSA (FIPS 204) verify anti-malleability / canonical-
+ * encoding guards on the signature HINT section (W64-confirmed, refute-corrected craft).
+ *
+ * THE GAP (3-gate teeth-proven): iii_mldsa_verify decodes an UNTRUSTED signature.  FIPS 204 HintBitUnpack
+ * mandates the hint indices be STRICTLY INCREASING within each polynomial and the padding bytes be ZERO --
+ * two canonical-encoding / anti-malleability guards (mldsa.iii:1180 cur<=prv, :1190 padding!=0).  The 3
+ * iii_mldsa_verify tests (198/769 tamper sig[0]=c_seed; 995 tampers siglen) NEVER touch the hint section
+ * [hoff, hoff+omega+k).  ML-DSA-44: hoff = 32 + l*pzp = 32 + 4*576 = 2336, omega = 80, k = 4; the cumulative
+ * per-poly hint counts are at sig[2416..2420); the hint index bytes are sig[2336..2416); the total hint count
+ * is sig[2419].
+ *
+ * THE CRAFT IS SET-PRESERVING (an arbitrary overwrite is tautological -- it changes the hint bit-SET, so
+ * verify still returns -1 via the final Fiat-Shamir c_check, leaving the guard unfalsified):
+ *   (1180) REORDER two genuine strictly-increasing ADJACENT index bytes within one polynomial.  Decode sets
+ *          MLDSA_POOL membership order-independently (line 1182), so the hint set H is BYTE-IDENTICAL -- the
+ *          ONLY behavioral difference is the strict-increase guard itself.
+ *   (1190) corrupt ONE padding byte at sig[hoff + idx_total] (the first byte past the used hints).  The
+ *          decode loop reads sig[hoff+j] only for j in [0, idx_total), so H is byte-identical; only the
+ *          padding-zero guard sees the corrupted byte.
+ *
+ * 99 = the genuine sig verifies AND both tampers are REJECTED (-1).  TEETH (proven, then reverted):
+ * removing line 1190 makes the padding-tampered sig ACCEPT (verify==0) -> this test returns 10 (line 1180
+ * still rejects the reorder); removing line 1180 makes the reordered sig ACCEPT -> returns 20 (the padding
+ * tamper, restored first, no longer interferes).  198/769/995 stay 99 (genuine sigs, no hint tamper). */
+module corpus_1551
+
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+
+var SEED : [u8; 64]
+var PK   : [u8; 2048]
+var SK   : [u8; 5120]
+var SIG  : [u8; 4096]
+var SLB  : [u8; 16]
+var MSG  : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = ((0x42u64 + i) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { MSG[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    iii_mldsa_keygen(2u64, &SEED as u64, &PK as u64, &SK as u64)
+    let sr : i32 = iii_mldsa_sign(2u64, &SK as u64, &MSG as u64, 32u64, &SIG as u64, &SLB as u64)
+    if sr != 0i32 { return 1u64 }
+    let sl : u64 = (SLB[0u64] as u64) | ((SLB[1u64] as u64) << 8u64) | ((SLB[2u64] as u64) << 16u64) | ((SLB[3u64] as u64) << 24u64)
+
+    /* admit: the genuine signature verifies */
+    if iii_mldsa_verify(2u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl) != 0i32 { return 2u64 }
+
+    /* locate a polynomial with >=2 hints (base = its first hint index); total hint count = sig[2419] */
+    let mut prevc : u64 = 0u64
+    let mut base : u64 = 999u64
+    let mut p : u64 = 0u64
+    while p < 4u64 {
+        let c : u64 = SIG[2416u64 + p] as u64
+        if base == 999u64 { if (c - prevc) >= 2u64 { base = prevc } }
+        prevc = c
+        p = p + 1u64
+    }
+    let idx_total : u64 = SIG[2419u64] as u64
+    if base == 999u64 { return 3u64 }              /* setup invariant (probe-verified for this seed) */
+    if idx_total >= 80u64 { return 4u64 }
+
+    /* (1190) PADDING-ZERO: corrupt the first padding byte past the used hints -> reject (-1) */
+    let pad_off : u64 = 2336u64 + idx_total
+    let pad_orig : u8 = SIG[pad_off]
+    SIG[pad_off] = 0xFFu8
+    let r1190 : i32 = iii_mldsa_verify(2u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl)
+    SIG[pad_off] = pad_orig                         /* restore BEFORE the next tamper (isolation) */
+    if r1190 != 0i32 - 1i32 { return 10u64 }        /* the padding-zero guard must reject */
+
+    /* (1180) STRICT-INCREASE: reorder two adjacent genuine indices in one poly -> reject (-1) */
+    let a_off : u64 = 2336u64 + base
+    let b_off : u64 = 2336u64 + base + 1u64
+    let a_orig : u8 = SIG[a_off]
+    let b_orig : u8 = SIG[b_off]
+    SIG[a_off] = b_orig ; SIG[b_off] = a_orig       /* swap: cur(=a)<=prv(=b) now holds */
+    let r1180 : i32 = iii_mldsa_verify(2u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl)
+    SIG[a_off] = a_orig ; SIG[b_off] = b_orig       /* restore */
+    if r1180 != 0i32 - 1i32 { return 20u64 }        /* the strict-increase guard must reject */
+
+    return 99u64                                     /* genuine verified + both hint tampers rejected */
+}

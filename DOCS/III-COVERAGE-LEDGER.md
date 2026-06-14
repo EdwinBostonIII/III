@@ -2213,3 +2213,12 @@ each surfaced one candidate that the 3-skeptic round refuted (read as already-co
 for a later lens: denotational preservation of the 21 residual lift-family non-joins (the high-value "does any pair
 denote DIFFERENTLY" question), idempotence/involution laws, ring distributivity where a +/x pair coexists, and
 total-order antisymmetry/transitivity.
+
+**W81 xii cert finding -- the denotational-difference ESCALATION RESOLVED EMPIRICALLY (probe _w82_xii_denote_probe.iii
+-> exit 99):** built the capped root pair FIF(K02_BIND, FTHEN(A,B), FTHEN(A,B)), applied R005 (prefix-lift) -> c5 and
+R006 (suffix-lift) -> c6, canonicalised both.  Result: xii_rewrite_struct_eq(c5,c6)==0 (the divergence is REAL -- the
+candidate's mechanism was correct) AND xdn_equal_all_envs(c5,c6)==1 (the two divergent normal forms DENOTE IDENTICALLY
+under all environments).  So the cert gap is CONFIRMED BENIGN: XII never emits a non-equivalent term; only the
+syntactic "every root pair joins" prose over-reads what xjn_gate_root samples.  The escalation condition (any residual
+non-join denoting DIFFERENTLY -> a real miscompilation) did NOT fire for this pair.  No code fix warranted; xii task
+stays a low-priority cert-prose precision nit.  This upgrades the W81 disposition from reasoned-benign to probe-proven-benign.

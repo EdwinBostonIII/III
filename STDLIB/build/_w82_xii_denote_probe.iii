@@ -1,0 +1,57 @@
+/* W82 escalation probe (resolves task #73): the W81 confluence-critpair candidate found that the
+ * capped root critical pair FIF(K02_BIND, FTHEN(A,B), FTHEN(A,B)) DIVERGES under R005 (prefix-lift,
+ * cap-guarded) vs R006 (suffix-lift, unguarded), yet xjn_gate_root() certifies "every root pair joins".
+ * The synthesis/refutation argued this is BENIGN because the two divergent normal forms are
+ * DENOTATIONALLY EQUAL (xii_denote.xdn_equal_all_envs). This probe SETTLES it empirically:
+ *
+ *   return 99 = divergence CONFIRMED (struct_eq==0) AND denotation PRESERVED (xdn_equal_all_envs==1)
+ *               -> the finding is BENIGN, exactly as documented; task #73 stays low-pri.
+ *   return  2 = divergence AND denotation DIFFERS (xdn_equal_all_envs==0)
+ *               -> a REAL miscompilation (XII can emit a non-equivalent term) -> ESCALATE + fix.
+ *   return  1 = NO divergence (struct_eq==1) -> the candidate's premise was wrong (even less real).
+ *   return 50+f / 60+f = R005 / R006 did not fire (last_rule_fired=f) -> construction off, diagnose.
+ *
+ * Constants verified: XB_K02_BIND=1 (capped), XB_K01_FORM=0 (cap-free), XB_FTHEN=19; rules 5/6 are
+ * both FIF/ANY/FTHEN/FTHEN (xii_rule_patterns.iii:82-83). */
+module w82_xii_denote_probe
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, child_a: u32, child_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(t1: u32, t2: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xdn_equal_all_envs(a: u32, b: u32) -> u8 from "xii_denote.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+
+    /* t1 = FIF(K02_BIND, FTHEN(A,B), FTHEN(A,B)) with A,B cap-free K01_FORM */
+    let p1 : u32 = xii_term_make_basis(1u8, 0u32)     /* K02_BIND capped predicate */
+    let a1 : u32 = xii_term_make_basis(0u8, 1u32)     /* K01_FORM cap-free */
+    let b1 : u32 = xii_term_make_basis(0u8, 2u32)
+    let t1 : u32 = xii_term_make_if(p1, xii_term_make_fusion2(19u8, a1, b1), xii_term_make_fusion2(19u8, a1, b1))
+    let r5 : u32 = xii_rewrite_apply_specific(5u32, t1)
+    let f5 : u32 = xii_rewrite_last_rule_fired()
+    if f5 != 5u32 { return 50u64 + (f5 as u64) }
+    let c5 : u32 = xii_canonicalise(r5)
+
+    /* rebuild a struct-identical t2 in the SAME arena (fresh IDs; do NOT reset -- c5 must stay valid) */
+    let p2 : u32 = xii_term_make_basis(1u8, 0u32)
+    let a2 : u32 = xii_term_make_basis(0u8, 1u32)
+    let b2 : u32 = xii_term_make_basis(0u8, 2u32)
+    let t2 : u32 = xii_term_make_if(p2, xii_term_make_fusion2(19u8, a2, b2), xii_term_make_fusion2(19u8, a2, b2))
+    let r6 : u32 = xii_rewrite_apply_specific(6u32, t2)
+    let f6 : u32 = xii_rewrite_last_rule_fired()
+    if f6 != 6u32 { return 60u64 + (f6 as u64) }
+    let c6 : u32 = xii_canonicalise(r6)
+
+    let se : u8 = xii_rewrite_struct_eq(c5, c6)
+    if se == 1u8 { return 1u64 }                       /* no divergence -> premise wrong */
+
+    let de : u8 = xdn_equal_all_envs(c5, c6)
+    if de == 1u8 { return 99u64 }                      /* diverge BUT denotation-equal -> BENIGN */
+    return 2u64                                        /* diverge AND denotation differs -> REAL miscompilation */
+}

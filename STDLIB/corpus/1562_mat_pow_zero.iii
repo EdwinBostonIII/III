@@ -1,0 +1,76 @@
+/* 1562_mat_pow_zero.iii -- W81 FIX falsifier: mat_pow_naive must satisfy M^0 = I (the monoid/ring
+ * power identity) and AGREE with mat_pow_fast at n=0, per matrix_ring.iii's headline theorem (:8)
+ * "the O(n) naive and O(log n) fast power are PROVEN to produce the identical matrix".
+ *
+ * THE DEFECT (semantics-preservation / identity violation, found W81 ultracode workflow, lens
+ * algebraic-laws, unanimous 0/3 refute): mat_pow_naive (matrix_ring.iii:82-92) does mat_copy(1,src)
+ * then `let mut i=1; while i<n`.  At n=0 the guard `1<0` is false, the loop body never runs, and the
+ * result slot is left holding src = M = M^1.  The correct value is M^0 = I.  mat_pow_fast (:93-110)
+ * seeds mat_identity(1) and its `while nn>0` loop is skipped, so it CORRECTLY returns I at n=0.  The
+ * two routines therefore DISAGREE at n=0 -- naive being the wrong side -- which directly falsifies the
+ * module's own "produce the identical matrix" claim and the standard x^0 = e law.
+ *
+ * THE FIX (matrix_ring.iii): a leading `if n == 0u32 { mat_identity(1u32) ; return 0i32 }` in
+ * mat_pow_naive.  This changes ONLY the n=0 case; every n>=1 path (result AND multiply-count) is
+ * byte-identical, so matrix_ring_kat's naive_muls==15 (n=16) assertion is untouched.
+ *
+ * M is chosen = 2*I = [[2,0],[0,2]] so M[0]=2 != 1: M^0 = I still has entry[0]=1, giving the oracle
+ * bite (a witness with a 1 in slot 0 would mask the bug).
+ *
+ * 99 = naive M^0 == I AND naive == fast at n=0 AND the n>=1 controls (M^1, M^4) are unchanged.
+ * TEETH: returns 10 against the PRE-FIX lib (naive M^0 reads 2 at entry[0], not 1); 99 POST-FIX. */
+module corpus_1562
+
+extern @abi(c-msvc-x64) fn mat_set(s: u32, a: u32, b: u32, c: u32, d: u32) -> i32 from "matrix_ring.iii"
+extern @abi(c-msvc-x64) fn mat_get(s: u32, i: u32) -> u32 from "matrix_ring.iii"
+extern @abi(c-msvc-x64) fn mat_pow_naive(src: u32, n: u32) -> i32 from "matrix_ring.iii"
+extern @abi(c-msvc-x64) fn mat_pow_fast(src: u32, n: u32) -> i32 from "matrix_ring.iii"
+
+fn main() -> u64 {
+    /* M = 2*I = [[2,0],[0,2]] in slot 0 (entry[0]=2 != 1 -> oracle has bite) */
+    mat_set(0u32, 2u32, 0u32, 0u32, 2u32)
+
+    /* naive M^0 -> slot 1; capture all 4 entries BEFORE fast overwrites slot 1 */
+    mat_pow_naive(0u32, 0u32)
+    let n0 : u32 = mat_get(1u32, 0u32)
+    let n1 : u32 = mat_get(1u32, 1u32)
+    let n2 : u32 = mat_get(1u32, 2u32)
+    let n3 : u32 = mat_get(1u32, 3u32)
+
+    /* fast M^0 -> slot 1 (the reference: known-correct identity seed) */
+    mat_pow_fast(0u32, 0u32)
+    let f0 : u32 = mat_get(1u32, 0u32)
+    let f1 : u32 = mat_get(1u32, 1u32)
+    let f2 : u32 = mat_get(1u32, 2u32)
+    let f3 : u32 = mat_get(1u32, 3u32)
+
+    /* (A) naive M^0 MUST be the identity I = [[1,0],[0,1]] -- the defining x^0=e law.
+     * PRE-FIX naive leaves 2*I here, so n0 == 2 != 1 -> TEETH (return 10). */
+    if n0 != 1u32 { return 10u64 }
+    if n1 != 0u32 { return 11u64 }
+    if n2 != 0u32 { return 12u64 }
+    if n3 != 1u32 { return 13u64 }
+
+    /* (B) fast M^0 = I (the known-correct control; should hold pre- and post-fix) */
+    if f0 != 1u32 { return 20u64 }
+    if f1 != 0u32 { return 21u64 }
+    if f2 != 0u32 { return 22u64 }
+    if f3 != 1u32 { return 23u64 }
+
+    /* (C) the module's headline: naive == fast at n=0 (explicit differential) */
+    if n0 != f0 { return 30u64 }
+    if n3 != f3 { return 31u64 }
+
+    /* (D) POSITIVE control: naive M^1 = M = 2*I, unchanged by the fix (n>=1 path untouched) */
+    mat_pow_naive(0u32, 1u32)
+    if mat_get(1u32, 0u32) != 2u32 { return 40u64 }
+    if mat_get(1u32, 3u32) != 2u32 { return 41u64 }
+
+    /* (E) POSITIVE control: naive M^4 = (2I)^4 = 16*I (mod 256), still correct for n>=1 */
+    mat_pow_naive(0u32, 4u32)
+    if mat_get(1u32, 0u32) != 16u32 { return 50u64 }
+    if mat_get(1u32, 1u32) != 0u32  { return 51u64 }
+    if mat_get(1u32, 3u32) != 16u32 { return 52u64 }
+
+    return 99u64
+}

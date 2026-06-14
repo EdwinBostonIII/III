@@ -2169,3 +2169,47 @@ task; the honest trigger to raise it is the first real `signed_i32_call() % k` /
 a live teeth case exactly like RSA.  Memory `feedback-iii-i32-signed-ordering-unsigned` carries the generalized
 rule + both probes.  Count unchanged at **1148** (no test added: one cannot write a PASSING corpus test for
 currently-miscompiled behavior, and asserting the bug to get green is the wrong-direction test the standard rejects).
+
+## Wave-81 — mat_pow_naive(M,0) = M not I: a SEMANTICS-IDENTITY violation FIXED (ultracode workflow, new axis) (2026-06-14)
+
+The input-validation neighborhood (decoders / crypto-canonical / count-bound / network parsers, W72-80) is mined
+to the floor, so W81 opened a genuinely different axis -- mathematical-IDENTITY / semantics-preservation VIOLATION
+on a VALID input (the W37/W49/W53 vein that finds wrong RESULTS, not coverage) -- via a 34-agent read-only ultracode
+Workflow: 12 violation lenses, each candidate run through 3-skeptic adversarial refutation, then synthesised.
+
+**THE DEFECT (numera/matrix_ring.iii, lens algebraic-laws, UNANIMOUS 0/3 refute, ~0.95 synthesis confidence):**
+mat_pow_naive (matrix_ring.iii:82-92, @export) does `mat_copy(1,src)` then `let mut i=1; while i<n`.  At **n=0**
+the guard `1<0` is false, the loop body never runs, and the result slot is left holding src = M = M^1.  The correct
+value is **M^0 = I**.  mat_pow_fast (:93-110) seeds `mat_identity(1)` and its `while nn>0` loop is skipped, so it
+CORRECTLY returns I at n=0.  The two routines therefore DISAGREE at n=0 -- directly falsifying the module's own
+headline theorem (:8) "the O(n) naive and O(log n) fast power are PROVEN to produce the identical matrix", with
+naive the wrong side, and violating the standard monoid/ring law x^0 = e.  The defect is domain-independent: one
+need not win an "is n=0 in-domain" argument -- the module's OWN equivalence claim is internally contradicted.
+
+**THE FIX (matrix_ring.iii):** a leading `if n == 0u32 { mat_identity(1u32) ; return 0i32 }` in mat_pow_naive.
+Surgical -- it changes ONLY the n=0 case; every n>=1 path (result AND the multiply-count) is byte-identical, so
+matrix_ring_kat's `naive_muls==15` (n=16) assertion is untouched.
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1562_mat_pow_zero builds M = 2*I (entry[0]=2 != 1, giving the
+oracle bite), asserts naive M^0 == I, naive == fast at n=0, and the n>=1 controls (M^1=M, M^4=16I).  Against the
+PRE-FIX lib **10** (naive M^0 reads entry[0]=2, not 1); POST-FIX **99**.  No regression: 1261_matrix_ring (the KAT,
+incl. naive_muls==15) stays 99.  Count 1148 -> **1149**.
+
+**The other surviving candidate -- xii_joinability root-confluence cert -- DOCUMENTED, NOT fixed (benign, separated).**
+The confluence-critpair lens found that `xjn_gate_root()` certifies "every ROOT critical pair joins" (xii_admission.iii:14-15)
+but only verifies cap-FREE sentinel witnesses; the capped root pair FIF(K02_BIND, FTHEN(A,B), FTHEN(A,B)) diverges
+under R005 (prefix-lift, cap-guarded) vs R006 (suffix-lift, unguarded) because R030's collapse is blocked on a
+capped predicate.  REAL but BENIGN: (1) the divergent normal forms are DENOTATIONALLY EQUAL (xii_denote.xdn_equal_all_envs
+certifies the lift family preserves denotation under all environments -- no wrong program emitted); (2) xii_admission.iii:6-26
+EXPLICITLY discloses XII is NOT globally confluent and that the system relies ONLY on DETERMINISTIC NORMALISATION (one
+fixed bottom-up strategy => one NF per term), "independent of global confluence".  "Fixing" the gate to sample capped
+predicates would make it return non-confluent -> xad_decide REJECTS a rule set the system soundly relies on = a
+REGRESSION for zero correctness gain.  Disposition: a low-priority dedicated task (precise the cert prose OR complete
+the lift rules, as careful proof-infra work) -- NOT bundled here (the self-host-proof-infra latent-gain triage rule).
+
+**LENSES VERIFIED CLEAN (durable): ec-grouplaw, ntt-homomorphism, proof-soundness, egraph-soundness, optimizer-fold,
+serialize-roundtrip (thin -- treat as under-probed); field-inverse-mont / cost-monotone / crypto-property / xii-rewrite
+each surfaced one candidate that the 3-skeptic round refuted (read as already-correct).**  Completeness critic flags
+for a later lens: denotational preservation of the 21 residual lift-family non-joins (the high-value "does any pair
+denote DIFFERENTLY" question), idempotence/involution laws, ring distributivity where a +/x pair coexists, and
+total-order antisymmetry/transitivity.

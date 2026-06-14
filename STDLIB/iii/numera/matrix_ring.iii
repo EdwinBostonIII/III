@@ -81,6 +81,7 @@ fn mat_muls() -> u32 @export { return MAT_MULS[0u64] }
 /* slot layout for the power routines: src=caller's; 1=result, 2=base, 3=temp. */
 fn mat_pow_naive(src: u32, n: u32) -> i32 @export {
     MAT_MULS[0u64] = 0u32
+    if n == 0u32 { mat_identity(1u32) ; return 0i32 }   /* M^0 = I (the x^0=e law); the loop below seeds slot1=M=M^1 and is correct only for n>=1 -- without this n=0 wrongly returned M and DISAGREED with mat_pow_fast (W81) */
     mat_copy(1u32, src)
     let mut i : u32 = 1u32
     while i < n {

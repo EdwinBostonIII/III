@@ -1,0 +1,43 @@
+/* 1546_lzss_reject.iii -- W62 COVERAGE: lzss_decompress malformed-stream REJECTION.
+ *
+ * THE GAP (proven non-tautological): lzss_decompress(in,in_len,out,out_cap) is an @export that
+ * parses UNTRUSTED input.  It has two distinct rejection CLASSES that NO test exercises -- 1224_lzss
+ * drives lzss_kat(), which is roundtrip identity decompress(compress(x))==x on VALID streams only, so
+ * a stream that compress() never emits (a malformed one) is never fed to the decoder:
+ *
+ *   (A) BACK-REFERENCE UNDERFLOW (lzss.iii:115  `if off > outp { return -1 }`): a crafted match whose
+ *       offset points BEFORE the output start.  Without the guard, `src = outp - off` underflows in u32
+ *       to ~0xFFFFFFFF and the copy `op[src+c]` reads ~4 GiB out of bounds (a security-relevant OOB
+ *       READ on attacker-controlled input).
+ *   (B) CAPACITY OVERFLOW (lzss.iii:125  `if outp >= out_cap { return -1 }`): more decoded bytes than
+ *       the caller's out_cap.  Without the guard, the decoder writes past out_cap (OOB WRITE).
+ *
+ * THE ORACLE: feed one crafted stream per class and assert lzss_decompress returns -1 (rejected).
+ *   A: ctrl=0x01 (token0 is a match), b0=0x01,b1=0x00 -> off=1, mlen=3; at token0 outp=0, so
+ *      off(1) > outp(0) -> the underflow guard must fire.
+ *   B: ctrl=0x00 (8 literal tokens), 3 literal bytes, out_cap=2; the 3rd literal hits outp(2)>=cap(2)
+ *      -> the capacity guard must fire.
+ *
+ * 99 = both malformed streams were rejected (-1).  TEETH (proven, then reverted): removing line 115
+ * makes A OOB-read/crash (exit != 99) while 1224 stays 99; removing line 125 makes B return 3 (this
+ * test returns 20) while 1224 stays 99 (a valid decompress fills exactly out_cap and never trips it). */
+module corpus_1546
+
+extern @abi(c-msvc-x64) fn lzss_decompress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+
+var RJ_IN  : [u8; 16]
+var RJ_OUT : [u8; 64]
+
+fn main() -> u64 {
+    /* (A) back-reference offset > current output position (off=1 while outp=0) */
+    RJ_IN[0u32] = 0x01u8 ; RJ_IN[1u32] = 0x01u8 ; RJ_IN[2u32] = 0x00u8
+    let ra : i32 = lzss_decompress(&RJ_IN as u64, 3u32, &RJ_OUT as u64, 64u32)
+    if ra != -1i32 { return 10u64 }    /* the off>outp underflow guard must reject (-1) */
+
+    /* (B) decoded length exceeds the declared out_cap (3 literals into out_cap=2) */
+    RJ_IN[0u32] = 0x00u8 ; RJ_IN[1u32] = 0x41u8 ; RJ_IN[2u32] = 0x42u8 ; RJ_IN[3u32] = 0x43u8
+    let rb : i32 = lzss_decompress(&RJ_IN as u64, 4u32, &RJ_OUT as u64, 2u32)
+    if rb != -1i32 { return 20u64 }    /* the outp>=out_cap capacity guard must reject (-1) */
+
+    return 99u64                         /* both malformed streams correctly rejected */
+}

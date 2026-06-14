@@ -1788,3 +1788,32 @@ clean.  This proves the new oracle covers a real wrong-entry class the existing 
 currently CORRECT (1545==99 on the real table); this is a permanent regression guard on all 160 entries.
 
 No defect to fix (tables correct); a genuine coverage closure on the one un-pinned table.  Count 1131 -> **1132**.
+
+## Wave-62 — lzss_decompress malformed-stream REJECTION oracle (untrusted-input negative paths) (2026-06-14)
+
+Two clean defect-lens sweeps (W60 aliasing/overlap, W61 unsigned-subtraction underflow) returned 0 confirmed --
+the autonomous code-defect surface is mined out (last code defect was W53/affine_check).  Rotated to the W59
+NEGATIVE-PATH COVERAGE idiom on an @export that parses UNTRUSTED input: `lzss_decompress`.  Its only test,
+1224_lzss, drives lzss_kat() = ROUNDTRIP identity decompress(compress(x))==x on VALID streams only -- so a stream
+compress() never emits (a MALFORMED one) is never fed to the decoder, leaving two distinct REJECTION CLASSES
+entirely unexercised:
+  (A) back-reference UNDERFLOW (lzss.iii:115 `if off > outp { return -1 }`): a crafted match offset pointing
+      before the output start.  Without the guard, `src = outp - off` underflows u32 to ~0xFFFFFFFF and
+      `op[src+c]` reads ~4 GiB out of bounds -- a security-relevant OOB READ on attacker-controlled bytes.
+  (B) capacity OVERFLOW (lzss.iii:125 `if outp >= out_cap { return -1 }`): more decoded bytes than out_cap ->
+      OOB WRITE past the caller's buffer.
+
+**W62-FIX (falsifier 1546_lzss_reject): a two-class rejection oracle.**  (A) ctrl=0x01,b0=0x01,b1=0x00 ->
+off=1 while outp=0 -> must return -1.  (B) ctrl=0x00 + 3 literals into out_cap=2 -> 3rd literal trips
+outp>=out_cap -> must return -1.  99 = both rejected.
+
+RIGOROUS TEETH PROOF (each guard independently load-bearing + the suite misses both classes):
+  - removed line 115, rebuilt -> 1546 = **139 (SIGSEGV** on the ~4 GiB OOB read) while 1224 stayed **99**; reverted.
+  - removed line 125, rebuilt -> 1546 = **20** (sub-case B returns 3 not -1) while 1224 stayed **99** (a valid
+    decompress fills exactly out_cap and never trips the guard); reverted.
+lzss.iii is byte-identical to HEAD (git diff empty, no TEETH residue).  Passes the 3-gate admission test: the gap
+is real (grepped: no malformed-stream test exists), the teeth are proven (each guard reddens its sub-case while
+the valid KAT stays green), and it is non-tautological (a concrete OOB the entire suite waves through).
+
+No defect to fix (both guards are present + correct); a negative-path coverage closure on an untrusted-input
+decompressor.  Count 1132 -> **1133**.

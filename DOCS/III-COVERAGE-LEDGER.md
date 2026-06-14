@@ -2028,3 +2028,25 @@ it returned **10**; POST-FIX **99**.  No regression: 127_semver / 1410_semver_ur
 The 3rd/4th real product-code DEFECT FIXED via the false-accept axis (semver.iii +~24 lines: a validation
 helper + 2 call sites).  Across W72-74 the axis netted 4 real spec-conformance defects in 3 parsers
 (json x2, semver x2) -- a repeatable methodology, not a one-off.  Count 1143 -> **1144**.
+
+## Wave-75 — normalise utf8_decode RFC 3629 overlong/surrogate/out-of-range FALSE-ACCEPTS: a SECURITY defect FIXED (2026-06-14)
+
+The most SEVERE false-accept (4th fix).  normalise.iii claims RFC 3629, but utf8_decode computed the code
+point from the lead + continuation bytes and NEVER enforced §3 well-formedness.  A probe (UTF8_MASK=15)
+confirmed normalise_nfd ACCEPTED all four classes: overlong 2-byte "C0 80" (=U+0000) and 3-byte "E0 81 BF"
+(=U+007F); UTF-16 surrogate "ED A0 80" (=U+D800); and >U+10FFFF "F4 90 80 80".  SECURITY-relevant: overlong
+UTF-8 is a real filter-bypass class -- an overlong-encoded '/' or '..' decodes to the same code point but
+slips past a byte-level path/keyword check.  Reachable via @export normalise_nfd / normalise_nfc, which
+propagate utf8_decode's 0xFFFFFFFF sentinel to NORM_E_BADUTF8.
+
+**THE FIX (utf8_decode, after the continuation-byte loop, +5 checks):** reject overlong (want==2 -> cp>=0x80;
+want==3 -> cp>=0x800; want==4 -> cp>=0x10000), UTF-16 surrogates (cp in D800..DFFF), and code points beyond
+U+10FFFF -- returning the 0xFFFFFFFF sentinel like the other ill-formed cases.
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1558_utf8_validate asserts the 4 ill-formed sequences
+are rejected (NORM_E_BADUTF8) AND valid 2/3/4-byte UTF-8 (é / € / U+1F600 emoji) still normalises.  Against
+the PRE-FIX lib it returned **10**; POST-FIX **99**.  No regression: 78_normalise_nfd_nfc stays 99.
+
+The 4th real product-code DEFECT FIXED via the false-accept axis, and the most security-relevant.  Across
+W72-75 the axis netted 5 spec-conformance defect CLASSES (8 instances) in 4 modules (json x2, semver x2,
+normalise/utf8 x4) -- json/semver/uri/utf8 now spec-conformant.  Count 1144 -> **1145**.

@@ -1,0 +1,63 @@
+/* 1558_utf8_validate.iii -- W75 FIX falsifier: the UTF-8 decoder in normalise.iii must REJECT ill-formed
+ * sequences per RFC 3629 §3 (which the module claims).  SECURITY-relevant: overlong UTF-8 is a real
+ * filter-bypass class (an overlong-encoded '/' or '..' decodes to the same code point but slips past a
+ * byte-level path/keyword check).
+ *
+ * THE DEFECT (false-accept, 5th of the axis): utf8_decode computed the code point from the lead+continuation
+ * bytes but NEVER enforced well-formedness, so normalise_nfd/nfc (@export, propagate utf8_decode's error
+ * sentinel to NORM_E_BADUTF8) ACCEPTED:
+ *   overlong "C0 80" (=U+0000) and "E0 81 BF" (=U+007F); surrogate "ED A0 80" (=U+D800); >U+10FFFF
+ *   "F4 90 80 80".  Probe UTF8_MASK=15 (all four).
+ *
+ * THE FIX (utf8_decode, after the continuation-byte loop): reject overlong (want==2 -> cp>=0x80; want==3 ->
+ * cp>=0x800; want==4 -> cp>=0x10000), surrogates (cp in D800..DFFF), and code points > U+10FFFF.
+ *
+ * 99 = the 4 ill-formed sequences are rejected (NORM_E_BADUTF8) AND valid 2/3/4-byte UTF-8 still normalises
+ * (NORM_OK).  TEETH: this falsifier reddens against the PRE-FIX lib and returns 99 against the POST-FIX lib. */
+module corpus_1558
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn normalise_nfd(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "normalise.iii"
+
+/* normalise a byte span; return the i32 result code (NORM_OK=0, NORM_E_BADUTF8=-1) */
+fn nf(a: u64, p: *u8, n: u64) -> i32 {
+    let b : u64 = builder_new(a, 32u64)
+    return normalise_nfd(b, p as u64, n)
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let p : *u8 = malloc(8u64)
+
+    /* === positive controls: valid 2/3/4-byte UTF-8 must normalise (NORM_OK) === */
+    /* U+00E9 'é' = C3 A9 (2-byte) */
+    p[0u64]=0xC3u8 p[1u64]=0xA9u8
+    if nf(a, p, 2u64) != 0i32 { free(p) arena_drop(a) return 30u64 }
+    /* U+20AC '€' = E2 82 AC (3-byte) */
+    p[0u64]=0xE2u8 p[1u64]=0x82u8 p[2u64]=0xACu8
+    if nf(a, p, 3u64) != 0i32 { free(p) arena_drop(a) return 31u64 }
+    /* U+1F600 emoji = F0 9F 98 80 (4-byte) */
+    p[0u64]=0xF0u8 p[1u64]=0x9Fu8 p[2u64]=0x98u8 p[3u64]=0x80u8
+    if nf(a, p, 4u64) != 0i32 { free(p) arena_drop(a) return 32u64 }
+
+    /* === negatives: ill-formed sequences must be REJECTED (NORM_E_BADUTF8, != NORM_OK) === */
+    /* (A) overlong 2-byte U+0000: C0 80 */
+    p[0u64]=0xC0u8 p[1u64]=0x80u8
+    if nf(a, p, 2u64) == 0i32 { free(p) arena_drop(a) return 10u64 }
+    /* (B) overlong 3-byte U+007F: E0 81 BF */
+    p[0u64]=0xE0u8 p[1u64]=0x81u8 p[2u64]=0xBFu8
+    if nf(a, p, 3u64) == 0i32 { free(p) arena_drop(a) return 20u64 }
+    /* (C) UTF-16 surrogate U+D800: ED A0 80 */
+    p[0u64]=0xEDu8 p[1u64]=0xA0u8 p[2u64]=0x80u8
+    if nf(a, p, 3u64) == 0i32 { free(p) arena_drop(a) return 40u64 }
+    /* (D) code point > U+10FFFF: F4 90 80 80 */
+    p[0u64]=0xF4u8 p[1u64]=0x90u8 p[2u64]=0x80u8 p[3u64]=0x80u8
+    if nf(a, p, 4u64) == 0i32 { free(p) arena_drop(a) return 50u64 }
+
+    free(p) arena_drop(a)
+    return 99u64
+}

@@ -215,6 +215,14 @@ fn utf8_decode(src: u64, src_len: u64, pos: u64) -> u32 {
         cp = (cp << 6u32) | (bn & 0x3Fu32)
         i = i + 1u64
     }
+    /* RFC 3629 §3 well-formedness (security: an overlong encoding decodes to the same code point and would
+     * slip a '/' or '..' past a byte-level filter).  Reject overlong encodings, UTF-16 surrogates
+     * (U+D800..U+DFFF), and code points beyond U+10FFFF. */
+    if want == 2u64 { if cp < 0x80u32    { NORM_LAST_LEN = 0u64; return 0xFFFFFFFFu32 } }
+    if want == 3u64 { if cp < 0x800u32   { NORM_LAST_LEN = 0u64; return 0xFFFFFFFFu32 } }
+    if want == 4u64 { if cp < 0x10000u32 { NORM_LAST_LEN = 0u64; return 0xFFFFFFFFu32 } }
+    if cp >= 0xD800u32 { if cp <= 0xDFFFu32 { NORM_LAST_LEN = 0u64; return 0xFFFFFFFFu32 } }
+    if cp > 0x10FFFFu32 { NORM_LAST_LEN = 0u64; return 0xFFFFFFFFu32 }
     NORM_LAST_LEN = want
     return cp
 }

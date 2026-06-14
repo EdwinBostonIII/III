@@ -1,0 +1,100 @@
+/* 1567_groebner_normal_form.iii -- W85 FIX falsifier: gb_reduce must return the UNIQUE coset representative
+ * (the division remainder containing NO term divisible by any basis LT), per its own docstring (groebner.iii:720
+ * "reduce target modulo the basis to its normal form") and the unique-remainder theorem.
+ *
+ * THE DEFECT (fixed-point-siblings lens, ultracode workflow, 0/3 refute): gb_reduce (:724-767) only TOP-reduces.
+ * The loop reduces LT(work) while a basis LT divides it; the moment LT(work) is divisible by no basis LT it sets
+ * progressed=0 and returns `work` WHOLE -- including TAIL terms that ARE reducible.  For f = x^2 + y over GF(7)
+ * with basis G = {y}: LT(f)=x^2 is not divisible by LT(g)=y, so gb_reduce returns x^2+y UNCHANGED -- although the
+ * tail y IS divisible by LT(g)=y.  True NF = x^2.  So gb_reduce(x^2+y,{y}) and gb_reduce(x^2,{y})=x^2 disagree
+ * though (x^2+y)-(x^2)=y in <y> -- a unique-remainder violation.
+ *
+ * THE FIX (gb_reduce): full multivariate division -- when LT(work) is irreducible, MOVE it to an accumulating
+ * remainder and keep reducing the tail; return the remainder.
+ *
+ * DISCRIMINATOR (no term-count export): r = NF(x^2+y, {y}); r2 = NF(r, {x^2}); gb_lead_coeff(r2).
+ *   correct r=x^2 -> r2 = NF(x^2,{x^2}) = 0 (zero poly) -> gb_lead_coeff == 0u64.
+ *   buggy   r=x^2+y -> r2 = NF(x^2+y,{x^2}) = y -> gb_lead_coeff == a bigint handle (!= 0).
+ *
+ * 99 = the tail y is reduced away (r2 == 0).  TEETH: against the PRE-FIX lib the y survives -> return 10. */
+module corpus_1567
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn gb_init(nvars: u32) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_begin(arena: u64, p: u64) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_new_poly() -> u32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_append_term(slot: u32, coeff_bid: u64, exps: u64) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_normalize(slot: u32) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_reduce(target: u32, basis: u64, basis_n: u32) -> u32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_lead_coeff(slot: u32) -> u64 from "groebner.iii"
+
+var EXPS : [u32; 2]
+var GBY  : [u32; 1]    /* basis {y} */
+var GBX  : [u32; 1]    /* basis {x^2} */
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 20u64)
+    if gb_init(2u32) != 0i32 { return 1u64 }
+    let ph : u64 = bigint_from_u64(arena, 7u64)   /* bind to a LOCAL (gb_begin handle-trap) */
+    if gb_begin(arena, ph) != 0i32 { return 2u64 }
+
+    /* basis G1 = { y } : single term, coeff 1, exps [0,1] */
+    let gy : u32 = gb_new_poly()
+    EXPS[0u64] = 0u32 ; EXPS[1u64] = 1u32
+    let cy : u64 = bigint_from_u64(arena, 1u64)
+    gb_append_term(gy, cy, &EXPS as u64)
+    gb_normalize(gy)
+    GBY[0u64] = gy
+
+    /* basis G2 = { x^2 } : single term, coeff 1, exps [2,0] */
+    let gx : u32 = gb_new_poly()
+    EXPS[0u64] = 2u32 ; EXPS[1u64] = 0u32
+    let cx : u64 = bigint_from_u64(arena, 1u64)
+    gb_append_term(gx, cx, &EXPS as u64)
+    gb_normalize(gx)
+    GBX[0u64] = gx
+
+    /* f = x^2 + y : term [2,0] coeff 1, term [0,1] coeff 1 */
+    let f : u32 = gb_new_poly()
+    EXPS[0u64] = 2u32 ; EXPS[1u64] = 0u32
+    let c1 : u64 = bigint_from_u64(arena, 1u64)
+    gb_append_term(f, c1, &EXPS as u64)
+    EXPS[0u64] = 0u32 ; EXPS[1u64] = 1u32
+    let c2 : u64 = bigint_from_u64(arena, 1u64)
+    gb_append_term(f, c2, &EXPS as u64)
+    gb_normalize(f)
+
+    /* r = NF(f, {y}) -- the bug: tail y survives because LT(f)=x^2 is irreducible */
+    let r : u32 = gb_reduce(f, &GBY as u64, 1u32)
+    if r == 0xFFFFFFFFu32 { return 3u64 }
+
+    /* r2 = NF(r, {x^2}) -- strips the x^2; if the y tail is still present, r2 = y (nonzero), else 0 */
+    let r2 : u32 = gb_reduce(r, &GBX as u64, 1u32)
+    if r2 == 0xFFFFFFFFu32 { return 4u64 }
+
+    let lc : u64 = gb_lead_coeff(r2)
+    if lc != 0u64 { return 10u64 }   /* PRE-FIX: the y tail survived -> r2 = y -> TEETH */
+
+    /* (B) ideal-member regression guards (the reduce-to-zero path Buchberger depends on; pass both ways):
+     *   NF(y, {y}) == 0  and  NF(x^2*y, {y}) == 0  (both lie in <y>) */
+    let yp : u32 = gb_new_poly()
+    EXPS[0u64] = 0u32 ; EXPS[1u64] = 1u32
+    let cy2 : u64 = bigint_from_u64(arena, 1u64)
+    gb_append_term(yp, cy2, &EXPS as u64)
+    gb_normalize(yp)
+    let ry : u32 = gb_reduce(yp, &GBY as u64, 1u32)
+    if ry == 0xFFFFFFFFu32 { return 5u64 }
+    if gb_lead_coeff(ry) != 0u64 { return 40u64 }   /* NF(y,{y}) must be 0 */
+
+    let xyp : u32 = gb_new_poly()
+    EXPS[0u64] = 2u32 ; EXPS[1u64] = 1u32           /* x^2*y */
+    let cxy : u64 = bigint_from_u64(arena, 1u64)
+    gb_append_term(xyp, cxy, &EXPS as u64)
+    gb_normalize(xyp)
+    let rxy : u32 = gb_reduce(xyp, &GBY as u64, 1u32)
+    if rxy == 0xFFFFFFFFu32 { return 6u64 }
+    if gb_lead_coeff(rxy) != 0u64 { return 41u64 }  /* NF(x^2*y,{y}) must be 0 */
+
+    return 99u64
+}

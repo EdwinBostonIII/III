@@ -2327,3 +2327,36 @@ violating the unique-remainder theorem (two congruent inputs get different norma
 S-polys to zero (ideal members reduce to 0 under top-reduction regardless), so the tail-reducible non-ideal case is
 uncovered.  Fix = full multivariate division (accumulate an irreducible LT into a remainder, keep reducing the tail)
 -- a loop restructure, W85.
+
+## Wave-85 — gb_reduce: top-reduction -> FULL multivariate division (the unique-remainder normal form) (2026-06-14)
+
+The W84 gb_reduce survivor, FIXED -- the most intricate fix of the arc (poly-arena surgery in a math module),
+done with a full CRASH-PROTOCOL pre-read + advisor review of the two blockers, not rushed.
+
+**THE DEFECT (numera/groebner.iii gb_reduce, fixed-point-closure lens):** the `while progressed` loop reduced only
+LT(work) -- the moment LT(work) was divisible by no basis LT it set progressed=0 and returned `work` WHOLE,
+including TAIL terms that ARE reducible.  So NF(x^2+y mod {y}) = x^2+y, not x^2 (the tail y is divisible by
+LT(g)=y), violating the docstring's "normal form" (:720) and the unique-remainder theorem: gb_reduce(x^2+y,{y}) and
+gb_reduce(x^2,{y})=x^2 disagree though (x^2+y)-(x^2)=y in <y>.  Corpus 1490/638 only reduce ideal members to 0
+(which top-reduction reaches regardless), so the tail-reducible non-ideal case was uncovered.
+
+**THE FIX (gb_reduce, full multivariate division):** when LT(work) is irreducible, MOVE it to the remainder
+(transfer its coeff id into GROEBNER_REM_COEFF, copy its exps into GROEBNER_REM_EXPS) and DROP it from work by
+advancing PL_START, then keep reducing the tail; build the remainder poly CONTIGUOUSLY at the end + normalize.
+THE ARENA CONSTRAINT (why it's not a one-liner): terms live in an APPEND-ONLY bump arena, polys are slices
+[PL_START,PL_END), and gb_sub_new's reduce-steps append `nxt` to the same arena -- so an incremental remainder
+poly would have its slice corrupted by the interleaved reduce-step appends; hence the scratch + contiguous-end-build.
+COEFF OWNERSHIP (blocker, verified safe): gb_copy_into copies coeffs via bigint_copy, so work owns FRESH ids;
+transferring them to the remainder (and clearing the orphaned source slot) means gb_drop_poly(work) frees only the
+reduced-away coeffs while the remainder's coeffs are freed once when the caller drops the result -- no double-free,
+no leak (the SENT error paths free the transferred-but-unbuilt coeffs explicitly).
+
+TEETH: 1567_groebner_normal_form -- the double-reduce discriminator gb_lead_coeff(NF(NF(x^2+y,{y}),{x^2}))
+(0=correct/y-stripped, nonzero=buggy/y-survived) + ideal-member regression arms NF(y,{y})==0 and NF(x^2*y,{y})==0
+(the reduce-to-zero path Buchberger depends on).  Pre-fix 10; post-fix 99.  NO digest shift: 1490_groebner /
+638_groebner (which exercise buchberger / autoreduce / gb_basis_digest) stay 99 -- full division produced the same
+fully-reduced bases the Groebner property already guaranteed.  Count 1153 -> **1154**.
+
+This is the 6th real wrong-result identity defect of the W79-opened arc (rsa malleability, matrix M^0, NFD reorder,
+span reflexivity, pcc closure, gb_reduce normal-form), all found via ultracode discovery Workflows + adversarial
+refute, every one confirmed by an in-session compile-probe before the edit and teeth-proven + corpus-gated.

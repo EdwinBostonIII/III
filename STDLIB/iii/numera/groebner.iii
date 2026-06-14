@@ -78,6 +78,12 @@ var GROEBNER_MT_EXPS      : [u32; 16]
 var GROEBNER_RD_LT        : [u32; 16]
 var GROEBNER_RD_LE        : [u32; 16]
 var GROEBNER_RD_D         : [u32; 16]
+/* [W85] full-division remainder scratch.  gb_reduce records each IRREDUCIBLE leading term (its coeff id is
+ * transferred here; its exps are copied) then drops it from `work` by advancing PL_START, and builds the
+ * remainder poly CONTIGUOUSLY at the end -- the append-only term arena forbids interleaving remainder appends
+ * with the gb_sub_new reduce-steps.  Sized GROEBNER_MAX_TERMS (coeff) and GROEBNER_MAX_TERMS*GROEBNER_MAX_VARS (exps). */
+var GROEBNER_REM_COEFF    : [u64; 65536]
+var GROEBNER_REM_EXPS     : [u32; 1048576]
 var GROEBNER_SP_FE        : [u32; 16]
 var GROEBNER_SP_GE        : [u32; 16]
 var GROEBNER_SP_LL        : [u32; 16]
@@ -733,11 +739,12 @@ fn gb_reduce(target: u32, basis: *u32, basis_n: u32) -> u32 @export {
     gb_normalize(work)
     let lt : *u32 = &GROEBNER_RD_LT[0u32]
     let nv : u32 = GROEBNER_NVARS
-    let mut progressed : u8 = 1u8
     let mut failed : u8 = 0u8
-    while progressed == 1u8 {
-        progressed = 0u8
-        if gb_is_zero(work) == 0u8 {
+    let mut rem_n : u32 = 0u32       /* [W85] # of irreducible leading terms moved to GROEBNER_REM_* */
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if gb_is_zero(work) == 1u8 { going = 0u8 }
+        if going == 1u8 {
             let wst : u32 = GROEBNER_PL_START[work]
             let wp : *u32 = gb_term_exp_ptr(wst)
             let mut k : u32 = 0u32
@@ -751,19 +758,70 @@ fn gb_reduce(target: u32, basis: *u32, basis_n: u32) -> u32 @export {
                 let gx : u64 = (gi as u64) & GROEBNER_U32MASK
                 let g : u32 = basis[gx]
                 let nxt : u32 = gb_reduce_step(work, g)
-                if nxt == GROEBNER_SENT { failed = 1u8 } else {
+                if nxt == GROEBNER_SENT { failed = 1u8 ; going = 0u8 } else {
                     gb_drop_poly(work)
                     work = nxt
-                    progressed = 1u8
+                }
+            } else {
+                /* [W85] LT(work) is irreducible by every basis LT.  TOP-reduction stopped here and returned
+                 * `work` whole -- leaking reducible TAIL terms into the "normal form".  Full division instead
+                 * MOVES this leading term to the remainder (transfer its coeff id, copy its exps), drops it
+                 * from work by advancing PL_START, and keeps reducing the tail. */
+                if rem_n >= GROEBNER_MAX_TERMS { failed = 1u8 ; going = 0u8 } else {
+                    let rb : u64 = (rem_n as u64) * (nv as u64)
+                    let mut k2 : u32 = 0u32
+                    while k2 < nv {
+                        let k2x : u64 = (k2 as u64) & GROEBNER_U32MASK
+                        GROEBNER_REM_EXPS[rb + k2x] = wp[k2x]
+                        k2 = k2 + 1u32
+                    }
+                    GROEBNER_REM_COEFF[(rem_n as u64) & GROEBNER_U32MASK] = GROEBNER_TERM_COEFF[wst]
+                    GROEBNER_TERM_COEFF[wst] = 0u64         /* slot orphaned below the advanced PL_START; clear so it can't double-drop */
+                    GROEBNER_PL_START[work] = wst + 1u32
+                    rem_n = rem_n + 1u32
                 }
             }
         }
     }
+    gb_drop_poly(work)
     if failed == 1u8 {
-        gb_drop_poly(work)
+        /* the transferred coeffs aren't owned by any live poly yet -- free them so SENT doesn't leak */
+        let mut jf : u32 = 0u32
+        while jf < rem_n {
+            let cf : u64 = GROEBNER_REM_COEFF[(jf as u64) & GROEBNER_U32MASK]
+            if cf != 0u64 { bigint_drop(cf) }
+            jf = jf + 1u32
+        }
         return GROEBNER_SENT
     }
-    return work
+    /* build the remainder CONTIGUOUSLY (a poly is a contiguous arena slice; we could not append to it while
+     * the reduce-steps were also appending nxt to the same bump arena). */
+    let r : u32 = gb_new_poly()
+    if r == GROEBNER_SENT {
+        let mut jr : u32 = 0u32
+        while jr < rem_n {
+            let cr : u64 = GROEBNER_REM_COEFF[(jr as u64) & GROEBNER_U32MASK]
+            if cr != 0u64 { bigint_drop(cr) }
+            jr = jr + 1u32
+        }
+        return GROEBNER_SENT
+    }
+    let mut i : u32 = 0u32
+    let mut aprc : i32 = GROEBNER_OK
+    while i < rem_n {
+        if aprc == GROEBNER_OK {
+            let rbi : u64 = (i as u64) * (nv as u64)
+            let ep : *u32 = ((&GROEBNER_REM_EXPS as u64) + rbi * 4u64) as *u32
+            aprc = gb_append_term(r, GROEBNER_REM_COEFF[(i as u64) & GROEBNER_U32MASK], ep)
+        }
+        i = i + 1u32
+    }
+    if aprc != GROEBNER_OK {
+        gb_drop_poly(r)
+        return GROEBNER_SENT
+    }
+    gb_normalize(r)
+    return r
 }
 
 // S-polynomial of f and g: S = (L/LT(f))*f - (L/LT(g))*g with L = lcm of

@@ -2079,3 +2079,23 @@ tampered ek was accepted (test returned 10); POST-FIX rejected (99).  No regress
 
 The 5th real product-code DEFECT FIXED via the false-accept axis -- and the first in the CRYPTO layer
 (FIPS 203 conformance + robustness).  Count 1145 -> **1146**.
+
+## Wave-78 — rfc3339_parse strict-format FALSE-ACCEPT: a 6th DEFECT FIXED (the axis reaches tempora) (2026-06-14)
+
+A tree-wide grep for spec-claiming @export decoders surfaced tempora/rfc3339.iii (claims "RFC 3339 / ISO 8601",
+strict format "YYYY-MM-DDTHH:MM:SSZ").  Its date VALIDITY is already correct (cal_civil_valid checks year>=1970,
+month 1-12, day<=days_in_month incl. leap Feb; inline hour<=23 / min<=59 / sec<=60).  But rfc3339_parse read
+the digits at FIXED offsets via rfc_parse2/rfc_parse4 -- which compute (byte-48)*10+... with NO digit check --
+and NEVER validated the separators or the 'Z' terminator.  So "2021/06/15T12:30:45Z" (wrong separator),
+"2021-06-15 12:30:45Z" (wrong 'T'), "2021-06-15T12:30:45X" (non-Z), and "2021-06-1A..." (non-digit day) all
+parsed to a valid-but-BOGUS unix time instead of the error sentinel -- the same false-accept class as W72-77.
+
+**THE FIX (rfc3339.iii):** a rfc_is_digit helper + rfc_fmt_ok(p) that checks the 14 digit positions are 0-9
+and the separators are '-' '-' 'T' ':' ':' at 4/7/10/13/16 and 'Z' at 19, called at the top of rfc3339_parse.
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1560_rfc3339_format asserts a canonical timestamp parses
+AND the four format-malformed strings return the sentinel.  Against the PRE-FIX lib it returned **10** (the
+wrong-separator string was accepted); POST-FIX **99**.  No regression: 95_rfc3339 round-trip stays 99.
+
+The 6th real product-code DEFECT FIXED via the false-accept axis (now across json/semver/utf8/mlkem/rfc3339
+in verba/numera/tempora).  Count 1146 -> **1147**.

@@ -1,0 +1,65 @@
+/* 1560_rfc3339_format.iii -- W78 FIX falsifier: rfc3339_parse must REJECT a string that does not match the
+ * strict "YYYY-MM-DDTHH:MM:SSZ" format it documents.
+ *
+ * THE DEFECT (false-accept): rfc3339_parse (tempora/rfc3339.iii, @export) reads the date/time digits at
+ * FIXED offsets via rfc_parse2/rfc_parse4, which compute (byte-48)*10+... with NO check that the byte is a
+ * digit, and it never validates the separators (offsets 4,7='-', 10='T', 13,16=':') or the 'Z' terminator
+ * (offset 19).  So "2021/06/15T12:30:45Z" (wrong separator), "2021-06-15 12:30:45Z" (wrong 'T'),
+ * "2021-06-15T12:30:45X" (non-Z), and "2021-06-1A..." (non-digit day) all parse to a valid-but-BOGUS unix
+ * time instead of the error sentinel.  (The date VALIDITY -- month/day/hour/min/sec ranges -- is already
+ * correct via cal_civil_valid + the inline checks; this closes the FORMAT hole.)
+ *
+ * THE FIX: rfc_fmt_ok(p) checks the 14 digit positions + the 5 separators + 'Z', called at the top of
+ * rfc3339_parse.
+ *
+ * 99 = a valid timestamp parses AND the four format-malformed inputs return the sentinel.  TEETH: this
+ * falsifier reddens against the PRE-FIX lib (the malformed strings are accepted) and returns 99 post-fix. */
+module corpus_1560
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn rfc3339_parse(src: u64, src_len: u64) -> u64 from "rfc3339.iii"
+
+/* write a canonical "2021-06-15T12:30:45Z" (20 bytes) */
+fn fill_valid(p: *u8) -> i32 {
+    p[0u64]=0x32u8  p[1u64]=0x30u8  p[2u64]=0x32u8  p[3u64]=0x31u8   /* 2021 */
+    p[4u64]=0x2Du8                                                    /* -    */
+    p[5u64]=0x30u8  p[6u64]=0x36u8                                    /* 06   */
+    p[7u64]=0x2Du8                                                    /* -    */
+    p[8u64]=0x31u8  p[9u64]=0x35u8                                    /* 15   */
+    p[10u64]=0x54u8                                                   /* T    */
+    p[11u64]=0x31u8 p[12u64]=0x32u8                                   /* 12   */
+    p[13u64]=0x3Au8                                                   /* :    */
+    p[14u64]=0x33u8 p[15u64]=0x30u8                                   /* 30   */
+    p[16u64]=0x3Au8                                                   /* :    */
+    p[17u64]=0x34u8 p[18u64]=0x35u8                                   /* 45   */
+    p[19u64]=0x5Au8                                                   /* Z    */
+    return 0i32
+}
+
+fn main() -> u64 {
+    let p : *u8 = malloc(24u64)
+
+    /* positive control: the canonical timestamp parses (not the error sentinel) */
+    fill_valid(p)
+    if rfc3339_parse(p as u64, 20u64) == 0xFFFFFFFFFFFFFFFFu64 { free(p) return 30u64 }
+
+    /* (A) wrong separator '/' at offset 4 -> sentinel */
+    fill_valid(p)  p[4u64] = 0x2Fu8
+    if rfc3339_parse(p as u64, 20u64) != 0xFFFFFFFFFFFFFFFFu64 { free(p) return 10u64 }
+
+    /* (B) wrong date/time separator (space instead of 'T') at offset 10 -> sentinel */
+    fill_valid(p)  p[10u64] = 0x20u8
+    if rfc3339_parse(p as u64, 20u64) != 0xFFFFFFFFFFFFFFFFu64 { free(p) return 20u64 }
+
+    /* (C) non-'Z' terminator ('X') at offset 19 -> sentinel */
+    fill_valid(p)  p[19u64] = 0x58u8
+    if rfc3339_parse(p as u64, 20u64) != 0xFFFFFFFFFFFFFFFFu64 { free(p) return 40u64 }
+
+    /* (D) non-digit ('A') in a digit position (day, offset 9) -> sentinel */
+    fill_valid(p)  p[9u64] = 0x41u8
+    if rfc3339_parse(p as u64, 20u64) != 0xFFFFFFFFFFFFFFFFu64 { free(p) return 50u64 }
+
+    free(p)
+    return 99u64
+}

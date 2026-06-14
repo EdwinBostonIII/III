@@ -77,8 +77,43 @@ fn rfc_parse4(src: *u8, off: u64) -> u32 {
     return d0 * 1000u32 + d1 * 100u32 + d2 * 10u32 + d3
 }
 
+fn rfc_is_digit(c: u32) -> u8 {
+    if c < 48u32 { return 0u8 }
+    if c > 57u32 { return 0u8 }
+    return 1u8
+}
+
+/* Strict RFC 3339 "YYYY-MM-DDTHH:MM:SSZ" format check: the 14 digit positions must be 0-9, the separators
+ * must be '-' '-' 'T' ':' ':' at offsets 4/7/10/13/16, and offset 19 must be 'Z'.  Without this the
+ * fixed-offset rfc_parse2/rfc_parse4 (which never check that a byte is a digit) would silently accept a
+ * wrong separator or a non-digit byte and return a BOGUS date instead of an error. */
+fn rfc_fmt_ok(p: *u8) -> u8 {
+    if p[4u64] != 45u8 { return 0u8 }    /* '-' */
+    if p[7u64] != 45u8 { return 0u8 }    /* '-' */
+    if p[10u64] != 84u8 { return 0u8 }   /* 'T' */
+    if p[13u64] != 58u8 { return 0u8 }   /* ':' */
+    if p[16u64] != 58u8 { return 0u8 }   /* ':' */
+    if p[19u64] != 90u8 { return 0u8 }   /* 'Z' */
+    if rfc_is_digit(p[0u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[1u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[2u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[3u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[5u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[6u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[8u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[9u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[11u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[12u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[14u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[15u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[17u64] as u32) == 0u8 { return 0u8 }
+    if rfc_is_digit(p[18u64] as u32) == 0u8 { return 0u8 }
+    return 1u8
+}
+
 fn rfc3339_parse(src: *u8, src_len: u64) -> u64 @export {
     if src_len < 20u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if rfc_fmt_ok(src) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }   /* RFC 3339 strict format: 14 digits + the exact separators + 'Z' */
     let year : u32 = rfc_parse4(src, 0u64)
     let month : u32 = rfc_parse2(src, 5u64)
     let day : u32 = rfc_parse2(src, 8u64)

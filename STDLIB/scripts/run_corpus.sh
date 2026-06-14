@@ -1132,6 +1132,7 @@ declare -A EXPECTED=(
     [1557_semver_ident]=99
     [1558_utf8_validate]=99
     [1559_mlkem_modcheck]=99
+    [1560_rfc3339_format]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

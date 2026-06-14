@@ -37,9 +37,11 @@ fn elias_bitlen(n: u64) -> u32 @export {
 
 fn elias_gamma_put(n: u64) -> i32 @export {
     let b : u32 = elias_bitlen(n)
-    if b > 1u32 { bitw_put(0u64, b - 1u32) }    /* b-1 leading zeros */
-    bitw_put(n, b)                              /* n in b bits (MSB = 1) */
-    return 0i32
+    /* [W51] propagate bitw_put's BIO_E_OVF instead of swallowing it -- a buffer overflow truncates
+     * the codeword, so reporting success (0) would let the caller decode a corrupt stream and break
+     * the documented round-trip identity silently.  Success path byte-identical (both puts return 0). */
+    if b > 1u32 { if bitw_put(0u64, b - 1u32) != 0i32 { return -1i32 } }   /* b-1 leading zeros */
+    return bitw_put(n, b)                       /* n in b bits (MSB = 1) */
 }
 
 fn elias_gamma_get() -> u64 @export {
@@ -56,8 +58,8 @@ fn elias_gamma_get() -> u64 @export {
 
 fn elias_delta_put(n: u64) -> i32 @export {
     let b : u32 = elias_bitlen(n)
-    elias_gamma_put(b as u64)                 /* encode the bit-length via gamma (b >= 1) */
-    if b > 1u32 { bitw_put(n, b - 1u32) }       /* the low b-1 bits of n (the MSB is implicit) */
+    if elias_gamma_put(b as u64) != 0i32 { return -1i32 }   /* [W51] propagate overflow */
+    if b > 1u32 { return bitw_put(n, b - 1u32) }            /* the low b-1 bits of n (the MSB is implicit) */
     return 0i32
 }
 

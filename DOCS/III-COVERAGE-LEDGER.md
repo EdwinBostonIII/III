@@ -1718,3 +1718,21 @@ byte-identical -> 1265 + loop_optimizer/affine consumers stay green.
 1542 teeth (soundness via @export): il_add(4294967290,4294967295,0,5) -- concrete (4294967290,0)=4294967290
 must lie in [il_lo,il_hi]; pre-fix [4294967290,4] excludes it (exit 30) / post-fix TOP contains it.  Mul analog
 il_mul(65535,65536,65535,65536) (exit 31).  Sanity: non-overflow add/mul unchanged.  Count 1128 -> **1129**.
+
+## Wave-51 — elias_gamma_put/elias_delta_put swallow bitio's overflow error (error-state axis; the cad-W29 class) (2026-06-13)
+
+Continued the fresh-axis rotation (W49 vindicated it).  W51 axes: error-state-half-write + boundary-exactness.
+Found 1 real defect (3 refuted: knapsack/coin_change/catalan all already-guarded or out-of-domain-unreachable
+-- the knapsack candidate was the W10-era guard ITSELF, pinned by 1501, with cause/effect inverted).
+
+**W51-FIX (numera/elias.iii elias_gamma_put + elias_delta_put; falsifier 1543):** both declare `-> i32` but
+DISCARDED the bitw_put return and hardcoded `return 0i32`.  bitw_put returns BIO_E_OVF (-1) when the codeword
+does not fit the bit-buffer (bitio's own KAT honors this channel) -- elias was the lone consumer that DROPPED
+it.  So encoding into an undersized buffer TRUNCATED the codeword yet reported SUCCESS (0); the caller then
+decodes a corrupt stream and the documented ROUND-TRIP IDENTITY breaks SILENTLY.  The cad-W29 error-swallow
+class, on the bitio substrate.  FIX: return bitw_put's code (-1 on overflow).  Success path byte-identical
+(all puts return 0 -> same return 0) -> 1228 elias_kat (2048-byte buffer, never overflows) stays green.
+
+1543 teeth: bitw_init(2-byte buf); elias_gamma_put(1500) [bitlen 11 -> 21 bits > 16] / elias_delta_put(1500)
+[17 bits > 16] -- pre-fix swallow -> 0 (exit 30/31), post-fix -> -1.  Sanity: a fitting codeword returns 0
+(guard not over-tight) + a large-buffer round-trip is unchanged.  Count 1129 -> **1130**.

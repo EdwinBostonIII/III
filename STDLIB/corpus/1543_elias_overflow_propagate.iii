@@ -1,0 +1,51 @@
+/* 1543_elias_overflow_propagate.iii -- W51 FALSIFIER: elias_gamma_put / elias_delta_put must
+ * PROPAGATE bitio's overflow error, not swallow it and report success.
+ *
+ * THE DEFECT (error-swallow, the cad-W29 class): elias_gamma_put/elias_delta_put declare -> i32 but
+ * discarded the bitw_put return and hardcoded `return 0i32`.  bitw_put returns BIO_E_OVF (-1) when the
+ * codeword does not fit the bit-buffer.  So encoding into an undersized buffer TRUNCATED the codeword
+ * yet reported SUCCESS (0) -- the caller then decodes a corrupt stream and the documented round-trip
+ * identity breaks SILENTLY.
+ *
+ * THE FIX: return bitw_put's code; -1 on overflow.
+ *
+ * TEETH (value differential): a codeword that does not fit a 2-byte (16-bit) buffer must report -1.
+ *   - gamma(1500): bitlen=11 -> 10 zero bits + 11 value bits = 21 > 16 -> overflow.
+ *   - delta(1500): gamma(11) [7 bits] + 10 low bits = 17 > 16 -> overflow.
+ *   pre-fix: both return 0 (false success) -> arm reddens (exit 30/31).  post-fix: -1.
+ * Sanity: a codeword that FITS returns 0 (guard not over-tight); and the normal round-trip in a large
+ * buffer is unchanged (success path byte-identical). */
+module corpus_1543
+
+extern @abi(c-msvc-x64) fn bitw_init(buf_ptr: u64, cap: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitw_bytelen() -> u32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn bitr_init(buf_ptr: u64, len: u32) -> i32 from "bitio.iii"
+extern @abi(c-msvc-x64) fn elias_gamma_put(n: u64) -> i32 from "elias.iii"
+extern @abi(c-msvc-x64) fn elias_gamma_get() -> u64 from "elias.iii"
+extern @abi(c-msvc-x64) fn elias_delta_put(n: u64) -> i32 from "elias.iii"
+
+var SMALL : [u8; 2]
+var BIG   : [u8; 64]
+
+fn main() -> u64 {
+    /* ---- TEETH 1: gamma overflow into a 2-byte buffer must report -1 ---- */
+    bitw_init((&SMALL as u64), 2u32)
+    if elias_gamma_put(1500u64) != -1i32 { return 30u64 }   /* pre-fix swallows -> 0 */
+
+    /* ---- TEETH 2: delta overflow into a 2-byte buffer must report -1 ---- */
+    bitw_init((&SMALL as u64), 2u32)
+    if elias_delta_put(1500u64) != -1i32 { return 31u64 }   /* pre-fix swallows -> 0 */
+
+    /* ---- sanity: a codeword that FITS the 2-byte buffer succeeds (guard not over-tight) ---- */
+    bitw_init((&SMALL as u64), 2u32)
+    if elias_gamma_put(3u64) != 0i32 { return 32u64 }       /* bitlen(3)=2 -> 3 bits <= 16 */
+
+    /* ---- sanity: normal round-trip in a large buffer unchanged (success path byte-identical) ---- */
+    bitw_init((&BIG as u64), 64u32)
+    if elias_gamma_put(100u64) != 0i32 { return 33u64 }
+    let ln : u32 = bitw_bytelen()
+    bitr_init((&BIG as u64), ln)
+    if elias_gamma_get() != 100u64 { return 34u64 }
+
+    return 99u64
+}

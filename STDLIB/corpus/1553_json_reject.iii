@@ -1,0 +1,46 @@
+/* 1553_json_reject.iii -- W71 COVERAGE: json_parse malformed-input REJECTION (W69-confirmed, teeth-verified).
+ *
+ * THE GAP (3-gate): json_parse (json.iii:850, @export) parses UNTRUSTED JSON.  Two rejection guards are
+ * NEVER driven by a corpus test (52/53/54/1327/1403/1467 all consume valid input or reject BEFORE these
+ * lines):
+ *   (272) NUMBER WITH NO DIGITS (json_parse_number: digits==0 -> JSON_INVALID): a '-' not followed by a
+ *         digit.  Craft "[-]" routes '-' into json_parse_number, which sees ']' -> digits==0.
+ *   (861) TRAILING GARBAGE after the root value (JSON_INPUT_POS != JSON_INPUT_LEN -> JSON_INVALID): per
+ *         RFC 8259.  Craft "42 x" -- the SPACE is load-bearing ("42x" rejects inside the number parser's
+ *         exponent path, teeth-less; the space terminates the number so only line 861 catches the residue).
+ *
+ * THE ORACLE: a positive control + one malformed input per class; each asserts json_parse == JSON_INVALID
+ * (0u64 = rejected).  99 = "42" parses (nonzero) AND both malformed inputs are rejected.  TEETH (proven,
+ * then reverted): removing line 272 makes "[-]" parse to a bogus 1-element NUM(0) array (nonzero -> this
+ * test returns 10); removing line 861 makes "42 x" return the valid NUM node (nonzero -> returns 20).  The
+ * positive "42" stays green under both (it has digits and POS==LEN). */
+module corpus_1553
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 from "json.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(16u64)
+
+    /* positive control: "42" -> a valid NUM node (nonzero); survives both teeth */
+    buf[0u64]=0x34u8 buf[1u64]=0x32u8
+    let rp : u64 = json_parse(a, buf as u64, 2u64)
+    if rp == 0u64 { free(buf) arena_drop(a) return 30u64 }
+
+    /* (A) '-' with no following digit (line 272): "[-]" -> JSON_INVALID (0) */
+    buf[0u64]=0x5Bu8 buf[1u64]=0x2Du8 buf[2u64]=0x5Du8
+    let ra : u64 = json_parse(a, buf as u64, 3u64)
+    if ra != 0u64 { free(buf) arena_drop(a) return 10u64 }
+
+    /* (B) trailing garbage after the root value (line 861): "42 x" -> JSON_INVALID (0) */
+    buf[0u64]=0x34u8 buf[1u64]=0x32u8 buf[2u64]=0x20u8 buf[3u64]=0x78u8
+    let rb : u64 = json_parse(a, buf as u64, 4u64)
+    if rb != 0u64 { free(buf) arena_drop(a) return 20u64 }
+
+    free(buf) arena_drop(a)
+    return 99u64
+}

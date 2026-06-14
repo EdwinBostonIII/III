@@ -1,0 +1,46 @@
+/* 1554_parse_decimal_reject.iii -- W71 COVERAGE: parse_decimal_u32 malformed-input REJECTION
+ * (W69-confirmed, teeth-verified).
+ *
+ * THE GAP (3-gate): parse_decimal_u32 (parse.iii:114, @export) parses an UNTRUSTED decimal integer.  Two
+ * rejection guards are NEVER driven by a corpus test (32_parse_decimal feeds "  42abc" positive only;
+ * 1066/1467 exercise sibling parsers; semver has its own decimal parser):
+ *   (143) ZERO DIGITS (digits==0 -> PARSE_FAIL): a buffer starting on a non-digit at pos 0.
+ *   (144) U32 OVERFLOW (overflowed==1 -> PARSE_FAIL): a value exceeding 0xFFFFFFFF.
+ *
+ * THE ORACLE: a positive control + one malformed input per class; rejection is asserted on the OK bit
+ * (parse_is_ok==0).  99 = "42" parses (ok, value 42) AND both malformed inputs are rejected.  TEETH
+ * (proven, then reverted): removing line 143 makes "abc" return PARSE_OK_BIT|0 with value 0 (parse_is_ok
+ * flips to 1 -> this test returns 10); removing line 144 makes "99999999999" return PARSE_OK_BIT|11 with a
+ * frozen value (parse_is_ok flips to 1 -> returns 20).  The positive "42" stays green under both (digits=2,
+ * never overflows). */
+module corpus_1554
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn parse_decimal_u32(base: u64, len: u64, pos: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_is_ok(packed: u64) -> u8 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_last_decimal_u32() -> u32 from "parse.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(16u64)
+
+    /* positive control: "42" -> ok, value 42 (survives both teeth) */
+    buf[0u64]=0x34u8 buf[1u64]=0x32u8
+    let rp : u64 = parse_decimal_u32(buf as u64, 2u64, 0u64)
+    if parse_is_ok(rp) != 1u8 { free(buf) return 30u64 }
+    if parse_last_decimal_u32() != 42u32 { free(buf) return 31u64 }
+
+    /* (A) zero digits (line 143): "abc" -> PARSE_FAIL (parse_is_ok == 0) */
+    buf[0u64]=0x61u8 buf[1u64]=0x62u8 buf[2u64]=0x63u8
+    let ra : u64 = parse_decimal_u32(buf as u64, 3u64, 0u64)
+    if parse_is_ok(ra) != 0u8 { free(buf) return 10u64 }
+
+    /* (B) u32 overflow (line 144): "99999999999" (eleven 9s, > 0xFFFFFFFF) -> PARSE_FAIL */
+    buf[0u64]=0x39u8 buf[1u64]=0x39u8 buf[2u64]=0x39u8 buf[3u64]=0x39u8 buf[4u64]=0x39u8 buf[5u64]=0x39u8
+    buf[6u64]=0x39u8 buf[7u64]=0x39u8 buf[8u64]=0x39u8 buf[9u64]=0x39u8 buf[10u64]=0x39u8
+    let rb : u64 = parse_decimal_u32(buf as u64, 11u64, 0u64)
+    if parse_is_ok(rb) != 0u8 { free(buf) return 20u64 }
+
+    free(buf)
+    return 99u64
+}

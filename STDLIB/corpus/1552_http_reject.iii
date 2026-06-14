@@ -1,0 +1,68 @@
+/* 1552_http_reject.iii -- W70 COVERAGE: http_parse_request malformed request-line/header REJECTION
+ * (W69-confirmed, teeth-verified).
+ *
+ * THE GAP (3-gate): http_parse_request (http_server.iii:602, @export) parses an UNTRUSTED HTTP request.
+ * Three request-line/header rejection guards are NEVER driven by a corpus test (64/1418 feed valid
+ * requests only):
+ *   (235) EMPTY METHOD  (method_len==0 -> HTTPS_E_PARSE): a request line beginning with SP.
+ *   (256) EMPTY TARGET  (target_len==0 -> HTTPS_E_PARSE): "GET<SP><SP>HTTP/1.1" (TWO spaces -- one space
+ *         hits the line-249 CR-in-target guard instead, so two is required to isolate 256).
+ *   (300) EMPTY HEADER NAME (name_len==0 -> HTTPS_E_PARSE): a header line beginning with ':'.
+ * (The cursor>=raw_len guards 233/273 and https_parse_decimal_u64's digit guards are REFUTED -- redundant
+ * with downstream checks; not covered here.)
+ *
+ * THE ORACLE: a positive control + one malformed request per class; each asserts http_parse_request == 0
+ * (rejected).  Assert on the PARSE RETURN, never a *_len readback (which is teeth-less: 0 in both worlds).
+ *
+ * 99 = the valid request parses AND all three malformed requests are rejected.  TEETH (proven, then
+ * reverted): removing line 235 makes the empty-method request ACCEPT (req!=0 -> this test returns 10);
+ * removing 256 -> returns 20; removing 300 -> returns 40.  The positive control (valid method/target, no
+ * headers) stays green under all three (its guards never fire). */
+module corpus_1552
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_request(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_server.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(64u64)
+
+    /* positive control: "GET / HTTP/1.1\r\n\r\n" (18) -> req != 0 (survives all three teeth) */
+    buf[0u64]=0x47u8 buf[1u64]=0x45u8 buf[2u64]=0x54u8 buf[3u64]=0x20u8
+    buf[4u64]=0x2Fu8 buf[5u64]=0x20u8
+    buf[6u64]=0x48u8 buf[7u64]=0x54u8 buf[8u64]=0x54u8 buf[9u64]=0x50u8 buf[10u64]=0x2Fu8 buf[11u64]=0x31u8 buf[12u64]=0x2Eu8 buf[13u64]=0x31u8
+    buf[14u64]=0x0Du8 buf[15u64]=0x0Au8 buf[16u64]=0x0Du8 buf[17u64]=0x0Au8
+    let rp : u64 = http_parse_request(a, buf as u64, 18u64)
+    if rp == 0u64 { free(buf) arena_drop(a) return 30u64 }
+
+    /* (A) empty method (line 235): " /index.html HTTP/1.1\r\n\r\n" (25, leading SP) -> req == 0 */
+    buf[0u64]=0x20u8
+    buf[1u64]=0x2Fu8 buf[2u64]=0x69u8 buf[3u64]=0x6Eu8 buf[4u64]=0x64u8 buf[5u64]=0x65u8 buf[6u64]=0x78u8 buf[7u64]=0x2Eu8 buf[8u64]=0x68u8 buf[9u64]=0x74u8 buf[10u64]=0x6Du8 buf[11u64]=0x6Cu8
+    buf[12u64]=0x20u8 buf[13u64]=0x48u8 buf[14u64]=0x54u8 buf[15u64]=0x54u8 buf[16u64]=0x50u8 buf[17u64]=0x2Fu8 buf[18u64]=0x31u8 buf[19u64]=0x2Eu8 buf[20u64]=0x31u8
+    buf[21u64]=0x0Du8 buf[22u64]=0x0Au8 buf[23u64]=0x0Du8 buf[24u64]=0x0Au8
+    let ra : u64 = http_parse_request(a, buf as u64, 25u64)
+    if ra != 0u64 { free(buf) arena_drop(a) return 10u64 }
+
+    /* (B) empty target (line 256): "GET  HTTP/1.1\r\n\r\n" (17, TWO spaces) -> req == 0 */
+    buf[0u64]=0x47u8 buf[1u64]=0x45u8 buf[2u64]=0x54u8 buf[3u64]=0x20u8 buf[4u64]=0x20u8
+    buf[5u64]=0x48u8 buf[6u64]=0x54u8 buf[7u64]=0x54u8 buf[8u64]=0x50u8 buf[9u64]=0x2Fu8 buf[10u64]=0x31u8 buf[11u64]=0x2Eu8 buf[12u64]=0x31u8
+    buf[13u64]=0x0Du8 buf[14u64]=0x0Au8 buf[15u64]=0x0Du8 buf[16u64]=0x0Au8
+    let rb : u64 = http_parse_request(a, buf as u64, 17u64)
+    if rb != 0u64 { free(buf) arena_drop(a) return 20u64 }
+
+    /* (C) empty header name (line 300): "GET / HTTP/1.1\r\n: value\r\n\r\n" (27) -> req == 0 */
+    buf[0u64]=0x47u8 buf[1u64]=0x45u8 buf[2u64]=0x54u8 buf[3u64]=0x20u8
+    buf[4u64]=0x2Fu8 buf[5u64]=0x20u8
+    buf[6u64]=0x48u8 buf[7u64]=0x54u8 buf[8u64]=0x54u8 buf[9u64]=0x50u8 buf[10u64]=0x2Fu8 buf[11u64]=0x31u8 buf[12u64]=0x2Eu8 buf[13u64]=0x31u8
+    buf[14u64]=0x0Du8 buf[15u64]=0x0Au8
+    buf[16u64]=0x3Au8 buf[17u64]=0x20u8 buf[18u64]=0x76u8 buf[19u64]=0x61u8 buf[20u64]=0x6Cu8 buf[21u64]=0x75u8 buf[22u64]=0x65u8
+    buf[23u64]=0x0Du8 buf[24u64]=0x0Au8 buf[25u64]=0x0Du8 buf[26u64]=0x0Au8
+    let rc : u64 = http_parse_request(a, buf as u64, 27u64)
+    if rc != 0u64 { free(buf) arena_drop(a) return 40u64 }
+
+    free(buf) arena_drop(a)
+    return 99u64
+}

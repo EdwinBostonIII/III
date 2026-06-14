@@ -1916,3 +1916,41 @@ malleability/non-canonical-encoding acceptance the suite waves through).
 
 No defect to fix (both guards present + correct); a negative-path coverage closure on the ML-DSA verifier's
 FIPS 204 anti-malleability surface.  Count 1137 -> **1138**.
+
+## Wave-69..71 — SYSTEMS-LAYER untrusted-parser rejection oracles (HTTP / JSON / decimal) (2026-06-14)
+
+W69 was a 36-agent discovery sweep on the systems-layer parsers (HTTP/JSON/INI/inet/URI) for the W62/63/65-68
+negcoverage idiom.  The adversarial-refute stage KILLED the teeth-less candidates (http cursor>=raw_len guards
+233/273 redundant; https_parse_decimal_u64 418/423 subsumed by the body bound-check at 588; http_client
+status-digit 275 caught by sibling 276; inet truncation guards memory-safety-only, backstopped by the bounded
+octet parser; json unterminated-string 570 backstopped by the trailing-garbage guard) and CORRECTED several
+crafts.  Seven teeth-bearing gaps confirmed and landed (W70 http + W71 json/parse):
+
+**W70 (1552_http_reject) -- http_parse_request (http_server.iii:602), 3 request-line/header guards:**
+  (235) EMPTY METHOD (method_len==0): craft " /index.html HTTP/1.1\r\n\r\n" (leading SP).
+  (256) EMPTY TARGET (target_len==0): craft "GET<SP><SP>HTTP/1.1\r\n\r\n" (TWO spaces -- one space hits the
+        line-249 CR-in-target guard instead).
+  (300) EMPTY HEADER NAME (name_len==0): craft "GET / HTTP/1.1\r\n: value\r\n\r\n".
+  Assert on the PARSE RETURN (req==0), never a *_len readback (teeth-less).
+
+**W71 (1553_json_reject) -- json_parse (json.iii:850), 2 guards:**
+  (272) NUMBER WITH NO DIGITS (digits==0): craft "[-]" (without the guard parses to a bogus 1-element NUM(0)
+        array).
+  (861) TRAILING GARBAGE after root: craft "42 x" (the SPACE is load-bearing -- "42x" rejects inside the
+        number parser's exponent path, teeth-less).
+
+**W71 (1554_parse_decimal_reject) -- parse_decimal_u32 (parse.iii:114), 2 guards:**
+  (143) ZERO DIGITS: craft "abc".  (144) U32 OVERFLOW: craft "99999999999".  Reject asserted on parse_is_ok==0.
+
+RIGOROUS TEETH -- all SEVEN guards proven independently load-bearing in THREE rebuilds (cross-module disjoint
+guard-sets, each reddening a different oracle's sub-case):
+  rebuild 1 (disable http:235 + json:272 + parse:143) -> 1552=10 1553=10 1554=10;
+  rebuild 2 (disable http:256 + json:861 + parse:144) -> 1552=20 1553=20 1554=20;
+  rebuild 3 (disable http:300)                         -> 1552=40 1553=99 1554=99.
+  positives 64_http_parse_request / 52_json_parse_primitives / 32_parse_decimal stayed 99 in all three.
+All three modules byte-identical to HEAD afterward (git diff empty, no TEETH residue).  3-gate per finding:
+gap real (grep-confirmed zero negative test), teeth proven, non-tautological (each malformed input is ACCEPTED
+without its guard -- a real over-acceptance the suite waves through).
+
+No defect to fix (all guards present + correct); three negative-path coverage closures on untrusted-input
+systems-layer parsers.  Count 1138 -> **1141**.

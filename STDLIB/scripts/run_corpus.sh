@@ -1117,6 +1117,7 @@ declare -A EXPECTED=(
     [1542_interval_lattice_overflow_sound]=99
     [1543_elias_overflow_propagate]=99
     [1544_bce_overflow_unsound]=99
+    [1545_blake2s_sigma_perm]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

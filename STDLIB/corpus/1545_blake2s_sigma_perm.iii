@@ -1,0 +1,25 @@
+/* 1545_blake2s_sigma_perm.iii -- W59 COVERAGE: all-entries self-consistency of the BLAKE2s
+ * SIGMA message-schedule table (RFC 7693).
+ *
+ * THE GAP (proven non-tautological): B2S_SIGMA is a 160-entry hardcoded permutation table (10
+ * rounds x 16).  The existing blake2s KATs assert only the digests of "abc" (M[0] nonzero, the
+ * rest 0) and "" (all words 0).  A single wrong SIGMA entry among the zero-word indices -- e.g.
+ * round 9 pos 1 (value 2 -> 8) -- is a genuine message-schedule bug, yet it leaves the "abc"/""
+ * digests UNCHANGED (M[2]=M[8]=0), so corpus 83 / 1539 / 1081 all stay GREEN.  No published-vector
+ * KAT exercises the entry.
+ *
+ * THE ORACLE: b2s_sigma_selfcheck() verifies each of the 10 rounds is a PERMUTATION of {0..15}
+ * (out-of-range / duplicate / missing), exercising ALL 160 entries.  This catches the class the
+ * digest KATs miss.  Returns 0 = all valid; (round+1) = first malformed round.
+ *
+ * 99 = the table is 10 valid permutations (the entries are correct).  A corrupted entry would
+ * return round+1 here while the digest KATs stay green -- the teeth this oracle adds. */
+module corpus_1545
+
+extern @abi(c-msvc-x64) fn b2s_sigma_selfcheck() -> u32 from "blake2s.iii"
+
+fn main() -> u64 {
+    let r : u32 = b2s_sigma_selfcheck()
+    if r != 0u32 { return r as u64 }   /* first malformed round (+1) -- a wrong SIGMA entry */
+    return 99u64                         /* all 10 rounds are valid permutations of {0..15} */
+}

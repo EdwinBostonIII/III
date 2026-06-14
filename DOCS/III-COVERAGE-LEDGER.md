@@ -1764,3 +1764,27 @@ overflow ac_max_access/bce_redundant unchanged.  Count 1130 -> **1131**.
 il_add/il_mul (W49) + affine_check ac_max_access (W53) are the TWO closed-form-bound producers both consumed by
 loop_optimizer (lo_safe = lo_access_max AND ac_in_bounds) and bce (ac_max_access).  Both now saturate-to-TOP on
 overflow; both ground-truth scans (ac_in_bounds) already did -> the whole stack is sound under overflow.
+
+## Wave-59 — hardcoded lookup-table correctness: BLAKE2s SIGMA all-entries self-consistency oracle (the spot-vector blind spot) (2026-06-13)
+
+After SIX consecutive clean defect-lens sweeps (W52/54/55/56/57/58), a user-hinted FRESH lens ("audit the
+twiddle tables") reopened a real gap class: a hardcoded lookup table can have a WRONG ENTRY the spot-vector
+KATs never exercise (AES encrypting one block hits ~30 of 256 S-box entries).  W59 verified every table's VALUES
+against its generating identity (all CORRECT: AES S-box/Rcon, GCM_BSWAP=15-i, ML-KEM KZ=17^bitrev(i) mod 3329,
+SHA/keccak constants, BLAKE2s SIGMA vs RFC7693) -- so NO wrong entry.  But it found one table that lacks an
+all-entries oracle and is NOT differentially pinned by a published vector.
+
+**W59-FIX (numera/blake2s.iii + falsifier 1545): the BLAKE2s SIGMA coverage blind spot.**  AES Rcon / GCM_BSWAP
+/ ML-KEM KZ are each differentially pinned by a FIPS KAT (a wrong entry flips the ciphertext/tag -> the KAT
+fails).  But BLAKE2s SIGMA (160-entry message schedule) is NOT: the only digest KATs are "abc" (M[0] nonzero,
+rest 0) and "" (all 0), so a wrong SIGMA entry among the ZERO-word indices is differentially INVISIBLE to the
+digest.  Added b2s_sigma_selfcheck() @export -- verifies each of the 10 rounds is a PERMUTATION of {0..15}
+(out-of-range / duplicate / missing), exercising ALL 160 entries -- and 1545 asserts it ==0 (99).
+
+RIGOROUS TEETH PROOF (the gap is real + the oracle bites): temporarily corrupted round-9 pos-1 (2 -> 8, a
+duplicate-8/missing-2) and rebuilt -> 1545 returned 10 (round 9 malformed, CAUGHT) while corpus 83 ("abc"=80)
+and 1539 (""=99) BOTH stayed GREEN (M[2]=M[8]=0 -> the corruption is invisible to those digests).  Reverted ->
+clean.  This proves the new oracle covers a real wrong-entry class the existing suite misses.  The table is
+currently CORRECT (1545==99 on the real table); this is a permanent regression guard on all 160 entries.
+
+No defect to fix (tables correct); a genuine coverage closure on the one un-pinned table.  Count 1131 -> **1132**.

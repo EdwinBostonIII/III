@@ -156,6 +156,32 @@ fn b2s_init_iv() -> i32 {
     return 0i32
 }
 
+/* [W59 coverage] SIGMA self-consistency: each of the 10 rounds must be a PERMUTATION of {0..15}.
+ * Returns 0 if all 10 rounds are valid permutations, else (round+1) of the first malformed round.
+ * Catches an out-of-range / duplicate / missing SIGMA literal -- a class the "abc"/"" digest KATs
+ * MISS, because their message words M[2..15]=0, so a swap among zero-word indices is invisible to
+ * the digest yet is a real message-schedule bug.  Exercises ALL 160 entries (10 rounds * 16). */
+fn b2s_sigma_selfcheck() -> u32 @export {
+    b2s_init_iv()
+    let mut r : u32 = 0u32
+    while r < 10u32 {
+        let s : u32 = r * 16u32
+        let mut seen : u32 = 0u32
+        let mut p : u32 = 0u32
+        while p < 16u32 {
+            let v : u32 = B2S_SIGMA[s + p]
+            if v > 15u32 { return r + 1u32 }              /* out of range */
+            let bit : u32 = 1u32 << v
+            if (seen & bit) != 0u32 { return r + 1u32 }   /* duplicate */
+            seen = seen | bit
+            p = p + 1u32
+        }
+        if seen != 0xFFFFu32 { return r + 1u32 }          /* a value of {0..15} is missing */
+        r = r + 1u32
+    }
+    return 0u32
+}
+
 fn b2s_rotr32(x: u32, n: u32) -> u32 {
     return ((x >> n) | (x << (32u32 - n)))
 }

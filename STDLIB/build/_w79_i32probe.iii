@@ -1,0 +1,33 @@
+/* W79 probe: localize the i32-ordering misbehavior that broke rsa_pss_verify.
+ * A fn returns a RUNTIME -1i32 (0i32 - 1i32, can't constant-fold).  Three orderings:
+ *   (a) DIRECT call-result ordered vs 0:   if ret_neg() >= 0i32   -- predict BROKEN (fires TRUE on -1)
+ *   (b) bound to a LOCAL then ordered:      let r=ret_neg(); r>=0  -- predict CORRECT (FALSE)
+ *   (c) EQUALITY on the call-result:        ret_neg() != -1i32     -- predict CORRECT
+ * Exit code is a bitmask of the THREE results, so one run tells the whole story:
+ *   bit0(=1): (a) wrongly fired (call-result >= 0 TRUE for -1)   [predict SET]
+ *   bit1(=2): (b) wrongly fired (local      >= 0 TRUE for -1)    [predict CLEAR]
+ *   bit2(=4): (c) wrongly fired (call-result != -1 TRUE for -1)  [predict CLEAR]
+ * predict exit = 1.  If exit has bit1 set -> "bind to local" advice is WRONG (broader trap). */
+module w79_i32probe
+
+fn ret_neg() -> i32 {
+    let mut y : i32 = 0i32
+    y = y - 1i32          /* runtime -1, not a literal the optimizer can fold */
+    return y
+}
+
+fn main() -> u64 {
+    let mut bits : u64 = 0u64
+
+    /* (a) direct call-result in an ordering compare vs 0 */
+    if ret_neg() >= 0i32 { bits = bits | 1u64 }
+
+    /* (b) the SAME value bound to a local first, then the same ordering compare */
+    let r : i32 = ret_neg()
+    if r >= 0i32 { bits = bits | 2u64 }
+
+    /* (c) equality (inequality) on the direct call-result */
+    if ret_neg() != -1i32 { bits = bits | 4u64 }
+
+    return bits
+}

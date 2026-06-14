@@ -1,0 +1,53 @@
+/* W80 part 2: the W79 trap was 32-BIT-WIDTH-specific (i32 call-result not sign-extended).  Re-probe
+ * the arithmetic-on-direct-call-result ops at u32 AND i32 width -- the likeliest place latent siblings
+ * live.  ret_u32() returns runtime 100u32; ret_i32n() returns runtime -100i32.  Bitmask: a SET bit =
+ * that op MISCOMPILED on the direct 32-bit call-result.  Any set bit names a real latent trigger. */
+module w80_u32probe
+
+fn ret_u32() -> u32 {
+    let mut y : u32 = 0u32
+    y = y + 100u32
+    return y
+}
+
+fn ret_i32n() -> i32 {
+    let mut y : i32 = 0i32
+    y = y - 100i32        /* runtime -100 */
+    return y
+}
+
+fn main() -> u64 {
+    let mut bits : u64 = 0u64
+
+    /* (bit0) u32 modulo on a DIRECT call-result: 100 % 7 = 2 */
+    if (ret_u32() % 7u32) != 2u32 { bits = bits | 1u64 }
+
+    /* (bit1) u32 divide on direct call-result: 100 / 7 = 14 */
+    if (ret_u32() / 7u32) != 14u32 { bits = bits | 2u64 }
+
+    /* (bit2) u32 subtract on direct call-result: 100 - 58 = 42 */
+    if (ret_u32() - 58u32) != 42u32 { bits = bits | 4u64 }
+
+    /* (bit3) u32 right-shift on direct call-result: 100 >> 2 = 25 */
+    if (ret_u32() >> 2u32) != 25u32 { bits = bits | 8u64 }
+
+    /* (bit4) u32 EQUALITY on direct call-result (control -- predict correct): 100 == 100 */
+    if ret_u32() != 100u32 { bits = bits | 16u64 }
+
+    /* (bit5) i32 NEGATIVE modulo on direct call-result: -100 % 7 -- signedness-sensitive.
+     * Signed: -100 % 7 = -2 (trunc-toward-zero).  Bind-to-local control compares the same. */
+    let lm : i32 = ret_i32n()
+    let local_mod : i32 = lm % 7i32
+    if (ret_i32n() % 7i32) != local_mod { bits = bits | 32u64 }
+
+    /* (bit6) i32 NEGATIVE divide on direct call-result vs local: -100 / 7 = -14 */
+    let ld : i32 = ret_i32n()
+    let local_div : i32 = ld / 7i32
+    if (ret_i32n() / 7i32) != local_div { bits = bits | 64u64 }
+
+    /* (bit7) i32 negative as-u64 widen on direct call-result (sign-extend check):
+     * (-100i32 as i64) should be -100; if zero-extended it's 4294967196. */
+    if ((ret_i32n() as i64) != (0i64 - 100i64)) { bits = bits | 128u64 }
+
+    return bits
+}

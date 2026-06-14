@@ -2134,3 +2134,38 @@ wrongly accepted); POST-FIX **99**.  No regression: 373_rsa_pss_sign_verify / 10
 
 The 7th real product-code DEFECT FIXED via the false-accept axis (json/semver/utf8/mlkem/rfc3339/**rsa**,
 across verba/numera/tempora).  Count 1147 -> **1148**.
+
+## Wave-80 — iiis-2 compiler trap GENERALIZED + verified-clean stdlib audit (a CONFIRMED-BUG honest negative) (2026-06-14)
+
+W79's RSA fix exposed a compiler codegen bug; W80 re-probed the documented iiis-2 traps in their UNSAFE shape
+(direct call-result operand / single-use, the way `_w79_i32probe` differed from the safe `_w61_signprobe` that
+once mis-marked the trap "RESOLVED") and audited the stdlib for live triggers.  Two probes, no product-code
+change -- this is an honest-negative wave in the Wave-37/38 SATURATION mould, but with a confirmed compiler bug
+as its durable artifact.
+
+**CONFIRMED + GENERALIZED (the durable finding).** The W79 defect is not just *ordering* -- it is EVERY
+width-sensitive SIGNED op on a direct i32 call-result.  Probe `STDLIB/build/_w80_u32probe.iii` returns **exit 96**
+(bits 5+6): `ret_i32n() % 7i32` and `ret_i32n() / 7i32` (ret_i32n returns a runtime -100) DISAGREE with the
+bound-to-local `lm % 7i32` / `ld / 7i32` -- the direct call-result runs the signed div/mod UNSIGNED (-100 read as
+4294967196).  The `as i64` widen of the same call-result (bit7) IS correctly sign-extended (cg_r3:1892 emits
+`movslq` on a narrowing cast), so the defect is confined to the in-place 32-bit signed op feeding `cqto+idivq`
+(cg_r3:2115-2124) / the signed compare: the 32-bit eax call-result reaches the 64-bit idiv/cmp without a
+sign-extend that the local-RELOAD path supplies.  u32/u64 `% / - >> &` on a call-result are all CORRECT
+(`_w80_callresult_probe.iii` exit 0) -- the bug is SIGNED-i32-specific.
+
+**VERIFIED-CLEAN stdlib audit (refuted to zero).** Tree-wide grep for an i32-call-result fed to signed `/`/`%`:
+ZERO instances.  Every call-result `%`/`/` in STDLIB/iii is on an UNSIGNED u32/u64 RNG/arith result
+(`_ad_rng_next() % 18u32`, `crt_rng() % bigp`, `gpoly_rng() % 20u64`, `(v/100u32)%10u32`) -- all confirmed
+correct by the probe.  Combined with W79's `) >= 0i32` audit (also zero, the codebase uses `!= -1i32`
+throughout, e.g. theorem_commons + ed25519_verify), the trap has NO live trigger anywhere in the stdlib.
+
+**DISPOSITION: document-and-separate (per the self-host-latent triage discipline).** The proper fix is in cg_r3
+(sign-extend an i32 operand -- `movslq`/`cdqe` -- before `cqto+idivq` and before a signed compare, mirroring the
+local-reload path).  It is NOT done in this loop: the gain is currently ZERO (no live trigger), the surface is
+load-bearing self-host codegen, and -- the decisive reason -- the corpus CANNOT prove no-regression in the
+signed-i32 space because that space is provably empty, so the change would land primarily in paths nothing
+exercises (the verification asymmetry the CRASH PROTOCOL exists to prevent).  Tracked as a dedicated low-priority
+task; the honest trigger to raise it is the first real `signed_i32_call() % k` / `>= 0i32` site, fixed then with
+a live teeth case exactly like RSA.  Memory `feedback-iii-i32-signed-ordering-unsigned` carries the generalized
+rule + both probes.  Count unchanged at **1148** (no test added: one cannot write a PASSING corpus test for
+currently-miscompiled behavior, and asserting the bug to get green is the wrong-direction test the standard rejects).

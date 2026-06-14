@@ -1,0 +1,52 @@
+/* W80: re-probe documented iiis-2 traps in their UNSAFE shape -- an arithmetic op applied to a
+ * DIRECT function call-result (single-use, not bound to a local), the shape that broke RSA's
+ * `bigint_cmp() >= 0i32`.  The CLAUDE.md modulo-after-call note says `a % b` after a call returns
+ * the quotient/stale-divisor; this checks whether %, /, -, >>, & on a direct call-result miscompile,
+ * and confirms the bound-to-local form is correct.  ret_val() returns a runtime 100 (no const-fold).
+ * Result is a bitmask: a SET bit = that op MISCOMPILED on the direct call-result.  predict 0 ideally;
+ * any set bit names a live latent-miscompile trigger to audit the stdlib for. */
+module w80_callresult_probe
+
+fn ret_val() -> u64 {
+    let mut y : u64 = 0u64
+    y = y + 100u64        /* runtime 100, optimizer can't fold */
+    return y
+}
+
+fn add_helper(x: u64) -> u64 { return x + 1u64 }
+
+fn use_once(x: u64) -> u64 {
+    /* x is used EXACTLY once, passed directly to another call (single-use param-spill shape) */
+    return add_helper(x)
+}
+
+fn main() -> u64 {
+    let mut bits : u64 = 0u64
+
+    /* (bit0) modulo on a DIRECT call-result, non-pow2 divisor: 100 % 7 = 2 */
+    if (ret_val() % 7u64) != 2u64 { bits = bits | 1u64 }
+
+    /* (bit1) same, BOUND TO LOCAL first: control -- predict correct */
+    let v : u64 = ret_val()
+    if (v % 7u64) != 2u64 { bits = bits | 2u64 }
+
+    /* (bit2) modulo direct call-result, divisor 10: 100 % 10 = 0 */
+    if (ret_val() % 10u64) != 0u64 { bits = bits | 4u64 }
+
+    /* (bit3) integer DIVIDE on direct call-result: 100 / 7 = 14 */
+    if (ret_val() / 7u64) != 14u64 { bits = bits | 8u64 }
+
+    /* (bit4) SUBTRACT on direct call-result: 100 - 58 = 42 */
+    if (ret_val() - 58u64) != 42u64 { bits = bits | 16u64 }
+
+    /* (bit5) RIGHT-SHIFT on direct call-result: 100 >> 2 = 25 */
+    if (ret_val() >> 2u64) != 25u64 { bits = bits | 32u64 }
+
+    /* (bit6) BIT-AND on direct call-result: 100 & 0x0F = 4 */
+    if (ret_val() & 0x0Fu64) != 4u64 { bits = bits | 64u64 }
+
+    /* (bit7) single-use param passed directly to a call: use_once(42) = 43 */
+    if use_once(42u64) != 43u64 { bits = bits | 128u64 }
+
+    return bits
+}

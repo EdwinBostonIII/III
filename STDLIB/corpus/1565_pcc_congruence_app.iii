@@ -1,0 +1,54 @@
+/* 1565_pcc_congruence_app.iii -- W83 FIX falsifier: congruence-closure fixpoint invariant
+ * "if f(x..) and f(y..) have pairwise-equal arguments, the applications are merged" (congruence_closure.iii:12-13),
+ * stated UNCONDITIONALLY -- must hold regardless of whether the applications were built BEFORE or AFTER the
+ * argument merge.
+ *
+ * THE DEFECT (fixed-point-closure lens, ultracode workflow): pcc_congruence_close() is invoked ONLY from
+ * pcc_merge (line 145); pcc_app1/pcc_app2 (lines 77-78) never trigger it.  So an application created AFTER its
+ * arguments were merged is NOT congruence-closed: pcc_eq(f(a),f(b)) returns 0 although a=b.  (It self-heals only
+ * when some later, unrelated merge re-runs closure.)  Under-approximation -- sound (never a FALSE equality) but
+ * the documented closed-to-fixpoint invariant is violated on the merge-then-build order.
+ *
+ * THE FIX (congruence_closure.iii): call pcc_congruence_close() at the end of pcc_app1 and pcc_app2, so every
+ * application participates in closure the moment it exists.
+ *
+ * 99 = both build orders satisfy the invariant AND no false equality is created.
+ * TEETH: against the PRE-FIX lib the merge-then-build case (A) returns pcc_eq==0 -> return 10. */
+module corpus_1565
+
+extern @abi(c-msvc-x64) fn pcc_init() -> i32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_leaf() -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_app1(fn_: u32, a: u32) -> u32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_merge(a: u32, b: u32, reason: u32) -> i32 from "congruence_closure.iii"
+extern @abi(c-msvc-x64) fn pcc_eq(a: u32, b: u32) -> u32 from "congruence_closure.iii"
+
+fn main() -> u64 {
+    /* (B) POSITIVE control -- build apps THEN merge args (already closes via pcc_merge): eq == 1 */
+    pcc_init()
+    let a : u32 = pcc_leaf()
+    let b : u32 = pcc_leaf()
+    let fa : u32 = pcc_app1(7u32, a)
+    let fb : u32 = pcc_app1(7u32, b)
+    pcc_merge(a, b, 1u32)
+    if pcc_eq(fa, fb) != 1u32 { return 20u64 }
+
+    /* (A) THE BUG -- merge args FIRST, then build apps: closed-to-fixpoint demands eq == 1.
+     * PRE-FIX returns 0 (pcc_app never triggers closure) -> TEETH. */
+    pcc_init()
+    let a2 : u32 = pcc_leaf()
+    let b2 : u32 = pcc_leaf()
+    pcc_merge(a2, b2, 1u32)
+    let fa2 : u32 = pcc_app1(9u32, a2)
+    let fb2 : u32 = pcc_app1(9u32, b2)
+    if pcc_eq(fa2, fb2) != 1u32 { return 10u64 }
+
+    /* (C) NEGATIVE -- distinct UNMERGED args must NOT yield equal applications (no false equality) */
+    pcc_init()
+    let x : u32 = pcc_leaf()
+    let y : u32 = pcc_leaf()
+    let fx : u32 = pcc_app1(5u32, x)
+    let fy : u32 = pcc_app1(5u32, y)
+    if pcc_eq(fx, fy) != 0u32 { return 30u64 }
+
+    return 99u64
+}

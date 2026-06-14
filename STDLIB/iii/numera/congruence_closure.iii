@@ -74,8 +74,11 @@ fn pcc_new(fn_: u32, a0: u32, a1: u32, narg: u32) -> u32 {
     return t
 }
 fn pcc_leaf() -> u32 @export { return pcc_new(PCC_LEAF, 0u32, 0u32, 0u32) }
-fn pcc_app1(fn_: u32, a: u32) -> u32 @export { return pcc_new(fn_, a, 0u32, 1u32) }
-fn pcc_app2(fn_: u32, a: u32, b: u32) -> u32 @export { return pcc_new(fn_, a, b, 2u32) }
+/* [W83] close congruence on application CREATION too, not only on pcc_merge -- otherwise an app built
+ * AFTER its args were merged stays uncongruent (pcc_eq(f(a),f(b))==0 though a=b) until some unrelated
+ * later merge re-closes, violating the unconditional "closed to fixpoint" invariant (header :12-13). */
+fn pcc_app1(fn_: u32, a: u32) -> u32 @export { let t : u32 = pcc_new(fn_, a, 0u32, 1u32) ; pcc_congruence_close() ; return t }
+fn pcc_app2(fn_: u32, a: u32, b: u32) -> u32 @export { let t : u32 = pcc_new(fn_, a, b, 2u32) ; pcc_congruence_close() ; return t }
 
 fn pcc_find(t: u32) -> u32 {
     let mut x : u32 = t

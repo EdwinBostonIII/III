@@ -2262,3 +2262,29 @@ latent.  Clean 2-line fix (call pcc_congruence_close() at the end of pcc_app1/pc
 inverse-pair-roundtrip (0 found).** Completeness critic: each FOUND lens was single-instance (idempotence probed only
 normalise; total-order only span_u8_cmp; fixed-point only pcc) -- the verba text family (glyph/markup/regex), the
 pq/heaplet/list comparators, and kleene/widening/sat fixpoints are unprobed siblings for W84+.
+
+## Wave-83 — pcc congruence-closure not closed for application-after-merge (the W82 fixed-point survivor) (2026-06-14)
+
+The 3rd W82 Workflow survivor, fixed.  congruence_closure.iii's header (:12-13) claims UNCONDITIONALLY
+"Congruence is closed to fixpoint: if f(x..) and f(y..) have pairwise-equal arguments, the applications are
+merged".  But pcc_congruence_close() (:104) is invoked ONLY from pcc_merge (:145); pcc_app1/pcc_app2 (:77-78 ->
+pcc_new) never trigger it.  So an application built AFTER its arguments were merged is NOT congruence-closed:
+pcc_eq(f(a),f(b)) returns 0 although a=b -- it self-heals only when some later, UNRELATED pcc_merge re-runs
+closure and flips the settled query 0->1.  Sound (under-approximation, never a FALSE equality) but the documented
+fixpoint invariant is violated on the merge-then-build order.  Latent (every consumer + the in-source KAT
+assert-terms-THEN-merge), but a real invariant break.
+
+**THE FIX (congruence_closure.iii):** call pcc_congruence_close() at the end of pcc_app1 and pcc_app2, so every
+application participates in closure the moment it exists -- making the invariant hold for BOTH build orders.
+(Forward reference to the later-defined pcc_congruence_close resolves -- III is whole-module symbol-scoped.)
+Idempotent (the closure's `while changed` loop runs to fixpoint); KAT-safe (the assert-then-merge path sees a
+no-op extra close); creates no false equality (falsifier 1565's negative arm: distinct unmerged args stay !=).
+
+TEETH: falsifier 1565_pcc_congruence_app -- (A) merge args FIRST then build f(a),f(b): pcc_eq must be 1
+(closed-to-fixpoint); (B) positive control build-then-merge; (C) negative distinct-args stay unequal.  Against
+the PRE-FIX lib (A) returns pcc_eq==0 -> 10; POST-FIX 99.  No regression: 1238_congruence_closure stays 99.
+Count 1151 -> **1152**.
+
+This closes the W81/W82 ultracode identity-violation arc: 5 real wrong-result defects fixed across the
+math-identity / semantics-preservation axis (matrix M^0, NFD reorder, span reflexivity, pcc closure + the RSA
+malleability that opened it), each adversarially refuted then in-session compile-probe confirmed before any edit.

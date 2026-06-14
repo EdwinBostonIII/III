@@ -630,6 +630,19 @@ fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
 fn iii_mlkem_encaps(k: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 @export {
     if k < 2u64 { return 0i32 - 1i32 }
     if k > 4u64 { return 0i32 - 1i32 }
+    /* FIPS 203 §7.2 modulus check: the encapsulation key's 384*k bytes are ByteEncode12(t); every decoded
+     * 12-bit coefficient MUST be in [0, q).  A non-canonical ek (any coeff >= q) is REJECTED -- Appendix C
+     * forbids a silent modular reduction, and Encaps SHALL NOT run on an unchecked key. */
+    let pkb : *u8 = pk as *u8
+    let mut ci : u64 = 0u64
+    while ci < 128u64 * k {
+        let mb0 : u64 = pkb[3u64*ci] as u64
+        let mb1 : u64 = pkb[3u64*ci + 1u64] as u64
+        let mb2 : u64 = pkb[3u64*ci + 2u64] as u64
+        if ((mb0 | (mb1 << 8u64)) & 0xFFFu64) >= KQ { return 0i32 - 1i32 }
+        if (((mb1 >> 4u64) | (mb2 << 4u64)) & 0xFFFu64) >= KQ { return 0i32 - 1i32 }
+        ci = ci + 1u64
+    }
     let pkbytes : u64 = 384u64*k + 32u64
     sha3_256_oneshot(pk, pkbytes, &KEM_HPK as u64)
     let gi : *u8 = &KEM_GIN2 as *u8

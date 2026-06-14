@@ -2050,3 +2050,32 @@ the PRE-FIX lib it returned **10**; POST-FIX **99**.  No regression: 78_normalis
 The 4th real product-code DEFECT FIXED via the false-accept axis, and the most security-relevant.  Across
 W72-75 the axis netted 5 spec-conformance defect CLASSES (8 instances) in 4 modules (json x2, semver x2,
 normalise/utf8 x4) -- json/semver/uri/utf8 now spec-conformant.  Count 1144 -> **1145**.
+
+## Wave-76/77 — ML-KEM encaps FIPS 203 §7.2 modulus check: a crypto FALSE-ACCEPT FIXED (the axis extended to numera crypto) (2026-06-14)
+
+W76 was a 12-agent discovery extending the false-accept axis to the NUMERA crypto + encoding DECODERS (a
+genuinely-fresh slice -- W72-75 swept only the verba/aether parsers).  6 MUST-candidates -> 1 confirmed.
+The refute KILLED the rest (notably fn256 fn_set_bytes_x: a scalar LOAD primitive correctly does NOT
+range-reject because sign/keygen reduce-after-load and ecdsa_verify range-checks sig_bytes INDEPENDENTLY at
+the @export -- teeth-less).
+
+**THE DEFECT (W77, confirmed + hand-verified):** iii_mlkem_encaps (mlkem.iii:630, @export) guarded ONLY the
+parameter k, then used an UNTRUSTED public key pk with NO modulus check.  kem_frombytes (206) stores each
+raw 12-bit field (0..4095) with no reduction / no rejection; kem_tobytes (185) re-encodes mod q (KQ=3329).
+So an ek whose ByteDecode12 yields any coefficient >= q is non-canonical -- ByteEncode12(ByteDecode12(ek))
+!= ek -- yet encaps ACCEPTED it.  FIPS 203 §7.2: Encaps SHALL NOT run on an unchecked ek; the modulus check
+ensures every encoded integer is in [0,q-1]; Appendix C forbids a silent reduction -> the key MUST be
+REJECTED.  Hand-verified: KQ=3329, kem_frombytes stores raw 12-bit (no reduce), kem_tobytes reduces mod q,
+encaps reachable on untrusted pk with only a k-guard.
+
+**THE FIX (iii_mlkem_encaps, after the k-guards):** scan the ek's 384*k bytes (128*k triplets = 256*k
+coefficients) and return -1 if any 12-bit coefficient >= KQ.  Encaps-only: decaps' sk is the holder's own
+key, and the untrusted-ciphertext path uses the Fujisaki-Okamoto implicit-reject (no modulus check needed).
+
+TEETH (reddens pre-fix, passes post-fix): falsifier 1559_mlkem_modcheck does keygen -> encaps(canonical
+ek)==0 (positive) -> tampers PK[0..2] so coeff0 = 0xD02 = 3330 >= q -> encaps must == -1.  PRE-FIX the
+tampered ek was accepted (test returned 10); POST-FIX rejected (99).  No regression: 199_mlkem_roundtrip /
+201_pq_dispatch stay 99 (canonical keys).
+
+The 5th real product-code DEFECT FIXED via the false-accept axis -- and the first in the CRYPTO layer
+(FIPS 203 conformance + robustness).  Count 1145 -> **1146**.

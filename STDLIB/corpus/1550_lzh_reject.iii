@@ -1,0 +1,40 @@
+/* 1550_lzh_reject.iii -- W67 COVERAGE: lzh_decompress malformed-stream REJECTION (W64-confirmed).
+ *
+ * THE GAP (3-gate teeth-proven): lzh_decompress(in,in_len,out,out_cap) is an @export that parses an
+ * UNTRUSTED LZH stream (the Huffman+LZSS DEFLATE recipe).  It has two rejection guards that the only
+ * lzh test (1231_lzh, roundtrip identity on valid streams, always out_cap=1024) never exercises:
+ *   (A) EMPTY STREAM (lzh.iii:64  if in_len < 1 { return LZH_E_SUB }): a stream with no mode byte.
+ *   (B) MODE-0 CAPACITY (lzh.iii:70  if n > out_cap { return LZH_E_CAP } where n = in_len-1): a STORED
+ *       blob declaring more bytes than the output buffer holds.
+ * (The line-77 huff-reject FORWARD is NOT covered here -- it is REFUTED: huff_decode's own rejection is
+ * already W63/1547, and lzh:77 forwards a value lzss_decompress masks back to -1, so it has no teeth.)
+ *
+ * THE ORACLE: one crafted stream per class.
+ *   A: in_len=0 (empty) -> LZH_E_SUB (-1).
+ *   B: {0x00,0x41,0x42} in_len=3 out_cap=1 (mode 0 STORED, n=2 > 1) -> LZH_E_CAP (-2).
+ *
+ * 99 = both rejected.  TEETH (proven, then reverted): removing line 64 makes A fall through with
+ * mode=ip[0]=0 and n = 0-1 = 0xFFFFFFFF, so `n > out_cap` returns LZH_E_CAP(-2) not LZH_E_SUB(-1) (this
+ * test returns 10); removing line 70 makes B copy 2 bytes into the generous backing buffer and return 2
+ * not -2 (returns 20).  1231_lzh stays 99 (out_cap=1024, n<=1000, in_len>=1 -- neither guard ever fires). */
+module corpus_1550
+
+extern @abi(c-msvc-x64) fn lzh_decompress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzh.iii"
+
+var LZ_IN  : [u8; 16]
+var LZ_OUT : [u8; 16]
+
+fn main() -> u64 {
+    /* (A) empty compressed stream (no mode byte): in_len=0 -> LZH_E_SUB.  LZ_IN[0]=0 makes the
+     * teeth deterministic (with the guard removed, mode reads 0 -> STORED branch -> n underflow). */
+    LZ_IN[0u32] = 0x00u8
+    let ra : i32 = lzh_decompress(&LZ_IN as u64, 0u32, &LZ_OUT as u64, 16u32)
+    if ra != 0i32 - 1i32 { return 10u64 }   /* the in_len<1 guard must reject (LZH_E_SUB) */
+
+    /* (B) mode-0 STORED blob whose declared length exceeds out_cap: n=in_len-1=2 > out_cap=1 */
+    LZ_IN[0u32] = 0x00u8 ; LZ_IN[1u32] = 0x41u8 ; LZ_IN[2u32] = 0x42u8   /* mode 0, then 'A','B' */
+    let rb : i32 = lzh_decompress(&LZ_IN as u64, 3u32, &LZ_OUT as u64, 1u32)
+    if rb != 0i32 - 2i32 { return 20u64 }   /* the n>out_cap guard must reject (LZH_E_CAP) */
+
+    return 99u64                              /* both malformed streams correctly rejected */
+}

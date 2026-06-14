@@ -1,0 +1,46 @@
+/* 1549_leb128_overflow_reject.iii -- W66 COVERAGE: leb128_decode_u64 OVERFLOW rejection (W64-confirmed).
+ *
+ * THE GAP (3-gate teeth-proven): leb128_decode_u64(src,src_len) is an @export that decodes an UNTRUSTED
+ * ULEB128 varint.  Its overflow guard (leb128.iii:60  if shift >= 64 { return 0 }) rejects a varint whose
+ * payload exceeds 64 bits.  The only leb128 corpus test (89_leb128) decodes 624485 from 3 bytes (shift peaks
+ * at 14) and tests the *i64* decoder's truncation guard (a lone 0x80) -- NEITHER reaches the u64 shift>=64
+ * overflow guard.  grep over STDLIB/corpus: 'leb128' appears in exactly one file (89_leb128).
+ *
+ * THE ORACLE (the CRAFT IS DELIBERATE -- a 10-byte craft would be tautological): an over-long ULEB128 of
+ * TEN 0x80 continuation bytes (shift 7,14,...,70) followed by a 0x01 TERMINATOR at index 10, src_len=11.
+ *   - WITH the guard: at index 9 the tenth continuation pushes shift 63 -> 70, so shift>=64 fires and
+ *     returns 0 (consumed=0, rejected) BEFORE the terminator at index 10 is read.
+ *   - WITHOUT the guard: the loop continues to index 10 (the i>=src_len length backstop does NOT fire,
+ *     since 10 < 11), reads the 0x01 terminator and returns consumed=11.
+ * A naive 10-byte craft (no terminator) would return 0 with OR without the guard (the length backstop at
+ * line 52 catches it) -- tautological, no teeth.  The terminator at index 10 is what isolates line 60.
+ *
+ * 99 = the positive control decodes AND the over-long varint is rejected (consumed 0).  TEETH (proven, then
+ * reverted): removing line 60 makes the 11-byte input return 11 not 0 (this test returns 10) while 89_leb128
+ * stays 99 (its varints never reach shift>=64). */
+module corpus_1549
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_value() -> u64 from "leb128.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(16u64)
+
+    /* positive control: single-byte 5 -> consumed 1, value 5 (must survive the teeth) */
+    buf[0u64] = 0x05u8
+    let cp : u64 = leb128_decode_u64(buf, 1u64)
+    if cp != 1u64 { free(buf) return 30u64 }
+    if leb128_last_value() != 5u64 { free(buf) return 31u64 }
+
+    /* over-long ULEB128: ten 0x80 continuation bytes + a 0x01 terminator at index 10 */
+    buf[0u64] = 0x80u8 buf[1u64] = 0x80u8 buf[2u64] = 0x80u8 buf[3u64] = 0x80u8 buf[4u64] = 0x80u8
+    buf[5u64] = 0x80u8 buf[6u64] = 0x80u8 buf[7u64] = 0x80u8 buf[8u64] = 0x80u8 buf[9u64] = 0x80u8
+    buf[10u64] = 0x01u8
+    let co : u64 = leb128_decode_u64(buf, 11u64)
+    if co != 0u64 { free(buf) return 10u64 }   /* the shift>=64 overflow guard must reject (consumed 0) */
+
+    free(buf)
+    return 99u64
+}

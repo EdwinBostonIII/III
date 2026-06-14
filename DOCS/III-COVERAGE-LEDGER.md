@@ -1847,3 +1847,38 @@ NOTE: lzss_decompress (W62) covers the LZ layer; lzh_decompress composes a Huffm
 
 No defect to fix (all guards present + correct); a negative-path coverage closure on the Huffman decoder.
 Count 1133 -> **1134**.
+
+## Wave-64..67 — systematic negative-coverage sweep: hex / leb128 / lzh decoder rejection oracles (2026-06-14)
+
+W64 was a 20-agent discovery sweep for the W62/W63 idiom generalized: an untrusted-input @export
+decoder/parser/verifier whose ENTIRE rejection surface is untested (positive/roundtrip KAT only, ZERO
+negative test, grep-confirmed).  The adversarial-refute stage was the workhorse -- it KILLED six teeth-less
+candidates (ed25519_verify line 277: the SHA-512(R||A||M) hash-binding makes the decompress guard
+unobservable; rsa_pss_verify: 1429 ALREADY tests sigLen!=k; mldsa 1172/1173: shadowed by the final
+Fiat-Shamir c_check so guard-removal can't flip the verdict; erasure_store es_repair_shard line 191:
+redundant with the es_reconstruct line-158 guard; lzh line 77: forwards a value lzss masks back to -1) and
+CORRECTED two oracles whose naive craft was tautological (leb128, mldsa-1180).  Confirmed gaps landed as
+W65/66/67 (the trivial-craft codec decoders; mldsa-1180/1190 deferred to W68):
+
+**W65 (1548_hex_reject) -- hex_decode (hex.iii:61).**  Two untested reject classes: odd src_len (line 66
+-> HEX_E_BAD_LEN -3) and bad nibble (lines 79-80, hex_char_to_nibble==0xFF -> HEX_E_BAD_CHAR -2).  grep
+HEX_E_BAD over corpus = 0 files; the 3 callers (16/1401/1429) feed valid even-length hex only.
+
+**W66 (1549_leb128_overflow_reject) -- leb128_decode_u64 (verba/leb128.iii:46).**  The shift>=64 overflow
+guard (line 60).  89_leb128 tests only the *i64* truncation guard.  CRAFT IS DELIBERATE: ten 0x80 + a 0x01
+terminator at index 10 (src_len=11) so shift hits 70 at index 9 BEFORE the terminator -- a 10-byte craft
+returns 0 with OR without the guard (length backstop) and is tautological; the terminator isolates line 60.
+
+**W67 (1550_lzh_reject) -- lzh_decompress (lzh.iii:63).**  Empty-stream (line 64 in_len<1 -> LZH_E_SUB -1)
+and mode-0 capacity (line 70 n>out_cap -> LZH_E_CAP -2).  1231_lzh is roundtrip-only (out_cap=1024).
+Completes the DEFLATE-recipe untrusted-input coverage (lzss=W62, huffman=W63, lzh-orchestration=W67).
+
+RIGOROUS TEETH -- all FIVE guards proven independently load-bearing in TWO rebuilds (disjoint guard-sets,
+each reddening a different oracle's sub-case):
+  - rebuild 1 (disable hex:66 + leb128:60 + lzh:64) -> 1548=10, 1549=10, 1550=10; positives 16/89/1231=99.
+  - rebuild 2 (disable hex:79-80 + lzh:70) -> 1548=20, 1550=20, 1549=99; positives 16/89/1231=99.
+All three modules byte-identical to HEAD afterward (git diff empty, no TEETH residue).  3-gate per finding:
+gap real (grep-confirmed zero negative tests), teeth proven, non-tautological.
+
+No defect to fix (all guards present + correct); three negative-path coverage closures on untrusted-input
+codec decoders.  Count 1134 -> **1137**.

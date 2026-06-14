@@ -1,0 +1,47 @@
+/* 1548_hex_reject.iii -- W65 COVERAGE: hex_decode malformed-input REJECTION (W64-confirmed gap).
+ *
+ * THE GAP (3-gate teeth-proven): hex_decode(src,src_len,out,out_cap) is an @export that parses
+ * UNTRUSTED hex text, with two distinct rejection guards -- none exercised by any corpus test (grep
+ * HEX_E_BAD over STDLIB/corpus = 0 files; the 3 hex_decode callers, 16/1401/1429, all feed VALID
+ * even-length hex and assert the OK path):
+ *   (A) ODD LENGTH (hex.iii:66  if (src_len & 1) != 0 { return HEX_E_BAD_LEN }): a hex string must
+ *       have an even number of nibbles.
+ *   (B) BAD NIBBLE (hex.iii:79-80  if hi/lo == 0xFF { return HEX_E_BAD_CHAR }): a byte that is not
+ *       0-9 / a-f / A-F (hex_char_to_nibble returns 0xFF) is not a hex digit.
+ *
+ * THE ORACLE: a positive control + one crafted input per reject class.
+ *   positive: "a5" -> HEX_OK, out[0]=0xA5  (must stay green under both teeth).
+ *   A: "abc" (len 3, odd) -> HEX_E_BAD_LEN (-3).
+ *   B: "zz"  (0x7A not a hex digit) -> HEX_E_BAD_CHAR (-2).
+ *
+ * 99 = the positive decodes and both malformed inputs are rejected.  TEETH (proven, then reverted):
+ * removing line 66 makes A decode "ab"->0xAB and return HEX_OK(0) not -3 (this test returns 10);
+ * removing lines 79-80 makes B compute 0xFF nibbles and return HEX_OK(0) not -2 (returns 20).  The
+ * positive control + the valid-hex roundtrip KATs (16/1401/1429) stay green (even length, valid
+ * nibbles never reach either branch). */
+module corpus_1548
+
+extern @abi(c-msvc-x64) fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 from "hex.iii"
+
+var HX_IN  : [u8; 8]
+var HX_OUT : [u8; 8]
+
+fn main() -> u64 {
+    /* positive control: "a5" -> 0xA5 (must survive both teeth) */
+    HX_IN[0u32] = 0x61u8 ; HX_IN[1u32] = 0x35u8                       /* 'a','5' */
+    let rp : i32 = hex_decode(&HX_IN as u64, 2u64, &HX_OUT as u64, 8u64)
+    if rp != 0i32 { return 30u64 }
+    if HX_OUT[0u32] != 0xA5u8 { return 31u64 }
+
+    /* (A) odd length "abc" (len 3) -> HEX_E_BAD_LEN (-3) */
+    HX_IN[0u32] = 0x61u8 ; HX_IN[1u32] = 0x62u8 ; HX_IN[2u32] = 0x63u8   /* 'a','b','c' */
+    let ra : i32 = hex_decode(&HX_IN as u64, 3u64, &HX_OUT as u64, 8u64)
+    if ra != 0i32 - 3i32 { return 10u64 }   /* the odd-length guard must reject (HEX_E_BAD_LEN) */
+
+    /* (B) bad nibble "zz" (len 2, 0x7A not a hex digit) -> HEX_E_BAD_CHAR (-2) */
+    HX_IN[0u32] = 0x7Au8 ; HX_IN[1u32] = 0x7Au8                       /* 'z','z' */
+    let rb : i32 = hex_decode(&HX_IN as u64, 2u64, &HX_OUT as u64, 8u64)
+    if rb != 0i32 - 2i32 { return 20u64 }   /* the bad-nibble guard must reject (HEX_E_BAD_CHAR) */
+
+    return 99u64                              /* positive decoded + both malformed inputs rejected */
+}

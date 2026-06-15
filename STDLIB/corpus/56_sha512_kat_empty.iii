@@ -1,17 +1,32 @@
-/* sha512 KAT: SHA-512("") = cf83e1357...  exit=first byte=0xCF=207 */
+/* 56_sha512_kat_empty.iii -- SHA-512("") FULL 64-byte digest.
+ * Strengthened (wave-5 production audit P3): was a toy-trap that read ONLY digest byte 0 (0xCF).  Now
+ * compares all 64 bytes to the published vector cf83e1357eefb8bd...538327af927da3e.  99 = every byte matches. */
 module corpus_56
 
 extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn sha512_oneshot(input: *u8, len: u64, out: *u8) -> u32 from "sha512.iii"
-extern @abi(c-msvc-x64) fn sha512_digest_byte(i: u32) -> u32 from "sha512.iii"
+
+var EXP : [u8; 64]
 
 fn main() -> u64 {
+    EXP[0u64]=0xcfu8 EXP[1u64]=0x83u8 EXP[2u64]=0xe1u8 EXP[3u64]=0x35u8 EXP[4u64]=0x7eu8 EXP[5u64]=0xefu8 EXP[6u64]=0xb8u8 EXP[7u64]=0xbdu8
+    EXP[8u64]=0xf1u8 EXP[9u64]=0x54u8 EXP[10u64]=0x28u8 EXP[11u64]=0x50u8 EXP[12u64]=0xd6u8 EXP[13u64]=0x6du8 EXP[14u64]=0x80u8 EXP[15u64]=0x07u8
+    EXP[16u64]=0xd6u8 EXP[17u64]=0x20u8 EXP[18u64]=0xe4u8 EXP[19u64]=0x05u8 EXP[20u64]=0x0bu8 EXP[21u64]=0x57u8 EXP[22u64]=0x15u8 EXP[23u64]=0xdcu8
+    EXP[24u64]=0x83u8 EXP[25u64]=0xf4u8 EXP[26u64]=0xa9u8 EXP[27u64]=0x21u8 EXP[28u64]=0xd3u8 EXP[29u64]=0x6cu8 EXP[30u64]=0xe9u8 EXP[31u64]=0xceu8
+    EXP[32u64]=0x47u8 EXP[33u64]=0xd0u8 EXP[34u64]=0xd1u8 EXP[35u64]=0x3cu8 EXP[36u64]=0x5du8 EXP[37u64]=0x85u8 EXP[38u64]=0xf2u8 EXP[39u64]=0xb0u8
+    EXP[40u64]=0xffu8 EXP[41u64]=0x83u8 EXP[42u64]=0x18u8 EXP[43u64]=0xd2u8 EXP[44u64]=0x87u8 EXP[45u64]=0x7eu8 EXP[46u64]=0xecu8 EXP[47u64]=0x2fu8
+    EXP[48u64]=0x63u8 EXP[49u64]=0xb9u8 EXP[50u64]=0x31u8 EXP[51u64]=0xbdu8 EXP[52u64]=0x47u8 EXP[53u64]=0x41u8 EXP[54u64]=0x7au8 EXP[55u64]=0x81u8
+    EXP[56u64]=0xa5u8 EXP[57u64]=0x38u8 EXP[58u64]=0x32u8 EXP[59u64]=0x7au8 EXP[60u64]=0xf9u8 EXP[61u64]=0x27u8 EXP[62u64]=0xdau8 EXP[63u64]=0x3eu8
+
     let inp : *u8 = malloc(1u64)
     let out : *u8 = malloc(64u64)
     sha512_oneshot(inp, 0u64, out)
-    let b0 : u32 = sha512_digest_byte(0u32)
-    free(inp)
-    free(out)
-    return b0 as u64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if out[i] != EXP[i] { free(inp) free(out) return 10u64 + i }
+        i = i + 1u64
+    }
+    free(inp) free(out)
+    return 99u64
 }

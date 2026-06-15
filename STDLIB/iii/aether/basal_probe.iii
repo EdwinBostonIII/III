@@ -6,8 +6,10 @@
  * that, executed inside a transactional quarantine, may reveal what the
  * host actually does for a previously untested operation.  It maintains a
  * FIXED finite hypothesis space with fixed-point weights (denominator
- * 2^32), selects the next probe by maximizing EXACT algebraic information
- * gain over predeclared likelihood tables, and on each observed outcome
+ * 2^32), selects the next probe by maximizing an ORDER-PRESERVING fixed-point
+ * information gain (the entropy uses a fixed-point log2, so the gain RANKS probes
+ * correctly but its magnitude is an approximation, not the exact real-valued bits)
+ * over predeclared likelihood tables, and on each observed outcome
  * performs one exact Bayesian conditioning step and publishes a
  * PROBE_RESULT witness fragment.  Every probe is reversible-or-refused
  * (W20): a refused quarantine yields NO weight update and NO publication.
@@ -405,7 +407,8 @@ fn bprobe_posterior(probe: u32, outcome: u32, out: *u64) -> i32 {
     return BPROBE_OK
 }
 
-// ---- internal: exact expected entropy reduction (information gain) ----
+// ---- internal: order-preserving fixed-point expected entropy reduction (information gain;
+//      fixed-point log2 -> ranks correctly, magnitude approximate, NOT the exact real bits) ----
 fn bprobe_information_gain(probe: u32) -> u64 {
     let post_p : *u64 = (&BPROBE_POST as u64) as *u64
     let w_p    : *u64 = (&BPROBE_W as u64) as *u64

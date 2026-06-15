@@ -1257,8 +1257,9 @@ fn cov_reach_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
     let mut i : u64 = 0u64
     while i < CV_NUNREACH {
         let idx : u64 = (CV_RIDX[i] as u64) & 0xFFFFFFFFu64
-        fs_write(h, cv_name_addr(idx), CV_ELEN[idx])
-        fs_write(h, (&CV_NL as u64), 1u64)
+        let wn : u64 = CV_ELEN[idx]
+        if fs_write(h, cv_name_addr(idx), wn) != wn { fs_close(h)  return -1i32 }   /* [P4] don't swallow a short/failed disk write */
+        if fs_write(h, (&CV_NL as u64), 1u64) != 1u64 { fs_close(h)  return -1i32 }
         i = i + 1u64
     }
     fs_close(h)
@@ -1328,8 +1329,9 @@ fn cov_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
     let mut i : u64 = 0u64
     while i < CV_NUNCOV {
         let idx : u64 = (CV_UIDX[i] as u64) & 0xFFFFFFFFu64
-        fs_write(h, cv_name_addr(idx), CV_ELEN[idx])
-        fs_write(h, (&CV_NL as u64), 1u64)
+        let wn : u64 = CV_ELEN[idx]
+        if fs_write(h, cv_name_addr(idx), wn) != wn { fs_close(h)  return -1i32 }   /* [P4] don't swallow a short/failed disk write */
+        if fs_write(h, (&CV_NL as u64), 1u64) != 1u64 { fs_close(h)  return -1i32 }
         i = i + 1u64
     }
     fs_close(h)
@@ -1346,8 +1348,9 @@ fn cov_gate_report_write(cap_id: u64, path_addr: u64) -> i32 @export {
     let mut i : u64 = 0u64
     while i < CV_NGUND {
         let idx : u64 = (CV_GIDX[i] as u64) & 0xFFFFFFFFu64
-        fs_write(h, cv_name_addr(idx), CV_ELEN[idx])
-        fs_write(h, (&CV_NL as u64), 1u64)
+        let wn : u64 = CV_ELEN[idx]
+        if fs_write(h, cv_name_addr(idx), wn) != wn { fs_close(h)  return -1i32 }   /* [P4] don't swallow a short/failed disk write */
+        if fs_write(h, (&CV_NL as u64), 1u64) != 1u64 { fs_close(h)  return -1i32 }
         i = i + 1u64
     }
     fs_close(h)

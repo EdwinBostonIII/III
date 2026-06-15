@@ -33,6 +33,7 @@ extern @abi(c-msvc-x64) fn rb_record(source_id: u32, live: *u8, len: u32, out: *
 
 const DF_ADMIT : i32 = 0i32      /* admitted to the deterministic core */
 const DF_DENY  : i32 = 1i32      /* default-denied from the core (provisional or unknown tier) */
+const DF_E_NORECORD : i32 = -1i32 /* [P4] a provisional value that could NOT be recorded for replay (witness/obs log exhausted) -- distinct from a normal DENY so the un-replayable observation is observable */
 
 /* THE FIREWALL VERDICT (default-deny): admit to the deterministic core iff the value is CANONICAL. */
 fn df_admit(tier: u32) -> i32 @export { return reach_oracle_admit_canonical(tier) }
@@ -58,7 +59,8 @@ fn df_pin_authentic(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 @expor
  * Returns DF_ADMIT / DF_DENY. */
 fn df_ingress(tier: u32, source_id: u32, live: *u8, len: u32, out: *u8) -> i32 @export {
     if reach_oracle_is_provisional(tier) == 1u8 {
-        rb_record(source_id, live, len, out)   /* record for replay (passes live->out AND logs) */
+        let h : u64 = rb_record(source_id, live, len, out)   /* record for replay (passes live->out AND logs) */
+        if h == 0xFFFFFFFFFFFFFFFFu64 { return DF_E_NORECORD }   /* [P4] RB_SENTINEL: the witness/obs log is exhausted -> this provisional value can NOT be replayed; surface it distinctly instead of an indistinguishable DENY */
         return DF_DENY
     }
     let adm : i32 = reach_oracle_admit_canonical(tier)

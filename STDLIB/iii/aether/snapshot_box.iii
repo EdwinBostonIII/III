@@ -96,6 +96,7 @@ fn snb_meet(a: u32, b: u32) -> u32 @export { return sl_meet(a, b) }
  * checkpoint image is detected (the cad re-derivation will not match). */
 fn snb_root_matches(slot: u32) -> u8 @export {
     if slot >= SNB_MAXSNAP { return 0u8 }
+    if SNB_CREATED[slot] == 0u8 { return 0u8 }   /* [P6] sibling-consistency with snb_restore: a never-checkpointed slot has no valid stored root to match */
     cad_oneshot(SNB_SUITE, snb_img_ptr(slot) as *u8, SNB_NBLOCKS * 8u64, (&SNB_TMPROOT as u64) as *u8)
     let rs : *u8 = snb_root_ptr(slot) as *u8
     let rn : *u8 = (&SNB_TMPROOT as u64) as *u8

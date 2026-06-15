@@ -390,7 +390,7 @@ fn sha512_finalize_internal() -> u32 @export {
 }
 
 fn sha512_final(out_64: *u8) -> u32 @constant_time @export {
-    sha512_finalize_internal()
+    if sha512_finalize_internal() != 0u32 { return 1u32 }   /* [P6] a cold call (SHA512_INIT==0) -> finalize refused; do NOT emit a zero/stale digest from SHA512_H (mirror sha256_final's no-write-on-error contract) */
     let mut j : u32 = 0u32
     while j < 8u32 {
         let h_val : u64 = SHA512_H[j]

@@ -1171,6 +1171,7 @@ declare -A EXPECTED=(
     [1596_coldinit_guards]=99
     [1597_production_hardening]=99
     [1598_resolver_tiebreak]=99
+    [1599_production_hardening_2]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

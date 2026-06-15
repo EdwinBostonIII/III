@@ -1,0 +1,40 @@
+/* 1599_production_hardening_2.iii -- wave-5 RE-AUDIT (wx33gxkp7): the second-round hardening gaps,
+ * each proven to FIRE on the bad path + a positive arm:
+ *
+ *  (P6) sha512_final: a COLD call (no sha512_init -> SHA512_INIT==0) now returns 1 (error) WITHOUT
+ *       emitting a zero/stale digest from SHA512_H -- mirrors sha256_final's no-write-on-error contract.
+ *       After init+update the final still succeeds and emits the correct digest.
+ *  (P6) develop_up.du_encapsulate: a SECOND encapsulation while a box is open is now rejected (DU_E)
+ *       -- the single-box invariant -- instead of silently orphaning the prior reversible envelope.
+ * 99 = both guards fire on the bad path AND both valid paths still work. */
+module corpus_1599
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_final(out_64: *u8) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 from "develop_up.iii"
+
+fn main() -> u64 {
+    /* (P6) sha512_final cold-call: SHA512_INIT==0 (fresh process) -> refused, no zero-digest emit */
+    let out : *u8 = malloc(64u64)
+    if sha512_final(out) != 1u32 { return 1u64 }      /* cold -> error 1 (was: silently emit zero digest) */
+    /* after a proper init+update the final succeeds and emits the correct "abc" digest */
+    sha512_init()
+    let inp : *u8 = malloc(3u64)  inp[0] = 97u8  inp[1] = 98u8  inp[2] = 99u8
+    sha512_update(inp, 3u64)
+    if sha512_final(out) != 0u32 { return 2u64 }       /* armed -> ok */
+    if out[0u64] != 0xddu8 { return 3u64 }             /* SHA-512("abc")[0] = 0xdd -> the success path still emits the real digest */
+
+    /* (P6) du_encapsulate single-box invariant: double-open rejected */
+    let root_cap : u64 = cap_env_init()
+    let full : u64 = cap_attenuate(root_cap, 0x5u64, 0u64)     /* DISK | COMPUTE */
+    if du_encapsulate(full, 100000u64, 100000u64) != 0i32 { return 4u64 }            /* first box -> OK */
+    if du_encapsulate(full, 100000u64, 100000u64) != (0i32 - 2i32) { return 5u64 }   /* second -> DU_E (single-box) */
+
+    free(out) free(inp)
+    return 99u64
+}

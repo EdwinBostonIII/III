@@ -60,6 +60,7 @@ var DU_OP       : [u8; 32]             /* snapshot op-id */
 /* ENCAPSULATE an opaque guest: zero-trust admission (DISK+COMPUTE rights), then wire the reversible disk,
  * the quota box, deterministic-replay recording, and a sealed behavioral baseline into ONE box. */
 fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 @export {
+    if DU_OPEN == 1u32 { return DU_E }   /* [P6] single-box invariant (header L18): refuse re-encapsulation while a box is open -- a second call would orphan the prior reversible envelope + quota box (a bounded resource leak walking toward REV_MAX_SLOTS) and silently wipe the replay log */
     if cap_verify_rights(guest_cap, DU_RIGHTS) == 0u8 { return DU_E_DENIED }
     let v : u32 = vbd_open(DU_VBD_TOKEN)
     if v == DU_NONE { return DU_E }

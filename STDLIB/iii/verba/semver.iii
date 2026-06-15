@@ -54,9 +54,14 @@ fn semver_is_ident_char(b: u8) -> u8 {
 }
 
 var SEMVER_OFF : u64 = 0u64
+/* [W89] out-of-band success flag: semver_parse_uint's old 0xFFFFFFFFFFFFFFFF failure sentinel COLLIDES with the
+ * valid u64 maximum 2^64-1, so a successfully-parsed max field was indistinguishable from failure (a valid
+ * version "18446744073709551615.0.0" was wrongly rejected).  Callers now check this flag, not the return value. */
+var SEMVER_UINT_OK : u8 = 0u8
 
 fn semver_parse_uint(src: *u8, src_len: u64, start: u64) -> u64 {
     SEMVER_OFF = start
+    SEMVER_UINT_OK = 0u8   /* [W89] default failure; set 1 only on the two success returns below */
     if start >= src_len { return 0xFFFFFFFFFFFFFFFFu64 }
     if semver_is_digit(src[start]) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
     /* No leading zeros except for the value 0 itself. */
@@ -67,6 +72,7 @@ fn semver_parse_uint(src: *u8, src_len: u64, start: u64) -> u64 {
             }
         }
         SEMVER_OFF = start + 1u64
+        SEMVER_UINT_OK = 1u8   /* [W89] success: the value 0 */
         return 0u64
     }
     let mut value : u64 = 0u64
@@ -89,6 +95,7 @@ fn semver_parse_uint(src: *u8, src_len: u64, start: u64) -> u64 {
         }
     }
     SEMVER_OFF = i
+    SEMVER_UINT_OK = 1u8   /* [W89] success: `value` is the parsed field (may legitimately be 2^64-1) */
     return value
 }
 
@@ -129,19 +136,19 @@ fn semver_parse(src: *u8, src_len: u64) -> i32 @export {
     SEMVER_LAST_BUILD_LEN = 0u64
 
     let major : u64 = semver_parse_uint(src, src_len, 0u64)
-    if major == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }
+    if SEMVER_UINT_OK == 0u8 { return SEMVER_FAIL }   /* [W89] out-of-band check; major may legitimately be 2^64-1 */
     let off1 : u64 = SEMVER_OFF
     if off1 >= src_len { return SEMVER_FAIL }
     if src[off1] != 46u8 { return SEMVER_FAIL }
 
     let minor : u64 = semver_parse_uint(src, src_len, off1 + 1u64)
-    if minor == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }
+    if SEMVER_UINT_OK == 0u8 { return SEMVER_FAIL }   /* [W89] out-of-band check */
     let off2 : u64 = SEMVER_OFF
     if off2 >= src_len { return SEMVER_FAIL }
     if src[off2] != 46u8 { return SEMVER_FAIL }
 
     let patch : u64 = semver_parse_uint(src, src_len, off2 + 1u64)
-    if patch == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }
+    if SEMVER_UINT_OK == 0u8 { return SEMVER_FAIL }   /* [W89] out-of-band check */
     let off3 : u64 = SEMVER_OFF
 
     SEMVER_LAST_MAJOR = major

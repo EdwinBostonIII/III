@@ -1143,6 +1143,7 @@ declare -A EXPECTED=(
     [1568_q128_round_dir]=99
     [1569_json_i64_min]=99
     [1570_rms_ceil_div_overflow]=99
+    [1571_semver_u64_max]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

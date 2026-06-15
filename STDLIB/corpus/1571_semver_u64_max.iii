@@ -1,0 +1,70 @@
+/* 1571_semver_u64_max.iii -- W89 FIX falsifier: a SemVer 2.0.0 numeric field at the u64 maximum (2^64-1) must
+ * PARSE (the module's own contract, semver.iii:80 -- "a numeric field >= 2^64 must be REJECTED, not silently
+ * wrapped" -- i.e. every value < 2^64, incl. the u64 max, MUST be accepted).
+ *
+ * THE DEFECT (return-channel sentinel collision, ultracode W88, the LAST defect before the vein closes):
+ * semver_parse_uint's *10+d overflow guard is arithmetically CORRECT (it computes 2^64-1 exactly + rejects >=2^64),
+ * but its FAILURE sentinel is 0xFFFFFFFFFFFFFFFF (semver.iii:60/61/66/82/85) which EQUALS the largest valid value
+ * 2^64-1.  On success it does `return value` (:92), so a successfully-parsed u64 max returns a bit pattern
+ * indistinguishable from failure, and the consumer `if major == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }`
+ * (:132/:138/:144) discards the correctly-parsed version.  So "18446744073709551615.0.0" is wrongly REJECTED.
+ *
+ * THE FIX (semver.iii): signal failure OUT-OF-BAND -- a module flag SEMVER_UINT_OK (default 0, set 1 on the two
+ * success returns), and the 3 consumers check it instead of `== 0xFF..FF` (mirrors inet's INET_LAST_ERROR + the
+ * clean sibling parsers pattern_form/parse).
+ *
+ * 99 = u64-max version parses (major == 2^64-1) AND max-1 parses AND 2^64 rejects AND "1.2.3" parses.
+ * TEETH: against the PRE-FIX lib semver_parse("18446744073709551615.0.0") == SEMVER_FAIL -> return 10. */
+module corpus_1571
+
+extern @abi(c-msvc-x64) fn semver_parse(src: u64, src_len: u64) -> i32 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_major() -> u64 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_minor() -> u64 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_patch() -> u64 from "semver.iii"
+
+var UMAX : [u8; 20]   /* "18446744073709551615" (2^64-1) */
+var BUF  : [u8; 28]
+var NV   : [u8; 8]
+
+fn set_umax() {
+    UMAX[0u64]=0x31u8 ; UMAX[1u64]=0x38u8 ; UMAX[2u64]=0x34u8 ; UMAX[3u64]=0x34u8 ; UMAX[4u64]=0x36u8
+    UMAX[5u64]=0x37u8 ; UMAX[6u64]=0x34u8 ; UMAX[7u64]=0x34u8 ; UMAX[8u64]=0x30u8 ; UMAX[9u64]=0x37u8
+    UMAX[10u64]=0x33u8 ; UMAX[11u64]=0x37u8 ; UMAX[12u64]=0x30u8 ; UMAX[13u64]=0x39u8 ; UMAX[14u64]=0x35u8
+    UMAX[15u64]=0x35u8 ; UMAX[16u64]=0x31u8 ; UMAX[17u64]=0x36u8 ; UMAX[18u64]=0x31u8 ; UMAX[19u64]=0x35u8
+}
+/* "<19 common digits><last>.0.0"; returns length 24 */
+fn build_ver(last: u8) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 19u64 { BUF[i] = UMAX[i] ; i = i + 1u64 }
+    BUF[19u64] = last
+    BUF[20u64] = 0x2Eu8 ; BUF[21u64] = 0x30u8 ; BUF[22u64] = 0x2Eu8 ; BUF[23u64] = 0x30u8   /* ".0.0" */
+    return 24u64
+}
+
+fn main() -> u64 {
+    set_umax()
+
+    /* (A) TEETH -- u64 max "18446744073709551615.0.0" must parse, major == 2^64-1 */
+    let la : u64 = build_ver(0x35u8)
+    if semver_parse(&BUF as u64, la) != 0i32 { return 10u64 }       /* PRE-FIX: SEMVER_FAIL -> TEETH */
+    if semver_last_major() != 0xFFFFFFFFFFFFFFFFu64 { return 11u64 }
+    if semver_last_minor() != 0u64 { return 12u64 }
+    if semver_last_patch() != 0u64 { return 13u64 }
+
+    /* (B) control -- max-1 "18446744073709551614.0.0" parses (pre + post) */
+    let lb : u64 = build_ver(0x34u8)
+    if semver_parse(&BUF as u64, lb) != 0i32 { return 20u64 }
+    if semver_last_major() != 18446744073709551614u64 { return 21u64 }
+
+    /* (C) overflow control -- 2^64 "18446744073709551616.0.0" MUST be rejected */
+    let lc : u64 = build_ver(0x36u8)
+    if semver_parse(&BUF as u64, lc) != (0i32 - 1i32) { return 30u64 }   /* SEMVER_FAIL */
+
+    /* (D) sanity -- a normal version still parses */
+    NV[0u64]=0x31u8 ; NV[1u64]=0x2Eu8 ; NV[2u64]=0x32u8 ; NV[3u64]=0x2Eu8 ; NV[4u64]=0x33u8   /* "1.2.3" */
+    if semver_parse(&NV as u64, 5u64) != 0i32 { return 40u64 }
+    if semver_last_major() != 1u64 { return 41u64 }
+    if semver_last_patch() != 3u64 { return 42u64 }
+
+    return 99u64
+}

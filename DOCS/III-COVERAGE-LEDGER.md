@@ -2425,3 +2425,42 @@ mined out; these two are isolated boundary defects whose bug-templates (the ceil
 unsigned `v10 = acc*10` parse-overflow-guard idiom across ~8 OTHER parsers (http_client/server, intent_form,
 pattern_form, semver, transform_form, nl_lex, parse) -- run as W88.  If W88 is dry, the correctness-defect vein is
 declared CLOSED and the loop pivots off the stdlib-numeric surface.
+
+## Wave-88/89 — the v10 parse-guard family swept (the LAST wave) + semver sentinel-collision FIXED -> VEIN CLOSED (2026-06-14)
+
+W88 (a 6th ultracode Workflow, 11 agents) enumerated EVERY *10 accumulator in STDLIB/iii (12 files) and verified the
+guard ARITHMETIC is uniformly correct (each accepts its type max + rejects overflow via the two-stage `> MAX/10` +
+carry-wrap idiom): http_client/server Content-Length, inet octet, rfc3339 fixed-width, pattern_form/intent_form/
+transform_form, parse_decimal, nl_lex (intentional 24-bit pack), all CLEAN.  ONE survivor -- not a guard-arithmetic
+error but an adjacent RETURN-CHANNEL defect.
+
+**THE DEFECT (verba/semver.iii semver_parse_uint, W89):** the *10 guard correctly computes 2^64-1 and rejects >=2^64,
+but the FAILURE sentinel is 0xFFFFFFFFFFFFFFFF (:65/66/71/88/91) which EQUALS the largest valid value 2^64-1.  On
+success it does `return value` (:98), so a successfully-parsed u64-max MAJOR/MINOR/PATCH returns a bit pattern
+indistinguishable from failure, and the consumer `if X == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }` discarded it
+-- a valid "18446744073709551615.0.0" was wrongly REJECTED, violating the module's own :86 contract (a field < 2^64
+must be accepted).  W87-class (valid maximum wrongly rejected), empirically EXIT=20.
+
+**THE FIX (semver.iii):** signal failure OUT-OF-BAND -- a module flag SEMVER_UINT_OK (default 0, set 1 on the two
+success returns), and the 3 consumers check it instead of `== 0xFF..FF` (mirrors inet's INET_LAST_ERROR + the clean
+sibling parsers parse.iii/pattern_form).  Falsifier 1571 (u64-max parses with major==2^64-1; controls: max-1 parses,
+2^64 rejects, "1.2.3" sane); teeth 10->99; 127_semver / 1557_semver_ident / 1410 stay 99.  Count 1157 -> **1158**.
+
+**THE CORRECTNESS-DEFECT VEIN IS CLOSED.** The W79-W89 program -- 6 ultracode read-only discovery Workflows (~150
+agents total) across the identity / semantics-preservation / numeric-boundary / exactness-certificate / return-channel
+shapes -- fixed **10 real wrong-result defects** (rsa malleability, matrix M^0, NFD reorder, NFC Hangul, span
+reflexivity, pcc closure, gb_reduce normal-form, q128 exactness certificate, json i64::MIN, rms ceil-div, semver
+sentinel), every one adversarially refuted (3-skeptic), confirmed by an in-session compile-probe BEFORE the edit,
+teeth-proven, and full-corpus gated; corpus 1147 -> 1158, FAIL=0 throughout.  Two benign-but-real findings were
+correctly SEPARATED, not forced (the XII root-confluence cert -- probe-proven denotation-preserving; the cg_r3
+i32-call-result signed-op trap -- latent, zero stdlib trigger, verification-asymmetric).  W88's exhaustive
+*10-accumulator enumeration + the prior waves' lens-sweeps (identity, witness-metadata, false-accept, negative-path)
+all returning to the floor is the SUCCESS condition: the input-validation + math-identity correctness surface is
+mined out.  The loop does NOT stop (continuous-improvement directive): it CONTINUES under the bar-keeper rule -- a
+wave that returns 0-confirmed after 3-skeptic refutation + in-session probe is a SUCCESS (a saturation proof), never
+a reason to manufacture a marginal fix.  It rotates to fresh axes that still carry an ORACLE THAT CANNOT LIE: W90
+(cross-module constant-agreement + constant-vs-published-authority) ran next and cleanly saturated the hash-IV/FNV
+lens (one survivor, a bespoke self-differential digest -> false positive, no edit); W91 sharpens to crypto
+field/group-param cross-module equality (KAT-pinned twin as the tiebreaker).  Performance is explicitly OFF the menu
+as a primary axis (its wall-clock oracle lies -- the measured Montgomery "speedup" was 2.5x SLOWER -- and its terrain
+is the fragile self-host compiler).

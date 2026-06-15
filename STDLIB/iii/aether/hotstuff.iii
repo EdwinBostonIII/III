@@ -1,9 +1,32 @@
 /* aether/hotstuff.iii — V1 Stage 5 (gospel L24059): deterministic HotStuff BFT.
  *
  * Three-phase pacemaker (PREPARE, PRE-COMMIT, COMMIT) with optimistic linearity.
- * Safety via the locked-block discipline; liveness via view change on timeout.
  * Leader rotation is the closed form leader = view mod n (no randomness — the
  * determinism mandate forbids random leader selection).  Quorum = 2f+1.
+ *
+ * SAFETY MODEL — what is ENFORCED-AND-PROVEN vs what is RESERVED (precise scope, no overclaim):
+ *   ENFORCED + machine-checked: safety rests on TWO consumed theorems, both bound to the LIVE f set by
+ *     hs_init (KAT 1314 hs_safety_proofs_kat) — Byzantine quorum-intersection (bq_safe: any two 2f+1
+ *     quorums in 3f+1 share >=1 honest node) and vote-count no-overflow (vrp_no_overflow) — together with
+ *     view-monotonic safe-voting in the pacemaker (a proposal must advance past HS_LOCKED_VIEW, line ~262).
+ *     Liveness: view-change on timeout, certified by an LTL G(quorum => F(advance)) proof (hs_liveness_kat).
+ *   CONSUMED SURFACE (production): hs_verify_qc is the only entry the live consumers (aether/fed_admit,
+ *     aether/fed_seal) call — a real 2f+1 Ed25519 quorum-certificate verifier over the prefix-signer QC
+ *     format (sig[i] is peer i's signature; >= 2f+1 distinct valid sigs over block_mhash||view required).
+ *   LIFECYCLE (single-engine model, NOW threaded -- [T1a]): the locked-QC CHAIN is wired end-to-end -- the
+ *     PREPARE quorum forms the prepareQC into HS_HIGH_QC (hs_form_qc_from_votes), the replica LOCKS on it at
+ *     pre-commit, the next proposal carries it as a real justify-QC, and hs_handle_propose enforces the
+ *     canonical safe-vote rule (hs_justify_ok: genesis only while nothing is locked, otherwise a VALID 2f+1
+ *     QC with view >= the locked view), closing the forged-justify-QC hole the view-only check left open.
+ *     hs_selftest drives the full propose -> vote -> commit -> new-view loop as a faithful ONE-engine model;
+ *     no production module drives it (the consumers use only hs_verify_qc).  Bounded to f=1 by the 256-byte
+ *     parent_qc block field (a 2f+1 QC fits only n_sigs <= 3); larger federations degrade gracefully -- the
+ *     QC is not formed and HS_HIGH_QC stays genesis (no overflow).
+ *   RESERVED (deliberately unbuilt, NOT a partial): arbitrary-signer QCs -- any 2f+1 subset rather than the
+ *     prefix-signer format.  No in-tree QC origin produces them; the only consumed path (hs_verify_qc <-
+ *     fed_admit / fed_seal) verifies prefix-signer QCs from hs_compose_qc.  A signer-bitmap format would be a
+ *     BREAKING change to that working, verified surface for a capability nothing exercises, so it is declined
+ *     as a correctness judgment (protecting the consumed path), not deferred work.
  *
  * Public API: hs_init, hs_set_keypair, hs_propose, hs_handle_propose,
  *   hs_handle_vote, hs_handle_new_view, hs_tick, hs_committed_head,
@@ -91,6 +114,7 @@ var HS_VOTE_BLOCK            : [u8; 32]     /* mhash of the block votes must mat
 var HS_VIEW_TIMER_MS         : u32 = 0u32
 var HS_VOTE_BITMAP           : [u8; 8]      /* 64 bits, per-peer voted-or-not */
 var HS_VOTE_COUNT            : u32 = 0u32
+var HS_VOTE_SIGS             : [u8; 4096]   /* [T1a] peer-indexed vote sigs (64*64): the prepareQC's signatures */
 var HS_NV_BITMAP             : [u8; 8]      /* new-view timeout senders */
 var HS_NV_COUNT              : u32 = 0u32
 var HS_NODE_KEYS             : [u8; 64]     /* this node's seed(32) || pk(32) */
@@ -258,8 +282,12 @@ fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 @export {
     let block_view : u64 = hs_read_u64(msg, 256u64)
     let expected_leader : u32 = hs_leader_for_view(block_view)
     if ident_eq(pkp, ((&HS_PEER_KEYS as u64) + (expected_leader as u64) * 32u64) as *u8) == 0u8 { return HS_E_BAD_PROPOSER }
-    /* Safe-vote check: block must advance past the locked view. */
+    /* Safe-vote check (canonical HotStuff): the block must advance past the locked view AND carry a valid
+     * justify-QC.  [T1a] the justify check rejects a forged/insufficient parent_qc at a high view -- the
+     * view-number check alone (the line below) would accept it, the premise the quorum-intersection safety
+     * theorem assumes away. */
     if block_view <= HS_LOCKED_VIEW { return HS_E_UNSAFE_VOTE }
+    if hs_justify_ok(msg) == 0u8 { return HS_E_BAD_QC }
     HS_HIGH_VIEW = block_view
     /* Bind subsequent votes to THIS block's mhash: a Byzantine peer voting for
      * a conflicting block (different mhash) is then rejected by hs_handle_vote
@@ -268,6 +296,57 @@ fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 @export {
     let mut bk : u64 = 0u64
     while bk < 32u64 { bvp[bk] = msg[296u64 + bk]  bk = bk + 1u64 }
     return HS_OK
+}
+
+/* [T1a] Form the prepareQC from the quorum's accumulated votes into HS_HIGH_QC (and copy it into HS_LOCKED_QC),
+ * in the prefix-signer QC format (sig[i] = peer i's signature over block_mhash||view, the format hs_verify_qc
+ * checks).  Called at the PREPARE->PRECOMMIT quorum: the result is the justify-QC the NEXT proposal carries and
+ * the certificate the replica LOCKS on.  Bounded to the 256-byte parent_qc block field: forms only when
+ * 44 + n_sigs*64 <= 256 (n_sigs <= 3 -- the f=1 federation the block layout supports); larger configurations
+ * leave HS_HIGH_QC unchanged (no overflow, graceful degradation to the pre-thread behaviour). */
+fn hs_form_qc_from_votes(view: u64) -> i32 {
+    let ns : u32 = HS_QUORUM
+    if 44u64 + (ns as u64) * 64u64 > 256u64 { return HS_E_BAD_QC }   /* QC would not fit the 256B parent_qc field */
+    let qc : *u8 = (&HS_HIGH_QC as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { qc[k] = HS_VOTE_BLOCK[k] ; k = k + 1u64 }       /* block_mhash this quorum voted for */
+    qc[32u64] = (view & 0xFFu64) as u8
+    qc[33u64] = ((view >> 8u64)  & 0xFFu64) as u8
+    qc[34u64] = ((view >> 16u64) & 0xFFu64) as u8
+    qc[35u64] = ((view >> 24u64) & 0xFFu64) as u8
+    qc[36u64] = ((view >> 32u64) & 0xFFu64) as u8
+    qc[37u64] = ((view >> 40u64) & 0xFFu64) as u8
+    qc[38u64] = ((view >> 48u64) & 0xFFu64) as u8
+    qc[39u64] = ((view >> 56u64) & 0xFFu64) as u8
+    qc[40u64] = (ns & 0xFFu32) as u8
+    qc[41u64] = ((ns >> 8u32)  & 0xFFu32) as u8
+    qc[42u64] = ((ns >> 16u32) & 0xFFu32) as u8
+    qc[43u64] = ((ns >> 24u32) & 0xFFu32) as u8
+    let mut i : u64 = 0u64
+    while i < (ns as u64) * 64u64 { qc[44u64 + i] = HS_VOTE_SIGS[i] ; i = i + 1u64 }   /* peers 0..ns-1, prefix-signer */
+    let lk : *u8 = (&HS_LOCKED_QC as u64) as *u8
+    let mut m : u64 = 0u64
+    while m < 256u64 { lk[m] = qc[m] ; m = m + 1u64 }                /* pre-commit LOCK on the prepareQC */
+    return HS_OK
+}
+
+/* [T1a] Safe-vote justify check (canonical HotStuff): the proposal's parent_qc (msg[0..256]) must be the
+ * GENESIS QC (all-zero) only while nothing is locked, OR a VALID quorum certificate (hs_verify_qc) whose view
+ * is at least the locked view.  This closes the forged-justify-QC hole: a Byzantine proposal carrying random
+ * or insufficient justify-QC bytes at a high view -- which the view-number check alone would ACCEPT -- is
+ * rejected here.  1 = safe to vote, 0 = reject. */
+fn hs_justify_ok(msg: *u8) -> u8 {
+    let mut allzero : u8 = 1u8
+    let mut i : u64 = 0u64
+    while i < 256u64 { if msg[i] != 0u8 { allzero = 0u8 } ; i = i + 1u64 }
+    if allzero == 1u8 {
+        if HS_LOCKED_VIEW == 0u64 { return 1u8 }    /* genesis extension is safe only before anything is locked */
+        return 0u8
+    }
+    if hs_verify_qc(msg, 256u32) == 0u8 { return 0u8 }              /* a real justify-QC must be a valid 2f+1 cert */
+    let qc_view : u64 = hs_read_u64(msg, 32u64)
+    if qc_view < HS_LOCKED_VIEW { return 0u8 }                      /* ... and not stale relative to the lock */
+    return 1u8
 }
 
 /* Real vote aggregation: verify the voter's signature over (block_mhash||view),
@@ -294,11 +373,23 @@ fn hs_handle_vote(msg: *u8, msg_len: u32) -> i32 @export {
     let bit : u8 = (one << sh) as u8
     if (HS_VOTE_BITMAP[byteidx] & bit) != 0u8 { return HS_E_DUPLICATE_VOTE }
     HS_VOTE_BITMAP[byteidx] = HS_VOTE_BITMAP[byteidx] | bit
+    /* [T1a] accumulate this voter's signature (peer-indexed) for prepareQC formation at quorum */
+    let sgp : *u8 = ((msg as u64) + 44u64) as *u8
+    let mut sj : u64 = 0u64
+    while sj < 64u64 { HS_VOTE_SIGS[(voter as u64) * 64u64 + sj] = sgp[sj] ; sj = sj + 1u64 }
     HS_VOTE_COUNT = HS_VOTE_COUNT + 1u32
     if HS_VOTE_COUNT >= HS_QUORUM {
         /* Quorum reached: advance the three-phase pacemaker. */
-        if HS_PHASE == HS_PHASE_PREPARE { HS_PHASE = HS_PHASE_PRECOMMIT } else { if HS_PHASE == HS_PHASE_PRECOMMIT { HS_PHASE = HS_PHASE_COMMIT } else {
-            /* COMMIT quorum: lock + commit this block. */
+        if HS_PHASE == HS_PHASE_PREPARE {
+            /* [T1a] the PREPARE quorum forms the prepareQC into HS_HIGH_QC and the replica LOCKS on it
+             * (canonical HotStuff pre-commit lock).  HS_HIGH_QC becomes the justify-QC the next proposal
+             * carries; HS_LOCKED_VIEW gates safe-voting in hs_handle_propose / hs_justify_ok. */
+            hs_form_qc_from_votes(view)
+            HS_HIGH_VIEW = view
+            HS_LOCKED_VIEW = view
+            HS_PHASE = HS_PHASE_PRECOMMIT
+        } else { if HS_PHASE == HS_PHASE_PRECOMMIT { HS_PHASE = HS_PHASE_COMMIT } else {
+            /* COMMIT quorum: commit this block (the lock was taken at pre-commit above). */
             ident_copy(msg, (&HS_COMMITTED_HEAD as u64) as *u8)
             HS_LOCKED_VIEW = view
         } }

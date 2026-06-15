@@ -1,0 +1,83 @@
+/* 1602_hotstuff_qc_lifecycle.iii -- aether::hotstuff [T1a] QC-threading lifecycle: the justify-QC safe-vote.
+ *
+ * Before T1a, hs_handle_propose accepted a proposal on the VIEW NUMBER alone -- a Byzantine leader could
+ * carry a forged/insufficient justify-QC at a high view and honest replicas would vote for it (the premise
+ * the quorum-intersection safety theorem assumes away).  T1a threads the prepareQC into HS_HIGH_QC at the
+ * PREPARE quorum and enforces the canonical safe-vote rule (hs_justify_ok): genesis only while nothing is
+ * locked, otherwise a VALID 2f+1 QC.  This KAT proves the teeth, non-tautologically -- the SAME validly-signed
+ * block is ACCEPTED with a genesis/valid justify-QC but REJECTED with a forged one:
+ *   (a) genesis parent_qc at view 1 (nothing locked)        -> ACCEPT (HS_OK)
+ *   (b) forged parent_qc (block_hash+sig unchanged, valid)  -> REJECT (HS_E_BAD_QC)   [the old code accepted]
+ *   (c) a valid 2f+1 QC (hs_compose_qc) as parent_qc        -> ACCEPT (HS_OK)
+ * 99 = all three verdicts correct. */
+module corpus_1602
+
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn hs_init(node_id: u32, peers: *u8, n_peers: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_set_keypair(kp: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_tick(elapsed_ms: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_propose(payload_mhash: *u8, out_block: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_compose_qc(block_mhash: *u8, view: u64, sigs: *u8, n_sigs: u32, out_qc: *u8) -> i32 from "hotstuff.iii"
+
+var K_SEED  : [u8; 128]
+var K_PK    : [u8; 128]
+var K_KP    : [u8; 64]
+var K_BLOCK : [u8; 424]
+var K_PAY   : [u8; 32]
+var K_QMH   : [u8; 32]
+var K_QSI   : [u8; 40]
+var K_QSIGS : [u8; 192]
+var K_QC    : [u8; 256]
+
+fn main() -> u64 {
+    /* 4 distinct seeds -> 4 real keypairs */
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let mut j : u64 = 0u64
+        while j < 32u64 { K_SEED[i * 32u64 + j] = (i * 7u64 + j + 1u64) as u8  j = j + 1u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 4u64 {
+        if ed25519_pubkey(((&K_SEED as u64) + i * 32u64) as *u8, ((&K_PK as u64) + i * 32u64) as *u8) != 1u8 { return 1u64 }
+        i = i + 1u64
+    }
+    hs_init(1u32, (&K_PK as u64) as *u8, 4u32)        /* node 1 = leader for view 1 */
+    let mut k : u64 = 0u64
+    while k < 32u64 { K_KP[k] = K_SEED[32u64 + k]  K_KP[32u64 + k] = K_PK[32u64 + k]  k = k + 1u64 }
+    hs_set_keypair((&K_KP as u64) as *u8)
+    if hs_tick(5000u32) != (0i32 - 6i32) { return 2u64 }     /* HS_E_TIMEOUT -> advance to view 1 */
+
+    let mut p : u64 = 0u64
+    while p < 32u64 { K_PAY[p] = (p + 9u64) as u8  p = p + 1u64 }
+    if hs_propose((&K_PAY as u64) as *u8, (&K_BLOCK as u64) as *u8) != 0i32 { return 3u64 }
+
+    /* (a) genesis parent_qc, nothing locked -> ACCEPT */
+    if hs_handle_propose((&K_BLOCK as u64) as *u8, 424u32) != 0i32 { return 4u64 }
+
+    /* (b) TEETH: forge parent_qc (block_hash[296..328] + sig[360..424] untouched, so the proposer-sig and
+     * leader checks still pass) -> the justify check REJECTS what the view-only rule would have accepted */
+    let mut g : u64 = 0u64
+    while g < 256u64 { K_BLOCK[g] = 0xFFu8  g = g + 1u64 }
+    if hs_handle_propose((&K_BLOCK as u64) as *u8, 424u32) != (0i32 - 2i32) { return 5u64 }   /* HS_E_BAD_QC */
+
+    /* (c) a VALID 2f+1 QC as parent_qc -> ACCEPT.  Peers 0,1,2 sign (qmh || view 1). */
+    let mut q : u64 = 0u64
+    while q < 32u64 { K_QMH[q] = (q + 1u64) as u8  K_QSI[q] = K_QMH[q]  q = q + 1u64 }
+    K_QSI[32u64] = 1u8
+    q = 33u64
+    while q < 40u64 { K_QSI[q] = 0u8  q = q + 1u64 }
+    i = 0u64
+    while i < 3u64 {
+        if ed25519_sign(((&K_SEED as u64) + i * 32u64) as *u8, ((&K_PK as u64) + i * 32u64) as *u8, (&K_QSI as u64) as *u8, 40u64, ((&K_QSIGS as u64) + i * 64u64) as *u8) != 1u8 { return 6u64 }
+        i = i + 1u64
+    }
+    if hs_compose_qc((&K_QMH as u64) as *u8, 1u64, (&K_QSIGS as u64) as *u8, 3u32, (&K_QC as u64) as *u8) != 0i32 { return 7u64 }
+    let mut c : u64 = 0u64
+    while c < 256u64 { K_BLOCK[c] = K_QC[c]  c = c + 1u64 }
+    if hs_handle_propose((&K_BLOCK as u64) as *u8, 424u32) != 0i32 { return 8u64 }
+
+    return 99u64
+}

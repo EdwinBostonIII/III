@@ -1,0 +1,62 @@
+/* 1590_cgr_intern_hash_collisions.iii -- adversarial collision oracle for the [PERF-CGR-1] hash index in
+ * numera/congruence (cgr_intern / cgr_contains O(n^2) linear scan -> O(1) open-addressing probe).
+ *
+ * The index must be BYTE-IDENTICAL to the old linear scan.  The dangerous failure is a hash COLLISION
+ * mishandled: two distinct content-addresses that hash to the same bucket must still get DISTINCT classes
+ * (the linear probe + cgr_addr_eq must disambiguate).  This KAT crams 64 distinct addresses into just 8
+ * hash buckets (byte[0]=j&7 -> 8 buckets, 8 collisions each; byte[8]=j distinguishes them):
+ *   (1) interning them yields classes 0..63 IN ORDER (distinct -- a hash-ONLY lookup with no addr_eq would
+ *       merge colliding addresses and return the wrong class);
+ *   (2) re-interning each returns the SAME class (dedup -- no duplicate insertion despite the collisions);
+ *   (3) cgr_contains is 1 for every interned address and 0 for an unseen one (even in a probed bucket).
+ * 99 = the hash index is collision-correct and byte-identical to the scan it replaced. */
+module corpus_1590
+
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_contains(p: *u8) -> u8 from "congruence.iii"
+
+const N : u32 = 64u32
+var ADDR   : [u8; 32]
+var UNSEEN : [u8; 32]
+
+fn build(j: u32) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 32u64 { ADDR[k] = 0u8  k = k + 1u64 }
+    ADDR[0u64] = (j & 7u32) as u8      /* hash bucket = j & 7 -> only 8 buckets for 64 keys (heavy probing) */
+    ADDR[8u64] = (j & 0xFFu32) as u8   /* distinguishes the address (j in 0..63) */
+    return 0i32
+}
+
+fn main() -> u64 {
+    cgr_init()
+    let ap : *u8 = (&ADDR as u64) as *u8
+
+    /* (1) intern 64 colliding-bucket addresses -> classes 0..63 in order (collision disambiguated) */
+    let mut j : u32 = 0u32
+    while j < N {
+        build(j)
+        if cgr_intern(ap, j as u64) != j { return 10u64 }
+        j = j + 1u32
+    }
+    /* (2) re-intern each -> SAME class (dedup; no duplicate insertion) */
+    j = 0u32
+    while j < N {
+        build(j)
+        if cgr_intern(ap, 999u64) != j { return 20u64 }
+        j = j + 1u32
+    }
+    /* (3) cgr_contains: every interned address present */
+    j = 0u32
+    while j < N {
+        build(j)
+        if cgr_contains(ap) != 1u8 { return 30u64 }
+        j = j + 1u32
+    }
+    /* (4) cgr_contains: an unseen address absent */
+    let mut k : u64 = 0u64
+    while k < 32u64 { UNSEEN[k] = 0xFFu8  k = k + 1u64 }
+    if cgr_contains((&UNSEEN as u64) as *u8) != 0u8 { return 40u64 }
+
+    return 99u64
+}

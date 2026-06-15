@@ -38,7 +38,24 @@ var CGR_N      : [u32; 1]       /* number of interned items */
 var CGR_KA     : [u8; 32]       /* KAT scratch: content-address A */
 var CGR_KB     : [u8; 32]       /* KAT scratch: content-address B */
 
-fn cgr_init() -> i32 @export { CGR_N[0u64] = 0u32 ; return 0i32 }
+/* [PERF-CGR-1] open-addressing index over the 32-byte addresses: addr-hash -> class_index+1 (0 = empty).
+ * Turns the O(n) linear scan in cgr_intern/cgr_contains into O(1) amortized (O(n^2) -> O(n) interning).
+ * BYTE-IDENTICAL: addresses are UNIQUE in the ring (cgr_intern is the only inserter and inserts only fresh
+ * addresses), so the linear scan's first-match is the unique match -- the hash lookup returns the same idx.
+ * Kept in sync by cgr_intern (the only inserter); cleared by cgr_init.  2x CGR_MAX slots => load <= 0.5. */
+const CGR_HSLOTS : u32 = 2048u32
+const CGR_HMASK  : u32 = 2047u32
+var CGR_HASH   : [u32; 2048]
+
+/* hash of the 32-byte content-address: low 11 bits of its first two (random, content-addressed) bytes. */
+fn cgr_hash_of(p: *u8) -> u32 { return (((p[0u64] as u32) | ((p[1u64] as u32) << 8u32)) & CGR_HMASK) }
+
+fn cgr_init() -> i32 @export {
+    CGR_N[0u64] = 0u32
+    let mut h : u32 = 0u32
+    while h < CGR_HSLOTS { CGR_HASH[h as u64] = 0u32  h = h + 1u32 }
+    return 0i32
+}
 
 /* copy the 32-byte address at p into item i's slot */
 fn cgr_store_addr(i: u32, p: *u8) -> i32 {
@@ -69,15 +86,30 @@ fn cgr_find(i: u32) -> u32 @export {
 /* intern a function by its 32-byte content-address.  An identical address returns the existing
  * class (AUTOMATIC congruence -- sound dedup); a fresh address creates a new singleton class. */
 fn cgr_intern(p: *u8, cost: u64) -> u32 @export {
+    /* [PERF-CGR-1] hash-probe instead of the O(n) linear scan -- byte-identical (unique addresses). */
+    let mut h : u32 = cgr_hash_of(p)
+    let mut probes : u32 = 0u32
+    let mut slot : u32 = CGR_HSLOTS    /* first empty slot in the chain = insertion point; HSLOTS = none yet */
+    let mut found : u32 = CGR_FULL
+    while probes < CGR_HSLOTS {
+        let v : u32 = CGR_HASH[h as u64]
+        if v == 0u32 { slot = h  probes = CGR_HSLOTS }   /* empty -> key absent; insert here */
+        else {
+            let idx : u32 = v - 1u32
+            if cgr_addr_eq(idx, p) == 1u32 { found = idx  probes = CGR_HSLOTS }
+            else { h = (h + 1u32) & CGR_HMASK  probes = probes + 1u32 }
+        }
+    }
+    if found != CGR_FULL { return cgr_find(found) }
     let n : u32 = CGR_N[0u64]
-    let mut i : u32 = 0u32
-    while i < n { if cgr_addr_eq(i, p) == 1u32 { return cgr_find(i) } ; i = i + 1u32 }
     if n >= CGR_MAX { return CGR_FULL }
+    if slot == CGR_HSLOTS { return CGR_FULL }   /* table full -- unreachable: CGR_HSLOTS (2048) > CGR_MAX (1024) */
     cgr_store_addr(n, p)
     CGR_PARENT[n as u64] = n
     CGR_RANK[n as u64] = 0u32
     CGR_COST[n as u64] = cost
     CGR_N[0u64] = n + 1u32
+    CGR_HASH[slot as u64] = n + 1u32
     return n
 }
 
@@ -85,13 +117,20 @@ fn cgr_intern(p: *u8, cost: u64) -> u32 @export {
  * ALREADY interned in the ring.  Unlike cgr_intern it does NOT insert -- an audit must never
  * mutate the audited set.  History-independent; rejects a fresh address even at capacity. */
 fn cgr_contains(p: *u8) -> u8 @export {
-    let n : u32 = CGR_N[0u64]
-    let mut i : u32 = 0u32
-    while i < n {
-        if cgr_addr_eq(i, p) == 1u32 { return 1u8 }
-        i = i + 1u32
+    /* [PERF-CGR-1] hash-probe (read-only; byte-identical to the linear scan). */
+    let mut h : u32 = cgr_hash_of(p)
+    let mut probes : u32 = 0u32
+    let mut res : u8 = 0u8
+    while probes < CGR_HSLOTS {
+        let v : u32 = CGR_HASH[h as u64]
+        if v == 0u32 { probes = CGR_HSLOTS }
+        else {
+            let idx : u32 = v - 1u32
+            if cgr_addr_eq(idx, p) == 1u32 { res = 1u8  probes = CGR_HSLOTS }
+            else { h = (h + 1u32) & CGR_HMASK  probes = probes + 1u32 }
+        }
     }
-    return 0u8
+    return res
 }
 
 /* CERTIFIED merge: join the classes of a and b ONLY when proof_ok==1 (a discharged kernel proof

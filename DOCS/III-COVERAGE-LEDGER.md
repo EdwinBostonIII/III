@@ -2464,3 +2464,53 @@ lens (one survivor, a bespoke self-differential digest -> false positive, no edi
 field/group-param cross-module equality (KAT-pinned twin as the tiebreaker).  Performance is explicitly OFF the menu
 as a primary axis (its wall-clock oracle lies -- the measured Montgomery "speedup" was 2.5x SLOWER -- and its terrain
 is the fragile self-host compiler).
+
+## Wave-90/91/92 — the crypto-constant surface mined out (3 clean saturations, the sharpest PROVEN) (2026-06-14)
+
+- **W90 (constant-authority, 18-lens Workflow, 25 agents):** CLEAN. One survivor (groebner GROEBNER_FNV_OFF1/OFF3 =
+  the FNV-1a *prime* not the offset basis) was a FALSE POSITIVE -- a bespoke "four independently-seeded lanes" digest
+  (groebner.iii:49) that XOR-masks every lane and is consumed only self-differentially (its own KAT + corpus 1490,
+  DIGA==DIGB with identical constants) -> no input yields a wrong result, no canonical-FNV interop is claimed.  All 3
+  skeptics voted "real" (anchored on a nonexistent multi-lane-FNV spec); the synthesis critic + in-session read caught
+  it.  LESSON: the 3-skeptic vote is necessary-not-sufficient; the synthesis critic + in-session verify are the true
+  bar-keeper.  KAT-pinned families (sha2/sha3/aes/keccak/curve25519/p256/secp256k1/mlkem/mldsa/base-N/crc) surfaced 0.
+- **W91 (field/group-param cross-module equality, 9-lens Workflow, 10 agents):** CLEAN, 0 raw candidates.  Every
+  multi-copy crypto constant is byte-equal + KAT-pinned (ML-KEM q=3329 x3, ML-DSA q=8380417 x3, Ed25519 L x3);
+  everything else is single-source or runtime-derived-and-self-certified (Montgomery nprime/R^2, Barrett mu, P-256/384
+  primes via extern).  secp256k1 not shipped.
+- **W92 (NTT zeta-table correctness, IN-SESSION recompute, no Workflow -- the cheaper+more-conclusive tool for a
+  COMPUTABLE oracle):** PROVEN clean.  ML-KEM mlkem.iii KZ[128] recomputed = 17^bitrev7(i) mod 3329 (PowerShell
+  BigInteger.ModPow) -> 0 mismatches.  ML-DSA mldsa.iii MLDSA_ZETAS[256] is runtime-derived mldsa_powmod(1753,
+  bitrev8(i)) mod 8380417 -- correct by construction (square-and-multiply, operands<q<2^23 so products<2^46 no
+  overflow; bitrev8 loop correct; generator 1753 + q correct = FIPS 204).  fp256/fp384 Montgomery R^2/ONE are
+  runtime-derived from the (verified P-256/P-384) primes, not hardcoded literals.  EFFICIENCY LAW (advisor): a
+  computable/published oracle is verified by RECOMPUTING in-session, not by an expensive Workflow fan-out; reserve
+  fan-outs for open SEARCH.  Three clean saturations -> the crypto-constant + constant-relation neighborhood is
+  genuinely exhausted.
+
+## Wave-93 — the cg_r3 i32-call-result signed-op TRAP root-fixed in the compiler (task #71 closed) (2026-06-14)
+
+The one known real-but-deferred defect (probes _w79_i32probe/_w80_u32probe; W79/W80).  ROOT CAUSE (Theory B, not the
+task title's Theory A): cg_typeclass.iii `iii_expr_typeclass` -- the ONE shared integer-type-class resolver for all
+backends -- had NO TC_K_EXPR_CALL case, so a CALL expression classified as TC_UNK -> iii_tc_expr_is_signed()=0 ->
+cg_r3 dispatched a SIGNED i32 div/mod/compare on a DIRECT call-result through the UNSIGNED path (divq/setae not
+idivq/setge).  _w80 bit7 (as-i64 widen) was already CORRECT -> the call-result IS sign-extended; the bug was the
+signedness DISPATCH, not materialization.  FIX: add the CALL case -> the callee's return type (iii_ast_call_callee ->
+binder -> iii_ast_fn_return_type/iii_ast_extern_return_type -> iii_tref_typeclass), SCOPED to signed classes via
+tc_signed_or_unk (unsigned-return calls stay TC_UNK so iii_tc_expr_is_u64 + every cg_r0/sanctum dispatch is unchanged).
+iiis-0-seed-safe (immutable `let`, early-return per branch -- NOT the documented let-mut-accumulator trap; all-u32
+equality, no signed-ordering).  VERIFICATION (the full matrix): fixpoint CONVERGED (iiis-2==iiis-3==08b5c38e); stdlib
+libiii_native.a BYTE-IDENTICAL (394ff96d before==after -> ZERO live stdlib trigger, as W80 predicted); stage1 corpus
+equivalence 59/0 (iiis-0==iiis-2 -> no bootstrap trigger); Ring-2 + Ring-0 gates PASS; probes _w79->0 / _w80->0
+(exactly 0, the primary oracle); falsifier 1572_cg_i32_callresult_signed_div 10->99 (teeth: local-bound form is the
+ground-truth oracle; pre-fix the call-result %,/ misdispatch unsigned); machine code confirms `movslq;cqto;idivq` now
+on the call-result path.  Resealed iiis-1/2/3 golden mhashes.  RESIDUALS (documented, out of scope -- not defects on
+any live path): (1) an i32 integer LITERAL with a type suffix (`7i32`) still classifies TC_UNK [a binary op with a
+typed local/param/call operand is unaffected since either-is-signed catches it]; (2) cg_r0/sanctum (8-byte-uniform,
+NOT corpus-gated) would emit an UNSIGNED compare for a u64-returning call-result in an ordering -- the "full fix"
+(return the true unsigned class too) would surface it but with a broad blast radius across ungated backends, so the
+scoped-to-signed fix deliberately leaves it.  GENERALIZATION (post-fix probe): the CALL case covers ALL signed return
+widths -- i16 and i64 call-result signed ordering (`ret_i16n() >= 0i16`, `ret_i64n() >= 0i64`) also now compile
+correctly (they shared the identical pre-fix TC_UNK->unsigned misdispatch; the i64 case was a silent sibling the
+W79/W80 probes never exercised).  A regression in the CALL case breaks every signed width at once, so the registered
+i32 falsifier 1572 is a sufficient sentinel for the whole case.

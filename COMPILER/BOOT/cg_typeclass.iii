@@ -41,6 +41,9 @@ const TC_K_EXPR_UNARY  : u32 = 50u32
 const TC_K_EXPR_PAREN  : u32 = 53u32
 const TC_K_EXPR_CAST   : u32 = 72u32
 const TC_K_VAR_DECL    : u32 = 74u32
+const TC_K_FN_DECL     : u32 = 4u32
+const TC_K_EXTERN_DECL : u32 = 7u32
+const TC_K_EXPR_CALL   : u32 = 46u32
 
 var TC_TY_U8    : [u8; 2] = [117u8, 56u8]                        /* "u8"    */
 var TC_TY_I8    : [u8; 2] = [105u8, 56u8]                        /* "i8"    */
@@ -66,6 +69,9 @@ extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "se
 extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_return_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_extern_return_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
@@ -99,13 +105,39 @@ fn iii_tref_typeclass(ast: u64, tn: u32) -> u32 {
     return TC_UNK
 }
 
+/* [W93] CALL-case scope: return the class ONLY when the callee's return type is a SIGNED int
+ * (i8/i16/i32/i64/isize); an unsigned/other return stays TC_UNK so iii_tc_expr_is_u64 and every
+ * cg_r0/sanctum dispatch keep their EXACT prior behaviour (a call-result was TC_UNK before).  This
+ * isolates the fix to the demonstrated signed-div/mod/compare defect (W79/W80): only signed-return
+ * call-results change classification, and W80's audit found ZERO live such sites in the stdlib -> the
+ * stdlib compiles byte-identical.  Pure leaf, equality dispatch only (iiis-0-seed-safe). */
+fn tc_signed_or_unk(rc: u32) -> u32 {
+    if rc == TC_I8 { return rc }
+    if rc == TC_I16 { return rc }
+    if rc == TC_I32 { return rc }
+    if rc == TC_I64 { return rc }
+    if rc == TC_ISIZE { return rc }
+    return TC_UNK
+}
+
 /* The ONE walk: resolve an expression's integer type-class. PAREN->inner, CAST->target,
- * BINARY->lhs ELSE rhs, UNARY->operand, IDENT->binder decl-type. Unclassifiable -> TC_UNK. */
+ * BINARY->lhs ELSE rhs, UNARY->operand, IDENT->binder decl-type, CALL->callee return-type (signed
+ * only, see tc_signed_or_unk).  Unclassifiable -> TC_UNK. */
 fn iii_expr_typeclass(ast: u64, node: u32) -> u32 {
     if node == 0u32 { return TC_UNK }
     let nk: u32 = iii_ast_node_kind(ast, node)
     if nk == TC_K_EXPR_PAREN { return iii_expr_typeclass(ast, iii_ast_paren_inner(ast, node)) }
     if nk == TC_K_EXPR_CAST { return iii_tref_typeclass(ast, iii_ast_cast_target_type(ast, node)) }
+    if nk == TC_K_EXPR_CALL {
+        let callee: u32 = iii_ast_call_callee(ast, node)
+        if callee == 0u32 { return TC_UNK }
+        let bid: u32 = iii_ast_node_binder_id(ast, callee)
+        if bid == 0u32 { return TC_UNK }
+        let bk: u32 = iii_ast_node_kind(ast, bid)
+        if bk == TC_K_FN_DECL { return tc_signed_or_unk(iii_tref_typeclass(ast, iii_ast_fn_return_type(ast, bid))) }
+        if bk == TC_K_EXTERN_DECL { return tc_signed_or_unk(iii_tref_typeclass(ast, iii_ast_extern_return_type(ast, bid))) }
+        return TC_UNK
+    }
     if nk == TC_K_EXPR_BINARY {
         let lc: u32 = iii_expr_typeclass(ast, iii_ast_binary_lhs(ast, node))
         if lc != TC_UNK { return lc }

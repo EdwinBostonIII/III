@@ -1,0 +1,48 @@
+/* 1572_cg_i32_callresult_signed_div.iii -- W93 FIX falsifier (COMPILER-LAYER: cg_typeclass.iii).
+ *
+ * THE DEFECT (probes _w79_i32probe/_w80_u32probe; root-caused W93): iii_expr_typeclass (the ONE shared
+ * integer-type-class resolver) had NO TC_K_EXPR_CALL case, so a CALL expression classified as TC_UNK ->
+ * iii_tc_expr_is_signed() returned 0 -> cg_r3 dispatched a SIGNED i32 div/mod/compare on a DIRECT
+ * call-result through the UNSIGNED path (divq/setae instead of idivq/setge).  A negative i32 returned by
+ * a call then computed the WRONG quotient/remainder/ordering vs the IDENTICAL expression on a value first
+ * BOUND TO A LOCAL (which classifies correctly via its let-binder type).  bit7 of _w80 proved the
+ * call-result IS sign-extended on `as i64` -> the bug is the signedness DISPATCH, not materialization.
+ *
+ * THE FIX (cg_typeclass.iii, W93): add the CALL case -> the callee's return type, SCOPED to signed
+ * classes (i8/i16/i32/i64/isize); unsigned-return calls stay TC_UNK so every other dispatch is unchanged.
+ *
+ * ORACLE (non-tautological): the LOCAL-bound form is the GROUND TRUTH -- it always dispatched signed
+ * correctly.  The direct-call-result form MUST match it.  99 = call-result signed %,/ both == their local
+ * reference, the references are the true signed values, u32 controls hold, and the as-i64 sign-extend
+ * holds.  TEETH: against the PRE-FIX compiler the call-result %,/ mis-dispatch unsigned -> != local -> 10. */
+module corpus_1572
+
+fn ret_i32n() -> i32 { let mut y : i32 = 0i32  y = y - 100i32  return y }   /* runtime -100 */
+fn ret_u32v() -> u32 { let mut y : u32 = 0u32  y = y + 100u32  return y }   /* runtime  100 */
+
+fn main() -> u64 {
+    /* (A) TEETH -- signed i32 modulo on a DIRECT call-result must equal the local-bound reference.
+     * -100 % 7 = -2 signed (trunc-toward-zero); 0xFFFFFF9C % 7 = 5 unsigned-misdispatch. */
+    let lm : i32 = ret_i32n()
+    let ref_mod : i32 = lm % 7i32
+    if (ret_i32n() % 7i32) != ref_mod { return 10u64 }
+
+    /* (B) TEETH -- signed i32 divide on a DIRECT call-result must equal the local-bound reference.
+     * -100 / 7 = -14 signed; huge unsigned quotient on misdispatch. */
+    let ld : i32 = ret_i32n()
+    let ref_div : i32 = ld / 7i32
+    if (ret_i32n() / 7i32) != ref_div { return 11u64 }
+
+    /* (C) control -- the local references are the TRUE signed values (rules out a both-wrong tautology) */
+    if ref_mod != (0i32 - 2i32) { return 12u64 }
+    if ref_div != (0i32 - 14i32) { return 13u64 }
+
+    /* (D) control -- u32 ops on a call-result were always correct and must stay correct */
+    if (ret_u32v() % 7u32) != 2u32 { return 20u64 }
+    if (ret_u32v() / 7u32) != 14u32 { return 21u64 }
+
+    /* (E) control -- i32 negative call-result sign-extends on `as i64` (materialization, already correct) */
+    if (ret_i32n() as i64) != (0i64 - 100i64) { return 30u64 }
+
+    return 99u64
+}

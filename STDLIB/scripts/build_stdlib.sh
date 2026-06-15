@@ -326,6 +326,7 @@ MODULES=(
     "numera/checked"
     "numera/modular"
     "numera/siphash"
+    "numera/adler32"
     "numera/fixed"
     "numera/q128"
     "verba/parse"

@@ -1,0 +1,56 @@
+/* STDLIB/iii/numera/adler32.iii
+ *
+ * III STDLIB - numera::adler32  --  Adler-32 checksum (RFC 1950, the zlib/PNG checksum).
+ *
+ * Two 16-bit running sums mod 65521 (the largest prime below 2^16): a = 1 + Sum(bytes),
+ * b = Sum(a_i); the 32-bit checksum is (b << 16) | a.  Weaker than a CRC for short inputs
+ * but cheaper; the standard integrity check inside zlib streams and PNG.
+ *
+ * NIH: pure u64 arithmetic; no dependencies.  Verified against canonical vectors
+ * (adler32("Wikipedia") = 0x11e60398) -- KAT 1574_adler32_kat.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module numera_adler32
+
+const ADLER_MOD : u64 = 65521u64   /* the largest prime < 2^16 */
+
+/* Adler-32 of data[0..len).  Returns the packed 32-bit checksum (b << 16) | a. */
+fn adler32(data: *u8, len: u64) -> u64 @export {
+    let mut a : u64 = 1u64
+    let mut b : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < len {
+        a = (a + (data[i] as u64)) % ADLER_MOD
+        b = (b + a) % ADLER_MOD
+        i = i + 1u64
+    }
+    return (b << 16u64) | a
+}
+
+/* Continue a running Adler-32: pass the prior packed value (1u64 to start fresh).
+ * adler32(d,n) == adler32_update(1u64, d, n).  Lets a checksum span multiple buffers. */
+fn adler32_update(adler: u64, data: *u8, len: u64) -> u64 @export {
+    let mut a : u64 = adler & 0xFFFFu64
+    let mut b : u64 = (adler >> 16u64) & 0xFFFFu64
+    let mut i : u64 = 0u64
+    while i < len {
+        a = (a + (data[i] as u64)) % ADLER_MOD
+        b = (b + a) % ADLER_MOD
+        i = i + 1u64
+    }
+    return (b << 16u64) | a
+}
+
+/* In-module self-test against known Adler-32 vectors. 99 = pass. */
+var ADLER_KAT_BUF : [u8; 16]
+fn adler32_selftest() -> u64 @export {
+    if adler32(ADLER_KAT_BUF as *u8, 0u64) != 0x00000001u64 { return 1u64 }   /* empty -> 1 */
+    ADLER_KAT_BUF[0u64] = 0x61u8  ADLER_KAT_BUF[1u64] = 0x62u8  ADLER_KAT_BUF[2u64] = 0x63u8   /* "abc" */
+    if adler32(ADLER_KAT_BUF as *u8, 3u64) != 0x024d0127u64 { return 2u64 }
+    /* streaming: "ab" then "c" equals "abc" in one shot */
+    let mid : u64 = adler32(ADLER_KAT_BUF as *u8, 2u64)
+    if adler32_update(mid, (ADLER_KAT_BUF as u64 + 2u64) as *u8, 1u64) != 0x024d0127u64 { return 3u64 }
+    return 99u64
+}

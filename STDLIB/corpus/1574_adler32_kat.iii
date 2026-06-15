@@ -1,0 +1,46 @@
+/* 1574_adler32_kat.iii -- NEW CAPABILITY: Adler-32 checksum (numera/adler32.iii).
+ *
+ * Canonical vectors (independently recomputed in-session; adler32("Wikipedia")=0x11e60398 is the
+ * well-documented reference value): "" -> 1, "a" -> 0x00620062, "abc" -> 0x024d0127,
+ * "Wikipedia" -> 0x11e60398, "message digest" -> 0x29750586.  Plus: the streaming API
+ * (adler32_update over two buffers == adler32 one-shot) and the in-module selftest.  99 = all pass. */
+module corpus_1574
+
+extern @abi(c-msvc-x64) fn adler32(data: *u8, len: u64) -> u64 from "adler32.iii"
+extern @abi(c-msvc-x64) fn adler32_update(adler: u64, data: *u8, len: u64) -> u64 from "adler32.iii"
+extern @abi(c-msvc-x64) fn adler32_selftest() -> u64 from "adler32.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+fn set3(p: *u8, a: u8, b: u8, c: u8) -> i32 { p[0u64] = a  p[1u64] = b  p[2u64] = c  return 0i32 }
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(32u64)
+
+    if adler32(buf, 0u64) != 0x00000001u64 { return 10u64 }                 /* empty -> 1 */
+
+    buf[0u64] = 0x61u8                                                       /* "a" */
+    if adler32(buf, 1u64) != 0x00620062u64 { return 11u64 }
+
+    set3(buf, 0x61u8, 0x62u8, 0x63u8)                                       /* "abc" */
+    if adler32(buf, 3u64) != 0x024d0127u64 { return 12u64 }
+
+    /* "Wikipedia" */
+    buf[0u64]=0x57u8 buf[1u64]=0x69u8 buf[2u64]=0x6bu8 buf[3u64]=0x69u8 buf[4u64]=0x70u8
+    buf[5u64]=0x65u8 buf[6u64]=0x64u8 buf[7u64]=0x69u8 buf[8u64]=0x61u8
+    if adler32(buf, 9u64) != 0x11e60398u64 { return 13u64 }
+
+    /* "message digest" */
+    buf[0u64]=0x6du8 buf[1u64]=0x65u8 buf[2u64]=0x73u8 buf[3u64]=0x73u8 buf[4u64]=0x61u8 buf[5u64]=0x67u8 buf[6u64]=0x65u8
+    buf[7u64]=0x20u8 buf[8u64]=0x64u8 buf[9u64]=0x69u8 buf[10u64]=0x67u8 buf[11u64]=0x65u8 buf[12u64]=0x73u8 buf[13u64]=0x74u8
+    if adler32(buf, 14u64) != 0x29750586u64 { return 14u64 }
+
+    /* streaming: adler32_update over "message " then "digest" == one-shot over "message digest" */
+    let mid : u64 = adler32(buf, 8u64)
+    if adler32_update(mid, (buf as u64 + 8u64) as *u8, 6u64) != 0x29750586u64 { return 20u64 }
+
+    if adler32_selftest() != 99u64 { return 30u64 }
+
+    free(buf)
+    return 99u64
+}

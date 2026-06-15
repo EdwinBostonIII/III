@@ -1,0 +1,127 @@
+/* 1585_develop_up_gateway.iii -- THE ENCAPSULATION GATEWAY capstone (aether/develop_up.iii): one
+ * "encapsulate this opaque guest" lifecycle composing ALL TEN develop-up slices.
+ *
+ * Flagship end-to-end scenario (every superpower exercised through the one gateway):
+ *  - ADMISSION (capability): a DISK+COMPUTE cap opens the box; a zero-rights cap is denied.
+ *  - LEGIT WORK: cap-gated + quota-charged (compute_box) + reversibly-recorded (vbd) writes -> a branching
+ *    CHECKPOINT (snapshot_box).  A no-rights cap's write is denied.
+ *  - FOUR MEMBRANES under one gateway: info-flow egress (flow_firewall), memory forcefield (enclave),
+ *    SID reversal routing (sid_router), determinism ingress (determinism_firewall).
+ *  - BEHAVIORAL GUARD (sentinel): a benign cadence COMMITS; a mass-encryption RANSOMWARE sweep DEVIATES ->
+ *    the box auto-rolls-back and recovers the committed state byte-for-byte.
+ *  - BRANCHING RESTORE: explicitly restore the disk to a past snapshot.
+ *  - HEALTH: the aggregate verdict (0 before open, 1 when open with quota headroom).
+ * 99 = the full lifecycle holds; an unmodified opaque guest gained every superpower through ONE box.
+ */
+module corpus_1585
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_write(guest_cap: u64, idx: u64, val: u64, cost: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_read(idx: u64) -> u64 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_checkpoint(ante: u32) -> u32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_observe(activity: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_guard() -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_restore(slot: u32) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_egress_safe() -> u32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_mem_allowed(offset: u32) -> u32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_reverse_route(exit_kind: u32) -> u32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_ingress_admit(tier: u32) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_health() -> u32 from "develop_up.iii"
+
+extern @abi(c-msvc-x64) fn ff_begin() -> i32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_input() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_relay(a: u32, b: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_const() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_egress(a: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_resolve() -> i32 from "flow_firewall.iii"
+
+const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
+const NB : u64 = 64u64
+const DU_RIGHTS : u64 = 0x5u64
+const DU_OK : i32 = 0i32
+const DU_E_DENIED : i32 = -1i32
+const SNT_COMMITTED : i32 = 0i32
+const SNT_ROLLED_BACK : i32 = 1i32
+const GENESIS : u32 = 0xFFFFFFFFu32
+const SNAP_NONE : u32 = 0xFFFFFFFFu32
+const OFF_SHARED : u32 = 0x30000u32
+const OFF_HV : u32 = 0x3E800u32
+const KVX_MSR : u32 = 2u32
+const KVX_OTHER : u32 = 0u32
+const ACT_REVERSIBLE_UNDO : u32 = 2u32
+const ACT_FAIL_CLOSED : u32 = 0u32
+const TIER_CANONICAL : u32 = 0u32
+const TIER_PROVISIONAL : u32 = 1u32
+const ROR_OK : i32 = 0i32
+const ROR_REFUSED : i32 = 1i32
+
+fn dval(i: u64) -> u64 { return (i + 1u64) * GOLDEN }
+fn rval(i: u64) -> u64 { return ((i + 1u64) * GOLDEN) ^ 0xFFFFFFFFFFFFFFFFu64 }
+
+fn main() -> u64 {
+    if du_health() != 0u32 { return 10u64 }                      /* health 0 before any box is open */
+
+    let root : u64 = cap_env_init()
+    if root != 1u64 { return 11u64 }
+    let guest : u64 = cap_attenuate(root, DU_RIGHTS, 0u64)
+    if guest == 0u64 { return 12u64 }
+    let poor : u64 = cap_attenuate(root, 0u64, 0u64)
+    if poor == 0u64 { return 13u64 }
+
+    /* ADMISSION */
+    if du_encapsulate(poor, 100000u64, 100000u64) != DU_E_DENIED { return 20u64 }
+    if du_encapsulate(guest, 100000u64, 100000u64) != DU_OK { return 21u64 }
+    if du_health() != 1u32 { return 22u64 }                      /* open + quota headroom */
+
+    /* LEGIT WORK + a no-rights write denial */
+    let mut i : u64 = 0u64
+    while i < NB { if du_write(guest, i, dval(i), 1u64) != DU_OK { return 30u64 }  i = i + 1u64 }
+    if du_write(poor, 0u64, 0xBADu64, 1u64) != DU_E_DENIED { return 31u64 }   /* no-rights cap denied */
+    let s0 : u32 = du_checkpoint(GENESIS)
+    if s0 == SNAP_NONE { return 32u64 }
+    i = 0u64
+    while i < NB { if du_read(i) != dval(i) { return 33u64 }  i = i + 1u64 }
+
+    /* FOUR MEMBRANES */
+    if du_mem_allowed(OFF_SHARED) != 1u32 { return 40u64 }
+    if du_mem_allowed(OFF_HV) != 0u32 { return 41u64 }
+    if du_reverse_route(KVX_MSR) != ACT_REVERSIBLE_UNDO { return 42u64 }
+    if du_reverse_route(KVX_OTHER) != ACT_FAIL_CLOSED { return 43u64 }
+    if du_ingress_admit(TIER_CANONICAL) != ROR_OK { return 44u64 }
+    if du_ingress_admit(TIER_PROVISIONAL) != ROR_REFUSED { return 45u64 }
+
+    /* INFO-FLOW egress: empty graph safe; a tainted leak unsafe */
+    if du_egress_safe() != 1u32 { return 46u64 }
+    ff_begin()
+    let r : u32 = ff_relay(ff_input(), ff_const())
+    ff_egress(r)
+    ff_resolve()
+    if du_egress_safe() != 0u32 { return 47u64 }                 /* tainted byte would leak -> unsafe */
+
+    /* BEHAVIORAL GUARD: benign cadence COMMITS */
+    i = 0u64
+    while i < 64u64 { du_observe(3u64)  i = i + 1u64 }
+    if du_guard() != SNT_COMMITTED { return 50u64 }
+
+    /* ATTACK = RANSOMWARE: overwrite all blocks; the sweep cadence DEVIATES -> auto-rollback */
+    i = 0u64
+    while i < NB { if du_write(guest, i, rval(i), 1u64) != DU_OK { return 51u64 }  i = i + 1u64 }
+    i = 0u64
+    while i < NB { if du_read(i) != rval(i) { return 52u64 }  i = i + 1u64 }   /* attack landed */
+    i = 0u64
+    while i < 64u64 { du_observe(i + 1u64)  i = i + 1u64 }
+    if du_guard() != SNT_ROLLED_BACK { return 53u64 }                          /* behavioral -> reversed */
+    i = 0u64
+    while i < NB { if du_read(i) != dval(i) { return 54u64 }  i = i + 1u64 }   /* recovered byte-for-byte */
+
+    /* BRANCHING RESTORE to snapshot s0, + a fail-closed bad-slot restore */
+    if du_restore(s0) != DU_OK { return 60u64 }
+    i = 0u64
+    while i < NB { if du_read(i) != dval(i) { return 61u64 }  i = i + 1u64 }
+    if du_restore(99u32) != (0i32 - 1i32) { return 62u64 }       /* bad slot -> fail-closed (negative arm) */
+
+    return 99u64
+}

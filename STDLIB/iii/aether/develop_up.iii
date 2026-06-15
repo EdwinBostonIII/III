@@ -1,0 +1,132 @@
+/* STDLIB/iii/aether/develop_up.iii
+ *
+ * III STDLIB - aether::develop_up  --  THE ENCAPSULATION GATEWAY (the develop-up vision, one entry point).
+ *
+ * The capstone the whole layer was built toward: a SINGLE "encapsulate this opaque guest" primitive that
+ * wires all ten superpower organs into one sealed-box lifecycle.  An operator opens one box and the guest --
+ * unmodified, its bytes meaningless to III -- runs inside it with reversibility, availability, behavioral
+ * immunity, deterministic replay, branching snapshots, and zero-trust capability mediation, while four
+ * per-operation membranes (information-flow, memory forcefield, SID reversal routing, determinism) govern
+ * each act.  sealed_box (slice 5) unified the first four bridges; this unifies ALL TEN.
+ *
+ * COMPOSES (not reimplements) the ten develop-up slices:
+ *   lifecycle  : capability (admission) + vbd (reversible disk) + compute_box (quota) + sentinel
+ *                (behavioral) + replay_box (record) + snapshot_box (branching checkpoint/restore)
+ *   membranes  : flow_firewall (egress) + enclave (memory) + sid_router (reversal route) +
+ *                determinism_firewall (ingress tier)
+ *
+ * Single-box: the composed organs are single-instance (one guest), so the gateway holds one box.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.98.
+ */
+
+module aether_develop_up
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn vbd_open(cap: u64) -> u32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn cb_admit(guest_cap: u64, cap_set: u64, mem_cap: u64, cpu_cap: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_charge_mem(guest_cap: u64, sb_id: u64, n_bytes: u64) -> u8 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_mem_remaining(sb_id: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn sentinel_arm() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_observe(a: u64) -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_guard(vbd_slot: u32) -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 from "snapshot_box.iii"
+extern @abi(c-msvc-x64) fn snb_restore(session: u32, slot: u32) -> i32 from "snapshot_box.iii"
+extern @abi(c-msvc-x64) fn ff_box_safe() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn enc_write_allowed(offset: u32) -> u32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn sr_route(exit_kind: u32) -> u32 from "sid_router.iii"
+extern @abi(c-msvc-x64) fn df_admit(tier: u32) -> i32 from "determinism_firewall.iii"
+
+const DU_OK        : i32 = 0i32
+const DU_E_DENIED  : i32 = -1i32       /* capability admission denied */
+const DU_E         : i32 = -2i32       /* box not open / sub-organ failure */
+const DU_RIGHTS    : u64 = 0x5u64      /* CAP_RIGHT_FS_WRITE (0x4) | CAP_RIGHT_ALLOC (0x1): disk + compute */
+const DU_NONE      : u32 = 0xFFFFFFFFu32
+const DU_VBD_TOKEN : u64 = 0x5A5A5A5Au64
+const DU_BENIGN_CADENCE : u64 = 3u64   /* the sealed-good behavioral baseline sample */
+
+var DU_VBD_SLOT : u32 = 0xFFFFFFFFu32  /* the box's reversible disk session */
+var DU_CMP_ID   : u64 = 0u64           /* the box's compute/quota id */
+var DU_OPEN     : u32 = 0u32
+var DU_OP       : [u8; 32]             /* snapshot op-id */
+
+/* ENCAPSULATE an opaque guest: zero-trust admission (DISK+COMPUTE rights), then wire the reversible disk,
+ * the quota box, deterministic-replay recording, and a sealed behavioral baseline into ONE box. */
+fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 @export {
+    if cap_verify_rights(guest_cap, DU_RIGHTS) == 0u8 { return DU_E_DENIED }
+    let v : u32 = vbd_open(DU_VBD_TOKEN)
+    if v == DU_NONE { return DU_E }
+    let c : u64 = cb_admit(guest_cap, 0u64, mem_cap, cpu_cap)
+    if c == 0u64 { return DU_E }
+    DU_VBD_SLOT = v
+    DU_CMP_ID = c
+    sentinel_arm()
+    let mut i : u64 = 0u64
+    while i < 64u64 { sentinel_observe(DU_BENIGN_CADENCE)  i = i + 1u64 }
+    sentinel_seal_baseline()
+    rb_begin()
+    let mut k : u64 = 0u64
+    while k < 32u64 { DU_OP[k] = (k + 1u64) as u8  k = k + 1u64 }
+    DU_OPEN = 1u32
+    return DU_OK
+}
+
+/* A guest disk write: cap-gated + quota-charged (availability) + reversibly recorded (reversibility). */
+fn du_write(guest_cap: u64, idx: u64, val: u64, cost: u64) -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    if cb_charge_mem(guest_cap, DU_CMP_ID, cost) == 0u8 { return DU_E_DENIED }
+    return vbd_write(DU_VBD_SLOT, idx, val)
+}
+
+fn du_read(idx: u64) -> u64 @export { return vbd_read(idx) }
+
+/* Commit the box's disk and take a branching checkpoint (reversibility + branching). Returns snapshot slot.
+ * vbd/reversible is transactional: a commit ENDS the session, so a fresh session is opened for the next
+ * transaction's writes. */
+fn du_checkpoint(ante: u32) -> u32 @export {
+    if DU_OPEN == 0u32 { return DU_NONE }
+    vbd_commit(DU_VBD_SLOT)
+    let snap : u32 = snb_checkpoint((&DU_OP as u64) as *u8, ante)
+    DU_VBD_SLOT = vbd_open(DU_VBD_TOKEN)
+    return snap
+}
+
+/* Observe a guest behavioral activity sample (feeds the sentinel window). */
+fn du_observe(activity: u64) -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    return sentinel_observe(activity)
+}
+
+/* The behavioral guard: the sentinel verdict gates the reversible response on the box's disk
+ * (deviation -> rollback, match -> commit).  Either outcome ends the transactional session, so a fresh
+ * session is opened for subsequent writes.  Returns the sentinel guard code. */
+fn du_guard() -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    let verdict : i32 = sentinel_guard(DU_VBD_SLOT)
+    DU_VBD_SLOT = vbd_open(DU_VBD_TOKEN)
+    return verdict
+}
+
+/* Restore the box's disk to a past snapshot (branching reversibility). */
+fn du_restore(slot: u32) -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    return snb_restore(DU_VBD_SLOT, slot)
+}
+
+/* --- the four per-operation membranes, exposed under the one gateway --- */
+fn du_egress_safe() -> u32 @export { return ff_box_safe() }                       /* information-flow */
+fn du_mem_allowed(offset: u32) -> u32 @export { return enc_write_allowed(offset) } /* memory forcefield */
+fn du_reverse_route(exit_kind: u32) -> u32 @export { return sr_route(exit_kind) }  /* SID reversal routing */
+fn du_ingress_admit(tier: u32) -> i32 @export { return df_admit(tier) }            /* determinism membrane */
+
+/* Aggregate HEALTH: 1 iff the box is open AND has quota headroom remaining. */
+fn du_health() -> u32 @export {
+    if DU_OPEN == 0u32 { return 0u32 }
+    if cb_mem_remaining(DU_CMP_ID) == 0u64 { return 0u32 }
+    return 1u32
+}

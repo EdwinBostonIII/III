@@ -1,0 +1,42 @@
+/* 1591_prover_soundness_u32_bound.iii -- prover/oracle SOUNDNESS at the u32 type bound (wave-2 discovery
+ * ranks 1-4; the W49/W53 prover-soundness vein).  Four abstract-interpretation @exports each gave a
+ * false-SAFE / silent-wrong verdict because an access/overflow was computed in WRAPPING u32 (or the
+ * saturating abstract max could never exceed bound==0xFFFFFFFF).  Each fix widens the decisive compare to
+ * exact u64.  This KAT pins the adversarial corner (currently-wrong) AND a positive arm (still correct):
+ *
+ *  (1) affine_check.ac_in_bounds: a=0xFFFFFFFF,b=5 at i=1 -> true address 4294967300 >> size 10 -> UNSAFE(0),
+ *      not the wrap-to-4 SAFE(1).  (This is the GROUND-TRUTH oracle other falsifiers consume.)
+ *  (2) range_check.rc_proven_safe: [0xFFFFFFFF]+[1] vs bound 0xFFFFFFFF overflows -> NOT proven safe (0).
+ *  (3) reduced_product.rp_count: [0xFFFFFFFF,0xFFFFFFFF] EVEN -> the single odd element has 0 evens (not 2^31).
+ *  (4) value_range_prover.vrp_no_overflow: family n=a=65536 -> n*a = 2^32 overflows u32 -> not no-overflow (0).
+ * 99 = every corner now sound AND every positive still holds. */
+module corpus_1591
+
+extern @abi(c-msvc-x64) fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 from "affine_check.iii"
+extern @abi(c-msvc-x64) fn rc_proven_safe(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 from "range_check.iii"
+extern @abi(c-msvc-x64) fn rp_count(lo: u32, hi: u32, p: u32) -> u32 from "reduced_product.iii"
+extern @abi(c-msvc-x64) fn vrp_no_overflow(cn: u32, ca: u32, bound: u32) -> u32 from "value_range_prover.iii"
+
+const RC_ADD  : u32 = 0u32
+const RP_EVEN : u32 = 0u32
+const U32MAX  : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* (1) affine_check: the wrapping access must be caught as UNSAFE; an in-range stream stays SAFE */
+    if ac_in_bounds(U32MAX, 5u32, 3u32, 10u32) != 0u32 { return 10u64 }   /* a*1+b wraps high -> UNSAFE */
+    if ac_in_bounds(1u32, 0u32, 5u32, 10u32) != 1u32 { return 11u64 }     /* 0..4 all < 10 -> SAFE */
+
+    /* (2) range_check: overflow at the u32 bound is NOT proven safe; a small in-bound op still is */
+    if rc_proven_safe(U32MAX, U32MAX, 1u32, 1u32, RC_ADD, U32MAX) != 0u32 { return 20u64 }   /* 0xFFFFFFFF+1 overflows */
+    if rc_proven_safe(10u32, 20u32, 5u32, 8u32, RC_ADD, 255u32) != 1u32 { return 21u64 }     /* max 28 <= 255 */
+
+    /* (3) reduced_product: the single max-u32 (odd) element has zero even values, not ~2^31; a real interval counts right */
+    if rp_count(U32MAX, U32MAX, RP_EVEN) != 0u32 { return 30u64 }
+    if rp_count(2u32, 8u32, RP_EVEN) != 4u32 { return 31u64 }             /* {2,4,6,8} */
+
+    /* (4) value_range_prover: n*a = 2^32 overflows -> not no-overflow; a small family is no-overflow */
+    if vrp_no_overflow(65536u32, 65536u32, U32MAX) != 0u32 { return 40u64 }
+    if vrp_no_overflow(10u32, 10u32, U32MAX) != 1u32 { return 41u64 }     /* 100 <= bound */
+
+    return 99u64
+}

@@ -1163,6 +1163,7 @@ declare -A EXPECTED=(
     [1588_hmac_long_key]=99
     [1589_merkle_cve_2012_2459_documented]=99
     [1590_cgr_intern_hash_collisions]=99
+    [1591_prover_soundness_u32_bound]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

@@ -38,6 +38,13 @@ fn rc_max(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32) -> u32 @export {
 
 /* 1 iff the operation MIGHT overflow the type bound (abstract max exceeds it). */
 fn rc_overflows(lo1: u32, hi1: u32, lo2: u32, hi2: u32, op: u32, bound: u32) -> u32 @export {
+    /* [W-prover] EXACT upper-corner check in u64.  add/mul are monotone in both operands, so the true max
+     * over [lo1,hi1]x[lo2,hi2] is at (hi1,hi2).  The abstract rc_max SATURATES to 0xFFFFFFFF on carry-out,
+     * so when bound == 0xFFFFFFFF it can NEVER exceed the bound -- a genuine type-bound overflow (e.g.
+     * 0xFFFFFFFF+1) was wrongly PROVEN safe (false-accept).  The exact u64 corner catches it; the rc_max
+     * test is kept for any non-add/mul op.  Byte-identical for non-overflowing cases. */
+    if op == RC_ADD { if ((hi1 as u64) + (hi2 as u64)) > (bound as u64) { return 1u32 } }
+    if op == RC_MUL { if ((hi1 as u64) * (hi2 as u64)) > (bound as u64) { return 1u32 } }
     if rc_max(lo1, hi1, lo2, hi2, op) > bound { return 1u32 }
     return 0u32
 }

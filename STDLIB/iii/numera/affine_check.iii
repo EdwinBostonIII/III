@@ -44,7 +44,11 @@ fn ac_max_access(a: u32, b: u32, n: u32) -> u32 @export {
 fn ac_in_bounds(a: u32, b: u32, n: u32, size: u32) -> u32 @export {
     let mut i : u32 = 0u32
     while i < n {
-        if ((a * i) + b) >= size {
+        /* [W53-sibling] compute the access a*i+b EXACTLY in u64: a raw-u32 (a*i)+b WRAPS on overflow, so a
+         * stream that actually wraps high (e.g. a=0xFFFFFFFF,b=5 at i=1 -> 4294967300) would look small and
+         * be wrongly certified in-bounds (false-SAFE).  This is the affine GROUND TRUTH oracle (bce_redundant
+         * / lo_analyses_agree consume it), so the wrap must be caught.  Byte-identical for <2^32 accesses. */
+        if (((a as u64) * (i as u64)) + (b as u64)) >= (size as u64) {
             AC_WIT[0u64] = i
             return 0u32
         }

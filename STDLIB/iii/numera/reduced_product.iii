@@ -39,6 +39,10 @@ var RP_PAR : [u32; 1]
 fn rp_reduce_lo(lo: u32, p: u32) -> u32 @export {
     if p >= RP_ANY { return lo }
     if (lo & 1u32) == p { return lo }
+    /* [W-prover] no u32 > 0xFFFFFFFF of the other parity exists; lo+1 would WRAP to 0 (a value BELOW lo),
+     * making rp_count report an absurd ~2^31.  Return lo: rp_reduce_hi yields hi-1 < lo, so rp_count's
+     * rlo>rhi guard then correctly reports 0 (the single max-u32 element has no value of the wanted parity). */
+    if lo == 0xFFFFFFFFu32 { return lo }
     return lo + 1u32
 }
 /* reduce the upper bound down to the largest value <= hi with parity p. */

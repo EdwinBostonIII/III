@@ -62,7 +62,7 @@ fn sip_round() -> i32 {
 }
 
 /* SipHash-2-4 with the key given as two little-endian u64 halves. */
-fn siphash24_keyed(k0: u64, k1: u64, data: *u8, len: u64) -> u64 @export {
+fn siphash24_keyed(k0: u64, k1: u64, data: *u8, len: u64) -> u64 @constant_time @export {
     SIP_V0 = k0 ^ SIP_C0
     SIP_V1 = k1 ^ SIP_C1
     SIP_V2 = k0 ^ SIP_C2
@@ -99,7 +99,7 @@ fn siphash24_keyed(k0: u64, k1: u64, data: *u8, len: u64) -> u64 @export {
 }
 
 /* SipHash-2-4 with the key given as 16 raw little-endian bytes at key[0..16). */
-fn siphash24(key: *u8, data: *u8, len: u64) -> u64 @export {
+fn siphash24(key: *u8, data: *u8, len: u64) -> u64 @constant_time @export {
     let k0 : u64 = sip_load_le8(key, 0u64)
     let k1 : u64 = sip_load_le8(key, 8u64)
     return siphash24_keyed(k0, k1, data, len)

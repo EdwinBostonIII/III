@@ -1,0 +1,45 @@
+/* 1573_siphash_kat.iii -- NEW CAPABILITY: SipHash-2-4 (numera/siphash.iii).
+ *
+ * Published-vector KAT against the official Aumasson-Bernstein SipHash-2-4 reference table
+ * (key = 00 01 .. 0f, message[i] = i).  Vectors independently recomputed (PowerShell bigint ref) and
+ * cross-checked against the canonical len-15 value 0xa129ca6149be45e5.  Covers the final-only path
+ * (len 0,1), one full block + partial tail (len 15), an exact-block boundary (len 8), and the full
+ * 64-byte buffer (len 63).  Plus: the two-u64-half keyed API == the 16-byte-key API; siphash_selftest()
+ * == 99; and a key-sensitivity negative arm (one flipped key byte changes the MAC).  99 = all pass. */
+module corpus_1573
+
+extern @abi(c-msvc-x64) fn siphash24(key: *u8, data: *u8, len: u64) -> u64 from "siphash.iii"
+extern @abi(c-msvc-x64) fn siphash24_keyed(k0: u64, k1: u64, data: *u8, len: u64) -> u64 from "siphash.iii"
+extern @abi(c-msvc-x64) fn siphash_selftest() -> u64 from "siphash.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+fn main() -> u64 {
+    let key : *u8 = malloc(16u64)
+    let mut i : u64 = 0u64
+    while i < 16u64 { key[i] = i as u8  i = i + 1u64 }
+    let msg : *u8 = malloc(64u64)
+    i = 0u64
+    while i < 64u64 { msg[i] = i as u8  i = i + 1u64 }
+
+    /* (A) published-vector oracle (the teeth: a wrong impl misses these) */
+    if siphash24(key, msg, 0u64)  != 0x726fdb47dd0e0e31u64 { return 10u64 }
+    if siphash24(key, msg, 1u64)  != 0x74f839c593dc67fdu64 { return 11u64 }
+    if siphash24(key, msg, 8u64)  != 0x93f5f5799a932462u64 { return 12u64 }
+    if siphash24(key, msg, 15u64) != 0xa129ca6149be45e5u64 { return 13u64 }
+    if siphash24(key, msg, 63u64) != 0x958a324ceb064572u64 { return 14u64 }
+
+    /* (B) the two-u64-half keyed API agrees with the 16-byte-key API (k0=LE(key[0..8]), k1=LE(key[8..16])) */
+    if siphash24_keyed(0x0706050403020100u64, 0x0f0e0d0c0b0a0908u64, msg, 15u64) != 0xa129ca6149be45e5u64 { return 20u64 }
+
+    /* (C) the in-module selftest passes */
+    if siphash_selftest() != 99u64 { return 30u64 }
+
+    /* (D) key-sensitivity: flip one key byte -> the MAC must change (proves the key is actually consumed) */
+    key[0] = 0xFFu8
+    if siphash24(key, msg, 15u64) == 0xa129ca6149be45e5u64 { return 40u64 }
+
+    free(key)
+    free(msg)
+    return 99u64
+}

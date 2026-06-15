@@ -1145,6 +1145,7 @@ declare -A EXPECTED=(
     [1570_rms_ceil_div_overflow]=99
     [1571_semver_u64_max]=99
     [1572_cg_i32_callresult_signed_div]=99
+    [1573_siphash_kat]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

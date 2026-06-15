@@ -1,0 +1,123 @@
+/* STDLIB/iii/numera/siphash.iii
+ *
+ * III STDLIB - numera::siphash  --  SipHash-2-4 (Aumasson & Bernstein 2012).
+ *
+ * A fast keyed pseudo-random function: a 128-bit key + a byte string -> a 64-bit
+ * MAC.  The canonical hash-flooding-resistant hash for hash tables and short-input
+ * authentication.  c=2 compression rounds, d=4 finalization rounds (the standard
+ * SipHash-2-4 parameterization).
+ *
+ * NIH: pure u64 ARX (add / rotate / xor); no dependencies beyond the III runtime.
+ * Verified against the official reference vectors (the 64-entry SipHash-2-4 table,
+ * key = 00 01 .. 0f, message = 00 01 .. len-1) -- KAT 1573_siphash_kat.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure, branch-on-public-length only).
+ */
+
+module numera_siphash
+
+/* The four SipHash initialization constants ("somepseudorandomlygeneratedbytes"). */
+const SIP_C0 : u64 = 0x736f6d6570736575u64   /* "somepseu" */
+const SIP_C1 : u64 = 0x646f72616e646f6du64   /* "dorandom" */
+const SIP_C2 : u64 = 0x6c7967656e657261u64   /* "lygenera" */
+const SIP_C3 : u64 = 0x7465646279746573u64   /* "tedbytes" */
+
+/* The 256-bit internal state (4 x u64).  Re-initialised at the top of every
+ * siphash24_keyed call, so a single computation never reads another's state. */
+var SIP_V0 : u64 = 0u64
+var SIP_V1 : u64 = 0u64
+var SIP_V2 : u64 = 0u64
+var SIP_V3 : u64 = 0u64
+
+/* Load 8 bytes at p[off..off+8) as a little-endian u64. */
+fn sip_load_le8(p: *u8, off: u64) -> u64 {
+    let b0 : u64 = p[off] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+/* One SipRound, mutating the module state (u64 add wraps mod 2^64 naturally). */
+fn sip_round() -> i32 {
+    SIP_V0 = SIP_V0 + SIP_V1
+    SIP_V1 = (SIP_V1 << 13u64) | (SIP_V1 >> 51u64)
+    SIP_V1 = SIP_V1 ^ SIP_V0
+    SIP_V0 = (SIP_V0 << 32u64) | (SIP_V0 >> 32u64)
+    SIP_V2 = SIP_V2 + SIP_V3
+    SIP_V3 = (SIP_V3 << 16u64) | (SIP_V3 >> 48u64)
+    SIP_V3 = SIP_V3 ^ SIP_V2
+    SIP_V0 = SIP_V0 + SIP_V3
+    SIP_V3 = (SIP_V3 << 21u64) | (SIP_V3 >> 43u64)
+    SIP_V3 = SIP_V3 ^ SIP_V0
+    SIP_V2 = SIP_V2 + SIP_V1
+    SIP_V1 = (SIP_V1 << 17u64) | (SIP_V1 >> 47u64)
+    SIP_V1 = SIP_V1 ^ SIP_V2
+    SIP_V2 = (SIP_V2 << 32u64) | (SIP_V2 >> 32u64)
+    return 0i32
+}
+
+/* SipHash-2-4 with the key given as two little-endian u64 halves. */
+fn siphash24_keyed(k0: u64, k1: u64, data: *u8, len: u64) -> u64 @export {
+    SIP_V0 = k0 ^ SIP_C0
+    SIP_V1 = k1 ^ SIP_C1
+    SIP_V2 = k0 ^ SIP_C2
+    SIP_V3 = k1 ^ SIP_C3
+    let end : u64 = len - (len & 7u64)          /* len rounded down to a multiple of 8 */
+    let mut i : u64 = 0u64
+    while i < end {
+        let m : u64 = sip_load_le8(data, i)
+        SIP_V3 = SIP_V3 ^ m
+        sip_round()
+        sip_round()
+        SIP_V0 = SIP_V0 ^ m
+        i = i + 8u64
+    }
+    /* Final block: the trailing (len & 7) bytes, with the low byte of len in the top byte. */
+    let mut b : u64 = (len & 0xFFu64) << 56u64
+    let rem : u64 = len & 7u64
+    let mut j : u64 = 0u64
+    while j < rem {
+        b = b | ((data[end + j] as u64) << (8u64 * j))
+        j = j + 1u64
+    }
+    SIP_V3 = SIP_V3 ^ b
+    sip_round()
+    sip_round()
+    SIP_V0 = SIP_V0 ^ b
+    /* Finalization. */
+    SIP_V2 = SIP_V2 ^ 0xFFu64
+    sip_round()
+    sip_round()
+    sip_round()
+    sip_round()
+    return SIP_V0 ^ SIP_V1 ^ SIP_V2 ^ SIP_V3
+}
+
+/* SipHash-2-4 with the key given as 16 raw little-endian bytes at key[0..16). */
+fn siphash24(key: *u8, data: *u8, len: u64) -> u64 @export {
+    let k0 : u64 = sip_load_le8(key, 0u64)
+    let k1 : u64 = sip_load_le8(key, 8u64)
+    return siphash24_keyed(k0, k1, data, len)
+}
+
+/* In-module known-answer self-test against the official SipHash-2-4 reference vectors
+ * (key = 00..0f, message[i] = i).  99 = all vectors match. */
+var SIP_KAT_KEY : [u8; 16]
+var SIP_KAT_MSG : [u8; 64]
+fn siphash_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 16u64 { SIP_KAT_KEY[i] = i as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 64u64 { SIP_KAT_MSG[i] = i as u8  i = i + 1u64 }
+    if siphash24(SIP_KAT_KEY as *u8, SIP_KAT_MSG as *u8, 0u64)  != 0x726fdb47dd0e0e31u64 { return 1u64 }   /* len 0  */
+    if siphash24(SIP_KAT_KEY as *u8, SIP_KAT_MSG as *u8, 1u64)  != 0x74f839c593dc67fdu64 { return 2u64 }   /* len 1  */
+    if siphash24(SIP_KAT_KEY as *u8, SIP_KAT_MSG as *u8, 8u64)  != 0x93f5f5799a932462u64 { return 3u64 }   /* len 8  */
+    if siphash24(SIP_KAT_KEY as *u8, SIP_KAT_MSG as *u8, 15u64) != 0xa129ca6149be45e5u64 { return 4u64 }   /* len 15 */
+    if siphash24(SIP_KAT_KEY as *u8, SIP_KAT_MSG as *u8, 63u64) != 0x958a324ceb064572u64 { return 5u64 }   /* len 63 */
+    return 99u64
+}

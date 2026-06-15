@@ -325,6 +325,7 @@ MODULES=(
     "omnia/spec_probe"
     "numera/checked"
     "numera/modular"
+    "numera/siphash"
     "numera/fixed"
     "numera/q128"
     "verba/parse"

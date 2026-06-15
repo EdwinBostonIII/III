@@ -204,6 +204,7 @@ fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 @export {
     let slot : u32 = path_slot
     if slot >= ENTROPY_MAX_PATHS { return ENTROPY_E_BAD }
     if ENTROPY_LIVE[slot] == 0u8 { return ENTROPY_E_BAD }
+    if ENTROPY_INITED == 0u8 { return ENTROPY_E_BAD }   /* [audit ENTROPY-INIT] ENTROPY_OMEGA is the GF(p) NTT root of unity, 0 until entropy_init; a cold spectrum (register_path does NOT require init) would transform with twiddle factor 0 -> a degenerate/wrong spectrum */
     let base : u64 = (slot as u64 & 0xFFFFFFFFu64) * (ENTROPY_N as u64)
     let len : u32 = ENTROPY_BUF_LEN[slot]
     let head : u32 = ENTROPY_BUF_HEAD[slot]

@@ -1,0 +1,77 @@
+/* 1596_coldinit_guards.iii -- wave-5: three use-before-init / sibling-asymmetry cold guards the
+ * discovery workflow surfaced and hand-judgment confirmed (the W10/W22/W23 defensive-hardening classes).
+ * Each arm proves the guard FIRES on the bad/cold path AND the valid path still works (prove-the-negative):
+ *
+ *  (1) drbg (SP 800-90A): iii_drbg_generate / iii_drbg_reseed on an UN-INSTANTIATED DRBG must be REJECTED
+ *      (-2) -- a cold generate would HMAC from the zero-default K/V => PREDICTABLE output (catastrophic).
+ *      After a proper Instantiate, generate succeeds AND produces real, NONZERO, ADVANCING output.
+ *  (2) shake256: shake256_oneshot(NULL input, nonzero len) must be REJECTED (1) -- keccak_absorb would
+ *      deref NULL; this matches the guard the sibling shake128_oneshot already has. Valid input -> 0.
+ *  (3) entropy_monitor: entropy_spectrum BEFORE entropy_init must be REJECTED (E_BAD) -- ENTROPY_OMEGA is
+ *      the GF(p) NTT root, 0 until init, so a cold spectrum would transform with twiddle 0. After init -> OK.
+ * 99 = every guard fires on the bad path AND every valid path still succeeds. */
+module corpus_1596
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn shake256_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 from "shake256.iii"
+extern @abi(c-msvc-x64) fn entropy_register_path(path_id: *u8) -> u32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_init() -> i32 from "entropy_monitor.iii"
+
+fn main() -> u64 {
+    /* ===== (1) drbg SP 800-90A instantiated-state guard ===== */
+    let g0 : *u8 = malloc(32u64)
+    if iii_drbg_generate(g0 as u64, 32u64, 0u64, 0u64) != (0i32 - 2i32) { return 1u64 }   /* cold generate -> -2 (un-instantiated) */
+    if iii_drbg_reseed(g0 as u64, 48u64, 0u64, 0u64) != (0i32 - 2i32) { return 2u64 }      /* cold reseed -> -2 */
+
+    let ent : *u8 = malloc(48u64)
+    let non : *u8 = malloc(16u64)
+    let mut i : u64 = 0u64
+    while i < 48u64 { ent[i] = (i + 1u64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 16u64 { non[i] = (0x40u64 + i) as u8 ; i = i + 1u64 }
+    if iii_drbg_instantiate(ent as u64, 48u64, non as u64, 16u64, 0u64, 0u64) != 0i32 { return 3u64 }
+
+    let g1 : *u8 = malloc(32u64)
+    let g2 : *u8 = malloc(32u64)
+    if iii_drbg_generate(g1 as u64, 32u64, 0u64, 0u64) != 0i32 { return 4u64 }   /* now works */
+    if iii_drbg_generate(g2 as u64, 32u64, 0u64, 0u64) != 0i32 { return 5u64 }
+    let mut nz : u32 = 0u32
+    let mut diff : u32 = 0u32
+    i = 0u64
+    while i < 32u64 {
+        if g1[i] != 0u8 { nz = 1u32 }
+        if g1[i] != g2[i] { diff = 1u32 }
+        i = i + 1u64
+    }
+    if nz != 1u32 { return 6u64 }      /* real (non-zero) output */
+    if diff != 1u32 { return 7u64 }    /* consecutive blocks differ -> the DRBG genuinely advances */
+
+    /* ===== (2) shake256 null-input guard (sibling-symmetry with shake128) ===== */
+    let so : *u8 = malloc(32u64)
+    if shake256_oneshot(0u64, 8u64, so as u64, 32u64) != 1u32 { return 8u64 }   /* NULL input + nonzero len -> reject */
+    let si : *u8 = malloc(8u64)
+    i = 0u64
+    while i < 8u64 { si[i] = (0x61u64 + i) as u8 ; i = i + 1u64 }                /* "abcdefgh" */
+    if shake256_oneshot(si as u64, 8u64, so as u64, 32u64) != 0u32 { return 9u64 }   /* valid input -> ok */
+
+    /* ===== (3) entropy_monitor spectrum-before-init guard ===== */
+    let pid : *u8 = malloc(32u64)
+    i = 0u64
+    while i < 32u64 { pid[i] = (i + 1u64) as u8 ; i = i + 1u64 }
+    let slot : u32 = entropy_register_path(pid)
+    if slot == 0xFFFFFFFFu32 { return 10u64 }
+    let spec : *u8 = malloc(512u64)    /* 64 u64 */
+    if entropy_spectrum(slot, spec as *u64) != (0i32 - 1i32) { return 11u64 }   /* cold spectrum (registered, INITED==0) -> E_BAD */
+    if entropy_init() != 0i32 { return 12u64 }
+    let slot2 : u32 = entropy_register_path(pid)                                 /* entropy_init() resets ENTROPY_LIVE -> re-register after init */
+    if slot2 == 0xFFFFFFFFu32 { return 13u64 }
+    if entropy_spectrum(slot2, spec as *u64) != 0i32 { return 14u64 }            /* after init -> OK */
+
+    free(g0) free(ent) free(non) free(g1) free(g2) free(so) free(si) free(pid) free(spec)
+    return 99u64
+}

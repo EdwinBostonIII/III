@@ -153,7 +153,8 @@ fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u
 }
 
 fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 @export {
-    if elen + alen > 768u64 { return 0i32 - 1i32 }   /* seed = entropy||addl into DRBG_SEED[768] [audit D-DRBG-1] */
+    if elen + alen > 768u64 { return 0i32 - 1i32 }   /* seed = entropy||addl into DRBG_SEED[768] -- buffer-bound (memory safety) checked FIRST, before state [audit D-DRBG-1] */
+    if DRBG_RC[0] == 0u64 { return 0i32 - 2i32 }   /* NIST SP 800-90A: Reseed REQUIRES a prior Instantiate; a cold reseed would drbg_update from zero K/V (not the 0x00/0x01 init), an invalid state. [audit D-DRBG-3] */
     let sp : *u8 = &DRBG_SEED as *u8
     let ep : *u8 = entropy as *u8
     let ap : *u8 = addl as *u8
@@ -168,6 +169,7 @@ fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 @export
 
 fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 @export {
     if n_bytes > 65536u64 { return 0i32 - 1i32 }   /* NIST SP 800-90A: max 65536 bytes (2^19 bits) per Generate request [audit D-DRBG-2] */
+    if DRBG_RC[0] == 0u64 { return 0i32 - 2i32 }   /* NIST SP 800-90A: Generate REQUIRES an instantiated DRBG. A cold call (no prior Instantiate) would HMAC from the zero-default DRBG_K/DRBG_V -> PREDICTABLE output. DRBG_RC==0 iff un-instantiated. [audit D-DRBG-3] */
     if alen > 0u64 { drbg_update(addl, alen) }
     let op : *u8 = out as *u8
     let vp : *u8 = &DRBG_V as *u8

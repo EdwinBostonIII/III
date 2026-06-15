@@ -29,6 +29,7 @@ fn shake256_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) 
     let op_l  : u64 = out_ptr
     let ol_l  : u64 = out_len
     if op_l == 0u64 { return 1u32 }
+    if il_l != 0u64 { if in_l == 0u64 { return 1u32 } }   /* [null-deref] keccak_absorb derefs input_ptr when input_len>0 -- match the sibling guard shake128_oneshot already has */
     let sp : u64 = &SHAKE256_STATE as u64
     let rd : u64 = keccak_pack_rate_dom(SHAKE256_RATE, SHAKE256_DOM)
     keccak_state_zero(sp)

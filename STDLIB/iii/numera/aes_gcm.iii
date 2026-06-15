@@ -536,7 +536,13 @@ fn gcm_compute_tag(tag_out: *u8) -> i32 {
 
 /* ---- Public seal ---- */
 
-fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 @crystal @side_channel_resistant @constant_time @dynamic_impact(perf=200, ux=0) @export {
+/* [E2-AES-GCM-1] @constant_time / @side_channel_resistant RETRACTED here to match aes.iii [E2-AES-1]:
+ * this wraps aes_encrypt_block, whose 256-entry S-box is indexed by SECRET state bytes (a cache-timing
+ * channel), and the default scalar GHASH branches on secret bits.  Carrying a side-channel-resistance
+ * annotation the code does not honour is a security-posture lie -- a caller trusting @constant_time for
+ * MAC verification would get a real timing/SPA channel.  The constant-time fix is the BITSLICED S-box +
+ * a branch-free GHASH (APOTHEOSIS S.5, a named horizon), a large separate undertaking -- not a wrapper tag. */
+fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 @crystal @dynamic_impact(perf=200, ux=0) @export {
     if GCM_INITED == 0u8 { return GCM_E_INIT }
     /* CTR-encrypt pt → ct_out. */
     gcm_ctr_xor(pt, pt_len, ct_out)
@@ -552,7 +558,10 @@ fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 @crystal
 
 /* ---- Public open ---- */
 
-fn aes_gcm_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 @crystal @side_channel_resistant @constant_time @dynamic_impact(perf=200, ux=0) @export {
+/* [E2-AES-GCM-1] @constant_time / @side_channel_resistant RETRACTED (see aes_gcm_seal): same secret-indexed
+ * S-box + secret-branching GHASH inheritance.  Note GCM tag compare here is still byte-exact (not a CT
+ * compare), a further reason the side-channel claim was unsound. */
+fn aes_gcm_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 @crystal @dynamic_impact(perf=200, ux=0) @export {
     if GCM_INITED == 0u8 { return 0u8 }
     /* GHASH the ciphertext FIRST (before decrypting), so we don't
      * conflate plaintext bytes into the tag computation. */

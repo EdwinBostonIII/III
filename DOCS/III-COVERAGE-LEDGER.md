@@ -2538,3 +2538,25 @@ call-result ORDERED inside a sealed_call is about as never-happens as Ring-2 get
 separate (a sibling of the cg_r3 #71-class deferral), NOT a dishonest half-fix (the advisor explicitly relaxed the
 "don't leave Ring-2 wrong" line once it was clear the sanctum bug is pre-existing and untouched by this change).
 **The call-result-signedness family is now CLOSED: cg_r3 (W93) ✓ / cg_r0 (W94) ✓ / sanctum deferred-and-documented.**
+
+## Wave-95 — dual-implementation-agreement sweep: CLEAN SATURATION -> the correctness-defect program CLOSES (2026-06-15)
+
+The genuinely-fresh axis after the call-result-signedness family closed: a function implemented TWICE (fast-vs-
+reference in one module, or the same computation cross-module) must produce BYTE-IDENTICAL output -- the internal
+differential oracle that cannot lie.  8-lens Workflow (sym-crypto / bigint-field / NTT / matrix / codes / compiler-opt
+/ codecs / a tree-wide "naive==fast / _ref / reference" comment sweep), 12 agents.  RESULT: 1 raw candidate, refuted
+by all 3 skeptics -> ZERO confirmed survivors.  CLEAN SATURATION.  WHY mined out: fast-vs-reference pairs are exactly
+the pairs the corpus KATs already pin on shared vectors (the adversarial edges 0/max/empty/pow-2/high-bit/aliased were
+already covered, or the two arms were not the same spec); cross-module same-computation pairs (compact sha256 vs crypto
+sha256, duplicate sorts, modpow in bigint vs field, CRC, base-N) are byte-pinned where they co-occur.
+
+**THE CORRECTNESS-DEFECT PROGRAM (this session, W79-W95) IS CLOSED.**  11 real wrong-result fixes (RSA malleability,
+matrix M^0, NFD reorder, NFC Hangul, span reflexivity, pcc closure, gb_reduce normal-form, q128 exactness, json
+i64::MIN, rms ceil-div, semver sentinel) + the compiler call-result-signedness trap root-fixed (W93 i32 / W94 u64-cg_r0,
+closing the long-deferred task #71); corpus 1147 -> 1159, FAIL=0 throughout; 13 gated commits.  FOUR clean saturations
+prove the floor: W90 (constant-authority), W91 (field/group-param equality), W92 (NTT-zeta PROVEN by recompute), W95
+(dual-impl agreement).  TWO items deferred-for-cause: #73 (XII root-confluence cert prose, probe-proven benign) + #77
+(emit_sanctum u64-call-result ordering -- deep/latent/fragile, root-caused).  The bar-keeper held throughout: every fix
+adversarially refuted + in-session-probed-before-edit + teeth-proven + gated; every refuted wave a saturation success,
+never a manufactured fix.  Next high-value work needs a USER-PROVIDED TARGET (a new capability, a named subsystem to
+harden, a real requirement) -- the loop holds the bar rather than manufacture a marginal W96.

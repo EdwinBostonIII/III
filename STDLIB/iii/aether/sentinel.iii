@@ -35,6 +35,7 @@ extern @abi(c-msvc-x64) fn entropy_sample(path_slot: u32, time_value: u64) -> i3
 extern @abi(c-msvc-x64) fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 from "entropy_monitor.iii"
 extern @abi(c-msvc-x64) fn entropy_set_baseline(path_slot: u32, spectrum: *u64, cap: u64) -> i32 from "entropy_monitor.iii"
 extern @abi(c-msvc-x64) fn entropy_distance(path_slot: u32, spectrum: *u64) -> u64 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_baseline_matches(path_slot: u32, spectrum: *u64) -> u8 from "entropy_monitor.iii"
 
 extern @abi(c-msvc-x64) fn vbd_rollback(slot: u32) -> i32 from "vbd.iii"
 extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
@@ -76,8 +77,10 @@ fn sentinel_seal_baseline() -> i32 @export {
     return entropy_set_baseline(SNT_SLOT, (&SNT_SPEC as u64) as *u64, SNT_BASE_CAP)
 }
 
-/* The anomaly WITNESS: exact in-field distance of the current window's spectrum from the sealed baseline.
- * 0 <=> behavior matches the sealed-good fingerprint exactly. */
+/* The anomaly-magnitude WITNESS: the in-field squared-Euclidean distance of the current window's spectrum
+ * from the sealed baseline.  This is a DIAGNOSTIC magnitude (how far), NOT the allow-list verdict -- the
+ * GF(p) sum can be 0 for a non-matching spectrum (a multiple-of-p collision), so the verdict below uses the
+ * exact elementwise oracle instead.  0 here means "magnitude congruent to 0 mod p", not "exact match". */
 fn sentinel_deviation() -> u64 @export {
     if SNT_SLOT == SNT_INVALID { return 0u64 }
     entropy_spectrum(SNT_SLOT, (&SNT_SPEC as u64) as *u64)
@@ -87,8 +90,12 @@ fn sentinel_deviation() -> u64 @export {
 /* Zero-trust allow-list VERDICT: 1 = the live cadence DEVIATED from the sealed-good fingerprint. */
 fn sentinel_anomalous() -> u32 @export {
     if SNT_SLOT == SNT_INVALID { return 1u32 }   /* [P5] FAIL-CLOSED: an unarmed/unsealed sentinel is UNCERTAIN -> treat as anomalous so sentinel_guard rolls back rather than silently committing (a ransomware sweep must never be retained merely because the monitor was not armed) */
-    if sentinel_deviation() != 0u64 { return 1u32 }
-    return 0u32
+    entropy_spectrum(SNT_SLOT, (&SNT_SPEC as u64) as *u64)
+    /* [P5] EXACT elementwise allow-list, NOT distance==0: the GF(p) squared distance can collide to 0 for a
+     * genuinely-different live spectrum (Sum (s_i - b_i)^2 == k*p), a FALSE-BENIGN that would retain the
+     * sweep.  entropy_baseline_matches compares element-for-element -> only the exact sealed cadence passes. */
+    if entropy_baseline_matches(SNT_SLOT, (&SNT_SPEC as u64) as *u64) == 1u8 { return 0u32 }
+    return 1u32
 }
 
 /* THE AUTONOMIC GUARD: the behavioral verdict gates the reversible response on the protected vbd slot.

@@ -1,0 +1,92 @@
+/* 1600_production_hardening_3.iii -- wave-5 RE-AUDIT round 2, batch D2:
+ *
+ *  (P5) entropy_baseline_matches: the EXACT elementwise allow-list oracle the sentinel verdict needs.
+ *       The old verdict was distance==0, where distance is the GF(p) squared-Euclidean magnitude -- which
+ *       can be 0 for a GENUINELY-different spectrum (Sum (s_i - b_i)^2 == k*p), a false-benign that would
+ *       silently RETAIN a ransomware sweep.  entropy_baseline_matches compares element-for-element: exact
+ *       spectrum -> 1, any single differing element -> 0 (no modular collision possible).
+ *  (slice 6) develop_up.du_replay: completes the record (rb_begin in du_encapsulate) -> replay-check wiring.
+ *       Fails closed (RB_ERR=2) when no box is open; once a box is open and a source is recorded, it
+ *       delegates to rb_replay_check -> 0 FAITHFUL on a matching live value, 1 DIVERGED on a differing one.
+ * 99 = the exact-match oracle distinguishes both ways AND du_replay fails closed + delegates faithfully. */
+module corpus_1600
+
+extern @abi(c-msvc-x64) fn entropy_init() -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_register_path(path_id: *u8) -> u32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_sample(path_slot: u32, time_value: u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_set_baseline(path_slot: u32, spectrum: *u64, cap: u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_baseline_matches(path_slot: u32, spectrum: *u64) -> u8 from "entropy_monitor.iii"
+
+extern @abi(c-msvc-x64) fn sentinel_arm() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_observe(activity: u64) -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_deviation() -> u64 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_anomalous() -> u32 from "sentinel.iii"
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_replay(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn rb_record(source_id: u32, live: *u8, len: u32, out: *u8) -> u64 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay() -> i32 from "replay_box.iii"
+
+var K_ID    : [u8; 32]
+var K_SPEC  : [u64; 64]
+var K_LIVE  : [u8; 4]
+var K_DIFF  : [u8; 4]
+var K_OUT   : [u8; 4]
+
+fn main() -> u64 {
+    /* ---- Arm A: entropy_baseline_matches exact-match oracle (the sentinel-verdict core) ---- */
+    entropy_init()
+    let mut i : u64 = 0u64
+    while i < 32u64 { K_ID[i] = (i + 1u64) as u8  i = i + 1u64 }
+    let slot : u32 = entropy_register_path((&K_ID as u64) as *u8)
+    if slot == 0xFFFFFFFFu32 { return 1u64 }
+    i = 0u64
+    while i < 64u64 { entropy_sample(slot, (i * 5u64 + 11u64) & 0xFFu64)  i = i + 1u64 }
+    if entropy_spectrum(slot, (&K_SPEC as u64) as *u64) != 0i32 { return 2u64 }
+    if entropy_set_baseline(slot, (&K_SPEC as u64) as *u64, 64u64) != 0i32 { return 3u64 }
+    if entropy_baseline_matches(slot, (&K_SPEC as u64) as *u64) != 1u8 { return 4u64 }   /* exact -> match */
+    K_SPEC[0u64] = K_SPEC[0u64] + 1u64
+    if entropy_baseline_matches(slot, (&K_SPEC as u64) as *u64) != 0u8 { return 5u64 }   /* one differs -> no match */
+    K_SPEC[0u64] = K_SPEC[0u64] - 1u64
+    if entropy_baseline_matches(slot, (&K_SPEC as u64) as *u64) != 1u8 { return 6u64 }   /* restored -> match (not latched) */
+
+    /* ---- Arm B: the sentinel verdict end-to-end (exact-match through the real flow) ---- */
+    if sentinel_arm() != 0i32 { return 11u64 }
+    i = 0u64
+    while i < 64u64 { sentinel_observe(3u64)  i = i + 1u64 }   /* benign steady-state cadence */
+    if sentinel_seal_baseline() != 0i32 { return 12u64 }
+    /* the sealed window persists unchanged -> exact match: magnitude witness 0 AND not anomalous */
+    if sentinel_deviation() != 0u64 { return 13u64 }          /* covers sentinel_deviation (magnitude == 0 on exact match) */
+    if sentinel_anomalous() != 0u32 { return 14u64 }          /* benign -> retained */
+    /* a saturated ransomware-like burst shifts the window -> the exact-match oracle fires -> anomalous */
+    i = 0u64
+    while i < 64u64 { sentinel_observe(200u64)  i = i + 1u64 }
+    if sentinel_anomalous() != 1u32 { return 15u64 }          /* deviated -> rollback verdict */
+
+    /* ---- Arm C: du_replay fail-closed + faithful delegation ---- */
+    K_LIVE[0u64] = 0xA1u8  K_LIVE[1u64] = 0xB2u8  K_LIVE[2u64] = 0xC3u8  K_LIVE[3u64] = 0xD4u8
+    K_DIFF[0u64] = 0xA1u8  K_DIFF[1u64] = 0xB2u8  K_DIFF[2u64] = 0xC3u8  K_DIFF[3u64] = 0x00u8   /* one byte differs */
+
+    /* (1) fail-closed: no box open -> RB_ERR (2) */
+    if du_replay(0u32, (&K_LIVE as u64) as *u8, 4u32, (&K_OUT as u64) as *u8) != 2u32 { return 7u64 }
+
+    /* (2) open a box (DISK|COMPUTE) -> du_encapsulate calls rb_begin (record mode) */
+    let root_cap : u64 = cap_env_init()
+    let full : u64 = cap_attenuate(root_cap, 0x5u64, 0u64)
+    if du_encapsulate(full, 100000u64, 100000u64) != 0i32 { return 8u64 }
+
+    /* record source 0 twice with the same 4 live bytes */
+    rb_record(0u32, (&K_LIVE as u64) as *u8, 4u32, (&K_OUT as u64) as *u8)
+    rb_record(0u32, (&K_LIVE as u64) as *u8, 4u32, (&K_OUT as u64) as *u8)
+
+    /* switch to replay mode, then check through the gateway */
+    rb_replay()
+    if du_replay(0u32, (&K_LIVE as u64) as *u8, 4u32, (&K_OUT as u64) as *u8) != 0u32 { return 9u64 }   /* matches recorded -> FAITHFUL */
+    if du_replay(0u32, (&K_DIFF as u64) as *u8, 4u32, (&K_OUT as u64) as *u8) != 1u32 { return 10u64 }  /* differs -> DIVERGED */
+
+    return 99u64
+}

@@ -273,6 +273,25 @@ fn entropy_distance(path_slot: u32, spectrum: *u64) -> u64 @export {
     return acc
 }
 
+/* [P5] EXACT elementwise allow-list match: 1 iff the supplied spectrum equals the stored baseline
+ * element-for-element.  This is the SAFETY oracle the zero-trust behavioral allow-list needs --
+ * entropy_distance returns the GF(p) squared-Euclidean magnitude, which can collide to 0 for a
+ * GENUINELY-different spectrum when Sum (s_i - b_i)^2 is a nonzero multiple of p (a false-benign that
+ * would silently RETAIN a ransomware sweep).  Direct equality admits no modular collision.  Invalid slot
+ * or unset baseline -> 0 (no sealed fingerprint to match against is NOT a match -> caller fails closed). */
+fn entropy_baseline_matches(path_slot: u32, spectrum: *u64) -> u8 @export {
+    let slot : u32 = path_slot
+    if slot >= ENTROPY_MAX_PATHS { return 0u8 }
+    if ENTROPY_BASE_SET[slot] == 0u8 { return 0u8 }
+    let base : u64 = (slot as u64 & 0xFFFFFFFFu64) * (ENTROPY_N as u64)
+    let mut i : u32 = 0u32
+    while i < ENTROPY_N {
+        if spectrum[i] != ENTROPY_BASELINE[base + (i as u64)] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
 /* Deterministic witness pre-image over a FIXED algebraic-time stamp; pure given
  * (slot state, stamp). Bytes 0..32 = path id; 32..40 = stamp LE byte-by-byte
  * (Trap 5 safe-serialize idiom); 40..296 = current spectrum low-4-bytes per

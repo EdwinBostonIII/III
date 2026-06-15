@@ -35,6 +35,7 @@ extern @abi(c-msvc-x64) fn sentinel_observe(a: u64) -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn sentinel_guard(vbd_slot: u32) -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay_check(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 from "replay_box.iii"
 extern @abi(c-msvc-x64) fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 from "snapshot_box.iii"
 extern @abi(c-msvc-x64) fn snb_restore(session: u32, slot: u32) -> i32 from "snapshot_box.iii"
 extern @abi(c-msvc-x64) fn ff_box_safe() -> u32 from "flow_firewall.iii"
@@ -49,6 +50,7 @@ const DU_E         : i32 = -2i32       /* box not open / sub-organ failure */
 const DU_RIGHTS    : u64 = 0x5u64      /* CAP_RIGHT_FS_WRITE (0x4) | CAP_RIGHT_ALLOC (0x1): disk + compute */
 const DU_RIGHT_DISK : u64 = 0x4u64     /* CAP_RIGHT_FS_WRITE -- the reversible-disk write authority (== SB_RIGHT_DISK) */
 const DU_NONE      : u32 = 0xFFFFFFFFu32
+const DU_REPLAY_ERR : u32 = 2u32       /* == replay_box RB_ERR: replay-check fail-closed (no open box) */
 const DU_VBD_TOKEN : u64 = 0x5A5A5A5Au64
 const DU_BENIGN_CADENCE : u64 = 3u64   /* the sealed-good behavioral baseline sample */
 
@@ -123,6 +125,16 @@ fn du_guard() -> i32 @export {
 fn du_restore(slot: u32) -> i32 @export {
     if DU_OPEN == 0u32 { return DU_E }
     return snb_restore(DU_VBD_SLOT, slot)
+}
+
+/* REPLAY (slice 6, deterministic-replay membrane): re-issue a recorded source against the replay log and
+ * report whether the guest's LIVE value would have DIVERGED from the recorded run -- the determinism
+ * superpower exposed at the gateway, completing the record (rb_begin, in du_encapsulate) -> replay-check
+ * wiring.  Returns rb_replay_check's verdict: 0 FAITHFUL / 1 DIVERGED / 2 ERR (exhausted/length-mismatch).
+ * Fails closed to DU_REPLAY_ERR when no box is open -- there is nothing recorded to replay against. */
+fn du_replay(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 @export {
+    if DU_OPEN == 0u32 { return DU_REPLAY_ERR }   /* == RB_ERR: no open box -> no recorded run to check against */
+    return rb_replay_check(source_id, live, len, out)
 }
 
 /* ATTEST the box's current state (slice 11): content-address the live disk and sign it with the node's

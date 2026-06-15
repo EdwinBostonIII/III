@@ -1,0 +1,84 @@
+/* 1598_resolver_tiebreak.iii -- wave-5 audit P1: resolve()'s ambiguity/tiebreak gate, FORCED TIE.
+ *
+ * The runner-up tracking in resolve() was broken (sequential ifs, no else): the scalar path collapsed
+ * next==best (so every match self-tiebroke -> spurious AMBIGUOUS), and the AVX-2 path left next at the
+ * sentinel so Step 5 NEVER fired -- two distinct equal-top patterns were silently resolved to the asm's
+ * lane-order pick, never deterministically tiebroken.  The corpus has no ties, so it could not see this;
+ * THIS KAT constructs one (advisor: the forced-tie KAT is the only verification of the fix).
+ *
+ * Two patterns with the SAME activation_base (== equal resolver_score == a genuine tie) but distinct
+ * pattern_ids PX=0x11111111 < PY=0x22222222.  tb_compare_pair orders by (pattern_id, mhash) ascending and
+ * resolve keeps the LOWER pid, so X must win deterministically.  With the fix, the AVX-2 path recovers the
+ * runner-up scalar-side, detects next_score==best_score, recomputes best+next via the host-independent
+ * scalar loop, and Step 5 tiebreaks to X -- exercising the corrected scalar runner-up logic on AVX-2
+ * hardware (otherwise unreachable -- there is no force-scalar hook).
+ * 99 = the tie resolves (NOT ambiguous) to the deterministic lower-pid winner X, reproducibly. */
+module corpus_1598
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn reflect(scope: u32) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, p_template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_unseal_for_test() -> i32 from "pattern_table.iii"
+
+var TPL : [u8; 168]
+
+fn kat_dispatch_x(a: u64, b: u64, c: u64, ctx: u64) -> u64 { return 0x5151u64 }
+fn kat_dispatch_y(a: u64, b: u64, c: u64, ctx: u64) -> u64 { return 0x6262u64 }
+
+fn put_u64(off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { TPL[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0u64
+}
+/* 168-byte template: pattern_id@0, unify_fn@88 (null), dispatch_fn@96, activation_base@104, k_value@128 */
+fn build_tpl(pid: u64, base: u64, dfp: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 168u64 { TPL[i] = 0u8  i = i + 1u64 }
+    put_u64(0u64, pid)
+    put_u64(96u64, dfp)
+    put_u64(104u64, base)
+    put_u64(128u64, 950000000u64)
+    return 0u64
+}
+/* PE firewall (1354 idiom): keep the intent NON-STATIC so resolve() stays a runtime dispatch */
+fn dynamic_intent(x: u64) -> u64 { return x }
+
+fn main() -> u64 {
+    resolution_init()
+    let set : u64 = pattern_set_global()
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return 80u64 }
+    call_context_init_set(0u64, kch as u8, 2u8, 1u8)
+    let ctx : u64 = call_context_new()
+    let intent : u64 = dynamic_intent(intent_form(100u64))
+
+    /* register the TWO equal-score patterns (same base -> tie); PX < PY */
+    pattern_registry_unseal_for_test()
+    let dx : u64 = kat_dispatch_x
+    build_tpl(0x11111111u64, 3000000000u64, dx)
+    if pattern_register(90u32, (&TPL) as u64) != 1u8 { return 1u64 }
+    let dy : u64 = kat_dispatch_y
+    build_tpl(0x22222222u64, 3000000000u64, dy)
+    if pattern_register(91u32, (&TPL) as u64) != 1u8 { return 2u64 }
+    pattern_registry_seal_global()
+
+    /* resolve the tie: X (lower pid) wins deterministically, NOT ambiguous */
+    let rc : u64 = resolve(set, intent, ctx)
+    if (rc & 1u64) != 0u64 { return 3u64 }                 /* odd tag == a refusal (AMBIGUOUS) -> the gate misfired */
+    if rc != (0x5151u64 << 1u64) { return 4u64 }           /* X's dispatch, payload<<1 -- lower pid won the tie */
+    if reflect(2u32) != 0x11111111u64 { return 5u64 }      /* the winner named is X (PX) */
+
+    /* determinism: a second resolve yields the identical winner */
+    let ctx2 : u64 = call_context_new()
+    let rc2 : u64 = resolve(set, intent, ctx2)
+    if rc2 != rc { return 6u64 }
+
+    return 99u64
+}

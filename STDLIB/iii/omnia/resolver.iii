@@ -687,6 +687,43 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
             let packed : u64 = iii_resolver_unit_resolve(set, intent, ctx)
             best_id    = ((packed >> 32u64) & 0xFFFFFFFFu64) as u32
             best_score = packed & 0xFFFFFFFFu64
+            /* [P1] the asm returns ONLY (best_id, best_score); recover the runner-up scalar-side so Step 5's
+             * ambiguity gate is LIVE on AVX-2 hosts too (it was dead -- next stuck at the sentinel).  On a
+             * NON-tie best_id is unchanged and next<best, so Step 5 stays skipped and the binding is
+             * byte-identical to before.  On a top-score TIE we recompute best+next ENTIRELY scalar-side so
+             * the tiebreak is host-INDEPENDENT (we never trust the asm's SIMD-lane-order pick on a tie). */
+            let mut rj : u32 = 0u32
+            while rj < 4096u32 {
+                if rj != best_id {
+                    if pattern_set_has(set, rj) == 1u8 {
+                        let prj : u64 = pattern_table_get(rj)
+                        if prj != 0u64 {
+                            let srj : u64 = resolver_score(prj, intent, ctx)
+                            if srj > next_score { next_id = rj  next_score = srj }
+                        }
+                    }
+                }
+                rj = (rj + 1u32) & 0xFFFFFFFFu32
+            }
+            if next_score == best_score {
+                best_id = 0xFFFFFFFFu32  best_score = 0u64  next_id = 0xFFFFFFFFu32  next_score = 0u64
+                let mut ti : u32 = 0u32
+                while ti < 4096u32 {
+                    if pattern_set_has(set, ti) == 1u8 {
+                        let pti : u64 = pattern_table_get(ti)
+                        if pti != 0u64 {
+                            let sti : u64 = resolver_score(pti, intent, ctx)
+                            if sti > best_score {
+                                next_id = best_id  next_score = best_score
+                                best_id = ti  best_score = sti
+                            } else if sti > next_score {
+                                next_id = ti  next_score = sti
+                            }
+                        }
+                    }
+                    ti = (ti + 1u32) & 0xFFFFFFFFu32
+                }
+            }
         } else {
             let mut i : u32 = 0u32
             while i < 4096u32 {
@@ -699,12 +736,9 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
                             next_score = best_score
                             best_id    = i
                             best_score = s
-                        }
-                        if s <= best_score {
-                            if s > next_score {
-                                next_id    = i
-                                next_score = s
-                            }
+                        } else if s > next_score {
+                            next_id    = i
+                            next_score = s
                         }
                     }
                 }

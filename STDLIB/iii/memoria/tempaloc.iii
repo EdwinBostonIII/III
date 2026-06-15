@@ -94,9 +94,11 @@ fn tempaloc_alloc(type_tag: u64) -> u64 @export {
     while i < cap {
         let idx : u32 = base + i
         if TEMPALOC_LIVE[idx] == 0u8 {
-            if g == TEMPALOC_BAD { g = idx }
+            g = idx        /* the FIRST (lowest) free slot */
+            i = cap        /* early-exit: byte-identical to the full scan, which only kept the first free */
+        } else {
+            i = i + 1u32
         }
-        i = i + 1u32
     }
     if g == TEMPALOC_BAD { return 0u64 }
     TEMPALOC_TYPE[g] = t

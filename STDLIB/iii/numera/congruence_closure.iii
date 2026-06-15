@@ -83,7 +83,17 @@ fn pcc_app2(fn_: u32, a: u32, b: u32) -> u32 @export { let t : u32 = pcc_new(fn_
 fn pcc_find(t: u32) -> u32 {
     let mut x : u32 = t
     while PCC_PAR[x as u64] != x { x = PCC_PAR[x as u64] }
-    return x
+    let root : u32 = x
+    /* Path compression: point every node on t's chain straight at the root.  Byte-identical to the plain
+     * walk (same root returned; PCC_PAR is read ONLY here, so the flattened shape is unobservable), but
+     * subsequent finds on the path are O(1) instead of O(depth) -- the one un-compressed union-find. */
+    x = t
+    while x != root {
+        let next : u32 = PCC_PAR[x as u64]
+        PCC_PAR[x as u64] = root
+        x = next
+    }
+    return root
 }
 fn pcc_eq(a: u32, b: u32) -> u32 @export {
     if pcc_find(a) == pcc_find(b) { return 1u32 }

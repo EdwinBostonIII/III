@@ -11,6 +11,16 @@
  * Tree shape: complete binary; for non-power-of-two leaf counts, the
  * last leaf is duplicated up the tree until a power-of-two level is
  * reached (Bitcoin-style; deterministic, no padding bytes added).
+ * [E2-MK-2] SECURITY NOTE -- the line-8 claim covers ONLY the node-as-leaf class.  This
+ * Bitcoin-style duplication carries the CVE-2012-2459 COUNT-AMBIGUITY: an N-leaf tree and an
+ * (N+1)-leaf tree that repeats the last leaf reduce to the SAME root even WITH the 0x00/0x01
+ * separation (the duplicated item is a real LEAF, so domain separation never engages).  It is
+ * UNREACHABLE in-tree: every consumer pins the leaf count -- erasure_store (fixed erasure-shard
+ * params), theorem_commons (TCOM_COUNT) -- and the stable-root zk/seal machinery (zk_air/
+ * zk_stark/ntt_fri) uses the power-of-two merkle_tree_build_u32 path where duplication never
+ * fires.  A FUTURE consumer rooting untrusted VARIABLE-count data MUST first switch to odd-node
+ * promotion (RFC 6962 carry-up).  corpus 1589 is the documented collision (a characterization
+ * test: if a real fix lands, 1589 flips and must be updated).
  *
  * Public surface:
  *   merkle_compute_root(leaves_ptr, leaf_count, leaf_size, out_32)        -> i32

@@ -1,0 +1,48 @@
+/* 1589_merkle_cve_2012_2459_documented.iii -- CHARACTERIZATION test for numera/merkle's KNOWN, in-tree
+ * UNREACHABLE CVE-2012-2459 count-ambiguity (the discovery's correctness #8; advisor-adjudicated landing).
+ *
+ * numera/merkle uses Bitcoin-style last-leaf duplication for odd counts (line 148: ri>=count -> ri=li).
+ * Even WITH the RFC-6962 0x00/0x01 domain separation, this means an N-leaf tree and an (N+1)-leaf tree
+ * that repeats the last leaf reduce to the SAME root (the duplicated item is a real leaf, so the
+ * leaf/node prefix never engages).  This is the classic CVE-2012-2459 second-preimage / count ambiguity.
+ *
+ * It is UNREACHABLE in-tree (every consumer pins the leaf count; the stable-root zk/seal machinery uses
+ * the power-of-two merkle_tree_build_u32 path where duplication never fires -- see merkle.iii [E2-MK-2]),
+ * so the proportionate landing is the header-narrow + this documented collision rather than a root-changing
+ * fix that would churn the seal/reseal surface.  This is a CHARACTERIZATION test: it asserts the collision
+ * EXISTS (3-leaf root == 4-leaf-with-duplicated-last root).  If a real fix (RFC 6962 odd-node promotion)
+ * ever lands, this test FLIPS (roots differ) and MUST be updated -- the alarm that the spec changed.
+ * 99 = the documented collision still holds. */
+module corpus_1589
+
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+
+var THREE : [u8; 96]    /* L1 || L2 || L3 (3 distinct 32-byte leaves) */
+var FOUR  : [u8; 128]   /* L1 || L2 || L3 || L3 (last leaf repeated) */
+var ROOT3 : [u8; 32]
+var ROOT4 : [u8; 32]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        THREE[i]          = (i + 1u64)   as u8   /* L1 */
+        THREE[32u64 + i]  = (i + 100u64) as u8   /* L2 */
+        THREE[64u64 + i]  = (i + 200u64) as u8   /* L3 (distinct from L1,L2) */
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 96u64 { FOUR[i] = THREE[i]  i = i + 1u64 }              /* L1,L2,L3 */
+    i = 0u64
+    while i < 32u64 { FOUR[96u64 + i] = THREE[64u64 + i]  i = i + 1u64 }  /* + L3 again */
+
+    if merkle_compute_root((&THREE as u64), 3u32, 32u64, (&ROOT3 as u64)) != 0i32 { return 10u64 }
+    if merkle_compute_root((&FOUR as u64),  4u32, 32u64, (&ROOT4 as u64)) != 0i32 { return 11u64 }
+
+    /* CVE-2012-2459: the 3-leaf root and the 4-leaf-with-duplicated-last root COLLIDE (documented). */
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if ROOT3[k] != ROOT4[k] { return 20u64 }   /* roots DIFFER -> merkle was fixed -> update this doc test */
+        k = k + 1u64
+    }
+    return 99u64
+}

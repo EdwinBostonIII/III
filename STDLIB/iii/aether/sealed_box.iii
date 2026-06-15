@@ -1,0 +1,71 @@
+/* STDLIB/iii/aether/sealed_box.iii
+ *
+ * III STDLIB - aether::sealed_box  --  THE DEVELOP-UP GATEWAY: encapsulate an opaque legacy system as a
+ * mathematical object and grant it III's superpowers under zero-trust capability mediation.
+ *
+ * "DEVELOP-UP" SLICE 5 / CAPSTONE.  The whole thesis in one facade: an unmodified legacy guest runs inside
+ * a sealed box; III -- blind to what the guest's bytes MEAN -- nonetheless grants it five powers and
+ * mediates every privileged act through an unforgeable capability (no ambient authority; deny by default):
+ *
+ *   1. ADMISSION       (aether/capability)     : every privileged act is verified against an attenuable,
+ *                                                 revocable capability -- POLA, with a cascading kill-switch.
+ *   2. REVERSIBLE DISK  (aether/vbd)            : capability-gated writes are recorded byte-for-byte and
+ *                                                 can be rolled back to any committed pre-image.
+ *   3. MEMORY FORCEFIELD(aether/enclave)        : writes to the hypervisor's own state are structurally
+ *                                                 unrepresentable; guest-declared regions are protected.
+ *   4. INFO-FLOW        (aether/flow_firewall)  : no input-tainted byte leaves the box unencrypted.
+ *   5. BEHAVIORAL IMMUNITY (aether/sentinel)    : a behavioral deviation from the sealed-good cadence
+ *                                                 (e.g. mass-encryption) auto-rolls-the-box-backward.
+ *
+ * COMPOSES (not reimplements) all five organs.  Its additive value is the SINGLE zero-trust entry point:
+ * the bridges become capability-mediated (sb_disk_write / sb_mem_allowed gate the bridge behind a cap),
+ * so a guest holding an attenuated or revoked capability is denied at the door.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.97.
+ */
+
+module aether_sealed_box
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_revoke(authority_id: u64, target_id: u64) -> i32 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn enc_write_allowed(offset: u32) -> u32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn ff_box_safe() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn sentinel_guard(slot: u32) -> i32 from "sentinel.iii"
+
+const SB_RIGHT_DISK : u64 = 0x4u64      /* == CAP_RIGHT_FS_WRITE  (reversible-disk write authority) */
+const SB_RIGHT_NET  : u64 = 0x20u64     /* == CAP_RIGHT_NET_DIAL  (egress authority) */
+const SB_E_DENIED   : i32 = -10i32
+
+/* ADMISSION (zero-trust): 1 iff the guest capability currently grants `right` (live, unrevoked, no
+ * ancestor revoked).  The single door through which every privileged act must pass. */
+fn sb_admit(guest_cap: u64, right: u64) -> u32 @export {
+    if cap_verify_rights(guest_cap, right) == 0u8 { return 0u32 }
+    return 1u32
+}
+
+/* REVERSIBLE DISK (vbd) gated by the DISK right: a denied cap cannot write (and nothing is mutated);
+ * a granted write is recorded byte-for-byte and is rollback-able. */
+fn sb_disk_write(guest_cap: u64, slot: u32, idx: u64, val: u64) -> i32 @export {
+    if cap_verify_rights(guest_cap, SB_RIGHT_DISK) == 0u8 { return SB_E_DENIED }
+    return vbd_write(slot, idx, val)
+}
+
+/* MEMORY FORCEFIELD (enclave) under capability admission: a guest write is allowed iff the cap holds the
+ * DISK right AND the offset is forcefield-admissible (architectural + paravirtual).  Deny by default. */
+fn sb_mem_allowed(guest_cap: u64, offset: u32) -> u32 @export {
+    if cap_verify_rights(guest_cap, SB_RIGHT_DISK) == 0u8 { return 0u32 }
+    return enc_write_allowed(offset)
+}
+
+/* INFO-FLOW (flow_firewall): 1 iff no input-tainted byte would leave the box unencrypted. */
+fn sb_egress_safe() -> u32 @export { return ff_box_safe() }
+
+/* BEHAVIORAL IMMUNITY (sentinel): the behavioral verdict gates the reversible response on `slot`
+ * (deviation -> rollback, match -> commit).  Returns the sentinel guard code. */
+fn sb_guard(slot: u32) -> i32 @export { return sentinel_guard(slot) }
+
+/* THE KILL SWITCH: an authority capability revokes a guest capability; revocation cascades to every
+ * descendant (cap_verify_rights walks the parent chain).  After this, sb_admit denies the guest. */
+fn sb_revoke(authority: u64, target: u64) -> i32 @export { return cap_revoke(authority, target) }

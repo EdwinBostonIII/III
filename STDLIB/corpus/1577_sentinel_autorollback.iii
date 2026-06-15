@@ -1,0 +1,86 @@
+/* 1577_sentinel_autorollback.iii -- DEVELOP-UP SLICE 3: the behavioral ransomware sentinel
+ * (aether/sentinel.iii) composing TWO real organs -- numera/entropy_monitor (the deterministic spectral
+ * behavioral detector) and aether/vbd (the reversible device, slice 1).  The autonomic-immunity proof.
+ *
+ * The sentinel seals the benign guest's steady write cadence as a known-good behavioral fingerprint, then
+ * the live cadence's exact GF(p) spectral DISTANCE from that baseline GATES a reversible response: deviate
+ * -> roll the box backward (undo the attack); match -> commit (retain the benign writes).
+ *
+ * TOY-PROOF ORACLE (a conjunction; the two arms differ ONLY in the activity pattern fed to the spectral
+ * organ -- the verdict and its opposite consequences flow from the REAL detector + REAL undo log):
+ *  (A) RANSOMWARE -> REVERSED: benign baseline sealed; the guest fills+commits legitimate disk D[i] (a
+ *      runtime-arbitrary pre-image the sentinel never saw); ransomware overwrites EVERY block with
+ *      high-entropy R[i]; the sentinel observes the mass-encryption full-disk SWEEP cadence; its spectrum
+ *      DEVIATES from the sealed baseline -> sentinel_guard returns ROLLED_BACK and the real undo log
+ *      recovers D[i] byte-for-byte.  A toy that doesn't run the real spectral distance can't classify on
+ *      cadence; a toy that hardcodes the verdict can't recover arbitrary D.
+ *  (B) BENIGN -> RETAINED: the guest does a localized benign write at the SEALED steady cadence; the
+ *      spectrum MATCHES the baseline (deviation == 0) -> sentinel_guard returns COMMITTED and the benign
+ *      write is RETAINED (NOT rolled back to D).  Proves the behavioral organ genuinely gates the
+ *      response -- the sentinel is not a trivial always-roll-back.
+ * 99 = both arms hold (opposite verdicts + opposite disk outcomes, separated purely by behavioral physics).
+ */
+module corpus_1577
+
+extern @abi(c-msvc-x64) fn sentinel_arm() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_observe(a: u64) -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_guard(vbd_slot: u32) -> i32 from "sentinel.iii"
+
+extern @abi(c-msvc-x64) fn vbd_open(cap: u64) -> u32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
+
+const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
+const NB : u64 = 256u64
+const CAP : u64 = 0x5A5A5A5Au64
+const SNT_ROLLED_BACK : i32 = 1i32
+const SNT_COMMITTED   : i32 = 0i32
+const BENIGN_VAL : u64 = 0x600D600D600D600Du64    /* distinct from any D[i] */
+
+fn dval(i: u64) -> u64 { return (i + 1u64) * GOLDEN }                              /* legitimate disk D[i] */
+fn rval(i: u64) -> u64 { return ((i + 1u64) * GOLDEN) ^ 0xFFFFFFFFFFFFFFFFu64 }    /* ransomware R[i] */
+
+fn main() -> u64 {
+    /* seal the benign behavioral baseline: a steady low write cadence (3 blocks / tick) */
+    if sentinel_arm() != 0i32 { return 10u64 }
+    let mut i : u64 = 0u64
+    while i < 64u64 { sentinel_observe(3u64)  i = i + 1u64 }
+    if sentinel_seal_baseline() != 0i32 { return 11u64 }
+
+    /* (A) the guest legitimately fills + commits its disk (the baseline state to recover) */
+    let s1 : u32 = vbd_open(CAP)
+    if s1 == 0xFFFFFFFFu32 { return 12u64 }
+    i = 0u64
+    while i < NB { if vbd_write(s1, i, dval(i)) != 0i32 { return 13u64 }  i = i + 1u64 }
+    if vbd_commit(s1) != 0i32 { return 14u64 }
+
+    /* ransomware runs inside the box and encrypts every block */
+    let s2 : u32 = vbd_open(CAP)
+    if s2 == 0xFFFFFFFFu32 { return 15u64 }
+    i = 0u64
+    while i < NB { if vbd_write(s2, i, rval(i)) != 0i32 { return 16u64 }  i = i + 1u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != rval(i) { return 17u64 }  i = i + 1u64 }   /* attack succeeded */
+
+    /* the sentinel observes the mass-encryption full-disk SWEEP cadence (structurally distinct) */
+    i = 0u64
+    while i < 64u64 { sentinel_observe(i + 1u64)  i = i + 1u64 }
+    /* the autonomic guard: behavioral verdict -> reversible response */
+    if sentinel_guard(s2) != SNT_ROLLED_BACK { return 18u64 }                   /* deviated -> reversed */
+    i = 0u64
+    while i < NB { if vbd_read(i) != dval(i) { return 19u64 }  i = i + 1u64 }    /* D recovered byte-for-byte */
+
+    /* (B) a benign localized write at the SEALED steady cadence -> matched -> RETAINED */
+    let s3 : u32 = vbd_open(CAP)
+    if s3 == 0xFFFFFFFFu32 { return 20u64 }
+    if vbd_write(s3, 0u64, BENIGN_VAL) != 0i32 { return 21u64 }
+    if vbd_read(0u64) != BENIGN_VAL { return 22u64 }
+    i = 0u64
+    while i < 64u64 { sentinel_observe(3u64)  i = i + 1u64 }                     /* benign cadence, matches baseline */
+    if sentinel_guard(s3) != SNT_COMMITTED { return 23u64 }                     /* matched -> committed */
+    if vbd_read(0u64) != BENIGN_VAL { return 24u64 }                            /* benign write RETAINED, not reverted */
+
+    return 99u64
+}

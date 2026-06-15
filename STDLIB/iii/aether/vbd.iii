@@ -1,0 +1,77 @@
+/* STDLIB/iii/aether/vbd.iii
+ *
+ * III STDLIB - aether::vbd  --  the capability-gated REVERSIBLE VIRTUAL BLOCK DEVICE.
+ *
+ * "DEVELOP-UP" SLICE 1 (the sealed box, reversibility/rollback). A legacy guest (Windows, Linux)
+ * running inside III's Ring-(-1) sealed box sees an ordinary hard disk; in reality every block write
+ * is mediated by III as a capability-gated, REVERSIBLE state transition.  Each write records the OLD
+ * block value as an inverse on numera/reversible (the byte-for-byte undo executor) BEFORE the block is
+ * mutated -- the record-before-mutate soundness order (forked_walk.iii:64-96).  Consequently an
+ * ARBITRARY adversarial overwrite -- ransomware "encrypting" every block with high-entropy garbage --
+ * is rolled back byte-for-byte by replaying the real undo log.  III reverses the state of the box
+ * without ever understanding the virus: it does not prove HOW the guest computed the write, only that
+ * the write is a capability-gated, invertible transition on a virtualized peripheral.
+ *
+ * COMPOSES (not reimplements): numera/reversible (rev_begin / rev_record / rev_rollback / rev_commit).
+ * The byte rollback comes from reversible's undo log (which holds the actual old values); this module
+ * adds the block-device abstraction + the capability-mediated write surface the hypervisor exposes.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_vbd
+
+extern @abi(c-msvc-x64) fn rev_init() -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_begin(cap: u64) -> u32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_record(slot: u32, tag: u32, a: u64, b: u64) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_rollback(slot: u32) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_commit(slot: u32) -> i32 from "reversible.iii"
+
+const VBD_TAG_MEM_RESTORE_U64 : u32 = 2u32   /* == REV_TAG_MEM_RESTORE_U64 (reversible.iii:59) */
+const VBD_OK        : i32 = 0i32
+const VBD_E_OOB     : i32 = -2i32            /* block index out of range */
+const VBD_E_NOINIT  : i32 = -3i32            /* device never opened */
+const VBD_E_REFUSED : i32 = -4i32            /* undo could not be logged (OOM/cap) -> write REFUSED */
+const VBD_NBLOCKS   : u64 = 256u64
+const VBD_SLOT_NONE : u32 = 0xFFFFFFFFu32
+
+/* The guest's virtualized disk: 256 u64 blocks. */
+var VBD_BLOCKS : [u64; 256]
+var VBD_INIT   : u32 = 0u32
+
+/* byte address of block idx (the undo log restores *(addr) = old). */
+fn vbd_block_addr(idx: u64) -> u64 { return (&VBD_BLOCKS as u64) + idx * 8u64 }
+
+/* Open the device under capability `cap` (cap != 0 is required by the reversible cap-gate, so a
+ * cap-stripped guest cannot obtain reversible writes).  Returns the reversible envelope slot, or
+ * VBD_SLOT_NONE on exhaustion. */
+fn vbd_open(cap: u64) -> u32 @export {
+    if VBD_INIT == 0u32 { rev_init()  VBD_INIT = 1u32 }
+    return rev_begin(cap)
+}
+
+/* Read block idx (0 on out-of-range -- a guest read never faults the host). */
+fn vbd_read(idx: u64) -> u64 @export {
+    if idx >= VBD_NBLOCKS { return 0u64 }
+    return VBD_BLOCKS[idx]
+}
+
+/* Write `val` to block idx on the open envelope `slot`.  Records the OLD value as a reversible inverse
+ * FIRST; if that record is refused (cap-denied / log full), the write is REFUSED and the block is left
+ * unchanged -- never leave unrollbackable state (the soundness order). */
+fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 @export {
+    if VBD_INIT == 0u32 { return VBD_E_NOINIT }
+    if idx >= VBD_NBLOCKS { return VBD_E_OOB }
+    let old : u64 = VBD_BLOCKS[idx]
+    let rr : i32 = rev_record(slot, VBD_TAG_MEM_RESTORE_U64, vbd_block_addr(idx), old)
+    if rr != VBD_OK { return VBD_E_REFUSED }
+    VBD_BLOCKS[idx] = val
+    return VBD_OK
+}
+
+/* Roll the device back to its pre-image (undo every write since `slot` was opened) -- the
+ * anti-ransomware reversal.  Byte-for-byte, via the real reversible undo log. */
+fn vbd_rollback(slot: u32) -> i32 @export { return rev_rollback(slot) }
+
+/* Persist the writes (commit the envelope; no rollback after this). */
+fn vbd_commit(slot: u32) -> i32 @export { return rev_commit(slot) }

@@ -1,0 +1,97 @@
+/* STDLIB/iii/aether/enclave.iii
+ *
+ * III STDLIB - aether::enclave  --  the ENLIGHTENED-GUEST memory forcefield (paravirtual sealed box).
+ *
+ * "DEVELOP-UP" SLICE 4 (the second semantic-gap bridge: THE ENLIGHTENED GUEST / paravirtualization).
+ * An opaque legacy guest is normally blind to the hypervisor and the hypervisor blind to it.  An
+ * ENLIGHTENED guest can cooperate: it issues a witnessed HYPERCALL (an AMD-SVM VMMCALL) to DECLARE a
+ * region of its own memory as sensitive, and III erects a memory FORCEFIELD around it -- mediating every
+ * subsequent write -- without ever understanding what the bytes mean.  Two forcefields stack:
+ *   1. the ARCHITECTURAL forcefield (fixed): the SVM layout makes a metal write to the hypervisor's own
+ *      control/state regions (VMCB / HSAVE / NPT / HV_STATE / OOB) structurally UNREPRESENTABLE -- the
+ *      opaque guest physically cannot corrupt the host that contains it; and
+ *   2. the PARAVIRTUAL forcefield (dynamic): regions the guest declares sensitive via a hypercall become
+ *      write-protected on top of the architectural policy.
+ * The hypercall itself is admitted ONLY through the real fail-closed exit policy: an unmodelled exit, or
+ * any non-witnessed-call exit, may NOT declare -- deny by default.
+ *
+ * COMPOSES (not reimplements) TWO real organs:
+ *   - katabasis/vmexit     : the AMD-SVM exit policy (intercept set, per-exit handler discipline, SID
+ *       inverse, total fail-closed catch-all).  The hypercall is the VMMCALL -> witnessed-call path.
+ *   - katabasis/svm_layout : the SVM-offset region typer + hexad write-admissibility (a write to a
+ *       structural-NEG region composes to a non-reachable cycle -> forbidden).
+ * It ADDS the guest-facing paravirtual declaration table and the single stacked forcefield verdict.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_enclave
+
+extern @abi(c-msvc-x64) fn katabasis_vmexit_intercepted(kind: u32) -> u8 from "vmexit.iii"
+extern @abi(c-msvc-x64) fn katabasis_vmexit_handling(kind: u32) -> u32 from "vmexit.iii"
+extern @abi(c-msvc-x64) fn katabasis_vmexit_inverse(kind: u32) -> u32 from "vmexit.iii"
+extern @abi(c-msvc-x64) fn katabasis_vmexit_fail_closed(kind: u32) -> u8 from "vmexit.iii"
+extern @abi(c-msvc-x64) fn katabasis_svm_region(offset: u32) -> u32 from "svm_layout.iii"
+extern @abi(c-msvc-x64) fn katabasis_svm_write_admissible(offset: u32) -> u8 from "svm_layout.iii"
+
+const ENC_OK         : i32 = 0i32
+const ENC_E_REFUSED  : i32 = -1i32      /* hypercall not admitted to declare */
+const ENC_E_FULL     : i32 = -2i32      /* declaration table full */
+const ENC_H_WITNESSED_CALL : u32 = 4u32 /* == KVX_H_WITNESSED_CALL (the declare channel) */
+const ENC_MAX_DECL   : u32 = 32u32
+
+var ENC_DECL_LO : [u32; 32]             /* declared sensitive region lows  (module-scope: runtime-index safe) */
+var ENC_DECL_HI : [u32; 32]            /* declared sensitive region highs */
+var ENC_DECL_N  : u32 = 0u32
+
+/* Reset the paravirtual declaration table (fresh sealed box). */
+fn enc_reset() -> i32 @export { ENC_DECL_N = 0u32  return ENC_OK }
+
+/* The enlightened-guest paravirtual HYPERCALL handler discipline for an SVM exit (KVX_H_*). */
+fn enc_hypercall(exit_kind: u32) -> u32 @export { return katabasis_vmexit_handling(exit_kind) }
+
+/* 1 iff this exit is ADMITTED to proceed (intercepted AND not fail-closed) -- deny by default. */
+fn enc_hypercall_admitted(exit_kind: u32) -> u32 @export {
+    if katabasis_vmexit_intercepted(exit_kind) == 0u8 { return 0u32 }   /* unmodelled -> deny */
+    if katabasis_vmexit_fail_closed(exit_kind) == 1u8 { return 0u32 }   /* fail-closed -> deny */
+    return 1u32
+}
+
+/* The SID inverse kind for a handled hypercall -- every admitted exit has a reversal (reversible box). */
+fn enc_hypercall_inverse(exit_kind: u32) -> u32 @export { return katabasis_vmexit_inverse(exit_kind) }
+
+/* The region type for an SVM offset (composes the layout typer). */
+fn enc_region(offset: u32) -> u32 @export { return katabasis_svm_region(offset) }
+
+/* The enlightened guest DECLARES [lo, hi) of its memory sensitive.  ONLY a witnessed-call hypercall may
+ * declare: any other exit kind (unmodelled, or a non-VMMCALL handler) is refused -- deny by default. */
+fn enc_declare(exit_kind: u32, lo: u32, hi: u32) -> i32 @export {
+    if enc_hypercall_admitted(exit_kind) != 1u32 { return ENC_E_REFUSED }
+    if katabasis_vmexit_handling(exit_kind) != ENC_H_WITNESSED_CALL { return ENC_E_REFUSED }
+    if ENC_DECL_N >= ENC_MAX_DECL { return ENC_E_FULL }
+    let n : u32 = ENC_DECL_N
+    ENC_DECL_LO[n] = lo
+    ENC_DECL_HI[n] = hi
+    ENC_DECL_N = n + 1u32
+    return ENC_OK
+}
+
+/* Is `offset` inside any guest-declared sensitive region? */
+fn enc_declared_sensitive(offset: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < ENC_DECL_N {
+        if offset >= ENC_DECL_LO[i] {
+            if offset < ENC_DECL_HI[i] { return 1u32 }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* THE STACKED FORCEFIELD: 1 iff a guest write to `offset` is allowed.  Refused iff the architectural SVM
+ * layout forbids it (hypervisor state / OOB), OR it falls in a guest-declared sensitive region. */
+fn enc_write_allowed(offset: u32) -> u32 @export {
+    if katabasis_svm_write_admissible(offset) == 0u8 { return 0u32 }   /* architectural forcefield */
+    if enc_declared_sensitive(offset) == 1u32 { return 0u32 }          /* paravirtual forcefield */
+    return 1u32
+}

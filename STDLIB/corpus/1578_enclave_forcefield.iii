@@ -1,0 +1,74 @@
+/* 1578_enclave_forcefield.iii -- DEVELOP-UP SLICE 4: the enlightened-guest memory forcefield
+ * (aether/enclave.iii) composing TWO real katabasis organs -- vmexit (the AMD-SVM fail-closed exit
+ * policy) and svm_layout (the SVM-offset region typer + hexad write-admissibility).
+ *
+ * TOY-PROOF ORACLE (three discriminators; the forcefield verdicts flow from the REAL policy organs):
+ *  (A) HYPERCALL FAIL-CLOSED GATE: only a witnessed-call hypercall (VMMCALL) may DECLARE a sensitive
+ *      region.  An unmodelled exit (KVX_OTHER) is refused (deny by default); an intercepted-but-non-
+ *      witnessed exit (KVX_CPUID -> synthetic handler) is ALSO refused (admitted != allowed-to-declare).
+ *      A toy that allows-by-default, or that treats "intercepted" as "may declare", fails.
+ *  (B) ARCHITECTURAL FORCEFIELD: with NO declarations, a write to the guest's SHARED channel is allowed,
+ *      but a write to the hypervisor's own state (HV_STATE), the VM control block (VMCB), or out of range
+ *      (OOB) is REFUSED -- the opaque guest cannot corrupt the host that contains it.  A toy that types
+ *      every offset writable fails.
+ *  (C) PARAVIRTUAL FORCEFIELD: after the guest declares [0x30000,0x31000) sensitive via a hypercall, a
+ *      write INSIDE that range is refused even though it sits in the normally-writable SHARED region,
+ *      while a write to SHARED OUTSIDE the range is still allowed.  Proves the dynamic declaration took
+ *      effect.  A toy that ignores declarations fails.
+ * 99 = all three hold (+ the reversibility witness: the VMMCALL hypercall has a defined SID inverse).
+ */
+module corpus_1578
+
+extern @abi(c-msvc-x64) fn enc_reset() -> i32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn enc_hypercall(exit_kind: u32) -> u32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn enc_hypercall_admitted(exit_kind: u32) -> u32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn enc_hypercall_inverse(exit_kind: u32) -> u32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn enc_declare(exit_kind: u32, lo: u32, hi: u32) -> i32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn enc_write_allowed(offset: u32) -> u32 from "enclave.iii"
+extern @abi(c-msvc-x64) fn enc_region(offset: u32) -> u32 from "enclave.iii"
+
+const KVX_OTHER   : u32 = 0u32
+const KVX_CPUID   : u32 = 1u32
+const KVX_VMMCALL : u32 = 4u32
+const H_WITNESSED_CALL : u32 = 4u32
+const INV_GUEST_REGS   : u32 = 4u32
+const ENC_OK        : i32 = 0i32
+const ENC_E_REFUSED : i32 = -1i32
+
+/* SVM offsets (per svm_layout): SHARED [0x20000,0x3E000); HV_STATE [0x3E000,0x3F000); VMCB [0,0x1000); OOB >=0x40000 */
+const OFF_SHARED : u32 = 0x30000u32
+const OFF_HVSTATE: u32 = 0x3E800u32
+const OFF_VMCB   : u32 = 0x00500u32
+const OFF_OOB    : u32 = 0x50000u32
+const REGION_OOB     : u32 = 0u32       /* KSVM_REGION_OOB */
+const REGION_SHARED  : u32 = 6u32       /* KSVM_REGION_SHARED */
+const REGION_HV_STATE: u32 = 7u32       /* KSVM_REGION_HV_STATE */
+
+fn main() -> u64 {
+    /* (A) HYPERCALL FAIL-CLOSED GATE */
+    enc_reset()
+    if enc_hypercall(KVX_VMMCALL) != H_WITNESSED_CALL { return 10u64 }     /* VMMCALL -> witnessed call */
+    if enc_hypercall_admitted(KVX_OTHER) != 0u32 { return 11u64 }          /* unmodelled -> not admitted */
+    if enc_hypercall_admitted(KVX_VMMCALL) != 1u32 { return 12u64 }        /* VMMCALL -> admitted */
+    if enc_hypercall_inverse(KVX_VMMCALL) != INV_GUEST_REGS { return 13u64 } /* reversible: defined SID inverse */
+    if enc_declare(KVX_OTHER, OFF_SHARED, OFF_SHARED + 0x1000u32) != ENC_E_REFUSED { return 14u64 }  /* unmodelled cannot declare */
+    if enc_declare(KVX_CPUID, OFF_SHARED, OFF_SHARED + 0x1000u32) != ENC_E_REFUSED { return 15u64 }  /* intercepted but not witnessed-call */
+    if enc_declare(KVX_VMMCALL, OFF_SHARED, OFF_SHARED + 0x1000u32) != ENC_OK { return 16u64 }       /* witnessed-call CAN declare */
+
+    /* (B) ARCHITECTURAL FORCEFIELD (no declarations) */
+    enc_reset()
+    if enc_region(OFF_SHARED)  != REGION_SHARED   { return 19u64 }  /* the SVM region typer (forcefield basis) */
+    if enc_region(OFF_HVSTATE) != REGION_HV_STATE { return 18u64 }
+    if enc_region(OFF_OOB)     != REGION_OOB      { return 17u64 }
+    if enc_write_allowed(OFF_SHARED)  != 1u32 { return 20u64 }   /* SHARED channel writable */
+    if enc_write_allowed(OFF_HVSTATE) != 0u32 { return 21u64 }   /* hypervisor state PROTECTED */
+    if enc_write_allowed(OFF_VMCB)    != 0u32 { return 22u64 }   /* VM control block PROTECTED */
+    if enc_write_allowed(OFF_OOB)     != 0u32 { return 23u64 }   /* out-of-range fail-closed */
+
+    /* (C) PARAVIRTUAL FORCEFIELD: declare a sensitive sub-range inside SHARED */
+    if enc_declare(KVX_VMMCALL, 0x30000u32, 0x31000u32) != ENC_OK { return 30u64 }
+    if enc_write_allowed(0x30800u32) != 0u32 { return 31u64 }    /* inside declared -> refused (even in SHARED) */
+    if enc_write_allowed(0x32000u32) != 1u32 { return 32u64 }    /* SHARED outside declared -> still allowed */
+
+    return 99u64
+}

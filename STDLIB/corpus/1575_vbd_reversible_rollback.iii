@@ -1,0 +1,62 @@
+/* 1575_vbd_reversible_rollback.iii -- DEVELOP-UP SLICE 1: the reversible virtual block device
+ * (aether/vbd.iii) composing the REAL numera/reversible undo executor.  The anti-ransomware proof.
+ *
+ * TOY-PROOF ORACLE (a conjunction -- a fresh undo-list toy that passes a round-trip alone does NOT
+ * pass all of these on RUNTIME-ARBITRARY values the organ never hardcoded):
+ *  (A) ARBITRARY-PRE-IMAGE RECOVERY: the guest fills its disk with legitimate data D[i] (derived at
+ *      runtime from the golden-ratio constant, not planted literals) and commits it; ransomware then
+ *      overwrites EVERY block with arbitrary high-entropy R2[i] = D[i]^~0 (the attack provably succeeds
+ *      -- every block != D); III rolls the box backward via the real reversible undo log and recovers
+ *      D[i] byte-for-byte for all 256 blocks.  A toy with a fixed restore table cannot reproduce D,
+ *      because D flows through rev_record's value argument at record time.
+ *  (B) CAPABILITY GATE + SOUNDNESS: a cap-stripped (cap=0) guest's write is REFUSED (VBD_E_REFUSED, the
+ *      reversible cap-gate denying the undo record) AND the block is left UNCHANGED -- never leaving
+ *      unrollbackable state.  A toy with no per-envelope cap token would mutate.
+ * 99 = both arms hold. */
+module corpus_1575
+
+extern @abi(c-msvc-x64) fn vbd_open(cap: u64) -> u32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_rollback(slot: u32) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
+
+const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
+const NB : u64 = 256u64
+
+fn dval(i: u64) -> u64 { return (i + 1u64) * GOLDEN }                              /* legitimate disk D[i] */
+fn rval(i: u64) -> u64 { return ((i + 1u64) * GOLDEN) ^ 0xFFFFFFFFFFFFFFFFu64 }    /* ransomware R2[i] */
+
+fn main() -> u64 {
+    /* (A) the guest legitimately fills + commits its disk (the baseline) */
+    let s1 : u32 = vbd_open(0x5A5A5A5Au64)
+    if s1 == 0xFFFFFFFFu32 { return 10u64 }
+    let mut i : u64 = 0u64
+    while i < NB { if vbd_write(s1, i, dval(i)) != 0i32 { return 11u64 }  i = i + 1u64 }
+    if vbd_commit(s1) != 0i32 { return 12u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != dval(i) { return 13u64 }  i = i + 1u64 }
+
+    /* the ransomware runs inside the box and encrypts every block */
+    let s2 : u32 = vbd_open(0x5A5A5A5Au64)
+    if s2 == 0xFFFFFFFFu32 { return 14u64 }
+    i = 0u64
+    while i < NB { if vbd_write(s2, i, rval(i)) != 0i32 { return 15u64 }  i = i + 1u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != rval(i) { return 16u64 }  i = i + 1u64 }   /* attack succeeded */
+
+    /* III rolls the box backward -- without understanding the virus */
+    if vbd_rollback(s2) != 0i32 { return 17u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != dval(i) { return 18u64 }  i = i + 1u64 }   /* pre-image recovered */
+
+    /* (B) capability gate + soundness: cap=0 guest -> write REFUSED, block UNCHANGED */
+    let s3 : u32 = vbd_open(0u64)
+    if s3 == 0xFFFFFFFFu32 { return 20u64 }
+    let before : u64 = vbd_read(0u64)
+    if vbd_write(s3, 0u64, 0xDEADBEEFu64) != (0i32 - 4i32) { return 21u64 }     /* VBD_E_REFUSED */
+    if vbd_read(0u64) != before { return 22u64 }                                /* unchanged */
+    vbd_rollback(s3)
+
+    return 99u64
+}

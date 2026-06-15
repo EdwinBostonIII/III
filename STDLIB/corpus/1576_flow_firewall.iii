@@ -1,0 +1,62 @@
+/* 1576_flow_firewall.iii -- DEVELOP-UP SLICE 2: the sealed-box information-flow firewall
+ * (aether/flow_firewall.iii) composing the REAL numera/taint_analysis dataflow engine.
+ *
+ * The develop-up property: a physical keystroke (untrusted INPUT) inside an opaque guest must not leave
+ * the box via the virtualized NIC (EGRESS) unless it passes a TLS ENCRYPT boundary -- enforced on the
+ * IO graph without III ever knowing the byte was a password.
+ *
+ * TOY-PROOF ORACLE (three discriminators a toy cannot pass):
+ *  (A) NON-OBVIOUS PATH: the keyboard taint reaches the NIC through THREE CPU/memory relays -- a toy
+ *      that only checks "is the source directly the sink" reports SAFE and fails.  ff_egress_leaks==1.
+ *  (B) ENCRYPT CLEARS: the same flow through a TLS boundary before egress is SAFE -- a toy that ignores
+ *      the sanitizer reports a leak and fails.  ff_egress_leaks==0, ff_box_safe==1.
+ *  (C) PROVENANCE: a clean egress (over a trusted constant) is SAFE even while a tainted source is
+ *      present and a sibling egress leaks -- a toy that flags "any egress when a source exists" fails.
+ * 99 = all three hold. */
+module corpus_1576
+
+extern @abi(c-msvc-x64) fn ff_begin() -> i32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_input() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_const() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_relay(a: u32, b: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_encrypt(a: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_egress(a: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_resolve() -> i32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_egress_leaks(e: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_box_safe() -> u32 from "flow_firewall.iii"
+
+fn main() -> u64 {
+    /* (A) NON-OBVIOUS PATH: keyboard -> relay -> relay -> relay -> NIC, all in the clear -> LEAK */
+    ff_begin()
+    let k  : u32 = ff_input()
+    let r1 : u32 = ff_relay(k,  ff_const())
+    let r2 : u32 = ff_relay(r1, ff_const())
+    let r3 : u32 = ff_relay(r2, ff_const())
+    let nicA : u32 = ff_egress(r3)
+    ff_resolve()
+    if ff_egress_leaks(nicA) != 1u32 { return 10u64 }
+    if ff_box_safe() != 0u32 { return 11u64 }
+
+    /* (B) ENCRYPT CLEARS: keyboard -> relay -> TLS encrypt -> NIC -> SAFE */
+    ff_begin()
+    let k2 : u32 = ff_input()
+    let r  : u32 = ff_relay(k2, ff_const())
+    let enc : u32 = ff_encrypt(r)
+    let nicB : u32 = ff_egress(enc)
+    ff_resolve()
+    if ff_egress_leaks(nicB) != 0u32 { return 20u64 }
+    if ff_box_safe() != 1u32 { return 21u64 }
+
+    /* (C) PROVENANCE: a tainted egress and a clean egress coexist; only the tainted one leaks */
+    ff_begin()
+    let kbd : u32 = ff_input()
+    let trusted : u32 = ff_const()
+    let leak_nic : u32 = ff_egress(kbd)
+    let safe_nic : u32 = ff_egress(trusted)
+    ff_resolve()
+    if ff_egress_leaks(leak_nic) != 1u32 { return 30u64 }
+    if ff_egress_leaks(safe_nic) != 0u32 { return 31u64 }
+    if ff_box_safe() != 0u32 { return 32u64 }
+
+    return 99u64
+}

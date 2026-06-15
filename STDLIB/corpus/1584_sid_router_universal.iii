@@ -1,0 +1,77 @@
+/* 1584_sid_router_universal.iii -- DEVELOP-UP SLICE 9: universal reversibility via routed SID
+ * (aether/sid_router.iii) composing katabasis/vmexit (the SID inverse-kind derivation + fail-closed
+ * catch-all) and numera/reversible (the byte-exact undo executor).
+ *
+ * TOY-PROOF ORACLE:
+ *  (A) ROUTING: each modelled exit's SID inverse routes to the CORRECT reversal action -- MSR -> reversible
+ *      undo, NPF -> CoW restore, VMMCALL -> register restore, CPUID/SMI -> no-op (identity).  A hardcoded
+ *      toy mis-routes at least one.
+ *  (B) FAIL-CLOSED: an unmodelled (OTHER) or explicit-invalid exit routes to FAIL_CLOSED and reports
+ *      fail-closed -- a toy that handles it heuristically (best-effort) fails the deny-by-default arm.
+ *  (C) REAL REVERSAL: the recorded-value path performs an actual reversible undo on a live memory cell --
+ *      the guest's privileged write REALLY lands (cell == NEW), then III reverses it byte-for-byte
+ *      (cell == OLD).  A no-op toy that never writes NEW fails the cell==NEW arm.
+ * 99 = all three hold (reversibility now covers every exit kind, not just disk).
+ */
+module corpus_1584
+
+extern @abi(c-msvc-x64) fn sr_inverse_kind(exit_kind: u32) -> u32 from "sid_router.iii"
+extern @abi(c-msvc-x64) fn sr_route(exit_kind: u32) -> u32 from "sid_router.iii"
+extern @abi(c-msvc-x64) fn sr_is_fail_closed(exit_kind: u32) -> u8 from "sid_router.iii"
+extern @abi(c-msvc-x64) fn sr_record_and_mutate(addr: u64, old_val: u64, new_val: u64) -> u32 from "sid_router.iii"
+extern @abi(c-msvc-x64) fn sr_undo(slot: u32) -> i32 from "sid_router.iii"
+
+const KVX_OTHER : u32 = 0u32
+const KVX_CPUID : u32 = 1u32
+const KVX_MSR : u32 = 2u32
+const KVX_NPF : u32 = 3u32
+const KVX_VMMCALL : u32 = 4u32
+const KVX_SMI : u32 = 5u32
+const KVX_INVALID : u32 = 6u32
+
+const INV_RECORDED : u32 = 2u32
+const INV_GUEST_REGS : u32 = 4u32
+const INV_HOST_STATE : u32 = 5u32
+
+const ACT_FAIL_CLOSED : u32 = 0u32
+const ACT_NOOP : u32 = 1u32
+const ACT_REVERSIBLE_UNDO : u32 = 2u32
+const ACT_COW_RESTORE : u32 = 3u32
+const ACT_REG_RESTORE : u32 = 4u32
+
+const SLOT_NONE : u32 = 0xFFFFFFFFu32
+const OLD : u64 = 0xDEADBEEFCAFEF00Du64
+const NEW : u64 = 0x0BADF00DBAADCAFEu64
+
+var CELL : [u64; 1]
+
+fn main() -> u64 {
+    /* (A) ROUTING */
+    if sr_route(KVX_MSR)     != ACT_REVERSIBLE_UNDO { return 10u64 }
+    if sr_route(KVX_NPF)     != ACT_COW_RESTORE     { return 11u64 }
+    if sr_route(KVX_VMMCALL) != ACT_REG_RESTORE     { return 12u64 }
+    if sr_route(KVX_CPUID)   != ACT_NOOP            { return 13u64 }
+    if sr_route(KVX_SMI)     != ACT_NOOP            { return 14u64 }
+
+    /* (B) FAIL-CLOSED (deny by default) */
+    if sr_route(KVX_OTHER)   != ACT_FAIL_CLOSED { return 15u64 }
+    if sr_route(KVX_INVALID) != ACT_FAIL_CLOSED { return 16u64 }
+    if sr_is_fail_closed(KVX_OTHER)   != 1u8 { return 17u64 }
+    if sr_is_fail_closed(KVX_INVALID) != 1u8 { return 18u64 }
+    if sr_is_fail_closed(KVX_MSR)     != 0u8 { return 19u64 }   /* a modelled exit does NOT fail-close */
+
+    /* inverse-kind derivation seen multiple ways */
+    if sr_inverse_kind(KVX_MSR)     != INV_RECORDED   { return 20u64 }
+    if sr_inverse_kind(KVX_VMMCALL) != INV_GUEST_REGS { return 21u64 }
+    if sr_inverse_kind(KVX_OTHER)   != INV_HOST_STATE { return 22u64 }
+
+    /* (C) REAL REVERSAL on the recorded-value path */
+    CELL[0u64] = OLD
+    let slot : u32 = sr_record_and_mutate((&CELL as u64), OLD, NEW)
+    if slot == SLOT_NONE { return 30u64 }
+    if CELL[0u64] != NEW { return 31u64 }      /* the guest's privileged write REALLY landed */
+    if sr_undo(slot) != 0i32 { return 32u64 }
+    if CELL[0u64] != OLD { return 33u64 }      /* III reversed it byte-for-byte via the SID pre-image */
+
+    return 99u64
+}

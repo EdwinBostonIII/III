@@ -1,0 +1,81 @@
+/* 1583_determinism_firewall.iii -- DEVELOP-UP SLICE 10: the determinism MEMBRANE
+ * (aether/determinism_firewall.iii) composing aether/reach_oracle (firewall verdict + pin forgery check)
+ * and aether/replay_box (record/replay of nondeterminism).
+ *
+ * TOY-PROOF ORACLE:
+ *  (A) DEFAULT-DENY FIREWALL: CANONICAL is admitted to the deterministic core; PROVISIONAL and ANY unknown
+ *      tier are DENIED (a toy that admits-unless-explicitly-denied fails the unknown-tier arm).
+ *  (B) PIN FORGERY: a correct oracle-pin (cad of the dependence bytes) is accepted; a FORGED pin (one byte
+ *      flipped) is REJECTED because pin_matches re-derives the content address -- a toy that trusts the
+ *      claimed pin passes the forgery and fails here.
+ *  (C) MEMBRANE + REPLAY: a PROVISIONAL value is DENIED from the core but RECORDED through the replay box;
+ *      on replay, that recorded value re-injects BIT-IDENTICALLY even though the live world now offers a
+ *      DIFFERENT value -- the determinism wall holds from both directions.  A CANONICAL value is admitted
+ *      and passed through (not recorded).
+ * 99 = all three hold.
+ */
+module corpus_1583
+
+extern @abi(c-msvc-x64) fn df_admit(tier: u32) -> i32 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn df_is_provisional(tier: u32) -> u8 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn df_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn df_pin_authentic(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn df_ingress(tier: u32, source_id: u32, live: *u8, len: u32, out: *u8) -> i32 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay() -> i32 from "replay_box.iii"
+
+const DF_ADMIT : i32 = 0i32
+const DF_DENY  : i32 = 1i32
+const TIER_CANONICAL   : u32 = 0u32
+const TIER_PROVISIONAL : u32 = 1u32
+const TIER_UNKNOWN     : u32 = 99u32
+const PROVISIONAL_RET  : u32 = 1u32      /* df_pin returns ROR_TIER_PROVISIONAL on success */
+const SID : u32 = 5u32
+
+var DATA : [u8; 16]
+var CPIN : [u8; 32]
+var FPIN : [u8; 32]
+var XV   : [u64; 1]
+var YV   : [u64; 1]
+var OUT  : [u64; 1]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 16u64 { DATA[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    /* (A) DEFAULT-DENY FIREWALL */
+    if df_admit(TIER_CANONICAL)   != DF_ADMIT { return 10u64 }
+    if df_admit(TIER_PROVISIONAL) != DF_DENY  { return 11u64 }
+    if df_admit(TIER_UNKNOWN)     != DF_DENY  { return 12u64 }   /* unknown tier denied (not admit-by-default) */
+    if df_is_provisional(TIER_PROVISIONAL) != 1u8 { return 13u64 }
+    if df_is_provisional(TIER_CANONICAL)   != 0u8 { return 14u64 }
+
+    /* (B) PIN FORGERY */
+    if df_pin((&DATA as u64), 16u64, (&CPIN as u64)) != PROVISIONAL_RET { return 20u64 }   /* pin -> provisional */
+    if df_pin_authentic((&DATA as u64), 16u64, (&CPIN as u64)) != 1u8 { return 21u64 }     /* correct pin accepted */
+    let mut k : u64 = 0u64
+    while k < 32u64 { FPIN[k] = CPIN[k]  k = k + 1u64 }
+    FPIN[0u64] = FPIN[0u64] ^ 0xFFu8
+    if df_pin_authentic((&DATA as u64), 16u64, (&FPIN as u64)) != 0u8 { return 22u64 }     /* forged pin REJECTED */
+
+    /* (C) MEMBRANE + REPLAY */
+    XV[0u64] = 0xA1B2C3D4E5F60718u64
+    YV[0u64] = 0x1807F6E5D4C3B2A1u64
+    let xp : *u8 = (&XV as u64) as *u8
+    let yp : *u8 = (&YV as u64) as *u8
+    let op : *u8 = (&OUT as u64) as *u8
+    rb_begin()
+    OUT[0u64] = 0u64
+    if df_ingress(TIER_PROVISIONAL, SID, xp, 8u32, op) != DF_DENY { return 30u64 }   /* provisional denied from core */
+    if OUT[0u64] != XV[0u64] { return 31u64 }                                        /* but recorded (passed through) */
+    OUT[0u64] = 0u64
+    if df_ingress(TIER_CANONICAL, SID, yp, 8u32, op) != DF_ADMIT { return 32u64 }    /* canonical admitted */
+    if OUT[0u64] != YV[0u64] { return 33u64 }                                        /* canonical passthrough */
+    rb_replay()
+    OUT[0u64] = 0u64
+    if df_ingress(TIER_PROVISIONAL, SID, yp, 8u32, op) != DF_DENY { return 34u64 }   /* still denied on replay */
+    if OUT[0u64] != XV[0u64] { return 35u64 }                                        /* re-injected RECORDED X, not live Y */
+    if OUT[0u64] == YV[0u64] { return 36u64 }
+
+    return 99u64
+}

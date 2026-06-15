@@ -1,0 +1,75 @@
+/* 1581_compute_box_quota.iii -- DEVELOP-UP SLICE 7: the sealed-box AVAILABILITY forcefield
+ * (aether/compute_box.iii) composing capability + omnia/{sandbox_ctor,sandbox_quota,sandbox_exec}.
+ *
+ * TOY-PROOF ORACLE (the discriminators a forged/per-alloc gateway cannot pass):
+ *  (A) ZERO-TRUST ADMISSION: only a COMPUTE-righted cap may create a box; a zero-rights cap is DENIED.
+ *  (B) CUMULATIVE-CAP (the teeth): with a 1000-byte cap, charge 600 (admit) then 600 again -> the second
+ *      is REFUSED because the ledger is APPEND-ONLY (cumulative 1200 > 1000, head = 400 < 600).  A toy
+ *      that checks only the per-allocation size (600 < 1000) would FALSELY admit it.  The refused charge
+ *      does NOT mutate usage (used stays 600).  Fill to the cap, then a 1-byte charge is still refused.
+ *  (C) EXECUTION GATE: a box with zero quota headroom REFUSES to run (SBE_E_NO_QUOTA); a box with headroom
+ *      runs (SBE_OK).  A CPU charge exceeding the cpu budget is likewise refused.
+ *  (D) CAPABILITY DENY: a no-compute cap is denied both charging (nothing accrues) and running.
+ * 99 = all four hold (a runaway guest cannot exceed its unforgeable resource envelope).
+ */
+module corpus_1581
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn cb_admit(guest_cap: u64, cap_set: u64, mem_cap: u64, cpu_cap: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_charge_mem(guest_cap: u64, sb_id: u64, n_bytes: u64) -> u8 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_charge_cpu(guest_cap: u64, sb_id: u64, micros: u64) -> u8 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_mem_used(sb_id: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_mem_remaining(sb_id: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_cpu_remaining(sb_id: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_run(guest_cap: u64, sb_id: u64, kind: u32, ctx: u64) -> i32 from "compute_box.iii"
+
+const R_COMPUTE      : u64 = 0x1u64
+const CB_DENIED      : u64 = 0u64
+const SBE_OK         : i32 = 0i32
+const SBE_E_NO_QUOTA : i32 = -3i32
+const CB_E_DENIED    : i32 = -10i32
+const MEMCAP : u64 = 1000u64
+const CPUCAP : u64 = 1000u64
+
+fn main() -> u64 {
+    let root : u64 = cap_env_init()
+    if root != 1u64 { return 10u64 }
+    let guest : u64 = cap_attenuate(root, R_COMPUTE, 0u64)    /* {COMPUTE} only */
+    if guest == 0u64 { return 11u64 }
+    let poor : u64 = cap_attenuate(root, 0u64, 0u64)          /* zero rights */
+    if poor == 0u64 { return 12u64 }
+
+    /* (A) ZERO-TRUST ADMISSION (the verdict seen BOTH ways at direct call sites) */
+    if cb_admit(poor, 0u64, MEMCAP, CPUCAP) != CB_DENIED { return 20u64 }    /* no-compute cap DENIED */
+    if cb_admit(guest, 0u64, MEMCAP, CPUCAP) == CB_DENIED { return 21u64 }   /* compute cap ADMITTED */
+    let sb : u64 = cb_admit(guest, 0u64, MEMCAP, CPUCAP)
+    if sb == CB_DENIED { return 22u64 }
+
+    /* (B) CUMULATIVE-CAP DISCRIMINATOR (append-only ledger) */
+    if cb_charge_mem(guest, sb, 600u64) != 1u8 { return 30u64 }   /* admit -> used 600 */
+    if cb_charge_mem(guest, sb, 600u64) != 0u8 { return 31u64 }   /* REFUSE: cumulative 1200 > 1000 */
+    if cb_mem_used(sb) != 600u64 { return 32u64 }                 /* refused charge did NOT accrue */
+    if cb_charge_mem(guest, sb, 400u64) != 1u8 { return 33u64 }   /* admit -> used 1000 (exactly cap) */
+    if cb_charge_mem(guest, sb, 1u64) != 0u8 { return 34u64 }     /* REFUSE: cap reached */
+    if cb_mem_remaining(sb) != 0u64 { return 35u64 }
+
+    /* (C) EXECUTION GATE */
+    if cb_run(guest, sb, 1u32, 0u64) != SBE_E_NO_QUOTA { return 40u64 }   /* exhausted box refuses to run */
+    let sb2 : u64 = cb_admit(guest, 0u64, MEMCAP, CPUCAP)
+    if sb2 == CB_DENIED { return 41u64 }
+    if cb_charge_cpu(guest, sb2, 500u64) != 1u8 { return 42u64 }  /* cpu admit (headroom) */
+    if cb_charge_cpu(guest, sb2, 600u64) != 0u8 { return 43u64 }  /* cpu REFUSE: 500+600 > 1000 */
+    if cb_cpu_remaining(sb2) != 500u64 { return 46u64 }           /* cpu headroom intact after the refused charge */
+    if cb_run(guest, sb2, 1u32, 0u64) != SBE_OK { return 44u64 }  /* box with headroom runs */
+
+    /* (D) CAPABILITY DENY */
+    let sb3 : u64 = cb_admit(guest, 0u64, MEMCAP, CPUCAP)
+    if sb3 == CB_DENIED { return 50u64 }
+    if cb_charge_mem(poor, sb3, 10u64) != 0u8 { return 51u64 }    /* cap-denied charge */
+    if cb_mem_used(sb3) != 0u64 { return 52u64 }                 /* nothing accrued */
+    if cb_run(poor, sb3, 1u32, 0u64) != CB_E_DENIED { return 53u64 }
+
+    return 99u64
+}

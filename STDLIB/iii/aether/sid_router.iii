@@ -1,0 +1,86 @@
+/* STDLIB/iii/aether/sid_router.iii
+ *
+ * III STDLIB - aether::sid_router  --  UNIVERSAL reversibility via routed Side-effect Inverse Derivation.
+ *
+ * "DEVELOP-UP" SLICE 9 (the reversibility pillar, generalized to ALL guest effects).  Slice 1 (vbd)
+ * reverses exactly ONE effect kind -- a disk byte-write.  But every privileged guest exit has a DERIVED
+ * inverse: katabasis/vmexit's SID column maps each exit kind to its reversal KIND (an MSR write -> the
+ * recorded prior value; a nested page-fault -> the copy-on-write restore; a VMMCALL -> the captured guest
+ * register file; an INVALID/unmodelled exit -> a fail-closed host-state revert).  enclave EXPOSES that
+ * inverse kind as a classification tag, but no slice RUNS it.  This router closes that half: it routes the
+ * SID-derived inverse kind to a concrete reversal ACTION, fail-closed by default, and executes the
+ * recorded-value path as a REAL reversible undo -- so the box's reversibility covers every effect, not
+ * just disk.
+ *
+ * COMPOSES (not reimplements):
+ *   - katabasis/vmexit   : the SID inverse-kind derivation (katabasis_vmexit_inverse) + the total
+ *       fail-closed catch-all (katabasis_vmexit_fail_closed).
+ *   - numera/reversible  : the byte-exact undo executor -- record the pre-image, let the guest mutate,
+ *       roll back, recover the pre-image.
+ *
+ * It ADDS the kind->action ROUTER (the derivation gives a kind; the router gives the executor) and the
+ * deny-by-default discipline (an unmodelled/host-state inverse NEVER best-efforts -- it fail-closes).
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_sid_router
+
+extern @abi(c-msvc-x64) fn katabasis_vmexit_inverse(kind: u32) -> u32 from "vmexit.iii"
+extern @abi(c-msvc-x64) fn katabasis_vmexit_fail_closed(kind: u32) -> u8 from "vmexit.iii"
+extern @abi(c-msvc-x64) fn rev_init() -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_begin(cap: u64) -> u32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_record(slot: u32, tag: u32, a: u64, b: u64) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_rollback(slot: u32) -> i32 from "reversible.iii"
+
+const SR_INV_NONE       : u32 = 0u32   /* == KVX_INV_* */
+const SR_INV_IDENTITY   : u32 = 1u32
+const SR_INV_RECORDED   : u32 = 2u32
+const SR_INV_COW        : u32 = 3u32
+const SR_INV_GUEST_REGS : u32 = 4u32
+const SR_INV_HOST_STATE : u32 = 5u32
+
+const SR_ACT_FAIL_CLOSED     : u32 = 0u32   /* deny-by-default: revert to host via the SID pre-image */
+const SR_ACT_NOOP            : u32 = 1u32   /* an identity/observation needs no reversal */
+const SR_ACT_REVERSIBLE_UNDO : u32 = 2u32   /* the recorded-value reversible undo log */
+const SR_ACT_COW_RESTORE     : u32 = 3u32   /* copy-on-write page restore */
+const SR_ACT_REG_RESTORE     : u32 = 4u32   /* guest register-file restore */
+
+const SR_TAG_MEM_RESTORE_U64 : u32 = 2u32   /* == REV_TAG_MEM_RESTORE_U64 */
+const SR_SLOT_NONE : u32 = 0xFFFFFFFFu32    /* == REV_SLOT_NONE */
+
+var SR_INITED : u32 = 0u32
+
+/* The SID inverse KIND derived for a guest exit (the reversal type). */
+fn sr_inverse_kind(exit_kind: u32) -> u32 @export { return katabasis_vmexit_inverse(exit_kind) }
+
+/* Route the SID-derived inverse kind to a concrete reversal ACTION.  A NONE/HOST_STATE inverse (an
+ * unmodelled or explicit-invalid exit) routes to FAIL-CLOSED -- never a heuristic best-effort. */
+fn sr_route(exit_kind: u32) -> u32 @export {
+    let inv : u32 = katabasis_vmexit_inverse(exit_kind)
+    if inv == SR_INV_RECORDED   { return SR_ACT_REVERSIBLE_UNDO }
+    if inv == SR_INV_COW        { return SR_ACT_COW_RESTORE }
+    if inv == SR_INV_GUEST_REGS { return SR_ACT_REG_RESTORE }
+    if inv == SR_INV_IDENTITY   { return SR_ACT_NOOP }
+    return SR_ACT_FAIL_CLOSED
+}
+
+/* 1 iff the exit fail-closes (its reversal is the host-state revert). */
+fn sr_is_fail_closed(exit_kind: u32) -> u8 @export { return katabasis_vmexit_fail_closed(exit_kind) }
+
+/* Begin a RECORDED-path reversal envelope on a real reversible memory cell: record the pre-image, then
+ * apply the guest's privileged write (cell := new_val).  Returns the reversible slot.  Soundness: if the
+ * undo cannot be logged, the mutation is REFUSED (the cell is left unchanged) and SR_SLOT_NONE is returned. */
+fn sr_record_and_mutate(addr: u64, old_val: u64, new_val: u64) -> u32 @export {
+    if SR_INITED == 0u32 { rev_init()  SR_INITED = 1u32 }
+    let slot : u32 = rev_begin(64u64)
+    if slot == SR_SLOT_NONE { return SR_SLOT_NONE }
+    let rr : i32 = rev_record(slot, SR_TAG_MEM_RESTORE_U64, addr, old_val)
+    if rr != 0i32 { return SR_SLOT_NONE }   /* undo not logged -> do NOT mutate (soundness) */
+    let p : *u64 = addr as *u64
+    p[0] = new_val                          /* the guest's privileged write actually happens */
+    return slot
+}
+
+/* Reverse the envelope: roll the recorded cell back to its pre-image via the SID undo log. */
+fn sr_undo(slot: u32) -> i32 @export { return rev_rollback(slot) }

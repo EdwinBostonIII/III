@@ -1,0 +1,74 @@
+/* STDLIB/iii/aether/compute_box.iii
+ *
+ * III STDLIB - aether::compute_box  --  the sealed-box AVAILABILITY forcefield (resource-exhaustion immunity).
+ *
+ * "DEVELOP-UP" SLICE 7 (the fifth superpower: AVAILABILITY).  The first six slices give the sealed box
+ * correctness, confidentiality, integrity, reversibility, determinism, and a memory forcefield -- but NONE
+ * bound how much it CONSUMES.  A runaway or adversarial guest (fork-bomb, memory balloon, busy-spin) could
+ * still starve the host.  This slice meters every byte and microsecond the opaque guest spends against a
+ * capability-granted budget, refusing any charge or execution that would exceed it -- so a guest can be
+ * given a hard, unforgeable resource envelope without modifying it.
+ *
+ * COMPOSES (not reimplements) THREE real omnia organs + capability:
+ *   - omnia/sandbox_ctor : the box lifecycle (sandbox_new with mem/cpu caps; CREATED->RUNNING->COMPLETED/
+ *       CANCELLED state machine).
+ *   - omnia/sandbox_quota: the APPEND-ONLY resource ledger -- record_alloc/record_cpu accumulate usage and
+ *       reject any charge exceeding the remaining headroom (overflow-safe head = cap - cur).  Append-only
+ *       is the point: a guest cannot release-and-realloc to evade the cumulative cap.
+ *   - omnia/sandbox_exec : execution admission -- sandbox_exec_begin REFUSES to start (SBE_E_NO_QUOTA) with
+ *       zero quota headroom.
+ *   - aether/capability  : zero-trust admission -- only a cap holding the COMPUTE right may create a box,
+ *       charge it, or run it.  Deny by default.
+ *
+ * It ADDS the single capability-mediated availability surface over the three sandbox organs.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_compute_box
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn sandbox_new(cap_set: u64, mem_cap_bytes: u64, cpu_cap_micros: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_record_alloc(sb_id: u64, n_bytes: u64) -> u8 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_record_cpu(sb_id: u64, micros: u64) -> u8 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_mem_used(sb_id: u64) -> u64 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_mem_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_cpu_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_begin(sb_id: u64, kind: u32, ctx: u64) -> i32 from "sandbox_exec.iii"
+
+const CB_RIGHT_COMPUTE : u64 = 0x1u64    /* == CAP_RIGHT_ALLOC (the compute/allocation authority) */
+const CB_DENIED        : u64 = 0u64      /* cap-denied / box-full sentinel (== CAP/sandbox null id) */
+const CB_REFUSED       : u8  = 0u8       /* a charge that is cap-denied or over the cumulative cap */
+const CB_ADMITTED      : u8  = 1u8
+const CB_E_DENIED      : i32 = -10i32    /* run denied by capability */
+
+/* ADMIT a sealed compute box for a guest: zero-trust -- only a COMPUTE-righted cap may create a box with
+ * the given mem/cpu budget.  Returns the box id, or CB_DENIED (cap-denied or box table full). */
+fn cb_admit(guest_cap: u64, cap_set: u64, mem_cap: u64, cpu_cap: u64) -> u64 @export {
+    if cap_verify_rights(guest_cap, CB_RIGHT_COMPUTE) == 0u8 { return CB_DENIED }
+    return sandbox_new(cap_set, mem_cap, cpu_cap)
+}
+
+/* CHARGE a memory allocation against the box's append-only ledger -- cap-gated.  CB_ADMITTED (1) = within
+ * budget; CB_REFUSED (0) = cap-denied OR over the cumulative cap.  A refused charge does NOT mutate usage. */
+fn cb_charge_mem(guest_cap: u64, sb_id: u64, n_bytes: u64) -> u8 @export {
+    if cap_verify_rights(guest_cap, CB_RIGHT_COMPUTE) == 0u8 { return CB_REFUSED }
+    return sandbox_quota_record_alloc(sb_id, n_bytes)
+}
+
+/* CHARGE CPU microseconds against the box's append-only ledger -- cap-gated. */
+fn cb_charge_cpu(guest_cap: u64, sb_id: u64, micros: u64) -> u8 @export {
+    if cap_verify_rights(guest_cap, CB_RIGHT_COMPUTE) == 0u8 { return CB_REFUSED }
+    return sandbox_quota_record_cpu(sb_id, micros)
+}
+
+/* Remaining memory / cpu headroom (0 = exhausted) and cumulative memory used. */
+fn cb_mem_remaining(sb_id: u64) -> u64 @export { return sandbox_quota_mem_remaining(sb_id) }
+fn cb_cpu_remaining(sb_id: u64) -> u64 @export { return sandbox_quota_cpu_remaining(sb_id) }
+fn cb_mem_used(sb_id: u64) -> u64 @export { return sandbox_quota_mem_used(sb_id) }
+
+/* RUN the guest in the box -- cap-gated, and refused (SBE_E_NO_QUOTA) if no quota headroom remains. */
+fn cb_run(guest_cap: u64, sb_id: u64, kind: u32, ctx: u64) -> i32 @export {
+    if cap_verify_rights(guest_cap, CB_RIGHT_COMPUTE) == 0u8 { return CB_E_DENIED }
+    return sandbox_exec_begin(sb_id, kind, ctx)
+}

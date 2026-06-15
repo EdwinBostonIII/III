@@ -1,0 +1,64 @@
+/* STDLIB/iii/aether/flow_firewall.iii
+ *
+ * III STDLIB - aether::flow_firewall  --  the sealed-box INFORMATION-FLOW FIREWALL.
+ *
+ * "DEVELOP-UP" SLICE 2 (the first semantic-gap bridge: PROVABLE INFORMATION FLOW). III cannot read the
+ * INTENT of an opaque legacy guest -- it cannot tell a typed password from a video-game pixel.  But it
+ * can track WHERE bytes go.  This firewall tags every physical untrusted INPUT (the guest's keyboard)
+ * as tainted, follows that taint through the opaque guest's CPU/memory relays, and enforces a
+ * constitutional policy at the virtualized EGRESS (the NIC): "input-tainted data may NOT leave the box
+ * unless it passes an ENCRYPT (TLS) boundary".  It is blind to semantics; it enforces information-flow
+ * PHYSICS on the guest's IO graph -- so a keystroke cannot exit in the clear even though III never knew
+ * it was a password.
+ *
+ * COMPOSES (not reimplements): numera/taint_analysis (the dataflow taint engine: sources spread taint
+ * through ops, sanitizers clear it, sinks violate iff their input is still tainted).  This module adds
+ * the guest-IO semantic framing, auto node-handle allocation, and the single box-safety VERDICT.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_flow_firewall
+
+extern @abi(c-msvc-x64) fn taint_reset(n: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_source(i: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_imm(i: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_op(i: u32, a: u32, b: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_sanitize(i: u32, a: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_set_sink(i: u32, a: u32) -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_propagate() -> i32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_sink_violates(i: u32) -> u32 from "taint_analysis.iii"
+extern @abi(c-msvc-x64) fn taint_violations() -> u32 from "taint_analysis.iii"
+
+const FF_CAP  : u32 = 64u32             /* == TNT_CAP (taint_analysis node capacity) */
+const FF_NONE : u32 = 0xFFFFFFFFu32
+
+var FF_NEXT : u32 = 0u32
+
+/* Begin a fresh guest flow graph (clears all nodes; node handles start at 0). */
+fn ff_begin() -> i32 @export { FF_NEXT = 0u32  return taint_reset(FF_CAP) }
+
+fn ff_alloc() -> u32 { let n : u32 = FF_NEXT  if n >= FF_CAP { return FF_NONE }  FF_NEXT = n + 1u32  return n }
+
+/* A physical untrusted input (keyboard / mouse) -> a tainted source node.  Returns the node handle. */
+fn ff_input() -> u32 @export { let n : u32 = ff_alloc()  if n == FF_NONE { return FF_NONE }  taint_set_source(n)  return n }
+/* A trusted constant (untainted). */
+fn ff_const() -> u32 @export { let n : u32 = ff_alloc()  if n == FF_NONE { return FF_NONE }  taint_set_imm(n)  return n }
+/* A guest CPU/memory relay over two operands -- taint flows through. */
+fn ff_relay(a: u32, b: u32) -> u32 @export { let n : u32 = ff_alloc()  if n == FF_NONE { return FF_NONE }  taint_set_op(n, a, b)  return n }
+/* A TLS / encrypt boundary over an operand -- the trusted sanitizer that clears taint. */
+fn ff_encrypt(a: u32) -> u32 @export { let n : u32 = ff_alloc()  if n == FF_NONE { return FF_NONE }  taint_set_sanitize(n, a)  return n }
+/* A virtualized network egress (the NIC) over an operand.  Returns the node handle. */
+fn ff_egress(a: u32) -> u32 @export { let n : u32 = ff_alloc()  if n == FF_NONE { return FF_NONE }  taint_set_sink(n, a)  return n }
+
+/* Resolve the flow (propagate taint to fixpoint).  Call after building the graph. */
+fn ff_resolve() -> i32 @export { return taint_propagate() }
+/* Does egress `e` leak input-tainted data out of the box unencrypted? (1 = LEAK.) */
+fn ff_egress_leaks(e: u32) -> u32 @export { return taint_sink_violates(e) }
+/* THE BOX-SAFETY VERDICT: resolve + assert NO egress leaks.  1 = the box upholds the no-unencrypted-exit
+ * policy; 0 = at least one input-tainted byte would leave the box in the clear. */
+fn ff_box_safe() -> u32 @export {
+    taint_propagate()
+    if taint_violations() == 0u32 { return 1u32 }
+    return 0u32
+}

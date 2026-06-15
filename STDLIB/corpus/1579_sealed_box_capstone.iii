@@ -1,0 +1,133 @@
+/* 1579_sealed_box_capstone.iii -- DEVELOP-UP SLICE 5 / CAPSTONE: the full encapsulation thesis end to end.
+ * aether/sealed_box composes FIVE real organs -- capability (admission), vbd (reversible disk), enclave
+ * (memory forcefield), flow_firewall (info-flow), sentinel (behavioral immunity) -- granting an OPAQUE
+ * guest III's superpowers under zero-trust capability mediation, with each of three distinct attacks
+ * defeated by a different bridge.
+ *
+ * TOY-PROOF ORACLE (six powers, each a discriminator a thin/forged gateway cannot pass):
+ *  (1) POLA ADMISSION : the guest cap is attenuated to {DISK} only -> sb_admit(DISK)=1 but sb_admit(NET)=0;
+ *      a zero-rights cap is denied DISK.  (A toy granting ambient authority fails.)
+ *  (2) CAP-GATED REVERSIBLE DISK : a DISK-righted write goes through vbd reversibly; a no-DISK cap's write
+ *      is DENIED and the block is UNCHANGED.  (A toy ignoring the cap mutates.)
+ *  (3) MEMORY FORCEFIELD under cap : a write to SHARED is allowed, to hypervisor state REFUSED, and ANY
+ *      offset is refused to a no-DISK cap.  (A toy typing all memory writable fails.)
+ *  (4) ATTACK=EXFILTRATION -> INFO-FLOW : a tainted byte reaching egress unencrypted -> sb_egress_safe=0;
+ *      the same flow through an encrypt boundary -> 1.  (A toy ignoring taint fails.)
+ *  (5) ATTACK=RANSOMWARE -> BEHAVIORAL IMMUNITY : a mass-encryption sweep deviates from the sealed cadence
+ *      -> sb_guard rolls the box backward -> arbitrary pre-image D recovered byte-for-byte.
+ *  (6) KILL SWITCH : revoking the guest cap cascades -> every subsequent privileged act is denied.
+ * 99 = all six hold.
+ */
+module corpus_1579
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn vbd_open(cap: u64) -> u32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
+
+extern @abi(c-msvc-x64) fn sentinel_arm() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_observe(a: u64) -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
+
+extern @abi(c-msvc-x64) fn ff_begin() -> i32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_input() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_relay(a: u32, b: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_const() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_encrypt(a: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_egress(a: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_resolve() -> i32 from "flow_firewall.iii"
+
+extern @abi(c-msvc-x64) fn sb_admit(guest_cap: u64, right: u64) -> u32 from "sealed_box.iii"
+extern @abi(c-msvc-x64) fn sb_disk_write(guest_cap: u64, slot: u32, idx: u64, val: u64) -> i32 from "sealed_box.iii"
+extern @abi(c-msvc-x64) fn sb_mem_allowed(guest_cap: u64, offset: u32) -> u32 from "sealed_box.iii"
+extern @abi(c-msvc-x64) fn sb_egress_safe() -> u32 from "sealed_box.iii"
+extern @abi(c-msvc-x64) fn sb_guard(slot: u32) -> i32 from "sealed_box.iii"
+extern @abi(c-msvc-x64) fn sb_revoke(authority: u64, target: u64) -> i32 from "sealed_box.iii"
+
+const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
+const NB : u64 = 256u64
+const VBD_CAP : u64 = 0x5A5A5A5Au64
+const R_DISK : u64 = 0x4u64       /* CAP_RIGHT_FS_WRITE */
+const R_NET  : u64 = 0x20u64      /* CAP_RIGHT_NET_DIAL */
+const SB_E_DENIED : i32 = -10i32
+const SNT_ROLLED_BACK : i32 = 1i32
+const OFF_SHARED : u32 = 0x30000u32
+const OFF_HV     : u32 = 0x3E800u32
+
+fn dval(i: u64) -> u64 { return (i + 1u64) * GOLDEN }
+fn rval(i: u64) -> u64 { return ((i + 1u64) * GOLDEN) ^ 0xFFFFFFFFFFFFFFFFu64 }
+
+fn main() -> u64 {
+    /* seal the benign behavioral baseline (steady cadence) */
+    if sentinel_arm() != 0i32 { return 10u64 }
+    let mut i : u64 = 0u64
+    while i < 64u64 { sentinel_observe(3u64)  i = i + 1u64 }
+    if sentinel_seal_baseline() != 0i32 { return 11u64 }
+
+    /* mint the capability tree: root -> guest cap attenuated to {DISK} only; a zero-rights "poor" cap */
+    let root : u64 = cap_env_init()
+    if root != 1u64 { return 12u64 }
+    let guest : u64 = cap_attenuate(root, R_DISK, 0u64)
+    if guest == 0u64 { return 13u64 }
+    let poor : u64 = cap_attenuate(root, 0u64, 0u64)
+    if poor == 0u64 { return 14u64 }
+
+    /* (1) POLA ADMISSION */
+    if sb_admit(guest, R_DISK) != 1u32 { return 20u64 }   /* granted DISK */
+    if sb_admit(guest, R_NET)  != 0u32 { return 21u64 }   /* never granted NET (least authority) */
+    if sb_admit(poor,  R_DISK) != 0u32 { return 22u64 }   /* zero-rights cap denied */
+
+    /* (2) CAP-GATED REVERSIBLE DISK: guest fills + commits D */
+    let s1 : u32 = vbd_open(VBD_CAP)
+    if s1 == 0xFFFFFFFFu32 { return 23u64 }
+    i = 0u64
+    while i < NB { if sb_disk_write(guest, s1, i, dval(i)) != 0i32 { return 24u64 }  i = i + 1u64 }
+    if vbd_commit(s1) != 0i32 { return 25u64 }
+    if vbd_read(5u64) != dval(5u64) { return 26u64 }
+    /* a no-DISK cap's write is DENIED and the block is UNCHANGED */
+    if sb_disk_write(poor, s1, 5u64, 0xBADu64) != SB_E_DENIED { return 27u64 }
+    if vbd_read(5u64) != dval(5u64) { return 28u64 }
+
+    /* (3) MEMORY FORCEFIELD under capability */
+    if sb_mem_allowed(guest, OFF_SHARED) != 1u32 { return 30u64 }   /* SHARED writable */
+    if sb_mem_allowed(guest, OFF_HV)     != 0u32 { return 31u64 }   /* hypervisor state PROTECTED */
+    if sb_mem_allowed(poor,  OFF_SHARED) != 0u32 { return 32u64 }   /* no-DISK cap denied everywhere */
+
+    /* (4) ATTACK = EXFILTRATION -> INFO-FLOW firewall */
+    ff_begin()
+    let k : u32 = ff_input()
+    let r : u32 = ff_relay(k, ff_const())
+    ff_egress(r)
+    ff_resolve()
+    if sb_egress_safe() != 0u32 { return 40u64 }   /* tainted byte would leave in the clear -> UNSAFE */
+    ff_begin()
+    let k2 : u32 = ff_input()
+    let enc : u32 = ff_encrypt(ff_relay(k2, ff_const()))
+    ff_egress(enc)
+    ff_resolve()
+    if sb_egress_safe() != 1u32 { return 41u64 }   /* encrypted -> SAFE */
+
+    /* (5) ATTACK = RANSOMWARE -> BEHAVIORAL IMMUNITY */
+    let s2 : u32 = vbd_open(VBD_CAP)
+    if s2 == 0xFFFFFFFFu32 { return 50u64 }
+    i = 0u64
+    while i < NB { if sb_disk_write(guest, s2, i, rval(i)) != 0i32 { return 51u64 }  i = i + 1u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != rval(i) { return 52u64 }  i = i + 1u64 }   /* attack succeeded */
+    i = 0u64
+    while i < 64u64 { sentinel_observe(i + 1u64)  i = i + 1u64 }                /* the mass-encryption sweep */
+    if sb_guard(s2) != SNT_ROLLED_BACK { return 53u64 }                        /* deviated -> reversed */
+    i = 0u64
+    while i < NB { if vbd_read(i) != dval(i) { return 54u64 }  i = i + 1u64 }   /* D recovered byte-for-byte */
+
+    /* (6) KILL SWITCH: revoke the guest cap -> every privileged act denied */
+    if sb_revoke(root, guest) != 0i32 { return 60u64 }
+    if sb_admit(guest, R_DISK) != 0u32 { return 61u64 }
+    let s3 : u32 = vbd_open(VBD_CAP)
+    if s3 == 0xFFFFFFFFu32 { return 62u64 }
+    if sb_disk_write(guest, s3, 0u64, dval(0u64)) != SB_E_DENIED { return 63u64 }
+
+    return 99u64
+}

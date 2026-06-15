@@ -1,0 +1,100 @@
+/* STDLIB/iii/aether/snapshot_box.iii
+ *
+ * III STDLIB - aether::snapshot_box  --  BRANCHING reversibility (a snapshot FOREST over the sealed disk).
+ *
+ * "DEVELOP-UP" SLICE 8 (the reversibility pillar, generalized).  Slice 1 (vbd) gives LINEAR undo: roll the
+ * disk back to the open envelope's start.  This slice gives a guest a FOREST of named, content-addressed
+ * checkpoints with full lattice structure -- branch, diverge, find the common ancestor of two timelines,
+ * and restore to ANY past snapshot (not just the most recent).  VM-snapshot-tree time travel for an
+ * unmodified guest.
+ *
+ * COMPOSES (not reimplements) THREE real organs:
+ *   - aether/snapshot_lattice : the witness-chained snapshot FOREST + lattice ops (sl_snapshot records an
+ *       antecedent + content-addressed root; sl_le = ancestry; sl_meet = greatest common antecedent).
+ *   - aether/vbd              : the sealed reversible disk whose committed image each checkpoint captures.
+ *   - cad                     : the ONE content-address primitive -- each checkpoint's root = cad(disk
+ *       image), so a tampered stored image is detectable (snb_root_matches).
+ *
+ * It ADDS what snapshot_lattice lacks (it stores only the 32-byte root, not the state): the per-checkpoint
+ * DISK-IMAGE store and the restore-to-an-arbitrary-snapshot operation, plus the integrity binding.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.96.
+ */
+
+module aether_snapshot_box
+
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn sl_snapshot(op_id: *u8, ante_snap: u32, root: *u8) -> u32 from "snapshot_lattice.iii"
+extern @abi(c-msvc-x64) fn sl_le(a: u32, b: u32) -> u8 from "snapshot_lattice.iii"
+extern @abi(c-msvc-x64) fn sl_meet(a: u32, b: u32) -> u32 from "snapshot_lattice.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const SNB_NBLOCKS : u64 = 256u64           /* == VBD_NBLOCKS */
+const SNB_MAXSNAP : u32 = 16u32            /* checkpoints this box can hold full images for */
+const SNB_GENESIS : u32 = 0xFFFFFFFFu32    /* == SNAPL_SENT (no antecedent) */
+const SNB_SENT    : u32 = 0xFFFFFFFFu32
+const SNB_SUITE   : u32 = 1u32             /* == cad CAD_SUITE_KECCAK256 */
+const SNB_OK      : i32 = 0i32
+const SNB_E       : i32 = -1i32
+
+var SNB_IMG     : [u64; 4096]   /* 16 checkpoints * 256 blocks (module-scope: runtime-index safe) */
+var SNB_ROOT    : [u8; 512]     /* 16 * 32-byte content-addressed roots */
+var SNB_SCRATCH : [u64; 256]    /* staging for the live disk image */
+var SNB_TMPROOT : [u8; 32]      /* staging for a content-address */
+
+fn snb_img_ptr(slot: u32) -> u64 { return (&SNB_IMG as u64) + (slot as u64) * SNB_NBLOCKS * 8u64 }
+fn snb_root_ptr(slot: u32) -> u64 { return (&SNB_ROOT as u64) + (slot as u64) * 32u64 }
+
+/* CHECKPOINT the live vbd disk: capture its committed image, content-address it as the snapshot root, and
+ * record it in the lattice forest under `ante` (SNB_GENESIS for a root).  Returns the snapshot slot, or
+ * SNB_SENT if the image store is full (fail-closed: never record a snapshot we cannot restore). */
+fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 @export {
+    let mut i : u64 = 0u64
+    while i < SNB_NBLOCKS { SNB_SCRATCH[i] = vbd_read(i)  i = i + 1u64 }
+    cad_oneshot(SNB_SUITE, (&SNB_SCRATCH as u64) as *u8, SNB_NBLOCKS * 8u64, (&SNB_TMPROOT as u64) as *u8)
+    let slot : u32 = sl_snapshot(op_id, ante, (&SNB_TMPROOT as u64) as *u8)
+    if slot >= SNB_MAXSNAP { return SNB_SENT }
+    let ip : *u64 = snb_img_ptr(slot) as *u64
+    i = 0u64
+    while i < SNB_NBLOCKS { ip[i] = SNB_SCRATCH[i]  i = i + 1u64 }
+    let rdst : *u8 = snb_root_ptr(slot) as *u8
+    let rsrc : *u8 = (&SNB_TMPROOT as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { rdst[k] = rsrc[k]  k = k + 1u64 }
+    return slot
+}
+
+/* RESTORE the sealed disk to checkpoint `slot` -- ANY past snapshot, not just the most recent.  The writes
+ * go through the reversible vbd session, so the restore is itself undoable.  SNB_E on a bad slot/write. */
+fn snb_restore(session: u32, slot: u32) -> i32 @export {
+    if slot >= SNB_MAXSNAP { return SNB_E }
+    let ip : *u64 = snb_img_ptr(slot) as *u64
+    let mut i : u64 = 0u64
+    while i < SNB_NBLOCKS {
+        if vbd_write(session, i, ip[i]) != 0i32 { return SNB_E }
+        i = i + 1u64
+    }
+    return SNB_OK
+}
+
+/* Ancestry: 1 iff snapshot a is a (non-strict) ancestor of b. */
+fn snb_ancestor(a: u32, b: u32) -> u8 @export { return sl_le(a, b) }
+
+/* The greatest common antecedent of two divergent timelines (the fork point), or SNB_SENT. */
+fn snb_meet(a: u32, b: u32) -> u32 @export { return sl_meet(a, b) }
+
+/* INTEGRITY: 1 iff the stored image for `slot` still content-addresses to its recorded root -- a tampered
+ * checkpoint image is detected (the cad re-derivation will not match). */
+fn snb_root_matches(slot: u32) -> u8 @export {
+    if slot >= SNB_MAXSNAP { return 0u8 }
+    cad_oneshot(SNB_SUITE, snb_img_ptr(slot) as *u8, SNB_NBLOCKS * 8u64, (&SNB_TMPROOT as u64) as *u8)
+    let rs : *u8 = snb_root_ptr(slot) as *u8
+    let rn : *u8 = (&SNB_TMPROOT as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if rs[k] != rn[k] { return 0u8 }
+        k = k + 1u64
+    }
+    return 1u8
+}

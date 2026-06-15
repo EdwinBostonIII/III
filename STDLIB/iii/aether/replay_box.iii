@@ -1,0 +1,79 @@
+/* STDLIB/iii/aether/replay_box.iii
+ *
+ * III STDLIB - aether::replay_box  --  the sealed-box DETERMINISTIC REPLAY engine (+ divergence detector).
+ *
+ * "DEVELOP-UP" SLICE 6 (the fourth superpower: DETERMINISTIC REPLAY).  A legacy guest is full of
+ * nondeterminism -- RNG draws, clock reads, network/sensor bytes.  III records every such observation as
+ * it happens; later it can REPLAY the run bit-identically by re-injecting the recorded values and ignoring
+ * the live world.  That gives the sealed box time-travel debugging, deterministic forensics, and a basis
+ * for verified rollback -- for an UNMODIFIED guest.
+ *
+ * COMPOSES (not reimplements) sanctus/observe (Organ C, the Witnessed Sense): obs_observe in LIVE mode
+ * passes a nondeterministic value through AND records it as a witness fragment; in REPLAY mode it
+ * re-injects the recorded payload and ignores the live pointer, so the replay is byte-identical.
+ *
+ * It ADDS the guest-facing record/replay framing AND a DIVERGENCE DETECTOR that raw observe lacks: during
+ * replay, observe silently discards the live value, so a guest that behaves DIFFERENTLY on replay (a
+ * nondeterminism leak, a tampering attempt, a non-reproducible bug) goes unnoticed.  rb_replay_check
+ * re-injects the recorded value AND reports whether the live value would have DIVERGED -- making
+ * replay-faithfulness an observable, enforceable property.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.96.
+ */
+
+module aether_replay_box
+
+extern @abi(c-msvc-x64) fn obs_init() -> i32 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_set_mode(m: u8) -> i32 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_observe(source_id: u32, live_ptr: *u8, len: u32, out_ptr: *u8) -> u64 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_count() -> u64 from "observe.iii"
+
+const RB_MODE_RECORD : u8  = 0u8           /* == OBS_MODE_LIVE */
+const RB_MODE_REPLAY : u8  = 1u8           /* == OBS_MODE_REPLAY */
+const RB_SENTINEL    : u64 = 0xFFFFFFFFFFFFFFFFu64   /* == OBS_SENTINEL (unreplayable/exhausted) */
+const RB_OK          : i32 = 0i32
+const RB_FAITHFUL    : u32 = 0u32          /* live matched the recorded run */
+const RB_DIVERGED    : u32 = 1u32          /* live differs from the recorded run */
+const RB_ERR         : u32 = 2u32          /* replay exhausted / length mismatch */
+
+/* Begin a fresh sealed deterministic-execution box in RECORD mode. */
+fn rb_begin() -> i32 @export { obs_init()  return obs_set_mode(RB_MODE_RECORD) }
+
+/* RECORD a nondeterministic guest observation (RNG / clock / IO byte): the live value passes through to
+ * `out` AND is logged.  Returns the observation handle, or RB_SENTINEL if unrecordable. */
+fn rb_record(source_id: u32, live: *u8, len: u32, out: *u8) -> u64 @export {
+    return obs_observe(source_id, live, len, out)
+}
+
+/* Switch the box to deterministic REPLAY (rewinds the observation cursor to the start of the run). */
+fn rb_replay() -> i32 @export { return obs_set_mode(RB_MODE_REPLAY) }
+
+/* REPLAY the next observation: re-inject the RECORDED value into `out`, ignoring the live world.  Returns
+ * the observation handle, or RB_SENTINEL when the recorded run is exhausted. */
+fn rb_replay_next(source_id: u32, len: u32, out: *u8) -> u64 @export {
+    return obs_observe(source_id, out as *u8, len, out)
+}
+
+/* REPLAY with DIVERGENCE DETECTION: re-inject the recorded value into `out`, then report whether the
+ * guest's LIVE value would have DIVERGED from the recorded run.  RB_FAITHFUL / RB_DIVERGED / RB_ERR.
+ * CONTRACT (enforced): `live` and `out` MUST be DISTINCT buffers.  obs_observe overwrites `out` with the
+ * recorded value, so an aliased live==out would make the live-vs-recorded compare degenerate to an
+ * always-equal X-vs-X and silently report a false RB_FAITHFUL -- so aliased buffers are REFUSED (RB_ERR)
+ * and no observation is consumed. */
+fn rb_replay_check(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 @export {
+    if (live as u64) == (out as u64) { return RB_ERR }    /* aliased buffers -> divergence check meaningless: refuse */
+    let h : u64 = obs_observe(source_id, live, len, out)   /* out receives the RECORDED value; live ignored */
+    if h == RB_SENTINEL { return RB_ERR }
+    let lv : *u8 = live
+    let rc : *u8 = out
+    let n  : u64 = len as u64
+    let mut i : u64 = 0u64
+    while i < n {
+        if lv[i] != rc[i] { return RB_DIVERGED }
+        i = i + 1u64
+    }
+    return RB_FAITHFUL
+}
+
+/* The number of recorded observations in the current run. */
+fn rb_count() -> u64 @export { return obs_count() }

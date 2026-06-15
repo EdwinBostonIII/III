@@ -1,0 +1,103 @@
+/* STDLIB/iii/aether/sentinel.iii
+ *
+ * III STDLIB - aether::sentinel  --  the BEHAVIORAL RANSOMWARE SENTINEL (sealed-box autonomic immunity).
+ *
+ * "DEVELOP-UP" SLICE 3 (the third semantic-gap bridge: BEHAVIORAL INFERENCE).  III cannot read the
+ * INTENT of an opaque legacy guest, and the information-flow firewall (slice 2) only governs egress.  But
+ * mass-encryption ransomware has an unmistakable PHYSICS: it sweeps the whole disk, writing every block
+ * at a saturated, structurally-distinct cadence.  This sentinel SEALS the benign guest's steady-state
+ * write-activity fingerprint as a known-good baseline, then watches the live IO cadence -- and the instant
+ * the behavior DEVIATES from the sealed-good fingerprint it rolls the box backward through the real
+ * reversible device, undoing the attack.  It never learns, never thresholds, never reads a byte of guest
+ * intent: it enforces a ZERO-TRUST ALLOW-LIST on behavior (only the exact sealed cadence is permitted)
+ * and reverses everything else.
+ *
+ * COMPOSES (not reimplements) TWO real organs:
+ *   - numera/entropy_monitor : the deterministic spectral behavioral detector.  Samples the write-activity
+ *       stream into a 64-deep window, takes its exact GF(p) NTT spectrum, and measures the in-field
+ *       squared-Euclidean distance from a sealed baseline spectrum (distance == 0  <=>  behavior matches
+ *       the sealed-good fingerprint exactly; no learning, no threshold).
+ *   - aether/vbd             : the reversible virtual block device (slice 1) -- the response surface.  The
+ *       behavioral verdict GATES the reversible response: deviation -> rollback (undo), match -> commit.
+ *
+ * The emergent capability neither organ has alone: AUTONOMOUS detection-and-reversal.  The behavioral
+ * organ genuinely decides whether rollback fires (the benign arm is retained, NOT rolled back), and the
+ * reversal recovers an ARBITRARY runtime pre-image the sentinel never saw.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_sentinel
+
+extern @abi(c-msvc-x64) fn entropy_init() -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_register_path(path_id: *u8) -> u32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_sample(path_slot: u32, time_value: u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_set_baseline(path_slot: u32, spectrum: *u64, cap: u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_distance(path_slot: u32, spectrum: *u64) -> u64 from "entropy_monitor.iii"
+
+extern @abi(c-msvc-x64) fn vbd_rollback(slot: u32) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
+
+const SNT_OK          : i32 = 0i32
+const SNT_E           : i32 = -1i32
+const SNT_COMMITTED   : i32 = 0i32      /* benign: matched the sealed cadence -> writes retained */
+const SNT_ROLLED_BACK : i32 = 1i32      /* anomalous: deviated -> box reversed */
+const SNT_INVALID     : u32 = 0xFFFFFFFFu32
+const SNT_WINDOW      : u64 = 64u64     /* == ENTROPY_N (one full behavioral window) */
+const SNT_BASE_CAP    : u64 = 64u64     /* non-zero baseline-install capability token (entropy M8 gate) */
+
+var SNT_SLOT : u32 = 0xFFFFFFFFu32      /* the monitored entropy path slot */
+var SNT_SPEC : [u64; 64]                /* scratch spectrum buffer */
+var SNT_ID   : [u8; 32]                 /* 32-byte path id */
+var SNT_INIT : u32 = 0u32
+
+/* Arm the sentinel: lazy-init the spectral organ, register a fresh monitored path. */
+fn sentinel_arm() -> i32 @export {
+    if SNT_INIT == 0u32 { entropy_init()  SNT_INIT = 1u32 }
+    let mut i : u64 = 0u64
+    while i < 32u64 { SNT_ID[i] = (i + 1u64) as u8  i = i + 1u64 }
+    let s : u32 = entropy_register_path((&SNT_ID as u64) as *u8)
+    if s == SNT_INVALID { return SNT_E }
+    SNT_SLOT = s
+    return SNT_OK
+}
+
+/* Observe one IO event: feed the guest's per-tick write-activity into the behavioral window. */
+fn sentinel_observe(activity: u64) -> i32 @export {
+    if SNT_SLOT == SNT_INVALID { return SNT_E }
+    return entropy_sample(SNT_SLOT, activity)
+}
+
+/* SEAL the current 64-sample window as the known-good behavioral baseline (the allow-list fingerprint). */
+fn sentinel_seal_baseline() -> i32 @export {
+    if SNT_SLOT == SNT_INVALID { return SNT_E }
+    if entropy_spectrum(SNT_SLOT, (&SNT_SPEC as u64) as *u64) != SNT_OK { return SNT_E }
+    return entropy_set_baseline(SNT_SLOT, (&SNT_SPEC as u64) as *u64, SNT_BASE_CAP)
+}
+
+/* The anomaly WITNESS: exact in-field distance of the current window's spectrum from the sealed baseline.
+ * 0 <=> behavior matches the sealed-good fingerprint exactly. */
+fn sentinel_deviation() -> u64 @export {
+    if SNT_SLOT == SNT_INVALID { return 0u64 }
+    entropy_spectrum(SNT_SLOT, (&SNT_SPEC as u64) as *u64)
+    return entropy_distance(SNT_SLOT, (&SNT_SPEC as u64) as *u64)
+}
+
+/* Zero-trust allow-list VERDICT: 1 = the live cadence DEVIATED from the sealed-good fingerprint. */
+fn sentinel_anomalous() -> u32 @export {
+    if sentinel_deviation() != 0u64 { return 1u32 }
+    return 0u32
+}
+
+/* THE AUTONOMIC GUARD: the behavioral verdict gates the reversible response on the protected vbd slot.
+ * Deviation -> roll the box backward (undo the attack), return SNT_ROLLED_BACK.
+ * Match      -> commit (retain the benign writes), return SNT_COMMITTED. */
+fn sentinel_guard(vbd_slot: u32) -> i32 @export {
+    if sentinel_anomalous() == 1u32 {
+        vbd_rollback(vbd_slot)
+        return SNT_ROLLED_BACK
+    }
+    vbd_commit(vbd_slot)
+    return SNT_COMMITTED
+}

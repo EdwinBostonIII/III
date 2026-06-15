@@ -1,0 +1,118 @@
+/* 1582_snapshot_box_branching.iii -- DEVELOP-UP SLICE 8: branching reversibility (a snapshot FOREST over
+ * the sealed reversible disk).  aether/snapshot_box composes aether/snapshot_lattice (forest + lattice) +
+ * aether/vbd (the disk) + cad (content-addressed roots).
+ *
+ * TOY-PROOF ORACLE (un-fakeable by construction):
+ *  Build a fork:  s0 (genesis, state A) <- s1 (state B) <- s2 (state C),  and  s1 <- s3 (state D, sibling
+ *  of s2).  Then:
+ *  (A) LATTICE: snb_meet(s2,s3) == s1 (the greatest common antecedent -- a flat/forged tree cannot compute
+ *      the lowest common ancestor); s1,s0 are ancestors of s2 and s3; s2 and s3 are INCOMPARABLE siblings.
+ *  (B) RESTORE-TO-ARBITRARY: jump the disk back to GENESIS (state A) -- a NON-most-recent snapshot -- and
+ *      recover state A byte-for-byte (vbd's linear undo can only reach the open envelope's start, never an
+ *      arbitrary past checkpoint after a divergent history); then restore to s2 and recover state C.
+ *  (C) INTEGRITY: each stored image still content-addresses to its recorded root; a bad slot fails closed.
+ * 99 = all hold.
+ */
+module corpus_1582
+
+extern @abi(c-msvc-x64) fn vbd_open(cap: u64) -> u32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
+
+extern @abi(c-msvc-x64) fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 from "snapshot_box.iii"
+extern @abi(c-msvc-x64) fn snb_restore(session: u32, slot: u32) -> i32 from "snapshot_box.iii"
+extern @abi(c-msvc-x64) fn snb_ancestor(a: u32, b: u32) -> u8 from "snapshot_box.iii"
+extern @abi(c-msvc-x64) fn snb_meet(a: u32, b: u32) -> u32 from "snapshot_box.iii"
+extern @abi(c-msvc-x64) fn snb_root_matches(slot: u32) -> u8 from "snapshot_box.iii"
+
+const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
+const NB : u64 = 256u64
+const CAP : u64 = 0x5A5A5A5Au64
+const GENESIS : u32 = 0xFFFFFFFFu32
+const SENT : u32 = 0xFFFFFFFFu32
+const VINVALID : u32 = 0xFFFFFFFFu32
+const XB : u64 = 0x1111111111111111u64
+const XC : u64 = 0x2222222222222222u64
+const XD : u64 = 0x3333333333333333u64
+
+var OP : [u8; 32]
+
+fn da(i: u64) -> u64 { return (i + 1u64) * GOLDEN }
+
+fn main() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 32u64 { OP[k] = (k + 1u64) as u8  k = k + 1u64 }
+    let opp : *u8 = (&OP as u64) as *u8
+
+    /* state A -> commit -> checkpoint s0 (genesis) */
+    let sa : u32 = vbd_open(CAP)
+    if sa == VINVALID { return 10u64 }
+    let mut i : u64 = 0u64
+    while i < NB { if vbd_write(sa, i, da(i)) != 0i32 { return 11u64 }  i = i + 1u64 }
+    vbd_commit(sa)
+    let s0 : u32 = snb_checkpoint(opp, GENESIS)
+    if s0 == SENT { return 12u64 }
+
+    /* state B -> commit -> checkpoint s1 (child of s0) */
+    let sb : u32 = vbd_open(CAP)
+    if sb == VINVALID { return 13u64 }
+    i = 0u64
+    while i < NB { vbd_write(sb, i, da(i) ^ XB)  i = i + 1u64 }
+    vbd_commit(sb)
+    let s1 : u32 = snb_checkpoint(opp, s0)
+    if s1 == SENT { return 14u64 }
+
+    /* state C -> commit -> checkpoint s2 (child of s1) */
+    let sc : u32 = vbd_open(CAP)
+    if sc == VINVALID { return 15u64 }
+    i = 0u64
+    while i < NB { vbd_write(sc, i, da(i) ^ XC)  i = i + 1u64 }
+    vbd_commit(sc)
+    let s2 : u32 = snb_checkpoint(opp, s1)
+    if s2 == SENT { return 16u64 }
+
+    /* FORK: restore to s1 (state B), confirm, then state D -> checkpoint s3 (sibling of s2) */
+    let sr1 : u32 = vbd_open(CAP)
+    if sr1 == VINVALID { return 17u64 }
+    if snb_restore(sr1, s1) != 0i32 { return 18u64 }
+    vbd_commit(sr1)
+    i = 0u64
+    while i < NB { if vbd_read(i) != (da(i) ^ XB) { return 19u64 }  i = i + 1u64 }
+    let sd : u32 = vbd_open(CAP)
+    if sd == VINVALID { return 20u64 }
+    i = 0u64
+    while i < NB { vbd_write(sd, i, da(i) ^ XD)  i = i + 1u64 }
+    vbd_commit(sd)
+    let s3 : u32 = snb_checkpoint(opp, s1)
+    if s3 == SENT { return 21u64 }
+
+    /* (A) LATTICE */
+    if snb_meet(s2, s3) != s1 { return 30u64 }       /* greatest common antecedent (the fork point) */
+    if snb_meet(s0, s2) != s0 { return 31u64 }       /* meet seen returning a different slot */
+    if snb_ancestor(s1, s2) != 1u8 { return 32u64 }
+    if snb_ancestor(s1, s3) != 1u8 { return 33u64 }
+    if snb_ancestor(s0, s2) != 1u8 { return 34u64 }  /* genesis ancestor of all */
+    if snb_ancestor(s2, s3) != 0u8 { return 35u64 }  /* siblings incomparable */
+    if snb_ancestor(s3, s2) != 0u8 { return 36u64 }
+
+    /* (B) RESTORE-TO-ARBITRARY: jump back to GENESIS (state A), not the most recent */
+    let srg : u32 = vbd_open(CAP)
+    if srg == VINVALID { return 40u64 }
+    if snb_restore(srg, s0) != 0i32 { return 41u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != da(i) { return 42u64 }  i = i + 1u64 }   /* state A recovered byte-for-byte */
+    let sr2 : u32 = vbd_open(CAP)
+    if sr2 == VINVALID { return 43u64 }
+    if snb_restore(sr2, s2) != 0i32 { return 44u64 }
+    i = 0u64
+    while i < NB { if vbd_read(i) != (da(i) ^ XC) { return 45u64 }  i = i + 1u64 }   /* state C recovered */
+
+    /* (C) INTEGRITY + fail-closed negatives */
+    if snb_root_matches(s0) != 1u8 { return 50u64 }
+    if snb_root_matches(s2) != 1u8 { return 51u64 }
+    if snb_root_matches(16u32) != 0u8 { return 52u64 }   /* out-of-range slot fails closed (negative arm) */
+    if snb_restore(sr2, 16u32) != (0i32 - 1i32) { return 53u64 }   /* SNB_E on bad slot (negative arm) */
+
+    return 99u64
+}

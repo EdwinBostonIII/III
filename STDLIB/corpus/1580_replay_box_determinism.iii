@@ -1,0 +1,104 @@
+/* 1580_replay_box_determinism.iii -- DEVELOP-UP SLICE 6: the sealed-box deterministic-replay engine
+ * (aether/replay_box.iii) composing the REAL sanctus/observe Witnessed-Sense organ.
+ *
+ * TOY-PROOF ORACLE (a conjunction a pass-through toy cannot satisfy):
+ *  (A) BYTE-IDENTICAL REPLAY + DIVERGENCE: a guest records a nondeterministic run of arbitrary runtime
+ *      values X[i].  On REPLAY the SAME observations are requested but the LIVE world now offers DIFFERENT
+ *      values Y[i] != X[i].  Each replay re-injects the RECORDED X[i] (NOT the live Y[i]) -- a toy that
+ *      passes live through would yield Y and fail -- AND rb_replay_check reports RB_DIVERGED (the live
+ *      world differs from the recorded run; a toy that ignores live cannot detect this).
+ *  (B) FAITHFUL REPLAY: replayed with live == recorded, rb_replay_check reports RB_FAITHFUL.
+ *  (C) PURE RE-INJECT + EXHAUSTION: rb_replay_next re-injects each recorded value in order, and one step
+ *      past the end returns RB_SENTINEL (the @safety(UNREPLAYABLE) boundary).
+ * 99 = all three hold (the run is byte-identical on replay regardless of the live world, and divergence
+ * from the recorded run is observable).
+ */
+module corpus_1580
+
+extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_record(source_id: u32, live: *u8, len: u32, out: *u8) -> u64 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay_next(source_id: u32, len: u32, out: *u8) -> u64 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay_check(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_count() -> u64 from "replay_box.iii"
+
+const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
+const N : u64 = 8u64
+const SID : u32 = 7u32
+const RB_FAITHFUL : u32 = 0u32
+const RB_DIVERGED : u32 = 1u32
+const RB_ERR      : u32 = 2u32
+const RB_SENTINEL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var XV  : [u64; 8]      /* recorded nondeterministic run (module-scope: runtime-index safe) */
+var YV  : [u64; 8]      /* divergent live values offered on replay */
+var OUT : [u64; 1]      /* 8-byte out slot */
+
+fn main() -> u64 {
+    let op : *u8 = (&OUT as u64) as *u8
+
+    /* build the runtime-arbitrary nondeterministic sequence (not planted literals) */
+    let mut i : u64 = 0u64
+    while i < N {
+        XV[i] = (i + 1u64) * GOLDEN
+        YV[i] = ((i + 1u64) * GOLDEN) ^ 0xA5A5A5A5A5A5A5A5u64    /* guaranteed != XV[i] */
+        i = i + 1u64
+    }
+
+    /* RECORD the run: each live value passes through AND is logged */
+    rb_begin()
+    i = 0u64
+    while i < N {
+        let xp : *u8 = ((&XV as u64) + i * 8u64) as *u8
+        let h : u64 = rb_record(SID, xp, 8u32, op)
+        if h == RB_SENTINEL { return 10u64 }
+        if OUT[0u64] != XV[i] { return 11u64 }
+        i = i + 1u64
+    }
+    if rb_count() != N { return 12u64 }
+
+    /* (A) REPLAY with a DIFFERENT live world -> recorded X re-injected + divergence detected.
+     * The verdict is compared at the DIRECT call site (the gate-outcome idiom). */
+    rb_replay()
+    i = 0u64
+    while i < N {
+        OUT[0u64] = 0u64
+        let yp : *u8 = ((&YV as u64) + i * 8u64) as *u8
+        if rb_replay_check(SID, yp, 8u32, op) != RB_DIVERGED { return 22u64 }   /* live diverged from the recorded run */
+        if OUT[0u64] != XV[i] { return 20u64 }     /* re-injected the RECORDED value, not the live Y */
+        if OUT[0u64] == YV[i] { return 21u64 }     /* definitely not the live value */
+        i = i + 1u64
+    }
+
+    /* (B) FAITHFUL replay: live == recorded -> no divergence (verdict seen the OTHER way) */
+    rb_replay()
+    i = 0u64
+    while i < N {
+        OUT[0u64] = 0u64
+        let xp : *u8 = ((&XV as u64) + i * 8u64) as *u8
+        if rb_replay_check(SID, xp, 8u32, op) != RB_FAITHFUL { return 31u64 }
+        if OUT[0u64] != XV[i] { return 30u64 }
+        i = i + 1u64
+    }
+
+    /* (C) pure re-inject + exhaustion boundary */
+    rb_replay()
+    i = 0u64
+    while i < N {
+        OUT[0u64] = 0u64
+        let h : u64 = rb_replay_next(SID, 8u32, op)
+        if h == RB_SENTINEL { return 40u64 }
+        if OUT[0u64] != XV[i] { return 41u64 }
+        i = i + 1u64
+    }
+    let hx : u64 = rb_replay_next(SID, 8u32, op)
+    if hx != RB_SENTINEL { return 42u64 }          /* one past the end -> unreplayable sentinel */
+
+    /* (D) ALIASING GUARD: live==out makes the divergence compare meaningless -> RB_ERR (never a false
+     * RB_FAITHFUL); the guard fires before any observation is consumed. */
+    rb_replay()
+    OUT[0u64] = 0u64
+    if rb_replay_check(SID, op, 8u32, op) != RB_ERR { return 50u64 }   /* live aliases out -> refused */
+
+    return 99u64
+}

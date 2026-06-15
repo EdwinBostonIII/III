@@ -1,0 +1,74 @@
+/* STDLIB/iii/aether/determinism_firewall.iii
+ *
+ * III STDLIB - aether::determinism_firewall  --  the DETERMINISM MEMBRANE (the wall that completes replay).
+ *
+ * "DEVELOP-UP" SLICE 10 (the determinism pillar, completed).  Slice 6 (replay_box) RECORDS a guest's
+ * nondeterminism so a run can be replayed bit-identically -- but nothing stops an UN-recorded, oracle-
+ * dependent (provisional) value from being trusted as if it were determined.  This membrane types every
+ * value crossing the box boundary: a CANONICAL value (content-addressed, reproducible) is admitted to the
+ * deterministic core; a PROVISIONAL value (live-API / oracle dependent) is DEFAULT-DENIED from the core but
+ * RECORDED through the replay box, so the non-reproducible dependence is both auditable (its oracle-pin is
+ * a content address) and replayable.  Replay-faithfulness becomes enforceable from both directions.
+ *
+ * COMPOSES (not reimplements):
+ *   - aether/reach_oracle : the firewall verdict (admit_canonical = default-deny; is_provisional) and the
+ *       oracle-pin forgery check (pin_matches re-derives cad(dependence) and compares -- a forged pin that
+ *       claims to bind different bytes is rejected).
+ *   - aether/replay_box   : the record/replay engine -- a denied provisional value is still recorded so its
+ *       live answer can be re-injected bit-identically on replay.
+ *
+ * It ADDS the single ingress MEMBRANE (df_ingress) that routes canonical-admit vs provisional-record-and-
+ * deny in one operation -- the reach_oracle <> replay_box composition neither organ expresses alone.
+ *
+ * Hexad: kind_compose.  Ring: R-1 (the sealed box).  K: 0.95.
+ */
+
+module aether_determinism_firewall
+
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn rb_record(source_id: u32, live: *u8, len: u32, out: *u8) -> u64 from "replay_box.iii"
+
+const DF_ADMIT : i32 = 0i32      /* admitted to the deterministic core */
+const DF_DENY  : i32 = 1i32      /* default-denied from the core (provisional or unknown tier) */
+
+/* THE FIREWALL VERDICT (default-deny): admit to the deterministic core iff the value is CANONICAL. */
+fn df_admit(tier: u32) -> i32 @export { return reach_oracle_admit_canonical(tier) }
+
+/* 1 iff the value is oracle-dependent PROVISIONAL (must be recorded for replay). */
+fn df_is_provisional(tier: u32) -> u8 @export { return reach_oracle_is_provisional(tier) }
+
+/* Pin an oracle result: out_pin := cad(dependence bytes); returns the PROVISIONAL tier (or INVALID on
+ * pin-computation failure).  The pin is itself reproducible, so the dependence is auditable forever. */
+fn df_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 @export { return reach_oracle_pin(pin_bytes, pin_len, out_pin) }
+
+/* Audit a claimed oracle-pin: 1 iff it binds EXACTLY these dependence bytes (cad re-derivation matches);
+ * a forged or mismatched pin is rejected -- the value's provenance cannot be spoofed. */
+fn df_pin_authentic(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 @export {
+    return reach_oracle_pin_matches(pin_bytes, pin_len, claimed_pin)
+}
+
+/* THE INGRESS MEMBRANE.  A value of the given `tier` crosses the box boundary:
+ *   CANONICAL  -> ADMIT to the deterministic core, pass the value through to `out`.
+ *   PROVISIONAL-> RECORD it through the replay box (so it replays bit-identically) AND DENY it from the
+ *                 core (default-deny).
+ *   any other  -> DENY (unknown tier is never trusted).
+ * Returns DF_ADMIT / DF_DENY. */
+fn df_ingress(tier: u32, source_id: u32, live: *u8, len: u32, out: *u8) -> i32 @export {
+    if reach_oracle_is_provisional(tier) == 1u8 {
+        rb_record(source_id, live, len, out)   /* record for replay (passes live->out AND logs) */
+        return DF_DENY
+    }
+    let adm : i32 = reach_oracle_admit_canonical(tier)
+    if adm == DF_ADMIT {
+        let s : *u8 = live
+        let d : *u8 = out
+        let n : u64 = len as u64
+        let mut i : u64 = 0u64
+        while i < n { d[i] = s[i]  i = i + 1u64 }   /* canonical passthrough */
+        return DF_ADMIT
+    }
+    return DF_DENY
+}

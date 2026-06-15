@@ -524,6 +524,7 @@ var RM_TMP : [u32; 130]
 var RM_T   : [u64; 132]
 var RM_NP  : [u32; 1]
 var RM_NW  : [u64; 1]
+var RM_CT_BITS : [u64; 1]   /* [P5] consume-once: a FIXED rsa_modexp iteration count for the NEXT call (the secret-exponent constant-time path); 0 = variable count (fast, for public exponents / Miller-Rabin) */
 
 fn rm_copy(dst: u64, src: u64, nw: u64) -> i32 {
     let d : *u32 = dst as *u32
@@ -647,6 +648,8 @@ fn rm_mont_sq(out: u64, a: u64, nw: u64) -> i32 {
 
 /* RSA modular exponentiation base^exp mod n via Montgomery (u32 CIOS). */
 fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
+    let ct_bits : u64 = RM_CT_BITS[0u64]   /* [P5] consume-once constant-time iteration count (set by a secret-exponent caller, e.g. rsa_pss_sign) */
+    RM_CT_BITS[0u64] = 0u64
     let nw : u64 = rm_extract(n, &RM_N as u64, 130u64)
     /* n'[0] = -N[0]^-1 mod 2^32 via the SHARED Newton organ (mont_nprime64).
      * APOTHEOSIS S.2.6 finish: rsa's 32-bit CIOS needs only n' mod 2^32, and
@@ -682,7 +685,8 @@ fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
     one[0] = 1u32
     rm_mont_mul(&RM_RES as u64, &RM_ONE as u64, &RM_R2 as u64, nw)  /* RM_RES = mont(1) */
     /* square-and-multiply, MSB->LSB */
-    let ebits : u64 = bigint_msb_position(exp)
+    let mut ebits : u64 = bigint_msb_position(exp)
+    if ct_bits > 0u64 { ebits = ct_bits }   /* [P5] secret exponent: iterate a FIXED count (= modulus bit width) so the iteration count is independent of d's bit-length -> truly constant-time.  Leading zero bits above d's MSB are square-of-1 no-ops, so the result is byte-identical to the variable-count path. */
     let mut bit : u64 = ebits
     while bit > 0u64 {
         bit = bit - 1u64
@@ -829,6 +833,7 @@ fn rsa_pss_sign(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64,
     if emLen == 0u64 { return 0i32 - 1i32 }
     let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
     if m == 0u64 { return 0i32 - 1i32 }   /* scan-7: bigint pool/arena exhausted -> FAIL CLOSED; never write an all-zero signature and report success */
+    RM_CT_BITS[0u64] = modBits   /* [P5] sign uses the SECRET exponent d -> constant-time fixed iteration count = modulus bit width (consumed by the next rsa_modexp) */
     let s : u64 = rsa_modexp(arena, m, d, n)
     if s == 0u64 { return 0i32 - 1i32 }
     let k : u64 = modBits / 8u64

@@ -54,7 +54,14 @@ fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 @export {
         let payload : u64 = b & 0x7Fu64
         value = value | (payload << shift)
         i = i + 1u64
-        if (b & 0x80u64) == 0u64 { going = 0u8 }
+        if (b & 0x80u64) == 0u64 {
+            going = 0u8
+            /* over-wide reject: the FINAL group must not push value bits past bit 63 -- a u64 is <= 10 LEB
+             * bytes and the 10th group's payload is <= 1.  shift < 64 here (continuation guard).  Without
+             * this, a 10th byte with payload bits 1..6 set silently TRUNCATES (false-accept).  [W-canon] */
+            let room : u64 = 64u64 - shift
+            if room < 7u64 { if (payload >> room) != 0u64 { LEB_LAST_VALUE = 0u64  return 0u64 } }
+        }
         if going == 1u8 {
             shift = shift + 7u64
             if shift >= 64u64 { LEB_LAST_VALUE = 0u64; return 0u64 }
@@ -116,7 +123,19 @@ fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 @export {
         value = value | (payload << shift)
         i = i + 1u64
         shift = shift + 7u64
-        if (b & 0x80u64) == 0u64 { going = 0u8 }
+        if (b & 0x80u64) == 0u64 {
+            going = 0u8
+            /* over-wide reject: the FINAL group's bits that map past bit 63 must ALL equal the sign bit
+             * (canonical SLEB128 sign extension); else the value does not fit in i64.  or_shift is the
+             * shift this byte was OR'd at (shift was already advanced above).  [W-canon] */
+            let or_shift : u64 = shift - 7u64
+            let room : u64 = 64u64 - or_shift
+            if room < 7u64 {
+                let hb : u64 = payload >> room
+                let mask : u64 = (1u64 << (7u64 - room)) - 1u64
+                if hb != 0u64 { if hb != mask { LEB_LAST_SVALUE = 0i64  return 0u64 } }
+            }
+        }
         if going == 1u8 {
             if shift >= 64u64 { LEB_LAST_SVALUE = 0i64  return 0u64 }
         }

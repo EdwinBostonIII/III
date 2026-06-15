@@ -144,6 +144,7 @@ fn base64_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
             /* "XX==" → 1 byte */
             if c3 != 61u32 { return B64_E_BADPAD }
             let v : u32 = (d0 << 18u32) | (d1 << 12u32)
+            if (d1 & 0x0Fu32) != 0u32 { return B64_E_BADPAD }   /* RFC 4648 §3.5 canonical: the 4 discarded low bits of the final char MUST be 0 (else "AB==" aliases "AA==") */
             if builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32) != 0i32 { return B64_E_BUILD }
             i = i + 4u64
             if i != src_len { return B64_E_BADPAD }   /* '=' padding terminates the stream: a padded quantum MUST be the last (reject mid-stream '=') */
@@ -153,6 +154,7 @@ fn base64_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
             if c3 == 61u32 {
                 /* "XXX=" → 2 bytes */
                 let v : u32 = (d0 << 18u32) | (d1 << 12u32) | (d2 << 6u32)
+                if (d2 & 0x03u32) != 0u32 { return B64_E_BADPAD }   /* RFC 4648 §3.5 canonical: the 2 discarded low bits of the final char MUST be 0 */
                 if builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32) != 0i32 { return B64_E_BUILD }
                 if builder_push_byte(builder_id, (v >> 8u32) & 0xFFu32) != 0i32 { return B64_E_BUILD }
                 i = i + 4u64
@@ -219,6 +221,7 @@ fn base64url_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export
         if e0 == 0xFFu32 { return B64_E_BADCHAR }
         if e1 == 0xFFu32 { return B64_E_BADCHAR }
         let v : u32 = (e0 << 18u32) | (e1 << 12u32)
+        if (e1 & 0x0Fu32) != 0u32 { return B64_E_BADPAD }   /* RFC 4648 §3.5 canonical: discarded low 4 bits MUST be 0 */
         if builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32) != 0i32 { return B64_E_BUILD }
     }
     if rem == 3u64 {
@@ -229,6 +232,7 @@ fn base64url_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export
         if f1 == 0xFFu32 { return B64_E_BADCHAR }
         if f2 == 0xFFu32 { return B64_E_BADCHAR }
         let v : u32 = (f0 << 18u32) | (f1 << 12u32) | (f2 << 6u32)
+        if (f2 & 0x03u32) != 0u32 { return B64_E_BADPAD }   /* RFC 4648 §3.5 canonical: discarded low 2 bits MUST be 0 */
         if builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32) != 0i32 { return B64_E_BUILD }
         if builder_push_byte(builder_id, (v >> 8u32) & 0xFFu32) != 0i32 { return B64_E_BUILD }
     }

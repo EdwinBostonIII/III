@@ -155,6 +155,11 @@ fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         let pad : u32 = 8u32 - nvalid
         let bytes_out : u32 = _b32_bytes_for_pad(pad)
         if bytes_out == 0xFFFFFFFFu32 { return B32_E_BADCHAR }
+        /* RFC 4648 §6 canonical: the low bits the final data char contributes BELOW the emitted bytes
+         * MUST be 0 -- else "MZ======" (Z low 2 bits set) aliases the canonical "MY======". */
+        let tail_bits : u64 = (5u64 - (bytes_out as u64)) * 8u64
+        let tail_mask : u64 = (1u64 << tail_bits) - 1u64
+        if (v & tail_mask) != 0u64 { return B32_E_BADCHAR }
         /* A padded block must be the FINAL block -- padding cannot appear mid-stream. */
         if saw_pad == 1u8 {
             if i + 8u64 < src_len { return B32_E_BADCHAR }

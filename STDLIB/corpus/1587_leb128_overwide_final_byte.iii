@@ -1,0 +1,62 @@
+/* 1587_leb128_overwide_final_byte.iii -- LEB128/SLEB128 final-byte WIDTH enforcement (false-accept fix).
+ * verba/leb128's width guard (shift>=64) lived inside the continuation branch, so the TERMINATING group
+ * was OR'd without a width check -- a 10th group with payload bits beyond the 64-bit width silently
+ * TRUNCATED (a non-injective decoder desyncs a WASM/DWARF byte cursor).  Distinct from 1549 (which exercises
+ * the continuation path, not the final byte).
+ *
+ * u64: the 10th group's payload must be <= 1 (only value bit 63).  i64: the 10th group's bits that map past
+ * bit 63 must ALL equal the sign bit (canonical sign extension), so the valid 10th payloads are
+ * {0x00, 0x01, 0x7E, 0x7F}.
+ *
+ * NEGATIVE ARMS (discriminators a "check shift>=64 only on continuation" decoder FAILS):
+ *   u64  nine 0x80 then 0x02  -> reject (payload bit 1 -> value bit 64)
+ *   i64  nine 0x80 then 0x02  -> reject (bit 1 set but sign bit 0: inconsistent extension)
+ * POSITIVE ARMS:
+ *   u64  small 0x80 0x01 -> 128;  full-width nine 0x80 then 0x01 -> 2^63 (10th payload 1 fits)
+ *   i64  full-width nine 0x80 then 0x7F -> -2^63 (10th payload 0x7F is canonical sign extension)
+ *   i64  encoder round-trips (+300 / -300 / -1) decode back exactly
+ * 99 = all hold. */
+module corpus_1587
+
+extern @abi(c-msvc-x64) fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_value() -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_svalue() -> i64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_encode_i64(value: i64, out: *u8) -> u64 from "leb128.iii"
+
+var U_SMALL : [u8; 2]  = [128u8, 1u8]                                                          /* 0x80 0x01 = 128 */
+var U_FULL  : [u8; 10] = [128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 1u8]  /* 2^63 */
+var U_WIDE  : [u8; 10] = [128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 2u8]  /* over-wide */
+var I_FULL  : [u8; 10] = [128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 127u8]/* -2^63 (0x7F) */
+var I_WIDE  : [u8; 10] = [128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 128u8, 2u8]  /* over-wide */
+var ENC     : [u8; 16]
+
+fn rt_i64(value: i64) -> u64 {
+    let n : u64 = leb128_encode_i64(value, (&ENC as u64) as *u8)
+    if leb128_decode_i64((&ENC as u64) as *u8, n) != n { return 0u64 }   /* consumed all encoded bytes */
+    if leb128_last_svalue() != value { return 0u64 }
+    return 1u64
+}
+
+fn main() -> u64 {
+    /* u64 small positive */
+    if leb128_decode_u64((&U_SMALL as u64) as *u8, 2u64) != 2u64 { return 10u64 }
+    if leb128_last_value() != 128u64 { return 11u64 }
+    /* u64 full-width 2^63 accepted (10th payload = 1) */
+    if leb128_decode_u64((&U_FULL as u64) as *u8, 10u64) != 10u64 { return 12u64 }
+    if leb128_last_value() != 0x8000000000000000u64 { return 13u64 }
+    /* u64 over-wide REJECTED (consumed 0) */
+    if leb128_decode_u64((&U_WIDE as u64) as *u8, 10u64) != 0u64 { return 14u64 }
+
+    /* i64 encoder round-trips (canonical inputs still accepted) */
+    if rt_i64(300i64) != 1u64 { return 20u64 }
+    if rt_i64(0i64 - 300i64) != 1u64 { return 21u64 }
+    if rt_i64(0i64 - 1i64) != 1u64 { return 22u64 }
+    /* i64 full-width -2^63 accepted (10th payload 0x7F is valid sign extension) */
+    if leb128_decode_i64((&I_FULL as u64) as *u8, 10u64) != 10u64 { return 23u64 }
+    if leb128_last_svalue() != (0i64 - 9223372036854775807i64 - 1i64) { return 24u64 }   /* -2^63 */
+    /* i64 over-wide REJECTED (consumed 0) */
+    if leb128_decode_i64((&I_WIDE as u64) as *u8, 10u64) != 0u64 { return 25u64 }
+
+    return 99u64
+}

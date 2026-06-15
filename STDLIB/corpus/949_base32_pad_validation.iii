@@ -11,8 +11,8 @@ extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
 extern @abi(c-msvc-x64) fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base32.iii"
 
 var SRC_OK  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 84u8, 66u8]   /* "MZXW6YTB" -> "fooba" (pad 0) */
-var SRC_P1  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 84u8, 61u8]   /* "MZXW6YT=" -> 4 bytes (pad 1, legal) */
-var SRC_P6  : [u8; 8] = [77u8, 90u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "MZ======" -> 1 byte (pad 6, legal) */
+var SRC_P1  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 81u8, 61u8]   /* "MZXW6YQ=" -> "foob" 4 bytes (pad 1, legal; CANONICAL -- Q's low 3 bits 0, unlike non-canonical "...T=") */
+var SRC_P6  : [u8; 8] = [77u8, 89u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "MY======" -> 1 byte (pad 6, legal; CANONICAL -- Y's low 2 bits 0, unlike non-canonical "MZ") */
 var SRC_P2  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 61u8, 61u8]   /* "MZXW6Y==" -> pad 2, ILLEGAL */
 var SRC_P5  : [u8; 8] = [77u8, 90u8, 88u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "MZX=====" -> pad 5, ILLEGAL */
 var SRC_P7  : [u8; 8] = [77u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "M=======" -> pad 7, ILLEGAL */

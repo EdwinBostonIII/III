@@ -1,0 +1,45 @@
+/* 1568_q128_round_dir.iii -- W86 FIX falsifier: the q128->f64 rounding-direction EXACTNESS certificate.
+ * q128_f64.iii:20-22 documents the 3-valued witness: 0 = exact (NO rounding lost), +1 = rounded up,
+ * -1 = rounded DOWN (truncated low bits, no ulp added).  Invariant: dir==0 <=> the f64 equals the value exactly.
+ *
+ * THE DEFECT (exactness-boundary lens, ultracode workflow, unanimous 0/3 refute): the round-to-nearest-ties-to-EVEN
+ * tie-DOWN arm (q128_f64.iii:178-180; round_bit==1 && sticky==0 && lsb_of_mant==0) sets LAST_DIR = 0i32 ("exact").
+ * But round_bit==1 means a nonzero low bit was DROPPED; the tie resolves DOWNWARD (no ulp added), so the result is
+ * NOT exact -- the certificate must be -1 (cf. the round_bit==0/sticky!=0 truncation arm at :188 which correctly
+ * sets -1).  For x = 2^53 + 1 (the exact half-ulp tie between 2^53 and 2^53+2), q128_to_f64_bits correctly returns
+ * 0x4340000000000000 = 2^53 (a 1-bit demonstrably lost) yet round_dir returns 0i32 -- a FALSE "no rounding lost".
+ *
+ * THE FIX (q128_f64.iii:179): `Q128_F64_LAST_DIR[slot] = -1i32` (rounded down, low bit truncated, no ulp added).
+ *
+ * 99 = the tie-down reports -1 AND exact values still report 0.  TEETH: against the PRE-FIX lib round_dir(2^53+1)
+ * returns 0 (false exact) -> return 10.  (round_dir results are bound to a LOCAL i32 + compared with ==/!= to
+ * sidestep the W79/W80 i32-call-result-ordering compiler trap.) */
+module corpus_1568
+
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_bits(id: u64) -> u64 from "q128_f64.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_round_dir(id: u64) -> i32 from "q128_f64.iii"
+
+fn main() -> u64 {
+    /* (A) TEETH -- 2^53+1 is the half-ulp tie; round-to-even rounds it DOWN to 2^53 (a 1-bit lost). */
+    let x : u64 = q128_from_u64(9007199254740993u64)        /* 2^53 + 1 */
+    let b : u64 = q128_to_f64_bits(x)                        /* populates LAST_DIR for x's slot */
+    if b != 0x4340000000000000u64 { return 1u64 }           /* proves LOSS: result = 2^53 != input 2^53+1 */
+    let d : i32 = q128_to_f64_round_dir(x)
+    if d != (0i32 - 1i32) { return 10u64 }                  /* PRE-FIX: d == 0 (false "exact") -> TEETH */
+
+    /* (B) EXACT control -- 2^53 is exactly representable; round_bit==0 path -> dir 0 (unaffected by the fix). */
+    let x2 : u64 = q128_from_u64(9007199254740992u64)       /* 2^53 */
+    let b2 : u64 = q128_to_f64_bits(x2)
+    if b2 != 0x4340000000000000u64 { return 2u64 }          /* 2^53 itself */
+    let d2 : i32 = q128_to_f64_round_dir(x2)
+    if d2 != 0i32 { return 20u64 }                          /* exact -> 0 */
+
+    /* (C) EXACT control -- a small integer, exactly representable -> dir 0. */
+    let x3 : u64 = q128_from_u64(5u64)
+    let b3 : u64 = q128_to_f64_bits(x3)
+    let d3 : i32 = q128_to_f64_round_dir(x3)
+    if d3 != 0i32 { return 30u64 }
+
+    return 99u64
+}

@@ -176,7 +176,7 @@ fn q128_to_f64_bits(id: u64) -> u64 @export {
                 Q128_F64_LAST_DIR[slot] = 1i32
             }
             if lsb_of_mant == 0u64 {
-                Q128_F64_LAST_DIR[slot] = 0i32
+                Q128_F64_LAST_DIR[slot] = 0i32 - 1i32   /* [W86] tie rounds DOWN to even: a 1-bit was dropped, no ulp added -> -1 (NOT exact); matches the round_bit==0/sticky!=0 truncation arm below */
             }
         }
     }

@@ -2360,3 +2360,35 @@ fully-reduced bases the Groebner property already guaranteed.  Count 1153 -> **1
 This is the 6th real wrong-result identity defect of the W79-opened arc (rsa malleability, matrix M^0, NFD reorder,
 span reflexivity, pcc closure, gb_reduce normal-form), all found via ultracode discovery Workflows + adversarial
 refute, every one confirmed by an in-session compile-probe before the edit and teeth-proven + corpus-gated.
+
+## Wave-86 — q128->f64 rounding-direction EXACTNESS certificate: a false "exact" at the round-to-even-down tie (2026-06-14)
+
+A 4th ultracode Workflow (18 agents, sibling-extension lenses + a fresh permutation-bijection lens + the
+exactness-boundary lens) -- 7 of 8 lenses clean (the identity axis is saturating); one unanimous (0/3 refute)
+survivor, a one-line metadata-certificate bug.
+
+**THE DEFECT (numera/q128_f64.iii, exactness-boundary lens):** q128_to_f64_bits emits, alongside the correct f64
+bit pattern, a 3-valued rounding-direction certificate (doc :20-22: 0=exact/no rounding lost, +1=rounded up,
+-1=rounded down/low bits truncated, no ulp added).  The round-to-nearest-ties-to-EVEN tie-DOWN arm
+(q128_f64.iii:178-180; round_bit==1 && sticky==0 && lsb_of_mant==0) set LAST_DIR = 0i32 ("exact").  But round_bit==1
+means a 1-bit was DROPPED and the tie resolves DOWNWARD (no ulp added) -- the result is NOT exact, so the certificate
+must be -1 (exactly the round_bit==0/sticky!=0 truncation arm at :188).  For x = 2^53+1 (the half-ulp tie between
+2^53 and 2^53+2), q128_to_f64_bits correctly returns 0x4340000000000000 = 2^53 (a 1-bit demonstrably lost) yet
+round_dir returned 0i32 -- a FALSE "no rounding lost", propagated by q128_to_f64_crystal into a crystal error_code of
+0 ("exact") where a downstream consumer would conclude the f64 equals the integer exactly (a false-exact seeding
+unsound exact-reasoning).  The arithmetic VALUE was always correct -- only the loss-witness certificate was wrong.
+
+**THE FIX (q128_f64.iii:179):** `Q128_F64_LAST_DIR[slot] = 0i32 - 1i32` (rounded down, low bit truncated, no ulp).
+The synthesis checked all FIVE arms of the rounding block -- exactly this one was wrong; the other four are correct.
+
+TEETH: falsifier 1568_q128_round_dir asserts bits(2^53+1)==2^53 (proving the loss) THEN round_dir==-1 (the corrected
+certificate), plus exact controls (2^53, 5 -> 0, unaffected by the fix).  The round_dir result is bound to a LOCAL
+i32 + compared with ==/!= -- sidestepping the W79/W80 i32-call-result-ordering compiler trap.  Pre-fix 10 (round_dir
+returned 0); post-fix 99.  No regression: 144_q128_to_f64 / 1417_option_path_pq_prov (crystal/round_dir consistency)
+stay 99.  Count 1154 -> **1155**.  The 7th wrong-result defect of the arc.
+
+**COMPLETENESS (W87+):** the identity axis is now broadly SATURATED -- W86 ran 8 fresh lenses (verba-text idempotence,
+comparators, fixpoint engines, permutation-bijection, ring-distributivity, homomorphism, inverse-roundtrip, exactness)
+and only the exactness lens yielded.  The under-probed residual is the "VALUE is right but the WITNESS/certificate
+metadata is wrong" class (this q128 bug's shape): grep crystal_mint call sites + *_dir/error_code/exact/LAST_* witnesses
+and check the witness invariant, not just the numeric output.  KATs that assert only the value (like 144) miss these.

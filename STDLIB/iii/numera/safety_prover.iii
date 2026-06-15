@@ -1,6 +1,20 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\safety_prover.iii
  *
- * III STDLIB - numera::safety_prover  --  THE COMPLETE k-INDUCTION VERDICT (verified).
+ * III STDLIB - numera::safety_prover  --  THE COMPLETE k-INDUCTION VERDICT (decision-complete; verified).
+ *
+ * TWO verdict procedures, both SOUND, the title now literally true:
+ *   sp_verdict_k(k)        -- arbitrary-k strong induction (unrestricted): sound, complete RELATIVE TO
+ *                             1-induction (proves invariants too weak to be 1-inductive by raising k), but
+ *                             NOT a decision procedure -- a non-simple cyclic path can keep a spurious
+ *                             counterexample-to-induction alive at every k, so it abstains UNKNOWN.
+ *   sp_verdict_complete()  -- SIMPLE-PATH k-induction (sp_step_k_simple): the decision-COMPLETE procedure.
+ *                             The simple-path restriction (all states on the induction path DISTINCT) bounds
+ *                             path length to the state count, so iterating k ALWAYS terminates in SAFE or
+ *                             UNSAFE -- NEVER UNKNOWN -- for a finite-state system.  This is what makes the
+ *                             "COMPLETE k-INDUCTION" title literal: a property unrestricted k-induction leaves
+ *                             UNKNOWN at every k (mode 3: a self-loop keeps a spurious CTI alive) is DECIDED
+ *                             SAFE by the simple-path procedure.  Soundness is preserved (the restriction adds
+ *                             completeness, never soundness); UNKNOWN is now structurally impossible.
  *
  * The two verification ideas unified into the actual algorithm: numera::bmc proves the BASE (no bad state
  * reachable within the bound) and numera::kinduction proves the STEP (the property is preserved by every
@@ -24,6 +38,8 @@
  *   sp_setup(mode) ; sp_reachable(target,k) -> u32 ; sp_p(s) -> u32 ; sp_step() -> u32 ; sp_verdict(k) -> u32 ;
  *   sp_step_k(k) -> u32 ; sp_verdict_k(k) -> u32 ; sp_pstates() -> u32   (ARBITRARY-k induction -- proves true
  *   invariants too weak to be 1-inductive instead of abstaining UNKNOWN; sp_step_k(1) is exactly sp_step)
+ *   sp_step_k_simple(k) -> u32 ; sp_verdict_complete() -> u32   (SIMPLE-PATH k-induction -- the decision-COMPLETE
+ *   procedure: SAFE or UNSAFE, never UNKNOWN, for a finite-state system; sp_step_k_simple(1) is exactly sp_step)
  *
  * Hexad: kind_essence.  Ring: R0.  K: 0.99.
  */
@@ -49,6 +65,19 @@ fn sp_setup(mode: u32) -> i32 @export {
         /* UNSAFE: 0->1->2->3->4->5->6 (the bad state is reachable) */
         SP_SUCC[0u64]=1u32<<1u32 ; SP_SUCC[1u64]=1u32<<2u32 ; SP_SUCC[2u64]=1u32<<3u32
         SP_SUCC[3u64]=1u32<<4u32 ; SP_SUCC[4u64]=1u32<<5u32 ; SP_SUCC[5u64]=1u32<<6u32
+        SP_SUCC[6u64]=0u32
+        return 0i32
+    }
+    if mode == 3u32 {
+        /* COMPLETENESS DEMO: 6 (bad) is unreachable from entry 0 -> the system is GENUINELY SAFE.  But state 5
+         * (also unreachable from 0) has a SELF-LOOP (5->5) plus 5->6.  Unrestricted k-induction seeds R_0 with
+         * ALL P-states (incl. 5), and 5's self-loop keeps 5 in R_{k-1} for EVERY k, so the 5->6 edge is a
+         * spurious counterexample-to-induction at every k -> UNKNOWN forever.  Simple-path k-induction excludes
+         * the non-simple self-loop (5's only predecessor is itself, so no simple P-path of length>1 ends at 5)
+         * and PROVES SAFE at k=2 -- the decision-completeness the unrestricted form structurally lacks. */
+        SP_SUCC[0u64]=1u32<<1u32 ; SP_SUCC[1u64]=1u32<<2u32 ; SP_SUCC[2u64]=1u32<<3u32
+        SP_SUCC[3u64]=1u32<<4u32 ; SP_SUCC[4u64]=1u32<<0u32
+        SP_SUCC[5u64]=(1u32<<5u32)|(1u32<<6u32)     /* self-loop keeps 5 in unrestricted R; 5->6 is the spurious CTI */
         SP_SUCC[6u64]=0u32
         return 0i32
     }
@@ -128,8 +157,10 @@ fn sp_pstates() -> u32 @export {
  * via a P-only path of length k-1; the step holds iff every successor of every state in R_{k-1} is a P-state.
  * sp_step_k(1) skips the loop and is bit-identical to sp_step().  SOUND: k-induction without the simple-path
  * restriction is sound (the restriction adds completeness, not soundness -- strong induction on reachability
- * depth).  This is what fulfils the module's "COMPLETE k-INDUCTION" promise: a property too weak to be
- * 1-inductive (UNKNOWN at k=1) is PROVEN at a larger k instead of abstaining. */
+ * depth).  This delivers completeness RELATIVE TO 1-induction: a property too weak to be 1-inductive
+ * (UNKNOWN at k=1) is PROVEN at a larger k instead of abstaining.  It is NOT itself a decision procedure -- a
+ * non-simple cyclic path can leave a system UNKNOWN at every k; for that, use the simple-path variant
+ * sp_step_k_simple / sp_verdict_complete (below), which IS decision-complete (SAFE/UNSAFE, never UNKNOWN). */
 fn sp_step_k(k: u32) -> u32 @export {
     let pst : u32 = sp_pstates()
     let mut r : u32 = pst
@@ -153,6 +184,69 @@ fn sp_step_k(k: u32) -> u32 @export {
         s = s + 1u32
     }
     return 1u32
+}
+
+/* DFS helper for simple-path k-induction: does a SIMPLE P-path that extends `cur` by exactly `remaining`
+ * more DISTINCT P-states end at a state with a non-P successor?  `cur` is already on the path; `visited` is
+ * the bitmask of path states (incl. cur).  Returns 1 iff such a counterexample-to-induction (CTI) exists.
+ * Finite (depth <= remaining <= SP_N) and module-scope SP_SUCC index is runtime-safe. */
+fn sp_dfs_cti(cur: u32, visited: u32, remaining: u32) -> u32 {
+    if remaining == 0u32 {
+        /* cur is the last P-state of a simple path of the required length: any non-P successor is a CTI */
+        let mut t : u32 = 0u32
+        while t < SP_N {
+            if ((SP_SUCC[cur as u64] >> t) & 1u32) == 1u32 {
+                if sp_p(t) == 0u32 { return 1u32 }
+            }
+            t = t + 1u32
+        }
+        return 0u32
+    }
+    /* extend the path to a DISTINCT P-successor (the simple-path constraint) */
+    let mut t : u32 = 0u32
+    while t < SP_N {
+        if ((SP_SUCC[cur as u64] >> t) & 1u32) == 1u32 {
+            if sp_p(t) == 1u32 {                                  /* P-only path */
+                if ((visited >> t) & 1u32) == 0u32 {              /* DISTINCT -> simple */
+                    if sp_dfs_cti(t, visited | (1u32 << t), remaining - 1u32) == 1u32 { return 1u32 }
+                }
+            }
+        }
+        t = t + 1u32
+    }
+    return 0u32
+}
+
+/* the SIMPLE-PATH k-inductive step (decision-COMPLETE for finite systems): there is NO simple P-path of k
+ * DISTINCT states whose last state has a non-P successor.  The distinctness restriction (vs sp_step_k's
+ * set-propagation, which loses path identity) is what makes k-induction a decision procedure: a non-simple
+ * cyclic path can keep a spurious CTI alive at every k (UNKNOWN forever), but simple paths are bounded by the
+ * state count.  sp_step_k_simple(1) checks each P-state's successors == sp_step (1-induction). */
+fn sp_step_k_simple(k: u32) -> u32 @export {
+    let mut s0 : u32 = 0u32
+    while s0 < SP_N {
+        if sp_p(s0) == 1u32 {
+            if sp_dfs_cti(s0, 1u32 << s0, k - 1u32) == 1u32 { return 0u32 }   /* a simple-path CTI -> step fails */
+        }
+        s0 = s0 + 1u32
+    }
+    return 1u32   /* no simple-path CTI of length k -> the k-inductive step holds */
+}
+
+/* THE COMPLETE DECISION PROCEDURE: iterate k; BMC finds a real counterexample (UNSAFE) or simple-path
+ * k-induction proves the property (SAFE).  For a finite system of SP_N states this ALWAYS decides: a simple
+ * path has at most SP_N distinct states, so by k=SP_N no simple P-path of that length exists and the step
+ * holds vacuously -> SAFE (when bad is genuinely unreachable, BMC never fired).  NEVER returns UNKNOWN. */
+fn sp_verdict_complete() -> u32 @export {
+    let mut k : u32 = 0u32
+    while k <= SP_N {
+        if sp_reachable(SP_BAD, k) == 1u32 { return SP_UNSAFE }       /* BMC counterexample at depth k */
+        if k >= 1u32 {
+            if sp_step_k_simple(k) == 1u32 { return SP_SAFE }         /* simple-path k-inductive -> safe forever */
+        }
+        k = k + 1u32
+    }
+    return SP_SAFE   /* k > P-state count: no simple P-path of length k -> vacuously inductive -> SAFE */
 }
 
 /* the three-way verdict under k-INDUCTION (sp_verdict is the k=1 special case). */
@@ -202,6 +296,25 @@ fn safety_prover_kat() -> u64 @export {
     /* (4) the predicate is correct */
     if sp_p(6u32) != 0u32 { return 10u64 }
     if sp_p(5u32) != 1u32 { return 11u64 }
+
+    /* (5) DECISION-COMPLETENESS -- the headline the title now LITERALLY delivers.  Mode 3 is genuinely SAFE
+     * (6 unreachable) yet unrestricted k-induction abstains UNKNOWN at EVERY k (state 5's self-loop keeps the
+     * spurious 5->6 CTI in R_{k-1} forever); simple-path k-induction excludes the non-simple self-loop and
+     * DECIDES it SAFE.  Non-tautological: the two procedures return DIFFERENT verdicts on the same system. */
+    sp_setup(3u32)
+    if sp_reachable(SP_BAD, 10u32) != 0u32 { return 19u64 }      /* base: 6 unreachable -> genuinely SAFE */
+    if sp_step_k(1u32) != 0u32 { return 20u64 }                  /* unrestricted: fails at k=1 (path [5]->6) */
+    if sp_step_k(2u32) != 0u32 { return 21u64 }                  /* ... and k=2 (5 stays in R via the self-loop) */
+    if sp_step_k(7u32) != 0u32 { return 22u64 }                  /* ... still fails at k = state count: UNKNOWN forever */
+    if sp_verdict_k(7u32) != SP_UNKNOWN { return 23u64 }         /* unrestricted verdict: abstains UNKNOWN */
+    if sp_step_k_simple(1u32) != 0u32 { return 24u64 }           /* simple-path k=1 also fails (path [5]->6) */
+    if sp_step_k_simple(2u32) != 1u32 { return 25u64 }           /* but k=2 HOLDS: no 2-distinct-state P-path ends at 5 */
+    if sp_verdict_complete() != SP_SAFE { return 26u64 }         /* the complete procedure DECIDES: SAFE (not UNKNOWN) */
+
+    /* (6) the complete procedure is a genuine decision procedure on the original three modes too (never UNKNOWN) */
+    sp_setup(0u32)  if sp_verdict_complete() != SP_SAFE   { return 27u64 }
+    sp_setup(1u32)  if sp_verdict_complete() != SP_UNSAFE { return 28u64 }
+    sp_setup(2u32)  if sp_verdict_complete() != SP_SAFE   { return 29u64 }   /* mode 2: UNKNOWN at unrestricted k=1 -> SAFE complete */
 
     return 99u64
 }

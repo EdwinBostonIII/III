@@ -1,15 +1,27 @@
-/* 1291_safety_prover.iii -- the complete k-induction verdict: SAFE/UNSAFE/UNKNOWN, verified.
- * Drives numera::safety_prover::safety_prover_kat: 99 = a SAFE system (bad state isolated, property
- * inductive) is certified SAFE; an UNSAFE system (a path to the bad state) is UNSAFE with the bad state at
- * depth 6 (not within 5); an UNKNOWN system (bad unreachable from the entry but an unreachable state steps
- * to it) yields UNKNOWN -- the 1-induction incompleteness case where a true invariant is not provable by
- * simple induction. The union of bmc (base) and kinduction (step) into the real verifier verdict. */
+/* 1291_safety_prover.iii -- the COMPLETE k-induction verdict: SAFE/UNSAFE/UNKNOWN + decision-completeness.
+ * Drives numera::safety_prover::safety_prover_kat (99 = SAFE/UNSAFE/UNKNOWN verdicts correct, INCLUDING the
+ * mode-3 completeness arm: a genuinely-safe system that unrestricted k-induction leaves UNKNOWN at every k is
+ * DECIDED SAFE by the simple-path procedure), then exercises the decision-COMPLETE procedure first-class:
+ * sp_verdict_complete never returns UNKNOWN -- SAFE on mode 3 (unrestricted UNKNOWN-forever) and on mode 2,
+ * UNSAFE on mode 1.  The union of bmc (base) and simple-path kinduction (step) into a real decision procedure. */
 module corpus_1291
 
 extern @abi(c-msvc-x64) fn safety_prover_kat() -> u64 from "safety_prover.iii"
+extern @abi(c-msvc-x64) fn sp_setup(mode: u32) -> i32 from "safety_prover.iii"
+extern @abi(c-msvc-x64) fn sp_verdict_k(k: u32) -> u32 from "safety_prover.iii"
+extern @abi(c-msvc-x64) fn sp_verdict_complete() -> u32 from "safety_prover.iii"
+extern @abi(c-msvc-x64) fn sp_step_k_simple(k: u32) -> u32 from "safety_prover.iii"
 
 fn main() -> u64 {
     let r : u64 = safety_prover_kat()
     if r != 99u64 { return r }
+    /* first-class decision-completeness: mode 3 is UNKNOWN under unrestricted k-induction at every k, but the
+     * simple-path complete procedure DECIDES it SAFE (the two verdicts differ on the same system -> real). */
+    sp_setup(3u32)
+    if sp_verdict_k(7u32) != 1u32 { return 50u64 }          /* SP_UNKNOWN (1) -- unrestricted abstains */
+    if sp_step_k_simple(2u32) != 1u32 { return 51u64 }      /* simple-path step holds at k=2 */
+    if sp_verdict_complete() != 2u32 { return 52u64 }       /* SP_SAFE (2) -- the complete procedure decides */
+    sp_setup(1u32)
+    if sp_verdict_complete() != 0u32 { return 53u64 }       /* SP_UNSAFE (0) -- BMC counterexample */
     return 99u64
 }

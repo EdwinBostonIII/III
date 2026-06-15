@@ -38,6 +38,12 @@ extern @abi(c-msvc-x64) fn ff_const() -> u32 from "flow_firewall.iii"
 extern @abi(c-msvc-x64) fn ff_egress(a: u32) -> u32 from "flow_firewall.iii"
 extern @abi(c-msvc-x64) fn ff_resolve() -> i32 from "flow_firewall.iii"
 
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn ni_init(args: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn du_attest(guest_cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn ab_identity_pub(out_pub_32: *u8) -> i32 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ab_verify(pub_32: *u8, root_32: *u8, sig_64: *u8) -> u8 from "attest_box.iii"
+
 const GOLDEN : u64 = 0x9E3779B97F4A7C15u64
 const NB : u64 = 64u64
 const DU_RIGHTS : u64 = 0x5u64
@@ -122,6 +128,25 @@ fn main() -> u64 {
     i = 0u64
     while i < NB { if du_read(i) != dval(i) { return 61u64 }  i = i + 1u64 }
     if du_restore(99u32) != (0i32 - 1i32) { return 62u64 }       /* bad slot -> fail-closed (negative arm) */
+
+    /* ATTESTATION (slice 11): the gateway signs the box's content-addressed state root with the node
+     * identity; a remote party verifies OFFLINE.  A box guest (DISK/COMPUTE only) cannot self-attest --
+     * only an attest-righted operator cap can vouch. */
+    let hw : *u8 = malloc(3u64)  hw[0u64]=0x48u8 hw[1u64]=0x57u8 hw[2u64]=0x42u8   /* "HWB" */
+    let bs : *u8 = malloc(3u64)  bs[0u64]=0x42u8 bs[1u64]=0x53u8 bs[2u64]=0x42u8   /* "BSB" */
+    let args : *u8 = malloc(32u64)
+    let a64 : *u64 = args as *u64
+    a64[0u64] = hw as u64 ; a64[1u64] = 3u64 ; a64[2u64] = bs as u64 ; a64[3u64] = 3u64
+    if ni_init(args) != 0i32 { return 70u64 }
+    let attester : u64 = cap_attenuate(root, 0x800u64, 0u64)      /* an ATTEST-righted operator cap */
+    let aroot : *u8 = malloc(32u64)
+    let asig  : *u8 = malloc(64u64)
+    let apub  : *u8 = malloc(32u64)
+    if du_attest(attester, aroot, asig) != DU_OK { return 71u64 }            /* the operator vouches */
+    ab_identity_pub(apub)
+    if ab_verify(apub, aroot, asig) != 1u8 { return 72u64 }                  /* remote offline verify holds */
+    if du_attest(guest, aroot, asig) != DU_E_DENIED { return 73u64 }         /* box guest cannot self-attest */
+    if du_attest(poor, aroot, asig) != DU_E_DENIED { return 74u64 }          /* zero-rights denied */
 
     return 99u64
 }

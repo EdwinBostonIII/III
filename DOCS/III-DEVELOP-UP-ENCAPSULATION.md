@@ -66,6 +66,8 @@ du_write(guest_cap, idx, val, cost)           cap-gated + quota-charged + revers
 du_checkpoint(ante)                           commit + branching snapshot (reopens the transactional session)
 du_observe(activity) / du_guard()             feed behavioral cadence; verdict -> rollback or commit
 du_restore(slot)                              restore the disk to any past snapshot
+du_attest(operator_cap, root, sig)            sign the box state root (slice 11) -> remote-verifiable vouch;
+                                              a box guest cannot self-attest (needs the ATTEST right)
 du_egress_safe / du_mem_allowed /             the four per-operation membranes
   du_reverse_route / du_ingress_admit
 du_health()                                   aggregate: open + quota headroom

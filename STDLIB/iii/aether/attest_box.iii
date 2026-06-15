@@ -1,0 +1,99 @@
+/* STDLIB/iii/aether/attest_box.iii
+ *
+ * III STDLIB - aether::attest_box  --  REMOTE ATTESTATION of the sealed box (develop-up SLICE 9).
+ *
+ * "DEVELOP-UP" SLICE 11 (the sixth superpower: ATTESTABILITY).  The prior slices give an opaque legacy guest
+ * reversibility, confidentiality, integrity, availability, determinism, and branching time-travel -- all
+ * enforced LOCALLY by the host.  But a REMOTE party (a federation peer, an auditor, a relying service) has
+ * no way to know the box is in a known-good state without trusting the host's word.  This slice closes that
+ * gap: it content-addresses the box's entire disk image into a 32-byte STATE ROOT and signs it with the
+ * node's Ed25519 IDENTITY (attestation) key, so anyone holding the node's public key can verify -- offline,
+ * without trusting the host -- that THIS node vouches the box is in exactly this state.  Confidential-
+ * computing-style remote attestation for an unmodified guest.
+ *
+ * The signature is over the content-address of the FULL disk, so a single tampered block changes the root
+ * and the old attestation no longer matches the live box (ab_attests_current detects the drift) -- while the
+ * signature over the original root stays cryptographically valid (the state moved, the vouch didn't).
+ *
+ * COMPOSES (not reimplements) four real organs, gated by the capability system's pre-reserved ATTEST right:
+ *   - aether/vbd            : the sealed reversible disk whose committed image is attested (vbd_read).
+ *   - cad                   : the ONE content-address primitive -- state root = cad(disk image).
+ *   - aether/node_identity  : the per-host deterministic Ed25519 identity key (ni_identity_sign / _pub);
+ *                             RFC 8032 is fully deterministic, so the attestation is reproducible cross-run.
+ *   - numera/crypt_ed25519  : ed25519_verify -- the remote party's offline check.
+ *   - aether/capability     : zero-trust admission -- only a cap holding the ATTEST right (bit 11, already
+ *                             reserved in capability.iii) may produce an attestation.  Deny by default.
+ *
+ * It ADDS the single capability-mediated attestation surface binding the box's cad state root to the node's
+ * signing identity -- a power no composed organ has alone.
+ *
+ * Hexad: kind_compose + kind_witness.  Ring: R-1 (the sealed box).  K: 0.96.
+ */
+
+module aether_attest_box
+
+extern @abi(c-msvc-x64) fn vbd_read(idx: u64) -> u64 from "vbd.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn ni_identity_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_identity_pub(out_pub: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_is_inited() -> u8 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+const AB_RIGHT_ATTEST : u64 = 0x800u64     /* == NODEID_RIGHT_ATTEST / capability bit 11 (pre-reserved) */
+const AB_NBLOCKS      : u64 = 256u64       /* == VBD_NBLOCKS */
+const AB_DISK_BYTES   : u64 = 2048u64      /* 256 blocks * 8 bytes */
+const AB_SUITE        : u32 = 1u32         /* == cad CAD_SUITE_KECCAK256 (== SNB_SUITE) */
+const AB_ROOT_BYTES   : u64 = 32u64
+const AB_OK        : i32 = 0i32
+const AB_E_DENIED  : i32 = -1i32           /* capability lacks the ATTEST right */
+const AB_E_NOID    : i32 = -2i32           /* node identity not yet initialised (no signing key) */
+const AB_E_SIGN    : i32 = -3i32           /* the Ed25519 signer refused */
+
+var AB_SCRATCH   : [u64; 256]   /* live disk image staging (module-scope: runtime-index safe) */
+var AB_CMP_ROOT  : [u8; 32]     /* recompute staging for ab_attests_current (no aliasing with caller bufs) */
+
+/* The box STATE ROOT = cad(the full 256-block committed disk image) into out_32.  Deterministic. */
+fn ab_state_root(out_32: *u8) -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < AB_NBLOCKS { AB_SCRATCH[i] = vbd_read(i)  i = i + 1u64 }
+    cad_oneshot(AB_SUITE, (&AB_SCRATCH as u64) as *u8, AB_DISK_BYTES, out_32)
+    return AB_OK
+}
+
+/* The node's attestation (identity) public key, for a remote verifier to fetch. */
+fn ab_identity_pub(out_pub_32: *u8) -> i32 @export {
+    return ni_identity_pub(out_pub_32)
+}
+
+/* ATTEST the current box state: cap-gated on the ATTEST right; the state root is content-addressed and
+ * signed with the node's Ed25519 identity key.  Writes the 32-byte root into out_root_32 and the 64-byte
+ * detached signature into out_sig_64.  A cap without the ATTEST right is DENIED and nothing is signed. */
+fn ab_attest(guest_cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 @export {
+    if cap_verify_rights(guest_cap, AB_RIGHT_ATTEST) == 0u8 { return AB_E_DENIED }
+    if ni_is_inited() == 0u8 { return AB_E_NOID }
+    ab_state_root(out_root_32)
+    if ni_identity_sign(out_root_32, AB_ROOT_BYTES, out_sig_64) != AB_OK { return AB_E_SIGN }
+    return AB_OK
+}
+
+/* Remote OFFLINE check: 1 iff sig_64 is a valid Ed25519 signature by pub_32 over root_32.  This is what a
+ * relying party runs with only (the node's public key, the attested root, the signature) -- no box access. */
+fn ab_verify(pub_32: *u8, root_32: *u8, sig_64: *u8) -> u8 @export {
+    return ed25519_verify(pub_32, root_32, AB_ROOT_BYTES, sig_64)
+}
+
+/* FRESHNESS check (for an auditor WITH box access): 1 iff the attestation is valid AND still describes the
+ * LIVE box -- i.e. the signed root equals the current state root.  A tampered/drifted box returns 0 even
+ * though the signature itself remains cryptographically valid over the (now stale) claimed root. */
+fn ab_attests_current(pub_32: *u8, claimed_root_32: *u8, sig_64: *u8) -> u8 @export {
+    if ed25519_verify(pub_32, claimed_root_32, AB_ROOT_BYTES, sig_64) == 0u8 { return 0u8 }
+    ab_state_root((&AB_CMP_ROOT as u64) as *u8)
+    let cur : *u8 = (&AB_CMP_ROOT as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < AB_ROOT_BYTES {
+        if cur[i] != claimed_root_32[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}

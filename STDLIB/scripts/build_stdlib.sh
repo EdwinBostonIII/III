@@ -819,6 +819,7 @@ MODULES=(
     "aether/sid_router"
     "aether/determinism_firewall"
     "aether/develop_up"
+    "aether/attest_box"
     "numera/branch_anchor"
     "aether/branch_governance"
     "numera/math_library"

@@ -1,0 +1,80 @@
+/* 1595_attest_box_remote.iii -- develop-up SLICE 11 (Remote Attestation) toy-proof KAT.
+ *
+ * attest_box signs the sealed box's cad state-root with the node's deterministic Ed25519 identity key,
+ * gated by the capability ATTEST right.  A trivial "return 1" cannot pass this oracle: it has four arms a
+ * stub fails -- a GRANTED attestation verifies offline AND matches the live box; a cap WITHOUT the attest
+ * right is DENIED; a single tampered block makes the signed root stop matching the live box (drift detected)
+ * though the signature stays cryptographically valid; and a forged (bit-flipped) signature fails offline
+ * verification.  Plus state-root determinism.  99 = every arm holds. */
+module corpus_1595
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ni_init(args: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn vbd_open(cap: u64) -> u32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn vbd_write(slot: u32, idx: u64, val: u64) -> i32 from "vbd.iii"
+extern @abi(c-msvc-x64) fn ab_state_root(out_32: *u8) -> i32 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ab_identity_pub(out_pub_32: *u8) -> i32 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ab_attest(guest_cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ab_verify(pub_32: *u8, root_32: *u8, sig_64: *u8) -> u8 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ab_attests_current(pub_32: *u8, claimed_root_32: *u8, sig_64: *u8) -> u8 from "attest_box.iii"
+
+fn main() -> u64 {
+    /* 1. init the node's deterministic Ed25519 identity (args = [hw_ptr, hw_len, bs_ptr, bs_len] LE u64x4) */
+    let hw : *u8 = malloc(3u64)  hw[0u64]=0x48u8 hw[1u64]=0x57u8 hw[2u64]=0x41u8   /* "HWA" */
+    let bs : *u8 = malloc(3u64)  bs[0u64]=0x42u8 bs[1u64]=0x53u8 bs[2u64]=0x41u8   /* "BSA" */
+    let args : *u8 = malloc(32u64)
+    let a64 : *u64 = args as *u64
+    a64[0u64] = hw as u64 ; a64[1u64] = 3u64 ; a64[2u64] = bs as u64 ; a64[3u64] = 3u64
+    if ni_init(args) != 0i32 { return 1u64 }
+
+    /* the node's attestation public key (a remote verifier fetches this once) */
+    let pub : *u8 = malloc(32u64)
+    if ab_identity_pub(pub) != 0i32 { return 2u64 }
+
+    /* 2. mint a cap WITH the ATTEST right (0x800) and one WITHOUT (alloc-only) */
+    let root_cap : u64 = cap_env_init()
+    let attest_cap : u64 = cap_attenuate(root_cap, 0x800u64, 0u64)
+    let plain_cap  : u64 = cap_attenuate(root_cap, 0x1u64, 0u64)
+
+    /* 3. open the sealed disk and establish a state */
+    let slot : u32 = vbd_open(0x5A5A5A5Au64)
+    vbd_write(slot, 1u64, 0x1111u64)
+    vbd_write(slot, 2u64, 0x2222u64)
+
+    /* 4. ATTEST the current state */
+    let root0 : *u8 = malloc(32u64)
+    let sig : *u8 = malloc(64u64)
+    if ab_attest(attest_cap, root0, sig) != 0i32 { return 3u64 }
+
+    /* 5. POSITIVE: verifies offline AND matches the unchanged live box */
+    if ab_verify(pub, root0, sig) != 1u8 { return 4u64 }
+    if ab_attests_current(pub, root0, sig) != 1u8 { return 5u64 }
+
+    /* 6. DENIED: a cap lacking the ATTEST right cannot attest */
+    let root1 : *u8 = malloc(32u64)
+    let sig1 : *u8 = malloc(64u64)
+    if ab_attest(plain_cap, root1, sig1) != -1i32 { return 6u64 }     /* AB_E_DENIED */
+
+    /* 7. TAMPER: change a block -> the signed root no longer matches the live box */
+    vbd_write(slot, 1u64, 0xDEADu64)
+    if ab_attests_current(pub, root0, sig) != 0u8 { return 7u64 }     /* drift detected */
+    if ab_verify(pub, root0, sig) != 1u8 { return 8u64 }             /* yet the sig over root0 is still genuine */
+
+    /* 8. FORGE: flip one signature byte -> offline verify fails (proves it is not a constant-1 stub) */
+    sig[0u64] = (((sig[0u64] as u32) ^ 0xFFu32) as u8)
+    if ab_verify(pub, root0, sig) != 0u8 { return 9u64 }
+
+    /* 9. DETERMINISM: ab_state_root recomputed twice is byte-identical */
+    let ra : *u8 = malloc(32u64)
+    let rb : *u8 = malloc(32u64)
+    ab_state_root(ra)
+    ab_state_root(rb)
+    let mut i : u64 = 0u64
+    while i < 32u64 { if ra[i] != rb[i] { return 10u64 }  i = i + 1u64 }
+
+    free(hw) free(bs) free(args) free(pub) free(root0) free(sig) free(root1) free(sig1) free(ra) free(rb)
+    return 99u64
+}

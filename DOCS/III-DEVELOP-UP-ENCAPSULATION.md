@@ -3,6 +3,13 @@
 **Status: COMPLETE.** 11 modules, 11 KATs (corpus 1575–1585), corpus 1172/0, zero defects across two
 adversarial-review workflows (61 agents, 4.8M tokens). Commits `747e5c21` (10 slices) + `5deda261` (gateway).
 
+**Extension (2026-06-15):** Slice 11 `aether/attest_box` adds a sixth superpower — REMOTE ATTESTATION:
+the box's full disk image is content-addressed into a 32-byte state root and signed with the node's
+deterministic Ed25519 identity key (gated by the capability ATTEST right, bit 11). A remote party verifies
+offline — without trusting the host — that this node vouches the box is in exactly this state; a single
+tampered block is detected as drift while the original signature stays cryptographically valid. KAT 1595
+(toy-proof: valid-attest / cap-denied / tamper-drift / forged-sig / determinism).
+
 ## The thesis
 
 Instead of rewriting all software natively in III ("develop down"), use III as an **invincible Ring-(-1)
@@ -32,7 +39,8 @@ byte-identical replay despite a *different* live world; a *forged* content-addre
 | 8 | `aether/snapshot_box` | branching reversibility (snapshot forest) | `aether/snapshot_lattice` + `vbd` + `cad` | 1582 |
 | 9 | `aether/sid_router` | universal reversibility (all exit kinds) | `katabasis/vmexit` + `numera/reversible` | 1584 |
 | 10 | `aether/determinism_firewall` | canonical/provisional determinism membrane | `aether/reach_oracle` + `replay_box` | 1583 |
-| ⋆ | `aether/develop_up` | **the encapsulation GATEWAY** (all 10 in one lifecycle) | all of the above + `capability` | 1585 |
+| 11 | `aether/attest_box` | remote attestation (offline-verifiable state vouch) | `node_identity` (Ed25519) + `cad` + `vbd` + `capability` | 1595 |
+| ⋆ | `aether/develop_up` | **the encapsulation GATEWAY** (all 10 lifecycle slices in one) | all of the above + `capability` | 1585 |
 
 ### Security coverage
 

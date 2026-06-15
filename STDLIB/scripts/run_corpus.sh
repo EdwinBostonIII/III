@@ -1167,6 +1167,7 @@ declare -A EXPECTED=(
     [1592_pbkdf2_iteration_fold]=99
     [1593_hkdf_zero_salt]=99
     [1594_sha512_two_block_pad]=99
+    [1595_attest_box_remote]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

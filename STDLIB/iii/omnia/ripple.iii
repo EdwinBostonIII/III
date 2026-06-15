@@ -221,11 +221,21 @@ fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 @export {
  *
  * cg_r3 emits a 3-instruction stub at every @dynamic function's
  * prologue calling this entry point with (crystal_id, mode).  Step
- * 0022 of the lattice plan.  Stage-0 records the dispatch into a
- * 1024-entry side table for later analysis (and to demonstrate the
- * callsite reaches the runtime); Stage-1 promotes it to a real
- * ripple_analyze + ripple_execute pipeline against the calling
- * function's transitive closure.
+ * 0022 of the lattice plan.  Stage-0 (THIS fn) records the dispatch
+ * into a 1024-entry side table.  Stage-1 (ripple_native_process,
+ * below) promotes a recorded dispatch into a REAL ripple_analyze +
+ * ripple_execute pipeline run against the dispatched crystal's
+ * transitive closure -- but OUT OF BAND, by an explicit optimization
+ * pass, NOT here.
+ *
+ * Why the split is correct (not a stub): driving the pipeline FROM
+ * this prologue would (a) RECURSE -- ripple_analyze/execute call
+ * mhash/crystal/vec, themselves @dynamic, whose prologues re-enter
+ * here -- and (b) cost an unbounded transitive-closure analysis on
+ * every hot call.  The prologue MUST stay a fast, crash-proof,
+ * reentrancy-free recorder; the heavy pipeline is deferred to the
+ * out-of-band drain.  This is the architecturally-correct Stage-0/1
+ * boundary, not an unfinished Stage-0.
  *
  * Discipline: this fn must NEVER crash on invalid input -- it's
  * called from EVERY @dynamic function's prologue, so a fault here
@@ -333,6 +343,30 @@ fn ripple_execute(arena_id: u64, plan_id: u64, mode: u32) -> u64 @export {
  * (RIPPLE_E_WITNESS_FULL) from other RIPPLE_INVALID returns. */
 fn ripple_last_error() -> i32 @export {
     return RIPPLE_LAST_ERR
+}
+
+/* ─── ripple_native_process (Stage-1 out-of-band drain) ──────────────
+ *
+ * Promote ONE recorded native dispatch (the Stage-0 side table filled by ripple_execute_native at @dynamic
+ * prologues) into a REAL ripple_analyze + ripple_execute pipeline run against the dispatched crystal's
+ * transitive closure.  This is the deliberate out-of-band driver an optimization/maintenance pass calls --
+ * NOT the prologue (see ripple_execute_native: doing this in the prologue would recurse + cost an unbounded
+ * analysis per hot call).  Returns the result crystal id, or RIPPLE_INVALID on a bad index / arena /
+ * analyze-or-execute failure.  Crash-proof: every sub-step is failure-checked, never faults. */
+fn ripple_native_process(arena_id: u64, idx: u32) -> u64 @export {
+    if arena_id == 0u64 { return RIPPLE_INVALID }
+    let i_l : u32 = idx
+    if i_l >= RIPPLE_NATIVE_USED { return RIPPLE_INVALID }
+    let cid : u64 = RIPPLE_NATIVE_CRYSTAL_ID[i_l]
+    if cid == 0u64 { return RIPPLE_INVALID }
+    /* Stage-0 records whatever mode the prologue passed; normalize to a valid ripple mode (default FAST: no
+     * witness-chain pressure when an out-of-band pass replays many dispatches). */
+    let rec_mode : u32 = RIPPLE_NATIVE_MODE[i_l]
+    let mut m : u32 = RIPPLE_MODE_FAST
+    if rec_mode == RIPPLE_MODE_STRICT { m = RIPPLE_MODE_STRICT }
+    let plan : u64 = ripple_analyze(arena_id, cid)
+    if plan == 0u64 { return RIPPLE_INVALID }
+    return ripple_execute(arena_id, plan, m)
 }
 
 /* ─── ripple_verify ─────────────────────────────────────────────── */

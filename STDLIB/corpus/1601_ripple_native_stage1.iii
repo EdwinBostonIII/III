@@ -1,0 +1,69 @@
+/* 1601_ripple_native_stage1.iii -- omnia::ripple Stage-1 out-of-band drain (ripple_native_process).
+ *
+ * The Stage-0 side table (filled by ripple_execute_native at @dynamic prologues) was a dead-end: recorded
+ * dispatches were never acted on.  Stage-1 ripple_native_process promotes a recorded dispatch into a REAL
+ * ripple_analyze + ripple_execute pipeline run against its transitive closure -- out of band (NOT in the
+ * prologue, which must stay a fast reentrancy-free recorder).  99 = a recorded dispatch drains to a genuine
+ * result crystal that VERIFIES, AND the guards reject a bad index / null arena (never crash). */
+module corpus_1601
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn witness_init() -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn ripple_change_new(arena_id: u64, kind: u32, target: u64, old_mhash: u64, new_mhash: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native(crystal_id: u64, mode: u32) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_clear() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_dispatch_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_native_process(arena_id: u64, idx: u32) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_verify(result_id: u64) -> u8 from "ripple.iii"
+
+fn fill(p: *u8, v: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = v  i = i + 1u64 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    witness_init()
+    ripple_execute_native_clear()                /* fresh Stage-0 dispatch table */
+
+    let site : *u8 = malloc(32u64)
+    let old_h : *u8 = malloc(32u64)
+    let new_h : *u8 = malloc(32u64)
+    fill(site, 0u8) fill(old_h, 0xAAu8) fill(new_h, 0xBBu8)
+
+    let ar : u64 = arena_new(1u64 << 20u64)
+    if ar == 0u64 { return 1u64 }
+
+    /* Diamond A -> B, A -> C, both -> D. */
+    let a : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let b : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let c : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let d : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    crystal_edges_init(a, ar) crystal_edges_init(b, ar) crystal_edges_init(c, ar) crystal_edges_init(d, ar)
+    crystal_edges_add(a, b) crystal_edges_add(a, c) crystal_edges_add(b, d) crystal_edges_add(c, d)
+
+    /* A change against A, then RECORD it as a native dispatch (as a @dynamic prologue would). */
+    let change : u64 = ripple_change_new(ar, 1u32, a, old_h as u64, new_h as u64)
+    if change == 0u64 { return 2u64 }
+    if ripple_execute_native(change, 2u32) != 0i32 { return 3u64 }    /* mode 2 = FAST; Stage-0 records */
+    if ripple_execute_native_dispatch_count() != 1u32 { return 4u64 }
+
+    /* Stage-1 drain: the recorded dispatch becomes a REAL analyze+execute run -> a verifiable result crystal. */
+    let result : u64 = ripple_native_process(ar, 0u32)
+    if result == 0u64 { return 5u64 }                                /* a genuine result crystal was minted */
+    if ripple_verify(result) != 1u8 { return 6u64 }                  /* and it verifies (real pipeline output) */
+
+    /* guards (prove the negatives): bad index and null arena -> RIPPLE_INVALID, no crash */
+    if ripple_native_process(ar, 5u32) != 0u64 { return 7u64 }       /* idx >= used */
+    if ripple_native_process(0u64, 0u32) != 0u64 { return 8u64 }     /* null arena */
+
+    arena_drop(ar)
+    free(site) free(old_h) free(new_h)
+    return 99u64
+}

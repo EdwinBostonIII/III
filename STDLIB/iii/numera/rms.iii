@@ -41,7 +41,8 @@ fn rms_setup(mode: u32) -> i32 @export {
 /* exact ceiling division ceil(a/b) for b > 0. */
 fn rms_ceil_div(a: u32, b: u32) -> u32 @export {
     if b == 0u32 { return 0u32 }   /* [W27] the `/ b` below traps (SIGFPE) on b==0; ceil(a/0) is undefined -> 0 (the "for b > 0" precondition is now enforced for external @export callers) */
-    return ((a + b) - 1u32) / b
+    if a == 0u32 { return 0u32 }   /* [W87] ceil(0/b) = 0 */
+    return ((a - 1u32) / b) + 1u32 /* [W87] overflow-free ceil: the old ((a+b)-1)/b pre-added a+b, which WRAPPED u32 for a near 2^32 (e.g. rms_ceil_div(0xFFFFFFFF,2) returned 0 not 2^31).  (a-1)/b+1 never pre-adds, exact for all a>=1, b>=1. */
 }
 
 /* the preemption a task i suffers in a window of length r, from all higher-priority tasks. */

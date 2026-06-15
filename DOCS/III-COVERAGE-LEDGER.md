@@ -2392,3 +2392,36 @@ comparators, fixpoint engines, permutation-bijection, ring-distributivity, homom
 and only the exactness lens yielded.  The under-probed residual is the "VALUE is right but the WITNESS/certificate
 metadata is wrong" class (this q128 bug's shape): grep crystal_mint call sites + *_dir/error_code/exact/LAST_* witnesses
 and check the witness invariant, not just the numeric output.  KATs that assert only the value (like 144) miss these.
+
+## Wave-87 — two numeric-boundary defects: json i64::MIN false-reject + rms_ceil_div u32 overflow (2026-06-14)
+
+A 5th ultracode Workflow (12 agents, witness-metadata + 4 fresh numeric-contract lenses).  The witness-metadata
+target (the W86 shape) came up EMPTY -- mined out.  Two survivors, both plain numeric-boundary defects (the same
+vein as the prior 7), FIXED here.
+
+**DEFECT 1 (verba/json.iii json_parse_number, sign-zero-boundary lens, conf 0.85 -- the high-value one):** a VALID
+RFC 8259 integer, i64::MIN = -9223372036854775808 (in the documented signed-i64 domain), was wrongly REJECTED.
+The integer-overflow guard (json.iii:260-263) accumulated the positive magnitude and compared against a
+SIGN-SYMMETRIC limit -- at value==lim (=2^63/10) a digit d>7 tripped overflow because lim*10+8 > 2^63-1.  Correct
+for a positive number (max 2^63-1) but WRONG for a negative one whose magnitude can be 2^63 = lim*10+8.  i64::MAX
+("...807") and -(2^63-1) ("-...807") both parsed; only i64::MIN failed -- the classic INT_MIN asymmetry.  FIX: at
+value==lim allow d==8 iff neg==1 (the i64 accumulation lim*10+8 wraps to exactly 0x8000000000000000 = i64::MIN, and
+the trailing `value = 0 - value` is a no-op on MIN), PLUS a `v_abs < 0i64` guard so i64::MIN followed by MORE
+digits ("...808" + more) still rejects.  (v_abs/d are LOCAL i64 -> the ordering compares are trap-safe.)  Falsifier
+1569 (i64::MIN parses to 0x8000000000000000 + controls: -(2^63-1), i64::MAX parse; -(2^63+1) rejects); teeth 10->99;
+1553/1555/1556 json KATs stay 99.  (3rd json fix of the program after W72 leading-zero + W73 control-char.)
+
+**DEFECT 2 (numera/rms.iii rms_ceil_div, conf 0.5 -- real but latent):** documented "exact ceiling division
+ceil(a/b) for b>0" (constraining only b), but the body `((a+b)-1)/b` pre-adds a+b which OVERFLOWS u32 for a near
+2^32: rms_ceil_div(0xFFFFFFFF,2) returned 0 not 2^31 (machine-code-confirmed in the agent's .s read).  Latent (no
+internal RMS caller approaches the u32 top -- response-times are bounded ~1000), but the general-purpose @export is
+wrong for an external caller.  FIX: `if a==0 {return 0} return ((a-1)/b)+1` -- never pre-adds, exact for all a>=1,
+b>=1, re-derives every existing KAT vector.  Falsifier 1570; teeth 10->99; 1520_rms_ceil_div_zero (the W27 b==0
+guard) stays 99.  Count 1155 -> **1157**.  The 8th + 9th wrong-result defects of the arc.
+
+**SATURATION (the workflow's blunt verdict, adopted):** the math-identity axis and the witness-metadata shape are
+mined out; these two are isolated boundary defects whose bug-templates (the ceil-div pre-add idiom; the signed
+*10 INT_MIN accumulator) each exist in exactly ONE place.  ONE specific un-probed sub-axis remains -- the shared
+unsigned `v10 = acc*10` parse-overflow-guard idiom across ~8 OTHER parsers (http_client/server, intent_form,
+pattern_form, semver, transform_form, nl_lex, parse) -- run as W88.  If W88 is dry, the correctness-defect vein is
+declared CLOSED and the loop pivots off the stdlib-numeric surface.

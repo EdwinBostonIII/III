@@ -1,0 +1,37 @@
+/* 1570_rms_ceil_div_overflow.iii -- W87 FIX falsifier: rms_ceil_div is documented "exact ceiling division
+ * ceil(a/b) for b > 0" (rms.iii:41), constraining ONLY the divisor; a is an unconstrained u32, so the contract
+ * promises the exact ceiling for EVERY u32 a.
+ *
+ * THE DEFECT (overflow-in-formula, ultracode workflow, 0/3 refute, machine-code-confirmed): the body
+ * `((a + b) - 1u32) / b` (rms.iii:44) pre-adds a+b, which OVERFLOWS u32 when a is near the top of the range.
+ * For a=0xFFFFFFFF, b=2: a+b = 0x100000001 wraps to 1; (1-1)/2 = 0.  So a documented-exact ceiling returns 0
+ * instead of ceil(4294967295/2) = 2147483648 on a valid in-contract input.  (Latent: no internal RMS caller
+ * approaches the u32 top, but the general-purpose @export is wrong for an external caller.)
+ *
+ * THE FIX (rms.iii): `if a == 0u32 { return 0u32 } return ((a - 1u32) / b) + 1u32` -- never pre-adds, so it
+ * cannot overflow for b >= 1, and re-derives every existing KAT vector exactly.
+ *
+ * 99 = the high-dividend cases are exact AND the existing small-vector KATs are unchanged.
+ * TEETH: against the PRE-FIX lib rms_ceil_div(0xFFFFFFFF,2) == 0 (not 2147483648) -> return 10. */
+module corpus_1570
+
+extern @abi(c-msvc-x64) fn rms_ceil_div(a: u32, b: u32) -> u32 from "rms.iii"
+
+fn main() -> u64 {
+    /* (A) TEETH -- high dividend where the a+b pre-add overflows u32 */
+    if rms_ceil_div(0xFFFFFFFFu32, 2u32) != 2147483648u32 { return 10u64 }   /* PRE-FIX: 0 -> TEETH */
+    if rms_ceil_div(0xFFFFFFFEu32, 3u32) != 1431655765u32 { return 11u64 }   /* PRE-FIX: 0 */
+
+    /* (B) the existing KAT vectors (rms.iii:109-112) -- must be byte-unchanged by the fix */
+    if rms_ceil_div(7u32, 4u32) != 2u32 { return 20u64 }
+    if rms_ceil_div(8u32, 4u32) != 2u32 { return 21u64 }
+    if rms_ceil_div(9u32, 4u32) != 3u32 { return 22u64 }
+    if rms_ceil_div(0u32, 4u32) != 0u32 { return 23u64 }
+
+    /* (C) more controls: exact multiples + b==1 identity */
+    if rms_ceil_div(8u32, 2u32) != 4u32 { return 24u64 }          /* exact multiple -> a/b */
+    if rms_ceil_div(100u32, 7u32) != 15u32 { return 25u64 }       /* 100/7 = 14.28 -> 15 */
+    if rms_ceil_div(1u32, 1u32) != 1u32 { return 26u64 }
+
+    return 99u64
+}

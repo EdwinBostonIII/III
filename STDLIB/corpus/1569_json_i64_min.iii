@@ -1,0 +1,81 @@
+/* 1569_json_i64_min.iii -- W87 FIX falsifier: json_parse must accept i64::MIN (-9223372036854775808), a valid
+ * RFC 8259 integer in the documented signed-i64 domain [-2^63, 2^63-1] (json.iii:23 "payload_a = i64 value").
+ *
+ * THE DEFECT (sign-zero-boundary, ultracode workflow): json_parse_number's overflow guard (json.iii:260-263)
+ * accumulates the POSITIVE magnitude and compares against a SIGN-SYMMETRIC limit -- at value==lim (=2^63/10) a
+ * digit d>7 trips overflow because lim*10+8 > 2^63-1.  That is correct for a POSITIVE number (max 2^63-1) but
+ * WRONG for a negative one: i64::MIN has magnitude 2^63 = lim*10+8.  So "-9223372036854775808" trips the guard
+ * and json_parse returns 0 (INVALID) -- the valid minimum is rejected.  i64::MAX ("...807") and -(2^63-1)
+ * ("-...807") both parse fine -- the classic INT_MIN sign-boundary asymmetry.
+ *
+ * THE FIX (json.iii): at value==lim allow d==8 only when neg==1 (the i64 accumulation lim*10+8 wraps to exactly
+ * 0x8000000000000000 = i64::MIN, and the trailing `value = 0 - value` is a no-op on MIN); plus a `v_abs < 0i64`
+ * guard so i64::MIN followed by MORE digits is still rejected.
+ *
+ * 99 = i64::MIN parses to NUM with value 0x8000000000000000 AND the controls hold (i64::MAX, -(2^63-1) parse;
+ * -(2^63+1) rejects).  TEETH: against the PRE-FIX lib json_parse("-9223372036854775808") == 0 -> return 10. */
+module corpus_1569
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_kind(id: u64) -> u8 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+
+var MAG : [u8; 19]    /* the 19 digits "9223372036854775808" (2^63) */
+var BUF : [u8; 24]
+
+fn set_mag() {
+    MAG[0u64]=0x39u8 ; MAG[1u64]=0x32u8 ; MAG[2u64]=0x32u8 ; MAG[3u64]=0x33u8 ; MAG[4u64]=0x33u8
+    MAG[5u64]=0x37u8 ; MAG[6u64]=0x32u8 ; MAG[7u64]=0x30u8 ; MAG[8u64]=0x33u8 ; MAG[9u64]=0x36u8
+    MAG[10u64]=0x38u8 ; MAG[11u64]=0x35u8 ; MAG[12u64]=0x34u8 ; MAG[13u64]=0x37u8 ; MAG[14u64]=0x37u8
+    MAG[15u64]=0x35u8 ; MAG[16u64]=0x38u8 ; MAG[17u64]=0x30u8 ; MAG[18u64]=0x38u8
+}
+/* "-<19-digit magnitude with last digit = last>"; returns length 20 */
+fn build_neg(last: u8) -> u64 {
+    BUF[0u64] = 0x2Du8                                  /* '-' */
+    let mut i : u64 = 0u64
+    while i < 19u64 { BUF[1u64 + i] = MAG[i] ; i = i + 1u64 }
+    BUF[19u64] = last
+    return 20u64
+}
+/* "<19-digit magnitude with last digit = last>"; returns length 19 */
+fn build_pos(last: u8) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 19u64 { BUF[i] = MAG[i] ; i = i + 1u64 }
+    BUF[18u64] = last
+    return 19u64
+}
+
+fn main() -> u64 {
+    set_mag()
+    let a : u64 = arena_new(1u64 << 16u64)
+
+    /* (A) TEETH -- i64::MIN "-9223372036854775808" must parse to NUM with value 0x8000000000000000 */
+    let la : u64 = build_neg(0x38u8)
+    let idmin : u64 = json_parse(a, &BUF as u64, la)
+    if idmin == 0u64 { return 10u64 }                  /* PRE-FIX: rejected -> TEETH */
+    if json_kind(idmin) != 4u8 { return 11u64 }        /* JSON_KIND_NUM */
+    let dmin : i64 = json_int(idmin)
+    if (dmin as u64) != 0x8000000000000000u64 { return 12u64 }
+
+    /* (B) control -(2^63-1) "-9223372036854775807" -> 0x8000000000000001 (parses pre+post) */
+    let lb : u64 = build_neg(0x37u8)
+    let idm1 : u64 = json_parse(a, &BUF as u64, lb)
+    if idm1 == 0u64 { return 20u64 }
+    let dm1 : i64 = json_int(idm1)
+    if (dm1 as u64) != 0x8000000000000001u64 { return 21u64 }
+
+    /* (C) control i64::MAX "9223372036854775807" -> 0x7FFFFFFFFFFFFFFF */
+    let lc : u64 = build_pos(0x37u8)
+    let idmax : u64 = json_parse(a, &BUF as u64, lc)
+    if idmax == 0u64 { return 30u64 }
+    let dmax : i64 = json_int(idmax)
+    if (dmax as u64) != 0x7FFFFFFFFFFFFFFFu64 { return 31u64 }
+
+    /* (D) NEGATIVE control -(2^63+1) "-9223372036854775809" MUST be rejected (out of range) */
+    let ld : u64 = build_neg(0x39u8)
+    let idof : u64 = json_parse(a, &BUF as u64, ld)
+    if idof != 0u64 { return 40u64 }
+
+    return 99u64
+}

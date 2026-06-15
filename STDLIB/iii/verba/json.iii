@@ -259,8 +259,16 @@ fn json_parse_number() -> u64 {
                  * Guard with magnitude check. */
                 let lim : i64 = 922337203685477580i64
                 let v_abs : i64 = value
+                if v_abs < 0i64 { overflowed = 1u8 }   /* [W87] a prior digit already overflowed the magnitude past i64::MIN (value wrapped negative) -- reject "...808" followed by MORE digits */
                 if v_abs > lim { overflowed = 1u8 }
-                if v_abs == lim { if d > 7i64 { overflowed = 1u8 } }   /* lim*10 = 2^63-8, so lim*10+d overflows i64 (max 2^63-1) for d>=8 [audit H-JSON-1] */
+                if v_abs == lim {
+                    /* [W87] i64::MIN has magnitude 2^63 = lim*10+8, representable ONLY for a NEGATIVE number; the
+                     * positive max is 2^63-1 = lim*10+7.  Allow d==8 iff neg==1 -- the i64 accumulation lim*10+8
+                     * wraps to exactly 0x8000000000000000 = i64::MIN and the trailing `value = 0 - value` is a
+                     * no-op on MIN, so "-9223372036854775808" round-trips.  (Previously d>7 here rejected i64::MIN
+                     * via the sign-symmetric 2^63-1 bound -- the classic INT_MIN asymmetry [audit H-JSON-1].) */
+                    if neg == 1u8 { if d > 8i64 { overflowed = 1u8 } } else { if d > 7i64 { overflowed = 1u8 } }
+                }
                 if overflowed == 0u8 {
                     value = (value * 10i64) + d
                 }

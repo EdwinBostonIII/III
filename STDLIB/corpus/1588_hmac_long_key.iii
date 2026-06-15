@@ -1,0 +1,57 @@
+/* 1588_hmac_long_key.iii -- HMAC long-key (K' = H(K)) coverage (RFC 4231 TC6/TC7).
+ * numera/hmac implements the key-longer-than-block path (hmac_prepare_key_sha256 line 78: key_len>64 ->
+ * K'=sha256(key); _sha512 line 95: >128 -> K'=sha512(key)), but NO corpus test exercised it -- every prior
+ * HMAC test (79/203) used a 20-byte key.  A regression that TRUNCATED rather than pre-hashed a long key
+ * would have passed every existing test.  This pins the contract to published vectors (all three recomputed
+ * independently via System.Security.Cryptography before being hardcoded here).
+ *
+ * Key = 0xAA x 131 (longer than the 64-byte SHA-256 block AND the 128-byte SHA-512 block).
+ * TC6 (SHA-256, 54-byte msg), TC7 (SHA-256 + SHA-512, 152-byte msg).  A toy that copies the first 64/128
+ * key bytes without pre-hashing produces a different tag -> fails.  99 = all three tags match. */
+module corpus_1588
+
+extern @abi(c-msvc-x64) fn hmac_sha256(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha256_tag(out_32: *u8) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512_tag(out_64: *u8) -> i32 from "hmac.iii"
+
+var KEY   : [u8; 131]
+var OUT32 : [u8; 32]
+var OUT64 : [u8; 64]
+var EXP_TC6_256 : [u8; 32] = [96u8, 228u8, 49u8, 89u8, 30u8, 224u8, 182u8, 127u8, 13u8, 138u8, 38u8, 170u8, 203u8, 245u8, 183u8, 127u8, 142u8, 11u8, 198u8, 33u8, 55u8, 40u8, 197u8, 20u8, 5u8, 70u8, 4u8, 15u8, 14u8, 227u8, 127u8, 84u8]
+var EXP_TC7_256 : [u8; 32] = [155u8, 9u8, 255u8, 167u8, 27u8, 148u8, 47u8, 203u8, 39u8, 99u8, 95u8, 188u8, 213u8, 176u8, 233u8, 68u8, 191u8, 220u8, 99u8, 100u8, 79u8, 7u8, 19u8, 147u8, 138u8, 127u8, 81u8, 83u8, 92u8, 58u8, 53u8, 226u8]
+var EXP_TC7_512 : [u8; 64] = [227u8, 123u8, 106u8, 119u8, 93u8, 200u8, 125u8, 186u8, 164u8, 223u8, 169u8, 249u8, 110u8, 94u8, 63u8, 253u8, 222u8, 189u8, 113u8, 248u8, 134u8, 114u8, 137u8, 134u8, 93u8, 245u8, 163u8, 45u8, 32u8, 205u8, 201u8, 68u8, 182u8, 2u8, 44u8, 172u8, 60u8, 73u8, 130u8, 177u8, 13u8, 94u8, 235u8, 85u8, 195u8, 228u8, 222u8, 21u8, 19u8, 70u8, 118u8, 251u8, 109u8, 224u8, 68u8, 96u8, 101u8, 201u8, 116u8, 64u8, 250u8, 140u8, 106u8, 88u8]
+
+fn eq_n(a: u64, b: u64, n: u64) -> u64 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if pa[i] != pb[i] { return 0u64 }
+        i = i + 1u64
+    }
+    return 1u64
+}
+
+fn main() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 131u64 { KEY[k] = 0xAAu8  k = k + 1u64 }
+    let keyp : *u8 = (&KEY as u64) as *u8
+
+    /* TC6: HMAC-SHA256, 54-byte message */
+    hmac_sha256(keyp, 131u64, ("Test Using Larger Than Block-Size Key - Hash Key First" as u64) as *u8, 54u64)
+    hmac_sha256_tag((&OUT32 as u64) as *u8)
+    if eq_n((&OUT32 as u64), (&EXP_TC6_256 as u64), 32u64) != 1u64 { return 10u64 }
+
+    /* TC7: HMAC-SHA256, 152-byte message */
+    hmac_sha256(keyp, 131u64, ("This is a test using a larger than block-size key and a larger than block-size data. The key needs to be hashed before being used by the HMAC algorithm." as u64) as *u8, 152u64)
+    hmac_sha256_tag((&OUT32 as u64) as *u8)
+    if eq_n((&OUT32 as u64), (&EXP_TC7_256 as u64), 32u64) != 1u64 { return 20u64 }
+
+    /* TC7: HMAC-SHA512, same 152-byte message (long key > 128-byte SHA-512 block) */
+    hmac_sha512(keyp, 131u64, ("This is a test using a larger than block-size key and a larger than block-size data. The key needs to be hashed before being used by the HMAC algorithm." as u64) as *u8, 152u64)
+    hmac_sha512_tag((&OUT64 as u64) as *u8)
+    if eq_n((&OUT64 as u64), (&EXP_TC7_512 as u64), 64u64) != 1u64 { return 30u64 }
+
+    return 99u64
+}

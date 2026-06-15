@@ -1160,6 +1160,7 @@ declare -A EXPECTED=(
     [1585_develop_up_gateway]=99
     [1586_basecodec_canonical_bits]=99
     [1587_leb128_overwide_final_byte]=99
+    [1588_hmac_long_key]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

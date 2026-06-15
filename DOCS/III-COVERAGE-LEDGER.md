@@ -2514,3 +2514,27 @@ widths -- i16 and i64 call-result signed ordering (`ret_i16n() >= 0i16`, `ret_i6
 correctly (they shared the identical pre-fix TC_UNK->unsigned misdispatch; the i64 case was a silent sibling the
 W79/W80 probes never exercised).  A regression in the CALL case breaks every signed width at once, so the registered
 i32 falsifier 1572 is a sufficient sentinel for the whole case.
+
+## Wave-94 — the cg_r0 u64 call-result-ordering sibling FIXED (cg_typeclass CALL-case completion); sanctum deferred (2026-06-14)
+
+W93's CALL case was ASYMMETRIC -- it classified signed returns and dropped u64/usize, so cg_r0/sanctum's
+"unsigned-setcc-iff-u64/usize" policy fell through to a SIGNED compare for a u64 CALL-RESULT ordering.  Confirmed by a
+differential probe: a u64-returning call ordered `< 0x100` gave cg_r0=1 (signed -- read 0x8000000000000010 as negative)
+vs cg_r3=2 (correct unsigned).  FIX: extend the CALL-case helper (tc_signed_or_unk -> tc_call_dispatch_class) to also
+pass TC_U64/TC_USIZE -- NOT u8/u16/u32 (those zero-extend bit-63-clear, signed==unsigned, no wrong-result path, pure
+churn).  The entire blast is the is_u64 flip on u64/usize call-results.  VERIFICATION: fixpoint CONVERGED
+(iiis-2==iiis-3==4dffd195); stdlib libiii_native.a BYTE-IDENTICAL (394ff96d before==after -> cg_r3 unaffected, because
+cg_r3 setcc keys on is_signed not is_u64); stage1 59/0; check-rm2 green; the cg_r0_width_gate probe `u64_callresult_lt`
+flipped FAIL (cg_r0=1 vs cg_r3=2) -> PASS=11/0 (the permanent regression test).  Resealed iiis-1/2/3 golden mhashes.
+
+**SANCTUM (cg_rm2 / emit_sanctum) DEFERRED -- a SEPARATE, DEEPER, pre-existing residual the shared-resolver fix does
+NOT reach.** An rm2_sample u64-call-result probe (do_ord_call, seal_id 5) PROVED the sanctum STILL emits signed even
+with the cg_typeclass fix (and was already wrong at W93 -- my change is provably inert for it: cases 1-4 stayed green).
+ROOT: emit_sanctum's `emit_call` (line 616) resolves the callee BY NAME-STRING (build_mangled from the ident
+name-offset/len + a memcmp for the cap-revoke recogniser), NOT via iii_ast_node_binder_id -- so the R-2 sema pass does
+not populate the callee binder, my binder-based CALL case reads binder_id=0 -> TC_UNK -> signed.  DEEP (needs R-2 sema
+to populate call binder_ids, or a name-based classification path in the sanctum) + LATENT to the floor (a u64
+call-result ORDERED inside a sealed_call is about as never-happens as Ring-2 gets) + FRAGILE terrain -> document-and-
+separate (a sibling of the cg_r3 #71-class deferral), NOT a dishonest half-fix (the advisor explicitly relaxed the
+"don't leave Ring-2 wrong" line once it was clear the sanctum bug is pre-existing and untouched by this change).
+**The call-result-signedness family is now CLOSED: cg_r3 (W93) ✓ / cg_r0 (W94) ✓ / sanctum deferred-and-documented.**

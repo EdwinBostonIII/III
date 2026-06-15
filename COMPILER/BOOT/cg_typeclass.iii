@@ -105,24 +105,28 @@ fn iii_tref_typeclass(ast: u64, tn: u32) -> u32 {
     return TC_UNK
 }
 
-/* [W93] CALL-case scope: return the class ONLY when the callee's return type is a SIGNED int
- * (i8/i16/i32/i64/isize); an unsigned/other return stays TC_UNK so iii_tc_expr_is_u64 and every
- * cg_r0/sanctum dispatch keep their EXACT prior behaviour (a call-result was TC_UNK before).  This
- * isolates the fix to the demonstrated signed-div/mod/compare defect (W79/W80): only signed-return
- * call-results change classification, and W80's audit found ZERO live such sites in the stdlib -> the
- * stdlib compiles byte-identical.  Pure leaf, equality dispatch only (iiis-0-seed-safe). */
-fn tc_signed_or_unk(rc: u32) -> u32 {
+/* [W93/W94] CALL-case scope: return the callee's return class when it is one a backend's width/
+ * signedness DISPATCH keys on -- a SIGNED int (i8/i16/i32/i64/isize: cg_r3 emits signed setcc/idivq)
+ * OR u64/usize (cg_r0/sanctum, 8-byte-uniform, emit UNSIGNED setcc IFF the class is u64/usize).
+ * u8/u16/u32 and non-int returns stay TC_UNK: they zero-extend with bit-63 CLEAR, so signed==unsigned
+ * compare -- no wrong-result path, classifying them would be pure churn (and could perturb byte-
+ * identity for nothing).  This is the COMPLETE fix for the call-result signedness trap: W93 (signed ->
+ * cg_r3 idivq/setge) + W94 (u64/usize -> cg_r0/sanctum setae; the confirmed cg_r0=1 vs cg_r3=2
+ * divergence).  Pure leaf, equality dispatch only (iiis-0-seed-safe). */
+fn tc_call_dispatch_class(rc: u32) -> u32 {
     if rc == TC_I8 { return rc }
     if rc == TC_I16 { return rc }
     if rc == TC_I32 { return rc }
     if rc == TC_I64 { return rc }
     if rc == TC_ISIZE { return rc }
+    if rc == TC_U64 { return rc }
+    if rc == TC_USIZE { return rc }
     return TC_UNK
 }
 
 /* The ONE walk: resolve an expression's integer type-class. PAREN->inner, CAST->target,
  * BINARY->lhs ELSE rhs, UNARY->operand, IDENT->binder decl-type, CALL->callee return-type (signed
- * only, see tc_signed_or_unk).  Unclassifiable -> TC_UNK. */
+ * or u64/usize, see tc_call_dispatch_class).  Unclassifiable -> TC_UNK. */
 fn iii_expr_typeclass(ast: u64, node: u32) -> u32 {
     if node == 0u32 { return TC_UNK }
     let nk: u32 = iii_ast_node_kind(ast, node)
@@ -134,8 +138,8 @@ fn iii_expr_typeclass(ast: u64, node: u32) -> u32 {
         let bid: u32 = iii_ast_node_binder_id(ast, callee)
         if bid == 0u32 { return TC_UNK }
         let bk: u32 = iii_ast_node_kind(ast, bid)
-        if bk == TC_K_FN_DECL { return tc_signed_or_unk(iii_tref_typeclass(ast, iii_ast_fn_return_type(ast, bid))) }
-        if bk == TC_K_EXTERN_DECL { return tc_signed_or_unk(iii_tref_typeclass(ast, iii_ast_extern_return_type(ast, bid))) }
+        if bk == TC_K_FN_DECL { return tc_call_dispatch_class(iii_tref_typeclass(ast, iii_ast_fn_return_type(ast, bid))) }
+        if bk == TC_K_EXTERN_DECL { return tc_call_dispatch_class(iii_tref_typeclass(ast, iii_ast_extern_return_type(ast, bid))) }
         return TC_UNK
     }
     if nk == TC_K_EXPR_BINARY {

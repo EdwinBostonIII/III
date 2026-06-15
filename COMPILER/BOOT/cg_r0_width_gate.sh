@@ -37,6 +37,12 @@ fn main() -> u64 { let v : u32 = probe()  return (((v >> 24u32) ^ (v >> 16u32) ^
 EOF
 "$IIIS" --compile-only --out "$W/m.o" "$W/m.iii" 2>/dev/null || { echo "[cg_r0-wgate] FATAL m.iii compile"; exit 2; }
 
+# [W94] u64 call-result value source (compiled by cg_r3 -- the value oracle): 0x8000000000000010,
+# high bit SET so a signed-vs-unsigned compare diverges.  The probe CALLs this so the operand is a
+# call-result (classified via the shared cg_typeclass resolver), not a local (which is already correct).
+printf 'module pv\nfn pv() -> u64 @export { let x : u64 = 0x8000000000000000u64  return x + 0x10u64 }\n' > "$W/pv.iii"
+"$IIIS" --compile-only --out "$W/pv.o" "$W/pv.iii" 2>/dev/null || { echo "[cg_r0-wgate] FATAL pv.iii compile"; exit 2; }
+
 PASS=0; FAIL=0
 dp () {  # name  body
     printf 'module p\n%s\n' "$2" > "$W/p.iii"
@@ -52,6 +58,24 @@ dp () {  # name  body
     else echo "[cg_r0-wgate] FAIL  $1 -> cg_r0=$r0 cg_r3=$def   <== cg_r0 u32-width defect"; FAIL=$((FAIL+1)); fi
 }
 
+# [W94] like dp() but the probe CALLs pv() (a u64 source) so the compared operand is a CALL-RESULT.
+# Links pv.o into both builds (pv resolves natively -- cg_r0's call symbol matches cg_r3's @export).
+# Targets the call-result signedness-dispatch defect: a u64-returning call classifies via the shared
+# resolver; cg_r0/sanctum's "unsigned setcc iff u64/usize" needs TC_U64 (not TC_UNK) or it emits a
+# SIGNED compare -> wrong for a high-bit-set u64.
+dpc () {  # name  body
+    printf 'module p\nextern @abi(c-msvc-x64) fn pv() -> u64 from "pv.iii"\n%s\n' "$2" > "$W/p.iii"
+    "$IIIS" --ring R0 --compile-only --out "$W/p_r0.o" "$W/p.iii" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r0 compile)"; FAIL=$((FAIL+1)); return; }
+    # cg_r0 mangles its callee ref to L_<caller-module>_<name> (L_p_pv); cg_r3 pv.o exports the bare `pv`.
+    gcc "$W/m.o" "$W/pv.o" "$W/harness.o" "$W/p_r0.o" -Wl,--defsym,probe=L_p_probe -Wl,--defsym,L_p_pv=pv -lkernel32 -o "$W/r0.exe" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r0 link)"; FAIL=$((FAIL+1)); return; }
+    "$W/r0.exe"; local r0=$?
+    "$IIIS" --compile-only --out "$W/p_def.o" "$W/p.iii" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r3 compile)"; FAIL=$((FAIL+1)); return; }
+    gcc "$W/m.o" "$W/pv.o" "$W/p_def.o" -lkernel32 -o "$W/def.exe" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r3 link)"; FAIL=$((FAIL+1)); return; }
+    "$W/def.exe"; local def=$?
+    if [ "$r0" -eq "$def" ]; then echo "[cg_r0-wgate] PASS  $1 (cg_r0==cg_r3 fold=$r0)"; PASS=$((PASS+1))
+    else echo "[cg_r0-wgate] FAIL  $1 -> cg_r0=$r0 cg_r3=$def   <== cg_r0 u64-call-result signedness defect"; FAIL=$((FAIL+1)); fi
+}
+
 # every probe FEEDS BACK a wrapping value (0xFFFFFFF0 + 0x20 = 0x10 with a bit-32 carry) so the
 # high half is dirty; a correct backend truncates to 32 bits, cg_r0-uniform did not.
 dp dirty_shr        'fn probe()->u32 @export { let x:u32=0xFFFFFFF0u32+0x20u32  return x >> 4u32 }'
@@ -64,6 +88,9 @@ dp dirty_ule        'fn probe()->u32 @export { let x:u32=0xFFFFFFF0u32+0x20u32  
 dp dirty_div        'fn probe()->u32 @export { let x:u32=0xFFFFFFF0u32+0x20u32  return x / 0x4u32 }'
 dp dirty_mod        'fn probe()->u32 @export { let x:u32=0xFFFFFFF0u32+0x20u32  return x % 0x7u32 }'
 dp dirty_gt         'fn probe()->u32 @export { let x:u32=0xFFFFFFF0u32+0x20u32  if x > 0x1000u32 { return 1u32 }  return 2u32 }'
+# [W94] u64 CALL-RESULT ordering: pv()=0x8000000000000010.  Correct unsigned `< 0x100` is FALSE -> 2;
+# a signed misdispatch (high bit read as sign) makes it negative -> `< 0x100` TRUE -> 1.  cg_r0==cg_r3 required.
+dpc u64_callresult_lt 'fn probe()->u32 @export { if pv() < 0x100u64 { return 1u32 }  return 2u32 }'
 
 echo "[cg_r0-wgate] PASS=$PASS FAIL=$FAIL"
 if [ $FAIL -ne 0 ]; then echo "[cg_r0-wgate] GATE FAIL -- cg_r0 mishandles u32 width on $FAIL op(s)."; exit 1; fi

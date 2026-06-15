@@ -1,0 +1,43 @@
+/* 1594_sha512_two_block_pad.iii -- SHA-512 TWO-BLOCK PADDING-SPILL coverage (wave-2 crypto rank 7).
+ *
+ * Existing KATs 55 ("abc", 3 bytes) and 56 (empty) both fit a single 128-byte SHA-512 block; the
+ * second-block padding path is DARK.  At 112 bytes the message + the mandatory 0x80 byte + the
+ * 16-byte length field is 112+1+16 = 129 > 128, so the padding SPILLS into a second compression
+ * block -- the FIPS 180-4 two-block boundary.  The classic 112-byte NIST message
+ *   "abcdefghbcdefghi...nopqrstu" (the 1024-bit two-block test) hashes to:
+ *     8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018
+ *     501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909
+ * (recompute-verified in-session via .NET SHA512.)  Landing this digest exercises the multi-block
+ * absorb + the length-field placement in the *second* block -- a single-block-only implementation
+ * would mis-place the length and miss every byte.  99 = all 64 digest bytes match. */
+module corpus_1594
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha512_oneshot(input: *u8, len: u64, out: *u8) -> u32 from "sha512.iii"
+
+var EXP : [u8; 64]
+
+fn main() -> u64 {
+    EXP[0u64]=0x8eu8 EXP[1u64]=0x95u8 EXP[2u64]=0x9bu8 EXP[3u64]=0x75u8 EXP[4u64]=0xdau8 EXP[5u64]=0xe3u8 EXP[6u64]=0x13u8 EXP[7u64]=0xdau8
+    EXP[8u64]=0x8cu8 EXP[9u64]=0xf4u8 EXP[10u64]=0xf7u8 EXP[11u64]=0x28u8 EXP[12u64]=0x14u8 EXP[13u64]=0xfcu8 EXP[14u64]=0x14u8 EXP[15u64]=0x3fu8
+    EXP[16u64]=0x8fu8 EXP[17u64]=0x77u8 EXP[18u64]=0x79u8 EXP[19u64]=0xc6u8 EXP[20u64]=0xebu8 EXP[21u64]=0x9fu8 EXP[22u64]=0x7fu8 EXP[23u64]=0xa1u8
+    EXP[24u64]=0x72u8 EXP[25u64]=0x99u8 EXP[26u64]=0xaeu8 EXP[27u64]=0xadu8 EXP[28u64]=0xb6u8 EXP[29u64]=0x88u8 EXP[30u64]=0x90u8 EXP[31u64]=0x18u8
+    EXP[32u64]=0x50u8 EXP[33u64]=0x1du8 EXP[34u64]=0x28u8 EXP[35u64]=0x9eu8 EXP[36u64]=0x49u8 EXP[37u64]=0x00u8 EXP[38u64]=0xf7u8 EXP[39u64]=0xe4u8
+    EXP[40u64]=0x33u8 EXP[41u64]=0x1bu8 EXP[42u64]=0x99u8 EXP[43u64]=0xdeu8 EXP[44u64]=0xc4u8 EXP[45u64]=0xb5u8 EXP[46u64]=0x43u8 EXP[47u64]=0x3au8
+    EXP[48u64]=0xc7u8 EXP[49u64]=0xd3u8 EXP[50u64]=0x29u8 EXP[51u64]=0xeeu8 EXP[52u64]=0xb6u8 EXP[53u64]=0xddu8 EXP[54u64]=0x26u8 EXP[55u64]=0x54u8
+    EXP[56u64]=0x5eu8 EXP[57u64]=0x96u8 EXP[58u64]=0xe5u8 EXP[59u64]=0x5bu8 EXP[60u64]=0x87u8 EXP[61u64]=0x4bu8 EXP[62u64]=0xe9u8 EXP[63u64]=0x09u8
+
+    /* exactly 112 ASCII bytes; literal is not NUL-terminated but we pass an explicit length */
+    let inp : *u8 = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu" as *u8
+    let out : *u8 = malloc(64u64)
+    sha512_oneshot(inp, 112u64, out)
+
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        if out[i] != EXP[i] { free(out) return 10u64 + i }
+        i = i + 1u64
+    }
+    free(out)
+    return 99u64
+}

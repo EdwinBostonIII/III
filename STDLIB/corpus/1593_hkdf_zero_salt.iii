@@ -1,0 +1,47 @@
+/* 1593_hkdf_zero_salt.iii -- HKDF-SHA256 ZERO-SALT branch coverage (wave-2 crypto rank 6).
+ *
+ * The existing KAT 81 (RFC 5869 TC1) extracts with salt_len==13, so the salt_len==0 branch in
+ * hkdf_sha256_extract (lines 49-52: substitute an all-zero HKDF_HASH_LEN-byte salt block) is DARK.
+ * RFC 5869 Test Case 3 is exactly the zero-salt case: IKM = 0x0b x 22, salt = "" (length 0),
+ * info = "" (length 0), L = 42.  Expected OKM:
+ *     8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8
+ * (recompute-verified in-session via .NET System.Security.Cryptography.HKDF Extract+Expand SHA256.)
+ * The zero-salt substitution is the ONLY way to land this OKM -- skipping it (HMAC with an empty
+ * key) yields a different PRK and a fully different OKM.  Also drives info_len==0 in expand.
+ * 99 = all 42 OKM bytes match. */
+module corpus_1593
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn hkdf_sha256_extract(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64) -> i32 from "hkdf.iii"
+extern @abi(c-msvc-x64) fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 from "hkdf.iii"
+
+var EXP : [u8; 42]
+
+fn main() -> u64 {
+    EXP[0u64]=0x8du8 EXP[1u64]=0xa4u8 EXP[2u64]=0xe7u8 EXP[3u64]=0x75u8 EXP[4u64]=0xa5u8 EXP[5u64]=0x63u8 EXP[6u64]=0xc1u8 EXP[7u64]=0x8fu8
+    EXP[8u64]=0x71u8 EXP[9u64]=0x5fu8 EXP[10u64]=0x80u8 EXP[11u64]=0x2au8 EXP[12u64]=0x06u8 EXP[13u64]=0x3cu8 EXP[14u64]=0x5au8 EXP[15u64]=0x31u8
+    EXP[16u64]=0xb8u8 EXP[17u64]=0xa1u8 EXP[18u64]=0x1fu8 EXP[19u64]=0x5cu8 EXP[20u64]=0x5eu8 EXP[21u64]=0xe1u8 EXP[22u64]=0x87u8 EXP[23u64]=0x9eu8
+    EXP[24u64]=0xc3u8 EXP[25u64]=0x45u8 EXP[26u64]=0x4eu8 EXP[27u64]=0x5fu8 EXP[28u64]=0x3cu8 EXP[29u64]=0x73u8 EXP[30u64]=0x8du8 EXP[31u64]=0x2du8
+    EXP[32u64]=0x9du8 EXP[33u64]=0x20u8 EXP[34u64]=0x13u8 EXP[35u64]=0x95u8 EXP[36u64]=0xfau8 EXP[37u64]=0xa4u8 EXP[38u64]=0xb6u8 EXP[39u64]=0x1au8
+    EXP[40u64]=0x96u8 EXP[41u64]=0xc8u8
+
+    let ikm : *u8 = malloc(22u64)
+    let mut g : u64 = 0u64
+    while g < 22u64 { ikm[g] = 0x0bu8 ; g = g + 1u64 }
+    let out : *u8 = malloc(42u64)
+
+    /* salt_len==0 -> the all-zero 32-byte salt branch.  salt ptr is never dereferenced on that path
+     * (ikm passed only as a non-null placeholder); info_len==0 likewise needs no real info buffer. */
+    if hkdf_sha256_extract(ikm, 0u64, ikm, 22u64) != 0i32 { free(ikm) free(out) return 1u64 }
+    if hkdf_sha256_expand(ikm, 0u64, out, 42u64) != 0i32 { free(ikm) free(out) return 2u64 }
+
+    let mut i : u64 = 0u64
+    while i < 42u64 {
+        if out[i] != EXP[i] { free(ikm) free(out) return 10u64 + i }
+        i = i + 1u64
+    }
+    free(ikm)
+    free(out)
+    return 99u64
+}

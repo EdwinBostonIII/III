@@ -1,0 +1,44 @@
+/* 1592_pbkdf2_iteration_fold.iii -- PBKDF2-HMAC-SHA256 ITERATION-FOLD coverage (wave-2 crypto rank 5).
+ *
+ * The existing KAT 86 derives with set_iter(1) -- iterations==1, so the inner fold loop
+ * `while j < PBK_ITER` in pbkdf2_sha256_derive NEVER executes: the U_1^U_2^...^U_c XOR
+ * accumulation and the U_j = HMAC(pw, U_{j-1}) chain are entirely DARK.  This pins iterations==2,
+ * the smallest count that runs the fold once (T = U_1 ^ U_2), against the published RFC-style
+ * PBKDF2-HMAC-SHA256 vector P="password" S="salt" c=2 dkLen=32:
+ *     ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43
+ * (recompute-verified in-session via .NET Rfc2898DeriveBytes/SHA256.)  A correct fold is the ONLY
+ * way to land this digest -- a stub that returned U_1 (the c=1 answer 120fb6cf...) would miss every
+ * byte.  Drives the SPLIT API (set_salt + set_iter(2) + derive) so set_iter is exercised directly.
+ * 99 = all 32 bytes match. */
+module corpus_1592
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_salt(salt: *u8, salt_len: u64) -> i32 from "pbkdf2.iii"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_iter(iterations: u32) -> i32 from "pbkdf2.iii"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) -> i32 from "pbkdf2.iii"
+
+var EXP : [u8; 32]
+
+fn main() -> u64 {
+    EXP[0u64]=0xaeu8 EXP[1u64]=0x4du8 EXP[2u64]=0x0cu8 EXP[3u64]=0x95u8 EXP[4u64]=0xafu8 EXP[5u64]=0x6bu8 EXP[6u64]=0x46u8 EXP[7u64]=0xd3u8
+    EXP[8u64]=0x2du8 EXP[9u64]=0x0au8 EXP[10u64]=0xdfu8 EXP[11u64]=0xf9u8 EXP[12u64]=0x28u8 EXP[13u64]=0xf0u8 EXP[14u64]=0x6du8 EXP[15u64]=0xd0u8
+    EXP[16u64]=0x2au8 EXP[17u64]=0x30u8 EXP[18u64]=0x3fu8 EXP[19u64]=0x8eu8 EXP[20u64]=0xf3u8 EXP[21u64]=0xc2u8 EXP[22u64]=0x51u8 EXP[23u64]=0xdfu8
+    EXP[24u64]=0xd6u8 EXP[25u64]=0xe2u8 EXP[26u64]=0xd8u8 EXP[27u64]=0x5au8 EXP[28u64]=0x95u8 EXP[29u64]=0x47u8 EXP[30u64]=0x4cu8 EXP[31u64]=0x43u8
+
+    let pw : *u8 = "password" as *u8       /* 8 bytes, explicit length below (literals are not NUL-terminated) */
+    let salt : *u8 = "salt" as *u8          /* 4 bytes */
+    let dk : *u8 = malloc(32u64)
+
+    if pbkdf2_sha256_set_salt(salt, 4u64) != 0i32 { free(dk) return 1u64 }
+    pbkdf2_sha256_set_iter(2u32)            /* the fold: T = U_1 ^ U_2 */
+    if pbkdf2_sha256_derive(pw, 8u64, dk, 32u64) != 0i32 { free(dk) return 2u64 }
+
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if dk[i] != EXP[i] { free(dk) return 10u64 + i }
+        i = i + 1u64
+    }
+    free(dk)
+    return 99u64
+}

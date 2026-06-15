@@ -42,6 +42,8 @@ var SNB_IMG     : [u64; 4096]   /* 16 checkpoints * 256 blocks (module-scope: ru
 var SNB_ROOT    : [u8; 512]     /* 16 * 32-byte content-addressed roots */
 var SNB_SCRATCH : [u64; 256]    /* staging for the live disk image */
 var SNB_TMPROOT : [u8; 32]      /* staging for a content-address */
+var SNB_COUNT   : u32 = 0u32    /* [P5] images stored so far; gate capacity BEFORE recording in the lattice */
+var SNB_CREATED : [u8; 16]      /* [P6] per-slot 'was this slot ever checkpointed' flag (16 == SNB_MAXSNAP) */
 
 fn snb_img_ptr(slot: u32) -> u64 { return (&SNB_IMG as u64) + (slot as u64) * SNB_NBLOCKS * 8u64 }
 fn snb_root_ptr(slot: u32) -> u64 { return (&SNB_ROOT as u64) + (slot as u64) * 32u64 }
@@ -50,6 +52,9 @@ fn snb_root_ptr(slot: u32) -> u64 { return (&SNB_ROOT as u64) + (slot as u64) * 
  * record it in the lattice forest under `ante` (SNB_GENESIS for a root).  Returns the snapshot slot, or
  * SNB_SENT if the image store is full (fail-closed: never record a snapshot we cannot restore). */
 fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 @export {
+    /* [P5] refuse BEFORE recording in the lattice when our image store is full -- else sl_snapshot records a
+     * checkpoint we cannot store, desyncing the lattice forest from the image store (an image-less snapshot). */
+    if SNB_COUNT >= SNB_MAXSNAP { return SNB_SENT }
     let mut i : u64 = 0u64
     while i < SNB_NBLOCKS { SNB_SCRATCH[i] = vbd_read(i)  i = i + 1u64 }
     cad_oneshot(SNB_SUITE, (&SNB_SCRATCH as u64) as *u8, SNB_NBLOCKS * 8u64, (&SNB_TMPROOT as u64) as *u8)
@@ -62,6 +67,8 @@ fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 @export {
     let rsrc : *u8 = (&SNB_TMPROOT as u64) as *u8
     let mut k : u64 = 0u64
     while k < 32u64 { rdst[k] = rsrc[k]  k = k + 1u64 }
+    SNB_CREATED[slot] = 1u8           /* [P6] mark this slot as genuinely checkpointed */
+    SNB_COUNT = SNB_COUNT + 1u32
     return slot
 }
 
@@ -69,6 +76,7 @@ fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 @export {
  * go through the reversible vbd session, so the restore is itself undoable.  SNB_E on a bad slot/write. */
 fn snb_restore(session: u32, slot: u32) -> i32 @export {
     if slot >= SNB_MAXSNAP { return SNB_E }
+    if SNB_CREATED[slot] == 0u8 { return SNB_E }   /* [P6] never restore a slot that was never checkpointed -- SNB_IMG is zero-init, so a cold restore would silently write an all-zero disk */
     let ip : *u64 = snb_img_ptr(slot) as *u64
     let mut i : u64 = 0u64
     while i < SNB_NBLOCKS {

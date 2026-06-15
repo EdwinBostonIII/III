@@ -47,6 +47,7 @@ const DU_OK        : i32 = 0i32
 const DU_E_DENIED  : i32 = -1i32       /* capability admission denied */
 const DU_E         : i32 = -2i32       /* box not open / sub-organ failure */
 const DU_RIGHTS    : u64 = 0x5u64      /* CAP_RIGHT_FS_WRITE (0x4) | CAP_RIGHT_ALLOC (0x1): disk + compute */
+const DU_RIGHT_DISK : u64 = 0x4u64     /* CAP_RIGHT_FS_WRITE -- the reversible-disk write authority (== SB_RIGHT_DISK) */
 const DU_NONE      : u32 = 0xFFFFFFFFu32
 const DU_VBD_TOKEN : u64 = 0x5A5A5A5Au64
 const DU_BENIGN_CADENCE : u64 = 3u64   /* the sealed-good behavioral baseline sample */
@@ -66,11 +67,14 @@ fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 @export {
     if c == 0u64 { return DU_E }
     DU_VBD_SLOT = v
     DU_CMP_ID = c
-    sentinel_arm()
+    /* [P4] a failed behavioral arm/seal or replay-record init must NOT leave a half-initialised box marked
+     * OPEN -- an unarmed sentinel would then COMMIT a ransomware sweep (see sentinel fail-closed).  Abort
+     * (DU_OPEN stays 0) so every later du_* call fails closed with DU_E. */
+    if sentinel_arm() != DU_OK { return DU_E }
     let mut i : u64 = 0u64
     while i < 64u64 { sentinel_observe(DU_BENIGN_CADENCE)  i = i + 1u64 }
-    sentinel_seal_baseline()
-    rb_begin()
+    if sentinel_seal_baseline() != DU_OK { return DU_E }
+    if rb_begin() != DU_OK { return DU_E }
     let mut k : u64 = 0u64
     while k < 32u64 { DU_OP[k] = (k + 1u64) as u8  k = k + 1u64 }
     DU_OPEN = 1u32
@@ -80,6 +84,7 @@ fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 @export {
 /* A guest disk write: cap-gated + quota-charged (availability) + reversibly recorded (reversibility). */
 fn du_write(guest_cap: u64, idx: u64, val: u64, cost: u64) -> i32 @export {
     if DU_OPEN == 0u32 { return DU_E }
+    if cap_verify_rights(guest_cap, DU_RIGHT_DISK) == 0u8 { return DU_E_DENIED }   /* [P6] the DISK write right -- cb_charge_mem only verifies COMPUTE; the sibling sealed_box.sb_disk_write gates on DISK, so the gateway must too (a COMPUTE-only cap must not write the reversible disk) */
     if cb_charge_mem(guest_cap, DU_CMP_ID, cost) == 0u8 { return DU_E_DENIED }
     return vbd_write(DU_VBD_SLOT, idx, val)
 }

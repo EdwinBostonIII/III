@@ -229,6 +229,7 @@ fn fp_inv_x(r: u64, a: u64) -> i32 @export { return fp_inv(r, a) }
 
 /* helpers: set slot = small integer v (canonical, not Montgomery); read limb. */
 fn fp_set_u32(slot: u64, v: u32) -> i32 @export {
+    if slot >= 64u64 { return -1i32 }   /* [OOB-W10] FP is [u32;512]=64*8; guard the slot like the siblings fp_set_limb/fp_get_limb do (else FP[slot*8 ..] writes OOB) */
     let b : u64 = slot * 8u64
     FP[b] = v
     let mut i : u64 = 1u64

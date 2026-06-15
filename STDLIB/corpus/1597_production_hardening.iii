@@ -1,0 +1,51 @@
+/* 1597_production_hardening.iii -- wave-5 production-readiness audit (w002qrudo): the develop-up + fp256
+ * hardening gaps the INDEPENDENT-eyes audit confirmed, each proven to FIRE on the bad path + a positive arm:
+ *
+ *  (P6) fp256.fp_set_u32: slot>=64 now REJECTED (-1) -- it lacked the bound its siblings fp_set_limb/
+ *       fp_get_limb have, so a large slot wrote OOB into FP[512]. slot<64 still succeeds.
+ *  (P5) sentinel.sentinel_anomalous: an UNARMED sentinel (SNT_INVALID) now reports ANOMALOUS (1, fail-closed)
+ *       instead of 0 -- previously an unarmed sentinel_guard would COMMIT a ransomware sweep. Armed+benign -> 0.
+ *  (P6) develop_up.du_write: a COMPUTE-only cap (0x1, no DISK 0x4) is now DENIED -- the gateway gated only on
+ *       cb_charge_mem (COMPUTE), strictly weaker than the sibling sealed_box.sb_disk_write. A DISK cap writes.
+ *  (P6) snapshot_box.snb_restore: a NEVER-checkpointed slot is now REFUSED (SNB_E) instead of restoring the
+ *       zero-initialised image as if it were a real snapshot.
+ * 99 = every guard fires on the bad path AND every valid path still works. */
+module corpus_1597
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fp_set_u32(slot: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn sentinel_arm() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_observe(activity: u64) -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn sentinel_anomalous() -> u32 from "sentinel.iii"
+extern @abi(c-msvc-x64) fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_write(guest_cap: u64, idx: u64, val: u64, cost: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn snb_restore(session: u32, slot: u32) -> i32 from "snapshot_box.iii"
+
+fn main() -> u64 {
+    /* (P6) fp256 OOB slot guard */
+    if fp_set_u32(64u64, 7u32) != (0i32 - 1i32) { return 1u64 }   /* slot>=64 -> reject (would write OOB) */
+    if fp_set_u32(0u64, 7u32) != 0i32 { return 2u64 }             /* valid slot -> ok */
+
+    /* (P5) sentinel FAIL-CLOSED: an unarmed sentinel is anomalous (must be the FIRST sentinel call -> cold) */
+    if sentinel_anomalous() != 1u32 { return 3u64 }               /* unarmed -> ANOMALOUS (was 0 = fail-open) */
+    if sentinel_arm() != 0i32 { return 4u64 }
+    let mut i : u64 = 0u64
+    while i < 64u64 { sentinel_observe(3u64)  i = i + 1u64 }       /* a benign steady cadence */
+    if sentinel_seal_baseline() != 0i32 { return 5u64 }
+    if sentinel_anomalous() != 0u32 { return 6u64 }               /* armed + benign-matches-baseline -> not anomalous */
+
+    /* (P6) snapshot_box: a never-checkpointed slot must not restore a zero image (do this BEFORE any checkpoint) */
+    if snb_restore(0u32, 5u32) != (0i32 - 1i32) { return 7u64 }   /* slot 5 never created -> SNB_E */
+
+    /* (P6) develop_up du_write requires the DISK right, not just COMPUTE */
+    let root_cap : u64 = cap_env_init()
+    let full : u64 = cap_attenuate(root_cap, 0x5u64, 0u64)        /* DISK(0x4) | COMPUTE(0x1) */
+    let comp : u64 = cap_attenuate(root_cap, 0x1u64, 0u64)        /* COMPUTE only, NO disk right */
+    if du_encapsulate(full, 100000u64, 100000u64) != 0i32 { return 8u64 }
+    if du_write(comp, 0u64, 0x11u64, 1u64) != (0i32 - 1i32) { return 9u64 }   /* COMPUTE-only -> DU_E_DENIED (new DISK gate) */
+    if du_write(full, 0u64, 0x11u64, 1u64) != 0i32 { return 10u64 }           /* DISK+COMPUTE cap -> ok */
+
+    return 99u64
+}

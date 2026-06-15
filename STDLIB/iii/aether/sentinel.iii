@@ -86,6 +86,7 @@ fn sentinel_deviation() -> u64 @export {
 
 /* Zero-trust allow-list VERDICT: 1 = the live cadence DEVIATED from the sealed-good fingerprint. */
 fn sentinel_anomalous() -> u32 @export {
+    if SNT_SLOT == SNT_INVALID { return 1u32 }   /* [P5] FAIL-CLOSED: an unarmed/unsealed sentinel is UNCERTAIN -> treat as anomalous so sentinel_guard rolls back rather than silently committing (a ransomware sweep must never be retained merely because the monitor was not armed) */
     if sentinel_deviation() != 0u64 { return 1u32 }
     return 0u32
 }

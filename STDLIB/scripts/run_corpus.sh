@@ -1194,6 +1194,7 @@ declare -A EXPECTED=(
     [1619_hotstuff_equivocation]=99
     [1620_box_exhaust_span_oob]=99
     [1621_rfc3339_format_yearbound]=99
+    [1622_ripple_merge_commute]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

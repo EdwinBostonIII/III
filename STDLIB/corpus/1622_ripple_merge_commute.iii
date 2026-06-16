@@ -1,0 +1,68 @@
+/* 1622 -- W3000 coverage: forcefield.ripple rn_merge ORDER-INDEPENDENCE (CALM / sheaf-gluing).
+ * ripple.iii documents the merge as order-independent, but 837 only pinned idempotence
+ * (merge(A,B) twice) and publish-order independence -- never merge(A<-B) vs merge(B<-A). This pins
+ * the real commutativity: two disjoint+overlapping stores merged in BOTH directions yield the same
+ * count AND the same resolved content for every value-address. 99 = commutative. */
+module corpus_1622
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_count(meta: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_merge(dmeta: *u8, dslots: *u8, darena: *u8, smeta: *u8, sslots: *u8, sarena: *u8, tmpaddr: *u8) -> u64 from "ripple.iii"
+
+fn kfill(buf: *u8, n: u64, seed: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n { buf[k] = ((seed + k) & 0xFFu64) as u8  k = k + 1u64 }
+    return 0u64
+}
+fn keqn(a: *u8, b: *u8, n: u64) -> u8 {
+    let mut k : u64 = 0u64
+    while k < n { if a[k] != b[k] { return 0u8 }  k = k + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let cap : u64 = 64u64
+    let acap : u64 = 65536u64
+    let mA : *u8 = malloc(32u64)  let sA : *u8 = malloc(cap*64u64)  let rA : *u8 = malloc(acap)
+    let mB : *u8 = malloc(32u64)  let sB : *u8 = malloc(cap*64u64)  let rB : *u8 = malloc(acap)
+    let mP : *u8 = malloc(32u64)  let sP : *u8 = malloc(cap*64u64)  let rP : *u8 = malloc(acap)   /* A2 */
+    let mQ : *u8 = malloc(32u64)  let sQ : *u8 = malloc(cap*64u64)  let rQ : *u8 = malloc(acap)   /* B2 */
+    let vb : *u8 = malloc(64u64)
+    let o1 : *u8 = malloc(64u64)  let o2 : *u8 = malloc(64u64)  let vbuf : *u8 = malloc(32u64)
+    let a7 : *u8 = malloc(32u64)  let a8 : *u8 = malloc(32u64)  let a9 : *u8 = malloc(32u64)  let tmp : *u8 = malloc(32u64)
+
+    rn_store_init(mA, sA, cap, acap)  rn_store_init(mB, sB, cap, acap)
+    rn_store_init(mP, sP, cap, acap)  rn_store_init(mQ, sQ, cap, acap)
+
+    /* A = {7,8} ; B = {8,9} ; P=A2 ; Q=B2 (content-addressed: value 8 -> same addr in all) */
+    kfill(vb, 40u64, 7u64)  rn_publish(mA, sA, rA, vb, 0u64, 40u64, a7, 0u64)
+    kfill(vb, 40u64, 8u64)  rn_publish(mA, sA, rA, vb, 0u64, 40u64, a8, 0u64)
+    kfill(vb, 40u64, 8u64)  rn_publish(mB, sB, rB, vb, 0u64, 40u64, tmp, 0u64)
+    kfill(vb, 40u64, 9u64)  rn_publish(mB, sB, rB, vb, 0u64, 40u64, a9, 0u64)
+    kfill(vb, 40u64, 7u64)  rn_publish(mP, sP, rP, vb, 0u64, 40u64, tmp, 0u64)
+    kfill(vb, 40u64, 8u64)  rn_publish(mP, sP, rP, vb, 0u64, 40u64, tmp, 0u64)
+    kfill(vb, 40u64, 8u64)  rn_publish(mQ, sQ, rQ, vb, 0u64, 40u64, tmp, 0u64)
+    kfill(vb, 40u64, 9u64)  rn_publish(mQ, sQ, rQ, vb, 0u64, 40u64, tmp, 0u64)
+    if rn_count(mA) != 2u64 { return 1u64 }
+    if rn_count(mB) != 2u64 { return 2u64 }
+
+    /* AB = merge(A <- B) ;  BA = merge(B2 <- A2) -- opposite directions */
+    rn_merge(mA, sA, rA, mB, sB, rB, tmp)
+    rn_merge(mQ, sQ, rQ, mP, sP, rP, tmp)
+    if rn_count(mA) != 3u64 { return 3u64 }
+    if rn_count(mQ) != 3u64 { return 4u64 }                 /* same union cardinality */
+
+    /* each value-address resolves to identical content in both merge orders */
+    if rn_resolve(mA, sA, rA, a7, 0u64, o1, 0u64, 64u64, vbuf) != 40u64 { return 5u64 }
+    if rn_resolve(mQ, sQ, rQ, a7, 0u64, o2, 0u64, 64u64, vbuf) != 40u64 { return 6u64 }
+    if keqn(o1, o2, 40u64) == 0u8 { return 7u64 }
+    if rn_resolve(mA, sA, rA, a8, 0u64, o1, 0u64, 64u64, vbuf) != 40u64 { return 8u64 }
+    if rn_resolve(mQ, sQ, rQ, a8, 0u64, o2, 0u64, 64u64, vbuf) != 40u64 { return 9u64 }
+    if keqn(o1, o2, 40u64) == 0u8 { return 10u64 }
+    if rn_resolve(mA, sA, rA, a9, 0u64, o1, 0u64, 64u64, vbuf) != 40u64 { return 11u64 }
+    if rn_resolve(mQ, sQ, rQ, a9, 0u64, o2, 0u64, 64u64, vbuf) != 40u64 { return 12u64 }
+    if keqn(o1, o2, 40u64) == 0u8 { return 13u64 }
+    return 99u64
+}

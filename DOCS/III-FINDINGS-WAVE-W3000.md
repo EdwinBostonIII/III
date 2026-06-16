@@ -16,8 +16,8 @@ defense-in-depth (pinning already-correct guards so a FUTURE regression is caugh
 ## Documented lower-priority (defense-in-depth, heavier setup or already-implied)
 - numera.field fp_add/fp_mul ring distributivity -- verifier rated "mathematically implied" by the
   point-KATs that already pin each op's reduction; marginal.
-- forcefield.ripple rn_merge commutativity (merge(A,B)==merge(B,A)) -- real property, heavy 2-store
-  fixture; candidate for a focused future KAT.
+- [x] forcefield.ripple rn_merge commutativity (merge(A<-B) == merge(B<-A): same count + identical
+  resolved content for every value-address -- CALM/sheaf-gluing order-independence). KAT 1622.
 - sema.iii compiler error-paths (SEMA_E_IDENT_UNRESOLVED / HEXAD_MISSING / RING_MISSING / DECL_DUP) --
   need a compiler-REJECTION test harness (compile a bad program, assert diagnostic) that the standard
   runnable-KAT corpus does not provide; a real future coverage axis if that harness is added.

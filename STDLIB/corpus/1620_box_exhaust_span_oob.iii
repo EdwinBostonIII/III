@@ -1,0 +1,31 @@
+/* 1620 -- W3000 coverage: two un-pinned guards.
+ *  (A) aether.flow_firewall capacity exhaustion: after FF_CAP=64 nodes are allocated, ff_alloc
+ *      returns FF_NONE and ff_relay/ff_input fail CLOSED (return FF_NONE) WITHOUT mutating the graph
+ *      (ff_box_safe verdict unchanged across the failed alloc). No KAT reached the 64-node boundary.
+ *  (B) memoria.span.span_u8_load bounds: idx>=len and null base both return the 0x100 OOB sentinel.
+ * 99 = exhaustion fails closed + state preserved; span OOB/null rejected; valid paths work. */
+module corpus_1620
+extern @abi(c-msvc-x64) fn ff_begin() -> i32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_input() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_relay(a: u32, b: u32) -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn ff_box_safe() -> u32 from "flow_firewall.iii"
+extern @abi(c-msvc-x64) fn span_u8_load(base: u64, len: u64, idx: u64) -> u32 from "span.iii"
+var BUF : [u8; 16]
+fn main() -> u64 {
+    /* (A) fill all 64 firewall nodes */
+    ff_begin()
+    let mut i : u32 = 0u32
+    while i < 64u32 { if ff_input() == 0xFFFFFFFFu32 { return 1u64 }  i = i + 1u32 }
+    let safe_before : u32 = ff_box_safe()
+    if ff_relay(0u32, 1u32) != 0xFFFFFFFFu32 { return 2u64 }   /* exhausted -> FF_NONE, fail closed */
+    if ff_input() != 0xFFFFFFFFu32 { return 3u64 }            /* still exhausted */
+    if ff_box_safe() != safe_before { return 4u64 }           /* failed alloc did NOT corrupt the graph */
+
+    /* (B) span bounds */
+    let base : u64 = (&BUF) as u64
+    BUF[0u64] = 0xABu8
+    if span_u8_load(base, 16u64, 0u64) != 0xABu32 { return 5u64 }      /* valid load */
+    if span_u8_load(base, 16u64, 16u64) != 0x100u32 { return 6u64 }    /* idx>=len -> OOB sentinel */
+    if span_u8_load(0u64, 16u64, 0u64) != 0x100u32 { return 7u64 }     /* null base -> sentinel */
+    return 99u64
+}

@@ -1,0 +1,15 @@
+/* 1621 -- W3000 coverage: tempora.rfc3339.rfc3339_format rejects year > 9999 (the emitter writes
+ * exactly 4 year digits; a 5-digit year would silently emit an ambiguous timestamp). No KAT drove
+ * the emitter's out-of-range guard (W78 covered the PARSER, not the formatter). 99 = valid epochs
+ * format OK, year-10000 rejected. */
+module corpus_1621
+extern @abi(c-msvc-x64) fn rfc3339_format(unix_seconds: u64, out_20: *u8) -> i32 from "rfc3339.iii"
+var OUT : [u8; 20]
+fn main() -> u64 {
+    let o : *u8 = (&OUT) as u64 as *u8
+    if rfc3339_format(0u64, o) != 0i32 { return 1u64 }                 /* 1970-01-01 -> OK */
+    if rfc3339_format(1000000000u64, o) != 0i32 { return 2u64 }        /* 2001-09-09 -> OK */
+    if rfc3339_format(253402300800u64, o) != (0i32 - 1i32) { return 3u64 }   /* 10000-01-01 -> reject (year>9999) */
+    if rfc3339_format(0xFFFFFFFFFFFFFFFFu64, o) != (0i32 - 1i32) { return 4u64 }   /* far future -> reject */
+    return 99u64
+}

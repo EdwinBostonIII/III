@@ -1,0 +1,3 @@
+module r10
+/* a variable declared inside an if-block is not in scope after it -- sema must reject the later use. */
+fn main() -> u64 { if 1u64 == 1u64 { let y : u64 = 5u64 }  return y }

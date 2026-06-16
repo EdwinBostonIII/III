@@ -32,7 +32,7 @@ A deliberately-VALID program (`return 99u64`) planted in `corpus_reject/` makes
 the gate exit 4 with `FAIL: ... COMPILED (rc=0) -- the compiler must REJECT it`;
 removing it restores exit 0. Both arms verified before wiring.
 
-## The 5 confirmed reject classes (the fixtures)
+## The 7 confirmed reject classes (the fixtures)
 
 | fixture | malformation | iiis-2 verdict |
 |---|---|---|
@@ -41,12 +41,15 @@ removing it restores exit 0. Both arms verified before wiring.
 | `r05_bad_token`        | stray `@@@` token (lexer) | REJECT rc=11 |
 | `r07_undeclared_assign`| assignment to an undeclared variable | REJECT rc=12 |
 | `r08_dup_fn`           | two `fn f()` definitions in one module | REJECT rc=12 |
+| `r10_outofscope_var`   | use of a variable after its declaring block | REJECT rc=12 (lexical scope) |
+| `r11_bad_int_literal`  | integer literal too large for `u64` | REJECT rc=11 (lexer numeric overflow) |
 
-Covers both the lexer (r05) and sema (r01/r04/r07/r08) rejection layers.
+Covers the lexer (r05 token, r11 numeric overflow) and sema (r01 ident, r04 fn,
+r07 assign, r08 duplicate, r10 scope) rejection layers.
 
 ## Compiler-LENIENCY observations (recorded, deliberately NOT fixed)
 
-While building the fixture set, four malformed programs were found that `iiis-2`
+While building the fixture set, nine malformed programs were found that `iiis-2`
 currently **ACCEPTS** (rc=0, object emitted) where a strict front-end would
 reject them:
 
@@ -55,6 +58,20 @@ reject them:
    not validated against known types; the value's type is taken).
 3. **Arity mismatch** — calling a 2-arg `fn` with 1 argument.
 4. **Call of a non-function value** — `let x : u64 = 5u64  x(1u64)`.
+5. **Operand width mismatch** — `u32 + u64` with no cast (implicit widen/truncate
+   rather than a diagnostic).
+6. **Return-type mismatch** — `fn ... -> u64 { return 0u32 }` (the narrower value
+   is accepted against the wider declared return type).
+7. **Duplicate parameter name** — `fn g(a: u64, a: u64)` (the second `a` shadows
+   silently instead of erroring).
+8. **Assignment to an immutable `let`** — `let x = 1u64  x = 2u64` (mutability of
+   a non-`mut` binding is not enforced).
+9. **Void result used as a value** — `fn h() { return }` then `return h()` (the
+   absent return value is consumed as `u64`).
+
+(Note: `extern ... from "no_such_module.iii"` compiling under `--compile-only` is
+**not** a leniency — extern references are resolved at link time, so a missing
+module is correctly a linker error, not a front-end one.)
 
 **Classification:** low-severity *robustness* gaps, **not correctness/security
 defects**. No *valid* program exhibits any of them, so the compiler never

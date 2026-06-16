@@ -1,0 +1,64 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1635_calendar_civil_fields.iii
+ *
+ * III conformance corpus 1635 -- calendar weekday + day-of-year accessors.
+ *
+ * THE CAPABILITY DELTA (enhance W2, lens tempora-civil):
+ *   cal_decompose_unix already computes `days` (days since the 1970-01-01
+ *   epoch) and the full civil (y,m,d) -- but exposed neither the WEEKDAY
+ *   (trivially (days+4)%7, since 1970-01-01 was a Thursday) nor the civil
+ *   DAY-OF-YEAR (days since Jan 1 of the decoded year, +1).  Both are now
+ *   derived from the already-computed fields and exposed as accessors.
+ *
+ * Discriminator (RED on the old lib, GREEN after the calendar.iii edit):
+ *   On the OLD lib the symbols cal_last_weekday / cal_last_doy do not exist,
+ *   so this KAT cannot link (capability ABSENT).  On the NEW lib it links and
+ *   each accessor returns the EXACT civil value -- a stub or wrong formula
+ *   fails (the assertions pin real dates).
+ *
+ * Cross-checked cases (0=Sunday..6=Saturday; doy 1-based):
+ *   unix 0          = 1970-01-01 Thu(4) doy 1
+ *   unix 259200     = 1970-01-04 Sun(0) doy 4
+ *   unix 1778198400 = 2026-05-08 Fri(5) doy 128
+ *   unix 951782400  = 2000-02-29 Tue(2) doy 60  (leap-day)
+ *
+ * Exit code: 99 on full pass; a distinct code per failed assertion.
+ *
+ * Hexad: kind_essence. Ring: R3. K: 1.00.
+ */
+
+module corpus_1635
+
+extern @abi(c-msvc-x64) fn cal_unix_to_civil(unix_seconds: u64) -> i32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_weekday() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_doy() -> u32 from "calendar.iii"
+
+fn _check(unix_s: u64, want_wd: u32, want_doy: u32) -> u32 {
+    cal_unix_to_civil(unix_s)
+    if cal_last_weekday() != want_wd { return 1u32 }
+    if cal_last_doy() != want_doy { return 2u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* unix 0 = 1970-01-01 Thursday(4) doy 1 */
+    let ra : u32 = _check(0u64, 4u32, 1u32)
+    if ra == 1u32 { return 10u64 }
+    if ra == 2u32 { return 11u64 }
+
+    /* unix 259200 = 1970-01-04 Sunday(0) doy 4 */
+    let rb : u32 = _check(259200u64, 0u32, 4u32)
+    if rb == 1u32 { return 20u64 }
+    if rb == 2u32 { return 21u64 }
+
+    /* unix 1778198400 = 2026-05-08 Friday(5) doy 128 */
+    let rc : u32 = _check(1778198400u64, 5u32, 128u32)
+    if rc == 1u32 { return 30u64 }
+    if rc == 2u32 { return 31u64 }
+
+    /* unix 951782400 = 2000-02-29 Tuesday(2) doy 60 (leap-day) */
+    let rd : u32 = _check(951782400u64, 2u32, 60u32)
+    if rd == 1u32 { return 40u64 }
+    if rd == 2u32 { return 41u64 }
+
+    return 99u64
+}

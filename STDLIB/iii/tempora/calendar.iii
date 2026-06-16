@@ -18,6 +18,8 @@
  *   cal_last_hour() -> u32
  *   cal_last_min() -> u32
  *   cal_last_sec() -> u32
+ *   cal_last_weekday() -> u32   (0=Sunday .. 6=Saturday)
+ *   cal_last_doy() -> u32       (1-based civil day-of-year)
  *
  * Hexad: kind_essence.  Ring: R3.  K: 1.00.
  */
@@ -32,6 +34,8 @@ var CAL_LAST_DAY   : u32 = 0u32
 var CAL_LAST_HOUR  : u32 = 0u32
 var CAL_LAST_MIN   : u32 = 0u32
 var CAL_LAST_SEC   : u32 = 0u32
+var CAL_LAST_WEEKDAY : u32 = 0u32   /* 0=Sunday .. 6=Saturday */
+var CAL_LAST_DOY     : u32 = 0u32   /* 1-based civil day-of-year */
 
 /* days_from_civil(y, m, d): returns days since 1970-01-01.
  * Algorithm by Howard Hinnant. */
@@ -122,7 +126,15 @@ fn cal_civil_from_days(days_unix: u64) -> i32 {
 fn cal_decompose_unix(unix_seconds: u64) -> i32 @export {
     let days : u64 = unix_seconds / 86400u64
     let secs_in_day : u64 = unix_seconds - days * 86400u64
+    /* Weekday from the epoch anchor (1970-01-01 = Thursday=4).  Computed BEFORE
+     * the cal_civil_from_days call so the modulo is NOT a modulo-after-call
+     * (the documented param-spill trap); 0=Sunday .. 6=Saturday. */
+    CAL_LAST_WEEKDAY = ((days + 4u64) % 7u64) as u32
     cal_civil_from_days(days)
+    /* Civil 1-based day-of-year: days since Jan 1 of the decoded year, +1.
+     * Reuses the Hinnant forward map; subtraction-after-call is trap-safe. */
+    let jan1 : u64 = cal_days_from_civil(CAL_LAST_YEAR, 1u32, 1u32)
+    CAL_LAST_DOY = ((days - jan1) + 1u64) as u32
     let hh : u64 = secs_in_day / 3600u64
     let mm_after_h : u64 = secs_in_day - hh * 3600u64
     let mm : u64 = mm_after_h / 60u64
@@ -143,3 +155,5 @@ fn cal_last_day() -> u32 @export { return CAL_LAST_DAY }
 fn cal_last_hour() -> u32 @export { return CAL_LAST_HOUR }
 fn cal_last_min() -> u32 @export { return CAL_LAST_MIN }
 fn cal_last_sec() -> u32 @export { return CAL_LAST_SEC }
+fn cal_last_weekday() -> u32 @export { return CAL_LAST_WEEKDAY }
+fn cal_last_doy() -> u32 @export { return CAL_LAST_DOY }

@@ -1,0 +1,75 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1642_rune_utf8_decode_reason.iii
+ *
+ * III conformance corpus 1642 -- UTF-8 decode error-class recovery.
+ *
+ * THE CAPABILITY DELTA (enhance W3, recover-the-discarded):
+ *   rune_utf8_decode distinguished six error conditions internally but collapsed
+ *   them all to its 0-byte sentinel return.  It now records the error CLASS in
+ *   RUNE_LAST_DECODE_REASON (read via rune_utf8_last_decode_reason) -- so a
+ *   streaming decoder can RETRY on INCOMPLETE but REJECT the rest.  The decode
+ *   RESULT (bytes consumed / codepoint) is byte-for-byte unchanged.
+ *
+ * Discriminator (RED on the old lib, GREEN after the rune.iii edit):
+ *   OLD lib: rune_utf8_last_decode_reason absent -> KAT cannot link.
+ *   NEW lib: each malformed sequence yields its DISTINCT reason (a stub
+ *   returning a constant fails -- six distinct values are pinned).
+ *
+ * Reasons: OK=0 INCOMPLETE=1 INVALID_LEAD=2 BAD_CONT=3 OVERLONG=4 SURROGATE=5
+ *          OUT_OF_RANGE=6.
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_essence. Ring: R3. K: 1.00.
+ */
+
+module corpus_1642
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 from "rune.iii"
+extern @abi(c-msvc-x64) fn rune_utf8_last_decode_reason() -> u32 from "rune.iii"
+
+fn _set4(buf: *u8, a: u8, b: u8, c: u8, d: u8) -> i32 {
+    buf[0u64] = a  buf[1u64] = b  buf[2u64] = c  buf[3u64] = d  return 0i32
+}
+
+/* returns 0 if (ret, reason) match; 1 ret mismatch; 2 reason mismatch */
+fn _chk(buf: *u8, avail: u64, want_ret: u32, want_reason: u32) -> u32 {
+    let r : u32 = rune_utf8_decode(buf as u64, avail, 0u64)
+    if r != want_ret { return 1u32 }
+    if rune_utf8_last_decode_reason() != want_reason { return 2u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(8u64)
+    if buf as u64 == 0u64 { return 3u64 }
+
+    /* 'A' (0x41) avail 1 -> ret 1, OK(0) */
+    _set4(buf, 65u8, 0u8, 0u8, 0u8)
+    if _chk(buf, 1u64, 1u32, 0u32) != 0u32 { return 10u64 }
+
+    /* [0xC3] avail 1 -> ret 0, INCOMPLETE(1) */
+    _set4(buf, 195u8, 0u8, 0u8, 0u8)
+    if _chk(buf, 1u64, 0u32, 1u32) != 0u32 { return 11u64 }
+
+    /* [0x80] avail 1 -> ret 0, INVALID_LEAD(2) */
+    _set4(buf, 128u8, 0u8, 0u8, 0u8)
+    if _chk(buf, 1u64, 0u32, 2u32) != 0u32 { return 12u64 }
+
+    /* [0xC3,0x00] avail 2 -> ret 0, BAD_CONT(3) */
+    _set4(buf, 195u8, 0u8, 0u8, 0u8)
+    if _chk(buf, 2u64, 0u32, 3u32) != 0u32 { return 13u64 }
+
+    /* [0xC0,0x80] avail 2 -> ret 0, OVERLONG(4) */
+    _set4(buf, 192u8, 128u8, 0u8, 0u8)
+    if _chk(buf, 2u64, 0u32, 4u32) != 0u32 { return 14u64 }
+
+    /* [0xED,0xA0,0x80] avail 3 -> ret 0, SURROGATE(5) */
+    _set4(buf, 237u8, 160u8, 128u8, 0u8)
+    if _chk(buf, 3u64, 0u32, 5u32) != 0u32 { return 15u64 }
+
+    /* [0xF7,0xBF,0xBF,0xBF] avail 4 -> ret 0, OUT_OF_RANGE(6) (cp=0x1FFFFF) */
+    _set4(buf, 247u8, 191u8, 191u8, 191u8)
+    if _chk(buf, 4u64, 0u32, 6u32) != 0u32 { return 16u64 }
+
+    return 99u64
+}

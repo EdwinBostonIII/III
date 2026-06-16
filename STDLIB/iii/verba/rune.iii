@@ -114,13 +114,36 @@ fn rune_utf8_encode(cp: u32, out_ptr: u64) -> u32 @export {
     return 4u32
 }
 
+/* UTF-8 decode failure reasons [enhance W3, recover-the-discarded]:
+ * rune_utf8_decode distinguished six error conditions internally but collapsed
+ * them all to its 0-byte sentinel return, so callers could not tell INCOMPLETE
+ * (retry when more bytes arrive) from a hard reject.  It now records the error
+ * CLASS in RUNE_LAST_DECODE_REASON, read via rune_utf8_last_decode_reason().
+ * The decode RESULT is byte-for-byte unchanged (the reason var is write-only
+ * here); only the previously-discarded error class is recovered. */
+const RUNE_DEC_OK           : u32 = 0u32
+const RUNE_DEC_INCOMPLETE   : u32 = 1u32   /* fewer than the lead byte's length available */
+const RUNE_DEC_INVALID_LEAD : u32 = 2u32   /* 0x80..0xBF or 0xF8..0xFF as a lead byte */
+const RUNE_DEC_BAD_CONT     : u32 = 3u32   /* a continuation byte was not 10xxxxxx */
+const RUNE_DEC_OVERLONG     : u32 = 4u32   /* non-minimal encoding */
+const RUNE_DEC_SURROGATE    : u32 = 5u32   /* U+D800..U+DFFF */
+const RUNE_DEC_OUT_OF_RANGE : u32 = 6u32   /* > U+10FFFF */
+var RUNE_LAST_DECODE_REASON : u32 = 0u32
+
 /* --- UTF-8 decode a single codepoint starting at in_ptr.
  * Reads up to `avail` bytes.  Returns the codepoint via out_cp pointer
  * and the number of bytes consumed via the function return.  Returns
- * 0 on error. --- */
+ * 0 on error (the error class is in RUNE_LAST_DECODE_REASON). --- */
 fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 @export {
-    if in_ptr == 0u64 { return 0u32 }
-    if avail == 0u64 { return 0u32 }
+    RUNE_LAST_DECODE_REASON = RUNE_DEC_OK
+    if in_ptr == 0u64 {
+        RUNE_LAST_DECODE_REASON = RUNE_DEC_INCOMPLETE
+        return 0u32
+    }
+    if avail == 0u64 {
+        RUNE_LAST_DECODE_REASON = RUNE_DEC_INCOMPLETE
+        return 0u32
+    }
     let p : *u8 = in_ptr as *u8
     let b0 : u32 = p[0] as u32
     if b0 < 0x80u32 {
@@ -133,13 +156,25 @@ fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 @export {
         }
         return 1u32
     }
-    if b0 < 0xC0u32 { return 0u32 }     /* invalid lead */
+    if b0 < 0xC0u32 {
+        RUNE_LAST_DECODE_REASON = RUNE_DEC_INVALID_LEAD
+        return 0u32
+    }
     if b0 < 0xE0u32 {
-        if avail < 2u64 { return 0u32 }
+        if avail < 2u64 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_INCOMPLETE
+            return 0u32
+        }
         let b1 : u32 = p[1] as u32
-        if (b1 & 0xC0u32) != 0x80u32 { return 0u32 }
+        if (b1 & 0xC0u32) != 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_BAD_CONT
+            return 0u32
+        }
         let cp : u32 = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
-        if cp < 0x80u32 { return 0u32 }   /* overlong */
+        if cp < 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_OVERLONG
+            return 0u32
+        }
         if out_cp != 0u64 {
             let q : *u8 = out_cp as *u8
             q[0] = (cp & 0xFFu32) as u8
@@ -150,15 +185,30 @@ fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 @export {
         return 2u32
     }
     if b0 < 0xF0u32 {
-        if avail < 3u64 { return 0u32 }
+        if avail < 3u64 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_INCOMPLETE
+            return 0u32
+        }
         let b1 : u32 = p[1] as u32
         let b2 : u32 = p[2] as u32
-        if (b1 & 0xC0u32) != 0x80u32 { return 0u32 }
-        if (b2 & 0xC0u32) != 0x80u32 { return 0u32 }
+        if (b1 & 0xC0u32) != 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_BAD_CONT
+            return 0u32
+        }
+        if (b2 & 0xC0u32) != 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_BAD_CONT
+            return 0u32
+        }
         let cp : u32 = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
-        if cp < 0x800u32 { return 0u32 }
+        if cp < 0x800u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_OVERLONG
+            return 0u32
+        }
         if cp >= 0xD800u32 {
-            if cp <= 0xDFFFu32 { return 0u32 }
+            if cp <= 0xDFFFu32 {
+                RUNE_LAST_DECODE_REASON = RUNE_DEC_SURROGATE
+                return 0u32
+            }
         }
         if out_cp != 0u64 {
             let q : *u8 = out_cp as *u8
@@ -170,16 +220,34 @@ fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 @export {
         return 3u32
     }
     if b0 < 0xF8u32 {
-        if avail < 4u64 { return 0u32 }
+        if avail < 4u64 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_INCOMPLETE
+            return 0u32
+        }
         let b1 : u32 = p[1] as u32
         let b2 : u32 = p[2] as u32
         let b3 : u32 = p[3] as u32
-        if (b1 & 0xC0u32) != 0x80u32 { return 0u32 }
-        if (b2 & 0xC0u32) != 0x80u32 { return 0u32 }
-        if (b3 & 0xC0u32) != 0x80u32 { return 0u32 }
+        if (b1 & 0xC0u32) != 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_BAD_CONT
+            return 0u32
+        }
+        if (b2 & 0xC0u32) != 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_BAD_CONT
+            return 0u32
+        }
+        if (b3 & 0xC0u32) != 0x80u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_BAD_CONT
+            return 0u32
+        }
         let cp : u32 = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
-        if cp < 0x10000u32 { return 0u32 }
-        if cp > RUNE_MAX { return 0u32 }
+        if cp < 0x10000u32 {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_OVERLONG
+            return 0u32
+        }
+        if cp > RUNE_MAX {
+            RUNE_LAST_DECODE_REASON = RUNE_DEC_OUT_OF_RANGE
+            return 0u32
+        }
         if out_cp != 0u64 {
             let q : *u8 = out_cp as *u8
             q[0] = (cp & 0xFFu32) as u8
@@ -189,5 +257,12 @@ fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 @export {
         }
         return 4u32
     }
+    RUNE_LAST_DECODE_REASON = RUNE_DEC_INVALID_LEAD
     return 0u32
+}
+
+/* The error class of the most recent rune_utf8_decode call (RUNE_DEC_*); OK(0)
+ * after a successful decode. [enhance W3, recover-the-discarded] */
+fn rune_utf8_last_decode_reason() -> u32 @export {
+    return RUNE_LAST_DECODE_REASON
 }

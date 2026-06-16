@@ -58,7 +58,12 @@ fn hex_char_to_nibble(c: u32) -> u32 @export {
 
 /* Decode 2n hex chars from src into n bytes at out.  Returns HEX_OK
  * or HEX_E_BAD_*. */
+/* Bytes fully decoded before the last hex_decode returned -- == n on HEX_OK, or
+ * the partial count reached before HEX_E_BAD_CHAR. [enhance W3, recover-the-discarded] */
+var HEX_LAST_DECODED : u64 = 0u64
+
 fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 @export {
+    HEX_LAST_DECODED = 0u64
     if src == 0u64 {
         if src_len == 0u64 { return HEX_OK }
         return HEX_E_NULL
@@ -76,10 +81,22 @@ fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 @export {
     while i < need {
         let hi : u32 = hex_char_to_nibble(sp[i*2u64] as u32)
         let lo : u32 = hex_char_to_nibble(sp[i*2u64 + 1u64] as u32)
-        if hi == 0xFFu32 { return HEX_E_BAD_CHAR }
-        if lo == 0xFFu32 { return HEX_E_BAD_CHAR }
+        if hi == 0xFFu32 {
+            HEX_LAST_DECODED = i
+            return HEX_E_BAD_CHAR
+        }
+        if lo == 0xFFu32 {
+            HEX_LAST_DECODED = i
+            return HEX_E_BAD_CHAR
+        }
         dp[i] = ((hi << 4u32) | lo) as u8
         i = i + 1u64
     }
+    HEX_LAST_DECODED = need
     return HEX_OK
+}
+
+/* Bytes fully decoded by the most recent hex_decode (see HEX_LAST_DECODED). */
+fn hex_last_decoded() -> u64 @export {
+    return HEX_LAST_DECODED
 }

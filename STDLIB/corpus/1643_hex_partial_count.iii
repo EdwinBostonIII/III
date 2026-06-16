@@ -1,0 +1,55 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1643_hex_partial_count.iii
+ *
+ * III conformance corpus 1643 -- hex_decode partial byte-count recovery.
+ *
+ * THE CAPABILITY DELTA (enhance W3, recover-the-discarded):
+ *   hex_decode's loop counter i (bytes fully decoded) was lost when it hit
+ *   HEX_E_BAD_CHAR, so a caller could not report WHERE decoding stopped.  The
+ *   count is now recorded in HEX_LAST_DECODED, read via hex_last_decoded():
+ *   == n on HEX_OK, or the partial count reached before the bad char.
+ *
+ * Discriminator (RED on the old lib, GREEN after the hex.iii edit):
+ *   OLD lib: hex_last_decoded absent -> KAT cannot link.
+ *   NEW lib: "a5b6" -> OK, count 2 ; "a5zz" -> BAD_CHAR, count 1 ;
+ *            "zz" -> BAD_CHAR, count 0.
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_essence. Ring: R3. K: 1.00.
+ */
+
+module corpus_1643
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 from "hex.iii"
+extern @abi(c-msvc-x64) fn hex_last_decoded() -> u64 from "hex.iii"
+
+const C1643_OK       : i32 =  0i32
+const C1643_BAD_CHAR : i32 = -2i32
+
+fn _set(buf: *u8, a: u8, b: u8, c: u8, d: u8) -> i32 {
+    buf[0u64] = a  buf[1u64] = b  buf[2u64] = c  buf[3u64] = d  return 0i32
+}
+
+fn main() -> u64 {
+    let src : *u8 = malloc(8u64)
+    let out : *u8 = malloc(8u64)
+    if src as u64 == 0u64 { return 3u64 }
+    if out as u64 == 0u64 { return 4u64 }
+
+    /* "a5b6" -> HEX_OK, count 2 */
+    _set(src, 97u8, 53u8, 98u8, 54u8)
+    if hex_decode(src as u64, 4u64, out as u64, 8u64) != C1643_OK { return 10u64 }
+    if hex_last_decoded() != 2u64 { return 11u64 }
+
+    /* "a5zz" -> HEX_E_BAD_CHAR, count 1 (0xa5 decoded before 'z') */
+    _set(src, 97u8, 53u8, 122u8, 122u8)
+    if hex_decode(src as u64, 4u64, out as u64, 8u64) != C1643_BAD_CHAR { return 20u64 }
+    if hex_last_decoded() != 1u64 { return 21u64 }
+
+    /* "zz" -> HEX_E_BAD_CHAR, count 0 */
+    _set(src, 122u8, 122u8, 0u8, 0u8)
+    if hex_decode(src as u64, 2u64, out as u64, 8u64) != C1643_BAD_CHAR { return 30u64 }
+    if hex_last_decoded() != 0u64 { return 31u64 }
+
+    return 99u64
+}

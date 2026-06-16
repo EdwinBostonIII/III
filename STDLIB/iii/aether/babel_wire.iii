@@ -273,6 +273,21 @@ fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 @export {
     return 0u8
 }
 
+/* Structural length gate: the buffer ACTUALLY contains header+CRC + the payload the header claims.
+ * [W2616 sev3/4] babel_wire_unpack_payload_byte takes no in_len and trusts the header-claimed
+ * payload_len, so a truncated message with a large claimed payload_len drives an out-of-bounds
+ * read.  A consumer MUST pass this gate before reading any payload byte.  Overflow-safe (u64 sum).
+ * (idoc_resolve_facet / idoc_facet_count read no in_len either -- their callers must gate here.) */
+fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 @export {
+    let l_buf : u64 = in_buf
+    if l_buf == 0u64 { return 0u8 }
+    if in_len < BABEL_WIRE_HEADER_BYTES { return 0u8 }
+    let plen : u32 = _bw_read_u32_le(l_buf, 57u64)
+    let need : u64 = (BABEL_WIRE_HEADER_BYTES as u64) + (plen as u64)
+    if (in_len as u64) < need { return 0u8 }
+    return 1u8
+}
+
 fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 @export {
     let l_buf : u64 = in_buf
     let l_exp : u64 = expected_seal

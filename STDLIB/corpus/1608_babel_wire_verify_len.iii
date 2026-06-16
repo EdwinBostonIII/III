@@ -1,0 +1,48 @@
+/* 1608 -- W2616 Tier-2: aether.babel_wire payload-length gate (OOB-read prevention), proven.
+ *
+ * babel_wire_unpack_payload_byte takes no in_len and trusts the header-claimed payload_len, and
+ * babel_wire_verify_crc only requires in_len >= 68 (header+CRC).  So a message whose DECLARED
+ * length does not cover its header-claimed payload would drive a payload read past the buffer.
+ * cap_handshake.cap_accept_offer is a live consumer: it verifies CRC+seal, requires payload_len==32,
+ * then reads 32 payload bytes from offset 68 -- without ever checking offer_len >= 100.
+ *
+ * Fix: babel_wire_verify_len(in_buf, in_len) returns 1 iff in_len >= 68 + header-claimed payload_len
+ * (overflow-safe), and cap_accept_offer now gates on it before reading payload bytes.
+ *
+ * 99 = the length gate is exact AND wired into cap_accept_offer (an under-covering declared length
+ *      is rejected, where it was accepted before -- the OOB-read path). */
+module corpus_1608
+
+extern @abi(c-msvc-x64) fn cap_offer_pattern_set(my_pset_digest_ptr: u64, out_offer_buf: u64) -> u32 from "cap_handshake.iii"
+extern @abi(c-msvc-x64) fn cap_accept_offer(offer_buf: u64, offer_len: u32, my_pset_digest_ptr: u64) -> u8 from "cap_handshake.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+
+var DIGEST : [u8; 32]
+var OFFER  : [u8; 256]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { DIGEST[i] = (i + 1u64) as u8  i = i + 1u64 }
+    let dig : u64 = (&DIGEST) as u64
+    let off : u64 = (&OFFER) as u64
+
+    /* pack a valid offer: total length = header(68) + payload(32) = 100. */
+    let total : u32 = cap_offer_pattern_set(dig, off)
+    if total != 100u32 { return 1u64 }
+
+    /* verify_len exactness: needs in_len >= 68 + 32 = 100. */
+    if babel_wire_verify_len(off, 100u32) != 1u8 { return 2u64 }   /* exact fit */
+    if babel_wire_verify_len(off, 200u32) != 1u8 { return 3u64 }   /* larger ok */
+    if babel_wire_verify_len(off, 99u32)  != 0u8 { return 4u64 }   /* one short of payload */
+    if babel_wire_verify_len(off, 68u32)  != 0u8 { return 5u64 }   /* header only, payload absent */
+    if babel_wire_verify_len(off, 67u32)  != 0u8 { return 6u64 }   /* below header */
+    if babel_wire_verify_len(0u64, 100u32) != 0u8 { return 7u64 }  /* null buffer */
+
+    /* end-to-end: cap_accept_offer accepts a full buffer with the matching digest... */
+    if cap_accept_offer(off, 100u32, dig) != 1u8 { return 8u64 }
+    /* ...but REJECTS a declared length that does not cover the 32-byte payload (was accepted
+     * before the gate -- the path that read 32 bytes past a genuinely-short buffer). */
+    if cap_accept_offer(off, 68u32, dig) != 0u8 { return 9u64 }
+    if cap_accept_offer(off, 99u32, dig) != 0u8 { return 10u64 }
+    return 99u64
+}

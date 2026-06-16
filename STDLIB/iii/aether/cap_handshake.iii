@@ -33,6 +33,7 @@ extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64
 extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_seal_id(in_buf: u64) -> u64 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
@@ -182,6 +183,7 @@ fn cap_accept_offer(offer_buf: u64, offer_len: u32, my_pset_digest_ptr: u64) -> 
     if babel_wire_verify_seal(l_off, CAP_HANDSHAKE_SEAL) != 1u8 { return 0u8 }
     if babel_wire_unpack_facet(l_off) != CAP_HANDSHAKE_FACET_OFFER { return 0u8 }
     if babel_wire_unpack_payload_len(l_off) != 32u32 { return 0u8 }
+    if babel_wire_verify_len(l_off, l_len) != 1u8 { return 0u8 }   /* [W2616] buffer must cover the 32-byte payload (OOB read otherwise) */
     /* Compare each payload byte with my digest. */
     let mut i : u32 = 0u32
     while i < 32u32 {

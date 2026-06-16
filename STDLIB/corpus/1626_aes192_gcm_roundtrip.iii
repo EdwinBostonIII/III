@@ -1,0 +1,38 @@
+/* 1626 -- numera.aes_gcm: AES-192-GCM (init_192 was missing; only 128/256 existed).
+ * Round-trip seal->open + ciphertext-differs + tamper-rejects. 99=pass. */
+module corpus_1626
+extern @abi(c-msvc-x64) fn aes_gcm_init_192(key: u64, nonce: u64, nonce_len: u64) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_seal(pt: u64, pt_len: u64, ct_out: u64, tag_out: u64) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_open(ct: u64, ct_len: u64, pt_out: u64, tag_in: u64) -> u8 from "aes_gcm.iii"
+var KEY24 : [u8; 24]
+var NONCE : [u8; 12]
+var PT  : [u8; 32]
+var CT  : [u8; 32]
+var TAG : [u8; 16]
+var DEC : [u8; 32]
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 24u64 { KEY24[i] = ((i * 7u64 + 1u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 12u64 { NONCE[i] = ((i + 0x10u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { PT[i] = ((i + 0x40u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    if aes_gcm_init_192((&KEY24) as u64, (&NONCE) as u64, 12u64) != 0i32 { return 1u64 }
+    if aes_gcm_seal((&PT) as u64, 32u64, (&CT) as u64, (&TAG) as u64) != 0i32 { return 2u64 }
+    /* real encryption: ciphertext differs from plaintext */
+    let mut same : u8 = 1u8
+    i = 0u64
+    while i < 32u64 { if CT[i] != PT[i] { same = 0u8 } ; i = i + 1u64 }
+    if same == 1u8 { return 3u64 }
+    /* open round-trips */
+    if aes_gcm_init_192((&KEY24) as u64, (&NONCE) as u64, 12u64) != 0i32 { return 4u64 }
+    if aes_gcm_open((&CT) as u64, 32u64, (&DEC) as u64, (&TAG) as u64) != 1u8 { return 5u64 }
+    i = 0u64
+    while i < 32u64 { if DEC[i] != PT[i] { return 6u64 } ; i = i + 1u64 }
+    /* tamper a ciphertext byte -> open must reject */
+    CT[0] = CT[0] ^ 0x01u8
+    aes_gcm_init_192((&KEY24) as u64, (&NONCE) as u64, 12u64)
+    if aes_gcm_open((&CT) as u64, 32u64, (&DEC) as u64, (&TAG) as u64) != 0u8 { return 7u64 }
+    return 99u64
+}

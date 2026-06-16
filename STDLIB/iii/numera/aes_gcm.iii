@@ -55,6 +55,7 @@ extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn aes128_set_key(key: *u8) -> i32 from "aes.iii"
 extern @abi(c-msvc-x64) fn aes256_set_key(key: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes192_set_key(key: *u8) -> i32 from "aes.iii"
 extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
 /* RITCHIE §3.5: PCLMULQDQ availability gate for the GHASH SIMD path.
  * Composed-proxy on AES-NI, matching the sanctioned cpufeat_has_bmi2
@@ -422,6 +423,12 @@ fn aes_gcm_init(key: *u8, nonce: *u8, nonce_len: u64) -> i32 @export {
 fn aes_gcm_init_256(key: *u8, nonce: *u8, nonce_len: u64) -> i32 @export {
     if gcm_alloc_buffers() != GCM_OK { return GCM_E_INIT }
     aes256_set_key(key)
+    return gcm_init_after_key(nonce, nonce_len)
+}
+
+fn aes_gcm_init_192(key: *u8, nonce: *u8, nonce_len: u64) -> i32 @export {
+    if gcm_alloc_buffers() != GCM_OK { return GCM_E_INIT }
+    aes192_set_key(key)
     return gcm_init_after_key(nonce, nonce_len)
 }
 

@@ -72,6 +72,18 @@ fn duration_to_seconds(d: u64) -> u64 @export {
     return d / DUR_NANOS_PER_SECOND
 }
 
+fn duration_to_micros(d: u64) -> u64 @export {
+    return d / DUR_NANOS_PER_MICRO
+}
+
+fn duration_to_minutes(d: u64) -> u64 @export {
+    return d / DUR_NANOS_PER_MINUTE
+}
+
+fn duration_to_hours(d: u64) -> u64 @export {
+    return d / DUR_NANOS_PER_HOUR
+}
+
 fn duration_add(a: u64, b: u64) -> u64 @export {
     let s : u64 = a + b
     if s < a { return DUR_MAX }

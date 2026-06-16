@@ -25,6 +25,7 @@ extern @abi(c-msvc-x64) fn ec256_add_x(out: u64, a: u64, bp: u64) -> i32 from "e
 extern @abi(c-msvc-x64) fn ec256_affine_x(out_x: u64, p: u64) -> i32 from "ec256.iii"
 extern @abi(c-msvc-x64) fn ec256_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 from "ec256.iii"
 extern @abi(c-msvc-x64) fn ec256_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn ec256_is_on_curve(p: u64) -> u8 from "ec256.iii"
 extern @abi(c-msvc-x64) fn fn256_boot() -> i32 from "fn256.iii"
 extern @abi(c-msvc-x64) fn fn_set_bytes_x(slot: u64, src: u64) -> i32 from "fn256.iii"
 extern @abi(c-msvc-x64) fn fn_get_bytes_x(dst: u64, slot: u64) -> i32 from "fn256.iii"
@@ -171,6 +172,7 @@ fn iii_ecdsa_p256_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: 
     /* R = u1.G + u2.Q */
     ec256_scalar_mul_base(30u64, &ECDSA_U1 as u64)
     ec256_set_affine(33u64, qx_bytes, qy_bytes)
+    if ec256_is_on_curve(33u64) != 1u8 { return 0u8 }   /* [E-EC-3] reject off-curve public key (invalid-curve attack) */
     ec256_scalar_mul_pt(36u64, &ECDSA_U2 as u64, 33u64)
     ec256_add_x(39u64, 30u64, 36u64)
     ec256_affine_x(&ECDSA_RX as u64, 39u64)

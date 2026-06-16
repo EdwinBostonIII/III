@@ -28,6 +28,7 @@ extern @abi(c-msvc-x64) fn fp_inv_x(r: u64, a: u64) -> i32 from "fp256.iii"
 extern @abi(c-msvc-x64) fn fp_to_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
 extern @abi(c-msvc-x64) fn fp_from_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
 extern @abi(c-msvc-x64) fn fp_csel_x(r: u64, a: u64, b: u64, cond: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_is_zero_x(slot: u64) -> u8 from "fp256.iii"
 
 var EC_INIT : [u32; 1]
 
@@ -214,4 +215,24 @@ fn ec256_emit_be(out: u64, slot: u64) -> i32 {
         i = i + 1u64
     }
     return 0i32
+}
+
+/* On-curve membership test for the affine point at projective slot p
+ * (X:Y:mont 1).  Returns 1 iff Y^2 == X^3 - 3X + b on NIST P-256, else 0.
+ * All field ops in Montgomery form; scratch slots 23..29 are disjoint from the
+ * RCB temps (10..17), the affine temps (20..22), and a verify caller's live
+ * point slots (30/33/36/39).  No in-place fp op (aliasing-safe).  Rejecting an
+ * off-curve public key here closes the ECDSA invalid-curve attack. */
+fn ec256_is_on_curve(p: u64) -> u8 @export {
+    ec256_init()
+    let pl : u64 = p
+    fp_mul_x(23u64, pl + 1u64, pl + 1u64)   /* 23 = Y^2 */
+    fp_mul_x(24u64, pl, pl)                 /* 24 = X^2 */
+    fp_mul_x(25u64, 24u64, pl)              /* 25 = X^3 */
+    fp_add_x(26u64, pl, pl)                 /* 26 = 2X */
+    fp_add_x(27u64, 26u64, pl)              /* 27 = 3X */
+    fp_sub_x(28u64, 25u64, 27u64)           /* 28 = X^3 - 3X */
+    fp_add_x(29u64, 28u64, 50u64)           /* 29 = X^3 - 3X + b (rhs) */
+    fp_sub_x(24u64, 23u64, 29u64)           /* 24 = lhs - rhs */
+    return fp_is_zero_x(24u64)
 }

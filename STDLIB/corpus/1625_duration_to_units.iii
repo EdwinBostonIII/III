@@ -1,0 +1,19 @@
+/* 1625 -- tempora.duration: the to_micros/to_minutes/to_hours conversions
+ * (the family had from_* for all units + to_nanos/millis/seconds, but was missing
+ * to_micros/to_minutes/to_hours). Round-trip + exact + truncation arms. 99=pass. */
+module corpus_1625
+extern @abi(c-msvc-x64) fn duration_from_micros(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_minutes(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_hours(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_to_micros(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_to_minutes(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_to_hours(d: u64) -> u64 from "duration.iii"
+fn main() -> u64 {
+    if duration_to_micros(duration_from_micros(5u64)) != 5u64 { return 1u64 }
+    if duration_to_minutes(duration_from_minutes(3u64)) != 3u64 { return 2u64 }
+    if duration_to_hours(duration_from_hours(2u64)) != 2u64 { return 3u64 }
+    if duration_from_micros(5u64) != 5000u64 { return 4u64 }            /* exact: 5 us = 5000 ns */
+    if duration_to_micros(2500u64) != 2u64 { return 5u64 }             /* truncating: 2500 ns -> 2 us */
+    if duration_to_hours(duration_from_minutes(150u64)) != 2u64 { return 6u64 } /* 150 min = 2.5 h -> 2 */
+    return 99u64
+}

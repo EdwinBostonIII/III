@@ -45,6 +45,7 @@ extern @abi(c-msvc-x64) fn intent_convey(src_handle: u64, dst_cap: u64, byte_cou
 extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_query(kind: u64, id: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_if(guard_intent: u64, body_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_under(context_intent: u64, body_intent: u64) -> u64 from "intent.iii"
 
 const HIP_CLASS_UNIQUE     : u32 = 0u32
 const HIP_CLASS_AMBIGUOUS  : u32 = 1u32
@@ -75,6 +76,7 @@ const HIPN_KIND_DECLARATIVE   : u32 = 2u32
 const HIPN_KIND_INTERROGATIVE : u32 = 3u32
 const HIPN_ROLE_TOPIC_C       : u32 = 10u32   /* mirrors NLP_ROLE_TOPIC */
 const HIPN_ROLE_CONDITION     : u32 = 12u32   /* mirrors NLP_ROLE_CONDITION (if/while) */
+const HIPN_ROLE_REASON        : u32 = 11u32   /* mirrors NLP_ROLE_REASON (because) */
 
 /* Verb word_ids (from nl_lex sealed lexicon). */
 const VW_SEND     : u32 =  1u32
@@ -452,6 +454,34 @@ fn _hip_wrap_condition(frags_buf: u64, tok_buf: u64, count: u32, out_cands: u64,
     return k
 }
 
+/* Reason-clause wrapping [enhance W2, lens hip-roles-deep]:
+ * a subordinate "because" clause is parsed by nl_parse as a REASON fragment
+ * (role 11) whose head is the clause's predicate verb, but hip DROPPED it --
+ * "send the packet because you close the queue" projected just CONVEY, losing
+ * the rationale.  When the main clause yields exactly ONE candidate AND a
+ * REASON fragment is present, wrap that candidate as the BODY of an
+ * intent_under whose CONTEXT is a predicate-query over the reason's verb, so
+ * the causal/contextual structure survives into the calculus (PRIMITIVE_UNDER).
+ * Reuses the existing intent_query + intent_under; no new module.  k unchanged. */
+fn _hip_wrap_reason(frags_buf: u64, tok_buf: u64, count: u32, out_cands: u64, k: u32) -> u32 {
+    if k != 1u32 { return k }
+    let r_idx : u32 = _hip_role_of(frags_buf, count, HIPN_ROLE_REASON)
+    if r_idx == 0xFFFFFFFFu32 { return k }
+    let pred_tok : u32 = nl_parse_frag_head(frags_buf, r_idx)
+    if pred_tok == 0xFFFFFFFFu32 { return k }
+    let pp : *u64 = (tok_buf + ((pred_tok as u64) * 8u64)) as *u64
+    let pred_w : u64 = (nl_token_word_id(pp[0u64]) as u64) & 0xFFFFFFFFu64
+    if pred_w == 0u64 { return k }
+    let reason_ctx : u64 = intent_query(pred_w, 0u64)
+    if reason_ctx == 0u64 { return k }
+    let body_pp : *u64 = out_cands as *u64
+    let body : u64 = body_pp[0u64]
+    let wrapped : u64 = intent_under(reason_ctx, body)
+    if wrapped == 0u64 { return k }
+    body_pp[0u64] = wrapped
+    return k
+}
+
 /* hip_resolve: top-level. text -> tokens -> fragments -> candidate
  * intents -> class.
  * 4-arg signature (iiis-0 5+arg trap):
@@ -515,6 +545,7 @@ fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u
             k = _hip_project_verb(pv_meta, frag_buf, tok_buf, oc)
             if k == 0xFFFFFFFFu32 { k = HIP_MAX_CANDIDATES }
             k = _hip_wrap_condition(frag_buf, tok_buf, frag_count, oc, k)
+            k = _hip_wrap_reason(frag_buf, tok_buf, frag_count, oc, k)
         }
     }
 

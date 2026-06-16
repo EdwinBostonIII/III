@@ -1,0 +1,51 @@
+/* 1629 -- aether.develop_up: CPU half of the availability forcefield (W3400).
+ *
+ * The gateway admitted a box WITH a CPU budget (du_encapsulate passes cpu_cap to
+ * cb_admit) but metered only memory: no du_charge_cpu / du_run, and du_health
+ * reported headroom from memory alone -- so a CPU-exhausted (busy-spin) box still
+ * reported "healthy" and the busy-spin DoS vector passed the capstone unmetered.
+ * Added du_charge_cpu / du_run + a CPU clause in du_health. 99 = all arms. */
+module corpus_1629
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_charge_cpu(guest_cap: u64, micros: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_run(guest_cap: u64, kind: u32, ctx: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_health() -> u32 from "develop_up.iii"
+
+fn main() -> u64 {
+    /* fail-closed before any box is open */
+    if du_health() != 0u32 { return 1u64 }
+    if du_charge_cpu(0u64, 10u64) != -2i32 { return 2u64 }   /* DU_E */
+    if du_run(0u64, 0u32, 0u64) != -2i32 { return 3u64 }     /* DU_E */
+
+    let root  : u64 = cap_env_init()
+    let guest : u64 = cap_attenuate(root, 0x5u64, 0u64)      /* DU_RIGHTS = disk|compute */
+    let poor  : u64 = cap_attenuate(root, 0u64, 0u64)        /* no rights */
+    if guest == 0u64 { return 4u64 }
+
+    /* open a box with a SMALL cpu budget (100 us) + ample memory */
+    if du_encapsulate(guest, 1000000u64, 100u64) != 0i32 { return 5u64 }
+    if du_health() != 1u32 { return 6u64 }                   /* open + headroom */
+
+    /* cap-gate: a no-COMPUTE-right cap cannot charge CPU */
+    if du_charge_cpu(poor, 10u64) != -1i32 { return 7u64 }   /* DU_E_DENIED */
+
+    /* meter: charge 60 us -> 40 remaining, still healthy */
+    if du_charge_cpu(guest, 60u64) != 0i32 { return 8u64 }
+    if du_health() != 1u32 { return 9u64 }
+
+    /* exhaust: charge 40 us -> 0 remaining */
+    if du_charge_cpu(guest, 40u64) != 0i32 { return 10u64 }
+    /* TEETH: a CPU-exhausted box reports UNHEALTHY (was "healthy" before the fix). */
+    if du_health() != 0u32 { return 11u64 }
+
+    /* a further charge is refused (quota exhausted) */
+    if du_charge_cpu(guest, 1u64) != -1i32 { return 12u64 }  /* DU_E_DENIED (CB_REFUSED) */
+
+    /* du_run refuses at zero CPU quota */
+    if du_run(guest, 0u32, 0u64) != -3i32 { return 13u64 }   /* SBE_E_NO_QUOTA */
+
+    return 99u64
+}

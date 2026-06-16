@@ -30,6 +30,9 @@ extern @abi(c-msvc-x64) fn vbd_commit(slot: u32) -> i32 from "vbd.iii"
 extern @abi(c-msvc-x64) fn cb_admit(guest_cap: u64, cap_set: u64, mem_cap: u64, cpu_cap: u64) -> u64 from "compute_box.iii"
 extern @abi(c-msvc-x64) fn cb_charge_mem(guest_cap: u64, sb_id: u64, n_bytes: u64) -> u8 from "compute_box.iii"
 extern @abi(c-msvc-x64) fn cb_mem_remaining(sb_id: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_charge_cpu(guest_cap: u64, sb_id: u64, micros: u64) -> u8 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_cpu_remaining(sb_id: u64) -> u64 from "compute_box.iii"
+extern @abi(c-msvc-x64) fn cb_run(guest_cap: u64, sb_id: u64, kind: u32, ctx: u64) -> i32 from "compute_box.iii"
 extern @abi(c-msvc-x64) fn sentinel_arm() -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn sentinel_observe(a: u64) -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
@@ -90,6 +93,22 @@ fn du_write(guest_cap: u64, idx: u64, val: u64, cost: u64) -> i32 @export {
     if cap_verify_rights(guest_cap, DU_RIGHT_DISK) == 0u8 { return DU_E_DENIED }   /* [P6] the DISK write right -- cb_charge_mem only verifies COMPUTE; the sibling sealed_box.sb_disk_write gates on DISK, so the gateway must too (a COMPUTE-only cap must not write the reversible disk) */
     if cb_charge_mem(guest_cap, DU_CMP_ID, cost) == 0u8 { return DU_E_DENIED }
     return vbd_write(DU_VBD_SLOT, idx, val)
+}
+
+/* CPU half of the availability forcefield: charge the box CPU quota. Gated on the
+ * open box; cb_charge_cpu enforces the COMPUTE cap-right internally (CPU charging
+ * touches no reversible disk, so no DISK gate). DU_E_DENIED on cap/quota refusal. */
+fn du_charge_cpu(guest_cap: u64, micros: u64) -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    if cb_charge_cpu(guest_cap, DU_CMP_ID, micros) == 0u8 { return DU_E_DENIED }
+    return DU_OK
+}
+
+/* Run a guest computation under the box CPU quota (cb_run refuses at zero quota).
+ * DU_E if no box open, else cb_run status. */
+fn du_run(guest_cap: u64, kind: u32, ctx: u64) -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    return cb_run(guest_cap, DU_CMP_ID, kind, ctx)
 }
 
 fn du_read(idx: u64) -> u64 @export { return vbd_read(idx) }
@@ -157,5 +176,6 @@ fn du_ingress_admit(tier: u32) -> i32 @export { return df_admit(tier) }         
 fn du_health() -> u32 @export {
     if DU_OPEN == 0u32 { return 0u32 }
     if cb_mem_remaining(DU_CMP_ID) == 0u64 { return 0u32 }
+    if cb_cpu_remaining(DU_CMP_ID) == 0u64 { return 0u32 }
     return 1u32
 }

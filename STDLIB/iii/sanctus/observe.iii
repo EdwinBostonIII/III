@@ -40,6 +40,8 @@ var OBS_PROD    : [u8; 32]      /* producer = source_id (low 4 bytes)        */
 var OBS_INCOM   : [u8; 32]      /* zero in-commit                            */
 var OBS_ANTE    : [u8; 32]      /* zero antecedents (n_ante = 0)             */
 var OBS_COMMIT  : [u8; 32]      /* content-address of the observed value     */
+var OBS_RCOMMIT : [u8; 32]      /* REPLAY: re-hash of the re-injected payload */
+var OBS_XCOMMIT : [u8; 32]      /* REPLAY: recorded out_commit for comparison */
 var OBS_FRAG    : [u8; 32]      /* frag-id sink                              */
 var OBS_SCRATCH : [u8; 4096]    /* the observed value (witnessed + passed through) */
 var OBS_IDX     : [u64; 65536]  /* frag indices of observations, in order    */
@@ -94,6 +96,16 @@ fn obs_observe(source_id: u32, live_ptr: *u8, len: u32, out_ptr: *u8) -> u64 @ex
         let gp : i32 = wh_get_payload(idx, out_ptr, len as u64, &OBS_OUTLEN as *u64)
         if gp != OBS_OK { return OBS_SENTINEL }
         if OBS_OUTLEN[0u64] != (len as u64) { return OBS_SENTINEL }
+        /* Integrity: the re-injected bytes must content-address to the recorded
+         * out_commit.  A redacted/tampered payload (wh_redact zeros the bytes but
+         * keeps the length) passes the length gate but fails this -- makes the
+         * @safety(UNREPLAYABLE) bricking class executable, not merely declared. */
+        cad_oneshot(OBS_SUITE_KECCAK, out_ptr, len as u64, (&OBS_RCOMMIT as u64) as *u8)
+        wh_get_out_commit(idx, (&OBS_XCOMMIT as u64) as *u8)
+        let mut cdiff : u8 = 0u8
+        let mut ci : u64 = 0u64
+        while ci < 32u64 { if OBS_RCOMMIT[ci] != OBS_XCOMMIT[ci] { cdiff = 1u8 }  ci = ci + 1u64 }
+        if cdiff != 0u8 { return OBS_SENTINEL }
         OBS_CURSOR = OBS_CURSOR + 1u64
         return idx
     }

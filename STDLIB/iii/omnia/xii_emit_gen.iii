@@ -303,10 +303,21 @@ fn xeg_override_index(horizon_id: u8, target: u8) -> u32 @export {
  * fragment is truncated.  If larger, the kernel fragment is followed
  * by target-appropriate NOP padding -- xii_emit_gen_produce wraps the
  * result with a final return-bytes block via _epilogue_emit. */
-fn _structural_body(horizon_id: u8, target: u8, body_size: u32, out: *u8) -> u32 {
+var XEG_FRAG_SCRATCH : [u8; 64]   /* [W2616] max kernel fragment is 20 bytes (K08); 64 is ample */
+
+fn _structural_body(horizon_id: u8, target: u8, body_size: u32, max_avail: u32, out: *u8) -> u32 {
     let primary : u8 = xii_horizon_primary_op(horizon_id as u32)
-    let frag_len : u32 = xii_kernel_emit_fragment(primary, target, out)
+    /* [W2616 sev4] emit to a bounded scratch, then copy a BUFFER-clamped amount.  The old code wrote
+     * the full (up to 20-byte) kernel fragment straight to out BEFORE the body_size check -- an OOB
+     * WRITE when expected_size was small (body_start + frag_len > the buffer end, reachable for
+     * expected_size in [plen+elen, plen+frag-1]).  max_avail = the buffer bytes from body_start to
+     * the end; copying min(frag_len, max_avail) is byte-identical for the in-bounds output at every
+     * size (verified: full-catalog sha256 at size 256 unchanged) and never writes past the buffer. */
+    let frag_len : u32 = xii_kernel_emit_fragment(primary, target, &XEG_FRAG_SCRATCH as *u8)
     if frag_len == 0u32 { return 0u32 }
+    let copy_n : u32 = if_min(frag_len, max_avail)
+    let mut ci : u32 = 0u32
+    while ci < copy_n { out[ci as u64] = XEG_FRAG_SCRATCH[ci as u64]  ci = ci + 1u32 }
     if frag_len >= body_size { return body_size }
     let pad_count : u32 = body_size - frag_len
     let pad_ptr : *u8 = (out as u64 + frag_len as u64) as *u8
@@ -376,7 +387,8 @@ fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *
         let body_sz : u32 = if_min(k * 4u32, body_size_target)
         let body_ptr_offset : u64 = (body_start as u64)
         let out_at_body : *u8 = (out as u64 + body_ptr_offset) as *u8
-        body_written = _structural_body(horizon_id as u8, target as u8, body_sz, out_at_body)
+        let max_avail : u32 = expected_size - body_start   /* [W2616] real buffer space from body_start */
+        body_written = _structural_body(horizon_id as u8, target as u8, body_sz, max_avail, out_at_body)
     }
     written = written + body_written
 

@@ -1181,6 +1181,7 @@ declare -A EXPECTED=(
     [1606_h052_bitreverse_emit]=99
     [1607_cap_drop_aba]=99
     [1608_babel_wire_verify_len]=99
+    [1609_emit_gen_oob_write]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

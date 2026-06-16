@@ -1,0 +1,51 @@
+/* 1609 -- W2616 Tier-2: omnia.xii_emit_gen _structural_body OOB-write, proven with a canary.
+ *
+ * xii_kernel_emit_fragment writes a fixed kernel fragment (up to 20 bytes) straight to `out`, and
+ * the old _structural_body did so BEFORE the body_size check -- so xii_emit_gen_produce with a small
+ * expected_size (body_start + frag_len past the buffer end, reachable for expected_size in
+ * [plen+elen, plen+frag-1]) wrote past the caller's buffer.  Fixed: emit to a bounded scratch and
+ * copy min(frag_len, max_avail) where max_avail = the buffer bytes from body_start to the end
+ * (byte-identical for the in-bounds output at every size -- full-catalog sha256 at 256 unchanged).
+ *
+ * Canary: a 0xEE fence past the produced region must survive a produce at the MINIMAL expected_size
+ * (the tightest buffer), across every productive horizon x target.  Before the fix the x86 cells
+ * (prologue 11, fragment up to 20) wrote into [23,31), clobbering the fence.
+ * 99 = no cell writes past expected_size, and a normal 256-byte produce still succeeds. */
+module corpus_1609
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
+
+var BUF : [u8; 512]
+
+fn fill_canary() -> i32 {
+    let mut i : u64 = 23u64
+    while i < 200u64 { BUF[i] = 0xEEu8  i = i + 1u64 }
+    return 0i32
+}
+/* 1u8 iff BUF[23..200) is still all 0xEE (nothing written past expected_size=23). */
+fn canary_intact() -> u8 {
+    let mut i : u64 = 23u64
+    while i < 200u64 { if BUF[i] != 0xEEu8 { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let out : *u8 = (&BUF) as u64 as *u8
+    let mut h : u32 = 0u32
+    while h < 144u32 {
+        if xii_horizon_is_productive(h) == 1u8 {
+            let mut t : u32 = 0u32
+            while t < 7u32 {
+                fill_canary()
+                xii_emit_gen_produce(h, t, 23u32, out)   /* minimal buffer: body_size 0, tightest */
+                if canary_intact() != 1u8 { return 100u64 + ((h * 10u32) + t) as u64 }
+                t = t + 1u32
+            }
+        }
+        h = h + 1u32
+    }
+    /* positive: a normal-size produce still works (functional, not just safe). */
+    if xii_emit_gen_produce(2u32, 1u32, 256u32, out) != 256u32 { return 1u64 }
+    return 99u64
+}

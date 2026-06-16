@@ -1,0 +1,13 @@
+/* 1617 -- W2900 coverage: enclave.enc_declare degenerate/inverted-region guard (lo >= hi ->
+ * ENC_E_REFUSED, the W2616 fix) and the hypercall-admission gate. No KAT exercised lo==hi / lo>hi.
+ * KVX_VMMCALL(4) is the witnessed-call declare channel (admitted + witnessed); KVX_OTHER(0) is
+ * unmodelled (deny-by-default). 99 = a valid region declares, empty/inverted/unadmitted are refused. */
+module corpus_1617
+extern @abi(c-msvc-x64) fn enc_declare(exit_kind: u32, lo: u32, hi: u32) -> i32 from "enclave.iii"
+fn main() -> u64 {
+    if enc_declare(4u32, 0x30000u32, 0x31000u32) != 0i32  { return 1u64 }   /* valid [lo,hi) -> OK (kind 4 admitted) */
+    if enc_declare(4u32, 0x30000u32, 0x30000u32) != -1i32 { return 2u64 }   /* lo==hi empty -> ENC_E_REFUSED */
+    if enc_declare(4u32, 0x31000u32, 0x30000u32) != -1i32 { return 3u64 }   /* lo>hi inverted -> ENC_E_REFUSED */
+    if enc_declare(0u32, 0x32000u32, 0x33000u32) != -1i32 { return 4u64 }   /* KVX_OTHER unmodelled -> refused */
+    return 99u64
+}

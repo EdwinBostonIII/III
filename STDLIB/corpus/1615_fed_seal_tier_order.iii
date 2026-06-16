@@ -1,0 +1,17 @@
+/* 1615 -- W2900 coverage: fed_seal_anchor parent-must-be-strictly-higher-tier guard (pt <= ct ->
+ * FED_SEAL_E_BADTIER). No KAT exercised parent_tier == child_tier or parent_tier < child_tier.
+ * 99 = equal and inverted tiers rejected; strictly-higher accepted. */
+module corpus_1615
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+var ROOT   : [u8; 32]
+var PARENT : [u8; 32]
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { ROOT[i] = (i + 1u64) as u8  PARENT[i] = (i + 100u64) as u8  i = i + 1u64 }
+    let rp : u64 = (&ROOT) as u64
+    let pp : u64 = (&PARENT) as u64
+    if fed_seal_anchor(2u32, rp, 2u32, pp) != -2i32 { return 1u64 }   /* parent==child tier -> E_BADTIER */
+    if fed_seal_anchor(3u32, rp, 2u32, pp) != -2i32 { return 2u64 }   /* parent < child tier -> E_BADTIER */
+    if fed_seal_anchor(2u32, rp, 3u32, pp) != 0i32  { return 3u64 }   /* parent strictly higher -> OK */
+    return 99u64
+}

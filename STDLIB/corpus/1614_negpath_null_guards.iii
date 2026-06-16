@@ -1,0 +1,27 @@
+/* 1614 -- W2900 coverage: null-pointer rejection paths that no KAT exercised --
+ * numera.hex.hex_encode (src==0 with n>0; out==0) and aether.babel_wire set_ctx_digest/set_payload
+ * (null source). Each guard's absence would turn a null arg into a deref/crash. 99 = all rejected. */
+module corpus_1614
+extern @abi(c-msvc-x64) fn hex_encode(src: u64, n: u64, out: u64) -> i32 from "hex.iii"
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+var INBUF  : [u8; 8]
+var OUTBUF : [u8; 32]
+var WBUF   : [u8; 512]
+var DIG    : [u8; 32]
+fn main() -> u64 {
+    let inp : u64 = (&INBUF) as u64
+    let outp : u64 = (&OUTBUF) as u64
+    if hex_encode(0u64, 5u64, outp) != -1i32 { return 1u64 }     /* src null + n>0 -> HEX_E_NULL */
+    if hex_encode(inp, 3u64, 0u64)  != -1i32 { return 2u64 }     /* out null -> HEX_E_NULL */
+    let r : i32 = hex_encode(inp, 4u64, outp)
+    if r == -1i32 { return 3u64 }                                /* valid -> NOT the null error */
+
+    let wbuf : u64 = (&WBUF) as u64
+    babel_wire_init(wbuf)
+    if babel_wire_set_ctx_digest(wbuf, 0u64) != -1i32 { return 4u64 }       /* null digest -> E_NULL */
+    if babel_wire_set_payload(wbuf, 0u64, 32u32) != -1i32 { return 5u64 }   /* null payload+len>0 -> E_NULL */
+    if babel_wire_set_ctx_digest(wbuf, (&DIG) as u64) != 0i32 { return 6u64 } /* valid -> OK */
+    return 99u64
+}

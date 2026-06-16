@@ -51,6 +51,7 @@ fn pbkdf2_sha256_set_salt(salt: *u8, salt_len: u64) -> i32 @export {
 }
 
 fn pbkdf2_sha256_set_iter(iterations: u32) -> i32 @export {
+    if iterations == 0u32 { return PBKDF2_E_INIT }   /* [W2900] RFC 8018 5.2: c MUST be >= 1; c=0 silently produced c=1 output (the sibling setters set_salt/derive validate -- this one did not) */
     PBK_ITER = iterations
     return PBKDF2_OK
 }

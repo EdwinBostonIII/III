@@ -1,0 +1,13 @@
+/* 1613 -- W2900 coverage: pbkdf2_sha256_set_iter rejects c=0 (RFC 8018 5.2: c MUST be >= 1).
+ * The sibling setters set_salt/derive validate their params; set_iter did NOT, so c=0 was silently
+ * accepted and (U_1 is computed before the fold) produced byte-identical output to c=1 -- a weak-key
+ * on misconfiguration. 99 = c=0 rejected, valid counts accepted. */
+module corpus_1613
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_iter(iterations: u32) -> i32 from "pbkdf2.iii"
+fn main() -> u64 {
+    if pbkdf2_sha256_set_iter(0u32) != -1i32 { return 1u64 }      /* PBKDF2_E_INIT: c=0 out of spec */
+    if pbkdf2_sha256_set_iter(1u32) != 0i32 { return 2u64 }       /* OK: minimum valid c */
+    if pbkdf2_sha256_set_iter(4096u32) != 0i32 { return 3u64 }    /* OK: typical c */
+    if pbkdf2_sha256_set_iter(0u32) != -1i32 { return 4u64 }      /* still rejected after a valid set */
+    return 99u64
+}

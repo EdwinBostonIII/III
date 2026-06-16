@@ -1,0 +1,57 @@
+/* 1606 -- W2616 Tier-2: omnia.xii_curated_extended H052 bitreverse_u64 emit override, proven.
+ *
+ * The H052 override (horizon id 51, non-crypto so the X25 chokepoint does NOT refuse it) emitted a
+ * 1-bit ROTATE on x86 (shr rax,1 | shl rcx,63 -- decode-confirmed, NOT a bit-reverse) and on ARM64
+ * did `rbit x0,x0 ; str x0,[x0]` -- a live memory-corruption store to the bit-reversed VALUE as an
+ * address (the pointer in x0 was clobbered by rbit).  Both are now the real reversal:
+ *   x86  : mov rax,[rdi]; <SWAR 0x55/0x33/0x0F mask-swaps + bswap>; mov [rdi],rax; ret
+ *          (gcc-assembled, objdump-lifted, offline-executed: bitrev(1)=0x8000..0, involution).
+ *   ARM64: ldr x1,[x0]; rbit x1,x1; str x1,[x0]; ret.
+ *
+ * Teeth (scan the produced bytes, robust to prologue length):
+ *   x86  : the bswap stage (48 0F C8) is PRESENT and the old rotate signature (48 C1 E1 3F = shl
+ *          rcx,63) is ABSENT.
+ *   ARM64: rbit x1,x1 (21 00 C0 DA) is PRESENT and the old rbit x0,x0 (00 00 C0 DA) is ABSENT.
+ * 99 = the rotate/corruption stubs are gone and a real bit-reverse is emitted on both targets. */
+module corpus_1606
+
+extern @abi(c-msvc-x64) fn xii_curated_extended_register_all() -> i32 from "xii_curated_extended.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+
+var BUF1606 : [u8; 4096]
+
+/* 1u8 iff the 4-byte pattern b0..b3 occurs anywhere in BUF1606[0..n). */
+fn scan4(n: u32, b0: u8, b1: u8, b2: u8, b3: u8) -> u8 {
+    if n < 4u32 { return 0u8 }
+    let mut i : u32 = 0u32
+    while i <= (n - 4u32) {
+        if BUF1606[i as u64] == b0 {
+            if BUF1606[(i + 1u32) as u64] == b1 {
+                if BUF1606[(i + 2u32) as u64] == b2 {
+                    if BUF1606[(i + 3u32) as u64] == b3 { return 1u8 }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+fn main() -> u64 {
+    xii_curated_extended_register_all()
+    let out : *u8 = (&BUF1606) as u64 as *u8
+
+    /* --- x86_avx2 (target 1) --- */
+    let nx : u32 = xii_emit_gen_produce(51u32, 1u32, 256u32, out)
+    if nx == 0u32 { return 20u64 }                         /* horizon 51 must be productive */
+    if scan4(nx, 0x48u8, 0x0Fu8, 0xC8u8, 0x48u8) != 1u8 { return 21u64 }  /* bswap present (real reversal) */
+    if scan4(nx, 0x48u8, 0xC1u8, 0xE1u8, 0x3Fu8) != 0u8 { return 22u64 }  /* old shl rcx,63 rotate GONE */
+
+    /* --- arm64_neon (target 3) --- */
+    let na : u32 = xii_emit_gen_produce(51u32, 3u32, 256u32, out)
+    if na == 0u32 { return 30u64 }
+    if scan4(na, 0x21u8, 0x00u8, 0xC0u8, 0xDAu8) != 1u8 { return 31u64 }  /* rbit x1,x1 present */
+    if scan4(na, 0x00u8, 0x00u8, 0xC0u8, 0xDAu8) != 0u8 { return 32u64 }  /* old rbit x0,x0 GONE */
+
+    return 99u64
+}

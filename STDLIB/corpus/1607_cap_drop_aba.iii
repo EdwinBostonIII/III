@@ -1,0 +1,36 @@
+/* 1607 -- W2616 Tier-2: aether.capability.cap_drop ABA / re-parent defect, proven with teeth.
+ *
+ * A cap id is (slot+1) and cap_alloc_slot reuses the first freed slot.  Before the fix, cap_drop
+ * freed a slot even when the dropped cap still had LIVE descendants -- a later cap_attenuate would
+ * re-mint the SAME id into that slot and silently RE-PARENT the orphaned descendants onto an
+ * unrelated capability (privilege confusion).  The fix REFUSES to drop a cap that has live
+ * descendants (CAP_E_DENIED), forcing bottom-up release.
+ *
+ * 99 = dropping a parent-with-live-child is refused; bottom-up release works; the ABA re-parent
+ *      can no longer occur. */
+module corpus_1607
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_drop(id: u64) -> i32 from "capability.iii"
+
+fn main() -> u64 {
+    let root  : u64 = cap_env_init()
+    let child : u64 = cap_attenuate(root,  0x5u64, 0u64)
+    let grand : u64 = cap_attenuate(child, 0x5u64, 0u64)
+    if root  == 0u64 { return 1u64 }
+    if child == 0u64 { return 2u64 }
+    if grand == 0u64 { return 3u64 }
+
+    /* TEETH: child has a LIVE descendant (grand) -> drop MUST be refused (was 0i32/OK -> ABA). */
+    if cap_drop(child) != -2i32 { return 4u64 }   /* CAP_E_DENIED */
+
+    /* bottom-up release: drop the leaf first, then the parent. */
+    if cap_drop(grand) != 0i32 { return 5u64 }    /* CAP_OK: grand is a leaf */
+    if cap_drop(child) != 0i32 { return 6u64 }    /* CAP_OK: child now has no live descendants */
+    if cap_drop(child) != -1i32 { return 7u64 }   /* CAP_E_BADID: already dropped */
+
+    /* root stays immortal regardless. */
+    if cap_drop(root)  != -2i32 { return 8u64 }   /* CAP_E_DENIED: env root */
+    return 99u64
+}

@@ -27,14 +27,14 @@ each here, default-skeptical). Status: [ ] todo, [x] fixed, [~] verified-not-rea
 - [ ] hotstuff_predict:36 (sev2) — hsp_init f=(n-1)/3 no n==0 guard -> underflow (hs_init same pattern).
 
 ## TIER 2 — correctness defects (need careful verification/fix)
-- [ ] xii_curated_extended:57,60 (sev5/4) — H052 bitreverse x86 override = 1-bit ROTATE not bit-reverse; ARM64 wrong addr. CONFIRMED defect (decoded); fix=correct/remove the machine-code override.
+- [x] xii_curated_extended:57,60 (sev5/4) -- H052 bitreverse x86 was a 1-bit ROTATE; ARM64 str x0,[x0] mem-corruption. FIXED: x86 full SWAR bit-reverse (gcc-assembled, objdump-lifted, OFFLINE-EXECUTED: bitrev(1)=msb + involution), ARM64 ldr x1/rbit x1/str x1,[x0]. Live-served (id 51 > chokepoint 24). KAT 1606 EXIT=99.
 - [ ] xii_emit_gen:308 (sev4) — _structural_body writes full fragment w/o clamp to body_size (OOB).
-- [ ] babel_wire:201,265 (sev3/4) — integrity CRC covers only header [0..63]; payload unauthenticated + verify doesn't check in_len covers payload.
+- [D] babel_wire:201,265 (sev3/4) -- CRC authenticates header [0..63] only; verify_crc requires in_len>=68 not 68+payload_len, so a truncated msg with a large claimed payload_len passes then unpack_payload_byte reads OOB. NEXT-CYCLE: needs a babel_wire_verify_len gate (payload readers don't take in_len); not a rushed protocol change.
 - [ ] capability:230 (sev3) — cap_is_revoked doesn't walk parent chain (descendant of revoked reports live).
-- [ ] capability:244 (sev3) — cap_drop frees slot w/o live-descendant check -> cap-id ABA re-parent.
+- [x] capability:244 (sev3) -- cap_drop ABA: id=slot+1 and cap_alloc_slot reuses freed slots, so dropping a cap with live descendants lets a later attenuate re-mint the id and silently re-parent them. FIXED: refuse drop while live descendants exist (bottom-up). KAT 1607 EXIT=99.
 - [ ] enclave:68 (sev3) — enc_declare accepts inverted region (lo>=hi), returns OK protecting nothing.
 - [ ] fed_eclipse:142 (sev3) — eclipse gate default-OPEN when unconfigured (should fail-closed).
-- [ ] vectorizer:61 (sev3) — vz_equivalent u32 cover-bitmask overflows for n>=32 -> wrong verdict.
+- [~] vectorizer:61 (sev3) -- vz_equivalent (1u32<<n) for n>=32 is UB but FAILS SAFE (grouping always equivalent for valid inputs -> only a conservative scalar fallback, never unsound). Set aside as UB-hygiene, not a soundness defect.
 - [ ] nous_conjecture_gen:52 (sev3) — NG_SQ_GE predicate u32 overflow -> spurious counterexample.
 - [ ] sieve:62 / collatz:29 / goldbach:53 / affine_check:65 / chacha20_poly1305:100 — u32 overflow/range.
 - [ ] xii_lattice:196 (sev3) — lookup uses 0 for both unset and valid cell idx 0 (sentinel collision).

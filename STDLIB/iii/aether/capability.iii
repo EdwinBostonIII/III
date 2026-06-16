@@ -259,6 +259,15 @@ fn cap_drop(id: u64) -> i32 @export {
     let s : u32 = cap_slot_of(id)
     if s == 0xFFFFFFFFu32 { return CAP_E_BADID }
     if id == CAP_ENV_ROOT { return CAP_E_DENIED }   /* env cap immortal during process */
+    /* [W2616 sev3] ABA guard: a cap id is (slot+1) and cap_alloc_slot reuses the first freed
+     * slot, so dropping a cap that still has LIVE descendants would let a later cap_attenuate
+     * re-mint the SAME id and silently RE-PARENT those descendants to an unrelated capability
+     * (privilege confusion).  Refuse: descendants must be dropped first (bottom-up). */
+    let mut d : u32 = 0u32
+    while d < CAP_MAX_INSTANCES {
+        if CAP_LIVE[d] == 1u8 { if CAP_PARENT[d] == id { return CAP_E_DENIED } }
+        d = d + 1u32
+    }
     CAP_LIVE[s]    = 0u8
     CAP_RIGHTS[s]  = 0u64
     CAP_PARENT[s]  = 0u64

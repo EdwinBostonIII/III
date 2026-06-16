@@ -48,11 +48,13 @@ fn main() -> u64 {
     /* (b) FALSIFIER: the seal binds the coefficient table -- a flipped byte changes it. */
     _sr_snapshot()
     seal_resolver_flip_byte_for_test(8u32)        /* flip a DEFAULT-coeff byte */
+    if seal_resolver_verify() != 0u8 { return 13u64 }   /* [W3100] FALSIFIER ARM: verify() recomputes from the now-corrupt table and MISMATCHES the still-clean sealed mhash -> 0 (a stub return-1 verify would fail here) */
     seal_resolver_compute()
     if _sr_eq_snapshot() == 1u8 { return 11u64 }  /* MUST differ */
     /* restore: flipping back recovers the original seal exactly. */
     seal_resolver_flip_byte_for_test(8u32)
     seal_resolver_compute()
     if _sr_eq_snapshot() != 1u8 { return 12u64 }
+    if seal_resolver_verify() != 1u8 { return 14u64 }   /* [W3100] restored + recomputed -> verify passes */
     return 99u64
 }

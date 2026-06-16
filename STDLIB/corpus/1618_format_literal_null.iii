@@ -1,0 +1,21 @@
+/* 1618 -- W2900 coverage: verba.format.format_literal null-base guard. base==0 with len>0 must
+ * reject (FMT_E_NULL) -- a null pointer with bytes to read would deref; base==0 with len==0 is the
+ * no-op OK. No KAT exercised the null-base path. 99 = null+len>0 rejected, null+len0 ok, valid ok. */
+module corpus_1618
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_literal(b: u64, base: u64, len: u64) -> i32 from "format.iii"
+var LIT : [u8; 8]
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 1u64 }
+    let bld : u64 = builder_new(a, 64u64)
+    if bld == 0u64 { return 2u64 }
+    if format_literal(bld, 0u64, 5u64) != -1i32 { return 3u64 }   /* null base + len>0 -> FMT_E_NULL */
+    if format_literal(bld, 0u64, 0u64) != 0i32  { return 4u64 }   /* null base + len==0 -> FMT_OK (no-op) */
+    LIT[0] = 0x61u8  LIT[1] = 0x62u8  LIT[2] = 0x63u8
+    if format_literal(bld, (&LIT) as u64, 3u64) != 0i32 { return 5u64 }   /* valid literal -> OK */
+    arena_drop(a)
+    return 99u64
+}

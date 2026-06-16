@@ -1,0 +1,73 @@
+/* 1619 -- W2900 coverage: hotstuff.hs_handle_vote Byzantine-safety. A vote whose block_mhash does
+ * NOT match the block bound by hs_handle_propose must be rejected (HS_E_BAD_QC) even when its
+ * Ed25519 signature is VALID -- otherwise a Byzantine peer could equivocate and complete a quorum
+ * for a conflicting block, breaking quorum-intersection safety. Non-tautological: the KAT proves the
+ * signature is genuinely valid (independent ed25519_verify==1), then shows the vote is rejected
+ * anyway. 99 = the validly-signed conflicting vote is refused. */
+module corpus_1619
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pk: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn hs_init(node_id: u32, peers: *u8, n_peers: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_set_keypair(kp: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_tick(elapsed_ms: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_propose(payload_mhash: *u8, out_block: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_handle_vote(msg: *u8, msg_len: u32) -> i32 from "hotstuff.iii"
+
+var K_SEED  : [u8; 128]
+var K_PK    : [u8; 128]
+var K_KP    : [u8; 64]
+var K_BLOCK : [u8; 424]
+var K_PAY   : [u8; 32]
+var EQVOTE  : [u8; 108]    /* block_mhash(32) | view(8) | voter(4) | sig(64) */
+var SIGIN   : [u8; 40]     /* block_mhash(32) | view(8) -- the vote signing input */
+var BPRIME  : [u8; 32]     /* a conflicting block mhash, != the bound block */
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let mut j : u64 = 0u64
+        while j < 32u64 { K_SEED[i * 32u64 + j] = (i * 7u64 + j + 1u64) as u8  j = j + 1u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 4u64 {
+        if ed25519_pubkey(((&K_SEED as u64) + i * 32u64) as *u8, ((&K_PK as u64) + i * 32u64) as *u8) != 1u8 { return 1u64 }
+        i = i + 1u64
+    }
+    hs_init(1u32, (&K_PK as u64) as *u8, 4u32)         /* node 1 = leader for view 1 */
+    let mut k : u64 = 0u64
+    while k < 32u64 { K_KP[k] = K_SEED[32u64 + k]  K_KP[32u64 + k] = K_PK[32u64 + k]  k = k + 1u64 }
+    hs_set_keypair((&K_KP as u64) as *u8)
+    if hs_tick(5000u32) != (0i32 - 6i32) { return 2u64 }   /* HS_E_TIMEOUT -> advance to view 1 */
+
+    let mut p : u64 = 0u64
+    while p < 32u64 { K_PAY[p] = (p + 9u64) as u8  p = p + 1u64 }
+    if hs_propose((&K_PAY as u64) as *u8, (&K_BLOCK as u64) as *u8) != 0i32 { return 3u64 }
+    if hs_handle_propose((&K_BLOCK as u64) as *u8, 424u32) != 0i32 { return 4u64 }   /* binds HS_VOTE_BLOCK */
+
+    /* an equivocating block (all 0xBB) -- overwhelmingly != the bound block mhash */
+    let mut b : u64 = 0u64
+    while b < 32u64 { BPRIME[b] = 0xBBu8  b = b + 1u64 }
+    /* signing input = BPRIME || view(1, u64 LE) */
+    let mut s : u64 = 0u64
+    while s < 32u64 { SIGIN[s] = BPRIME[s]  s = s + 1u64 }
+    SIGIN[32] = 1u8  SIGIN[33] = 0u8  SIGIN[34] = 0u8  SIGIN[35] = 0u8
+    SIGIN[36] = 0u8  SIGIN[37] = 0u8  SIGIN[38] = 0u8  SIGIN[39] = 0u8
+    /* voter 0 signs the conflicting block -- a genuinely valid signature */
+    if ed25519_sign((&K_SEED as u64) as *u8, (&K_PK as u64) as *u8, (&SIGIN as u64) as *u8, 40u64, ((&EQVOTE as u64) + 44u64) as *u8) != 1u8 { return 5u64 }
+
+    /* assemble the vote message: block_mhash | view | voter | sig */
+    let mut m : u64 = 0u64
+    while m < 32u64 { EQVOTE[m] = BPRIME[m]  m = m + 1u64 }
+    EQVOTE[32] = 1u8  EQVOTE[33] = 0u8  EQVOTE[34] = 0u8  EQVOTE[35] = 0u8
+    EQVOTE[36] = 0u8  EQVOTE[37] = 0u8  EQVOTE[38] = 0u8  EQVOTE[39] = 0u8
+    EQVOTE[40] = 0u8  EQVOTE[41] = 0u8  EQVOTE[42] = 0u8  EQVOTE[43] = 0u8   /* voter 0 */
+
+    /* TEETH (1): the signature IS valid over (BPRIME || view) by voter 0's key. */
+    if ed25519_verify((&K_PK as u64) as *u8, (&SIGIN as u64) as *u8, 40u64, ((&EQVOTE as u64) + 44u64) as *u8) != 1u8 { return 6u64 }
+    /* TEETH (2): hs_handle_vote rejects it anyway -- block_mhash != the bound HS_VOTE_BLOCK. */
+    if hs_handle_vote((&EQVOTE as u64) as *u8, 108u32) != (0i32 - 2i32) { return 7u64 }   /* HS_E_BAD_QC */
+    return 99u64
+}

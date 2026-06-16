@@ -18,7 +18,11 @@ latent-defect class still surfaces real bugs (like the W72-80 false-accepts).
 - [x] omnia.resolver.pr_less_than_cr strict ring precedence RM2<RM1<R0<R3 (reflexive/antisymmetric) (KAT 1616)
 - [x] aether.enclave.enc_declare degenerate-region (lo>=hi -> E_REFUSED, the W2616 guard) + admit gate (KAT 1617)
 
-## Next coverage micro-batch (pipelined, need more setup)
-- [ ] verba.format.format_literal null-base-with-len>0 -> FMT_E_NULL (needs a builder+arena fixture)
-- [ ] aether.hotstuff.hs_handle_vote Byzantine equivocation: valid sig over a DIFFERENT block must be
-  rejected (needs the Ed25519 propose+vote ceremony)
+## Coverage strengthened (micro-batch 2)
+- [x] verba.format.format_literal null-base-with-len>0 -> FMT_E_NULL (KAT 1618, builder+arena fixture)
+- [x] aether.hotstuff.hs_handle_vote Byzantine equivocation: a VALIDLY-signed vote over a conflicting
+  block (!= the bound HS_VOTE_BLOCK) is rejected HS_E_BAD_QC -- non-tautological (the KAT proves the
+  Ed25519 sig is valid via an independent ed25519_verify, then shows the vote refused). KAT 1619.
+
+All 10 coverage findings from the discovery workflow are now addressed (1 latent defect fixed + 9
+negative-path/property KATs).

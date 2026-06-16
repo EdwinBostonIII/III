@@ -68,6 +68,10 @@ fn enc_region(offset: u32) -> u32 @export { return katabasis_svm_region(offset) 
 fn enc_declare(exit_kind: u32, lo: u32, hi: u32) -> i32 @export {
     if enc_hypercall_admitted(exit_kind) != 1u32 { return ENC_E_REFUSED }
     if katabasis_vmexit_handling(exit_kind) != ENC_H_WITNESSED_CALL { return ENC_E_REFUSED }
+    /* [W2616 sev3] reject an inverted/degenerate region (lo >= hi) -- [lo,hi) would be EMPTY, so
+     * enc_declared_sensitive matches nothing and the guest believes it protected memory it left exposed
+     * (a silent false-success on a forcefield declaration).  Refuse before consuming a slot. */
+    if lo >= hi { return ENC_E_REFUSED }
     if ENC_DECL_N >= ENC_MAX_DECL { return ENC_E_FULL }
     let n : u32 = ENC_DECL_N
     ENC_DECL_LO[n] = lo

@@ -70,6 +70,8 @@ fn pf_setup() -> i32 @export {
 
 /* a dominates b iff a is no worse in every dimension and strictly better in at least one. */
 fn pf_dominates(a: u32, b: u32) -> u32 @export {
+    if a >= PF_M { return 0u32 }   /* [W2616 sev3] PF_LAT/PF_ENE are [6]; unchecked a/b OOB (sibling pareto_extraction guards) */
+    if b >= PF_M { return 0u32 }
     if PF_LAT[a as u64] > PF_LAT[b as u64] { return 0u32 }
     if PF_ENE[a as u64] > PF_ENE[b as u64] { return 0u32 }
     if PF_LAT[a as u64] < PF_LAT[b as u64] { return 1u32 }
@@ -85,6 +87,7 @@ fn pf_verified(k: u32) -> u32 @export {
 
 /* k is on the verified Pareto frontier iff it is verified and no OTHER verified kernel dominates it. */
 fn pf_on_frontier(k: u32) -> u32 @export {
+    if k >= PF_M { return 0u32 }   /* [W2616 sev3] k indexes the [6] arrays via pf_verified/pf_dominates */
     if pf_verified(k) == 0u32 { return 0u32 }
     let mut j : u32 = 0u32
     while j < PF_M {

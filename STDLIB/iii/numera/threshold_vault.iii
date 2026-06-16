@@ -64,7 +64,8 @@ var TV_PKXS     : [u8; 16]       /* their x-coordinates */
 var TV_PN       : [u32; 5]       /* [0]=kthr [1]=nshard [2]=kkey [3]=nkey [4]=blen */
 
 fn tv_blen() -> u32 @export { return TV_PN[4u32] }
-fn tv_keyshare_ptr(i: u32) -> u64 @export { let off : u64 = (i * 32u32) as u64 ; return (&TV_KEYSH as u64) + off }
+fn tv_keyshare_ptr(i: u32) -> u64 @export { if i >= TV_MAX_NK { return 0u64 }   /* [W2616 sev2] bound i (sibling tv_keyshare_x does); else returns a pointer into adjacent BSS */
+    let off : u64 = (i * 32u32) as u64 ; return (&TV_KEYSH as u64) + off }
 fn tv_keyshare_x(i: u32) -> u8 @export { if i >= TV_MAX_NK { return 0u8 } return TV_KEYXS[i] }   /* [OOB-W11] @export idx into TV_KEYXS[16] */
 
 fn tv_seal(blob_ptr: u64, blen: u32, kthr: u32, nshard: u32, kkey: u32, nkey: u32, key_ptr: u64, nonce_ptr: u64, keycoeff_ptr: u64) -> i32 @export {

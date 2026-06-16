@@ -230,7 +230,21 @@ fn cap_parent(id: u64) -> u64 @export {
 fn cap_is_revoked(id: u64) -> u8 @export {
     let s : u32 = cap_slot_of(id)
     if s == 0xFFFFFFFFu32 { return 1u8 }
-    return CAP_REVOKED[s]
+    /* [W2616 sev3] walk the parent chain (mirroring cap_verify_rights' ancestor loop): a descendant of a
+     * revoked ancestor IS revoked -- the "descendants dead" contract.  Without this walk cap_is_revoked
+     * disagreed with cap_verify_rights (which denies a descendant of a revoked cap) and with cap_forge's
+     * liveness consumers.  Fail-closed (revoked) on a missing slot or a cycle. */
+    let mut cur : u64 = id
+    let mut steps : u32 = 0u32
+    while cur != 0u64 {
+        if steps > CAP_MAX_INSTANCES { return 1u8 }
+        let cs : u32 = cap_slot_of(cur)
+        if cs == 0xFFFFFFFFu32 { return 1u8 }
+        if CAP_REVOKED[cs] == 1u8 { return 1u8 }
+        cur = CAP_PARENT[cs]
+        steps = steps + 1u32
+    }
+    return 0u8
 }
 
 fn cap_expires_at(id: u64) -> u64 @export {

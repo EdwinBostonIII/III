@@ -31,6 +31,7 @@ var HSP_INITED    : u8  = 0u8
 
 fn hsp_init(peers: *u8, n_peers: u32) -> i32 @export {
     if (peers as u64) == 0u64 { return HSP_E_NULL }
+    if n_peers == 0u32 { return HSP_E_NULL }   /* [sev2] (n_peers-1)/3 underflows u32 for n_peers==0 -> garbage fault count/quorum */
     if n_peers > HSP_MAX_PEERS { return HSP_E_NULL }
     HSP_N = n_peers
     HSP_F = (n_peers - 1u32) / 3u32

@@ -35,6 +35,9 @@ fn bq_quorum(f: u32) -> u32 @export { return (2u32 * f) + 1u32 }     /* quorum =
 
 /* 1 iff EVERY pair of qsize-subsets of [0,nbits) intersects in at least min_req nodes (exhaustive). */
 fn bq_min_overlap_ok(nbits: u32, qsize: u32, min_req: u32) -> u32 @export {
+    /* [sev2] `1u32 << nbits` is UB for nbits>=32, and the exhaustive 2^nbits x 2^nbits subset scan is only
+     * meaningful for small N (bq_safe stays at N=3f+1 for tiny f); reject oversized nbits up front. */
+    if nbits > 16u32 { return 0u32 }
     let lim : u32 = 1u32 << nbits
     let mut m1 : u32 = 0u32
     while m1 < lim {

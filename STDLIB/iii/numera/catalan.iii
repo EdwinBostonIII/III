@@ -23,6 +23,7 @@ var CATALAN_C : [u32; 12]
 
 /* the O(n^2) convolution recurrence (multiplication only). */
 fn catalan_conv(n: u32) -> u32 @export {
+    if n > 11u32 { return 0u32 }   /* [sev3 OOB] CATALAN_C is [12] (C[0..11]); n>=12 writes/reads past it (domain n 0..11) */
     CATALAN_C[0u64] = 1u32
     let mut k : u32 = 1u32
     while k <= n {
@@ -40,6 +41,7 @@ fn catalan_conv(n: u32) -> u32 @export {
 
 /* the O(n) product formula C(k) = C(k-1) * (4k-2) / (k+1) (one exact division per step). */
 fn catalan_formula(n: u32) -> u32 @export {
+    if n > 11u32 { return 0u32 }   /* [sev3 OOB] CATALAN_C is [12]; n>=12 writes/reads past it */
     CATALAN_C[0u64] = 1u32
     let mut k : u32 = 1u32
     while k <= n {

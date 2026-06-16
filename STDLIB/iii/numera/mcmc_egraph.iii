@@ -58,7 +58,8 @@ fn mcmc_init() -> i32 @export {
     return 0i32
 }
 
-fn mcmc_cost(s: u32) -> u32 @export { return MCMC_COST[s as u64] }
+fn mcmc_cost(s: u32) -> u32 @export { if s >= MCMC_N { return 0u32 }   /* [W2616 sev3] MCMC_COST is [64]; s>=MCMC_N OOB read */
+    return MCMC_COST[s as u64] }
 
 fn mcmc_rng() -> u64 {
     let mut z : u64 = MCMC_RNG[0u64]
@@ -71,6 +72,7 @@ fn mcmc_rng() -> u64 {
 
 /* greedy descent: always step to a strictly-cheaper neighbour; stops at the first local minimum. */
 fn mcmc_greedy(start: u32) -> u32 @export {
+    if start >= MCMC_N { return 0u32 }   /* [W2616 sev3] start indexes MCMC_COST[64] */
     let mut cur : u32 = start
     let mut moving : u32 = 1u32
     while moving == 1u32 {
@@ -90,6 +92,7 @@ fn mcmc_greedy(start: u32) -> u32 @export {
 
 /* annealed Metropolis-Hastings search; returns the best (lowest) cost found. */
 fn mcmc_search(start: u32, seed: u64, iters: u32) -> u32 @export {
+    if start >= MCMC_N { return 0u32 }   /* [W2616 sev3] start indexes MCMC_COST[64] */
     MCMC_RNG[0u64] = seed
     let mut cur : u32 = start
     let mut best : u32 = MCMC_COST[cur as u64]

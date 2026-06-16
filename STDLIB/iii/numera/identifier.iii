@@ -51,6 +51,8 @@ fn ident_eq(a: *u8, b: *u8) -> u8 @export {
     return 0u8
 }
 fn ident_cmp(a: *u8, b: *u8) -> i32 @export {
+    if (a as u64) == 0u64 { return 0i32 }   /* [W2616 sev2] null guard (siblings have it): 0 = indeterminate, no deref */
+    if (b as u64) == 0u64 { return 0i32 }
     let mut i : u64 = 0u64
     let mut result : i32 = 0i32
     let mut sentinel : u8 = 0u8

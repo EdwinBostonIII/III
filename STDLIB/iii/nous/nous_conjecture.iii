@@ -32,6 +32,7 @@ const NC_ADMITTED  : i32 = 1i32    /* a completing rule was conjectured + admitt
 const NC_REJECTED  : i32 = -1i32   /* the conjecture failed the disposer (cycle or non-restoring) */
 const NC_FULL      : i32 = -2i32   /* rule arena exhausted */
 const NC_DIVERGED  : i32 = -3i32   /* iteration bound hit before confluence (never a false CONFLUENT) */
+const NC_E_SYM     : i32 = -4i32   /* symbol id >= NC_MAX_SYM: would OOB the 32-byte reach bitmap */
 
 var NC_LHS    : [u8; 64]
 var NC_RHS    : [u8; 64]
@@ -47,6 +48,10 @@ fn nc_reset() -> i32 @export {
 
 fn nc_add_rule(l: u32, r: u32) -> i32 @export {
     if NC_N >= NC_MAX_RULES { return NC_FULL }
+    /* [sev5 OOB] symbols index the 32-byte reach bitmap (nc_reach_into b[l]/b[r]); reject any symbol >=
+     * NC_MAX_SYM at admission so a stored rule can never drive an out-of-bounds reach read/write. */
+    if l >= NC_MAX_SYM { return NC_E_SYM }
+    if r >= NC_MAX_SYM { return NC_E_SYM }
     NC_LHS[NC_N as u64] = (l & 0xFFu32) as u8
     NC_RHS[NC_N as u64] = (r & 0xFFu32) as u8
     NC_N = NC_N + 1u32
@@ -61,6 +66,7 @@ fn nc_reach_into(start: u32, bm: u64) -> i32 {
     let b : *u8 = bm as *u8
     let mut i : u64 = 0u64
     while i < 32u64 { b[i] = 0u8  i = i + 1u64 }
+    if start >= NC_MAX_SYM { return -1i32 }   /* [sev5 OOB] out-of-range start -> empty reach (bitmap zeroed) */
     b[start as u64] = 1u8
     let mut pass : u32 = 0u32
     while pass < NC_MAX_SYM {
@@ -90,6 +96,7 @@ fn nc_joins(u: u32, v: u32) -> u8 @export {
 
 /* 1 iff adding l->r would create a cycle: r already reaches l (so l->r->...->l). */
 fn nc_creates_cycle(l: u32, r: u32) -> u8 {
+    if l >= NC_MAX_SYM { return 0u8 }   /* [sev5 OOB] guard the NC_REACH[l] read (r is guarded by nc_reach_into) */
     nc_reach_into(r, &NC_REACH as u64)
     return NC_REACH[l as u64]
 }

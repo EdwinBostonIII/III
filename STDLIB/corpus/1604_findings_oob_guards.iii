@@ -1,0 +1,50 @@
+/* 1604_findings_oob_guards.iii -- wave W2616 (recovered discovery findings): the accessor-bounds /
+ * underflow guards each PROVEN to fire on the bad input (and the valid path still correct):
+ *   nous_conjecture.nc_add_rule  : symbol >= NC_MAX_SYM(32) rejected (was an OOB write on the 32-byte reach bitmap)
+ *   numera.coin_change.coin_dp   : amt > 20 returns COIN_BIG, no OOB on COIN_DP[21]
+ *   numera.catalan.{conv,formula}: n > 11 returns 0, no OOB on CATALAN_C[12]; C(5)=42 still exact
+ *   aether.hotstuff_predict.hsp_init : n_peers == 0 rejected (was (n-1)/3 u32 underflow -> garbage quorum)
+ * 99 = every guard fires on bad input AND every valid path is still correct. */
+module corpus_1604
+
+extern @abi(c-msvc-x64) fn nc_reset() -> i32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_add_rule(l: u32, r: u32) -> i32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn coin_dp(amt: u32) -> u32 from "coin_change.iii"
+extern @abi(c-msvc-x64) fn catalan_conv(n: u32) -> u32 from "catalan.iii"
+extern @abi(c-msvc-x64) fn catalan_formula(n: u32) -> u32 from "catalan.iii"
+extern @abi(c-msvc-x64) fn hsp_init(peers: *u8, n_peers: u32) -> i32 from "hotstuff_predict.iii"
+extern @abi(c-msvc-x64) fn bq_min_overlap_ok(nbits: u32, qsize: u32, min_req: u32) -> u32 from "bft_quorum.iii"
+extern @abi(c-msvc-x64) fn bmc_shortest(target: u32) -> u32 from "bmc.iii"
+
+var DUMMY : [u8; 256]
+
+fn main() -> u64 {
+    /* nc_add_rule: out-of-range symbol rejected (was OOB), valid symbol accepted */
+    nc_reset()
+    if nc_add_rule(40u32, 1u32) != (0i32 - 4i32) { return 1u64 }   /* NC_E_SYM: 40 >= NC_MAX_SYM */
+    if nc_add_rule(5u32, 3u32) != 0i32 { return 2u64 }             /* in-range -> admitted */
+
+    /* coin_dp: amt past the [21] table returns COIN_BIG without OOB; in-range is correct */
+    if coin_dp(25u32) != 1000u32 { return 3u64 }                   /* COIN_BIG (1000), no crash */
+    if coin_dp(6u32) >= 1000u32 { return 4u64 }                    /* 6 = 3+3 -> small, not the sentinel */
+
+    /* catalan: n past the [12] table returns 0 without OOB; in-range matches the textbook value */
+    if catalan_conv(15u32) != 0u32 { return 5u64 }
+    if catalan_conv(5u32) != 42u32 { return 6u64 }                 /* C(5) = 42 */
+    if catalan_formula(15u32) != 0u32 { return 7u64 }
+    if catalan_formula(5u32) != 42u32 { return 8u64 }
+
+    /* hsp_init: n_peers == 0 rejected (was a u32 underflow), valid config accepted */
+    if hsp_init((&DUMMY as u64) as *u8, 0u32) == 0i32 { return 9u64 }    /* must be an error, not HSP_OK */
+    if hsp_init((&DUMMY as u64) as *u8, 4u32) != 0i32 { return 10u64 }   /* HSP_OK */
+
+    /* bq_min_overlap_ok: oversized nbits rejected (was 1u32<<nbits UB + unbounded 2^nbits scan) */
+    if bq_min_overlap_ok(40u32, 3u32, 1u32) != 0u32 { return 11u64 }     /* nbits>16 -> 0, no UB */
+    if bq_min_overlap_ok(4u32, 3u32, 1u32) != 1u32 { return 12u64 }      /* small N: any two 3-of-4 subsets overlap */
+
+    /* bmc_shortest: out-of-range target -> BMC_NONE (was reach>>target UB for target>=32) */
+    if bmc_shortest(40u32) != 7u32 { return 13u64 }                      /* BMC_NONE (7) */
+    if bmc_shortest(0u32) != 0u32 { return 14u64 }                       /* state 0 is the initial -> depth 0 */
+
+    return 99u64
+}

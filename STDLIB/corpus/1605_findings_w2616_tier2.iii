@@ -1,0 +1,56 @@
+/* 1605_findings_w2616_tier2.iii -- wave W2616 Tier-2: correctness/security findings, each proven:
+ *   aether.capability.cap_is_revoked : now walks the parent chain -- a descendant of a REVOKED ancestor is
+ *        reported revoked (was 0/live, contradicting cap_verify_rights' "descendants dead" contract).
+ *   numera.identifier.ident_cmp      : null operand -> 0 (no deref crash).
+ *   numera.threshold_vault.tv_keyshare_ptr : i >= TV_MAX_NK -> 0 (no pointer into adjacent BSS).
+ *   numera.mcmc_egraph.mcmc_cost/greedy    : index >= MCMC_N -> 0 (no OOB read of MCMC_COST[64]).
+ *   numera.pareto_frontier.pf_dominates/on_frontier : index >= PF_M -> 0 (no OOB read of the [6] arrays).
+ * 99 = the cap-revocation walk fires AND every accessor guard fires on the bad index. */
+module corpus_1605
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_revoke(authority_id: u64, target_id: u64) -> i32 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_is_revoked(id: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn tv_keyshare_ptr(i: u32) -> u64 from "threshold_vault.iii"
+extern @abi(c-msvc-x64) fn mcmc_cost(s: u32) -> u32 from "mcmc_egraph.iii"
+extern @abi(c-msvc-x64) fn mcmc_greedy(start: u32) -> u32 from "mcmc_egraph.iii"
+extern @abi(c-msvc-x64) fn pf_dominates(a: u32, b: u32) -> u32 from "pareto_frontier.iii"
+extern @abi(c-msvc-x64) fn pf_on_frontier(k: u32) -> u32 from "pareto_frontier.iii"
+
+var IDBUF : [u8; 32]
+
+fn main() -> u64 {
+    /* cap_is_revoked walks the chain: revoke a middle cap, its DESCENDANT reports revoked */
+    let root : u64 = cap_env_init()
+    let child : u64 = cap_attenuate(root, 0x5u64, 0u64)
+    let gchild : u64 = cap_attenuate(child, 0x5u64, 0u64)
+    if root == 0u64 { return 1u64 }
+    if child == 0u64 { return 2u64 }
+    if gchild == 0u64 { return 3u64 }
+    if cap_is_revoked(gchild) != 0u8 { return 4u64 }    /* live before revocation */
+    if cap_revoke(root, child) != 0i32 { return 5u64 }  /* root revokes the middle cap */
+    if cap_is_revoked(child) != 1u8 { return 6u64 }     /* the cap itself */
+    if cap_is_revoked(gchild) != 1u8 { return 7u64 }    /* TEETH: descendant of a revoked ancestor (was 0) */
+
+    /* ident_cmp null operand -> 0 (no crash) */
+    let mut i : u64 = 0u64
+    while i < 32u64 { IDBUF[i] = (i + 1u64) as u8  i = i + 1u64 }
+    if ident_cmp((0u64) as *u8, (&IDBUF as u64) as *u8) != 0i32 { return 8u64 }
+    if ident_cmp((&IDBUF as u64) as *u8, (&IDBUF as u64) as *u8) != 0i32 { return 9u64 }   /* equal */
+
+    /* tv_keyshare_ptr OOB -> 0; valid -> non-null */
+    if tv_keyshare_ptr(20u32) != 0u64 { return 10u64 }
+    if tv_keyshare_ptr(2u32) == 0u64 { return 11u64 }
+
+    /* mcmc_cost / mcmc_greedy OOB -> 0 (MCMC_COST is [64]) */
+    if mcmc_cost(100u32) != 0u32 { return 12u64 }
+    if mcmc_greedy(100u32) != 0u32 { return 13u64 }
+
+    /* pf_dominates / pf_on_frontier OOB -> 0 (the [6] arrays) */
+    if pf_dominates(10u32, 0u32) != 0u32 { return 14u64 }
+    if pf_on_frontier(10u32) != 0u32 { return 15u64 }
+
+    return 99u64
+}

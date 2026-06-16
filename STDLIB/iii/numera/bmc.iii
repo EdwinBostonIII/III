@@ -52,6 +52,9 @@ fn bmc_succ_of(set: u32) -> u32 @export {
 
 /* shortest distance from the initial state 0 to target (BMC_NONE if unreachable within N steps). */
 fn bmc_shortest(target: u32) -> u32 @export {
+    /* [sev2] `reach >> target` is UB for target>=32; and any target >= BMC_N is an out-of-range state that is
+     * trivially unreachable.  One guard here also covers bmc_reachable/bmc_safe (both route through this). */
+    if target >= BMC_N { return BMC_NONE }
     let mut reach : u32 = 1u32 << 0u32           /* {0} */
     let mut depth : u32 = 0u32
     while depth <= BMC_N {

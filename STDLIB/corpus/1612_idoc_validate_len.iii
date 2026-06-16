@@ -1,0 +1,41 @@
+/* 1612 -- W2700: aether.idoc idoc_validate omitted the payload-length gate, proven.
+ *
+ * idoc_validate(idoc_buf, idoc_len) HAS idoc_len and is the function meant to BE the structural
+ * gate, but it only called babel_wire_verify_crc -- never babel_wire_verify_len. So a buffer whose
+ * declared length did not cover its header-claimed payload still passed validation, and the payload
+ * walk (and downstream idoc_resolve_facet) read past the buffer. Fixed: gate on verify_len.
+ * 99 = a well-formed idoc validates, but a declared length that does not cover the payload is
+ *      rejected (was accepted -> OOB read). */
+module corpus_1612
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 from "idoc.iii"
+
+var BUF : [u8; 512]
+
+fn main() -> u64 {
+    let bptr : u64 = (&BUF) as u64
+    babel_wire_init(bptr)
+    let hb : u32 = babel_wire_header_bytes()    /* 68 */
+
+    /* one facet record at the payload base: fid(1) + flen(4 LE)=4 + 4 data bytes = 9-byte payload. */
+    let pb : u64 = bptr + (hb as u64)
+    let p0 : *u8 = pb as *u8
+    p0[0u64] = 0x01u8                            /* facet id */
+    p0[1u64] = 0x04u8  p0[2u64] = 0x00u8  p0[3u64] = 0x00u8  p0[4u64] = 0x00u8   /* flen = 4 LE */
+    p0[5u64] = 0xDDu8  p0[6u64] = 0xDDu8  p0[7u64] = 0xDDu8  p0[8u64] = 0xDDu8   /* 4 data bytes */
+
+    let total : u32 = idoc_finalize(bptr, 9u32)  /* sets payload_len + CRC; total = hb + 9 */
+    if total != (hb + 9u32) { return 1u64 }
+
+    /* a well-formed idoc validates at its true length. */
+    if idoc_validate(bptr, total) != 1u8 { return 2u64 }
+
+    /* TEETH: a declared length that does NOT cover header+payload is rejected (was accepted). */
+    if idoc_validate(bptr, hb) != 0u8 { return 3u64 }            /* header only, payload absent */
+    if idoc_validate(bptr, total - 1u32) != 0u8 { return 4u64 }  /* one byte short of the payload */
+    if idoc_validate(bptr, hb - 1u32) != 0u8 { return 5u64 }     /* below the header */
+    return 99u64
+}

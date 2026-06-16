@@ -283,7 +283,8 @@ fn cf_slot_of_cap_raw(cap: u64) -> u32 {
 fn cf_publish_slot(slot: u32, revtag: u8, n_ante: u32) -> u64 {
     wh_chain_root(&CFORGE_INC as *u8)
     cf_slot_commit(slot, &CFORGE_OUTC as *u8)
-    let opp : *u8 = &CFORGE_OPID_FORGE as *u8
+    let mut opp : *u8 = &CFORGE_OPID_FORGE as *u8
+    if revtag == CFORGE_REVTAG_DEFORGE { opp = &CFORGE_OPID_DEFORGE as *u8 }   /* [W2700] deforge fragments must carry the deforge opid, not forge (CFORGE_OPID_DEFORGE was dead) */
     let frag : u64 = wh_publish(&CFORGE_PRODUCER as *u8, opp, &CFORGE_INC as *u8, &CFORGE_OUTC as *u8, revtag, CFORGE_PHASE, CFORGE_PILLAR, &CFORGE_ANTE_IDBUF as *u8, n_ante, &CFORGE_OUTC as *u8, 32u32, &CFORGE_FID as *u8)
     return frag
 }

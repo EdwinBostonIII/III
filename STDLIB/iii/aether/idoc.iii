@@ -37,6 +37,7 @@ extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i
 extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
@@ -224,6 +225,7 @@ fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 @export {
     let l_len : u32 = idoc_len
     if l_buf == 0u64 { return 0u8 }
     if babel_wire_verify_crc(l_buf, l_len) != 1u8 { return 0u8 }
+    if babel_wire_verify_len(l_buf, l_len) != 1u8 { return 0u8 }   /* [W2700] buffer must cover header+payload before the structural walk (the gate idoc_validate is meant to BE) */
     /* Structural: walk payload; ensure each facet's len fits. */
     let plen : u32 = babel_wire_unpack_payload_len(l_buf)
     let mut off : u32 = 0u32

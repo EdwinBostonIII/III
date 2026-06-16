@@ -1,0 +1,35 @@
+/* 1610 -- W2700: numera.lzss lzss_decompress truncated-match OOB read, proven.
+ *
+ * The match branch reads TWO bytes (b0=ip[inp], b1=ip[inp+1]) but the only guard was `inp < in_len`
+ * (one byte). A stream ending in a match control bit + a single byte read ip[in_len] OOB. Fixed:
+ * reject when (inp+1) >= in_len before reading b1.
+ * 99 = round-trip still works AND a truncated match token is rejected (was OOB read). */
+module corpus_1610
+
+extern @abi(c-msvc-x64) fn lzss_compress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+extern @abi(c-msvc-x64) fn lzss_decompress(in_ptr: u64, in_len: u32, out_ptr: u64, out_cap: u32) -> i32 from "lzss.iii"
+
+var SRC   : [u8; 64]
+var COMP  : [u8; 256]
+var DEC   : [u8; 64]
+var BADIN : [u8; 4]
+
+fn main() -> u64 {
+    /* positive: a repetitive buffer round-trips. */
+    let mut i : u64 = 0u64
+    while i < 48u64 { SRC[i] = (0x41u8 + ((i & 7u64) as u8))  i = i + 1u64 }
+    let clen : i32 = lzss_compress((&SRC) as u64 as *u8, 48u32, (&COMP) as u64 as *u8, 256u32)
+    if clen == -1i32 { return 1u64 }
+    let dlen : i32 = lzss_decompress((&COMP) as u64 as *u8, clen as u32, (&DEC) as u64 as *u8, 64u32)
+    if dlen != 48i32 { return 2u64 }
+    let mut j : u64 = 0u64
+    while j < 48u64 { if DEC[j] != SRC[j] { return 3u64 }  j = j + 1u64 }
+
+    /* TEETH: a truncated match token (control bit0=match, then ONE byte) must be rejected, not
+     * OOB-read.  in_len=2: outer reads ctrl=ip[0]=0x01 (inp->1); inner inp(1)<in_len(2), match bit
+     * set, then b1=ip[2] would be OOB.  After the fix -> -1. */
+    BADIN[0] = 0x01u8
+    BADIN[1] = 0xAAu8
+    if lzss_decompress((&BADIN) as u64 as *u8, 2u32, (&DEC) as u64 as *u8, 64u32) != -1i32 { return 4u64 }
+    return 99u64
+}

@@ -1,0 +1,69 @@
+/* 1611 -- W2700: aether.cap_forge cf_publish_slot mislabels deforge fragments, proven.
+ *
+ * cf_publish_slot took a revtag param but unconditionally set opid = CFORGE_OPID_FORGE, so every
+ * DEFORGE fragment was published with the FORGE opid (CFORGE_OPID_DEFORGE was a dead constant). The
+ * witness log then had deforge fragments (revtag=1) carrying the forge opid -- an attribution lie.
+ * Fixed: select CFORGE_OPID_DEFORGE when revtag == CFORGE_REVTAG_DEFORGE.
+ *
+ * Ceremony: forge A (split), forge B as a RESTRICT of A (B depends on A via CFORGE_ANTE), then
+ * deforge A -> the cascade revokes the dependent B and publishes B's DEFORGE fragment.
+ * 99 = B's deforge-fragment opid DIFFERS from a forge-fragment opid (was identical before the fix). */
+module corpus_1611
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cf_init() -> i32 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn cf_forge_split(cap_a: u64, partition_pred: u32, partition_index: u32, out_cap: *u64) -> u32 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn cf_forge_restrict(cap_a: u64, sub_resource: *u8, rights_mask: u64, out_cap: *u64) -> u32 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn cf_forged_frag(slot: u32) -> u64 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn cf_deforge_cascade(revoked_cap: u64) -> u32 from "cap_forge.iii"
+extern @abi(c-msvc-x64) fn wh_get_op_id(idx: u64, out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+
+var OUTA : [u64; 1]
+var OUTB : [u64; 1]
+var SUBRES : [u8; 32]
+var FORGE_OPID   : [u8; 32]
+var DEFORGE_OPID : [u8; 32]
+
+fn opid_eq() -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { if FORGE_OPID[i] != DEFORGE_OPID[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    wh_init(0u64)          /* the witness spine must be live or wh_publish returns the sentinel */
+    cf_init()
+    let env : u64 = cap_env_init()
+    let parent : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    if parent == 0u64 { return 1u64 }
+
+    /* forge A via split */
+    let slot_a : u32 = cf_forge_split(parent, 2u32, 1u32, (&OUTA) as u64 as *u64)
+    if slot_a == 0xFFFFFFFFu32 { return 2u64 }
+    let cap_a : u64 = OUTA[0u64]
+    if cap_a == 0u64 { return 3u64 }
+
+    /* forge B as a restrict of A (B depends on A) */
+    let mut k : u64 = 0u64
+    while k < 32u64 { SUBRES[k] = (k as u8)  k = k + 1u64 }
+    let slot_b : u32 = cf_forge_restrict(cap_a, (&SUBRES) as u64 as *u8, 0x0Au64, (&OUTB) as u64 as *u64)
+    if slot_b == 0xFFFFFFFFu32 { return 4u64 }
+    if OUTB[0u64] == 0u64 { return 5u64 }
+
+    /* capture B's FORGE-fragment opid */
+    let forge_frag : u64 = cf_forged_frag(slot_b)
+    wh_get_op_id(forge_frag, (&FORGE_OPID) as u64 as *u8)
+
+    /* deforge A: cascade revokes the dependent B and publishes B's DEFORGE fragment */
+    let n : u32 = cf_deforge_cascade(cap_a)
+    if n == 0u32 { return 6u64 }                       /* B must have cascaded */
+    let deforge_frag : u64 = cf_forged_frag(slot_b)
+    if deforge_frag == forge_frag { return 7u64 }      /* a NEW fragment was published */
+    wh_get_op_id(deforge_frag, (&DEFORGE_OPID) as u64 as *u8)
+
+    /* TEETH: the deforge fragment's opid must differ from the forge opid (was identical). */
+    if opid_eq() == 1u8 { return 8u64 }
+    return 99u64
+}

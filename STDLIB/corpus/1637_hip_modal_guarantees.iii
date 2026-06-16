@@ -1,0 +1,97 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1637_hip_modal_guarantees.iii
+ *
+ * III conformance corpus 1637 -- HIP modal-force projection.
+ *
+ * THE CAPABILITY DELTA (enhance W2, lens hip-roles-deep):
+ *   nl_parse recognises "AGENT [MODAL] VERB" ("the buffer should encrypt the
+ *   message") and emits a MODAL fragment (role 13) whose quantifier is the
+ *   modality_id (STRONG=1 for should/will, POSSIBLE=2 for can/may, ...), but
+ *   hip DROPPED it -- every projected intent carried required_guarantees=0
+ *   regardless of modal force.  hip now stamps each candidate's
+ *   required_guarantees with the modality.
+ *
+ * Discriminator (RED on the old lib, GREEN after the hip.iii edit):
+ *   Case A "the buffer should encrypt the message" -> cands[0].required_guarantees == 1 (STRONG)
+ *          OLD: 0 (unset) -> exit 11 (RED)
+ *   Case B "send the packet" (no modal) -> cands[0].required_guarantees == 0 (no spurious stamp)
+ *
+ * intent_required_guarantees reads offset 148 (intent.iii:219); modality
+ * STRONG=1.  "should"=verb word 157 (modal-aux); all KAT words registered.
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_compose. Ring: R3. K: 1.00.
+ */
+
+module corpus_1637
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 from "hip.iii"
+extern @abi(c-msvc-x64) fn intent_required_guarantees(intent_ptr: u64) -> u32 from "intent.iii"
+
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+fn _read_u64(buf: *u8, off: u64) -> u64 {
+    let lo : u64 = (_read_u32(buf, off) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (_read_u32(buf, off + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+fn _zero(buf: *u8, n: u64) -> i32 { let mut i : u64 = 0u64  while i < n { buf[i] = 0u8  i = i + 1u64 }  return 0i32 }
+
+/* "the buffer should encrypt the message" */
+fn _phrase_a(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,98u8);o=_put(buf,o,117u8);o=_put(buf,o,102u8);o=_put(buf,o,102u8);o=_put(buf,o,101u8);o=_put(buf,o,114u8);o=_put(buf,o,32u8)   /* buffer */
+    o=_put(buf,o,115u8);o=_put(buf,o,104u8);o=_put(buf,o,111u8);o=_put(buf,o,117u8);o=_put(buf,o,108u8);o=_put(buf,o,100u8);o=_put(buf,o,32u8)   /* should */
+    o=_put(buf,o,101u8);o=_put(buf,o,110u8);o=_put(buf,o,99u8);o=_put(buf,o,114u8);o=_put(buf,o,121u8);o=_put(buf,o,112u8);o=_put(buf,o,116u8);o=_put(buf,o,32u8)   /* encrypt */
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,109u8);o=_put(buf,o,101u8);o=_put(buf,o,115u8);o=_put(buf,o,115u8);o=_put(buf,o,97u8);o=_put(buf,o,103u8);o=_put(buf,o,101u8)   /* message */
+    return o as u32
+}
+/* "send the packet" (no modal) */
+fn _phrase_b(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,115u8);o=_put(buf,o,101u8);o=_put(buf,o,110u8);o=_put(buf,o,100u8);o=_put(buf,o,32u8)   /* send */
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,112u8);o=_put(buf,o,97u8);o=_put(buf,o,99u8);o=_put(buf,o,107u8);o=_put(buf,o,101u8);o=_put(buf,o,116u8)   /* packet */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let text  : *u8 = malloc(256u64)
+    let cands : *u8 = malloc(64u64)
+    let meta  : *u8 = malloc(16u64)
+    if text  as u64 == 0u64 { return 3u64 }
+    if cands as u64 == 0u64 { return 4u64 }
+    if meta  as u64 == 0u64 { return 5u64 }
+
+    /* Case A: modal "should" (STRONG=1) stamps the projected intents. */
+    _zero(meta, 16u64); _zero(cands, 64u64)
+    let len_a : u32 = _phrase_a(text)
+    let rc_a : i32 = hip_resolve(text as u64, len_a, cands as u64, meta as u64)
+    if rc_a != 0i32 { return 1u64 }
+    let cnt_a : u32 = _read_u32(meta, 0u64)
+    if cnt_a < 1u32 { return 10u64 }
+    let cand0 : u64 = _read_u64(cands, 0u64)
+    if intent_required_guarantees(cand0) != 1u32 { return 11u64 }   /* RED on old lib (==0) */
+
+    /* Case B: no modal -> no stamp. */
+    _zero(meta, 16u64); _zero(cands, 64u64)
+    let len_b : u32 = _phrase_b(text)
+    let rc_b : i32 = hip_resolve(text as u64, len_b, cands as u64, meta as u64)
+    if rc_b != 0i32 { return 2u64 }
+    let cnt_b : u32 = _read_u32(meta, 0u64)
+    if cnt_b < 1u32 { return 20u64 }
+    let cand0b : u64 = _read_u64(cands, 0u64)
+    if intent_required_guarantees(cand0b) != 0u32 { return 21u64 }
+
+    free(text); free(cands); free(meta)
+    return 99u64
+}

@@ -1,0 +1,62 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1639_http_response_version.iii
+ *
+ * III conformance corpus 1639 -- HTTP status-line version recovery.
+ *
+ * THE CAPABILITY DELTA (enhance W2, lens aether-net-capability):
+ *   http_parse_status_line parsed the status code but SKIPPED the HTTP version
+ *   digits.  It now CAPTURES major/minor into HTTP_RESP_VERSION, exposed via
+ *   the new http_response_http_version accessor -- so backend_remote can apply
+ *   the RFC 7230 HTTP/1.0-vs-1.1 EOF-framing distinction it documents but could
+ *   not previously observe.
+ *
+ * Discriminator (RED on the old lib, GREEN after the http_client.iii edit):
+ *   OLD lib: http_response_http_version does not exist -> KAT cannot link.
+ *   NEW lib: "HTTP/1.1 200 OK\r\n\r\n" -> 0x0101 ; "HTTP/1.0 404 NF\r\n\r\n" -> 0x0100.
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_passage. Ring: R3. K: 1.00.
+ */
+
+module corpus_1639
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_http_version(id: u64) -> u32 from "http_client.iii"
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+
+/* "HTTP/1.<minor> <c0><c1><c2> XX\r\n\r\n" */
+fn _resp(buf: *u8, minor: u8, c0: u8, c1: u8, c2: u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,72u8);o=_put(buf,o,84u8);o=_put(buf,o,84u8);o=_put(buf,o,80u8);o=_put(buf,o,47u8)   /* HTTP/ */
+    o=_put(buf,o,49u8);o=_put(buf,o,46u8);o=_put(buf,o,minor)   /* 1 . <minor> */
+    o=_put(buf,o,32u8)   /* SP */
+    o=_put(buf,o,c0);o=_put(buf,o,c1);o=_put(buf,o,c2)   /* status 3 digits */
+    o=_put(buf,o,32u8);o=_put(buf,o,79u8);o=_put(buf,o,75u8)   /* SP O K */
+    o=_put(buf,o,13u8);o=_put(buf,o,10u8)   /* CRLF (end of status line) */
+    o=_put(buf,o,13u8);o=_put(buf,o,10u8)   /* CRLF (end of headers) */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(64u64)
+    if buf as u64 == 0u64 { return 3u64 }
+
+    /* HTTP/1.1 200 -> 0x0101 */
+    let l1 : u32 = _resp(buf, 49u8, 50u8, 48u8, 48u8)   /* minor '1', "200" */
+    let r1 : u64 = http_parse_response(a, buf as u64, l1 as u64)
+    if r1 == 0u64 { return 1u64 }
+    if http_response_http_version(r1) != 0x0101u32 { return 11u64 }
+
+    /* HTTP/1.0 404 -> 0x0100 */
+    let l0 : u32 = _resp(buf, 48u8, 52u8, 48u8, 52u8)   /* minor '0', "404" */
+    let r0 : u64 = http_parse_response(a, buf as u64, l0 as u64)
+    if r0 == 0u64 { return 2u64 }
+    if http_response_http_version(r0) != 0x0100u32 { return 12u64 }
+
+    arena_drop(a)
+    return 99u64
+}

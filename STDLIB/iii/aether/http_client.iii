@@ -74,6 +74,7 @@ var HTTP_RESP_TEXT_LEN       : [u64; 64]
 var HTTP_RESP_HEADERS_COUNT  : [u64; 64]
 var HTTP_RESP_BODY_BASE      : [u64; 64]
 var HTTP_RESP_BODY_LEN       : [u64; 64]
+var HTTP_RESP_VERSION        : [u32; 64]   /* (major<<8)|minor; 0 if unparsed */
 var HTTP_RESP_LIVE           : [u8;  64]
 
 /* Per-header parallel arrays.  Header j of response i lives at index
@@ -102,6 +103,7 @@ fn http_alloc_slot() -> u32 {
             HTTP_RESP_HEADERS_COUNT[i] = 0u64
             HTTP_RESP_BODY_BASE[i] = 0u64
             HTTP_RESP_BODY_LEN[i] = 0u64
+            HTTP_RESP_VERSION[i] = 0u32
             return i
         }
         i = i + 1u32
@@ -252,6 +254,20 @@ fn http_parse_status_line(slot_idx: u32) -> i32 {
     if p3 != 80u32 { return HTTP_E_PARSE }   /* P */
     if p4 != 47u32 { return HTTP_E_PARSE }   /* / */
     HTTP_PARSE_CURSOR = 5u64
+    /* Capture HTTP version "M.N": major at byte 5, minor at byte 7 (the digits
+     * the skip loop below discards).  raw_len >= 9 is guaranteed above, so
+     * bytes 5..7 exist. [enhance W2, aether-net: parsed-but-discarded recovered] */
+    let vmaj : u32 = http_byte_at(5u64)
+    let vmin : u32 = http_byte_at(7u64)
+    if vmaj >= 48u32 {
+        if vmaj <= 57u32 {
+            if vmin >= 48u32 {
+                if vmin <= 57u32 {
+                    HTTP_RESP_VERSION[slot_idx] = (((vmaj - 48u32) & 0xFFu32) << 8u32) | ((vmin - 48u32) & 0xFFu32)
+                }
+            }
+        }
+    }
     /* Skip version digits/dot until first space. */
     let mut going_ver : u8 = 1u8
     while going_ver == 1u8 {
@@ -676,6 +692,15 @@ fn http_response_status(id: u64) -> u32 @export {
     let idx : u32 = http_resolve_id(id)
     if idx == HTTP_RESP_MAX { return 0u32 }
     return HTTP_RESP_STATUS[idx] as u32
+}
+
+/* HTTP version of the parsed status line, as (major<<8)|minor (0x0101 =
+ * HTTP/1.1, 0x0100 = HTTP/1.0); 0 if the slot is invalid or version malformed.
+ * [enhance W2, aether-net: parsed-but-discarded version recovered] */
+fn http_response_http_version(id: u64) -> u32 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u32 }
+    return HTTP_RESP_VERSION[idx]
 }
 
 fn http_response_status_text_base(id: u64) -> u64 @export {

@@ -72,6 +72,7 @@ var HTTPS_REQ_TARGET_LEN    : [u64; 64]
 var HTTPS_REQ_HEADERS_COUNT : [u64; 64]
 var HTTPS_REQ_BODY_BASE     : [u64; 64]
 var HTTPS_REQ_BODY_LEN      : [u64; 64]
+var HTTPS_REQ_VERSION       : [u32; 64]   /* (major<<8)|minor; 0 if unparsed */
 var HTTPS_REQ_LIVE          : [u8;  64]
 
 /* Per-header parallel arrays. */
@@ -100,6 +101,7 @@ fn https_alloc_slot() -> u32 {
             HTTPS_REQ_HEADERS_COUNT[i] = 0u64
             HTTPS_REQ_BODY_BASE[i] = 0u64
             HTTPS_REQ_BODY_LEN[i] = 0u64
+            HTTPS_REQ_VERSION[i] = 0u32
             return i
         }
         i = i + 1u32
@@ -257,8 +259,11 @@ fn https_parse_request_line(slot_idx: u32) -> i32 {
     HTTPS_REQ_TARGET_BASE[slot_idx] = HTTPS_PARSE_RAW_BASE + target_off
     HTTPS_REQ_TARGET_LEN[slot_idx]  = target_len
     HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64   /* past SP */
-    /* Skip HTTP-version up to CRLF.  We accept anything as long as the
-     * line ends with CRLF; strict version checking can be added later. */
+    /* HTTP-version "HTTP/M.N": the line must end with CRLF.  We now CAPTURE the
+     * major/minor digits (previously skipped) into HTTPS_REQ_VERSION as
+     * (major<<8)|minor; a malformed version stays 0 (unparsed) yet still parses
+     * as long as the CRLF terminates the line. [enhance W2, aether-net] */
+    let ver_off : u64 = HTTPS_PARSE_CURSOR
     let mut going_v : u8 = 1u8
     while going_v == 1u8 {
         if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_v = 0u8 }
@@ -271,6 +276,20 @@ fn https_parse_request_line(slot_idx: u32) -> i32 {
         }
     }
     if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+    let ver_len : u64 = HTTPS_PARSE_CURSOR - ver_off
+    if ver_len >= 8u64 {
+        let maj : u32 = https_byte_at(ver_off + 5u64)
+        let min : u32 = https_byte_at(ver_off + 7u64)
+        if maj >= 48u32 {
+            if maj <= 57u32 {
+                if min >= 48u32 {
+                    if min <= 57u32 {
+                        HTTPS_REQ_VERSION[slot_idx] = (((maj - 48u32) & 0xFFu32) << 8u32) | ((min - 48u32) & 0xFFu32)
+                    }
+                }
+            }
+        }
+    }
     HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 2u64   /* past CRLF */
     return HTTPS_OK
 }
@@ -626,6 +645,15 @@ fn http_request_method_base(id: u64) -> u64 @export {
     let idx : u32 = https_resolve_id(id)
     if idx == HTTPS_REQ_MAX { return 0u64 }
     return HTTPS_REQ_METHOD_BASE[idx]
+}
+
+/* HTTP version of the parsed request line, as (major<<8)|minor (e.g. 0x0101 =
+ * HTTP/1.1, 0x0100 = HTTP/1.0); 0 if the slot is invalid or the version was
+ * malformed. [enhance W2, aether-net: parsed-but-discarded version recovered] */
+fn http_request_http_version(id: u64) -> u32 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u32 }
+    return HTTPS_REQ_VERSION[idx]
 }
 
 fn http_request_method_len(id: u64) -> u64 @export {

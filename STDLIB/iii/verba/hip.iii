@@ -46,6 +46,7 @@ extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 
 extern @abi(c-msvc-x64) fn intent_query(kind: u64, id: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_if(guard_intent: u64, body_intent: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_under(context_intent: u64, body_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_required_guarantees(intent_ptr: u64, g: u32) -> i32 from "intent.iii"
 
 const HIP_CLASS_UNIQUE     : u32 = 0u32
 const HIP_CLASS_AMBIGUOUS  : u32 = 1u32
@@ -77,6 +78,7 @@ const HIPN_KIND_INTERROGATIVE : u32 = 3u32
 const HIPN_ROLE_TOPIC_C       : u32 = 10u32   /* mirrors NLP_ROLE_TOPIC */
 const HIPN_ROLE_CONDITION     : u32 = 12u32   /* mirrors NLP_ROLE_CONDITION (if/while) */
 const HIPN_ROLE_REASON        : u32 = 11u32   /* mirrors NLP_ROLE_REASON (because) */
+const HIPN_ROLE_MODAL         : u32 = 13u32   /* mirrors NLP_ROLE_MODAL (should/will/can) */
 
 /* Verb word_ids (from nl_lex sealed lexicon). */
 const VW_SEND     : u32 =  1u32
@@ -425,6 +427,32 @@ fn _hip_classify(cand_count: u32) -> u32 {
     return HIP_CLASS_AMBIGUOUS
 }
 
+/* Modal-force projection [enhance W2, lens hip-roles-deep]:
+ * nl_parse recognises an "AGENT [MODAL] VERB" declarative ("the buffer should
+ * encrypt the message") and emits a MODAL fragment (role 13) whose quantifier
+ * is the modality_id (STRONG/POSSIBLE/COUNTERFACTUAL/ASPECTUAL), but hip
+ * DROPPED it -- every projected intent carried required_guarantees=0 regardless
+ * of the modal force.  hip now stamps each projected candidate's
+ * required_guarantees with the modality, so "should"/"will" (STRONG=1) is
+ * distinguishable from "may"/"can" (POSSIBLE=2) downstream.  Applied BEFORE the
+ * condition/reason wraps so the force lands on the ACTION, not the wrapper.
+ * Reuses the existing intent_set_required_guarantees; no new module. */
+fn _hip_apply_modal(frags_buf: u64, count: u32, out_cands: u64, k: u32) -> u32 {
+    if k == 0u32 { return k }
+    if k > HIP_MAX_CANDIDATES { return k }
+    let m_idx : u32 = _hip_role_of(frags_buf, count, HIPN_ROLE_MODAL)
+    if m_idx == 0xFFFFFFFFu32 { return k }
+    let modal_q : u32 = nl_parse_frag_quantifier(frags_buf, m_idx)
+    if modal_q == 0u32 { return k }
+    let mut i : u32 = 0u32
+    while i < k {
+        let pp : *u64 = (out_cands + ((i as u64) * 8u64)) as *u64
+        intent_set_required_guarantees(pp[0u64], modal_q)
+        i = i + 1u32
+    }
+    return k
+}
+
 /* Conditional-clause wrapping [enhance W1, lens hip-intent]:
  * a subordinate "if"/"while" clause is parsed by nl_parse as a CONDITION
  * fragment whose head is the clause's predicate verb, but hip DROPPED it --
@@ -544,6 +572,7 @@ fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u
             let pv_meta : u64 = _hip_pack_pv_meta(v_word, frag_count, k, HIP_MAX_CANDIDATES)
             k = _hip_project_verb(pv_meta, frag_buf, tok_buf, oc)
             if k == 0xFFFFFFFFu32 { k = HIP_MAX_CANDIDATES }
+            k = _hip_apply_modal(frag_buf, frag_count, oc, k)
             k = _hip_wrap_condition(frag_buf, tok_buf, frag_count, oc, k)
             k = _hip_wrap_reason(frag_buf, tok_buf, frag_count, oc, k)
         }

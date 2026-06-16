@@ -49,7 +49,12 @@
  *   [40..44)=voter_id(LE) [44..108)=voter_sig over (block_mhash||view).
  * NewView layout (76 bytes): [0..8)=new_view(LE) [8..12)=sender_id(LE)
  *   [12..76)=timeout_sig over (new_view-bytes).
- * QC layout: [0..32)=block_mhash [32..40)=view [40..44)=n_sigs [44..)=64B sigs.
+ * QC layout: [0..32)=block_mhash [32..40)=view [40..44)=n_sigs [44..52)=signer_bitmap
+ *   (8B LE, bit p set iff peer p signed) [52..)=64B sigs in ascending signer-index order.
+ *   [T1b] The signer bitmap makes the QC carry ANY 2f+1 subset (genuine BFT fault tolerance),
+ *   not just a prefix of peers; hs_verify_qc verifies each sig against its CLAIMED signer's key.
+ *   hs_compose_qc composes a prefix-signer QC (bitmap = low n_sigs bits); hs_compose_qc_bitmap
+ *   composes an arbitrary-signer QC.  Length = 52 + n_sigs*64.
  */
 module aether_hotstuff
 
@@ -298,15 +303,16 @@ fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 @export {
     return HS_OK
 }
 
-/* [T1a] Form the prepareQC from the quorum's accumulated votes into HS_HIGH_QC (and copy it into HS_LOCKED_QC),
- * in the prefix-signer QC format (sig[i] = peer i's signature over block_mhash||view, the format hs_verify_qc
- * checks).  Called at the PREPARE->PRECOMMIT quorum: the result is the justify-QC the NEXT proposal carries and
- * the certificate the replica LOCKS on.  Bounded to the 256-byte parent_qc block field: forms only when
- * 44 + n_sigs*64 <= 256 (n_sigs <= 3 -- the f=1 federation the block layout supports); larger configurations
- * leave HS_HIGH_QC unchanged (no overflow, graceful degradation to the pre-thread behaviour). */
+/* [T1a/T1b] Form the prepareQC from the quorum's accumulated votes into HS_HIGH_QC (and copy it into
+ * HS_LOCKED_QC), in the signer-bitmap QC format hs_verify_qc checks.  [T1b] writes the ACTUAL voter set
+ * (HS_VOTE_BITMAP) and their sigs in ascending signer-index order -- so a quorum of arbitrary (non-prefix)
+ * voters forms a VALID QC, not just peers 0..n-1.  Called at the PREPARE->PRECOMMIT quorum: the result is the
+ * justify-QC the NEXT proposal carries and the certificate the replica LOCKS on.  Bounded to the 256-byte
+ * parent_qc block field: forms only when 52 + n_sigs*64 <= 256 (n_sigs <= 3 -- the f=1 federation the block
+ * layout supports); larger configurations leave HS_HIGH_QC unchanged (no overflow, graceful degradation). */
 fn hs_form_qc_from_votes(view: u64) -> i32 {
     let ns : u32 = HS_QUORUM
-    if 44u64 + (ns as u64) * 64u64 > 256u64 { return HS_E_BAD_QC }   /* QC would not fit the 256B parent_qc field */
+    if 52u64 + (ns as u64) * 64u64 > 256u64 { return HS_E_BAD_QC }   /* QC would not fit the 256B parent_qc field */
     let qc : *u8 = (&HS_HIGH_QC as u64) as *u8
     let mut k : u64 = 0u64
     while k < 32u64 { qc[k] = HS_VOTE_BLOCK[k] ; k = k + 1u64 }       /* block_mhash this quorum voted for */
@@ -322,8 +328,23 @@ fn hs_form_qc_from_votes(view: u64) -> i32 {
     qc[41u64] = ((ns >> 8u32)  & 0xFFu32) as u8
     qc[42u64] = ((ns >> 16u32) & 0xFFu32) as u8
     qc[43u64] = ((ns >> 24u32) & 0xFFu32) as u8
-    let mut i : u64 = 0u64
-    while i < (ns as u64) * 64u64 { qc[44u64 + i] = HS_VOTE_SIGS[i] ; i = i + 1u64 }   /* peers 0..ns-1, prefix-signer */
+    /* [T1b] signer bitmap = the actual voters (HS_VOTE_BITMAP, 8 bytes = 64 bits) */
+    let mut bj : u64 = 0u64
+    while bj < 8u64 { qc[44u64 + bj] = HS_VOTE_BITMAP[bj] ; bj = bj + 1u64 }
+    /* [T1b] sigs in ascending signer-index order, gathered from the peer-indexed HS_VOTE_SIGS */
+    let mut p : u32 = 0u32
+    let mut j : u32 = 0u32
+    while p < HS_PEER_COUNT {
+        let bidx : u64 = (p as u64) / 8u64
+        let one : u32 = 1u32
+        let pbit : u8 = (one << (p & 7u32)) as u8
+        if (HS_VOTE_BITMAP[bidx] & pbit) != 0u8 {
+            let mut s : u64 = 0u64
+            while s < 64u64 { qc[52u64 + (j as u64) * 64u64 + s] = HS_VOTE_SIGS[(p as u64) * 64u64 + s] ; s = s + 1u64 }
+            j = j + 1u32
+        }
+        p = p + 1u32
+    }
     let lk : *u8 = (&HS_LOCKED_QC as u64) as *u8
     let mut m : u64 = 0u64
     while m < 256u64 { lk[m] = qc[m] ; m = m + 1u64 }                /* pre-commit LOCK on the prepareQC */
@@ -481,31 +502,84 @@ fn hs_compose_qc(block_mhash: *u8, view: u64, sigs: *u8, n_sigs: u32, out_qc: *u
     out_qc[41u64] = ((n_sigs >> 8u32)  & 0xFFu32) as u8
     out_qc[42u64] = ((n_sigs >> 16u32) & 0xFFu32) as u8
     out_qc[43u64] = ((n_sigs >> 24u32) & 0xFFu32) as u8
+    /* [T1b] prefix-signer bitmap: peers 0..n_sigs-1 (low n_sigs bits) */
+    let bm : u64 = (1u64 << (n_sigs as u64)) - 1u64
+    let mut bj : u64 = 0u64
+    while bj < 8u64 { out_qc[44u64 + bj] = ((bm >> (bj * 8u64)) & 0xFFu64) as u8 ; bj = bj + 1u64 }
     let mut m : u64 = 0u64
-    while m < (n_sigs as u64) * 64u64 { out_qc[44u64 + m] = sigs[m] ; m = m + 1u64 }
+    while m < (n_sigs as u64) * 64u64 { out_qc[52u64 + m] = sigs[m] ; m = m + 1u64 }
+    return HS_OK
+}
+
+/* [T1b] popcount over a 64-bit signer bitmap. */
+fn hs_popcount(x: u64) -> u32 {
+    let mut c : u32 = 0u32
+    let mut v : u64 = x
+    while v != 0u64 { c = c + ((v & 1u64) as u32) ; v = v >> 1u64 }
+    return c
+}
+
+/* [T1b] Compose an ARBITRARY-signer QC: signer_bitmap names which peers signed (any 2f+1 subset);
+ * `sigs` holds n_sigs = popcount(bitmap) signatures in ASCENDING signer-index order.  This is the
+ * genuine-BFT composer -- a quorum need not be a prefix of the peer set (e.g. when peer 0 is the faulty
+ * node).  hs_compose_qc is the prefix-signer special case (bitmap = low n_sigs bits). */
+fn hs_compose_qc_bitmap(block_mhash: *u8, view: u64, signer_bitmap: u64, sigs: *u8, out_qc: *u8) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (block_mhash as u64) == 0u64 { return HS_E_NULL }
+    if (sigs as u64) == 0u64 { return HS_E_NULL }
+    if (out_qc as u64) == 0u64 { return HS_E_NULL }
+    let n_sigs : u32 = hs_popcount(signer_bitmap)
+    if n_sigs < HS_QUORUM { return HS_E_BAD_QC }
+    let mut k : u64 = 0u64
+    while k < 32u64 { out_qc[k] = block_mhash[k] ; k = k + 1u64 }
+    out_qc[32u64] = (view & 0xFFu64) as u8
+    out_qc[33u64] = ((view >> 8u64)  & 0xFFu64) as u8
+    out_qc[34u64] = ((view >> 16u64) & 0xFFu64) as u8
+    out_qc[35u64] = ((view >> 24u64) & 0xFFu64) as u8
+    out_qc[36u64] = ((view >> 32u64) & 0xFFu64) as u8
+    out_qc[37u64] = ((view >> 40u64) & 0xFFu64) as u8
+    out_qc[38u64] = ((view >> 48u64) & 0xFFu64) as u8
+    out_qc[39u64] = ((view >> 56u64) & 0xFFu64) as u8
+    out_qc[40u64] = (n_sigs & 0xFFu32) as u8
+    out_qc[41u64] = ((n_sigs >> 8u32)  & 0xFFu32) as u8
+    out_qc[42u64] = ((n_sigs >> 16u32) & 0xFFu32) as u8
+    out_qc[43u64] = ((n_sigs >> 24u32) & 0xFFu32) as u8
+    let mut bj : u64 = 0u64
+    while bj < 8u64 { out_qc[44u64 + bj] = ((signer_bitmap >> (bj * 8u64)) & 0xFFu64) as u8 ; bj = bj + 1u64 }
+    let mut m : u64 = 0u64
+    while m < (n_sigs as u64) * 64u64 { out_qc[52u64 + m] = sigs[m] ; m = m + 1u64 }
     return HS_OK
 }
 
 fn hs_verify_qc(qc: *u8, qc_len: u32) -> u8 @export {
     if HS_INITED == 0u8 { return 0u8 }
     if (qc as u64) == 0u64 { return 0u8 }
-    if qc_len < 44u32 { return 0u8 }
+    if qc_len < 52u32 { return 0u8 }
     let n_sigs : u32 = hs_read_u32(qc, 40u64)
     if n_sigs < HS_QUORUM { return 0u8 }
-    /* n_sigs is attacker-controlled; bound it to the peer count so the i*32 index into
-     * HS_PEER_KEYS[2048] stays in-bounds and n_sigs*64 cannot wrap u32.  [audit hotstuff-1] */
+    /* n_sigs is attacker-controlled; bound it to the peer count so peer indices stay in HS_PEER_KEYS[2048]
+     * and n_sigs*64 cannot wrap u32.  [audit hotstuff-1] */
     if n_sigs > HS_PEER_COUNT { return 0u8 }
-    if qc_len < 44u32 + n_sigs * 64u32 { return 0u8 }
+    if qc_len < 52u32 + n_sigs * 64u32 { return 0u8 }
+    /* [T1b] read the signer bitmap; it must name EXACTLY n_sigs distinct peers (popcount == n_sigs) */
+    let bitmap : u64 = hs_read_u64(qc, 44u64)
+    if hs_popcount(bitmap) != n_sigs { return 0u8 }
     let sp : *u8 = (&HS_SIG_INPUT as u64) as *u8
     let mut k : u64 = 0u64
     while k < 40u64 { sp[k] = qc[k] ; k = k + 1u64 }
+    /* verify the j-th signature against its CLAIMED signer p (the j-th set bit) -- ANY 2f+1 subset, the
+     * bitmap guarantees distinctness, so a valid QC needs 2f+1 genuinely-distinct honest signatures. */
     let mut ok_count : u32 = 0u32
-    let mut i : u32 = 0u32
-    while i < n_sigs {
-        let pk : *u8 = ((&HS_PEER_KEYS as u64) + (i as u64) * 32u64) as *u8
-        let sig : *u8 = ((qc as u64) + 44u64 + (i as u64) * 64u64) as *u8
-        if ed25519_verify(pk, sp, 40u64, sig) == 1u8 { ok_count = ok_count + 1u32 }
-        i = i + 1u32
+    let mut j : u32 = 0u32
+    let mut p : u32 = 0u32
+    while p < HS_PEER_COUNT {
+        if ((bitmap >> (p as u64)) & 1u64) == 1u64 {
+            let pk : *u8 = ((&HS_PEER_KEYS as u64) + (p as u64) * 32u64) as *u8
+            let sig : *u8 = ((qc as u64) + 52u64 + (j as u64) * 64u64) as *u8
+            if ed25519_verify(pk, sp, 40u64, sig) == 1u8 { ok_count = ok_count + 1u32 }
+            j = j + 1u32
+        }
+        p = p + 1u32
     }
     if ok_count >= HS_QUORUM { return 1u8 }
     return 0u8
@@ -589,9 +663,9 @@ fn hs_selftest() -> u64 @export {
         i = i + 1u64
     }
     if hs_compose_qc((&HS_KAT_BMH as u64) as *u8, 1u64, (&HS_KAT_SIGS as u64) as *u8, 3u32, (&HS_KAT_QC as u64) as *u8) != 0i32 { return 6u64 }
-    if hs_verify_qc((&HS_KAT_QC as u64) as *u8, 236u32) != 1u8 { return 7u64 }
-    HS_KAT_QC[44u64] = HS_KAT_QC[44u64] ^ 0x01u8            /* tamper sig 0 -> only 2 valid < quorum */
-    if hs_verify_qc((&HS_KAT_QC as u64) as *u8, 236u32) == 1u8 { return 8u64 }
+    if hs_verify_qc((&HS_KAT_QC as u64) as *u8, 244u32) != 1u8 { return 7u64 }   /* [T1b] 52 + 3*64 = 244 */
+    HS_KAT_QC[52u64] = HS_KAT_QC[52u64] ^ 0x01u8            /* tamper sig 0 (now at [52]) -> only 2 valid < quorum */
+    if hs_verify_qc((&HS_KAT_QC as u64) as *u8, 244u32) == 1u8 { return 8u64 }
     /* vote aggregation: vote = bmh || view || voter(LE) || sig */
     let mut v : u64 = 0u64
     while v < 32u64 { HS_KAT_VOTE[v] = HS_KAT_BMH[v]  v = v + 1u64 }

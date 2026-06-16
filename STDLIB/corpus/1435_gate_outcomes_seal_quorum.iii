@@ -105,20 +105,20 @@ fn main() -> u64 {
         sg = sg + 1u64
     }
     if hs_compose_qc((&MH as u64) as *u8, view, (&SIGS as u64) as *u8, 3u32, (&QC as u64) as *u8) != 0i32 { return 33u64 }
-    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 1u8 { return 34u64 }    /* 44 + 3*64 */
+    if hs_verify_qc((&QC as u64) as *u8, 244u32) != 1u8 { return 34u64 }    /* [T1b] 52 + 3*64 */
     /* the honest composer itself refuses a sub-quorum cert (E_BAD_QC) ... */
     if hs_compose_qc((&MH as u64) as *u8, view, (&SIGS as u64) as *u8, 2u32, (&QC as u64) as *u8) != -2i32 { return 35u64 }
     if hs_compose_qc((&MH as u64) as *u8, view, (&SIGS as u64) as *u8, 3u32, (&QC as u64) as *u8) != 0i32 { return 37u64 }
-    /* ... so the verifier's sub-quorum arm is driven ADVERSARIALLY: forge the
-     * attacker-controlled n_sigs field of an otherwise-valid QC down to 2 */
+    /* ... so the verifier's sub-quorum arm is driven ADVERSARIALLY: forge the attacker-controlled
+     * n_sigs field of an otherwise-valid QC down to 2 ([T1b] now caught by the popcount!=n_sigs check) */
     QC[40u64] = 2u8
-    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 0u8 { return 36u64 }    /* below quorum */
+    if hs_verify_qc((&QC as u64) as *u8, 244u32) != 0u8 { return 36u64 }    /* n_sigs/bitmap mismatch -> reject */
     QC[40u64] = 3u8
-    QC[50u64] = QC[50u64] ^ 0x01u8                                          /* tamper sig 0 */
-    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 0u8 { return 38u64 }    /* count drops below quorum */
-    QC[50u64] = QC[50u64] ^ 0x01u8
-    if hs_verify_qc((&QC as u64) as *u8, 236u32) != 1u8 { return 39u64 }
-    if hs_verify_qc((&QC as u64) as *u8, 100u32) != 0u8 { return 40u64 }    /* truncated */
+    QC[60u64] = QC[60u64] ^ 0x01u8                                          /* [T1b] tamper sig 0 (now at [52..116]) */
+    if hs_verify_qc((&QC as u64) as *u8, 244u32) != 0u8 { return 38u64 }    /* count drops below quorum */
+    QC[60u64] = QC[60u64] ^ 0x01u8
+    if hs_verify_qc((&QC as u64) as *u8, 244u32) != 1u8 { return 39u64 }
+    if hs_verify_qc((&QC as u64) as *u8, 100u32) != 0u8 { return 40u64 }    /* truncated (< 52 + 3*64) */
 
     return 99u64
 }

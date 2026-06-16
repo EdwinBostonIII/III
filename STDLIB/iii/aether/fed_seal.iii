@@ -84,14 +84,14 @@ fn fed_seal_anchor_count() -> u32 @export {
 fn fed_seal_anchor_with_qc(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8, qc_len: u32) -> i32 @export {
     if (qc_ptr as u64) == 0u64 { return FED_SEAL_E_NULL }
     /* The caller passes the REAL qc_len (buffer size).  Guard structure BEFORE indexing any QC
-     * byte: (1) min 44 so qp[40..43] is in-bounds (was a PRE-READ OOB -- the old code indexed
-     * qp[40..43] before any length check); (2) n_sigs <= validator ceiling (anti-wrap AND tighter
-     * than the old 0xFFFF); (3) full-buffer adequacy.  hs_verify_qc re-checks.  [audit fed_seal-1/-2] */
-    if qc_len < 44u32 { return FED_SEAL_E_QC }
+     * byte: (1) min 52 so qp[40..51] (n_sigs + [T1b] signer bitmap) is in-bounds (was a PRE-READ
+     * OOB -- the old code indexed qp[40..43] before any length check); (2) n_sigs <= validator
+     * ceiling (anti-wrap); (3) full-buffer adequacy.  hs_verify_qc re-checks.  [audit fed_seal-1/-2] */
+    if qc_len < 52u32 { return FED_SEAL_E_QC }
     let qp : *u8 = qc_ptr
     let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
     if n_sigs > FED_SEAL_QC_MAX_SIGS { return FED_SEAL_E_QC }
-    if qc_len < 44u32 + n_sigs * 64u32 { return FED_SEAL_E_QC }
+    if qc_len < 52u32 + n_sigs * 64u32 { return FED_SEAL_E_QC }
     if hs_verify_qc(qp, qc_len) != 1u8 { return FED_SEAL_E_QC }
     return fed_seal_anchor(child_tier, child_root_ptr, parent_tier, parent_root_ptr)
 }
@@ -240,11 +240,11 @@ fn fed_seal_anchor_witnessed(child_tier: u32, child_root_ptr: u64, parent_tier: 
  * witnessed append -- the Tier-3/Bedrock anchor decision AND its provenance in one motion. */
 fn fed_seal_anchor_with_qc_witnessed(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8, qc_len: u32) -> i32 @export {
     if (qc_ptr as u64) == 0u64 { return FED_SEAL_E_NULL }
-    if qc_len < 44u32 { return FED_SEAL_E_QC }
+    if qc_len < 52u32 { return FED_SEAL_E_QC }                   /* [T1b] 52 = header + n_sigs + signer bitmap */
     let qp : *u8 = qc_ptr
     let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
     if n_sigs > FED_SEAL_QC_MAX_SIGS { return FED_SEAL_E_QC }
-    if qc_len < 44u32 + n_sigs * 64u32 { return FED_SEAL_E_QC }
+    if qc_len < 52u32 + n_sigs * 64u32 { return FED_SEAL_E_QC }
     if hs_verify_qc(qp, qc_len) != 1u8 { return FED_SEAL_E_QC }
     return fed_seal_anchor_witnessed(child_tier, child_root_ptr, parent_tier, parent_root_ptr)
 }

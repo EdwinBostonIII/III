@@ -175,17 +175,17 @@ fn fed_admit_with_qc_proof(node_id: u64, pow_nonce: u64, packed_meta: u64, qc_pt
     if score < threshold { return FED_ADMIT_E_SCORE }
     /* 4th gate (gospel L24432): the admission decision must be backed by a
      * HotStuff quorum certificate (>= 2f+1 verified Ed25519 signatures). QC
-     * length derived from its n_sigs field (qc[40..44]): 44 + n_sigs*64.
+     * length derived from its n_sigs field (qc[40..44]): 52 + n_sigs*64 ([T1b] +8 signer bitmap).
      * Checked last so a failing sybil/pow/score gate is reported first. */
     /* The caller passes the REAL qc_len (buffer size).  Guard the structure BEFORE indexing
-     * ANY QC byte: (1) min 44 bytes so qp[40..43] is in-bounds (was a pre-read OOB); (2) cap
-     * n_sigs at the validator ceiling (prevents the n_sigs*64 u32 wrap); (3) require the buffer
-     * to actually hold the full sig array.  hs_verify_qc re-checks all three internally. */
-    if qc_len < 44u32 { return FED_ADMIT_E_QC }
+     * ANY QC byte: (1) min 52 bytes so qp[40..51] (n_sigs + signer bitmap) is in-bounds (was a
+     * pre-read OOB); (2) cap n_sigs at the validator ceiling (prevents the n_sigs*64 u32 wrap);
+     * (3) require the buffer to hold the full sig array.  hs_verify_qc re-checks all three. */
+    if qc_len < 52u32 { return FED_ADMIT_E_QC }
     let qp : *u8 = qc_ptr
     let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
     if n_sigs > FED_ADMIT_QC_MAX_SIGS { return FED_ADMIT_E_QC }
-    if qc_len < 44u32 + n_sigs * 64u32 { return FED_ADMIT_E_QC }
+    if qc_len < 52u32 + n_sigs * 64u32 { return FED_ADMIT_E_QC }
     if hs_verify_qc(qp, qc_len) != 1u8 { return FED_ADMIT_E_QC }
     let rc : i32 = fed_admit_to_planetary(0u32, buf_addr)
     if rc != FED_ADMIT_OK { return rc }

@@ -1175,6 +1175,7 @@ declare -A EXPECTED=(
     [1600_production_hardening_3]=99
     [1601_ripple_native_stage1]=99
     [1602_hotstuff_qc_lifecycle]=99
+    [1603_hotstuff_arbitrary_signer_qc]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

@@ -44,6 +44,7 @@ extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_convey(src_handle: u64, dst_cap: u64, byte_count: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_query(kind: u64, id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_if(guard_intent: u64, body_intent: u64) -> u64 from "intent.iii"
 
 const HIP_CLASS_UNIQUE     : u32 = 0u32
 const HIP_CLASS_AMBIGUOUS  : u32 = 1u32
@@ -73,6 +74,7 @@ const HIPN_KIND_IMPERATIVE    : u32 = 1u32
 const HIPN_KIND_DECLARATIVE   : u32 = 2u32
 const HIPN_KIND_INTERROGATIVE : u32 = 3u32
 const HIPN_ROLE_TOPIC_C       : u32 = 10u32   /* mirrors NLP_ROLE_TOPIC */
+const HIPN_ROLE_CONDITION     : u32 = 12u32   /* mirrors NLP_ROLE_CONDITION (if/while) */
 
 /* Verb word_ids (from nl_lex sealed lexicon). */
 const VW_SEND     : u32 =  1u32
@@ -421,6 +423,35 @@ fn _hip_classify(cand_count: u32) -> u32 {
     return HIP_CLASS_AMBIGUOUS
 }
 
+/* Conditional-clause wrapping [enhance W1, lens hip-intent]:
+ * a subordinate "if"/"while" clause is parsed by nl_parse as a CONDITION
+ * fragment whose head is the clause's predicate verb, but hip DROPPED it --
+ * "lock the mutex if you close the queue" projected just ACT(lock), silently
+ * losing the guard.  When the main clause yields exactly ONE candidate AND a
+ * CONDITION fragment is present, wrap that candidate as the body of an
+ * intent_if whose guard is a predicate-query over the condition's verb, so the
+ * conditional STRUCTURE survives into the calculus (PRIMITIVE_IF).  Reuses the
+ * existing intent_query + intent_if; no new module.  k is unchanged -- the
+ * single candidate is replaced in place by its IF-wrapper. */
+fn _hip_wrap_condition(frags_buf: u64, tok_buf: u64, count: u32, out_cands: u64, k: u32) -> u32 {
+    if k != 1u32 { return k }
+    let cond_idx : u32 = _hip_role_of(frags_buf, count, HIPN_ROLE_CONDITION)
+    if cond_idx == 0xFFFFFFFFu32 { return k }
+    let pred_tok : u32 = nl_parse_frag_head(frags_buf, cond_idx)
+    if pred_tok == 0xFFFFFFFFu32 { return k }
+    let pp : *u64 = (tok_buf + ((pred_tok as u64) * 8u64)) as *u64
+    let pred_w : u64 = (nl_token_word_id(pp[0u64]) as u64) & 0xFFFFFFFFu64
+    if pred_w == 0u64 { return k }
+    let guard : u64 = intent_query(pred_w, 0u64)
+    if guard == 0u64 { return k }
+    let body_pp : *u64 = out_cands as *u64
+    let body : u64 = body_pp[0u64]
+    let wrapped : u64 = intent_if(guard, body)
+    if wrapped == 0u64 { return k }
+    body_pp[0u64] = wrapped
+    return k
+}
+
 /* hip_resolve: top-level. text -> tokens -> fragments -> candidate
  * intents -> class.
  * 4-arg signature (iiis-0 5+arg trap):
@@ -483,6 +514,7 @@ fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u
             let pv_meta : u64 = _hip_pack_pv_meta(v_word, frag_count, k, HIP_MAX_CANDIDATES)
             k = _hip_project_verb(pv_meta, frag_buf, tok_buf, oc)
             if k == 0xFFFFFFFFu32 { k = HIP_MAX_CANDIDATES }
+            k = _hip_wrap_condition(frag_buf, tok_buf, frag_count, oc, k)
         }
     }
 

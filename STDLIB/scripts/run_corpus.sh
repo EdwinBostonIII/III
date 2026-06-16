@@ -1206,6 +1206,7 @@ declare -A EXPECTED=(
     [1631_csv_field_unescaped]=99
     [1632_uri_authority_split]=99
     [1633_hip_locative_destination]=99
+    [1634_hip_conditional_intent]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

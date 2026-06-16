@@ -1,0 +1,148 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1634_hip_conditional_intent.iii
+ *
+ * III conformance corpus 1634 -- HIP conditional-clause understanding.
+ *
+ * THE CAPABILITY DELTA (enhance W1, lens hip-intent):
+ *   nl_parse recognises a subordinate "if"/"while" clause and emits a
+ *   CONDITION fragment (role 12) whose head is the clause's predicate verb,
+ *   but hip DROPPED it: "lock the mutex if you close the queue" projected just
+ *   ACT(lock) -- the guard vanished.  hip now wraps the (single) main-clause
+ *   intent as the BODY of an intent_if whose guard is a predicate-query over
+ *   the condition's verb, so the conditional STRUCTURE reaches the calculus.
+ *
+ * Discriminator (RED on the old lib, GREEN after the hip.iii edit):
+ *   Case A "lock the mutex if you close the queue"
+ *     -> top candidate goal_kind == PRIMITIVE_IF (15)
+ *        OLD: PRIMITIVE_ACT (5, the bare lock)            -> exit 11 (RED)
+ *        NEW: IF{ guard = QUERY(close=15), body = ACT }   -> proceeds
+ *   Case B "lock the mutex" (no subordinate clause)
+ *     -> top candidate goal_kind == PRIMITIVE_ACT (5); the wrap must NOT fire
+ *        without a CONDITION fragment.  Identical on old + new.
+ *
+ * intent_if stores guard at partial_arg 0, body at partial_arg 1
+ * (intent.iii:457-458).  PRIMITIVE_IF=15, PRIMITIVE_ACT=5, PRIMITIVE_QUERY=9.
+ * "close" is nl_lex verb word_id 15; "you" is consumed as the sub-clause
+ * subject so the predicate resolves to close (verified by an offline probe).
+ *
+ * Exit code: 99 on full pass; a distinct code per failed assertion.
+ *
+ * Hexad: kind_compose. Ring: R3. K: 1.00.
+ */
+
+module corpus_1634
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
+
+extern @abi(c-msvc-x64) fn intent_goal_kind(intent_ptr: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_arg(intent_ptr: u64, slot: u32) -> u64 from "intent.iii"
+
+const C1634_ACT   : u32 = 5u32
+const C1634_QUERY : u32 = 9u32
+const C1634_IF    : u32 = 15u32
+const C1634_CLOSE : u64 = 15u64
+
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+fn _read_u64(buf: *u8, off: u64) -> u64 {
+    let lo : u64 = (_read_u32(buf, off) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (_read_u32(buf, off + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 {
+    buf[off] = b
+    return off + 1u64
+}
+
+fn _zero(buf: *u8, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n { buf[i] = 0u8; i = i + 1u64 }
+    return 0i32
+}
+
+/* "lock the mutex if you close the queue" */
+fn _phrase_a(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf,o,108u8);o = _put(buf,o,111u8);o = _put(buf,o,99u8);o = _put(buf,o,107u8)   /* lock */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,116u8);o = _put(buf,o,104u8);o = _put(buf,o,101u8)   /* the */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,109u8);o = _put(buf,o,117u8);o = _put(buf,o,116u8);o = _put(buf,o,101u8);o = _put(buf,o,120u8)   /* mutex */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,105u8);o = _put(buf,o,102u8)   /* if */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,121u8);o = _put(buf,o,111u8);o = _put(buf,o,117u8)   /* you */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,99u8);o = _put(buf,o,108u8);o = _put(buf,o,111u8);o = _put(buf,o,115u8);o = _put(buf,o,101u8)   /* close */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,116u8);o = _put(buf,o,104u8);o = _put(buf,o,101u8)   /* the */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,113u8);o = _put(buf,o,117u8);o = _put(buf,o,101u8);o = _put(buf,o,117u8);o = _put(buf,o,101u8)   /* queue */
+    return o as u32
+}
+
+/* "lock the mutex" (no subordinate clause) */
+fn _phrase_b(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf,o,108u8);o = _put(buf,o,111u8);o = _put(buf,o,99u8);o = _put(buf,o,107u8)   /* lock */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,116u8);o = _put(buf,o,104u8);o = _put(buf,o,101u8)   /* the */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,109u8);o = _put(buf,o,117u8);o = _put(buf,o,116u8);o = _put(buf,o,101u8);o = _put(buf,o,120u8)   /* mutex */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let text  : *u8 = malloc(256u64)
+    let cands : *u8 = malloc(64u64)
+    let meta  : *u8 = malloc(16u64)
+    if text  as u64 == 0u64 { return 3u64 }
+    if cands as u64 == 0u64 { return 4u64 }
+    if meta  as u64 == 0u64 { return 5u64 }
+
+    let unique : u32 = hip_class_unique()
+
+    /* === Case A: conditional -> IF{ QUERY(close), ACT(lock) } === */
+    _zero(meta, 16u64)
+    _zero(cands, 64u64)
+    let len_a : u32 = _phrase_a(text)
+    let rc_a : i32 = hip_resolve(text as u64, len_a, cands as u64, meta as u64)
+    if rc_a != 0i32 { return 1u64 }
+    let cnt_a : u32 = _read_u32(meta, 0u64)
+    let cls_a : u32 = _read_u32(meta, 4u64)
+    if cnt_a != 1u32   { return 10u64 }
+    if cls_a != unique { return 19u64 }
+    let cand0 : u64 = _read_u64(cands, 0u64)
+    if (intent_goal_kind(cand0) as u32) != C1634_IF { return 11u64 }   /* RED on old lib (==ACT 5) */
+    let body  : u64 = intent_partial_arg(cand0, 1u32)
+    if (intent_goal_kind(body) as u32) != C1634_ACT { return 12u64 }   /* IF wraps the lock-ACT */
+    let guard : u64 = intent_partial_arg(cand0, 0u32)
+    if (intent_goal_kind(guard) as u32) != C1634_QUERY { return 13u64 } /* guard is a predicate-query */
+    if intent_partial_arg(guard, 0u32) != C1634_CLOSE { return 14u64 }  /* over the verb "close"(15) */
+
+    /* === Case B: no condition -> bare ACT, wrap must NOT fire === */
+    _zero(meta, 16u64)
+    _zero(cands, 64u64)
+    let len_b : u32 = _phrase_b(text)
+    let rc_b : i32 = hip_resolve(text as u64, len_b, cands as u64, meta as u64)
+    if rc_b != 0i32 { return 2u64 }
+    let cnt_b : u32 = _read_u32(meta, 0u64)
+    if cnt_b != 1u32 { return 20u64 }
+    let cand0b : u64 = _read_u64(cands, 0u64)
+    if (intent_goal_kind(cand0b) as u32) != C1634_ACT { return 21u64 }
+
+    free(text)
+    free(cands)
+    free(meta)
+    return 99u64
+}

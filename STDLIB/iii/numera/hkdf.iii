@@ -27,6 +27,8 @@ module numera_hkdf
 
 extern @abi(c-msvc-x64) fn hmac_sha256(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
 extern @abi(c-msvc-x64) fn hmac_sha256_tag(out_32: *u8) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512_tag(out_64: *u8) -> i32 from "hmac.iii"
 
 const HKDF_OK : i32 = 0i32
 const HKDF_E_INIT : i32 = -1i32
@@ -114,4 +116,79 @@ fn hkdf_sha256_oneshot(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64, info: *
     let e : i32 = hkdf_sha256_extract(salt, salt_len, ikm, ikm_len)
     if e != HKDF_OK { return e }
     return hkdf_sha256_expand(info, info_len, out, out_len)
+}
+
+/* ---- HKDF-SHA512 (RFC 5869 with HMAC-SHA512) -- 64-byte PRK/T blocks ---- */
+const HKDF_HASH_LEN512 : u32 = 64u32
+const HKDF_MAX_OUT512  : u64 = 16320u64    /* 255 * 64 */
+
+var HKDF_WORK_PRK512  : [u8; 64]
+var HKDF_WORK_T512    : [u8; 64]
+var HKDF_WORK_MSG512  : [u8; 4160]    /* T(<=64) || info || ctr ; info bound 4063 -> 64+4063+1=4128 */
+var HKDF_WORK_ZERO512 : [u8; 64]
+var HKDF_PRK512_READY : u8 = 0u8
+
+fn hkdf_sha512_extract(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64) -> i32 @export {
+    let mut k : *u8 = salt
+    let mut k_len : u64 = salt_len
+    if k_len == 0u64 {
+        k = (&HKDF_WORK_ZERO512) as u64 as *u8
+        k_len = 64u64
+    }
+    let hr : i32 = hmac_sha512(k, k_len, ikm, ikm_len)
+    if hr != HKDF_OK { return hr }
+    let tr : i32 = hmac_sha512_tag((&HKDF_WORK_PRK512) as u64 as *u8)
+    if tr != HKDF_OK { return tr }
+    HKDF_PRK512_READY = 1u8
+    return HKDF_OK
+}
+
+fn hkdf_sha512_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @export {
+    if HKDF_PRK512_READY == 0u8 { return HKDF_E_INIT }
+    if out_len > HKDF_MAX_OUT512 { return HKDF_E_TOOLONG }
+    if info_len > 4063u64 { return HKDF_E_TOOLONG }
+    let mut written : u64 = 0u64
+    let mut counter : u32 = 1u32
+    let mp : *u8 = (&HKDF_WORK_MSG512) as u64 as *u8
+    let tp : *u8 = (&HKDF_WORK_T512) as u64 as *u8
+    let pp : *u8 = (&HKDF_WORK_PRK512) as u64 as *u8
+    let mut prev_len : u64 = 0u64
+    while written < out_len {
+        let mut mi : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < prev_len {
+            mp[mi] = tp[k]
+            mi = mi + 1u64
+            k = k + 1u64
+        }
+        let mut j : u64 = 0u64
+        while j < info_len {
+            mp[mi] = info[j]
+            mi = mi + 1u64
+            j = j + 1u64
+        }
+        mp[mi] = (counter & 0xFFu32) as u8
+        mi = mi + 1u64
+        let hr : i32 = hmac_sha512(pp, 64u64, mp, mi)
+        if hr != HKDF_OK { return hr }
+        let tr : i32 = hmac_sha512_tag(tp)
+        if tr != HKDF_OK { return tr }
+        prev_len = 64u64
+        let mut chunk : u64 = 64u64
+        if written + chunk > out_len { chunk = out_len - written }
+        let mut c : u64 = 0u64
+        while c < chunk {
+            out[written + c] = tp[c]
+            c = c + 1u64
+        }
+        written = written + chunk
+        counter = counter + 1u32
+    }
+    return HKDF_OK
+}
+
+fn hkdf_sha512_oneshot(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64, info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @export {
+    let e : i32 = hkdf_sha512_extract(salt, salt_len, ikm, ikm_len)
+    if e != HKDF_OK { return e }
+    return hkdf_sha512_expand(info, info_len, out, out_len)
 }

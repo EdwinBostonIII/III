@@ -1,0 +1,59 @@
+/* 1627 -- numera.hkdf: HKDF-SHA512 (RFC 5869 over HMAC-SHA512; only -SHA256 existed).
+ * ORACLE teeth: the HKDF first block must equal HMAC-SHA512(PRK, info||0x01) where
+ * PRK = HMAC-SHA512(salt, ikm), computed directly here. Plus oneshot==split and
+ * info-dependence. 99 = all arms. */
+module corpus_1627
+extern @abi(c-msvc-x64) fn hkdf_sha512_extract(salt: u64, salt_len: u64, ikm: u64, ikm_len: u64) -> i32 from "hkdf.iii"
+extern @abi(c-msvc-x64) fn hkdf_sha512_expand(info: u64, info_len: u64, out: u64, out_len: u64) -> i32 from "hkdf.iii"
+extern @abi(c-msvc-x64) fn hkdf_sha512_oneshot(salt: u64, salt_len: u64, ikm: u64, ikm_len: u64, info: u64, info_len: u64, out: u64, out_len: u64) -> i32 from "hkdf.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512(key: u64, key_len: u64, msg: u64, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512_tag(out_64: u64) -> i32 from "hmac.iii"
+
+var SALT : [u8; 16]
+var IKM  : [u8; 22]
+var INFO : [u8; 10]
+var INFO2: [u8; 10]
+var OKM  : [u8; 100]
+var OKM2 : [u8; 100]
+var PRK  : [u8; 64]
+var MSG  : [u8; 11]
+var T1   : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 16u64 { SALT[i] = ((i + 0x10u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 22u64 { IKM[i] = 0x0Bu8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 10u64 { INFO[i] = ((i + 0xF0u64) & 0xFFu64) as u8 ; INFO2[i] = ((i + 0x90u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    /* ORACLE: PRK = HMAC-SHA512(salt, ikm) */
+    if hmac_sha512((&SALT) as u64, 16u64, (&IKM) as u64, 22u64) != 0i32 { return 1u64 }
+    hmac_sha512_tag((&PRK) as u64)
+    /* T1 = HMAC-SHA512(PRK, info || 0x01) */
+    i = 0u64
+    while i < 10u64 { MSG[i] = INFO[i] ; i = i + 1u64 }
+    MSG[10] = 0x01u8
+    if hmac_sha512((&PRK) as u64, 64u64, (&MSG) as u64, 11u64) != 0i32 { return 2u64 }
+    hmac_sha512_tag((&T1) as u64)
+
+    /* HKDF oneshot, 64 bytes -- first block must equal T1. */
+    if hkdf_sha512_oneshot((&SALT) as u64, 16u64, (&IKM) as u64, 22u64, (&INFO) as u64, 10u64, (&OKM) as u64, 64u64) != 0i32 { return 3u64 }
+    i = 0u64
+    while i < 64u64 { if OKM[i] != T1[i] { return 4u64 } ; i = i + 1u64 }
+
+    /* oneshot == extract+expand (100 bytes, spans 2 blocks). */
+    if hkdf_sha512_oneshot((&SALT) as u64, 16u64, (&IKM) as u64, 22u64, (&INFO) as u64, 10u64, (&OKM) as u64, 100u64) != 0i32 { return 5u64 }
+    if hkdf_sha512_extract((&SALT) as u64, 16u64, (&IKM) as u64, 22u64) != 0i32 { return 6u64 }
+    if hkdf_sha512_expand((&INFO) as u64, 10u64, (&OKM2) as u64, 100u64) != 0i32 { return 7u64 }
+    i = 0u64
+    while i < 100u64 { if OKM[i] != OKM2[i] { return 8u64 } ; i = i + 1u64 }
+
+    /* info-dependence: different info -> different OKM. */
+    if hkdf_sha512_oneshot((&SALT) as u64, 16u64, (&IKM) as u64, 22u64, (&INFO2) as u64, 10u64, (&OKM2) as u64, 100u64) != 0i32 { return 9u64 }
+    let mut diff : u8 = 0u8
+    i = 0u64
+    while i < 100u64 { if OKM[i] != OKM2[i] { diff = 1u8 } ; i = i + 1u64 }
+    if diff == 0u8 { return 10u64 }
+    return 99u64
+}

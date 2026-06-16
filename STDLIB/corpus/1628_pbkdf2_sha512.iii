@@ -1,0 +1,47 @@
+/* 1628 -- numera.pbkdf2: PBKDF2-HMAC-SHA512 (RFC 8018; only -SHA256 existed).
+ * ORACLE teeth: for iterations=1, T = U_1 = HMAC-SHA512(pw, salt||INT(1)),
+ * computed directly here. Plus iter-dependence + length. 99 = all arms. */
+module corpus_1628
+extern @abi(c-msvc-x64) fn pbkdf2_sha512_oneshot(password: u64, password_len: u64, salt: u64, salt_len: u64, iterations: u32, dk: u64, dk_len: u64) -> i32 from "pbkdf2.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512(key: u64, key_len: u64, msg: u64, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512_tag(out_64: u64) -> i32 from "hmac.iii"
+
+var PW   : [u8; 8]
+var SALT : [u8; 12]
+var DK   : [u8; 100]
+var DK2  : [u8; 100]
+var MSG  : [u8; 16]
+var U1   : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64  { PW[i]   = ((i + 0x70u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 12u64 { SALT[i] = ((i + 0x20u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    /* ORACLE (iter=1): U1 = HMAC-SHA512(pw, salt || INT(1)) */
+    i = 0u64
+    while i < 12u64 { MSG[i] = SALT[i] ; i = i + 1u64 }
+    MSG[12] = 0u8  MSG[13] = 0u8  MSG[14] = 0u8  MSG[15] = 1u8
+    if hmac_sha512((&PW) as u64, 8u64, (&MSG) as u64, 16u64) != 0i32 { return 1u64 }
+    hmac_sha512_tag((&U1) as u64)
+
+    /* pbkdf2 iter=1, 64 bytes -- must equal U1. */
+    if pbkdf2_sha512_oneshot((&PW) as u64, 8u64, (&SALT) as u64, 12u64, 1u32, (&DK) as u64, 64u64) != 0i32 { return 2u64 }
+    i = 0u64
+    while i < 64u64 { if DK[i] != U1[i] { return 3u64 } ; i = i + 1u64 }
+
+    /* iter-dependence: iter=2 differs from iter=1. */
+    if pbkdf2_sha512_oneshot((&PW) as u64, 8u64, (&SALT) as u64, 12u64, 2u32, (&DK2) as u64, 64u64) != 0i32 { return 4u64 }
+    let mut diff : u8 = 0u8
+    i = 0u64
+    while i < 64u64 { if DK2[i] != DK[i] { diff = 1u8 } ; i = i + 1u64 }
+    if diff == 0u8 { return 5u64 }
+
+    /* length: 100 bytes spans 2 blocks, deterministic re-run matches. */
+    if pbkdf2_sha512_oneshot((&PW) as u64, 8u64, (&SALT) as u64, 12u64, 3u32, (&DK) as u64, 100u64) != 0i32 { return 6u64 }
+    if pbkdf2_sha512_oneshot((&PW) as u64, 8u64, (&SALT) as u64, 12u64, 3u32, (&DK2) as u64, 100u64) != 0i32 { return 7u64 }
+    i = 0u64
+    while i < 100u64 { if DK[i] != DK2[i] { return 8u64 } ; i = i + 1u64 }
+    return 99u64
+}

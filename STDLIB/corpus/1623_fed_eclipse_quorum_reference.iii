@@ -1,0 +1,78 @@
+/* 1623 -- aether.fed_eclipse quorum-reference derivation (Phase 14k Step 0190b).
+ *
+ * fed_eclipse's eclipse alarm was inert: no production path set a *meaningful*
+ * reference (only unit-test 161 called set_reference; alarm fail-open by default).
+ * The additive quorum layer supplies the production path -- observe the peer-set
+ * fingerprints reported by trusted peers, then derive the reference as the one a
+ * QUORUM of them agree on (Byzantine-robust). This proves the new logic + that it
+ * is purely additive (the fail-open default and both alarm arms still hold).
+ * 99 = all arms pass. */
+module corpus_1623
+
+extern @abi(c-msvc-x64) fn fed_sybil_clear_all() -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_clear() -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_observe_reset() -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_observe_count() -> u32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_observe_peer_fingerprint(fp_32: u64) -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_derive_reference_from_quorum(quorum: u32) -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_byte_divergence() -> u32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_alarm() -> u8 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_compute_my_fingerprint(out_32: u64) -> i32 from "fed_eclipse.iii"
+
+var FP_A    : [u8; 32]
+var FP_Z    : [u8; 32]
+var FP_ZERO : [u8; 32]
+var LOCAL   : [u8; 32]
+
+fn main() -> u64 {
+    fed_sybil_clear_all()
+    fed_eclipse_clear()
+    let mut i : u64 = 0u64
+    while i < 32u64 { FP_A[i] = 0x11u8  FP_Z[i] = 0x77u8  i = i + 1u64 }
+
+    /* (1) reset -> count 0 */
+    fed_eclipse_observe_reset()
+    if fed_eclipse_observe_count() != 0u32 { return 1u64 }
+
+    /* (2) Byzantine: observe A,Z,A,Z,A ; quorum 3 -> A (count 3) wins, the
+     * sub-quorum adversary Z (count 2 < 3) cannot forge the reference. */
+    fed_eclipse_observe_peer_fingerprint((&FP_A) as u64)
+    fed_eclipse_observe_peer_fingerprint((&FP_Z) as u64)
+    fed_eclipse_observe_peer_fingerprint((&FP_A) as u64)
+    fed_eclipse_observe_peer_fingerprint((&FP_Z) as u64)
+    fed_eclipse_observe_peer_fingerprint((&FP_A) as u64)
+    if fed_eclipse_observe_count() != 5u32 { return 2u64 }
+    if fed_eclipse_derive_reference_from_quorum(3u32) != 0i32 { return 3u64 }
+
+    /* (3) ALARM arm: reference (A) is live; the empty local admitted set gives
+     * a zero fingerprint, which diverges from A in all 32 bytes -> alarm. */
+    fed_eclipse_compute_my_fingerprint((&LOCAL) as u64)
+    if fed_eclipse_byte_divergence() != 32u32 { return 4u64 }
+    if fed_eclipse_alarm() != 1u8 { return 5u64 }
+
+    /* (4) NO-ALARM arm: quorum reference = ZERO; empty local view = zeros =
+     * reference -> divergence 0 -> no false alarm. */
+    fed_eclipse_clear()
+    fed_eclipse_observe_reset()
+    fed_eclipse_observe_peer_fingerprint((&FP_ZERO) as u64)
+    fed_eclipse_observe_peer_fingerprint((&FP_ZERO) as u64)
+    if fed_eclipse_derive_reference_from_quorum(2u32) != 0i32 { return 6u64 }
+    fed_eclipse_compute_my_fingerprint((&LOCAL) as u64)
+    if fed_eclipse_byte_divergence() != 0u32 { return 7u64 }
+    if fed_eclipse_alarm() != 0u8 { return 8u64 }
+
+    /* (5) NOQUORUM fail-open: A,Z (1 each), quorum 2 -> none reaches it ->
+     * reference stays UNSET -> divergence sentinel, alarm fail-open 0. */
+    fed_eclipse_clear()
+    fed_eclipse_observe_reset()
+    fed_eclipse_observe_peer_fingerprint((&FP_A) as u64)
+    fed_eclipse_observe_peer_fingerprint((&FP_Z) as u64)
+    if fed_eclipse_derive_reference_from_quorum(2u32) != -4i32 { return 9u64 }
+    if fed_eclipse_byte_divergence() != 0xFFFFFFFFu32 { return 10u64 }
+    if fed_eclipse_alarm() != 0u8 { return 11u64 }
+
+    /* (6) quorum==0 -> BADARG */
+    if fed_eclipse_derive_reference_from_quorum(0u32) != -2i32 { return 12u64 }
+
+    return 99u64
+}

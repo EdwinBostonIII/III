@@ -21,6 +21,10 @@
  * Public surface:
  *   fed_eclipse_compute_my_fingerprint(out_32)            -> i32
  *   fed_eclipse_set_reference_fingerprint(in_32)          -> i32
+ *   fed_eclipse_observe_reset()                           -> i32
+ *   fed_eclipse_observe_peer_fingerprint(fp_32)           -> i32
+ *   fed_eclipse_observe_count()                           -> u32
+ *   fed_eclipse_derive_reference_from_quorum(quorum)      -> i32
  *   fed_eclipse_byte_divergence()                         -> u32
  *   fed_eclipse_default_threshold()                       -> u32
  *   fed_eclipse_set_threshold(t)                          -> i32
@@ -41,6 +45,10 @@ extern @abi(c-msvc-x64) fn fed_sybil_slots_max() -> u32 from "fed_sybil.iii"
 const FECL_OK             : i32 =  0i32
 const FECL_E_NULL         : i32 = -1i32
 const FECL_E_BADARG       : i32 = -2i32
+const FECL_E_FULL         : i32 = -3i32
+const FECL_E_NOQUORUM     : i32 = -4i32
+
+const FECL_MAXOBS         : u32 = 256u32   /* matches fed_sybil's 256-slot peer cap */
 
 const FECL_DEFAULT_THRESH : u32 = 4u32
 
@@ -56,6 +64,15 @@ var FECL_FINGER    : [u8; 32]
 /* XOR scratch for fed_eclipse_anomaly_check (Hamming-distance probe).
  * Module-private; caller must serialize. */
 var ECLIPSE_XOR_SCRATCH : [u8; 32]
+
+/* Quorum-reference derivation state (Phase 14k Step 0190b -- the production
+ * path that makes the eclipse alarm live).  A node collects the peer-set
+ * fingerprints reported by the peers it trusts (e.g. over a sovereign-tier
+ * channel) into FECL_OBS_FP, then derives the consensus-expected reference
+ * as the fingerprint a QUORUM of them agree on.  Module-private; caller
+ * serializes.  FECL_MAXOBS * 32 = 256 * 32 = 8192. */
+var FECL_OBS_FP : [u8; 8192]
+var FECL_OBS_N  : u32 = 0u32
 
 fn fed_eclipse_default_threshold() -> u32 @export {
     return FECL_DEFAULT_THRESH
@@ -154,8 +171,102 @@ fn fed_eclipse_clear() -> i32 @export {
         i = i + 1u32
     }
     FECL_REFERENCE_SET = 0u8
+    FECL_OBS_N         = 0u32
     FECL_THRESHOLD     = FECL_DEFAULT_THRESH
     return FECL_OK
+}
+
+/* ----------------------------------------------------------------------
+ * Quorum-reference derivation -- the production path for the eclipse
+ * reference (the module docstring's "consensus expected fingerprint").
+ *
+ * Flow: fed_eclipse_observe_reset(), then
+ * fed_eclipse_observe_peer_fingerprint(fp) for each fingerprint reported by
+ * a peer the node trusts, then fed_eclipse_derive_reference_from_quorum(q).
+ * If some fingerprint was reported by >= q observed peers it becomes the
+ * reference (FECL_REFERENCE_SET=1) and the alarm goes live; otherwise the
+ * reference stays untouched and the alarm remains fail-open (no false alarm
+ * on a split view).  Purely ADDITIVE: never changes fed_eclipse_alarm,
+ * fed_eclipse_byte_divergence, or fed_admit's fail-open default -- it only
+ * supplies a way to set a *meaningful* reference.
+ *
+ * Byzantine robustness: with q a quorum (>= 2f+1 of <= 3f+1 trusted peers)
+ * at most one fingerprint can reach q (two q-sets would exceed the
+ * population), so the derived reference is unique and an adversary holding
+ * < q observed peers cannot dictate it.  Mandate 7: PURE STRUCTURAL
+ * plurality -- a fixed count vs a fixed quorum, no statistics, no learning.
+ * Loops use the u64-counter/u64-bound proven-safe idiom (cf. fed_genesis).
+ * --------------------------------------------------------------------*/
+
+fn fed_eclipse_observe_reset() -> i32 @export {
+    FECL_OBS_N = 0u32
+    return FECL_OK
+}
+
+fn fed_eclipse_observe_count() -> u32 @export {
+    return FECL_OBS_N
+}
+
+/* Record one peer-reported 32-byte fingerprint.  FECL_E_NULL on a null
+ * pointer, FECL_E_FULL when the buffer (FECL_MAXOBS) is full, else FECL_OK. */
+fn fed_eclipse_observe_peer_fingerprint(fp_32: u64) -> i32 @export {
+    let p_l : u64 = fp_32
+    if p_l == 0u64 { return FECL_E_NULL }
+    let n : u32 = FECL_OBS_N
+    if n >= FECL_MAXOBS { return FECL_E_FULL }
+    let base : u64 = (n as u64) * 32u64
+    let sp : *u8 = p_l as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        FECL_OBS_FP[base + k] = sp[k]
+        k = k + 1u64
+    }
+    FECL_OBS_N = n + 1u32
+    return FECL_OK
+}
+
+/* Byte-equality of two observed fingerprints (module-private). */
+fn _fecl_obs_eq(a_idx: u32, b_idx: u32) -> u8 {
+    let abase : u64 = (a_idx as u64) * 32u64
+    let bbase : u64 = (b_idx as u64) * 32u64
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if FECL_OBS_FP[abase + k] != FECL_OBS_FP[bbase + k] { return 0u8 }
+        k = k + 1u64
+    }
+    return 1u8
+}
+
+/* Derive the reference as the fingerprint reported by >= `quorum` observed
+ * peers.  Sets FECL_REFERENCE + FECL_REFERENCE_SET and returns FECL_OK when
+ * such a fingerprint exists; FECL_E_BADARG when quorum==0; FECL_E_NOQUORUM
+ * (reference untouched) when none reaches the quorum. */
+fn fed_eclipse_derive_reference_from_quorum(quorum: u32) -> i32 @export {
+    let q : u32 = quorum
+    if q == 0u32 { return FECL_E_BADARG }
+    let n64 : u64 = FECL_OBS_N as u64
+    let q64 : u64 = q as u64
+    let mut i : u64 = 0u64
+    while i < n64 {
+        let mut cnt : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < n64 {
+            if _fecl_obs_eq(i as u32, j as u32) == 1u8 { cnt = cnt + 1u64 }
+            j = j + 1u64
+        }
+        if cnt >= q64 {
+            let base : u64 = i * 32u64
+            let mut k : u64 = 0u64
+            while k < 32u64 {
+                FECL_REFERENCE[k] = FECL_OBS_FP[base + k]
+                k = k + 1u64
+            }
+            FECL_REFERENCE_SET = 1u8
+            return FECL_OK
+        }
+        i = i + 1u64
+    }
+    return FECL_E_NOQUORUM
 }
 
 /* Brian Kernighan popcount over a single byte.  Module-private.

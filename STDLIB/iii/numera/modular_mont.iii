@@ -163,5 +163,5 @@ fn mont_pow_u32(base: u64, exp: u64, n: u64) -> u64 @export {
             e = e >> 1u64
         }
     }
-    return mont_from_form(result_R, n_l)
+    return mont_redc(result_R, n_l, n_inv)   /* [W2800 perf] reuse the n_inv from line 149; mont_from_form would recompute mont_n_inv_neg (a 5-iter Newton loop). Byte-identical: mont_from_form(a,n)==mont_redc(a,n,mont_n_inv_neg(n)) and n_inv==mont_n_inv_neg(n_l). */
 }

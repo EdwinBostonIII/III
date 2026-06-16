@@ -1,7 +1,7 @@
 /* STDLIB/iii/forcefield/ripple_unify.iii -- the Sovereign Ripple Calculus, INCREMENT 2:
  * the first CERTIFIED REFACTORING -- unification.  Composes the existing organs into one
- * sound DECIDER (it certifies WHICH unifications are sound; it does NOT yet edit files --
- * that is Inc 3's applier, behind commit_gate + the reseal gate):
+ * sound DECIDER (it certifies WHICH unifications are sound; the edit itself is performed by
+ * the Inc-3 applier forcefield/ripple_apply.iii, gated by forcefield/commit_gate.iii):
  *
  *   ripple_metric (rm_unifiable): is this pair a unification CANDIDATE? -- capability-equal
  *                  AND same intent-class.  An intentional variation point (capability-equal

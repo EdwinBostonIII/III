@@ -21,7 +21,7 @@
  * Hexad: kind_motion + kind_witness.  Ring: R0.  K: 1.00.
  *
  * NIH: identifier.iii (built), capability.iii (built),
- *      constitution.iii (not yet built), branch_anchor.iii (not yet built),
+ *      constitution.iii (built, numera/), branch_anchor.iii (built, numera/),
  *      witness_hook.iii (built -- direct wh_publish for M6 governance fragment).
  *
  * Discipline Nine: M16 (branch ratifiability), W42 (no merge without proof

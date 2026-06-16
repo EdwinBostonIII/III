@@ -1,0 +1,48 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1640_duration_components.iii
+ *
+ * III conformance corpus 1640 -- duration component breakdown.
+ *
+ * THE CAPABILITY DELTA (enhance W3, recover-the-discarded):
+ *   duration is a u64 nanosecond count; the to_X functions return TOTAL units
+ *   (to_hours = total hours).  The CALENDAR-style component decomposition
+ *   (days + hours%24 + minutes%60 + seconds%60 + nanos%1e9) was implied by the
+ *   value but never exposed.  Five new component accessors recover it.
+ *
+ * Discriminator (RED on the old lib, GREEN after the duration.iii edit):
+ *   OLD lib: duration_*_component symbols absent -> KAT cannot link.
+ *   NEW lib: exact components for two pinned durations (a 0-stub fails).
+ *
+ *   106210000000000 ns = 1d 5h 30m 10s 0ns
+ *   90061000000007  ns = 1d 1h 1m 1s 7ns
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_motion. Ring: R3. K: 1.00.
+ */
+
+module corpus_1640
+
+extern @abi(c-msvc-x64) fn duration_days_component(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_hours_component(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_minutes_component(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_seconds_component(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_nanos_component(d: u64) -> u64 from "duration.iii"
+
+fn main() -> u64 {
+    /* Case A: 1d 5h 30m 10s 0ns */
+    let a : u64 = 106210000000000u64
+    if duration_days_component(a)    != 1u64  { return 10u64 }
+    if duration_hours_component(a)   != 5u64  { return 11u64 }
+    if duration_minutes_component(a) != 30u64 { return 12u64 }
+    if duration_seconds_component(a) != 10u64 { return 13u64 }
+    if duration_nanos_component(a)   != 0u64  { return 14u64 }
+
+    /* Case B: 1d 1h 1m 1s 7ns (nonzero nanos) */
+    let b : u64 = 90061000000007u64
+    if duration_days_component(b)    != 1u64  { return 20u64 }
+    if duration_hours_component(b)   != 1u64  { return 21u64 }
+    if duration_minutes_component(b) != 1u64  { return 22u64 }
+    if duration_seconds_component(b) != 1u64  { return 23u64 }
+    if duration_nanos_component(b)   != 7u64  { return 24u64 }
+
+    return 99u64
+}

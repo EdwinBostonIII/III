@@ -1,0 +1,49 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1641_ini_separator.iii
+ *
+ * III conformance corpus 1641 -- INI key/value separator recovery.
+ *
+ * THE CAPABILITY DELTA (enhance W3, recover-the-discarded):
+ *   ini_parse_kv read the separator byte ('=' or ':') only to advance the
+ *   cursor, then DISCARDED it -- so a caller could not tell "a=1" from "a:1".
+ *   The separator is now stored per entry and exposed via ini_separator.
+ *
+ * Discriminator (RED on the old lib, GREEN after the ini.iii edit):
+ *   OLD lib: ini_separator symbol absent -> KAT cannot link.
+ *   NEW lib: "a=1\nb:2\n" -> entry0 sep==61 ('='), entry1 sep==58 (':').
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_essence. Ring: R3. K: 1.00.
+ */
+
+module corpus_1641
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn ini_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_count(id: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_separator(id: u64, i: u64) -> u32 from "ini.iii"
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+
+/* "a=1\nb:2\n" */
+fn _ini(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,97u8);o=_put(buf,o,61u8);o=_put(buf,o,49u8);o=_put(buf,o,10u8)   /* a=1 LF */
+    o=_put(buf,o,98u8);o=_put(buf,o,58u8);o=_put(buf,o,50u8);o=_put(buf,o,10u8)   /* b:2 LF */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(32u64)
+    if buf as u64 == 0u64 { return 3u64 }
+    let n : u32 = _ini(buf)
+    let id : u64 = ini_parse(a, buf as u64, n as u64)
+    if id == 0u64 { return 1u64 }
+    if ini_count(id) != 2u64 { return 10u64 }
+    if ini_separator(id, 0u64) != 61u32 { return 11u64 }   /* '=' */
+    if ini_separator(id, 1u64) != 58u32 { return 12u64 }   /* ':' */
+    arena_drop(a)
+    return 99u64
+}

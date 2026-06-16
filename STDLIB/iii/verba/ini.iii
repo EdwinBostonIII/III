@@ -40,6 +40,7 @@ var INI_KEY_BASE     : [u64; 4096]
 var INI_KEY_LEN      : [u64; 4096]
 var INI_VALUE_BASE   : [u64; 4096]
 var INI_VALUE_LEN    : [u64; 4096]
+var INI_SEPARATOR    : [u32; 4096]   /* 61 ('='), 58 (':'), or 0 if none */
 
 var INI_PARSE_SEC_BASE : u64 = 0u64
 var INI_PARSE_SEC_LEN : u64 = 0u64
@@ -171,10 +172,14 @@ fn ini_parse_kv(p: *u8, raw_base: u64, raw_len: u64, start_pos: u64) -> u64 {
         }
     }
     let key_end : u64 = ini_trim_right(p, key_start, pos)
+    /* Capture the separator char (= or :), previously discarded after advancing
+     * the cursor. [enhance W3, recover-the-discarded] */
+    let mut sep : u32 = 0u32
     if pos < raw_len {
-        let sep : u32 = p[pos] as u32
-        if sep == 61u32 { pos = pos + 1u64 }
-        if sep == 58u32 { pos = pos + 1u64 }
+        let s : u32 = p[pos] as u32
+        if s == 61u32 { sep = 61u32 }
+        if s == 58u32 { sep = 58u32 }
+        if sep != 0u32 { pos = pos + 1u64 }
     }
     pos = ini_skip_ws(p, raw_len, pos)
     let val_start : u64 = pos
@@ -189,6 +194,7 @@ fn ini_parse_kv(p: *u8, raw_base: u64, raw_len: u64, start_pos: u64) -> u64 {
         INI_KEY_LEN[ei]      = key_end - key_start
         INI_VALUE_BASE[ei]   = raw_base + val_start
         INI_VALUE_LEN[ei]    = val_end - val_start
+        INI_SEPARATOR[ei]    = sep
         INI_COUNT[table] = idx + 1u64
     }
     return pos
@@ -301,6 +307,16 @@ fn ini_value_len(id: u64, i: u64) -> u64 @export {
     if i >= INI_ENTRY_MAX { return 0u64 }   /* [audit H-INI-1] */
     if i >= INI_COUNT[idx] { return 0u64 }  /* [audit H-INI-2] live-count bound */
     return INI_VALUE_LEN[ini_index(idx, i)]
+}
+
+/* The separator that joined entry i's key and value: 61 ('='), 58 (':'), or 0
+ * if none. [enhance W3, recover-the-discarded: the parsed-but-dropped sep] */
+fn ini_separator(id: u64, i: u64) -> u32 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u32 }
+    if i >= INI_ENTRY_MAX { return 0u32 }
+    if i >= INI_COUNT[idx] { return 0u32 }
+    return INI_SEPARATOR[ini_index(idx, i)]
 }
 
 fn ini_drop(id: u64) -> i32 @export {

@@ -20,6 +20,7 @@ const DUR_NANOS_PER_MILLI  : u64 = 1000000u64
 const DUR_NANOS_PER_SECOND : u64 = 1000000000u64
 const DUR_NANOS_PER_MINUTE : u64 = 60000000000u64
 const DUR_NANOS_PER_HOUR   : u64 = 3600000000000u64
+const DUR_NANOS_PER_DAY    : u64 = 86400000000000u64
 const DUR_MAX              : u64 = 0xFFFFFFFFFFFFFFFFu64
 
 /* Precomputed saturation thresholds for from_X conversions.  Each
@@ -82,6 +83,28 @@ fn duration_to_minutes(d: u64) -> u64 @export {
 
 fn duration_to_hours(d: u64) -> u64 @export {
     return d / DUR_NANOS_PER_HOUR
+}
+
+/* Component breakdown [enhance W3, recover-the-discarded]: the to_X functions
+ * return TOTAL units; these return the calendar-style COMPONENT (days + the
+ * hours/minutes/seconds/nanos remainders) of the same nanosecond value, the
+ * decomposition the duration already implies but never exposed.  Division of a
+ * normal-magnitude duration is sound (to_hours relies on it); only DUR_MAX-class
+ * dividends hit the W11 quirk, which a real component query never reaches. */
+fn duration_days_component(d: u64) -> u64 @export {
+    return d / DUR_NANOS_PER_DAY
+}
+fn duration_hours_component(d: u64) -> u64 @export {
+    return (d / DUR_NANOS_PER_HOUR) % 24u64
+}
+fn duration_minutes_component(d: u64) -> u64 @export {
+    return (d / DUR_NANOS_PER_MINUTE) % 60u64
+}
+fn duration_seconds_component(d: u64) -> u64 @export {
+    return (d / DUR_NANOS_PER_SECOND) % 60u64
+}
+fn duration_nanos_component(d: u64) -> u64 @export {
+    return d % DUR_NANOS_PER_SECOND
 }
 
 fn duration_add(a: u64, b: u64) -> u64 @export {

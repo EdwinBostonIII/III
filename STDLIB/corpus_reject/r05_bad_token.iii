@@ -1,0 +1,2 @@
+module r05
+fn main() -> u64 { return 0u64 @@@ }

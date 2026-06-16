@@ -204,6 +204,23 @@ if [[ -f "$GEN_RL" ]]; then
     fi
 fi
 
+# --- Compiler-rejection conformance gate (reject-path coverage) ---------
+# run_corpus.sh exercises only programs that COMPILE and RUN; the compiler's
+# diagnostic / rejection path has no other gate. reject_conformance.sh asserts
+# every deliberately-malformed fixture in STDLIB/corpus_reject/ is still
+# REJECTED (non-zero exit, no object emitted). A regression that made the
+# front-end silently ACCEPT malformed input (a swallowed sema/parse error)
+# would otherwise pass every other check.
+REJECT_GATE="$STDLIB_DIR/scripts/reject_conformance.sh"
+if [[ -f "$REJECT_GATE" ]]; then
+    echo "[build_stdlib] compiler-rejection conformance: $REJECT_GATE"
+    if ! bash "$REJECT_GATE" "$IIIS"; then
+        echo "[build_stdlib] FATAL: compiler-rejection conformance failed -- a malformed corpus_reject fixture was ACCEPTED (front-end swallowed a sema/parse error)." >&2
+        echo "[build_stdlib]        See STDLIB/corpus_reject/ and STDLIB/scripts/reject_conformance.sh." >&2
+        exit 2
+    fi
+fi
+
 # --- Sovereign Forge closure meta-gate (SOVEREIGN_FORGE.md §2) -----------
 # Beyond the per-citizen drift gates above: assert the manifest itself is self-
 # consistent -- no orphan generator, every K1-K6 full-spec seal recomputes to its

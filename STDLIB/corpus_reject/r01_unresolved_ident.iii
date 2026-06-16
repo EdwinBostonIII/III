@@ -1,0 +1,2 @@
+module r01
+fn main() -> u64 { return zzz_undefined_symbol }

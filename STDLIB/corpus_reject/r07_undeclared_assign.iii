@@ -1,0 +1,2 @@
+module r07
+fn main() -> u64 { undeclared_var = 5u64  return 0u64 }

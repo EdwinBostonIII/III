@@ -1,0 +1,4 @@
+module r08
+fn f() -> u64 { return 1u64 }
+fn f() -> u64 { return 2u64 }
+fn main() -> u64 { return f() }

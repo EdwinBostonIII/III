@@ -256,19 +256,35 @@ fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_p
     let dst_h : u64 = (dst_w as u64) & 0xFFFFFFFFu64
     let inst_h: u64 = (inst_w as u64) & 0xFFFFFFFFu64
 
+    /* Locative-as-destination fallback [enhance W1, lens hip-intent]:
+     * a CONVEY verb's destination came ONLY from the DESTINATION role (a
+     * "to"/"into" NP); a LOCATION complement ("in"/"on"/"at"/"within" NP)
+     * was parsed by nl_parse but DROPPED -- "store the packet in the channel"
+     * conveyed to dst=0, losing the channel.  Recover the locative head as the
+     * conveyance target, but ONLY when no explicit destination is present
+     * (so "send X to A in B" keeps A).  Applies to the whole convey-with-dst
+     * family (send/put/store/write/copy/move/dispatch); load/get/read read
+     * FROM a source so they are deliberately untouched. */
+    let loc_w : u32 = _hip_role_head_word_id(f_l, t_l, fc, HIPN_ROLE_LOCATION)
+    let loc_h : u64 = (loc_w as u64) & 0xFFFFFFFFu64
+    let mut conv_dst : u64 = dst_h
+    if dst_h == 0u64 {
+        if loc_h != 0u64 { conv_dst = loc_h }
+    }
+
     /* CONVEY group: send / put / store / write / load / get / read /
      * copy / move. Slots: (src_handle, dst_cap, byte_count). */
     if v == VW_SEND {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_PUT {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_STORE {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_WRITE {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_LOAD {
         /* "load X from Y" -> CONVEY(Y, X, qty). source/dest swap. */
@@ -281,10 +297,10 @@ fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_p
         let id : u64 = intent_convey(src_h, pat_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_COPY {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_MOVE {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_OPEN {
         /* "open file" -> FORM(file_form) AND ACT(open_transition). */
@@ -391,7 +407,7 @@ fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_p
         let id : u64 = intent_act(pat_h, 137u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_DISPATCH {
-        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), conv_dst, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else {
         /* unknown verb -> no candidate */

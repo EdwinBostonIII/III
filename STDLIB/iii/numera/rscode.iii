@@ -183,8 +183,9 @@ fn rs_init(n: u32, k: u32) -> i32 @export {
     let mut i : u32 = 0u32
     while i < n {
         let mut j : u32 = 0u32
+        let base : u32 = i * k   /* [W2810] hoist */
         while j < k {
-            RS_V[i * k + j] = gf8_pow(i, j) as u8
+            RS_V[base + j] = gf8_pow(i, j) as u8
             j = j + 1u32
         }
         i = i + 1u32
@@ -195,8 +196,10 @@ fn rs_init(n: u32, k: u32) -> i32 @export {
     let mut r : u32 = 0u32
     while r < k {
         let mut c : u32 = 0u32
+        let rw : u32 = r * w   /* [W2810] hoist */
+        let rk : u32 = r * k
         while c < k {
-            RS_AUG[r * w + c] = RS_V[r * k + c]
+            RS_AUG[rw + c] = RS_V[rk + c]
             c = c + 1u32
         }
         r = r + 1u32

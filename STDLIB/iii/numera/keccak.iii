@@ -310,8 +310,9 @@ fn keccak_f1600(state_ptr: u64) -> i32 @export {
         let mut yy : u32 = 0u32
         while yy < 5u32 {
             let mut xx : u32 = 0u32
+            let row_base : u32 = 5u32 * yy   /* [W2810] hoist 5*yy out of the inner xx loop */
             while xx < 5u32 {
-                let lane : u32 = xx + 5u32 * yy
+                let lane : u32 = xx + row_base
                 KK_LANE_A[lane] = KK_LANE_A[lane] ^ KK_PAR_D[xx]
                 xx = xx + 1u32
             }

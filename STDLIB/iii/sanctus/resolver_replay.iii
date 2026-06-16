@@ -35,7 +35,9 @@ fn sanctus_resolver_replay_check_chain() -> u8 @export {
         let mut nonzero : u8 = 0u8
         let mut k : u32 = 0u32
         while k < 32u32 {
-            if witness_entry_mhash_byte(idx, k) != 0u32 { nonzero = 1u8 }
+            if nonzero == 0u8 {   /* [W2810] stop the 32 extern calls after the first nonzero byte */
+                if witness_entry_mhash_byte(idx, k) != 0u32 { nonzero = 1u8 }
+            }
             k = k + 1u32
         }
         if nonzero == 0u8 { return 0u8 }

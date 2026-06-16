@@ -68,8 +68,7 @@ fn fp_sub(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
     if bm == 0u64 { bigint_drop(am) return FIELD_INVALID }
     let cmp : i32 = bigint_cmp(am, bm)
     let mut ge : u8 = 0u8
-    if cmp == 0i32 { ge = 1u8 }
-    if cmp == 1i32 { ge = 1u8 }
+    if cmp != -1i32 { ge = 1u8 }   /* [W2810] cmp in {-1,0,1}; consolidate the two == writes (cmp is a local, != is iiis-safe) */
     if ge == 1u8 {
         let diff : u64 = bigint_sub(arena, am, bm)
         bigint_drop(am)

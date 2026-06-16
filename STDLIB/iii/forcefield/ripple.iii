@@ -263,10 +263,11 @@ fn rn_merge(dmeta: *u8, dslots: *u8, darena: *u8, smeta: *u8, sslots: *u8, saren
     let scap : u64 = rn_ld_u64(smeta, 0u64)
     let mut i : u64 = 0u64
     while i < scap {
-        if sslots[i * 64u64 + 48u64] == 1u8 {
-            let voff : u64 = rn_ld_u64(sslots, i * 64u64 + 32u64)
-            let vlen : u64 = rn_ld_u64(sslots, i * 64u64 + 40u64)
-            let kind : u8 = sslots[i * 64u64 + 49u64]
+        let slot_base : u64 = i * 64u64   /* [W2810] hoist the per-slot stride mul */
+        if sslots[slot_base + 48u64] == 1u8 {
+            let voff : u64 = rn_ld_u64(sslots, slot_base + 32u64)
+            let vlen : u64 = rn_ld_u64(sslots, slot_base + 40u64)
+            let kind : u8 = sslots[slot_base + 49u64]
             let mut frame : u64 = vlen
             if kind == RN_DOM_NODE { frame = vlen >> 5u64 }
             /* [silent-truncation] propagate rn_insert's rc (2=full / 3=oom): a dropped value would

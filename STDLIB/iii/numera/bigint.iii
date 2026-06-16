@@ -943,8 +943,7 @@ fn modctx_set_nprime(id: u64, nprime0: u64, n0: u64) -> i32 @export {
     let np : u64 = nprime0 & 0xFFFFFFFFu64
     if mont_nprime_certified(n0, np) != 1u8 { return -3i32 }
     MODCTX_NPRIME0[si] = np
-    if np == 1u64 { MODCTX_FREE[si] = 1u8 }
-    if np != 1u64 { MODCTX_FREE[si] = 0u8 }
+    if np == 1u64 { MODCTX_FREE[si] = 1u8 } else { MODCTX_FREE[si] = 0u8 }   /* [W2810] one branch */
     return 0i32
 }
 

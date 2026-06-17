@@ -47,6 +47,9 @@ extern @abi(c-msvc-x64) fn intent_query(kind: u64, id: u64) -> u64 from "intent.
 extern @abi(c-msvc-x64) fn intent_if(guard_intent: u64, body_intent: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_under(context_intent: u64, body_intent: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_set_required_guarantees(intent_ptr: u64, g: u32) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_then(left_intent: u64, right_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_with(left_intent: u64, right_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_compose(left_intent: u64, right_intent: u64) -> u64 from "intent.iii"
 
 const HIP_CLASS_UNIQUE     : u32 = 0u32
 const HIP_CLASS_AMBIGUOUS  : u32 = 1u32
@@ -79,6 +82,7 @@ const HIPN_ROLE_TOPIC_C       : u32 = 10u32   /* mirrors NLP_ROLE_TOPIC */
 const HIPN_ROLE_CONDITION     : u32 = 12u32   /* mirrors NLP_ROLE_CONDITION (if/while) */
 const HIPN_ROLE_REASON        : u32 = 11u32   /* mirrors NLP_ROLE_REASON (because) */
 const HIPN_ROLE_MODAL         : u32 = 13u32   /* mirrors NLP_ROLE_MODAL (should/will/can) */
+const HIPN_ROLE_CONJ          : u32 = 14u32   /* mirrors NLP_ROLE_CONJ (and/or/but/then) */
 
 /* Verb word_ids (from nl_lex sealed lexicon). */
 const VW_SEND     : u32 =  1u32
@@ -125,6 +129,14 @@ const VW_DISPATCH : u32 = 138u32
  * All callers serialise on hip_resolve. */
 var HIP_TOK_BUF : [u8; 2048]    /* HIP_MAX_TOKENS * 8 = 2048 */
 var HIP_FRAG_BUF : [u8; 1024]   /* 64 frags * 16 bytes = 1024 */
+/* CONJ second-clause projection scratch + the role-scan start offset
+ * [enhance W3, recover-the-discarded].  HIP_PROJ_FRAG_START is read by
+ * _hip_role_of as its scan start; it is 0 for every normal lookup (so all
+ * existing paths are byte-identical) and set ONLY during the second-clause
+ * projection inside _hip_wrap_conj, then reset.  hip_resolve serialises all
+ * callers, so this module state is safe. */
+var HIP_CONJ_SCRATCH : [u8; 64]
+var HIP_PROJ_FRAG_START : u32 = 0u32
 /* iiis-0 bug: &u32_global emits load-value, not load-address. Use
  * byte arrays for anything we need to take the address of. */
 var HIP_TOKEN_COUNT_BUF : [u8; 4]
@@ -161,7 +173,7 @@ fn _hip_role_of(frags_buf: u64, count: u32, role: u32) -> u32 {
     let f_l : u64 = frags_buf
     let n_l : u32 = count
     let r_l : u32 = role
-    let mut i : u32 = 0u32
+    let mut i : u32 = HIP_PROJ_FRAG_START
     let mut found : u32 = 0xFFFFFFFFu32
     while i < n_l {
         if found == 0xFFFFFFFFu32 {
@@ -510,6 +522,51 @@ fn _hip_wrap_reason(frags_buf: u64, tok_buf: u64, count: u32, out_cands: u64, k:
     return k
 }
 
+/* Conjunction composition [enhance W3, recover-the-discarded]:
+ * nl_parse recognises a coordinating conjunction ("send X and close Y") and
+ * recurses into the second clause, emitting a CONJ fragment (role 14, quant =
+ * the conjunction word_id) plus the second clause's VERB/PATIENT -- but hip
+ * projected ONLY the first clause (k=1), dropping the second action.  When the
+ * first clause yields exactly ONE candidate AND a CONJ fragment is present, hip
+ * now projects the second clause (roles scanned AFTER the conjunction via
+ * HIP_PROJ_FRAG_START) and composes the two intents: "then" -> intent_then
+ * (sequence), "and" -> intent_with (conjunction), else -> intent_compose.
+ * Reuses the existing projector + composition primitives; no new module. */
+fn _hip_wrap_conj(frags_buf: u64, tok_buf: u64, count: u32, out_cands: u64, k: u32) -> u32 {
+    if k != 1u32 { return k }
+    let c_idx : u32 = _hip_role_of(frags_buf, count, HIPN_ROLE_CONJ)
+    if c_idx == 0xFFFFFFFFu32 { return k }
+    let conj_word : u32 = nl_parse_frag_quantifier(frags_buf, c_idx)
+    HIP_PROJ_FRAG_START = c_idx + 1u32
+    let v2_word : u32 = _hip_verb_word_id(frags_buf, tok_buf, count)
+    if v2_word == 0u32 {
+        HIP_PROJ_FRAG_START = 0u32
+        return k
+    }
+    let scratch : u64 = (&HIP_CONJ_SCRATCH) as u64
+    let pv2 : u64 = _hip_pack_pv_meta(v2_word, count, 0u32, HIP_MAX_CANDIDATES)
+    let k2 : u32 = _hip_project_verb(pv2, frags_buf, tok_buf, scratch)
+    HIP_PROJ_FRAG_START = 0u32
+    if k2 == 0u32 { return k }
+    if k2 == 0xFFFFFFFFu32 { return k }
+    let s_pp : *u64 = scratch as *u64
+    let second : u64 = s_pp[0u64]
+    if second == 0u64 { return k }
+    let f_pp : *u64 = out_cands as *u64
+    let first : u64 = f_pp[0u64]
+    let mut composed : u64 = 0u64
+    if conj_word == 181u32 {
+        composed = intent_then(first, second)
+    } else if conj_word == 178u32 {
+        composed = intent_with(first, second)
+    } else {
+        composed = intent_compose(first, second)
+    }
+    if composed == 0u64 { return k }
+    f_pp[0u64] = composed
+    return k
+}
+
 /* hip_resolve: top-level. text -> tokens -> fragments -> candidate
  * intents -> class.
  * 4-arg signature (iiis-0 5+arg trap):
@@ -528,6 +585,7 @@ fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u
         nl_lex_init_all()
         HIP_INITED = 1u8
     }
+    HIP_PROJ_FRAG_START = 0u32
 
     /* Module-scoped meta scratch (use byte-array addresses; iiis-0
      * &u32_global is broken). */
@@ -575,6 +633,7 @@ fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u
             k = _hip_apply_modal(frag_buf, frag_count, oc, k)
             k = _hip_wrap_condition(frag_buf, tok_buf, frag_count, oc, k)
             k = _hip_wrap_reason(frag_buf, tok_buf, frag_count, oc, k)
+            k = _hip_wrap_conj(frag_buf, tok_buf, frag_count, oc, k)
         }
     }
 

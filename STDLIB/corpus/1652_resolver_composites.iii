@@ -1,0 +1,99 @@
+/* 1652_resolver_composites.iii -- complete the composite pipeline: resolve() honours UNDER, THEN, WITH.
+ *
+ * After IF (corpus 1651), the remaining hip composites are made live:
+ *   - UNDER(ctx, body) = PRIMITIVE_UNDER(14): hip's causal "X because Y" (ctx is a predicate over the
+ *     reason).  Like IF, the ctx is a K-free precondition resolved on its OWN throwaway kchain; the body
+ *     resolves only if the ctx BINDS, else the causal claim is unfounded -> REFUSE.
+ *   - THEN(left, right) = PRIMITIVE_THEN(12): sequence "X then Y".  Both are real actions; resolve left
+ *     (fail-fast: a refused left refuses the sequence), then resolve right; the result is right's binding.
+ *   - WITH(left, right) = PRIMITIVE_WITH(13): conjunction "X and Y".  Both must bind under the caller's
+ *     context; result is right's binding.
+ *
+ * Old lib (IF-only): UNDER/THEN/WITH still FLATTEN (scored as opaque COMPOSE patterns, sub-intents
+ * ignored) -> the failing-arg arms wrongly succeed -> RED.  After the fix they refuse / return the body.
+ *
+ * Registration mirrors corpus 1361/1651 (slot 90, mu_unify_primitive, dispatch -> 0x4B4B).
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1652
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_partial_arg(intent_ptr: u64, slot: u32, value: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_under(context_intent: u64, body_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_then(left_intent: u64, right_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_with(left_intent: u64, right_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, p_template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_unseal_for_test() -> i32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn mu_unify_primitive(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
+
+var TPL : [u8; 168]
+
+fn kat_dispatch(a: u64, b: u64, c: u64, ctx: u64) -> u64 { return 0x4B4Bu64 }
+
+fn put_u64(off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { TPL[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0u64
+}
+
+fn fresh_ctx() -> u64 {
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return 0u64 }
+    call_context_init_set(0u64, kch as u8, 2u8, 1u8)
+    return call_context_new()
+}
+
+/* a primitive that BINDS to slot 90 (claim 11); used as body/left/right and the holding arg0. */
+fn mk_bind() -> u64 {
+    let p : u64 = intent_new(6u8)
+    intent_set_partial_arg(p, 12u32, 11u64)
+    return p
+}
+/* a primitive that REFUSES (wrong claim 4); used as the failing arg0. */
+fn mk_fail() -> u64 {
+    let p : u64 = intent_new(6u8)
+    intent_set_partial_arg(p, 12u32, 4u64)
+    return p
+}
+
+const BIND : u64 = 0x9696u64   /* 0x4B4B << 1 (success tag) */
+
+fn main() -> u64 {
+    resolution_init()
+    let set : u64 = pattern_set_global()
+
+    pattern_registry_unseal_for_test()
+    let mut i : u64 = 0u64
+    while i < 168u64 { TPL[i] = 0u8 ; i = i + 1u64 }
+    put_u64(0u64, 0xA57A57A5u64)
+    TPL[41u64] = 11u8
+    put_u64(88u64, mu_unify_primitive)
+    put_u64(96u64, kat_dispatch)
+    put_u64(104u64, 3000000000u64)
+    put_u64(128u64, 950000000u64)
+    if pattern_register(90u32, (&TPL) as u64) != 1u8 { return 5u64 }
+    pattern_registry_seal_global()
+
+    /* control: a bare primitive binds */
+    if resolve(set, mk_bind(), fresh_ctx()) != BIND { return 6u64 }
+
+    /* ---- UNDER (ctx, body): ctx holds -> body ; ctx fails -> refuse ---- */
+    if resolve(set, intent_under(mk_bind(), mk_bind()), fresh_ctx()) != BIND { return 10u64 }
+    if (resolve(set, intent_under(mk_fail(), mk_bind()), fresh_ctx()) & 1u64) != 1u64 { return 11u64 }
+
+    /* ---- THEN (left, right): left holds -> right ; left fails -> refuse (fail-fast) ---- */
+    if resolve(set, intent_then(mk_bind(), mk_bind()), fresh_ctx()) != BIND { return 20u64 }
+    if (resolve(set, intent_then(mk_fail(), mk_bind()), fresh_ctx()) & 1u64) != 1u64 { return 21u64 }
+
+    /* ---- WITH (left, right): left holds -> right ; left fails -> refuse ---- */
+    if resolve(set, intent_with(mk_bind(), mk_bind()), fresh_ctx()) != BIND { return 30u64 }
+    if (resolve(set, intent_with(mk_fail(), mk_bind()), fresh_ctx()) & 1u64) != 1u64 { return 31u64 }
+
+    return 99u64
+}

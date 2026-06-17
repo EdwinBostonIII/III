@@ -74,7 +74,10 @@ const RV_PRIMITIVE_REFLECT : u8 = 18u8
 /* [composite] hip lowers NL "X if Y" -> intent_if = PRIMITIVE_IF(15) with guard@partial_arg[0],
  * body@partial_arg[1] (verba/intent.iii:454).  resolve() honours the guard (below); THEN(12)/
  * WITH(13)/UNDER(14) still flatten until their own increments land. */
-const RV_PRIMITIVE_IF      : u8 = 15u8
+const RV_PRIMITIVE_THEN    : u8 = 12u8   /* sequence  (left, right)  -- both real actions */
+const RV_PRIMITIVE_WITH    : u8 = 13u8   /* conjunction (left, right) -- both real actions */
+const RV_PRIMITIVE_UNDER   : u8 = 14u8   /* causal    (ctx, body)    -- ctx is a K-free precondition */
+const RV_PRIMITIVE_IF      : u8 = 15u8   /* conditional (guard, body) -- guard is a K-free precondition */
 const RV_COMPOSITE_MAX_DEPTH : u64 = 16u64   /* native-recursion bound for nested composites */
 const KCHAIN_INVALID_ID    : u64 = 0xFFFFFFFFFFFFFFFFu64
 
@@ -553,23 +556,26 @@ fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export
     return payload | 1u64
 }
 
-/* ── composite: guarded conditional (PRIMITIVE_IF) ──
+/* ── composite: precondition-guarded action (PRIMITIVE_IF / PRIMITIVE_UNDER) ──
  *
- * hip lowers NL "X if Y" into intent_if(guard, body) = PRIMITIVE_IF(15) with the guard sub-intent
- * at partial_arg[0] and the body at partial_arg[1].  Historically resolve() scored the IF intent by
- * its OWN COMPOSE-hexad fields and never looked at the sub-intents, so the guard was inert and the
- * whole NL conditional pipeline was dead.  This honours the calculus contract ("body resolves only
- * if guard's witness satisfies a predicate"): resolve the guard; if it BINDS, the guard holds and
- * the body's real binding is returned; otherwise the conditional REFUSES.
+ * hip lowers NL "X if Y" into intent_if(guard, body) = PRIMITIVE_IF(15) and NL "X because Y" into
+ * intent_under(ctx, body) = PRIMITIVE_UNDER(14), each with the precondition sub-intent at
+ * partial_arg[0] and the body at partial_arg[1].  In both, the arg0 is a PREDICATE (hip emits an
+ * intent_query over the condition/reason verb), not a dispatched action.  Historically resolve()
+ * scored the composite by its OWN COMPOSE-hexad fields and never looked at the sub-intents, so the
+ * precondition was inert and the whole NL conditional/causal pipeline was dead.  This honours the
+ * calculus contract ("body resolves only if the guard's witness satisfies a predicate"): resolve the
+ * precondition; if it BINDS it holds and the body's real binding is returned; otherwise the
+ * conditional/causal claim is unfounded and the composite REFUSES.
  *
- * K-discipline: the guard is resolved on its OWN throwaway kchain (dropped immediately), so the
- * caller's K budget is charged exactly ONCE -- for the body's dispatch.  That makes resolve(IF)
- * K-equivalent to resolving the body alone, so honouring a HELD guard can never K-underflow a
- * conditional that the body alone would have resolved (no regression vs the old flatten, which
- * also did a single compose).  The guard inherits the caller's cap_id so it is evaluated under the
- * caller's authority.  Composites are never memoised, so the asm hot path always misses them and
- * this interception always fires; primitives (1-11, 16-19) never enter here and stay byte-identical. */
-fn _resolve_if(set: u64, intent: u64, ctx: u64) -> u64 {
+ * K-discipline: the precondition is resolved on its OWN throwaway kchain (dropped immediately), so
+ * the caller's K budget is charged exactly ONCE -- for the body's dispatch.  That makes the
+ * composite K-equivalent to resolving the body alone, so honouring a HELD precondition can never
+ * K-underflow a request that the body alone would have resolved (no regression vs the old flatten,
+ * which also did a single compose).  The precondition inherits the caller's cap_id so it is
+ * evaluated under the caller's authority.  Composites are never memoised, so the asm hot path always
+ * misses them and this interception always fires; primitives (1-11, 16-19) never enter here. */
+fn _resolve_guarded(set: u64, intent: u64, ctx: u64) -> u64 {
     if RES_COMPOSITE_DEPTH[0u64] >= RV_COMPOSITE_MAX_DEPTH {
         return resolve_fail(E_RESOLVE_DEPTH, set, intent, ctx)
     }
@@ -593,13 +599,41 @@ fn _resolve_if(set: u64, intent: u64, ctx: u64) -> u64 {
     kchain_drop(kg)
 
     /* resolve_fail (with its failure witness) fires ONLY on the genuine refuse branch -- a held
-     * guard must not emit a phantom refusal into the witness chain. */
+     * precondition must not emit a phantom refusal into the witness chain. */
     let mut result : u64 = 0u64
     if (gres & 1u64) == 0u64 {
-        result = resolve(set, body, ctx)        /* guard holds -> the body's real binding */
+        result = resolve(set, body, ctx)        /* precondition holds -> the body's real binding */
     } else {
-        result = resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)   /* guard fails -> refuse */
+        result = resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)   /* precondition fails -> refuse */
     }
+    RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] - 1u64
+    return result
+}
+
+/* ── composite: sequenced/conjoined actions (PRIMITIVE_THEN / PRIMITIVE_WITH) ──
+ *
+ * hip lowers NL "X then Y" into intent_then(left, right) = PRIMITIVE_THEN(12) and NL "X and Y" into
+ * intent_with(left, right) = PRIMITIVE_WITH(13).  Unlike IF/UNDER, BOTH sub-intents are real actions:
+ * resolve the left (fail-fast -- a refused left refuses the whole composite, so a sequence cannot run
+ * its tail after a failed head and a conjunction cannot half-succeed), then resolve the right; the
+ * composite's binding is the right's (the sequence's final / the conjunction's last action).  Both
+ * resolve on the CALLER's ctx, so each is K-charged -- two composes is the honest cost of doing two
+ * actions (the K-floor legitimately bounds an over-long chain; with the calculus's K=1.00 composite
+ * weight this never spuriously underflows a two-action request the flatten would have allowed). */
+fn _resolve_seq(set: u64, intent: u64, ctx: u64) -> u64 {
+    if RES_COMPOSITE_DEPTH[0u64] >= RV_COMPOSITE_MAX_DEPTH {
+        return resolve_fail(E_RESOLVE_DEPTH, set, intent, ctx)
+    }
+    RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] + 1u64
+    let left  : u64 = intent_partial_arg(intent, 0u32)
+    let right : u64 = intent_partial_arg(intent, 1u32)
+
+    let lres : u64 = resolve(set, left, ctx)
+    let mut result : u64 = lres
+    if (lres & 1u64) == 0u64 {
+        result = resolve(set, right, ctx)       /* left succeeded -> the composite is the right's binding */
+    }
+    /* if left refused, result == lres (its refusal) is propagated -- fail-fast. */
     RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] - 1u64
     return result
 }
@@ -640,15 +674,18 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
         }
     }
 
-    /* Step 1c: composite interception.  PRIMITIVE_IF(15) is resolved by HONOURING its guard
-     * (see _resolve_if above) rather than scored as an opaque COMPOSE-hexad pattern.  Placed AFTER
-     * the tamper + depth gates (a tampered or too-deep composite still fails closed) but BEFORE the
-     * memo/asm path -- composites are never memoised, so the asm hot path always misses them and
-     * this fires on every call.  Only IF is intercepted in this increment; THEN(12)/WITH(13)/
-     * UNDER(14) still flatten until their own increments land. */
-    if intent_goal_kind(intent) == RV_PRIMITIVE_IF {
-        return _resolve_if(set, intent, ctx)
-    }
+    /* Step 1c: composite interception.  The four composition operators are resolved by HONOURING
+     * their sub-intents (see _resolve_guarded / _resolve_seq above) rather than scored as opaque
+     * COMPOSE-hexad patterns.  IF(15)/UNDER(14) gate a body on a K-free precondition; THEN(12)/
+     * WITH(13) sequence/conjoin two real actions.  Placed AFTER the tamper + depth gates (a tampered
+     * or too-deep composite still fails closed) but BEFORE the memo/asm path -- composites are never
+     * memoised, so the asm hot path always misses them and this fires on every call.  Primitives
+     * (1-11, 16-19) never match here and stay byte-identical. */
+    let gk_composite : u8 = intent_goal_kind(intent)
+    if gk_composite == RV_PRIMITIVE_IF    { return _resolve_guarded(set, intent, ctx) }
+    if gk_composite == RV_PRIMITIVE_UNDER { return _resolve_guarded(set, intent, ctx) }
+    if gk_composite == RV_PRIMITIVE_THEN  { return _resolve_seq(set, intent, ctx) }
+    if gk_composite == RV_PRIMITIVE_WITH  { return _resolve_seq(set, intent, ctx) }
 
     /* Step 2: ctx digest (cached by ctx pointer; SHA-256 only on miss). */
     _res_ctx_digest_cached(ctx, (&RES_DIG) as u64)

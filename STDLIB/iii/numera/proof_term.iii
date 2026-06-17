@@ -92,9 +92,31 @@ const PT_RULE_IMPLIES_INTRO  : u8 = 0x0Eu8
 const PT_RULE_AND_INTRO      : u8 = 0x0Fu8   // A, B          |- A&B
 const PT_RULE_AND_ELIM_L     : u8 = 0x10u8   // A&B           |- A
 const PT_RULE_AND_ELIM_R     : u8 = 0x11u8   // A&B           |- B
-const PT_RULE_MAX            : u8 = 0x11u8
+// DISJUNCTION (propositional OR), encoded A|B over '|' (0x7C).  Introduction injects either side;
+// elimination is CASE ANALYSIS -- from A|B together with a derivation of C assuming A and a derivation
+// of C assuming B, conclude C, discharging both case assumptions.  With AND + => this completes the
+// positive propositional natural-deduction core, e.g. (A|B)=>(B|A) becomes provable.
+const PT_RULE_OR_INTRO_L     : u8 = 0x12u8   // A            |- A|B   (B free)
+const PT_RULE_OR_INTRO_R     : u8 = 0x13u8   // B            |- A|B   (A free)
+const PT_RULE_OR_ELIM        : u8 = 0x14u8   // A|B, [A]..C, [B]..C |- C   (arity 5; see pt_replay_or_elim)
+// NEGATION + CLASSICAL.  EX_FALSO: from the absurdity ⊥ anything follows (explosion / ex contradictione
+// quodlibet, with ¬A := A=>⊥ giving A, ¬A |- ⊥ |- B).  DOUBLE_NEG_ELIM: from ((A=>⊥)=>⊥) conclude A --
+// the axiom that makes the calculus CLASSICAL rather than intuitionistic.
+const PT_RULE_EX_FALSO       : u8 = 0x15u8   // ⊥            |- C   (any C)
+const PT_RULE_DOUBLE_NEG_ELIM: u8 = 0x16u8   // ((A=>⊥)=>⊥)  |- A
+const PT_RULE_MAX            : u8 = 0x16u8
 const PT_MAX_ASSUMPTIONS     : u64 = 64u64   // one bit per live assumption in the u64 dependency mask
 const PT_OP_AND              : u8 = 0x26u8    // '&' conjunction separator A & B
+const PT_OP_OR               : u8 = 0x7Cu8    // '|' disjunction separator A | B
+// STRUCTURED FORMULAS: explicit parentheses make arbitrarily-nested formulas unambiguous.  Operator
+// splitting finds the first TOP-LEVEL operator (paren depth 0), and operand comparison strips matching
+// outer parens -- so "(a>b)" matches a premise "a>b".  Flat (paren-free) formulas have depth 0
+// everywhere, so every existing proof parses byte-identically: the upgrade is purely additive.
+const PT_OP_LPAREN           : u8 = 0x28u8    // '('
+const PT_OP_RPAREN           : u8 = 0x29u8    // ')'
+// Falsum (the absurdity constant ⊥), encoded as the single byte '_'.  Negation is definable as
+// ¬A := A=>⊥, so it reuses implication; only EX_FALSO (⊥ |- C) and DOUBLE_NEG_ELIM are new rules.
+const PT_FALSUM              : u8 = 0x5Fu8    // '_' = ⊥
 
 const PT_OP_IMPLIES          : u8 = 0x3Eu8     // '>' implication separator A => B
 const PT_OP_RELATION         : u8 = 0x3Du8     // '=' relation separator a R b
@@ -194,6 +216,75 @@ fn pt_find_byte(ptr: u64, len: u64, target: u8) -> i64 {
     return found
 }
 
+// First occurrence of `op` at parenthesis depth 0 (the TOP-LEVEL operator), or -1.  For a flat
+// (paren-free) formula depth is 0 throughout, so this is identical to pt_find_byte -- the structured
+// encoding is purely additive.  Sentinel fold (W14); result tested == / != only (Trap3).
+fn pt_find_toplevel_op(ptr: u64, len: u64, op: u8) -> i64 {
+    let p : *u8 = ptr as *u8
+    let mut depth : i64 = 0i64
+    let mut found : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < len {
+        if sentinel == 0u8 {
+            let b : u8 = p[i]
+            if b == PT_OP_LPAREN { depth = depth + 1i64 }
+            if b == PT_OP_RPAREN { depth = depth - 1i64 }
+            if depth == 0i64 {
+                if b == op { found = i as i64  sentinel = 1u8 }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+// 1u8 iff the formula is fully wrapped in ONE matching outer parenthesis pair -- i.e. ptr[0]=='(',
+// ptr[len-1]==')', and that '(' closes only at the final ')' (paren depth returns to 0 only at the end).
+fn pt_is_wrapped(ptr: u64, len: u64) -> u8 {
+    if len < 2u64 { return 0u8 }
+    let p : *u8 = ptr as *u8
+    if p[0u64] != PT_OP_LPAREN { return 0u8 }
+    if p[len - 1u64] != PT_OP_RPAREN { return 0u8 }
+    let mut depth : i64 = 0i64
+    let mut ok : u8 = 1u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let b : u8 = p[i]
+        if b == PT_OP_LPAREN { depth = depth + 1i64 }
+        if b == PT_OP_RPAREN { depth = depth - 1i64 }
+        if depth == 0i64 {
+            if i < (len - 1u64) { ok = 0u8 }   // the opening paren closed before the end
+        }
+        i = i + 1u64
+    }
+    return ok
+}
+
+// Structural formula equality: strip all matching outer parenthesis layers from both operands, then
+// byte-compare the cores.  So "(a>b)" == "a>b" == "((a>b))".  For paren-free formulas this reduces to
+// pt_bytes_eq, so every existing proof's operand comparisons are unchanged.
+fn pt_formula_eq(p1: u64, l1: u64, p2: u64, l2: u64) -> u8 {
+    let mut a : u64 = p1   let mut al : u64 = l1
+    let mut wa : u8 = pt_is_wrapped(a, al)
+    while wa == 1u8 { a = a + 1u64  al = al - 2u64  wa = pt_is_wrapped(a, al) }
+    let mut b : u64 = p2   let mut bl : u64 = l2
+    let mut wb : u8 = pt_is_wrapped(b, bl)
+    while wb == 1u8 { b = b + 1u64  bl = bl - 2u64  wb = pt_is_wrapped(b, bl) }
+    return pt_bytes_eq(a, al, b, bl)
+}
+
+// 1u8 iff the formula is the absurdity ⊥ (a single '_' byte, modulo outer parens).
+fn pt_is_falsum(ptr: u64, len: u64) -> u8 {
+    let mut p : u64 = ptr   let mut l : u64 = len
+    let mut w : u8 = pt_is_wrapped(p, l)
+    while w == 1u8 { p = p + 1u64  l = l - 2u64  w = pt_is_wrapped(p, l) }
+    if l != 1u64 { return 0u8 }
+    let fp : *u8 = p as *u8
+    if fp[0u64] != PT_FALSUM { return 0u8 }
+    return 1u8
+}
+
 // Read a u32 little-endian from a byte span at offset off.
 fn pt_load_u32_le(base: u64, off: u64) -> u32 {
     let p : *u8 = base as *u8
@@ -236,13 +327,13 @@ fn pt_find_slot(term_id: *u8) -> i64 {
 // MODUS_PONENS conclusion replay: premise[0]=A, premise[1]=A=>B, this=B.
 // Locate '>' in premise[1]; require prefix == A and suffix == this conclusion.
 fn pt_check_mp(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 {
-    let sep : i64 = pt_find_byte(p1, l1, PT_OP_IMPLIES)
+    let sep : i64 = pt_find_toplevel_op(p1, l1, PT_OP_IMPLIES)
     if sep == -1i64 { return 0u8 }
     let spos : u64 = sep as u64
     let suff_off : u64 = spos + 1u64
     let suff_len : u64 = l1 - suff_off
-    if pt_bytes_eq(p1, spos, p0, l0) == 0u8 { return 0u8 }
-    if pt_bytes_eq(p1 + suff_off, suff_len, c, cl) == 0u8 { return 0u8 }
+    if pt_formula_eq(p1, spos, p0, l0) == 0u8 { return 0u8 }
+    if pt_formula_eq(p1 + suff_off, suff_len, c, cl) == 0u8 { return 0u8 }
     return 1u8
 }
 
@@ -250,11 +341,11 @@ fn pt_check_mp(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 {
 // conclusion=a R c.  Split each on '='; require b0==a1 (shared middle),
 // and conclusion ends == a0 / c1 (exact byte match).
 fn pt_check_trans(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 {
-    let s0 : i64 = pt_find_byte(p0, l0, PT_OP_RELATION)
+    let s0 : i64 = pt_find_toplevel_op(p0, l0, PT_OP_RELATION)
     if s0 == -1i64 { return 0u8 }
-    let s1 : i64 = pt_find_byte(p1, l1, PT_OP_RELATION)
+    let s1 : i64 = pt_find_toplevel_op(p1, l1, PT_OP_RELATION)
     if s1 == -1i64 { return 0u8 }
-    let sc : i64 = pt_find_byte(c, cl, PT_OP_RELATION)
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_RELATION)
     if sc == -1i64 { return 0u8 }
     let a0p : u64 = p0          let a0l : u64 = s0 as u64
     let b0p : u64 = p0 + (s0 as u64) + 1u64   let b0l : u64 = l0 - (s0 as u64) - 1u64
@@ -262,9 +353,9 @@ fn pt_check_trans(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 {
     let b1p : u64 = p1 + (s1 as u64) + 1u64   let b1l : u64 = l1 - (s1 as u64) - 1u64
     let acp : u64 = c           let acl : u64 = sc as u64
     let bcp : u64 = c + (sc as u64) + 1u64    let bcl : u64 = cl - (sc as u64) - 1u64
-    if pt_bytes_eq(b0p, b0l, a1p, a1l) == 0u8 { return 0u8 }
-    if pt_bytes_eq(a0p, a0l, acp, acl) == 0u8 { return 0u8 }
-    if pt_bytes_eq(b1p, b1l, bcp, bcl) == 0u8 { return 0u8 }
+    if pt_formula_eq(b0p, b0l, a1p, a1l) == 0u8 { return 0u8 }
+    if pt_formula_eq(a0p, a0l, acp, acl) == 0u8 { return 0u8 }
+    if pt_formula_eq(b1p, b1l, bcp, bcl) == 0u8 { return 0u8 }
     return 1u8
 }
 
@@ -314,6 +405,11 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if kind == PT_RULE_AND_INTRO { return pt_replay_and_intro(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_AND_ELIM_L { return pt_replay_and_elim_l(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_AND_ELIM_R { return pt_replay_and_elim_r(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_OR_INTRO_L { return pt_replay_or_intro_l(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_OR_INTRO_R { return pt_replay_or_intro_r(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_OR_ELIM { return pt_replay_or_elim(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_EX_FALSO { return pt_replay_ex_falso(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_DOUBLE_NEG_ELIM { return pt_replay_double_neg_elim(slot, idx, pcount, c, cl) }
     return PT_E_INVALID_INFERENCE
 }
 
@@ -377,11 +473,11 @@ fn pt_replay_trans(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
 // Structurally identical to TRANSITIVITY but over '>' instead of '=' -- the implication algebra's
 // transitivity, completing the operator symmetry (MODUS_PONENS was the only '>' rule).
 fn pt_check_hyp_syll(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 {
-    let s0 : i64 = pt_find_byte(p0, l0, PT_OP_IMPLIES)
+    let s0 : i64 = pt_find_toplevel_op(p0, l0, PT_OP_IMPLIES)
     if s0 == -1i64 { return 0u8 }
-    let s1 : i64 = pt_find_byte(p1, l1, PT_OP_IMPLIES)
+    let s1 : i64 = pt_find_toplevel_op(p1, l1, PT_OP_IMPLIES)
     if s1 == -1i64 { return 0u8 }
-    let sc : i64 = pt_find_byte(c, cl, PT_OP_IMPLIES)
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_IMPLIES)
     if sc == -1i64 { return 0u8 }
     let a0p : u64 = p0          let a0l : u64 = s0 as u64
     let b0p : u64 = p0 + (s0 as u64) + 1u64   let b0l : u64 = l0 - (s0 as u64) - 1u64
@@ -389,9 +485,9 @@ fn pt_check_hyp_syll(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 
     let b1p : u64 = p1 + (s1 as u64) + 1u64   let b1l : u64 = l1 - (s1 as u64) - 1u64
     let acp : u64 = c           let acl : u64 = sc as u64
     let bcp : u64 = c + (sc as u64) + 1u64    let bcl : u64 = cl - (sc as u64) - 1u64
-    if pt_bytes_eq(b0p, b0l, a1p, a1l) == 0u8 { return 0u8 }   // B of (A=>B) == A of (B=>C)
-    if pt_bytes_eq(a0p, a0l, acp, acl) == 0u8 { return 0u8 }   // conclusion antecedent == A
-    if pt_bytes_eq(b1p, b1l, bcp, bcl) == 0u8 { return 0u8 }   // conclusion consequent == C
+    if pt_formula_eq(b0p, b0l, a1p, a1l) == 0u8 { return 0u8 }   // B of (A=>B) == A of (B=>C)
+    if pt_formula_eq(a0p, a0l, acp, acl) == 0u8 { return 0u8 }   // conclusion antecedent == A
+    if pt_formula_eq(b1p, b1l, bcp, bcl) == 0u8 { return 0u8 }   // conclusion consequent == C
     return 1u8
 }
 
@@ -457,14 +553,14 @@ fn pt_replay_implies_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) ->
     let idxb : u64 = slot * PT_MAX_STEPS + ib
     if PT_STEP_KINDS[idxa] != PT_RULE_ASSUME { return PT_E_INVALID_INFERENCE }   // must discharge an assumption
     // conclusion must be A=>B: split on '>', antecedent == A (assume's concl), consequent == B (body's concl)
-    let sc : i64 = pt_find_byte(c, cl, PT_OP_IMPLIES)
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_IMPLIES)
     if sc == -1i64 { return PT_E_INVALID_INFERENCE }
     let pa : u64 = pt_concl_addr(idxa)   let la : u64 = PT_STEP_CONCL_LENS[idxa] as u64
     let pb : u64 = pt_concl_addr(idxb)   let lb : u64 = PT_STEP_CONCL_LENS[idxb] as u64
     let antp : u64 = c          let antl : u64 = sc as u64
     let conp : u64 = c + (sc as u64) + 1u64   let conl : u64 = cl - (sc as u64) - 1u64
-    if pt_bytes_eq(antp, antl, pa, la) == 0u8 { return PT_E_INVALID_INFERENCE }   // antecedent == A
-    if pt_bytes_eq(conp, conl, pb, lb) == 0u8 { return PT_E_INVALID_INFERENCE }   // consequent == B
+    if pt_formula_eq(antp, antl, pa, la) == 0u8 { return PT_E_INVALID_INFERENCE }   // antecedent == A
+    if pt_formula_eq(conp, conl, pb, lb) == 0u8 { return PT_E_INVALID_INFERENCE }   // consequent == B
     // discharge: clear A's assumption bit from B's mask (~mask_a via XOR with all-ones)
     let mask_a : u64 = PT_STEP_ASSUME_MASK[idxa]
     let mask_b : u64 = PT_STEP_ASSUME_MASK[idxb]
@@ -487,12 +583,12 @@ fn pt_replay_and_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32
     let idx1 : u64 = slot * PT_MAX_STEPS + i1
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
     let p1 : u64 = pt_concl_addr(idx1)   let l1 : u64 = PT_STEP_CONCL_LENS[idx1] as u64
-    let sc : i64 = pt_find_byte(c, cl, PT_OP_AND)
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_AND)
     if sc == -1i64 { return PT_E_INVALID_INFERENCE }
     let lp : u64 = c          let ll : u64 = sc as u64
     let rp : u64 = c + (sc as u64) + 1u64   let rl : u64 = cl - (sc as u64) - 1u64
-    if pt_bytes_eq(lp, ll, p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // left conjunct == A
-    if pt_bytes_eq(rp, rl, p1, l1) == 0u8 { return PT_E_INVALID_INFERENCE }   // right conjunct == B
+    if pt_formula_eq(lp, ll, p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // left conjunct == A
+    if pt_formula_eq(rp, rl, p1, l1) == 0u8 { return PT_E_INVALID_INFERENCE }   // right conjunct == B
     return PT_OK
 }
 
@@ -504,10 +600,10 @@ fn pt_replay_and_elim_l(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i3
     let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
     let idx0 : u64 = slot * PT_MAX_STEPS + i0
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
-    let sp : i64 = pt_find_byte(p0, l0, PT_OP_AND)
+    let sp : i64 = pt_find_toplevel_op(p0, l0, PT_OP_AND)
     if sp == -1i64 { return PT_E_INVALID_INFERENCE }
     let lp : u64 = p0         let ll : u64 = sp as u64
-    if pt_bytes_eq(lp, ll, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion == left conjunct
+    if pt_formula_eq(lp, ll, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion == left conjunct
     return PT_OK
 }
 
@@ -519,10 +615,142 @@ fn pt_replay_and_elim_r(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i3
     let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
     let idx0 : u64 = slot * PT_MAX_STEPS + i0
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
-    let sp : i64 = pt_find_byte(p0, l0, PT_OP_AND)
+    let sp : i64 = pt_find_toplevel_op(p0, l0, PT_OP_AND)
     if sp == -1i64 { return PT_E_INVALID_INFERENCE }
     let rp : u64 = p0 + (sp as u64) + 1u64   let rl : u64 = l0 - (sp as u64) - 1u64
-    if pt_bytes_eq(rp, rl, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion == right conjunct
+    if pt_formula_eq(rp, rl, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion == right conjunct
+    return PT_OK
+}
+
+// ---- Disjunction (propositional OR) introduction + elimination (case analysis) ----
+
+// OR_INTRO_L: premise[0]=A, conclusion = A|B (the LEFT disjunct == A; the right disjunct B is free,
+// since A true makes A|B true for any B).  Generic mask.
+fn pt_replay_or_intro_l(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_OR)
+    if sc == -1i64 { return PT_E_INVALID_INFERENCE }
+    let lp : u64 = c          let ll : u64 = sc as u64
+    if pt_formula_eq(lp, ll, p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // left disjunct == A
+    return PT_OK
+}
+
+// OR_INTRO_R: premise[0]=B, conclusion = A|B (the RIGHT disjunct == B; the left A is free).
+fn pt_replay_or_intro_r(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_OR)
+    if sc == -1i64 { return PT_E_INVALID_INFERENCE }
+    let rp : u64 = c + (sc as u64) + 1u64   let rl : u64 = cl - (sc as u64) - 1u64
+    if pt_formula_eq(rp, rl, p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // right disjunct == B
+    return PT_OK
+}
+
+// OR_ELIM (disjunction elimination = case analysis).  Premises (arity 5), in order:
+//   [0] disj   : A|B
+//   [1] assumeA: an ASSUME of A (the left case hypothesis)
+//   [2] branchA: a derivation of C (the goal), which assumed A
+//   [3] assumeB: an ASSUME of B (the right case hypothesis)
+//   [4] branchB: a derivation of C, which assumed B
+// Conclusion = C.  Both branches must reach the SAME C, the case hypotheses must match the two
+// disjuncts, and the result DISCHARGES both case assumptions: the goal C holds whenever A|B does.
+//   mask(C) = mask(disj) | (mask(branchA) & ~bit(assumeA)) | (mask(branchB) & ~bit(assumeB))
+// -- the disjunction's own assumptions, plus each branch's OTHER assumptions (case hyp discharged).
+fn pt_replay_or_elim(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 5u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i_d  : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let i_aa : u64 = PT_STEP_PREMISES[base + 1u64] as u64
+    let i_ba : u64 = PT_STEP_PREMISES[base + 2u64] as u64
+    let i_ab : u64 = PT_STEP_PREMISES[base + 3u64] as u64
+    let i_bb : u64 = PT_STEP_PREMISES[base + 4u64] as u64
+    let idx_d  : u64 = slot * PT_MAX_STEPS + i_d
+    let idx_aa : u64 = slot * PT_MAX_STEPS + i_aa
+    let idx_ba : u64 = slot * PT_MAX_STEPS + i_ba
+    let idx_ab : u64 = slot * PT_MAX_STEPS + i_ab
+    let idx_bb : u64 = slot * PT_MAX_STEPS + i_bb
+    // the two case hypotheses must be ASSUME steps
+    if PT_STEP_KINDS[idx_aa] != PT_RULE_ASSUME { return PT_E_INVALID_INFERENCE }
+    if PT_STEP_KINDS[idx_ab] != PT_RULE_ASSUME { return PT_E_INVALID_INFERENCE }
+    // split the disjunction on '|' into A (left) and B (right)
+    let pd : u64 = pt_concl_addr(idx_d)   let ld : u64 = PT_STEP_CONCL_LENS[idx_d] as u64
+    let sd : i64 = pt_find_toplevel_op(pd, ld, PT_OP_OR)
+    if sd == -1i64 { return PT_E_INVALID_INFERENCE }
+    let ap : u64 = pd          let al : u64 = sd as u64
+    let bp : u64 = pd + (sd as u64) + 1u64   let bl : u64 = ld - (sd as u64) - 1u64
+    // assumeA must be A, assumeB must be B
+    let paa : u64 = pt_concl_addr(idx_aa)   let laa : u64 = PT_STEP_CONCL_LENS[idx_aa] as u64
+    let pab : u64 = pt_concl_addr(idx_ab)   let lab : u64 = PT_STEP_CONCL_LENS[idx_ab] as u64
+    if pt_formula_eq(paa, laa, ap, al) == 0u8 { return PT_E_INVALID_INFERENCE }   // left case assumes A
+    if pt_formula_eq(pab, lab, bp, bl) == 0u8 { return PT_E_INVALID_INFERENCE }   // right case assumes B
+    // both branches must conclude the goal C (== this step's conclusion)
+    let pba : u64 = pt_concl_addr(idx_ba)   let lba : u64 = PT_STEP_CONCL_LENS[idx_ba] as u64
+    let pbb : u64 = pt_concl_addr(idx_bb)   let lbb : u64 = PT_STEP_CONCL_LENS[idx_bb] as u64
+    if pt_formula_eq(pba, lba, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }    // branchA concludes C
+    if pt_formula_eq(pbb, lbb, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }    // branchB concludes C
+    // discharge both case assumptions; keep the disjunction's and the branches' OTHER assumptions
+    let bit_aa : u64 = PT_STEP_ASSUME_MASK[idx_aa]
+    let bit_ab : u64 = PT_STEP_ASSUME_MASK[idx_ab]
+    let m_d  : u64 = PT_STEP_ASSUME_MASK[idx_d]
+    let m_ba : u64 = PT_STEP_ASSUME_MASK[idx_ba] & (0xFFFFFFFFFFFFFFFFu64 ^ bit_aa)
+    let m_bb : u64 = PT_STEP_ASSUME_MASK[idx_bb] & (0xFFFFFFFFFFFFFFFFu64 ^ bit_ab)
+    PT_STEP_ASSUME_MASK[idx] = m_d | m_ba | m_bb
+    return PT_OK
+}
+
+// ---- Negation (via ¬A := A=>⊥) + classical double-negation elimination ----
+
+// EX_FALSO: premise[0] = ⊥ (the absurdity); conclusion = any C.  From a contradiction anything follows.
+// Combined with MODUS_PONENS (A, ¬A=A=>⊥ |- ⊥) this gives explosion: A, ¬A |- B.  Generic mask.
+fn pt_replay_ex_falso(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p0 : u64 = pt_concl_addr(idx0)
+    if pt_is_falsum(p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // premise must be ⊥
+    return PT_OK
+}
+
+// DOUBLE_NEG_ELIM: premise[0] = ¬¬C = (C=>⊥)=>⊥; conclusion = C.  This is the classical axiom that
+// distinguishes classical from intuitionistic logic.  Parse the premise as an implication whose
+// consequent is ⊥ and whose antecedent (a negation ¬C) is itself an implication C=>⊥; require the inner
+// antecedent C to equal the conclusion.  Generic mask.
+fn pt_replay_double_neg_elim(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p0 : u64 = pt_concl_addr(idx0)
+    // outer implication: (¬C) => ⊥
+    let s1 : i64 = pt_find_toplevel_op(p0, l0, PT_OP_IMPLIES)
+    if s1 == -1i64 { return PT_E_INVALID_INFERENCE }
+    let con1p : u64 = p0 + (s1 as u64) + 1u64   let con1l : u64 = l0 - (s1 as u64) - 1u64
+    if pt_is_falsum(con1p, con1l) == 0u8 { return PT_E_INVALID_INFERENCE }   // outer consequent == ⊥
+    // outer antecedent ¬C = C=>⊥ ; strip its parens then split the inner top-level '>'
+    let mut antp : u64 = p0       let mut antl : u64 = s1 as u64
+    let mut w : u8 = pt_is_wrapped(antp, antl)
+    while w == 1u8 { antp = antp + 1u64  antl = antl - 2u64  w = pt_is_wrapped(antp, antl) }
+    let s2 : i64 = pt_find_toplevel_op(antp, antl, PT_OP_IMPLIES)
+    if s2 == -1i64 { return PT_E_INVALID_INFERENCE }
+    let con2p : u64 = antp + (s2 as u64) + 1u64   let con2l : u64 = antl - (s2 as u64) - 1u64
+    if pt_is_falsum(con2p, con2l) == 0u8 { return PT_E_INVALID_INFERENCE }   // inner consequent == ⊥
+    let ant2p : u64 = antp        let ant2l : u64 = s2 as u64
+    if pt_formula_eq(ant2p, ant2l, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // inner C == conclusion
     return PT_OK
 }
 
@@ -532,16 +760,16 @@ fn pt_replay_and_elim_r(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i3
 // conclusion EQUAL to its premise ("a=b" -> "a=b", sides NOT swapped) certified as valid -- an
 // unsound inference.  This makes the swap a real proof obligation, like MP/TRANSITIVITY.
 fn pt_check_symmetry(p0: u64, l0: u64, c: u64, cl: u64) -> u8 {
-    let s0 : i64 = pt_find_byte(p0, l0, PT_OP_RELATION)
+    let s0 : i64 = pt_find_toplevel_op(p0, l0, PT_OP_RELATION)
     if s0 == -1i64 { return 0u8 }
-    let sc : i64 = pt_find_byte(c, cl, PT_OP_RELATION)
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_RELATION)
     if sc == -1i64 { return 0u8 }
     let a0p : u64 = p0          let a0l : u64 = s0 as u64
     let b0p : u64 = p0 + (s0 as u64) + 1u64   let b0l : u64 = l0 - (s0 as u64) - 1u64
     let acp : u64 = c           let acl : u64 = sc as u64
     let bcp : u64 = c + (sc as u64) + 1u64    let bcl : u64 = cl - (sc as u64) - 1u64
-    if pt_bytes_eq(acp, acl, b0p, b0l) == 0u8 { return 0u8 }   // conclusion-LHS == premise-RHS
-    if pt_bytes_eq(bcp, bcl, a0p, a0l) == 0u8 { return 0u8 }   // conclusion-RHS == premise-LHS
+    if pt_formula_eq(acp, acl, b0p, b0l) == 0u8 { return 0u8 }   // conclusion-LHS == premise-RHS
+    if pt_formula_eq(bcp, bcl, a0p, a0l) == 0u8 { return 0u8 }   // conclusion-RHS == premise-LHS
     return 1u8
 }
 
@@ -563,11 +791,11 @@ fn pt_replay_symmetry(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 
 // the schema |- t = t; there is NO valid instance with lhs != rhs).  Completes the relation-algebra
 // soundness alongside SYMMETRY (b=a from a=b) and TRANSITIVITY (a=c from a=b,b=c).
 fn pt_check_reflexivity(c: u64, cl: u64) -> u8 {
-    let sc : i64 = pt_find_byte(c, cl, PT_OP_RELATION)
+    let sc : i64 = pt_find_toplevel_op(c, cl, PT_OP_RELATION)
     if sc == -1i64 { return 0u8 }
     let lhs_p : u64 = c          let lhs_l : u64 = sc as u64
     let rhs_p : u64 = c + (sc as u64) + 1u64    let rhs_l : u64 = cl - (sc as u64) - 1u64
-    if pt_bytes_eq(lhs_p, lhs_l, rhs_p, rhs_l) == 0u8 { return 0u8 }   // lhs == rhs
+    if pt_formula_eq(lhs_p, lhs_l, rhs_p, rhs_l) == 0u8 { return 0u8 }   // lhs == rhs
     return 1u8
 }
 

@@ -1,0 +1,107 @@
+/* 1663_proof_classical_nested.iii -- CLASSICAL double-negation elimination + the STRUCTURED-ENCODING payoff.
+ *
+ * DOUBLE_NEG_ELIM (0x16): from ((A=>⊥)=>⊥) -- i.e. ¬¬A -- conclude A.  This is the axiom that makes the
+ * calculus CLASSICAL (it is NOT intuitionistically derivable).  Crucially, ¬¬A = (A=>⊥)=>⊥ has a NESTED
+ * implication, which the old flat first-'>' split could not parse -- it is expressible only with the new
+ * parenthesized encoding: ¬¬A is the byte string "(a>_)>_" (the inner ¬A=A=>⊥ wrapped in parens, then =>⊥),
+ * and operator splitting now finds the TOP-LEVEL '>' (paren depth 0) while operand comparison strips the
+ * outer parens.  This proves the encoding upgrade is real and not cosmetic.
+ *
+ * Discriminator (RED on the old lib -- DOUBLE_NEG_ELIM 0x16 unknown -> proofs fail to verify; GREEN after):
+ *   (A) ¬¬A |- A: AXIOM "(a>_)>_"; DOUBLE_NEG_ELIM -> a.
+ *   (B) THE CLASSICAL THEOREM ¬¬A=>A: ASSUME "(a>_)>_"; DOUBLE_NEG_ELIM -> a; IMPLIES_INTRO ->
+ *       "((a>_)>_)>a" -- a closed theorem (mask 0).  The IMPLIES_INTRO antecedent "((a>_)>_)" must
+ *       structurally equal the assumption "(a>_)>_" modulo the outer parens -- which pt_formula_eq does.
+ *   (C) TEETH: DOUBLE_NEG_ELIM on a single negation "a>_" (=¬A, not ¬¬A) is rejected.
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1663
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+
+const PT_RULE_AXIOM           : u8  = 0x01u8
+const PT_RULE_ASSUME          : u8  = 0x0Du8
+const PT_RULE_IMPLIES_INTRO   : u8  = 0x0Eu8
+const PT_RULE_DOUBLE_NEG_ELIM : u8  = 0x16u8
+const PT_OK                   : i32 =  0i32
+const PT_E_INVALID_INFERENCE  : i32 = -4i32
+
+var ARG   : [u8; 128]
+var PREMS : [u32; 8]
+var CB    : [u8; 16]
+var T_DA : [u8; 32]
+var T_TH : [u8; 32]
+var T_NG : [u8; 32]
+
+fn wr_u32(off: u64, v: u32) -> i32 {
+    let p : *u8 = ((&ARG) as u64 + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8   p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8   p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn build(tid_addr: u64, kind: u8, pcount: u32, clen: u32) -> i32 {
+    let ap : *u8 = (&ARG) as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = kind
+    wr_u32(36u64, pcount)   wr_u32(40u64, clen)
+    let mut k : u64 = 0u64
+    while k < (pcount as u64) { wr_u32(44u64 + k * 4u64, PREMS[k])  k = k + 1u64 }
+    let coff : u64 = 44u64 + 4u64 * (pcount as u64)
+    let mut j : u64 = 0u64
+    while j < (clen as u64) { ap[coff + j] = CB[j]  j = j + 1u64 }
+    return pt_add_inference((&ARG) as *u8)
+}
+
+/* set CB to "(a>_)>_" = ¬¬A  (7 bytes: ( a > _ ) > _). */
+fn cb_nnA() -> i32 {
+    CB[0u64] = 0x28u8  CB[1u64] = 0x61u8  CB[2u64] = 0x3Eu8  CB[3u64] = 0x5Fu8
+    CB[4u64] = 0x29u8  CB[5u64] = 0x3Eu8  CB[6u64] = 0x5Fu8
+    return 0i32
+}
+
+fn main() -> u64 {
+    pt_init()
+    /* a=0x61 ; '>'=0x3E ; '_'=0x5F(⊥) ; '('=0x28 ; ')'=0x29 */
+
+    /* (A) ¬¬A |- A. */
+    if pt_alloc((&T_DA) as *u8) != PT_OK { return 1u64 }
+    cb_nnA()
+    if build((&T_DA) as u64, PT_RULE_AXIOM, 0u32, 7u32) != PT_OK { return 2u64 }            /* 0: (a>_)>_ */
+    PREMS[0u64] = 0u32   CB[0u64] = 0x61u8
+    if build((&T_DA) as u64, PT_RULE_DOUBLE_NEG_ELIM, 1u32, 1u32) != PT_OK { return 3u64 }  /* 1: a */
+    if pt_finalize((&T_DA) as *u8) != PT_OK { return 4u64 }
+    if pt_verify((&T_DA) as *u8) != PT_OK { return 5u64 }    /* OLD: rule unknown -> RED */
+
+    /* (B) THE CLASSICAL THEOREM ¬¬A => A. */
+    if pt_alloc((&T_TH) as *u8) != PT_OK { return 6u64 }
+    cb_nnA()
+    if build((&T_TH) as u64, PT_RULE_ASSUME, 0u32, 7u32) != PT_OK { return 7u64 }           /* 0: ASSUME (a>_)>_ */
+    PREMS[0u64] = 0u32   CB[0u64] = 0x61u8
+    if build((&T_TH) as u64, PT_RULE_DOUBLE_NEG_ELIM, 1u32, 1u32) != PT_OK { return 8u64 }  /* 1: a */
+    /* 2: IMPLIES_INTRO -> "((a>_)>_)>a" (11 bytes). */
+    PREMS[0u64] = 0u32  PREMS[1u64] = 1u32
+    CB[0u64] = 0x28u8  CB[1u64] = 0x28u8  CB[2u64] = 0x61u8  CB[3u64] = 0x3Eu8  CB[4u64] = 0x5Fu8  CB[5u64] = 0x29u8
+    CB[6u64] = 0x3Eu8  CB[7u64] = 0x5Fu8  CB[8u64] = 0x29u8  CB[9u64] = 0x3Eu8  CB[10u64] = 0x61u8
+    if build((&T_TH) as u64, PT_RULE_IMPLIES_INTRO, 2u32, 11u32) != PT_OK { return 9u64 }
+    if pt_finalize((&T_TH) as *u8) != PT_OK { return 10u64 }
+    if pt_verify((&T_TH) as *u8) != PT_OK { return 11u64 }   /* ¬¬A => A -- the classical theorem */
+
+    /* (C) TEETH: DOUBLE_NEG_ELIM on a single negation "a>_" (=¬A) is rejected. */
+    if pt_alloc((&T_NG) as *u8) != PT_OK { return 12u64 }
+    CB[0u64] = 0x61u8  CB[1u64] = 0x3Eu8  CB[2u64] = 0x5Fu8
+    if build((&T_NG) as u64, PT_RULE_AXIOM, 0u32, 3u32) != PT_OK { return 13u64 }           /* 0: a>_ (=¬A) */
+    PREMS[0u64] = 0u32   CB[0u64] = 0x61u8
+    if build((&T_NG) as u64, PT_RULE_DOUBLE_NEG_ELIM, 1u32, 1u32) != PT_OK { return 14u64 } /* claims a */
+    if pt_finalize((&T_NG) as *u8) != PT_OK { return 15u64 }
+    if pt_verify((&T_NG) as *u8) != PT_E_INVALID_INFERENCE { return 16u64 }  /* ¬A is not ¬¬A -> reject */
+
+    return 99u64
+}

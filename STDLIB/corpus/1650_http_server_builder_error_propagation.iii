@@ -1,0 +1,69 @@
+/* 1650_http_server_builder_error_propagation.iii -- W6 DISPATCH-GAP falsifier:
+ * http_server response builders silently swallowed builder errors.
+ *
+ * THE DEFECT (aether/http_server.iii): https_push_crlf / _colon_space /
+ * _status_code / _http11_prefix and http_send_status / _header_name /
+ * _header_value DISCARDED every builder_push_byte / builder_push_bytes return
+ * code and hard-returned HTTPS_OK.  On a SEALED (or OOM) builder the response
+ * was truncated on the wire while the API reported success -- an RFC 9112
+ * framing violation.  http_client.iii and http_send_body already propagate;
+ * these did not (internally inconsistent).
+ *
+ * THE FIX: capture each push rc; return it when != HTTPS_OK.  A non-failing
+ * builder is byte-identical (control arm 1 proves the happy path still 0).
+ *
+ * Discriminator (RED on the old lib, GREEN after):
+ *   sealed builder -> http_send_status / _header_name / _header_value
+ *     OLD: return HTTPS_OK (0)  -- the lie
+ *     NEW: return BLD_E_SEALED (-4) -- the propagated error
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1650
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn http_send_status(builder_id: u64, status_code: u32, reason_base: u64, reason_len: u64) -> i32 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_send_header_name(builder_id: u64, name_base: u64, name_len: u64) -> i32 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_send_header_value(builder_id: u64, value_base: u64, value_len: u64) -> i32 from "http_server.iii"
+
+const HTTPS_OK      : i32 =  0i32
+const BLD_E_SEALED  : i32 = -4i32
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 2u64 }
+
+    /* Reason phrase "OK" + a header name/value, reused across arms. */
+    let reason : *u8 = malloc(2u64)
+    reason[0] = 79u8   /* O */
+    reason[1] = 75u8   /* K */
+    let hn : *u8 = malloc(4u64)
+    hn[0] = 72u8; hn[1] = 111u8; hn[2] = 115u8; hn[3] = 116u8   /* "Host" */
+    let hv : *u8 = malloc(1u64)
+    hv[0] = 120u8   /* 'x' */
+
+    /* ---- control arm: a FRESH (un-sealed) builder still succeeds (byte-identical happy path) ---- */
+    let b_ok : u64 = builder_new(a, 256u64)
+    if b_ok == 0u64 { return 3u64 }
+    let rc_ok : i32 = http_send_status(b_ok, 200u32, reason as u64, 2u64)
+    if rc_ok != HTTPS_OK { return 4u64 }                 /* happy path unchanged */
+
+    /* ---- TEETH: a SEALED builder must PROPAGATE the error, not lie ---- */
+    let b_sealed : u64 = builder_new(a, 256u64)
+    if b_sealed == 0u64 { return 5u64 }
+    builder_seal(b_sealed)                               /* now every push -> BLD_E_SEALED */
+
+    let r_status : i32 = http_send_status(b_sealed, 200u32, reason as u64, 2u64)
+    if r_status != BLD_E_SEALED { return 10u64 }         /* OLD lib: r_status == 0 -> RED */
+
+    let r_hname : i32 = http_send_header_name(b_sealed, hn as u64, 4u64)
+    if r_hname != BLD_E_SEALED { return 11u64 }          /* OLD lib: r_hname == 0 -> RED */
+
+    let r_hval : i32 = http_send_header_value(b_sealed, hv as u64, 1u64)
+    if r_hval != BLD_E_SEALED { return 12u64 }           /* OLD lib: r_hval == 0 -> RED */
+
+    arena_drop(a)
+    return 99u64
+}

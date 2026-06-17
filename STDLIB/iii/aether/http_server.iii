@@ -120,56 +120,77 @@ fn https_resolve_id(id: u64) -> u32 {
 
 /* ----------- Response building helpers ----------- */
 
+/* [W6 error-propagation] these helpers previously DISCARDED builder_push_byte/
+ * builder_push_bytes return codes and hard-returned HTTPS_OK, so a SEALED or
+ * OOM builder silently truncated the HTTP response while reporting success
+ * (RFC 9112 framing violation -- a partial status line / headers go on the
+ * wire).  http_client.iii already propagates; http_send_body already
+ * propagates; these now match.  All push rc (BLD_E_BADID/_SEALED/_FULL/_OOM)
+ * are != HTTPS_OK(0), so a non-failing builder is byte-identical. */
 fn https_push_crlf(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 13u32)
-    builder_push_byte(builder_id, 10u32)
-    return HTTPS_OK
+    let r0 : i32 = builder_push_byte(builder_id, 13u32)
+    if r0 != HTTPS_OK { return r0 }
+    return builder_push_byte(builder_id, 10u32)
 }
 
 fn https_push_colon_space(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 58u32)
-    builder_push_byte(builder_id, 32u32)
-    return HTTPS_OK
+    let r0 : i32 = builder_push_byte(builder_id, 58u32)
+    if r0 != HTTPS_OK { return r0 }
+    return builder_push_byte(builder_id, 32u32)
 }
 
 fn https_push_status_code(builder_id: u64, code: u32) -> i32 {
     let d2 : u32 = (code / 100u32) % 10u32
     let d1 : u32 = (code / 10u32) % 10u32
     let d0 : u32 = code % 10u32
-    builder_push_byte(builder_id, 48u32 + d2)
-    builder_push_byte(builder_id, 48u32 + d1)
-    builder_push_byte(builder_id, 48u32 + d0)
-    return HTTPS_OK
+    let r0 : i32 = builder_push_byte(builder_id, 48u32 + d2)
+    if r0 != HTTPS_OK { return r0 }
+    let r1 : i32 = builder_push_byte(builder_id, 48u32 + d1)
+    if r1 != HTTPS_OK { return r1 }
+    return builder_push_byte(builder_id, 48u32 + d0)
 }
 
 fn https_push_http11_prefix(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 72u32)   /* H */
-    builder_push_byte(builder_id, 84u32)   /* T */
-    builder_push_byte(builder_id, 84u32)   /* T */
-    builder_push_byte(builder_id, 80u32)   /* P */
-    builder_push_byte(builder_id, 47u32)   /* / */
-    builder_push_byte(builder_id, 49u32)   /* 1 */
-    builder_push_byte(builder_id, 46u32)   /* . */
-    builder_push_byte(builder_id, 49u32)   /* 1 */
-    builder_push_byte(builder_id, 32u32)   /* SP */
-    return HTTPS_OK
+    let mut rc : i32 = builder_push_byte(builder_id, 72u32)   /* H */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 84u32)   /* T */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 84u32)   /* T */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 80u32)   /* P */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 47u32)   /* / */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 49u32)   /* 1 */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 46u32)   /* . */
+    if rc != HTTPS_OK { return rc }
+    rc = builder_push_byte(builder_id, 49u32)   /* 1 */
+    if rc != HTTPS_OK { return rc }
+    return builder_push_byte(builder_id, 32u32)   /* SP */
 }
 
 fn http_send_status(builder_id: u64, status_code: u32, reason_base: u64, reason_len: u64) -> i32 @export {
-    https_push_http11_prefix(builder_id)
-    https_push_status_code(builder_id, status_code)
-    builder_push_byte(builder_id, 32u32)  /* SP */
-    builder_push_bytes(builder_id, reason_base, reason_len)
+    let r0 : i32 = https_push_http11_prefix(builder_id)
+    if r0 != HTTPS_OK { return r0 }
+    let r1 : i32 = https_push_status_code(builder_id, status_code)
+    if r1 != HTTPS_OK { return r1 }
+    let r2 : i32 = builder_push_byte(builder_id, 32u32)  /* SP */
+    if r2 != HTTPS_OK { return r2 }
+    let r3 : i32 = builder_push_bytes(builder_id, reason_base, reason_len)
+    if r3 != HTTPS_OK { return r3 }
     return https_push_crlf(builder_id)
 }
 
 fn http_send_header_name(builder_id: u64, name_base: u64, name_len: u64) -> i32 @export {
-    builder_push_bytes(builder_id, name_base, name_len)
+    let r0 : i32 = builder_push_bytes(builder_id, name_base, name_len)
+    if r0 != HTTPS_OK { return r0 }
     return https_push_colon_space(builder_id)
 }
 
 fn http_send_header_value(builder_id: u64, value_base: u64, value_len: u64) -> i32 @export {
-    builder_push_bytes(builder_id, value_base, value_len)
+    let r0 : i32 = builder_push_bytes(builder_id, value_base, value_len)
+    if r0 != HTTPS_OK { return r0 }
     return https_push_crlf(builder_id)
 }
 

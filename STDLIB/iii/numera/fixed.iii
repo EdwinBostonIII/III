@@ -78,6 +78,12 @@ fn fix_div(a: u64, b: u64) -> u64 @export {
      * compute a / b first (integer Q part), then ((a mod b) << 32) / b
      * for the fractional part. */
     let int_part : u64 = a / b
+    /* [W6 overflow guard] the integer quotient must fit Q32.32's 32-bit integer field;
+     * int_part >= 2^32 would overflow `int_part << 32` below (the high bits shift out,
+     * silently collapsing the result to a tiny/zero value).  Saturate to the max Q32.32
+     * value -- consistent with the div-by-zero sentinel above.  For int_part in
+     * [0, 2^32-1] the guard never fires, so the result is byte-identical to the old path. */
+    if int_part > 0xFFFFFFFFu64 { return 0xFFFFFFFFFFFFFFFFu64 }
     let rem      : u64 = a % b
     let mut frac_part : u64 = 0u64
     if rem != 0u64 {

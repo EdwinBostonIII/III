@@ -1,0 +1,51 @@
+/* 1649_fix_div_quotient_overflow.iii -- W6 OVERFLOW-WRONG falsifier: Q32.32 fix_div
+ * silently wraps when the integer quotient does not fit the 32-bit integer field.
+ *
+ * THE DEFECT (numera/fixed.iii:114): the final assembly `(int_part << 32) | frac`
+ * overflows u64 when int_part >= 2^32 -- the high bits shift out, so the result
+ * collapses to (near) zero instead of the true (out-of-range) ratio.  Reachable for
+ * any division whose true integer part is >= 2^32, e.g. a value divided by a tiny
+ * Q32.32 fraction.  fix_div(2^32, 1) returned 0 (= (2^32 << 32) mod 2^64) instead of
+ * a saturated max.
+ *
+ * THE FIX: the divisor-zero path already saturates to 0xFFFFFFFFFFFFFFFF (the max
+ * Q32.32 value); apply the SAME saturation when int_part > 2^32-1.  For int_part in
+ * [0, 2^32-1] the guard never fires -> byte-identical to the old path.
+ *
+ * THE LAW (teeth): int_part(a/b) >= 2^32  <=>  fix_div(a,b) == 0xFFFFFFFFFFFFFFFF.
+ *   - arm 2 is the tightest VALID boundary (int_part = 2^32-1, no saturate) -- a stub
+ *     that always saturates fails it.
+ *   - arms 3-5 are int_part = 2^32, 2^33, 2^32*(2^32-1) -- pre-fix all return 0, so
+ *     they redden against the old lib; a stub returning a constant fails arm 1/2.
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1649
+
+extern @abi(c-msvc-x64) fn fix_div(a: u64, b: u64) -> u64 from "fixed.iii"
+
+const FX_MAX : u64 = 0xFFFFFFFFFFFFFFFFu64    /* saturated max Q32.32 */
+
+fn main() -> u64 {
+    /* ---- control: ordinary in-range division is unchanged (byte-identical) ---- */
+    if fix_div(10u64 << 32u64, 4u64 << 32u64) != 0x280000000u64 { return 1u64 }   /* 10/4 = 2.5 */
+
+    /* ---- control: the tightest VALID boundary, int_part = 2^32-1 (NO saturate) ----
+     * a = 0xFFFFFFFF (raw), b = 1 (raw) -> int_part = 0xFFFFFFFF, rem = 0 ->
+     * result = 0xFFFFFFFF << 32 = 0xFFFFFFFF00000000.  Guard 0xFFFFFFFF > 0xFFFFFFFF
+     * is FALSE, so this must NOT saturate (a blanket-saturate stub fails here). */
+    if fix_div(0xFFFFFFFFu64, 1u64) != 0xFFFFFFFF00000000u64 { return 2u64 }
+
+    /* ---- TEETH: int_part = 2^32 exactly (the boundary that overflows) ----
+     * pre-fix: (0x100000000 << 32) mod 2^64 = 0 ; post-fix: saturate to FX_MAX. */
+    if fix_div(0x100000000u64, 1u64) != FX_MAX { return 3u64 }
+
+    /* ---- TEETH: int_part = 2^33 (clearly over) ; pre-fix returns 0 ---- */
+    if fix_div(0x200000000u64, 1u64) != FX_MAX { return 4u64 }
+
+    /* ---- TEETH: int_part = (2^32-1)*2^32 (huge) ; pre-fix returns 0 ---- */
+    if fix_div(0xFFFFFFFF00000000u64, 1u64) != FX_MAX { return 5u64 }
+
+    /* ---- control: div-by-zero sentinel unchanged (already FX_MAX) ---- */
+    if fix_div(0x100000000u64, 0u64) != FX_MAX { return 6u64 }
+
+    return 99u64
+}

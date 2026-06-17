@@ -1,0 +1,58 @@
+/* 1656_http_crystal_slot_alias_x19.iii -- the X19 wraparound in aether/http crystal slot lookup.
+ *
+ * THE DEFECT: http_response_crystal_root_byte derived the slot as (id-1) & 0xFF with only a
+ * `slot >= 64` check AFTER the mask.  That check catches ids in [65,256], but `& 0xFF` WRAPS, so a
+ * fabricated id in [257,320] masks back onto a LIVE slot [0,63] and reads ANOTHER response's cached
+ * crystal root byte.  (The write path http_response_with_crystal had the same wrap.)  Siblings
+ * omnia/promote + numera/q128_f64 range-check the id BEFORE masking; http was the unfixed one.
+ *
+ * THE FIX: `if id > AETHER_HTTP_RESP_MAX_FOR_CRYSTAL return 0x100` before the mask (and the symmetric
+ * guard on the write path), closing the wrap correct-by-construction.
+ *
+ * Discriminator (RED on the old lib, GREEN after): a response with an X-Crystal-HTTP header caches
+ * its 32-byte root at slot (resp-1).  resp+256 masks to the SAME slot (256 == 0 mod 256) and is > 64.
+ *   - crystal_root_byte(resp, 0)       == ROOT[0]   (control: the real id reads its own byte)
+ *   - crystal_root_byte(resp + 256, 0) == 0x100     (TEETH: OLD aliases -> ROOT[0] ; NEW rejects)
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1656
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_format_crystal_header(out_buf: u64, out_cap: u64, root_ptr: u64) -> u64 from "http.iii"
+extern @abi(c-msvc-x64) fn http_response_with_crystal(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http.iii"
+extern @abi(c-msvc-x64) fn http_response_crystal_root_byte(id: u64, i: u32) -> u32 from "http.iii"
+
+var ROOT : [u8; 32]
+var RAW  : [u8; 120]
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(65536u64)
+    if arena == 0u64 { return 1u64 }
+
+    /* a known 32-byte root; ROOT[0] = 5 (never the 0x100 sentinel). */
+    let mut q : u64 = 0u64
+    while q < 32u64 { ROOT[q] = ((q * 11u64 + 5u64) & 0xFFu64) as u8   q = q + 1u64 }
+
+    /* RAW = "HTTP/1.1 200 OK\r\n" + <82-byte crystal header> + "Content-Length: 0\r\n\r\n" (120 bytes). */
+    let sl : *u8 = ("HTTP/1.1 200 OK" as u64) as *u8
+    let mut w : u64 = 0u64
+    while w < 15u64 { RAW[w] = sl[w]   w = w + 1u64 }
+    RAW[15u64] = 13u8   RAW[16u64] = 10u8
+    if http_format_crystal_header((&RAW as u64) + 17u64, 82u64, (&ROOT as u64)) != 82u64 { return 2u64 }
+    let cl : *u8 = ("Content-Length: 0" as u64) as *u8
+    let mut v : u64 = 0u64
+    while v < 17u64 { RAW[99u64 + v] = cl[v]   v = v + 1u64 }
+    RAW[116u64] = 13u8   RAW[117u64] = 10u8   RAW[118u64] = 13u8   RAW[119u64] = 10u8
+
+    let resp : u64 = http_response_with_crystal(arena, (&RAW as u64), 120u64)
+    if resp == 0u64 { return 3u64 }
+
+    /* control: the real response reads its own cached crystal byte. */
+    if http_response_crystal_root_byte(resp, 0u32) != (ROOT[0u64] as u32) { return 4u64 }
+
+    /* TEETH: resp+256 masks to resp's slot and is > 64.  OLD aliases -> ROOT[0] (== 5, != 0x100) -> RED;
+     * NEW range-rejects -> 0x100. */
+    let alias : u64 = resp + 256u64
+    if http_response_crystal_root_byte(alias, 0u32) != 0x100u32 { return 10u64 }
+
+    return 99u64
+}

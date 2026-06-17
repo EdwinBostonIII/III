@@ -105,12 +105,13 @@ fn http_response_with_crystal(arena: u64, raw_base: u64, raw_len: u64) -> u64 @e
     http_init_crystal_name()
     let hidx : i64 = http_response_header_find_ci(resp, &CRYSTAL_HEADER_NAME as u64, 14u64)
     if hidx != -1i64 {
+        /* [X19] range-check BEFORE the (resp-1)&0xFF mask -- the 0xFF mask permits 0..255 but the
+         * crystal arrays hold only AETHER_HTTP_RESP_MAX_FOR_CRYSTAL (64) slots.  The old `slot >= 64`
+         * check (kept below) catches resp in [65,256], but `& 0xFF` WRAPS, so resp in [257,320] would
+         * alias onto live slots [0,63].  Range-checking the id first closes the wrap window
+         * correct-by-construction (matches omnia/promote + numera/q128_f64). */
+        if resp > (AETHER_HTTP_RESP_MAX_FOR_CRYSTAL as u64) { return resp }
         let slot : u64 = (resp - 1u64) & 0xFFu64
-        /* The 0xFF mask permits 0..255 but the crystal arrays hold only
-         * AETHER_HTTP_RESP_MAX_FOR_CRYSTAL (64) slots; without this guard a resp id
-         * in [65,256] writes OOB into CRYSTAL_ROOT/CRYSTAL_LIVE.  The sibling reader
-         * http_response_crystal_root_byte enforces the SAME bound -- skip the crystal
-         * cache (still return the parsed response) when out of range. */
         if slot >= (AETHER_HTTP_RESP_MAX_FOR_CRYSTAL as u64) { return resp }
         let slot_u32 : u32 = slot as u32
         let hidx_u64 : u64 = (hidx as u64) & 0xFFFFFFFFu64
@@ -150,6 +151,10 @@ fn http_response_with_crystal(arena: u64, raw_base: u64, raw_len: u64) -> u64 @e
 fn http_response_crystal_root_byte(id: u64, i: u32) -> u32 @export {
     if id == 0u64 { return 0x100u32 }
     if i >= 32u32 { return 0x100u32 }
+    /* [X19] range-check before the mask -- a fabricated id in [257,320] would `& 0xFF`-wrap onto a
+     * live slot [0,63] and READ another response's crystal byte.  Closes the wrap the `slot >= 64`
+     * check below misses. */
+    if id > (AETHER_HTTP_RESP_MAX_FOR_CRYSTAL as u64) { return 0x100u32 }
     let slot : u64 = (id - 1u64) & 0xFFu64
     if slot >= (AETHER_HTTP_RESP_MAX_FOR_CRYSTAL as u64) { return 0x100u32 }
     let slot_u32 : u32 = slot as u32

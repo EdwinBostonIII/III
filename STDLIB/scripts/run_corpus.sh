@@ -1228,6 +1228,7 @@ declare -A EXPECTED=(
     [1653_proof_symmetry_swap]=99
     [1654_sandbox_slot_alias_x19]=99
     [1655_q128f64_slot_alias_x19]=99
+    [1656_http_crystal_slot_alias_x19]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

@@ -1,0 +1,104 @@
+/* 1658_proof_hyp_syllogism.iii -- new prover capability: HYPOTHETICAL SYLLOGISM (implication transitivity).
+ *
+ * THE GAP (first-principles operator asymmetry): the verifier's RELATION operator '=' had reflexivity,
+ * symmetry, AND transitivity, but its IMPLICATION operator '>' had only MODUS_PONENS -- no implication
+ * transitivity.  Hypothetical syllogism (A=>B, B=>C |- A=>C) is sound and NOT derivable from MODUS_PONENS
+ * alone (this Hilbert-style store has =>-elimination but no =>-introduction / assumption discharge).
+ *
+ * THE ADDITION: PT_RULE_HYP_SYLLOGISM (0x0C) + pt_check_hyp_syll -- structurally identical to TRANSITIVITY
+ * but over the implication byte '>' (PT_OP_IMPLIES): premise[0]=A=>B, premise[1]=B=>C, require shared
+ * middle (B==A') and the conclusion A=>C ends.  Completes the implication algebra; theorem_carrier
+ * (tc_alloc gates on pt_verify) can now admit theorems whose proofs chain implications.
+ *
+ * Conclusion encoding: A=>B is bytes(A) 0x3E bytes(B) ('>' = 0x3E).
+ *
+ * Discriminator (RED on the old lib, GREEN after):
+ *   - VALID: step0 AXIOM "a>b", step1 AXIOM "b>c", step2 HYP_SYLLOGISM [0,1] "a>c".
+ *     OLD lib: rule 0x0C is UNKNOWN -> pt_verify_step returns PT_E_INVALID_INFERENCE -> pt_verify != PT_OK
+ *     -> RED.  NEW lib: dispatched + checked -> PT_OK.
+ *   - INVALID (teeth): same premises but conclusion "a>d" (wrong consequent) -> PT_E_INVALID_INFERENCE
+ *     (a stub that accepts any 0x0C step fails this).
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1658
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+
+const PT_RULE_AXIOM          : u8  = 0x01u8
+const PT_RULE_HYP_SYLLOGISM  : u8  = 0x0Cu8
+const PT_OP_IMPLIES          : u8  = 0x3Eu8     /* '>' */
+const PT_OK                  : i32 =  0i32
+const PT_E_INVALID_INFERENCE : i32 = -4i32
+
+var ARG  : [u8; 128]
+var TIDV : [u8; 32]    /* valid hyp-syllogism term */
+var TIDI : [u8; 32]    /* invalid (wrong conclusion) term */
+
+fn wr_u32(addr: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (addr + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* AXIOM step with conclusion "c0 > c2" (3 bytes, '>' in the middle), pcount=0. */
+fn build_axiom(tid_addr: u64, c0: u8, c2: u8) -> i32 {
+    let a : u64 = (&ARG) as u64
+    let ap : *u8 = a as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = PT_RULE_AXIOM
+    wr_u32(a, 36u64, 0u32)               /* pcount = 0 */
+    wr_u32(a, 40u64, 3u32)               /* clen = 3 */
+    ap[44u64] = c0   ap[45u64] = PT_OP_IMPLIES   ap[46u64] = c2
+    return pt_add_inference(a as *u8)
+}
+
+/* HYP_SYLLOGISM step: premises [p0,p1], conclusion "c0 > c2", pcount=2.
+ * args: premises at off 44 (u32) and 48 (u32); conclusion at off 44 + 4*2 = 52. */
+fn build_hyp(tid_addr: u64, p0: u32, p1: u32, c0: u8, c2: u8) -> i32 {
+    let a : u64 = (&ARG) as u64
+    let ap : *u8 = a as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = PT_RULE_HYP_SYLLOGISM
+    wr_u32(a, 36u64, 2u32)               /* pcount = 2 */
+    wr_u32(a, 40u64, 3u32)               /* clen = 3 */
+    wr_u32(a, 44u64, p0)                 /* premise[0] index */
+    wr_u32(a, 48u64, p1)                 /* premise[1] index */
+    ap[52u64] = c0   ap[53u64] = PT_OP_IMPLIES   ap[54u64] = c2
+    return pt_add_inference(a as *u8)
+}
+
+fn main() -> u64 {
+    pt_init()
+
+    /* ---- VALID: a>b, b>c |- a>c ---- */
+    if pt_alloc((&TIDV) as *u8) != PT_OK { return 1u64 }
+    if build_axiom((&TIDV) as u64, 0x61u8, 0x62u8) != PT_OK { return 2u64 }   /* step0: a>b */
+    if build_axiom((&TIDV) as u64, 0x62u8, 0x63u8) != PT_OK { return 3u64 }   /* step1: b>c */
+    if build_hyp((&TIDV) as u64, 0u32, 1u32, 0x61u8, 0x63u8) != PT_OK { return 4u64 }  /* step2: a>c */
+    if pt_finalize((&TIDV) as *u8) != PT_OK { return 5u64 }
+    if pt_verify((&TIDV) as *u8) != PT_OK { return 6u64 }    /* OLD lib: 0x0C unknown -> INVALID -> RED */
+
+    /* ---- INVALID (teeth): a>b, b>c |- a>d (wrong consequent) -> rejected ---- */
+    if pt_alloc((&TIDI) as *u8) != PT_OK { return 7u64 }
+    if build_axiom((&TIDI) as u64, 0x61u8, 0x62u8) != PT_OK { return 8u64 }   /* a>b */
+    if build_axiom((&TIDI) as u64, 0x62u8, 0x63u8) != PT_OK { return 9u64 }   /* b>c */
+    if build_hyp((&TIDI) as u64, 0u32, 1u32, 0x61u8, 0x64u8) != PT_OK { return 10u64 }  /* a>d (wrong) */
+    if pt_finalize((&TIDI) as *u8) != PT_OK { return 11u64 }
+    if pt_verify((&TIDI) as *u8) != PT_E_INVALID_INFERENCE { return 12u64 }   /* must reject the wrong end */
+
+    return 99u64
+}

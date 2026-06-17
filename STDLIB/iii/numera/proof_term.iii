@@ -72,7 +72,12 @@ const PT_RULE_REFLEXIVITY    : u8 = 0x08u8
 const PT_RULE_SYMMETRY       : u8 = 0x09u8
 const PT_RULE_TRANSITIVITY   : u8 = 0x0Au8
 const PT_RULE_CASE_ANALYSIS  : u8 = 0x0Bu8
-const PT_RULE_MAX            : u8 = 0x0Bu8
+// HYPOTHETICAL_SYLLOGISM (A=>B, B=>C |- A=>C): the IMPLICATION analog of relation TRANSITIVITY --
+// the prover had =-transitivity but no =>-transitivity, an asymmetry in its operator algebra.  Sound
+// (|- (A=>B) -> (B=>C) -> (A=>C)) and NOT derivable from MODUS_PONENS alone (no =>-introduction / no
+// assumption discharge in this Hilbert-style store).  Expressible in the canonical '>' encoding.
+const PT_RULE_HYP_SYLLOGISM  : u8 = 0x0Cu8
+const PT_RULE_MAX            : u8 = 0x0Cu8
 
 const PT_OP_IMPLIES          : u8 = 0x3Eu8     // '>' implication separator A => B
 const PT_OP_RELATION         : u8 = 0x3Du8     // '=' relation separator a R b
@@ -277,6 +282,7 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if kind == PT_RULE_CASE_ANALYSIS { return pt_arity_ge2(pcount) }
     if kind == PT_RULE_MODUS_PONENS { return pt_replay_mp(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_TRANSITIVITY { return pt_replay_trans(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_HYP_SYLLOGISM { return pt_replay_hyp_syll(slot, idx, pcount, c, cl) }
     return PT_E_INVALID_INFERENCE
 }
 
@@ -331,6 +337,45 @@ fn pt_replay_trans(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
     let p1 : u64 = pt_concl_addr(idx1)   let l1 : u64 = PT_STEP_CONCL_LENS[idx1] as u64
     if pt_check_trans(p0, l0, p1, l1, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
+    return PT_OK
+}
+
+// HYPOTHETICAL_SYLLOGISM conclusion check: premise[0] = A=>B, premise[1] = B=>C, conclusion = A=>C.
+// Split each on the IMPLICATION byte '>' (PT_OP_IMPLIES); require the shared middle (B of premise[0]
+// == A of premise[1]) and the two ends (conclusion antecedent == A, conclusion consequent == C).
+// Structurally identical to TRANSITIVITY but over '>' instead of '=' -- the implication algebra's
+// transitivity, completing the operator symmetry (MODUS_PONENS was the only '>' rule).
+fn pt_check_hyp_syll(p0: u64, l0: u64, p1: u64, l1: u64, c: u64, cl: u64) -> u8 {
+    let s0 : i64 = pt_find_byte(p0, l0, PT_OP_IMPLIES)
+    if s0 == -1i64 { return 0u8 }
+    let s1 : i64 = pt_find_byte(p1, l1, PT_OP_IMPLIES)
+    if s1 == -1i64 { return 0u8 }
+    let sc : i64 = pt_find_byte(c, cl, PT_OP_IMPLIES)
+    if sc == -1i64 { return 0u8 }
+    let a0p : u64 = p0          let a0l : u64 = s0 as u64
+    let b0p : u64 = p0 + (s0 as u64) + 1u64   let b0l : u64 = l0 - (s0 as u64) - 1u64
+    let a1p : u64 = p1          let a1l : u64 = s1 as u64
+    let b1p : u64 = p1 + (s1 as u64) + 1u64   let b1l : u64 = l1 - (s1 as u64) - 1u64
+    let acp : u64 = c           let acl : u64 = sc as u64
+    let bcp : u64 = c + (sc as u64) + 1u64    let bcl : u64 = cl - (sc as u64) - 1u64
+    if pt_bytes_eq(b0p, b0l, a1p, a1l) == 0u8 { return 0u8 }   // B of (A=>B) == A of (B=>C)
+    if pt_bytes_eq(a0p, a0l, acp, acl) == 0u8 { return 0u8 }   // conclusion antecedent == A
+    if pt_bytes_eq(b1p, b1l, bcp, bcl) == 0u8 { return 0u8 }   // conclusion consequent == C
+    return 1u8
+}
+
+// HYPOTHETICAL_SYLLOGISM replay wrapper: arity 2, then the shared-middle + ends '>' match.
+fn pt_replay_hyp_syll(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 2u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let i1 : u64 = PT_STEP_PREMISES[base + 1u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let idx1 : u64 = slot * PT_MAX_STEPS + i1
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p1 : u64 = pt_concl_addr(idx1)   let l1 : u64 = PT_STEP_CONCL_LENS[idx1] as u64
+    if pt_check_hyp_syll(p0, l0, p1, l1, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
     return PT_OK
 }
 

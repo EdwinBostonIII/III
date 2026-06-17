@@ -112,7 +112,12 @@ fn rfc_fmt_ok(p: *u8) -> u8 {
 }
 
 fn rfc3339_parse(src: *u8, src_len: u64) -> u64 @export {
-    if src_len < 20u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    /* The format is EXACTLY "YYYY-MM-DDTHH:MM:SSZ" (20 bytes, line 6); a longer
+     * input is trailing garbage, not a valid RFC 3339 datetime.  The old `< 20`
+     * accepted (and silently ignored) any tail, e.g. "...56Zjunk".  Require the
+     * exact length, matching the full-consumption discipline of the sibling
+     * parsers (base64/semver/json). [enhance W4, validation-completeness] */
+    if src_len != 20u64 { return 0xFFFFFFFFFFFFFFFFu64 }
     if rfc_fmt_ok(src) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }   /* RFC 3339 strict format: 14 digits + the exact separators + 'Z' */
     let year : u32 = rfc_parse4(src, 0u64)
     let month : u32 = rfc_parse2(src, 5u64)

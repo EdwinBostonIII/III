@@ -1140,6 +1140,13 @@ fn json_emit_min_i64(builder_id: u64) -> i32 {
     return JSON_OK
 }
 
+/* Lowercase hex digit for a 4-bit nibble (RFC 8259 \uXXXX). */
+fn _json_hex_nib(n: u32) -> u32 {
+    let x : u32 = n & 0xFu32
+    if x < 10u32 { return 48u32 + x }
+    return 97u32 + (x - 10u32)
+}
+
 fn json_emit_string(builder_id: u64, value_id: u64) -> i32 {
     let base : u64 = json_string_base(value_id)
     let len  : u64 = json_string_len(value_id)
@@ -1149,45 +1156,39 @@ fn json_emit_string(builder_id: u64, value_id: u64) -> i32 {
         let mut i : u64 = 0u64
         while i < len {
             let c : u32 = p[i] as u32
-            /* Escape \, ", and control characters */
+            /* RFC 8259 sec 7: escape ", \, the five short-form control escapes,
+             * AND every remaining control char (U+0000-001F) as \u00XX.  The old
+             * code emitted 0x00-07 / 0x0B / 0x0E-1F RAW, which the parser then
+             * rejects (line ~585) -- a round-trip break. [enhance W4, format-symmetry] */
             if c == 34u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 34u32)
-            }
-            if c == 92u32 {
+            } else if c == 92u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 92u32)
-            }
-            if c == 8u32 {
+            } else if c == 8u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 98u32)
-            }
-            if c == 9u32 {
+            } else if c == 9u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 116u32)
-            }
-            if c == 10u32 {
+            } else if c == 10u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 110u32)
-            }
-            if c == 12u32 {
+            } else if c == 12u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 102u32)
-            }
-            if c == 13u32 {
+            } else if c == 13u32 {
                 builder_push_byte(builder_id, 92u32)
                 builder_push_byte(builder_id, 114u32)
-            }
-            /* Pass through other bytes */
-            let mut needs_escape : u8 = 0u8
-            if c == 34u32 { needs_escape = 1u8 }
-            if c == 92u32 { needs_escape = 1u8 }
-            if c == 8u32  { needs_escape = 1u8 }
-            if c == 9u32  { needs_escape = 1u8 }
-            if c == 10u32 { needs_escape = 1u8 }
-            if c == 12u32 { needs_escape = 1u8 }
-            if c == 13u32 { needs_escape = 1u8 }
-            if needs_escape == 0u8 {
+            } else if c < 0x20u32 {
+                builder_push_byte(builder_id, 92u32)    /* \ */
+                builder_push_byte(builder_id, 117u32)   /* u */
+                builder_push_byte(builder_id, 48u32)    /* 0 */
+                builder_push_byte(builder_id, 48u32)    /* 0 */
+                builder_push_byte(builder_id, _json_hex_nib((c >> 4u32) & 0xFu32))
+                builder_push_byte(builder_id, _json_hex_nib(c & 0xFu32))
+            } else {
                 builder_push_byte(builder_id, c)
             }
             i = i + 1u64

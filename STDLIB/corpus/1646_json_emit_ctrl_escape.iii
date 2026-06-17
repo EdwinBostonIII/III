@@ -1,0 +1,83 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1646_json_emit_ctrl_escape.iii
+ *
+ * III conformance corpus 1646 -- JSON emit control-char escaping (round-trip fix).
+ *
+ * THE DEFECT (enhance W4, format-symmetry):
+ *   json_emit_string escaped " \ \b \t \n \f \r but emitted every OTHER control
+ *   char (U+0000-0007, U+000B, U+000E-001F) RAW.  The PARSER correctly rejects
+ *   unescaped control chars (RFC 8259 sec 7), so emitting one produced JSON that
+ *   could not be re-parsed -- a round-trip break.  The emitter now escapes the
+ *   remainder as \u00XX.
+ *
+ * Discriminator (RED on the old lib, GREEN after the json.iii fix):
+ *   Parse "" -> a string value holding the byte 0x01.  Emit it:
+ *     OLD: emits the 3 bytes [ " 0x01 " ] -> emitted_len == 3, and re-parse FAILS.
+ *     NEW: emits the 8 bytes [ " \ u 0 0 0 1 " ] -> emitted_len == 8, re-parse OK.
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_form. Ring: R3. K: 1.00.
+ */
+
+module corpus_1646
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, base: u64, len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_emit(builder_id: u64, value_id: u64) -> i32 from "json.iii"
+extern @abi(c-msvc-x64) fn json_kind(id: u64) -> u8 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_base(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+
+const C1646_STR : u8 = 5u8
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+
+/* the 8-byte JSON document "" */
+fn _inp(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,34u8)    /* " */
+    o=_put(buf,o,92u8)    /* \ */
+    o=_put(buf,o,117u8)   /* u */
+    o=_put(buf,o,48u8)    /* 0 */
+    o=_put(buf,o,48u8)    /* 0 */
+    o=_put(buf,o,48u8)    /* 0 */
+    o=_put(buf,o,49u8)    /* 1 */
+    o=_put(buf,o,34u8)    /* " */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let inp : *u8 = malloc(16u64)
+    if inp as u64 == 0u64 { return 3u64 }
+    let n : u32 = _inp(inp)
+
+    /* parse "" -> string value holding byte 0x01 */
+    let v1 : u64 = json_parse(a, inp as u64, n as u64)
+    if v1 == 0u64 { return 10u64 }
+    if (json_kind(v1) as u32) != (C1646_STR as u32) { return 11u64 }
+    if json_string_len(v1) != 1u64 { return 12u64 }
+    let s1 : *u8 = json_string_base(v1) as *u8
+    if (s1[0u64] as u32) != 1u32 { return 13u64 }
+
+    /* emit it */
+    let b : u64 = builder_new(a, 64u64)
+    if json_emit(b, v1) != 0i32 { return 20u64 }
+    let eb : u64 = builder_seal(b)
+    let el : u64 = builder_len(b)
+    if el != 8u64 { return 21u64 }   /* RED on old lib (==3, raw control char) */
+
+    /* re-parse the emitted bytes -> must succeed AND recover 0x01 (round-trip) */
+    let v2 : u64 = json_parse(a, eb, el)
+    if v2 == 0u64 { return 30u64 }   /* RED on old lib (emitted raw ctrl char unparseable) */
+    if json_string_len(v2) != 1u64 { return 31u64 }
+    let s2 : *u8 = json_string_base(v2) as *u8
+    if (s2[0u64] as u32) != 1u32 { return 32u64 }
+
+    arena_drop(a)
+    return 99u64
+}

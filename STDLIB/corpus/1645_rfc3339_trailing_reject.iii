@@ -1,0 +1,65 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1645_rfc3339_trailing_reject.iii
+ *
+ * III conformance corpus 1645 -- RFC 3339 trailing-garbage rejection (false-accept fix).
+ *
+ * THE DEFECT (enhance W4, validation-completeness):
+ *   rfc3339_parse gated on `src_len < 20` and validated only positions 0-19, so
+ *   any TRAILING bytes were silently ignored: "2024-06-16T12:34:56Zjunk" parsed
+ *   as a valid timestamp.  The format is EXACTLY 20 bytes (module contract); the
+ *   fix requires `src_len == 20`, matching the full-consumption discipline of
+ *   the sibling parsers.  (corpus 1560 covers digit/separator malformation but
+ *   not the length case.)
+ *
+ * Discriminator (RED on the old lib, GREEN after the rfc3339.iii fix):
+ *   "2024-06-16T12:34:56Z"  (20 bytes) -> valid (Unix seconds, != error)
+ *   "2024-06-16T12:34:56Zx" (21 bytes) -> 0xFFFFFFFFFFFFFFFF (rejected)
+ *        OLD: returns a (bogus-valid) timestamp -> exit 11 (RED)
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_form. Ring: R3. K: 1.00.
+ */
+
+module corpus_1645
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn rfc3339_parse(src: u64, src_len: u64) -> u64 from "rfc3339.iii"
+
+const C1645_ERR : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+
+/* "2024-06-16T12:34:56Z" + optional trailing byte */
+fn _ts(buf: *u8, trail: u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,50u8);o=_put(buf,o,48u8);o=_put(buf,o,50u8);o=_put(buf,o,52u8)   /* 2024 */
+    o=_put(buf,o,45u8)                                                            /* - */
+    o=_put(buf,o,48u8);o=_put(buf,o,54u8)                                         /* 06 */
+    o=_put(buf,o,45u8)                                                            /* - */
+    o=_put(buf,o,49u8);o=_put(buf,o,54u8)                                         /* 16 */
+    o=_put(buf,o,84u8)                                                            /* T */
+    o=_put(buf,o,49u8);o=_put(buf,o,50u8)                                         /* 12 */
+    o=_put(buf,o,58u8)                                                            /* : */
+    o=_put(buf,o,51u8);o=_put(buf,o,52u8)                                         /* 34 */
+    o=_put(buf,o,58u8)                                                            /* : */
+    o=_put(buf,o,53u8);o=_put(buf,o,54u8)                                         /* 56 */
+    o=_put(buf,o,90u8)                                                            /* Z  (20 bytes total) */
+    if trail != 0u8 { o = _put(buf, o, trail) }
+    return o as u32
+}
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(32u64)
+    if buf as u64 == 0u64 { return 3u64 }
+
+    /* 20-byte valid timestamp parses (control: must NOT regress). */
+    let l20 : u32 = _ts(buf, 0u8)
+    if l20 != 20u32 { return 5u64 }
+    if rfc3339_parse(buf as u64, 20u64) == C1645_ERR { return 10u64 }
+
+    /* 21-byte (trailing 'x') must be REJECTED. */
+    let l21 : u32 = _ts(buf, 120u8)
+    if l21 != 21u32 { return 6u64 }
+    if rfc3339_parse(buf as u64, 21u64) != C1645_ERR { return 11u64 }   /* RED on old lib (accepted) */
+
+    return 99u64
+}

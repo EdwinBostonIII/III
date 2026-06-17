@@ -71,6 +71,12 @@ const RV_RING_R3  : u8 = 3u8
 /* Primitive ids matching verba/intent.iii (CORE-CALCULUS-V1.0). */
 const RV_PRIMITIVE_COMPOSE : u8 =  6u8
 const RV_PRIMITIVE_REFLECT : u8 = 18u8
+/* [composite] hip lowers NL "X if Y" -> intent_if = PRIMITIVE_IF(15) with guard@partial_arg[0],
+ * body@partial_arg[1] (verba/intent.iii:454).  resolve() honours the guard (below); THEN(12)/
+ * WITH(13)/UNDER(14) still flatten until their own increments land. */
+const RV_PRIMITIVE_IF      : u8 = 15u8
+const RV_COMPOSITE_MAX_DEPTH : u64 = 16u64   /* native-recursion bound for nested composites */
+const KCHAIN_INVALID_ID    : u64 = 0xFFFFFFFFFFFFFFFFu64
 
 const GUARANTEE_LINEAR        : u32 = 0x00000001u32
 const GUARANTEE_BOUNDED       : u32 = 0x00000002u32
@@ -132,9 +138,15 @@ extern @abi(c-msvc-x64) fn call_context_ring(p: u64) -> u8 from "call_context.ii
 extern @abi(c-msvc-x64) fn call_context_arena_id(p: u64) -> u64 from "call_context.iii"
 extern @abi(c-msvc-x64) fn call_context_recursion_depth(p: u64) -> u16 from "call_context.iii"
 extern @abi(c-msvc-x64) fn call_context_digest(p: u64, out_32b: u64) -> i32 from "call_context.iii"
+/* [composite] guard-context construction for IF/THEN/UNDER/WITH evaluation. */
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
 
 extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call: u64) -> u8 from "kchain.iii"
 extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+/* [composite] a throwaway kchain isolates the guard's K cost from the caller's budget. */
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_drop(id: u64) -> u8 from "kchain.iii"
 extern @abi(c-msvc-x64) fn witness_append_k(mhash_ptr: u64, cap_id: u64, k_fixed: u64) -> i32 from "witness.iii"
 
 extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
@@ -204,6 +216,10 @@ var RES_CTX_CACHE_DIG : [u8; 32]
  * fires.  Useful for bench corpora to verify the fast path is actually
  * exercised (vs silently falling through to the slow path). */
 var RES_FAST_PATH_HITS : [u64; 1]
+
+/* [composite] native-recursion depth for the IF/THEN/UNDER/WITH interception (below).  Bounds
+ * nested composites so a pathological intent tree cannot blow the native stack. */
+var RES_COMPOSITE_DEPTH : [u64; 1]
 
 fn resolver_fast_path_hits() -> u64 @export {
     return RES_FAST_PATH_HITS[0u64]
@@ -537,6 +553,57 @@ fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export
     return payload | 1u64
 }
 
+/* ── composite: guarded conditional (PRIMITIVE_IF) ──
+ *
+ * hip lowers NL "X if Y" into intent_if(guard, body) = PRIMITIVE_IF(15) with the guard sub-intent
+ * at partial_arg[0] and the body at partial_arg[1].  Historically resolve() scored the IF intent by
+ * its OWN COMPOSE-hexad fields and never looked at the sub-intents, so the guard was inert and the
+ * whole NL conditional pipeline was dead.  This honours the calculus contract ("body resolves only
+ * if guard's witness satisfies a predicate"): resolve the guard; if it BINDS, the guard holds and
+ * the body's real binding is returned; otherwise the conditional REFUSES.
+ *
+ * K-discipline: the guard is resolved on its OWN throwaway kchain (dropped immediately), so the
+ * caller's K budget is charged exactly ONCE -- for the body's dispatch.  That makes resolve(IF)
+ * K-equivalent to resolving the body alone, so honouring a HELD guard can never K-underflow a
+ * conditional that the body alone would have resolved (no regression vs the old flatten, which
+ * also did a single compose).  The guard inherits the caller's cap_id so it is evaluated under the
+ * caller's authority.  Composites are never memoised, so the asm hot path always misses them and
+ * this interception always fires; primitives (1-11, 16-19) never enter here and stay byte-identical. */
+fn _resolve_if(set: u64, intent: u64, ctx: u64) -> u64 {
+    if RES_COMPOSITE_DEPTH[0u64] >= RV_COMPOSITE_MAX_DEPTH {
+        return resolve_fail(E_RESOLVE_DEPTH, set, intent, ctx)
+    }
+    RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] + 1u64
+    let guard : u64 = intent_partial_arg(intent, 0u32)
+    let body  : u64 = intent_partial_arg(intent, 1u32)
+
+    let kg : u64 = kchain_new(0u64)
+    if kg == KCHAIN_INVALID_ID {
+        RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] - 1u64
+        return resolve_fail(E_RESOLVE_K_UNDERFLOW, set, intent, ctx)
+    }
+    call_context_init_set(call_context_cap_id(ctx), kg as u8, RV_RING_R0, RV_HEXAD_FORM)
+    let gctx : u64 = call_context_new()
+    if gctx == 0u64 {
+        kchain_drop(kg)
+        RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] - 1u64
+        return resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)
+    }
+    let gres : u64 = resolve(set, guard, gctx)
+    kchain_drop(kg)
+
+    /* resolve_fail (with its failure witness) fires ONLY on the genuine refuse branch -- a held
+     * guard must not emit a phantom refusal into the witness chain. */
+    let mut result : u64 = 0u64
+    if (gres & 1u64) == 0u64 {
+        result = resolve(set, body, ctx)        /* guard holds -> the body's real binding */
+    } else {
+        result = resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)   /* guard fails -> refuse */
+    }
+    RES_COMPOSITE_DEPTH[0u64] = RES_COMPOSITE_DEPTH[0u64] - 1u64
+    return result
+}
+
 /* ── the resolve primitive ── */
 
 fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
@@ -571,6 +638,16 @@ fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
         if depth_u32 >= RESOLVER_MAX_RECURSION_DEPTH {
             return resolve_fail(E_RESOLVE_DEPTH, set, intent, ctx)
         }
+    }
+
+    /* Step 1c: composite interception.  PRIMITIVE_IF(15) is resolved by HONOURING its guard
+     * (see _resolve_if above) rather than scored as an opaque COMPOSE-hexad pattern.  Placed AFTER
+     * the tamper + depth gates (a tampered or too-deep composite still fails closed) but BEFORE the
+     * memo/asm path -- composites are never memoised, so the asm hot path always misses them and
+     * this fires on every call.  Only IF is intercepted in this increment; THEN(12)/WITH(13)/
+     * UNDER(14) still flatten until their own increments land. */
+    if intent_goal_kind(intent) == RV_PRIMITIVE_IF {
+        return _resolve_if(set, intent, ctx)
     }
 
     /* Step 2: ctx digest (cached by ctx pointer; SHA-256 only on miss). */

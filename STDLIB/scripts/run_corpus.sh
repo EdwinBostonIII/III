@@ -1223,6 +1223,7 @@ declare -A EXPECTED=(
     [1648_leb128_decode_reason]=99
     [1649_fix_div_quotient_overflow]=99
     [1650_http_server_builder_error_propagation]=99
+    [1651_resolver_if_guard]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

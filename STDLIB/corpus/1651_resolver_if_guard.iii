@@ -1,0 +1,123 @@
+/* 1651_resolver_if_guard.iii -- THE CONSUMER CAPSTONE: resolve() honors the IF composite's guard.
+ *
+ * THE DEAD STRUCTURE: hip builds NL "X if Y" into intent_if(guard, body) = PRIMITIVE_IF(15) with
+ * partial_arg[0]=guard, [1]=body (verba/intent.iii:454; comment: "body resolves only if guard's
+ * witness satisfies a predicate").  But resolver.iii scored the IF intent by its OWN fields and
+ * NEVER recursed into guard/body -- the guard was IGNORED, so resolve(IF{holds,body}) ==
+ * resolve(IF{fails,body}).  The entire hip conditional pipeline was inert.
+ *
+ * THE FIX (resolver.iii, top of resolve(), before the hot/memo path): for PRIMITIVE_IF, resolve
+ * the guard; if it binds (success tag) the guard HOLDS -> resolve+return the body; if it refuses,
+ * REFUSE the whole composite.  Primitives (kinds 1-11,16-19) are byte-identical (the branch only
+ * fires for 12-15); composites are never memoized so the asm hot path always misses them.
+ *
+ * Discriminator (RED on the old lib, GREEN after):
+ *   - body alone resolves to the registered pattern's binding (0x4B4B<<1).
+ *   - guardH (a MATCHING claim) resolves OK ; guardF (a WRONG claim) refuses.
+ *   - IF{guardH, body}  OLD: ignores guard (flattens, != body binding) ; NEW: == body binding.
+ *   - IF{guardF, body}  OLD: identical to IF{guardH,body} ; NEW: REFUSES (tag bit0=1).
+ * Exit 99 = the guard is live, root to leaf. */
+module corpus_1651
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_partial_arg(intent_ptr: u64, slot: u32, value: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_if(guard_intent: u64, body_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, p_template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_unseal_for_test() -> i32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn mu_unify_primitive(buf: u64, pattern: u64, intent: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
+
+var TPL : [u8; 168]
+var KAT_DISPATCHED : u64 = 0u64
+
+fn kat_dispatch(a: u64, b: u64, c: u64, ctx: u64) -> u64 {
+    KAT_DISPATCHED = KAT_DISPATCHED + 1u64
+    return 0x4B4Bu64
+}
+
+fn put_u64(off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        TPL[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* a fresh capability-bound ctx (each resolve gets its own, like corpus 1361). */
+fn fresh_ctx() -> u64 {
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return 0u64 }
+    call_context_init_set(0u64, kch as u8, 2u8, 1u8)
+    return call_context_new()
+}
+
+fn main() -> u64 {
+    resolution_init()
+    let set : u64 = pattern_set_global()
+
+    /* Register a winning pattern claiming PRIMITIVE slot 11 (mirrors corpus 1361). */
+    pattern_registry_unseal_for_test()
+    let mut i : u64 = 0u64
+    while i < 168u64 { TPL[i] = 0u8 ; i = i + 1u64 }
+    put_u64(0u64, 0xA57A57A5u64)        /* pattern_id */
+    TPL[41u64] = 11u8                   /* binding_kinds[0] = primitive slot 11 */
+    let uf : u64 = mu_unify_primitive
+    put_u64(88u64, uf)                  /* unify_fn = production primitive unifier */
+    let df : u64 = kat_dispatch
+    put_u64(96u64, df)                  /* dispatch_fn -> 0x4B4B */
+    put_u64(104u64, 3000000000u64)      /* activation_base: wins */
+    put_u64(128u64, 950000000u64)       /* k_value */
+    if pattern_register(90u32, (&TPL) as u64) != 1u8 { return 5u64 }
+    pattern_registry_seal_global()
+
+    /* ---- a body primitive that BINDS (claim slot 11) ---- */
+    let body : u64 = intent_new(6u8)
+    if body == 0u64 { return 6u64 }
+    intent_set_partial_arg(body, 12u32, 11u64)
+    let cb : u64 = fresh_ctx()
+    if cb == 0u64 { return 7u64 }
+    if resolve(set, body, cb) != (0x4B4Bu64 << 1u64) { return 8u64 }   /* body binds */
+
+    /* ---- guardH: a MATCHING claim (holds) ; guardF: a WRONG claim (refuses) ---- */
+    let guardH : u64 = intent_new(6u8)
+    intent_set_partial_arg(guardH, 12u32, 11u64)
+    let cgh : u64 = fresh_ctx()
+    if (resolve(set, guardH, cgh) & 1u64) != 0u64 { return 9u64 }      /* guardH holds (success) */
+
+    let guardF : u64 = intent_new(6u8)
+    intent_set_partial_arg(guardF, 12u32, 4u64)
+    let cgf : u64 = fresh_ctx()
+    if (resolve(set, guardF, cgf) & 1u64) != 1u64 { return 10u64 }     /* guardF fails (refusal) */
+
+    /* ---- TEETH 1: IF{guardH, body} resolves the body (guard held) ----
+     * OLD lib: the IF intent is scored by its own COMPOSE-hexad fields, NOT 0x4B4B<<1 -> RED. */
+    let body2 : u64 = intent_new(6u8)
+    intent_set_partial_arg(body2, 12u32, 11u64)
+    let guardH2 : u64 = intent_new(6u8)
+    intent_set_partial_arg(guardH2, 12u32, 11u64)
+    let if_hold : u64 = intent_if(guardH2, body2)
+    if if_hold == 0u64 { return 11u64 }
+    let cih : u64 = fresh_ctx()
+    if resolve(set, if_hold, cih) != (0x4B4Bu64 << 1u64) { return 12u64 }
+
+    /* ---- TEETH 2: IF{guardF, body} REFUSES (guard failed) ----
+     * OLD lib: identical to IF{guardH,body} (guard ignored) -> not a refusal -> RED. */
+    let body3 : u64 = intent_new(6u8)
+    intent_set_partial_arg(body3, 12u32, 11u64)
+    let guardF2 : u64 = intent_new(6u8)
+    intent_set_partial_arg(guardF2, 12u32, 4u64)
+    let if_fail : u64 = intent_if(guardF2, body3)
+    if if_fail == 0u64 { return 13u64 }
+    let cif : u64 = fresh_ctx()
+    if (resolve(set, if_fail, cif) & 1u64) != 1u64 { return 14u64 }
+
+    return 99u64
+}

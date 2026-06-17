@@ -31,6 +31,8 @@ extern @abi(c-msvc-x64) fn sandbox_set_state(sb_id: u64, state: u32) -> i32 from
 extern @abi(c-msvc-x64) fn sandbox_set_result(sb_id: u64, result: u64) -> i32 from "sandbox_ctor.iii"
 extern @abi(c-msvc-x64) fn sandbox_quota_mem_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
 extern @abi(c-msvc-x64) fn sandbox_quota_cpu_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
+/* [X19] the one bound organ -- range-check-before-index that NEVER masks (bound.iii). */
+extern @abi(c-msvc-x64) fn bnd_index(id: u64, slots: u64) -> u32 from "bound.iii"
 
 const SBE_OK          : i32 =  0i32
 const SBE_E_BADID     : i32 = -1i32
@@ -51,11 +53,10 @@ var SBE_CTX  : [u64; 64]
 
 fn _sbe_slot_of(sb_id: u64) -> u32 {
     let id_l : u64 = sb_id
-    if id_l == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = (id_l - 1u64) & 0x3Fu64
-    let s_u32 : u32 = s as u32
-    if s_u32 >= SBE_SLOTS { return 0xFFFFFFFFu32 }
-    return s_u32
+    /* [X19] route through the one bound organ -- NEVER mask (masking aliases an out-of-domain id onto
+     * a live slot; bound.iii X19).  bnd_index returns id-1 in [0,SBE_SLOTS) or BND_INVALID, which is
+     * exactly the old return contract for valid ids -- behaviour-identical for 1..64, rejects 0/>64. */
+    return bnd_index(id_l, SBE_SLOTS as u64)
 }
 
 fn sandbox_exec_begin(sb_id: u64, kind: u32, ctx: u64) -> i32 @export {

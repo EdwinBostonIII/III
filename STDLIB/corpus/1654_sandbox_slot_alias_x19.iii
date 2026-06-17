@@ -1,0 +1,50 @@
+/* 1654_sandbox_slot_alias_x19.iii -- W8 FALSE-ACCEPT falsifier: sandbox slot lookup must NOT mask.
+ *
+ * THE DEFECT (the X19 defect, named in omnia/bound.iii:10): _sbx_slot_of (sandbox_ctor.iii:57) and
+ * _sbe_slot_of (sandbox_exec.iii:55) computed the slot as (id-1) & 0x3F.  Masking ALIASES an
+ * out-of-domain id onto a live slot: for id=65, (65-1) & 0x3F = 0, so sandbox id 65 -- which was
+ * never created -- resolves to slot 0.  The `>= SBX_SLOTS` guard is DEAD (the mask caps at 63 < 64),
+ * and the LIVE check only rejects aliasing onto DEAD slots; aliasing onto a LIVE slot 0 succeeds,
+ * returning slot 0's capability to a caller holding a bogus id -- capability confusion.
+ *
+ * THE FIX: route both slot lookups through the existing bound organ bnd_index(id, slots) (bound.iii),
+ * which range-checks (id in [1, slots]) and NEVER masks -- exactly as the sibling
+ * sandbox_quota._sbq_slot_of already does.  bnd_index(65, 64) == BND_INVALID.
+ *
+ * Discriminator (RED on the old lib, GREEN after):
+ *   - sandbox_new(0x1111,..) -> id 1 at slot 0 ; sandbox_cap_set(1) == 0x1111 (control, unchanged).
+ *   - sandbox_cap_set(65): OLD lib aliases to slot 0 -> returns 0x1111 (FALSE ACCEPT); NEW lib
+ *     rejects (bnd_index -> BND_INVALID) -> returns 0.
+ *   - exec path: after begin(1, kind=0x7777), sandbox_exec_kind(65) OLD -> 0x7777 (aliased);
+ *     NEW -> 0.
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1654
+
+extern @abi(c-msvc-x64) fn sandbox_new(cap_set: u64, mem_cap_bytes: u64, cpu_cap_micros: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_cap_set(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_begin(sb_id: u64, kind: u32, ctx: u64) -> i32 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_kind(sb_id: u64) -> u32 from "sandbox_exec.iii"
+
+fn main() -> u64 {
+    /* create a sandbox -- first free slot is 0, so the id is 1, cap_set = 0x1111. */
+    let id1 : u64 = sandbox_new(0x1111u64, 65536u64, 1000000u64)
+    if id1 != 1u64 { return 1u64 }
+
+    /* control: the real id resolves to its real cap (unchanged behaviour). */
+    if sandbox_cap_set(1u64) != 0x1111u64 { return 2u64 }
+
+    /* TEETH 1 (ctor): id 65 must NOT alias to slot 0.
+     * OLD lib: (65-1)&0x3F = 0 -> returns 0x1111 -> RED.  NEW lib: rejected -> 0. */
+    if sandbox_cap_set(65u64) != 0u64 { return 3u64 }
+
+    /* a still-valid high id (64 = last slot) is rejected only because slot 63 is not live --
+     * but id 64 maps to slot 63 legitimately; assert a NEVER-created id in-range stays 0. */
+    if sandbox_cap_set(64u64) != 0u64 { return 4u64 }   /* slot 63 not live -> 0 (both libs) */
+
+    /* TEETH 2 (exec): begin an exec on the real sandbox, then id 65 must not alias its kind. */
+    if sandbox_exec_begin(1u64, 0x7777u32, 0u64) != 0i32 { return 5u64 }
+    if sandbox_exec_kind(1u64) != 0x7777u32 { return 6u64 }     /* control: real id reads its kind */
+    if sandbox_exec_kind(65u64) != 0u32 { return 7u64 }         /* OLD: 0x7777 aliased -> RED ; NEW: 0 */
+
+    return 99u64
+}

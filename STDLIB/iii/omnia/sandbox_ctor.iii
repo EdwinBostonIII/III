@@ -32,6 +32,9 @@
 
 module omnia_sandbox_ctor
 
+/* [X19] the one bound organ -- range-check-before-index that NEVER masks (bound.iii). */
+extern @abi(c-msvc-x64) fn bnd_index(id: u64, slots: u64) -> u32 from "bound.iii"
+
 const SBX_OK             : i32 =  0i32
 const SBX_E_BADID        : i32 = -1i32
 const SBX_E_FULL         : i32 = -2i32
@@ -53,10 +56,12 @@ var SBX_RESULT      : [u64; 64]
 
 fn _sbx_slot_of(sb_id: u64) -> u32 {
     let id_l : u64 = sb_id
-    if id_l == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = (id_l - 1u64) & 0x3Fu64
-    let s_u32 : u32 = s as u32
-    if s_u32 >= SBX_SLOTS { return 0xFFFFFFFFu32 }
+    /* [X19] route the range-check-before-index through the one bound organ -- NEVER mask.  Masking
+     * (id-1)&0x3F aliases an out-of-domain id (e.g. 65 -> slot 0) onto a LIVE slot -- capability
+     * confusion.  Behaviour-identical for valid ids 1..64; rejects 0 and >64.  Matches the sibling
+     * sandbox_quota._sbq_slot_of (omnia/bound.iii X19). */
+    let s_u32 : u32 = bnd_index(id_l, SBX_SLOTS as u64)
+    if s_u32 == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
     if SBX_LIVE[s_u32] == 0u8 { return 0xFFFFFFFFu32 }
     return s_u32
 }

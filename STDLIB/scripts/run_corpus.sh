@@ -1231,6 +1231,7 @@ declare -A EXPECTED=(
     [1656_http_crystal_slot_alias_x19]=99
     [1657_proof_reflexivity_check]=99
     [1658_proof_hyp_syllogism]=99
+    [1659_proof_natural_deduction]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99

@@ -1,0 +1,138 @@
+/* 1659_proof_natural_deduction.iii -- the prover becomes a NATURAL-DEDUCTION system.
+ *
+ * THE NEW CAPABILITY: the store had =>-elimination (MODUS_PONENS) but no =>-introduction, so it
+ * could not prove any CONDITIONAL theorem lacking an axiomatic witness -- not even A=>A.  Two new
+ * rules close this: PT_RULE_ASSUME (0x0D) posits a hypothesis; PT_RULE_IMPLIES_INTRO (0x0E)
+ * discharges it, concluding A=>B from a derivation of B that assumed A.  Soundness is enforced by
+ * per-step assumption-dependency masks: ASSUME taints a fresh bit, inference rules inherit (OR) their
+ * premises' bits, IMPLIES_INTRO clears the discharged bit, and a finalized THEOREM must end with an
+ * all-zero mask (every assumption discharged).
+ *
+ * Discriminator (RED on the old lib -- 0x0D/0x0E are unknown rules -> the proofs fail to verify;
+ * GREEN after):
+ *   (A) A=>A: ASSUME a; IMPLIES_INTRO -> "a>a".  A canonical ND theorem, unprovable before.
+ *   (B) A=>C from A=>B, B=>C by NATURAL DEDUCTION: assume A; MP to B; MP to C; discharge -> "a>c".
+ *       This RE-DERIVES hypothetical syllogism from the deeper =>-introduction rule.
+ *   (C) TEETH -- undischarged assumption REJECTED: assume A; MP to B; (no discharge) -> final mask
+ *       != 0 -> PT_E_INVALID_INFERENCE (a conditional derivation is NOT a theorem).
+ *   (D) TEETH -- wrong discharge conclusion REJECTED: assume A; IMPLIES_INTRO claiming "a>d" (body
+ *       is A, not D) -> PT_E_INVALID_INFERENCE.
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1659
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+
+const PT_RULE_AXIOM          : u8  = 0x01u8
+const PT_RULE_MODUS_PONENS   : u8  = 0x02u8
+const PT_RULE_ASSUME         : u8  = 0x0Du8
+const PT_RULE_IMPLIES_INTRO  : u8  = 0x0Eu8
+const PT_OP_IMPLIES          : u8  = 0x3Eu8     /* '>' */
+const PT_OK                  : i32 =  0i32
+const PT_E_INVALID_INFERENCE : i32 = -4i32
+
+var ARG : [u8; 128]
+var T_AA : [u8; 32]   /* A=>A */
+var T_AC : [u8; 32]   /* A=>C via ND */
+var T_UD : [u8; 32]   /* undischarged (negative) */
+var T_WD : [u8; 32]   /* wrong discharge (negative) */
+
+fn wr_u32(off: u64, v: u32) -> i32 {
+    let p : *u8 = ((&ARG) as u64 + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn arg_reset(tid_addr: u64, kind: u8) -> i32 {
+    let ap : *u8 = (&ARG) as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = kind
+    return 0i32
+}
+
+/* arity-0 step with a 1-byte conclusion (ASSUME a hypothesis), conclusion @44. */
+fn build_assume(tid_addr: u64, c0: u8) -> i32 {
+    arg_reset(tid_addr, PT_RULE_ASSUME)
+    wr_u32(36u64, 0u32)   wr_u32(40u64, 1u32)
+    let ap : *u8 = (&ARG) as *u8
+    ap[44u64] = c0
+    return pt_add_inference((&ARG) as *u8)
+}
+
+/* arity-0 AXIOM with a 3-byte "c0>c2" conclusion @44. */
+fn build_axiom_impl(tid_addr: u64, c0: u8, c2: u8) -> i32 {
+    arg_reset(tid_addr, PT_RULE_AXIOM)
+    wr_u32(36u64, 0u32)   wr_u32(40u64, 3u32)
+    let ap : *u8 = (&ARG) as *u8
+    ap[44u64] = c0   ap[45u64] = PT_OP_IMPLIES   ap[46u64] = c2
+    return pt_add_inference((&ARG) as *u8)
+}
+
+/* arity-2 MODUS_PONENS, premises [p0,p1] @44/48, 1-byte conclusion @52. */
+fn build_mp(tid_addr: u64, p0: u32, p1: u32, c0: u8) -> i32 {
+    arg_reset(tid_addr, PT_RULE_MODUS_PONENS)
+    wr_u32(36u64, 2u32)   wr_u32(40u64, 1u32)
+    wr_u32(44u64, p0)     wr_u32(48u64, p1)
+    let ap : *u8 = (&ARG) as *u8
+    ap[52u64] = c0
+    return pt_add_inference((&ARG) as *u8)
+}
+
+/* arity-2 IMPLIES_INTRO, premises [assume,body] @44/48, 3-byte "c0>c2" conclusion @52. */
+fn build_intro(tid_addr: u64, p_assume: u32, p_body: u32, c0: u8, c2: u8) -> i32 {
+    arg_reset(tid_addr, PT_RULE_IMPLIES_INTRO)
+    wr_u32(36u64, 2u32)   wr_u32(40u64, 3u32)
+    wr_u32(44u64, p_assume)   wr_u32(48u64, p_body)
+    let ap : *u8 = (&ARG) as *u8
+    ap[52u64] = c0   ap[53u64] = PT_OP_IMPLIES   ap[54u64] = c2
+    return pt_add_inference((&ARG) as *u8)
+}
+
+fn main() -> u64 {
+    pt_init()
+
+    /* (A) A=>A : assume a, discharge to a>a. */
+    if pt_alloc((&T_AA) as *u8) != PT_OK { return 1u64 }
+    if build_assume((&T_AA) as u64, 0x61u8) != PT_OK { return 2u64 }                /* step0: ASSUME a */
+    if build_intro((&T_AA) as u64, 0u32, 0u32, 0x61u8, 0x61u8) != PT_OK { return 3u64 }  /* step1: a=>a */
+    if pt_finalize((&T_AA) as *u8) != PT_OK { return 4u64 }
+    if pt_verify((&T_AA) as *u8) != PT_OK { return 5u64 }      /* OLD: unknown rule -> != OK -> RED */
+
+    /* (B) A=>C from A=>B, B=>C by natural deduction. */
+    if pt_alloc((&T_AC) as *u8) != PT_OK { return 6u64 }
+    if build_assume((&T_AC) as u64, 0x61u8) != PT_OK { return 7u64 }                /* 0: ASSUME a */
+    if build_axiom_impl((&T_AC) as u64, 0x61u8, 0x62u8) != PT_OK { return 8u64 }    /* 1: a>b */
+    if build_axiom_impl((&T_AC) as u64, 0x62u8, 0x63u8) != PT_OK { return 9u64 }    /* 2: b>c */
+    if build_mp((&T_AC) as u64, 0u32, 1u32, 0x62u8) != PT_OK { return 10u64 }       /* 3: MP(a, a>b)=b */
+    if build_mp((&T_AC) as u64, 3u32, 2u32, 0x63u8) != PT_OK { return 11u64 }       /* 4: MP(b, b>c)=c */
+    if build_intro((&T_AC) as u64, 0u32, 4u32, 0x61u8, 0x63u8) != PT_OK { return 12u64 } /* 5: a=>c */
+    if pt_finalize((&T_AC) as *u8) != PT_OK { return 13u64 }
+    if pt_verify((&T_AC) as *u8) != PT_OK { return 14u64 }     /* the ND-derived A=>C theorem */
+
+    /* (C) TEETH: undischarged assumption is NOT a theorem. */
+    if pt_alloc((&T_UD) as *u8) != PT_OK { return 15u64 }
+    if build_assume((&T_UD) as u64, 0x61u8) != PT_OK { return 16u64 }               /* 0: ASSUME a */
+    if build_axiom_impl((&T_UD) as u64, 0x61u8, 0x62u8) != PT_OK { return 17u64 }   /* 1: a>b */
+    if build_mp((&T_UD) as u64, 0u32, 1u32, 0x62u8) != PT_OK { return 18u64 }       /* 2: MP=b (mask!=0) */
+    if pt_finalize((&T_UD) as *u8) != PT_OK { return 19u64 }
+    if pt_verify((&T_UD) as *u8) != PT_E_INVALID_INFERENCE { return 20u64 }   /* undischarged -> reject */
+
+    /* (D) TEETH: wrong discharge conclusion (body is A, not D) rejected. */
+    if pt_alloc((&T_WD) as *u8) != PT_OK { return 21u64 }
+    if build_assume((&T_WD) as u64, 0x61u8) != PT_OK { return 22u64 }               /* 0: ASSUME a */
+    if build_intro((&T_WD) as u64, 0u32, 0u32, 0x61u8, 0x64u8) != PT_OK { return 23u64 }  /* 1: claim a>d */
+    if pt_finalize((&T_WD) as *u8) != PT_OK { return 24u64 }
+    if pt_verify((&T_WD) as *u8) != PT_E_INVALID_INFERENCE { return 25u64 }   /* wrong consequent -> reject */
+
+    return 99u64
+}

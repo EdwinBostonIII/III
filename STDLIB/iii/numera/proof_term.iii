@@ -77,7 +77,17 @@ const PT_RULE_CASE_ANALYSIS  : u8 = 0x0Bu8
 // (|- (A=>B) -> (B=>C) -> (A=>C)) and NOT derivable from MODUS_PONENS alone (no =>-introduction / no
 // assumption discharge in this Hilbert-style store).  Expressible in the canonical '>' encoding.
 const PT_RULE_HYP_SYLLOGISM  : u8 = 0x0Cu8
-const PT_RULE_MAX            : u8 = 0x0Cu8
+// NATURAL DEDUCTION (the =>-introduction half of implication, complementing MODUS_PONENS's
+// =>-elimination).  ASSUME posits a hypothesis A into the local context; IMPLIES_INTRO discharges it,
+// concluding A=>B from a derivation of B that depended on A.  This makes the store a natural-deduction
+// system, not just a Hilbert chain-checker: it can now prove CONDITIONAL theorems (A=>A, and any
+// A=>B provable by assuming A) that have NO axiomatic witness.  Soundness is enforced by per-step
+// assumption-dependency masks (PT_STEP_ASSUME_MASK) -- a finalized theorem must discharge every
+// assumption (final mask == 0).
+const PT_RULE_ASSUME         : u8 = 0x0Du8
+const PT_RULE_IMPLIES_INTRO  : u8 = 0x0Eu8
+const PT_RULE_MAX            : u8 = 0x0Eu8
+const PT_MAX_ASSUMPTIONS     : u64 = 64u64   // one bit per live assumption in the u64 dependency mask
 
 const PT_OP_IMPLIES          : u8 = 0x3Eu8     // '>' implication separator A => B
 const PT_OP_RELATION         : u8 = 0x3Du8     // '=' relation separator a R b
@@ -101,6 +111,12 @@ var PT_STEP_PREMISE_COUNTS : [u32; 262144]
 var PT_STEP_PREMISES       : [u32; 2097152]
 var PT_STEP_CONCL_LENS     : [u32; 262144]
 var PT_STEP_CONCLUSIONS    : [u64; 16777216]   // frugal: 16777216*8 = 134217728 bytes (128 MiB), accessed byte-wise via pt_concl_addr (witness_hook.iii idiom)
+// Natural-deduction assumption-dependency: PT_STEP_ASSUME_MASK[idx] = the set of live assumptions step
+// idx depends on (bit k = the k-th ASSUME of this proof).  ASSUME sets a fresh bit; every other rule
+// ORs its premises' masks; IMPLIES_INTRO clears the discharged assumption's bit.  A theorem's final
+// step must have mask 0.  Existing assumption-free proofs are all-zero -> byte-identical behaviour.
+var PT_STEP_ASSUME_MASK    : [u64; 262144]
+var PT_ASSUME_NEXT         : [u64; 1]           // per-verify counter: the next free assumption bit
 
 var PT_ADDARG_SCRATCH      : [u8; 600]
 var PT_SEED                : [u8; 16]
@@ -271,6 +287,11 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     let cl : u64 = PT_STEP_CONCL_LENS[idx] as u64
     let c : u64 = pt_concl_addr(idx)
     if pt_check_dag(idx, step, kind, pcount) == 0u8 { return PT_E_INVALID_INFERENCE }
+    // Natural-deduction assumption tracking: default this step's mask to the union of its premises'
+    // (every non-ND rule inherits its premises' live assumptions); ASSUME and IMPLIES_INTRO override.
+    pt_set_generic_mask(slot, idx, pcount)
+    if kind == PT_RULE_ASSUME { return pt_replay_assume(idx, cl, pcount) }
+    if kind == PT_RULE_IMPLIES_INTRO { return pt_replay_implies_intro(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_AXIOM { return pt_arity0(cl, pcount) }
     if kind == PT_RULE_INDUCTION_BASE { return pt_arity0(cl, pcount) }
     if kind == PT_RULE_REFLEXIVITY { return pt_replay_reflexivity(c, cl, pcount) }
@@ -376,6 +397,69 @@ fn pt_replay_hyp_syll(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
     let p1 : u64 = pt_concl_addr(idx1)   let l1 : u64 = PT_STEP_CONCL_LENS[idx1] as u64
     if pt_check_hyp_syll(p0, l0, p1, l1, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
+    return PT_OK
+}
+
+// ---- Natural deduction: assumption-dependency tracking + =>-introduction ----
+
+// Default mask for a step: the UNION (OR) of its premises' assumption masks -- a step depends on every
+// assumption any premise depends on.  Called for every step before the rule dispatch; ASSUME and
+// IMPLIES_INTRO override it.  Premises are < step (DAG), so their masks are already computed this pass.
+fn pt_set_generic_mask(slot: u64, idx: u64, pcount: u32) -> i32 {
+    let base : u64 = idx * 8u64
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < (pcount as u64) {
+        let p : u64 = PT_STEP_PREMISES[base + i] as u64
+        let pidx : u64 = slot * PT_MAX_STEPS + p
+        m = m | PT_STEP_ASSUME_MASK[pidx]
+        i = i + 1u64
+    }
+    PT_STEP_ASSUME_MASK[idx] = m
+    return PT_OK
+}
+
+// ASSUME: posit a hypothesis.  Arity 0, non-empty conclusion (the assumed formula).  It is always a
+// valid STEP (an assumption is free to state); its soundness contribution is that it taints its mask
+// with a FRESH assumption bit, which every downstream step inherits until IMPLIES_INTRO discharges it.
+// Bounded at PT_MAX_ASSUMPTIONS live assumptions per proof (one u64 bit each).
+fn pt_replay_assume(idx: u64, cl: u64, pcount: u32) -> i32 {
+    if pcount != 0u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let n : u64 = PT_ASSUME_NEXT[0u64]
+    if n >= PT_MAX_ASSUMPTIONS { return PT_E_INVALID_INFERENCE }   // assumption-context overflow
+    PT_STEP_ASSUME_MASK[idx] = 1u64 << n
+    PT_ASSUME_NEXT[0u64] = n + 1u64
+    return PT_OK
+}
+
+// IMPLIES_INTRO (=>-introduction / assumption discharge): premise[0] = an ASSUME of A, premise[1] = a
+// derivation of B (which may depend on A).  Conclusion must be A=>B.  The result DISCHARGES A: its
+// mask is B's mask with A's assumption bit cleared, so A=>B no longer depends on the hypothesis A.
+// This is the rule that lets the store prove conditional theorems with no axiomatic witness.
+fn pt_replay_implies_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 2u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let ia : u64 = PT_STEP_PREMISES[base + 0u64] as u64     // the ASSUME step (hypothesis A)
+    let ib : u64 = PT_STEP_PREMISES[base + 1u64] as u64     // the body step (derivation of B)
+    let idxa : u64 = slot * PT_MAX_STEPS + ia
+    let idxb : u64 = slot * PT_MAX_STEPS + ib
+    if PT_STEP_KINDS[idxa] != PT_RULE_ASSUME { return PT_E_INVALID_INFERENCE }   // must discharge an assumption
+    // conclusion must be A=>B: split on '>', antecedent == A (assume's concl), consequent == B (body's concl)
+    let sc : i64 = pt_find_byte(c, cl, PT_OP_IMPLIES)
+    if sc == -1i64 { return PT_E_INVALID_INFERENCE }
+    let pa : u64 = pt_concl_addr(idxa)   let la : u64 = PT_STEP_CONCL_LENS[idxa] as u64
+    let pb : u64 = pt_concl_addr(idxb)   let lb : u64 = PT_STEP_CONCL_LENS[idxb] as u64
+    let antp : u64 = c          let antl : u64 = sc as u64
+    let conp : u64 = c + (sc as u64) + 1u64   let conl : u64 = cl - (sc as u64) - 1u64
+    if pt_bytes_eq(antp, antl, pa, la) == 0u8 { return PT_E_INVALID_INFERENCE }   // antecedent == A
+    if pt_bytes_eq(conp, conl, pb, lb) == 0u8 { return PT_E_INVALID_INFERENCE }   // consequent == B
+    // discharge: clear A's assumption bit from B's mask (~mask_a via XOR with all-ones)
+    let mask_a : u64 = PT_STEP_ASSUME_MASK[idxa]
+    let mask_b : u64 = PT_STEP_ASSUME_MASK[idxb]
+    let not_a  : u64 = 0xFFFFFFFFFFFFFFFFu64 ^ mask_a
+    PT_STEP_ASSUME_MASK[idx] = mask_b & not_a
     return PT_OK
 }
 
@@ -537,6 +621,7 @@ fn pt_verify(term_id: *u8) -> i32 @export {
     let slot : u64 = found as u64
     if PT_FINAL[slot] == 0u8 { return PT_E_NOT_FINAL }
     let count : u32 = PT_STEP_COUNTS[slot]
+    PT_ASSUME_NEXT[0u64] = 0u64                  // per-proof assumption-bit counter (natural deduction)
     let mut result : i32 = PT_OK
     let mut sentinel : u8 = 0u8
     let mut i : u64 = 0u64
@@ -546,6 +631,15 @@ fn pt_verify(term_id: *u8) -> i32 @export {
             if r != PT_OK { result = r  sentinel = 1u8 }
         }
         i = i + 1u64
+    }
+    // Natural-deduction soundness: a finalized theorem must DISCHARGE every assumption -- its final
+    // conclusion may depend on no live hypothesis (mask == 0).  Assumption-free proofs (no ASSUME steps)
+    // carry an all-zero mask, so this is byte-identical for every pre-existing proof.
+    if result == PT_OK {
+        if count > 0u32 {
+            let last_idx : u64 = slot * PT_MAX_STEPS + ((count - 1u32) as u64)
+            if PT_STEP_ASSUME_MASK[last_idx] != 0u64 { result = PT_E_INVALID_INFERENCE }
+        }
     }
     if result == PT_OK { PT_VERIFIED[slot] = 1u8 }
     return result

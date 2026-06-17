@@ -86,8 +86,15 @@ const PT_RULE_HYP_SYLLOGISM  : u8 = 0x0Cu8
 // assumption (final mask == 0).
 const PT_RULE_ASSUME         : u8 = 0x0Du8
 const PT_RULE_IMPLIES_INTRO  : u8 = 0x0Eu8
-const PT_RULE_MAX            : u8 = 0x0Eu8
+// CONJUNCTION (propositional AND): introduction pairs two proofs; elimination projects.  A&B is
+// encoded bytes(A) 0x26 bytes(B) ('&').  Sound and structurally checkable in the byte encoding, and
+// composes with natural deduction to prove e.g. (A&B)=>A (assume A&B; AND_ELIM_L; discharge).
+const PT_RULE_AND_INTRO      : u8 = 0x0Fu8   // A, B          |- A&B
+const PT_RULE_AND_ELIM_L     : u8 = 0x10u8   // A&B           |- A
+const PT_RULE_AND_ELIM_R     : u8 = 0x11u8   // A&B           |- B
+const PT_RULE_MAX            : u8 = 0x11u8
 const PT_MAX_ASSUMPTIONS     : u64 = 64u64   // one bit per live assumption in the u64 dependency mask
+const PT_OP_AND              : u8 = 0x26u8    // '&' conjunction separator A & B
 
 const PT_OP_IMPLIES          : u8 = 0x3Eu8     // '>' implication separator A => B
 const PT_OP_RELATION         : u8 = 0x3Du8     // '=' relation separator a R b
@@ -304,6 +311,9 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if kind == PT_RULE_MODUS_PONENS { return pt_replay_mp(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_TRANSITIVITY { return pt_replay_trans(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_HYP_SYLLOGISM { return pt_replay_hyp_syll(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_AND_INTRO { return pt_replay_and_intro(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_AND_ELIM_L { return pt_replay_and_elim_l(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_AND_ELIM_R { return pt_replay_and_elim_r(slot, idx, pcount, c, cl) }
     return PT_E_INVALID_INFERENCE
 }
 
@@ -460,6 +470,59 @@ fn pt_replay_implies_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) ->
     let mask_b : u64 = PT_STEP_ASSUME_MASK[idxb]
     let not_a  : u64 = 0xFFFFFFFFFFFFFFFFu64 ^ mask_a
     PT_STEP_ASSUME_MASK[idx] = mask_b & not_a
+    return PT_OK
+}
+
+// ---- Conjunction (propositional AND) introduction + elimination ----
+// Masks use the generic union (set by pt_set_generic_mask); only the conclusion structure is checked.
+
+// AND_INTRO: premise[0]=A, premise[1]=B, conclusion = A&B (split on '&'; left==A, right==B).
+fn pt_replay_and_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 2u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let i1 : u64 = PT_STEP_PREMISES[base + 1u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let idx1 : u64 = slot * PT_MAX_STEPS + i1
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p1 : u64 = pt_concl_addr(idx1)   let l1 : u64 = PT_STEP_CONCL_LENS[idx1] as u64
+    let sc : i64 = pt_find_byte(c, cl, PT_OP_AND)
+    if sc == -1i64 { return PT_E_INVALID_INFERENCE }
+    let lp : u64 = c          let ll : u64 = sc as u64
+    let rp : u64 = c + (sc as u64) + 1u64   let rl : u64 = cl - (sc as u64) - 1u64
+    if pt_bytes_eq(lp, ll, p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // left conjunct == A
+    if pt_bytes_eq(rp, rl, p1, l1) == 0u8 { return PT_E_INVALID_INFERENCE }   // right conjunct == B
+    return PT_OK
+}
+
+// AND_ELIM_L: premise[0]=A&B, conclusion = A (the left conjunct, before the first '&').
+fn pt_replay_and_elim_l(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let sp : i64 = pt_find_byte(p0, l0, PT_OP_AND)
+    if sp == -1i64 { return PT_E_INVALID_INFERENCE }
+    let lp : u64 = p0         let ll : u64 = sp as u64
+    if pt_bytes_eq(lp, ll, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion == left conjunct
+    return PT_OK
+}
+
+// AND_ELIM_R: premise[0]=A&B, conclusion = B (the right conjunct, after the first '&').
+fn pt_replay_and_elim_r(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let sp : i64 = pt_find_byte(p0, l0, PT_OP_AND)
+    if sp == -1i64 { return PT_E_INVALID_INFERENCE }
+    let rp : u64 = p0 + (sp as u64) + 1u64   let rl : u64 = l0 - (sp as u64) - 1u64
+    if pt_bytes_eq(rp, rl, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion == right conjunct
     return PT_OK
 }
 

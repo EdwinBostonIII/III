@@ -1,0 +1,111 @@
+/* 1660_proof_conjunction.iii -- propositional CONJUNCTION (AND) introduction + elimination.
+ *
+ * THE NEW CAPABILITY: the prover handled '=' (relation) and '>' (implication, with full natural
+ * deduction) but had no conjunction.  Three rules add it over the '&' (0x26) encoding A&B:
+ *   AND_INTRO  (0x0F): A, B   |- A&B   (pair two proofs)
+ *   AND_ELIM_L (0x10): A&B    |- A     (left projection)
+ *   AND_ELIM_R (0x11): A&B    |- B     (right projection)
+ * Sound and structurally checkable (split the conclusion/premise on '&', byte-compare conjuncts), and
+ * -- the point -- COMPOSES with natural deduction: (A&B)=>A is now a provable theorem.
+ *
+ * Discriminator (RED on the old lib -- 0x0F/0x10/0x11 unknown -> proofs fail to verify; GREEN after):
+ *   (A) intro+elim chain: AXIOM a; AXIOM b; AND_INTRO -> a&b; AND_ELIM_L -> a; AND_ELIM_R -> b.
+ *   (B) (A&B)=>A by natural deduction: ASSUME a&b; AND_ELIM_L -> a; IMPLIES_INTRO -> "a&b>a".
+ *   (C) TEETH: AND_INTRO claiming "a&c" when the premises are a,b -> rejected (right conjunct != B).
+ *   (D) TEETH: AND_ELIM_L claiming "b" (the right conjunct) -> rejected.
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1660
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+
+const PT_RULE_AXIOM          : u8  = 0x01u8
+const PT_RULE_ASSUME         : u8  = 0x0Du8
+const PT_RULE_IMPLIES_INTRO  : u8  = 0x0Eu8
+const PT_RULE_AND_INTRO      : u8  = 0x0Fu8
+const PT_RULE_AND_ELIM_L     : u8  = 0x10u8
+const PT_RULE_AND_ELIM_R     : u8  = 0x11u8
+const PT_OK                  : i32 =  0i32
+const PT_E_INVALID_INFERENCE : i32 = -4i32
+
+var ARG : [u8; 128]
+var T_IE : [u8; 32]   /* intro + elim chain */
+var T_TH : [u8; 32]   /* (A&B)=>A theorem */
+var T_N1 : [u8; 32]   /* negative: wrong intro */
+var T_N2 : [u8; 32]   /* negative: wrong elim */
+
+fn wr_u32(off: u64, v: u32) -> i32 {
+    let p : *u8 = ((&ARG) as u64 + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* General step builder: kind, pcount (0..2), premises p0/p1, conclusion bytes b0..b4 (clen of them).
+ * Premises occupy off 44 (and 48); the conclusion follows at off 44 + 4*pcount. */
+fn build(tid_addr: u64, kind: u8, pcount: u32, p0: u32, p1: u32,
+         b0: u8, b1: u8, b2: u8, b3: u8, b4: u8, clen: u32) -> i32 {
+    let ap : *u8 = (&ARG) as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = kind
+    wr_u32(36u64, pcount)
+    wr_u32(40u64, clen)
+    if pcount >= 1u32 { wr_u32(44u64, p0) }
+    if pcount == 2u32 { wr_u32(48u64, p1) }
+    let coff : u64 = 44u64 + 4u64 * (pcount as u64)
+    if clen >= 1u32 { ap[coff + 0u64] = b0 }
+    if clen >= 2u32 { ap[coff + 1u64] = b1 }
+    if clen >= 3u32 { ap[coff + 2u64] = b2 }
+    if clen >= 4u32 { ap[coff + 3u64] = b3 }
+    if clen >= 5u32 { ap[coff + 4u64] = b4 }
+    return pt_add_inference((&ARG) as *u8)
+}
+
+fn main() -> u64 {
+    pt_init()
+    /* atoms: a=0x61 b=0x62 c=0x63 ; '&'=0x26 ; '>'=0x3E */
+
+    /* (A) AXIOM a; AXIOM b; AND_INTRO -> a&b; AND_ELIM_L -> a; AND_ELIM_R -> b. */
+    if pt_alloc((&T_IE) as *u8) != PT_OK { return 1u64 }
+    if build((&T_IE) as u64, PT_RULE_AXIOM, 0u32, 0u32, 0u32, 0x61u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 2u64 }   /* 0: a */
+    if build((&T_IE) as u64, PT_RULE_AXIOM, 0u32, 0u32, 0u32, 0x62u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 3u64 }   /* 1: b */
+    if build((&T_IE) as u64, PT_RULE_AND_INTRO, 2u32, 0u32, 1u32, 0x61u8,0x26u8,0x62u8,0u8,0u8, 3u32) != PT_OK { return 4u64 }   /* 2: a&b */
+    if build((&T_IE) as u64, PT_RULE_AND_ELIM_L, 1u32, 2u32, 0u32, 0x61u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 5u64 }   /* 3: a */
+    if build((&T_IE) as u64, PT_RULE_AND_ELIM_R, 1u32, 2u32, 0u32, 0x62u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 6u64 }   /* 4: b */
+    if pt_finalize((&T_IE) as *u8) != PT_OK { return 7u64 }
+    if pt_verify((&T_IE) as *u8) != PT_OK { return 8u64 }    /* OLD: unknown rules -> != OK -> RED */
+
+    /* (B) (A&B)=>A by natural deduction: ASSUME a&b; AND_ELIM_L -> a; IMPLIES_INTRO -> a&b>a. */
+    if pt_alloc((&T_TH) as *u8) != PT_OK { return 9u64 }
+    if build((&T_TH) as u64, PT_RULE_ASSUME, 0u32, 0u32, 0u32, 0x61u8,0x26u8,0x62u8,0u8,0u8, 3u32) != PT_OK { return 10u64 }   /* 0: ASSUME a&b */
+    if build((&T_TH) as u64, PT_RULE_AND_ELIM_L, 1u32, 0u32, 0u32, 0x61u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 11u64 }   /* 1: a */
+    if build((&T_TH) as u64, PT_RULE_IMPLIES_INTRO, 2u32, 0u32, 1u32, 0x61u8,0x26u8,0x62u8,0x3Eu8,0x61u8, 5u32) != PT_OK { return 12u64 }   /* 2: a&b>a */
+    if pt_finalize((&T_TH) as *u8) != PT_OK { return 13u64 }
+    if pt_verify((&T_TH) as *u8) != PT_OK { return 14u64 }   /* the (A&B)=>A theorem */
+
+    /* (C) TEETH: AND_INTRO claiming a&c when premises are a,b. */
+    if pt_alloc((&T_N1) as *u8) != PT_OK { return 15u64 }
+    if build((&T_N1) as u64, PT_RULE_AXIOM, 0u32, 0u32, 0u32, 0x61u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 16u64 }
+    if build((&T_N1) as u64, PT_RULE_AXIOM, 0u32, 0u32, 0u32, 0x62u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 17u64 }
+    if build((&T_N1) as u64, PT_RULE_AND_INTRO, 2u32, 0u32, 1u32, 0x61u8,0x26u8,0x63u8,0u8,0u8, 3u32) != PT_OK { return 18u64 }   /* a&c (wrong) */
+    if pt_finalize((&T_N1) as *u8) != PT_OK { return 19u64 }
+    if pt_verify((&T_N1) as *u8) != PT_E_INVALID_INFERENCE { return 20u64 }
+
+    /* (D) TEETH: AND_ELIM_L claiming b (the right conjunct). */
+    if pt_alloc((&T_N2) as *u8) != PT_OK { return 21u64 }
+    if build((&T_N2) as u64, PT_RULE_AXIOM, 0u32, 0u32, 0u32, 0x61u8,0x26u8,0x62u8,0u8,0u8, 3u32) != PT_OK { return 22u64 }   /* a&b */
+    if build((&T_N2) as u64, PT_RULE_AND_ELIM_L, 1u32, 0u32, 0u32, 0x62u8,0u8,0u8,0u8,0u8, 1u32) != PT_OK { return 23u64 }   /* claims b (wrong) */
+    if pt_finalize((&T_N2) as *u8) != PT_OK { return 24u64 }
+    if pt_verify((&T_N2) as *u8) != PT_E_INVALID_INFERENCE { return 25u64 }
+
+    return 99u64
+}

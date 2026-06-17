@@ -268,7 +268,7 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if pt_check_dag(idx, step, kind, pcount) == 0u8 { return PT_E_INVALID_INFERENCE }
     if kind == PT_RULE_AXIOM { return pt_arity0(cl, pcount) }
     if kind == PT_RULE_INDUCTION_BASE { return pt_arity0(cl, pcount) }
-    if kind == PT_RULE_REFLEXIVITY { return pt_arity0(cl, pcount) }
+    if kind == PT_RULE_REFLEXIVITY { return pt_replay_reflexivity(c, cl, pcount) }
     if kind == PT_RULE_GENERALIZATION { return pt_arity1(pcount) }
     if kind == PT_RULE_INDUCTION_STEP { return pt_arity1(pcount) }
     if kind == PT_RULE_SYMMETRY { return pt_replay_symmetry(slot, idx, pcount, c, cl) }
@@ -362,6 +362,28 @@ fn pt_replay_symmetry(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 
     let idx0 : u64 = slot * PT_MAX_STEPS + i0
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
     if pt_check_symmetry(p0, l0, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
+    return PT_OK
+}
+
+// REFLEXIVITY conclusion check: the conclusion must be a REFLEXIVE relation "t = t" -- the two sides
+// of '=' byte-equal.  Pre-fix this rule was arity-0 ONLY (pt_arity0), so a step claiming REFLEXIVITY
+// with conclusion "a = b" (sides NOT equal) certified as a valid inference -- unsound (reflexivity is
+// the schema |- t = t; there is NO valid instance with lhs != rhs).  Completes the relation-algebra
+// soundness alongside SYMMETRY (b=a from a=b) and TRANSITIVITY (a=c from a=b,b=c).
+fn pt_check_reflexivity(c: u64, cl: u64) -> u8 {
+    let sc : i64 = pt_find_byte(c, cl, PT_OP_RELATION)
+    if sc == -1i64 { return 0u8 }
+    let lhs_p : u64 = c          let lhs_l : u64 = sc as u64
+    let rhs_p : u64 = c + (sc as u64) + 1u64    let rhs_l : u64 = cl - (sc as u64) - 1u64
+    if pt_bytes_eq(lhs_p, lhs_l, rhs_p, rhs_l) == 0u8 { return 0u8 }   // lhs == rhs
+    return 1u8
+}
+
+// REFLEXIVITY replay wrapper: arity 0, non-empty conclusion, then the lhs==rhs reflexivity check.
+fn pt_replay_reflexivity(c: u64, cl: u64, pcount: u32) -> i32 {
+    if pcount != 0u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    if pt_check_reflexivity(c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
     return PT_OK
 }
 

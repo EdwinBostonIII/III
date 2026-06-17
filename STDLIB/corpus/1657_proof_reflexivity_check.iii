@@ -1,0 +1,80 @@
+/* 1657_proof_reflexivity_check.iii -- prover soundness: REFLEXIVITY checks lhs==rhs (relation algebra complete).
+ *
+ * THE HOLE (sibling of the SYMMETRY hole, corpus 1653): pt_verify_step dispatched PT_RULE_REFLEXIVITY to
+ * pt_arity0 -- an ARITY-ONLY check (0 premises, non-empty conclusion).  But reflexivity is the schema
+ * |- t = t; the conclusion MUST be a reflexive relation (the two sides of '=' byte-equal).  So a step
+ * claiming REFLEXIVITY with conclusion "a = b" (sides NOT equal) certified as a VALID inference -- unsound.
+ * MODUS_PONENS, TRANSITIVITY, and SYMMETRY replay their conclusions; REFLEXIVITY did not.
+ *
+ * THE FIX: pt_check_reflexivity splits the conclusion on '=' (PT_OP_RELATION) and requires lhs == rhs;
+ * pt_replay_reflexivity wraps it (arity 0, non-empty conclusion, then the reflexivity check).  This
+ * completes the relation-algebra soundness: reflexivity (t=t), symmetry (b=a from a=b), transitivity
+ * (a=c from a=b,b=c) are ALL now conclusion-verified, not arity-checked.  A real consumer gates on this:
+ * theorem_carrier.tc_alloc admits a theorem only if its cited proof verifies (pt_verify == 0).
+ *
+ * Discriminator (RED on the old lib, GREEN after):
+ *   - VALID reflexivity: conclusion "a=a" -> pt_verify == PT_OK (a real instance still verifies).
+ *   - INVALID reflexivity: conclusion "a=b" -> OLD lib PT_OK (accepts the unsound step) ;
+ *     NEW lib PT_E_INVALID_INFERENCE.
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1657
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+
+const PT_RULE_REFLEXIVITY    : u8  = 0x08u8
+const PT_OK                  : i32 =  0i32
+const PT_E_INVALID_INFERENCE : i32 = -4i32
+
+var ARG  : [u8; 128]
+var TIDV : [u8; 32]    /* valid reflexivity term */
+var TIDI : [u8; 32]    /* invalid (non-reflexive) term */
+
+fn wr_u32(addr: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (addr + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* Build an arity-0 step into ARG: term_id @[0..32], kind @[32], pcount=0 @[36], clen=3 @[40],
+ * conclusion "c0 = c2" @[44..47] (3 bytes, the relation byte 0x3D in the middle). */
+fn build_refl(tid_addr: u64, c0: u8, c2: u8) -> i32 {
+    let a : u64 = (&ARG) as u64
+    let ap : *u8 = a as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = PT_RULE_REFLEXIVITY
+    wr_u32(a, 36u64, 0u32)               /* pcount = 0 (arity-0) */
+    wr_u32(a, 40u64, 3u32)               /* clen = 3 ("x=y") */
+    ap[44u64] = c0
+    ap[45u64] = 0x3Du8                   /* '=' */
+    ap[46u64] = c2
+    return pt_add_inference(a as *u8)
+}
+
+fn main() -> u64 {
+    pt_init()
+
+    /* ---- VALID: reflexivity "a=a" -> verifies ---- */
+    if pt_alloc((&TIDV) as *u8) != PT_OK { return 1u64 }
+    if build_refl((&TIDV) as u64, 0x61u8, 0x61u8) != PT_OK { return 2u64 }    /* a=a */
+    if pt_finalize((&TIDV) as *u8) != PT_OK { return 3u64 }
+    if pt_verify((&TIDV) as *u8) != PT_OK { return 4u64 }                     /* a real instance verifies */
+
+    /* ---- INVALID: "a=b" claiming REFLEXIVITY (sides not equal) -> rejected ---- */
+    if pt_alloc((&TIDI) as *u8) != PT_OK { return 5u64 }
+    if build_refl((&TIDI) as u64, 0x61u8, 0x62u8) != PT_OK { return 6u64 }    /* a=b */
+    if pt_finalize((&TIDI) as *u8) != PT_OK { return 7u64 }
+    if pt_verify((&TIDI) as *u8) != PT_E_INVALID_INFERENCE { return 8u64 }    /* OLD lib: PT_OK -> RED */
+
+    return 99u64
+}

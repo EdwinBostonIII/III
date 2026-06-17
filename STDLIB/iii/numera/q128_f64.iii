@@ -113,6 +113,9 @@ fn q128f_extract(hi: u64, lo: u64, lo_bit: u32, nbits: u32) -> u64 {
 fn q128_to_f64_bits(id: u64) -> u64 @export {
     let id_l : u64 = id
     if id_l == 0u64 { return F64_POS_ZERO_BITS }
+    /* [X19] range-check before the (id-1)&0x3F slot mask -- masking aliases an out-of-domain id onto a
+     * live slot (and this fn WRITES LAST_DIR[slot]).  Matches omnia/promote._prm_slot_of's guard. */
+    if id_l > (Q128_F64_MAX_INSTANCES as u64) { return F64_POS_ZERO_BITS }
     let hi : u64 = q128_hi(id_l)
     let lo : u64 = q128_lo(id_l)
     if hi == 0u64 {
@@ -193,6 +196,8 @@ fn q128_to_f64_bits(id: u64) -> u64 @export {
 
 fn q128_to_f64_round_dir(id: u64) -> i32 @export {
     if id == 0u64 { return 0i32 }
+    /* [X19] range-check before the mask -- an out-of-domain id must not READ a live slot's direction. */
+    if id > (Q128_F64_MAX_INSTANCES as u64) { return 0i32 }
     let slot : u64 = (id - 1u64) & 0x3Fu64
     return Q128_F64_LAST_DIR[slot]
 }

@@ -1,0 +1,55 @@
+/* 1655_q128f64_slot_alias_x19.iii -- the X19 defect in numera/q128_f64 (asymmetric-sibling lens).
+ *
+ * THE DEFECT: q128_to_f64_bits and q128_to_f64_round_dir derive the per-id slot as (id-1) & 0x3F
+ * with NO upper range check (only an id==0 guard).  Masking ALIASES an out-of-domain id onto a live
+ * slot: for a live handle h at slot s, the id (h + 64) masks to the SAME slot s, so
+ * q128_to_f64_round_dir(h + 64) -- a handle that was never allocated -- reads handle h's recorded
+ * rounding direction instead of being rejected.  bits() likewise WRITES the aliased slot.  The
+ * sibling modules already remedy exactly this: omnia/promote._prm_slot_of guards `if id > PRM_SLOTS`
+ * before masking ([audit promote-1]); omnia/sandbox_quota + sandbox_ctor/exec route through
+ * bnd_index.  q128_f64 was the unfixed sibling.
+ *
+ * THE FIX: add `if id > Q128_F64_MAX_INSTANCES return <neutral>` before the mask in both fns
+ * (round_dir -> 0i32, bits -> F64_POS_ZERO_BITS), matching promote.iii.  Valid ids 1..64 unchanged.
+ *
+ * Discriminator (RED on the old lib, GREEN after).  round_dir results bound to a LOCAL i32 then
+ * compared with ==/!= (the W79/W80 i32-call-result-ordering compiler trap, per corpus 1568):
+ *   - bits(h) on 2^53+1 records LAST_DIR[slot(h)] = -1 (tie rounds down to even, W86).
+ *   - round_dir(h)      == -1   (control: the real handle reads its own direction)
+ *   - round_dir(h + 64) ==  0   (TEETH: OLD aliases slot(h) -> -1 ; NEW rejects id>64 -> 0)
+ *   - bits(h + 64)      ==  0   (id>64 -> POS_ZERO, and does not corrupt LAST_DIR[slot(h)])
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1655
+
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_bits(id: u64) -> u64 from "q128_f64.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_round_dir(id: u64) -> i32 from "q128_f64.iii"
+
+const F64_POS_ZERO_BITS : u64 = 0x0000000000000000u64
+
+fn main() -> u64 {
+    /* allocate a real handle h and record its rounding direction (2^53+1 -> tie down -> -1). */
+    let h : u64 = q128_from_u64(9007199254740993u64)        /* 2^53 + 1 */
+    if h == 0u64 { return 1u64 }
+    let b : u64 = q128_to_f64_bits(h)
+    if b != 0x4340000000000000u64 { return 2u64 }           /* result = 2^53 (a 1-bit lost) */
+
+    /* control: the real handle reads its own direction (-1). */
+    let dh : i32 = q128_to_f64_round_dir(h)
+    if dh != (0i32 - 1i32) { return 10u64 }
+
+    /* TEETH: (h + 64) masks to the SAME slot as h.  OLD lib aliases -> returns -1; fixed -> 0. */
+    let alias : u64 = h + 64u64
+    let da : i32 = q128_to_f64_round_dir(alias)
+    if da != 0i32 { return 20u64 }                          /* OLD: da == -1 (aliased) -> RED */
+
+    /* the bits() write path is likewise guarded: id>64 -> POS_ZERO, no aliased write. */
+    let ba : u64 = q128_to_f64_bits(alias)
+    if ba != F64_POS_ZERO_BITS { return 30u64 }
+
+    /* and the real handle's direction survived the aliased bits() call (no slot corruption). */
+    let dh2 : i32 = q128_to_f64_round_dir(h)
+    if dh2 != (0i32 - 1i32) { return 31u64 }
+
+    return 99u64
+}

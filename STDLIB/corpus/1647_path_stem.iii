@@ -1,0 +1,48 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1647_path_stem.iii
+ *
+ * III conformance corpus 1647 -- path_stem (filename without extension).
+ *
+ * THE CAPABILITY DELTA (enhance W4, composable-missing-op):
+ *   path exposed basename + extension but not the STEM (basename minus its
+ *   extension) -- a distinct, common file operation.  path_stem composes the
+ *   two existing exports.
+ *
+ * Discriminator (RED on the old lib, GREEN after the path.iii edit):
+ *   OLD lib: path_stem absent -> KAT cannot link.
+ *   NEW lib: "/usr/local/bin/foo.txt"->3, "README"->6, ".bashrc"->7 (a 0-stub fails).
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_form. Ring: R3. K: 1.00.
+ */
+
+module corpus_1647
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn path_stem(p: u64, p_len: u64) -> u64 from "path.iii"
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(64u64)
+    if buf as u64 == 0u64 { return 3u64 }
+
+    /* "/usr/local/bin/foo.txt" (22) -> stem "foo" = 3 */
+    let mut o : u64 = 0u64
+    o=_put(buf,o,47u8);o=_put(buf,o,117u8);o=_put(buf,o,115u8);o=_put(buf,o,114u8);o=_put(buf,o,47u8)
+    o=_put(buf,o,108u8);o=_put(buf,o,111u8);o=_put(buf,o,99u8);o=_put(buf,o,97u8);o=_put(buf,o,108u8);o=_put(buf,o,47u8)
+    o=_put(buf,o,98u8);o=_put(buf,o,105u8);o=_put(buf,o,110u8);o=_put(buf,o,47u8)
+    o=_put(buf,o,102u8);o=_put(buf,o,111u8);o=_put(buf,o,111u8);o=_put(buf,o,46u8);o=_put(buf,o,116u8);o=_put(buf,o,120u8);o=_put(buf,o,116u8)
+    if path_stem(buf as u64, o) != 3u64 { return 10u64 }
+
+    /* "README" (6) -> no extension -> stem 6 */
+    let mut o2 : u64 = 0u64
+    o2=_put(buf,o2,82u8);o2=_put(buf,o2,69u8);o2=_put(buf,o2,65u8);o2=_put(buf,o2,68u8);o2=_put(buf,o2,77u8);o2=_put(buf,o2,69u8)
+    if path_stem(buf as u64, o2) != 6u64 { return 11u64 }
+
+    /* ".bashrc" (7) -> leading dot, no extension -> stem 7 */
+    let mut o3 : u64 = 0u64
+    o3=_put(buf,o3,46u8);o3=_put(buf,o3,98u8);o3=_put(buf,o3,97u8);o3=_put(buf,o3,115u8);o3=_put(buf,o3,104u8);o3=_put(buf,o3,114u8);o3=_put(buf,o3,99u8)
+    if path_stem(buf as u64, o3) != 7u64 { return 12u64 }
+
+    return 99u64
+}

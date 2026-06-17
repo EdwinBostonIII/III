@@ -1,0 +1,73 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1648_leb128_decode_reason.iii
+ *
+ * III conformance corpus 1648 -- LEB128 decode error-class recovery.
+ *
+ * THE CAPABILITY DELTA (enhance W4, recover-the-discarded):
+ *   leb128_decode_u64 / _i64 collapsed three distinct failures (truncation,
+ *   final-group overflow, shift overflow) into their 0 sentinel.  The class is
+ *   now recorded in LEB_LAST_REASON_U64 / _I64, read via leb128_last_reason_u64
+ *   / _i64 -- so a WASM/DWARF streaming decoder can RETRY on INCOMPLETE but
+ *   REJECT permanently on OVERFLOW.  The decode RESULT is unchanged.
+ *
+ * Discriminator (RED on the old lib, GREEN after the leb128.iii edit):
+ *   OLD lib: leb128_last_reason_* absent -> KAT cannot link.
+ *   NEW lib: distinct reasons (a stub returning a constant fails):
+ *     [0x05]            -> consumed 1, reason OK(0)
+ *     [0x80]            -> consumed 0, reason INCOMPLETE(1)
+ *     [0x80]*10         -> consumed 0, reason OVERFLOW(2)
+ *
+ * Exit: 99 full pass; distinct code per failed assertion.
+ * Hexad: kind_essence. Ring: R3. K: 1.00.
+ */
+
+module corpus_1648
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn leb128_decode_u64(src: u64, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_reason_u64() -> u32 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_decode_i64(src: u64, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_reason_i64() -> u32 from "leb128.iii"
+
+const C1648_OK         : u32 = 0u32
+const C1648_INCOMPLETE : u32 = 1u32
+const C1648_OVERFLOW   : u32 = 2u32
+
+fn main() -> u64 {
+    let b : *u8 = malloc(16u64)
+    if b as u64 == 0u64 { return 3u64 }
+
+    /* [0x05] -> consumed 1, OK */
+    b[0u64] = 5u8
+    if leb128_decode_u64(b as u64, 1u64) != 1u64 { return 10u64 }
+    if leb128_last_reason_u64() != C1648_OK { return 11u64 }
+
+    /* [0x80] (continuation, no terminator) -> consumed 0, INCOMPLETE */
+    b[0u64] = 128u8
+    if leb128_decode_u64(b as u64, 1u64) != 0u64 { return 20u64 }
+    if leb128_last_reason_u64() != C1648_INCOMPLETE { return 21u64 }
+
+    /* [0x80]*10 (shift overflow past 64) -> consumed 0, OVERFLOW */
+    let mut i : u64 = 0u64
+    while i < 10u64 { b[i] = 128u8  i = i + 1u64 }
+    if leb128_decode_u64(b as u64, 10u64) != 0u64 { return 30u64 }
+    if leb128_last_reason_u64() != C1648_OVERFLOW { return 31u64 }
+
+    /* === i64 (SLEB128) reason coverage (closes the leb128_last_reason_i64 gap) === */
+    /* [0x05] -> consumed 1, OK (positive, no sign-extend) */
+    b[0u64] = 5u8
+    if leb128_decode_i64(b as u64, 1u64) != 1u64 { return 40u64 }
+    if leb128_last_reason_i64() != C1648_OK { return 41u64 }
+
+    /* [0x80] (continuation, no terminator) -> consumed 0, INCOMPLETE */
+    b[0u64] = 128u8
+    if leb128_decode_i64(b as u64, 1u64) != 0u64 { return 50u64 }
+    if leb128_last_reason_i64() != C1648_INCOMPLETE { return 51u64 }
+
+    /* [0x80]*10 (shift overflow past 64) -> consumed 0, OVERFLOW */
+    let mut j : u64 = 0u64
+    while j < 10u64 { b[j] = 128u8  j = j + 1u64 }
+    if leb128_decode_i64(b as u64, 10u64) != 0u64 { return 60u64 }
+    if leb128_last_reason_i64() != C1648_OVERFLOW { return 61u64 }
+
+    return 99u64
+}

@@ -22,6 +22,14 @@ module verba_leb128
 
 var LEB_LAST_VALUE  : u64 = 0u64
 var LEB_LAST_SVALUE : i64 = 0i64
+/* Decode failure class [enhance W4, recover-the-discarded]: leb128_decode_u64/i64
+ * collapse distinct errors into their 0 sentinel; the class is now recorded so a
+ * WASM/DWARF streaming decoder can RETRY on INCOMPLETE but REJECT on OVERFLOW. */
+const LEB_DEC_OK         : u32 = 0u32
+const LEB_DEC_INCOMPLETE : u32 = 1u32   /* ran out of bytes before the terminator */
+const LEB_DEC_OVERFLOW   : u32 = 2u32   /* value exceeds 64 bits / non-canonical final group */
+var LEB_LAST_REASON_U64 : u32 = 0u32
+var LEB_LAST_REASON_I64 : u32 = 0u32
 
 fn leb128_encode_u64(value: u64, out: *u8) -> u64 @export {
     let mut v : u64 = value
@@ -48,8 +56,9 @@ fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 @export {
     let mut shift : u64 = 0u64
     let mut i : u64 = 0u64
     let mut going : u8 = 1u8
+    LEB_LAST_REASON_U64 = LEB_DEC_OK
     while going == 1u8 {
-        if i >= src_len { LEB_LAST_VALUE = 0u64; return 0u64 }
+        if i >= src_len { LEB_LAST_VALUE = 0u64; LEB_LAST_REASON_U64 = LEB_DEC_INCOMPLETE; return 0u64 }
         let b : u64 = src[i] as u64
         let payload : u64 = b & 0x7Fu64
         value = value | (payload << shift)
@@ -60,11 +69,11 @@ fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 @export {
              * bytes and the 10th group's payload is <= 1.  shift < 64 here (continuation guard).  Without
              * this, a 10th byte with payload bits 1..6 set silently TRUNCATES (false-accept).  [W-canon] */
             let room : u64 = 64u64 - shift
-            if room < 7u64 { if (payload >> room) != 0u64 { LEB_LAST_VALUE = 0u64  return 0u64 } }
+            if room < 7u64 { if (payload >> room) != 0u64 { LEB_LAST_VALUE = 0u64  LEB_LAST_REASON_U64 = LEB_DEC_OVERFLOW  return 0u64 } }
         }
         if going == 1u8 {
             shift = shift + 7u64
-            if shift >= 64u64 { LEB_LAST_VALUE = 0u64; return 0u64 }
+            if shift >= 64u64 { LEB_LAST_VALUE = 0u64; LEB_LAST_REASON_U64 = LEB_DEC_OVERFLOW; return 0u64 }
         }
     }
     LEB_LAST_VALUE = value
@@ -115,8 +124,9 @@ fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 @export {
     let mut i : u64 = 0u64
     let mut going : u8 = 1u8
     let mut lastb : u64 = 0u64
+    LEB_LAST_REASON_I64 = LEB_DEC_OK
     while going == 1u8 {
-        if i >= src_len { LEB_LAST_SVALUE = 0i64  return 0u64 }
+        if i >= src_len { LEB_LAST_SVALUE = 0i64  LEB_LAST_REASON_I64 = LEB_DEC_INCOMPLETE  return 0u64 }
         let b : u64 = src[i] as u64
         lastb = b
         let payload : u64 = b & 0x7Fu64
@@ -133,11 +143,11 @@ fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 @export {
             if room < 7u64 {
                 let hb : u64 = payload >> room
                 let mask : u64 = (1u64 << (7u64 - room)) - 1u64
-                if hb != 0u64 { if hb != mask { LEB_LAST_SVALUE = 0i64  return 0u64 } }
+                if hb != 0u64 { if hb != mask { LEB_LAST_SVALUE = 0i64  LEB_LAST_REASON_I64 = LEB_DEC_OVERFLOW  return 0u64 } }
             }
         }
         if going == 1u8 {
-            if shift >= 64u64 { LEB_LAST_SVALUE = 0i64  return 0u64 }
+            if shift >= 64u64 { LEB_LAST_SVALUE = 0i64  LEB_LAST_REASON_I64 = LEB_DEC_OVERFLOW  return 0u64 }
         }
     }
     if shift < 64u64 {
@@ -152,4 +162,13 @@ fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 @export {
 
 fn leb128_last_svalue() -> i64 @export {
     return LEB_LAST_SVALUE
+}
+
+/* The decode failure class of the most recent leb128_decode_u64 / _i64 (LEB_DEC_*);
+ * OK(0) after a successful decode. [enhance W4, recover-the-discarded] */
+fn leb128_last_reason_u64() -> u32 @export {
+    return LEB_LAST_REASON_U64
+}
+fn leb128_last_reason_i64() -> u32 @export {
+    return LEB_LAST_REASON_I64
 }

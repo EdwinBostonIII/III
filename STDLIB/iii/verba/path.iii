@@ -102,6 +102,16 @@ fn path_extension(p: *u8, p_len: u64) -> u64 @export {
     return bn_len - found
 }
 
+/* Filename stem = the basename WITHOUT its extension, as a length.  Composes the
+ * existing path_basename + path_extension exports (a distinct, common operation
+ * -- "foo.txt" -> 3, "README" -> 6, ".bashrc" -> 7).  [enhance W4, composable-missing-op] */
+fn path_stem(p: *u8, p_len: u64) -> u64 @export {
+    let bn : u64 = path_basename(p, p_len)
+    let ext : u64 = path_extension(p, p_len)
+    if ext == 0u64 { return bn }
+    return bn - ext
+}
+
 fn path_last_offset() -> u64 @export {
     return PATH_LAST_OFFSET
 }

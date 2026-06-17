@@ -271,7 +271,7 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if kind == PT_RULE_REFLEXIVITY { return pt_arity0(cl, pcount) }
     if kind == PT_RULE_GENERALIZATION { return pt_arity1(pcount) }
     if kind == PT_RULE_INDUCTION_STEP { return pt_arity1(pcount) }
-    if kind == PT_RULE_SYMMETRY { return pt_arity1(pcount) }
+    if kind == PT_RULE_SYMMETRY { return pt_replay_symmetry(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_LIBRARY_CITE { return pt_arity1(pcount) }
     if kind == PT_RULE_SUBSTITUTION { return pt_arity_ge1(pcount) }
     if kind == PT_RULE_CASE_ANALYSIS { return pt_arity_ge2(pcount) }
@@ -331,6 +331,37 @@ fn pt_replay_trans(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
     let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
     let p1 : u64 = pt_concl_addr(idx1)   let l1 : u64 = PT_STEP_CONCL_LENS[idx1] as u64
     if pt_check_trans(p0, l0, p1, l1, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
+    return PT_OK
+}
+
+// SYMMETRY conclusion replay: premise = a R b, conclusion must be b R a.  Split each on the
+// relation byte '='; require conclusion-LHS == premise-RHS and conclusion-RHS == premise-LHS.
+// Pre-fix this rule was arity-checked ONLY (pt_arity1), so a step claiming SYMMETRY with a
+// conclusion EQUAL to its premise ("a=b" -> "a=b", sides NOT swapped) certified as valid -- an
+// unsound inference.  This makes the swap a real proof obligation, like MP/TRANSITIVITY.
+fn pt_check_symmetry(p0: u64, l0: u64, c: u64, cl: u64) -> u8 {
+    let s0 : i64 = pt_find_byte(p0, l0, PT_OP_RELATION)
+    if s0 == -1i64 { return 0u8 }
+    let sc : i64 = pt_find_byte(c, cl, PT_OP_RELATION)
+    if sc == -1i64 { return 0u8 }
+    let a0p : u64 = p0          let a0l : u64 = s0 as u64
+    let b0p : u64 = p0 + (s0 as u64) + 1u64   let b0l : u64 = l0 - (s0 as u64) - 1u64
+    let acp : u64 = c           let acl : u64 = sc as u64
+    let bcp : u64 = c + (sc as u64) + 1u64    let bcl : u64 = cl - (sc as u64) - 1u64
+    if pt_bytes_eq(acp, acl, b0p, b0l) == 0u8 { return 0u8 }   // conclusion-LHS == premise-RHS
+    if pt_bytes_eq(bcp, bcl, a0p, a0l) == 0u8 { return 0u8 }   // conclusion-RHS == premise-LHS
+    return 1u8
+}
+
+// SYMMETRY replay wrapper: arity 1, then conclusion is the byte-swapped relation of the premise.
+fn pt_replay_symmetry(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let p0 : u64 = pt_concl_addr(idx0)   let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    if pt_check_symmetry(p0, l0, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
     return PT_OK
 }
 

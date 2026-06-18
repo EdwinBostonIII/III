@@ -21,6 +21,7 @@ extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.
 extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_get_out_commit(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_producer(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
 /* H2 (mig1, "one name"): the observed value's content-address is computed through the ONE
  * cad primitive, never a raw keccak256.  cad_oneshot(CAD_SUITE_KECCAK256,..) wraps the same
  * Keccak-256 backend, so OBS_COMMIT is BYTE-IDENTICAL to the prior keccak256_oneshot -- the
@@ -42,6 +43,7 @@ var OBS_ANTE    : [u8; 32]      /* zero antecedents (n_ante = 0)             */
 var OBS_COMMIT  : [u8; 32]      /* content-address of the observed value     */
 var OBS_RCOMMIT : [u8; 32]      /* REPLAY: re-hash of the re-injected payload */
 var OBS_XCOMMIT : [u8; 32]      /* REPLAY: recorded out_commit for comparison */
+var OBS_RPROD   : [u8; 32]      /* REPLAY: recorded producer (its low 4 bytes = source_id) */
 var OBS_FRAG    : [u8; 32]      /* frag-id sink                              */
 var OBS_SCRATCH : [u8; 4096]    /* the observed value (witnessed + passed through) */
 var OBS_IDX     : [u64; 65536]  /* frag indices of observations, in order    */
@@ -106,6 +108,13 @@ fn obs_observe(source_id: u32, live_ptr: *u8, len: u32, out_ptr: *u8) -> u64 @ex
         let mut ci : u64 = 0u64
         while ci < 32u64 { if OBS_RCOMMIT[ci] != OBS_XCOMMIT[ci] { cdiff = 1u8 }  ci = ci + 1u64 }
         if cdiff != 0u8 { return OBS_SENTINEL }
+        /* Sequence integrity: the recorded producer's low 4 bytes ARE the source_id (LE, as packed in live
+         * mode below).  A payload re-injected under a DIFFERENT source_id is a sequence divergence and is
+         * rejected -- even though its bytes content-address correctly -- so replay binds not just WHAT was
+         * observed but WHO observed it. */
+        wh_get_producer(idx, (&OBS_RPROD as u64) as *u8)
+        let rsid : u32 = (OBS_RPROD[0u64] as u32) | ((OBS_RPROD[1u64] as u32) << 8u32) | ((OBS_RPROD[2u64] as u32) << 16u32) | ((OBS_RPROD[3u64] as u32) << 24u32)
+        if rsid != source_id { return OBS_SENTINEL }
         OBS_CURSOR = OBS_CURSOR + 1u64
         return idx
     }

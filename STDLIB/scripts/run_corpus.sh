@@ -1315,6 +1315,7 @@ declare -A EXPECTED=(
     [1674_self_emit]=99
     # --- PHASE III (III-PHASE3-WALLS) Campaign I: certified portfolio search.
     [1700_beam_search]=99
+    [1701_lemma_forge]=99
 )
 
 PASS=0

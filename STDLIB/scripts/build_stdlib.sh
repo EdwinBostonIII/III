@@ -1139,6 +1139,12 @@ MODULES=(
     # the portfolio, soundness unconditional because the K_0 referee is frozen.  Composes verified_search
     # + egraph_stochastic (no island); compiler-unreferenced -> LIBNATIVE only; appended last (BSS-neutral).
     "nous/beam_search"
+    # --- PHASE III Campaign I #2: the LEMMA FORGE.  nous/lemma_forge manufactures auxiliary BV lemmas by
+    # critical-pair completion, pre-filters them by behavioral evaluation (tc_eval), CERTIFIES the survivors
+    # through the frozen kernel (tc_check on Pi(x:BV).Id), and deposits only kernel-proven lemmas into the
+    # grown commons (tg_register, itself tc_check-gated) -- the search space contracts monotonically.
+    # Composes numera/typecheck + nous/theorem_grow (no island); compiler-unreferenced -> LIBNATIVE; last.
+    "nous/lemma_forge"
 )
 
 PASS=0

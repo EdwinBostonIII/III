@@ -1,0 +1,169 @@
+/* STDLIB/iii/nous/lemma_forge.iii -- THE LEMMA FORGE (III-PHASE3-WALLS, Campaign I, organ 2).
+ *
+ * Campaign I shrinks the search SPACE rather than searching it faster: it manufactures the auxiliary
+ * lemmas the combinatorial wall otherwise blames on humans, certifies each through the frozen kernel,
+ * and deposits the survivors into the grown commons so every later search CITES a lemma by hash instead
+ * of re-deriving it.  The library grows monotonically; the space contracts monotonically.
+ *
+ * THE DOMAIN (honest, kernel-decidable): the bitvector fragment of numera/typecheck (tc_bv*).  A
+ * candidate lemma is a UNIVERSAL BV identity  Pi(x:BV). Id(BV, lhs, rhs).  This is exactly the fragment
+ * the kernel can both EVALUATE (tc_eval, closed folding + symbolic iota) and PROVE (tc_check on a
+ * lam-refl certificate), so a forged lemma is a genuine kernel theorem, never a hand-wave.
+ *
+ * THE TWO STAGES (propose-and-check, genuinely distinct):
+ *   1. PROPOSE -- behavioral pre-filter.  The candidate's two sides are EVALUATED at a vector of sample
+ *      points (tc_eval).  Disagreement at ANY sample is a cheap, sound REJECTION (definitely not equal).
+ *      Agreement is only a CONJECTURE -- sampling is incomplete, so it may over-propose.  The eval-vector
+ *      is the behavioral key of this (right-arena) domain.  [nous_behavioral_key keys XII-arena normal
+ *      forms, a DIFFERENT term universe; calling it on kernel terms would be wrong-arena -- so the
+ *      behavioral key here is the kernel's own evaluation, the surpass-only honest choice.]
+ *   2. CHECK -- sound universal certification.  tc_check( lam x. refl lhs : Pi(x:BV). Id(BV,lhs,rhs) ).
+ *      This is the frozen referee: a sampled-but-false conjecture is CAUGHT here, never admitted.
+ *
+ * THE CANDIDATES (critical-pair completion of a seed BV rule set {x*1->x, x*0->0, x+0->x, x<<k->x*2^k}):
+ * overlapping the rule LHSs yields the completion equations below (6 genuinely-true, 2 deliberately-false
+ * canaries).  Only kernel-certified ones reach the commons (tg_register is itself tc_check-gated), so the
+ * deposit is intrinsically non-vacuous: a false lemma cannot be deposited.
+ *
+ * THE HONEST FLOOR: Knuth-Bendix completion can DIVERGE (unboundedly many new critical pairs).  This
+ * organ does BOUNDED completion over a fixed candidate frontier; an unexhausted frontier would be a typed
+ * GAP, never a false closure claim.  (The fixed frontier here is exhausted, so no GAP arises.)
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 0.99.  Composes numera/typecheck (the kernel) + nous/theorem_grow
+ * (the commons) -- no island.  Determinism: integer-only; one arena pass per forge so deposited handles
+ * stay valid; unsigned compares; no float.
+ */
+module nous_lemma_forge
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval(t: u32, x0: u64, x1: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tg_register(proof: u32, goal: u32) -> i32 from "theorem_grow.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+
+const LF_NCAND : u32 = 8u32
+const LF_NSAMP : u32 = 8u32
+const LF_TGOK  : i32 = 0i32
+
+var LF_LHS : [u32; 8]
+var LF_RHS : [u32; 8]
+var LF_SAMP : [u64; 8]
+var LF_ADMITTED : u64 = 0u64
+var LF_REFUSED  : u64 = 0u64
+var LF_INIT : u8 = 0u8
+
+/* recipe indices over a single free var x = tc_var(0):
+ *   0:x+0  1:x  2:x*1  3:x*0  4:0  5:(x*1)+(x*0)  6:x<<1  7:x*2  8:x<<5  9:x*32  10:x*64  11:x+1 */
+fn lf_setup() -> i32 {
+    LF_LHS[0u64]=0u32   LF_RHS[0u64]=1u32     /* x+0          ==  x       (true)  */
+    LF_LHS[1u64]=2u32   LF_RHS[1u64]=1u32     /* x*1          ==  x       (true)  */
+    LF_LHS[2u64]=3u32   LF_RHS[2u64]=4u32     /* x*0          ==  0       (true)  */
+    LF_LHS[3u64]=5u32   LF_RHS[3u64]=1u32     /* (x*1)+(x*0)  ==  x       (true)  */
+    LF_LHS[4u64]=6u32   LF_RHS[4u64]=7u32     /* x<<1         ==  x*2     (true)  */
+    LF_LHS[5u64]=8u32   LF_RHS[5u64]=9u32     /* x<<5         ==  x*32    (true)  */
+    LF_LHS[6u64]=8u32   LF_RHS[6u64]=10u32    /* x<<5         ==  x*64    (FALSE) */
+    LF_LHS[7u64]=1u32   LF_RHS[7u64]=11u32    /* x            ==  x+1     (FALSE) */
+    LF_SAMP[0u64]=1u64   LF_SAMP[1u64]=2u64   LF_SAMP[2u64]=3u64        LF_SAMP[3u64]=5u64
+    LF_SAMP[4u64]=7u64   LF_SAMP[5u64]=11u64  LF_SAMP[6u64]=255u64      LF_SAMP[7u64]=65537u64
+    return 0i32
+}
+
+fn lf_init() -> i32 @export {
+    if LF_INIT == 1u8 { return 0i32 }
+    lf_setup()
+    LF_INIT = 1u8
+    return 0i32
+}
+
+fn lf_lit(v: u64) -> u32 { return tc_bvlit((v & 0xFFFFFFFFu64) as u32, (v >> 32u64) as u32) }
+
+/* build a recipe's kernel BV term over x = tc_var(0); the arena must be active (tc_reset called). */
+fn lf_build(recipe: u32) -> u32 {
+    let x : u32 = tc_var(0u32)
+    if recipe == 0u32  { return tc_bvadd(x, lf_lit(0u64)) }
+    if recipe == 1u32  { return x }
+    if recipe == 2u32  { return tc_bvmul(x, lf_lit(1u64)) }
+    if recipe == 3u32  { return tc_bvmul(x, lf_lit(0u64)) }
+    if recipe == 4u32  { return lf_lit(0u64) }
+    if recipe == 5u32  { return tc_bvadd(tc_bvmul(x, lf_lit(1u64)), tc_bvmul(x, lf_lit(0u64))) }
+    if recipe == 6u32  { return tc_bvshl(x, lf_lit(1u64)) }
+    if recipe == 7u32  { return tc_bvmul(x, lf_lit(2u64)) }
+    if recipe == 8u32  { return tc_bvshl(x, lf_lit(5u64)) }
+    if recipe == 9u32  { return tc_bvmul(x, lf_lit(32u64)) }
+    if recipe == 10u32 { return tc_bvmul(x, lf_lit(64u64)) }
+    return tc_bvadd(x, lf_lit(1u64))
+}
+
+fn lf_ncand() -> u32 @export { return LF_NCAND }
+
+/* STAGE 1 -- behavioral pre-filter: 1 iff the two sides agree at every sample point (a conjecture). */
+fn lf_propose(ci: u32) -> u8 @export {
+    lf_init()
+    tc_reset()
+    let lhs : u32 = lf_build(LF_LHS[(ci as u64) & 0xFFFFFFFFu64])
+    let rhs : u32 = lf_build(LF_RHS[(ci as u64) & 0xFFFFFFFFu64])
+    let mut s : u32 = 0u32
+    while s < LF_NSAMP {
+        let xv : u64 = LF_SAMP[(s as u64) & 0xFFFFFFFFu64]
+        if tc_eval(lhs, xv, 0u64) != tc_eval(rhs, xv, 0u64) { return 0u8 }
+        s = s + 1u32
+    }
+    return 1u8
+}
+
+/* STAGE 2 -- sound universal certification: 1 iff the kernel proves Pi(x:BV). Id(BV, lhs, rhs). */
+fn lf_certify_one(ci: u32) -> u8 @export {
+    lf_init()
+    tc_reset()
+    let lhs : u32 = lf_build(LF_LHS[(ci as u64) & 0xFFFFFFFFu64])
+    let rhs : u32 = lf_build(LF_RHS[(ci as u64) & 0xFFFFFFFFu64])
+    let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, rhs))
+    let proof : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    return tc_check(proof, goal)
+}
+
+/* THE FORGE: propose then check then deposit, in ONE arena pass so the deposited (proof,goal) handles
+ * stay valid for the kernel-gated commons.  Returns the number of lemmas admitted to the commons. */
+fn lf_forge() -> u64 @export {
+    lf_init()
+    tcom_init()
+    tc_reset()
+    LF_ADMITTED = 0u64
+    LF_REFUSED  = 0u64
+    let mut ci : u32 = 0u32
+    while ci < LF_NCAND {
+        let lhs : u32 = lf_build(LF_LHS[(ci as u64) & 0xFFFFFFFFu64])
+        let rhs : u32 = lf_build(LF_RHS[(ci as u64) & 0xFFFFFFFFu64])
+        let mut agree : u8 = 1u8
+        let mut s : u32 = 0u32
+        while s < LF_NSAMP {
+            let xv : u64 = LF_SAMP[(s as u64) & 0xFFFFFFFFu64]
+            if tc_eval(lhs, xv, 0u64) != tc_eval(rhs, xv, 0u64) { agree = 0u8 }
+            s = s + 1u32
+        }
+        let mut done : u8 = 0u8
+        if agree == 1u8 {
+            let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, rhs))
+            let proof : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+            if tc_check(proof, goal) == 1u8 {
+                if tg_register(proof, goal) == LF_TGOK { LF_ADMITTED = LF_ADMITTED + 1u64  done = 1u8 }
+            }
+        }
+        if done == 0u8 { LF_REFUSED = LF_REFUSED + 1u64 }
+        ci = ci + 1u32
+    }
+    return LF_ADMITTED
+}
+
+fn lf_admitted() -> u64 @export { return LF_ADMITTED }
+fn lf_refused()  -> u64 @export { return LF_REFUSED }

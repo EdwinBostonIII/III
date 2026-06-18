@@ -1,0 +1,55 @@
+/* STDLIB/corpus/1701_lemma_forge.iii
+ *
+ * Falsifier KAT for nous::lemma_forge (III-PHASE3-WALLS, Campaign I, organ 2) -- THE LEMMA FORGE.
+ * 99 = every arm holds; 1..16 = the failing arm.  Independent oracle: numera/typecheck's frozen BV
+ * decision procedure (tc_check) + the commons floor (theorem_grow tg_count) -- a stub cannot deposit
+ * a lemma the kernel did not prove.
+ *
+ *   (1) KERNEL CERTIFIER (biting both ways): the 6 true critical-pair completions are kernel-admittable
+ *       (x+0==x, x*1==x, x*0==0, (x*1)+(x*0)==x, x<<1==x*2, x<<5==x*32), and the 2 false canaries are
+ *       REFUSED (x<<5==x*64 off-by-one; x==x+1).  A forge that admitted a false lemma fails here.
+ *   (2) BEHAVIORAL PROPOSER (distinct from the kernel): the sampled eval-vector AGREES on a true lemma
+ *       and DISAGREES on the false ones -- the cheap pre-filter separates candidates before the kernel.
+ *   (3) FORGE deposits exactly the 6 certified completions and refuses the 2.
+ *   (4) the commons GREW by exactly 6 (monotone, kernel-gated deposit: a false lemma cannot be deposited).
+ */
+module corpus_1701_lemma_forge
+
+extern @abi(c-msvc-x64) fn lf_init() -> i32 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn lf_ncand() -> u32 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn lf_propose(ci: u32) -> u8 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn lf_certify_one(ci: u32) -> u8 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn lf_forge() -> u64 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn lf_admitted() -> u64 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn lf_refused() -> u64 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn tg_count() -> u64 from "theorem_grow.iii"
+
+fn main() -> u64 {
+    lf_init()
+    if lf_ncand() != 8u32 { return 1u64 }
+
+    /* (1) the kernel certifier admits the 6 true completions, REFUSES the 2 false canaries */
+    if lf_certify_one(0u32) != 1u8 { return 2u64 }
+    if lf_certify_one(1u32) != 1u8 { return 3u64 }
+    if lf_certify_one(2u32) != 1u8 { return 4u64 }
+    if lf_certify_one(3u32) != 1u8 { return 5u64 }
+    if lf_certify_one(4u32) != 1u8 { return 6u64 }
+    if lf_certify_one(5u32) != 1u8 { return 7u64 }
+    if lf_certify_one(6u32) != 0u8 { return 8u64 }     /* x<<5 == x*64 : REFUSED */
+    if lf_certify_one(7u32) != 0u8 { return 9u64 }     /* x == x+1     : REFUSED */
+
+    /* (2) the behavioral pre-filter agrees on a true lemma, disagrees on the false ones */
+    if lf_propose(4u32) != 1u8 { return 10u64 }        /* x<<1 vs x*2  : behaviorally equal   */
+    if lf_propose(6u32) != 0u8 { return 11u64 }        /* x<<5 vs x*64 : behaviorally distinct */
+    if lf_propose(7u32) != 0u8 { return 12u64 }        /* x vs x+1     : behaviorally distinct */
+
+    /* (3) forge deposits exactly the 6 certified completions, refuses the 2 */
+    if lf_forge() != 6u64 { return 13u64 }
+    if lf_admitted() != 6u64 { return 14u64 }
+    if lf_refused() != 2u64 { return 15u64 }
+
+    /* (4) the commons grew by exactly 6 (fresh process -> tg_count == 6) */
+    if tg_count() != 6u64 { return 16u64 }
+
+    return 99u64
+}

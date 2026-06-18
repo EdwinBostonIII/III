@@ -29,6 +29,7 @@ extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
@@ -113,4 +114,43 @@ fn pw_kept_bits_matter() -> u8 @export {
     let tx     : u32 = bb_and(x, mask)
     let tflip  : u32 = bb_and(bb_xor(x, lowbit), mask)
     return bb_equal(tx, tflip)                          /* == 0: flipping a kept bit changes output (not vacuous) */
+}
+
+/* THE REVERSIBLE-COMPUTATION ISOMORPHISM (the provable answer to "is III's logic isomorphic to reversible
+ * physics": YES for the discrete-reversible class -- it CONTAINS the universal reversible gate, proven).  The
+ * Toffoli / CCNOT gate (a,b,c) -> (a, b, c ^ (a&b)) is the universal reversible primitive.  It is SELF-INVERSE
+ * -- applying it twice returns the input exactly -- so nothing is erased (Landauer: ~zero-heat computation),
+ * and III's algebra reverses it perfectly.  This is the honest reach of the weave: a perfect model of discrete
+ * reversible computation; the continuous remains a typed approximation (the calculus wall), not claimed here. */
+fn pw_toffoli_self_inverse() -> u8 @export {
+    bb_reset(PW_W)
+    let a  : u32 = bb_var(0u32)
+    let b  : u32 = bb_var(1u32)
+    let c  : u32 = bb_var(2u32)
+    let ab : u32 = bb_and(a, b)
+    let c1 : u32 = bb_xor(c, ab)                        /* forward:  c' = c ^ (a&b) */
+    let c2 : u32 = bb_xor(c1, ab)                       /* again:    c'' = c' ^ (a&b) = c */
+    return bb_equal(c2, c)                              /* == 1: self-inverse -> reversible */
+}
+
+/* UNIVERSALITY: with c=1 the Toffoli third output is 1 ^ (a&b) = NOT(a&b) = NAND -- and NAND is functionally
+ * complete, so reversible computation can express ANY Boolean function.  Proven equal to NAND by the judge. */
+fn pw_toffoli_is_nand() -> u8 @export {
+    bb_reset(PW_W)
+    let a    : u32 = bb_var(0u32)
+    let b    : u32 = bb_var(1u32)
+    let ones : u32 = bb_const(0xFFFFFFFFu64)            /* c = 1 (every bit set, width 32) */
+    let out  : u32 = bb_xor(ones, bb_and(a, b))        /* Toffoli(a,b,1) third output */
+    return bb_equal(out, bb_not(bb_and(a, b)))         /* == 1: it IS NAND -> universal */
+}
+
+/* BITING companion: the Toffoli is NOT the identity -- one application DOES flip c (when a&b=1), so it does
+ * real work.  The judge returns 0 on c' == c; the KAT asserts 0, proving self-inverse is non-vacuous. */
+fn pw_toffoli_nontrivial() -> u8 @export {
+    bb_reset(PW_W)
+    let a  : u32 = bb_var(0u32)
+    let b  : u32 = bb_var(1u32)
+    let c  : u32 = bb_var(2u32)
+    let c1 : u32 = bb_xor(c, bb_and(a, b))             /* one forward application */
+    return bb_equal(c1, c)                              /* == 0: c' != c in general -> not the identity */
 }

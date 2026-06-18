@@ -1399,6 +1399,8 @@ declare -A EXPECTED=(
     [1756_weave]=99
     # the anatomy of one-wayness: round reversible (bijection) + compression provably non-injective (entropy sink).
     [1757_oneway_anatomy]=99
+    # the reversible-computation isomorphism: Toffoli self-inverse (III contains reversible compute) + == NAND (universal).
+    [1758_reversible_iso]=99
 )
 
 PASS=0

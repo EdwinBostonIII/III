@@ -38,6 +38,7 @@ extern @abi(c-msvc-x64) fn sentinel_observe(a: u64) -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn sentinel_seal_baseline() -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn sentinel_guard(vbd_slot: u32) -> i32 from "sentinel.iii"
 extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay() -> i32 from "replay_box.iii"
 extern @abi(c-msvc-x64) fn rb_replay_check(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 from "replay_box.iii"
 extern @abi(c-msvc-x64) fn snb_checkpoint(op_id: *u8, ante: u32) -> u32 from "snapshot_box.iii"
 extern @abi(c-msvc-x64) fn snb_restore(session: u32, slot: u32) -> i32 from "snapshot_box.iii"
@@ -45,6 +46,7 @@ extern @abi(c-msvc-x64) fn ff_box_safe() -> u32 from "flow_firewall.iii"
 extern @abi(c-msvc-x64) fn enc_write_allowed(offset: u32) -> u32 from "enclave.iii"
 extern @abi(c-msvc-x64) fn sr_route(exit_kind: u32) -> u32 from "sid_router.iii"
 extern @abi(c-msvc-x64) fn df_admit(tier: u32) -> i32 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn df_ingress(tier: u32, source_id: u32, live: *u8, len: u32, out: *u8) -> i32 from "determinism_firewall.iii"
 extern @abi(c-msvc-x64) fn ab_attest(guest_cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 from "attest_box.iii"
 
 const DU_OK        : i32 = 0i32
@@ -156,6 +158,14 @@ fn du_replay(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 @export {
     return rb_replay_check(source_id, live, len, out)
 }
 
+/* Switch the box's replay log from RECORD (set in du_encapsulate) to REPLAY, so subsequent du_replay calls
+ * check the live value against the recorded run.  Gated on an open box -- completes the gateway's
+ * record -> replay cycle without reaching around to replay_box. */
+fn du_replay_begin() -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    return rb_replay()
+}
+
 /* ATTEST the box's current state (slice 11): content-address the live disk and sign it with the node's
  * Ed25519 identity, so a remote party verifies the box's state OFFLINE without trusting the host.  Gated on
  * the caller's ATTEST right inside attest_box -- a box guest holding only DISK/COMPUTE cannot self-attest;
@@ -170,7 +180,17 @@ fn du_attest(guest_cap: u64, out_root_32: *u8, out_sig_64: *u8) -> i32 @export {
 fn du_egress_safe() -> u32 @export { return ff_box_safe() }                       /* information-flow */
 fn du_mem_allowed(offset: u32) -> u32 @export { return enc_write_allowed(offset) } /* memory forcefield */
 fn du_reverse_route(exit_kind: u32) -> u32 @export { return sr_route(exit_kind) }  /* SID reversal routing */
-fn du_ingress_admit(tier: u32) -> i32 @export { return df_admit(tier) }            /* determinism membrane */
+fn du_ingress_admit(tier: u32) -> i32 @export { return df_admit(tier) }            /* determinism membrane (verdict only) */
+
+/* THE FULL INGRESS MEMBRANE (slice 10, the record half).  A value of `tier` crosses the box boundary: a
+ * CANONICAL value is admitted to the deterministic core and passed to out; a PROVISIONAL value is RECORDED
+ * through the replay box (so it replays bit-identically) and DENIED from the core; an unknown tier is
+ * denied.  Unlike du_ingress_admit (verdict only), this completes the record -> du_replay wiring: what
+ * du_ingress records, du_replay later checks.  Gated on an open box -- never an ungated bypass. */
+fn du_ingress(tier: u32, source_id: u32, live: *u8, len: u32, out: *u8) -> i32 @export {
+    if DU_OPEN == 0u32 { return DU_E }
+    return df_ingress(tier, source_id, live, len, out)
+}
 
 /* Aggregate HEALTH: 1 iff the box is open AND has quota headroom remaining. */
 fn du_health() -> u32 @export {

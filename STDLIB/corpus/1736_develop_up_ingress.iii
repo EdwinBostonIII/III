@@ -1,0 +1,67 @@
+/* STDLIB/corpus/1736_develop_up_ingress.iii -- develop_up: the FULL determinism ingress membrane (W3400).
+ *
+ * The gateway exposed only du_ingress_admit (df_admit verdict).  The record half of the firewall --
+ * df_ingress, which RECORDS a provisional value through the replay box before denying it -- was
+ * structurally unreachable from the gateway, so the record -> du_replay wiring was broken.  Now du_ingress
+ * (gated on an open box) drives df_ingress, and du_replay_begin switches the log to replay.  This KAT
+ * proves the wiring is LIVE end-to-end: what du_ingress records, du_replay later checks divergence against.
+ * 99 = all arms; 1..12 = the failing arm.
+ */
+module corpus_1736_develop_up_ingress
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn du_encapsulate(guest_cap: u64, mem_cap: u64, cpu_cap: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_ingress(tier: u32, source_id: u32, live: u64, len: u32, out: u64) -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_replay_begin() -> i32 from "develop_up.iii"
+extern @abi(c-msvc-x64) fn du_replay(source_id: u32, live: u64, len: u32, out: u64) -> u32 from "develop_up.iii"
+
+const DF_ADMIT : i32 = 0i32
+const DF_DENY  : i32 = 1i32
+const DU_E     : i32 = -2i32
+const TIER_CANONICAL   : u32 = 0u32
+const TIER_PROVISIONAL : u32 = 1u32
+const RB_FAITHFUL : u32 = 0u32
+const RB_DIVERGED : u32 = 1u32
+const SID : u32 = 5u32
+
+var XV   : [u64; 1]
+var YV   : [u64; 1]
+var OUTA : [u64; 1]
+var OUTB : [u64; 1]
+
+fn main() -> u64 {
+    XV[0u64] = 0xA1B2C3D4E5F60718u64
+    YV[0u64] = 0x1807F6E5D4C3B2A1u64
+
+    /* (gate) du_ingress + du_replay_begin fail closed before any box is open */
+    if du_ingress(TIER_PROVISIONAL, SID, (&XV as u64), 8u32, (&OUTA as u64)) != DU_E { return 1u64 }
+    if du_replay_begin() != DU_E { return 2u64 }
+
+    let root : u64 = cap_env_init()
+    let guest : u64 = cap_attenuate(root, 0x5u64, 0u64)   /* disk|compute */
+    if guest == 0u64 { return 3u64 }
+    if du_encapsulate(guest, 1000000u64, 100000u64) != 0i32 { return 4u64 }
+
+    /* du_ingress: a PROVISIONAL value is DENIED from the core but RECORDED (passed through to out) */
+    OUTA[0u64] = 0u64
+    if du_ingress(TIER_PROVISIONAL, SID, (&XV as u64), 8u32, (&OUTA as u64)) != DF_DENY { return 5u64 }
+    if OUTA[0u64] != XV[0u64] { return 6u64 }
+    /* a CANONICAL value is ADMITTED + passed through (NOT recorded) */
+    OUTA[0u64] = 0u64
+    if du_ingress(TIER_CANONICAL, SID, (&YV as u64), 8u32, (&OUTA as u64)) != DF_ADMIT { return 7u64 }
+    if OUTA[0u64] != YV[0u64] { return 8u64 }
+
+    /* END-TO-END: switch to replay -> du_replay of the SAME X is FAITHFUL (du_ingress's record is live) */
+    if du_replay_begin() != 0i32 { return 9u64 }
+    OUTB[0u64] = 0u64
+    if du_replay(SID, (&XV as u64), 8u32, (&OUTB as u64)) != RB_FAITHFUL { return 10u64 }
+
+    /* BITING: reset, du_replay of a DIFFERENT value Y is DIVERGED (recorded X != live Y) -- the divergence
+     * the determinism firewall exists to catch, now reachable through the gateway */
+    if du_replay_begin() != 0i32 { return 11u64 }
+    OUTB[0u64] = 0u64
+    if du_replay(SID, (&YV as u64), 8u32, (&OUTB as u64)) != RB_DIVERGED { return 12u64 }
+
+    return 99u64
+}

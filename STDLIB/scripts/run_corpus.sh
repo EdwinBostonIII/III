@@ -1355,6 +1355,8 @@ declare -A EXPECTED=(
     [1734_ec384_on_curve]=99
     # observe replay now binds the source_id (producer) too, not just the payload hash (sequence integrity).
     [1735_observe_replay_source_id]=99
+    # the full determinism ingress membrane reachable at the gateway: du_ingress records -> du_replay checks.
+    [1736_develop_up_ingress]=99
 )
 
 PASS=0

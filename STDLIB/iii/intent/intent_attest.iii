@@ -1,0 +1,42 @@
+/* STDLIB/iii/intent/intent_attest.iii -- INTENT-TO-EXECUTION, Phase 5: the Interactive Audit.
+ *
+ * The architecture can deduce, prove, and bound an intent -- but it must NOT emit machine code until the
+ * human has cryptographically authorized the EXACT synthesized authority.  This is the escape from the
+ * "perfect prison": the machine handles the mathematics; the human retains absolute sovereignty.
+ *
+ * ia_manifest_hash content-addresses (cad) the resolved interpretation together with its bounded rights and
+ * temporal expiry -- the Capability Manifest, the theorem the developer audits.  ia_authorize emits the
+ * binary ONLY IF the human's Ed25519 signature over THAT EXACT manifest hash verifies.  Because any change
+ * to the resolved intent or its bounds changes the hash, the signature binds exactly this authority: a
+ * tampered manifest (a different action, or a weaker/removed expiry) fails verification and emission is
+ * refused.  If the human signs blindly, the fault is legally theirs, not the compiler's.
+ *
+ * Hexad: kind_seal.  Ring: R0.  K: 1.00.  Composes verba/crypt_ed25519 + numera/cad -- no new crypto.
+ */
+module intent_intent_attest
+
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+var IA_MANIFEST : [u8; 24]      /* resolved_mask(8 LE) || rights(8 LE) || expires_at(8 LE) */
+
+fn ia_put_u64(off: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { IA_MANIFEST[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0i32
+}
+
+/* the Capability Manifest hash: cad over (resolved interpretation, bounded rights, temporal expiry). */
+fn ia_manifest_hash(resolved_mask: u64, rights: u64, expires_at: u64, out_32: u64) -> i32 @export {
+    ia_put_u64(0u64, resolved_mask)
+    ia_put_u64(8u64, rights)
+    ia_put_u64(16u64, expires_at)
+    cad_oneshot(0u32, (&IA_MANIFEST as u64) as *u8, 24u64, out_32 as *u8)
+    return 0i32
+}
+
+/* AUTHORIZE emission: 1 iff the human's Ed25519 signature over THIS exact manifest hash verifies.  Only
+ * then may the compiler emit the binary.  A tampered manifest fails -> emission refused. */
+fn ia_authorize(pk: u64, manifest_hash: u64, sig: u64) -> u8 @export {
+    return ed25519_verify(pk as *u8, manifest_hash as *u8, 32u64, sig as *u8)
+}

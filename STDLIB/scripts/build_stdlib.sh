@@ -555,6 +555,10 @@ MODULES=(
     "intent/lex_ontology"
     "intent/intent_lex"
     "intent/disambiguate"
+    # intent Phases 4-5: a resolved intent -> a temporally-bounded capability (Perfectly-Executed-Mistake
+    # safeguard) emitted only under the human's Ed25519 signature over the Capability Manifest.
+    "intent/synthesis_bridge"
+    "intent/intent_attest"
     "verba/intent"
     "verba/ast_intent"
     "verba/intent_form"

@@ -1,0 +1,64 @@
+/* STDLIB/corpus/1746_intent_synthesis_attest.iii -- INTENT-TO-EXECUTION Phases 4-5 conformance.
+ *
+ * A resolved intent is lowered to a TEMPORALLY-BOUNDED capability (the Perfectly-Executed-Mistake
+ * safeguard) and emitted ONLY under the human's Ed25519 signature over the exact Capability Manifest.
+ * 99 = all arms; 1..9 = the arm.
+ */
+module corpus_1746_intent_synthesis_attest
+
+extern @abi(c-msvc-x64) fn dis_resolve(text: u64, len: u64) -> u32 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn dis_resolved_mask() -> u64 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn sb_rights_of(resolved_mask: u64) -> u64 from "synthesis_bridge.iii"
+extern @abi(c-msvc-x64) fn sb_requires_time_oracle(resolved_mask: u64) -> u8 from "synthesis_bridge.iii"
+extern @abi(c-msvc-x64) fn sb_synthesize(parent_cap: u64, resolved_mask: u64, expires_at: u64) -> u64 from "synthesis_bridge.iii"
+extern @abi(c-msvc-x64) fn sb_is_bounded(cap_id: u64) -> u8 from "synthesis_bridge.iii"
+extern @abi(c-msvc-x64) fn ia_manifest_hash(resolved_mask: u64, rights: u64, expires_at: u64, out_32: u64) -> i32 from "intent_attest.iii"
+extern @abi(c-msvc-x64) fn ia_authorize(pk: u64, manifest_hash: u64, sig: u64) -> u8 from "intent_attest.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+
+const DOM_VBD_FREEZE : u64 = 1u64
+const DOM_TTL_BOUND  : u64 = 32u64
+const SB_RIGHT_DISK  : u64 = 0x1u64
+const DIS_RESOLVED   : u32 = 0u32
+
+var SEED     : [u8; 32]
+var PK       : [u8; 32]
+var SIG      : [u8; 64]
+var MANIFEST : [u8; 32]
+
+fn main() -> u64 {
+    /* (1) resolve "lock database" -> freeze */
+    if dis_resolve(("lock database" as u64), 13u64) != DIS_RESOLVED { return 1u64 }
+    let m : u64 = dis_resolved_mask()
+    if m != DOM_VBD_FREEZE { return 2u64 }
+
+    /* (2) the resolved action maps to the DISK right; not time-oracle dependent (a TTL intent would be) */
+    if sb_rights_of(m) != SB_RIGHT_DISK { return 3u64 }
+    if sb_requires_time_oracle(m) != 0u8 { return 4u64 }
+    if sb_requires_time_oracle(m | DOM_TTL_BOUND) != 1u8 { return 5u64 }
+
+    /* (3) PERFECTLY-EXECUTED-MISTAKE SAFEGUARD: the synthesized capability is temporally bounded */
+    let env : u64 = cap_env_init()
+    let expires : u64 = 1000000u64
+    let cap : u64 = sb_synthesize(env, m, expires)
+    if cap == 0u64 { return 6u64 }
+    if sb_is_bounded(cap) != 1u8 { return 7u64 }
+
+    /* (4) the human audits + signs the Capability Manifest hash -> emission authorized */
+    let rights : u64 = sb_rights_of(m)
+    ia_manifest_hash(m, rights, expires, (&MANIFEST as u64))
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = ((0x55u64 + i) & 0xFFu64) as u8  i = i + 1u64 }
+    ed25519_pubkey((&SEED as u64) as *u8, (&PK as u64) as *u8)
+    ed25519_sign((&SEED as u64) as *u8, (&PK as u64) as *u8, (&MANIFEST as u64) as *u8, 32u64, (&SIG as u64) as *u8)
+    if ia_authorize((&PK as u64), (&MANIFEST as u64), (&SIG as u64)) != 1u8 { return 8u64 }
+
+    /* (5) BITING: tamper the manifest to a WEAKER bound (expiry 0 = permanent lockout); the hash changes,
+     *     so the human's signature over the ORIGINAL manifest does NOT authorize it -> emission refused */
+    ia_manifest_hash(m, rights, 0u64, (&MANIFEST as u64))
+    if ia_authorize((&PK as u64), (&MANIFEST as u64), (&SIG as u64)) != 0u8 { return 9u64 }
+
+    return 99u64
+}

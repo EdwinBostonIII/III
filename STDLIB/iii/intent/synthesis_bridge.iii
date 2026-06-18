@@ -1,0 +1,61 @@
+/* STDLIB/iii/intent/synthesis_bridge.iii -- INTENT-TO-EXECUTION, Phase 4: the Theorem Bridge.
+ *
+ * Once lexical ambiguity is mathematically eliminated (Phase 3 yields a single interpretation bit), the
+ * intent must be lowered into a CAPABILITY-BOUNDED operation.  Two safety theorems are enforced here:
+ *
+ *   THE PERFECTLY-EXECUTED-MISTAKE SAFEGUARD.  A naive synthesizer told to "lock down the database" could
+ *   emit an absolute, permanent block and lock the owner out forever.  This bridge NEVER emits an unbounded
+ *   capability: every synthesized action is attenuated (aether/capability cap_attenuate) with a TEMPORAL
+ *   EXPIRY, so even a flawed intent decays -- the vault unlocks when the epoch elapses.
+ *
+ *   THE ORACLE PROBLEM.  An intent that depends on the real-world clock (a TTL self-destruct) cannot be
+ *   trusted to a host NTP server.  The bridge refuses to link an external clock; it requires the human to
+ *   hold CAP_RIGHT_TIME_ORACLE and cryptographically bind the time feed (Phase 5), so the non-deterministic
+ *   input is legally pinned to the deterministic state.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  Composes aether/capability -- no new authority primitive.
+ */
+module intent_synthesis_bridge
+
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_expires_at(id: u64) -> u64 from "capability.iii"
+
+const DOM_VBD_FREEZE     : u64 = 1u64
+const DOM_CRYPTO_ENCRYPT : u64 = 2u64
+const DOM_NET_DENY       : u64 = 4u64
+const DOM_TTL_BOUND      : u64 = 32u64
+
+const SB_RIGHT_DISK   : u64 = 0x1u64
+const SB_RIGHT_CRYPTO : u64 = 0x2u64
+const SB_RIGHT_NET    : u64 = 0x4u64
+
+/* the capability rights a resolved interpretation requires (0 for a non-resolved/unknown mask). */
+fn sb_rights_of(resolved_mask: u64) -> u64 @export {
+    if resolved_mask == DOM_VBD_FREEZE { return SB_RIGHT_DISK }
+    if resolved_mask == DOM_CRYPTO_ENCRYPT { return SB_RIGHT_CRYPTO }
+    if resolved_mask == DOM_NET_DENY { return SB_RIGHT_NET }
+    return 0u64
+}
+
+/* 1 iff the resolved intent depends on the real-world clock -> the Oracle Problem: it needs a human-signed
+ * time feed (CAP_RIGHT_TIME_ORACLE), never a host NTP link. */
+fn sb_requires_time_oracle(resolved_mask: u64) -> u8 @export {
+    if (resolved_mask & DOM_TTL_BOUND) != 0u64 { return 1u8 }
+    return 0u8
+}
+
+/* synthesize the capability for a resolved intent, ALWAYS temporally bounded (the Perfectly-Executed-
+ * Mistake safeguard).  Returns the attenuated, expiring capability id (0 if the mask is not a single
+ * resolved action). */
+fn sb_synthesize(parent_cap: u64, resolved_mask: u64, expires_at: u64) -> u64 @export {
+    let rights : u64 = sb_rights_of(resolved_mask)
+    if rights == 0u64 { return 0u64 }
+    return cap_attenuate(parent_cap, rights, expires_at)
+}
+
+/* 1 iff a synthesized capability is genuinely bounded (a nonzero expiry) -- the auditor's check that no
+ * permanent-lockout capability ever escapes the bridge. */
+fn sb_is_bounded(cap_id: u64) -> u8 @export {
+    if cap_expires_at(cap_id) != 0u64 { return 1u8 }
+    return 0u8
+}

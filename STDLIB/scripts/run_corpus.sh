@@ -1375,6 +1375,8 @@ declare -A EXPECTED=(
     [1744_pq_quorum]=99
     # intent-to-execution lexical disambiguation: bitwise-intersection oracle resolves or REJECTS human intent.
     [1745_intent_disambiguate]=99
+    # intent-to-execution synthesis+attest: resolved intent -> bounded capability -> Ed25519 sign-to-emit.
+    [1746_intent_synthesis_attest]=99
 )
 
 PASS=0

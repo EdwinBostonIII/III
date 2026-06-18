@@ -1,0 +1,48 @@
+/* STDLIB/iii/numera/markov_exact.iii -- EXACT-RATIONAL MARKOV CHAINS
+ * (III-PHASE4-PROBABILITY, Layer 4).
+ *
+ * A row-stochastic chain whose transition weights are exact integers over a common denominator D (so each
+ * row sums to D).  For a two-state chain the stationary distribution is the exact rational
+ *   pi = [ w(1->0), w(0->1) ] / ( w(0->1) + w(1->0) ),
+ * and STATIONARITY is checked EXACTLY, with no float and no fixed-point iteration error: for each state i,
+ *   sum_j pi_j * w(j->i)  ==  pi_i * D.
+ * An arbitrary (e.g. uniform) distribution is correctly REJECTED for a non-symmetric chain, so the check
+ * has teeth.  This is the exact-stationary core; larger chains generalise via Gaussian elimination over the
+ * rational field (numera/field) -- the same exact arithmetic repeated.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Exact-rational (the discipline of numera/field +
+ * matrix_ring).  Determinism: integer-only; no float; no iteration.
+ */
+module numera_markov_exact
+
+var MK_W : [u64; 4]   /* [w00, w01, w10, w11]; row 0 = [w00,w01], row 1 = [w10,w11] */
+
+/* set the transition weights (each row should sum to the same D for a stochastic chain). */
+fn mk_set(w00: u64, w01: u64, w10: u64, w11: u64) -> i32 @export {
+    MK_W[0u64] = w00  MK_W[1u64] = w01  MK_W[2u64] = w10  MK_W[3u64] = w11
+    return 0i32
+}
+
+/* the common denominator D = row-0 sum (== row-1 sum for a stochastic chain). */
+fn mk_den() -> u64 @export { return MK_W[0u64] + MK_W[1u64] }
+
+/* 1 iff the chain is stochastic (both rows sum to the same D). */
+fn mk_stochastic() -> u8 @export {
+    if (MK_W[0u64] + MK_W[1u64]) == (MK_W[2u64] + MK_W[3u64]) { return 1u8 }
+    return 0u8
+}
+
+/* the exact stationary numerator for state i: pi_0_num = w10, pi_1_num = w01 (over pi_den = w01+w10). */
+fn mk_stat_num(i: u32) -> u64 @export {
+    if i == 0u32 { return MK_W[2u64] }
+    return MK_W[1u64]
+}
+fn mk_stat_den() -> u64 @export { return MK_W[1u64] + MK_W[2u64] }
+
+/* STATIONARITY (exact): 1 iff (p0,p1) satisfies sum_j p_j * w(j->i) == p_i * D for both states. */
+fn mk_check_stationary(p0: u64, p1: u64) -> u8 @export {
+    let d : u64 = mk_den()
+    if (p0 * MK_W[0u64] + p1 * MK_W[2u64]) != p0 * d { return 0u8 }   /* state 0: w(0->0), w(1->0) */
+    if (p0 * MK_W[1u64] + p1 * MK_W[3u64]) != p1 * d { return 0u8 }   /* state 1: w(0->1), w(1->1) */
+    return 1u8
+}

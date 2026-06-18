@@ -1225,6 +1225,21 @@ MODULES=(
     # CAP_RIGHT_SAMPLE (bit 22); the seed is a public cad commitment.  Composes drbg + cad + capability;
     # compiler-unreferenced -> LIBNATIVE; last.
     "numera/sample_beacon"
+    # --- PHASE IV Layer 3: the SEALED MEASURE.  numera/distribution is an exact pmf admitted as a
+    # distribution ONLY IF the kernel folds sum(masses)==denominator (the normalization theorem, deposited
+    # to the commons) -- an unnormalized table is refused; with exact expectation, an inverse-CDF, and a
+    # beacon-driven (replayable) sampler.  Composes typecheck + theorem_commons + sample_beacon; LIBNATIVE.
+    "numera/distribution"
+    # --- PHASE IV Layer 4: exact inference engines.  numera/infer_exact -- exact discrete marginals /
+    # evidence / conditionals by variable elimination (the tractable, always-CANONICAL core).
+    "numera/infer_exact"
+    # numera/markov_exact -- exact-rational row-stochastic chains; the stationary distribution is exact and
+    # STATIONARITY (pi P == pi) is checked with integers (a uniform pi is rejected for a non-symmetric chain).
+    "numera/markov_exact"
+    # numera/mc_certified -- the keystone of intractability: a seeded-deterministic Monte Carlo estimate
+    # paired with a PROVED concentration interval that CONTAINS the exact infer_exact value, tagged
+    # PROVISIONAL (default-denied from canonical).  Composes sample_beacon + infer_exact + nous_synth.
+    "numera/mc_certified"
 )
 
 PASS=0

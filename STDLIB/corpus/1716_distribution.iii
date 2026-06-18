@@ -1,0 +1,58 @@
+/* STDLIB/corpus/1716_distribution.iii
+ *
+ * Falsifier KAT for numera::distribution (III-PHASE4-PROBABILITY, Layer 3) -- the sealed measure.
+ * 99 = every arm holds; 1..10 = the failing arm.  Independent oracle: the kernel (a non-normalized pmf
+ * cannot pass tc_check) and exact integer arithmetic.
+ *
+ *   (1) a NORMALIZED pmf (4,2,1,1)/8 carries its normalization theorem; the commons grows.
+ *   (2) BITING: an UNNORMALIZED pmf (sum 7 != den 8) is REFUSED -- not a distribution.
+ *   (3) exact expectation numerator E*den = 0*4+1*2+2*1+3*1 = 7.
+ *   (4) inverse-CDF over cumulative [4,6,7,8).
+ *   (5) beacon sampling is deterministic (same seed -> same outcome).
+ */
+module corpus_1716_distribution
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn dist_init() -> i32 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_set(m0: u64, m1: u64, m2: u64, m3: u64) -> i32 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_set_den(den: u64) -> i32 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_norm_theorem() -> u8 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_theorem_count() -> u64 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_expect_num() -> u64 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_icdf(r: u64) -> u32 from "distribution.iii"
+extern @abi(c-msvc-x64) fn dist_sample(cap: u64, seed: u64) -> u32 from "distribution.iii"
+
+fn main() -> u64 {
+    dist_init()
+
+    /* (1) normalized pmf -> theorem holds + deposited */
+    dist_set(4u64, 2u64, 1u64, 1u64)
+    dist_set_den(8u64)
+    let before : u64 = dist_theorem_count()
+    if dist_norm_theorem() != 1u8 { return 1u64 }
+    if dist_theorem_count() <= before { return 2u64 }
+
+    /* (2) BITING: unnormalized pmf (sum 7) refused */
+    dist_set(4u64, 2u64, 1u64, 0u64)
+    dist_set_den(8u64)
+    if dist_norm_theorem() != 0u8 { return 3u64 }
+
+    /* (3) exact expectation numerator = 7 */
+    dist_set(4u64, 2u64, 1u64, 1u64)
+    dist_set_den(8u64)
+    if dist_expect_num() != 7u64 { return 4u64 }
+
+    /* (4) inverse-CDF over cumulative [4,6,7,8) */
+    if dist_icdf(0u64) != 0u32 { return 5u64 }
+    if dist_icdf(4u64) != 1u32 { return 6u64 }
+    if dist_icdf(6u64) != 2u32 { return 7u64 }
+    if dist_icdf(7u64) != 3u32 { return 8u64 }
+
+    /* (5) beacon sampling deterministic under seed */
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x400000u64, 0u64)
+    if dist_sample(cap, 0x99u64) != dist_sample(cap, 0x99u64) { return 9u64 }
+
+    return 99u64
+}

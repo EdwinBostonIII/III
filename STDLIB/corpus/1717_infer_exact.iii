@@ -1,0 +1,37 @@
+/* STDLIB/corpus/1717_infer_exact.iii
+ *
+ * Falsifier KAT for numera::infer_exact (III-PHASE4-PROBABILITY, Layer 4) -- exact discrete inference.
+ * 99 = every arm holds; 1..9 = the failing arm.  Oracle: exact integer arithmetic + the consistency law.
+ *
+ *   joint P(00)=2,P(01)=1,P(10)=3,P(11)=4, total 10.
+ *   (1) evidence = 10.  (2) marginals X=[3,7], Y=[5,5].  (3) CONSISTENCY (biting): marginals sum to the
+ *   evidence.  (4) conditional numerator P(Y=1|X=1)=cell(1,1)=4 over marginal_x(1)=7.
+ */
+module corpus_1717_infer_exact
+
+extern @abi(c-msvc-x64) fn ie_set_joint(c00: u64, c01: u64, c10: u64, c11: u64) -> i32 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_evidence() -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_marginal_x(x: u32) -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_marginal_y(y: u32) -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_cond_num(x: u32, y: u32) -> u64 from "infer_exact.iii"
+
+fn main() -> u64 {
+    ie_set_joint(2u64, 1u64, 3u64, 4u64)
+
+    if ie_evidence() != 10u64 { return 1u64 }
+
+    if ie_marginal_x(0u32) != 3u64 { return 2u64 }
+    if ie_marginal_x(1u32) != 7u64 { return 3u64 }
+    if ie_marginal_y(0u32) != 5u64 { return 4u64 }
+    if ie_marginal_y(1u32) != 5u64 { return 5u64 }
+
+    /* CONSISTENCY (biting): each variable's marginals sum to the evidence */
+    if (ie_marginal_x(0u32) + ie_marginal_x(1u32)) != ie_evidence() { return 6u64 }
+    if (ie_marginal_y(0u32) + ie_marginal_y(1u32)) != ie_evidence() { return 7u64 }
+
+    /* conditional P(Y=1|X=1) = 4/7 */
+    if ie_cond_num(1u32, 1u32) != 4u64 { return 8u64 }
+    if ie_marginal_x(1u32) != 7u64 { return 9u64 }
+
+    return 99u64
+}

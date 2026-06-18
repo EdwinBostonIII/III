@@ -1,0 +1,91 @@
+/* STDLIB/iii/numera/distribution.iii -- THE SEALED MEASURE (first-class distribution)
+ * (III-PHASE4-PROBABILITY, Layer 3).
+ *
+ * A distribution in III is not a float table -- it is a SEALED MEASURE over a finite typed support whose
+ * defining property, "the masses sum to one", is a KERNEL THEOREM the value literally carries.  An exact
+ * pmf (integer masses over a denominator) is admitted as a distribution ONLY IF the kernel folds
+ * sum(masses) == denominator (a closed bitvector equality) and the theorem is deposited into the grown
+ * commons; an UNNORMALIZED table is REFUSED -- it is not a distribution.  Over it: exact expectation, an
+ * inverse-CDF, and an inverse-CDF SAMPLER driven by the verifiable beacon (so every draw is replayable).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  Composes numera/typecheck (the normalization theorem) +
+ * numera/theorem_commons (the deposit) + numera/sample_beacon (the only randomness) -- no island.
+ * Determinism: integer-only; the sampler's entropy is the beacon seed; no float.
+ */
+module numera_distribution
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn bc_seed(cap: u64, s: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_generate(out: u64, n: u64) -> i32 from "sample_beacon.iii"
+
+const DST_N : u32 = 4u32
+
+var DST_MASS : [u64; 4]
+var DST_DEN  : u64 = 1u64
+var DST_SBUF : [u8; 8]
+
+fn dst_lit(v: u64) -> u32 { return tc_bvlit((v & 0xFFFFFFFFu64) as u32, (v >> 32u64) as u32) }
+
+/* initialise the commons (idempotent in a fresh process). */
+fn dist_init() -> i32 @export { return tcom_init() }
+
+/* define a pmf over 4 outcomes (masses) and its denominator separately, so normalization is a real
+ * checkable property rather than true by construction. */
+fn dist_set(m0: u64, m1: u64, m2: u64, m3: u64) -> i32 @export {
+    DST_MASS[0u64] = m0  DST_MASS[1u64] = m1  DST_MASS[2u64] = m2  DST_MASS[3u64] = m3
+    return 0i32
+}
+fn dist_set_den(den: u64) -> i32 @export { DST_DEN = den  return 0i32 }
+
+/* THE NORMALIZATION THEOREM: sum(masses) == den, as a closed BV equality the kernel folds.  1 = a genuine
+ * distribution (theorem holds AND is deposited in the commons); 0 = REFUSED (not a distribution). */
+fn dist_norm_theorem() -> u8 @export {
+    tc_reset()
+    let sum : u32 = tc_bvadd(tc_bvadd(dst_lit(DST_MASS[0u64]), dst_lit(DST_MASS[1u64])),
+                             tc_bvadd(dst_lit(DST_MASS[2u64]), dst_lit(DST_MASS[3u64])))
+    let d    : u32 = dst_lit(DST_DEN)
+    let goal : u32 = tc_id(tc_bv(), sum, d)
+    let proof : u32 = tc_refl(sum)
+    if tc_check(proof, goal) != 1u8 { return 0u8 }
+    if tcom_admit_goal(proof, goal) != 0i32 { return 0u8 }
+    return 1u8
+}
+
+/* the commons size (the monotone count of admitted measure theorems). */
+fn dist_theorem_count() -> u64 @export { return tcom_size() }
+
+/* exact expectation NUMERATOR: sum(i * mass_i)  (the expectation is this / den). */
+fn dist_expect_num() -> u64 @export {
+    return DST_MASS[1u64] + 2u64 * DST_MASS[2u64] + 3u64 * DST_MASS[3u64]
+}
+
+/* inverse-CDF: the outcome i where the cumulative mass first exceeds r (r in [0, den)). */
+fn dist_icdf(r: u64) -> u32 @export {
+    let mut cum : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < DST_N {
+        cum = cum + DST_MASS[(i as u64) & 0xFFFFFFFFu64]
+        if r < cum { return i }
+        i = i + 1u32
+    }
+    return DST_N - 1u32
+}
+
+/* SAMPLE via the beacon: draw a byte, reduce into [0,den), invert the CDF.  Deterministic under the seed
+ * (the same seed -> the same outcome), so the sampling history replays byte-identically. */
+fn dist_sample(cap: u64, seed: u64) -> u32 @export {
+    bc_seed(cap, seed)
+    bc_generate((&DST_SBUF as u64), 8u64)
+    let r : u64 = DST_SBUF[0u64] as u64
+    let rr : u64 = r - (r / DST_DEN) * DST_DEN
+    return dist_icdf(rr)
+}

@@ -1,0 +1,46 @@
+/* STDLIB/iii/numera/infer_exact.iii -- EXACT DISCRETE INFERENCE
+ * (III-PHASE4-PROBABILITY, Layer 4 -- the tractable core, always CANONICAL).
+ *
+ * Exact inference over a finite factor product by variable elimination: given a joint over two binary
+ * variables (a 4-cell factor of integer masses), it computes EXACT marginals (sum out a variable), the
+ * EXACT evidence (the normalizer), and EXACT conditionals -- all as integer numerators over the evidence,
+ * never a float.  Where exact inference is tractable it is the canonical answer; the marginals provably
+ * sum back to the evidence (the consistency the rest of the layer relies on).
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Pairs with numera/distribution (the marginal is a pmf) and
+ * numera/evidence_calculus (a conditional is the exact rational cell/marginal).  Determinism: integer-only.
+ */
+module numera_infer_exact
+
+const IE_N : u32 = 2u32
+
+var IE_JOINT : [u64; 4]   /* P(X=i,Y=j) masses, row-major [00,01,10,11] */
+var IE_DEN   : u64 = 1u64
+
+/* define the joint factor; the evidence is its total mass. */
+fn ie_set_joint(c00: u64, c01: u64, c10: u64, c11: u64) -> i32 @export {
+    IE_JOINT[0u64] = c00  IE_JOINT[1u64] = c01  IE_JOINT[2u64] = c10  IE_JOINT[3u64] = c11
+    IE_DEN = c00 + c01 + c10 + c11
+    return 0i32
+}
+
+/* exact evidence = the total mass (the normalizer). */
+fn ie_evidence() -> u64 @export { return IE_DEN }
+
+/* exact marginal P(X=x) numerator (sum out Y) -- variable elimination over the row. */
+fn ie_marginal_x(x: u32) -> u64 @export {
+    if x == 0u32 { return IE_JOINT[0u64] + IE_JOINT[1u64] }
+    return IE_JOINT[2u64] + IE_JOINT[3u64]
+}
+
+/* exact marginal P(Y=y) numerator (sum out X) -- variable elimination over the column. */
+fn ie_marginal_y(y: u32) -> u64 @export {
+    if y == 0u32 { return IE_JOINT[0u64] + IE_JOINT[2u64] }
+    return IE_JOINT[1u64] + IE_JOINT[3u64]
+}
+
+/* exact conditional P(Y=y | X=x) NUMERATOR = cell(x,y); the conditional is this / ie_marginal_x(x). */
+fn ie_cond_num(x: u32, y: u32) -> u64 @export {
+    let idx : u64 = ((x as u64) * 2u64) + (y as u64)
+    return IE_JOINT[idx & 0x3u64]
+}

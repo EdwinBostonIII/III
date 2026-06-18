@@ -1,0 +1,37 @@
+/* STDLIB/corpus/1718_markov_exact.iii
+ *
+ * Falsifier KAT for numera::markov_exact (III-PHASE4-PROBABILITY, Layer 4) -- exact-rational Markov chains.
+ * 99 = every arm holds; 1..6 = the failing arm.  Oracle: exact stationarity (pi P == pi) -- a wrong (uniform)
+ * distribution is rejected for this non-symmetric chain.
+ *
+ *   chain P = [[2,2],[1,3]] / 4 (D=4).  stationary pi = [1,2]/3.
+ *   (1) stochastic + denominator.  (2) the exact stationary numerators [1,2]/3.  (3) STATIONARITY (biting):
+ *   the computed pi IS stationary; (4) a uniform pi is NOT (rejected).
+ */
+module corpus_1718_markov_exact
+
+extern @abi(c-msvc-x64) fn mk_set(w00: u64, w01: u64, w10: u64, w11: u64) -> i32 from "markov_exact.iii"
+extern @abi(c-msvc-x64) fn mk_den() -> u64 from "markov_exact.iii"
+extern @abi(c-msvc-x64) fn mk_stochastic() -> u8 from "markov_exact.iii"
+extern @abi(c-msvc-x64) fn mk_stat_num(i: u32) -> u64 from "markov_exact.iii"
+extern @abi(c-msvc-x64) fn mk_stat_den() -> u64 from "markov_exact.iii"
+extern @abi(c-msvc-x64) fn mk_check_stationary(p0: u64, p1: u64) -> u8 from "markov_exact.iii"
+
+fn main() -> u64 {
+    mk_set(2u64, 2u64, 1u64, 3u64)
+
+    /* (1) stochastic, D=4 */
+    if mk_stochastic() != 1u8 { return 1u64 }
+    if mk_den() != 4u64 { return 2u64 }
+
+    /* (2) exact stationary [1,2]/3 */
+    if mk_stat_num(0u32) != 1u64 { return 3u64 }
+    if mk_stat_num(1u32) != 2u64 { return 4u64 }
+    if mk_stat_den() != 3u64 { return 5u64 }
+
+    /* (3) STATIONARITY (biting): the computed pi is stationary; (4) uniform pi is REJECTED */
+    if mk_check_stationary(mk_stat_num(0u32), mk_stat_num(1u32)) != 1u8 { return 6u64 }
+    if mk_check_stationary(1u64, 1u64) != 0u8 { return 7u64 }
+
+    return 99u64
+}

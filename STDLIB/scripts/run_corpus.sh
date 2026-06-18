@@ -1330,6 +1330,10 @@ declare -A EXPECTED=(
     [1713_perceptual_proposer]=99
     [1714_provisional_universe]=99
     [1715_sample_beacon]=99
+    [1716_distribution]=99
+    [1717_infer_exact]=99
+    [1718_markov_exact]=99
+    [1719_mc_certified]=99
 )
 
 PASS=0

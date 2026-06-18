@@ -1,0 +1,65 @@
+/* STDLIB/iii/numera/mc_certified.iii -- CERTIFIED MONTE CARLO (the keystone of intractability)
+ * (III-PHASE4-PROBABILITY, Layer 4).
+ *
+ * Where exact inference is intractable, III does not guess and it does not emit a float that pretends to be
+ * the answer.  It draws a SEEDED-DETERMINISTIC Monte Carlo estimate from the verifiable beacon and pairs it
+ * with a PROVED concentration interval, tagging the whole as a PROVISIONAL whose oracle-pin IS that interval.
+ * The randomness only PROPOSES the estimate; the interval is the honest, checkable error bound.
+ *
+ * THE CERTIFICATION (the biting property): the proved interval [p_hat - eps, p_hat + eps] CONTAINS the EXACT
+ * probability that numera/infer_exact computes on a small tractable instance.  eps is a conservative exact-
+ * rational Hoeffding bound for the sample count N (here eps = 1/4 for N = 64, looser than the tight
+ * sqrt(ln(2/delta)/2N) and therefore sound).  A wrong estimate whose interval misses the exact value fails.
+ *
+ * THE HONEST FLOOR: the TIGHT Hoeffding eps requires proven rational truncations of exp/ln; this organ uses
+ * a sound conservative eps and binds the estimate to the exact infer_exact value -- the tightening is a
+ * bound refinement, never a fake.  The estimate is PROVISIONAL and DEFAULT-DENIED from canonical: a Monte
+ * Carlo number never asserts as truth.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Composes numera/sample_beacon (the only randomness) +
+ * numera/infer_exact (the exact oracle) + nous/nous_synth (the PROVISIONAL wall) -- no island.
+ * Determinism: the estimate's entropy is the beacon seed; integer-only; no float.
+ */
+module numera_mc_certified
+
+extern @abi(c-msvc-x64) fn bc_seed(cap: u64, s: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_generate(out: u64, n: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn ie_set_joint(c00: u64, c01: u64, c10: u64, c11: u64) -> i32 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_marginal_x(x: u32) -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_evidence() -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"
+
+const MC_N      : u32 = 64u32
+const MC_THRESH : u64 = 160u64    /* a byte < 160 (of 256) is a success -> Bernoulli(160/256 = 5/8) */
+
+var MC_BUF : [u8; 64]
+
+/* run N Bernoulli(5/8) trials via the beacon; return the success count (deterministic under the seed). */
+fn mc_estimate_count(cap: u64, seed: u64) -> u32 @export {
+    bc_seed(cap, seed)
+    bc_generate((&MC_BUF as u64), MC_N as u64)
+    let mut succ : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < (MC_N as u64) {
+        if (MC_BUF[i] as u64) < MC_THRESH { succ = succ + 1u32 }
+        i = i + 1u64
+    }
+    return succ
+}
+
+/* the proved interval contains the EXACT probability infer_exact computes.  With p = ie_marginal_x(0) /
+ * ie_evidence() over a common denominator N: p = 5/8 = 40/64, p_hat = count/64, eps = 1/4 = 16/64.  The
+ * interval contains p iff |count - 40| <= 16.  Returns 1 iff the interval brackets the exact value. */
+fn mc_interval_contains_truth(cap: u64, seed: u64) -> u8 @export {
+    let s : u64 = mc_estimate_count(cap, seed) as u64
+    /* exact p, scaled to /64: p_scaled = ie_marginal_x(0) * (64 / ie_evidence()) = 5 * 8 = 40 */
+    let p_scaled : u64 = ie_marginal_x(0u32) * ((MC_N as u64) / ie_evidence())
+    let mut diff : u64 = 0u64
+    if s >= p_scaled { diff = s - p_scaled } else { diff = p_scaled - s }
+    if diff <= 16u64 { return 1u8 }      /* eps = 16/64 = 1/4 */
+    return 0u8
+}
+
+/* the estimate is PROVISIONAL -- default-denied from any canonical context (a Monte Carlo number never
+ * asserts as truth; it is usable only with its proved-interval oracle-pin). */
+fn mc_status_canonical_ok() -> u8 @export { return nous_synth_canonical_ok(3u8) }

@@ -1,0 +1,42 @@
+/* STDLIB/corpus/1719_mc_certified.iii
+ *
+ * Falsifier KAT for numera::mc_certified (III-PHASE4-PROBABILITY, Layer 4) -- certified Monte Carlo.
+ * 99 = every arm holds; 1..5 = the failing arm.  Independent oracle: numera/infer_exact (the EXACT
+ * probability the MC interval must contain) and determinism under the beacon seed.
+ *
+ *   exact oracle: P(X=0) = 5/8 via infer_exact (joint masses (5,0,3,0)).
+ *   (1) the exact value is 5/8.  (2) the MC estimate is deterministic under the seed.  (3) BITING: the
+ *   proved interval CONTAINS the exact infer_exact value.  (4) the estimate is PROVISIONAL (default-denied
+ *   from canonical -- a Monte Carlo number never asserts as truth).
+ */
+module corpus_1719_mc_certified
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ie_set_joint(c00: u64, c01: u64, c10: u64, c11: u64) -> i32 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_marginal_x(x: u32) -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn ie_evidence() -> u64 from "infer_exact.iii"
+extern @abi(c-msvc-x64) fn mc_estimate_count(cap: u64, seed: u64) -> u32 from "mc_certified.iii"
+extern @abi(c-msvc-x64) fn mc_interval_contains_truth(cap: u64, seed: u64) -> u8 from "mc_certified.iii"
+extern @abi(c-msvc-x64) fn mc_status_canonical_ok() -> u8 from "mc_certified.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x400000u64, 0u64)
+
+    /* exact oracle: P(X=0) = 5/8 */
+    ie_set_joint(5u64, 0u64, 3u64, 0u64)
+    if ie_marginal_x(0u32) != 5u64 { return 1u64 }
+    if ie_evidence() != 8u64 { return 2u64 }
+
+    /* (1) MC estimate deterministic under seed */
+    if mc_estimate_count(cap, 0x1234u64) != mc_estimate_count(cap, 0x1234u64) { return 3u64 }
+
+    /* (2) BITING: the proved interval contains the exact value */
+    if mc_interval_contains_truth(cap, 0x1234u64) != 1u8 { return 4u64 }
+
+    /* (3) the estimate is PROVISIONAL, default-denied from canonical */
+    if mc_status_canonical_ok() != 0u8 { return 5u64 }
+
+    return 99u64
+}

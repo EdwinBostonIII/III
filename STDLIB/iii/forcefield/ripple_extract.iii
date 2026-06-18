@@ -18,7 +18,8 @@
  * rx_certify_extract permits the write IFF all four hold AND commit_gate admits.  DECIDER only
  * (the applier writes the file -- Phase B2 -- behind the same GATE0-3 + revert).  Compiler-
  * UNREFERENCED -> LIBNATIVE.  Hexad: kind_essence (the act of giving truth its own boundary).
- * Ring: R0.  K: 1.00.  NIH: composes congruence + ripple_metric + commit_gate only. */
+ * Ring: R0.  K: 1.00.  NIH: composes congruence + ripple_metric + commit_gate, and -- for the
+ * complete-graph C3 (rx_acyclic_insert_g, below) -- III's own module self-model omnia/self_atlas. */
 module forcefield_ripple_extract
 
 extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
@@ -107,6 +108,47 @@ fn rx_reaches(src: u32, dst: u32, n: u32) -> u32 @export {
 /* inserting caller->F is acyclic IFF F does not already reach caller (else caller->F closes a loop). */
 fn rx_acyclic_insert(f: u32, caller: u32, n: u32) -> u32 @export {
     if rx_reaches(f, caller, n) == 1u32 { return 0u32 }   /* F reaches caller -> cycle -> reject */
+    return 1u32
+}
+
+/* ===== C3 GROUNDED IN III's SELF-MODEL (omnia/self_atlas) -- THE SELF-AWARENESS SEAM ===== *
+ * rx_acyclic_insert above is only ever as complete as the proposed sub-graph the CALLER hand-builds
+ * with rx_add_dep.  In a real extraction the caller lifts shared truth into a new provider F and
+ * inserts caller->F; F's only out-edges are to the EXISTING modules it lifts.  If one of those lifted
+ * modules transitively depends on the caller in III's ACTUAL graph -- a fact the caller's local view
+ * does not carry -- then caller->F closes a REAL module cycle that the local C3 cannot see, and it is
+ * FALSE-ADMITTED.  omnia/self_atlas IS III's complete, loaded module-dependency self-model; consulting
+ * it makes the extraction organ AWARE OF ITS OWN INTERCONNECTIVITY before it permits writing a file --
+ * it refuses its own cycle-closing refactoring.  (This is the first GENERATIVE consumer of self_atlas:
+ * the self-model becomes load-bearing, and -- once the self-model is re-mapped -- it records this very
+ * edge ripple_extract->self_atlas, so III sees that its extractor now consults its self-image.)
+ *
+ * Identities are self_atlas node indices (the caller resolves names via satlas_find first, as corpus
+ * 1667 does).  caller->F is acyclic IFF F does not reach caller; since F's out-edges are exactly its
+ * lifted deps {d_i}, F reaches caller IFF some d_i == caller OR d_i reaches caller in the self-model.
+ * NIH: composes omnia/self_atlas only.  Pure function of the loaded self-model (no IO, no clock). */
+extern @abi(c-msvc-x64) fn satlas_reaches(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+
+/* Would inserting caller->F (where the new provider F lifts the EXISTING module `dep`) close a cycle
+ * through III's real self-model?  1 = cycle (this dep makes the insertion unsafe), 0 = safe via dep.
+ * Unknown identities (>= node count) assert no real edge, so they cannot manufacture a false cycle. */
+fn rx_dep_closes_cycle_g(dep: u32, caller: u32) -> u32 @export {
+    let d : u32 = dep
+    let c : u32 = caller
+    let nc : u32 = satlas_node_count()
+    if d >= nc { return 0u32 }            /* unknown lifted module: contributes no real edge */
+    if c >= nc { return 0u32 }            /* unknown caller: no real cycle is assertable */
+    if d == c { return 1u32 }             /* F -> caller directly: caller -> F -> caller */
+    if satlas_reaches(d, c) == 1u8 { return 1u32 }   /* F -> dep ->...-> caller in the real graph */
+    return 0u32
+}
+
+/* Self-model-grounded C3: is inserting caller->F (F lifts the existing module `dep`) acyclic?  The
+ * AUTHORITATIVE complete-graph companion to rx_acyclic_insert -- 1 = acyclic / safe to write the
+ * provider, 0 = would close a real module cycle.  Feed its result as C3 into rx_certify_extract. */
+fn rx_acyclic_insert_g(dep: u32, caller: u32) -> u32 @export {
+    if rx_dep_closes_cycle_g(dep, caller) == 1u32 { return 0u32 }
     return 1u32
 }
 

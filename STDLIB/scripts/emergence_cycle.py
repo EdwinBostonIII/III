@@ -38,6 +38,7 @@ TESTS = {
     "1667_self_atlas_real":   ["omnia_self_atlas", "omnia_self_atlas_data"],
     "1668_self_atlas_lens":   ["omnia_self_atlas", "omnia_self_atlas_lens"],
     "1669_self_atlas_report": ["omnia_self_atlas", "omnia_self_atlas_data", "omnia_self_atlas_lens"],
+    "1670_ripple_extract_selfmodel": ["omnia_self_atlas", "omnia_self_atlas_data", "forcefield_ripple_extract"],
 }
 ENV = dict(os.environ, SOURCE_DATE_EPOCH="0", LC_ALL="C", LANG="C", TZ="UTC0")
 
@@ -101,6 +102,10 @@ def main():
     if os.path.exists(REPORT):
         with open(REPORT, "r", encoding="ascii", errors="replace") as f:
             print(f.read())
+
+    step("5. DISCOVER  (the next lean compound: inert capability ranked by blast-radius)")
+    dr = run([sys.executable, os.path.join(HERE, "emergence_discover.py")])
+    print(dr.stdout.strip() or dr.stderr.strip())
 
     print("=" * 60)
     print("EMERGENCE CYCLE: %s" % ("GREEN -- self-model honest, all checks pass"

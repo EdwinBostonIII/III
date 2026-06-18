@@ -1,0 +1,84 @@
+/* 1670_ripple_extract_selfmodel.iii -- THE SELF-AWARENESS SEAM MADE LOAD-BEARING.
+ *
+ * forcefield/ripple_extract's C3 ACYCLIC INSERTION decides whether writing a new provider file F
+ * (caller -> F) is acyclic.  The LOCAL check (rx_acyclic_insert) only sees the proposed sub-graph the
+ * caller hand-builds with rx_add_dep; blind to III's real transitive structure, it FALSE-ADMITS an
+ * insertion that closes a real module cycle.  The SELF-MODEL check (rx_acyclic_insert_g) is grounded
+ * in III's actual loaded module-dependency graph (omnia/self_atlas), so it REJECTS the same insertion.
+ *
+ * This test proves the VERDICT FLIP on REAL III modules and that the self-model verdict flows through
+ * the EXISTING extraction decider (rx_certify_extract).  It rests on a real graph fact: aes_gcm depends
+ * (transitively) on cpufeat, so a "provider below cpufeat that lifts aes_gcm" is a real cycle.  Before
+ * this compound rx_acyclic_insert_g did not exist (the only C3 was the blind local one); this is the
+ * RED->GREEN discriminator that the self-model is now load-bearing in a generative organ.
+ *
+ * 99 = all arms pass; a distinct small code localizes the first failing arm.
+ */
+module corpus_1670
+
+extern @abi(c-msvc-x64) fn satlas_data_load() -> i32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_find(name_ptr: u64, len: u64) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_reaches(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+
+extern @abi(c-msvc-x64) fn rx_dep_reset() -> i32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_add_dep(a: u32, b: u32) -> i32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_acyclic_insert(f: u32, caller: u32, n: u32) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_dep_closes_cycle_g(dep: u32, caller: u32) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_acyclic_insert_g(dep: u32, caller: u32) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_certify_extract(c1: u32, c2: u32, c3: u32, c4: u32, kernel_ok: u32) -> u32 from "ripple_extract.iii"
+
+const SENT : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    satlas_data_load()
+    if satlas_node_count() == 0u32 { return 1u64 }
+
+    /* Real modules: aes_gcm depends (redundantly) on cpufeat -> aes_gcm REACHES cpufeat. */
+    let dep    : u32 = satlas_find(("aes_gcm" as *u8) as u64, 7u64)   /* the existing module F lifts   */
+    let caller : u32 = satlas_find(("cpufeat" as *u8) as u64, 7u64)   /* the consumer of the new F     */
+    if dep == SENT { return 2u64 }
+    if caller == SENT { return 3u64 }
+
+    /* PRECONDITION (the real graph fact this test rests on): aes_gcm transitively reaches cpufeat. */
+    if satlas_reaches(dep, caller) != 1u8 { return 4u64 }
+
+    /* ===== THE BLIND SPOT: the LOCAL C3 false-admits =====
+     * A naive caller builds only the proposed edges it KNOWS: F(node 1) -> aes_gcm(node 2).  It does
+     * NOT add aes_gcm -> cpufeat (it has no view of III's real graph), so the local reachability sees
+     * F as a clean leaf provider with respect to caller cpufeat(node 0) -> ADMIT. */
+    rx_dep_reset()
+    rx_add_dep(1u32, 2u32)                                            /* F -> aes_gcm (the only known edge) */
+    if rx_acyclic_insert(1u32, 0u32, 3u32) != 1u32 { return 5u64 }    /* LOCAL C3 ADMITS (the blind spot)   */
+
+    /* ===== THE FIX: the SELF-MODEL C3 rejects (load-bearing) =====
+     * Grounded in III's actual graph: F would depend on aes_gcm, which reaches cpufeat, so
+     * cpufeat -> F -> aes_gcm ->...-> cpufeat is a real cycle. */
+    if rx_dep_closes_cycle_g(dep, caller) != 1u32 { return 6u64 }     /* self-model SEES the cycle          */
+    if rx_acyclic_insert_g(dep, caller) != 0u32 { return 7u64 }       /* self-model C3 REJECTS (the flip)   */
+
+    /* ===== the self-model verdict flows through the EXISTING extraction decider ===== */
+    let c3_self : u32 = rx_acyclic_insert_g(dep, caller)              /* == 0 */
+    if rx_certify_extract(1u32, 1u32, c3_self, 1u32, 1u32) != 0u32 { return 8u64 }   /* decider REFUSES the write */
+
+    /* ===== POSITIVE arm: a genuinely-acyclic real insertion is ADMITTED (prove the positive) =====
+     * cpufeat is a deep foundation -- it reaches (almost) nothing.  A provider F that lifts cpufeat for
+     * a high consumer (aes_gcm) does NOT close a cycle.  dep'=cpufeat, caller'=aes_gcm. */
+    let dep2    : u32 = caller       /* cpufeat */
+    let caller2 : u32 = dep          /* aes_gcm */
+    if satlas_reaches(dep2, caller2) != 0u8 { return 9u64 }           /* cpufeat does NOT reach aes_gcm      */
+    if rx_dep_closes_cycle_g(dep2, caller2) != 0u32 { return 10u64 }  /* no cycle                           */
+    if rx_acyclic_insert_g(dep2, caller2) != 1u32 { return 11u64 }    /* self-model C3 ADMITS (positive)    */
+    let c3_pos : u32 = rx_acyclic_insert_g(dep2, caller2)             /* == 1 */
+    if rx_certify_extract(1u32, 1u32, c3_pos, 1u32, 1u32) != 1u32 { return 12u64 }   /* decider PERMITS the write */
+
+    /* ===== self-edge guard: F lifting the caller itself is a trivial cycle ===== */
+    if rx_dep_closes_cycle_g(caller, caller) != 1u32 { return 13u64 }
+    if rx_acyclic_insert_g(caller, caller) != 0u32 { return 14u64 }
+
+    /* ===== unknown-identity guard: a SENT/out-of-range identity asserts no real edge ===== */
+    if rx_dep_closes_cycle_g(SENT, caller) != 0u32 { return 15u64 }
+    if rx_acyclic_insert_g(SENT, caller) != 1u32 { return 16u64 }
+
+    return 99u64
+}

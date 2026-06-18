@@ -1,0 +1,92 @@
+/* STDLIB/iii/numera/proof_replay_cache.iii -- THE PROOF-REPLAY CACHE
+ * (III-PHASE3-WALLS, Campaign II, organ 1).
+ *
+ * Campaign II collapses the experienced cost of CIC arbitration without weakening soundness.  The first
+ * lever: MEMOIZE the kernel.  Every tc_check verdict is CONTENT-ADDRESSED by cad over the serialized
+ * (proof || goal); a re-check of the same obligation becomes a 32-byte hash compare and a table lookup
+ * instead of a full re-derivation.  Over a system's life the amortized cost of "is this proof valid?"
+ * trends to a lookup -- the kernel bottleneck stops braking the bootstrap.
+ *
+ * THE SOUNDNESS INVARIANT (the cache never lies): the key is cad(serialize(proof) || serialize(goal)).
+ * Distinct obligations serialize to distinct bytes, hence distinct content addresses, so a lookup CANNOT
+ * return another obligation's verdict.  On a cache MISS the verdict is computed by the frozen kernel
+ * (tc_check) and stored; on a HIT the stored verdict is returned -- and it provably equals what the
+ * kernel would recompute, because it IS what the kernel computed for this exact content.  A tampered or
+ * different (proof, goal) lands on a different key and is recomputed, never mis-served.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.  Composes numera/typecheck (tc_check + tc_serialize) +
+ * cad (content address) -- no island.  Determinism: integer-only; byte-wise key compare; module-scope
+ * buffers; i32 lookup result compared with != -1i32 on a local (the call-result-ordering idiom).
+ */
+module numera_proof_replay_cache
+
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const PRC_MAX  : u32 = 64u32
+const PRC_SCAP : u64 = 2048u64
+
+var PRC_KEYS : [u8; 2048]    /* 64 slots * 32-byte content keys */
+var PRC_VERD : [u8; 64]
+var PRC_N    : u32 = 0u32
+var PRC_HITS   : u64 = 0u64
+var PRC_MISSES : u64 = 0u64
+var PRC_SER : [u8; 4096]
+var PRC_KEY : [u8; 32]
+
+fn prc_reset() -> i32 @export {
+    PRC_N = 0u32
+    PRC_HITS = 0u64
+    PRC_MISSES = 0u64
+    return 0i32
+}
+
+/* content key = cad(serialize(proof) || serialize(goal)) -> PRC_KEY[0..32]. */
+fn prc_key(proof: u32, goal: u32) -> i32 {
+    let lp : u64 = tc_serialize(proof, (&PRC_SER as u64) as *u8, PRC_SCAP)
+    let lg : u64 = tc_serialize(goal, ((&PRC_SER as u64) + lp) as *u8, PRC_SCAP)
+    cad_oneshot(0u32, (&PRC_SER as u64) as *u8, lp + lg, (&PRC_KEY as u64) as *u8)
+    return 0i32
+}
+
+/* lookup PRC_KEY in the cache; slot index or -1. */
+fn prc_lookup() -> i32 {
+    let mut i : u32 = 0u32
+    while i < PRC_N {
+        let base : u64 = (i as u64) * 32u64
+        let mut eq : u8 = 1u8
+        let mut j : u64 = 0u64
+        while j < 32u64 {
+            if PRC_KEYS[base + j] != PRC_KEY[j] { eq = 0u8 }
+            j = j + 1u64
+        }
+        if eq == 1u8 { return i as i32 }
+        i = i + 1u32
+    }
+    return -1i32
+}
+
+/* the memoized check: HIT -> stored verdict (hash compare, no kernel); MISS -> kernel, then store. */
+fn prc_check(proof: u32, goal: u32) -> u8 @export {
+    prc_key(proof, goal)
+    let slot : i32 = prc_lookup()
+    if slot != -1i32 {
+        PRC_HITS = PRC_HITS + 1u64
+        return PRC_VERD[(slot as u64) & 0xFFu64]
+    }
+    PRC_MISSES = PRC_MISSES + 1u64
+    let v : u8 = tc_check(proof, goal)
+    if PRC_N < PRC_MAX {
+        let base : u64 = (PRC_N as u64) * 32u64
+        let mut j : u64 = 0u64
+        while j < 32u64 { PRC_KEYS[base + j] = PRC_KEY[j]  j = j + 1u64 }
+        PRC_VERD[(PRC_N as u64) & 0xFFu64] = v
+        PRC_N = PRC_N + 1u32
+    }
+    return v
+}
+
+fn prc_hits()   -> u64 @export { return PRC_HITS }
+fn prc_misses() -> u64 @export { return PRC_MISSES }
+fn prc_size()   -> u32 @export { return PRC_N }

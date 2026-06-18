@@ -1319,6 +1319,8 @@ declare -A EXPECTED=(
     [1702_search_market]=99
     [1703_cegar_refine]=99
     [1704_egraph_hw_ematch]=99
+    [1705_proof_replay_cache]=99
+    [1706_proof_parallel]=99
 )
 
 PASS=0

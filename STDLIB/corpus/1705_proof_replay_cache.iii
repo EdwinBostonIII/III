@@ -1,0 +1,68 @@
+/* STDLIB/corpus/1705_proof_replay_cache.iii
+ *
+ * Falsifier KAT for numera::proof_replay_cache (III-PHASE3-WALLS, Campaign II, organ 1) -- the memoized
+ * kernel.  99 = every arm holds; 1..12 = the failing arm.  Independent oracle: the frozen kernel tc_check
+ * -- the cache must agree with it on every obligation, hit or miss.
+ *
+ *   (1) SOUNDNESS: the first checks are MISSES computed by the kernel; the cached verdict equals tc_check
+ *       (true identity -> 1, false identity -> 0).  2 misses, 0 hits, 2 entries.
+ *   (2) CACHE HIT (biting): re-checking the SAME obligations is a HIT (hash compare, no kernel recompute)
+ *       returning the same verdict -- miss count does NOT grow.
+ *   (3) CONTENT KEYING (biting): the true and false obligations get DISTINCT verdicts (1 vs 0), so the
+ *       cache keys by content and cannot serve one obligation's verdict for another.
+ */
+module corpus_1705_proof_replay_cache
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn prc_reset() -> i32 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_check(proof: u32, goal: u32) -> u8 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_hits() -> u64 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_misses() -> u64 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_size() -> u32 from "proof_replay_cache.iii"
+
+fn main() -> u64 {
+    prc_reset()
+    tc_reset()
+    let x    : u32 = tc_var(0u32)
+    let lit1 : u32 = tc_bvlit(1u32, 0u32)
+    /* true obligation: Pi(x:BV). Id(BV, x*1, x), proof lam x. refl(x*1) */
+    let tlhs  : u32 = tc_bvmul(x, lit1)
+    let tgoal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), tlhs, x))
+    let tprf  : u32 = tc_lam(tc_bv(), tc_refl(tlhs))
+    /* false obligation: Pi(x:BV). Id(BV, x, x+1), proof lam x. refl(x) */
+    let fgoal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), x, tc_bvadd(x, lit1)))
+    let fprf  : u32 = tc_lam(tc_bv(), tc_refl(x))
+
+    let tv : u8 = tc_check(tprf, tgoal)
+    let fv : u8 = tc_check(fprf, fgoal)
+    if tv != 1u8 { return 1u64 }
+    if fv != 0u8 { return 2u64 }
+
+    /* (1) SOUNDNESS: first checks are MISSES, cache == kernel */
+    if prc_check(tprf, tgoal) != tv { return 3u64 }
+    if prc_check(fprf, fgoal) != fv { return 4u64 }
+    if prc_misses() != 2u64 { return 5u64 }
+    if prc_hits() != 0u64 { return 6u64 }
+    if prc_size() != 2u32 { return 7u64 }
+
+    /* (2) CACHE HIT (biting): re-check is a hit, same verdict, no new miss */
+    if prc_check(tprf, tgoal) != tv { return 8u64 }
+    if prc_check(fprf, fgoal) != fv { return 9u64 }
+    if prc_hits() != 2u64 { return 10u64 }
+    if prc_misses() != 2u64 { return 11u64 }
+
+    /* (3) CONTENT KEYING (biting): the two obligations keep DISTINCT verdicts (1 vs 0) */
+    if prc_check(tprf, tgoal) == prc_check(fprf, fgoal) { return 12u64 }
+
+    return 99u64
+}

@@ -1162,6 +1162,18 @@ MODULES=(
     # machine-checked equality (aeu_and_tree_certified, exhaustive over all 2^n patterns) to the scalar
     # matcher.  Composes egraph + aeu (no island); compiler-unreferenced -> LIBNATIVE; last.
     "numera/egraph_hw_ematch"
+    # --- PHASE III Campaign II #1: the PROOF-REPLAY CACHE.  numera/proof_replay_cache content-addresses
+    # every tc_check verdict by cad(serialize(proof)||serialize(goal)); a re-check is a 32-byte hash compare
+    # and table lookup, never a re-derivation -- the amortized cost of "is this proof valid?" trends to a
+    # lookup.  Sound by construction: distinct obligations -> distinct keys, so a hit cannot mis-serve.
+    # Composes numera/typecheck + cad (no island); compiler-unreferenced -> LIBNATIVE; last.
+    "numera/proof_replay_cache"
+    # --- PHASE III Campaign II #5: EMBARRASSINGLY-PARALLEL proof checking.  numera/proof_parallel exploits
+    # the kernel's purity: independent obligations dispatch in any order and merge into one certified set,
+    # and the merge is CALM (order-independent).  The runtime falsifier: the forward-dispatch certified
+    # bitmask equals the reverse-dispatch one -- a short-circuiting/order-dependent checker diverges.
+    # Composes numera/typecheck (no island); compiler-unreferenced -> LIBNATIVE; last.
+    "numera/proof_parallel"
 )
 
 PASS=0

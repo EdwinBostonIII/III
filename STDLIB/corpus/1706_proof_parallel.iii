@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1706_proof_parallel.iii
+ *
+ * Falsifier KAT for numera::proof_parallel (III-PHASE3-WALLS, Campaign II, organ 5) -- embarrassingly-
+ * parallel proof checking.  99 = every arm holds; 1..10 = the failing arm.  Independent oracle: the
+ * per-obligation kernel verdicts (tc_check) -- the certified set must be exactly the true obligations and
+ * must not depend on dispatch order.
+ *
+ *   (1) per-obligation verdicts are independent: T,F,T,T (the false obligation refused).
+ *   (2) the certified set = {0,2,3} = 0b1101 = 13.
+ *   (3) CALM order-independence (biting): the REVERSE-dispatch mask is IDENTICAL -- a short-circuiting or
+ *       order-dependent checker would diverge here.
+ *   (4) the false obligation (bit 1) is in NEITHER ordering's certified set.
+ */
+module corpus_1706_proof_parallel
+
+extern @abi(c-msvc-x64) fn pp_setup() -> i32 from "proof_parallel.iii"
+extern @abi(c-msvc-x64) fn pp_n() -> u32 from "proof_parallel.iii"
+extern @abi(c-msvc-x64) fn pp_verdict(i: u32) -> u8 from "proof_parallel.iii"
+extern @abi(c-msvc-x64) fn pp_mask_forward() -> u32 from "proof_parallel.iii"
+extern @abi(c-msvc-x64) fn pp_mask_reverse() -> u32 from "proof_parallel.iii"
+
+fn main() -> u64 {
+    pp_setup()
+    if pp_n() != 4u32 { return 1u64 }
+
+    /* (1) independent verdicts T,F,T,T */
+    if pp_verdict(0u32) != 1u8 { return 2u64 }
+    if pp_verdict(1u32) != 0u8 { return 3u64 }
+    if pp_verdict(2u32) != 1u8 { return 4u64 }
+    if pp_verdict(3u32) != 1u8 { return 5u64 }
+
+    /* (2) certified set {0,2,3} = 13 */
+    if pp_mask_forward() != 13u32 { return 6u64 }
+
+    /* (3) CALM order-independence (biting): reverse dispatch is identical */
+    if pp_mask_reverse() != pp_mask_forward() { return 7u64 }
+    if pp_mask_reverse() != 13u32 { return 8u64 }
+
+    /* (4) the false obligation (bit 1) is certified by NEITHER ordering */
+    if (pp_mask_forward() & 2u32) != 0u32 { return 9u64 }
+    if (pp_mask_reverse() & 2u32) != 0u32 { return 10u64 }
+
+    return 99u64
+}

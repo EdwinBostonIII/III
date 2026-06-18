@@ -1,0 +1,95 @@
+/* STDLIB/iii/numera/proof_parallel.iii -- EMBARRASSINGLY-PARALLEL PROOF CHECKING
+ * (III-PHASE3-WALLS, Campaign II, organ 5).
+ *
+ * Campaign II collapses the cost of CIC arbitration.  The kernel (numera/typecheck) is PURE and
+ * DETERMINISTIC: a proof obligation's verdict depends only on its own (proof, goal), never on shared
+ * mutable state.  Therefore a batch of independent obligations is EMBARRASSINGLY PARALLEL -- they can be
+ * dispatched in any order (or across workers) and their certified results merged into one set, and the
+ * merge is order-independent (CALM): the union of per-obligation certified bits is commutative and
+ * idempotent, so every dispatch order converges to the SAME certified set.
+ *
+ * THE OPERATIONAL PROOF (a runtime falsifier, the same shape the house uses for "reordering changes no
+ * answer"): the certified-set bitmask computed FORWARD must equal the one computed in REVERSE.  A checker
+ * that carried order-dependent state, or short-circuited on the first refused obligation, would diverge
+ * here -- so this is a biting test of the parallel-safety property, not a tautology.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 0.99.  Composes numera/typecheck (tc_check) -- the per-obligation
+ * verdict is the kernel's; this organ adds only the order-independent merge.  Determinism: integer-only;
+ * the obligations are built once in a single arena pass so their handles stay valid; unsigned compares.
+ */
+module numera_proof_parallel
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+const PP_N : u32 = 4u32
+
+var PP_PROOF : [u32; 4]
+var PP_GOAL  : [u32; 4]
+var PP_INIT  : u8 = 0u8
+
+fn pp_lit(v: u64) -> u32 { return tc_bvlit((v & 0xFFFFFFFFu64) as u32, (v >> 32u64) as u32) }
+
+/* four independent obligations (interleaved T,F,T,T) built in ONE arena pass so a short-circuit-on-false
+ * checker would visit different sets forward vs reverse. */
+fn pp_setup() -> i32 @export {
+    if PP_INIT == 1u8 { return 0i32 }
+    tc_reset()
+    let x : u32 = tc_var(0u32)
+    let l0 : u32 = tc_bvadd(x, pp_lit(0u64))                          /* 0: x+0 == x   (TRUE)  */
+    PP_PROOF[0u64] = tc_lam(tc_bv(), tc_refl(l0))
+    PP_GOAL[0u64]  = tc_pi(tc_bv(), tc_id(tc_bv(), l0, x))
+    PP_PROOF[1u64] = tc_lam(tc_bv(), tc_refl(x))                      /* 1: x == x+1   (FALSE) */
+    PP_GOAL[1u64]  = tc_pi(tc_bv(), tc_id(tc_bv(), x, tc_bvadd(x, pp_lit(1u64))))
+    let l2 : u32 = tc_bvmul(x, pp_lit(1u64))                          /* 2: x*1 == x   (TRUE)  */
+    PP_PROOF[2u64] = tc_lam(tc_bv(), tc_refl(l2))
+    PP_GOAL[2u64]  = tc_pi(tc_bv(), tc_id(tc_bv(), l2, x))
+    let l3 : u32 = tc_bvshl(x, pp_lit(1u64))                          /* 3: x<<1 == x*2 (TRUE) */
+    PP_PROOF[3u64] = tc_lam(tc_bv(), tc_refl(l3))
+    PP_GOAL[3u64]  = tc_pi(tc_bv(), tc_id(tc_bv(), l3, tc_bvmul(x, pp_lit(2u64))))
+    PP_INIT = 1u8
+    return 0i32
+}
+
+fn pp_n() -> u32 @export { return PP_N }
+
+/* the kernel verdict for obligation i (independent of all others). */
+fn pp_verdict(i: u32) -> u8 @export {
+    pp_setup()
+    if i >= PP_N { return 0u8 }
+    return tc_check(PP_PROOF[(i as u64) & 0xFFFFFFFFu64], PP_GOAL[(i as u64) & 0xFFFFFFFFu64])
+}
+
+/* certified-set bitmask, obligations dispatched in FORWARD order. */
+fn pp_mask_forward() -> u32 @export {
+    pp_setup()
+    let mut mask : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < PP_N {
+        if pp_verdict(i) == 1u8 { mask = mask | (1u32 << i) }
+        i = i + 1u32
+    }
+    return mask
+}
+
+/* the SAME certified set, dispatched in REVERSE order -- MUST be identical (CALM order-independence). */
+fn pp_mask_reverse() -> u32 @export {
+    pp_setup()
+    let mut mask : u32 = 0u32
+    let mut j : u32 = PP_N
+    while j > 0u32 {
+        j = j - 1u32
+        if pp_verdict(j) == 1u8 { mask = mask | (1u32 << j) }
+    }
+    return mask
+}

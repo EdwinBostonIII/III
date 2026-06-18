@@ -1,0 +1,199 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\nous\theorem_grow.iii
+ *
+ * III STDLIB - nous::theorem_grow  --  the autogenesis persistent theorem DAG (Wave D, long memory).
+ *
+ * The loop's long-term memory: a content-addressed theorem registry that SURVIVES restarts.
+ * tg_register admits a (proof, goal) through the kernel gate (tcom_admit_goal re-runs tc_check) and
+ * keeps the term pair so it can be re-serialized.  tg_persist writes the registry to disk as an
+ * injective image -- per theorem the kernel-serialized goal AND proof (tc_serialize) -- under a
+ * single cad seal (the root).  tg_reload reads it back, RE-CHECKS the seal (a tampered byte changes
+ * the root -> refused) and RE-ADMITS every record through the kernel (tc_deserialize + tcom_admit_
+ * goal), so NOTHING is trusted: a false theorem in the file is refused on reload, never loaded.
+ * tg_count is the monotone floor the ratchet pins; tg_merkle_root exposes the authenticated DAG
+ * (O(log n) membership) the Commons already builds over merkle.  Surpass-only: not a flat dump, a
+ * re-verified, tamper-evident, citable theorem store.
+ *
+ * Hexad: kind_essence + kind_cognition.  Composes theorem_commons + typecheck + cad + fs (merkle
+ * transitively via tcom_merkle_root).  Determinism: integer-only, content-derived image order.
+ * Discipline: W2 (<=4 params), W4 (module-scope scratch), W13 (<=20 locals), W14/W15 (sentinel
+ * loops, no recursion).  ASCII only. */
+
+module nous_theorem_grow
+
+extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_merkle_root(out: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tc_serialize(t: u32, out: *u8, cap: u64) -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_deserialize(bytes: *u8, len: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+
+const TG_MAGIC   : u32 = 0x54475254u32        /* "TRGT" little-endian tag */
+const TG_MAX     : u64 = 256u64
+const TG_IMGCAP  : u64 = 65536u64
+const TG_TERMCAP : u64 = 4096u64
+const TG_OK      : i32 = 0i32
+
+var TG_PROOF : [u32; 256]
+var TG_GOAL  : [u32; 256]
+var TG_N     : u64 = 0u64
+var TG_IMG   : [u8; 65536]
+var TG_SEAL  : [u8; 32]
+
+fn tg_put_u32le(base: u64, off: u64, v: u32) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let p : *u8 = (base + off + i) as *u8
+        p[0u64] = ((v >> ((i * 8u64) as u32)) & 0xFFu32) as u8
+        i = i + 1u64
+    }
+    return off + 4u64
+}
+
+fn tg_get_u32le(base: u64, off: u64) -> u32 {
+    let mut v : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let p : *u8 = (base + off + i) as *u8
+        v = v | ((p[0u64] as u32) << ((i * 8u64) as u32))
+        i = i + 1u64
+    }
+    return v
+}
+
+/* Serialize header + all (goal, proof) records into buf; returns the body length (before the seal). */
+fn tg_build_image(buf: u64) -> u64 {
+    let mut off : u64 = 0u64
+    off = tg_put_u32le(buf, off, TG_MAGIC)
+    off = tg_put_u32le(buf, off, TG_N as u32)
+    let mut i : u64 = 0u64
+    while i < TG_N {
+        let gl : u64 = tc_serialize(TG_GOAL[i], (buf + off + 4u64) as *u8, TG_TERMCAP)
+        tg_put_u32le(buf, off, gl as u32)
+        off = off + 4u64 + gl
+        let pl : u64 = tc_serialize(TG_PROOF[i], (buf + off + 4u64) as *u8, TG_TERMCAP)
+        tg_put_u32le(buf, off, pl as u32)
+        off = off + 4u64 + pl
+        i = i + 1u64
+    }
+    return off
+}
+
+/* Serialize a SINGLE arbitrary (goal, proof) record (used to stage a candidate or a false probe). */
+fn tg_build_pair_image(buf: u64, proof: u32, goal: u32) -> u64 {
+    let mut off : u64 = 0u64
+    off = tg_put_u32le(buf, off, TG_MAGIC)
+    off = tg_put_u32le(buf, off, 1u32)
+    let gl : u64 = tc_serialize(goal, (buf + off + 4u64) as *u8, TG_TERMCAP)
+    tg_put_u32le(buf, off, gl as u32)
+    off = off + 4u64 + gl
+    let pl : u64 = tc_serialize(proof, (buf + off + 4u64) as *u8, TG_TERMCAP)
+    tg_put_u32le(buf, off, pl as u32)
+    off = off + 4u64 + pl
+    return off
+}
+
+fn tg_seal_eq(bodylen: u64) -> u8 {
+    let sp : *u8 = (&TG_SEAL as u64) as *u8
+    let bp : *u8 = ((&TG_IMG as u64) + bodylen) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if sp[i] != bp[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn tg_seal_and_write(cap: u64, path: u64, bodylen: u64) -> i32 {
+    cad_oneshot(0u32, (&TG_IMG as u64) as *u8, bodylen, ((&TG_IMG as u64) + bodylen) as *u8)
+    let h : u64 = fs_open(cap, path, 2u32)
+    if h == 0u64 { return -3i32 }
+    fs_write(h, (&TG_IMG as u64), bodylen + 32u64)
+    fs_close(h)
+    return TG_OK
+}
+
+/* ---- registry ---- */
+
+fn tg_register(proof: u32, goal: u32) -> i32 @export {
+    if tcom_admit_goal(proof, goal) != TG_OK { return -1i32 }
+    if TG_N >= TG_MAX { return -2i32 }
+    TG_PROOF[TG_N] = proof
+    TG_GOAL[TG_N] = goal
+    TG_N = TG_N + 1u64
+    return TG_OK
+}
+
+fn tg_count() -> u64 @export { return TG_N }
+
+/* The persisted image's root (cad over header + all records) -- changes iff the registry changes. */
+fn tg_root(out_32: u64) -> i32 @export {
+    let bodylen : u64 = tg_build_image((&TG_IMG as u64))
+    return cad_oneshot(0u32, (&TG_IMG as u64) as *u8, bodylen, out_32 as *u8)
+}
+
+/* The authenticated theorem DAG root (O(log n) membership), composed from the Commons over merkle. */
+fn tg_merkle_root(out_32: u64) -> i32 @export { return tcom_merkle_root(out_32) }
+
+/* ---- disk persistence ---- */
+
+fn tg_persist(cap: u64, path: u64) -> i32 @export {
+    return tg_seal_and_write(cap, path, tg_build_image((&TG_IMG as u64)))
+}
+
+fn tg_persist_pair(cap: u64, path: u64, proof: u32, goal: u32) -> i32 @export {
+    return tg_seal_and_write(cap, path, tg_build_pair_image((&TG_IMG as u64), proof, goal))
+}
+
+/* Seal-only check: 1 iff the file's body re-hashes to its stored seal (the root is intact). */
+fn tg_verify(cap: u64, path: u64) -> u8 @export {
+    let h : u64 = fs_open(cap, path, 1u32)
+    if h == 0u64 { return 0u8 }
+    let nread : u64 = fs_read(h, (&TG_IMG as u64), TG_IMGCAP)
+    fs_close(h)
+    if nread < 40u64 { return 0u8 }
+    let bodylen : u64 = nread - 32u64
+    cad_oneshot(0u32, (&TG_IMG as u64) as *u8, bodylen, (&TG_SEAL as u64) as *u8)
+    return tg_seal_eq(bodylen)
+}
+
+/* Read back, RE-CHECK the seal (tamper -> -1), then RE-ADMIT every record through the kernel.
+ * Returns the count of theorems whose proof re-checked (a false record is silently NOT loaded). */
+fn tg_reload(cap: u64, path: u64) -> i32 @export {
+    let h : u64 = fs_open(cap, path, 1u32)
+    if h == 0u64 { return -3i32 }
+    let nread : u64 = fs_read(h, (&TG_IMG as u64), TG_IMGCAP)
+    fs_close(h)
+    if nread < 40u64 { return -2i32 }
+    let bodylen : u64 = nread - 32u64
+    cad_oneshot(0u32, (&TG_IMG as u64) as *u8, bodylen, (&TG_SEAL as u64) as *u8)
+    if tg_seal_eq(bodylen) == 0u8 { return -1i32 }
+    if tg_get_u32le((&TG_IMG as u64), 0u64) != TG_MAGIC { return -2i32 }
+    let count : u32 = tg_get_u32le((&TG_IMG as u64), 4u64)
+    TG_N = 0u64
+    let mut off : u64 = 8u64
+    let mut admitted : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < count {
+        let gl : u64 = tg_get_u32le((&TG_IMG as u64), off) as u64
+        off = off + 4u64
+        let goal : u32 = tc_deserialize(((&TG_IMG as u64) + off) as *u8, gl)
+        off = off + gl
+        let pl : u64 = tg_get_u32le((&TG_IMG as u64), off) as u64
+        off = off + 4u64
+        let proof : u32 = tc_deserialize(((&TG_IMG as u64) + off) as *u8, pl)
+        off = off + pl
+        if tcom_admit_goal(proof, goal) == TG_OK {
+            if TG_N < TG_MAX {
+                TG_GOAL[TG_N] = goal
+                TG_PROOF[TG_N] = proof
+                TG_N = TG_N + 1u64
+            }
+            admitted = admitted + 1u64
+        }
+        i = i + 1u32
+    }
+    return admitted as i32
+}

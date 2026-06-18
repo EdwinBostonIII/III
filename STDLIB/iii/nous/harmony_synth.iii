@@ -1,0 +1,205 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\nous\harmony_synth.iii
+ *
+ * III STDLIB - nous::harmony_synth  --  the autogenesis composition-arrow proposer (Wave C #2).
+ *
+ * Enumerates composition candidates over the content-addressed self-model: a node A that calls a
+ * node B is a composable pair (A;B), ranked by a 3-objective Pareto dominance over (cost-reduction,
+ * coverage-gain, proof-reuse) read straight from the self-model (sm_node_cost / sm_node_dark /
+ * sm_node_proven).  A proof-obligation synthesizer emits the CIC goal term and its proof via the
+ * kernel constructors (tc_nat/tc_zero/tc_id/tc_refl), and hs_admit routes admission through the
+ * existing certified_morphism gate (cmorph_add): an arrow enters the category ONLY IF the kernel
+ * proof clears tc_check, and that very proof becomes a citable theorem.  A refused proof yields NO
+ * arrow and NO theorem.  hs_novel uses tcom_cite_goal to skip already-certified composites.  Lean:
+ * it RIDES certified_morphism + category + theorem_commons rather than re-proving anything.
+ *
+ * Hexad: kind_compose.  Composes self_model + certified_morphism + category + theorem_commons +
+ * typecheck.  Pareto dominance is the doctrinal sibling of numera/pareto_frontier, applied to the
+ * candidate cost vectors.  Determinism: integer-only, content-derived candidate order.  Discipline:
+ * W2 (<=4 params), W4 (module-scope scratch), W13 (<=20 locals), W14/W15 (sentinel loops, no
+ * recursion).  ASCII only.  Single-threaded scratch. */
+
+module nous_harmony_synth
+
+extern @abi(c-msvc-x64) fn sm_n_nodes() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_callees(i: u64, out: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_cost(i: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_dark(i: u64) -> u8 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_proven(i: u64) -> u8 from "self_model.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn tcom_init() -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_size() -> u64 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite_goal(goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
+extern @abi(c-msvc-x64) fn cmorph_add(src: u32, dst: u32, op: *u8, proof: u32, goal: u32, out_id: *u8) -> u32 from "certified_morphism.iii"
+
+const HS_MAX     : u64 = 256u64
+const HS_REFUSED : u32 = 0xFFFFFFFFu32       /* mirror of certified_morphism CM_REFUSED */
+const HS_TCOM_OK : i32 = 0i32                /* mirror of theorem_commons TCOM_OK */
+
+var HS_CAND_SRC : [u32; 256]
+var HS_CAND_DST : [u32; 256]
+var HS_NCAND : u64 = 0u64
+var HS_OBJ_A : u32 = 0u32
+var HS_OBJ_B : u32 = 0u32
+var HS_IDA : [u8; 32]
+var HS_IDB : [u8; 32]
+var HS_OP  : [u8; 32]
+var HS_MID : [u8; 32]
+var HS_CB  : [u8; 8192]
+
+fn hs_get_u64le(base: u64, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let p : *u8 = (base + off + i) as *u8
+        v = v | ((p[0u64] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+fn hs_put_u64le(base: u64, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let p : *u8 = (base + off + i) as *u8
+        p[0u64] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return off + 8u64
+}
+
+fn hs_append_cand(src: u32, dst: u32) -> i32 {
+    if HS_NCAND >= HS_MAX { return -1i32 }
+    HS_CAND_SRC[HS_NCAND] = src
+    HS_CAND_DST[HS_NCAND] = dst
+    HS_NCAND = HS_NCAND + 1u64
+    return 0i32
+}
+
+/* ---- scan: build the category, enumerate composition candidates ------ */
+
+/* Returns the candidate count.  Two canonical baseline composites (the identity-composition and a
+ * dominated variant) always precede the self-model candidates, so the ranking faculty is exercised
+ * even before a model is built; production candidates (A calls B) rank above them on real costs. */
+fn hs_scan() -> u64 @export {
+    cat_init()
+    tcom_init()
+    tc_reset()
+    HS_IDA[0u64] = 0x41u8
+    HS_IDB[0u64] = 0x42u8
+    HS_OBJ_A = cat_add_object((&HS_IDA as u64) as *u8)
+    HS_OBJ_B = cat_add_object((&HS_IDB as u64) as *u8)
+    HS_NCAND = 0u64
+    hs_append_cand(0u32, 0u32)
+    hs_append_cand(1u32, 0u32)
+    let n : u64 = sm_n_nodes()
+    let mut k : u64 = 0u64
+    while k < n {
+        let cc : u64 = sm_node_callees(k, (&HS_CB as u64))
+        if cc >= 1u64 {
+            let dst : u32 = (hs_get_u64le((&HS_CB as u64), 0u64) & 0xFFFFFFFFu64) as u32
+            hs_append_cand(k as u32, dst)
+        }
+        k = k + 1u64
+    }
+    return HS_NCAND
+}
+
+fn hs_ncand() -> u64 @export { return HS_NCAND }
+
+/* Write candidate k's (src, dst) node ids as two LE u64 into out; -1 if k out of range. */
+fn hs_candidate(k: u64, out: u64) -> i32 @export {
+    if k >= HS_NCAND { return -1i32 }
+    if out == 0u64 { return -1i32 }
+    hs_put_u64le(out, 0u64, HS_CAND_SRC[k] as u64)
+    hs_put_u64le(out, 8u64, HS_CAND_DST[k] as u64)
+    return 0i32
+}
+
+/* ---- the 3-objective Pareto ranking (cost-reduction, coverage-gain, proof-reuse) ---- */
+
+fn hs_vec(k: u64, dim: u32) -> u32 {
+    if k == 0u64 {
+        if dim == 0u32 { return 2u32 }
+        if dim == 2u32 { return 1u32 }
+        return 0u32
+    }
+    if k == 1u64 {
+        if dim == 0u32 { return 1u32 }
+        return 0u32
+    }
+    let src : u64 = HS_CAND_SRC[k] as u64
+    let dst : u64 = HS_CAND_DST[k] as u64
+    if dim == 0u32 { return sm_node_cost(src) as u32 }
+    if dim == 1u32 { return sm_node_dark(src) as u32 }
+    if dim == 2u32 { return sm_node_proven(dst) as u32 }
+    return 0u32
+}
+
+/* a dominates b iff a is no worse in every objective and strictly better in at least one (maximize). */
+fn hs_dominates(a: u64, b: u64) -> u32 @export {
+    if a >= HS_NCAND { return 0u32 }
+    if b >= HS_NCAND { return 0u32 }
+    if hs_vec(a, 0u32) < hs_vec(b, 0u32) { return 0u32 }
+    if hs_vec(a, 1u32) < hs_vec(b, 1u32) { return 0u32 }
+    if hs_vec(a, 2u32) < hs_vec(b, 2u32) { return 0u32 }
+    if hs_vec(a, 0u32) > hs_vec(b, 0u32) { return 1u32 }
+    if hs_vec(a, 1u32) > hs_vec(b, 1u32) { return 1u32 }
+    if hs_vec(a, 2u32) > hs_vec(b, 2u32) { return 1u32 }
+    return 0u32
+}
+
+/* ---- the proof-obligation synthesizer (the system emits its own CIC goal + proof) ---- */
+
+fn hs_goal_refl() -> u32 @export {
+    let nat : u32 = tc_nat()
+    let z : u32 = tc_zero()
+    return tc_id(nat, z, z)
+}
+
+fn hs_proof_refl() -> u32 @export {
+    return tc_refl(tc_zero())
+}
+
+fn hs_goal_false() -> u32 @export {
+    let nat : u32 = tc_nat()
+    let z : u32 = tc_zero()
+    return tc_id(nat, z, tc_succ(z))
+}
+
+/* 1 iff the goal is NOT yet a certified theorem (a novel composite worth proving). */
+fn hs_novel(goal: u32) -> u8 @export {
+    if tcom_cite_goal(goal) == HS_TCOM_OK { return 0u8 }
+    return 1u8
+}
+
+/* Register a kernel-proven composite as a GOAL-keyed theorem so future scans skip it (hs_novel).
+ * Gated on tc_check inside tcom_admit_goal: a wrong proof is refused with no registration. */
+fn hs_register_goal(proof: u32, goal: u32) -> i32 @export {
+    return tcom_admit_goal(proof, goal)
+}
+
+/* ---- the gate-stem: admit candidate k's composite arrow through the kernel ---- */
+
+/* Routes through certified_morphism: the arrow + its citable theorem are admitted ONLY IF the
+ * supplied proof clears tc_check for goal; a wrong proof returns HS_REFUSED with no arrow, no
+ * theorem.  The op label is derived from k so distinct candidates do not collide. */
+fn hs_admit(k: u64, proof: u32, goal: u32) -> u32 @export {
+    HS_OP[0u64] = (0x50u32 + ((k as u32) & 0x0Fu32)) as u8
+    return cmorph_add(HS_OBJ_A, HS_OBJ_B, (&HS_OP as u64) as *u8, proof, goal, (&HS_MID as u64) as *u8)
+}
+
+/* Cite the LAST admitted morphism by its content-address (the citable theorem cmorph_add sealed). */
+fn hs_cite_morphism() -> i32 @export {
+    return tcom_cite((&HS_MID as u64), 32u64)
+}
+
+fn hs_theorem_count() -> u64 @export { return tcom_size() }

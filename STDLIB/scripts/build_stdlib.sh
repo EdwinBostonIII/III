@@ -1078,6 +1078,30 @@ MODULES=(
     # that changes iff structure/coverage/proof/cost changes.  Externs corpus_coverage + cad
     # (built above); compiler-unreferenced -> LIBNATIVE only; appended last (BSS-neutral).
     "sanctus/self_model"
+    # --- AUTOGENESIS Wave C: the proposer organs.  Each reads the frozen self_model interface and
+    # rides an existing engine (no island): gap_conjecture extends the nous_conjecture_gen
+    # propose->dispose discipline with a structural law table, honouring the nous_search trichotomy.
+    "nous/gap_conjecture"
+    # harmony_synth: enumerates composition arrows over the self-model, ranks by Pareto, and admits
+    # each ONLY through the certified_morphism kernel gate (an arrow is a proof-carrying theorem).
+    "nous/harmony_synth"
+    # refactor_propose: an e-graph equivalence prover for whole exports (COMBINE) + dark-export cuts
+    # (CUT); rp_certify integrates e-graph evidence + a CIC proof through commit_gate, merging the
+    # congruence ring only on admission.
+    "nous/refactor_propose"
+    # optimize_self: cost-gradient descent gated by the analytic cost oracle (microarch_model) with a
+    # hard result-equivalence gate (a cheaper move that changes an answer is rejected); journals moves
+    # via ripple_journal and rides the ripple_loop closed loop (self-edits nothing when kernel down).
+    "nous/optimize_self"
+    # --- AUTOGENESIS Wave D: long-term memory.  theorem_grow is a persistent, tamper-evident,
+    # re-verified theorem DAG on disk; on reload every proof is re-checked through the kernel, so a
+    # false or tampered record is refused, never trusted.  tg_count is the monotone ratchet floor.
+    "nous/theorem_grow"
+    # --- AUTOGENESIS Wave E: THE GATEWAY.  sanctus/autogenesis closes the loop: one cap-gated cycle
+    # gathers candidates from the proposers, stages them in a reversible vbd transaction, attests the
+    # before/after state roots, extends a genesis-anchored hash-chained ledger, and either commits
+    # (apprentice-gated) or rolls back byte-exact.  Composes all six organs + vbd + attest_box.
+    "sanctus/autogenesis"
     # --- THE SELF-AWARENESS SEAM (omnia::self_atlas): the III-native self-model of its OWN
     # module dependency graph -- the cartographer machine brought INSIDE III so the
     # generative organs can query blast-radius / would-this-refactor-cycle / is-this-edge-

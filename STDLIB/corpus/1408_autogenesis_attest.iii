@@ -1,0 +1,66 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1408_autogenesis_attest.iii
+ *
+ * Falsifier KAT for sanctus::autogenesis -- ATTESTATION.  After a cycle the box state root is signed
+ * with the node identity (ag_attest, gated on the ATTEST right); the detached signature verifies
+ * offline (ab_verify) and the freshness check holds (ab_attests_current).  Biting arm: a cap WITHOUT
+ * the ATTEST right is DENIED (-1).  Drift arm: after a rollback changes the box, the once-valid
+ * attestation no longer describes the live state and ab_attests_current returns 0. */
+
+module corpus_1408_autogenesis_attest
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ni_init(args: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_identity_pub(out_pub: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ab_verify(pub_32: *u8, root_32: *u8, sig_64: *u8) -> u8 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ab_attests_current(pub_32: *u8, claimed_root_32: *u8, sig_64: *u8) -> u8 from "attest_box.iii"
+extern @abi(c-msvc-x64) fn ag_cycle(cap: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_attest(cap: u64, out_root: u64, out_sig: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_rollback() -> i32 from "autogenesis.iii"
+
+var ARGS : [u8; 32]
+var HW : [u8; 8]
+var BS : [u8; 8]
+var ROOT : [u8; 32]
+var SIG : [u8; 64]
+var ROOT2 : [u8; 32]
+var SIG2 : [u8; 64]
+var PUB : [u8; 32]
+
+fn kw64(addr: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let p : *u8 = (addr + i) as *u8
+        p[0u64] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_auto : u64 = cap_attenuate(env, 0x80000u64, 0u64)
+    let cap_attest : u64 = cap_attenuate(env, 0x800u64, 0u64)
+    let cap_noattest : u64 = cap_attenuate(env, 0x10u64, 0u64)
+
+    HW[0u64] = 0x48u8  HW[1u64] = 0x57u8  HW[2u64] = 0x31u8
+    BS[0u64] = 0x42u8  BS[1u64] = 0x53u8  BS[2u64] = 0x31u8
+    kw64((&ARGS as u64), (&HW as u64))
+    kw64((&ARGS as u64) + 8u64, 3u64)
+    kw64((&ARGS as u64) + 16u64, (&BS as u64))
+    kw64((&ARGS as u64) + 24u64, 3u64)
+    if ni_init((&ARGS as u64) as *u8) != 0i32 { return 1u64 }
+
+    if ag_cycle(cap_auto) != 0i32 { return 2u64 }
+
+    if ag_attest(cap_attest, (&ROOT as u64), (&SIG as u64)) != 0i32 { return 3u64 }
+    if ag_attest(cap_noattest, (&ROOT2 as u64), (&SIG2 as u64)) != -1i32 { return 4u64 }
+
+    ni_identity_pub((&PUB as u64) as *u8)
+    if ab_verify((&PUB as u64) as *u8, (&ROOT as u64) as *u8, (&SIG as u64) as *u8) != 1u8 { return 5u64 }
+    if ab_attests_current((&PUB as u64) as *u8, (&ROOT as u64) as *u8, (&SIG as u64) as *u8) != 1u8 { return 6u64 }
+
+    ag_rollback()
+    if ab_attests_current((&PUB as u64) as *u8, (&ROOT as u64) as *u8, (&SIG as u64) as *u8) != 0u8 { return 7u64 }
+    return 99u64
+}

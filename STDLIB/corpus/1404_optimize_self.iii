@@ -1,0 +1,47 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1404_optimize_self.iii
+ *
+ * Falsifier KAT for nous::optimize_self (autogenesis Wave C #4).  Positive arm: an equivalent
+ * cheaper rewrite (x*4 -> x<<2) is admitted -- cycles saved, the move journaled.  Biting arm: a
+ * value-changing impostor (x*3), though cheaper, is REJECTED by the result-equivalence gate with no
+ * journal entry (the loop may reduce cycles, never change an answer byte).  Safety arm: os_converge
+ * routes through the existing closed loop and self-edits nothing when the kernel is down. */
+
+module corpus_1404_optimize_self
+
+extern @abi(c-msvc-x64) fn os_plan() -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_apply_in_model() -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_apply_variant(variant: u32) -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_value_before() -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_value_after(variant: u32) -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_cost_before() -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_cost_after() -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_journal_count() -> u64 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_journal_root(out_32: u64) -> i32 from "optimize_self.iii"
+extern @abi(c-msvc-x64) fn os_converge(kernel_ok: u32) -> u32 from "optimize_self.iii"
+
+var RBUF : [u8; 32]
+
+fn main() -> u64 {
+    let plan : u64 = os_plan()
+    if plan == 0u64 { return 1u64 }
+    if os_journal_count() != 0u64 { return 2u64 }
+
+    let saved : u64 = os_apply_in_model()
+    if saved == 0u64 { return 3u64 }
+    if os_journal_count() != 1u64 { return 4u64 }
+
+    if os_value_after(0u32) != os_value_before() { return 5u64 }
+    if os_cost_after() >= os_cost_before() { return 6u64 }
+
+    let bad : u64 = os_apply_variant(1u32)
+    if bad != 0u64 { return 7u64 }
+    if os_journal_count() != 1u64 { return 8u64 }
+
+    let r : i32 = os_journal_root((&RBUF as u64))
+    if r != 0i32 { return 9u64 }
+
+    if os_converge(0u32) != 0u32 { return 10u64 }
+    if os_converge(1u32) != 0u32 { return 11u64 }
+
+    return 99u64
+}

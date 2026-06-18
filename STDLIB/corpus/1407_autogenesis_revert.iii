@@ -1,0 +1,43 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1407_autogenesis_revert.iii
+ *
+ * Falsifier KAT for sanctus::autogenesis -- FORCED-FAIL REVERSIBILITY.  A cycle stages a change
+ * (the state root moves off its pre-cycle value), then ag_rollback restores the box BYTE-IDENTICAL
+ * to the pre-cycle state.  This is the anti-tumor rail: a rejected cycle leaves no trace. */
+
+module corpus_1407_autogenesis_revert
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ag_cycle(cap: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_state_root(out_32: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_rollback() -> i32 from "autogenesis.iii"
+
+var PRE : [u8; 32]
+var POST : [u8; 32]
+var RB : [u8; 32]
+
+fn eq32(a: u64, b: u64) -> u8 {
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if ap[i] != bp[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_auto : u64 = cap_attenuate(env, 0x80000u64, 0u64)
+
+    ag_state_root((&PRE as u64))
+    if ag_cycle(cap_auto) != 0i32 { return 1u64 }
+    ag_state_root((&POST as u64))
+    if eq32((&PRE as u64), (&POST as u64)) != 0u8 { return 2u64 }
+
+    if ag_rollback() != 0i32 { return 3u64 }
+    ag_state_root((&RB as u64))
+    if eq32((&PRE as u64), (&RB as u64)) != 1u8 { return 4u64 }
+    return 99u64
+}

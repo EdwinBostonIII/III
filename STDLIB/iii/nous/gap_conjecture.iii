@@ -1,0 +1,233 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\nous\gap_conjecture.iii
+ *
+ * III STDLIB - nous::gap_conjecture  --  the autogenesis export-law proposer (Wave C #1).
+ *
+ * Reads the content-addressed self-model (sm_next_gap / sm_node_cost) to pick an improvement
+ * target, then PROPOSES a bounded universal law over that node and DISPOSES it by exhaustive
+ * scan -- the same propose->dispose discipline as nous_conjecture_gen, extended with a
+ * parameterized STRUCTURAL law table (idempotence, boundedness, monotonicity, round-trip) over
+ * canonical model functions.  The trichotomy keystone (nous_classify) is honoured exactly: a
+ * counterexample is REFUTED, a fully-saturated clean scan is SATURATED (admitted), and a budget
+ * timeout is GAP -- so a timeout can never harden into a false admission.  gc_emit_falsifier
+ * makes the loop write its own red-then-green corpus test.  It rides the existing
+ * nous_conjecture_gen disposer (gc_check_base) rather than re-implementing it: lean, no island.
+ *
+ * Hexad: kind_decision.  Composes self_model + nous_conjecture_gen + nous_search only.
+ * Determinism: integer-only, bounded domain, content-derived law selection.  Discipline: W2
+ * (<=4 params), W4 (module-scope scratch), W13 (<=20 locals), W14/W15 (sentinel/index loops, no
+ * recursion).  ASCII only.  Single-threaded scratch. */
+
+module nous_gap_conjecture
+
+extern @abi(c-msvc-x64) fn sm_node_cost(i: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_next_gap() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn nous_classify(saturated: u8, has_answer: u8) -> u8 from "nous_search.iii"
+extern @abi(c-msvc-x64) fn ng_conjecture_universal(kind: u32, n: u32) -> i32 from "nous_conjecture_gen.iii"
+
+const GC_DOMAIN   : u32 = 4096u32          /* bounded universal domain */
+const GC_BUDGET   : u32 = 4096u32          /* full-saturation step budget (== domain) */
+const GC_CAP      : u32 = 1024u32          /* boundedness law CAP */
+
+const GC_IDEMP    : u32 = 0u32             /* f(x)=x&~1 ; f(f(x))==f(x)        -- TRUE */
+const GC_BOUNDED  : u32 = 1u32             /* g(x)=x%CAP ; g(x) < CAP          -- TRUE */
+const GC_MONOTONE : u32 = 2u32             /* h(x)=x>>1 ; h(x) <= h(x+1)       -- TRUE */
+const GC_ROUNDTRIP: u32 = 3u32             /* enc=2x,dec=y>>1 ; dec(enc(x))==x -- TRUE */
+const GC_N_SOUND  : u32 = 4u32             /* count of sound laws (proposals draw from these) */
+const GC_FALSE    : u32 = 4u32             /* claim (x+1) idempotent           -- FALSE (biting arm) */
+
+const GC_SATURATED : u8 = 0u8              /* mirrors nous_search NOUS_SATURATED */
+const GC_GAP       : u8 = 1u8
+const GC_REFUTED   : u8 = 2u8
+
+var GC_LAST_LAW : u32 = 0u32
+var GC_LAST_CX  : u32 = 4096u32            /* GC_DOMAIN == "no counterexample" */
+var GC_LAST_OUT : u8  = 1u8                /* default GAP until a proposal runs */
+var GC_DEC      : [u8; 16]
+
+/* ---- the parameterized structural law table -------------------------- */
+
+/* 1 iff the law holds pointwise at x; an unknown law is conservatively violated (never admitted). */
+fn gc_law_holds(law: u32, x: u32) -> u8 @export {
+    if law == GC_IDEMP {
+        let f : u32 = x & 0xFFFFFFFEu32
+        let ff : u32 = f & 0xFFFFFFFEu32
+        if ff == f { return 1u8 }
+        return 0u8
+    }
+    if law == GC_BOUNDED {
+        let g : u32 = x % GC_CAP
+        if g < GC_CAP { return 1u8 }
+        return 0u8
+    }
+    if law == GC_MONOTONE {
+        let a : u32 = x >> 1u32
+        let b : u32 = (x + 1u32) >> 1u32
+        if a <= b { return 1u8 }
+        return 0u8
+    }
+    if law == GC_ROUNDTRIP {
+        let e : u32 = x * 2u32
+        let d : u32 = e >> 1u32
+        if d == x { return 1u8 }
+        return 0u8
+    }
+    if law == GC_FALSE {
+        let f2 : u32 = x + 1u32
+        let ff2 : u32 = f2 + 1u32
+        if ff2 == f2 { return 1u8 }
+        return 0u8
+    }
+    return 0u8
+}
+
+/* Smallest x in 0..n with the law VIOLATED; returns n if the law holds over 0..n. */
+fn gc_scan(law: u32, n: u32) -> u32 @export {
+    let mut x : u32 = 0u32
+    while x < n {
+        if gc_law_holds(law, x) == 0u8 { return x }
+        x = x + 1u32
+    }
+    return n
+}
+
+/* ---- propose -> dispose with the trichotomy keystone ----------------- */
+
+/* Core: scan the bounded universal under a step budget; classify by nous_classify so a budget
+ * timeout is GAP (never a false admission) and a counterexample is REFUTED. */
+fn gc_propose_law(law: u32, budget: u32) -> u8 {
+    let mut x : u32 = 0u32
+    let mut steps : u32 = 0u32
+    let mut cx : u32 = GC_DOMAIN
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if x >= GC_DOMAIN { go = 0u8 }
+        if go == 1u8 {
+            if steps >= budget { go = 0u8 }
+        }
+        if go == 1u8 {
+            if gc_law_holds(law, x) == 0u8 {
+                cx = x
+                go = 0u8
+            }
+        }
+        if go == 1u8 {
+            x = x + 1u32
+            steps = steps + 1u32
+        }
+    }
+    let mut sat : u8 = 0u8
+    if x >= GC_DOMAIN { sat = 1u8 }
+    let mut out : u8 = GC_GAP
+    if cx < GC_DOMAIN {
+        out = nous_classify(1u8, 0u8)
+    }
+    if cx >= GC_DOMAIN {
+        out = nous_classify(sat, 1u8)
+    }
+    GC_LAST_LAW = law
+    GC_LAST_CX = cx
+    GC_LAST_OUT = out
+    return out
+}
+
+/* Map a self-model node to a SOUND candidate law (proposals never draw the false probe). */
+fn gc_law_for_node(node_i: u64) -> u32 {
+    let c : u64 = sm_node_cost(node_i)
+    return (c % (GC_N_SOUND as u64)) as u32
+}
+
+/* Propose+dispose a sound law for a chosen self-model node (full saturation). */
+fn gc_propose(node_i: u64) -> u8 @export {
+    return gc_propose_law(gc_law_for_node(node_i), GC_BUDGET)
+}
+
+/* Propose for the self-model's current improvement target (sm_next_gap). */
+fn gc_propose_next() -> u8 @export {
+    return gc_propose(sm_next_gap())
+}
+
+/* Same, under a caller budget -- exposes the GAP arm (a timeout never hardens). */
+fn gc_propose_budgeted(node_i: u64, budget: u32) -> u8 @export {
+    return gc_propose_law(gc_law_for_node(node_i), budget)
+}
+
+/* Drive a SPECIFIC law (incl. the false probe) under full budget -- the biting falsifier path. */
+fn gc_test_law(law: u32) -> u8 @export {
+    return gc_propose_law(law, GC_BUDGET)
+}
+
+/* Ride the existing nous_conjecture_gen disposer for a base law (no island). */
+fn gc_check_base(kind: u32) -> i32 @export {
+    return ng_conjecture_universal(kind, GC_DOMAIN)
+}
+
+fn gc_outcome() -> u8 @export { return GC_LAST_OUT }
+fn gc_cx() -> u32 @export { return GC_LAST_CX }
+fn gc_last_law() -> u32 @export { return GC_LAST_LAW }
+
+/* ---- the system writes its own red-then-green test ------------------- */
+
+fn gc_put_str(base: u64, off: u64, s: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        let src : *u8 = (s + k) as *u8
+        let dst : *u8 = (base + off + k) as *u8
+        dst[0u64] = src[0u64]
+        k = k + 1u64
+    }
+    return off + n
+}
+
+fn gc_put_nl(base: u64, off: u64) -> u64 {
+    let d : *u8 = (base + off) as *u8
+    d[0u64] = 10u8
+    return off + 1u64
+}
+
+fn gc_put_dec(base: u64, off: u64, v: u32) -> u64 {
+    if v == 0u32 {
+        let z : *u8 = (base + off) as *u8
+        z[0u64] = 48u8
+        return off + 1u64
+    }
+    let mut n : u32 = v
+    let mut i : u64 = 0u64
+    while n > 0u32 {
+        GC_DEC[i] = (48u32 + (n % 10u32)) as u8
+        n = n / 10u32
+        i = i + 1u64
+    }
+    let mut o : u64 = off
+    let mut j : u64 = i
+    while j > 0u64 {
+        j = j - 1u64
+        let d : *u8 = (base + o) as *u8
+        d[0u64] = GC_DEC[j]
+        o = o + 1u64
+    }
+    return o
+}
+
+/* Render a compilable corpus test that re-checks the LAST proposed law; returns byte length. */
+fn gc_emit_falsifier(out: u64, max: u64) -> i32 @export {
+    if out == 0u64 { return -1i32 }
+    if max < 256u64 { return -1i32 }
+    let mut o : u64 = 0u64
+    o = gc_put_str(out, o, ("module corpus_emit_gap" as u64), 22u64)
+    o = gc_put_nl(out, o)
+    o = gc_put_str(out, o, ("extern @abi(c-msvc-x64) fn gc_test_law(law: u32) -> u8 from \"gap_conjecture.iii\"" as u64), 80u64)
+    o = gc_put_nl(out, o)
+    o = gc_put_str(out, o, ("fn main() -> u64 {" as u64), 18u64)
+    o = gc_put_nl(out, o)
+    o = gc_put_str(out, o, ("    if gc_test_law(" as u64), 19u64)
+    o = gc_put_dec(out, o, GC_LAST_LAW)
+    o = gc_put_str(out, o, ("u32) != " as u64), 8u64)
+    o = gc_put_dec(out, o, GC_LAST_OUT as u32)
+    o = gc_put_str(out, o, ("u8 { return 1u64 }" as u64), 18u64)
+    o = gc_put_nl(out, o)
+    o = gc_put_str(out, o, ("    return 99u64" as u64), 16u64)
+    o = gc_put_nl(out, o)
+    o = gc_put_str(out, o, ("}" as u64), 1u64)
+    o = gc_put_nl(out, o)
+    return o as i32
+}

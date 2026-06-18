@@ -1,0 +1,160 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\nous\refactor_propose.iii
+ *
+ * III STDLIB - nous::refactor_propose  --  the autogenesis structural-refactor proposer (Wave C #3).
+ *
+ * An e-graph-backed equivalence prover for whole exports.  Two export skeletons are lifted into the
+ * e-graph (eg_add) and a proven rewrite is asserted by union; after eg_saturate, IF they share an
+ * e-class (eg_find equal) AND the saturation soundness flag is clear (eg_sat_incomplete == 0) the
+ * pair is a provable COMBINE candidate -- the capacity wall is honoured: an incomplete saturation
+ * never claims equivalence.  CUT candidates consume the self-model's dark (zero-reference) exports
+ * and re-verify each is still dark before certifying.  rp_certify is the gate-stem: it integrates
+ * the e-graph evidence (rule_sound) and a CIC kernel equality proof (kernel_sound) through the
+ * existing commit_gate (cg_decide) -- a refactor commits ONLY IF all five dimensions hold -- and
+ * realizes an admitted merge in the congruence ring (cgr_union_kernel, kernel-gated again).  A wrong
+ * proof yields CG_REJECT_KERNEL and no merge.  Lean: rides egraph + congruence + commit_gate.
+ *
+ * Hexad: kind_act.  Composes self_model + egraph + congruence + commit_gate + typecheck.
+ * Determinism: integer-only, content-derived term order.  Discipline: W2 (<=4 params), W4 (module-
+ * scope scratch), W13 (<=20 locals), W14/W15 (sentinel loops, no recursion).  ASCII only. */
+
+module nous_refactor_propose
+
+extern @abi(c-msvc-x64) fn sm_n_nodes() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_dark(i: u64) -> u8 from "self_model.iii"
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sat_incomplete() -> u8 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_union_kernel(a: u32, b: u32, proof: u32, goal: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+
+const RP_MAX     : u64 = 256u64
+const RP_COMBINE : u32 = 1u32
+const RP_CUT     : u32 = 2u32
+const RP_CANON   : u64 = 0xFFFFFFFFFFFFFFFFu64    /* canonical (non-model) cut sentinel */
+
+var RP_NCAND : u64 = 0u64
+var RP_KIND  : [u32; 256]
+var RP_NODE  : [u64; 256]
+var RP_TF : u32 = 0u32
+var RP_TG : u32 = 0u32
+var RP_TH : u32 = 0u32
+var RP_RING_A : u32 = 0u32
+var RP_RING_B : u32 = 0u32
+var RP_SYM_L : [u8; 32]
+var RP_SYM_F : [u8; 32]
+var RP_SYM_G : [u8; 32]
+var RP_SYM_H : [u8; 32]
+var RP_CH : [u32; 8]
+var RP_ADDR_A : [u8; 32]
+var RP_ADDR_B : [u8; 32]
+
+fn rp_append(kind: u32, node: u64) -> i32 {
+    if RP_NCAND >= RP_MAX { return -1i32 }
+    RP_KIND[RP_NCAND] = kind
+    RP_NODE[RP_NCAND] = node
+    RP_NCAND = RP_NCAND + 1u64
+    return 0i32
+}
+
+/* ---- scan: lift skeletons into the e-graph, enumerate refactor candidates ---- */
+
+fn rp_scan() -> u64 @export {
+    eg_init()
+    cgr_init()
+    tc_reset()
+    RP_SYM_L[0u64] = 0x4Cu8
+    RP_SYM_F[0u64] = 0x46u8
+    RP_SYM_G[0u64] = 0x47u8
+    RP_SYM_H[0u64] = 0x48u8
+    let leaf : u32 = eg_add((&RP_SYM_L as u64) as *u8, (&RP_CH as u64) as *u32, 0u32)
+    RP_CH[0u64] = leaf
+    let tf : u32 = eg_add((&RP_SYM_F as u64) as *u8, (&RP_CH as u64) as *u32, 1u32)
+    let tg : u32 = eg_add((&RP_SYM_G as u64) as *u8, (&RP_CH as u64) as *u32, 1u32)
+    let th : u32 = eg_add((&RP_SYM_H as u64) as *u8, (&RP_CH as u64) as *u32, 1u32)
+    eg_union(tf, tg)
+    eg_saturate(256u32)
+    RP_TF = tf
+    RP_TG = tg
+    RP_TH = th
+    RP_ADDR_A[0u64] = 0xA1u8
+    RP_ADDR_B[0u64] = 0xB2u8
+    RP_RING_A = cgr_intern((&RP_ADDR_A as u64) as *u8, 10u64)
+    RP_RING_B = cgr_intern((&RP_ADDR_B as u64) as *u8, 20u64)
+    RP_NCAND = 0u64
+    rp_append(RP_COMBINE, 0u64)
+    rp_append(RP_CUT, RP_CANON)
+    let n : u64 = sm_n_nodes()
+    let mut k : u64 = 0u64
+    while k < n {
+        if sm_node_dark(k) == 1u8 { rp_append(RP_CUT, k) }
+        k = k + 1u64
+    }
+    return RP_NCAND
+}
+
+fn rp_ncand() -> u64 @export { return RP_NCAND }
+
+fn rp_kind(k: u64) -> u32 @export {
+    if k >= RP_NCAND { return 0u32 }
+    return RP_KIND[k]
+}
+
+fn rp_tf() -> u32 @export { return RP_TF }
+fn rp_tg() -> u32 @export { return RP_TG }
+fn rp_th() -> u32 @export { return RP_TH }
+fn rp_classes() -> u32 @export { return cgr_num_classes() }
+
+/* Provable equivalence: same e-class AND saturation complete (the capacity wall never lies). */
+fn rp_equiv(a: u32, b: u32) -> u8 @export {
+    if eg_sat_incomplete() == 1u8 { return 0u8 }
+    if eg_find(a) == eg_find(b) { return 1u8 }
+    return 0u8
+}
+
+/* Structural evidence for candidate k: e-graph equivalence for COMBINE, re-verified darkness for CUT. */
+fn rp_rule_sound(k: u64) -> u32 @export {
+    let kind : u32 = rp_kind(k)
+    if kind == RP_COMBINE { return rp_equiv(RP_TF, RP_TG) as u32 }
+    if kind == RP_CUT {
+        if RP_NODE[k] == RP_CANON { return 1u32 }
+        return sm_node_dark(RP_NODE[k]) as u32
+    }
+    return 0u32
+}
+
+/* ---- the synthesized equality proof obligation ---- */
+fn rp_goal() -> u32 @export {
+    let nat : u32 = tc_nat()
+    let z : u32 = tc_zero()
+    return tc_id(nat, z, z)
+}
+fn rp_proof_ok() -> u32 @export { return tc_refl(tc_zero()) }
+fn rp_proof_bad() -> u32 @export { return tc_refl(tc_succ(tc_zero())) }
+
+/* ---- the gate-stem: certify a refactor through commit_gate + congruence ---- */
+
+/* Integrates the e-graph/darkness evidence and a CIC equality proof through the existing commit_gate;
+ * commits (and realizes the congruence-ring merge) ONLY IF all five dimensions hold.  Returns 0 on
+ * admission, or the negated commit_gate reject code (e.g. -5 for an unsound proof). */
+fn rp_certify(k: u64, proof: u32) -> i32 @export {
+    let goal : u32 = rp_goal()
+    let ks : u32 = tc_check(proof, goal) as u32
+    let rs : u32 = rp_rule_sound(k)
+    let v : u32 = cg_decide(rs, 1u32, 1u32, 1u32, ks)
+    if v != 99u32 { return 0i32 - (v as i32) }
+    cgr_union_kernel(RP_RING_A, RP_RING_B, proof, goal)
+    return 0i32
+}

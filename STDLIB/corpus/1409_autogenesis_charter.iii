@@ -1,0 +1,35 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1409_autogenesis_charter.iii
+ *
+ * Falsifier KAT for sanctus::autogenesis -- THE CHARTER CANARY.  The apprentice clause made
+ * structural: a cap holding only CAP_RIGHT_AUTOGENESIS may PROPOSE and run a cycle, but committing
+ * to the sealed tree WITHOUT CAP_RIGHT_AUTOGENESIS_COMMIT and WITHOUT an operator/quorum
+ * authorization is REFUSED (AG_E_UNAUTH).  The cycle stays open (uncommitted).  A cap lacking the
+ * autogenesis right cannot even open a cycle.  Removing the gate makes this canary go green = caught. */
+
+module corpus_1409_autogenesis_charter
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ag_cycle(cap: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_commit(cap: u64, sig: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_inflight() -> u32 from "autogenesis.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_auto : u64 = cap_attenuate(env, 0x80000u64, 0u64)
+    let cap_none : u64 = cap_attenuate(env, 0x10u64, 0u64)
+
+    if ag_cycle(cap_auto) != 0i32 { return 1u64 }
+
+    /* THE CANARY: unauthorized commit (no COMMIT right, no signature) MUST be refused. */
+    if ag_commit(cap_auto, 0u64) != -5i32 { return 2u64 }
+    if ag_inflight() != 1u32 { return 3u64 }
+
+    /* An authorization token (operator/quorum signature presented) lifts the apprentice gate. */
+    if ag_commit(cap_auto, 1u64) != 0i32 { return 4u64 }
+    if ag_inflight() != 0u32 { return 5u64 }
+
+    /* A cap lacking the autogenesis right cannot even open a cycle. */
+    if ag_cycle(cap_none) != -1i32 { return 6u64 }
+    return 99u64
+}

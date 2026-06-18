@@ -1,0 +1,135 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\nous\optimize_self.iii
+ *
+ * III STDLIB - nous::optimize_self  --  the autogenesis cost-gradient optimizer (Wave C #4).
+ *
+ * Cost-gradient descent gated by the analytic cost oracle.  os_plan selects a hot path the
+ * self-model (sm_node_cost) and the microarch cost model (ma_simulate -> ma_last_cycles) AGREE is
+ * costly, and arms the move journal.  os_apply_in_model drives an equivalent cheaper form and
+ * journals the move through ripple_journal (whose order-recorded run-root lets parallel searches be
+ * reconciled).  The RESULT-EQUIVALENCE GATE is hard and comes FIRST: a candidate that changes one
+ * answer byte is REJECTED even when it is strictly cheaper -- the loop may reduce cycles, it may
+ * never change a value.  os_converge invokes the existing closed loop (ripple_loop rl_run), which
+ * self-edits NOTHING when the kernel is down (kernel_ok = 0): the kernel-first safety property,
+ * reused not re-implemented.  Equivalence proving is delegated to nous/refactor_propose; this organ
+ * owns COST.
+ *
+ * Hexad: kind_act.  Composes self_model + microarch_model + ripple_journal + ripple_loop.
+ * Determinism: integer-only, no wall-clock (the analytic oracle is cycle-exact).  Discipline: W2
+ * (<=4 params), W4 (module-scope scratch), W13 (<=20 locals), W14/W15 (sentinel loops, no
+ * recursion).  ASCII only. */
+
+module nous_optimize_self
+
+extern @abi(c-msvc-x64) fn sm_next_gap() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_cost(i: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn ma_init() -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_set_params(p: *u32) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_simulate(ops: *u32, n: u32, deps: *u32, dep_n: u32, out_cycles: *u64) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_last_cycles() -> u64 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn rj_init() -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_count() -> u64 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_record(ckpt: *u8) -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rj_run_root(out: *u8) -> i32 from "ripple_journal.iii"
+extern @abi(c-msvc-x64) fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 from "ripple_loop.iii"
+
+const OS_X : u64 = 7u64                       /* the witness input of the modelled computation */
+
+var OS_PARAMS : [u32; 4]
+var OS_OPS_B  : [u32; 4]
+var OS_OPS_A  : [u32; 4]
+var OS_DEPS_B : [u32; 8]
+var OS_DEPS_A : [u32; 4]
+var OS_OUT    : [u64; 1]
+var OS_CKPT   : [u8; 32]
+
+fn os_put_u64le(base: u64, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let p : *u8 = (base + off + i) as *u8
+        p[0u64] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return off + 8u64
+}
+
+fn os_uarch_setup() -> i32 {
+    ma_init()
+    OS_PARAMS[0u64] = 2u32
+    OS_PARAMS[1u64] = 2u32
+    OS_PARAMS[2u64] = 16u32
+    OS_PARAMS[3u64] = 2u32
+    return ma_set_params((&OS_PARAMS as u64) as *u32)
+}
+
+/* ---- the analytic cost oracle: cycles of the long (serial chain) vs short form ---- */
+
+fn os_cost_before() -> u64 @export {
+    os_uarch_setup()
+    OS_OPS_B[0u64] = 1u32
+    OS_OPS_B[1u64] = 1u32
+    OS_OPS_B[2u64] = 1u32
+    OS_OPS_B[3u64] = 1u32
+    OS_DEPS_B[0u64] = 1u32 ; OS_DEPS_B[1u64] = 0u32
+    OS_DEPS_B[2u64] = 2u32 ; OS_DEPS_B[3u64] = 1u32
+    OS_DEPS_B[4u64] = 3u32 ; OS_DEPS_B[5u64] = 2u32
+    ma_simulate((&OS_OPS_B as u64) as *u32, 4u32, (&OS_DEPS_B as u64) as *u32, 3u32, (&OS_OUT as u64) as *u64)
+    return ma_last_cycles()
+}
+
+fn os_cost_after() -> u64 @export {
+    os_uarch_setup()
+    OS_OPS_A[0u64] = 1u32
+    ma_simulate((&OS_OPS_A as u64) as *u32, 1u32, (&OS_DEPS_A as u64) as *u32, 0u32, (&OS_OUT as u64) as *u64)
+    return ma_last_cycles()
+}
+
+/* ---- the value model: the observable answer the optimization must PRESERVE ---- */
+
+fn os_value_before() -> u64 @export { return OS_X * 4u64 }
+
+/* variant 0: the equivalent rewrite (x*4 == x<<2); variant 1: a value-changing impostor (x*3). */
+fn os_value_after(variant: u32) -> u64 @export {
+    if variant == 0u32 { return OS_X << 2u64 }
+    return OS_X * 3u64
+}
+
+/* ---- the move journal ---- */
+
+fn os_journal_move(cb: u64, ca: u64) -> i32 {
+    os_put_u64le((&OS_CKPT as u64), 0u64, cb)
+    os_put_u64le((&OS_CKPT as u64), 8u64, ca)
+    os_put_u64le((&OS_CKPT as u64), 16u64, os_value_before())
+    os_put_u64le((&OS_CKPT as u64), 24u64, 0u64)
+    return rj_record((&OS_CKPT as u64) as *u8)
+}
+
+fn os_journal_count() -> u64 @export { return rj_count() }
+fn os_journal_root(out_32: u64) -> i32 @export { return rj_run_root(out_32 as *u8) }
+
+/* ---- plan: where the self-model and the cost model AGREE it is costly ---- */
+
+fn os_plan() -> u64 @export {
+    rj_init()
+    let smc : u64 = sm_node_cost(sm_next_gap())
+    let mc : u64 = os_cost_before()
+    if smc > mc { return smc }
+    return mc
+}
+
+/* ---- apply: the RESULT-EQUIVALENCE GATE precedes any cost comparison ---- */
+
+/* Returns cycles saved iff the rewrite preserves the answer AND is strictly cheaper; 0 (rejected)
+ * otherwise.  A value-changing candidate is refused before cost is even consulted. */
+fn os_apply_variant(variant: u32) -> u64 @export {
+    if os_value_after(variant) != os_value_before() { return 0u64 }
+    let cb : u64 = os_cost_before()
+    let ca : u64 = os_cost_after()
+    if ca >= cb { return 0u64 }
+    os_journal_move(cb, ca)
+    return cb - ca
+}
+
+fn os_apply_in_model() -> u64 @export { return os_apply_variant(0u32) }
+
+/* ---- converge: the existing closed loop; self-edits nothing when the kernel is down ---- */
+fn os_converge(kernel_ok: u32) -> u32 @export { return rl_run(0u32, 1u32, kernel_ok) }

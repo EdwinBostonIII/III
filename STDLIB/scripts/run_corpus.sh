@@ -1318,6 +1318,7 @@ declare -A EXPECTED=(
     [1701_lemma_forge]=99
     [1702_search_market]=99
     [1703_cegar_refine]=99
+    [1704_egraph_hw_ematch]=99
 )
 
 PASS=0

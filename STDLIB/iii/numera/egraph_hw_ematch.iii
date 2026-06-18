@@ -1,0 +1,113 @@
+/* STDLIB/iii/numera/egraph_hw_ematch.iii -- THE CERTIFIED HARDWARE E-MATCHER
+ * (III-PHASE3-WALLS, Campaign I, organ 4).
+ *
+ * Campaign I raises saturation throughput by evaluating ALL of an e-match's guard conditions in ONE
+ * abstract combinational pass instead of a sequential scan -- with a machine-checked equality to the
+ * scalar matcher, so the speed costs no soundness.  An e-match's child obligations reduce to ECLASS-
+ * EQUALITY guards (eg_find(a) == eg_find(b)); their conjunction is exactly what numera/aeu's certified
+ * parallel AND-tree computes.
+ *
+ * THE LOWERING: each guard condition becomes one aeu lane bit; aeu_check_n is the parallel conjunction
+ * verdict (every lane evaluated in the same pass -- a violation is caught simultaneously, not after a
+ * scan).  aeu_and_tree_certified(n) proves (hdl_equiv2, EXHAUSTIVE over all 2^n guard-bit patterns) that
+ * the NAND-built AND-tree equals a native n-way AND -- the hardware matcher provably equals the scalar
+ * conjunction for EVERY possible guard pattern, not just the ones this fixture exercises.
+ *
+ * THE CONNECTION (no island): the guards are computed by eg_find over a REAL unioned e-graph (the e-
+ * matching eclass primitive), and the verdict is the aeu certified AND-tree -- both named production
+ * organs, load-bearing.  The scalar reference (a sequential AND of the same eg_find conditions) is the
+ * independent oracle the hardware verdict must match.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 0.99.  Composes numera/egraph (eg_find) + numera/aeu (the
+ * certified AND-tree).  Determinism: integer-only; unsigned compares; module-scope buffers (no local-
+ * array trap); no float.
+ */
+module numera_egraph_hw_ematch
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn aeu_set_lane(i: u32, bit: u32) -> u64 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_check_n(n: u32) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_and_tree_certified(n: u32) -> u32 from "aeu.iii"
+
+const EHE_NCOND : u32 = 4u32
+
+var EHE_CA  : [u32; 4]
+var EHE_CB  : [u32; 4]
+var EHE_SYM : [u8; 32]
+var EHE_CH  : [u32; 8]
+var EHE_INIT : u8 = 0u8
+
+fn ehe_mk_leaf(tag: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { EHE_SYM[i] = 0u8  i = i + 1u64 }
+    EHE_SYM[0u64] = tag
+    return eg_add((&EHE_SYM as u64) as *u8, (&EHE_CH as u64) as *u32, 0u32)
+}
+
+/* build a real e-graph: six distinct leaves, two unions; the four guard conditions are the e-matcher's
+ * child obligations expressed as eclass equalities (three hold, one does not). */
+fn ehe_setup() -> i32 @export {
+    if EHE_INIT == 1u8 { return 0i32 }
+    eg_init()
+    let n0 : u32 = ehe_mk_leaf(1u8)
+    let n1 : u32 = ehe_mk_leaf(2u8)
+    let n2 : u32 = ehe_mk_leaf(3u8)
+    let n3 : u32 = ehe_mk_leaf(4u8)
+    let n4 : u32 = ehe_mk_leaf(5u8)
+    let n5 : u32 = ehe_mk_leaf(6u8)
+    eg_union(n0, n1)
+    eg_union(n2, n3)
+    EHE_CA[0u64]=n0  EHE_CB[0u64]=n1     /* TRUE  -- unioned   */
+    EHE_CA[1u64]=n2  EHE_CB[1u64]=n3     /* TRUE  -- unioned   */
+    EHE_CA[2u64]=n0  EHE_CB[2u64]=n0     /* TRUE  -- reflexive */
+    EHE_CA[3u64]=n4  EHE_CB[3u64]=n5     /* FALSE -- distinct  */
+    EHE_INIT = 1u8
+    return 0i32
+}
+
+/* guard condition i: 1 iff the two operands are in the same eclass (eg_find equal). */
+fn ehe_guard_bit(i: u32) -> u32 @export {
+    ehe_setup()
+    if i >= EHE_NCOND { return 0u32 }
+    if eg_find(EHE_CA[(i as u64) & 0xFFFFFFFFu64]) == eg_find(EHE_CB[(i as u64) & 0xFFFFFFFFu64]) { return 1u32 }
+    return 0u32
+}
+
+/* SCALAR e-matcher: a sequential AND of the first n guard conditions (the reference oracle). */
+fn ehe_scalar(n: u32) -> u32 @export {
+    ehe_setup()
+    let mut acc : u32 = 1u32
+    let mut i : u32 = 0u32
+    while i < n {
+        if ehe_guard_bit(i) != 1u32 { acc = 0u32 }
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* HARDWARE e-matcher: lower the guard bits to the aeu lanes, evaluate the parallel conjunction (all
+ * lanes in one pass -- a violation is caught simultaneously). */
+fn ehe_hw(n: u32) -> u32 @export {
+    ehe_setup()
+    let mut i : u32 = 0u32
+    while i < n {
+        aeu_set_lane(i, ehe_guard_bit(i))
+        i = i + 1u32
+    }
+    return aeu_check_n(n)
+}
+
+/* the lowering is CERTIFIED: the n-input NAND-built AND-tree equals a native n-way AND, exhaustively over
+ * all 2^n guard-bit patterns (hdl_equiv2). */
+fn ehe_lowering_certified(n: u32) -> u32 @export {
+    return aeu_and_tree_certified(n)
+}
+
+/* 1 iff the hardware verdict equals the scalar verdict for the first n guards (the speed costs no answer). */
+fn ehe_agree(n: u32) -> u8 @export {
+    if ehe_hw(n) == ehe_scalar(n) { return 1u8 }
+    return 0u8
+}

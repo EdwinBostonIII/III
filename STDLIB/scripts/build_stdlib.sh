@@ -1156,6 +1156,12 @@ MODULES=(
     # abstract is a proof in the concrete, so the concrete-state explosion is never paid in full.  Composes
     # interval_lattice (il_join + il_leq, no island); compiler-unreferenced -> LIBNATIVE; last.
     "numera/cegar_refine"
+    # --- PHASE III Campaign I #4: the CERTIFIED HARDWARE E-MATCHER.  numera/egraph_hw_ematch lowers an
+    # e-match's guard conjunction (eclass-equality obligations, eg_find) to numera/aeu's certified parallel
+    # AND-tree: every guard evaluated in one combinational pass, a violation caught simultaneously, with a
+    # machine-checked equality (aeu_and_tree_certified, exhaustive over all 2^n patterns) to the scalar
+    # matcher.  Composes egraph + aeu (no island); compiler-unreferenced -> LIBNATIVE; last.
+    "numera/egraph_hw_ematch"
 )
 
 PASS=0

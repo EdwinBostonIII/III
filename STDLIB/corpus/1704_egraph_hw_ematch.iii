@@ -1,0 +1,49 @@
+/* STDLIB/corpus/1704_egraph_hw_ematch.iii
+ *
+ * Falsifier KAT for numera::egraph_hw_ematch (III-PHASE3-WALLS, Campaign I, organ 4) -- the CERTIFIED
+ * HARDWARE E-MATCHER.  99 = every arm holds; 1..12 = the failing arm.  Independent oracle: the scalar
+ * sequential-AND of the same eg_find guard conditions over a real unioned e-graph, plus aeu's exhaustive
+ * AND-tree certificate -- a stub whose lowering is not a real AND, or disagrees with the scalar matcher,
+ * is caught.
+ *
+ *   (1) the e-graph guard conditions: c0,c1 (unioned), c2 (reflexive) hold; c3 (distinct classes) fails.
+ *   (2) SATISFIED guard {c0,c1,c2}: scalar AND = 1, hardware parallel = 1, they AGREE.
+ *   (3) VIOLATED guard {c0,c1,c2,c3}: the c3 violation is caught in the SAME parallel pass -- scalar = 0,
+ *       hardware = 0, agree.  BITING: an OR-lowering would return 1 here.
+ *   (4) the lowering is CERTIFIED exhaustively: the n-input AND-tree == native n-way AND over all 2^n
+ *       guard patterns (a non-AND lowering fails aeu_and_tree_certified).
+ */
+module corpus_1704_egraph_hw_ematch
+
+extern @abi(c-msvc-x64) fn ehe_setup() -> i32 from "egraph_hw_ematch.iii"
+extern @abi(c-msvc-x64) fn ehe_guard_bit(i: u32) -> u32 from "egraph_hw_ematch.iii"
+extern @abi(c-msvc-x64) fn ehe_scalar(n: u32) -> u32 from "egraph_hw_ematch.iii"
+extern @abi(c-msvc-x64) fn ehe_hw(n: u32) -> u32 from "egraph_hw_ematch.iii"
+extern @abi(c-msvc-x64) fn ehe_lowering_certified(n: u32) -> u32 from "egraph_hw_ematch.iii"
+extern @abi(c-msvc-x64) fn ehe_agree(n: u32) -> u8 from "egraph_hw_ematch.iii"
+
+fn main() -> u64 {
+    ehe_setup()
+
+    /* (1) the e-graph eclass guards: c0,c1,c2 hold; c3 fails */
+    if ehe_guard_bit(0u32) != 1u32 { return 1u64 }
+    if ehe_guard_bit(1u32) != 1u32 { return 2u64 }
+    if ehe_guard_bit(2u32) != 1u32 { return 3u64 }
+    if ehe_guard_bit(3u32) != 0u32 { return 4u64 }
+
+    /* (2) SATISFIED guard {c0,c1,c2}: scalar = hardware = 1 */
+    if ehe_scalar(3u32) != 1u32 { return 5u64 }
+    if ehe_hw(3u32) != 1u32 { return 6u64 }
+    if ehe_agree(3u32) != 1u8 { return 7u64 }
+
+    /* (3) VIOLATED guard {c0,c1,c2,c3}: the violation is caught in one parallel pass; scalar = hardware = 0 */
+    if ehe_scalar(4u32) != 0u32 { return 8u64 }
+    if ehe_hw(4u32) != 0u32 { return 9u64 }
+    if ehe_agree(4u32) != 1u8 { return 10u64 }
+
+    /* (4) the lowering is exhaustively certified: AND-tree == native AND over all 2^n patterns */
+    if ehe_lowering_certified(3u32) != 1u32 { return 11u64 }
+    if ehe_lowering_certified(4u32) != 1u32 { return 12u64 }
+
+    return 99u64
+}

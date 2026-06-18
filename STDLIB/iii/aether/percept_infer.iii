@@ -1,0 +1,40 @@
+/* STDLIB/iii/aether/percept_infer.iii -- PERCEPTION WIRED TO THE INFERENCE ENGINES
+ * (III-PHASE4-PROBABILITY, Layer 7 -- full-system integration).
+ *
+ * Closes the open-world loop: a noisy observation enters through the perception membrane as a PROVISIONAL,
+ * becomes an EXACT likelihood, drives an EXACT Bayesian posterior, and the posterior BELIEF is typed by the
+ * measure tetrachotomy -- exact-or-PROVISIONAL, default-denied from any canonical context until a kernel
+ * proof promotes it.  The open world gains a full measure-theoretic calculus without touching the seal.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 1.00.  Composes aether/perception_membrane (the gateway) +
+ * numera/bayes_exact (the exact posterior) + numera/measure_status (the typing wall) -- no island.
+ * Determinism: integer-only; the posterior is exact; the belief is PROVISIONAL until proven.
+ */
+module aether_percept_infer
+
+extern @abi(c-msvc-x64) fn pm_ingest(cap: u64) -> u8 from "perception_membrane.iii"
+extern @abi(c-msvc-x64) fn bx_set(a: u64, b: u64, l0: u64, l1: u64) -> i32 from "bayes_exact.iii"
+extern @abi(c-msvc-x64) fn bx_posterior_num(i: u32) -> u64 from "bayes_exact.iii"
+extern @abi(c-msvc-x64) fn bx_marginal() -> u64 from "bayes_exact.iii"
+extern @abi(c-msvc-x64) fn bx_normalized() -> u8 from "bayes_exact.iii"
+extern @abi(c-msvc-x64) fn ms_canonical_ok(status: u8) -> u8 from "measure_status.iii"
+extern @abi(c-msvc-x64) fn ms_provisional_usable(status: u8, pin: u8) -> u8 from "measure_status.iii"
+
+const PI_PROVISIONAL : u8 = 3u8
+
+/* a noisy observation enters the inference pipeline through the membrane (gated; -> PROVISIONAL). */
+fn pi_ingest(cap: u64) -> u8 @export { return pm_ingest(cap) }
+
+/* set the prior and the OBSERVED likelihood; the posterior is computed exactly by bayes_exact. */
+fn pi_observe(prior0: u64, prior1: u64, lik0: u64, lik1: u64) -> i32 @export {
+    return bx_set(prior0, prior1, lik0, lik1)
+}
+fn pi_posterior_num(i: u32) -> u64 @export { return bx_posterior_num(i) }
+fn pi_posterior_marginal() -> u64 @export { return bx_marginal() }
+fn pi_posterior_normalized() -> u8 @export { return bx_normalized() }
+
+/* the posterior BELIEF is PROVISIONAL: default-denied from any canonical context (measure_status wall). */
+fn pi_posterior_canonical_ok() -> u8 @export { return ms_canonical_ok(PI_PROVISIONAL) }
+
+/* usable in a gap-accepting context ONLY with its oracle-pin. */
+fn pi_posterior_usable(pin: u8) -> u8 @export { return ms_provisional_usable(PI_PROVISIONAL, pin) }

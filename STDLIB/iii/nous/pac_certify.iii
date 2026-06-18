@@ -1,0 +1,37 @@
+/* STDLIB/iii/nous/pac_certify.iii -- PAC / GENERALIZATION BOUNDS
+ * (III-PHASE4-PROBABILITY, Layer 6).
+ *
+ * Closes the open-world learning loop with PROVED generalization.  A learned (sealed-weights) hypothesis
+ * ships with an exact-rational generalization bound -- an Occam/VC/Rademacher bound over the sample count n
+ * and the hypothesis-class complexity (ln|H| + ln(1/delta), carried as an integer bit-budget):
+ *   generalization error  eps  <=  complexity / n .
+ * The bound is monotone DECREASING in n (more data -> tighter), and a perceptual hypothesis is admitted to
+ * use ONLY IF its bound meets a target -- so a hypothesis trained on too little data is refused, and one
+ * with enough data is certified.  The open-world proposer's output is gated by proved generalization, not
+ * hope.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  Composes nous/nous_train (the certified-only admit) -- the
+ * bound is the certificate.  Determinism: integer-only; exact cross-mult; no float.
+ */
+module nous_pac_certify
+
+extern @abi(c-msvc-x64) fn nous_train_admit(has_cert: u8) -> u8 from "nous_train.iii"
+
+/* the generalization bound: eps <= complexity / n. */
+fn pac_bound_num(complexity: u64) -> u64 @export { return complexity }
+fn pac_bound_den(n: u64) -> u64 @export { return n }
+
+/* the bound TIGHTENS with more samples: eps(n2) < eps(n1) iff n2 > n1 (complexity fixed). */
+fn pac_tighter(complexity: u64, n1: u64, n2: u64) -> u8 @export {
+    if (complexity * n1) < (complexity * n2) { return 1u8 }
+    return 0u8
+}
+
+/* admit a hypothesis iff its bound <= target (tn/td):  complexity/n <= tn/td  iff  complexity*td <= tn*n. */
+fn pac_admits(complexity: u64, n: u64, tn: u64, td: u64) -> u8 @export {
+    if (complexity * td) <= (tn * n) { return 1u8 }
+    return 0u8
+}
+
+/* the certified hypothesis is admitted to DECIDE only with its bound certificate (the poison wall). */
+fn pac_admit_certified(has_cert: u8) -> u8 @export { return nous_train_admit(has_cert) }

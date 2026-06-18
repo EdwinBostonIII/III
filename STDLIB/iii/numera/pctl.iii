@@ -1,0 +1,29 @@
+/* STDLIB/iii/numera/pctl.iii -- PROBABILISTIC MODEL CHECKING (PCTL)
+ * (III-PHASE4-PROBABILITY, Layer 6).
+ *
+ * Certification-grade probabilistic model checking: over an exact-rational Markov chain, the probabilistic
+ * operator P_{~thr}[ reach GOAL ] is decided EXACTLY, with a witnessing probability, never a float.  For a
+ * transient state with competing absorbing outcomes FAIL and GOAL (weights p and q), the probability of
+ * reaching GOAL before FAIL is the exact rational q / (p + q); the PCTL property P_{>=thr}[reach GOAL] then
+ * reduces to an exact cross-multiplied comparison.  A safety property is proved or refuted with no rounding.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  The reachability is the absorption probability of a
+ * numera/markov_exact chain; the P-operator is the temporal_logic "eventually" lifted to probability.
+ * Determinism: integer-only; exact cross-mult; no float.
+ */
+module numera_pctl
+
+var PC_P : u64 = 1u64   /* weight: transient -> FAIL  */
+var PC_Q : u64 = 1u64   /* weight: transient -> GOAL  */
+
+fn pctl_set(p: u64, q: u64) -> i32 @export { PC_P = p  PC_Q = q  return 0i32 }
+
+/* exact P[ reach GOAL before FAIL ] = q / (p + q). */
+fn pctl_reach_num() -> u64 @export { return PC_Q }
+fn pctl_reach_den() -> u64 @export { return PC_P + PC_Q }
+
+/* PCTL P_{>=thr}[reach GOAL]: 1 iff reach_prob >= thr (tn/td), exact (reach_num*td >= tn*reach_den). */
+fn pctl_satisfies_geq(tn: u64, td: u64) -> u8 @export {
+    if (pctl_reach_num() * td) >= (tn * pctl_reach_den()) { return 1u8 }
+    return 0u8
+}

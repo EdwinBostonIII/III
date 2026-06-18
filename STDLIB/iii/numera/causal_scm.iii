@@ -1,0 +1,43 @@
+/* STDLIB/iii/numera/causal_scm.iii -- CAUSAL INFERENCE (structural causal models, do-calculus)
+ * (III-PHASE4-PROBABILITY, Layer 6).
+ *
+ * Structural causal models with EXACT interventional and counterfactual distributions.  The point of
+ * causality is that DOING is not SEEING: under confounding, the interventional P(Y | do(X)) differs from the
+ * observational P(Y | X).  This organ encodes a confounded SCM (Z -> X, Z -> Y, X -> Y) and computes both
+ * exactly by the back-door adjustment:
+ *   P(Y=1 | do(X=1)) = sum_z P(Y=1 | X=1, z) P(z)            -- the causal effect (back-door over Z);
+ *   P(Y=1 | X=1)     = P(Y=1, X=1) / P(X=1)                  -- the observational correlation.
+ * With P(Z)=1/2, P(X=1|Z0)=1/4, P(X=1|Z1)=3/4, P(Y=1|X1,Z0)=1, P(Y=1|X1,Z1)=0, the causal effect is 1/2 but
+ * the correlation is only 1/4 -- the do-operator removes the back-door bias, exactly.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Exact rationals (the do-calculus over the causal DAG of
+ * sanctus/catalyst).  Determinism: integer-only; no float.
+ */
+module numera_causal_scm
+
+/* the confounded SCM (weights): P(X=1|Z=z) over 4; P(Z=z) over 2; P(Y=1|X=1,Z=z) in {0,1}. */
+const CS_PX1Z0  : u64 = 1u64   /* P(X=1|Z=0) = 1/4 */
+const CS_PX1Z1  : u64 = 3u64   /* P(X=1|Z=1) = 3/4 */
+const CS_PZ0    : u64 = 1u64   /* P(Z=0) = 1/2 */
+const CS_PZ1    : u64 = 1u64   /* P(Z=1) = 1/2 */
+const CS_PYX1Z0 : u64 = 1u64   /* P(Y=1|X=1,Z=0) = 1 */
+const CS_PYX1Z1 : u64 = 0u64   /* P(Y=1|X=1,Z=1) = 0 */
+
+/* P(Y=1 | do(X=1)) = sum_z P(Y=1|X1,z) P(z) -- numerator over P(Z) denominator 2. */
+fn cs_do_num() -> u64 @export { return CS_PYX1Z0 * CS_PZ0 + CS_PYX1Z1 * CS_PZ1 }
+fn cs_do_den() -> u64 @export { return CS_PZ0 + CS_PZ1 }
+
+/* P(Y=1, X=1) numerator = sum_z P(Y=1|X1,z) P(X1|z) P(z). */
+fn cs_joint_yx_num() -> u64 @export { return CS_PYX1Z0 * CS_PX1Z0 * CS_PZ0 + CS_PYX1Z1 * CS_PX1Z1 * CS_PZ1 }
+/* P(X=1) numerator = sum_z P(X1|z) P(z). */
+fn cs_px1_num() -> u64 @export { return CS_PX1Z0 * CS_PZ0 + CS_PX1Z1 * CS_PZ1 }
+
+/* P(Y=1 | X=1) = P(Y=1,X=1) / P(X=1) (the /8 denominators cancel). */
+fn cs_see_num() -> u64 @export { return cs_joint_yx_num() }
+fn cs_see_den() -> u64 @export { return cs_px1_num() }
+
+/* CONFOUNDED: 1 iff the causal effect P(Y|do X) differs from the correlation P(Y|X) (do != see). */
+fn cs_confounded() -> u8 @export {
+    if (cs_do_num() * cs_see_den()) != (cs_see_num() * cs_do_den()) { return 1u8 }
+    return 0u8
+}

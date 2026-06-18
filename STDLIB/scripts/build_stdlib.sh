@@ -1262,6 +1262,21 @@ MODULES=(
     # numera/rand_algo -- verified randomized algorithms: Fermat primality (Las-Vegas-correct for primes,
     # Monte-Carlo-detecting for composites) with beacon-drawn witnesses.  Composes sample_beacon.
     "numera/rand_algo"
+    # numera/pctl -- probabilistic model checking: the exact reachability probability over a Markov chain
+    # decides PCTL P_{>=thr}[reach GOAL] with no rounding.
+    "numera/pctl"
+    # numera/causal_scm -- causal inference: under confounding the interventional P(Y|do X) differs from the
+    # observational P(Y|X), computed exactly by the back-door adjustment (do != see).
+    "numera/causal_scm"
+    # nous/pac_certify -- PAC generalization bounds: eps <= complexity/n tightens with data and gates a
+    # learned hypothesis into use; certified-only admit (nous_train).
+    "nous/pac_certify"
+    # --- PHASE IV Layer 7: full-system integration.  aether/percept_infer wires perception_membrane to the
+    # inference engines (noisy obs -> exact posterior -> PROVISIONAL, default-denied until proven).
+    "aether/percept_infer"
+    # nous/bayes_search -- Bayesian-optimal budget allocation: the posterior expected yield (bayes_exact)
+    # shifts the optimum and the regret is exact.  (PHASE IV COMPLETE.)
+    "nous/bayes_search"
 )
 
 PASS=0

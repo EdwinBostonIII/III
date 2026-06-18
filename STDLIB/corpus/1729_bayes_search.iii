@@ -1,0 +1,16 @@
+/* KAT for nous::bayes_search (Phase IV Layer 7) -- Bayesian-optimal allocation. 99=pass; 1..5=arm.
+ * prior tie (1,1), evidence (1,3) -> posterior shifts optimum to subgoal 1; regret exact. */
+module corpus_1729_bayes_search
+extern @abi(c-msvc-x64) fn bs2_set(prior0: u64, prior1: u64, lik0: u64, lik1: u64) -> i32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_posterior_yield(i: u32) -> u64 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_best() -> u32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_regret(i: u32) -> u64 from "bayes_search.iii"
+fn main() -> u64 {
+    bs2_set(1u64, 1u64, 1u64, 3u64)
+    if bs2_posterior_yield(0u32) != 1u64 { return 1u64 }
+    if bs2_posterior_yield(1u32) != 3u64 { return 2u64 }
+    if bs2_best() != 1u32 { return 3u64 }            /* posterior shifts optimum (biting) */
+    if bs2_regret(1u32) != 0u64 { return 4u64 }      /* optimal -> zero regret */
+    if bs2_regret(0u32) != 2u64 { return 5u64 }      /* suboptimal -> regret 2 */
+    return 99u64
+}

@@ -1,0 +1,21 @@
+/* KAT for nous::pac_certify (Phase IV Layer 6) -- PAC generalization bounds. 99=pass; 1..8=arm.
+ * bound = complexity/n; tightens with n; gates a hypothesis; certified-only admit. */
+module corpus_1731_pac_certify
+extern @abi(c-msvc-x64) fn pac_bound_num(complexity: u64) -> u64 from "pac_certify.iii"
+extern @abi(c-msvc-x64) fn pac_bound_den(n: u64) -> u64 from "pac_certify.iii"
+extern @abi(c-msvc-x64) fn pac_tighter(complexity: u64, n1: u64, n2: u64) -> u8 from "pac_certify.iii"
+extern @abi(c-msvc-x64) fn pac_admits(complexity: u64, n: u64, tn: u64, td: u64) -> u8 from "pac_certify.iii"
+extern @abi(c-msvc-x64) fn pac_admit_certified(has_cert: u8) -> u8 from "pac_certify.iii"
+fn main() -> u64 {
+    /* the bound itself: complexity 4 over n samples = 4/n */
+    if pac_bound_num(4u64) != 4u64 { return 1u64 }
+    if pac_bound_den(100u64) != 100u64 { return 2u64 }
+
+    if pac_tighter(4u64, 10u64, 100u64) != 1u8 { return 3u64 }   /* more data -> tighter */
+    if pac_tighter(4u64, 100u64, 10u64) != 0u8 { return 4u64 }   /* less data -> not tighter */
+    if pac_admits(4u64, 100u64, 1u64, 10u64) != 1u8 { return 5u64 }  /* 4/100 <= 1/10 -> admit */
+    if pac_admits(4u64, 10u64, 1u64, 10u64) != 0u8 { return 6u64 }   /* 4/10 > 1/10 -> refuse (biting) */
+    if pac_admit_certified(1u8) != 1u8 { return 7u64 }
+    if pac_admit_certified(0u8) != 0u8 { return 8u64 }
+    return 99u64
+}

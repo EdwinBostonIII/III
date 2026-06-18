@@ -1,0 +1,27 @@
+/* KAT for aether::percept_infer (Phase IV Layer 7) -- perception wired to inference. 99=pass; 1..8=arm.
+ * noisy obs -> PROVISIONAL -> exact posterior -> default-denied from canonical until proven. */
+module corpus_1728_percept_infer
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn pi_ingest(cap: u64) -> u8 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_observe(prior0: u64, prior1: u64, lik0: u64, lik1: u64) -> i32 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_num(i: u32) -> u64 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_marginal() -> u64 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_normalized() -> u8 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_canonical_ok() -> u8 from "percept_infer.iii"
+extern @abi(c-msvc-x64) fn pi_posterior_usable(pin: u8) -> u8 from "percept_infer.iii"
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_p : u64 = cap_attenuate(env, 0x200000u64, 0u64)
+    let cap_none : u64 = cap_attenuate(env, 0x10u64, 0u64)
+    if pi_ingest(cap_p) != 3u8 { return 1u64 }
+    if pi_ingest(cap_none) != 0xFFu8 { return 2u64 }
+    pi_observe(1u64, 1u64, 3u64, 1u64)
+    if pi_posterior_num(0u32) != 3u64 { return 3u64 }
+    if pi_posterior_marginal() != 4u64 { return 4u64 }
+    if pi_posterior_normalized() != 1u8 { return 5u64 }
+    if pi_posterior_canonical_ok() != 0u8 { return 6u64 }   /* PROVISIONAL default-denied (biting) */
+    if pi_posterior_usable(1u8) != 1u8 { return 7u64 }
+    if pi_posterior_usable(0u8) != 0u8 { return 8u64 }       /* no pin -> refused (biting) */
+    return 99u64
+}

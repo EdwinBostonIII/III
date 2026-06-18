@@ -1341,6 +1341,11 @@ declare -A EXPECTED=(
     [1724_infotheory]=99
     [1725_approx_struct]=99
     [1726_rand_algo]=99
+    [1727_pctl]=99
+    [1728_percept_infer]=99
+    [1729_bayes_search]=99
+    [1730_causal_scm]=99
+    [1731_pac_certify]=99
 )
 
 PASS=0

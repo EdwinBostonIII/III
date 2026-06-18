@@ -1,0 +1,17 @@
+/* KAT for numera::causal_scm (Phase IV Layer 6) -- do-calculus. 99=pass; 1..6=arm.
+ * confounded SCM: P(Y|do X=1)=1/2 but P(Y|X=1)=1/4 -- do != see (the back-door bias, exact). */
+module corpus_1730_causal_scm
+extern @abi(c-msvc-x64) fn cs_do_num() -> u64 from "causal_scm.iii"
+extern @abi(c-msvc-x64) fn cs_do_den() -> u64 from "causal_scm.iii"
+extern @abi(c-msvc-x64) fn cs_see_num() -> u64 from "causal_scm.iii"
+extern @abi(c-msvc-x64) fn cs_see_den() -> u64 from "causal_scm.iii"
+extern @abi(c-msvc-x64) fn cs_confounded() -> u8 from "causal_scm.iii"
+fn main() -> u64 {
+    if cs_do_num() != 1u64 { return 1u64 }
+    if cs_do_den() != 2u64 { return 2u64 }            /* P(Y|do X=1) = 1/2 */
+    if cs_see_num() != 1u64 { return 3u64 }
+    if cs_see_den() != 4u64 { return 4u64 }            /* P(Y|X=1) = 1/4 */
+    if cs_confounded() != 1u8 { return 5u64 }          /* do != see (biting) */
+    if (cs_do_num() * cs_see_den()) != (2u64 * cs_see_num() * cs_do_den()) { return 6u64 }  /* do = 2*see */
+    return 99u64
+}

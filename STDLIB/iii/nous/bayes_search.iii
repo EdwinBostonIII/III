@@ -1,0 +1,40 @@
+/* STDLIB/iii/nous/bayes_search.iii -- BAYESIAN-OPTIMAL BUDGET ALLOCATION
+ * (III-PHASE4-PROBABILITY, Layer 7 -- full-system integration).
+ *
+ * Upgrades Campaign I's search market into BAYESIAN-OPTIMAL allocation: a search budget is routed to the
+ * subgoals with the highest POSTERIOR expected yield, computed exactly by numera/bayes_exact (prior x
+ * likelihood).  The posterior update genuinely shifts the optimum -- when evidence favours one subgoal, the
+ * Bayesian choice differs from the prior choice -- and the REGRET of any allocation (the gap to the optimal
+ * posterior yield) is an exact integer, zero for the optimal choice.  Campaign I's explosion is now fought
+ * with optimal, proved allocation rather than a uniform split.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  Composes numera/bayes_exact (the exact posterior) -- the
+ * Pareto/cost discipline of search_market lifted to a Bayesian objective.  Determinism: integer-only.
+ */
+module nous_bayes_search
+
+extern @abi(c-msvc-x64) fn bx_set(a: u64, b: u64, l0: u64, l1: u64) -> i32 from "bayes_exact.iii"
+extern @abi(c-msvc-x64) fn bx_posterior_num(i: u32) -> u64 from "bayes_exact.iii"
+
+/* set prior yields (a,b) and observed likelihoods (l0,l1); the posterior yield of subgoal i is prior_i*lik_i. */
+fn bs2_set(prior0: u64, prior1: u64, lik0: u64, lik1: u64) -> i32 @export {
+    return bx_set(prior0, prior1, lik0, lik1)
+}
+
+/* the posterior expected yield of subgoal i. */
+fn bs2_posterior_yield(i: u32) -> u64 @export { return bx_posterior_num(i) }
+
+/* the Bayesian-optimal subgoal = argmax posterior yield (ties -> lower index). */
+fn bs2_best() -> u32 @export {
+    if bx_posterior_num(0u32) >= bx_posterior_num(1u32) { return 0u32 }
+    return 1u32
+}
+
+/* the regret of funding subgoal i = best posterior yield - yield_i (0 for the optimal choice). */
+fn bs2_regret(i: u32) -> u64 @export {
+    let y0 : u64 = bx_posterior_num(0u32)
+    let y1 : u64 = bx_posterior_num(1u32)
+    let mut best : u64 = y0
+    if y1 > y0 { best = y1 }
+    return best - bx_posterior_num(i)
+}

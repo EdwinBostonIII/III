@@ -1,0 +1,103 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\self_report.iii
+ *
+ * III STDLIB - omnia::self_report  --  III writes its OWN emergence dashboard, in III.
+ *
+ * The self-model (self_atlas), the analysis (self_atlas_lens), and the mapping
+ * (self_cartographer) are all native; this makes the REPORT native too, retiring the last
+ * non-III step.  It composes verba/builder + verba/format to render a compact, machine-checkable
+ * summary line of the loaded self-model, and aether/fs to write it to disk -- so III can emit its
+ * own dashboard with no external generator, language, or file format in the loop.
+ *
+ *   satlas_report_into(out_ptr, max) -> u64   render the summary into a caller buffer.
+ *   satlas_report_write(cap, path)   -> i32   render it and write it to a file (FS WRITE).
+ *
+ * Summary fields: nodes edges coupling emergence strata cycles redundant dormant.
+ *
+ * Hexad: kind_form (it gives the self-image a written shape).  Ring: R0.  K: 0.99.
+ * NIH: arena + builder + format + fs + self_atlas + self_atlas_lens (all in-tree).  Discipline:
+ * W2 (<=4 params), W13 (<=20 locals), W14/W15 (straight-line, no recursion).  ASCII only. */
+
+module omnia_self_report
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn salens_coupling() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_emergence_index() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_level() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_cycle_nodes() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_redundant() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_dormant() -> u32 from "self_atlas_lens.iii"
+
+const SREP_OK         : i32 = 0i32
+const SREP_E_OPEN     : i32 = -1i32
+const SREP_MODE_WRITE : u32 = 2u32
+const SREP_ARENA      : u64 = 8192u64
+const SREP_HINT       : u64 = 512u64
+const SREP_SP         : u32 = 32u32          /* space */
+
+/* Append "label=<v> " to builder b (W2: 4 params). */
+fn satlas_rep_field(b: u64, label_ptr: u64, label_len: u64, v: u32) -> i32 {
+    builder_push_bytes(b, label_ptr, label_len)
+    format_decimal_u32(b, v)
+    builder_push_byte(b, SREP_SP)
+    return SREP_OK
+}
+
+/* Render the self-model summary line into builder b. */
+fn satlas_report_build(b: u64) -> i32 {
+    satlas_rep_field(b, ("nodes=" as u64),     6u64,  satlas_node_count())
+    satlas_rep_field(b, ("edges=" as u64),     6u64,  satlas_edge_count())
+    satlas_rep_field(b, ("coupling=" as u64),  9u64,  salens_coupling())
+    satlas_rep_field(b, ("emergence=" as u64), 10u64, salens_emergence_index())
+    satlas_rep_field(b, ("strata=" as u64),    7u64,  salens_max_level())
+    satlas_rep_field(b, ("cycles=" as u64),    7u64,  salens_count_cycle_nodes())
+    satlas_rep_field(b, ("redundant=" as u64), 10u64, salens_count_redundant())
+    satlas_rep_field(b, ("dormant=" as u64),   8u64,  salens_count_dormant())
+    builder_push_byte(b, 10u32)                  /* newline */
+    return SREP_OK
+}
+
+/* Render the summary into out_ptr (capped at max); return the byte count written. */
+fn satlas_report_into(out_ptr: u64, max: u64) -> u64 @export {
+    let a : u64 = arena_new(SREP_ARENA)
+    let bld : u64 = builder_new(a, SREP_HINT)
+    satlas_report_build(bld)
+    let base : u64 = builder_seal(bld)
+    let len : u64 = builder_len(bld)
+    let mut k : u64 = len
+    if k > max { k = max }
+    let s : *u8 = base as *u8
+    let d : *u8 = out_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < k { d[i] = s[i]  i = i + 1u64 }
+    builder_drop(bld)
+    return k
+}
+
+/* Render the summary and write it to a file (cap must carry FS WRITE). */
+fn satlas_report_write(cap: u64, path: u64) -> i32 @export {
+    let a : u64 = arena_new(SREP_ARENA)
+    let bld : u64 = builder_new(a, SREP_HINT)
+    satlas_report_build(bld)
+    let base : u64 = builder_seal(bld)
+    let len : u64 = builder_len(bld)
+    let h : u64 = fs_open(cap, path, SREP_MODE_WRITE)
+    if h == 0u64 { builder_drop(bld)  return SREP_E_OPEN }
+    fs_write(h, base, len)
+    fs_close(h)
+    builder_drop(bld)
+    return SREP_OK
+}

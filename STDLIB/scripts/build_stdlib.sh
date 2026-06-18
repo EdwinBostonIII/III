@@ -1093,6 +1093,11 @@ MODULES=(
     # replacement for the external graph generator.  Externs fs + self_atlas (above);
     # compiler-unreferenced -> LIBNATIVE only; appended last.
     "omnia/self_cartographer"
+    # III writes its OWN emergence dashboard in III (omnia::self_report): composes verba/builder
+    # + verba/format to render the self-model summary and aether/fs to write it -- retiring the
+    # last non-III step.  Externs builder/format/fs/self_atlas/self_atlas_lens (above);
+    # compiler-unreferenced -> LIBNATIVE only; appended last.
+    "omnia/self_report"
 )
 
 PASS=0

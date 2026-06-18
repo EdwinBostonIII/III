@@ -1301,6 +1301,7 @@ declare -A EXPECTED=(
     [1669_self_atlas_report]=99
     [1670_self_cartographer]=99
     [1671_self_dormancy]=99
+    [1672_self_report]=99
 )
 
 PASS=0

@@ -1,0 +1,72 @@
+/* 1672_self_report.iii -- III renders its OWN emergence summary, in III (omnia::self_report).
+ *
+ * Build the hand-verified 8-node/9-edge graph (as 1666), have III render its self-model summary
+ * into a buffer via verba/builder + verba/format, and verify the rendering begins
+ * "nodes=8 edges=9 " -- proving native counting + decimal formatting + literal emission.  Also
+ * exercises the file writer (satlas_report_write) to a hermetic temp file.  rc 99 = pass.
+ */
+module corpus_1672
+
+extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_report_into(out_ptr: u64, max: u64) -> u64 from "self_report.iii"
+extern @abi(c-msvc-x64) fn satlas_report_write(cap: u64, path: u64) -> i32 from "self_report.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+var BUF   : [u8; 256]
+var T_A   : [u8; 1]
+var T_B   : [u8; 1]
+var P_REP : [u8; 32]
+
+fn lk(c1: u32, c2: u32) -> i32 {
+    let pa : *u8 = (&T_A as u64) as *u8
+    let pb : *u8 = (&T_B as u64) as *u8
+    pa[0u64] = c1 as u8
+    pb[0u64] = c2 as u8
+    return satlas_link((&T_A as u64), 1u64, (&T_B as u64), 1u64)
+}
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+fn main() -> u64 {
+    satlas_reset()
+    lk(97u32, 98u32)    /* a->b */
+    lk(97u32, 99u32)    /* a->c */
+    lk(98u32, 100u32)   /* b->d */
+    lk(99u32, 100u32)   /* c->d */
+    lk(100u32, 101u32)  /* d->e */
+    lk(97u32, 100u32)   /* a->d */
+    lk(120u32, 121u32)  /* x->y */
+    lk(121u32, 122u32)  /* y->z */
+    lk(122u32, 120u32)  /* z->x */
+
+    let len : u64 = satlas_report_into((&BUF as u64), 256u64)
+    if len < 16u64 { return 1u64 }
+
+    let exp : *u8 = ("nodes=8 edges=9 " as u64) as *u8
+    let bp : *u8 = (&BUF as u64) as *u8
+    let mut i : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while i < 16u64 {
+        if bp[i] != exp[i] { ok = 0u8 }
+        i = i + 1u64
+    }
+    if ok != 1u8 { return 2u64 }
+
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    bcopy((&P_REP as u64), ("./iii_rep_kat.txt" as u64), 17u64)
+    if satlas_report_write(cap, (&P_REP as u64)) != 0i32 { return 3u64 }
+    fs_delete(cap, (&P_REP as u64))
+
+    return 99u64
+}

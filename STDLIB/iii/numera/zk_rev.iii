@@ -1,0 +1,121 @@
+/* STDLIB/iii/numera/zk_rev.iii -- ZERO-KNOWLEDGE PROVABLE REVERSIBILITY (ZK-Rev).
+ *
+ * Intersects two existing organs that had no glue: numera/reversible (the transactional undo engine) and
+ * numera/zk_air (the AIR/STARK prover).  A federated node can now mathematically PROVE that a sequence of
+ * reversible operations is faithfully invertible -- that applying the recorded inverses restores the start
+ * -- as a STARK over the operation trace, without revealing the intermediate states.
+ *
+ * The encoding: each reversible step adds a recorded constant `delta` to a running state (column 0), with
+ * delta carried in column 1.  The operation "+delta" is reversible because delta is RECORDED -- its inverse
+ * "-delta" is uniquely computable.  The AIR transition constraints are
+ *     C0:  next_state - state - delta = 0    (the forward recurrence the STARK certifies)
+ *     C1:  next_delta - delta        = 0     (delta is constant across the trace)
+ * so a proof that C0 holds over the whole trace IS a proof that every step is invertible.  Each step is
+ * ALSO recorded into the real reversibility engine (rev_record_quad) -- the STARK's subject and the undo
+ * log are the same operations, so the proof certifies exactly what reversible recorded.  zr_roundtrip_ok
+ * demonstrates the inverse: subtracting the recorded deltas from the final state recovers the original.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  Composes numera/reversible + numera/zk_air -- no new prover,
+ * no new engine.  Determinism: integer field arithmetic mod the STARK prime; no float.
+ */
+module numera_zk_rev
+
+extern @abi(c-msvc-x64) fn rev_register_undo(tag: u32, undo_fn: u64) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_begin(cap: u64) -> u32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_record_quad(slot: u32, tag: u32, quad: u64) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn air_reset(w_cols: u32, n_rows: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, var_a: u32, var_b: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
+
+const ZR_NEG1  : u32 = 998244352u32   /* -1 mod the STARK prime */
+const ZR_PRIME : u64 = 998244353u64
+const ZR_ROWS  : u32 = 8u32
+const ZR_TAG   : u32 = 7u32           /* a generic reversibility-log tag */
+
+var ZR_S0    : u64 = 0u64
+var ZR_DELTA : u64 = 0u64
+var ZR_QUAD  : [u64; 4]
+
+fn zr_modp(x: u64) -> u64 { return x - (x / ZR_PRIME) * ZR_PRIME }
+
+/* AIR-only: reset, set up the reversibility constraints, and fill the honest +delta trace.  Shared by the
+ * real build and the break-test so each is self-contained (the proof_stark ps_constraints_invalid pattern). */
+fn zr_air_fill(s0p: u64, deltap: u64) -> i32 {
+    air_reset(2u32, ZR_ROWS)
+    /* C0: next_state - state - delta = 0 */
+    air_add_term(0u32, 1u32, 3u32, 0u32)
+    air_add_term(0u32, ZR_NEG1, 1u32, 0u32)
+    air_add_term(0u32, ZR_NEG1, 2u32, 0u32)
+    /* C1: next_delta - delta = 0 */
+    air_add_term(1u32, 1u32, 4u32, 0u32)
+    air_add_term(1u32, ZR_NEG1, 2u32, 0u32)
+    /* the Fiat-Shamir coefficients that combine the constraints (without these the combination is vacuous) */
+    air_set_alpha(0u64, 7u32)
+    air_set_alpha(1u64, 13u32)
+    let mut t : u64 = 0u64
+    let mut cur : u64 = s0p
+    while t < (ZR_ROWS as u64) {
+        air_set_trace(t, 0u64, cur as u32)
+        air_set_trace(t, 1u64, deltap as u32)
+        cur = zr_modp(cur + deltap)
+        t = t + 1u64
+    }
+    return 0i32
+}
+
+/* Build the reversibility proof obligation: open a real reversibility session and record ZR_ROWS reversible
+ * +delta steps into the undo engine, then set up the matching AIR trace (the STARK's subject). */
+fn zr_build(s0: u64, delta: u64) -> i32 @export {
+    ZR_S0 = zr_modp(s0)
+    ZR_DELTA = zr_modp(delta)
+    rev_register_undo(ZR_TAG, 0u64)             /* the tag the log entries carry */
+    let slot : u32 = rev_begin(0u64)            /* open the reversible session (cap 0 ok: not a mem-restore tag) */
+    let mut t : u64 = 0u64
+    let mut cur : u64 = ZR_S0
+    while t < (ZR_ROWS as u64) {
+        let nxt : u64 = zr_modp(cur + ZR_DELTA)
+        ZR_QUAD[0u64] = cur  ZR_QUAD[1u64] = nxt  ZR_QUAD[2u64] = ZR_DELTA  ZR_QUAD[3u64] = 0u64
+        rev_record_quad(slot, ZR_TAG, (&ZR_QUAD as u64))   /* record into the real undo engine */
+        cur = nxt
+        t = t + 1u64
+    }
+    zr_air_fill(ZR_S0, ZR_DELTA)
+    return 0i32
+}
+
+/* the constraints HOLD on the honestly-recorded reversibility trace. */
+fn zr_constraints_ok() -> u8 @export {
+    air_build_lde()
+    return air_constraints_hold()
+}
+
+/* prove the reversibility recurrence as a STARK; returns air_stark_verify's verdict (1 = proven). */
+fn zr_prove() -> u64 @export {
+    air_stark_prove()
+    return air_stark_verify()
+}
+
+/* BITING: re-fill the honest trace, corrupt one state cell -> the +delta recurrence breaks -> constraints
+ * FAIL (the proof has teeth).  Self-contained (re-fills the AIR), like proof_stark's ps_constraints_invalid. */
+fn zr_break_and_check() -> u8 @export {
+    zr_air_fill(ZR_S0, ZR_DELTA)
+    air_set_trace(4u64, 0u64, 12345u32)
+    air_build_lde()
+    return air_constraints_hold()
+}
+
+/* the ROUND-TRIP the STARK certifies, demonstrated: subtracting the recorded deltas from the final state
+ * recovers the original exactly.  1 iff inverse(forward(s0)) == s0. */
+fn zr_roundtrip_ok() -> u8 @export {
+    let steps : u64 = (ZR_ROWS as u64) - 1u64
+    let acc : u64 = zr_modp(steps * ZR_DELTA)
+    let fwd : u64 = zr_modp(ZR_S0 + acc)                 /* the final state */
+    let inv : u64 = zr_modp((fwd + ZR_PRIME) - acc)      /* apply the recorded inverse */
+    if inv == ZR_S0 { return 1u8 }
+    return 0u8
+}

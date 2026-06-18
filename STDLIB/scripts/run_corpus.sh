@@ -1361,6 +1361,8 @@ declare -A EXPECTED=(
     [1737_shift_dream_adoption]=99
     # hypervisor determinism sealing: a guest's RDRAND/RDTSC becomes deterministic drbg bytes, recorded through df_ingress.
     [1738_hypervisor_entropy_seal]=99
+    # ZK-Rev: reversible undo log proven faithfully invertible as a STARK (reversible x zk_air).
+    [1739_zk_rev]=99
 )
 
 PASS=0

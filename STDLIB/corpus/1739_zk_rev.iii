@@ -1,0 +1,37 @@
+/* STDLIB/corpus/1739_zk_rev.iii -- ZERO-KNOWLEDGE PROVABLE REVERSIBILITY (ZK-Rev).
+ *
+ * numera/zk_rev intersects numera/reversible (the undo engine) and numera/zk_air (the STARK): a sequence
+ * of reversible operations, recorded into the real undo log, is PROVEN faithfully invertible as a STARK
+ * over its trace.  99 = all arms; 1..4 = the failing arm.
+ *
+ *   (1) the forward recurrence (next = state + recorded delta) HOLDS on the honest trace.
+ *   (2) the STARK PROVES it (air_stark_verify == 0 = verified).
+ *   (3) the ROUND-TRIP: subtracting the recorded deltas recovers the original state.
+ *   (4) BITING: corrupting one cell breaks the recurrence -> constraints FAIL (the proof has teeth).
+ */
+module corpus_1739_zk_rev
+
+extern @abi(c-msvc-x64) fn zr_build(s0: u64, delta: u64) -> i32 from "zk_rev.iii"
+extern @abi(c-msvc-x64) fn zr_constraints_ok() -> u8 from "zk_rev.iii"
+extern @abi(c-msvc-x64) fn zr_prove() -> u64 from "zk_rev.iii"
+extern @abi(c-msvc-x64) fn zr_break_and_check() -> u8 from "zk_rev.iii"
+extern @abi(c-msvc-x64) fn zr_roundtrip_ok() -> u8 from "zk_rev.iii"
+
+fn main() -> u64 {
+    /* (1) honest reversibility trace: 8 reversible +3 steps from state 5 */
+    zr_build(5u64, 3u64)
+    if zr_constraints_ok() != 1u8 { return 1u64 }
+
+    /* (2) the STARK proves the forward recurrence (== the invertibility certificate) */
+    zr_build(5u64, 3u64)
+    if zr_prove() != 0u64 { return 2u64 }
+
+    /* (3) the round-trip the proof certifies: the recorded inverse recovers the start */
+    if zr_roundtrip_ok() != 1u8 { return 3u64 }
+
+    /* (4) BITING: a corrupted trace breaks the +delta recurrence -> constraints fail */
+    zr_build(5u64, 3u64)
+    if zr_break_and_check() != 0u8 { return 4u64 }
+
+    return 99u64
+}

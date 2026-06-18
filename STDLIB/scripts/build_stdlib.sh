@@ -402,6 +402,9 @@ MODULES=(
     "numera/zk_snark"
     "numera/zk_stark"
     "numera/zk_air"
+    # numera/zk_rev -- ZERO-KNOWLEDGE PROVABLE REVERSIBILITY: composes reversible (undo engine) + zk_air
+    # (STARK) so a node proves a reversible-operation trace is faithfully invertible without revealing states.
+    "numera/zk_rev"
     "numera/zk_prune"
     "verba/base64"
     "numera/hkdf"

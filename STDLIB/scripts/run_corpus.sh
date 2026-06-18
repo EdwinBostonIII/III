@@ -1363,6 +1363,8 @@ declare -A EXPECTED=(
     [1738_hypervisor_entropy_seal]=99
     # ZK-Rev: reversible undo log proven faithfully invertible as a STARK (reversible x zk_air).
     [1739_zk_rev]=99
+    # Zk-Caps: a capability proven a valid merkle leaf (rights/expiry bound) without revealing cap id/parent.
+    [1740_cap_zkp]=99
 )
 
 PASS=0

@@ -517,6 +517,9 @@ MODULES=(
     "omnia/sandbox_quota"
     "omnia/sandbox_exec"
     "numera/merkle"
+    # aether/cap_zkp -- ZK-Delegated Anonymous Capabilities: a cap proven a valid merkle leaf (rights/expiry
+    # bound by cad) without revealing cap id/parent; composes numera/merkle + cad.
+    "aether/cap_zkp"
     "omnia/obs_log"
     "omnia/obs_metric"
     "omnia/obs_trace"

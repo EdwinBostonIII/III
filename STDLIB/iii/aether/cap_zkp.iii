@@ -1,0 +1,89 @@
+/* STDLIB/iii/aether/cap_zkp.iii -- ZK-DELEGATED ANONYMOUS CAPABILITIES (Zk-Caps).
+ *
+ * In a federated topology, transmitting a cap_id during session negotiation leaks the requesting node's
+ * structural provenance (its id and attenuation/parent chain) to the host.  Zk-Caps lets a client prove it
+ * holds a capability with sufficient rights, unexpired, and validly registered in a domain -- WITHOUT
+ * revealing the cap's id or parent chain.
+ *
+ * The mechanism composes existing organs, no new crypto: each capability in a federated domain is committed
+ * to a 32-byte merkle LEAF = cad(rights || expiry || salt) (numera/merkle + cad), and the domain publishes
+ * the merkle ROOT.  To negotiate, the client FORGES a proof carrying (rights, expiry, salt, slot) + the
+ * merkle inclusion path -- never the cap id or parent.  The host VERIFIES by RE-DERIVING the leaf from the
+ * revealed (rights, expiry, salt) and checking it is a member of the sealed tree.  Because the leaf BINDS
+ * the rights, a client cannot claim rights it was not granted: a forged-rights leaf is a DIFFERENT leaf,
+ * not in the tree, and the inclusion proof fails.  The predicates (requested rights are a subset; unexpired
+ * at the public instant) are re-checked against PUBLIC inputs.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.97.  Composes numera/merkle + cad -- no island, no new crypto.
+ * Determinism: integer + content-address; no float.
+ */
+module aether_cap_zkp
+
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_proof_len_for(leaf_count: u32, leaf_index: u32) -> u32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const CZ_MAX    : u32 = 16u32
+const CZ_LEAFSZ : u64 = 32u64
+
+var CZ_LEAVES : [u8; 512]    /* CZ_MAX * 32 */
+var CZ_ROOT   : [u8; 32]
+var CZ_PROOF  : [u8; 1024]
+var CZ_LEAF   : [u8; 32]
+var CZ_TUP    : [u8; 24]      /* rights(8 LE) || expiry(8 LE) || salt(8 LE) */
+var CZ_N      : u32 = 0u32
+
+fn cz_put_u64(off: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { CZ_TUP[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0i32
+}
+
+/* commit (rights, expiry, salt) to a 32-byte leaf = cad(rights || expiry || salt). */
+fn cz_commit(rights: u64, expiry: u64, salt: u64, out: u64) -> i32 @export {
+    cz_put_u64(0u64, rights)
+    cz_put_u64(8u64, expiry)
+    cz_put_u64(16u64, salt)
+    cad_oneshot(0u32, (&CZ_TUP as u64) as *u8, 24u64, out as *u8)
+    return 0i32
+}
+
+fn cz_reset() -> i32 @export { CZ_N = 0u32  return 0i32 }
+
+/* register a capability's leaf commitment into the domain tree; returns its slot (or sentinel if full). */
+fn cz_add(rights: u64, expiry: u64, salt: u64) -> u32 @export {
+    if CZ_N >= CZ_MAX { return 0xFFFFFFFFu32 }
+    let idx : u32 = CZ_N
+    cz_commit(rights, expiry, salt, (&CZ_LEAVES as u64) + (idx as u64) * CZ_LEAFSZ)
+    CZ_N = CZ_N + 1u32
+    return idx
+}
+
+/* seal the domain: the published merkle root over all registered cap leaves. */
+fn cz_seal() -> i32 @export { return merkle_compute_root((&CZ_LEAVES as u64), CZ_N, CZ_LEAFSZ, (&CZ_ROOT as u64)) }
+fn cz_root_byte(i: u32) -> u32 @export { if i >= 32u32 { return 0x100u32 }  return CZ_ROOT[i as u64] as u32 }
+
+/* FORGE a session proof for the cap at `slot`: it must cover `requested` rights and be unexpired at `now`;
+ * the inclusion path is built into CZ_PROOF.  Returns 1 iff the predicates hold (else nothing to negotiate). */
+fn cz_forge(slot: u32, rights: u64, expiry: u64, salt: u64, requested: u64, now: u64) -> u8 @export {
+    if (rights & requested) != requested { return 0u8 }
+    if expiry != 0u64 { if expiry <= now { return 0u8 } }
+    let pci : u64 = merkle_pack_count_index(CZ_N, slot)
+    merkle_compute_proof((&CZ_LEAVES as u64), CZ_LEAFSZ, pci, (&CZ_PROOF as u64))
+    return 1u8
+}
+
+/* VERIFY at the host without the cap id/parent: re-derive the leaf from the REVEALED (rights, expiry, salt)
+ * -- binding the rights -- check membership in the sealed tree, and re-check the public predicates. */
+fn cz_verify(slot: u32, rights: u64, expiry: u64, salt: u64, requested: u64, now: u64) -> u8 @export {
+    if (rights & requested) != requested { return 0u8 }
+    if expiry != 0u64 { if expiry <= now { return 0u8 } }
+    cz_commit(rights, expiry, salt, (&CZ_LEAF as u64))
+    let steps : u32 = merkle_proof_len_for(CZ_N, slot)
+    let vm : u64 = merkle_pack_verify_meta(CZ_LEAFSZ as u32, slot, steps)
+    return merkle_verify_proof((&CZ_LEAF as u64), vm, (&CZ_PROOF as u64), (&CZ_ROOT as u64))
+}

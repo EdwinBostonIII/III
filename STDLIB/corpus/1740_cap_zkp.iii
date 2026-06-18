@@ -1,0 +1,61 @@
+/* STDLIB/corpus/1740_cap_zkp.iii -- ZK-Delegated Anonymous Capabilities (Zk-Caps).
+ *
+ * aether/cap_zkp lets a client prove it holds a capability with sufficient rights, unexpired, validly
+ * registered in a federated domain -- without revealing the cap id or parent chain.  Each cap is a merkle
+ * leaf = cad(rights||expiry||salt); the host re-derives the leaf from the REVEALED (rights, expiry, salt)
+ * and checks membership in the sealed tree.  99 = all arms; 1..10 = the failing arm.
+ *
+ *   (1) a valid cap covering the request, unexpired, forges + verifies.
+ *   (2) insufficient rights / (3) expired -> forge refuses.
+ *   (4) BITING: claiming MORE rights than granted re-derives a different leaf -> not in the tree -> rejected.
+ *   (5) BITING: a tampered salt re-derives a different leaf -> rejected.
+ *   (6) the honest cap (claiming its true rights) still verifies after the attacks.
+ */
+module corpus_1740_cap_zkp
+
+extern @abi(c-msvc-x64) fn cz_reset() -> i32 from "cap_zkp.iii"
+extern @abi(c-msvc-x64) fn cz_add(rights: u64, expiry: u64, salt: u64) -> u32 from "cap_zkp.iii"
+extern @abi(c-msvc-x64) fn cz_seal() -> i32 from "cap_zkp.iii"
+extern @abi(c-msvc-x64) fn cz_forge(slot: u32, rights: u64, expiry: u64, salt: u64, requested: u64, now: u64) -> u8 from "cap_zkp.iii"
+extern @abi(c-msvc-x64) fn cz_verify(slot: u32, rights: u64, expiry: u64, salt: u64, requested: u64, now: u64) -> u8 from "cap_zkp.iii"
+extern @abi(c-msvc-x64) fn cz_root_byte(i: u32) -> u32 from "cap_zkp.iii"
+
+fn main() -> u64 {
+    cz_reset()
+    cz_add(0xFFu64, 1000u64, 0xA1u64)   /* slot 0: full rights, expires 1000 */
+    cz_add(0x0Fu64, 0u64,    0xB2u64)   /* slot 1: low-nibble rights, never expires */
+    cz_add(0xF0u64, 5u64,    0xC3u64)   /* slot 2: high-nibble rights, expires soon (5) */
+    cz_add(0x33u64, 2000u64, 0xD4u64)   /* slot 3: mixed rights, expires 2000 */
+    cz_seal()
+
+    /* the published domain root (the host's PUBLIC input) is a real 32-byte value; OOB reads the sentinel */
+    let mut nz : u32 = 0u32
+    let mut bi : u32 = 0u32
+    while bi < 32u32 { if cz_root_byte(bi) != 0u32 { nz = nz + 1u32 }  bi = bi + 1u32 }
+    if nz == 0u32 { return 11u64 }
+    if cz_root_byte(32u32) != 0x100u32 { return 12u64 }
+
+    /* (1) valid: cap 0 covers 0x03, unexpired at now=500 */
+    if cz_forge(0u32, 0xFFu64, 1000u64, 0xA1u64, 0x03u64, 500u64) != 1u8 { return 1u64 }
+    if cz_verify(0u32, 0xFFu64, 1000u64, 0xA1u64, 0x03u64, 500u64) != 1u8 { return 2u64 }
+
+    /* (2) insufficient rights: cap 1 (0x0F) cannot cover 0xF0 */
+    if cz_forge(1u32, 0x0Fu64, 0u64, 0xB2u64, 0xF0u64, 500u64) != 0u8 { return 3u64 }
+
+    /* (3) expired: cap 2 expires at 5, now 500 */
+    if cz_forge(2u32, 0xF0u64, 5u64, 0xC3u64, 0x10u64, 500u64) != 0u8 { return 4u64 }
+
+    /* (4) BITING forged-rights: a valid proof for cap 1, then CLAIM 0xFF -> different leaf -> rejected */
+    if cz_forge(1u32, 0x0Fu64, 0u64, 0xB2u64, 0x01u64, 500u64) != 1u8 { return 5u64 }
+    if cz_verify(1u32, 0xFFu64, 0u64, 0xB2u64, 0x01u64, 500u64) != 0u8 { return 6u64 }
+
+    /* (5) BITING tampered salt: a wrong salt re-derives a different leaf -> rejected */
+    if cz_forge(0u32, 0xFFu64, 1000u64, 0xA1u64, 0x03u64, 500u64) != 1u8 { return 7u64 }
+    if cz_verify(0u32, 0xFFu64, 1000u64, 0x99u64, 0x03u64, 500u64) != 0u8 { return 8u64 }
+
+    /* (6) the honest cap claiming its TRUE rights still verifies after the attacks */
+    if cz_forge(1u32, 0x0Fu64, 0u64, 0xB2u64, 0x01u64, 500u64) != 1u8 { return 9u64 }
+    if cz_verify(1u32, 0x0Fu64, 0u64, 0xB2u64, 0x01u64, 500u64) != 1u8 { return 10u64 }
+
+    return 99u64
+}

@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1712_quantize_sensor.iii
+ *
+ * Falsifier KAT for numera::quantize_sensor (III-PHASE3-WALLS, Campaign III, organ 2) -- the deterministic
+ * sensor quantizer.  99 = every arm holds; 1..10 = the failing arm.  Independent oracle: exact integer
+ * arithmetic and the containment invariant -- a float quantizer fails the exact floor; a non-deterministic
+ * or unsound one fails the determinism / containment arms.
+ *
+ *   (1) deterministic: same reading -> same quantized output.
+ *   (2) exact floor to the dyadic grid (45000 >> 12 = 10), denominator 2^4 = 16.
+ *   (3) SOUNDNESS (biting): the quantization cell CONTAINS the reading (edges and interior).
+ *   (4) the cell is the half-open interval [q*4096, (q+1)*4096) tightly around the grid point.
+ */
+module corpus_1712_quantize_sensor
+
+extern @abi(c-msvc-x64) fn qs_quantize(x: u64, bits: u32) -> u64 from "quantize_sensor.iii"
+extern @abi(c-msvc-x64) fn qs_den(bits: u32) -> u64 from "quantize_sensor.iii"
+extern @abi(c-msvc-x64) fn qs_cell_lo(q: u64, bits: u32) -> u64 from "quantize_sensor.iii"
+extern @abi(c-msvc-x64) fn qs_cell_hi(q: u64, bits: u32) -> u64 from "quantize_sensor.iii"
+extern @abi(c-msvc-x64) fn qs_contains(x: u64, bits: u32) -> u8 from "quantize_sensor.iii"
+
+fn main() -> u64 {
+    let x : u64 = 45000u64    /* a noisy reading in units of 1/2^16 (~0.6866) */
+
+    /* (1) deterministic */
+    if qs_quantize(x, 4u32) != qs_quantize(x, 4u32) { return 1u64 }
+
+    /* (2) exact dyadic floor: 45000 >> 12 = 10; denominator 16 */
+    if qs_quantize(x, 4u32) != 10u64 { return 2u64 }
+    if qs_den(4u32) != 16u64 { return 3u64 }
+
+    /* (3) SOUNDNESS: the cell contains the reading (interior + edges) */
+    if qs_contains(x, 4u32) != 1u8 { return 4u64 }
+    if qs_contains(0u64, 4u32) != 1u8 { return 5u64 }
+    if qs_contains(65535u64, 8u32) != 1u8 { return 6u64 }
+
+    /* (4) the cell is [40960, 45056) and x=45000 lies strictly inside it */
+    let q : u64 = qs_quantize(x, 4u32)
+    if qs_cell_lo(q, 4u32) != 40960u64 { return 7u64 }
+    if qs_cell_hi(q, 4u32) != 45056u64 { return 8u64 }
+    if x < qs_cell_lo(q, 4u32) { return 9u64 }
+    if x >= qs_cell_hi(q, 4u32) { return 10u64 }
+
+    return 99u64
+}

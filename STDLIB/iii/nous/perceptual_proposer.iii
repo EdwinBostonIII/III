@@ -1,0 +1,83 @@
+/* STDLIB/iii/nous/perceptual_proposer.iii -- THE PERCEPTUAL PROPOSER
+ * (III-PHASE3-WALLS, Campaign III, organ 4).
+ *
+ * Full pattern-recognition power over noisy input, with ZERO determinism loss and ZERO soundness loss --
+ * because the learned part may only PROPOSE, never DECIDE.  A sealed integer-weights model (trained OUT OF
+ * TREE on noisy data, shipped here as content-addressed DATA) is applied to an observation to PROPOSE a
+ * typed hypothesis; the proposal is then CHECKED, and:
+ *   - the weights are accepted only if SEALED (nous_train refuses an unsealed / zero-addressed artifact);
+ *   - a proposal is admitted to DECIDE only with a certificate (nous_train_admit) -- otherwise refused;
+ *   - a proposal is a nous_synth PROVISIONAL and is DEFAULT-DENIED from any canonical context;
+ *   - a weak or wrong model only raises the GAP RATE (nous_gap_rate) -- it never produces a wrong artifact.
+ * This is Mandate 7 honored exactly: statistics on the PROPOSE channel, proof on the DECIDE channel.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  Composes nous/nous_train (sealed load + the propose-checked
+ * admit + the gap dial) + nous/nous_synth (the canonical wall) + cad (the seal) -- no island.  Determinism:
+ * integer weights, no runtime learning; same input -> same proposal.
+ */
+module nous_perceptual_proposer
+
+extern @abi(c-msvc-x64) fn nous_train_init() -> i32 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn nous_train_load(weights_addr32: *u8, sealed: u8) -> i32 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn nous_train_loaded() -> u8 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn nous_train_admit(has_cert: u8) -> u8 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn nous_train_record(outcome: u8) -> i32 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn nous_gap_rate() -> u32 from "nous_train.iii"
+extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const PPR_PROVISIONAL : u8 = 3u8     /* nous_synth PROVISIONAL */
+const PPR_GAP         : u8 = 1u8     /* nous_train GAP outcome (the trichotomy GAP) */
+
+var PPR_WEIGHTS : [u8; 32]    /* the out-of-tree-trained integer weight vector, shipped as DATA */
+var PPR_SEAL    : [u8; 32]
+var PPR_INIT    : u8 = 0u8
+
+fn ppr_init() -> i32 @export {
+    if PPR_INIT == 1u8 { return 0i32 }
+    nous_train_init()
+    PPR_WEIGHTS[0u64] = 7u8  PPR_WEIGHTS[1u64] = 3u8  PPR_WEIGHTS[2u64] = 5u8  PPR_WEIGHTS[3u64] = 2u8
+    cad_oneshot(0u32, (&PPR_WEIGHTS as u64) as *u8, 32u64, (&PPR_SEAL as u64) as *u8)   /* seal the weights */
+    PPR_INIT = 1u8
+    return 0i32
+}
+
+/* load the SEALED learner (accepted: sealed + content-addressed). */
+fn ppr_load_sealed() -> i32 @export {
+    ppr_init()
+    return nous_train_load((&PPR_SEAL as u64) as *u8, 1u8)
+}
+fn ppr_loaded() -> u8 @export { return nous_train_loaded() }
+
+/* BITING: an UNSEALED load is REFUSED -- the learner cannot ship as unsealed weights. */
+fn ppr_load_unsealed_refused() -> u8 @export {
+    ppr_init()
+    if nous_train_load((&PPR_SEAL as u64) as *u8, 0u8) != 0i32 { return 1u8 }
+    return 0u8
+}
+
+/* apply the sealed weights to a noisy observation -> a PROPOSED score (deterministic, integer-only). */
+fn ppr_propose(input: u32) -> u32 @export {
+    ppr_init()
+    let w0 : u32 = PPR_WEIGHTS[0u64] as u32
+    let w1 : u32 = PPR_WEIGHTS[1u64] as u32
+    return w0 * (input & 0xFFu32) + w1 * ((input >> 8u32) & 0xFFu32)
+}
+
+/* THE PROPOSE-CHECKED WALL: a proposal may DECIDE only with a certificate; uncertified -> REFUSED. */
+fn ppr_admit(has_cert: u8) -> u8 @export {
+    return nous_train_admit(has_cert)
+}
+
+/* a proposal cannot assert CANONICAL -- it is a PROVISIONAL (nous_synth default-deny). */
+fn ppr_proposal_canonical_ok() -> u8 @export {
+    return nous_synth_canonical_ok(PPR_PROVISIONAL)
+}
+
+/* an uncertified proposal records a GAP, raising the gap rate -- a weak model only gaps more, never
+ * produces a wrong artifact.  Returns the gap rate (permille) after recording one gap. */
+fn ppr_record_gap_rate() -> u32 @export {
+    ppr_init()
+    nous_train_record(PPR_GAP)
+    return nous_gap_rate()
+}

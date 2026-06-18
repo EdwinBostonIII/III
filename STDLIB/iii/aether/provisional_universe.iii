@@ -1,0 +1,72 @@
+/* STDLIB/iii/aether/provisional_universe.iii -- THE PROVISIONAL UNIVERSE
+ * (III-PHASE3-WALLS, Campaign III, organ 5).
+ *
+ * A quarantined, capability-walled sub-universe where probabilistic hypotheses may live and be acted on
+ * WITHOUT ever poisoning the certified core.  It closes the open-world loop:
+ *   - ADMISSION is capability-mediated: a hypothesis enters only through a cap holding CAP_RIGHT_PERCEIVE,
+ *     and enters as a nous_synth PROVISIONAL.
+ *   - ACTING on a quarantined provisional is permitted ONLY with its oracle-pin (nous_synth) -- a pinless
+ *     provisional is inert.
+ *   - PROMOTION to CANONICAL is by KERNEL PROOF and nothing else: tc_check must discharge the hypothesis'
+ *     goal.  A provable hypothesis becomes CANONICAL and may cross into the commons; an UNPROVABLE one
+ *     DECAYS to a GAP -- honest, resumable, and forever refused from any canonical context.  A probabilistic
+ *     belief therefore never becomes truth except by proof.
+ *
+ * This is the arena to Campaign III's gateway (aether/perception_membrane): the membrane admits the world;
+ * the universe is where it is reasoned about and can only graduate to canonical truth through the kernel.
+ *
+ * Hexad: kind_passage.  Ring: R-1 (a quarantine boundary).  K: 1.00.  Composes aether/capability (the
+ * wall) + numera/typecheck (the promotion proof) + nous/nous_synth (the PROVISIONAL/CANONICAL discipline)
+ * -- no island.  Determinism: integer-only; promotion is a kernel decision, never a statistic.
+ */
+module aether_provisional_universe
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn nous_synth_provisional_usable(status: u8, has_oracle_pin: u8) -> u8 from "nous_synth.iii"
+
+const PU_PERCEIVE    : u64 = 0x200000u64
+const PU_CANONICAL   : u8  = 0u8
+const PU_GAP         : u8  = 1u8
+const PU_PROVISIONAL : u8  = 3u8
+const PU_REFUSED     : u8  = 0xFFu8
+
+/* ADMIT a hypothesis into the quarantine: gated on CAP_RIGHT_PERCEIVE; it enters as PROVISIONAL. */
+fn pu_admit(cap: u64) -> u8 @export {
+    if cap_verify_rights(cap, PU_PERCEIVE) != 1u8 { return PU_REFUSED }
+    return PU_PROVISIONAL
+}
+
+/* a quarantined provisional may be ACTED ON only with its oracle-pin. */
+fn pu_act_usable(status: u8, pin: u8) -> u8 @export {
+    return nous_synth_provisional_usable(status, pin)
+}
+
+/* PROMOTE by KERNEL PROOF only: want_true=1 builds a provable hypothesis (x*1 == x), want_true=0 a false
+ * one (x*1 == x*2).  Returns PU_CANONICAL iff the kernel proves it, else PU_GAP (decay, never canonical). */
+fn pu_promote(want_true: u8) -> u8 @export {
+    tc_reset()
+    let x   : u32 = tc_var(0u32)
+    let lhs : u32 = tc_bvmul(x, tc_bvlit(1u32, 0u32))
+    let mut rhs : u32 = x
+    if want_true == 0u8 { rhs = tc_bvmul(x, tc_bvlit(2u32, 0u32)) }
+    let goal  : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, rhs))
+    let proof : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    if tc_check(proof, goal) == 1u8 { return PU_CANONICAL }
+    return PU_GAP
+}
+
+/* the resulting status' canonical admissibility (a kernel-PROMOTED CANONICAL crosses; a decayed GAP does not). */
+fn pu_status_canonical_ok(status: u8) -> u8 @export {
+    return nous_synth_canonical_ok(status)
+}

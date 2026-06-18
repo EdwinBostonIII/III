@@ -1191,6 +1191,34 @@ MODULES=(
     # CERTIFIES equivalent (tc_conv); a wrong rewrite is refused and diverges in value.  The optimized op's
     # ISA fragment is emitted deterministically by omnia/xii_kernel_emit.  Composes typecheck + kernel_emit.
     "numera/proof_jit"
+    # --- PHASE III Campaign III #1: EXACT DETERMINISTIC PROBABILITY.  numera/evidence_calculus makes a
+    # probability an exact reduced rational p/q in the unit interval (or an exact rational interval), never
+    # a float -- so real-world likelihoods enter exact and 1/3+1/3+1/3 is EXACTLY 1.  An undefined
+    # probability (q=0) is a typed GAP.  NIH (hand-rolled gcd); compiler-unreferenced -> LIBNATIVE; last.
+    "numera/evidence_calculus"
+    # --- PHASE III Campaign III #3: THE PERCEPTION MEMBRANE.  aether/perception_membrane is the gateway:
+    # an observation is admitted ONLY by a cap holding CAP_RIGHT_PERCEIVE (Wave A bit 21), enters as a
+    # nous_synth PROVISIONAL (never canonical), is DEFAULT-DENIED from every canonical context (the seal is
+    # untouched), and is recorded by replay_box for byte-identical replay.  Composes capability + nous_synth
+    # + replay_box (no island) -- the consumer that makes CAP_RIGHT_PERCEIVE load-bearing; LIBNATIVE; last.
+    "aether/perception_membrane"
+    # --- PHASE III Campaign III #2: the DETERMINISTIC SENSOR QUANTIZER.  numera/quantize_sensor floors a
+    # noisy fine reading to an EXACT dyadic rational q/2^bits (never a float) plus the quantization CELL
+    # that provably contains the reading -- deterministic, replayable typed evidence feeding
+    # evidence_calculus.  Compiler-unreferenced -> LIBNATIVE; last.
+    "numera/quantize_sensor"
+    # --- PHASE III Campaign III #4: the PERCEPTUAL PROPOSER.  nous/perceptual_proposer applies a SEALED
+    # out-of-tree-trained integer-weights model to a noisy observation to PROPOSE a typed hypothesis -- which
+    # may only DECIDE with a certificate (nous_train_admit), is a PROVISIONAL default-denied from canonical,
+    # and a weak model only raises the GAP rate, never a wrong artifact.  Mandate 7 honored: statistics
+    # propose, proof decides.  Composes nous_train + nous_synth + cad (no island); LIBNATIVE; last.
+    "nous/perceptual_proposer"
+    # --- PHASE III Campaign III #5: the PROVISIONAL UNIVERSE.  aether/provisional_universe is the
+    # quarantined, capability-walled arena where a hypothesis enters as PROVISIONAL, is actable only with
+    # its oracle-pin, and is PROMOTED to CANONICAL by KERNEL PROOF alone (tc_check) -- an unprovable
+    # hypothesis decays to a GAP, never silently canonical.  Composes capability + typecheck + nous_synth
+    # (no island); the arena to perception_membrane's gateway; LIBNATIVE; last.  (Campaign III COMPLETE.)
+    "aether/provisional_universe"
 )
 
 PASS=0

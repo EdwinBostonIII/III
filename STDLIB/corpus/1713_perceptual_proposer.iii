@@ -1,0 +1,46 @@
+/* STDLIB/corpus/1713_perceptual_proposer.iii
+ *
+ * Falsifier KAT for nous::perceptual_proposer (III-PHASE3-WALLS, Campaign III, organ 4) -- the learned
+ * proposer that may never decide.  99 = every arm holds; 1..8 = the failing arm.  Independent oracles:
+ * nous_train (sealed-only load; certified-only admit) and nous_synth (the canonical wall).
+ *
+ *   (1) the sealed learner loads; an UNSEALED artifact is REFUSED (biting).
+ *   (2) the proposer is deterministic (same input -> same proposal).
+ *   (3) THE PROPOSE-CHECKED WALL (biting): a CERTIFIED proposal may decide; an UNCERTIFIED one is REFUSED.
+ *   (4) a proposal cannot assert CANONICAL (it is a PROVISIONAL, default-denied).
+ *   (5) an uncertified proposal raises the GAP rate (a weak model gaps, never produces a wrong artifact).
+ */
+module corpus_1713_perceptual_proposer
+
+extern @abi(c-msvc-x64) fn ppr_init() -> i32 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_load_sealed() -> i32 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_loaded() -> u8 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_load_unsealed_refused() -> u8 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_propose(input: u32) -> u32 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_admit(has_cert: u8) -> u8 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_proposal_canonical_ok() -> u8 from "perceptual_proposer.iii"
+extern @abi(c-msvc-x64) fn ppr_record_gap_rate() -> u32 from "perceptual_proposer.iii"
+
+fn main() -> u64 {
+    ppr_init()
+
+    /* (1) sealed loads; unsealed refused */
+    if ppr_load_sealed() != 0i32 { return 1u64 }
+    if ppr_loaded() != 1u8 { return 2u64 }
+    if ppr_load_unsealed_refused() != 1u8 { return 3u64 }
+
+    /* (2) deterministic proposal */
+    if ppr_propose(0x0203u32) != ppr_propose(0x0203u32) { return 4u64 }
+
+    /* (3) propose-checked wall: certified admits, uncertified refused */
+    if ppr_admit(1u8) != 1u8 { return 5u64 }
+    if ppr_admit(0u8) != 0u8 { return 6u64 }
+
+    /* (4) a proposal cannot assert canonical */
+    if ppr_proposal_canonical_ok() != 0u8 { return 7u64 }
+
+    /* (5) an uncertified proposal raises the gap rate */
+    if ppr_record_gap_rate() == 0u32 { return 8u64 }
+
+    return 99u64
+}

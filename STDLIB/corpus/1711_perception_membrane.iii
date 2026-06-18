@@ -1,0 +1,43 @@
+/* STDLIB/corpus/1711_perception_membrane.iii
+ *
+ * Falsifier KAT for aether::perception_membrane (III-PHASE3-WALLS, Campaign III, organ 3) -- the gateway.
+ * 99 = every arm holds; 1..7 = the failing arm.  Independent oracles: the capability system (ingest gated
+ * on CAP_RIGHT_PERCEIVE) and nous_synth's C-12 default-deny (a PROVISIONAL cannot assert as canonical).
+ *
+ *   (1) ingest is gated: a perceive-righted cap -> PROVISIONAL; a cap lacking the right is REFUSED (biting).
+ *   (2) THE WALL (biting): the PROVISIONAL is default-denied from a canonical context; a CANONICAL crosses.
+ *   (3) a PROVISIONAL is usable in a gap-accepting context ONLY with its oracle-pin (no pin -> refused).
+ *   (4) the observation records + replays byte-identically (auditable, deterministic).
+ */
+module corpus_1711_perception_membrane
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn pm_ingest(cap: u64) -> u8 from "perception_membrane.iii"
+extern @abi(c-msvc-x64) fn pm_canonical_ok(status: u8) -> u8 from "perception_membrane.iii"
+extern @abi(c-msvc-x64) fn pm_provisional_usable(status: u8, pin: u8) -> u8 from "perception_membrane.iii"
+extern @abi(c-msvc-x64) fn pm_replay_faithful(source_id: u32, recorded: u32, check: u32) -> u32 from "perception_membrane.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_perceive : u64 = cap_attenuate(env, 0x200000u64, 0u64)   /* CAP_RIGHT_PERCEIVE */
+    let cap_none     : u64 = cap_attenuate(env, 0x10u64, 0u64)       /* fs_delete only, NOT perceive */
+
+    /* (1) ingest is gated */
+    if pm_ingest(cap_perceive) != 3u8 { return 1u64 }       /* -> PROVISIONAL */
+    if pm_ingest(cap_none) != 0xFFu8 { return 2u64 }        /* REFUSED (biting) */
+
+    /* (2) THE WALL: PROVISIONAL default-denied from canonical; CANONICAL crosses */
+    if pm_canonical_ok(3u8) != 0u8 { return 3u64 }          /* biting */
+    if pm_canonical_ok(0u8) != 1u8 { return 4u64 }
+
+    /* (3) PROVISIONAL usable only with its oracle-pin */
+    if pm_provisional_usable(3u8, 1u8) != 1u8 { return 5u64 }
+    if pm_provisional_usable(3u8, 0u8) != 0u8 { return 6u64 }   /* biting */
+
+    /* (4) the observation replays byte-identically; a divergent live value is CAUGHT (biting) */
+    if pm_replay_faithful(7u32, 0xABCDu32, 0xABCDu32) != 1u32 { return 7u64 }   /* faithful */
+    if pm_replay_faithful(7u32, 0xABCDu32, 0xABFFu32) != 0u32 { return 8u64 }   /* diverged -> caught */
+
+    return 99u64
+}

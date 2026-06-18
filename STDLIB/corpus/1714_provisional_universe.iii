@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1714_provisional_universe.iii
+ *
+ * Falsifier KAT for aether::provisional_universe (III-PHASE3-WALLS, Campaign III, organ 5) -- the
+ * quarantined sub-universe.  99 = every arm holds; 1..8 = the failing arm.  Independent oracles: the
+ * capability wall, the kernel (promotion only by tc_check), and nous_synth (the canonical wall).
+ *
+ *   (1) admission is gated: a perceive cap -> PROVISIONAL; no right -> REFUSED (biting).
+ *   (2) a quarantined provisional is actable ONLY with its oracle-pin (biting).
+ *   (3) PROMOTION ONLY BY KERNEL PROOF (biting): a provable hypothesis -> CANONICAL; an unprovable one
+ *       DECAYS to a GAP, never silently canonical.
+ *   (4) only the kernel-promoted CANONICAL crosses into the canonical context; the decayed GAP is refused.
+ */
+module corpus_1714_provisional_universe
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn pu_admit(cap: u64) -> u8 from "provisional_universe.iii"
+extern @abi(c-msvc-x64) fn pu_act_usable(status: u8, pin: u8) -> u8 from "provisional_universe.iii"
+extern @abi(c-msvc-x64) fn pu_promote(want_true: u8) -> u8 from "provisional_universe.iii"
+extern @abi(c-msvc-x64) fn pu_status_canonical_ok(status: u8) -> u8 from "provisional_universe.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_q    : u64 = cap_attenuate(env, 0x200000u64, 0u64)   /* CAP_RIGHT_PERCEIVE */
+    let cap_none : u64 = cap_attenuate(env, 0x10u64, 0u64)
+
+    /* (1) gated admission */
+    if pu_admit(cap_q) != 3u8 { return 1u64 }
+    if pu_admit(cap_none) != 0xFFu8 { return 2u64 }
+
+    /* (2) actable only with the oracle-pin */
+    if pu_act_usable(3u8, 1u8) != 1u8 { return 3u64 }
+    if pu_act_usable(3u8, 0u8) != 0u8 { return 4u64 }
+
+    /* (3) promotion only by kernel proof */
+    if pu_promote(1u8) != 0u8 { return 5u64 }     /* provable -> CANONICAL(0) */
+    if pu_promote(0u8) != 1u8 { return 6u64 }     /* unprovable -> GAP(1) */
+
+    /* (4) only the promoted CANONICAL crosses; the decayed GAP is refused */
+    if pu_status_canonical_ok(pu_promote(1u8)) != 1u8 { return 7u64 }
+    if pu_status_canonical_ok(pu_promote(0u8)) != 0u8 { return 8u64 }
+
+    return 99u64
+}

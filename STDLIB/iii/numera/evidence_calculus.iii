@@ -1,0 +1,92 @@
+/* STDLIB/iii/numera/evidence_calculus.iii -- EXACT DETERMINISTIC PROBABILITY
+ * (III-PHASE3-WALLS, Campaign III, organ 1).
+ *
+ * Campaign III lets III reason about the open, noisy, probabilistic world WITHOUT surrendering one
+ * invariant.  The first stone: a probability here is NOT a float and never a frequency counter -- it is an
+ * EXACT nonnegative rational p/q in the unit interval, always stored reduced, or an exact rational INTERVAL
+ * when only bounds are known.  Real-world likelihoods enter as exact rationals; reasoning over them is
+ * exact rational arithmetic, bit-identical and replayable, with NO float on any path that decides.
+ *
+ * WHY EXACT MATTERS (the open-world-without-compromise point): 1/3 + 1/3 + 1/3 is EXACTLY 1 here; a float
+ * accumulates 0.999... and a downstream "is this a valid distribution?" check silently fails.  Exactness is
+ * the difference between a probabilistic conclusion you can trust like a proof and one you cannot.
+ *
+ * THE TYPED GAP: an undefined probability (denominator 0) is not a trap -- ec_set returns EC_GAP, the same
+ * honest "unknown, and here is why" discipline as numera/uncertainty.  A reasoner that hits it resumes; it
+ * never fabricates a value.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: a hand-rolled Euclid gcd; no float, no third party.
+ * Determinism: integer-only u64; reduction is canonical (so equal probabilities have equal (p,q)); the
+ * unit-interval invariant 0 <= p <= q (q>0) is a checkable predicate; <=4 params per fn (cross-mult
+ * comparisons instead of 6-arg containment).
+ */
+module numera_evidence_calculus
+
+const EC_OK  : i32 = 0i32
+const EC_GAP : i32 = -1i32     /* undefined probability (q==0) -> a typed gap, never a trap */
+
+var EC_P : u64 = 0u64
+var EC_Q : u64 = 1u64
+
+/* Euclid gcd (explicit mod = a - (a/b)*b to avoid the modulo-after-call idiom). */
+fn ec_gcd(a: u64, b: u64) -> u64 {
+    let mut x : u64 = a
+    let mut y : u64 = b
+    while y != 0u64 {
+        let t : u64 = y
+        y = x - (x / y) * y
+        x = t
+    }
+    return x
+}
+
+/* store p/q reduced; EC_GAP if q==0 (undefined). */
+fn ec_set(p: u64, q: u64) -> i32 @export {
+    if q == 0u64 { EC_P = 0u64  EC_Q = 1u64  return EC_GAP }
+    let g : u64 = ec_gcd(p, q)
+    if g == 0u64 { EC_P = 0u64  EC_Q = q  return EC_OK }
+    EC_P = p / g
+    EC_Q = q / g
+    return EC_OK
+}
+
+fn ec_p() -> u64 @export { return EC_P }
+fn ec_q() -> u64 @export { return EC_Q }
+
+/* valid probability: 0 <= p/q <= 1 with q > 0  (p,q unsigned, so p >= 0 always). */
+fn ec_is_unit(p: u64, q: u64) -> u8 @export {
+    if q == 0u64 { return 0u8 }
+    if p > q { return 0u8 }
+    return 1u8
+}
+
+/* product of two probabilities = independent-evidence combination, reduced. */
+fn ec_mul(p1: u64, q1: u64, p2: u64, q2: u64) -> i32 @export {
+    return ec_set(p1 * p2, q1 * q2)
+}
+
+/* exact rational sum, reduced (mixtures / normalization). */
+fn ec_add(p1: u64, q1: u64, p2: u64, q2: u64) -> i32 @export {
+    return ec_set(p1 * q2 + p2 * q1, q1 * q2)
+}
+
+/* complement 1 - p/q = (q-p)/q, reduced; EC_GAP if undefined or p>q (not a probability). */
+fn ec_complement(p: u64, q: u64) -> i32 @export {
+    if q == 0u64 { EC_P = 0u64  EC_Q = 1u64  return EC_GAP }
+    if p > q { EC_P = 0u64  EC_Q = 1u64  return EC_GAP }
+    return ec_set(q - p, q)
+}
+
+/* exact equality of two rationals (cross-mult). */
+fn ec_eq(p1: u64, q1: u64, p2: u64, q2: u64) -> u8 @export {
+    if (p1 * q2) == (p2 * q1) { return 1u8 }
+    return 0u8
+}
+
+/* exact order p1/q1 <= p2/q2 (cross-mult); composes into interval containment lo<=x AND x<=hi. */
+fn ec_leq(p1: u64, q1: u64, p2: u64, q2: u64) -> u8 @export {
+    if q1 == 0u64 { return 0u8 }
+    if q2 == 0u64 { return 0u8 }
+    if (p1 * q2) <= (p2 * q1) { return 1u8 }
+    return 0u8
+}

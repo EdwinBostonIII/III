@@ -1,0 +1,52 @@
+/* STDLIB/iii/numera/quantize_sensor.iii -- THE DETERMINISTIC SENSOR QUANTIZER
+ * (III-PHASE3-WALLS, Campaign III, organ 2).
+ *
+ * The open world hands III noisy, fine-grained readings; this organ converts each into EXACT, typed,
+ * replayable evidence -- never a float.  A reading x (in fine units of 1/2^FINE) is floored to a coarser
+ * dyadic grid of `bits` precision, yielding the EXACT dyadic rational q / 2^bits, together with the
+ * QUANTIZATION CELL [q/2^bits, (q+1)/2^bits) that PROVABLY CONTAINS the true reading.  The dyadic numerator
+ * q and denominator 2^bits feed numera/evidence_calculus directly (an exact rational probability), and the
+ * cell is the typed-uncertainty bound the rest of the membrane carries.
+ *
+ * Deterministic by construction (the quantizer is a shift -- the same reading always yields the same typed
+ * evidence, so every reaction is replayable), exact (no float on any path), and SOUND (the cell contains
+ * the reading, so an abstract conclusion over the cell holds for the true value).
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH; pairs with numera/evidence_calculus (q/2^bits is an
+ * exact rational) and the membrane's uncertainty bound.  Determinism: integer-only shifts; no float.
+ */
+module numera_quantize_sensor
+
+const QS_FINE : u32 = 16u32    /* input resolution: x is in units of 1/2^16 */
+
+/* quantize a fine reading x to `bits` of dyadic precision: the numerator over 2^bits (floor to grid). */
+fn qs_quantize(x: u64, bits: u32) -> u64 @export {
+    if bits >= QS_FINE { return x }
+    let sh : u32 = QS_FINE - bits
+    return x >> (sh as u64)
+}
+
+/* the exact dyadic denominator 2^bits (the quantized value is qs_quantize(x,bits) / qs_den(bits)). */
+fn qs_den(bits: u32) -> u64 @export {
+    return 1u64 << (bits as u64)
+}
+
+/* the quantization cell of grid point q (in fine units): [lo, hi) = [q*2^(FINE-bits), (q+1)*2^(FINE-bits)). */
+fn qs_cell_lo(q: u64, bits: u32) -> u64 @export {
+    if bits >= QS_FINE { return q }
+    let sh : u32 = QS_FINE - bits
+    return q << (sh as u64)
+}
+fn qs_cell_hi(q: u64, bits: u32) -> u64 @export {
+    if bits >= QS_FINE { return q + 1u64 }
+    let sh : u32 = QS_FINE - bits
+    return (q + 1u64) << (sh as u64)
+}
+
+/* SOUNDNESS: the cell of quantize(x) CONTAINS x -- the abstraction over-approximates the true reading. */
+fn qs_contains(x: u64, bits: u32) -> u8 @export {
+    let q : u64 = qs_quantize(x, bits)
+    if x < qs_cell_lo(q, bits) { return 0u8 }
+    if x >= qs_cell_hi(q, bits) { return 0u8 }
+    return 1u8
+}

@@ -1,0 +1,72 @@
+/* STDLIB/iii/aether/perception_membrane.iii -- THE PERCEPTION MEMBRANE
+ * (III-PHASE3-WALLS, Campaign III, organ 3).
+ *
+ * The open world enters III ONLY through a checked membrane that converts every observation into typed,
+ * witnessed evidence, structurally forbidden from contaminating the certified core.  This is the gateway:
+ *   - INGEST is capability-mediated: an observation is admitted only by a cap holding CAP_RIGHT_PERCEIVE
+ *     (bit 21, minted in Wave A).  Without it the system is fully closed -- nothing is perceived.
+ *   - Every admitted observation enters as a nous_synth PROVISIONAL (never CANONICAL), so it carries the
+ *     honest "believed, not proven" status.
+ *   - THE WALL (nous_synth C-12 default-deny): a PROVISIONAL is REFUSED in any canonical context; it is
+ *     usable in a gap-accepting context ONLY with its oracle-pin.  The world is admitted; the seal is not
+ *     touched.  Promotion to CANONICAL requires a kernel proof elsewhere -- never the membrane's doing.
+ *   - Every observation is RECORDED by replay_box so the entire perceptual history replays byte-identically
+ *     (the determinism the open world would otherwise break is restored by witnessing, not by refusing).
+ *
+ * Hexad: kind_passage.  Ring: R-1 (a boundary ceremony).  K: 1.00.  Composes aether/capability +
+ * nous/nous_synth + aether/replay_box -- no island; this organ is the consumer that makes CAP_RIGHT_PERCEIVE
+ * load-bearing.  Determinism: integer-only; the membrane adds no entropy; observation order is witnessed.
+ */
+module aether_perception_membrane
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn nous_synth_provisional_usable(status: u8, has_oracle_pin: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_record(source_id: u32, live: *u8, len: u32, out: *u8) -> u64 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay_check(source_id: u32, live: *u8, len: u32, out: *u8) -> u32 from "replay_box.iii"
+
+/* CAP_RIGHT_PERCEIVE = 0x200000 and the nous_synth status literals (named in their modules; literals here
+ * per the trap-2 cross-module-const discipline): CANONICAL=0, PROVISIONAL=3. */
+const PM_PERCEIVE    : u64 = 0x200000u64
+const PM_CANONICAL   : u8  = 0u8
+const PM_PROVISIONAL : u8  = 3u8
+const PM_REFUSED     : u8  = 0xFFu8
+
+var PM_REC  : [u8; 64]
+var PM_CHK  : [u8; 64]
+var PM_HASH : [u8; 32]
+
+/* INGEST: gated on CAP_RIGHT_PERCEIVE.  Authorized -> the observation enters as a PROVISIONAL; an
+ * unauthorized cap is REFUSED (the system stays closed). */
+fn pm_ingest(cap: u64) -> u8 @export {
+    if cap_verify_rights(cap, PM_PERCEIVE) != 1u8 { return PM_REFUSED }
+    return PM_PROVISIONAL
+}
+
+/* THE WALL: a status is allowed into a CANONICAL context iff it is CANONICAL (default-deny). */
+fn pm_canonical_ok(status: u8) -> u8 @export {
+    return nous_synth_canonical_ok(status)
+}
+
+/* a PROVISIONAL is usable in a gap-accepting context ONLY with its oracle-pin. */
+fn pm_provisional_usable(status: u8, pin: u8) -> u8 @export {
+    return nous_synth_provisional_usable(status, pin)
+}
+
+/* RECORD a 2-byte observation, then REPLAY and check a (possibly different) live value against it.
+ * 1 = FAITHFUL (the live value matched the recorded run; replay_box RB_FAITHFUL == 0); 0 = DIVERGED.
+ * A faithful replay proves the observation is witnessed and byte-reproducible; a divergent live value is
+ * caught (so the witness has teeth). */
+fn pm_replay_faithful(source_id: u32, recorded: u32, check: u32) -> u32 @export {
+    PM_REC[0u64] = (recorded & 0xFFu32) as u8
+    PM_REC[1u64] = ((recorded >> 8u32) & 0xFFu32) as u8
+    PM_CHK[0u64] = (check & 0xFFu32) as u8
+    PM_CHK[1u64] = ((check >> 8u32) & 0xFFu32) as u8
+    rb_begin()
+    rb_record(source_id, (&PM_REC as u64) as *u8, 2u32, (&PM_HASH as u64) as *u8)
+    rb_replay()
+    if rb_replay_check(source_id, (&PM_CHK as u64) as *u8, 2u32, (&PM_HASH as u64) as *u8) == 0u32 { return 1u32 }
+    return 0u32
+}

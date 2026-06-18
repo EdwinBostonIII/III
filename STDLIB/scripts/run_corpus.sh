@@ -1324,6 +1324,11 @@ declare -A EXPECTED=(
     [1707_proof_jit]=99
     [1708_proof_stark]=99
     [1709_aeu_kernel]=99
+    [1710_evidence_calculus]=99
+    [1711_perception_membrane]=99
+    [1712_quantize_sensor]=99
+    [1713_perceptual_proposer]=99
+    [1714_provisional_universe]=99
 )
 
 PASS=0

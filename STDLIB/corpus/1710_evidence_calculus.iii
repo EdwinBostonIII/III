@@ -1,0 +1,61 @@
+/* STDLIB/corpus/1710_evidence_calculus.iii
+ *
+ * Falsifier KAT for numera::evidence_calculus (III-PHASE3-WALLS, Campaign III, organ 1) -- exact
+ * deterministic probability.  99 = every arm holds; 1..14 = the failing arm.  Independent oracle: exact
+ * rational arithmetic -- a float implementation fails arm (2) (1/3+1/3+1/3 != 1 in float), a non-reducing
+ * one fails (1)/(3), a wrong unit guard fails (5).
+ *
+ *   (1) canonical reduction: 2/6 -> 1/3.
+ *   (2) BITING vs float: 1/3 + 1/3 + 1/3 == 1 EXACTLY.
+ *   (3) independent-evidence product: 1/2 * 2/3 = 1/3.
+ *   (4) complement: 1 - 1/3 = 2/3.
+ *   (5) unit-interval invariant: 1/3 valid; 3/2 invalid (>1); q=0 -> typed GAP.
+ *   (6) exact confidence interval via cross-mult order.
+ */
+module corpus_1710_evidence_calculus
+
+extern @abi(c-msvc-x64) fn ec_set(p: u64, q: u64) -> i32 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_p() -> u64 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_q() -> u64 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_is_unit(p: u64, q: u64) -> u8 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_mul(p1: u64, q1: u64, p2: u64, q2: u64) -> i32 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_add(p1: u64, q1: u64, p2: u64, q2: u64) -> i32 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_complement(p: u64, q: u64) -> i32 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_eq(p1: u64, q1: u64, p2: u64, q2: u64) -> u8 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_leq(p1: u64, q1: u64, p2: u64, q2: u64) -> u8 from "evidence_calculus.iii"
+
+fn main() -> u64 {
+    /* (1) canonical reduction 2/6 -> 1/3 */
+    if ec_set(2u64, 6u64) != 0i32 { return 1u64 }
+    if ec_p() != 1u64 { return 2u64 }
+    if ec_q() != 3u64 { return 3u64 }
+
+    /* (2) BITING vs float: 1/3 + 1/3 + 1/3 == 1 exactly */
+    ec_add(1u64, 3u64, 1u64, 3u64)
+    let ap : u64 = ec_p()
+    let aq : u64 = ec_q()
+    ec_add(ap, aq, 1u64, 3u64)
+    if ec_p() != 1u64 { return 4u64 }
+    if ec_q() != 1u64 { return 5u64 }
+
+    /* (3) independent-evidence product 1/2 * 2/3 = 1/3 */
+    ec_mul(1u64, 2u64, 2u64, 3u64)
+    if ec_p() != 1u64 { return 6u64 }
+    if ec_q() != 3u64 { return 7u64 }
+
+    /* (4) complement 1 - 1/3 = 2/3 */
+    ec_complement(1u64, 3u64)
+    if ec_eq(ec_p(), ec_q(), 2u64, 3u64) != 1u8 { return 8u64 }
+
+    /* (5) unit-interval invariant + typed gap */
+    if ec_is_unit(1u64, 3u64) != 1u8 { return 9u64 }
+    if ec_is_unit(3u64, 2u64) != 0u8 { return 10u64 }
+    if ec_set(5u64, 0u64) != -1i32 { return 11u64 }
+
+    /* (6) exact confidence interval: 1/3 in [1/4, 1/2], not >= 1/2 */
+    if ec_leq(1u64, 4u64, 1u64, 3u64) != 1u8 { return 12u64 }
+    if ec_leq(1u64, 3u64, 1u64, 2u64) != 1u8 { return 13u64 }
+    if ec_leq(1u64, 2u64, 1u64, 3u64) != 0u8 { return 14u64 }
+
+    return 99u64
+}

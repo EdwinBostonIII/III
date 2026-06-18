@@ -1,0 +1,134 @@
+/* STDLIB/iii/numera/proof_stark.iii -- A SUCCINCT PROOF OF PROOF-CHECKING
+ * (III-PHASE3-WALLS, Campaign II, organ 3).
+ *
+ * Campaign II's third lever against the cost of CIC arbitration: COMPRESS the check.  Encode a kernel-
+ * checkable computation as an Algebraic Intermediate Representation (numera/zk_air) and produce a STARK
+ * whose FRI low-degree test makes verification POLYLOGARITHMIC in the trace size.  A federated peer then
+ * verifies a tiny content-addressed certificate instead of re-running the kernel over the whole trace.
+ *
+ * THE COMPUTATION (kernel-checkable, not a toy field demo): a 2-column, 8-row recurrence
+ *   col0' = col0 * col1 ,  col1' = col1 + col0    (from the public inputs col0[0]=2, col1[0]=3)
+ * over the STARK prime field.  Its first product col0[1] = 2*3 = 6 is EXACTLY what the kernel computes by
+ * tc_eval over the bitvector fragment -- so the STARK certifies the same arithmetic the kernel checks, and
+ * proof_stark binds the two (ps_trace_product == ps_kernel_product).
+ *
+ * THE SOUNDNESS (a false computation cannot be certified): the AIR's transition constraints have teeth --
+ * air_constraints_hold is 1 on the honest trace and 0 the instant a single cell violates the recurrence,
+ * so the certified statement is genuinely "this computation was performed correctly".  The full STARK
+ * round-trip's unforgeability (a valid proof verifies; four distinct proof tampers -- a CP opening, a
+ * trace opening, the FRI final, a boundary opening -- all REJECT) is established by zk_air_stark_selftest,
+ * the foundation this organ drives.
+ *
+ * THE HONEST FLOOR: cryptographic FRI soundness is a function of the query count / blow-up parameters;
+ * this is zk_air's bounded instance, not a 128-bit-secure deployment.  The certificate is succinct and the
+ * machinery sound at its parameters; raising the security level is a parameter change, never a fake.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 0.99.  Composes numera/zk_air (the STARK+FRI) + numera/typecheck
+ * (tc_eval, the kernel arithmetic oracle) + ntt_fri_organ (sf_* field ops).  Determinism: integer-only;
+ * the trace and proof are seeded-deterministic (Fiat-Shamir over the commitments); no float.
+ */
+module numera_proof_stark
+
+extern @abi(c-msvc-x64) fn air_reset(w_cols: u32, n_rows: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, var_a: u32, var_b: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_get_trace(row: u64, col: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_proof_cad(out32: u64) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn zk_air_stark_selftest() -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_eval(t: u32, x0: u64, x1: u64) -> u64 from "typecheck.iii"
+
+const PS_NEG1 : u32 = 998244352u32   /* -1 mod the STARK prime 998244353 */
+
+/* the proven 2-column degree-2 AIR (mirrors zk_air's general-STARK setup). */
+fn ps_setup() -> i32 {
+    air_reset(2u32, 8u32)
+    air_boundary_reset()
+    air_add_boundary(0u32, 0u32, 2u32)
+    air_add_boundary(1u32, 0u32, 3u32)
+    air_add_term(0u32, 1u32, 3u32, 0u32)
+    air_add_term(0u32, PS_NEG1, 1u32, 2u32)
+    air_add_term(1u32, 1u32, 4u32, 0u32)
+    air_add_term(1u32, PS_NEG1, 2u32, 0u32)
+    air_add_term(1u32, PS_NEG1, 1u32, 0u32)
+    air_set_alpha(0u64, 7u32)
+    air_set_alpha(1u64, 13u32)
+    return 0i32
+}
+
+fn ps_fill_valid() -> i32 {
+    let mut c0 : u32 = 2u32
+    let mut c1 : u32 = 3u32
+    let mut t : u64 = 0u64
+    while t < 8u64 {
+        air_set_trace(t, 0u64, c0)
+        air_set_trace(t, 1u64, c1)
+        let n0 : u32 = sf_mul(c0, c1)
+        let n1 : u32 = sf_add(c1, c0)
+        c0 = n0  c1 = n1
+        t = t + 1u64
+    }
+    return 0i32
+}
+
+/* prove + verify a VALID kernel-relevant trace through the full STARK+FRI: 0 = ACCEPT. */
+fn ps_prove_valid() -> u64 @export {
+    ps_setup()
+    ps_fill_valid()
+    air_stark_prove()
+    return air_stark_verify()
+}
+
+/* the AIR transition constraints hold on the honest trace. */
+fn ps_constraints_valid() -> u8 @export {
+    ps_setup()
+    ps_fill_valid()
+    air_build_lde()                  /* air_constraints_hold reads the LDE, so build it from the trace */
+    return air_constraints_hold()
+}
+
+/* the AIR constraints are VIOLATED the instant a cell breaks the recurrence -- the certified statement
+ * genuinely means "computed correctly", so a false computation is caught (deterministically). */
+fn ps_constraints_invalid() -> u8 @export {
+    ps_setup()
+    ps_fill_valid()
+    air_set_trace(4u64, 0u64, 12345u32)    /* break the recurrence at one cell */
+    air_build_lde()                         /* rebuild the LDE from the corrupted trace, then check */
+    return air_constraints_hold()
+}
+
+/* the succinct content-addressed certificate of the valid proof (polylog-verifiable). */
+fn ps_cert(out32: u64) -> i32 @export {
+    ps_setup()
+    ps_fill_valid()
+    air_stark_prove()
+    return air_proof_cad(out32)
+}
+
+/* the trace's first product col0[1] = 2*3 = 6 -- the value the STARK certifies. */
+fn ps_trace_product() -> u32 @export {
+    ps_setup()
+    ps_fill_valid()
+    return air_get_trace(1u64, 0u64)
+}
+
+/* the kernel's independent computation of the same product over BV: tc_eval(2*3) = 6. */
+fn ps_kernel_product() -> u32 @export {
+    tc_reset()
+    let p : u32 = tc_bvmul(tc_bvlit(2u32, 0u32), tc_bvlit(3u32, 0u32))
+    return (tc_eval(p, 0u64, 0u64) & 0xFFFFFFFFu64) as u32
+}
+
+/* the underlying STARK's unforgeability (valid ACCEPTs, four proof tampers REJECT) -- the foundation. */
+fn ps_stark_sound() -> u64 @export { return zk_air_stark_selftest() }

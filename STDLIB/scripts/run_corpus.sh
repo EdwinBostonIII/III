@@ -1321,6 +1321,7 @@ declare -A EXPECTED=(
     [1704_egraph_hw_ematch]=99
     [1705_proof_replay_cache]=99
     [1706_proof_parallel]=99
+    [1708_proof_stark]=99
 )
 
 PASS=0

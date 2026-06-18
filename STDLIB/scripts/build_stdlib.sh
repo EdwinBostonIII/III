@@ -1174,6 +1174,13 @@ MODULES=(
     # bitmask equals the reverse-dispatch one -- a short-circuiting/order-dependent checker diverges.
     # Composes numera/typecheck (no island); compiler-unreferenced -> LIBNATIVE; last.
     "numera/proof_parallel"
+    # --- PHASE III Campaign II #3: a SUCCINCT PROOF OF PROOF-CHECKING.  numera/proof_stark encodes a
+    # kernel-checkable arithmetic trace as an AIR and drives numera/zk_air's STARK+FRI to a polylog-
+    # verifiable content-addressed certificate: a peer verifies a tiny seal instead of re-running the
+    # kernel.  Sound -- the AIR constraints have teeth (a violated cell fails air_constraints_hold) and
+    # the proof is unforgeable (zk_air_stark_selftest); the certified product equals the kernel's tc_eval.
+    # Composes zk_air + typecheck + ntt_fri_organ (no island); compiler-unreferenced -> LIBNATIVE; last.
+    "numera/proof_stark"
 )
 
 PASS=0

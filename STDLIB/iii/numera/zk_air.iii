@@ -578,7 +578,7 @@ fn air_derive_alphas(tlen: u64) -> i32 {
     return 0i32
 }
 
-fn air_stark_prove() -> i32 {
+fn air_stark_prove() -> i32 @export {
     air_build_lde()
     let wc : u64 = AIR_W[0] as u64
     let n  : u64 = AIR_N[0] as u64
@@ -687,7 +687,7 @@ fn air_stark_prove() -> i32 {
  * committed roots, verifies every Merkle opening, checks the general AIR transition
  * CP[q]*Z_H(q) == air_combine_opened (the data-driven constraint at the openings), and
  * the FRI low-degree consistency down to the final constant. */
-fn air_stark_verify() -> u64 {
+fn air_stark_verify() -> u64 @export {
     let wc : u64 = AIR_W[0] as u64
     let n  : u64 = AIR_N[0] as u64
     let d  : u64 = AIR_B * n

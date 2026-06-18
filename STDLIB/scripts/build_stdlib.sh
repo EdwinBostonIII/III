@@ -1181,6 +1181,16 @@ MODULES=(
     # the proof is unforgeable (zk_air_stark_selftest); the certified product equals the kernel's tc_eval.
     # Composes zk_air + typecheck + ntt_fri_organ (no island); compiler-unreferenced -> LIBNATIVE; last.
     "numera/proof_stark"
+    # --- PHASE III Campaign II #4: the kernel lowered to certified silicon.  numera/aeu_kernel lowers the
+    # kernel's BV equality predicate (which tc_conv decides) to a universal-NAND netlist, proven equal to
+    # the native-gate spec EXHAUSTIVELY (hdl_equiv2 over all 2^4 inputs) AND equal to the kernel's own
+    # tc_conv on literal pairs.  Composes numera/hdl + numera/typecheck (no island).
+    "numera/aeu_kernel"
+    # --- PHASE III Campaign II #2: the kernel JIT, verdict-identical by construction.  numera/proof_jit
+    # only permits a hot-path rewrite (strength-reduce x*8 -> x<<3) that the kernel's conversion oracle
+    # CERTIFIES equivalent (tc_conv); a wrong rewrite is refused and diverges in value.  The optimized op's
+    # ISA fragment is emitted deterministically by omnia/xii_kernel_emit.  Composes typecheck + kernel_emit.
+    "numera/proof_jit"
 )
 
 PASS=0

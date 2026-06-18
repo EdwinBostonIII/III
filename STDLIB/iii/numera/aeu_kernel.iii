@@ -1,0 +1,105 @@
+/* STDLIB/iii/numera/aeu_kernel.iii -- THE KERNEL, LOWERED TO CERTIFIED SILICON
+ * (III-PHASE3-WALLS, Campaign II, organ 4).
+ *
+ * Campaign II's deepest lever against the cost of CIC arbitration: lower the kernel's HOT PREDICATES to a
+ * certified combinational netlist, so the check runs in one abstract clock cycle of universal NAND gates
+ * with ZERO software overhead.  numera/aeu already proves a silicon AXIOM verifier equals the scalar
+ * conjunction (aeu_netlist_certified); this organ extends that to a KERNEL DECISION predicate.
+ *
+ * THE PREDICATE: bitvector EQUALITY of two 2-bit literals -- exactly the comparison the kernel's
+ * conversion oracle (tc_conv) performs on closed BV literals.  bv_eq(a,b) = (a0 XNOR b0) AND (a1 XNOR b1).
+ *
+ * THE CERTIFICATION (two independent oracles):
+ *   1. SILICON == SPEC: the predicate is built TWICE -- once from universal NAND gates only (the silicon
+ *      form, structurally a NAND tree) and once from native XOR/NOT/AND gates (the spec) -- and hdl_equiv2
+ *      proves them equal EXHAUSTIVELY over all 2^4 input assignments.  A miswired netlist fails here.
+ *   2. SILICON == KERNEL: the NAND netlist's verdict, evaluated at a literal pair, equals the kernel's own
+ *      tc_conv decision for those literals -- the lowered predicate provably computes what the kernel does.
+ *
+ * THE HONEST FLOOR: this lowers ONE kernel predicate at a fixed width to a certified gate netlist; the full
+ * reducer (conversion over arbitrary terms) and a synthesis-equivalence proof against fabricated RTL are a
+ * receding boundary -- more predicates and wider widths are the same construction repeated, never a fake.
+ *
+ * Hexad: kind_sensitivity (admission, in silicon).  Ring: R0.  K: 0.99.  Composes numera/hdl (the gate
+ * netlist + hdl_equiv2) + numera/typecheck (tc_conv, the kernel oracle) -- no island.  Determinism:
+ * integer-only; exhaustive equivalence; no float.
+ */
+module numera_aeu_kernel
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add_in(input_idx: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_set_input(idx: u32, val: i32) -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_eval(out: u32) -> i32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit(lo: u32, hi: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+
+const AK_NAND : u32 = 8u32
+const AK_XOR  : u32 = 7u32
+const AK_NOT  : u32 = 4u32
+const AK_AND  : u32 = 5u32
+
+/* XNOR(a,b) from NAND gates only (the 4-NAND XOR, then NAND-negated). */
+fn ak_xnor_nand(a: u32, b: u32) -> u32 {
+    let c  : u32 = hdl_add(AK_NAND, a, b)
+    let d  : u32 = hdl_add(AK_NAND, a, c)
+    let e  : u32 = hdl_add(AK_NAND, b, c)
+    let xr : u32 = hdl_add(AK_NAND, d, e)        /* XOR(a,b)        */
+    return hdl_add(AK_NAND, xr, xr)              /* NOT(XOR) = XNOR */
+}
+
+/* the 2-bit bv_eq built from NAND only over inputs (a0=0,a1=1,b0=2,b1=3); returns the eq gate. */
+fn ak_build_silicon() -> u32 {
+    let a0 : u32 = hdl_add_in(0u32)
+    let a1 : u32 = hdl_add_in(1u32)
+    let b0 : u32 = hdl_add_in(2u32)
+    let b1 : u32 = hdl_add_in(3u32)
+    let e0 : u32 = ak_xnor_nand(a0, b0)
+    let e1 : u32 = ak_xnor_nand(a1, b1)
+    let ne : u32 = hdl_add(AK_NAND, e0, e1)
+    return hdl_add(AK_NAND, ne, ne)              /* AND(e0,e1) via NAND */
+}
+
+/* the SAME 2-bit bv_eq from NATIVE gates over the same inputs; returns the eq gate. */
+fn ak_build_native() -> u32 {
+    let a0 : u32 = hdl_add_in(0u32)
+    let a1 : u32 = hdl_add_in(1u32)
+    let b0 : u32 = hdl_add_in(2u32)
+    let b1 : u32 = hdl_add_in(3u32)
+    let x0 : u32 = hdl_add(AK_XOR, a0, b0)
+    let e0 : u32 = hdl_add(AK_NOT, x0, 0u32)
+    let x1 : u32 = hdl_add(AK_XOR, a1, b1)
+    let e1 : u32 = hdl_add(AK_NOT, x1, 0u32)
+    return hdl_add(AK_AND, e0, e1)
+}
+
+/* CERTIFIED: the NAND-built bv_eq equals the native-gate bv_eq exhaustively over all 2^4 inputs. 1=ok. */
+fn ak_certified() -> u32 @export {
+    hdl_reset()
+    let sil : u32 = ak_build_silicon()
+    let nat : u32 = ak_build_native()
+    return hdl_equiv2(sil, nat, 4u32)
+}
+
+/* the NAND netlist's verdict for the literal pair (a,b), a,b in 0..3 (2-bit). */
+fn ak_netlist_eq(a: u32, b: u32) -> u8 @export {
+    hdl_reset()
+    let sil : u32 = ak_build_silicon()
+    hdl_set_input(0u32, (a & 1u32) as i32)
+    hdl_set_input(1u32, ((a >> 1u32) & 1u32) as i32)
+    hdl_set_input(2u32, (b & 1u32) as i32)
+    hdl_set_input(3u32, ((b >> 1u32) & 1u32) as i32)
+    if hdl_eval(sil) == 1i32 { return 1u8 }
+    return 0u8
+}
+
+/* 1 iff the lowered netlist verdict equals the kernel's tc_conv decision for the literal pair (a,b). */
+fn ak_agrees(a: u32, b: u32) -> u8 @export {
+    let nl : u8 = ak_netlist_eq(a, b)
+    tc_reset()
+    let kr : u8 = tc_conv(tc_bvlit(a, 0u32), tc_bvlit(b, 0u32))
+    if nl == kr { return 1u8 }
+    return 0u8
+}

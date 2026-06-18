@@ -1,0 +1,33 @@
+/* STDLIB/corpus/1709_aeu_kernel.iii
+ *
+ * Falsifier KAT for numera::aeu_kernel (III-PHASE3-WALLS, Campaign II, organ 4) -- the kernel predicate
+ * lowered to certified silicon.  99 = every arm holds; 1..8 = the failing arm.  Independent oracles:
+ * hdl_equiv2 (exhaustive over 2^4 inputs) and the kernel's tc_conv on literal pairs.
+ *
+ *   (1) the NAND-built bv_eq netlist EQUALS the native-gate bv_eq over ALL 2^4 input assignments.
+ *   (2) BITING: the netlist DISCRIMINATES -- equal literals -> 1, unequal -> 0 (not stuck-true).
+ *   (3) BITING: the lowered predicate AGREES with the kernel's tc_conv on equal and unequal literal pairs.
+ */
+module corpus_1709_aeu_kernel
+
+extern @abi(c-msvc-x64) fn ak_certified() -> u32 from "aeu_kernel.iii"
+extern @abi(c-msvc-x64) fn ak_netlist_eq(a: u32, b: u32) -> u8 from "aeu_kernel.iii"
+extern @abi(c-msvc-x64) fn ak_agrees(a: u32, b: u32) -> u8 from "aeu_kernel.iii"
+
+fn main() -> u64 {
+    /* (1) silicon == spec, exhaustively */
+    if ak_certified() != 1u32 { return 1u64 }
+
+    /* (2) the netlist discriminates: 0==0 ->1, 3==3 ->1, 1!=2 ->0, 2!=3 ->0 */
+    if ak_netlist_eq(0u32, 0u32) != 1u8 { return 2u64 }
+    if ak_netlist_eq(3u32, 3u32) != 1u8 { return 3u64 }
+    if ak_netlist_eq(1u32, 2u32) != 0u8 { return 4u64 }
+    if ak_netlist_eq(2u32, 3u32) != 0u8 { return 5u64 }
+
+    /* (3) the lowered predicate agrees with the kernel's tc_conv (equal and unequal pairs) */
+    if ak_agrees(0u32, 0u32) != 1u8 { return 6u64 }
+    if ak_agrees(1u32, 2u32) != 1u8 { return 7u64 }   /* both say "not equal" -> agree */
+    if ak_agrees(3u32, 3u32) != 1u8 { return 8u64 }
+
+    return 99u64
+}

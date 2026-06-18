@@ -80,6 +80,10 @@ const CAP_RIGHT_AUTOGENESIS_COMMIT : u64 = 0x00100000u64
  * uncertainty GAP or a nous_synth PROVISIONAL, default-denied from every CANONICAL context.  Without
  * this bit the system is fully closed and byte-identical to today (no perception surface acts). */
 const CAP_RIGHT_PERCEIVE           : u64 = 0x00200000u64
+/* Phase IV verified-probability draw (III-PHASE4-PROBABILITY, ADR-P4-001).  Bit 22 mediates every random
+ * draw: the sample beacon is the ONLY lawful randomness, and is always seeded + witnessed, so a draw is
+ * replayable and the build/corpus stay byte-identical.  Without this bit the system draws nothing. */
+const CAP_RIGHT_SAMPLE             : u64 = 0x00400000u64
 const CAP_RIGHT_ENV            : u64 = 0x8000000000000000u64
 
 /* Slot table - up to 256 simultaneous caps in this address space. */

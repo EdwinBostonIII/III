@@ -1,0 +1,50 @@
+/* STDLIB/corpus/1715_sample_beacon.iii
+ *
+ * Falsifier KAT for numera::sample_beacon (III-PHASE4-PROBABILITY, Layer 2) -- the verifiable
+ * deterministic beacon.  99 = every arm holds; 1..6 = the failing arm.  Independent oracle: byte-level
+ * determinism -- a same-seed stream MUST be byte-identical and a different-seed stream MUST differ.
+ *
+ *   (1) seeding is gated on CAP_RIGHT_SAMPLE (unauthorized cap refused -- biting).
+ *   (2) REPLAYABLE (biting): the same seed yields a byte-identical stream.
+ *   (3) seed-sensitive (biting): a different seed yields a different stream (the randomness is real).
+ *   (4) the seed commitment is non-zero and deterministic.
+ */
+module corpus_1715_sample_beacon
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn bc_seed(cap: u64, s: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_replayable(cap: u64, s: u64, n: u64) -> u8 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_seed_sensitive(cap: u64, n: u64) -> u8 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_commit(out32: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var C1 : [u8; 32]
+var C2 : [u8; 32]
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_s    : u64 = cap_attenuate(env, 0x400000u64, 0u64)   /* CAP_RIGHT_SAMPLE */
+    let cap_none : u64 = cap_attenuate(env, 0x10u64, 0u64)
+
+    /* (1) gated seeding */
+    if bc_seed(cap_s, 0xABCDu64) != 0i32 { return 1u64 }
+    if bc_seed(cap_none, 0xABCDu64) != -1i32 { return 2u64 }
+
+    /* (2) replayable: same seed -> identical stream */
+    if bc_replayable(cap_s, 0xABCDu64, 32u64) != 1u8 { return 3u64 }
+
+    /* (3) seed-sensitive: different seed -> different stream */
+    if bc_seed_sensitive(cap_s, 32u64) != 1u8 { return 4u64 }
+
+    /* (4) the seed commitment is non-zero and deterministic */
+    bc_seed(cap_s, 0xABCDu64)
+    bc_commit((&C1 as u64))
+    bc_seed(cap_s, 0xABCDu64)
+    bc_commit((&C2 as u64))
+    if cad_is_zero((&C1 as u64) as *u8) != 0u8 { return 5u64 }
+    if cad_eq((&C1 as u64) as *u8, (&C2 as u64) as *u8) != 1u8 { return 6u64 }
+
+    return 99u64
+}

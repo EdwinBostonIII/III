@@ -1219,6 +1219,12 @@ MODULES=(
     # hypothesis decays to a GAP, never silently canonical.  Composes capability + typecheck + nous_synth
     # (no island); the arena to perception_membrane's gateway; LIBNATIVE; last.  (Campaign III COMPLETE.)
     "aether/provisional_universe"
+    # --- PHASE IV (III-PHASE4-PROBABILITY) Layer 2: the VERIFIABLE DETERMINISTIC BEACON.  numera/sample_beacon
+    # is the ONLY lawful randomness: a 32-byte seed drives the HMAC-DRBG (numera/drbg) to a stream that is a
+    # pure function of the seed, so draws are replayable and the build/corpus stay byte-identical.  Gated on
+    # CAP_RIGHT_SAMPLE (bit 22); the seed is a public cad commitment.  Composes drbg + cad + capability;
+    # compiler-unreferenced -> LIBNATIVE; last.
+    "numera/sample_beacon"
 )
 
 PASS=0

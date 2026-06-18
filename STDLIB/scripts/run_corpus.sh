@@ -1329,6 +1329,7 @@ declare -A EXPECTED=(
     [1712_quantize_sensor]=99
     [1713_perceptual_proposer]=99
     [1714_provisional_universe]=99
+    [1715_sample_beacon]=99
 )
 
 PASS=0

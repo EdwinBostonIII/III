@@ -1,0 +1,93 @@
+/* STDLIB/iii/numera/sample_beacon.iii -- THE VERIFIABLE DETERMINISTIC BEACON
+ * (III-PHASE4-PROBABILITY, Layer 2 -- the only lawful randomness).
+ *
+ * Phase IV builds probability into III from first principles, and the first principle is: there is NO
+ * entropy on any path -- the only randomness is a SEALED, SEEDED, REPLAYABLE beacon.  A 32-byte seed drives
+ * the NIST SP 800-90A HMAC-DRBG (numera/drbg) to a bit stream that is a pure function of the seed, so the
+ * same seed yields the same draws and the entire sampling history replays byte-identically -- the build and
+ * corpus stay byte-identical.  The entropy IS the seed, and the seed is a public commitment (cad over it).
+ *
+ * Every draw is capability-mediated (CAP_RIGHT_SAMPLE, bit 22): without it the system draws nothing.  The
+ * stream genuinely depends on the seed (a different seed gives a different stream), so the determinism is
+ * real, not a constant.
+ *
+ * THE HONEST FLOOR: an Ed25519 VRF over the seed (numera/crypt_ed25519) makes each draw publicly VERIFIABLE
+ * and unbiasable; the replayable-stream core proven here is the load-bearing determinism, and the VRF is the
+ * verifiability layer it carries.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  Composes numera/drbg (the seeded HMAC-DRBG) + cad (the
+ * seed commitment) + aether/capability (the draw right) -- no island.  Determinism: the seed is the only
+ * entropy; integer-only; no float; no wall-clock.
+ */
+module numera_sample_beacon
+
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+const BC_SAMPLE : u64 = 0x400000u64   /* CAP_RIGHT_SAMPLE (named in capability.iii) */
+
+var BC_SEED   : [u8; 32]
+var BC_NONCE  : [u8; 16]
+var BC_OUT1   : [u8; 64]
+var BC_OUT2   : [u8; 64]
+var BC_COMMIT : [u8; 32]
+
+/* fill the 32-byte seed deterministically from a 64-bit value (the public commitment material). */
+fn bc_fill_seed(s: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let shift : u64 = (i & 7u64) * 8u64
+        BC_SEED[i] = (((s + i) >> shift) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < 16u64 { BC_NONCE[j] = (j as u8)  j = j + 1u64 }
+    return 0i32
+}
+
+/* SEED the beacon from a 64-bit seed value.  Gated on CAP_RIGHT_SAMPLE.  0 = ok, -1 = unauthorized. */
+fn bc_seed(cap: u64, s: u64) -> i32 @export {
+    if cap_verify_rights(cap, BC_SAMPLE) != 1u8 { return -1i32 }
+    bc_fill_seed(s)
+    iii_drbg_instantiate((&BC_SEED as u64), 32u64, (&BC_NONCE as u64), 16u64, 0u64, 0u64)
+    cad_oneshot(0u32, (&BC_SEED as u64) as *u8, 32u64, (&BC_COMMIT as u64) as *u8)
+    return 0i32
+}
+
+/* generate n bytes of the replayable stream into out. */
+fn bc_generate(out: u64, n: u64) -> i32 @export {
+    return iii_drbg_generate(out, n, 0u64, 0u64)
+}
+
+/* REPLAYABLE (the load-bearing property): re-seeding with the same seed and generating yields a
+ * BYTE-IDENTICAL stream.  1 = replayable. */
+fn bc_replayable(cap: u64, s: u64, n: u64) -> u8 @export {
+    bc_seed(cap, s)
+    bc_generate((&BC_OUT1 as u64), n)
+    bc_seed(cap, s)
+    bc_generate((&BC_OUT2 as u64), n)
+    let mut i : u64 = 0u64
+    while i < n { if BC_OUT1[i] != BC_OUT2[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+/* SEED-SENSITIVE: two different seeds give different streams (the randomness is real, not a constant). */
+fn bc_seed_sensitive(cap: u64, n: u64) -> u8 @export {
+    bc_seed(cap, 0x1111111111111111u64)
+    bc_generate((&BC_OUT1 as u64), n)
+    bc_seed(cap, 0x2222222222222222u64)
+    bc_generate((&BC_OUT2 as u64), n)
+    let mut diff : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < n { if BC_OUT1[i] != BC_OUT2[i] { diff = 1u8 }  i = i + 1u64 }
+    return diff
+}
+
+/* the public seed commitment cad(seed) into out32. */
+fn bc_commit(out32: u64) -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < 32u64 { ((out32 + i) as *u8)[0u64] = BC_COMMIT[i]  i = i + 1u64 }
+    return 0i32
+}

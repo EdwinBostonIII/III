@@ -1299,9 +1299,9 @@ declare -A EXPECTED=(
     [1668_self_atlas_lens]=99
     [1670_ripple_extract_selfmodel]=99
     [1669_self_atlas_report]=99
-    [1670_self_cartographer]=99
     [1671_self_dormancy]=99
     [1672_self_report]=99
+    [1673_self_cartographer]=99
 )
 
 PASS=0

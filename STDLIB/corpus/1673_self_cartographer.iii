@@ -1,4 +1,4 @@
-/* 1670_self_cartographer.iii -- III maps a source tree NATIVELY (omnia::self_cartographer).
+/* 1673_self_cartographer.iii -- III maps a source tree NATIVELY (omnia::self_cartographer).
  *
  * Hermetic, like 1124: build a tiny tree of .iii files with known `from "X.iii"` edges, have
  * scarto_map walk it (via aether/fs) and populate omnia/self_atlas, verify the recovered graph,
@@ -12,7 +12,7 @@
  * Expected: 4 nodes {alpha,beta,gamma,delta}; 4 edges; reaches(delta,gamma)=1.
  * rc 99 = pass; a distinct small code marks each failed step.
  */
-module corpus_1670
+module corpus_1673
 
 extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"

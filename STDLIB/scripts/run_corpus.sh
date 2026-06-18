@@ -1349,8 +1349,8 @@ declare -A EXPECTED=(
     # --- the autogenesis loop now CONSUMES the Phase III/IV organs in its live body (lemma_forge grows the
     # commons each cycle; a measure_status-typed risk gate makes the real ag_commit decline a risky self-change).
     [1732_autogenesis_consume]=99
-    # the restructured proposer layer: bayes_search allocates the certify budget, proof_replay_cache memoizes.
-    [1733_proposer_market]=99
+    # the proposer layer deepened IN PLACE: hs_scan/rp_scan bayes-throttle their enumeration + cache their obligation.
+    [1733_proposer_deepening]=99
 )
 
 PASS=0

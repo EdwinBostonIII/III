@@ -43,10 +43,11 @@ extern @abi(c-msvc-x64) fn fed_genesis_root_byte(i: u32) -> u32 from "fed_genesi
  * cycle, and measure_status types the regression-risk that gates the commit. */
 extern @abi(c-msvc-x64) fn lf_forge() -> u64 from "lemma_forge.iii"
 extern @abi(c-msvc-x64) fn ms_canonical_ok(status: u8) -> u8 from "measure_status.iii"
-/* the restructured proposer layer: bayes_search allocates the certify budget, proof_replay_cache memoizes. */
-extern @abi(c-msvc-x64) fn pm_step() -> u64 from "proposer_market.iii"
-extern @abi(c-msvc-x64) fn pm_cache_hits() -> u64 from "proposer_market.iii"
-extern @abi(c-msvc-x64) fn pm_lead() -> u32 from "proposer_market.iii"
+/* the restructured proposer layer: hs_scan/rp_scan (which ag_cycle already calls) now allocate their own
+ * enumeration budget through bayes_search and route their canonical obligation through proof_replay_cache;
+ * the cycle reads the cache + the bayes lead straight from those organs (no intermediary island). */
+extern @abi(c-msvc-x64) fn prc_hits() -> u64 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn bs2_lead() -> u32 from "bayes_search.iii"
 
 const CAP_RIGHT_AUTOGENESIS        : u64 = 0x80000u64
 const CAP_RIGHT_AUTOGENESIS_COMMIT : u64 = 0x100000u64
@@ -69,7 +70,6 @@ var AG_SAVED       : u64 = 0u64
 var AG_STAGED      : u64 = 0u64
 var AG_VALID       : u32 = 0u32
 var AG_RISK_OVERRIDE : u64 = 0u64    /* operator/review hook: flag the in-flight candidate as higher-risk */
-var AG_CERTIFIED     : u64 = 0u64    /* checks the proposer market certified this cycle (bayes-allocated, cache-served) */
 var AG_LEDGER_INIT : u32 = 0u32
 var AG_BEFORE   : [u8; 32]
 var AG_AFTER    : [u8; 32]
@@ -171,8 +171,6 @@ fn ag_cycle(cap: u64) -> i32 @export {
     AG_NCAND = hsn + rpn
     AG_SAVED = os_apply_in_model()
     lf_forge()                            /* GROW THE COMMONS: the cycle forges kernel-certified lemmas its proofs can cite */
-    AG_CERTIFIED = pm_step()              /* THE PROPOSER MARKET: bayes_search allocates the certify budget over the live
-                                           * proposer yields; proof_replay_cache memoizes the certify checks (amortized across cycles) */
     let slot : u32 = vbd_open(cap)
     if slot == AG_SLOT_NONE { return AG_E_TX }
     AG_SLOT = slot
@@ -221,8 +219,8 @@ fn ag_ledger_root(out_32: u64) -> i32 @export {
 fn ag_inflight() -> u32 @export { return AG_INFLIGHT }
 fn ag_ncand() -> u64 @export { return AG_NCAND }
 fn ag_valid() -> u32 @export { return AG_VALID }
-/* the proposer-market observables: checks certified this cycle, cumulative cache hits (the kernel cost
- * the cache saved), and the Bayesian-optimal lead proposer (0 = harmony, 1 = refactor). */
-fn ag_certified() -> u64 @export { return AG_CERTIFIED }
-fn ag_cache_hits() -> u64 @export { return pm_cache_hits() }
-fn ag_lead_proposer() -> u32 @export { return pm_lead() }
+/* the deepened-proposer observables, read straight from the organs the proposers drive: the cumulative
+ * proof-replay cache hits (kernel re-derivations the proposer layer saved) and the Bayesian-optimal lead
+ * proposer (0 = harmony, 1 = refactor) by posterior yield. */
+fn ag_cache_hits() -> u64 @export { return prc_hits() }
+fn ag_lead_proposer() -> u32 @export { return bs2_lead() }

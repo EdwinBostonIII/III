@@ -39,10 +39,17 @@ extern @abi(c-msvc-x64) fn tcom_cite_goal(goal: u32) -> i32 from "theorem_common
 extern @abi(c-msvc-x64) fn tcom_admit_goal(proof: u32, goal: u32) -> i32 from "theorem_commons.iii"
 extern @abi(c-msvc-x64) fn tcom_cite(stmt: u64, len: u64) -> i32 from "theorem_commons.iii"
 extern @abi(c-msvc-x64) fn cmorph_add(src: u32, dst: u32, op: *u8, proof: u32, goal: u32, out_id: *u8) -> u32 from "certified_morphism.iii"
+/* the proposer layer is deepened: bayes_search allocates this proposer's per-cycle enumeration budget
+ * (fighting Wall-1 combinatorial explosion) and proof_replay_cache memoizes its canonical obligation. */
+extern @abi(c-msvc-x64) fn bs2_budget(total: u64, i: u32) -> u64 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_observe(i: u32, y: u64) -> i32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn prc_check(proof: u32, goal: u32) -> u8 from "proof_replay_cache.iii"
 
 const HS_MAX     : u64 = 256u64
 const HS_REFUSED : u32 = 0xFFFFFFFFu32       /* mirror of certified_morphism CM_REFUSED */
 const HS_TCOM_OK : i32 = 0i32                /* mirror of theorem_commons TCOM_OK */
+const HS_BUDGET_TOTAL : u64 = 8u64           /* fixed per-cycle enumeration budget (split with refactor by bayes posterior) */
+const HS_BASELINE     : u64 = 2u64           /* the two canonical baseline composites precede self-model candidates */
 
 var HS_CAND_SRC : [u32; 256]
 var HS_CAND_DST : [u32; 256]
@@ -100,16 +107,32 @@ fn hs_scan() -> u64 @export {
     HS_NCAND = 0u64
     hs_append_cand(0u32, 0u32)
     hs_append_cand(1u32, 0u32)
+    /* bayes_search allocates this proposer's enumeration budget by posterior yield (its past productivity);
+     * once the budget is spent the scan STOPS, so a less-productive proposer collapses toward its baseline
+     * instead of exploding -- the per-cycle candidate surface is bayes-bounded. */
+    let budget : u64 = bs2_budget(HS_BUDGET_TOTAL, 0u32)
     let n : u64 = sm_n_nodes()
     let mut k : u64 = 0u64
     while k < n {
-        let cc : u64 = sm_node_callees(k, (&HS_CB as u64))
-        if cc >= 1u64 {
-            let dst : u32 = (hs_get_u64le((&HS_CB as u64), 0u64) & 0xFFFFFFFFu64) as u32
-            hs_append_cand(k as u32, dst)
+        let used : u64 = HS_NCAND - HS_BASELINE
+        if used >= budget { k = n }
+        else {
+            let cc : u64 = sm_node_callees(k, (&HS_CB as u64))
+            if cc >= 1u64 {
+                let dst : u32 = (hs_get_u64le((&HS_CB as u64), 0u64) & 0xFFFFFFFFu64) as u32
+                hs_append_cand(k as u32, dst)
+            }
+            k = k + 1u64
         }
-        k = k + 1u64
     }
+    bs2_observe(0u32, HS_NCAND)                  /* report productivity for the NEXT cycle's allocation */
+    /* route harmony's canonical obligation refl(0):Id(Nat,0,0) through the proof-replay cache: its first
+     * sight is a kernel MISS, but refactor_propose checks the structurally-identical obligation in the same
+     * cycle (a HIT) and every later cycle HITS too -- the proposer layer's kernel cost trends to a lookup. */
+    let g : u32 = hs_goal_refl()
+    let p : u32 = hs_proof_refl()
+    let v : u8 = prc_check(p, g)
+    if v == 1u8 { hs_append_cand(0u32, 0u32) }   /* a self-certified composite, admitted iff the kernel verdict clears */
     return HS_NCAND
 }
 

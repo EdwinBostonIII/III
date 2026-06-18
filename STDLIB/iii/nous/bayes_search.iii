@@ -38,3 +38,44 @@ fn bs2_regret(i: u32) -> u64 @export {
     if y1 > y0 { best = y1 }
     return best - bx_posterior_num(i)
 }
+
+/* ---- the PROPOSER-BUDGET allocator: the autogenesis proposers (harmony_synth, refactor_propose) drive
+ * their OWN per-cycle enumeration budget through this.  It keeps its own deterministic yield state (so it
+ * never disturbs the bx_* registers shared with bayes_exact/percept_infer) and applies the SAME exact
+ * posterior law -- posterior_i = prior_i * observed_yield_i -- with a NON-TRIVIAL prior, so a proposer's
+ * past productivity, not just its current count, shapes how much of the fixed budget it gets.  No float. */
+const BS2_PRIOR0 : u64 = 2u64   /* harmony's historical-productivity prior */
+const BS2_PRIOR1 : u64 = 1u64   /* refactor's prior */
+
+var BS2_Y0 : u64 = 1u64         /* last observed harmony yield */
+var BS2_Y1 : u64 = 1u64         /* last observed refactor yield */
+
+/* a proposer reports its observed yield (its candidate count this scan) for next cycle's allocation. */
+fn bs2_observe(i: u32, y: u64) -> i32 @export {
+    if i == 0u32 { BS2_Y0 = y } else { BS2_Y1 = y }
+    return 0i32
+}
+
+/* posterior expected yield of proposer i = prior_i * observed_yield_i (the exact bayes_exact law). */
+fn bs2_post(i: u32) -> u64 {
+    if i == 0u32 { return BS2_PRIOR0 * BS2_Y0 }
+    return BS2_PRIOR1 * BS2_Y1
+}
+
+/* proposer i's share of a fixed total enumeration budget: total * post_i / (post_0 + post_1).  The
+ * higher-posterior proposer enumerates more candidates; a starved one collapses to its baseline.  Equal
+ * observed yields still favour harmony (the 2:1 prior) -- a raw-yield divider cannot reproduce this. */
+fn bs2_budget(total: u64, i: u32) -> u64 @export {
+    let p0 : u64 = bs2_post(0u32)
+    let p1 : u64 = bs2_post(1u32)
+    let tot : u64 = p0 + p1
+    if tot == 0u64 { return total }
+    let pi : u64 = bs2_post(i)
+    return (total * pi) / tot
+}
+
+/* the Bayesian-optimal lead proposer (0 = harmony, 1 = refactor) by posterior yield. */
+fn bs2_lead() -> u32 @export {
+    if bs2_post(0u32) >= bs2_post(1u32) { return 0u32 }
+    return 1u32
+}

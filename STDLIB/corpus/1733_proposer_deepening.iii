@@ -1,0 +1,164 @@
+/* STDLIB/corpus/1733_proposer_deepening.iii
+ *
+ * Falsifier KAT: the autogenesis PROPOSER LAYER deepened IN PLACE so bayes_search and proof_replay_cache
+ * are load-bearing inside the real hs_scan/rp_scan (no island module).  99 = pass; 1..8 = the failing arm.
+ *
+ * Builds a 1400-style hermetic self-model fixture (rt -> lf callee edge; dk dark), then:
+ *   (1) BAYES THROTTLE bites harmony: with harmony's budget seeded to 0, hs_scan CUTS the rt candidate
+ *       (smaller count); with a full budget it keeps it.  Deleting the budget guard makes the arms equal -> RED.
+ *   (2) BAYES THROTTLE bites refactor: symmetric on the dark-node cut.
+ *   (3,4) PROOF_REPLAY_CACHE: harmony's canonical obligation is a kernel MISS; refactor's structurally
+ *       identical obligation in the same cycle is a HIT and is NOT re-derived (miss count unchanged).
+ *   (5,6) the allocator: EQUAL observed yields still favour harmony via the 2:1 prior (a raw-yield split
+ *       would tie), and the lead FLIPS when refactor's yield dominates.
+ *   (7) SOUNDNESS: a bad proof through the cache is refused exactly as the kernel would.
+ */
+module corpus_1733_proposer_deepening
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn sm_build(cap: u64, mods_root: u64, corpus_root: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn hs_scan() -> u64 from "harmony_synth.iii"
+extern @abi(c-msvc-x64) fn hs_ncand() -> u64 from "harmony_synth.iii"
+extern @abi(c-msvc-x64) fn rp_scan() -> u64 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_ncand() -> u64 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_goal() -> u32 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_proof_bad() -> u32 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn bs2_observe(i: u32, y: u64) -> i32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_budget(total: u64, i: u32) -> u64 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_lead() -> u32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn prc_check(proof: u32, goal: u32) -> u8 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_reset() -> i32 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_hits() -> u64 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_misses() -> u64 from "proof_replay_cache.iii"
+
+const SENT   : u64 = 0xFFFFFFFFFFFFFFFFu64
+const MWRITE : u32 = 2u32
+
+var P_MOD : [u8; 48]
+var P_COR : [u8; 48]
+var P_A   : [u8; 48]
+var P_T   : [u8; 48]
+var C_A   : [u8; 512]
+var C_T   : [u8; 512]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+fn aline(buf: u64, off: u64, lit: u64, litlen: u64) -> u64 {
+    let d : *u8 = (buf + off) as *u8
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < litlen { d[i] = s[i]  i = i + 1u64 }
+    d[litlen] = 10u8
+    return off + litlen + 1u64
+}
+
+fn wfile(cap: u64, path: u64, content: u64, clen: u64) -> i32 {
+    let h : u64 = fs_open(cap, path, MWRITE)
+    if h == 0u64 { return -1i32 }
+    let w : u64 = fs_write(h, content, clen)
+    fs_close(h)
+    if w != clen { return -2i32 }
+    return 0i32
+}
+
+fn build_fixture(cap: u64) -> i32 {
+    bcopy((&P_MOD as u64), ("./iii_pd_kat_m" as u64),       14u64)
+    bcopy((&P_COR as u64), ("./iii_pd_kat_c" as u64),       14u64)
+    bcopy((&P_A as u64),   ("./iii_pd_kat_m/a.iii" as u64), 20u64)
+    bcopy((&P_T as u64),   ("./iii_pd_kat_c/t.iii" as u64), 20u64)
+
+    let mut ao : u64 = 0u64
+    ao = aline((&C_A as u64), ao, ("module fixm" as u64), 11u64)
+    ao = aline((&C_A as u64), ao, ("fn lf() -> u64 @export { return 1u64 }" as u64), 38u64)
+    ao = aline((&C_A as u64), ao, ("fn rt() -> u64 @export { return lf() }" as u64), 38u64)
+    ao = aline((&C_A as u64), ao, ("fn dk() -> u64 @export { return 2u64 }" as u64), 38u64)
+
+    let mut to : u64 = 0u64
+    to = aline((&C_T as u64), to, ("module corpus_fixt" as u64), 18u64)
+    to = aline((&C_T as u64), to, ("extern @abi(c-msvc-x64) fn rt() -> u64 from \"a.iii\"" as u64), 51u64)
+    to = aline((&C_T as u64), to, ("fn fixmain() -> u64 { return rt() }" as u64), 35u64)
+
+    if fs_mkdir(cap, (&P_MOD as u64)) != 0i32 { return 1i32 }
+    if fs_mkdir(cap, (&P_COR as u64)) != 0i32 { return 2i32 }
+    if wfile(cap, (&P_A as u64), (&C_A as u64), ao) != 0i32 { return 3i32 }
+    if wfile(cap, (&P_T as u64), (&C_T as u64), to) != 0i32 { return 4i32 }
+    return 0i32
+}
+
+fn cleanup(cap: u64) -> i32 {
+    fs_delete(cap, (&P_A as u64))
+    fs_delete(cap, (&P_T as u64))
+    fs_rmdir(cap, (&P_MOD as u64))
+    fs_rmdir(cap, (&P_COR as u64))
+    return 0i32
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let bf : i32 = build_fixture(cap)
+    if bf != 0i32 { cleanup(cap)  return 100u64 + (bf as u64) }
+    let n : u64 = sm_build(cap, (&P_MOD as u64), (&P_COR as u64))
+
+    /* (1) harmony throttle bite: budget 0 cuts the rt candidate; full budget keeps it */
+    bs2_observe(0u32, 0u64)  bs2_observe(1u32, 1u64)
+    hs_scan()
+    let hs_lo : u64 = hs_ncand()
+    bs2_observe(0u32, 1u64)  bs2_observe(1u32, 0u64)
+    hs_scan()
+    let hs_hi : u64 = hs_ncand()
+
+    /* (2) refactor throttle bite: budget 0 cuts the dark-node candidate */
+    bs2_observe(0u32, 1u64)  bs2_observe(1u32, 0u64)
+    rp_scan()
+    let rp_lo : u64 = rp_ncand()
+    bs2_observe(0u32, 0u64)  bs2_observe(1u32, 1u64)
+    rp_scan()
+    let rp_hi : u64 = rp_ncand()
+
+    /* (3,4) cross-proposer cache hit */
+    prc_reset()
+    hs_scan()
+    let miss1 : u64 = prc_misses()
+    rp_scan()
+    let hits : u64 = prc_hits()
+    let miss2 : u64 = prc_misses()
+
+    /* (5,6) the allocator + prior */
+    bs2_observe(0u32, 5u64)  bs2_observe(1u32, 5u64)
+    let b0 : u64 = bs2_budget(8u64, 0u32)
+    let b1 : u64 = bs2_budget(8u64, 1u32)
+    let lead_eq : u32 = bs2_lead()
+    bs2_observe(0u32, 1u64)  bs2_observe(1u32, 10u64)
+    let lead_flip : u32 = bs2_lead()
+
+    /* (7) soundness */
+    let badv : u8 = prc_check(rp_proof_bad(), rp_goal())
+
+    cleanup(cap)
+
+    if n < 3u64 { return 90u64 }
+    if hs_hi <= hs_lo { return 1u64 }       /* the budget genuinely cuts harmony's enumeration */
+    if rp_hi <= rp_lo { return 2u64 }       /* and refactor's */
+    if hits == 0u64 { return 3u64 }         /* refactor's check was served from harmony's cached verdict */
+    if miss2 != miss1 { return 4u64 }       /* refactor did NOT re-derive (no second kernel miss) */
+    if b0 <= b1 { return 5u64 }             /* the 2:1 prior favours harmony despite EQUAL yields */
+    if lead_eq != 0u32 { return 6u64 }
+    if lead_flip != 1u32 { return 7u64 }    /* the lead flips when refactor dominates */
+    if badv != 0u8 { return 8u64 }          /* a bad proof refused exactly as the kernel */
+    return 99u64
+}

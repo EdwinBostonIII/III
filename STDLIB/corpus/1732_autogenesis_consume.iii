@@ -5,8 +5,9 @@
  * path (as corpus 1406/1409 do) and proves its behaviour now depends on the consumed organs:
  *
  *   (1) lemma_forge CONSUMED: the real cycle grew the kernel-certified commons (tg_count rose).
- *   (2) PROPOSER MARKET CONSUMED: the real cycle ran pm_step -- bayes_search allocated the certify budget
- *       and proof_replay_cache served checks (ag_certified > 0, ag_cache_hits > 0, a valid lead proposer).
+ *   (2) DEEPENED PROPOSERS CONSUMED: hs_scan/rp_scan (which ag_cycle calls) routed their identical
+ *       obligation through proof_replay_cache -- one missed, one HIT -- so ag_cache_hits > 0, and the
+ *       Bayesian lead proposer is valid.
  *   (3,4) the risk metric (deterministic, measure_status-typed PROVISIONAL) reflects a flagged candidate.
  *   (5) BITING: with the candidate flagged high-risk, the FULLY AUTHORIZED commit is REFUSED.
  *   (6) clearing the risk lets the authorized commit proceed.
@@ -25,7 +26,6 @@ extern @abi(c-msvc-x64) fn ag_valid() -> u32 from "autogenesis.iii"
 extern @abi(c-msvc-x64) fn ag_risk() -> u64 from "autogenesis.iii"
 extern @abi(c-msvc-x64) fn ag_force_risk(r: u64) -> i32 from "autogenesis.iii"
 extern @abi(c-msvc-x64) fn ag_risk_acceptable() -> u8 from "autogenesis.iii"
-extern @abi(c-msvc-x64) fn ag_certified() -> u64 from "autogenesis.iii"
 extern @abi(c-msvc-x64) fn ag_cache_hits() -> u64 from "autogenesis.iii"
 extern @abi(c-msvc-x64) fn ag_lead_proposer() -> u32 from "autogenesis.iii"
 extern @abi(c-msvc-x64) fn tg_count() -> u64 from "theorem_grow.iii"
@@ -39,10 +39,10 @@ fn main() -> u64 {
     if ag_cycle(cap_auto) != 0i32 { return 1u64 }
     /* (1) lemma_forge consumed: the live cycle grew the commons */
     if tg_count() <= before { return 2u64 }
-    /* (2) proposer market consumed in the LIVE cycle: bayes allocated + cache served */
-    if ag_certified() == 0u64 { return 3u64 }
-    if ag_cache_hits() == 0u64 { return 4u64 }
-    if ag_lead_proposer() > 1u32 { return 5u64 }
+    /* (2) deepened proposers consumed in the LIVE cycle: proof_replay_cache served a cross-proposer check
+     *     (hs_scan missed, rp_scan hit the identical obligation) and the bayes lead is valid */
+    if ag_cache_hits() == 0u64 { return 3u64 }
+    if ag_lead_proposer() > 1u32 { return 4u64 }
     /* the low-risk cycle validates (the risk gate is transparent for a safe change) */
     if ag_valid() != 99u32 { return 6u64 }
     if ag_risk_acceptable() != 1u8 { return 7u64 }

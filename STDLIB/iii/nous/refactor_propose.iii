@@ -39,11 +39,18 @@ extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+/* the proposer layer is deepened: bayes_search allocates this proposer's per-cycle enumeration budget and
+ * proof_replay_cache memoizes its canonical obligation (structurally identical to harmony's -> a HIT). */
+extern @abi(c-msvc-x64) fn bs2_budget(total: u64, i: u32) -> u64 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_observe(i: u32, y: u64) -> i32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn prc_check(proof: u32, goal: u32) -> u8 from "proof_replay_cache.iii"
 
 const RP_MAX     : u64 = 256u64
 const RP_COMBINE : u32 = 1u32
 const RP_CUT     : u32 = 2u32
 const RP_CANON   : u64 = 0xFFFFFFFFFFFFFFFFu64    /* canonical (non-model) cut sentinel */
+const RP_BUDGET_TOTAL : u64 = 8u64               /* fixed per-cycle enumeration budget (split with harmony by bayes posterior) */
+const RP_BASELINE     : u64 = 2u64               /* the two canonical baseline candidates precede self-model cuts */
 
 var RP_NCAND : u64 = 0u64
 var RP_KIND  : [u32; 256]
@@ -96,12 +103,26 @@ fn rp_scan() -> u64 @export {
     RP_NCAND = 0u64
     rp_append(RP_COMBINE, 0u64)
     rp_append(RP_CUT, RP_CANON)
+    /* bayes_search allocates this proposer's enumeration budget by posterior yield; the scan stops once it
+     * is spent, so the per-cycle cut surface is bayes-bounded (Wall-1 explosion control). */
+    let budget : u64 = bs2_budget(RP_BUDGET_TOTAL, 1u32)
     let n : u64 = sm_n_nodes()
     let mut k : u64 = 0u64
     while k < n {
-        if sm_node_dark(k) == 1u8 { rp_append(RP_CUT, k) }
-        k = k + 1u64
+        let used : u64 = RP_NCAND - RP_BASELINE
+        if used >= budget { k = n }
+        else {
+            if sm_node_dark(k) == 1u8 { rp_append(RP_CUT, k) }
+            k = k + 1u64
+        }
     }
+    bs2_observe(1u32, RP_NCAND)                   /* report productivity for the NEXT cycle's allocation */
+    /* refactor's canonical obligation is structurally IDENTICAL to harmony's refl(0):Id(Nat,0,0); when the
+     * cycle ran hs_scan first, this is a content-addressed cache HIT (no second kernel derivation). */
+    let g : u32 = rp_goal()
+    let p : u32 = rp_proof_ok()
+    let v : u8 = prc_check(p, g)
+    if v == 1u8 { rp_append(RP_COMBINE, 1u64) }   /* a self-certified merge, admitted iff the kernel verdict clears */
     return RP_NCAND
 }
 

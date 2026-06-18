@@ -1387,6 +1387,8 @@ declare -A EXPECTED=(
     [1750_invent_crossover]=99
     # the NIH purge: III invents a proven modular-reduction fold beating Montgomery for special-form primes.
     [1751_invent_reduction]=99
+    # the completed six-valued bounded lattice (Belnap + Null/All-present): paraconsistency + null-safety, proven native.
+    [1752_logic6]=99
 )
 
 PASS=0

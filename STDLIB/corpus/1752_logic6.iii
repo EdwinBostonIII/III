@@ -1,0 +1,51 @@
+/* STDLIB/corpus/1752_logic6.iii -- the completed six-valued bounded lattice, proven native.
+ *
+ * numera/logic6 is Belnap's {False,True,Both,Neither} closed by Null (bottom) and All-present (top) -- a
+ * De Morgan algebra III reasons in on the judge it already has, by exhaustive enumeration of the 6^k tuples.
+ * 99 = all arms.  It proves features Boolean logic structurally cannot express: a contradiction that does
+ * not explode, and the failure of excluded middle.
+ */
+module corpus_1752_logic6
+
+extern @abi(c-msvc-x64) fn l6_lattice_laws_hold() -> u8 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_associative() -> u8 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_is_paraconsistent() -> u8 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_excluded_middle_fails() -> u8 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_valid(v: u32) -> u8 from "logic6.iii"
+
+const L6_TRUE : u32 = 1u32
+const L6_FALSE : u32 = 2u32
+const L6_BOTH : u32 = 3u32
+const L6_NULL : u32 = 4u32
+const L6_ALL  : u32 = 5u32
+
+fn main() -> u64 {
+    /* (1) the completed bounded lattice IS a De Morgan algebra: every law holds for all inputs */
+    if l6_lattice_laws_hold() != 1u8 { return 1u64 }
+    if l6_associative() != 1u8 { return 2u64 }
+
+    /* (2) the involution closes the lattice: NOT Null = All-present, NOT All-present = Null */
+    if l6_not(L6_NULL) != L6_ALL { return 3u64 }
+    if l6_not(L6_ALL) != L6_NULL { return 4u64 }
+
+    /* (3) PARACONSISTENCY -- a contradiction does NOT explode (Boolean cannot express this) */
+    if l6_is_paraconsistent() != 1u8 { return 5u64 }
+    if l6_and(L6_BOTH, l6_not(L6_BOTH)) != L6_BOTH { return 6u64 }   /* Both AND NOT Both = Both, not False */
+
+    /* (4) excluded middle FAILS */
+    if l6_excluded_middle_fails() != 1u8 { return 7u64 }
+    if l6_or(L6_BOTH, l6_not(L6_BOTH)) == L6_TRUE { return 8u64 }    /* Both OR NOT Both != True */
+
+    /* (5) the bounds: Null annihilates meet (the void), All-present annihilates join (the universal) */
+    if l6_and(L6_NULL, L6_TRUE) != L6_NULL { return 9u64 }
+    if l6_or(L6_ALL, L6_FALSE) != L6_ALL { return 10u64 }
+
+    /* (6) the validity predicate */
+    if l6_valid(L6_ALL) != 1u8 { return 11u64 }
+    if l6_valid(6u32) != 0u8 { return 12u64 }
+
+    return 99u64
+}

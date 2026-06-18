@@ -787,6 +787,8 @@ MODULES=(
     "numera/bv_bits"
     # numera/invent -- the Generative Invention Loop: de-novo cost-directed law synthesis (value-sieve + SAT judge).
     "numera/invent"
+    # numera/logic6 -- the completed six-valued bounded lattice (De Morgan algebra): paraconsistency + null-safety, lean.
+    "numera/logic6"
     "numera/barrett"
     "numera/egraph"
     "numera/cost_lattice"

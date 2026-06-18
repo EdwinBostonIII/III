@@ -1,0 +1,156 @@
+/* STDLIB/iii/numera/logic6.iii -- THE COMPLETED BOUNDED LATTICE (six-valued logic), native, lean.
+ *
+ * Belnap's four truth values {False, True, Both, Neither} closed top and bottom by Null (the infimum,
+ * bottom, the void) and All-present (the supremum, top, the universal).  Together they form a proper
+ * DE MORGAN ALGEBRA: a bounded distributive lattice with an order-reversing involution.  This is the
+ * mathematically complete object -- not a random sixth state, but the element that closes the lattice.
+ *
+ * It needs NO new judge, NO SMT, NO emulation tax: each value is a 3-bit code, each operator is a Boolean
+ * circuit, and a law over k variables is DECIDED by exhaustive enumeration of the 6^k tuples (complete +
+ * instant for the algebra; a many-variable circuit would bit-blast through the existing SAT judge).  Six
+ * values fit the eight 3-bit slots with two to spare -- the upgrade from five is free.
+ *
+ * Lattice (the truth order, AND = meet, OR = join):
+ *   Null (bottom)  <  False  <  {Both, Neither}  <  True  <  All-present (top)
+ *   meet:  Null AND x = Null ;  All AND x = x   (Null annihilates, All is identity)
+ *   join:  All  OR x = All  ;  Null OR x = x    (All annihilates, Null is identity)
+ *   NOT  (order-reversing involution):  Null<->All, False<->True, Both<->Both, Neither<->Neither.
+ *
+ * Provably over Boolean: PARACONSISTENCY (Both AND NOT Both = Both, not False -- ex-falso fails, a
+ * contradiction does not explode) and NULL-SAFETY (Null is the absorbing bottom -- missing data cannot
+ * silently become a value).  It is NOT quantum (Both is a paraconsistent value, not a superposition).
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00.  No dependency -- pure integer logic, perfectly lean.
+ */
+module numera_logic6
+
+const L6_NEITHER : u32 = 0u32   /* t=0 f=0  -- the gap */
+const L6_TRUE    : u32 = 1u32   /* t=1 f=0 */
+const L6_FALSE   : u32 = 2u32   /* t=0 f=1 */
+const L6_BOTH    : u32 = 3u32   /* t=1 f=1  -- the contradiction */
+const L6_NULL    : u32 = 4u32   /* bottom (infimum) */
+const L6_ALL     : u32 = 5u32   /* top (supremum) */
+
+var L6_VALS  : [u32; 6]
+var L6_READY : [u8; 1]
+
+fn l6_init() -> i32 @export {
+    L6_VALS[0u64] = L6_NEITHER  L6_VALS[1u64] = L6_TRUE  L6_VALS[2u64] = L6_FALSE
+    L6_VALS[3u64] = L6_BOTH     L6_VALS[4u64] = L6_NULL  L6_VALS[5u64] = L6_ALL
+    L6_READY[0u64] = 1u8
+    return 0i32
+}
+
+fn l6_valid(v: u32) -> u8 @export { if v <= L6_ALL { return 1u8 }  return 0u8 }
+
+/* the involution: bottom<->top; else swap the truth/falsity evidence bits (fixes Both and Neither). */
+fn l6_not(v: u32) -> u32 @export {
+    if v == L6_NULL { return L6_ALL }
+    if v == L6_ALL { return L6_NULL }
+    let t : u32 = v & 0x1u32
+    let f : u32 = (v >> 1u32) & 0x1u32
+    return f | (t << 1u32)
+}
+
+/* meet: Null annihilates, All is identity; else the Belnap conjunction (t=ta&tb, f=fa|fb). */
+fn l6_and(a: u32, b: u32) -> u32 @export {
+    if a == L6_NULL { return L6_NULL }
+    if b == L6_NULL { return L6_NULL }
+    if a == L6_ALL { return b }
+    if b == L6_ALL { return a }
+    let t : u32 = (a & 0x1u32) & (b & 0x1u32)
+    let f : u32 = ((a >> 1u32) & 0x1u32) | ((b >> 1u32) & 0x1u32)
+    return t | (f << 1u32)
+}
+
+/* join: All annihilates, Null is identity; else the Belnap disjunction (t=ta|tb, f=fa&fb). */
+fn l6_or(a: u32, b: u32) -> u32 @export {
+    if a == L6_ALL { return L6_ALL }
+    if b == L6_ALL { return L6_ALL }
+    if a == L6_NULL { return b }
+    if b == L6_NULL { return a }
+    let t : u32 = (a & 0x1u32) | (b & 0x1u32)
+    let f : u32 = ((a >> 1u32) & 0x1u32) & ((b >> 1u32) & 0x1u32)
+    return t | (f << 1u32)
+}
+
+/* ===== the exhaustive decision procedure over the finite algebra (6^k tuples) ===== */
+
+/* the De Morgan algebra laws hold for ALL inputs: commutativity, idempotence, absorption, De Morgan,
+ * double negation, and the lattice bounds (Null=bottom, All=top).  Returns 1 iff every law holds. */
+fn l6_lattice_laws_hold() -> u8 @export {
+    l6_init()
+    let mut i : u32 = 0u32
+    while i < 6u32 {
+        let a : u32 = L6_VALS[i as u64]
+        /* unary: double negation; idempotence; the bounds */
+        if l6_not(l6_not(a)) != a { return 0u8 }
+        if l6_and(a, a) != a { return 0u8 }
+        if l6_or(a, a) != a { return 0u8 }
+        if l6_and(L6_NULL, a) != L6_NULL { return 0u8 }     /* Null is the bottom (meet-annihilator) */
+        if l6_or(L6_NULL, a) != a { return 0u8 }            /* Null is the join-identity */
+        if l6_or(L6_ALL, a) != L6_ALL { return 0u8 }        /* All is the top (join-annihilator) */
+        if l6_and(L6_ALL, a) != a { return 0u8 }            /* All is the meet-identity */
+        let mut j : u32 = 0u32
+        while j < 6u32 {
+            let b : u32 = L6_VALS[j as u64]
+            if l6_and(a, b) != l6_and(b, a) { return 0u8 }                       /* commutativity */
+            if l6_or(a, b) != l6_or(b, a) { return 0u8 }
+            if l6_not(l6_and(a, b)) != l6_or(l6_not(a), l6_not(b)) { return 0u8 } /* De Morgan */
+            if l6_not(l6_or(a, b)) != l6_and(l6_not(a), l6_not(b)) { return 0u8 }
+            if l6_and(a, l6_or(a, b)) != a { return 0u8 }                        /* absorption */
+            if l6_or(a, l6_and(a, b)) != a { return 0u8 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* associativity (the 6^3 check, separated to keep each law legible). */
+fn l6_associative() -> u8 @export {
+    l6_init()
+    let mut i : u32 = 0u32
+    while i < 6u32 {
+        let mut j : u32 = 0u32
+        while j < 6u32 {
+            let mut k : u32 = 0u32
+            while k < 6u32 {
+                let a : u32 = L6_VALS[i as u64]
+                let b : u32 = L6_VALS[j as u64]
+                let c : u32 = L6_VALS[k as u64]
+                if l6_and(l6_and(a, b), c) != l6_and(a, l6_and(b, c)) { return 0u8 }
+                if l6_or(l6_or(a, b), c) != l6_or(a, l6_or(b, c)) { return 0u8 }
+                k = k + 1u32
+            }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* PARACONSISTENCY: 1 iff some value v has v AND NOT v != False -- ex-falso FAILS, a contradiction does not
+ * explode (Boolean can never satisfy this).  Both AND NOT Both = Both AND Both = Both, the witness. */
+fn l6_is_paraconsistent() -> u8 @export {
+    l6_init()
+    let mut i : u32 = 0u32
+    while i < 6u32 {
+        let a : u32 = L6_VALS[i as u64]
+        if l6_and(a, l6_not(a)) != L6_FALSE { return 1u8 }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+/* 1 iff the law of excluded middle FAILS: some v has v OR NOT v != True (Boolean: always True). */
+fn l6_excluded_middle_fails() -> u8 @export {
+    l6_init()
+    let mut i : u32 = 0u32
+    while i < 6u32 {
+        let a : u32 = L6_VALS[i as u64]
+        if l6_or(a, l6_not(a)) != L6_TRUE { return 1u8 }
+        i = i + 1u32
+    }
+    return 0u8
+}

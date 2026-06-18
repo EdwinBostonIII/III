@@ -990,6 +990,9 @@ MODULES=(
     # Additive consumers of sov_isa / typecheck; NOT in the compiler link closure (golden + TB unmoved).
     "numera/ast_hunter"
     "omnia/proof_bisimulation"
+    # numera/isa_macro_synth -- autonomous ISA macro synthesis driver: bisim-gated, refute-by-default, feeds
+    # the live sov_isa adoption.  Composes proof_bisimulation + sov_isa.
+    "numera/isa_macro_synth"
     "forcefield/cg_surgical_strike"
     "forcefield/daemon_scythe"
     "forcefield/scythe_census"

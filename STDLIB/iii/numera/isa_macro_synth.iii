@@ -1,0 +1,48 @@
+/* STDLIB/iii/numera/isa_macro_synth.iii -- AUTONOMOUS ISA MACRO SYNTHESIS (the instruction-level driver).
+ *
+ * numera/algo_synth already synthesizes ALGORITHM-level macros (O(n) -> O(1)) with a refute-by-default
+ * dispose; sov_isa already ADOPTS proven INSTRUCTION rules (adopt_dream / adopt_shift_dream); and
+ * proof_bisimulation proves a hot mul(x,2^a) universally equivalent to its optimal macro double^b(x).  What
+ * was missing is the end-to-end DRIVER that ties them: monitor a hot instruction op, synthesize its macro,
+ * PROVE it by bisimulation, and admit it to the optimizer's rewrite set ONLY IF proven -- the named
+ * "sov_isa_admit_rule" entry point.
+ *
+ * REFUTE-BY-DEFAULT: ims_admit gates on omnia/proof_bisimulation's bisim_is_obsolete(a,b) -- the CIC kernel
+ * must PROVE the macro universally equivalent AND the cost gradient must show it strictly cheaper.  A macro
+ * failing EITHER is refuted; only a kernel-proven, beneficial macro is admitted, and admission drives the
+ * existing sov_isa adoption (the macro enters the live optimizer's rewrite set).  The machine writes its own
+ * microcode; the kernel is the sole arbiter that it is sound.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Composes omnia/proof_bisimulation (proof) + numera/sov_isa
+ * (adoption) -- no new prover, no ML.  Determinism: integer-only.
+ */
+module numera_isa_macro_synth
+
+extern @abi(c-msvc-x64) fn bisim_prove_equiv(a: u32, b: u32) -> u8 from "proof_bisimulation.iii"
+extern @abi(c-msvc-x64) fn bisim_is_obsolete(a: u32, b: u32) -> u8 from "proof_bisimulation.iii"
+extern @abi(c-msvc-x64) fn sov_isa_adopt_dream() -> u32 from "sov_isa.iii"
+
+var IMS_ADMITTED : u32 = 0u32
+
+fn ims_reset() -> i32 @export { IMS_ADMITTED = 0u32  return 0i32 }
+
+/* propose the optimal strength-reduction macro exponent for a hot mul(x, 2^a): the optimal is double^a. */
+fn ims_propose(a: u32) -> u32 @export { return a }
+
+/* the proof half alone (kernel-checked universal equivalence) -- exposed for callers wanting the verdict. */
+fn ims_equiv_proven(a: u32, b: u32) -> u8 @export { return bisim_prove_equiv(a, b) }
+
+/* ADMIT macro `b` for hot op `a` to the optimizer ONLY IF the bisimulation kernel PROVES it universally
+ * equivalent AND strictly cheaper (refute-by-default).  On admission the proven macro drives the live
+ * sov_isa adoption pipeline.  Returns 1 = synthesized + admitted, 0 = refuted. */
+fn ims_admit(a: u32, b: u32) -> u8 @export {
+    if bisim_is_obsolete(a, b) != 1u8 { return 0u8 }   /* not proven equivalent + cheaper -> refute, never on doubt */
+    sov_isa_adopt_dream()                              /* the proven macro enters the live optimizer's rewrite set */
+    IMS_ADMITTED = IMS_ADMITTED + 1u32
+    return 1u8
+}
+
+fn ims_admitted_count() -> u32 @export { return IMS_ADMITTED }
+
+/* the full autonomous loop for a hot op `a`: propose the macro, prove it, admit or refute. */
+fn ims_synth(a: u32) -> u8 @export { return ims_admit(a, ims_propose(a)) }

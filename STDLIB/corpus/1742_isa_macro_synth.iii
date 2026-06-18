@@ -1,0 +1,38 @@
+/* STDLIB/corpus/1742_isa_macro_synth.iii -- autonomous ISA macro synthesis (refute-by-default).
+ *
+ * numera/isa_macro_synth ties the bisimulation proof to ISA admission: a hot op's macro is admitted to the
+ * optimizer ONLY IF the CIC kernel proves it universally equivalent AND strictly cheaper.  99 = all arms.
+ *
+ *   (1) the kernel proves the strength macro for a hot op; (2) autonomous synthesis admits it.
+ *   (3) BITING: a non-equivalent macro is REFUTED and never enters the ISA (count unchanged).
+ *   (4) another hot op synthesizes + admits.
+ */
+module corpus_1742_isa_macro_synth
+
+extern @abi(c-msvc-x64) fn ims_reset() -> i32 from "isa_macro_synth.iii"
+extern @abi(c-msvc-x64) fn ims_equiv_proven(a: u32, b: u32) -> u8 from "isa_macro_synth.iii"
+extern @abi(c-msvc-x64) fn ims_admit(a: u32, b: u32) -> u8 from "isa_macro_synth.iii"
+extern @abi(c-msvc-x64) fn ims_admitted_count() -> u32 from "isa_macro_synth.iii"
+extern @abi(c-msvc-x64) fn ims_synth(a: u32) -> u8 from "isa_macro_synth.iii"
+
+fn main() -> u64 {
+    ims_reset()
+
+    /* (1) the kernel proves macro double^3 universally equivalent to mul(x, 2^3) */
+    if ims_equiv_proven(3u32, 3u32) != 1u8 { return 1u64 }
+
+    /* (2) autonomous synthesis of the hot op admits the proven macro */
+    if ims_synth(3u32) != 1u8 { return 2u64 }
+    if ims_admitted_count() != 1u32 { return 3u64 }
+
+    /* (3) BITING refute-by-default: a non-equivalent macro (a != b) is REFUTED, never admitted on doubt */
+    if ims_equiv_proven(3u32, 4u32) != 0u8 { return 4u64 }
+    if ims_admit(3u32, 4u32) != 0u8 { return 5u64 }
+    if ims_admitted_count() != 1u32 { return 6u64 }   /* the unproven macro did NOT enter the ISA */
+
+    /* (4) another hot op (within the proven strength tower) synthesizes + admits */
+    if ims_synth(2u32) != 1u8 { return 7u64 }
+    if ims_admitted_count() != 2u32 { return 8u64 }
+
+    return 99u64
+}

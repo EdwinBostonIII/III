@@ -1367,6 +1367,8 @@ declare -A EXPECTED=(
     [1740_cap_zkp]=99
     # R042 sort-penalty tier: a rewrite site's geometric cost charged to the CPU meter (bounds owner-domain sorts).
     [1741_xii_sort_meter]=99
+    # autonomous ISA macro synthesis: bisim-gated, refute-by-default; an unproven macro never enters the ISA.
+    [1742_isa_macro_synth]=99
 )
 
 PASS=0

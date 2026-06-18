@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1724_infotheory.iii
+ *
+ * Falsifier KAT for numera::infotheory (III-PHASE4-PROBABILITY, Layer 6) -- exact information theory.
+ * 99 = every arm holds; 1..8 = the failing arm.  Oracle: exact integer arithmetic + the collision/entropy
+ * structural facts.
+ *
+ *   (1) uniform collision = 4/16 = 1/n; uniform is not deterministic.  (2) deterministic collision = 1, H=0.
+ *   (3) BITING: uniform collision < deterministic collision (collision minimized by uniform).
+ *   (4) KL = 0 iff p == q (biting on inequality).
+ */
+module corpus_1724_infotheory
+
+extern @abi(c-msvc-x64) fn it_set(m0: u64, m1: u64, m2: u64, m3: u64) -> i32 from "infotheory.iii"
+extern @abi(c-msvc-x64) fn it_collision_num() -> u64 from "infotheory.iii"
+extern @abi(c-msvc-x64) fn it_collision_den() -> u64 from "infotheory.iii"
+extern @abi(c-msvc-x64) fn it_entropy_zero() -> u8 from "infotheory.iii"
+extern @abi(c-msvc-x64) fn it_kl_zero(q0: u64, q1: u64, q2: u64, q3: u64) -> u8 from "infotheory.iii"
+
+fn main() -> u64 {
+    /* (1) uniform (1,1,1,1)/4: collision 4/16 = 1/4 = 1/n; not deterministic */
+    it_set(1u64, 1u64, 1u64, 1u64)
+    if it_collision_num() != 4u64 { return 1u64 }
+    if it_collision_den() != 16u64 { return 2u64 }
+    if it_entropy_zero() != 0u8 { return 3u64 }
+
+    /* (2) deterministic (4,0,0,0)/4: collision 16/16 = 1; H = 0 (biting) */
+    it_set(4u64, 0u64, 0u64, 0u64)
+    if it_collision_num() != 16u64 { return 4u64 }
+    if it_entropy_zero() != 1u8 { return 5u64 }
+
+    /* (3) BITING: uniform collision < deterministic collision */
+    it_set(1u64, 1u64, 1u64, 1u64)
+    let unif : u64 = it_collision_num()
+    it_set(4u64, 0u64, 0u64, 0u64)
+    let det : u64 = it_collision_num()
+    if unif >= det { return 6u64 }
+
+    /* (4) KL = 0 iff p == q */
+    it_set(2u64, 1u64, 1u64, 0u64)
+    if it_kl_zero(2u64, 1u64, 1u64, 0u64) != 1u8 { return 7u64 }
+    if it_kl_zero(1u64, 1u64, 1u64, 1u64) != 0u8 { return 8u64 }
+
+    return 99u64
+}

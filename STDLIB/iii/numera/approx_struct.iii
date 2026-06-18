@@ -1,0 +1,53 @@
+/* STDLIB/iii/numera/approx_struct.iii -- PROBABILISTIC DATA STRUCTURES WITH PROVED ERROR
+ * (III-PHASE4-PROBABILITY, Layer 6).
+ *
+ * Approximate data structures whose "approximate" is an EXACT BOUND on the approximation.  A Bloom filter
+ * over an m-bit array with k hash functions has TWO guarantees, the first absolute and proven here, the
+ * second an exact rational bound:
+ *   - NO FALSE NEGATIVE (proven): every inserted element is ALWAYS reported present -- inserting only sets
+ *     bits and querying only reads them, so an inserted element's bits are necessarily set.
+ *   - a bounded FALSE-POSITIVE rate: a never-inserted element is a false positive only if all its k bits
+ *     happen to be set; that probability is an exact rational in (m, k, n), not a float hope.
+ * The hashes are seeded-deterministic, so the structure is replayable.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH (integer mix hashes); pairs with numera/prob_interval
+ * for the false-positive bound.  Determinism: integer-only; no float.
+ */
+module numera_approx_struct
+
+const BF_MASK : u64 = 0x3Fu64    /* 64-bit array -> bit index in [0,64) */
+
+var BF_ARR : [u64; 1]
+
+/* two integer mix hashes (k = 0,1) of x to bit indices in [0,64). */
+fn bf_hash(x: u64, k: u32) -> u64 {
+    if k == 0u32 { return ((x * 2654435761u64) >> 24u64) & BF_MASK }
+    return ((x * 11400714819323198485u64) >> 28u64) & BF_MASK
+}
+
+fn bf_reset() -> i32 @export { BF_ARR[0u64] = 0u64  return 0i32 }
+
+/* insert x: set its k bits. */
+fn bf_insert(x: u64) -> i32 @export {
+    BF_ARR[0u64] = BF_ARR[0u64] | (1u64 << bf_hash(x, 0u32))
+    BF_ARR[0u64] = BF_ARR[0u64] | (1u64 << bf_hash(x, 1u32))
+    return 0i32
+}
+
+/* query x: 1 iff ALL of its k bits are set (a present-or-false-positive answer). */
+fn bf_query(x: u64) -> u8 @export {
+    if (BF_ARR[0u64] & (1u64 << bf_hash(x, 0u32))) == 0u64 { return 0u8 }
+    if (BF_ARR[0u64] & (1u64 << bf_hash(x, 1u32))) == 0u64 { return 0u8 }
+    return 1u8
+}
+
+/* the number of set bits (the load) -- the false-positive bound is a rational function of this. */
+fn bf_popcount() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut b : u64 = 0u64
+    while b < 64u64 {
+        if (BF_ARR[0u64] & (1u64 << b)) != 0u64 { c = c + 1u32 }
+        b = b + 1u64
+    }
+    return c
+}

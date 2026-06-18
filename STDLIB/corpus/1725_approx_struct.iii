@@ -1,0 +1,39 @@
+/* STDLIB/corpus/1725_approx_struct.iii
+ *
+ * Falsifier KAT for numera::approx_struct (III-PHASE4-PROBABILITY, Layer 6) -- probabilistic data
+ * structures with proved error.  99 = every arm holds; 1..7 = the failing arm.  Oracle: the Bloom
+ * no-false-negative invariant -- every inserted element MUST be reported present.
+ *
+ *   (1) NO FALSE NEGATIVE (biting): every inserted element is present.  (2) an empty filter reports absence.
+ *   (3) a load reflects the set bits after insert.
+ */
+module corpus_1725_approx_struct
+
+extern @abi(c-msvc-x64) fn bf_reset() -> i32 from "approx_struct.iii"
+extern @abi(c-msvc-x64) fn bf_insert(x: u64) -> i32 from "approx_struct.iii"
+extern @abi(c-msvc-x64) fn bf_query(x: u64) -> u8 from "approx_struct.iii"
+extern @abi(c-msvc-x64) fn bf_popcount() -> u32 from "approx_struct.iii"
+
+fn main() -> u64 {
+    bf_reset()
+    bf_insert(100u64)
+    bf_insert(200u64)
+    bf_insert(300u64)
+
+    /* (1) NO FALSE NEGATIVE: every inserted element is present */
+    if bf_query(100u64) != 1u8 { return 1u64 }
+    if bf_query(200u64) != 1u8 { return 2u64 }
+    if bf_query(300u64) != 1u8 { return 3u64 }
+
+    /* (2) an empty filter reports absence */
+    bf_reset()
+    if bf_query(100u64) != 0u8 { return 4u64 }
+    if bf_popcount() != 0u32 { return 5u64 }
+
+    /* (3) the load reflects the set bits after insert */
+    bf_insert(100u64)
+    if bf_query(100u64) != 1u8 { return 6u64 }
+    if bf_popcount() == 0u32 { return 7u64 }
+
+    return 99u64
+}

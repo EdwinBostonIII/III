@@ -1,0 +1,46 @@
+/* STDLIB/corpus/1723_dp_exact.iii
+ *
+ * Falsifier KAT for numera::dp_exact (III-PHASE4-PROBABILITY, Layer 6) -- differential privacy with
+ * machine-checked guarantees.  99 = every arm holds; 1..7 = the failing arm.  Oracle: exact rational
+ * epsilon arithmetic -- a float accountant fails the exact-composition arm.
+ *
+ *   (1) sequential composition 1/2 + 1/4 = 3/4 exactly.  (2) BITING vs float: 1/3+1/3+1/3 = 1 exactly.
+ *   (3) parallel composition max(1/2,1/4) = 1/2.  (4) the mechanism noise is deterministic under the seed.
+ */
+module corpus_1723_dp_exact
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn dp_seq_compose(e1n: u64, e1d: u64, e2n: u64, e2d: u64) -> i32 from "dp_exact.iii"
+extern @abi(c-msvc-x64) fn dp_par_compose(e1n: u64, e1d: u64, e2n: u64, e2d: u64) -> i32 from "dp_exact.iii"
+extern @abi(c-msvc-x64) fn dp_eps_num() -> u64 from "dp_exact.iii"
+extern @abi(c-msvc-x64) fn dp_eps_den() -> u64 from "dp_exact.iii"
+extern @abi(c-msvc-x64) fn dp_noise(cap: u64, seed: u64) -> u32 from "dp_exact.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x400000u64, 0u64)
+
+    /* (1) sequential 1/2 + 1/4 = 3/4 */
+    dp_seq_compose(1u64, 2u64, 1u64, 4u64)
+    if dp_eps_num() != 3u64 { return 1u64 }
+    if dp_eps_den() != 4u64 { return 2u64 }
+
+    /* (2) BITING vs float: 1/3 + 1/3 + 1/3 = 1 exactly */
+    dp_seq_compose(1u64, 3u64, 1u64, 3u64)
+    let an : u64 = dp_eps_num()
+    let ad : u64 = dp_eps_den()
+    dp_seq_compose(an, ad, 1u64, 3u64)
+    if dp_eps_num() != 1u64 { return 3u64 }
+    if dp_eps_den() != 1u64 { return 4u64 }
+
+    /* (3) parallel max(1/2,1/4) = 1/2 */
+    dp_par_compose(1u64, 2u64, 1u64, 4u64)
+    if dp_eps_num() != 1u64 { return 5u64 }
+    if dp_eps_den() != 2u64 { return 6u64 }
+
+    /* (4) noise deterministic under seed */
+    if dp_noise(cap, 0x55u64) != dp_noise(cap, 0x55u64) { return 7u64 }
+
+    return 99u64
+}

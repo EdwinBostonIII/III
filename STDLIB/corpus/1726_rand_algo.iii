@@ -1,0 +1,38 @@
+/* STDLIB/corpus/1726_rand_algo.iii
+ *
+ * Falsifier KAT for numera::rand_algo (III-PHASE4-PROBABILITY, Layer 6) -- verified randomized algorithms.
+ * 99 = every arm holds; 1..6 = the failing arm.  Oracle: exact modular arithmetic + Fermat's little theorem.
+ *
+ *   (1) LAS VEGAS: prime 13 passes every Fermat witness in [2,11] (never wrongly composite).
+ *   (2) MONTE CARLO (biting): composite 15 has a failing witness in [2,13] (detected).
+ *   (3) specific witnesses: 2^14 mod 15 = 4 != 1 (witnesses 15); 2^12 mod 13 = 1 (passes for 13).
+ *   (4) a beacon-drawn random witness for prime 13 passes (deterministic under seed).
+ */
+module corpus_1726_rand_algo
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ra_fermat_ok(n: u64, a: u64) -> u8 from "rand_algo.iii"
+extern @abi(c-msvc-x64) fn ra_all_witness_ok(n: u64, lo: u64, hi: u64) -> u8 from "rand_algo.iii"
+extern @abi(c-msvc-x64) fn ra_has_witness(n: u64, lo: u64, hi: u64) -> u8 from "rand_algo.iii"
+extern @abi(c-msvc-x64) fn ra_random_witness_ok(cap: u64, seed: u64, n: u64) -> u8 from "rand_algo.iii"
+
+fn main() -> u64 {
+    /* (1) LAS VEGAS: prime 13 passes all witnesses */
+    if ra_all_witness_ok(13u64, 2u64, 11u64) != 1u8 { return 1u64 }
+
+    /* (2) MONTE CARLO (biting): composite 15 is detected */
+    if ra_has_witness(15u64, 2u64, 13u64) != 1u8 { return 2u64 }
+
+    /* (3) specific witnesses */
+    if ra_fermat_ok(15u64, 2u64) != 0u8 { return 3u64 }   /* 2 witnesses 15 composite */
+    if ra_fermat_ok(13u64, 2u64) != 1u8 { return 4u64 }   /* 2 passes for prime 13 */
+
+    /* (4) a beacon-drawn random witness for prime 13 passes (deterministic) */
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x400000u64, 0u64)
+    if ra_random_witness_ok(cap, 0x77u64, 13u64) != 1u8 { return 5u64 }
+    if ra_random_witness_ok(cap, 0x77u64, 13u64) != ra_random_witness_ok(cap, 0x77u64, 13u64) { return 6u64 }
+
+    return 99u64
+}

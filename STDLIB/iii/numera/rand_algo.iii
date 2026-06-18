@@ -1,0 +1,76 @@
+/* STDLIB/iii/numera/rand_algo.iii -- VERIFIED RANDOMIZED ALGORITHMS
+ * (III-PHASE4-PROBABILITY, Layer 6).
+ *
+ * Randomized algorithms whose randomness is the seeded beacon and whose correctness is exact.  The Fermat
+ * primality test (a Monte Carlo / Las Vegas hybrid):
+ *   - LAS VEGAS for primes: a prime passes EVERY witness (a^(n-1) == 1 mod n by Fermat) -- it is NEVER
+ *     wrongly reported composite, regardless of the random draws;
+ *   - MONTE CARLO for composites: a (non-Carmichael) composite has a witness a with a^(n-1) != 1 mod n, so
+ *     compositeness is detected with bounded error -- at most one-in-(n-#liars) random draws misses it.
+ * The witnesses are drawn from the seeded beacon, so a run is replayable and the error is bounded, never a
+ * silent wrong answer.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Composes numera/sample_beacon (the random witnesses) -- no
+ * island.  Determinism: integer modpow; the entropy is the beacon seed; no float.  (Small n: products stay
+ * < 2^32, so the explicit modular reductions are exact.)
+ */
+module numera_rand_algo
+
+extern @abi(c-msvc-x64) fn bc_seed(cap: u64, s: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_generate(out: u64, n: u64) -> i32 from "sample_beacon.iii"
+
+var RA_BUF : [u8; 8]
+
+/* modular exponentiation base^exp mod m (square-and-multiply; explicit modular reductions). */
+fn ra_modpow(base: u64, exp: u64, m: u64) -> u64 {
+    if m == 0u64 { return 0u64 }
+    let mut result : u64 = 1u64
+    let mut b : u64 = base - (base / m) * m
+    let mut e : u64 = exp
+    while e > 0u64 {
+        if (e & 1u64) == 1u64 {
+            let rb : u64 = result * b
+            result = rb - (rb / m) * m
+        }
+        let bb : u64 = b * b
+        b = bb - (bb / m) * m
+        e = e >> 1u64
+    }
+    return result
+}
+
+/* Fermat witness: 1 iff a^(n-1) == 1 (mod n) -- a does NOT witness compositeness. */
+fn ra_fermat_ok(n: u64, a: u64) -> u8 @export {
+    if ra_modpow(a, n - 1u64, n) == 1u64 { return 1u8 }
+    return 0u8
+}
+
+/* LAS VEGAS: a prime passes EVERY witness in [lo,hi] (never wrongly called composite). */
+fn ra_all_witness_ok(n: u64, lo: u64, hi: u64) -> u8 @export {
+    let mut a : u64 = lo
+    while a <= hi {
+        if ra_fermat_ok(n, a) != 1u8 { return 0u8 }
+        a = a + 1u64
+    }
+    return 1u8
+}
+
+/* MONTE CARLO: a composite has a FAILING witness in [lo,hi] (compositeness detected). */
+fn ra_has_witness(n: u64, lo: u64, hi: u64) -> u8 @export {
+    let mut a : u64 = lo
+    while a <= hi {
+        if ra_fermat_ok(n, a) == 0u8 { return 1u8 }
+        a = a + 1u64
+    }
+    return 0u8
+}
+
+/* draw a witness a in [2, n-1] from the beacon and test it; deterministic under the seed. */
+fn ra_random_witness_ok(cap: u64, seed: u64, n: u64) -> u8 @export {
+    bc_seed(cap, seed)
+    bc_generate((&RA_BUF as u64), 8u64)
+    let r : u64 = RA_BUF[0u64] as u64
+    let span : u64 = n - 3u64                       /* witnesses 2..n-2 */
+    let a : u64 = 2u64 + (r - (r / span) * span)
+    return ra_fermat_ok(n, a)
+}

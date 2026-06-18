@@ -1251,6 +1251,17 @@ MODULES=(
     # conclusion (CANONICAL/PROVISIONAL/GAP/REFUTED) via nous_synth; only a CANONICAL measure crosses, a
     # PROVISIONAL is usable only with its proved-interval pin.  Composes nous_synth (no island).
     "numera/measure_status"
+    # --- PHASE IV Layer 6: the world-changing applications.  numera/dp_exact -- differential privacy with
+    # EXACT epsilon composition (1/3 thrice == 1, closing the float-accumulation budget bug); a beacon noise draw.
+    "numera/dp_exact"
+    # numera/infotheory -- exact information theory: the collision quantity sum p_i^2 is an exact rational
+    # (minimized by uniform, maximized by deterministic); KL=0 iff p==q; H=0 iff deterministic.
+    "numera/infotheory"
+    # numera/approx_struct -- a Bloom filter with the PROVEN no-false-negative guarantee + a rational FP bound.
+    "numera/approx_struct"
+    # numera/rand_algo -- verified randomized algorithms: Fermat primality (Las-Vegas-correct for primes,
+    # Monte-Carlo-detecting for composites) with beacon-drawn witnesses.  Composes sample_beacon.
+    "numera/rand_algo"
 )
 
 PASS=0

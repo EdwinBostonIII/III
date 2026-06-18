@@ -1337,6 +1337,10 @@ declare -A EXPECTED=(
     [1720_belief_sheaf]=99
     [1721_bayes_exact]=99
     [1722_measure_status]=99
+    [1723_dp_exact]=99
+    [1724_infotheory]=99
+    [1725_approx_struct]=99
+    [1726_rand_algo]=99
 )
 
 PASS=0

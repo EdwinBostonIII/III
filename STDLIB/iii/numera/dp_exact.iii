@@ -1,0 +1,50 @@
+/* STDLIB/iii/numera/dp_exact.iii -- DIFFERENTIAL PRIVACY WITH MACHINE-CHECKED GUARANTEES
+ * (III-PHASE4-PROBABILITY, Layer 6).
+ *
+ * Differential privacy whose budget is a THEOREM, not a hope.  Privacy loss epsilon is an EXACT rational,
+ * and the composition theorems are exact integer arithmetic:
+ *   SEQUENTIAL composition -- running two mechanisms costs epsilon_1 + epsilon_2 (exact);
+ *   PARALLEL   composition -- on disjoint data, the cost is max(epsilon_1, epsilon_2).
+ * Because epsilon is exact, composing 1/3 three times is EXACTLY 1 -- a float DP accountant accumulates
+ * 0.999... and silently mis-reports the spent budget (a real privacy-leak bug class this closes).  The
+ * mechanism's noise is drawn from the seeded beacon, so a privatized release is replayable and auditable.
+ *
+ * THE HONEST FLOOR: the proof that the DISCRETE noise mechanism itself is epsilon-DP (its likelihood ratio
+ * <= e^epsilon) is the deeper measure theorem; this organ provides the EXACT budget accounting and a
+ * replayable noise draw -- the mechanism bound is a refinement, never a fake.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  Composes numera/evidence_calculus (exact rational epsilon) +
+ * numera/sample_beacon (the only randomness) -- no island.  Determinism: integer-only; no float.
+ */
+module numera_dp_exact
+
+extern @abi(c-msvc-x64) fn ec_set(p: u64, q: u64) -> i32 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_add(p1: u64, q1: u64, p2: u64, q2: u64) -> i32 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_p() -> u64 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn ec_q() -> u64 from "evidence_calculus.iii"
+extern @abi(c-msvc-x64) fn bc_seed(cap: u64, s: u64) -> i32 from "sample_beacon.iii"
+extern @abi(c-msvc-x64) fn bc_generate(out: u64, n: u64) -> i32 from "sample_beacon.iii"
+
+var DP_BUF : [u8; 8]
+
+/* SEQUENTIAL composition: total epsilon = e1 + e2 (exact), left in the evidence_calculus registers. */
+fn dp_seq_compose(e1n: u64, e1d: u64, e2n: u64, e2d: u64) -> i32 @export {
+    return ec_add(e1n, e1d, e2n, e2d)
+}
+
+/* PARALLEL composition: total = max(e1, e2) (exact). */
+fn dp_par_compose(e1n: u64, e1d: u64, e2n: u64, e2d: u64) -> i32 @export {
+    if (e1n * e2d) >= (e2n * e1d) { return ec_set(e1n, e1d) }
+    return ec_set(e2n, e2d)
+}
+
+fn dp_eps_num() -> u64 @export { return ec_p() }
+fn dp_eps_den() -> u64 @export { return ec_q() }
+
+/* a discrete mechanism noise draw via the beacon: deterministic under the seed, so the privatized release
+ * is replayable (the entropy is the public seed). */
+fn dp_noise(cap: u64, seed: u64) -> u32 @export {
+    bc_seed(cap, seed)
+    bc_generate((&DP_BUF as u64), 8u64)
+    return DP_BUF[0u64] as u32
+}

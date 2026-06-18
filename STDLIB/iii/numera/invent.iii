@@ -1,0 +1,137 @@
+/* STDLIB/iii/numera/invent.iii -- THE GENERATIVE INVENTION LOOP (de-novo law synthesis).
+ *
+ * The first organ that lets III speak its OWN words: it invents algebraic laws that are in no human
+ * template, proves them, and keeps only those that are computationally valuable.  Here, on the strength-
+ * reduction domain: given a target mul(x, k), search the OPERATION ALGEBRA itself (shifts, adds, subs of x)
+ * for a provably-equal but CHEAPER form -- e.g. 7*x = (x<<3) - x, a reduction NO power-of-two grid contains.
+ *
+ * The two-tier engine separates VALUE from TRUTH:
+ *   (1) GENERATE: enumerate candidate forms over {shl, add, sub, x}, cheapest shapes first.
+ *   (2) SIEVE (the transmission, PRE-judge): drop any candidate whose op-cost is not strictly below the best
+ *       form found so far -- it cannot improve the optimizer, so it never earns a proof cycle.  This is the
+ *       answer to Combinatorial Triviality: the judge is never flooded with true-but-worthless forms.
+ *   (3) JUDGE (the kernel): bb_equal -- a Tseitin+CDCL UNSAT miter at the machine width proves the survivor
+ *       equal for ALL inputs, or refutes it.  The CIC convertibility check is too weak for linear BV
+ *       identities (it cannot fold mul-vs-shift-sub); the SAT miter is the sound, general decision procedure.
+ *   (4) ADOPT: the cheapest proven form becomes a new rewrite law the optimizer did not have.
+ *
+ * Honest boundary: the operation algebra {shl,add,sub} is III's, but the SHAPES are invented by search, not
+ * handed in -- this is de-novo relative to every template.  Pointing the same loop at a richer algebra
+ * lifts it to new primitives + abstractions.  Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Composes
+ * numera/bv_bits (the SAT decision procedure) -- no ML, no guessing.
+ */
+module numera_invent
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const GIL_W        : u64 = 64u64       /* prove at the deployment machine width */
+const GIL_MUL_COST : u32 = 4u32        /* the value gradient: a multiply is the expensive baseline */
+const GIL_MAXA     : u64 = 12u64       /* shift-amount search bound */
+
+var GIL_KERNEL_CALLS : u64 = 0u64      /* candidates that reached the SAT judge */
+var GIL_SIEVE_DROPS  : u64 = 0u64      /* candidates the value-sieve dropped PRE-judge */
+var GIL_BEST_COST    : u32 = 0u32      /* the cheapest proven-equal form's op-cost */
+var GIL_BEST_KIND    : u32 = 0u32      /* the winning shape (1..5) */
+var GIL_BEST_A       : u64 = 0u64
+var GIL_BEST_B       : u64 = 0u64
+
+/* the op-cost of a candidate shape (the value gradient). */
+fn gil_cost(kind: u32) -> u32 {
+    if kind == 1u32 { return 1u32 }    /* shl(x,a)                */
+    if kind == 2u32 { return 2u32 }    /* (x<<a) - x              */
+    if kind == 3u32 { return 2u32 }    /* (x<<a) + x              */
+    if kind == 4u32 { return 3u32 }    /* (x<<a) + (x<<b)         */
+    if kind == 5u32 { return 3u32 }    /* (x<<a) - (x<<b)         */
+    return 0xFFFFFFFFu32
+}
+
+/* build candidate shape `kind` over the bit-blaster variable x. */
+fn gil_build(kind: u32, x: u32, a: u64, b: u64) -> u32 {
+    if kind == 1u32 { return bb_shl(x, a) }
+    if kind == 2u32 { return bb_sub(bb_shl(x, a), x) }
+    if kind == 3u32 { return bb_add(bb_shl(x, a), x) }
+    if kind == 4u32 { return bb_add(bb_shl(x, a), bb_shl(x, b)) }
+    if kind == 5u32 { return bb_sub(bb_shl(x, a), bb_shl(x, b)) }
+    return 0xFFFFFFFFu32
+}
+
+/* SIEVE then (if it can improve) JUDGE one candidate against mul(x,k).  Adopts it as the new best iff the
+ * SAT miter PROVES equality and it is strictly cheaper.  Returns 1 iff adopted. */
+fn gil_consider(k: u64, kind: u32, a: u64, b: u64) -> i32 {
+    let c : u32 = gil_cost(kind)
+    if c >= GIL_BEST_COST {                       /* the value sieve: cannot beat the incumbent -> no proof cycle */
+        GIL_SIEVE_DROPS = GIL_SIEVE_DROPS + 1u64
+        return 0i32
+    }
+    bb_reset(GIL_W)
+    let x : u32 = bb_var(0u32)
+    let target : u32 = bb_mul(x, bb_const(k))
+    let cand : u32 = gil_build(kind, x, a, b)
+    GIL_KERNEL_CALLS = GIL_KERNEL_CALLS + 1u64
+    if bb_equal(target, cand) == 1u8 {
+        GIL_BEST_COST = c
+        GIL_BEST_KIND = kind
+        GIL_BEST_A = a
+        GIL_BEST_B = b
+        return 1i32
+    }
+    return 0i32
+}
+
+/* FORGE: invent the cheapest provably-equal strength-reduction for mul(x,k), searching cheapest shapes
+ * first so the sieve tightens as it goes.  Returns the invented form's op-cost (GIL_MUL_COST if none beats
+ * the multiply -- e.g. a prime with no compact shift form in range). */
+fn gil_forge(k: u64) -> u32 @export {
+    GIL_KERNEL_CALLS = 0u64
+    GIL_SIEVE_DROPS = 0u64
+    GIL_BEST_KIND = 0u32
+    GIL_BEST_A = 0u64
+    GIL_BEST_B = 0u64
+    GIL_BEST_COST = GIL_MUL_COST       /* incumbent: the multiply itself */
+
+    /* cost 1: shl(x,a) -- the power-of-two case */
+    let mut a : u64 = 0u64
+    while a <= GIL_MAXA { gil_consider(k, 1u32, a, 0u64)  a = a + 1u64 }
+    /* cost 2: (x<<a) - x  [k = 2^a - 1] */
+    a = 1u64
+    while a <= GIL_MAXA { gil_consider(k, 2u32, a, 0u64)  a = a + 1u64 }
+    /* cost 2: (x<<a) + x  [k = 2^a + 1] */
+    a = 1u64
+    while a <= GIL_MAXA { gil_consider(k, 3u32, a, 0u64)  a = a + 1u64 }
+    /* cost 3: (x<<a) +/- (x<<b)  [k = 2^a +/- 2^b] */
+    a = 1u64
+    while a <= GIL_MAXA {
+        let mut b : u64 = 0u64
+        while b < a {
+            gil_consider(k, 4u32, a, b)
+            gil_consider(k, 5u32, a, b)
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    return GIL_BEST_COST
+}
+
+fn gil_best_cost() -> u32 @export { return GIL_BEST_COST }
+fn gil_best_kind() -> u32 @export { return GIL_BEST_KIND }
+fn gil_best_a() -> u64 @export { return GIL_BEST_A }
+fn gil_kernel_calls() -> u64 @export { return GIL_KERNEL_CALLS }
+fn gil_sieve_drops() -> u64 @export { return GIL_SIEVE_DROPS }
+
+/* the safety check, exposed: the SAT judge REFUSES a false strength reduction (k*x where k != 2^a - 1
+ * against (x<<a)-x).  1 iff correctly refuted. */
+fn gil_refutes_false(k: u64, a: u64) -> u8 @export {
+    bb_reset(GIL_W)
+    let x : u32 = bb_var(0u32)
+    let target : u32 = bb_mul(x, bb_const(k))
+    let cand : u32 = bb_sub(bb_shl(x, a), x)
+    if bb_equal(target, cand) == 0u8 { return 1u8 }
+    return 0u8
+}

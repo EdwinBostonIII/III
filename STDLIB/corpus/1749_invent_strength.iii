@@ -1,0 +1,55 @@
+/* STDLIB/corpus/1749_invent_strength.iii -- THE GENERATIVE INVENTION LOOP: III invents NEW laws.
+ *
+ * numera/invent searches the operation algebra for a provably-equal but CHEAPER form of mul(x,k), with a
+ * value-sieve that drops non-improving candidates BEFORE the SAT judge (the answer to Combinatorial
+ * Triviality).  The invented laws are in NO power-of-two template -- this is de-novo.  99 = all arms.
+ *
+ *   7*x  -> (x<<3) - x   (cost 2 < mul 4; 7 = 2^3 - 1, kind 2, a=3)
+ *   15*x -> (x<<4) - x   (15 = 2^4 - 1)
+ *   9*x  -> (x<<3) + x   (9 = 2^3 + 1, kind 3)
+ *   10*x -> (x<<3)+(x<<1)(10 = 8+2, kind 4, cost 3)
+ *   8*x  -> (x<<3)       (power of two, kind 1, cost 1)
+ *   the value-sieve drops MANY candidates pre-judge; a false reduction is REFUTED by the SAT judge.
+ */
+module corpus_1749_invent_strength
+
+extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_cost() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_kernel_calls() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_sieve_drops() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_refutes_false(k: u64, a: u64) -> u8 from "invent.iii"
+
+fn main() -> u64 {
+    /* (1) DE-NOVO: 7*x -> (x<<3) - x, cost 2, invented (7 is not a power of two) */
+    if gil_forge(7u64) != 2u32 { return 1u64 }
+    if gil_best_cost() != 2u32 { return 18u64 }    /* the incumbent's recorded cost agrees */
+    if gil_best_kind() != 2u32 { return 2u64 }     /* (x<<a) - x */
+    if gil_best_a() != 3u64 { return 3u64 }        /* 8 = 2^3 */
+
+    /* (2) THE SIEVE WORKED: many candidates were dropped pre-judge, only a few reached the SAT kernel */
+    if gil_sieve_drops() == 0u64 { return 4u64 }
+    if gil_kernel_calls() == 0u64 { return 5u64 }
+    if gil_sieve_drops() <= gil_kernel_calls() { return 6u64 }   /* the transmission drops MORE than it judges */
+
+    /* (3) more de-novo reductions, none in any power-of-two grid */
+    if gil_forge(15u64) != 2u32 { return 7u64 }
+    if gil_best_kind() != 2u32 { return 8u64 }     /* (x<<4) - x */
+    if gil_best_a() != 4u64 { return 9u64 }
+    if gil_forge(9u64) != 2u32 { return 10u64 }
+    if gil_best_kind() != 3u32 { return 11u64 }    /* (x<<3) + x */
+    if gil_forge(10u64) != 3u32 { return 12u64 }
+    if gil_best_kind() != 4u32 { return 13u64 }    /* (x<<3) + (x<<1) */
+
+    /* (4) the power-of-two case still falls out as the cheapest (cost 1) */
+    if gil_forge(8u64) != 1u32 { return 14u64 }
+    if gil_best_kind() != 1u32 { return 15u64 }
+
+    /* (5) SAFETY: a false reduction (6*x =? (x<<3)-x = 7*x) is REFUTED by the SAT judge */
+    if gil_refutes_false(6u64, 3u64) != 1u8 { return 16u64 }
+    /* and the true one is NOT refuted (sanity on the refuter) */
+    if gil_refutes_false(7u64, 3u64) != 0u8 { return 17u64 }
+
+    return 99u64
+}

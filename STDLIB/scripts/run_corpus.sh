@@ -1381,6 +1381,8 @@ declare -A EXPECTED=(
     [1747_intent_egraph_lower]=99
     # III invents, proves, adopts, and self-improves -- a live system-wide autonomous-invention demonstration.
     [1748_autonomous_invention_demo]=99
+    # the Generative Invention Loop: III invents non-power-of-two strength reductions, value-sieved + SAT-proven.
+    [1749_invent_strength]=99
 )
 
 PASS=0

@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1737_shift_dream_adoption.iii -- sov_isa adopts the WHOLE shift-combining family (W3400).
+ *
+ * The rules() table hand-wires only Rule H, the single (a=1,b=1) instance of the shift-combining family
+ * shl(shl(x,a),b) -> shl(x,a+b).  sov_isa_adopt_shift_dream now adopts the WHOLE certified registry
+ * parametrically -- the sibling of sov_isa_adopt_dream (which already does this for strength reduction).
+ * Each adopted rule is double-gated: certified UNSAT by the autocatalyst's count-mask wall AND re-proven
+ * by the local CIC kernel.  Operator-invoked, so the build's golden emit is unmoved.  99 = all arms.
+ *
+ *   (1) an empty shift registry adopts NOTHING.
+ *   (2) certify two shape-2 triples (2,3) and (5,5); the getters expose them.
+ *   (3) BITING: adopt EXACTLY 2 (the whole certified family, not just Rule H's single instance).
+ *   (4) determinism: a second adopt pass returns the same count.
+ */
+module corpus_1737_shift_dream_adoption
+
+extern @abi(c-msvc-x64) fn cga_dispose_shift(shape: u32, a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_shift_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_shift_get_shape(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_shift_get_a(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_shift_get_b(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn sov_isa_adopt_shift_dream() -> u32 from "sov_isa.iii"
+
+fn main() -> u64 {
+    /* (1) an empty registry adopts nothing */
+    if sov_isa_adopt_shift_dream() != 0u32 { return 1u64 }
+
+    /* (2) certify two shape-2 shift-combining triples: (2,3) [<<2 then <<3 == <<5] and (5,5) [== <<10] */
+    if cga_dispose_shift(2u32, 2u32, 3u32, 1u32) != 1u8 { return 2u64 }
+    if cga_dispose_shift(2u32, 5u32, 5u32, 1u32) != 1u8 { return 3u64 }
+    if cga_shift_count() < 2u32 { return 4u64 }
+    /* the getters expose the certified (shape,a,b) of the first triple */
+    if cga_shift_get_shape(0u32) != 2u32 { return 5u64 }
+    if cga_shift_get_a(0u32) != 2u32 { return 6u64 }
+    if cga_shift_get_b(0u32) != 3u32 { return 7u64 }
+
+    /* (3) BITING: adopt EXACTLY the 2 certified shape-2 triples (each kernel-re-proven) -- more than the
+     *     single hand-wired Rule H, the whole certified family parametrically */
+    if sov_isa_adopt_shift_dream() != 2u32 { return 8u64 }
+
+    /* (4) determinism: a second adopt pass returns the same count */
+    if sov_isa_adopt_shift_dream() != 2u32 { return 9u64 }
+
+    return 99u64
+}

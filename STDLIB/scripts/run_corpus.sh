@@ -1357,6 +1357,8 @@ declare -A EXPECTED=(
     [1735_observe_replay_source_id]=99
     # the full determinism ingress membrane reachable at the gateway: du_ingress records -> du_replay checks.
     [1736_develop_up_ingress]=99
+    # sov_isa adopts the WHOLE certified shift-combining family parametrically (sibling of adopt_dream), not just Rule H.
+    [1737_shift_dream_adoption]=99
 )
 
 PASS=0

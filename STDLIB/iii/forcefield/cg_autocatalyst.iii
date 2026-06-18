@@ -450,6 +450,25 @@ fn cga_shift_get_shape(i: u32) -> u32 @export {
     if i >= CGA_SH_N[0u64] { return 0xFFFFFFFFu32 }
     return CGA_SH_SHAPE[i as u64]
 }
+/* the (a,b) counts of the i-th certified shift-combining triple -- so a consumer (sov_isa) can adopt the
+ * WHOLE certified family parametrically, not just one hand-wired instance.  Mirror of cga_shift_get_shape. */
+fn cga_shift_get_a(i: u32) -> u32 @export {
+    if i >= CGA_SH_N[0u64] { return 0xFFFFFFFFu32 }
+    return CGA_SH_A[i as u64]
+}
+fn cga_shift_get_b(i: u32) -> u32 @export {
+    if i >= CGA_SH_N[0u64] { return 0xFFFFFFFFu32 }
+    return CGA_SH_B[i as u64]
+}
+/* RE-EARN a shift triple's certification WITHOUT growing the registry (the volatile re-derive contract: a
+ * seal is never trusted, always re-proven).  Mirror of cga_mixed_verify_all's save/restore: run the
+ * UNSAT-behind-the-count-mask-wall disposer, then restore the count.  1 iff it re-certifies. */
+fn cga_shift_certifies(shape: u32, a: u32, b: u32) -> u8 @export {
+    let saved : u32 = CGA_SH_N[0u64]
+    let v : u8 = cga_dispose_shift(shape, a, b, 1u32)
+    CGA_SH_N[0u64] = saved
+    return v
+}
 
 /* ===== harmony wave-4 M5: the LEASH, completed across the lattice ================================
  * cga_all_true / cga_bv_all_true re-verify the Peano and count-mask registries; these are the

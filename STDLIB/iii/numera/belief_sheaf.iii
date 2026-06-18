@@ -1,0 +1,97 @@
+/* STDLIB/iii/numera/belief_sheaf.iii -- BELIEF PROPAGATION AS SHEAF GLUING (the keystone framing)
+ * (III-PHASE4-PROBABILITY, Layer 4).
+ *
+ * Exact belief propagation expressed as SHEAF GLUING on numera/sheaf.  Variable clusters are OPEN sets;
+ * the local conditional distributions over them are SECTIONS; their restriction to a shared variable is the
+ * shared MARGINAL.  The sheaf gluing condition (sh_check_glue) -- "the sections agree on every overlap" --
+ * IS exactly marginal consistency: a family of local distributions that agree on their shared marginals
+ * GLUES to the unique global joint, proven; a family that disagrees is REFUSED, never vacuously glued.
+ * Message-passing inference becomes a gluing theorem.
+ *
+ * Here two clusters g0, g1 share a variable (intersection g01).  A CONSISTENT family gives both clusters
+ * the same shared marginal (section SA over both) and glues; an INCONSISTENT family gives different shared
+ * marginals (SA over g0, SB over g1) whose restrictions to g01 disagree and is refused.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  Composes numera/sheaf (sh_check_glue is load-bearing) -- the
+ * gluing is the real content-addressed restriction-agreement check, not a re-implementation.  Determinism:
+ * content-addressed; the verdict is reproducible.
+ */
+module numera_belief_sheaf
+
+extern @abi(c-msvc-x64) fn sh_init() -> i32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_open(open_id: *u8, parent_slot: u32) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_section(presheaf_id: *u8, open_slot: u32, section_id: *u8) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_restriction(parent: u32, child: u32, transform_id: *u8) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_add_intersection(a: u32, b: u32, inter: u32) -> u32 from "sheaf.iii"
+extern @abi(c-msvc-x64) fn sh_check_glue(cover: *u8, parent_open: u32, out_global: *u8) -> u8 from "sheaf.iii"
+
+const BS_SENT : u32 = 0xFFFFFFFFu32   /* SHEAF_SENT */
+
+var BS_O0    : [u8; 32]
+var BS_O1    : [u8; 32]
+var BS_O01   : [u8; 32]
+var BS_PRE   : [u8; 32]
+var BS_T     : [u8; 32]
+var BS_SA    : [u8; 32]
+var BS_SB    : [u8; 32]
+var BS_COVER : [u8; 64]
+var BS_OUT   : [u8; 32]
+
+fn bs_fill(buf: u64, val: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { ((buf + i) as *u8)[0u64] = val  i = i + 1u64 }
+    return 0i32
+}
+
+fn bs_init_ids() -> i32 {
+    bs_fill((&BS_O0 as u64), 0x10u8)
+    bs_fill((&BS_O1 as u64), 0x11u8)
+    bs_fill((&BS_O01 as u64), 0x33u8)
+    bs_fill((&BS_PRE as u64), 0x50u8)
+    bs_fill((&BS_T as u64), 0x77u8)
+    bs_fill((&BS_SA as u64), 0xA1u8)    /* local distribution A: shared marginal A */
+    bs_fill((&BS_SB as u64), 0xB2u8)    /* local distribution B: a DIFFERENT shared marginal */
+    return 0i32
+}
+
+/* write the cover header: presheaf_id(32) || n(8 LE) || slot s0(4 LE) || slot s1(4 LE). */
+fn bs_cover2(s0: u32, s1: u32) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { BS_COVER[i] = BS_PRE[i]  i = i + 1u64 }
+    BS_COVER[32u64] = 2u8
+    let mut z : u64 = 33u64
+    while z < 40u64 { BS_COVER[z] = 0u8  z = z + 1u64 }
+    BS_COVER[40u64] = (s0 & 0xFFu32) as u8
+    BS_COVER[41u64] = ((s0 >> 8u32)  & 0xFFu32) as u8
+    BS_COVER[42u64] = ((s0 >> 16u32) & 0xFFu32) as u8
+    BS_COVER[43u64] = ((s0 >> 24u32) & 0xFFu32) as u8
+    BS_COVER[44u64] = (s1 & 0xFFu32) as u8
+    BS_COVER[45u64] = ((s1 >> 8u32)  & 0xFFu32) as u8
+    BS_COVER[46u64] = ((s1 >> 16u32) & 0xFFu32) as u8
+    BS_COVER[47u64] = ((s1 >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* build the two-cluster cover; sec_b chooses the second cluster's shared marginal (SA = consistent,
+ * SB = inconsistent).  Returns the gluing verdict (1 = glued to the global joint, 0 = refused). */
+fn bs_glue(use_sb: u8) -> u8 {
+    bs_init_ids()
+    sh_init()
+    let g0  : u32 = sh_add_open((&BS_O0 as u64) as *u8, BS_SENT)
+    let g1  : u32 = sh_add_open((&BS_O1 as u64) as *u8, BS_SENT)
+    let g01 : u32 = sh_add_open((&BS_O01 as u64) as *u8, BS_SENT)
+    sh_add_intersection(g0, g1, g01)
+    sh_add_restriction(g0, g01, (&BS_T as u64) as *u8)
+    sh_add_restriction(g1, g01, (&BS_T as u64) as *u8)
+    sh_add_section((&BS_PRE as u64) as *u8, g0, (&BS_SA as u64) as *u8)
+    if use_sb == 1u8 { sh_add_section((&BS_PRE as u64) as *u8, g1, (&BS_SB as u64) as *u8) }
+    else { sh_add_section((&BS_PRE as u64) as *u8, g1, (&BS_SA as u64) as *u8) }
+    bs_cover2(g0, g1)
+    return sh_check_glue((&BS_COVER as u64) as *u8, BS_SENT, (&BS_OUT as u64) as *u8)
+}
+
+/* a CONSISTENT family (agreeing shared marginal) glues to the unique global joint. */
+fn bs_consistent_glues() -> u8 @export { return bs_glue(0u8) }
+
+/* an INCONSISTENT family (disagreeing shared marginal) is REFUSED -- no vacuous glue. */
+fn bs_inconsistent_refused() -> u8 @export { return bs_glue(1u8) }

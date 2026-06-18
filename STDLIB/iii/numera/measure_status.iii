@@ -1,0 +1,36 @@
+/* STDLIB/iii/numera/measure_status.iii -- THE MEASURE TETRACHOTOMY (the typing wall)
+ * (III-PHASE4-PROBABILITY, Layer 5).
+ *
+ * Every probabilistic conclusion in III is typed by the SAME tetrachotomy that governs every other
+ * synthesized artifact (nous/nous_synth), applied to measure verbatim:
+ *   CANONICAL   -- an exact measure theorem the kernel checked (e.g. an exact marginal, a normalized pmf);
+ *   PROVISIONAL -- an estimate carrying its proved error interval as an oracle-pin (e.g. mc_certified);
+ *   GAP         -- budget spent, honest and resumable;
+ *   REFUTED     -- a contradictory or impossible measure.
+ * The federation wall and C-12 default-deny carry over unchanged: ONLY a CANONICAL measure crosses into the
+ * commons or to a peer; a PROVISIONAL is refused in any canonical context and usable in a gap-accepting one
+ * only with its pin.  A probabilistic belief never becomes certified truth except as a CANONICAL theorem.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  Composes nous/nous_synth (the tetrachotomy + the walls) -- the
+ * measure layer's typing IS the synthesis typing, one source of truth, no re-implementation.
+ */
+module numera_measure_status
+
+extern @abi(c-msvc-x64) fn nous_synth_classify(proof_checked: u8, certified_correct: u8, cost_optimal: u8, has_candidate: u8, saturated: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn nous_synth_federatable(status: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn nous_synth_provisional_usable(status: u8, has_oracle_pin: u8) -> u8 from "nous_synth.iii"
+
+/* classify a measure result into the tetrachotomy. */
+fn ms_classify(proof_checked: u8, certified: u8, optimal: u8, has_cand: u8, saturated: u8) -> u8 @export {
+    return nous_synth_classify(proof_checked, certified, optimal, has_cand, saturated)
+}
+
+/* the federation wall: only a CANONICAL measure crosses as an agreed value. */
+fn ms_federatable(status: u8) -> u8 @export { return nous_synth_federatable(status) }
+
+/* C-12 default-deny: a canonical context accepts only a CANONICAL measure. */
+fn ms_canonical_ok(status: u8) -> u8 @export { return nous_synth_canonical_ok(status) }
+
+/* a PROVISIONAL measure is usable in a gap-accepting context only with its proved-interval oracle-pin. */
+fn ms_provisional_usable(status: u8, pin: u8) -> u8 @export { return nous_synth_provisional_usable(status, pin) }

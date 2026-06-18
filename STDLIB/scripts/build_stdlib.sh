@@ -1240,6 +1240,17 @@ MODULES=(
     # paired with a PROVED concentration interval that CONTAINS the exact infer_exact value, tagged
     # PROVISIONAL (default-denied from canonical).  Composes sample_beacon + infer_exact + nous_synth.
     "numera/mc_certified"
+    # numera/belief_sheaf -- belief propagation as SHEAF GLUING (numera/sheaf): variable clusters are opens,
+    # local distributions are sections, the gluing condition IS marginal consistency on overlaps.  A
+    # consistent family glues to the unique joint; an inconsistent one is refused (no vacuous glue).
+    "numera/belief_sheaf"
+    # numera/bayes_exact -- exact Bayesian inference: prior x likelihood -> exact posterior over the exact
+    # marginal likelihood; the posteriors sum to one exactly (the normalization a float update violates).
+    "numera/bayes_exact"
+    # --- PHASE IV Layer 5: the measure tetrachotomy.  numera/measure_status types every probabilistic
+    # conclusion (CANONICAL/PROVISIONAL/GAP/REFUTED) via nous_synth; only a CANONICAL measure crosses, a
+    # PROVISIONAL is usable only with its proved-interval pin.  Composes nous_synth (no island).
+    "numera/measure_status"
 )
 
 PASS=0

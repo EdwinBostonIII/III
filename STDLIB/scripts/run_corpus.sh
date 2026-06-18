@@ -1334,6 +1334,9 @@ declare -A EXPECTED=(
     [1717_infer_exact]=99
     [1718_markov_exact]=99
     [1719_mc_certified]=99
+    [1720_belief_sheaf]=99
+    [1721_bayes_exact]=99
+    [1722_measure_status]=99
 )
 
 PASS=0

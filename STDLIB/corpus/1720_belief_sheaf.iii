@@ -1,0 +1,22 @@
+/* STDLIB/corpus/1720_belief_sheaf.iii
+ *
+ * Falsifier KAT for numera::belief_sheaf (III-PHASE4-PROBABILITY, Layer 4) -- belief propagation as sheaf
+ * gluing.  99 = every arm holds; 1..4 = the failing arm.  Independent oracle: numera/sheaf's content-
+ * addressed restriction-agreement (sh_check_glue) -- an inconsistent overlap cannot be vacuously glued.
+ *
+ *   (1) a CONSISTENT family (agreeing shared marginals) GLUES to the unique global joint.
+ *   (2) BITING: an INCONSISTENT family (disagreeing shared marginals) is REFUSED.
+ *   (3,4) the gluing verdict is deterministic.
+ */
+module corpus_1720_belief_sheaf
+
+extern @abi(c-msvc-x64) fn bs_consistent_glues() -> u8 from "belief_sheaf.iii"
+extern @abi(c-msvc-x64) fn bs_inconsistent_refused() -> u8 from "belief_sheaf.iii"
+
+fn main() -> u64 {
+    if bs_consistent_glues() != 1u8 { return 1u64 }       /* consistent -> glues */
+    if bs_inconsistent_refused() != 0u8 { return 2u64 }   /* inconsistent -> refused (biting) */
+    if bs_consistent_glues() != 1u8 { return 3u64 }       /* deterministic */
+    if bs_inconsistent_refused() != 0u8 { return 4u64 }
+    return 99u64
+}

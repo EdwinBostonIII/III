@@ -1,0 +1,40 @@
+/* STDLIB/corpus/1722_measure_status.iii
+ *
+ * Falsifier KAT for numera::measure_status (III-PHASE4-PROBABILITY, Layer 5) -- the measure tetrachotomy.
+ * 99 = every arm holds; 1..10 = the failing arm.  Independent oracle: nous_synth's tetrachotomy + walls --
+ * a budget-hit measure is never certified, and only a CANONICAL measure crosses.
+ *
+ *   (1) tetrachotomy: correct+optimal -> CANONICAL; correct, optimality deferred -> PROVISIONAL; a
+ *       budget-hit -> neither CANONICAL nor PROVISIONAL (a GAP).
+ *   (2) federation wall (biting): only CANONICAL federates.
+ *   (3) C-12 default-deny (biting): only CANONICAL crosses a canonical context.
+ *   (4) PROVISIONAL usable only with its oracle-pin (biting).
+ */
+module corpus_1722_measure_status
+
+extern @abi(c-msvc-x64) fn ms_classify(proof_checked: u8, certified: u8, optimal: u8, has_cand: u8, saturated: u8) -> u8 from "measure_status.iii"
+extern @abi(c-msvc-x64) fn ms_federatable(status: u8) -> u8 from "measure_status.iii"
+extern @abi(c-msvc-x64) fn ms_canonical_ok(status: u8) -> u8 from "measure_status.iii"
+extern @abi(c-msvc-x64) fn ms_provisional_usable(status: u8, pin: u8) -> u8 from "measure_status.iii"
+
+fn main() -> u64 {
+    /* (1) the tetrachotomy */
+    if ms_classify(1u8, 1u8, 1u8, 1u8, 1u8) != 0u8 { return 1u64 }   /* CANONICAL    */
+    if ms_classify(1u8, 1u8, 0u8, 1u8, 1u8) != 3u8 { return 2u64 }   /* PROVISIONAL  */
+    if ms_classify(0u8, 1u8, 1u8, 1u8, 0u8) == 0u8 { return 3u64 }   /* budget-hit NOT CANONICAL */
+    if ms_classify(0u8, 1u8, 1u8, 1u8, 0u8) == 3u8 { return 4u64 }   /* budget-hit NOT PROVISIONAL (a GAP) */
+
+    /* (2) federation wall: only CANONICAL federates */
+    if ms_federatable(0u8) != 1u8 { return 5u64 }
+    if ms_federatable(3u8) != 0u8 { return 6u64 }
+
+    /* (3) C-12 default-deny: only CANONICAL crosses */
+    if ms_canonical_ok(0u8) != 1u8 { return 7u64 }
+    if ms_canonical_ok(3u8) != 0u8 { return 8u64 }
+
+    /* (4) PROVISIONAL usable only with its oracle-pin */
+    if ms_provisional_usable(3u8, 1u8) != 1u8 { return 9u64 }
+    if ms_provisional_usable(3u8, 0u8) != 0u8 { return 10u64 }
+
+    return 99u64
+}

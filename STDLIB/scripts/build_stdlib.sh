@@ -838,6 +838,9 @@ MODULES=(
     "aether/sealed_box"
     "aether/replay_box"
     "aether/compute_box"
+    # aether/xii_sort_meter -- the R042 sort-penalty tier: charges an R042 site's geometric weight to the
+    # compute-box CPU meter, bounding adversarial owner-domain sorts.  Composes xii_rewrite + xii_canonicalise + compute_box.
+    "aether/xii_sort_meter"
     "aether/snapshot_box"
     "aether/sid_router"
     "aether/determinism_firewall"

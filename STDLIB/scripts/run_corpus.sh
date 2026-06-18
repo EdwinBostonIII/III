@@ -1365,6 +1365,8 @@ declare -A EXPECTED=(
     [1739_zk_rev]=99
     # Zk-Caps: a capability proven a valid merkle leaf (rights/expiry bound) without revealing cap id/parent.
     [1740_cap_zkp]=99
+    # R042 sort-penalty tier: a rewrite site's geometric cost charged to the CPU meter (bounds owner-domain sorts).
+    [1741_xii_sort_meter]=99
 )
 
 PASS=0

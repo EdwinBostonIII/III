@@ -1,0 +1,58 @@
+/* STDLIB/corpus/1741_xii_sort_meter.iii -- the R042 sort-penalty tier tied to the resource meter.
+ *
+ * aether/xii_sort_meter charges an R042 site's geometric sort-penalty (xii_canon_weight) to a compute
+ * box's CPU quota, so an adversarial owner-domain deep sort is BOUNDED.  99 = all arms; 1..5 = the arm.
+ *
+ *   (1) an out-of-order R042 site has a positive geometric sort-penalty.
+ *   (2) an already-sorted spine has NO penalty.
+ *   (3) BITING: a CPU budget below the penalty REFUSES the charge (the deep sort is bounded).
+ *   (4) ample budget charges + admits; (5) a non-R042 term charges nothing.
+ */
+module corpus_1741_xii_sort_meter
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn r042_penalty(t: u32) -> u32 from "xii_sort_meter.iii"
+extern @abi(c-msvc-x64) fn r042_charge(guest_cap: u64, sb_id: u64, t: u32) -> u8 from "xii_sort_meter.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cb_admit(guest_cap: u64, cap_set: u64, mem_cap: u64, cpu_cap: u64) -> u64 from "compute_box.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* out-of-order R042 site: F(0x200, F(0x100, 0x300)), sa=0x200 > sb=0x100 */
+    let f2 : u32 = xii_term_make_basis(0u8, 0x100u32)
+    let z  : u32 = xii_term_make_basis(0u8, 0x300u32)
+    let inner : u32 = xii_term_make_fusion2(18u8, f2, z)
+    let f1 : u32 = xii_term_make_basis(0u8, 0x200u32)
+    let t  : u32 = xii_term_make_fusion2(18u8, f1, inner)
+
+    /* (1) the R042 site has a positive geometric sort-penalty */
+    let p : u32 = r042_penalty(t)
+    if p == 0u32 { return 1u64 }
+
+    /* (2) an already-sorted spine F(0x100, F(0x200,0x300)) has NO penalty */
+    let g2 : u32 = xii_term_make_basis(0u8, 0x200u32)
+    let gz : u32 = xii_term_make_basis(0u8, 0x300u32)
+    let ginner : u32 = xii_term_make_fusion2(18u8, g2, gz)
+    let g1 : u32 = xii_term_make_basis(0u8, 0x100u32)
+    let gt : u32 = xii_term_make_fusion2(18u8, g1, ginner)
+    if r042_penalty(gt) != 0u32 { return 2u64 }
+
+    let env : u64 = cap_env_init()
+    let guest : u64 = cap_attenuate(env, 0x5u64, 0u64)   /* disk|compute */
+
+    /* (3) BITING: a CPU budget BELOW the penalty -> the sort is refused (the owner-domain attack is bounded) */
+    let sb_small : u64 = cb_admit(guest, 0x5u64, 1000000u64, (p as u64) - 1u64)
+    if r042_charge(guest, sb_small, t) != 0u8 { return 3u64 }
+
+    /* (4) ample budget -> the sort is charged + admitted */
+    let sb_big : u64 = cb_admit(guest, 0x5u64, 1000000u64, (p as u64) + 100u64)
+    if r042_charge(guest, sb_big, t) != 1u8 { return 4u64 }
+
+    /* (5) a non-R042 (sorted) term charges nothing */
+    if r042_charge(guest, sb_big, gt) != 1u8 { return 5u64 }
+
+    return 99u64
+}

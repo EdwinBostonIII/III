@@ -94,6 +94,21 @@ def analyze(node_names, edges):
     impact = [len(_bfs(in_adj, i) - {i}) for i in range(N)]
     depends = [len(_bfs(out_adj, i) - {i}) for i in range(N)]
 
+    # architectural strata -- same fixpoint relaxation as self_atlas (clamped at N for cycles)
+    cap = N
+    level = [0] * N
+    rounds = 0
+    ch = True
+    while ch and rounds < N:
+        ch = False
+        for (a, b) in eids:
+            nv = cap if level[b] + 1 > cap else level[b] + 1
+            if level[a] < nv:
+                level[a] = nv
+                ch = True
+        rounds += 1
+    max_level = max((l for l in level if l < cap), default=0)
+
     redundant = []
     for (a, b) in eids:
         if b in _bfs(out_adj, a, ban=(a, b)):
@@ -119,6 +134,7 @@ def analyze(node_names, edges):
         "emergence": (sum(impact) * 1000) // len(edges) if edges else 0,
         "max_depends": max(depends) if depends else 0,
         "argmax_depends": depends.index(max(depends)) if depends else 0xFFFFFFFF,
+        "max_level": max_level,
     }
 
 
@@ -191,6 +207,7 @@ def emit(M):
     P.append('fn satlas_data_expect_top_hub_impact() -> u32 @export { return %du32 }' % M["top_hub_impact"])
     P.append('fn satlas_data_expect_emergence()     -> u32 @export { return %du32 }' % M["emergence"])
     P.append('fn satlas_data_expect_max_depends()   -> u32 @export { return %du32 }' % M["max_depends"])
+    P.append('fn satlas_data_expect_max_level()     -> u32 @export { return %du32 }' % M["max_level"])
     P.append('')
 
     with open(OUT, "w", encoding="ascii", newline="\n") as f:
@@ -217,6 +234,7 @@ def write_report(M):
     R.append("    %s  (fan-in %d)" % (nm(M["argmax_fanin"]), M["max_fanin"]))
     R.append("DEEPEST INTEGRATOR (transitively uses the most of III -- emergence concentrates here):")
     R.append("    %s  (depends on %d)" % (nm(M["argmax_depends"]), M["max_depends"]))
+    R.append("ARCHITECTURAL HEIGHT (deepest acyclic dependency chain): %d strata" % M["max_level"])
     R.append("")
     R.append("CYCLE CORES (%d modules in a feedback cycle):" % len(M["cycle_nodes"]))
     R.append("    " + ", ".join(nm(i) for i in M["cycle_nodes"]) if M["cycle_nodes"] else "    (none)")

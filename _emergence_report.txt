@@ -1,18 +1,19 @@
 ==============================================================================
 III EMERGENCE DASHBOARD  --  self-model of STDLIB/iii (generated, verified)
 ==============================================================================
-nodes ............. 592
-edges ............. 1171
-coupling .......... 1978  (avg out-degree x1000)
-emergence index ... 5040  (sum of blast-radii / edges x1000 -- the C-A-B leftover:
+nodes ............. 593
+edges ............. 1174
+coupling .......... 1979  (avg out-degree x1000)
+emergence index ... 5041  (sum of blast-radii / edges x1000 -- the C-A-B leftover:
                        transitive consequence the wiring carries beyond its edges)
 
 STEEPEST HUB (largest blast radius -- changing it ripples furthest):
-    cpufeat  (impact 353)
+    cpufeat  (impact 354)
 MOST DEPENDED-UPON (largest direct fan-in):
     cad  (fan-in 58)
 DEEPEST INTEGRATOR (transitively uses the most of III -- emergence concentrates here):
     charter_terminal  (depends on 86)
+ARCHITECTURAL HEIGHT (deepest acyclic dependency chain): 15 strata
 
 CYCLE CORES (7 modules in a feedback cycle):
     bv_commons, ccl, cg_autocatalyst, constitution, sov_isa, temporal_logic, typecheck

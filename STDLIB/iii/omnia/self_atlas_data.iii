@@ -7,7 +7,7 @@
  * the lens signals computed at generation time as satlas_data_expect_*(); corpus 1669
  * asserts the in-III lens reproduces them exactly (renderer pinned to the authority).
  *
- * 592 nodes, 1171 edges.  Regenerate: python STDLIB/scripts/gen_self_atlas.py
+ * 593 nodes, 1174 edges.  Regenerate: python STDLIB/scripts/gen_self_atlas.py
  *
  * Hexad: kind_essence (a faithful self-image).  Ring: R0.  K: 1.00.  NIH: self_atlas only.
  * Discipline: W2 (<=4 params), W13 (0 locals), W14/W15 (straight-line calls, no loops). */
@@ -457,6 +457,7 @@ fn satlas_data_nodes_1() -> i32 {
     satlas_intern("segment_tree", 12u64)
     satlas_intern("self_atlas", 10u64)
     satlas_intern("self_atlas_lens", 15u64)
+    satlas_intern("self_cartographer", 17u64)
     satlas_intern("self_engine", 11u64)
     satlas_intern("self_reformatter", 16u64)
     satlas_intern("semver", 6u64)
@@ -502,11 +503,11 @@ fn satlas_data_nodes_1() -> i32 {
     satlas_intern("theorem_commons", 15u64)
     satlas_intern("threshold_vault", 15u64)
     satlas_intern("tiebreak", 8u64)
-    satlas_intern("timing_safe", 11u64)
     return 0i32
 }
 
 fn satlas_data_nodes_2() -> i32 {
+    satlas_intern("timing_safe", 11u64)
     satlas_intern("topology_atlas", 14u64)
     satlas_intern("tp_asm_to_pe", 12u64)
     satlas_intern("tp_ast_bin_to_iii", 17u64)
@@ -1387,6 +1388,7 @@ fn satlas_data_edges_3() -> i32 {
     satlas_link("ripple_extract", 14u64, "commit_gate", 11u64)
     satlas_link("ripple_extract", 14u64, "congruence", 10u64)
     satlas_link("ripple_extract", 14u64, "ripple_metric", 13u64)
+    satlas_link("ripple_extract", 14u64, "self_atlas", 10u64)
     satlas_link("ripple_field", 12u64, "xii_hj", 6u64)
     satlas_link("ripple_field", 12u64, "xii_savings", 11u64)
     satlas_link("ripple_journal", 14u64, "ripple", 6u64)
@@ -1450,6 +1452,8 @@ fn satlas_data_edges_3() -> i32 {
     satlas_link("sealed_channel", 14u64, "x25519", 6u64)
     satlas_link("self_atlas", 10u64, "mhash", 5u64)
     satlas_link("self_atlas_lens", 15u64, "self_atlas", 10u64)
+    satlas_link("self_cartographer", 17u64, "fs", 2u64)
+    satlas_link("self_cartographer", 17u64, "self_atlas", 10u64)
     satlas_link("self_engine", 11u64, "golden_shift", 12u64)
     satlas_link("self_engine", 11u64, "k0_referee", 10u64)
     satlas_link("self_reformatter", 16u64, "governance", 10u64)
@@ -1592,13 +1596,13 @@ fn satlas_data_edges_3() -> i32 {
     satlas_link("transform_patterns", 18u64, "tp_babel_json_cbor", 18u64)
     satlas_link("transform_patterns", 18u64, "tp_babel_json_to_ast", 20u64)
     satlas_link("transform_patterns", 18u64, "tp_babel_json_to_iii", 20u64)
-    satlas_link("transform_patterns", 18u64, "tp_babel_text", 13u64)
-    satlas_link("transform_patterns", 18u64, "tp_babel_text_back", 18u64)
-    satlas_link("transform_patterns", 18u64, "tp_c99hdr_to_iii", 16u64)
     return 0i32
 }
 
 fn satlas_data_edges_4() -> i32 {
+    satlas_link("transform_patterns", 18u64, "tp_babel_text", 13u64)
+    satlas_link("transform_patterns", 18u64, "tp_babel_text_back", 18u64)
+    satlas_link("transform_patterns", 18u64, "tp_c99hdr_to_iii", 16u64)
     satlas_link("transform_patterns", 18u64, "tp_iii_hex", 10u64)
     satlas_link("transform_patterns", 18u64, "tp_iii_to_asm", 13u64)
     satlas_link("transform_patterns", 18u64, "tp_iii_to_ast_bin", 17u64)
@@ -1827,17 +1831,18 @@ fn satlas_data_load() -> i32 @export {
     return 0i32
 }
 
-fn satlas_data_node_count() -> u32 @export { return 592u32 }
-fn satlas_data_edge_count() -> u32 @export { return 1171u32 }
+fn satlas_data_node_count() -> u32 @export { return 593u32 }
+fn satlas_data_edge_count() -> u32 @export { return 1174u32 }
 
 /* Lens signals computed at generation time -- corpus 1669 pins the in-III lens to these. */
-fn satlas_data_expect_coupling()      -> u32 @export { return 1978u32 }
+fn satlas_data_expect_coupling()      -> u32 @export { return 1979u32 }
 fn satlas_data_expect_orphans()       -> u32 @export { return 71u32 }
-fn satlas_data_expect_roots()         -> u32 @export { return 255u32 }
+fn satlas_data_expect_roots()         -> u32 @export { return 256u32 }
 fn satlas_data_expect_leaves()        -> u32 @export { return 156u32 }
 fn satlas_data_expect_cycle_nodes()   -> u32 @export { return 7u32 }
 fn satlas_data_expect_redundant()     -> u32 @export { return 427u32 }
 fn satlas_data_expect_max_fanin()     -> u32 @export { return 58u32 }
-fn satlas_data_expect_top_hub_impact() -> u32 @export { return 353u32 }
-fn satlas_data_expect_emergence()     -> u32 @export { return 5040u32 }
+fn satlas_data_expect_top_hub_impact() -> u32 @export { return 354u32 }
+fn satlas_data_expect_emergence()     -> u32 @export { return 5041u32 }
 fn satlas_data_expect_max_depends()   -> u32 @export { return 86u32 }
+fn satlas_data_expect_max_level()     -> u32 @export { return 15u32 }

@@ -41,6 +41,7 @@ extern @abi(c-msvc-x64) fn satlas_in_cycle(n: u32) -> u8 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_remove_safe(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_impact_count(n: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_depends_count(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_level(n: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_steepest_hub() -> u32 from "self_atlas.iii"
 
 const SALENS_SENT   : u32 = 0xFFFFFFFFu32
@@ -234,4 +235,20 @@ fn salens_emergence_index() -> u32 @export {
         i = i + 1u32
     }
     return ((acc * 1000u64) / (m as u64)) as u32
+}
+
+/* ARCHITECTURAL HEIGHT: the deepest acyclic dependency chain in III -- how many strata deep the
+ * lattice runs (cyclic nodes, which saturate at node_count, are excluded). */
+fn salens_max_level() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut best : u32 = 0u32
+    while i < n {
+        let lv : u32 = satlas_level(i)
+        if lv < n {
+            if lv > best { best = lv }
+        }
+        i = i + 1u32
+    }
+    return best
 }

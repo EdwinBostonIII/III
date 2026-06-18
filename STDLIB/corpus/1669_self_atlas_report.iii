@@ -21,6 +21,7 @@ extern @abi(c-msvc-x64) fn satlas_data_expect_max_fanin() -> u32 from "self_atla
 extern @abi(c-msvc-x64) fn satlas_data_expect_top_hub_impact() -> u32 from "self_atlas_data.iii"
 extern @abi(c-msvc-x64) fn satlas_data_expect_emergence() -> u32 from "self_atlas_data.iii"
 extern @abi(c-msvc-x64) fn satlas_data_expect_max_depends() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_max_level() -> u32 from "self_atlas_data.iii"
 
 extern @abi(c-msvc-x64) fn salens_coupling() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_count_orphans() -> u32 from "self_atlas_lens.iii"
@@ -32,6 +33,7 @@ extern @abi(c-msvc-x64) fn salens_max_fanin() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_top_hub_impact() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_emergence_index() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_max_depends() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_level() -> u32 from "self_atlas_lens.iii"
 
 fn main() -> u64 {
     satlas_data_load()
@@ -46,6 +48,7 @@ fn main() -> u64 {
     if salens_top_hub_impact() != satlas_data_expect_top_hub_impact() { return 8u64 }
     if salens_emergence_index() != satlas_data_expect_emergence() { return 9u64 }
     if salens_max_depends() != satlas_data_expect_max_depends() { return 10u64 }
+    if salens_max_level() != satlas_data_expect_max_level() { return 11u64 }
 
     return 99u64
 }

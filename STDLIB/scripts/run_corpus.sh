@@ -1297,6 +1297,8 @@ declare -A EXPECTED=(
     [1666_self_atlas]=99
     [1667_self_atlas_real]=99
     [1668_self_atlas_lens]=99
+    [1669_self_atlas_report]=99
+    [1670_self_cartographer]=99
 )
 
 PASS=0

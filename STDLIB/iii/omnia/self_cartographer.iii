@@ -1,0 +1,200 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\self_cartographer.iii
+ *
+ * III STDLIB - omnia::self_cartographer  --  III maps ITSELF, natively, in III.
+ *
+ * The cartographer was an external tool; the self-model (omnia/self_atlas) made the MAP native;
+ * this makes the MAPPING native too.  scarto_map walks a source tree with aether/fs's directory
+ * organ (fs_dir_open/read/name/is_dir + fs_open/read), reads every .iii module, parses its
+ * `extern ... from "X.iii"` dependency edges, and populates omnia/self_atlas directly -- so III
+ * builds its own self-model by reading its own source, with NO external generator and NO other
+ * language or file format in the loop.  Strict NIH: aether/fs + omnia/self_atlas only.
+ *
+ *   scarto_map(cap, root_ptr, root_len) -> u32   walk root recursively, populate self_atlas,
+ *                                                return the node count.  cap needs FS READ.
+ *
+ * The walk is iterative (an explicit module-scope directory stack -- W15, no recursion) and
+ * keeps at most ONE directory search open at a time (subdirectories are PUSHED, not opened, so
+ * a deep tree never exhausts the 64-slot handle table -- the fs.iii read-all-then-recurse
+ * discipline).  Files are read into a single 256 KiB scratch and scanned byte-wise for the
+ * 6-byte token `from "`; the quoted target (minus its .iii suffix) is the edge head.
+ *
+ * Hexad: kind_passage (it reaches across the tree) + kind_essence (it builds a self-image).
+ * Ring: R0.  K: 0.98 (filesystem-dependent -- a tool, not the deterministic core).  Discipline:
+ * W2 (<=4 params), W4 (module-scope buffers), W8 (static bounds), W13 (<=20 locals), W14/W15
+ * (sentinel-flag loops, explicit stack, no recursion).  ASCII only.  Single-threaded scratch. */
+
+module omnia_self_cartographer
+
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_size(h: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_open(cap: u64, path: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_read(h: u64) -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_name_len() -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_is_dir() -> u8 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_dir_close(h: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_intern(name_ptr: u64, len: u64) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+
+const SCARTO_MODE_READ : u32 = 1u32
+const SCARTO_FBUF_MAX  : u64 = 262144u64
+const SCARTO_DSLOT     : u64 = 256u64
+const SCARTO_DMAX      : u32 = 128u32
+const SCARTO_PATHMAX   : u64 = 255u64
+const SCARTO_MASK      : u64 = 0xFFFFFFFFu64
+
+var SCARTO_FBUF   : [u8; 262144]
+var SCARTO_DSTACK : [u8; 32768]                 /* 128 dir paths * 256 bytes */
+var SCARTO_DLEN   : [u32; 128]
+var SCARTO_SP     : u32 = 0u32
+var SCARTO_PATH   : [u8; 512]                    /* child-path scratch        */
+var SCARTO_NAME   : [u8; 256]                    /* basename scratch          */
+
+/* ---- small byte helpers ---------------------------------------------- */
+
+fn scarto_copy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    return n
+}
+
+/* 1 if the entry name is "." or "..". */
+fn scarto_is_dot(name: u64, len: u64) -> u8 {
+    let p : *u8 = name as *u8
+    if len == 1u64 { if p[0u64] == 0x2Eu8 { return 1u8 } }
+    if len == 2u64 { if p[0u64] == 0x2Eu8 { if p[1u64] == 0x2Eu8 { return 1u8 } } }
+    return 0u8
+}
+
+/* 1 if name ends in ".iii". */
+fn scarto_ends_iii(name: u64, len: u64) -> u8 {
+    if len < 5u64 { return 0u8 }                 /* need at least "x.iii" */
+    let p : *u8 = name as *u8
+    if p[len - 4u64] != 0x2Eu8 { return 0u8 }
+    if p[len - 3u64] != 0x69u8 { return 0u8 }
+    if p[len - 2u64] != 0x69u8 { return 0u8 }
+    if p[len - 1u64] != 0x69u8 { return 0u8 }
+    return 1u8
+}
+
+/* Build SCARTO_PATH = dir + "/" + name + NUL; return total length, or 0 if it would overflow. */
+fn scarto_join(dbase: u64, dlen: u64, nm: u64, ln: u64) -> u64 {
+    let total : u64 = dlen + 1u64 + ln
+    if total > SCARTO_PATHMAX { return 0u64 }
+    let dst : u64 = (&SCARTO_PATH as u64)
+    scarto_copy(dst, dbase, dlen)
+    let p : *u8 = dst as *u8
+    p[dlen] = 0x2Fu8                              /* '/' */
+    scarto_copy(dst + dlen + 1u64, nm, ln)
+    p[total] = 0u8
+    return total
+}
+
+/* Push a NUL-terminated directory path onto the work stack. */
+fn scarto_dpush(ptr: u64, len: u64) -> i32 {
+    if SCARTO_SP >= SCARTO_DMAX { return -1i32 }
+    if len > (SCARTO_DSLOT - 1u64) { return -1i32 }
+    let slot : u64 = (&SCARTO_DSTACK as u64) + ((SCARTO_SP as u64) * SCARTO_DSLOT)
+    scarto_copy(slot, ptr, len)
+    let p : *u8 = slot as *u8
+    p[len] = 0u8
+    SCARTO_DLEN[(SCARTO_SP as u64) & SCARTO_MASK] = len as u32
+    SCARTO_SP = SCARTO_SP + 1u32
+    return 0i32
+}
+
+/* Scan a freshly-read file buffer for `from "X.iii"` edges; link base -> X for each. */
+fn scarto_parse(base_ptr: u64, base_len: u64, got: u64) -> i32 {
+    satlas_intern(base_ptr, base_len)
+    let fb : *u8 = (&SCARTO_FBUF as u64) as *u8
+    let g : u64 = got
+    let mut i : u64 = 0u64
+    while i + 6u64 <= g {
+        let mut hit : u8 = 1u8
+        if fb[i] != 0x66u8 { hit = 0u8 }             /* f */
+        if fb[i + 1u64] != 0x72u8 { hit = 0u8 }      /* r */
+        if fb[i + 2u64] != 0x6Fu8 { hit = 0u8 }      /* o */
+        if fb[i + 3u64] != 0x6Du8 { hit = 0u8 }      /* m */
+        if fb[i + 4u64] != 0x20u8 { hit = 0u8 }      /* space */
+        if fb[i + 5u64] != 0x22u8 { hit = 0u8 }      /* " */
+        if hit == 0u8 {
+            i = i + 1u64
+        } else {
+            let start : u64 = i + 6u64
+            let mut j : u64 = start
+            let mut qend : u64 = 0u64
+            let mut sc : u8 = 1u8
+            while sc == 1u8 {
+                if j >= g { sc = 0u8 }
+                else {
+                    if fb[j] == 0x22u8 { qend = j  sc = 0u8 }
+                    else { j = j + 1u64 }
+                }
+            }
+            if qend > (start + 4u64) {
+                let nlen : u64 = (qend - start) - 4u64
+                satlas_link(base_ptr, base_len, (&SCARTO_FBUF as u64) + start, nlen)
+                i = qend + 1u64
+            } else {
+                i = start
+            }
+        }
+    }
+    return 0i32
+}
+
+/* Read one .iii file and feed it to the parser. */
+fn scarto_process(cap: u64, path_ptr: u64, base_ptr: u64, base_len: u64) -> i32 {
+    let h : u64 = fs_open(cap, path_ptr, SCARTO_MODE_READ)
+    if h == 0u64 { return -1i32 }
+    let sz : u64 = fs_size(h)
+    let mut rd : u64 = sz
+    if rd > SCARTO_FBUF_MAX { rd = SCARTO_FBUF_MAX }
+    let got : u64 = fs_read(h, (&SCARTO_FBUF as u64), rd)
+    fs_close(h)
+    scarto_parse(base_ptr, base_len, got)
+    return 0i32
+}
+
+/* Walk root recursively, populate self_atlas from every .iii module's `from` edges, and
+ * return the resulting node count.  cap must carry FS READ. */
+fn scarto_map(cap: u64, root_ptr: u64, root_len: u64) -> u32 @export {
+    satlas_reset()
+    SCARTO_SP = 0u32
+    scarto_dpush(root_ptr, root_len)
+    while SCARTO_SP > 0u32 {
+        SCARTO_SP = SCARTO_SP - 1u32
+        let dbase : u64 = (&SCARTO_DSTACK as u64) + ((SCARTO_SP as u64) * SCARTO_DSLOT)
+        let dlen : u64 = SCARTO_DLEN[(SCARTO_SP as u64) & SCARTO_MASK] as u64
+        let dh : u64 = fs_dir_open(cap, dbase)
+        if dh != 0u64 {
+            while fs_dir_read(dh) == 1u8 {
+                let nm : u64 = fs_dir_name()
+                let ln : u64 = fs_dir_name_len()
+                if scarto_is_dot(nm, ln) == 0u8 {
+                    let isd : u8 = fs_dir_is_dir()
+                    let clen : u64 = scarto_join(dbase, dlen, nm, ln)
+                    if clen > 0u64 {
+                        if isd == 1u8 {
+                            scarto_dpush((&SCARTO_PATH as u64), clen)
+                        } else {
+                            if scarto_ends_iii(nm, ln) == 1u8 {
+                                scarto_copy((&SCARTO_NAME as u64), nm, ln - 4u64)
+                                scarto_process(cap, (&SCARTO_PATH as u64), (&SCARTO_NAME as u64), ln - 4u64)
+                            }
+                        }
+                    }
+                }
+            }
+            fs_dir_close(dh)
+        }
+    }
+    return satlas_node_count()
+}

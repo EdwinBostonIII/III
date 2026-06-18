@@ -1088,6 +1088,11 @@ MODULES=(
     # model -- orphans, cycle-cores, redundant-dependency refactor proposals, coupling, the
     # steepest hub.  Externs only self_atlas (above); compiler-unreferenced -> LIBNATIVE; last.
     "omnia/self_atlas_lens"
+    # III maps ITSELF in III (omnia::self_cartographer): walks a source tree via aether/fs,
+    # parses each module from-target dependency edges and populates self_atlas -- the native
+    # replacement for the external graph generator.  Externs fs + self_atlas (above);
+    # compiler-unreferenced -> LIBNATIVE only; appended last.
+    "omnia/self_cartographer"
 )
 
 PASS=0

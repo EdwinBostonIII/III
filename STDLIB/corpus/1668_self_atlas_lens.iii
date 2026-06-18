@@ -21,6 +21,8 @@ module corpus_1668
 extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_find(name_ptr: u64, len: u64) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_level(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
 
 extern @abi(c-msvc-x64) fn salens_coupling() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_count_orphans() -> u32 from "self_atlas_lens.iii"
@@ -35,6 +37,7 @@ extern @abi(c-msvc-x64) fn salens_argmax_fanin() -> u32 from "self_atlas_lens.ii
 extern @abi(c-msvc-x64) fn salens_max_fanin() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_deepest_integrator() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_max_depends() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_level() -> u32 from "self_atlas_lens.iii"
 
 var T_A : [u8; 1]
 var T_B : [u8; 1]
@@ -69,6 +72,7 @@ fn main() -> u64 {
     let a : u32 = id1(97u32)
     let d : u32 = id1(100u32)
     let e : u32 = id1(101u32)
+    let x : u32 = id1(120u32)
 
     if salens_coupling() != 1125u32 { return 1u64 }
     if salens_count_orphans() != 0u32 { return 2u64 }
@@ -87,6 +91,12 @@ fn main() -> u64 {
     if salens_max_fanin() != 3u32 { return 13u64 }
     if salens_max_depends() != 4u32 { return 14u64 }
     if salens_deepest_integrator() != a { return 15u64 }
+
+    if satlas_level(e) != 0u32 { return 16u64 }
+    if satlas_level(d) != 1u32 { return 17u64 }
+    if satlas_level(a) != 3u32 { return 18u64 }
+    if satlas_level(x) != satlas_node_count() { return 19u64 }
+    if salens_max_level() != 3u32 { return 20u64 }
 
     return 99u64
 }

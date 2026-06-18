@@ -75,6 +75,12 @@ var SATLAS_QUEUE  : [u32; 4096]
 var SATLAS_EXF    : u32 = 0xFFFFFFFFu32         /* BFS edge-exclusion: from (SENT = disabled) */
 var SATLAS_EXT    : u32 = 0xFFFFFFFFu32         /* BFS edge-exclusion: to                     */
 
+/* Architectural strata: SATLAS_LEVEL[n] = longest dependency chain from n to a leaf (its depth
+ * in III's lattice).  Cyclic nodes saturate to NCOUNT (the sentinel "unbounded / in a cycle").
+ * Lazily recomputed (a single fixpoint relaxation) on first query after the graph changes. */
+var SATLAS_LEVEL  : [u32; 2048]
+var SATLAS_LVL_DIRTY : u8 = 1u8
+
 /* Commit scratch. */
 var SATLAS_CBUF   : [u8; 8]
 var SATLAS_DOM    : [u8; 16]                    /* "omnia/self_atlas" */
@@ -117,6 +123,7 @@ fn satlas_reset() -> i32 @export {
     SATLAS_ECOUNT = 0u32
     SATLAS_EXF = SATLAS_SENT
     SATLAS_EXT = SATLAS_SENT
+    SATLAS_LVL_DIRTY = 1u8
     return SATLAS_OK
 }
 
@@ -178,6 +185,7 @@ fn satlas_add_edge(src: u32, tgt: u32) -> i32 @export {
     SATLAS_EFROM[nb] = a
     SATLAS_ETO[nb] = b
     SATLAS_ECOUNT = SATLAS_ECOUNT + 1u32
+    SATLAS_LVL_DIRTY = 1u8
     return SATLAS_OK
 }
 
@@ -373,6 +381,52 @@ fn satlas_depends_count(n: u32) -> u32 @export {
     let c : u32 = satlas_bfs(nn, 0u8)
     if SATLAS_SEEN[(nn as u64) & SATLAS_MASK64] == 1u8 { return c - 1u32 }
     return c
+}
+
+/* Recompute the architectural strata by fixpoint relaxation: level[a] = max(level[a],
+ * level[b]+1) over every edge a->b, clamped to NCOUNT.  A DAG converges in <= longest-chain
+ * rounds; cyclic nodes never converge and are stopped + clamped at NCOUNT after NCOUNT rounds
+ * (the "unbounded / in a cycle" sentinel).  No recursion (W15); O(rounds * E). */
+fn satlas_ensure_levels() -> i32 {
+    if SATLAS_LVL_DIRTY == 0u8 { return SATLAS_OK }
+    let n : u32 = SATLAS_NCOUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        SATLAS_LEVEL[(i as u64) & SATLAS_MASK64] = 0u32
+        i = i + 1u32
+    }
+    let mut round : u32 = 0u32
+    let mut changed : u8 = 1u8
+    while changed == 1u8 {
+        changed = 0u8
+        if round < n {
+            let mut e : u32 = 0u32
+            while e < SATLAS_ECOUNT {
+                let eb : u64 = (e as u64) & SATLAS_MASK64
+                let a : u32 = SATLAS_EFROM[eb]
+                let b : u32 = SATLAS_ETO[eb]
+                let mut nv : u32 = SATLAS_LEVEL[(b as u64) & SATLAS_MASK64] + 1u32
+                if nv > n { nv = n }
+                if SATLAS_LEVEL[(a as u64) & SATLAS_MASK64] < nv {
+                    SATLAS_LEVEL[(a as u64) & SATLAS_MASK64] = nv
+                    changed = 1u8
+                }
+                e = e + 1u32
+            }
+            round = round + 1u32
+        }
+    }
+    SATLAS_LVL_DIRTY = 0u8
+    return SATLAS_OK
+}
+
+/* Architectural stratum of n: the longest dependency chain from n down to a leaf (depth in
+ * III's lattice).  A leaf is 0; a node returning NCOUNT is cyclic (unbounded depth). */
+fn satlas_level(n: u32) -> u32 @export {
+    let nn : u32 = n
+    if nn >= SATLAS_NCOUNT { return 0u32 }
+    satlas_ensure_levels()
+    return SATLAS_LEVEL[(nn as u64) & SATLAS_MASK64]
 }
 
 /* Would adding the dependency a->b create a directed cycle? (== b already reaches a). */

@@ -1,0 +1,73 @@
+/* STDLIB/corpus/1748_autonomous_invention_demo.iii -- III INVENTS, PROVES, ADOPTS, AND SELF-IMPROVES.
+ *
+ * A live, system-wide demonstration that III autonomously produces genuinely-NEW, kernel-proven artifacts
+ * and extends ITSELF with them -- unassisted, deterministic, the kernel the sole arbiter.  Honest boundary:
+ * III discovers WITHIN fixed, human-designed search spaces (it does not invent the search space); every
+ * admitted artifact is kernel/SAT-proven; the final live COMMIT stays apprentice-gated (the charter).
+ * 99 = the whole loop ran and produced proven-new output; 1..10 = the stage that failed.
+ *
+ *   DISCOVER  : from EMPTY registries, autonomously enumerate + PROVE new algebraic laws (strength
+ *               reduction via BV64, mixed bitwise identities via Tseitin+CDCL UNSAT at 4 widths, shift
+ *               combining) -- each count > 0 is a law III proved that was not hand-listed.
+ *   RE-EARN   : the seals are re-proven (never trusted) -- the volatile re-derive contract.
+ *   ADOPT     : the optimizer adopts the discovered shift laws into its OWN live rewrite set (re-proof-gated).
+ *   SYNTHESIZE: an O(n)->O(1) algorithm is synthesized + PROVEN; an off-by-one leap is REFUTED.
+ *   SELF-LOOP : the autonomous self-improvement cycle hash-chains a tamper-evident ledger; the root EVOLVES.
+ */
+module corpus_1748_autonomous_invention_demo
+
+extern @abi(c-msvc-x64) fn cga_bv_discover(max_exp: u32, budget: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_discover(budget: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_shift_discover(g: u32, budget: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_verify_all() -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_shift_verify_all() -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn sov_isa_adopt_shift_dream() -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn asyn_synthesize_sum(prop: u32, maxn: u32) -> u32 from "algo_synth.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ag_cycle(cap: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_commit(cap: u64, sig: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_ledger_root(out_32: u64) -> i32 from "autogenesis.iii"
+
+var L1 : [u8; 32]
+var L2 : [u8; 32]
+
+fn main() -> u64 {
+    /* === DISCOVER: III autonomously proves NEW laws from empty registries === */
+    let bv : u32 = cga_bv_discover(8u32, 1u32)
+    if bv == 0u32 { return 1u64 }
+    if cga_bv_count() != bv { return 2u64 }
+    let mx : u32 = cga_mixed_discover(1u32)
+    if mx == 0u32 { return 3u64 }
+    let sh : u32 = cga_shift_discover(6u32, 1u32)
+    if sh == 0u32 { return 4u64 }
+
+    /* === RE-EARN: the seals are re-proven, never trusted === */
+    if cga_mixed_verify_all() != 1u8 { return 5u64 }
+    if cga_shift_verify_all() != 1u8 { return 6u64 }
+
+    /* === ADOPT: the optimizer extends its OWN rule set with the discovered shift laws === */
+    if sov_isa_adopt_shift_dream() == 0u32 { return 7u64 }
+
+    /* === SYNTHESIZE: a cheaper algorithm, proven; a wrong leap, refuted === */
+    if asyn_synthesize_sum(1u32, 2000u32) != 1u32 { return 8u64 }   /* O(n) -> O(1), PROVEN */
+    if asyn_synthesize_sum(2u32, 2000u32) != 0u32 { return 9u64 }   /* off-by-one -> REFUTED */
+
+    /* === SELF-LOOP: the autonomous cycle hash-chains a tamper-evident ledger; the root EVOLVES === */
+    let env : u64 = cap_env_init()
+    let cap_auto : u64 = cap_attenuate(env, 0x80000u64, 0u64)       /* CAP_RIGHT_AUTOGENESIS */
+    let cap_commit : u64 = cap_attenuate(env, 0x180000u64, 0u64)    /* + AUTOGENESIS_COMMIT (apprentice gate) */
+    ag_cycle(cap_auto)
+    ag_ledger_root((&L1 as u64))
+    ag_commit(cap_commit, 0u64)
+    ag_cycle(cap_auto)
+    ag_ledger_root((&L2 as u64))
+    ag_commit(cap_commit, 0u64)
+    let mut diff : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if L1[i] != L2[i] { diff = 1u8 }  i = i + 1u64 }
+    if diff != 1u8 { return 10u64 }
+
+    return 99u64
+}

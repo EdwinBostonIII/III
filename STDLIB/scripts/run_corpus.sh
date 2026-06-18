@@ -1379,6 +1379,8 @@ declare -A EXPECTED=(
     [1746_intent_synthesis_attest]=99
     # intent-to-execution e-graph lowering: a resolved intent enters the optimizer's equality-saturation pipeline.
     [1747_intent_egraph_lower]=99
+    # III invents, proves, adopts, and self-improves -- a live system-wide autonomous-invention demonstration.
+    [1748_autonomous_invention_demo]=99
 )
 
 PASS=0

@@ -1,0 +1,84 @@
+/* STDLIB/iii/numera/primweb.iii -- THE PRIMITIVE SPIDERWEB: proven mathematical relations between III's own
+ * NIH crypto building-blocks, in ONE bitvector universe.
+ *
+ * These are NOT new primitives -- they are CONNECTIVE TISSUE.  Each "strand" is a kernel/SAT-proven relation
+ * (equivalence, shared-core, or a structural property) ABOUT primitives III already implements (chacha20,
+ * blake2s, ...), proven on the judge III already has (numera/bv_bits, the Tseitin+CDCL bit-blast miter),
+ * and namable as New Math (numera/present).  The grievance "borrowed primitives" is answered by re-PROVING
+ * each as III's own object and exhibiting the proven web that ties them together.
+ *
+ * The universe is real and bounded: every primitive bit-blasts to the one functionally-complete NAND
+ * substrate, and the spiderweb is the proven-relation graph ABOVE that floor.  Honest limit: WHOLE-primitive
+ * equivalence is SAT-intractable; the strands proven here are building-block scale (rotation-direction
+ * duality, ARX-atom invertibility) -- exactly the part that is decidable.
+ *
+ * STRAND 1 -- the ChaCha<->Blake2 rotation-direction duality:  rotl(x,k) == rotr(x, 32-k)  for all 32-bit x.
+ *   ChaCha's quarter-round (chacha20.iii) rotates LEFT by {16,12,8,7}; Blake2s's G (blake2s.iii) rotates
+ *   RIGHT by {16,12,8,7}.  This strand is the literal proven edge: the SAME rotation machinery, two
+ *   directions.  At k=16 it degenerates -- rotl(x,16)==rotr(x,16) -- so ChaCha's and Blake2's FIRST rotation
+ *   are the identical operation.
+ * STRAND 2 -- the shared ARX atom is a BIJECTION:  d' = rotl(d ^ (a+b), 16) is invertible in d
+ *   (d = rotr(d',16) ^ (a+b)).  This atom underlies BOTH ChaCha's QR and Blake2's G; proving it invertible
+ *   proves the shared core is a permutation -- the property the cipher/hash security rests on.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Composes numera/bv_bits -- no new prover, no ML, no island.
+ */
+module numera_primweb
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const PW_W : u64 = 32u64        /* the crypto primitives' word width */
+
+/* rotate a 32-bit symbolic word -- composed from the shift/or the judge already has (the rotate that
+ * bv_bits did not name), so the strand needs no core surgery.  Callers pass k in (0,32). */
+fn pw_rotl(x: u32, k: u64) -> u32 { return bb_or(bb_shl(x, k), bb_shr(x, 32u64 - k)) }
+fn pw_rotr(x: u32, k: u64) -> u32 { return bb_or(bb_shr(x, k), bb_shl(x, 32u64 - k)) }
+
+/* STRAND 1: rotl(x,k) == rotr(x, 32-k) for ALL 32-bit x.  1 iff the judge proves it (UNSAT of inequality). */
+fn pw_rot_duality(k: u64) -> u8 @export {
+    bb_reset(PW_W)
+    let x : u32 = bb_var(0u32)
+    return bb_equal(pw_rotl(x, k), pw_rotr(x, 32u64 - k))
+}
+
+/* the FALSIFIER companion: rotl(x,k) == rotr(x,k) holds ONLY at k=16 (the half-width self-coincidence) and is
+ * refuted for every other k.  1 = the judge found them equal; this is the biting arm -- a stub returning 1
+ * unconditionally fails when k != 16. */
+fn pw_rot_coincide(k: u64) -> u8 @export {
+    bb_reset(PW_W)
+    let x : u32 = bb_var(0u32)
+    return bb_equal(pw_rotl(x, k), pw_rotr(x, k))
+}
+
+/* STRAND 2: the shared ARX atom d' = rotl(d ^ (a+b), 16) is a bijection in d.  Apply forward then the inverse
+ * d = rotr(d',16) ^ (a+b) and prove the recovered d equals the original for ALL (a,b,d).  1 iff proven. */
+fn pw_arx_atom_invertible() -> u8 @export {
+    bb_reset(PW_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let d : u32 = bb_var(2u32)
+    let t : u32 = bb_add(a, b)
+    let dfwd : u32 = pw_rotl(bb_xor(d, t), 16u64)        /* forward */
+    let drec : u32 = bb_xor(pw_rotr(dfwd, 16u64), t)     /* inverse */
+    return bb_equal(drec, d)
+}
+
+/* BITING companion for STRAND 2: a WRONG inverse (omitting the final xor-t) does NOT recover d -- the judge
+ * must REFUSE it.  1 = (incorrectly) recovered; the KAT asserts 0, proving the invertibility proof has teeth. */
+fn pw_arx_atom_wrong_inverse() -> u8 @export {
+    bb_reset(PW_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let d : u32 = bb_var(2u32)
+    let t : u32 = bb_add(a, b)
+    let dfwd : u32 = pw_rotl(bb_xor(d, t), 16u64)
+    let drec : u32 = pw_rotr(dfwd, 16u64)                /* WRONG: forgot ^ t */
+    return bb_equal(drec, d)
+}

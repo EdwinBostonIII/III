@@ -1,0 +1,28 @@
+/* STDLIB/corpus/1756_weave.iii -- THE WEAVE: an "impossible" optimization made sound by proof.
+ *
+ * numera/weave is the abstract optimization bridge (the variable `i`): lift a binary computation into the
+ * six-valued weave where don't-cares are first-class, collapse through that freedom, lower back to binary
+ * PROVEN equal on the care-set.  This KAT proves the defining boundary on the existing bv_bits judge:
+ * the optimization a AND b -> a is SOUND in the weave (under the don't-care a->b) yet UNSOUND in plain
+ * 2-state -- the move lives only in the abstract dimension, and III proves exactly that.  99 = all arms.
+ */
+module corpus_1756_weave
+
+extern @abi(c-msvc-x64) fn wv_optimizes_on_care() -> u8 from "weave.iii"
+extern @abi(c-msvc-x64) fn wv_unsound_in_binary() -> u8 from "weave.iii"
+extern @abi(c-msvc-x64) fn wv_dontcare_nonempty() -> u8 from "weave.iii"
+
+fn main() -> u64 {
+    /* (1) LOWER-WITH-PROOF: a AND b collapses to a on the care-set (a->b) -- the bv judge proves it sound */
+    if wv_optimizes_on_care() != 1u8 { return 1u64 }
+
+    /* (2) WHY THE WEAVE IS NECESSARY (biting): the same move is UNSOUND in plain 2-state -- a&b != a
+     *     everywhere (a=1,b=0 separates them).  The judge returns 0; the optimization exists only in the weave. */
+    if wv_unsound_in_binary() != 0u8 { return 2u64 }
+
+    /* (3) the don't-care freedom is REAL, not vacuous: the care-set is not a tautology, so a genuine
+     *     don't-care input (a AND NOT b) exists -- the degree of freedom the weave exploits. */
+    if wv_dontcare_nonempty() != 0u8 { return 3u64 }
+
+    return 99u64
+}

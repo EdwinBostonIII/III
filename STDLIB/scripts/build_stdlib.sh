@@ -791,6 +791,14 @@ MODULES=(
     "numera/logic6"
     # numera/present -- the Rosetta layer: render + content-address-name III\'s discoveries as human-readable New Math.
     "numera/present"
+    # numera/primweb -- the PRIMITIVE SPIDERWEB: SAT/kernel-proven strands (the common denominators) between
+    # III\'s own NIH crypto blocks -- rotation-direction duality (ChaCha<->Blake2) + shared-ARX-atom bijection.
+    # The first threads of the proven bitvector weave; composes numera/bv_bits -- no island.
+    "numera/primweb"
+    # numera/weave -- THE WEAVE (the variable `i`): lift a binary computation into the six-valued don't-care
+    # weave, collapse through the freedom, lower back to 2-state PROVEN equal on the care-set.  The universal
+    # optimization procedure; composes numera/bv_bits + numera/logic6 -- no island.
+    "numera/weave"
     "numera/barrett"
     "numera/egraph"
     "numera/cost_lattice"

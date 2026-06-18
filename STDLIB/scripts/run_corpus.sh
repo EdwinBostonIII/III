@@ -1393,6 +1393,10 @@ declare -A EXPECTED=(
     [1753_invent_logic6]=99
     # the Rosetta layer: III's discoveries rendered as human-readable, content-address-named New Math.
     [1754_present_newmath]=99
+    # the primitive spiderweb: proven strands (rotation duality, ARX-atom bijection) between III's crypto blocks.
+    [1755_primweb]=99
+    # the weave: an "impossible" binary optimization (a&b -> a) made sound by proof on the don't-care care-set.
+    [1756_weave]=99
 )
 
 PASS=0

@@ -1,0 +1,37 @@
+/* STDLIB/corpus/1755_primweb.iii -- the PRIMITIVE SPIDERWEB: proven strands between III's crypto blocks.
+ *
+ * numera/primweb proves, on the existing bv_bits judge, the mathematical relations that tie III's own NIH
+ * primitives into one bitvector universe.  99 = every arm holds; 1..6 = the failing arm.  Independent oracle:
+ * the Tseitin+CDCL miter (a false strand is REFUSED, not vacuously accepted).
+ *
+ *   STRAND 1 -- ChaCha<->Blake2 rotation-direction duality: rotl(x,k) == rotr(x,32-k) for the constants
+ *               {16,12,8,7} both primitives share; at k=16 it degenerates to rotl==rotr (their identical
+ *               first rotation).  BITING: rotl(x,12) != rotr(x,12) is REFUTED (the judge discriminates).
+ *   STRAND 2 -- the shared ARX atom d' = rotl(d^(a+b),16) is a BIJECTION; a broken inverse is REFUSED.
+ */
+module corpus_1755_primweb
+
+extern @abi(c-msvc-x64) fn pw_rot_duality(k: u64) -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_rot_coincide(k: u64) -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_arx_atom_invertible() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_arx_atom_wrong_inverse() -> u8 from "primweb.iii"
+
+fn main() -> u64 {
+    /* (1) STRAND 1: the duality holds for every rotation constant ChaCha (left) and Blake2 (right) share */
+    if pw_rot_duality(16u64) != 1u8 { return 1u64 }
+    if pw_rot_duality(12u64) != 1u8 { return 2u64 }
+    if pw_rot_duality(8u64) != 1u8 { return 3u64 }
+    if pw_rot_duality(7u64) != 1u8 { return 4u64 }
+
+    /* (2) the k=16 coincidence: ChaCha's first (rotl 16) and Blake2's first (rotr 16) are the SAME op */
+    if pw_rot_coincide(16u64) != 1u8 { return 5u64 }
+    /* BITING: at k=12 left and right rotation are NOT equal -- the judge REFUSES the false coincidence */
+    if pw_rot_coincide(12u64) != 0u8 { return 6u64 }
+
+    /* (3) STRAND 2: the shared ARX atom is a bijection (the property that makes the round a permutation) */
+    if pw_arx_atom_invertible() != 1u8 { return 7u64 }
+    /* BITING: a broken inverse does NOT recover the input -- the invertibility proof has teeth */
+    if pw_arx_atom_wrong_inverse() != 0u8 { return 8u64 }
+
+    return 99u64
+}

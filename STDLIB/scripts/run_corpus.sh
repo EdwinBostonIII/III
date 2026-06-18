@@ -1383,6 +1383,8 @@ declare -A EXPECTED=(
     [1748_autonomous_invention_demo]=99
     # the Generative Invention Loop: III invents non-power-of-two strength reductions, value-sieved + SAT-proven.
     [1749_invent_strength]=99
+    # expanded alphabet: III rediscovers the arithmetic<->bitwise crossover identities (incl. carry-save) de-novo.
+    [1750_invent_crossover]=99
 )
 
 PASS=0

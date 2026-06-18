@@ -29,6 +29,10 @@ extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 
 const GIL_W        : u64 = 64u64       /* prove at the deployment machine width */
@@ -135,3 +139,118 @@ fn gil_refutes_false(k: u64, a: u64) -> u8 @export {
     if bb_equal(target, cand) == 0u8 { return 1u8 }
     return 0u8
 }
+
+/* ===================================================================================================
+ * EXPANDED ALPHABET -- the two-variable arithmetic<->bitwise CROSSOVER forge.
+ *
+ * Single-variable mul(x,k) cannot benefit from bitwise ops (you cannot build multiplication from
+ * and/or/xor of constants).  The "alien" bit-twiddling lives in TWO variables, where an ARITHMETIC
+ * combination of BITWISE terms collapses to a single cheap op.  The same engine -- generate, value-sieve,
+ * SAT-judge -- now over the algebra {and, or, xor, not, shl, add, sub} on a leaf set {x, y, x&y, x|y, x^y,
+ * ~x, ~y}.  III rediscovers the folklore crossover identities (x^y = (x|y)-(x&y); x|y = (x^y)+(x&y);
+ * x+y = (x^y)+2(x&y), the carry-save adder) entirely de-novo -- the SHAPE found by cost-directed search,
+ * the EQUALITY proven by the SAT judge for all inputs.
+ * =================================================================================================== */
+const GILX_W : u64 = 64u64
+
+var GILX_KERNEL_CALLS : u64 = 0u64
+var GILX_SIEVE_DROPS  : u64 = 0u64
+var GILX_BEST_COST    : u32 = 0u32
+var GILX_BEST_MODE    : u32 = 0u32       /* 99 = single leaf; 0..4 = op(leaf_a, leaf_b) */
+var GILX_BEST_A       : u32 = 0u32
+var GILX_BEST_B       : u32 = 0u32
+
+/* the 7-leaf set; leaves 0..1 (x,y) are free, 2..6 (and/or/xor/not_x/not_y) cost 1. */
+fn gilx_leaf(idx: u32, x: u32, y: u32) -> u32 {
+    if idx == 0u32 { return x }
+    if idx == 1u32 { return y }
+    if idx == 2u32 { return bb_and(x, y) }
+    if idx == 3u32 { return bb_or(x, y) }
+    if idx == 4u32 { return bb_xor(x, y) }
+    if idx == 5u32 { return bb_not(x) }
+    if idx == 6u32 { return bb_not(y) }
+    return 0xFFFFFFFFu32
+}
+fn gilx_leaf_cost(idx: u32) -> u32 { if idx <= 1u32 { return 0u32 }  return 1u32 }
+
+fn gilx_op(op: u32, p: u32, q: u32) -> u32 {
+    if op == 0u32 { return bb_and(p, q) }
+    if op == 1u32 { return bb_or(p, q) }
+    if op == 2u32 { return bb_xor(p, q) }
+    if op == 3u32 { return bb_add(p, q) }
+    if op == 4u32 { return bb_sub(p, q) }
+    return 0xFFFFFFFFu32
+}
+
+/* the mixed TARGET expressions to reduce, and their op-costs (the incumbent to beat). */
+fn gilx_target(kind: u32, x: u32, y: u32) -> u32 {
+    if kind == 1u32 { return bb_sub(bb_or(x, y), bb_and(x, y)) }                  /* (x|y) - (x&y) */
+    if kind == 2u32 { return bb_add(bb_xor(x, y), bb_and(x, y)) }                 /* (x^y) + (x&y) */
+    if kind == 3u32 { return bb_add(bb_xor(x, y), bb_shl(bb_and(x, y), 1u64)) }   /* (x^y) + ((x&y)<<1) */
+    return 0xFFFFFFFFu32
+}
+fn gilx_target_cost(kind: u32) -> u32 {
+    if kind == 1u32 { return 3u32 }
+    if kind == 2u32 { return 3u32 }
+    if kind == 3u32 { return 4u32 }
+    return 0xFFFFFFFFu32
+}
+
+/* SIEVE then JUDGE one candidate (single leaf if mode==99, else op(leaf_a,leaf_b)) against the target. */
+fn gilx_consider(kind: u32, cost: u32, mode: u32, a: u32, b: u32) -> i32 {
+    if cost >= GILX_BEST_COST {
+        GILX_SIEVE_DROPS = GILX_SIEVE_DROPS + 1u64
+        return 0i32
+    }
+    bb_reset(GILX_W)
+    let x : u32 = bb_var(0u32)
+    let y : u32 = bb_var(1u32)
+    let target : u32 = gilx_target(kind, x, y)
+    let mut cand : u32 = 0u32
+    if mode == 99u32 { cand = gilx_leaf(a, x, y) } else { cand = gilx_op(mode, gilx_leaf(a, x, y), gilx_leaf(b, x, y)) }
+    GILX_KERNEL_CALLS = GILX_KERNEL_CALLS + 1u64
+    if bb_equal(target, cand) == 1u8 {
+        GILX_BEST_COST = cost
+        GILX_BEST_MODE = mode
+        GILX_BEST_A = a
+        GILX_BEST_B = b
+        return 1i32
+    }
+    return 0i32
+}
+
+/* CROSSOVER FORGE: invent the cheapest provably-equal form of mixed target `kind`. */
+fn gilx_forge(kind: u32) -> u32 @export {
+    GILX_KERNEL_CALLS = 0u64
+    GILX_SIEVE_DROPS = 0u64
+    GILX_BEST_MODE = 0xFFFFFFFFu32
+    GILX_BEST_A = 0u32
+    GILX_BEST_B = 0u32
+    GILX_BEST_COST = gilx_target_cost(kind)        /* incumbent: the mixed form itself */
+
+    /* single leaves first (cheapest) */
+    let mut li : u32 = 0u32
+    while li < 7u32 { gilx_consider(kind, gilx_leaf_cost(li), 99u32, li, 0u32)  li = li + 1u32 }
+    /* then op(leaf_a, leaf_b) */
+    let mut op : u32 = 0u32
+    while op < 5u32 {
+        let mut i : u32 = 0u32
+        while i < 7u32 {
+            let mut j : u32 = 0u32
+            while j < 7u32 {
+                gilx_consider(kind, gilx_leaf_cost(i) + gilx_leaf_cost(j) + 1u32, op, i, j)
+                j = j + 1u32
+            }
+            i = i + 1u32
+        }
+        op = op + 1u32
+    }
+    return GILX_BEST_COST
+}
+
+fn gilx_best_cost() -> u32 @export { return GILX_BEST_COST }
+fn gilx_best_mode() -> u32 @export { return GILX_BEST_MODE }
+fn gilx_best_a() -> u32 @export { return GILX_BEST_A }
+fn gilx_best_b() -> u32 @export { return GILX_BEST_B }
+fn gilx_kernel_calls() -> u64 @export { return GILX_KERNEL_CALLS }
+fn gilx_sieve_drops() -> u64 @export { return GILX_SIEVE_DROPS }

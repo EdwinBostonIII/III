@@ -1,0 +1,42 @@
+/* STDLIB/corpus/1750_invent_crossover.iii -- EXPANDED ALPHABET: arithmetic<->bitwise crossover invention.
+ *
+ * numera/invent's two-variable forge searches {and,or,xor,not,shl,add,sub} over the leaf set
+ * {x,y,x&y,x|y,x^y,~x,~y} and DISCOVERS the folklore crossover identities de-novo -- the shape found by
+ * cost-directed search, the equality proven by the SAT judge.  99 = all arms.
+ *
+ *   (x|y) - (x&y)        collapses to  x^y     (arithmetic of bitwise -> pure xor; cost 3 -> 1)
+ *   (x^y) + (x&y)        collapses to  x|y     (cost 3 -> 1)
+ *   (x^y) + ((x&y)<<1)   collapses to  x+y     (THE CARRY-SAVE ADDER, de-novo; cost 4 -> 1)
+ */
+module corpus_1750_invent_crossover
+
+extern @abi(c-msvc-x64) fn gilx_forge(kind: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilx_best_cost() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilx_best_mode() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilx_best_a() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilx_best_b() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilx_kernel_calls() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilx_sieve_drops() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    /* (1) (x|y)-(x&y)  ->  x^y  (single leaf 4 = x^y, cost 1) */
+    if gilx_forge(1u32) != 1u32 { return 1u64 }
+    if gilx_best_cost() != 1u32 { return 2u64 }
+    if gilx_best_mode() != 99u32 { return 3u64 }       /* a single leaf, not a compound */
+    if gilx_best_a() != 4u32 { return 4u64 }           /* leaf 4 = x^y */
+    if gilx_sieve_drops() == 0u64 { return 5u64 }
+
+    /* (2) (x^y)+(x&y)  ->  x|y  (single leaf 3 = x|y) */
+    if gilx_forge(2u32) != 1u32 { return 6u64 }
+    if gilx_best_mode() != 99u32 { return 7u64 }
+    if gilx_best_a() != 3u32 { return 8u64 }           /* leaf 3 = x|y */
+
+    /* (3) THE CARRY-SAVE ADDER de-novo: (x^y)+((x&y)<<1) -> x+y  (op 3 = add of leaves x,y) */
+    if gilx_forge(3u32) != 1u32 { return 9u64 }
+    if gilx_best_mode() != 3u32 { return 10u64 }       /* op 3 = add */
+    if gilx_best_a() != 0u32 { return 11u64 }          /* leaf 0 = x */
+    if gilx_best_b() != 1u32 { return 12u64 }          /* leaf 1 = y */
+    if gilx_kernel_calls() == 0u64 { return 13u64 }
+
+    return 99u64
+}

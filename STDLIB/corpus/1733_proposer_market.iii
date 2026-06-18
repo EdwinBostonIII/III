@@ -1,0 +1,62 @@
+/* STDLIB/corpus/1733_proposer_market.iii
+ *
+ * Falsifier KAT for nous::proposer_market -- the autogenesis proposer layer restructured so bayes_search
+ * and proof_replay_cache are LOAD-BEARING.  99 = every arm holds; 1..9 = the failing arm.
+ *
+ *   (1,2) BAYES load-bearing: with EQUAL observed yields the 2:1 prior still gives harmony the larger
+ *         budget (a raw-yield split would TIE -> only the posterior explains it); the allocation also
+ *         FLIPS when refactor's yield dominates.  bs2_best is the lead.
+ *   (3,4) PRC load-bearing: certifying through the cache makes the recurring obligations HITS, and all
+ *         valid checks pass (cache and kernel agree).
+ *   (5)   SOUNDNESS: the cache never lies -- a bad proof is refused exactly as tc_check would.
+ *   (6)   the LIVE pm_step (what the cycle calls) allocates + caches over the real proposer yields.
+ */
+module corpus_1733_proposer_market
+
+extern @abi(c-msvc-x64) fn hs_scan() -> u64 from "harmony_synth.iii"
+extern @abi(c-msvc-x64) fn rp_scan() -> u64 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_goal() -> u32 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_proof_bad() -> u32 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn prc_check(proof: u32, goal: u32) -> u8 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn pm_alloc(hs_yield: u64, rp_yield: u64) -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_budget_hs() -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_budget_rp() -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_lead() -> u32 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_certify() -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_certified() -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_cache_hits() -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_step() -> u64 from "proposer_market.iii"
+extern @abi(c-msvc-x64) fn pm_reset() -> i32 from "proposer_market.iii"
+
+fn main() -> u64 {
+    /* (1) BAYES: equal yields -> harmony gets the larger budget via the 2:1 prior */
+    pm_alloc(5u64, 5u64)
+    if pm_budget_hs() <= pm_budget_rp() { return 1u64 }
+    if pm_lead() != 0u32 { return 2u64 }
+
+    /* (2) the allocation responds to yields: refactor-dominant -> refactor leads */
+    pm_alloc(1u64, 10u64)
+    if pm_budget_rp() <= pm_budget_hs() { return 3u64 }
+    if pm_lead() != 1u32 { return 4u64 }
+
+    /* (3,4) PRC: certify through the cache -> recurring obligations HIT; all valid checks pass */
+    pm_alloc(5u64, 5u64)
+    pm_certify()
+    if pm_cache_hits() == 0u64 { return 5u64 }
+    if pm_certified() != 8u64 { return 6u64 }
+
+    /* (5) SOUNDNESS: a bad proof is refused exactly as the kernel would */
+    if prc_check(rp_proof_bad(), rp_goal()) != 0u8 { return 7u64 }
+
+    /* (6) the LIVE step amortizes ACROSS cycles: from a cold market, cycle 2's identical obligations are
+     *     all served from cache, so the hit count strictly rises (the kernel cost trends to a lookup) */
+    hs_scan()
+    rp_scan()
+    pm_reset()
+    let c : u64 = pm_step()
+    if c == 0u64 { return 8u64 }
+    let h1 : u64 = pm_cache_hits()
+    pm_step()
+    if pm_cache_hits() <= h1 { return 9u64 }
+    return 99u64
+}

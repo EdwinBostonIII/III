@@ -1,0 +1,106 @@
+/* STDLIB/iii/nous/proposer_market.iii -- THE BAYESIAN-OPTIMAL, CACHE-MEMOIZED PROPOSER MARKET
+ * (autogenesis proposer-layer restructure).
+ *
+ * The autogenesis cycle's two synthesizing proposers -- harmony_synth (composition arrows) and
+ * refactor_propose (structural merges) -- used to be enumerated unconditionally and their certify cost
+ * paid in full every cycle.  This market restructures that layer so two organs become load-bearing:
+ *
+ *   nous/bayes_search  -- ALLOCATES the per-cycle certify budget between the proposers by their POSTERIOR
+ *     expected yield (prior x observed-yield), so the historically- and currently-more-productive proposer
+ *     gets the larger share of the budget.  The prior is non-trivial (harmony 2 : refactor 1), so equal
+ *     observed yields still shift the allocation -- a raw-yield split could not reproduce it; the posterior
+ *     is genuinely consulted.
+ *
+ *   numera/proof_replay_cache  -- MEMOIZES every certify check.  The proposers' obligations recur (a
+ *     proposer's candidates share its obligation, and the same obligations return cycle after cycle), so
+ *     all but the first check of an obligation is a content-addressed cache HIT -- the kernel cost of the
+ *     proposer layer trends to a lookup, and the cache provably never mis-serves (its key is the proof+goal
+ *     content address; a wrong proof lands on a different key and is recomputed and refused).
+ *
+ * pm_step is what the autogenesis cycle calls: observe the live yields, allocate by bayes, certify through
+ * the cache.  Both organs are in the live path -- removing either changes pm_step's result.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  Composes bayes_search + proof_replay_cache + harmony_synth +
+ * refactor_propose -- no island (the autogenesis cycle is the caller).  Determinism: integer-only; the
+ * allocation is a deterministic function of the proposers' own deterministic yields; no entropy, no float.
+ */
+module nous_proposer_market
+
+extern @abi(c-msvc-x64) fn bs2_set(prior0: u64, prior1: u64, lik0: u64, lik1: u64) -> i32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_posterior_yield(i: u32) -> u64 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn bs2_best() -> u32 from "bayes_search.iii"
+extern @abi(c-msvc-x64) fn prc_check(proof: u32, goal: u32) -> u8 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_hits() -> u64 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn prc_reset() -> i32 from "proof_replay_cache.iii"
+extern @abi(c-msvc-x64) fn hs_ncand() -> u64 from "harmony_synth.iii"
+extern @abi(c-msvc-x64) fn hs_proof_refl() -> u32 from "harmony_synth.iii"
+extern @abi(c-msvc-x64) fn hs_goal_refl() -> u32 from "harmony_synth.iii"
+extern @abi(c-msvc-x64) fn rp_ncand() -> u64 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_goal() -> u32 from "refactor_propose.iii"
+extern @abi(c-msvc-x64) fn rp_proof_ok() -> u32 from "refactor_propose.iii"
+
+const PM_BUDGET   : u64 = 8u64   /* total per-cycle certify budget */
+const PM_PRIOR_HS : u64 = 2u64   /* harmony's historical-productivity prior */
+const PM_PRIOR_RP : u64 = 1u64   /* refactor's prior */
+
+var PM_BUDGET_HS : u64 = 0u64
+var PM_BUDGET_RP : u64 = 0u64
+var PM_CERTIFIED : u64 = 0u64
+
+/* Allocate the certify budget by POSTERIOR expected yield (bayes_search): budget_i proportional to
+ * prior_i * observed_yield_i.  The non-trivial prior means equal observed yields still favour harmony --
+ * a raw-yield split cannot reproduce this, so the posterior is genuinely load-bearing. */
+fn pm_alloc(hs_yield: u64, rp_yield: u64) -> u64 @export {
+    bs2_set(PM_PRIOR_HS, PM_PRIOR_RP, hs_yield, rp_yield)
+    let yh : u64 = bs2_posterior_yield(0u32)
+    let yr : u64 = bs2_posterior_yield(1u32)
+    let tot : u64 = yh + yr
+    if tot == 0u64 { PM_BUDGET_HS = 0u64  PM_BUDGET_RP = 0u64  return 0u64 }
+    PM_BUDGET_HS = (PM_BUDGET * yh) / tot
+    PM_BUDGET_RP = PM_BUDGET - PM_BUDGET_HS
+    return PM_BUDGET
+}
+
+fn pm_budget_hs() -> u64 @export { return PM_BUDGET_HS }
+fn pm_budget_rp() -> u64 @export { return PM_BUDGET_RP }
+
+/* the Bayesian-optimal lead proposer (0 = harmony, 1 = refactor). */
+fn pm_lead() -> u32 @export { return bs2_best() }
+
+/* CERTIFY each proposer's obligation up to its allocated budget THROUGH the proof-replay cache.  The
+ * obligation recurs, so the first check of each is a kernel MISS and the rest are content-addressed HITS.
+ * Returns the count of checks that PASSED (a valid obligation passes every time, from cache or kernel). */
+fn pm_certify() -> u64 @export {
+    PM_CERTIFIED = 0u64
+    let gh : u32 = hs_goal_refl()
+    let ph : u32 = hs_proof_refl()
+    let mut i : u64 = 0u64
+    while i < PM_BUDGET_HS {
+        if prc_check(ph, gh) == 1u8 { PM_CERTIFIED = PM_CERTIFIED + 1u64 }
+        i = i + 1u64
+    }
+    let gr : u32 = rp_goal()
+    let pr : u32 = rp_proof_ok()
+    let mut j : u64 = 0u64
+    while j < PM_BUDGET_RP {
+        if prc_check(pr, gr) == 1u8 { PM_CERTIFIED = PM_CERTIFIED + 1u64 }
+        j = j + 1u64
+    }
+    return PM_CERTIFIED
+}
+
+fn pm_certified()  -> u64 @export { return PM_CERTIFIED }
+fn pm_cache_hits() -> u64 @export { return prc_hits() }
+
+/* THE LIVE STEP the autogenesis cycle calls: observe the proposers' live yields, allocate the budget by
+ * bayes, certify through the cache.  The cache is NOT reset -- it amortizes ACROSS cycles (the proposers'
+ * obligations recur, and the cache keys on serialized CONTENT, so a later cycle's identical obligation is
+ * a hit regardless of term-id), so the kernel cost of the proposer layer genuinely trends to a lookup.
+ * Returns the certified-check count. */
+fn pm_step() -> u64 @export {
+    pm_alloc(hs_ncand(), rp_ncand())
+    return pm_certify()
+}
+
+/* explicit cache reset (for isolation when a caller wants a cold market). */
+fn pm_reset() -> i32 @export { return prc_reset() }

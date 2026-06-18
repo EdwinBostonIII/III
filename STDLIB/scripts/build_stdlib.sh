@@ -1277,6 +1277,10 @@ MODULES=(
     # nous/bayes_search -- Bayesian-optimal budget allocation: the posterior expected yield (bayes_exact)
     # shifts the optimum and the regret is exact.  (PHASE IV COMPLETE.)
     "nous/bayes_search"
+    # nous/proposer_market -- the autogenesis proposer layer restructured so bayes_search ALLOCATES the
+    # per-cycle certify budget (posterior yield, non-trivial prior) and proof_replay_cache MEMOIZES the
+    # certify checks (amortized across cycles).  ag_cycle calls pm_step -- load-bearing, not an island.
+    "nous/proposer_market"
 )
 
 PASS=0

@@ -1346,6 +1346,9 @@ declare -A EXPECTED=(
     [1729_bayes_search]=99
     [1730_causal_scm]=99
     [1731_pac_certify]=99
+    # --- the autogenesis loop now CONSUMES the Phase III/IV organs in its live body (lemma_forge grows the
+    # commons each cycle; a measure_status-typed risk gate makes the real ag_commit decline a risky self-change).
+    [1732_autogenesis_consume]=99
 )
 
 PASS=0

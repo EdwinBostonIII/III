@@ -39,6 +39,10 @@ extern @abi(c-msvc-x64) fn ab_attest(guest_cap: u64, out_root_32: *u8, out_sig_6
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn fed_genesis_is_set() -> u8 from "fed_genesis.iii"
 extern @abi(c-msvc-x64) fn fed_genesis_root_byte(i: u32) -> u32 from "fed_genesis.iii"
+/* The loop now CONSUMES the Phase III/IV organs in its live body: lemma_forge grows the commons each
+ * cycle, and measure_status types the regression-risk that gates the commit. */
+extern @abi(c-msvc-x64) fn lf_forge() -> u64 from "lemma_forge.iii"
+extern @abi(c-msvc-x64) fn ms_canonical_ok(status: u8) -> u8 from "measure_status.iii"
 
 const CAP_RIGHT_AUTOGENESIS        : u64 = 0x80000u64
 const CAP_RIGHT_AUTOGENESIS_COMMIT : u64 = 0x100000u64
@@ -51,6 +55,8 @@ const AG_E_UNAUTH   : i32 = -5i32
 const AG_E_INVALID  : i32 = -6i32
 const AG_SLOT_NONE  : u32 = 0xFFFFFFFFu32
 const AG_VALID_OK   : u32 = 99u32
+const AG_RISK_THRESHOLD : u64 = 64u64    /* the apprentice commits only if the regression-risk metric is below this */
+const AG_PROVISIONAL    : u8  = 3u8       /* nous_synth PROVISIONAL: the risk estimate is never canonical */
 
 var AG_INFLIGHT    : u32 = 0u32
 var AG_SLOT        : u32 = 0u32
@@ -58,6 +64,7 @@ var AG_NCAND       : u64 = 0u64
 var AG_SAVED       : u64 = 0u64
 var AG_STAGED      : u64 = 0u64
 var AG_VALID       : u32 = 0u32
+var AG_RISK_OVERRIDE : u64 = 0u64    /* operator/review hook: flag the in-flight candidate as higher-risk */
 var AG_LEDGER_INIT : u32 = 0u32
 var AG_BEFORE   : [u8; 32]
 var AG_AFTER    : [u8; 32]
@@ -113,12 +120,36 @@ fn ag_stage() -> u64 @export {
     return AG_STAGED
 }
 
-/* Validation verdict: a cycle is green iff a transaction is open and the manifest is staged.  The
- * answer-preserving guarantee is enforced upstream (optimize_self's result-equivalence gate); the
- * byte-identical differential is the gate script's job. */
+/* The cycle's regression-RISK metric -- the apprentice reasoning probabilistically about its OWN change.
+ * Deterministic from the cycle's own BEFORE state root + blast radius (AG_NCAND), so it needs no separate
+ * entropy and replays byte-identically.  An operator/review may raise it via ag_force_risk. */
+fn ag_risk() -> u64 @export {
+    let bp : *u8 = (&AG_BEFORE as u64) as *u8
+    let mut r : u64 = AG_NCAND + ((bp[0u64] as u64) & 0x0Fu64)
+    if AG_RISK_OVERRIDE > r { r = AG_RISK_OVERRIDE }
+    return r
+}
+
+/* operator/review hook: flag the in-flight candidate as higher-risk. */
+fn ag_force_risk(r: u64) -> i32 @export { AG_RISK_OVERRIDE = r  return AG_OK }
+
+/* 1 iff the regression risk is ACCEPTABLE -- consuming numera/measure_status: the risk is typed
+ * PROVISIONAL (it can never itself assert as canonical truth, only GATE) AND it is below the threshold.
+ * A risk that could assert canonical, or one above the threshold, is NOT acceptable. */
+fn ag_risk_acceptable() -> u8 @export {
+    if ms_canonical_ok(AG_PROVISIONAL) != 0u8 { return 0u8 }   /* a PROVISIONAL risk must NOT be canonical */
+    if ag_risk() > AG_RISK_THRESHOLD { return 0u8 }
+    return 1u8
+}
+
+/* Validation verdict: a cycle is green iff a transaction is open, the manifest is staged, AND the
+ * probabilistic regression-risk gate accepts the change.  The answer-preserving guarantee is enforced
+ * upstream (optimize_self's result-equivalence gate); the byte-identical differential is the gate
+ * script's job; the risk gate is the apprentice declining a self-change it judges too risky. */
 fn ag_validate() -> u32 {
     if AG_INFLIGHT != 1u32 { return 0u32 }
     if AG_STAGED == 0u64 { return 0u32 }
+    if ag_risk_acceptable() != 1u8 { return 0u32 }
     return AG_VALID_OK
 }
 
@@ -126,6 +157,7 @@ fn ag_validate() -> u32 {
 fn ag_cycle(cap: u64) -> i32 @export {
     if cap_verify_rights(cap, CAP_RIGHT_AUTOGENESIS) == 0u8 { return AG_E_DENIED }
     if AG_INFLIGHT == 1u32 { return AG_E_INFLIGHT }
+    AG_RISK_OVERRIDE = 0u64
     ag_ledger_anchor()
     sm_next_gap()
     gc_propose_next()
@@ -133,6 +165,7 @@ fn ag_cycle(cap: u64) -> i32 @export {
     let rpn : u64 = rp_scan()
     AG_NCAND = hsn + rpn
     AG_SAVED = os_apply_in_model()
+    lf_forge()                            /* GROW THE COMMONS: the cycle forges kernel-certified lemmas its proofs can cite */
     let slot : u32 = vbd_open(cap)
     if slot == AG_SLOT_NONE { return AG_E_TX }
     AG_SLOT = slot
@@ -162,6 +195,7 @@ fn ag_commit(cap: u64, sig: u64) -> i32 @export {
         if sig == 0u64 { return AG_E_UNAUTH }
     }
     if AG_VALID != AG_VALID_OK { return AG_E_INVALID }
+    if ag_risk_acceptable() != 1u8 { return AG_E_INVALID }   /* re-check the risk gate at commit: a late-flagged risky self-change is declined even when authorized */
     let r : i32 = vbd_commit(AG_SLOT)
     AG_INFLIGHT = 0u32
     return r

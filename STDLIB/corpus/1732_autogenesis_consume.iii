@@ -1,0 +1,56 @@
+/* STDLIB/corpus/1732_autogenesis_consume.iii
+ *
+ * Falsifier KAT: THE AUTOGENESIS LOOP CONSUMES THE PHASE III/IV ORGANS in its LIVE body.
+ * 99 = every arm holds; 1..10 = the failing arm.  This exercises the UNCHANGED-signature ag_cycle/ag_commit
+ * path (as corpus 1406/1409 do) and proves its behaviour now depends on the consumed organs:
+ *
+ *   (1) lemma_forge CONSUMED: the real cycle grew the kernel-certified commons (tg_count rose).
+ *   (2,3) the risk metric (deterministic, measure_status-typed PROVISIONAL) reflects a flagged candidate.
+ *   (4) BITING: with the candidate flagged high-risk, the FULLY AUTHORIZED commit (a cap holding
+ *       CAP_RIGHT_AUTOGENESIS_COMMIT) is REFUSED -- the apprentice declines a self-change it judges risky.
+ *   (5) clearing the risk lets the authorized commit proceed (a safe self-change is accepted).
+ *
+ * Independent oracle: the commit authorization is fully present (cap_commit), so only the new probabilistic
+ * risk gate can explain the refusal -- a loop that ignored the consumed organs would commit the risky change.
+ */
+module corpus_1732_autogenesis_consume
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ag_cycle(cap: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_commit(cap: u64, sig: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_inflight() -> u32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_valid() -> u32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_risk() -> u64 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_force_risk(r: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_risk_acceptable() -> u8 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn tg_count() -> u64 from "theorem_grow.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap_auto : u64 = cap_attenuate(env, 0x80000u64, 0u64)      /* AUTOGENESIS */
+    let cap_commit : u64 = cap_attenuate(env, 0x180000u64, 0u64)   /* AUTOGENESIS | COMMIT (full authority) */
+
+    let before : u64 = tg_count()
+    if ag_cycle(cap_auto) != 0i32 { return 1u64 }
+    /* (1) lemma_forge consumed: the live cycle grew the commons */
+    if tg_count() <= before { return 2u64 }
+    /* the low-risk cycle validates (the risk gate is transparent for a safe change) */
+    if ag_valid() != 99u32 { return 3u64 }
+    if ag_risk_acceptable() != 1u8 { return 4u64 }
+
+    /* (2) flag the candidate high-risk; ag_risk reflects it */
+    ag_force_risk(1000u64)
+    if ag_risk() < 1000u64 { return 5u64 }
+    /* (3) the measure_status-typed risk is now unacceptable */
+    if ag_risk_acceptable() != 0u8 { return 6u64 }
+    /* (4) BITING: the FULLY AUTHORIZED commit is refused (AG_E_INVALID = -6), not for lack of authority */
+    if ag_commit(cap_commit, 0u64) != -6i32 { return 7u64 }
+    if ag_inflight() != 1u32 { return 8u64 }
+
+    /* (5) clear the risk -> the authorized commit proceeds */
+    ag_force_risk(0u64)
+    if ag_commit(cap_commit, 0u64) != 0i32 { return 9u64 }
+    if ag_inflight() != 0u32 { return 10u64 }
+    return 99u64
+}

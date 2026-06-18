@@ -47,12 +47,21 @@ extern @abi(c-msvc-x64) fn nous_budget_make(steps: u32, cost_cap: u64, kind: u8,
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_drop(id: u64) -> i32 from "capability.iii"
 
 const NOUS_CH_OK            : i32 = 0i32
 const NOUS_CH_CAD_KECCAK    : u32 = 1u32
 const NOUS_CH_MAX_CLAUSES   : u32 = 64u32
 const NOUS_CH_KIND_AMEND    : u8  = 0u8     /* the amendment clause: verify AND falsify */
 const NOUS_CH_KIND_CANARY   : u8  = 1u8     /* a deliberately-false clause (negative arm) */
+const NOUS_CH_KIND_AUTOGEN  : u8  = 2u8     /* the autogenesis apprentice clause (verify AND falsify) */
+/* Autogenesis rights (literals here per the trap-2 discipline; named in aether/capability.iii):
+ *   CAP_RIGHT_AUTOGENESIS = 0x80000 (propose/run)   CAP_RIGHT_AUTOGENESIS_COMMIT = 0x100000 (commit) */
+const NOUS_CH_AG_RUN        : u64 = 0x80000u64
+const NOUS_CH_AG_COMMIT     : u64 = 0x100000u64
 const NOUS_CH_VERDICT_GREEN : u64 = 99u64   /* > MAX_CLAUSES, so never a RED index */
 const NOUS_CH_U32MASK       : u64 = 0xFFFFFFFFu64
 /* mirrored values (named consts live in nous_search; literals here to avoid trap-2):
@@ -96,6 +105,24 @@ fn nous_ch_canary_holds() -> u8 {
     return 0u8
 }
 
+/* The autogenesis apprentice law, verified-and-falsified structurally via capability semantics:
+ * autogenesis PROPOSES and is CHECKED, never DECIDES -- an UNATTENDED source-tree commit demands
+ * CAP_RIGHT_AUTOGENESIS_COMMIT.  VERIFY (positive arm): a cap holding the commit right passes the
+ * commit check.  FALSIFY (biting negative arm): a propose-only cap (run right, NOT commit) is
+ * REFUSED the commit -- so the gate can say no.  Returns 1 iff both arms hold. */
+fn nous_ch_ag_verify() -> u8 {
+    let env : u64 = cap_env_init()
+    let granted : u64 = cap_attenuate(env, NOUS_CH_AG_COMMIT, 0u64)
+    let g1 : u8 = cap_verify_rights(granted, NOUS_CH_AG_COMMIT)
+    let propose_only : u64 = cap_attenuate(env, NOUS_CH_AG_RUN, 0u64)
+    let g2 : u8 = cap_verify_rights(propose_only, NOUS_CH_AG_COMMIT)
+    cap_drop(granted)
+    cap_drop(propose_only)
+    if g1 != 1u8 { return 0u8 }     /* commit-righted cap MUST pass */
+    if g2 != 0u8 { return 0u8 }     /* propose-only cap MUST be refused the commit */
+    return 1u8
+}
+
 fn nous_ch_clause_eval(idx: u32) -> u8 {
     let k : u8 = NOUS_CH_CLAUSE_KIND[(idx as u64) & NOUS_CH_U32MASK]
     if k == NOUS_CH_KIND_AMEND {
@@ -104,6 +131,7 @@ fn nous_ch_clause_eval(idx: u32) -> u8 {
         return 1u8
     }
     if k == NOUS_CH_KIND_CANARY { return nous_ch_canary_holds() }
+    if k == NOUS_CH_KIND_AUTOGEN { return nous_ch_ag_verify() }
     return 0u8
 }
 
@@ -171,7 +199,9 @@ fn nous_charter_selftest() -> u64 @export {
     while s < 32u64 { NOUS_CH_SAVED[s] = NOUS_CH_VERDICT[s]  s = s + 1u64 }
     if nous_ch_run_charter() != NOUS_CH_VERDICT_GREEN { return 7u64 }
     if cad_eq((&NOUS_CH_VERDICT as u64) as *u8, (&NOUS_CH_SAVED as u64) as *u8) != 1u8 { return 8u64 }
-    if nous_ch_register(NOUS_CH_KIND_CANARY) != 1i32 { return 9u64 }
-    if nous_ch_run_charter() != 2u64 { return 10u64 }
+    if nous_ch_register(NOUS_CH_KIND_AUTOGEN) != 1i32 { return 9u64 }
+    if nous_ch_run_charter() != NOUS_CH_VERDICT_GREEN { return 10u64 }
+    if nous_ch_register(NOUS_CH_KIND_CANARY) != 2i32 { return 11u64 }
+    if nous_ch_run_charter() != 3u64 { return 12u64 }
     return 99u64
 }

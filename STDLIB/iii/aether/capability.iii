@@ -69,6 +69,12 @@ const CAP_RIGHT_AMEND          : u64 = 0x4000u64
 const CAP_RIGHT_RESOLVE_INVOKE     : u64 = 0x00010000u64
 const CAP_RIGHT_PATTERN_REGISTER   : u64 = 0x00020000u64
 const CAP_RIGHT_TRANSFORM_RUN      : u64 = 0x00040000u64
+/* Autogenesis rights (III-AUTOGENESIS-WAVE, ADR-AG-001).  Bit 19 authorizes proposing/running
+ * the closed self-improvement loop (apprentice mode); bit 20 authorizes UNATTENDED source-tree
+ * commit and is UNGRANTED by default -- the loop is an apprentice that proposes, proves, and
+ * stages, but a sealed-source mutation requires this bit or an operator/quorum signature. */
+const CAP_RIGHT_AUTOGENESIS        : u64 = 0x00080000u64
+const CAP_RIGHT_AUTOGENESIS_COMMIT : u64 = 0x00100000u64
 const CAP_RIGHT_ENV            : u64 = 0x8000000000000000u64
 
 /* Slot table - up to 256 simultaneous caps in this address space. */

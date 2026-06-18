@@ -309,6 +309,111 @@ fn uri_authority_len(id: u64) -> u64 @export {
     return URI_AUTH_LEN[idx]
 }
 
+/* ---- authority sub-structure: [ userinfo "@" ] host [ ":" port ] (RFC 3986 3.2)
+ * Computed on demand from the stored authority span (the parser keeps authority
+ * as one span).  last-@ splits userinfo; an IP-literal host [..] is bracket-aware
+ * so an inner ":" is not mistaken for the port delimiter; otherwise last-: splits
+ * host:port.  Module scratch; caller serializes (single-writer discipline). ---- */
+var URI_UINFO_OFF : [u64; 1]
+var URI_UINFO_LEN : [u64; 1]
+var URI_HOST_OFF  : [u64; 1]
+var URI_HOST_LEN  : [u64; 1]
+var URI_PORT_OFF  : [u64; 1]
+var URI_PORT_LEN  : [u64; 1]
+
+fn _uri_auth_split(idx: u32) -> i32 {
+    let base : u64 = URI_AUTH_BASE[idx]
+    let len  : u64 = URI_AUTH_LEN[idx]
+    URI_UINFO_OFF[0u64] = 0u64  URI_UINFO_LEN[0u64] = 0u64
+    URI_HOST_OFF[0u64]  = 0u64  URI_HOST_LEN[0u64]  = 0u64
+    URI_PORT_OFF[0u64]  = 0u64  URI_PORT_LEN[0u64]  = 0u64
+    if base == 0u64 { return 0i32 }
+    if len == 0u64 { return 0i32 }
+    let pp : *u8 = base as *u8
+    let mut at_pos : u64 = len
+    let mut i : u64 = 0u64
+    while i < len { if pp[i] == 0x40u8 { at_pos = i }  i = i + 1u64 }
+    let mut hp_start : u64 = 0u64
+    if at_pos < len {
+        URI_UINFO_OFF[0u64] = 0u64
+        URI_UINFO_LEN[0u64] = at_pos
+        hp_start = at_pos + 1u64
+    }
+    let hp_len : u64 = len - hp_start
+    if hp_len == 0u64 { return 0i32 }
+    if pp[hp_start] == 0x5Bu8 {
+        let mut rb : u64 = hp_len
+        let mut j : u64 = 0u64
+        while j < hp_len { if pp[hp_start + j] == 0x5Du8 { if rb == hp_len { rb = j } }  j = j + 1u64 }
+        if rb < hp_len {
+            URI_HOST_OFF[0u64] = hp_start
+            URI_HOST_LEN[0u64] = rb + 1u64
+            let after : u64 = hp_start + rb + 1u64
+            if after < len { if pp[after] == 0x3Au8 {
+                URI_PORT_OFF[0u64] = after + 1u64
+                URI_PORT_LEN[0u64] = len - (after + 1u64)
+            } }
+            return 0i32
+        }
+        URI_HOST_OFF[0u64] = hp_start
+        URI_HOST_LEN[0u64] = hp_len
+        return 0i32
+    }
+    let mut cp : u64 = hp_len
+    let mut k : u64 = 0u64
+    while k < hp_len { if pp[hp_start + k] == 0x3Au8 { cp = k }  k = k + 1u64 }
+    if cp < hp_len {
+        URI_HOST_OFF[0u64] = hp_start
+        URI_HOST_LEN[0u64] = cp
+        URI_PORT_OFF[0u64] = hp_start + cp + 1u64
+        URI_PORT_LEN[0u64] = hp_len - (cp + 1u64)
+    } else {
+        URI_HOST_OFF[0u64] = hp_start
+        URI_HOST_LEN[0u64] = hp_len
+    }
+    return 0i32
+}
+
+fn uri_authority_userinfo_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    _uri_auth_split(idx)
+    if URI_UINFO_LEN[0u64] == 0u64 { return 0u64 }
+    return URI_AUTH_BASE[idx] + URI_UINFO_OFF[0u64]
+}
+fn uri_authority_userinfo_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    _uri_auth_split(idx)
+    return URI_UINFO_LEN[0u64]
+}
+fn uri_authority_host_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    _uri_auth_split(idx)
+    if URI_HOST_LEN[0u64] == 0u64 { return 0u64 }
+    return URI_AUTH_BASE[idx] + URI_HOST_OFF[0u64]
+}
+fn uri_authority_host_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    _uri_auth_split(idx)
+    return URI_HOST_LEN[0u64]
+}
+fn uri_authority_port_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    _uri_auth_split(idx)
+    if URI_PORT_LEN[0u64] == 0u64 { return 0u64 }
+    return URI_AUTH_BASE[idx] + URI_PORT_OFF[0u64]
+}
+fn uri_authority_port_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    _uri_auth_split(idx)
+    return URI_PORT_LEN[0u64]
+}
+
 fn uri_path_base(id: u64) -> u64 @export {
     let idx : u32 = uri_resolve_id(id)
     if idx == URI_MAX { return 0u64 }

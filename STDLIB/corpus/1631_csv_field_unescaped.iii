@@ -1,0 +1,55 @@
+/* 1631 -- verba.csv csv_field_unescaped (W3400): RFC 4180 "" -> " collapse.
+ * csv_parse stores the RAW quoted span (it punts the unescape to "the consumer");
+ * this IS that consumer. Parses x,"a""b",z and checks a""b -> a"b, plain field
+ * no-op, out_cap overflow -> -1, bad row -> -1. 99 = all arms.
+ * (i64 sentinels are bound to locals to avoid the i64-literal-before-brace trap.) */
+module corpus_1631
+extern @abi(c-msvc-x64) fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_len(id: u64, row: u64, col: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_unescaped(id: u64, row: u64, col: u64, out_ptr: u64, out_cap: u64) -> i64 from "csv.iii"
+
+var RAW : [u8; 16]
+var OUT : [u8; 16]
+
+fn main() -> u64 {
+    let neg1  : i64 = -1i64
+    let three : i64 = 3i64
+    let one   : i64 = 1i64
+
+    RAW[0] = 0x78u8   /* x */
+    RAW[1] = 0x2Cu8   /* , */
+    RAW[2] = 0x22u8   /* " */
+    RAW[3] = 0x61u8   /* a */
+    RAW[4] = 0x22u8   /* " */
+    RAW[5] = 0x22u8   /* " */
+    RAW[6] = 0x62u8   /* b */
+    RAW[7] = 0x22u8   /* " */
+    RAW[8] = 0x2Cu8   /* , */
+    RAW[9] = 0x7Au8   /* z */
+    RAW[10] = 0x0Au8  /* \n */
+
+    let id : u64 = csv_parse(0u64, (&RAW) as u64, 11u64)
+    if id == 0u64 { return 1u64 }
+
+    /* field [0][1] raw span is a""b (4 bytes, doubled quote stored raw) */
+    if csv_field_len(id, 0u64, 1u64) != 4u64 { return 2u64 }
+    let n : i64 = csv_field_unescaped(id, 0u64, 1u64, (&OUT) as u64, 16u64)
+    if n != three { return 3u64 }
+    if OUT[0] != 0x61u8 { return 4u64 }   /* a */
+    if OUT[1] != 0x22u8 { return 5u64 }   /* " */
+    if OUT[2] != 0x62u8 { return 6u64 }   /* b */
+
+    /* plain field [0][0] = x : no escaping */
+    let n2 : i64 = csv_field_unescaped(id, 0u64, 0u64, (&OUT) as u64, 16u64)
+    if n2 != one { return 7u64 }
+    if OUT[0] != 0x78u8 { return 8u64 }   /* x */
+
+    /* out_cap too small for the 3-byte result -> -1 */
+    let n3 : i64 = csv_field_unescaped(id, 0u64, 1u64, (&OUT) as u64, 2u64)
+    if n3 != neg1 { return 9u64 }
+
+    /* out-of-range row -> -1 */
+    let n4 : i64 = csv_field_unescaped(id, 99u64, 0u64, (&OUT) as u64, 16u64)
+    if n4 != neg1 { return 10u64 }
+    return 99u64
+}

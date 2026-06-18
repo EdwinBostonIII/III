@@ -1,0 +1,149 @@
+/* 1664_proof_first_order.iii -- FIRST-ORDER LOGIC: the four quantifier rules + the eigenvariable condition.
+ *
+ * Predicate logic on top of the classical propositional calculus.  Encoding: variables are single bytes
+ * (X=0x58), constants (a=0x61); a unary predicate application P(t) is the 2-byte "Pt"; ∀x.φ = "@X(φ)"
+ * (@=0x40), ∃x.φ = "?X(φ)" (?=0x3F), bodies parenthesised per the structured encoding.
+ *
+ * Four rules complete the calculus (no partials):
+ *   FORALL_ELIM  : @x(φ)        |- φ[x:=t]            (universal instantiation -- unconditional)
+ *   EXISTS_INTRO : φ[x:=t]      |- ?x(φ)              (existential generalisation -- unconditional)
+ *   FORALL_INTRO : φ            |- @x(φ)   [eigenvar] (universal generalisation)
+ *   EXISTS_ELIM  : ?x(φ),[φ]..C |- C       [eigenvar] (existential instantiation)
+ * The EIGENVARIABLE condition (the generalised variable must not occur free in any undischarged
+ * assumption / the goal) is what keeps INTRO/ELIM sound -- the teeth arms (D,F) prove it bites.
+ *
+ * Discriminator (RED on the old lib -- 0x17-0x1A unknown -> proofs fail to verify; GREEN after):
+ *   (A) ∀x.Px |- Pa            (B) Pa |- ∃x.Px
+ *   (C) |- ∀x.(Px=>Px)         (universal generalisation of a closed sub-proof)
+ *   (D) TEETH: ASSUME Px then FORALL_INTRO x -> rejected (x free in the assumption)
+ *   (E) ∃x.Px, [Px]..Qa |- Qa  (existential instantiation; Qa has no free x)
+ *   (F) TEETH: EXISTS_ELIM with goal Px (x free in the goal) -> rejected
+ * Exit 99 full pass; distinct code per failed assertion. */
+module corpus_1664
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+
+const PT_RULE_AXIOM          : u8  = 0x01u8
+const PT_RULE_ASSUME         : u8  = 0x0Du8
+const PT_RULE_IMPLIES_INTRO  : u8  = 0x0Eu8
+const PT_RULE_FORALL_ELIM    : u8  = 0x17u8
+const PT_RULE_EXISTS_INTRO   : u8  = 0x18u8
+const PT_RULE_FORALL_INTRO   : u8  = 0x19u8
+const PT_RULE_EXISTS_ELIM    : u8  = 0x1Au8
+const PT_OK                  : i32 =  0i32
+const PT_E_INVALID_INFERENCE : i32 = -4i32
+
+var ARG   : [u8; 128]
+var PREMS : [u32; 8]
+var CB    : [u8; 16]
+var T_FE : [u8; 32]
+var T_EI : [u8; 32]
+var T_FI : [u8; 32]
+var T_FD : [u8; 32]
+var T_EE : [u8; 32]
+var T_ED : [u8; 32]
+
+fn wr_u32(off: u64, v: u32) -> i32 {
+    let p : *u8 = ((&ARG) as u64 + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8   p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8   p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn build(tid_addr: u64, kind: u8, pcount: u32, clen: u32) -> i32 {
+    let ap : *u8 = (&ARG) as *u8
+    let tp : *u8 = tid_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 { ap[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { ap[i] = tp[i]  i = i + 1u64 }
+    ap[32u64] = kind
+    wr_u32(36u64, pcount)   wr_u32(40u64, clen)
+    let mut k : u64 = 0u64
+    while k < (pcount as u64) { wr_u32(44u64 + k * 4u64, PREMS[k])  k = k + 1u64 }
+    let coff : u64 = 44u64 + 4u64 * (pcount as u64)
+    let mut j : u64 = 0u64
+    while j < (clen as u64) { ap[coff + j] = CB[j]  j = j + 1u64 }
+    return pt_add_inference((&ARG) as *u8)
+}
+
+/* conclusion setters (P=0x50 Q=0x51 X=0x58 a=0x61 ; @=0x40 ?=0x3F ( =0x28 ) =0x29 > =0x3E) */
+fn cb_PX()  -> i32 { CB[0u64]=0x50u8 CB[1u64]=0x58u8 return 0i32 }                                  /* P(x)  */
+fn cb_Pa()  -> i32 { CB[0u64]=0x50u8 CB[1u64]=0x61u8 return 0i32 }                                  /* P(a)  */
+fn cb_Qa()  -> i32 { CB[0u64]=0x51u8 CB[1u64]=0x61u8 return 0i32 }                                  /* Q(a)  */
+fn cb_AllPX() -> i32 { CB[0u64]=0x40u8 CB[1u64]=0x58u8 CB[2u64]=0x28u8 CB[3u64]=0x50u8 CB[4u64]=0x58u8 CB[5u64]=0x29u8 return 0i32 }  /* @X(PX) */
+fn cb_ExPX()  -> i32 { CB[0u64]=0x3Fu8 CB[1u64]=0x58u8 CB[2u64]=0x28u8 CB[3u64]=0x50u8 CB[4u64]=0x58u8 CB[5u64]=0x29u8 return 0i32 }  /* ?X(PX) */
+
+fn main() -> u64 {
+    pt_init()
+
+    /* (A) FORALL_ELIM: ∀x.Px |- Pa. */
+    if pt_alloc((&T_FE) as *u8) != PT_OK { return 1u64 }
+    cb_AllPX()
+    if build((&T_FE) as u64, PT_RULE_AXIOM, 0u32, 6u32) != PT_OK { return 2u64 }       /* 0: @X(PX) */
+    PREMS[0u64]=0u32   cb_Pa()
+    if build((&T_FE) as u64, PT_RULE_FORALL_ELIM, 1u32, 2u32) != PT_OK { return 3u64 } /* 1: Pa */
+    if pt_finalize((&T_FE) as *u8) != PT_OK { return 4u64 }
+    if pt_verify((&T_FE) as *u8) != PT_OK { return 5u64 }   /* OLD: rule unknown -> RED */
+
+    /* (B) EXISTS_INTRO: Pa |- ∃x.Px. */
+    if pt_alloc((&T_EI) as *u8) != PT_OK { return 6u64 }
+    cb_Pa()
+    if build((&T_EI) as u64, PT_RULE_AXIOM, 0u32, 2u32) != PT_OK { return 7u64 }        /* 0: Pa */
+    PREMS[0u64]=0u32   cb_ExPX()
+    if build((&T_EI) as u64, PT_RULE_EXISTS_INTRO, 1u32, 6u32) != PT_OK { return 8u64 } /* 1: ?X(PX) */
+    if pt_finalize((&T_EI) as *u8) != PT_OK { return 9u64 }
+    if pt_verify((&T_EI) as *u8) != PT_OK { return 10u64 }
+
+    /* (C) FORALL_INTRO: |- ∀x.(Px=>Px). */
+    if pt_alloc((&T_FI) as *u8) != PT_OK { return 11u64 }
+    cb_PX()
+    if build((&T_FI) as u64, PT_RULE_ASSUME, 0u32, 2u32) != PT_OK { return 12u64 }      /* 0: ASSUME PX */
+    PREMS[0u64]=0u32  PREMS[1u64]=0u32
+    CB[0u64]=0x50u8 CB[1u64]=0x58u8 CB[2u64]=0x3Eu8 CB[3u64]=0x50u8 CB[4u64]=0x58u8       /* PX>PX */
+    if build((&T_FI) as u64, PT_RULE_IMPLIES_INTRO, 2u32, 5u32) != PT_OK { return 13u64 }/* 1: PX>PX (mask 0) */
+    PREMS[0u64]=1u32
+    CB[0u64]=0x40u8 CB[1u64]=0x58u8 CB[2u64]=0x28u8 CB[3u64]=0x50u8 CB[4u64]=0x58u8 CB[5u64]=0x3Eu8 CB[6u64]=0x50u8 CB[7u64]=0x58u8 CB[8u64]=0x29u8  /* @X(PX>PX) */
+    if build((&T_FI) as u64, PT_RULE_FORALL_INTRO, 1u32, 9u32) != PT_OK { return 14u64 }
+    if pt_finalize((&T_FI) as *u8) != PT_OK { return 15u64 }
+    if pt_verify((&T_FI) as *u8) != PT_OK { return 16u64 }  /* ∀x.(Px=>Px) -- universal generalisation */
+
+    /* (D) TEETH: ASSUME Px then FORALL_INTRO x -> x free in the assumption -> reject. */
+    if pt_alloc((&T_FD) as *u8) != PT_OK { return 17u64 }
+    cb_PX()
+    if build((&T_FD) as u64, PT_RULE_ASSUME, 0u32, 2u32) != PT_OK { return 18u64 }      /* 0: ASSUME PX (mask bit0) */
+    PREMS[0u64]=0u32   cb_AllPX()
+    if build((&T_FD) as u64, PT_RULE_FORALL_INTRO, 1u32, 6u32) != PT_OK { return 19u64 }/* claims @X(PX) */
+    if pt_finalize((&T_FD) as *u8) != PT_OK { return 20u64 }
+    if pt_verify((&T_FD) as *u8) != PT_E_INVALID_INFERENCE { return 21u64 }   /* eigenvariable violated -> reject */
+
+    /* (E) EXISTS_ELIM: ∃x.Px, [Px]..Qa |- Qa  (Qa has no free x). */
+    if pt_alloc((&T_EE) as *u8) != PT_OK { return 22u64 }
+    cb_ExPX()
+    if build((&T_EE) as u64, PT_RULE_AXIOM, 0u32, 6u32) != PT_OK { return 23u64 }       /* 0: ?X(PX) */
+    cb_PX()
+    if build((&T_EE) as u64, PT_RULE_ASSUME, 0u32, 2u32) != PT_OK { return 24u64 }      /* 1: ASSUME PX (the body) */
+    cb_Qa()
+    if build((&T_EE) as u64, PT_RULE_AXIOM, 0u32, 2u32) != PT_OK { return 25u64 }       /* 2: Qa (branch goal) */
+    PREMS[0u64]=0u32  PREMS[1u64]=1u32  PREMS[2u64]=2u32   cb_Qa()
+    if build((&T_EE) as u64, PT_RULE_EXISTS_ELIM, 3u32, 2u32) != PT_OK { return 26u64 } /* 3: Qa */
+    if pt_finalize((&T_EE) as *u8) != PT_OK { return 27u64 }
+    if pt_verify((&T_EE) as *u8) != PT_OK { return 28u64 }  /* existential instantiation */
+
+    /* (F) TEETH: EXISTS_ELIM with goal Px (x free in the goal) -> reject. */
+    if pt_alloc((&T_ED) as *u8) != PT_OK { return 29u64 }
+    cb_ExPX()
+    if build((&T_ED) as u64, PT_RULE_AXIOM, 0u32, 6u32) != PT_OK { return 30u64 }       /* 0: ?X(PX) */
+    cb_PX()
+    if build((&T_ED) as u64, PT_RULE_ASSUME, 0u32, 2u32) != PT_OK { return 31u64 }      /* 1: ASSUME PX */
+    PREMS[0u64]=0u32  PREMS[1u64]=1u32  PREMS[2u64]=1u32   cb_PX()
+    if build((&T_ED) as u64, PT_RULE_EXISTS_ELIM, 3u32, 2u32) != PT_OK { return 32u64 } /* claims Px */
+    if pt_finalize((&T_ED) as *u8) != PT_OK { return 33u64 }
+    if pt_verify((&T_ED) as *u8) != PT_E_INVALID_INFERENCE { return 34u64 }   /* x free in goal -> reject */
+
+    return 99u64
+}

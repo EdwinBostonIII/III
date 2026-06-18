@@ -208,6 +208,38 @@ fn csv_field_len(id: u64, row: u64, col: u64) -> u64 @export {
     return CSV_FIELD_LEN[csv_field_index(idx, row, col)]
 }
 
+/* Copy a field span into out_ptr, collapsing each escaped "" to a single " (RFC 4180
+ * quoted-field unescaping).  csv_parse stores the RAW span (it explicitly punts the
+ * "" -> " collapse to the consumer); this is that consumer.  Returns the unescaped
+ * byte count, 0 for an empty/absent field, or -1 on bad id / out-of-range / out_cap
+ * overflow.  Same bounds guards as csv_field_base/_len. */
+fn csv_field_unescaped(id: u64, row: u64, col: u64, out_ptr: u64, out_cap: u64) -> i64 @export {
+    let idx : u32 = csv_resolve(id)
+    if idx == CSV_TABLE_MAX { return -1i64 }
+    if row >= CSV_ROW_COUNT[idx] { return -1i64 }
+    if col >= CSV_COL_COUNT[csv_row_col_index(idx, row)] { return -1i64 }
+    let fi : u64 = csv_field_index(idx, row, col)
+    let base : u64 = CSV_FIELD_BASE[fi]
+    let len : u64 = CSV_FIELD_LEN[fi]
+    if base == 0u64 { return 0i64 }
+    let sp : *u8 = base as *u8
+    let op : *u8 = out_ptr as *u8
+    let mut i : u64 = 0u64
+    let mut wr : u64 = 0u64
+    while i < len {
+        let c : u8 = sp[i]
+        let mut step : u64 = 1u64
+        if c == 0x22u8 {
+            if (i + 1u64) < len { if sp[i + 1u64] == 0x22u8 { step = 2u64 } }
+        }
+        if wr >= out_cap { return -1i64 }
+        op[wr] = c
+        wr = wr + 1u64
+        i = i + step
+    }
+    return wr as i64
+}
+
 fn csv_drop(id: u64) -> i32 @export {
     let idx : u32 = csv_resolve(id)
     if idx == CSV_TABLE_MAX { return CSV_E_BADID }

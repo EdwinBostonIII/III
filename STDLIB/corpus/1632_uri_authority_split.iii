@@ -1,0 +1,78 @@
+/* 1632 -- verba.uri authority sub-split (W3400): userinfo/host/port accessors.
+ * The parser stored authority as one opaque span; now uri_authority_{userinfo,host,
+ * port}_{base,len} split it RFC-3986-correctly, incl. IPv6 [..] bracket-awareness.
+ * Cases: user@host.ex:8080 ; example.com (no userinfo/port) ; [::1]:80 (IPv6). 99=pass. */
+module corpus_1632
+extern @abi(c-msvc-x64) fn uri_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_userinfo_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_userinfo_len(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_host_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_host_len(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_port_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_port_len(id: u64) -> u64 from "uri.iii"
+
+var U1 : [u8; 32]   /* http://user@host.ex:8080/p */
+var U2 : [u8; 24]   /* http://example.com/ */
+var U3 : [u8; 20]   /* http://[::1]:80/ */
+
+fn fill(dst: u64, src_ascii_lo: u64, n: u64) -> i32 { return 0i32 }
+
+/* compare bytes at [base,len) to a literal in a small scratch; returns 1 if equal */
+fn span_eq(base: u64, len: u64, lit: u64, lit_len: u64) -> u8 {
+    if len != lit_len { return 0u8 }
+    let bp : *u8 = base as *u8
+    let lp : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < len { if bp[i] != lp[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+var LIT_USER : [u8; 4]
+var LIT_HOST : [u8; 7]
+var LIT_PORT : [u8; 4]
+var LIT_EX   : [u8; 11]
+var LIT_V6   : [u8; 5]
+var LIT_80   : [u8; 2]
+
+fn main() -> u64 {
+    /* U1 = "http://user@host.ex:8080/p" */
+    let s1 : *u8 = (&U1) as u64 as *u8
+    s1[0]=0x68u8 s1[1]=0x74u8 s1[2]=0x74u8 s1[3]=0x70u8 s1[4]=0x3Au8 s1[5]=0x2Fu8 s1[6]=0x2Fu8
+    s1[7]=0x75u8 s1[8]=0x73u8 s1[9]=0x65u8 s1[10]=0x72u8 s1[11]=0x40u8
+    s1[12]=0x68u8 s1[13]=0x6Fu8 s1[14]=0x73u8 s1[15]=0x74u8 s1[16]=0x2Eu8 s1[17]=0x65u8 s1[18]=0x78u8
+    s1[19]=0x3Au8 s1[20]=0x38u8 s1[21]=0x30u8 s1[22]=0x38u8 s1[23]=0x30u8 s1[24]=0x2Fu8 s1[25]=0x70u8
+    /* literals */
+    LIT_USER[0]=0x75u8 LIT_USER[1]=0x73u8 LIT_USER[2]=0x65u8 LIT_USER[3]=0x72u8
+    LIT_HOST[0]=0x68u8 LIT_HOST[1]=0x6Fu8 LIT_HOST[2]=0x73u8 LIT_HOST[3]=0x74u8 LIT_HOST[4]=0x2Eu8 LIT_HOST[5]=0x65u8 LIT_HOST[6]=0x78u8
+    LIT_PORT[0]=0x38u8 LIT_PORT[1]=0x30u8 LIT_PORT[2]=0x38u8 LIT_PORT[3]=0x30u8
+
+    let id1 : u64 = uri_parse(0u64, (&U1) as u64, 26u64)
+    if id1 == 0u64 { return 1u64 }
+    if span_eq(uri_authority_userinfo_base(id1), uri_authority_userinfo_len(id1), (&LIT_USER) as u64, 4u64) != 1u8 { return 2u64 }
+    if span_eq(uri_authority_host_base(id1), uri_authority_host_len(id1), (&LIT_HOST) as u64, 7u64) != 1u8 { return 3u64 }
+    if span_eq(uri_authority_port_base(id1), uri_authority_port_len(id1), (&LIT_PORT) as u64, 4u64) != 1u8 { return 4u64 }
+
+    /* U2 = "http://example.com/" : no userinfo, no port */
+    let s2 : *u8 = (&U2) as u64 as *u8
+    s2[0]=0x68u8 s2[1]=0x74u8 s2[2]=0x74u8 s2[3]=0x70u8 s2[4]=0x3Au8 s2[5]=0x2Fu8 s2[6]=0x2Fu8
+    s2[7]=0x65u8 s2[8]=0x78u8 s2[9]=0x61u8 s2[10]=0x6Du8 s2[11]=0x70u8 s2[12]=0x6Cu8 s2[13]=0x65u8
+    s2[14]=0x2Eu8 s2[15]=0x63u8 s2[16]=0x6Fu8 s2[17]=0x6Du8 s2[18]=0x2Fu8
+    LIT_EX[0]=0x65u8 LIT_EX[1]=0x78u8 LIT_EX[2]=0x61u8 LIT_EX[3]=0x6Du8 LIT_EX[4]=0x70u8 LIT_EX[5]=0x6Cu8 LIT_EX[6]=0x65u8 LIT_EX[7]=0x2Eu8 LIT_EX[8]=0x63u8 LIT_EX[9]=0x6Fu8 LIT_EX[10]=0x6Du8
+    let id2 : u64 = uri_parse(0u64, (&U2) as u64, 19u64)
+    if id2 == 0u64 { return 5u64 }
+    if uri_authority_userinfo_len(id2) != 0u64 { return 6u64 }
+    if span_eq(uri_authority_host_base(id2), uri_authority_host_len(id2), (&LIT_EX) as u64, 11u64) != 1u8 { return 7u64 }
+    if uri_authority_port_len(id2) != 0u64 { return 8u64 }
+
+    /* U3 = "http://[::1]:80/" : IPv6 host, port */
+    let s3 : *u8 = (&U3) as u64 as *u8
+    s3[0]=0x68u8 s3[1]=0x74u8 s3[2]=0x74u8 s3[3]=0x70u8 s3[4]=0x3Au8 s3[5]=0x2Fu8 s3[6]=0x2Fu8
+    s3[7]=0x5Bu8 s3[8]=0x3Au8 s3[9]=0x3Au8 s3[10]=0x31u8 s3[11]=0x5Du8 s3[12]=0x3Au8 s3[13]=0x38u8 s3[14]=0x30u8 s3[15]=0x2Fu8
+    LIT_V6[0]=0x5Bu8 LIT_V6[1]=0x3Au8 LIT_V6[2]=0x3Au8 LIT_V6[3]=0x31u8 LIT_V6[4]=0x5Du8
+    LIT_80[0]=0x38u8 LIT_80[1]=0x30u8
+    let id3 : u64 = uri_parse(0u64, (&U3) as u64, 16u64)
+    if id3 == 0u64 { return 9u64 }
+    if span_eq(uri_authority_host_base(id3), uri_authority_host_len(id3), (&LIT_V6) as u64, 5u64) != 1u8 { return 10u64 }
+    if span_eq(uri_authority_port_base(id3), uri_authority_port_len(id3), (&LIT_80) as u64, 2u64) != 1u8 { return 11u64 }
+    return 99u64
+}

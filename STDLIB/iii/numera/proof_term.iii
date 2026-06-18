@@ -104,7 +104,13 @@ const PT_RULE_OR_ELIM        : u8 = 0x14u8   // A|B, [A]..C, [B]..C |- C   (arit
 // the axiom that makes the calculus CLASSICAL rather than intuitionistic.
 const PT_RULE_EX_FALSO       : u8 = 0x15u8   // ⊥            |- C   (any C)
 const PT_RULE_DOUBLE_NEG_ELIM: u8 = 0x16u8   // ((A=>⊥)=>⊥)  |- A
-const PT_RULE_MAX            : u8 = 0x16u8
+// FIRST-ORDER QUANTIFIER RULES.  The ELIM/INTRO pair for each quantifier; ∀-intro and ∃-elim carry the
+// EIGENVARIABLE condition (the generalised variable must not occur free in any undischarged assumption).
+const PT_RULE_FORALL_ELIM    : u8 = 0x17u8   // @x(φ)        |- φ[x:=t]            (universal instantiation)
+const PT_RULE_EXISTS_INTRO   : u8 = 0x18u8   // φ[x:=t]      |- ?x(φ)              (existential generalisation)
+const PT_RULE_FORALL_INTRO   : u8 = 0x19u8   // φ            |- @x(φ)   [eigenvar] (universal generalisation)
+const PT_RULE_EXISTS_ELIM    : u8 = 0x1Au8   // ?x(φ), [φ]..C |- C       [eigenvar] (existential instantiation)
+const PT_RULE_MAX            : u8 = 0x1Au8
 const PT_MAX_ASSUMPTIONS     : u64 = 64u64   // one bit per live assumption in the u64 dependency mask
 const PT_OP_AND              : u8 = 0x26u8    // '&' conjunction separator A & B
 const PT_OP_OR               : u8 = 0x7Cu8    // '|' disjunction separator A | B
@@ -117,6 +123,11 @@ const PT_OP_RPAREN           : u8 = 0x29u8    // ')'
 // Falsum (the absurdity constant ⊥), encoded as the single byte '_'.  Negation is definable as
 // ¬A := A=>⊥, so it reuses implication; only EX_FALSO (⊥ |- C) and DOUBLE_NEG_ELIM are new rules.
 const PT_FALSUM              : u8 = 0x5Fu8    // '_' = ⊥
+// FIRST-ORDER: quantifiers over single-byte variables.  ∀x.φ = "@x(φ)", ∃x.φ = "?x(φ)" (the body
+// parenthesised, per the structured encoding).  Terms are single bytes (variables X/Y/Z, constants
+// a/b/c); unary predicate application P(t) is the 2-byte "Pt".
+const PT_OP_FORALL           : u8 = 0x40u8    // '@' universal quantifier
+const PT_OP_EXISTS           : u8 = 0x3Fu8    // '?' existential quantifier
 
 const PT_OP_IMPLIES          : u8 = 0x3Eu8     // '>' implication separator A => B
 const PT_OP_RELATION         : u8 = 0x3Du8     // '=' relation separator a R b
@@ -146,6 +157,11 @@ var PT_STEP_CONCLUSIONS    : [u64; 16777216]   // frugal: 16777216*8 = 134217728
 // step must have mask 0.  Existing assumption-free proofs are all-zero -> byte-identical behaviour.
 var PT_STEP_ASSUME_MASK    : [u64; 262144]
 var PT_ASSUME_NEXT         : [u64; 1]           // per-verify counter: the next free assumption bit
+// First-order quantifier-parse scratch (non-reentrant, like the rest of the verifier): pt_parse_quant
+// decomposes "@x(φ)" / "?x(φ)" into the bound variable + body ptr/len for the quantifier rules.
+var PT_Q_VAR               : [u8;  1]
+var PT_Q_BODY_P            : [u64; 1]
+var PT_Q_BODY_L            : [u64; 1]
 
 var PT_ADDARG_SCRATCH      : [u8; 600]
 var PT_SEED                : [u8; 16]
@@ -285,6 +301,105 @@ fn pt_is_falsum(ptr: u64, len: u64) -> u8 {
     return 1u8
 }
 
+// ---- First-order quantifier helpers ----
+
+// Parse "Qx(φ)" (Q = qop, x a 1-byte variable, φ a parenthesised body) -> 1u8 + sets PT_Q_VAR /
+// PT_Q_BODY_P / PT_Q_BODY_L; 0u8 if the shape is wrong.  Requires the "(φ)" to be a matched wrap.
+fn pt_parse_quant(ptr: u64, len: u64, qop: u8) -> u8 {
+    if len < 5u64 { return 0u8 }                         // minimal "Qx(y)" is 5 bytes (non-empty body)
+    let p : *u8 = ptr as *u8
+    if p[0u64] != qop { return 0u8 }
+    if p[2u64] != PT_OP_LPAREN { return 0u8 }
+    if p[len - 1u64] != PT_OP_RPAREN { return 0u8 }
+    if pt_is_wrapped(ptr + 2u64, len - 2u64) == 0u8 { return 0u8 }   // "(φ)" closes only at the end
+    PT_Q_VAR[0u64]    = p[1u64]
+    PT_Q_BODY_P[0u64] = ptr + 3u64
+    PT_Q_BODY_L[0u64] = len - 4u64
+    return 1u8
+}
+
+// 1u8 iff `var` is NOT re-bound inside the formula (no "@var"/"?var" binder occurrence).  We require the
+// Barendregt convention (distinct bound variables) so that substitution is sound as a flat replace-all.
+fn pt_no_rebind(ptr: u64, len: u64, qv: u8) -> u8 {
+    let p : *u8 = ptr as *u8
+    let mut i : u64 = 1u64
+    let mut ok : u8 = 1u8
+    while i < len {
+        if p[i] == qv {
+            let prev : u8 = p[i - 1u64]
+            if prev == PT_OP_FORALL { ok = 0u8 }
+            if prev == PT_OP_EXISTS { ok = 0u8 }
+        }
+        i = i + 1u64
+    }
+    return ok
+}
+
+// 1u8 iff `c` is `φ` with every occurrence of `var` replaced by a single consistent term t (and the two
+// agree everywhere else).  Sound as a flat replace-all because the caller has required pt_no_rebind(φ,var).
+fn pt_subst_match(pp: u64, pl: u64, cp: u64, cl: u64, qv: u8) -> u8 {
+    if pl != cl { return 0u8 }                           // single-byte substitution preserves length
+    let a : *u8 = pp as *u8
+    let b : *u8 = cp as *u8
+    let mut t : u8 = 0u8
+    let mut got_t : u8 = 0u8
+    let mut ok : u8 = 1u8
+    let mut i : u64 = 0u64
+    while i < pl {
+        if a[i] == qv {
+            if got_t == 0u8 { t = b[i]  got_t = 1u8 }
+            if b[i] != t { ok = 0u8 }
+        } else {
+            if a[i] != b[i] { ok = 0u8 }
+        }
+        i = i + 1u64
+    }
+    return ok
+}
+
+// 1u8 iff `var` occurs FREE in the formula.  Conservative: any occurrence that is not itself a binder
+// ("@var"/"?var") counts as free.  Over-approximating free variables keeps the eigenvariable check SOUND
+// (it can only reject, never wrongly accept a capturing generalisation).
+fn pt_var_free_in(qv: u8, ptr: u64, len: u64) -> u8 {
+    let p : *u8 = ptr as *u8
+    let mut free : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < len {
+        if p[i] == qv {
+            let mut is_binder : u8 = 0u8
+            if i > 0u64 {
+                let prev : u8 = p[i - 1u64]
+                if prev == PT_OP_FORALL { is_binder = 1u8 }
+                if prev == PT_OP_EXISTS { is_binder = 1u8 }
+            }
+            if is_binder == 0u8 { free = 1u8 }
+        }
+        i = i + 1u64
+    }
+    return free
+}
+
+// EIGENVARIABLE condition: `var` must not occur free in any UNDISCHARGED assumption that the relevant
+// derivation depends on (the assumptions whose bit is set in `pmask`).  Iterate the ASSUME steps below
+// `step_limit`; for each one live in pmask, reject if var is free in its assumed formula.
+fn pt_eigenvar_ok(slot: u64, step_limit: u64, pmask: u64, qv: u8) -> u8 {
+    let mut j : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while j < step_limit {
+        let jidx : u64 = slot * PT_MAX_STEPS + j
+        if PT_STEP_KINDS[jidx] == PT_RULE_ASSUME {
+            let jbit : u64 = PT_STEP_ASSUME_MASK[jidx]
+            if (jbit & pmask) != 0u64 {
+                let jp : u64 = pt_concl_addr(jidx)
+                let jl : u64 = PT_STEP_CONCL_LENS[jidx] as u64
+                if pt_var_free_in(qv, jp, jl) == 1u8 { ok = 0u8 }
+            }
+        }
+        j = j + 1u64
+    }
+    return ok
+}
+
 // Read a u32 little-endian from a byte span at offset off.
 fn pt_load_u32_le(base: u64, off: u64) -> u32 {
     let p : *u8 = base as *u8
@@ -410,6 +525,10 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if kind == PT_RULE_OR_ELIM { return pt_replay_or_elim(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_EX_FALSO { return pt_replay_ex_falso(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_DOUBLE_NEG_ELIM { return pt_replay_double_neg_elim(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_FORALL_ELIM { return pt_replay_forall_elim(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_EXISTS_INTRO { return pt_replay_exists_intro(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_FORALL_INTRO { return pt_replay_forall_intro(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_EXISTS_ELIM { return pt_replay_exists_elim(slot, idx, pcount, c, cl) }
     return PT_E_INVALID_INFERENCE
 }
 
@@ -751,6 +870,94 @@ fn pt_replay_double_neg_elim(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) 
     if pt_is_falsum(con2p, con2l) == 0u8 { return PT_E_INVALID_INFERENCE }   // inner consequent == ⊥
     let ant2p : u64 = antp        let ant2l : u64 = s2 as u64
     if pt_formula_eq(ant2p, ant2l, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // inner C == conclusion
+    return PT_OK
+}
+
+// ---- First-order quantifier rules ----
+
+// FORALL_ELIM (universal instantiation): premise = @x(φ); conclusion = φ[x:=t] for some term t.  Generic mask.
+fn pt_replay_forall_elim(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p0 : u64 = pt_concl_addr(idx0)
+    if pt_parse_quant(p0, l0, PT_OP_FORALL) == 0u8 { return PT_E_INVALID_INFERENCE }   // premise = @x(φ)
+    let qv : u8 = PT_Q_VAR[0u64]
+    let phi_p : u64 = PT_Q_BODY_P[0u64]   let phi_l : u64 = PT_Q_BODY_L[0u64]
+    if pt_no_rebind(phi_p, phi_l, qv) == 0u8 { return PT_E_INVALID_INFERENCE }   // alpha-renamed (Barendregt)
+    if pt_subst_match(phi_p, phi_l, c, cl, qv) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion = φ[x:=t]
+    return PT_OK
+}
+
+// EXISTS_INTRO (existential generalisation): premise = φ[x:=t]; conclusion = ?x(φ).  Generic mask.
+fn pt_replay_exists_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p0 : u64 = pt_concl_addr(idx0)
+    if pt_parse_quant(c, cl, PT_OP_EXISTS) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion = ?x(φ)
+    let qv : u8 = PT_Q_VAR[0u64]
+    let phi_p : u64 = PT_Q_BODY_P[0u64]   let phi_l : u64 = PT_Q_BODY_L[0u64]
+    if pt_no_rebind(phi_p, phi_l, qv) == 0u8 { return PT_E_INVALID_INFERENCE }
+    if pt_subst_match(phi_p, phi_l, p0, l0, qv) == 0u8 { return PT_E_INVALID_INFERENCE }   // premise = φ[x:=t]
+    return PT_OK
+}
+
+// FORALL_INTRO (universal generalisation): premise = φ; conclusion = @x(φ).  EIGENVARIABLE: x must not be
+// free in any undischarged assumption the premise depends on.  Generic mask.
+fn pt_replay_forall_intro(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 1u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i0 : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let idx0 : u64 = slot * PT_MAX_STEPS + i0
+    let l0 : u64 = PT_STEP_CONCL_LENS[idx0] as u64
+    let p0 : u64 = pt_concl_addr(idx0)
+    if pt_parse_quant(c, cl, PT_OP_FORALL) == 0u8 { return PT_E_INVALID_INFERENCE }   // conclusion = @x(φ)
+    let qv : u8 = PT_Q_VAR[0u64]
+    let phi_p : u64 = PT_Q_BODY_P[0u64]   let phi_l : u64 = PT_Q_BODY_L[0u64]
+    if pt_formula_eq(phi_p, phi_l, p0, l0) == 0u8 { return PT_E_INVALID_INFERENCE }   // inner φ == premise
+    let step : u64 = idx - slot * PT_MAX_STEPS
+    if pt_eigenvar_ok(slot, step, PT_STEP_ASSUME_MASK[idx0], qv) == 0u8 { return PT_E_INVALID_INFERENCE }
+    return PT_OK
+}
+
+// EXISTS_ELIM (existential instantiation = the dual of OR_ELIM).  Premises (arity 3): [0] ?x(φ); [1] an
+// ASSUME of the body φ (x a fresh eigenvariable); [2] a derivation of the goal C assuming φ.  Conclude C,
+// discharging the φ assumption.  EIGENVARIABLE: x must not be free in C, nor in branchC's OTHER undischarged
+// assumptions.  mask = ∃.mask | (branchC.mask & ~bit(assumeφ)).
+fn pt_replay_exists_elim(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 3u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let i_e : u64 = PT_STEP_PREMISES[base + 0u64] as u64
+    let i_a : u64 = PT_STEP_PREMISES[base + 1u64] as u64
+    let i_b : u64 = PT_STEP_PREMISES[base + 2u64] as u64
+    let idx_e : u64 = slot * PT_MAX_STEPS + i_e
+    let idx_a : u64 = slot * PT_MAX_STEPS + i_a
+    let idx_b : u64 = slot * PT_MAX_STEPS + i_b
+    if PT_STEP_KINDS[idx_a] != PT_RULE_ASSUME { return PT_E_INVALID_INFERENCE }   // case hypothesis is an ASSUME
+    let le : u64 = PT_STEP_CONCL_LENS[idx_e] as u64
+    let pe : u64 = pt_concl_addr(idx_e)
+    if pt_parse_quant(pe, le, PT_OP_EXISTS) == 0u8 { return PT_E_INVALID_INFERENCE }   // premise[0] = ?x(φ)
+    let qv : u8 = PT_Q_VAR[0u64]
+    let phi_p : u64 = PT_Q_BODY_P[0u64]   let phi_l : u64 = PT_Q_BODY_L[0u64]
+    let la : u64 = PT_STEP_CONCL_LENS[idx_a] as u64   let pa : u64 = pt_concl_addr(idx_a)
+    if pt_formula_eq(pa, la, phi_p, phi_l) == 0u8 { return PT_E_INVALID_INFERENCE }   // the ASSUME is φ
+    let lb : u64 = PT_STEP_CONCL_LENS[idx_b] as u64   let pb : u64 = pt_concl_addr(idx_b)
+    if pt_formula_eq(pb, lb, c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }   // branchC concludes C
+    if pt_var_free_in(qv, c, cl) == 1u8 { return PT_E_INVALID_INFERENCE }   // x not free in the goal C
+    let bit_a : u64 = PT_STEP_ASSUME_MASK[idx_a]
+    let bmask : u64 = PT_STEP_ASSUME_MASK[idx_b] & (0xFFFFFFFFFFFFFFFFu64 ^ bit_a)
+    let step : u64 = idx - slot * PT_MAX_STEPS
+    if pt_eigenvar_ok(slot, step, bmask, qv) == 0u8 { return PT_E_INVALID_INFERENCE }   // x not free in other assumptions
+    PT_STEP_ASSUME_MASK[idx] = PT_STEP_ASSUME_MASK[idx_e] | bmask
     return PT_OK
 }
 

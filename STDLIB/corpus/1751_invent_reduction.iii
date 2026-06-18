@@ -1,0 +1,39 @@
+/* STDLIB/corpus/1751_invent_reduction.iii -- THE NIH PURGE: III invents a modular fold beating Montgomery.
+ *
+ * For special-form primes p = 2^k - c (Mersenne, pseudo-Mersenne, Solinas -- the primes of modern STARK
+ * provers and ECC), the reduction is a FOLD r = (x & (2^k-1)) + c*(x>>k): pure shift/mask/add, NO multiply,
+ * versus Montgomery's two.  numera/invent SEARCHES the multiplier (it is NOT told c) and PROVES the fold
+ * congruent without any urem reference, via x - r == (x>>k)*p.  A wrong multiplier is refuted.  Honest
+ * boundary: superior for these primes, NOT a universal Montgomery replacement.  99 = all arms.
+ */
+module corpus_1751_invent_reduction
+
+extern @abi(c-msvc-x64) fn gilr_forge(k: u64, c: u64) -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilr_fold_cost() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilr_mont_cost() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilr_probes() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilr_proves(k: u64, c: u64, cc: u64) -> u8 from "invent.iii"
+
+fn main() -> u64 {
+    /* (1) MERSENNE p = 2^32 - 1: III invents r = (x&(2^32-1)) + (x>>32), multiplier 1, proven */
+    if gilr_forge(32u64, 1u64) != 1u64 { return 1u64 }
+    if gilr_fold_cost() != 3u32 { return 2u64 }
+    if gilr_fold_cost() >= gilr_mont_cost() { return 3u64 }     /* strictly cheaper than Montgomery (3 < 8) */
+
+    /* (2) PSEUDO-MERSENNE p = 2^32 - 5: III SEARCHES and finds multiplier 5 (it was not told c) */
+    if gilr_forge(32u64, 5u64) != 5u64 { return 4u64 }
+    if gilr_fold_cost() != 4u32 { return 5u64 }
+    if gilr_fold_cost() >= gilr_mont_cost() { return 6u64 }
+    if gilr_probes() < 2u64 { return 7u64 }                     /* it genuinely searched wrong multipliers first */
+
+    /* (3) SAFETY: the correct fold is proven; a WRONG multiplier is refuted by the SAT judge */
+    if gilr_proves(32u64, 1u64, 1u64) != 1u8 { return 8u64 }
+    if gilr_proves(32u64, 1u64, 2u64) != 0u8 { return 9u64 }
+    if gilr_proves(32u64, 5u64, 5u64) != 1u8 { return 10u64 }
+    if gilr_proves(32u64, 5u64, 4u64) != 0u8 { return 11u64 }
+
+    /* (4) a different prime width also folds: p = 2^16 - 1 */
+    if gilr_forge(16u64, 1u64) != 1u64 { return 12u64 }
+
+    return 99u64
+}

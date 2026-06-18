@@ -360,6 +360,7 @@ var RSA_GEN_N : [u64; 1]
 var RSA_GEN_E : [u64; 1]
 var RSA_GEN_D : [u64; 1]
 var RSA_CAND  : [u8; 512]
+var RSA_SMALLP : [u64; 24]    /* small odd primes for the keygen trial-division pre-filter */
 
 const RSA_E_PUB : u64 = 65537u64
 
@@ -453,21 +454,70 @@ fn rsa_rand_candidate(arena: u64, pbits: u64) -> u64 {
     return cand
 }
 
-/* generate a pbits-bit prime in `persist`; each candidate's Miller-Rabin runs
- * in a per-candidate scratch arena (modexp memory reclaimed via arena_drop;
- * the 64 global bigint slots are freed by is_prime's own drops). */
+/* cand mod p for a small odd prime p (< 2^31): high-to-low, splitting each 64-bit limb into two 32-bit
+ * halves so the running remainder (always < p) never overflows when shifted left 32.  No arena, no bigint
+ * alloc -- a cheap pre-filter that needs no Miller-Rabin modexp. */
+fn rsa_mod_small(cand: u64, nlimbs: u64, p: u64) -> u64 {
+    let mut r : u64 = 0u64
+    let mut i : u64 = nlimbs
+    while i > 0u64 {
+        i = i - 1u64
+        let limb : u64 = bigint_get_limb(cand, i)
+        let hi : u64 = (limb >> 32u64) & 0xFFFFFFFFu64
+        let lo : u64 = limb & 0xFFFFFFFFu64
+        r = (r << 32u64) | hi
+        r = r - (r / p) * p
+        r = (r << 32u64) | lo
+        r = r - (r / p) * p
+    }
+    return r
+}
+
+fn rsa_init_smallp() -> i32 {
+    RSA_SMALLP[0u64]=3u64   RSA_SMALLP[1u64]=5u64   RSA_SMALLP[2u64]=7u64   RSA_SMALLP[3u64]=11u64
+    RSA_SMALLP[4u64]=13u64  RSA_SMALLP[5u64]=17u64  RSA_SMALLP[6u64]=19u64  RSA_SMALLP[7u64]=23u64
+    RSA_SMALLP[8u64]=29u64  RSA_SMALLP[9u64]=31u64  RSA_SMALLP[10u64]=37u64 RSA_SMALLP[11u64]=41u64
+    RSA_SMALLP[12u64]=43u64 RSA_SMALLP[13u64]=47u64 RSA_SMALLP[14u64]=53u64 RSA_SMALLP[15u64]=59u64
+    RSA_SMALLP[16u64]=61u64 RSA_SMALLP[17u64]=67u64 RSA_SMALLP[18u64]=71u64 RSA_SMALLP[19u64]=73u64
+    RSA_SMALLP[20u64]=79u64 RSA_SMALLP[21u64]=83u64 RSA_SMALLP[22u64]=89u64 RSA_SMALLP[23u64]=97u64
+    return 0i32
+}
+
+/* 1 iff cand is divisible by one of the first 24 odd primes (definitely composite) -- ~75% of odd
+ * candidates are eliminated here, cheaply, before the expensive arena + Miller-Rabin. */
+fn rsa_trial_div(cand: u64, nlimbs: u64) -> u8 {
+    let mut k : u64 = 0u64
+    while k < 24u64 {
+        if rsa_mod_small(cand, nlimbs, RSA_SMALLP[k]) == 0u64 { return 1u8 }
+        k = k + 1u64
+    }
+    return 0u8
+}
+
+/* generate a pbits-bit prime in `persist`; each candidate is first TRIAL-DIVIDED by small primes (no
+ * arena, no modexp) and only the ~25% of survivors run the per-candidate scratch-arena Miller-Rabin --
+ * the same prime is found (trial division never skips a prime), far fewer 64-MiB-class allocations and
+ * full modexps, so large-key (>=512-bit) keygen is practical. */
 fn rsa_gen_prime(persist: u64, pbits: u64) -> u64 {
+    rsa_init_smallp()
+    let nlimbs : u64 = (pbits + 63u64) / 64u64
     let two : u64 = bigint_from_u64(persist, 2u64)
     let mut cand : u64 = rsa_rand_candidate(persist, pbits)
     let mut found : u64 = 0u64
     while found == 0u64 {
-        let tmp : u64 = arena_new(67108864u64)        /* 1<<26 = 64 MiB scratch (precomputed; avoids literal-shift misparse) */
-        let pr : u8 = rsa_is_prime(tmp, cand)
-        arena_drop(tmp)
-        if pr == 1u8 { found = 1u64 } else {
-            let next : u64 = bigint_add(persist, cand, two)
+        if rsa_trial_div(cand, nlimbs) == 1u8 {
+            let nxt : u64 = bigint_add(persist, cand, two)   /* small-prime factor -> composite, skip cheaply */
             bigint_drop(cand)
-            cand = next
+            cand = nxt
+        } else {
+            let tmp : u64 = arena_new(4194304u64)            /* 4 MiB scratch (a few KiB live); was 64 MiB/candidate */
+            let pr : u8 = rsa_is_prime(tmp, cand)
+            arena_drop(tmp)
+            if pr == 1u8 { found = 1u64 } else {
+                let nxt : u64 = bigint_add(persist, cand, two)
+                bigint_drop(cand)
+                cand = nxt
+            }
         }
     }
     bigint_drop(two)
@@ -658,20 +708,20 @@ fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
      * deleted -- ONE Newton proof surface, shared with bigint modpow + fields. */
     let n0full : u64 = (RM_N[0] as u64) | ((RM_N[1] as u64) << 32u64)
     RM_NP[0] = (mont_nprime64(n0full) & 0xFFFFFFFFu64) as u32
-    /* R2 = 2^(64*nw) mod N : start at R mod N = 2^(32*nw) mod N = 2^(32*nw)-N,
-     * then double 32*nw more times.  Build R mod N = (2^(32*nw) - N). */
+    /* R2 = 2^(64*nw) mod N, computed by doubling 1 modulo N a total of 64*nw times (each rm_dbl does the
+     * conditional subtract, keeping the value in [0,N)).  Correct for ANY modulus width.  The prior shortcut
+     * "R mod N = 2^(32*nw) - N, then double 32*nw times" assumed N filled its top word (N > 2^(32*nw-1)),
+     * which holds only when the half-modulus bit length is a MULTIPLE OF 32 (160-bit -> 5 words, 256-bit ->
+     * 8 words).  For a 272-bit half-modulus (9 words = 288 bits; the top 16 bits of word 8 are zero) the
+     * shortcut left R2 un-reduced -> a wrong Montgomery domain -> a modexp that never matched the integers
+     * -> Miller-Rabin rejected EVERY candidate and keygen looped forever (the 544-bit "cost wall" was this
+     * bug).  Doubling from 1 needs no top-word assumption. */
     let r2 : *u32 = &RM_R2 as *u32
-    let pp : *u32 = &RM_N as *u32
-    let mut borrow : u64 = 0u64
     let mut i : u64 = 0u64
-    while i < nw {
-        let v : u64 = 0x100000000u64 - (pp[i] as u64) - borrow
-        r2[i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
-        i = i + 1u64
-    }
+    while i < nw { r2[i] = 0u32 ; i = i + 1u64 }
+    r2[0] = 1u32
     let mut d : u64 = 0u64
-    let dn : u64 = 32u64 * nw
+    let dn : u64 = 64u64 * nw
     while d < dn { rm_dbl(&RM_R2 as u64, nw) ; d = d + 1u64 }
     /* aMont = base * R2 * R^-1 = base*R ; load base into RM_A */
     rm_extract(base, &RM_A as u64, 130u64)

@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1743_rsa_pss_544_roundtrip.iii -- RSASSA-PSS at 544 bits, end-to-end (caveat closed).
+ *
+ * The >=522-bit PSS roundtrip was listed as a deferred caveat ("route keygen multiply onto NTT").  The real
+ * blocker was a CORRECTNESS bug, not a multiply: the Montgomery R2 setup in rsa_modexp used the shortcut
+ * "R mod N = 2^(32*nw) - N", valid only when the half-modulus fills its top 32-bit word (bit length a
+ * MULTIPLE OF 32).  A 272-bit half-modulus (9 words = 288 bits, top 16 bits zero) violated it -> a wrong
+ * Montgomery domain -> Miller-Rabin rejected EVERY candidate -> keygen looped forever.  With R2 computed by
+ * doubling 1 mod N (correct for any width), 544-bit keygen -> sign -> verify -> tamper completes in ~2s.
+ *
+ * emLen = 68 >= 2*hLen + 2 = 66, so PSS-SHA256 at sLen=0 is valid.  Exit 99; 1..3 localise the stage.
+ */
+module corpus_1743_rsa_pss_544_roundtrip
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn rsa_keygen(arena: u64, modBits: u64, seed: u64, slen: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_n() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_e() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_d() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_sign(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64, sig_out: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_verify(arena: u64, n: u64, e: u64, modBits: u64, mHash: u64, sig: u64, sigLen: u64, sLen: u64) -> u8 from "rsa.iii"
+
+var SEED : [u8; 48]
+var MH   : [u8; 32]
+var SIG  : [u8; 96]
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(268435456u64)
+    let sp : *u8 = &SEED as *u8
+    let mut i : u64 = 0u64
+    while i < 48u64 { sp[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+    rsa_keygen(ar, 544u64, &SEED as u64, 48u64)
+    let n : u64 = rsa_gen_n()
+    let e : u64 = rsa_gen_e()
+    let d : u64 = rsa_gen_d()
+    let mh : *u8 = &MH as *u8
+    i = 0u64
+    while i < 32u64 { mh[i] = (i & 0xFFu64) as u8  i = i + 1u64 }
+    if rsa_pss_sign(ar, n, d, 544u64, &MH as u64, &MH as u64, 0u64, &SIG as u64) != 0i32 { return 1u64 }
+    if rsa_pss_verify(ar, n, e, 544u64, &MH as u64, &SIG as u64, 68u64, 0u64) != 1u8 { return 2u64 }
+    let sg : *u8 = &SIG as *u8
+    sg[7] = ((sg[7] as u64) ^ 0x01u64) as u8
+    if rsa_pss_verify(ar, n, e, 544u64, &MH as u64, &SIG as u64, 68u64, 0u64) != 0u8 { return 3u64 }
+    return 99u64
+}

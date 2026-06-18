@@ -1369,6 +1369,8 @@ declare -A EXPECTED=(
     [1741_xii_sort_meter]=99
     # autonomous ISA macro synthesis: bisim-gated, refute-by-default; an unproven macro never enters the ISA.
     [1742_isa_macro_synth]=99
+    # RSA-PSS at 544 bits (non-multiple-of-32 half-modulus): keygen->sign->verify->tamper, the Montgomery R2 bug fixed.
+    [1743_rsa_pss_544_roundtrip]=99
 )
 
 PASS=0

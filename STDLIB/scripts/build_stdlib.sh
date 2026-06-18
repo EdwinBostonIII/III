@@ -500,6 +500,9 @@ MODULES=(
     "numera/keccak_sponge"
     "numera/mldsa"
     "numera/mlkem"
+    # aether/pq_quorum -- POST-QUANTUM federation quorum certificates: BFT 2f+1 over ML-DSA votes (survives a
+    # quantum adversary that could forge the classical Ed25519 QC).  Additive; composes numera/mldsa.
+    "aether/pq_quorum"
     "numera/slhdsa"
     "numera/pq_dispatch"
     "sanctus/mandate_m22"

@@ -1,0 +1,101 @@
+/* STDLIB/iii/aether/pq_quorum.iii -- POST-QUANTUM FEDERATION QUORUM CERTIFICATES.
+ *
+ * The federation's HotStuff quorum certificates (aether/hotstuff) bind 2f+1 Ed25519 signatures over
+ * block_mhash||view.  Ed25519 is broken by a cryptographically-relevant quantum computer: a quantum
+ * adversary could forge the 2f+1 votes and rewrite the sealed planetary ledger.  This adds a POST-QUANTUM
+ * quorum-certificate path -- the same BFT 2f+1 threshold, but each vote is an ML-DSA (FIPS-204, Dilithium)
+ * signature (numera/mldsa) -- so the federation seal survives the quantum transition.  It is ADDITIVE: the
+ * classical hotstuff path is untouched (no consensus regression); a node that requires quantum resistance
+ * verifies the PQ certificate instead of / in addition to the Ed25519 one.
+ *
+ * Each peer holds an ML-DSA-44 (level 2) keypair; a vote is iii_mldsa_sign over block_mhash(32)||view(8);
+ * pqq_verify counts the votes whose ML-DSA signature is VALID against the voter's OWN key over the CURRENT
+ * block and returns 1 iff the count reaches the threshold.  A forged, tampered, or wrong-block signature
+ * does not count -- exactly the BFT safety property, now quantum-resistant.
+ *
+ * Hexad: kind_passage.  Ring: R-1 (the planetary seal).  K: 0.96.  Composes numera/mldsa + the BFT
+ * threshold -- no new crypto, no ML.  Determinism: integer + lattice; no float.
+ */
+module aether_pq_quorum
+
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+
+const PQQ_LEVEL    : u64 = 2u64       /* ML-DSA-44 */
+const PQQ_MAXPEERS : u64 = 8u64
+const PQQ_PK  : u64 = 2048u64         /* per-peer buffer strides (>= the FIPS-204 level-2 sizes) */
+const PQQ_SK  : u64 = 5120u64
+const PQQ_SIG : u64 = 4096u64
+
+var PQQ_PKS    : [u8; 16384]          /* 8 * 2048 */
+var PQQ_SKS    : [u8; 40960]          /* 8 * 5120 */
+var PQQ_SIGS   : [u8; 32768]          /* 8 * 4096 */
+var PQQ_SIGLEN : [u64; 8]
+var PQQ_SIGNED : [u8; 8]              /* 1 iff peer i cast a vote on the current block */
+var PQQ_MSG    : [u8; 40]             /* block_mhash(32) || view(8 LE) */
+var PQQ_SEED   : [u8; 64]
+var PQQ_SLB    : [u8; 16]
+
+/* generate peer i's ML-DSA keypair from a deterministic per-peer seed byte. */
+fn pqq_keygen(i: u64, seed_byte: u8) -> i32 @export {
+    if i >= PQQ_MAXPEERS { return -1i32 }
+    let mut k : u64 = 0u64
+    while k < 32u64 { PQQ_SEED[k] = (((seed_byte as u64) + k) & 0xFFu64) as u8  k = k + 1u64 }
+    return iii_mldsa_keygen(PQQ_LEVEL, (&PQQ_SEED as u64), (&PQQ_PKS as u64) + i * PQQ_PK, (&PQQ_SKS as u64) + i * PQQ_SK)
+}
+
+/* set the block under vote (msg = block_mhash || view) and clear all peer votes. */
+fn pqq_set_block(block_mhash: u64, view: u64) -> i32 @export {
+    let m : *u8 = block_mhash as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { PQQ_MSG[k] = m[k]  k = k + 1u64 }
+    k = 0u64
+    while k < 8u64 { PQQ_MSG[32u64 + k] = ((view >> (k * 8u64)) & 0xFFu64) as u8  k = k + 1u64 }
+    let mut p : u64 = 0u64
+    while p < PQQ_MAXPEERS { PQQ_SIGNED[p] = 0u8  p = p + 1u64 }
+    return 0i32
+}
+
+/* peer i casts an ML-DSA vote on the current block. */
+fn pqq_vote(i: u64) -> i32 @export {
+    if i >= PQQ_MAXPEERS { return -1i32 }
+    let rc : i32 = iii_mldsa_sign(PQQ_LEVEL, (&PQQ_SKS as u64) + i * PQQ_SK, (&PQQ_MSG as u64), 40u64, (&PQQ_SIGS as u64) + i * PQQ_SIG, (&PQQ_SLB as u64))
+    if rc != 0i32 { return rc }
+    PQQ_SIGLEN[i] = (PQQ_SLB[0u64] as u64) | ((PQQ_SLB[1u64] as u64) << 8u64) | ((PQQ_SLB[2u64] as u64) << 16u64) | ((PQQ_SLB[3u64] as u64) << 24u64)
+    PQQ_SIGNED[i] = 1u8
+    return 0i32
+}
+
+/* the count of peers (over n_peers) whose ML-DSA vote is VALID against their own key over the current block. */
+fn pqq_valid_count(n_peers: u64) -> u64 @export {
+    let mut valid : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n_peers {
+        if i < PQQ_MAXPEERS {
+            if PQQ_SIGNED[i] == 1u8 {
+                if iii_mldsa_verify(PQQ_LEVEL, (&PQQ_PKS as u64) + i * PQQ_PK, (&PQQ_MSG as u64), 40u64, (&PQQ_SIGS as u64) + i * PQQ_SIG, PQQ_SIGLEN[i]) == 0i32 {
+                    valid = valid + 1u64
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return valid
+}
+
+/* THE POST-QUANTUM QUORUM CERTIFICATE: 1 iff at least `threshold` (the BFT 2f+1) peers cast a VALID ML-DSA
+ * vote on the current block.  A forged / tampered / wrong-block signature is not counted. */
+fn pqq_verify(n_peers: u64, threshold: u64) -> u8 @export {
+    if pqq_valid_count(n_peers) >= threshold { return 1u8 }
+    return 0u8
+}
+
+/* flip one byte of peer i's signature -- a corrupted/forged QC vote in transit, which the verifier MUST
+ * reject (the federation's tamper-detection, exercised by the conformance KAT). */
+fn pqq_tamper(i: u64) -> i32 @export {
+    if i >= PQQ_MAXPEERS { return -1i32 }
+    let b : u64 = i * PQQ_SIG
+    PQQ_SIGS[b] = PQQ_SIGS[b] ^ 0x01u8
+    return 0i32
+}

@@ -1371,6 +1371,8 @@ declare -A EXPECTED=(
     [1742_isa_macro_synth]=99
     # RSA-PSS at 544 bits (non-multiple-of-32 half-modulus): keygen->sign->verify->tamper, the Montgomery R2 bug fixed.
     [1743_rsa_pss_544_roundtrip]=99
+    # post-quantum federation quorum certificate: BFT 2f+1 over ML-DSA votes; tampered/insufficient votes rejected.
+    [1744_pq_quorum]=99
 )
 
 PASS=0

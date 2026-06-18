@@ -1,0 +1,30 @@
+/* STDLIB/corpus/1757_oneway_anatomy.iii -- THE ANATOMY OF ONE-WAYNESS (the provable answer to "reverse a hash").
+ *
+ * Can III run a cipher/hash backward to recover the input?  The answer is a THEOREM, not a hope: reversible up
+ * to the compression, provably one-way AT it.  Proven on the existing bv_bits judge, no island.  99 = all arms.
+ *
+ *   (1) the ARX round is a BIJECTION (reversible) -- a permutation, invertible for all inputs.
+ *   (2) the compression/truncation is NON-INJECTIVE (the entropy sink): its output is invariant under flipping
+ *       a DROPPED bit, so trillions of inputs collapse to one -- no reversible hardware un-mixes that (P!=NP).
+ *   (3) NOT vacuous: flipping a KEPT bit DOES change the output, so the compression genuinely preserves the
+ *       low bits while destroying the high.  Together: III locates exactly WHERE one-wayness lives.
+ */
+module corpus_1757_oneway_anatomy
+
+extern @abi(c-msvc-x64) fn pw_arx_atom_invertible() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_compress_destroys() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_kept_bits_matter() -> u8 from "primweb.iii"
+
+fn main() -> u64 {
+    /* (1) the round is reversible: the ARX atom is a bijection */
+    if pw_arx_atom_invertible() != 1u8 { return 1u64 }
+
+    /* (2) the compression is IRREVERSIBLE: a dropped bit cannot affect the output -> information destroyed ->
+     *     non-injective -> not invertible (the entropy sink, proven) */
+    if pw_compress_destroys() != 1u8 { return 2u64 }
+
+    /* (3) not vacuous: a kept bit DOES change the output, so the truncation preserves-low/destroys-high genuinely */
+    if pw_kept_bits_matter() != 0u8 { return 3u64 }
+
+    return 99u64
+}

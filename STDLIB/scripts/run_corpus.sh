@@ -1397,6 +1397,8 @@ declare -A EXPECTED=(
     [1755_primweb]=99
     # the weave: an "impossible" binary optimization (a&b -> a) made sound by proof on the don't-care care-set.
     [1756_weave]=99
+    # the anatomy of one-wayness: round reversible (bijection) + compression provably non-injective (entropy sink).
+    [1757_oneway_anatomy]=99
 )
 
 PASS=0

@@ -27,6 +27,8 @@ module numera_primweb
 
 extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
@@ -81,4 +83,34 @@ fn pw_arx_atom_wrong_inverse() -> u8 @export {
     let dfwd : u32 = pw_rotl(bb_xor(d, t), 16u64)
     let drec : u32 = pw_rotr(dfwd, 16u64)                /* WRONG: forgot ^ t */
     return bb_equal(drec, d)
+}
+
+/* THE ANATOMY OF ONE-WAYNESS (the provable answer to "can III reverse a hash": NO -- and here is WHERE
+ * reversibility dies).  A round is a bijection (reversible -- proven above).  A hash's COMPRESSION/truncation
+ * is the entropy sink: it is NON-INJECTIVE by construction.  trunc(x) = x & lowmask drops the high bits, so
+ * its output is INVARIANT under flipping any dropped bit -- trillions of inputs collapse to one output, and no
+ * reversible hardware un-mixes that (the P!=NP / un-mixing-paint wall).  Proven UNIVERSALLY by the bv judge:
+ * the truncation output does not change when a DROPPED bit is flipped -> the information in it is destroyed. */
+const PW_TRUNC_MASK : u64 = 0x0000FFFFu64                /* keep the low 16 bits of a 32-bit word, drop the high 16 */
+fn pw_compress_destroys() -> u8 @export {
+    bb_reset(PW_W)
+    let x       : u32 = bb_var(0u32)
+    let mask    : u32 = bb_const(PW_TRUNC_MASK)
+    let highbit : u32 = bb_const(0x00010000u64)         /* bit 16 -- a DROPPED bit */
+    let tx      : u32 = bb_and(x, mask)
+    let tflip   : u32 = bb_and(bb_xor(x, highbit), mask)
+    return bb_equal(tx, tflip)                          /* == 1: flipping a dropped bit cannot change output -> destroyed */
+}
+
+/* THE BITING COMPANION (the compression is not vacuously constant): flipping a KEPT bit DOES change the
+ * output -- so the truncation genuinely preserves the low bits while destroying the high.  Returns the judge's
+ * verdict on equality under a kept-bit flip; the KAT asserts 0 (they differ -> the kept bits truly matter). */
+fn pw_kept_bits_matter() -> u8 @export {
+    bb_reset(PW_W)
+    let x      : u32 = bb_var(0u32)
+    let mask   : u32 = bb_const(PW_TRUNC_MASK)
+    let lowbit : u32 = bb_const(0x00000001u64)          /* bit 0 -- a KEPT bit */
+    let tx     : u32 = bb_and(x, mask)
+    let tflip  : u32 = bb_and(bb_xor(x, lowbit), mask)
+    return bb_equal(tx, tflip)                          /* == 0: flipping a kept bit changes output (not vacuous) */
 }

@@ -25,7 +25,6 @@
 
 module omnia_ripple
 
-extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 
 extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
                                          cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"

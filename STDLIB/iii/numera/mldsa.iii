@@ -32,8 +32,6 @@ extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
  * (numera/ntt.iii); mldsa_ntt_work/mldsa_invntt_work delegate to the tabled cores
  * (min_len=1 -> complete; start_k=255).  MLDSA_ZETAS is u64 so the organ's u64
  * zeta-table reader can index it directly.  Final ×n^-1 inverse scale stays here. */
-extern @abi(c-msvc-x64) fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 from "ntt.iii"
-extern @abi(c-msvc-x64) fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 from "ntt.iii"
 /* APOTHEOSIS C.1: the per-q descriptor over the same organ (consumes ntt_ctx). */
 extern @abi(c-msvc-x64) fn ntt_ctx_forward(row: u64, base: u64, zeta_addr: u64) -> i32 from "ntt_ctx.iii"
 extern @abi(c-msvc-x64) fn ntt_ctx_inverse(row: u64, base: u64, zeta_addr: u64) -> i32 from "ntt_ctx.iii"

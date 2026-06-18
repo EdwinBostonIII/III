@@ -27,8 +27,6 @@
 
 module aether_pattern_set_federation
 
-extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
-extern @abi(c-msvc-x64) fn pattern_set_verify(set_ptr: u64) -> u8 from "pattern_table.iii"
 
 extern @abi(c-msvc-x64) fn fed_seal_lookup_anchor(child_tier: u32, child_root_ptr: u64) -> u32 from "fed_seal.iii"
 extern @abi(c-msvc-x64) fn fed_seal_anchor_byte(slot: u32, child_or_parent: u32, idx: u32) -> u32 from "fed_seal.iii"

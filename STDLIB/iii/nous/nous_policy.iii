@@ -38,7 +38,6 @@
  */
 module nous_policy
 
-extern @abi(c-msvc-x64) fn nous_feat_kind(t: u32) -> u32 from "nous_features.iii"
 
 const NOUS_POL_N          : u32 = 45u32   /* 40 LIVE R-rule slots (R001-R004 retired by route S are EXCLUDED -- the proposer emits only the live set; CUT-10) + 5 trit */
 const NOUS_POL_TRIT_LO    : u32 = 101u32

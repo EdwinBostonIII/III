@@ -25,9 +25,6 @@
 
 module verba_normalise
 
-extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
 extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
 
 const NORM_OK : i32 = 0i32

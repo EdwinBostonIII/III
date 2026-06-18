@@ -46,7 +46,6 @@ extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
-extern @abi(c-msvc-x64) fn at_advance() -> u64 from "algebraic_time.iii"
 extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "aether/witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "aether/witness_hook.iii"
 

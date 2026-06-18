@@ -24,10 +24,6 @@
 
 module omnia_resolver_memo
 
-extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
 
 const MEMO_CAP : u32 = 4096u32
 

@@ -1,0 +1,25 @@
+/* STDLIB/corpus/1760_gil_cycle_validate.iii -- THE CASH-IN: the invention engine, cost-validated against III's
+ * REAL microarch model (numera/microarch_model -- the same cycle oracle numera/cost_calculus already trusts).
+ *
+ * The GIL's value-sieve ranks by an abstract OP-COUNT.  This wires it to the analytic cycle model so "cheaper"
+ * becomes COST-TRUE and TARGET-RELATIVE: the SAME strength reduction is validated cheaper on a slow-multiply
+ * target yet REJECTED on a fast-multiply one -- the microarch model OVERRULES the op-count sieve exactly where
+ * the op-count is blind.  Two existing faculties connected (invent <- microarch_model), no island.  99 = all.
+ */
+module corpus_1760_gil_cycle_validate
+
+extern @abi(c-msvc-x64) fn gil_cycle_validate(k: u64, mul_latency: u32) -> u8 from "invent.iii"
+
+fn main() -> u64 {
+    /* SLOW-MULTIPLY target (imul = 10 cycles): the gil-invented reductions are cycle-validated cheaper. */
+    if gil_cycle_validate(7u64, 10u32) != 1u8 { return 1u64 }   /* 7*x -> (x<<3) - x  (~2 cyc << 10) */
+    if gil_cycle_validate(9u64, 10u32) != 1u8 { return 2u64 }   /* 9*x -> (x<<3) + x */
+    if gil_cycle_validate(3u64, 10u32) != 1u8 { return 3u64 }   /* 3*x -> (x<<1) + x */
+
+    /* BITING -- the cash-in's TEETH: on a FAST-MULTIPLY target (imul = 1 cycle) the SAME reduction is NOT
+     * cheaper.  The op-count sieve would still "reduce"; the real microarch model REFUSES it.  Cost is
+     * target-relative, and III now computes that from the cycle model it already owns. */
+    if gil_cycle_validate(7u64, 1u32) != 0u8 { return 4u64 }
+
+    return 99u64
+}

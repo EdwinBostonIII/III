@@ -38,6 +38,11 @@ extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+/* THE COST-TRUTH BRIDGE: cost an invented form by III's EXISTING analytic microarch cycle model
+ * (numera/microarch_model -- the same oracle numera/cost_calculus uses), not a crude op-count. */
+extern @abi(c-msvc-x64) fn ma_init() -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_set_latency(opcode: u32, cycles: u32) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_simulate(ops: *u32, n: u32, deps: *u32, dep_n: u32, out_cycles: *u64) -> i32 from "microarch_model.iii"
 
 const GIL_W        : u64 = 64u64       /* prove at the deployment machine width */
 const GIL_MUL_COST : u32 = 4u32        /* the value gradient: a multiply is the expensive baseline */
@@ -437,3 +442,70 @@ fn gil6_best_mode() -> u32 @export { return GIL6_BEST_MODE }
 fn gil6_best_a() -> u32 @export { return GIL6_BEST_A }
 fn gil6_judged() -> u64 @export { return GIL6_JUDGED }
 fn gil6_drops() -> u64 @export { return GIL6_DROPS }
+
+/* ============================================================================================================
+ * THE CASH-IN: the invention engine, cost-validated against III's REAL microarch model (numera/microarch_model)
+ * ------------------------------------------------------------------------------------------------------------
+ * The value-sieve (gil_cost) ranks candidates by an abstract OP-COUNT -- correct for a gate-count / zk target
+ * where a multiply is the dominant cost.  But on real silicon "cheaper" is TARGET-RELATIVE: a strength
+ * reduction that wins by op-count can LOSE by cycles if the target's multiplier is fast.  This bridge feeds a
+ * gil-invented form to the same analytic cycle model the optimizer's cost_calculus already trusts, so the
+ * invention engine's "cheaper" becomes COST-TRUE -- additive (the op-count search is untouched; this only adds
+ * a cycle-truth verdict).  Two existing faculties connected, no island.
+ *
+ * Opcodes are caller-defined latency labels for the model; deps are (consumer_index, producer_index) pairs. */
+const GIL_MA_MUL : u32 = 10u32
+const GIL_MA_SHL : u32 = 11u32
+const GIL_MA_SUB : u32 = 12u32
+const GIL_MA_ADD : u32 = 13u32
+
+var GIL_MA_OPS  : [u32; 8]
+var GIL_MA_DEPS : [u32; 16]
+var GIL_MA_CYC  : [u64; 1]
+
+fn gil_ma_cycles(n: u32, dep_n: u32) -> u64 {
+    ma_simulate((&GIL_MA_OPS as u64) as *u32, n, (&GIL_MA_DEPS as u64) as *u32, dep_n, (&GIL_MA_CYC as u64) as *u64)
+    return GIL_MA_CYC[0u64]
+}
+
+/* Validate the gil-invented reduction of mul(x,k) against the cycle model, for a target whose MULTIPLY latency
+ * is `mul_latency` (shift/add/sub fixed at 1).  Returns 1 iff the invented form is STRICTLY fewer cycles than a
+ * single imul on that target -- so the SAME reduction returns 1 on a slow-multiply target and 0 on a fast one. */
+fn gil_cycle_validate(k: u64, mul_latency: u32) -> u8 @export {
+    gil_forge(k)
+    let kind : u32 = gil_best_kind()
+    ma_init()
+    ma_set_latency(GIL_MA_MUL, mul_latency)
+    ma_set_latency(GIL_MA_SHL, 1u32)
+    ma_set_latency(GIL_MA_SUB, 1u32)
+    ma_set_latency(GIL_MA_ADD, 1u32)
+    /* baseline: a single imul */
+    GIL_MA_OPS[0u64] = GIL_MA_MUL
+    let cyc_imul : u64 = gil_ma_cycles(1u32, 0u32)
+    /* the invented form, by winning shape (gil_best_kind 1..5) */
+    let mut n  : u32 = 0u32
+    let mut dn : u32 = 0u32
+    if kind == 1u32 {                                  /* shl(x,a) */
+        GIL_MA_OPS[0u64] = GIL_MA_SHL  n = 1u32  dn = 0u32
+    }
+    if kind == 2u32 {                                  /* (x<<a) - x */
+        GIL_MA_OPS[0u64] = GIL_MA_SHL  GIL_MA_OPS[1u64] = GIL_MA_SUB
+        GIL_MA_DEPS[0u64] = 1u32  GIL_MA_DEPS[1u64] = 0u32  n = 2u32  dn = 1u32
+    }
+    if kind == 3u32 {                                  /* (x<<a) + x */
+        GIL_MA_OPS[0u64] = GIL_MA_SHL  GIL_MA_OPS[1u64] = GIL_MA_ADD
+        GIL_MA_DEPS[0u64] = 1u32  GIL_MA_DEPS[1u64] = 0u32  n = 2u32  dn = 1u32
+    }
+    if kind == 4u32 {                                  /* (x<<a) + (x<<b) */
+        GIL_MA_OPS[0u64] = GIL_MA_SHL  GIL_MA_OPS[1u64] = GIL_MA_SHL  GIL_MA_OPS[2u64] = GIL_MA_ADD
+        GIL_MA_DEPS[0u64] = 2u32  GIL_MA_DEPS[1u64] = 0u32  GIL_MA_DEPS[2u64] = 2u32  GIL_MA_DEPS[3u64] = 1u32  n = 3u32  dn = 2u32
+    }
+    if kind == 5u32 {                                  /* (x<<a) - (x<<b) */
+        GIL_MA_OPS[0u64] = GIL_MA_SHL  GIL_MA_OPS[1u64] = GIL_MA_SHL  GIL_MA_OPS[2u64] = GIL_MA_SUB
+        GIL_MA_DEPS[0u64] = 2u32  GIL_MA_DEPS[1u64] = 0u32  GIL_MA_DEPS[2u64] = 2u32  GIL_MA_DEPS[3u64] = 1u32  n = 3u32  dn = 2u32
+    }
+    if n == 0u32 { return 0u8 }                        /* no reduction found -> not cheaper */
+    let cyc_form : u64 = gil_ma_cycles(n, dn)
+    if cyc_form < cyc_imul { return 1u8 }
+    return 0u8
+}

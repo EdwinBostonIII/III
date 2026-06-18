@@ -1,0 +1,51 @@
+/* 1669_self_atlas_report.iii -- pin the in-III lens to the generated expectations.
+ *
+ * omnia/self_atlas_data.iii carries the lens signals computed by gen_self_atlas.py (the
+ * dashboard renderer) as satlas_data_expect_*().  This test loads III's REAL self-model and
+ * asserts the in-III lens (omnia/self_atlas_lens) reproduces every one of them EXACTLY -- so
+ * the Python render and the .iii authority can never silently diverge (no island).
+ *
+ * Both sides recompute from the same source each regeneration, so this stays valid as III
+ * grows.  main() returns 99 on full agreement; a distinct code identifies the first mismatch.
+ */
+module corpus_1669
+
+extern @abi(c-msvc-x64) fn satlas_data_load() -> i32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_coupling() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_orphans() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_roots() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_leaves() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_cycle_nodes() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_redundant() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_max_fanin() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_top_hub_impact() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_emergence() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_expect_max_depends() -> u32 from "self_atlas_data.iii"
+
+extern @abi(c-msvc-x64) fn salens_coupling() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_orphans() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_roots() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_leaves() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_cycle_nodes() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_redundant() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_fanin() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_top_hub_impact() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_emergence_index() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_depends() -> u32 from "self_atlas_lens.iii"
+
+fn main() -> u64 {
+    satlas_data_load()
+
+    if salens_coupling() != satlas_data_expect_coupling() { return 1u64 }
+    if salens_count_orphans() != satlas_data_expect_orphans() { return 2u64 }
+    if salens_count_roots() != satlas_data_expect_roots() { return 3u64 }
+    if salens_count_leaves() != satlas_data_expect_leaves() { return 4u64 }
+    if salens_count_cycle_nodes() != satlas_data_expect_cycle_nodes() { return 5u64 }
+    if salens_count_redundant() != satlas_data_expect_redundant() { return 6u64 }
+    if salens_max_fanin() != satlas_data_expect_max_fanin() { return 7u64 }
+    if salens_top_hub_impact() != satlas_data_expect_top_hub_impact() { return 8u64 }
+    if salens_emergence_index() != satlas_data_expect_emergence() { return 9u64 }
+    if salens_max_depends() != satlas_data_expect_max_depends() { return 10u64 }
+
+    return 99u64
+}

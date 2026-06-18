@@ -1,0 +1,154 @@
+/* 1666_self_atlas.iii -- omnia::self_atlas: III's native self-model of its own module graph.
+ *
+ * Builds a hand-verified directed dependency graph and asserts every query the generative
+ * organs rely on.  Graph (edges = "depends on"):
+ *
+ *     a -> b      a -> c      b -> d      c -> d      d -> e      a -> d (redundant)
+ *     x -> y      y -> z      z -> x      (a 3-cycle, separate component)
+ *
+ * Node ids by intern order: a=0 b=1 c=2 d=3 e=4 x=5 y=6 z=7  (8 nodes, 9 edges).
+ *
+ * Hand-checked expectations:
+ *   fanout(a)=3 ; fanin(d)=3 ; fanin(e)=1
+ *   reaches(a,e)=1 ; reaches(e,a)=0 ; depends_direct(a,e)=0
+ *   in_cycle(a)=0 ; in_cycle(x)=1 ; same_cycle(x,z)=1 ; same_cycle(a,d)=0
+ *   would_cycle(e,a)=1 (a already reaches e) ; would_cycle(a,e)=0 ; would_cycle(d,a)=1
+ *   remove_safe(a,d)=1 (a->b->d remains) ; remove_safe(a,b)=0 (only path to b)
+ *   impact_count(d)=3 {a,b,c} ; impact_count(e)=4 {a,b,c,d} ; impact_count(a)=0
+ *   steepest_hub = e (id 4, the largest blast radius)
+ *   impact_into(d) = {a,b,c} = ids {0,1,2}
+ *   commit is reproducible across an identical rebuild, and changes when an edge is added.
+ *
+ * main() returns 99 on full pass; a distinct small code identifies the first failing check.
+ */
+module corpus_1666
+
+extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_find(name_ptr: u64, len: u64) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_fanout(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_fanin(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_depends_direct(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_reaches(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_in_cycle(n: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_same_cycle(a: u32, b: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_would_cycle(a: u32, b: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_remove_safe(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_impact_count(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_impact_into(n: u32, out_ptr: u64, max: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_steepest_hub() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_commit(out32: u64) -> i32 from "self_atlas.iii"
+
+var T_A  : [u8; 1]
+var T_B  : [u8; 1]
+var CMT1 : [u8; 32]
+var CMT2 : [u8; 32]
+var CMT3 : [u8; 32]
+var IMP  : [u32; 16]
+
+/* intern-and-link by two single-char names */
+fn lk(c1: u32, c2: u32) -> i32 {
+    let pa : *u8 = (&T_A as u64) as *u8
+    let pb : *u8 = (&T_B as u64) as *u8
+    pa[0u64] = c1 as u8
+    pb[0u64] = c2 as u8
+    return satlas_link((&T_A as u64), 1u64, (&T_B as u64), 1u64)
+}
+
+/* node id of a single-char name */
+fn id1(c: u32) -> u32 {
+    let pa : *u8 = (&T_A as u64) as *u8
+    pa[0u64] = c as u8
+    return satlas_find((&T_A as u64), 1u64)
+}
+
+/* 32-byte equality */
+fn beq32(p: u64, q: u64) -> u8 {
+    let a : *u8 = p as *u8
+    let b : *u8 = q as *u8
+    let mut i : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while i < 32u64 {
+        if a[i] != b[i] { eq = 0u8 }
+        i = i + 1u64
+    }
+    return eq
+}
+
+fn build() -> i32 {
+    satlas_reset()
+    lk(97u32, 98u32)    /* a->b */
+    lk(97u32, 99u32)    /* a->c */
+    lk(98u32, 100u32)   /* b->d */
+    lk(99u32, 100u32)   /* c->d */
+    lk(100u32, 101u32)  /* d->e */
+    lk(97u32, 100u32)   /* a->d (redundant) */
+    lk(120u32, 121u32)  /* x->y */
+    lk(121u32, 122u32)  /* y->z */
+    lk(122u32, 120u32)  /* z->x */
+    return 0i32
+}
+
+fn main() -> u64 {
+    build()
+
+    let a : u32 = id1(97u32)
+    let b : u32 = id1(98u32)
+    let c : u32 = id1(99u32)
+    let d : u32 = id1(100u32)
+    let e : u32 = id1(101u32)
+    let x : u32 = id1(120u32)
+    let z : u32 = id1(122u32)
+
+    if satlas_node_count() != 8u32 { return 1u64 }
+    if satlas_edge_count() != 9u32 { return 2u64 }
+
+    if satlas_fanout(a) != 3u32 { return 3u64 }
+    if satlas_fanin(d) != 3u32 { return 4u64 }
+    if satlas_fanin(e) != 1u32 { return 5u64 }
+
+    if satlas_depends_direct(a, b) != 1u8 { return 6u64 }
+    if satlas_depends_direct(a, e) != 0u8 { return 7u64 }
+
+    if satlas_reaches(a, e) != 1u8 { return 8u64 }
+    if satlas_reaches(e, a) != 0u8 { return 9u64 }
+
+    if satlas_in_cycle(a) != 0u8 { return 10u64 }
+    if satlas_in_cycle(x) != 1u8 { return 11u64 }
+    if satlas_in_cycle(d) != 0u8 { return 12u64 }
+
+    if satlas_same_cycle(x, z) != 1u8 { return 13u64 }
+    if satlas_same_cycle(a, d) != 0u8 { return 14u64 }
+
+    if satlas_would_cycle(e, a) != 1u8 { return 15u64 }
+    if satlas_would_cycle(a, e) != 0u8 { return 16u64 }
+    if satlas_would_cycle(d, a) != 1u8 { return 17u64 }
+
+    if satlas_remove_safe(a, d) != 1u8 { return 18u64 }
+    if satlas_remove_safe(a, b) != 0u8 { return 19u64 }
+
+    if satlas_impact_count(d) != 3u32 { return 20u64 }
+    if satlas_impact_count(e) != 4u32 { return 21u64 }
+    if satlas_impact_count(a) != 0u32 { return 22u64 }
+
+    if satlas_steepest_hub() != e { return 23u64 }
+
+    let cnt : u32 = satlas_impact_into(d, (&IMP as u64), 16u32)
+    if cnt != 3u32 { return 24u64 }
+    if IMP[0u64] != a { return 25u64 }
+    if IMP[1u64] != b { return 26u64 }
+    if IMP[2u64] != c { return 27u64 }
+
+    satlas_commit((&CMT1 as u64))
+    build()
+    satlas_commit((&CMT2 as u64))
+    if beq32((&CMT1 as u64), (&CMT2 as u64)) != 1u8 { return 28u64 }
+
+    lk(101u32, 97u32)   /* e->a : a new edge -> the self-model must change */
+    satlas_commit((&CMT3 as u64))
+    if beq32((&CMT1 as u64), (&CMT3 as u64)) == 1u8 { return 29u64 }
+
+    return 99u64
+}

@@ -1236,6 +1236,7 @@ declare -A EXPECTED=(
     [1661_proof_disjunction]=99
     [1662_proof_negation]=99
     [1663_proof_classical_nested]=99
+    [1664_proof_first_order]=99
     [1110_tp_morphism]=99
     [1111_sha_ni_stream_diff]=99
     [1054_h9_mig2_tie]=99
@@ -1293,6 +1294,9 @@ declare -A EXPECTED=(
     [1107_egraph_saturate_capacity_gap]=99
     [1108_sov_self_extend]=99
     [1109_cast_stride_index]=36
+    [1666_self_atlas]=99
+    [1667_self_atlas_real]=99
+    [1668_self_atlas_lens]=99
 )
 
 PASS=0

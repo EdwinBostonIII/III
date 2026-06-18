@@ -1073,6 +1073,21 @@ MODULES=(
     "omnia/tp_planner"
     # --- the executable coverage ledger (KAT 1391 + the ratchet gate below); appended last ---
     "sanctus/corpus_coverage"
+    # --- THE SELF-AWARENESS SEAM (omnia::self_atlas): the III-native self-model of its OWN
+    # module dependency graph -- the cartographer machine brought INSIDE III so the
+    # generative organs can query blast-radius / would-this-refactor-cycle / is-this-edge-
+    # redundant BEFORE they act.  Pure leaf: externs only mhash (built far above), referenced
+    # by nothing in the production link (corpus 1666 + the generated self_atlas_data drive it).
+    # Compiler-unreferenced -> LIBNATIVE only; appended last (BSS-neutral).
+    "omnia/self_atlas"
+    # The generated self-model DATA (STDLIB/scripts/gen_self_atlas.py): the III-own module
+    # dependency graph (591 nodes / 1170 edges) loaded into self_atlas at runtime.  Externs
+    # only self_atlas (above); compiler-unreferenced -> LIBNATIVE only; appended last.
+    "omnia/self_atlas_data"
+    # The emergence-analysis lens (omnia::self_atlas_lens): what III SEES through its self-
+    # model -- orphans, cycle-cores, redundant-dependency refactor proposals, coupling, the
+    # steepest hub.  Externs only self_atlas (above); compiler-unreferenced -> LIBNATIVE; last.
+    "omnia/self_atlas_lens"
 )
 
 PASS=0

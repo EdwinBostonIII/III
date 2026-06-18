@@ -1,0 +1,237 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\self_atlas_lens.iii
+ *
+ * III STDLIB - omnia::self_atlas_lens  --  III's EMERGENCE-ANALYSIS faculty.
+ *
+ * self_atlas gives III a faithful self-model of its own module graph.  This lens is what III
+ * SEES THROUGH it: the structural signals that say where the substrate wants to improve --
+ * the "bring forth its own refactorings" the system was always reaching for, now computed by
+ * III about ITSELF from its own structure (no learning, no heuristics; pure graph facts):
+ *
+ *   - salens_coupling()        avg out-degree x1000: a single scalar self-complexity metric,
+ *                              the MDL-proxy the ripple calculus minimizes.
+ *   - salens_count_orphans()   isolated modules (no dependents AND no dependencies) -- dead
+ *                              code or unwired capability: the first thing to investigate.
+ *   - salens_count_roots()     modules nothing depends on (entry points / top of the lattice).
+ *   - salens_count_leaves()    modules that depend on nothing (the pure foundations).
+ *   - salens_count_cycle_nodes()  modules sitting in a feedback cycle (the co-recursion cores).
+ *   - salens_count_redundant() directed dependencies that are REDUNDANT (the target is still
+ *                              reachable without them): the self-proposed coupling cuts.
+ *   - salens_first_redundant(out)  the top such refactoring proposal, [from,to], for an
+ *                              operator/organ to review (III never edits its own source blind).
+ *   - salens_top_hub() / _impact()  the module whose change ripples furthest, and how far.
+ *   - salens_argmax_fanin() / _max_fanin()  the single most depended-upon module.
+ *
+ * Every signal is a PURE FUNCTION of the loaded self-model (Mandate 7: no observational
+ * learning).  The cut PROPOSALS are advisory: a graph-redundant edge may still carry live
+ * symbols, so cuts are operator-gated -- matching III's "decide, do not autonomously edit".
+ *
+ * Hexad: kind_essence (sees the self-image) + kind_compose (pure traversals).  Ring: R0.
+ * K: 1.00.  NIH: self_atlas only.  Discipline: W2 (<=4 params), W8 (static bounds),
+ * W13 (<=20 locals), W14/W15 (sentinel/index loops, no break, no recursion).  ASCII only. */
+
+module omnia_self_atlas_lens
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_from(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_to(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_fanin(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_fanout(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_in_cycle(n: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_remove_safe(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_impact_count(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_depends_count(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_steepest_hub() -> u32 from "self_atlas.iii"
+
+const SALENS_SENT   : u32 = 0xFFFFFFFFu32
+const SALENS_MASK64 : u64 = 0xFFFFFFFFu64
+
+fn salens_put_u32le(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    let vv : u32 = v
+    p[0u64] = (vv & 0xFFu32) as u8
+    p[1u64] = ((vv >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((vv >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((vv >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* Average out-degree x1000 -- a scalar self-complexity / coupling metric. */
+fn salens_coupling() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    if n == 0u32 { return 0u32 }
+    return (satlas_edge_count() * 1000u32) / n
+}
+
+/* Isolated modules: no dependents AND no dependencies. */
+fn salens_count_orphans() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut c : u32 = 0u32
+    while i < n {
+        if satlas_fanin(i) == 0u32 {
+            if satlas_fanout(i) == 0u32 { c = c + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* Roots: modules nothing depends on (top of the lattice / entry points). */
+fn salens_count_roots() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut c : u32 = 0u32
+    while i < n {
+        if satlas_fanin(i) == 0u32 { c = c + 1u32 }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* Leaves: modules that depend on nothing (the pure foundations). */
+fn salens_count_leaves() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut c : u32 = 0u32
+    while i < n {
+        if satlas_fanout(i) == 0u32 { c = c + 1u32 }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* Modules sitting in a directed feedback cycle (the co-recursion cores). */
+fn salens_count_cycle_nodes() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut c : u32 = 0u32
+    while i < n {
+        if satlas_in_cycle(i) == 1u8 { c = c + 1u32 }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* Directed dependencies that are REDUNDANT: the target is still reachable without them.
+ * These are the self-proposed coupling cuts (advisory; operator-gated). */
+fn salens_count_redundant() -> u32 @export {
+    let m : u32 = satlas_edge_count()
+    let mut e : u32 = 0u32
+    let mut c : u32 = 0u32
+    while e < m {
+        let a : u32 = satlas_edge_from(e)
+        let b : u32 = satlas_edge_to(e)
+        if satlas_remove_safe(a, b) == 1u8 { c = c + 1u32 }
+        e = e + 1u32
+    }
+    return c
+}
+
+/* The top redundant-dependency proposal: writes [from,to] (two u32 LE) into out_ptr.
+ * Returns 1 if a redundant edge exists, 0 otherwise. */
+fn salens_first_redundant(out_ptr: u64) -> u8 @export {
+    let op : u64 = out_ptr
+    let m : u32 = satlas_edge_count()
+    let mut e : u32 = 0u32
+    let mut found : u8 = 0u8
+    while e < m {
+        if found == 0u8 {
+            let a : u32 = satlas_edge_from(e)
+            let b : u32 = satlas_edge_to(e)
+            if satlas_remove_safe(a, b) == 1u8 {
+                salens_put_u32le(op, 0u64, a)
+                salens_put_u32le(op, 4u64, b)
+                found = 1u8
+            }
+        }
+        e = e + 1u32
+    }
+    return found
+}
+
+/* The module whose change ripples furthest, and the size of that blast radius. */
+fn salens_top_hub() -> u32 @export { return satlas_steepest_hub() }
+fn salens_top_hub_impact() -> u32 @export { return satlas_impact_count(satlas_steepest_hub()) }
+
+/* The single most depended-upon module (largest direct fan-in) and that fan-in. */
+fn salens_argmax_fanin() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut best : u32 = SALENS_SENT
+    let mut bestv : u32 = 0u32
+    while i < n {
+        let v : u32 = satlas_fanin(i)
+        if v > bestv {
+            bestv = v
+            best = i
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+fn salens_max_fanin() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut bestv : u32 = 0u32
+    while i < n {
+        let v : u32 = satlas_fanin(i)
+        if v > bestv { bestv = v }
+        i = i + 1u32
+    }
+    return bestv
+}
+
+/* The DEEPEST INTEGRATOR: the module with the largest foundation breadth (it transitively uses
+ * the most of III) and that breadth -- the dual of the steepest hub. */
+fn salens_deepest_integrator() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut best : u32 = SALENS_SENT
+    let mut bestv : u32 = 0u32
+    while i < n {
+        let v : u32 = satlas_depends_count(i)
+        if v > bestv {
+            bestv = v
+            best = i
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+fn salens_max_depends() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut bestv : u32 = 0u32
+    while i < n {
+        let v : u32 = satlas_depends_count(i)
+        if v > bestv { bestv = v }
+        i = i + 1u32
+    }
+    return bestv
+}
+
+/* THE EMERGENCE INDEX -- the C-A-B leftover made into a number.
+ *
+ * Sum over every module of its blast radius (how many modules transitively depend on it),
+ * divided by the number of direct edges, x1000.  It is the AMPLIFICATION of the wiring: how
+ * much transitive consequence the structure carries beyond the literal edges drawn.  A pile
+ * of unrelated parts (edges with no reach) scores ~1000 (closure == edges); a deeply, coherently
+ * interconnected system scores far higher -- the reach the parts have on each other that no
+ * single edge contains.  That surplus IS the "greater than the sum of its parts": the leftover
+ * when the direct relations are subtracted from the transitive whole.  Pure function of the
+ * loaded self-model; rises as III grows more coherently interconnected. */
+fn salens_emergence_index() -> u32 @export {
+    let m : u32 = satlas_edge_count()
+    if m == 0u32 { return 0u32 }
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut acc : u64 = 0u64
+    while i < n {
+        acc = acc + (satlas_impact_count(i) as u64)
+        i = i + 1u32
+    }
+    return ((acc * 1000u64) / (m as u64)) as u32
+}

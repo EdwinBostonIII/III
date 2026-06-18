@@ -1,0 +1,67 @@
+==============================================================================
+III EMERGENCE DASHBOARD  --  self-model of STDLIB/iii (generated, verified)
+==============================================================================
+nodes ............. 592
+edges ............. 1171
+coupling .......... 1978  (avg out-degree x1000)
+emergence index ... 5040  (sum of blast-radii / edges x1000 -- the C-A-B leftover:
+                       transitive consequence the wiring carries beyond its edges)
+
+STEEPEST HUB (largest blast radius -- changing it ripples furthest):
+    cpufeat  (impact 353)
+MOST DEPENDED-UPON (largest direct fan-in):
+    cad  (fan-in 58)
+DEEPEST INTEGRATOR (transitively uses the most of III -- emergence concentrates here):
+    charter_terminal  (depends on 86)
+
+CYCLE CORES (7 modules in a feedback cycle):
+    bv_commons, ccl, cg_autocatalyst, constitution, sov_isa, temporal_logic, typecheck
+
+ORPHANS (71 isolated modules -- no dependents AND no dependencies):
+    adler32, ast_intent, bench, binary_search, bitops, bmc, catalan, coin_change, collatz, conjecture_refute, contract_gate, crt, csv, dce, dynamic_impact, dynamic_record, either, fixed_extra, gate_verdict, genesis, glob, gray_code, gvn, hamming_secded, hotstuff_heal, hotstuff_predict, ini, isel, jit_fuse, jit_swap, kinduction, kmp, knapsack, lcs, leb128, levenshtein, lis, list_schedule, markup, matrix_ring, mcmc_egraph, mem_rewrite, modular, nous_conjecture, nous_conjecture_gen, nous_costlin, obs_log, obs_metric, obs_observatory, parse, pq_params, prespec, proof_replay, ptr_provenance, regex, result, rewrite_schedule, ring_lattice, ring_opt, ripple_apply, rms, safety_prover, segment_tree, semver, siphash, span, spec_probe, translation_validation, tso, xii_circ, xii_lattice
+
+REDUNDANT-DEPENDENCY REFACTOR PROPOSALS (427; target still reachable without the edge;
+advisory -- a graph-redundant edge may still carry live symbols, so cuts are operator-gated):
+    admit                        -X->  cycle_term
+    aes_gcm                      -X->  cpufeat
+    ai_resolve                   -X->  call_context
+    ai_resolve                   -X->  kchain
+    ai_resolve                   -X->  pattern_table
+    arena_slot_witness           -X->  arena
+    attest                       -X->  sha256
+    attest_box                   -X->  cad
+    attest_box                   -X->  capability
+    attest_box                   -X->  crypt_ed25519
+    backend_remote               -X->  arena
+    bar_layout                   -X->  hexad_algebra
+    barrett                      -X->  bigint
+    basal_probe                  -X->  capability
+    basal_probe                  -X->  identifier
+    basal_probe                  -X->  witness_hook
+    bigint                       -X->  cpufeat
+    bigint_karatsuba             -X->  bigint
+    bisimulation_witness         -X->  identifier
+    bisimulation_witness         -X->  witness_hook
+    bisimulation_witness         -X->  witness_spine
+    bone_marrow                  -X->  cad
+    bone_marrow                  -X->  identifier
+    branch_anchor                -X->  algebraic_time
+    branch_anchor                -X->  constitution
+    branch_anchor                -X->  identifier
+    branch_anchor                -X->  witness_hook
+    branch_anchor                -X->  witness_spine
+    branch_governance            -X->  constitution
+    branch_governance            -X->  identifier
+    branch_governance            -X->  witness_hook
+    bricking                     -X->  hexad_algebra
+    bv_commons                   -X->  theorem_commons
+    bv_commons                   -X->  typecheck
+    bv_dispose                   -X->  bv_ring
+    bv_dispose                   -X->  typecheck
+    cad                          -X->  sha256
+    cap_forge                    -X->  cad
+    cap_forge                    -X->  identifier
+    category                     -X->  cad
+    ... and 387 more
+
+==============================================================================

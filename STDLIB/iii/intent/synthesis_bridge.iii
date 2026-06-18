@@ -19,6 +19,7 @@ module intent_synthesis_bridge
 
 extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_expires_at(id: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
 
 const DOM_VBD_FREEZE     : u64 = 1u64
 const DOM_CRYPTO_ENCRYPT : u64 = 2u64
@@ -28,6 +29,9 @@ const DOM_TTL_BOUND      : u64 = 32u64
 const SB_RIGHT_DISK   : u64 = 0x1u64
 const SB_RIGHT_CRYPTO : u64 = 0x2u64
 const SB_RIGHT_NET    : u64 = 0x4u64
+
+const SB_EG_SENT : u32 = 0xFFFFFFFFu32   /* not a single resolved action */
+var SB_SYM : [u8; 32]                    /* an e-graph symbol identifier (EGRAPH_SYMBYTES) */
 
 /* the capability rights a resolved interpretation requires (0 for a non-resolved/unknown mask). */
 fn sb_rights_of(resolved_mask: u64) -> u64 @export {
@@ -58,4 +62,21 @@ fn sb_synthesize(parent_cap: u64, resolved_mask: u64, expires_at: u64) -> u64 @e
 fn sb_is_bounded(cap_id: u64) -> u8 @export {
     if cap_expires_at(cap_id) != 0u64 { return 1u8 }
     return 0u8
+}
+
+/* lower a resolved intent into the optimizer's E-GRAPH as an operation node, so the synthesized action
+ * enters the SAME equality-saturation + cost-minimising extraction pipeline as native code (numera/egraph).
+ * Each subsystem-action interns a distinct symbol, so hashconsing returns the same node for the same intent
+ * and distinct nodes for distinct intents.  Returns the e-graph node id, or SB_EG_SENT for a non-resolved
+ * mask.  The caller initialises the synthesis e-graph once (eg_init) and lowers many intents into it. */
+fn sb_lower_to_egraph(resolved_mask: u64) -> u32 @export {
+    let mut tag : u8 = 0u8
+    if resolved_mask == DOM_VBD_FREEZE { tag = 0xF1u8 }
+    if resolved_mask == DOM_CRYPTO_ENCRYPT { tag = 0xE2u8 }
+    if resolved_mask == DOM_NET_DENY { tag = 0xD4u8 }
+    if tag == 0u8 { return SB_EG_SENT }
+    let mut i : u64 = 0u64
+    while i < 32u64 { SB_SYM[i] = 0u8  i = i + 1u64 }
+    SB_SYM[0u64] = tag
+    return eg_add((&SB_SYM as u64) as *u8, 0u64 as *u32, 0u32)
 }

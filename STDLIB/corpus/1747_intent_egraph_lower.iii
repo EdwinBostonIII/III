@@ -1,0 +1,44 @@
+/* STDLIB/corpus/1747_intent_egraph_lower.iii -- INTENT-TO-EXECUTION Phase 4: lowering into the e-graph.
+ *
+ * A resolved intent enters the optimizer's e-graph (numera/egraph) as an operation node, so the synthesized
+ * action joins the SAME equality-saturation + cost-minimising extraction pipeline as native code.  99 = all
+ * arms; 1..9 = the arm.
+ */
+module corpus_1747_intent_egraph_lower
+
+extern @abi(c-msvc-x64) fn dis_resolve(text: u64, len: u64) -> u32 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn dis_resolved_mask() -> u64 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn sb_lower_to_egraph(resolved_mask: u64) -> u32 from "synthesis_bridge.iii"
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+
+const DOM_VBD_FREEZE     : u64 = 1u64
+const DOM_CRYPTO_ENCRYPT : u64 = 2u64
+const DOM_NET_DENY       : u64 = 4u64
+const SB_EG_SENT : u32 = 0xFFFFFFFFu32
+const DIS_RESOLVED : u32 = 0u32
+
+fn main() -> u64 {
+    eg_init()   /* one synthesis e-graph */
+
+    /* (1) the resolved "lock database" -> freeze lowers to a real e-graph node */
+    if dis_resolve(("lock database" as u64), 13u64) != DIS_RESOLVED { return 1u64 }
+    let f1 : u32 = sb_lower_to_egraph(dis_resolved_mask())
+    if f1 == SB_EG_SENT { return 2u64 }
+
+    /* (2) distinct resolved actions lower to DISTINCT nodes */
+    let e1 : u32 = sb_lower_to_egraph(DOM_CRYPTO_ENCRYPT)
+    if e1 == SB_EG_SENT { return 3u64 }
+    if e1 == f1 { return 4u64 }
+    let d1 : u32 = sb_lower_to_egraph(DOM_NET_DENY)
+    if d1 == e1 { return 5u64 }
+    if d1 == f1 { return 6u64 }
+
+    /* (3) the SAME intent hashconses to the SAME node */
+    if sb_lower_to_egraph(DOM_VBD_FREEZE) != f1 { return 7u64 }
+
+    /* (4) a non-resolved mask does not lower */
+    if sb_lower_to_egraph(0u64) != SB_EG_SENT { return 8u64 }
+    if sb_lower_to_egraph(DOM_VBD_FREEZE | DOM_CRYPTO_ENCRYPT) != SB_EG_SENT { return 9u64 }
+
+    return 99u64
+}

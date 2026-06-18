@@ -1377,6 +1377,8 @@ declare -A EXPECTED=(
     [1745_intent_disambiguate]=99
     # intent-to-execution synthesis+attest: resolved intent -> bounded capability -> Ed25519 sign-to-emit.
     [1746_intent_synthesis_attest]=99
+    # intent-to-execution e-graph lowering: a resolved intent enters the optimizer's equality-saturation pipeline.
+    [1747_intent_egraph_lower]=99
 )
 
 PASS=0

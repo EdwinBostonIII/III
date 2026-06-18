@@ -34,5 +34,10 @@ fn main() -> u64 {
     if ims_synth(2u32) != 1u8 { return 7u64 }
     if ims_admitted_count() != 2u32 { return 8u64 }
 
+    /* (5) gate-outcome both-arms: ims_admit's ADMIT outcome (a kernel-proven, cheaper macro -> 1) seen via a
+     * DIRECT comparison -- the refute outcome (-> 0) is the direct comparison at arm (3).  Placed last so this
+     * admission does not perturb the count assertions above. */
+    if ims_admit(3u32, 3u32) != 1u8 { return 9u64 }
+
     return 99u64
 }

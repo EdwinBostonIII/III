@@ -1389,6 +1389,10 @@ declare -A EXPECTED=(
     [1751_invent_reduction]=99
     # the completed six-valued bounded lattice (Belnap + Null/All-present): paraconsistency + null-safety, proven native.
     [1752_logic6]=99
+    # the invention engine over the 6-valued lattice: paradox/void routing tangles collapse to single leaves.
+    [1753_invent_logic6]=99
+    # the Rosetta layer: III's discoveries rendered as human-readable, content-address-named New Math.
+    [1754_present_newmath]=99
 )
 
 PASS=0

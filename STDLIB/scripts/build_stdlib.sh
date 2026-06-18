@@ -789,6 +789,8 @@ MODULES=(
     "numera/invent"
     # numera/logic6 -- the completed six-valued bounded lattice (De Morgan algebra): paraconsistency + null-safety, lean.
     "numera/logic6"
+    # numera/present -- the Rosetta layer: render + content-address-name III\'s discoveries as human-readable New Math.
+    "numera/present"
     "numera/barrett"
     "numera/egraph"
     "numera/cost_lattice"

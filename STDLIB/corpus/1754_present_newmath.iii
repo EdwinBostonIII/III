@@ -1,0 +1,70 @@
+/* STDLIB/corpus/1754_present_newmath.iii -- the Rosetta layer: III's discoveries made human-readable + named.
+ *
+ * numera/present renders a discovery from the invention engine as a human-readable symbolic law and names it
+ * by content address.  This KAT verifies the rendered TEXT byte-for-byte (the law a developer would read) and
+ * the named, growing New-Math ledger.  99 = all arms.
+ *
+ * present_strength(7) renders exactly:  "7*x = (x << 3) - x"
+ */
+module corpus_1754_present_newmath
+
+extern @abi(c-msvc-x64) fn present_strength(k: u64) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_fold(k: u64, c: u64, cc: u64) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_collapse(tid: u32) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn gilr_forge(k: u64, c: u64) -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn pres_byte(i: u64) -> u32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_len() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_name_byte(i: u64) -> u32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_count() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_buf_ptr() -> u64 from "present.iii"
+
+/* assert the rendered buffer equals the literal `lit` of length n. */
+fn pres_text_is(lit: u64, n: u64) -> u8 {
+    if pres_len() != n { return 0u8 }
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < n { if pres_byte(i) != (s[i] as u32) { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* (1) 7*x is rendered as exactly "7*x = (x << 3) - x" */
+    present_strength(7u64)
+    if pres_text_is(("7*x = (x << 3) - x" as u64), 18u64) != 1u8 { return 1u64 }
+    if pres_count() != 1u64 { return 2u64 }
+
+    /* the discovery is NAMED by content address (non-zero) */
+    let mut nz : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 { if pres_name_byte(i) != 0u32 { nz = nz + 1u32 }  i = i + 1u64 }
+    if nz == 0u32 { return 3u64 }
+
+    /* (2) 9*x renders the + form */
+    present_strength(9u64)
+    if pres_text_is(("9*x = (x << 3) + x" as u64), 18u64) != 1u8 { return 4u64 }
+
+    /* (3) the modular fold: the invention engine PROVES the multiplier (gilr_forge), and the presenter
+     * renders exactly what was proven (cc passed in -- rendering decoupled from the SAT re-proof). */
+    let cc : u64 = gilr_forge(32u64, 1u64)
+    if cc != 1u64 { return 5u64 }                 /* Mersenne 2^32-1: the proven fold multiplier is 1 */
+    present_fold(32u64, 1u64, cc)
+    if pres_count() != 3u64 { return 6u64 }
+    if pres_len() == 0u64 { return 11u64 }
+
+    /* (4) a 6-valued lattice collapse renders its law: tid2 (absorption) -> "a & (a | b) = a".
+     * The RHS "a" is read from what gil6 proved, so this byte-match is the biting oracle. */
+    present_collapse(2u32)
+    if pres_text_is(("a & (a | b) = a" as u64), 15u64) != 1u8 { return 7u64 }
+
+    /* (5) the annihilation collapse: (a & Null) | b -> b */
+    present_collapse(1u32)
+    if pres_text_is(("(a & Null) | b = b" as u64), 18u64) != 1u8 { return 8u64 }
+
+    /* (6) the buffer-pointer accessor points at the rendered text (covers pres_buf_ptr) */
+    if pres_buf_ptr() == 0u64 { return 9u64 }
+
+    /* (7) the New-Math ledger has grown across all THREE discovery classes: 5 named entries */
+    if pres_count() != 5u64 { return 10u64 }
+
+    return 99u64
+}

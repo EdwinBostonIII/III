@@ -1,0 +1,113 @@
+/* STDLIB/iii/numera/present.iii -- THE ROSETTA LAYER: III's discoveries, made human-presentable + named.
+ *
+ * III invents in a space humans cannot hold in working memory.  This organ closes the translation gap: it
+ * takes ONE discovery from the invention engine (numera/invent) and (1) renders it as a human-readable
+ * symbolic law, and (2) NAMES it by content address (cad over the law text) -- a unique, tamper-evident,
+ * III-coined identifier.  Each call appends to the New-Math ledger, one discovery at a time, so a developer
+ * reads + cites the law without reading the machinery that found it.
+ *
+ * Lean: pure formatting + one cad.  Composes numera/invent (the discoveries) + numera/cad (the name).
+ * Hexad: kind_passage.  Ring: R0.  K: 1.00.
+ */
+module numera_present
+
+extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilr_forge(k: u64, c: u64) -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_forge(tid: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_best_a() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+var PRES_BUF   : [u8; 128]
+var PRES_LEN   : [u64; 1]
+var PRES_NAME  : [u8; 32]
+var PRES_COUNT : [u64; 1]
+
+fn pres_ch(c: u8) -> i32 { if PRES_LEN[0u64] < 127u64 { PRES_BUF[PRES_LEN[0u64]] = c  PRES_LEN[0u64] = PRES_LEN[0u64] + 1u64 }  return 0i32 }
+
+fn pres_str(lit: u64, n: u64) -> i32 {
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < n { pres_ch(s[i])  i = i + 1u64 }
+    return 0i32
+}
+
+/* emit a u64 as decimal (reversed-then-copied via a small stack buffer). */
+var PRES_DIG : [u8; 24]
+fn pres_u64(v: u64) -> i32 {
+    if v == 0u64 { pres_ch(0x30u8)  return 0i32 }
+    let mut n : u64 = 0u64
+    let mut x : u64 = v
+    while x > 0u64 { PRES_DIG[n] = (0x30u64 + (x - (x / 10u64) * 10u64)) as u8  x = x / 10u64  n = n + 1u64 }
+    while n > 0u64 { n = n - 1u64  pres_ch(PRES_DIG[n]) }
+    return 0i32
+}
+
+/* finalize: content-address the law text -> the unique name; bump the ledger. */
+fn pres_seal() -> i32 {
+    cad_oneshot(0u32, (&PRES_BUF as u64) as *u8, PRES_LEN[0u64], (&PRES_NAME as u64) as *u8)
+    PRES_COUNT[0u64] = PRES_COUNT[0u64] + 1u64
+    return 0i32
+}
+
+/* present a strength-reduction discovery for N*x as a human-readable law, named.  Returns the text length. */
+fn present_strength(k: u64) -> u64 @export {
+    gil_forge(k)
+    PRES_LEN[0u64] = 0u64
+    pres_u64(k)
+    pres_str(("*x = " as u64), 5u64)
+    let kind : u32 = gil_best_kind()
+    let a : u64 = gil_best_a()
+    if kind == 1u32 { pres_str(("x << " as u64), 5u64)  pres_u64(a) }
+    if kind == 2u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") - x" as u64), 5u64) }
+    if kind == 3u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") + x" as u64), 5u64) }
+    if kind == 4u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") + (x << b)" as u64), 11u64) }
+    pres_seal()
+    return PRES_LEN[0u64]
+}
+
+/* present a special-prime modular fold discovery, named.  Rendering is decoupled from proving: the caller
+ * passes the multiplier `cc` that the invention engine (gilr_forge) already proved -- this organ only
+ * formats, so presentation never pays the SAT cost a second time. */
+fn present_fold(k: u64, c: u64, cc: u64) -> u64 @export {
+    PRES_LEN[0u64] = 0u64
+    pres_str(("x mod (2^" as u64), 9u64)
+    pres_u64(k)
+    pres_str((" - " as u64), 3u64)
+    pres_u64(c)
+    pres_str((") = (x & (2^" as u64), 12u64)
+    pres_u64(k)
+    pres_str((" - 1)) + " as u64), 9u64)
+    pres_u64(cc)
+    pres_str(("*(x >> " as u64), 7u64)
+    pres_u64(k)
+    pres_ch(0x29u8)
+    pres_seal()
+    return PRES_LEN[0u64]
+}
+
+/* present a 6-valued lattice COLLAPSE discovery (numera/logic6 via gil6), named.  The routing tangle
+ * `tid` collapses to a single lattice leaf; the RHS is read from what gil6 actually PROVED (gil6_best_a),
+ * so the rendered law is tied to the discovery, not asserted independently of it. */
+fn present_collapse(tid: u32) -> u64 @export {
+    gil6_forge(tid)
+    PRES_LEN[0u64] = 0u64
+    if tid == 1u32 { pres_str(("(a & Null) | b" as u64), 14u64) }
+    if tid == 2u32 { pres_str(("a & (a | b)" as u64), 11u64) }
+    if tid == 3u32 { pres_str(("(a | All) & b" as u64), 13u64) }
+    pres_str((" = " as u64), 3u64)
+    let leaf : u32 = gil6_best_a()
+    if leaf == 0u32 { pres_ch(0x61u8) }                    /* a */
+    if leaf == 1u32 { pres_ch(0x62u8) }                    /* b */
+    if leaf == 2u32 { pres_str(("Null" as u64), 4u64) }
+    if leaf == 3u32 { pres_str(("All" as u64), 3u64) }
+    pres_seal()
+    return PRES_LEN[0u64]
+}
+
+fn pres_buf_ptr() -> u64 @export { return (&PRES_BUF as u64) }
+fn pres_len() -> u64 @export { return PRES_LEN[0u64] }
+fn pres_byte(i: u64) -> u32 @export { if i >= PRES_LEN[0u64] { return 0x100u32 }  return PRES_BUF[i] as u32 }
+fn pres_name_byte(i: u64) -> u32 @export { if i >= 32u64 { return 0x100u32 }  return PRES_NAME[i] as u32 }
+fn pres_count() -> u64 @export { return PRES_COUNT[0u64] }

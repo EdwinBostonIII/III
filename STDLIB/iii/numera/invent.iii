@@ -35,6 +35,9 @@ extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
 
 const GIL_W        : u64 = 64u64       /* prove at the deployment machine width */
 const GIL_MUL_COST : u32 = 4u32        /* the value gradient: a multiply is the expensive baseline */
@@ -330,3 +333,107 @@ fn gilr_forge(k: u64, c: u64) -> u64 @export {
 fn gilr_fold_cost() -> u32 @export { return GILR_FOLD_COST }
 fn gilr_mont_cost() -> u32 @export { return GILR_MONT_COST }
 fn gilr_probes() -> u64 @export { return GILR_PROBES }
+
+/* ===================================================================================================
+ * THE 6-STATE FORGE -- the invention engine pointed at numera/logic6 (the completed bounded lattice).
+ *
+ * Over Boolean the forge invented the carry-save adder.  Over the six-valued lattice it invents COLLAPSE:
+ * tangles of paradox-routing (Both) and void-routing (Null/All-present) that reduce to almost nothing --
+ * the provable "don't-care collapse".  The judge here is not SAT but EXHAUSTIVE equivalence over the 36
+ * (a,b) value pairs (the finite algebra is decided directly); the value-sieve still gates pre-judge.
+ *
+ * Leaves: 0=a, 1=b, 2=Null, 3=All-present, 4=NOT a, 5=NOT b  (a,b,Null,All cost 0; NOT cost 1).
+ * Ops: 0=AND(meet), 1=OR(join).
+ * =================================================================================================== */
+const L6_NULL_C : u32 = 4u32
+const L6_ALL_C  : u32 = 5u32
+
+var GIL6_BEST_COST : u32 = 0u32
+var GIL6_BEST_MODE : u32 = 0u32          /* 99 = single leaf; 0..1 = op(leaf_a, leaf_b) */
+var GIL6_BEST_A    : u32 = 0u32
+var GIL6_BEST_B    : u32 = 0u32
+var GIL6_JUDGED    : u64 = 0u64
+var GIL6_DROPS     : u64 = 0u64
+
+/* the mixed TARGET expressions (and their op-cost incumbent), each a routing tangle that should collapse. */
+fn gil6_target(tid: u32, a: u32, b: u32) -> u32 {
+    if tid == 1u32 { return l6_or(l6_and(a, L6_NULL_C), b) }   /* (a AND Null) OR b      -> collapses to b */
+    if tid == 2u32 { return l6_and(a, l6_or(a, b)) }           /* a AND (a OR b)         -> collapses to a (absorption) */
+    if tid == 3u32 { return l6_and(l6_or(a, L6_ALL_C), b) }    /* (a OR All-present) AND b -> collapses to b */
+    return 0xFFFFFFFFu32
+}
+fn gil6_target_cost(tid: u32) -> u32 { if tid <= 3u32 { return 2u32 }  return 0xFFFFFFFFu32 }
+
+fn gil6_leaf(idx: u32, a: u32, b: u32) -> u32 {
+    if idx == 0u32 { return a }
+    if idx == 1u32 { return b }
+    if idx == 2u32 { return L6_NULL_C }
+    if idx == 3u32 { return L6_ALL_C }
+    if idx == 4u32 { return l6_not(a) }
+    if idx == 5u32 { return l6_not(b) }
+    return 0xFFFFFFFFu32
+}
+fn gil6_leaf_cost(idx: u32) -> u32 { if idx <= 3u32 { return 0u32 }  return 1u32 }
+fn gil6_op(op: u32, p: u32, q: u32) -> u32 { if op == 0u32 { return l6_and(p, q) }  return l6_or(p, q) }
+
+/* EXHAUSTIVE equivalence: candidate == target tid over all 36 valid (a,b) pairs (values 0..5). */
+fn gil6_equiv(tid: u32, mode: u32, la: u32, lb: u32) -> u8 {
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        let mut b : u32 = 0u32
+        while b < 6u32 {
+            let t : u32 = gil6_target(tid, a, b)
+            let mut cand : u32 = 0u32
+            if mode == 99u32 { cand = gil6_leaf(la, a, b) } else { cand = gil6_op(mode, gil6_leaf(la, a, b), gil6_leaf(lb, a, b)) }
+            if t != cand { return 0u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+fn gil6_consider(tid: u32, cost: u32, mode: u32, la: u32, lb: u32) -> i32 {
+    if cost >= GIL6_BEST_COST { GIL6_DROPS = GIL6_DROPS + 1u64  return 0i32 }
+    GIL6_JUDGED = GIL6_JUDGED + 1u64
+    if gil6_equiv(tid, mode, la, lb) == 1u8 {
+        GIL6_BEST_COST = cost
+        GIL6_BEST_MODE = mode
+        GIL6_BEST_A = la
+        GIL6_BEST_B = lb
+        return 1i32
+    }
+    return 0i32
+}
+
+/* FORGE: invent the cheapest 6-valued form equivalent to the routing tangle `tid`. */
+fn gil6_forge(tid: u32) -> u32 @export {
+    GIL6_JUDGED = 0u64
+    GIL6_DROPS = 0u64
+    GIL6_BEST_MODE = 0xFFFFFFFFu32
+    GIL6_BEST_A = 0u32
+    GIL6_BEST_B = 0u32
+    GIL6_BEST_COST = gil6_target_cost(tid)
+    let mut li : u32 = 0u32
+    while li < 6u32 { gil6_consider(tid, gil6_leaf_cost(li), 99u32, li, 0u32)  li = li + 1u32 }
+    let mut op : u32 = 0u32
+    while op < 2u32 {
+        let mut i : u32 = 0u32
+        while i < 6u32 {
+            let mut j : u32 = 0u32
+            while j < 6u32 {
+                gil6_consider(tid, gil6_leaf_cost(i) + gil6_leaf_cost(j) + 1u32, op, i, j)
+                j = j + 1u32
+            }
+            i = i + 1u32
+        }
+        op = op + 1u32
+    }
+    return GIL6_BEST_COST
+}
+
+fn gil6_best_cost() -> u32 @export { return GIL6_BEST_COST }
+fn gil6_best_mode() -> u32 @export { return GIL6_BEST_MODE }
+fn gil6_best_a() -> u32 @export { return GIL6_BEST_A }
+fn gil6_judged() -> u64 @export { return GIL6_JUDGED }
+fn gil6_drops() -> u64 @export { return GIL6_DROPS }

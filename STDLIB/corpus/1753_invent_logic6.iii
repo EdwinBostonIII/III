@@ -1,0 +1,38 @@
+/* STDLIB/corpus/1753_invent_logic6.iii -- the invention engine over the six-valued lattice: COLLAPSE.
+ *
+ * numera/invent's gil6 forge searches the six-valued algebra {AND, OR, NOT} over {a,b,Null,All-present}
+ * and discovers that routing tangles built from paradox/void values collapse to almost nothing -- the
+ * provable "don't-care collapse", judged exhaustively over the 36 (a,b) pairs.  99 = all arms.
+ *
+ *   (a AND Null) OR b           collapses to  b   (Null annihilates the meet, then is the join identity)
+ *   a AND (a OR b)              collapses to  a   (absorption)
+ *   (a OR All-present) AND b    collapses to  b   (All-present annihilates the join, then is the meet identity)
+ */
+module corpus_1753_invent_logic6
+
+extern @abi(c-msvc-x64) fn gil6_forge(tid: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_best_cost() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_best_mode() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_best_a() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_judged() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil6_drops() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    /* (1) (a AND Null) OR b  ->  b  (cost 2 -> 0, a single leaf) */
+    if gil6_forge(1u32) != 0u32 { return 1u64 }
+    if gil6_best_cost() != 0u32 { return 10u64 }       /* the incumbent-cost accessor agrees: a free leaf, cost 0 */
+    if gil6_best_mode() != 99u32 { return 2u64 }      /* a single leaf, total collapse */
+    if gil6_best_a() != 1u32 { return 3u64 }          /* leaf 1 = b */
+    if gil6_drops() == 0u64 { return 4u64 }           /* the value-sieve dropped candidates pre-judge */
+
+    /* (2) a AND (a OR b)  ->  a  (absorption) */
+    if gil6_forge(2u32) != 0u32 { return 5u64 }
+    if gil6_best_a() != 0u32 { return 6u64 }          /* leaf 0 = a */
+
+    /* (3) (a OR All-present) AND b  ->  b */
+    if gil6_forge(3u32) != 0u32 { return 7u64 }
+    if gil6_best_a() != 1u32 { return 8u64 }          /* leaf 1 = b */
+    if gil6_judged() == 0u64 { return 9u64 }          /* the exhaustive judge did run */
+
+    return 99u64
+}

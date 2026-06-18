@@ -75,6 +75,11 @@ const CAP_RIGHT_TRANSFORM_RUN      : u64 = 0x00040000u64
  * stages, but a sealed-source mutation requires this bit or an operator/quorum signature. */
 const CAP_RIGHT_AUTOGENESIS        : u64 = 0x00080000u64
 const CAP_RIGHT_AUTOGENESIS_COMMIT : u64 = 0x00100000u64
+/* Phase III open-world ingest (III-PHASE3-WALLS, ADR-P3-001).  Bit 21 authorizes admitting
+ * external / noisy / probabilistic observation through the perception membrane -- ONLY as a typed
+ * uncertainty GAP or a nous_synth PROVISIONAL, default-denied from every CANONICAL context.  Without
+ * this bit the system is fully closed and byte-identical to today (no perception surface acts). */
+const CAP_RIGHT_PERCEIVE           : u64 = 0x00200000u64
 const CAP_RIGHT_ENV            : u64 = 0x8000000000000000u64
 
 /* Slot table - up to 256 simultaneous caps in this address space. */

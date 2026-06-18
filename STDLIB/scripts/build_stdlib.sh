@@ -1133,6 +1133,12 @@ MODULES=(
     # Python fixture generator.  Externs builder/format/fs/self_atlas/self_atlas_lens (above);
     # compiler-unreferenced -> LIBNATIVE only; appended last.
     "omnia/self_emit"
+    # --- PHASE III (III-PHASE3-WALLS) Campaign I: defeat combinatorial explosion.  nous/beam_search is a
+    # CERTIFIED PORTFOLIO: K seeded gated annealed walks (verified_search) whose certified frontiers are
+    # CALM-merged by a commutative cheapest-certified reduction -- a single walk's dead-end is escaped by
+    # the portfolio, soundness unconditional because the K_0 referee is frozen.  Composes verified_search
+    # + egraph_stochastic (no island); compiler-unreferenced -> LIBNATIVE only; appended last (BSS-neutral).
+    "nous/beam_search"
 )
 
 PASS=0

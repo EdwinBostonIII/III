@@ -80,6 +80,14 @@ fn vs_ok(v: u32) -> u32 @export {
     return k0_verify(v)
 }
 
+/* Cost accessor: the registered (deceptive) cost of candidate v.  Exported so a composing portfolio
+ * search (nous/beam_search) reduces over the SAME landscape verified_search registered in K_0, not a
+ * private copy (surpass-only: one source of truth).  Out-of-range -> u32 max. */
+fn vs_cost(v: u32) -> u32 @export {
+    if v >= VS_M { return 0xFFFFFFFFu32 }
+    return VS_COST[v as u64]
+}
+
 fn vs_rng() -> u64 {
     let mut z : u64 = VS_RNG[0u64]
     z = z ^ (z << 13u64)

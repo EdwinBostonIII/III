@@ -51,6 +51,8 @@ extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_drop(id: u64) -> i32 from "capability.iii"
+extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"
+extern @abi(c-msvc-x64) fn nous_synth_provisional_usable(status: u8, has_oracle_pin: u8) -> u8 from "nous_synth.iii"
 
 const NOUS_CH_OK            : i32 = 0i32
 const NOUS_CH_CAD_KECCAK    : u32 = 1u32
@@ -58,6 +60,9 @@ const NOUS_CH_MAX_CLAUSES   : u32 = 64u32
 const NOUS_CH_KIND_AMEND    : u8  = 0u8     /* the amendment clause: verify AND falsify */
 const NOUS_CH_KIND_CANARY   : u8  = 1u8     /* a deliberately-false clause (negative arm) */
 const NOUS_CH_KIND_AUTOGEN  : u8  = 2u8     /* the autogenesis apprentice clause (verify AND falsify) */
+const NOUS_CH_KIND_PERCEIVE : u8  = 3u8     /* Phase III perception-wall clause (verify AND falsify) */
+/* nous_synth measure-status literals (named in nous_synth.iii; literals here per the trap-2 discipline):
+ *   NOUS_SYN_CANONICAL = 0   NOUS_SYN_PROVISIONAL = 3 */
 /* Autogenesis rights (literals here per the trap-2 discipline; named in aether/capability.iii):
  *   CAP_RIGHT_AUTOGENESIS = 0x80000 (propose/run)   CAP_RIGHT_AUTOGENESIS_COMMIT = 0x100000 (commit) */
 const NOUS_CH_AG_RUN        : u64 = 0x80000u64
@@ -123,6 +128,20 @@ fn nous_ch_ag_verify() -> u8 {
     return 1u8
 }
 
+/* The Phase III perception wall, verified-and-falsified through nous_synth's C-12 default-deny.  The
+ * open world enters only as typed evidence that CANNOT assert as canonical truth without a kernel
+ * proof.  VERIFY (positive arms): a CANONICAL status crosses a canonical context, and a PROVISIONAL is
+ * usable in a gap-accepting context WITH its oracle-pin.  FALSIFY (biting negative arms): a PROVISIONAL
+ * is REFUSED in a canonical context (default-deny, fail-safe), and a PROVISIONAL WITHOUT its oracle-pin
+ * is refused even in a gap-accepting context.  Returns 1 iff every arm holds. */
+fn nous_ch_perceive_verify() -> u8 {
+    if nous_synth_canonical_ok(0u8) != 1u8 { return 0u8 }              /* CANONICAL crosses canonical    */
+    if nous_synth_canonical_ok(3u8) != 0u8 { return 0u8 }             /* PROVISIONAL refused (biting)   */
+    if nous_synth_provisional_usable(3u8, 1u8) != 1u8 { return 0u8 }  /* PROVISIONAL + pin usable       */
+    if nous_synth_provisional_usable(3u8, 0u8) != 0u8 { return 0u8 }  /* PROVISIONAL no pin refused(bite)*/
+    return 1u8
+}
+
 fn nous_ch_clause_eval(idx: u32) -> u8 {
     let k : u8 = NOUS_CH_CLAUSE_KIND[(idx as u64) & NOUS_CH_U32MASK]
     if k == NOUS_CH_KIND_AMEND {
@@ -132,6 +151,7 @@ fn nous_ch_clause_eval(idx: u32) -> u8 {
     }
     if k == NOUS_CH_KIND_CANARY { return nous_ch_canary_holds() }
     if k == NOUS_CH_KIND_AUTOGEN { return nous_ch_ag_verify() }
+    if k == NOUS_CH_KIND_PERCEIVE { return nous_ch_perceive_verify() }
     return 0u8
 }
 
@@ -183,10 +203,12 @@ fn nous_ch_verdict(out: *u8) -> i32 @export {
     return NOUS_CH_OK
 }
 
-/* KAT: 99 = all pass.  Proves the amendment holds (verify=1, falsify=1), the canary is
- * genuinely false (3), run_charter GREEN with the amendment clause (5), the verdict is
- * non-zero (6) and reproducible (8), and -- the prove-the-negative arm -- run_charter
- * goes RED at the canary's 1-based index (10), so the gate is a real falsifier. */
+/* KAT: 99 = all pass.  Proves the amendment holds (verify=1, falsify=2), the canary is genuinely
+ * false (3), run_charter GREEN with the amendment clause (5), the verdict is non-zero (6) and
+ * reproducible (8), the autogenesis apprentice clause holds (10), the Phase III perception clause
+ * holds standalone (11) and under run_charter (13), and -- the prove-the-negative arm -- run_charter
+ * goes RED at the canary's (now 4th) 1-based index (15), so the gate is a real falsifier.  Adding the
+ * perceive clause SHIFTS the canary's RED index from 3 to 4; the gate must still bite there. */
 fn nous_charter_selftest() -> u64 @export {
     nous_ch_init()
     if nous_ch_verify() != 1u8 { return 1u64 }
@@ -201,7 +223,10 @@ fn nous_charter_selftest() -> u64 @export {
     if cad_eq((&NOUS_CH_VERDICT as u64) as *u8, (&NOUS_CH_SAVED as u64) as *u8) != 1u8 { return 8u64 }
     if nous_ch_register(NOUS_CH_KIND_AUTOGEN) != 1i32 { return 9u64 }
     if nous_ch_run_charter() != NOUS_CH_VERDICT_GREEN { return 10u64 }
-    if nous_ch_register(NOUS_CH_KIND_CANARY) != 2i32 { return 11u64 }
-    if nous_ch_run_charter() != 3u64 { return 12u64 }
+    if nous_ch_perceive_verify() != 1u8 { return 11u64 }
+    if nous_ch_register(NOUS_CH_KIND_PERCEIVE) != 2i32 { return 12u64 }
+    if nous_ch_run_charter() != NOUS_CH_VERDICT_GREEN { return 13u64 }
+    if nous_ch_register(NOUS_CH_KIND_CANARY) != 3i32 { return 14u64 }
+    if nous_ch_run_charter() != 4u64 { return 15u64 }
     return 99u64
 }

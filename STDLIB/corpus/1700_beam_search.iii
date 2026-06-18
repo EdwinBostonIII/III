@@ -1,0 +1,57 @@
+/* STDLIB/corpus/1700_beam_search.iii
+ *
+ * Falsifier KAT for nous::beam_search (III-PHASE3-WALLS, Campaign I, organ 1) -- THE CERTIFIED
+ * PORTFOLIO.  99 = every arm holds; 1..11 = the failing arm.  Independent oracle: numera/verified_search
+ * (the frozen K_0 referee + the known global-correct optimum v5, cost 10) -- a stub cannot self-certify
+ * past it.
+ *
+ *   (1) the gated portfolio finds the global-correct optimum v5 (cost 10), certified;
+ *   (2) SOUNDNESS (biting): the UNGATED portfolio falls into the cheaper-WRONG trap v11 (cost 1) and it
+ *       is NOT correct -- the referee gate is load-bearing through the portfolio;
+ *   (3) CALM order-independence (biting): reversing the seed-processing order yields the IDENTICAL
+ *       merged result, gated and ungated -- the merge is commutative;
+ *   (4) DETERMINISM: same base+budget -> same result;
+ *   (5) ESCAPE (the load-bearing value-add, biting): at a SHORT budget >=1 single walk is trapped above
+ *       the optimum (cost > 10), yet the PORTFOLIO still reaches v5 (cost 10).  A single-walk passthrough
+ *       would be stuck; the portfolio escapes.  (exit 10 = SHORT too small; exit 11 = SHORT too large.)
+ */
+module corpus_1700_beam_search
+
+extern @abi(c-msvc-x64) fn bs_portfolio(base: u64, iters: u32, gated: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn bs_portfolio_cost(base: u64, iters: u32, gated: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn bs_portfolio_rev(base: u64, iters: u32, gated: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn bs_singles_stuck(base: u64, iters: u32) -> u32 from "beam_search.iii"
+extern @abi(c-msvc-x64) fn vs_ok(v: u32) -> u32 from "verified_search.iii"
+extern @abi(c-msvc-x64) fn vs_cost(v: u32) -> u32 from "verified_search.iii"
+
+fn main() -> u64 {
+    let base  : u64 = 0x1357924680ABCDEFu64
+    let long  : u32 = 30000u32
+    let short : u32 = 30u32     /* tuned: at this budget 5 of 12 single walks are trapped above the
+                                 * optimum, yet the portfolio still reaches v5 -- escape is load-bearing */
+
+    /* (1) gated portfolio -> global-correct optimum v5 (cost 10), certified */
+    let g : u32 = bs_portfolio(base, long, 1u32)
+    if g != 5u32 { return 1u64 }
+    if vs_cost(g) != 10u32 { return 2u64 }
+    if vs_ok(g) != 1u32 { return 3u64 }
+
+    /* (2) SOUNDNESS (biting): ungated portfolio -> cheaper-WRONG trap v11 (cost 1), NOT correct */
+    let u : u32 = bs_portfolio(base, long, 0u32)
+    if u != 11u32 { return 4u64 }
+    if vs_cost(u) != 1u32 { return 5u64 }
+    if vs_ok(u) != 0u32 { return 6u64 }
+
+    /* (3) CALM order-independence (biting): reverse seed order -> identical merged result */
+    if bs_portfolio_rev(base, long, 1u32) != g { return 7u64 }
+    if bs_portfolio_rev(base, long, 0u32) != u { return 8u64 }
+
+    /* (4) determinism */
+    if bs_portfolio(base, long, 1u32) != g { return 9u64 }
+
+    /* (5) ESCAPE (biting): portfolio reaches the optimum where >=1 single walk is trapped above it */
+    if bs_portfolio_cost(base, short, 1u32) != 10u32 { return 10u64 }
+    if bs_singles_stuck(base, short) == 0u32 { return 11u64 }
+
+    return 99u64
+}

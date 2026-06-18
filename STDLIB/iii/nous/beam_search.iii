@@ -1,0 +1,125 @@
+/* STDLIB/iii/nous/beam_search.iii -- THE CERTIFIED PORTFOLIO (III-PHASE3-WALLS, Campaign I, organ 1).
+ *
+ * Campaign I defeats combinatorial explosion not by searching faster but by searching GUIDED, in
+ * PARALLEL, and never trusting a guess: a portfolio of K seeded-deterministic annealed walks, every
+ * adoption gated through the frozen referee, the certified results merged by a commutative (CALM /
+ * order-independent) cheapest-certified reduction.  A single walk's dead-end is escaped by the
+ * portfolio; soundness is unconditional because the referee is frozen.
+ *
+ * THE COMPOSITION (no island -- two named, load-bearing organs):
+ *   numera/verified_search  -- vs_search is the K_0-gated annealed Metropolis walk over the deceptive
+ *                              12-candidate landscape; vs_ok is the frozen-referee gate; vs_cost is the
+ *                              real registered cost (so the portfolio reduces over the SAME landscape).
+ *   numera/egraph_stochastic -- egs_next is the seeded xorshift64* that derives K distinct, replayable
+ *                              walk seeds from one base (the "entropy" is the seed -- byte-deterministic).
+ *
+ * WHY THE PORTFOLIO IS LOAD-BEARING (not a passthrough): verified_search's correct subspace v0..v5 has
+ * cost barriers at v2(80) and v4(60) walling the global-correct optimum v5(10) behind local minima
+ * v1(50)/v3(30).  At a BOUNDED per-walk budget a single annealed walk is trapped above the optimum; a
+ * portfolio of diverse seeds escapes because some seed climbs the barrier.  The KAT proves both: the
+ * portfolio reaches v5 where >=1 single walk does not.
+ *
+ * WHY IT STAYS SOUND: when gated, only K_0-certified candidates (vs_ok==1) enter the reduction, so the
+ * portfolio NEVER returns the cheaper-wrong trap v11(cost 1) -- it returns the cheapest CORRECT v5.  An
+ * UNGATED portfolio falls into v11, proving the gate is load-bearing through the portfolio.
+ *
+ * WHY THE MERGE IS CALM: the reduction is min-by-(cost,index), a commutative-idempotent semilattice
+ * join, so the merged result is identical regardless of the order seeds are processed (bs_portfolio ==
+ * bs_portfolio_rev).  This is the operational, runtime-checkable face of the ripple_journal order-
+ * independence the campaign relies on for parallel certified search.
+ *
+ * HONEST NOTE (surpass-only, no vacuous composition): the campaign names pareto_frontier as a composed
+ * organ for the multi-objective case; verified_search's bank is SINGLE-objective (cost), so the Pareto
+ * frontier degenerates to the cheapest-certified point and a pareto_frontier call here would be cosmetic.
+ * It is therefore omitted rather than faked; a genuinely multi-objective portfolio composes pf_dominates.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 0.99.  NIH: composes verified_search + egraph_stochastic only.
+ * Determinism: integer-only, seeded; u32/u64 unsigned compares; no arena, no float, no modulo.
+ */
+module nous_beam_search
+
+extern @abi(c-msvc-x64) fn vs_setup() -> i32 from "verified_search.iii"
+extern @abi(c-msvc-x64) fn vs_search(seed: u64, iters: u32, gated: u32) -> u32 from "verified_search.iii"
+extern @abi(c-msvc-x64) fn vs_ok(v: u32) -> u32 from "verified_search.iii"
+extern @abi(c-msvc-x64) fn vs_cost(v: u32) -> u32 from "verified_search.iii"
+extern @abi(c-msvc-x64) fn egs_next(state: u64) -> u64 from "egraph_stochastic.iii"
+
+const BS_K     : u32 = 12u32                      /* portfolio width: 12 diverse seeded walks      */
+const BS_GOLDEN : u64 = 0x9E3779B97F4A7C15u64     /* seed-derivation odd multiplier (golden ratio) */
+
+/* derive the i-th portfolio seed from a base -- distinct per i, replayable, auditable.  Mixes through
+ * the egraph_stochastic xorshift so the spread matches the engine that drives the walks. */
+fn bs_seed(base: u64, i: u32) -> u64 {
+    let mixed : u64 = base ^ (((i as u64) + 1u64) * BS_GOLDEN)
+    let s1 : u64 = egs_next(mixed)
+    let s2 : u64 = egs_next(s1)
+    return s2
+}
+
+/* one annealed gated walk for portfolio slot i (assumes vs_setup already registered the K_0 bank). */
+fn bs_walk(base: u64, i: u32, iters: u32, gated: u32) -> u32 {
+    return vs_search(bs_seed(base, i), iters, gated)
+}
+
+/* THE PORTFOLIO: run K walks; merge the certified results by the commutative min-by-(cost,index) join.
+ * gated==1 -> only K_0-certified candidates enter the merge (sound); gated==0 -> raw walks (exhibits
+ * the trap).  Returns the chosen candidate index. */
+fn bs_portfolio(base: u64, iters: u32, gated: u32) -> u32 @export {
+    vs_setup()
+    let mut best_v : u32 = 0u32                   /* v0 anchor: always certified, cost 100 */
+    let mut best_c : u32 = vs_cost(0u32)
+    let mut i : u32 = 0u32
+    while i < BS_K {
+        let cand : u32 = bs_walk(base, i, iters, gated)
+        let mut accept : u32 = 1u32
+        if gated == 1u32 { if vs_ok(cand) != 1u32 { accept = 0u32 } }
+        if accept == 1u32 {
+            let c : u32 = vs_cost(cand)
+            if c < best_c { best_c = c  best_v = cand }
+            else { if c == best_c { if cand < best_v { best_v = cand } } }
+        }
+        i = i + 1u32
+    }
+    return best_v
+}
+
+/* the chosen candidate's cost (convenience for the KAT / a cost-budget caller). */
+fn bs_portfolio_cost(base: u64, iters: u32, gated: u32) -> u32 @export {
+    return vs_cost(bs_portfolio(base, iters, gated))
+}
+
+/* THE SAME PORTFOLIO, seeds processed in REVERSE order.  Because the merge is a commutative semilattice
+ * join, the result MUST equal bs_portfolio (CALM / order-independence) -- the runtime falsifier for the
+ * "reordering changes no answer" property.  An order-dependent merge would diverge here. */
+fn bs_portfolio_rev(base: u64, iters: u32, gated: u32) -> u32 @export {
+    vs_setup()
+    let mut best_v : u32 = 0u32
+    let mut best_c : u32 = vs_cost(0u32)
+    let mut j : u32 = BS_K
+    while j > 0u32 {
+        j = j - 1u32
+        let cand : u32 = bs_walk(base, j, iters, gated)
+        let mut accept : u32 = 1u32
+        if gated == 1u32 { if vs_ok(cand) != 1u32 { accept = 0u32 } }
+        if accept == 1u32 {
+            let c : u32 = vs_cost(cand)
+            if c < best_c { best_c = c  best_v = cand }
+            else { if c == best_c { if cand < best_v { best_v = cand } } }
+        }
+    }
+    return best_v
+}
+
+/* how many of the K single gated walks FAIL to reach the global-correct optimum (cost 10) at this
+ * budget.  >0 proves the portfolio is load-bearing: a single walk is not enough, the portfolio is. */
+fn bs_singles_stuck(base: u64, iters: u32) -> u32 @export {
+    vs_setup()
+    let mut stuck : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < BS_K {
+        let cand : u32 = bs_walk(base, i, iters, 1u32)
+        if vs_cost(cand) > 10u32 { stuck = stuck + 1u32 }
+        i = i + 1u32
+    }
+    return stuck
+}

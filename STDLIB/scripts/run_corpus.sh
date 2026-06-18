@@ -1313,6 +1313,8 @@ declare -A EXPECTED=(
     [1672_self_report]=99
     [1673_self_cartographer]=99
     [1674_self_emit]=99
+    # --- PHASE III (III-PHASE3-WALLS) Campaign I: certified portfolio search.
+    [1700_beam_search]=99
 )
 
 PASS=0

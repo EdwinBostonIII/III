@@ -198,6 +198,17 @@ fn fq_add_x(r: u64, a: u64, b: u64) -> i32 @export { return fq_add(r, a, b) }
 fn fq_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return fq_sub(r, a, b) }
 fn fq_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return fq_mul(r, a, b) }
 fn fq_sqr_x(r: u64, a: u64) -> i32 @export { return fq_sqr(r, a) }
+/* 1 iff the canonical field element at slot is zero (OR-reduction of its 12 limbs) -- the prime-field
+ * zero-test fp384 lacked; the P-384 on-curve membership check needs it.  (Mirror of fp256 fp_is_zero.) */
+fn fq_is_zero(slot: u64) -> u8 @export {
+    if slot >= 48u64 { return 0u8 }
+    let b : u64 = slot * 12u64
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 12u64 { acc = acc | FQ[b + i]  i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
 fn fq_copy_x(dst: u64, src: u64) -> i32 @export { return fq_copy(dst, src) }
 fn fq_inv_x(r: u64, a: u64) -> i32 @export { return fq_inv(r, a) }
 fn fq_to_mont_x(r: u64, a: u64) -> i32 @export { return fq_to_mont(r, a) }

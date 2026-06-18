@@ -1351,6 +1351,8 @@ declare -A EXPECTED=(
     [1732_autogenesis_consume]=99
     # the proposer layer deepened IN PLACE: hs_scan/rp_scan bayes-throttle their enumeration + cache their obligation.
     [1733_proposer_deepening]=99
+    # the P-384 invalid-curve hole closed: ec384_is_on_curve + the ecdsa_p384 verify guard (mirror of P-256).
+    [1734_ec384_on_curve]=99
 )
 
 PASS=0

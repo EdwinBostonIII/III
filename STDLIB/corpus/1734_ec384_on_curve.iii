@@ -1,0 +1,55 @@
+/* STDLIB/corpus/1734_ec384_on_curve.iii
+ *
+ * Falsifier KAT: the P-384 invalid-curve hole is closed.  ec384_is_on_curve + the verify guard reject an
+ * off-curve public key (mirror of the existing P-256 protection).  99 = pass; 1..6 = the failing arm.
+ *
+ *   (1) a freshly generated public key is ON-curve and verifies.
+ *   (2) BITING: perturbing the y-coordinate makes the point OFF-curve -> ec384_is_on_curve returns 0.
+ *   (3) BITING: the LIVE iii_ecdsa_p384_verify rejects the off-curve key (the guard, before scalar mult).
+ *   (4) restoring the key makes it on-curve and verify again (the guard is transparent for valid keys).
+ */
+module corpus_1734_ec384_on_curve
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_keygen(d: u64, pub_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_sign(d: u64, z: u64, k: u64, sig_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn ec384_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_is_on_curve(p: u64) -> u8 from "ec384.iii"
+
+var D : [u8; 48]
+var Z : [u8; 48]
+var K : [u8; 48]
+var PUB : [u8; 96]
+var SIG : [u8; 96]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { D[i] = ((i + 2u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { K[i] = ((i + 0x31u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { Z[i] = ((i + 0x51u64) & 0xFFu64) as u8  i = i + 1u64 }
+    iii_ecdsa_p384_keygen(&D as u64, &PUB as u64)
+    iii_ecdsa_p384_sign(&D as u64, &Z as u64, &K as u64, &SIG as u64)
+
+    /* (1) the valid public key is ON-curve and verifies */
+    ec384_set_affine(26u64, &PUB as u64, (&PUB as u64) + 48u64)
+    if ec384_is_on_curve(26u64) != 1u8 { return 1u64 }
+    if iii_ecdsa_p384_verify_x(&PUB as u64, (&PUB as u64) + 48u64, &Z as u64, &SIG as u64) != 1u8 { return 2u64 }
+
+    /* (2) BITING: perturb the y-coordinate -> OFF-curve -> the membership test rejects */
+    PUB[48u64] = PUB[48u64] ^ 0x01u8
+    ec384_set_affine(26u64, &PUB as u64, (&PUB as u64) + 48u64)
+    if ec384_is_on_curve(26u64) != 0u8 { return 3u64 }
+
+    /* (3) BITING: the LIVE verify path rejects the off-curve key (the guard, not the scalar mult) */
+    if iii_ecdsa_p384_verify_x(&PUB as u64, (&PUB as u64) + 48u64, &Z as u64, &SIG as u64) != 0u8 { return 4u64 }
+
+    /* (4) restore -> on-curve again, verifies again (the guard is transparent for valid keys) */
+    PUB[48u64] = PUB[48u64] ^ 0x01u8
+    ec384_set_affine(26u64, &PUB as u64, (&PUB as u64) + 48u64)
+    if ec384_is_on_curve(26u64) != 1u8 { return 5u64 }
+    if iii_ecdsa_p384_verify_x(&PUB as u64, (&PUB as u64) + 48u64, &Z as u64, &SIG as u64) != 1u8 { return 6u64 }
+
+    return 99u64
+}

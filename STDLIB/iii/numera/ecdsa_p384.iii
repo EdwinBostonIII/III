@@ -24,6 +24,7 @@ extern @abi(c-msvc-x64) fn ec384_add_x(out: u64, a: u64, bp: u64) -> i32 from "e
 extern @abi(c-msvc-x64) fn ec384_affine_x(out_x: u64, p: u64) -> i32 from "ec384.iii"
 extern @abi(c-msvc-x64) fn ec384_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 from "ec384.iii"
 extern @abi(c-msvc-x64) fn ec384_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_is_on_curve(p: u64) -> u8 from "ec384.iii"
 extern @abi(c-msvc-x64) fn fn384_boot() -> i32 from "fn384.iii"
 extern @abi(c-msvc-x64) fn gn_set_bytes_x(slot: u64, src: u64) -> i32 from "fn384.iii"
 extern @abi(c-msvc-x64) fn gn_get_bytes_x(dst: u64, slot: u64) -> i32 from "fn384.iii"
@@ -124,6 +125,7 @@ fn iii_ecdsa_p384_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: 
     gn_get_bytes_x(&EC384_U2 as u64, 9u64)
     ec384_scalar_mul_base(23u64, &EC384_U1 as u64)
     ec384_set_affine(26u64, qx_bytes, qy_bytes)
+    if ec384_is_on_curve(26u64) != 1u8 { return 0u8 }   /* [E-EC-3] reject off-curve public key (invalid-curve attack); mirror of P-256 */
     ec384_scalar_mul_pt(29u64, &EC384_U2 as u64, 26u64)
     ec384_add_x(32u64, 23u64, 29u64)
     ec384_affine_x(&EC384_RX as u64, 32u64)

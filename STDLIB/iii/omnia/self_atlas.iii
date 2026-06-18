@@ -450,6 +450,19 @@ fn satlas_is_marked(n: u32) -> u8 @export {
     return SATLAS_MARK[(n as u64) & SATLAS_MASK64]
 }
 
+/* Copy node n's name into out_ptr (capped at max); return the byte count written. */
+fn satlas_name_into(n: u32, out_ptr: u64, max: u64) -> u64 @export {
+    if n >= SATLAS_NCOUNT { return 0u64 }
+    let ln : u64 = SATLAS_NLEN[(n as u64) & SATLAS_MASK64] as u64
+    let mut k : u64 = ln
+    if k > max { k = max }
+    let s : *u8 = satlas_name_ptr(n) as *u8
+    let d : *u8 = out_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < k { d[i] = s[i]  i = i + 1u64 }
+    return k
+}
+
 /* Would adding the dependency a->b create a directed cycle? (== b already reaches a). */
 fn satlas_would_cycle(a: u32, b: u32) -> u8 @export {
     let x : u32 = a

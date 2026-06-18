@@ -40,6 +40,11 @@ extern @abi(c-msvc-x64) fn salens_max_level() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_count_cycle_nodes() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_count_redundant() -> u32 from "self_atlas_lens.iii"
 extern @abi(c-msvc-x64) fn salens_count_dormant() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_top_hub() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_top_hub_impact() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_deepest_integrator() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_depends() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn satlas_name_into(n: u32, out_ptr: u64, max: u64) -> u64 from "self_atlas.iii"
 
 const SREP_OK         : i32 = 0i32
 const SREP_E_OPEN     : i32 = -1i32
@@ -47,6 +52,19 @@ const SREP_MODE_WRITE : u32 = 2u32
 const SREP_ARENA      : u64 = 8192u64
 const SREP_HINT       : u64 = 512u64
 const SREP_SP         : u32 = 32u32          /* space */
+const SREP_COLON      : u32 = 58u32          /* ':' */
+const SREP_NAME_MAX   : u64 = 64u64
+
+var SREP_NAME : [u8; 64]
+
+/* Append "label=<name>:<v> " (a named field) to builder b. */
+fn satlas_rep_named(b: u64, label_ptr: u64, label_len: u64, node: u32) -> i32 {
+    builder_push_bytes(b, label_ptr, label_len)
+    let nl : u64 = satlas_name_into(node, (&SREP_NAME as u64), SREP_NAME_MAX)
+    builder_push_bytes(b, (&SREP_NAME as u64), nl)
+    builder_push_byte(b, SREP_COLON)
+    return SREP_OK
+}
 
 /* Append "label=<v> " to builder b (W2: 4 params). */
 fn satlas_rep_field(b: u64, label_ptr: u64, label_len: u64, v: u32) -> i32 {
@@ -66,6 +84,11 @@ fn satlas_report_build(b: u64) -> i32 {
     satlas_rep_field(b, ("cycles=" as u64),    7u64,  salens_count_cycle_nodes())
     satlas_rep_field(b, ("redundant=" as u64), 10u64, salens_count_redundant())
     satlas_rep_field(b, ("dormant=" as u64),   8u64,  salens_count_dormant())
+    satlas_rep_named(b, ("hub=" as u64),       4u64,  salens_top_hub())
+    format_decimal_u32(b, salens_top_hub_impact())
+    builder_push_byte(b, SREP_SP)
+    satlas_rep_named(b, ("integ=" as u64),     6u64,  salens_deepest_integrator())
+    format_decimal_u32(b, salens_max_depends())
     builder_push_byte(b, 10u32)                  /* newline */
     return SREP_OK
 }

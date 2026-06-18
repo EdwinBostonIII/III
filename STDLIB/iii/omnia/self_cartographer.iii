@@ -145,13 +145,21 @@ fn scarto_parse(base_ptr: u64, base_len: u64, got: u64) -> i32 {
                 }
             }
             if qend > (start + 4u64) {
-                let nlen : u64 = (qend - start) - 4u64
-                let tp : u64 = (&SCARTO_FBUF as u64) + start
-                if SCARTO_MODE == 0u8 {
-                    satlas_link(base_ptr, base_len, tp, nlen)
-                } else {
-                    let tn : u32 = satlas_find(tp, nlen)
-                    if tn != SCARTO_SENT { satlas_mark(tn) }
+                let p4 : u64 = qend - 4u64
+                let mut isiii : u8 = 1u8
+                if fb[p4] != 0x2Eu8 { isiii = 0u8 }          /* . */
+                if fb[p4 + 1u64] != 0x69u8 { isiii = 0u8 }   /* i */
+                if fb[p4 + 2u64] != 0x69u8 { isiii = 0u8 }   /* i */
+                if fb[p4 + 3u64] != 0x69u8 { isiii = 0u8 }   /* i */
+                if isiii == 1u8 {
+                    let nlen : u64 = (qend - start) - 4u64
+                    let tp : u64 = (&SCARTO_FBUF as u64) + start
+                    if SCARTO_MODE == 0u8 {
+                        satlas_link(base_ptr, base_len, tp, nlen)
+                    } else {
+                        let tn : u32 = satlas_find(tp, nlen)
+                        if tn != SCARTO_SENT { satlas_mark(tn) }
+                    }
                 }
                 i = qend + 1u64
             } else {

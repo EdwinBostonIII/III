@@ -30,10 +30,18 @@ extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "re
 extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
 extern @abi(c-msvc-x64) fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 from "reach_oracle.iii"
 extern @abi(c-msvc-x64) fn rb_record(source_id: u32, live: *u8, len: u32, out: *u8) -> u64 from "replay_box.iii"
+/* the deterministic random-bit generator: deterministic entropy derived from a seed, the hypervisor's
+ * answer to a guest's nondeterministic RDRAND/RDTSC (no hardware noise crosses the seal). */
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
 
 const DF_ADMIT : i32 = 0i32      /* admitted to the deterministic core */
 const DF_DENY  : i32 = 1i32      /* default-denied from the core (provisional or unknown tier) */
 const DF_E_NORECORD : i32 = -1i32 /* [P4] a provisional value that could NOT be recorded for replay (witness/obs log exhausted) -- distinct from a normal DENY so the un-replayable observation is observable */
+const DF_TIER_PROVISIONAL : u32 = 1u32   /* == ROR_TIER_PROVISIONAL: synthesized entropy is oracle-class -- recorded + denied */
+const DF_ENT_MAX : u32 = 256u32
+
+var DF_ENT_SCRATCH : [u8; 256]
 
 /* THE FIREWALL VERDICT (default-deny): admit to the deterministic core iff the value is CANONICAL. */
 fn df_admit(tier: u32) -> i32 @export { return reach_oracle_admit_canonical(tier) }
@@ -73,4 +81,22 @@ fn df_ingress(tier: u32, source_id: u32, live: *u8, len: u32, out: *u8) -> i32 @
         return DF_ADMIT
     }
     return DF_DENY
+}
+
+/* THE HYPERVISOR ENTROPY SEAL (slice 10, the hardware-determinism air gap closed).  When an encapsulated
+ * guest executes a nondeterministic hardware instruction -- RDRAND / RDSEED (raw entropy) or RDTSC (timing)
+ * -- the Floor must NOT let physical hardware fulfil it, or deterministic state-machine replication breaks.
+ * Instead the hypervisor synthesizes DETERMINISTIC bytes from a trace-derived seed via numera/drbg, and
+ * routes them through this firewall's OWN df_ingress as a PROVISIONAL value: the bytes are DENIED from the
+ * deterministic core but RECORDED on the witness spine (rb_record), so every federated peer replays the
+ * exact same bytes.  The guest receives the deterministic bytes in `out` and is oblivious to the intercept;
+ * the federation achieves 100% deterministic replay even of an adversary's entropy/timing reads.
+ * Composes numera/drbg + this firewall's df_ingress -- no new organ.  Same seed -> same bytes (closed gap). */
+fn df_seal_entropy(seed: *u8, seed_len: u64, source_id: u32, out: *u8, n_bytes: u32) -> i32 @export {
+    if n_bytes > DF_ENT_MAX { return DF_DENY }
+    iii_drbg_instantiate(seed as u64, seed_len, 0u64, 0u64, 0u64, 0u64)
+    iii_drbg_generate((&DF_ENT_SCRATCH as u64), n_bytes as u64, 0u64, 0u64)
+    /* the synthesized entropy crosses the boundary as a PROVISIONAL value: recorded for replay, denied from
+     * the core, and passed to the guest's out buffer -- all in the one membrane operation. */
+    return df_ingress(DF_TIER_PROVISIONAL, source_id, (&DF_ENT_SCRATCH as u64) as *u8, n_bytes, out)
 }

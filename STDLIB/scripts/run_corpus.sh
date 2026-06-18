@@ -1359,6 +1359,8 @@ declare -A EXPECTED=(
     [1736_develop_up_ingress]=99
     # sov_isa adopts the WHOLE certified shift-combining family parametrically (sibling of adopt_dream), not just Rule H.
     [1737_shift_dream_adoption]=99
+    # hypervisor determinism sealing: a guest's RDRAND/RDTSC becomes deterministic drbg bytes, recorded through df_ingress.
+    [1738_hypervisor_entropy_seal]=99
 )
 
 PASS=0

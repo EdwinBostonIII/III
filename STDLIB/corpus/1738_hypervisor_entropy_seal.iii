@@ -1,0 +1,57 @@
+/* STDLIB/corpus/1738_hypervisor_entropy_seal.iii -- HYPERVISOR-LEVEL DETERMINISM SEALING.
+ *
+ * A guest's nondeterministic RDRAND/RDSEED/RDTSC breaks deterministic state-machine replication.  The Floor
+ * now synthesizes DETERMINISTIC bytes (numera/drbg, trace-seeded) and routes them through the determinism
+ * firewall's df_ingress as a PROVISIONAL value: recorded on the witness spine (replayable) and denied from
+ * the core.  The hardware-determinism air gap is closed.  99 = all arms; 1..5 = the failing arm.
+ *
+ *   (1) sealing returns DF_DENY (provisional: recorded + denied, not admitted to the core).
+ *   (2) BITING: the SAME seed yields IDENTICAL bytes -- a hardware RDRAND would differ every call.
+ *   (3) a DIFFERENT seed yields DIFFERENT bytes (genuinely seed-dependent, not a constant).
+ *   (4) RECORDED: on replay the sealed bytes re-inject bit-identically (federated determinism).
+ */
+module corpus_1738_hypervisor_entropy_seal
+
+extern @abi(c-msvc-x64) fn df_seal_entropy(seed: u64, seed_len: u64, source_id: u32, out: u64, n_bytes: u32) -> i32 from "determinism_firewall.iii"
+extern @abi(c-msvc-x64) fn rb_begin() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay() -> i32 from "replay_box.iii"
+extern @abi(c-msvc-x64) fn rb_replay_check(source_id: u32, live: u64, len: u32, out: u64) -> u32 from "replay_box.iii"
+
+const DF_DENY     : i32 = 1i32
+const RB_FAITHFUL : u32 = 0u32
+const SID : u32 = 7u32
+
+var SEEDA : [u8; 16]
+var SEEDC : [u8; 16]
+var OUTA : [u8; 16]
+var OUTB : [u8; 16]
+var OUTC : [u8; 16]
+var OUTR : [u8; 16]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 16u64 { SEEDA[i] = ((i + 0xA0u64) & 0xFFu64) as u8  SEEDC[i] = ((i + 0xC0u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    rb_begin()   /* record mode -- so the sealed entropy is logged for replay */
+
+    /* (1) seal under seed A -> deterministic bytes, recorded + denied */
+    if df_seal_entropy((&SEEDA as u64), 16u64, SID, (&OUTA as u64), 16u32) != DF_DENY { return 1u64 }
+
+    /* (2) BITING: same seed -> IDENTICAL bytes (hardware RDRAND would differ) */
+    if df_seal_entropy((&SEEDA as u64), 16u64, SID, (&OUTB as u64), 16u32) != DF_DENY { return 2u64 }
+    i = 0u64
+    while i < 16u64 { if OUTA[i] != OUTB[i] { return 3u64 }  i = i + 1u64 }
+
+    /* (3) different seed -> DIFFERENT bytes */
+    df_seal_entropy((&SEEDC as u64), 16u64, SID, (&OUTC as u64), 16u32)
+    let mut diff : u8 = 0u8
+    i = 0u64
+    while i < 16u64 { if OUTA[i] != OUTC[i] { diff = 1u8 }  i = i + 1u64 }
+    if diff != 1u8 { return 4u64 }
+
+    /* (4) RECORDED: switch to replay; the first sealed value (seed A) re-injects bit-identically */
+    rb_replay()
+    if rb_replay_check(SID, (&OUTA as u64), 16u32, (&OUTR as u64)) != RB_FAITHFUL { return 5u64 }
+
+    return 99u64
+}

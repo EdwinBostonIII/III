@@ -1295,6 +1295,7 @@ declare -A EXPECTED=(
     [1108_sov_self_extend]=99
     [1109_cast_stride_index]=36
     [1666_self_atlas]=99
+    [1400_self_model]=99
     [1667_self_atlas_real]=99
     [1668_self_atlas_lens]=99
     [1670_ripple_extract_selfmodel]=99

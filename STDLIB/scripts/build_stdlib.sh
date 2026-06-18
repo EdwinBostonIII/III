@@ -1073,6 +1073,11 @@ MODULES=(
     "omnia/tp_planner"
     # --- the executable coverage ledger (KAT 1391 + the ratchet gate below); appended last ---
     "sanctus/corpus_coverage"
+    # --- AUTOGENESIS Wave B: the content-addressed self-image keystone (sanctus::self_model).
+    # Promotes corpus_coverage audited export call graph into a Merkle DAG with one 32-byte root
+    # that changes iff structure/coverage/proof/cost changes.  Externs corpus_coverage + cad
+    # (built above); compiler-unreferenced -> LIBNATIVE only; appended last (BSS-neutral).
+    "sanctus/self_model"
     # --- THE SELF-AWARENESS SEAM (omnia::self_atlas): the III-native self-model of its OWN
     # module dependency graph -- the cartographer machine brought INSIDE III so the
     # generative organs can query blast-radius / would-this-refactor-cycle / is-this-edge-

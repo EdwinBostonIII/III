@@ -1,0 +1,194 @@
+/* 1400_self_model.iii -- sanctus::self_model falsifier KAT (the autogenesis keystone).
+ *
+ * Builds a hermetic fixture tree and audits it through self_model:
+ *   modules/a.iii : lf (leaf), rt (calls lf), dk (nothing references it)
+ *   corpus/t.iii  : calls rt  -> rt + lf reached; dk is DARK (unreached)
+ *
+ * Asserts: >=3 export nodes; the edge rt -> lf is present; dk is dark; the model root is
+ * deterministic (same tree -> same root); and mutating ONE node's proof status changes the
+ * root and yields sm_diff = 1 (the biting arm).  Content is built byte-exact with explicit
+ * newline bytes (no \n-literal dependence).  Hermetic; rc 99 = pass.
+ */
+module corpus_1400
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_mkdir(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_rmdir(cap: u64, path: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn cov_node_name(i: u64, out_addr: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn sm_build(cap: u64, mods_root: u64, corpus_root: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_n_nodes() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_dark(i: u64) -> u8 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_covered(i: u64) -> u8 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_cost(i: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_proven(i: u64) -> u8 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_next_gap() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_addr(i: u64, out_32: u64) -> i32 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_node_callees(i: u64, out: u64) -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_root(out_32: u64) -> i32 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_mark_proven(i: u64, v: u8) -> i32 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_diff(root_a_32: u64, root_b_32: u64) -> u64 from "self_model.iii"
+
+const SENT   : u64 = 0xFFFFFFFFFFFFFFFFu64
+const MWRITE : u32 = 2u32
+
+var P_MOD : [u8; 48]
+var P_COR : [u8; 48]
+var P_A   : [u8; 48]
+var P_T   : [u8; 48]
+var C_A   : [u8; 512]
+var C_T   : [u8; 512]
+var NMBUF : [u8; 128]
+var CALB  : [u8; 256]
+var RB1   : [u8; 32]
+var RB2   : [u8; 32]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+/* append lit[0..litlen) then a newline byte to buf+off; return the new offset */
+fn aline(buf: u64, off: u64, lit: u64, litlen: u64) -> u64 {
+    let d : *u8 = (buf + off) as *u8
+    let s : *u8 = lit as *u8
+    let mut i : u64 = 0u64
+    while i < litlen { d[i] = s[i]  i = i + 1u64 }
+    d[litlen] = 10u8
+    return off + litlen + 1u64
+}
+
+fn wfile(cap: u64, path: u64, content: u64, clen: u64) -> i32 {
+    let h : u64 = fs_open(cap, path, MWRITE)
+    if h == 0u64 { return -1i32 }
+    let w : u64 = fs_write(h, content, clen)
+    fs_close(h)
+    if w != clen { return -2i32 }
+    return 0i32
+}
+
+fn beq(a: u64, b: u64, n: u64) -> u8 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while i < n { if pa[i] != pb[i] { eq = 0u8 }  i = i + 1u64 }
+    return eq
+}
+
+fn find_node(name_ptr: u64, len: u64) -> u64 {
+    let n : u64 = sm_n_nodes()
+    let mut i : u64 = 0u64
+    let mut hit : u64 = SENT
+    while i < n {
+        let nl : u64 = cov_node_name(i, (&NMBUF as u64))
+        if nl == len {
+            if beq((&NMBUF as u64), name_ptr, len) == 1u8 { hit = i }
+        }
+        i = i + 1u64
+    }
+    return hit
+}
+
+fn has_callee(src: u64, tgt: u64) -> u8 {
+    let cc : u64 = sm_node_callees(src, (&CALB as u64))
+    let p : *u64 = (&CALB as u64) as *u64
+    let mut k : u64 = 0u64
+    let mut hit : u8 = 0u8
+    while k < cc {
+        if p[k] == tgt { hit = 1u8 }
+        k = k + 1u64
+    }
+    return hit
+}
+
+fn build_fixture(cap: u64) -> i32 {
+    bcopy((&P_MOD as u64), ("./iii_sm_kat_m" as u64),       14u64)
+    bcopy((&P_COR as u64), ("./iii_sm_kat_c" as u64),       14u64)
+    bcopy((&P_A as u64),   ("./iii_sm_kat_m/a.iii" as u64), 20u64)
+    bcopy((&P_T as u64),   ("./iii_sm_kat_c/t.iii" as u64), 20u64)
+
+    let mut ao : u64 = 0u64
+    ao = aline((&C_A as u64), ao, ("module fixm" as u64), 11u64)
+    ao = aline((&C_A as u64), ao, ("fn lf() -> u64 @export { return 1u64 }" as u64), 38u64)
+    ao = aline((&C_A as u64), ao, ("fn rt() -> u64 @export { return lf() }" as u64), 38u64)
+    ao = aline((&C_A as u64), ao, ("fn dk() -> u64 @export { return 2u64 }" as u64), 38u64)
+
+    let mut to : u64 = 0u64
+    to = aline((&C_T as u64), to, ("module corpus_fixt" as u64), 18u64)
+    to = aline((&C_T as u64), to, ("extern @abi(c-msvc-x64) fn rt() -> u64 from \"a.iii\"" as u64), 51u64)
+    to = aline((&C_T as u64), to, ("fn fixmain() -> u64 { return rt() }" as u64), 35u64)
+
+    if fs_mkdir(cap, (&P_MOD as u64)) != 0i32 { return 1i32 }
+    if fs_mkdir(cap, (&P_COR as u64)) != 0i32 { return 2i32 }
+    if wfile(cap, (&P_A as u64), (&C_A as u64), ao) != 0i32 { return 3i32 }
+    if wfile(cap, (&P_T as u64), (&C_T as u64), to) != 0i32 { return 4i32 }
+    return 0i32
+}
+
+fn cleanup(cap: u64) -> i32 {
+    fs_delete(cap, (&P_A as u64))
+    fs_delete(cap, (&P_T as u64))
+    fs_rmdir(cap, (&P_MOD as u64))
+    fs_rmdir(cap, (&P_COR as u64))
+    return 0i32
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let bf : i32 = build_fixture(cap)
+    if bf != 0i32 { cleanup(cap)  return 100u64 + (bf as u64) }
+
+    let n : u64 = sm_build(cap, (&P_MOD as u64), (&P_COR as u64))
+    sm_root((&RB1 as u64))                               /* build-1 root */
+
+    let lf : u64 = find_node(("lf" as u64), 2u64)
+    let rt : u64 = find_node(("rt" as u64), 2u64)
+    let dk : u64 = find_node(("dk" as u64), 2u64)
+    let mut darkflag : u8 = 0u8
+    let mut edge : u8 = 0u8
+    if dk != SENT { darkflag = sm_node_dark(dk) }
+    if rt != SENT { if lf != SENT { edge = has_callee(rt, lf) } }
+
+    let n2 : u64 = sm_build(cap, (&P_MOD as u64), (&P_COR as u64))
+    sm_root((&RB2 as u64))                               /* build-2 root (same tree) */
+    let det : u64 = sm_diff((&RB1 as u64), (&RB2 as u64))   /* 0 == deterministic */
+
+    if lf != SENT { sm_mark_proven(lf, 1u8) }            /* mutate one node's proof bit */
+    sm_root((&RB2 as u64))                               /* RB2 := post-mutation root */
+    let drift : u64 = sm_diff((&RB1 as u64), (&RB2 as u64)) /* RB1 pre, RB2 post -> 1 */
+
+    /* exercise the remaining surface (coverage) on the post-mutation model */
+    let cov_rt : u8 = sm_node_covered(rt)
+    let cost_rt : u64 = sm_node_cost(rt)
+    let gap : u64 = sm_next_gap()
+    let prov_lf : u8 = sm_node_proven(lf)
+    sm_node_addr(lf, (&NMBUF as u64))
+
+    cleanup(cap)
+
+    if n < 3u64 { return 10u64 }
+    if n2 != n { return 11u64 }
+    if lf == SENT { return 12u64 }
+    if rt == SENT { return 13u64 }
+    if dk == SENT { return 14u64 }
+    if edge != 1u8 { return 15u64 }
+    if darkflag != 1u8 { return 16u64 }
+    if det != 0u64 { return 17u64 }
+    if drift != 1u64 { return 18u64 }
+    if cov_rt != 1u8 { return 19u64 }
+    if cost_rt < 1u64 { return 20u64 }
+    if gap >= n { return 21u64 }
+    if prov_lf != 1u8 { return 22u64 }
+    return 99u64
+}

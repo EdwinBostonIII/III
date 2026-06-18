@@ -1222,6 +1222,61 @@ fn cov_n_unreachable() -> u64 @export { return CV_NUNREACH }
 fn cov_n_edges() -> u64 @export { return CV_NEDGE }
 fn cov_n_internal_nodes() -> u64 @export { return CV_NINT }
 
+/* === self_model accessors (composed by sanctus/self_model): the per-export-node graph view.
+ * Export nodes are ids 0..CV_NEXP; callees may be export ids (< CV_NEXP) or file-local internal
+ * nodes (>= CV_NEXP).  Additive read-only views over the audited graph; no state change. === */
+fn cov_node_name(i: u64, out_addr: u64) -> u64 @export {
+    let ii : u64 = i
+    let oa : u64 = out_addr
+    if oa == 0u64 { return 0u64 }
+    if ii >= CV_NEXP { return 0u64 }
+    let src : *u8 = cv_name_addr(ii) as *u8
+    let dst : *u8 = oa as *u8
+    let len : u64 = CV_ELEN[ii]
+    let mut k : u64 = 0u64
+    while k < len { dst[k] = src[k]   k = k + 1u64 }
+    dst[len] = 0u8
+    return len
+}
+
+fn cov_node_covered(i: u64) -> u8 @export {
+    if i >= CV_NEXP { return 0u8 }
+    return CV_ECOV[i]
+}
+
+fn cov_node_reached(i: u64) -> u8 @export {
+    if i >= CV_NEXP { return 0u8 }
+    return CV_EREACH[i]
+}
+
+fn cov_node_callee_count(i: u64) -> u64 @export {
+    let ii : u64 = i
+    if ii >= CV_NEXP { return 0u64 }
+    let mut e : u64 = 0u64
+    let mut c : u64 = 0u64
+    while e < CV_NEDGE {
+        if (CV_EFROM[e] as u64) == ii { c = c + 1u64 }
+        e = e + 1u64
+    }
+    return c
+}
+
+fn cov_node_callee(i: u64, k: u64) -> u64 @export {
+    let ii : u64 = i
+    let kk : u64 = k
+    if ii >= CV_NEXP { return 0xFFFFFFFFu64 }
+    let mut e : u64 = 0u64
+    let mut c : u64 = 0u64
+    while e < CV_NEDGE {
+        if (CV_EFROM[e] as u64) == ii {
+            if c == kk { return CV_ETO[e] as u64 }
+            c = c + 1u64
+        }
+        e = e + 1u64
+    }
+    return 0xFFFFFFFFu64
+}
+
 /* the v3 verdict: COMPLETE iff certifiable AND every export is reachable from a corpus
  * use site through the call graph (the anti-dark-surface criterion) */
 fn cov_reach_verdict() -> u32 @export {

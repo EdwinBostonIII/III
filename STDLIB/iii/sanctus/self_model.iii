@@ -1,0 +1,229 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\self_model.iii
+ *
+ * III STDLIB - sanctus::self_model  --  III's content-addressed self-image (the autogenesis keystone).
+ *
+ * Promotes sanctus/corpus_coverage's in-memory export call graph into a content-addressed Merkle
+ * DAG: each export node is addressed by cad(name || index || covered || reached || proven ||
+ * cost-class || sorted-callee-ids), so the whole self-model collapses to ONE 32-byte root that
+ * changes IFF the system's structure, coverage, proof status, or cost changes.  That root is the
+ * substrate of drift detection (sm_diff), the monotone self-model ratchet, and the autogenesis
+ * ledger; sm_next_gap is what the proposer organs aim at.
+ *
+ *   - covered/reached/callees come from the verified corpus_coverage audit (no re-parse: lean).
+ *   - cost-class is the node's direct fan-out (a deterministic structural cost; the address slot
+ *     is cost-agnostic so a finer microarch cost can replace it without changing the architecture).
+ *   - the proof-status bit defaults to 0 and is flipped by sm_set_proven when the CIC kernel admits
+ *     a contract for that export -- which re-addresses the node and the root, so the loop's progress
+ *     is itself content-addressed and tamper-evident.
+ *
+ * Hexad: kind_essence.  Ring: R-1.  Composes corpus_coverage + cad only.  Determinism: integer-only,
+ * content-derived order (callee ids sorted), same tree -> same root.  Discipline: W2 (<=4 params),
+ * W4 (module-scope state), W8 (static bounds), W13 (<=20 locals), W14/W15 (sentinel loops, no
+ * recursion).  ASCII only.  Single-threaded (one self-model in memory). */
+
+module sanctus_self_model
+
+extern @abi(c-msvc-x64) fn cov_audit(cap_id: u64, modules_root: u64, corpus_root: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_n_exports() -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_node_name(i: u64, out_addr: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_node_covered(i: u64) -> u8 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_node_reached(i: u64) -> u8 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_node_callee_count(i: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cov_node_callee(i: u64, k: u64) -> u64 from "corpus_coverage.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const SM_OK         : i32 = 0i32
+const SM_E_BAD      : i32 = -1i32
+const SM_SUITE      : u32 = 0u32                 /* CAD_SUITE_SHA256 */
+const SM_MAX_NODES  : u64 = 16384u64
+const SM_MAX_CALLEE : u64 = 1024u64
+const SM_ADDR_BYTES : u64 = 32u64
+
+var SM_ADDR    : [u8;  524288]                   /* 16384 * 32 node addresses */
+var SM_PROVEN  : [u8;  16384]                    /* per-node proof-status bit  */
+var SM_COST    : [u64; 16384]                    /* per-node cost-class (fan-out) */
+var SM_NNODES  : u64 = 0u64
+var SM_ROOT    : [u8;  32]
+var SM_NAMEBUF : [u8;  128]
+var SM_NODEBUF : [u8;  16384]                    /* per-node hash input scratch */
+var SM_CALLEES : [u64; 1024]
+
+/* ---- byte helpers ---------------------------------------------------- */
+
+fn sm_put_u64le(base: u64, off: u64, v: u64) -> u64 {
+    let p : *u8 = (base + off) as *u8
+    let vv : u64 = v
+    p[0u64] = (vv & 0xFFu64) as u8
+    p[1u64] = ((vv >> 8u64)  & 0xFFu64) as u8
+    p[2u64] = ((vv >> 16u64) & 0xFFu64) as u8
+    p[3u64] = ((vv >> 24u64) & 0xFFu64) as u8
+    p[4u64] = ((vv >> 32u64) & 0xFFu64) as u8
+    p[5u64] = ((vv >> 40u64) & 0xFFu64) as u8
+    p[6u64] = ((vv >> 48u64) & 0xFFu64) as u8
+    p[7u64] = ((vv >> 56u64) & 0xFFu64) as u8
+    return off + 8u64
+}
+
+/* sort SM_CALLEES[0..n) ascending (insertion sort; content-derived order, no recursion) */
+fn sm_sort_callees(n: u64) -> i32 {
+    let mut i : u64 = 1u64
+    while i < n {
+        let key : u64 = SM_CALLEES[i]
+        let mut j : u64 = i
+        let mut go : u8 = 1u8
+        while go == 1u8 {
+            if j == 0u64 { go = 0u8 }
+            else {
+                if SM_CALLEES[j - 1u64] > key {
+                    SM_CALLEES[j] = SM_CALLEES[j - 1u64]
+                    j = j - 1u64
+                } else { go = 0u8 }
+            }
+        }
+        SM_CALLEES[j] = key
+        i = i + 1u64
+    }
+    return SM_OK
+}
+
+/* address node i = cad(name || index || covered || reached || proven || cost || sorted-callees) */
+fn sm_compute_addr(i: u64) -> i32 {
+    let nb : u64 = (&SM_NODEBUF as u64)
+    let nl : u64 = cov_node_name(i, (&SM_NAMEBUF as u64))
+    let src : *u8 = (&SM_NAMEBUF as u64) as *u8
+    let dst : *u8 = nb as *u8
+    let mut k : u64 = 0u64
+    while k < nl { dst[k] = src[k]  k = k + 1u64 }
+    let mut off : u64 = nl
+    off = sm_put_u64le(nb, off, i)
+    let p1 : *u8 = (nb + off) as *u8
+    p1[0u64] = cov_node_covered(i)
+    p1[1u64] = cov_node_reached(i)
+    p1[2u64] = SM_PROVEN[i]
+    off = off + 3u64
+    off = sm_put_u64le(nb, off, SM_COST[i])
+    let cc : u64 = cov_node_callee_count(i)
+    let mut c : u64 = 0u64
+    while c < cc {
+        if c < SM_MAX_CALLEE { SM_CALLEES[c] = cov_node_callee(i, c) }
+        c = c + 1u64
+    }
+    let mut nc : u64 = cc
+    if nc > SM_MAX_CALLEE { nc = SM_MAX_CALLEE }
+    sm_sort_callees(nc)
+    let mut j : u64 = 0u64
+    while j < nc { off = sm_put_u64le(nb, off, SM_CALLEES[j])  j = j + 1u64 }
+    cad_oneshot(SM_SUITE, nb as *u8, off, ((&SM_ADDR as u64) + i * SM_ADDR_BYTES) as *u8)
+    return SM_OK
+}
+
+fn sm_recompute_root() -> i32 {
+    cad_oneshot(SM_SUITE, (&SM_ADDR as u64) as *u8, SM_NNODES * SM_ADDR_BYTES, (&SM_ROOT as u64) as *u8)
+    return SM_OK
+}
+
+/* ---- public surface -------------------------------------------------- */
+
+/* Audit the tree and build the content-addressed self-model; returns the node count. */
+fn sm_build(cap: u64, mods_root: u64, corpus_root: u64) -> u64 @export {
+    cov_audit(cap, mods_root, corpus_root)
+    let mut n : u64 = cov_n_exports()
+    if n > SM_MAX_NODES { n = SM_MAX_NODES }
+    SM_NNODES = n
+    let mut i : u64 = 0u64
+    while i < n {
+        SM_PROVEN[i] = 0u8
+        SM_COST[i] = cov_node_callee_count(i)
+        sm_compute_addr(i)
+        i = i + 1u64
+    }
+    sm_recompute_root()
+    return n
+}
+
+fn sm_n_nodes() -> u64 @export { return SM_NNODES }
+
+fn sm_node_covered(i: u64) -> u8 @export {
+    if i >= SM_NNODES { return 0u8 }
+    return cov_node_covered(i)
+}
+
+fn sm_node_dark(i: u64) -> u8 @export {
+    if i >= SM_NNODES { return 0u8 }
+    if cov_node_reached(i) == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn sm_node_callees(i: u64, out: u64) -> u64 @export {
+    if i >= SM_NNODES { return 0u64 }
+    let cc : u64 = cov_node_callee_count(i)
+    let mut k : u64 = 0u64
+    while k < cc {
+        sm_put_u64le(out, k * 8u64, cov_node_callee(i, k))
+        k = k + 1u64
+    }
+    return cc
+}
+
+fn sm_node_cost(i: u64) -> u64 @export {
+    if i >= SM_NNODES { return 0u64 }
+    return SM_COST[i]
+}
+
+fn sm_node_proven(i: u64) -> u8 @export {
+    if i >= SM_NNODES { return 0u8 }
+    return SM_PROVEN[i]
+}
+
+/* Flip a node's proof bit (the kernel admitted its contract) and re-address node + root. */
+fn sm_set_proven(i: u64, v: u8) -> i32 {
+    if i >= SM_NNODES { return SM_E_BAD }
+    if v == 0u8 { SM_PROVEN[i] = 0u8 } else { SM_PROVEN[i] = 1u8 }
+    sm_compute_addr(i)
+    sm_recompute_root()
+    return SM_OK
+}
+
+/* exported wrapper so the proposer/prover organs can drive proof status through the gate */
+fn sm_mark_proven(i: u64, v: u8) -> i32 @export { return sm_set_proven(i, v) }
+
+/* The first improvement target: a dark (unreached) or unproven export; SM_NNODES if none. */
+fn sm_next_gap() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < SM_NNODES {
+        if cov_node_reached(i) == 0u8 { return i }
+        if SM_PROVEN[i] == 0u8 { return i }
+        i = i + 1u64
+    }
+    return SM_NNODES
+}
+
+fn sm_node_addr(i: u64, out_32: u64) -> i32 @export {
+    if i >= SM_NNODES { return SM_E_BAD }
+    let s : *u8 = ((&SM_ADDR as u64) + i * SM_ADDR_BYTES) as *u8
+    let d : *u8 = out_32 as *u8
+    let mut k : u64 = 0u64
+    while k < SM_ADDR_BYTES { d[k] = s[k]  k = k + 1u64 }
+    return SM_OK
+}
+
+fn sm_root(out_32: u64) -> i32 @export {
+    let s : *u8 = (&SM_ROOT as u64) as *u8
+    let d : *u8 = out_32 as *u8
+    let mut k : u64 = 0u64
+    while k < SM_ADDR_BYTES { d[k] = s[k]  k = k + 1u64 }
+    return SM_OK
+}
+
+/* Structural drift between two self-model roots: 0 == identical structure, 1 == changed. */
+fn sm_diff(root_a_32: u64, root_b_32: u64) -> u64 @export {
+    let a : *u8 = root_a_32 as *u8
+    let b : *u8 = root_b_32 as *u8
+    let mut k : u64 = 0u64
+    let mut d : u64 = 0u64
+    while k < SM_ADDR_BYTES {
+        if a[k] != b[k] { d = 1u64 }
+        k = k + 1u64
+    }
+    return d
+}

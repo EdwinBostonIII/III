@@ -1405,6 +1405,8 @@ declare -A EXPECTED=(
     [1759_sha_structure]=99
     # THE CASH-IN: the invention engine cost-validated against III's real microarch cycle model (target-relative).
     [1760_gil_cycle_validate]=99
+    # SHA-2 two-tree optimization identities: Ch one-AND-fewer + Maj carry-save (= the adder carry), proven.
+    [1761_sha_optform]=99
 )
 
 PASS=0

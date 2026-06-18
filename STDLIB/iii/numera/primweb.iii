@@ -193,3 +193,53 @@ fn pw_sha_maj_nontrivial() -> u8 @export {
     let maj : u32 = bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c))
     return bb_equal(maj, a)                            /* == 0: Maj(a,b,c) is not just a */
 }
+
+/* SHA-2 TWO-TREE OPTIMIZATION IDENTITIES -- the same Boolean function, a cheaper expression tree (the classic
+ * "one-AND-fewer" forms sha256.iii's straight transcription does NOT use).  Proven equal at w=32 by bb_equal;
+ * whether to ADOPT them into sha256 is governed by the cash-in's cost-truth (gate-count win; x86 marginal).
+ *
+ * Ch: (e&f)^(~e&g) == g ^ (e & (f^g))   -- drops one AND and the NOT (a select rewritten as a guarded delta). */
+fn pw_sha_ch_optform() -> u8 @export {
+    bb_reset(PW_W)
+    let e : u32 = bb_var(0u32)
+    let f : u32 = bb_var(1u32)
+    let g : u32 = bb_var(2u32)
+    let orig  : u32 = bb_xor(bb_and(e, f), bb_and(bb_not(e), g))     /* the spec form */
+    let cheap : u32 = bb_xor(g, bb_and(e, bb_xor(f, g)))            /* one AND fewer, no NOT */
+    return bb_equal(orig, cheap)
+}
+
+/* BITING: a single connective wrong (| for the inner &) breaks it -- g ^ (e | (f^g)) != Ch.  Judge REFUSES. */
+fn pw_sha_ch_optform_wrong() -> u8 @export {
+    bb_reset(PW_W)
+    let e : u32 = bb_var(0u32)
+    let f : u32 = bb_var(1u32)
+    let g : u32 = bb_var(2u32)
+    let orig  : u32 = bb_xor(bb_and(e, f), bb_and(bb_not(e), g))
+    let wrong : u32 = bb_xor(g, bb_or(e, bb_xor(f, g)))             /* | instead of & -> wrong */
+    return bb_equal(orig, wrong)
+}
+
+/* Maj: (a&b)^(a&c)^(b&c) == (a&b) ^ (c & (a^b))   -- the CARRY-SAVE form (this IS the full-adder carry: maj is
+ * exactly what bb's own bb_gate_maj/bb_fulladder computes).  Drops one AND.  SHA-2's diffusion core = the
+ * prover's adder carry -- a real spiderweb edge between the hash and the judge's arithmetic. */
+fn pw_sha_maj_optform() -> u8 @export {
+    bb_reset(PW_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let orig  : u32 = bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c))   /* the spec form */
+    let cheap : u32 = bb_xor(bb_and(a, b), bb_and(c, bb_xor(a, b)))              /* carry-save / adder-carry */
+    return bb_equal(orig, cheap)
+}
+
+/* BITING: | for the leading & breaks it -- (a|b) ^ (c&(a^b)) != Maj.  Judge REFUSES. */
+fn pw_sha_maj_optform_wrong() -> u8 @export {
+    bb_reset(PW_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let orig  : u32 = bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c))
+    let wrong : u32 = bb_xor(bb_or(a, b), bb_and(c, bb_xor(a, b)))
+    return bb_equal(orig, wrong)
+}

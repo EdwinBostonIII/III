@@ -1,0 +1,29 @@
+/* STDLIB/corpus/1761_sha_optform.iii -- SHA-2 two-tree optimization identities, proven on the bv_bits judge.
+ *
+ * The same Boolean function, a cheaper expression tree -- the classic "one-AND-fewer" forms that sha256.iii's
+ * straight transcription does not use.  Proven equal at w=32 (a real, adoptable optimization, gate-count win);
+ * the wrong forms (a single connective changed) are REFUSED, so the proof bites.  99 = all arms.
+ *
+ *   Ch:  (e&f)^(~e&g)        == g ^ (e & (f^g))          (one AND fewer, no NOT)
+ *   Maj: (a&b)^(a&c)^(b&c)   == (a&b) ^ (c & (a^b))       (carry-save = the full-adder carry)
+ */
+module corpus_1761_sha_optform
+
+extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_sha_ch_optform_wrong() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_sha_maj_optform_wrong() -> u8 from "primweb.iii"
+
+fn main() -> u64 {
+    /* (1) Ch's cheaper one-AND-fewer form is proven equal to the spec form */
+    if pw_sha_ch_optform() != 1u8 { return 1u64 }
+    /* BITING: the | -for-& corruption is REFUSED */
+    if pw_sha_ch_optform_wrong() != 0u8 { return 2u64 }
+
+    /* (2) Maj's carry-save form (= the full-adder carry) is proven equal to the spec form */
+    if pw_sha_maj_optform() != 1u8 { return 3u64 }
+    /* BITING: the | -for-& corruption is REFUSED */
+    if pw_sha_maj_optform_wrong() != 0u8 { return 4u64 }
+
+    return 99u64
+}

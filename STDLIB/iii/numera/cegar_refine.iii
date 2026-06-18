@@ -1,0 +1,101 @@
+/* STDLIB/iii/numera/cegar_refine.iii -- COUNTEREXAMPLE-GUIDED ABSTRACTION REFINEMENT
+ * (III-PHASE3-WALLS, Campaign I, organ 3).
+ *
+ * Campaign I beats the concrete-state explosion by reasoning in a SOUND ABSTRACTION (small) and paying
+ * the cost of precision ONLY where a spurious counterexample forces it.  The abstraction here is the
+ * interval lattice (numera/interval_lattice), whose transfer functions provably CONTAIN every concrete
+ * result -- so a proof in the abstract is a proof in the concrete, and the explosion is never paid in full.
+ *
+ * THE LOOP (CEGAR): a reachable set is a union of disjoint pieces.  The COARSE abstraction is their convex
+ * hull (il_join -- the lattice lub), which over-approximates: it admits values in the gaps between pieces.
+ * To prove a target absent:
+ *   1. try the COARSE hull.  Target outside the hull -> PROVED absent (cheap, no refinement).
+ *   2. target inside the hull -> a candidate counterexample.  REFINE: drop back to the disjoint pieces.
+ *      Target in NO piece -> the hull CE was SPURIOUS; PROVED absent at higher precision.  Target in some
+ *      piece -> a GENUINE counterexample; it is NOT refined away (soundness in the other direction).
+ *
+ * SOUNDNESS (the load-bearing invariant): every piece is <= the hull in the lattice order (il_leq), so the
+ * hull contains the whole concrete reachable set.  An abstract "absent" is therefore a concrete "absent".
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 0.99.  Composes numera/interval_lattice (il_join + il_leq are
+ * load-bearing -- no island).  Determinism: integer-only; unsigned compares; module-scope arrays; the hull
+ * is cached once so later lattice calls cannot clobber it.
+ */
+module numera_cegar_refine
+
+extern @abi(c-msvc-x64) fn il_join(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_leq(l1: u32, h1: u32, l2: u32, h2: u32) -> u32 from "interval_lattice.iii"
+
+const CR_NP : u32 = 2u32
+
+var CR_LO  : [u32; 2]
+var CR_HI  : [u32; 2]
+var CR_HLO : u32 = 0u32
+var CR_HHI : u32 = 0u32
+var CR_INIT : u8 = 0u8
+
+fn cr_init() -> i32 @export {
+    if CR_INIT == 1u8 { return 0i32 }
+    CR_LO[0u64]=0u32   CR_HI[0u64]=2u32      /* piece 0: [0,2]  */
+    CR_LO[1u64]=8u32   CR_HI[1u64]=10u32     /* piece 1: [8,10] */
+    il_join(CR_LO[0u64], CR_HI[0u64], CR_LO[1u64], CR_HI[1u64])   /* coarse hull = lattice lub */
+    CR_HLO = il_lo()
+    CR_HHI = il_hi()
+    CR_INIT = 1u8
+    return 0i32
+}
+
+fn cr_hull_lo() -> u32 @export { cr_init()  return CR_HLO }
+fn cr_hull_hi() -> u32 @export { cr_init()  return CR_HHI }
+
+fn cr_in(v: u32, lo: u32, hi: u32) -> u8 {
+    if v < lo { return 0u8 }
+    if v > hi { return 0u8 }
+    return 1u8
+}
+
+/* SOUNDNESS: 1 iff every reachable piece is contained in the coarse hull (il_leq, the lattice order). */
+fn cr_sound() -> u8 @export {
+    cr_init()
+    let mut i : u32 = 0u32
+    while i < CR_NP {
+        if il_leq(CR_LO[(i as u64) & 0xFFFFFFFFu64], CR_HI[(i as u64) & 0xFFFFFFFFu64], CR_HLO, CR_HHI) != 1u32 { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* COARSE proves target absent iff it lies OUTSIDE the hull. */
+fn cr_coarse_proves_absent(target: u32) -> u8 @export {
+    cr_init()
+    if cr_in(target, CR_HLO, CR_HHI) == 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* REFINED proves target absent iff NO disjoint piece contains it. */
+fn cr_refined_proves_absent(target: u32) -> u8 @export {
+    cr_init()
+    let mut i : u32 = 0u32
+    while i < CR_NP {
+        if cr_in(target, CR_LO[(i as u64) & 0xFFFFFFFFu64], CR_HI[(i as u64) & 0xFFFFFFFFu64]) == 1u8 { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* a SPURIOUS counterexample: admitted by the coarse hull, refuted by refinement (an over-approximation
+ * artifact, not a real reachable value). */
+fn cr_spurious(target: u32) -> u8 @export {
+    if cr_coarse_proves_absent(target) == 1u8 { return 0u8 }
+    if cr_refined_proves_absent(target) == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* THE CEGAR LOOP: prove target absent, refining ONLY on a coarse failure.  1 = proved (coarse or refined);
+ * 0 = a genuine counterexample remains. */
+fn cr_prove_absent(target: u32) -> u8 @export {
+    if cr_coarse_proves_absent(target) == 1u8 { return 1u8 }
+    return cr_refined_proves_absent(target)
+}

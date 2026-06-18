@@ -1,0 +1,54 @@
+/* STDLIB/corpus/1702_search_market.iii
+ *
+ * Falsifier KAT for nous::search_market (III-PHASE3-WALLS, Campaign I, organ 5) -- THE SEARCH MARKET.
+ * 99 = every arm holds; 1..13 = the failing arm.  Independent oracle: nous_search's trichotomy
+ * (nous_classify) + the ratio-optimality of the fixture -- a stub allocating uniformly, or claiming an
+ * unfunded subgoal SATURATED, is caught.
+ *
+ *   (1) OPTIMAL (biting): greedy-by-ratio total yield STRICTLY exceeds the uniform baseline (230 vs 40).
+ *   (2) the funded set is exactly the ratio-optimal {g0,g2,g4}; the unaffordable {g1,g3} stay unfunded.
+ *   (3) GAP discipline (biting): an UNFUNDED subgoal is an honest GAP(1), never SATURATED(0); a funded
+ *       one is SATURATED(0) -- a budget-hit is resumable, never a wrong answer.
+ *   (4) DETERMINISM: same budget -> same allocation.
+ *   (5) the budget is cost-denominated: a wall-clock budget is REFUSED, a step budget accepted.
+ */
+module corpus_1702_search_market
+
+extern @abi(c-msvc-x64) fn sm_init() -> i32 from "search_market.iii"
+extern @abi(c-msvc-x64) fn sm_alloc_greedy(budget: u64) -> u64 from "search_market.iii"
+extern @abi(c-msvc-x64) fn sm_alloc_uniform(budget: u64) -> u64 from "search_market.iii"
+extern @abi(c-msvc-x64) fn sm_funded(budget: u64, i: u32) -> u8 from "search_market.iii"
+extern @abi(c-msvc-x64) fn sm_outcome(budget: u64, i: u32) -> u8 from "search_market.iii"
+extern @abi(c-msvc-x64) fn sm_budget_wallclock_refused() -> u8 from "search_market.iii"
+
+fn main() -> u64 {
+    sm_init()
+    let b : u64 = 30u64
+
+    /* (1) OPTIMAL (biting): greedy strictly beats uniform */
+    let g : u64 = sm_alloc_greedy(b)
+    let u : u64 = sm_alloc_uniform(b)
+    if g != 230u64 { return 1u64 }
+    if u != 40u64 { return 2u64 }
+    if g <= u { return 3u64 }
+
+    /* (2) the ratio-optimal funded set {g0,g2,g4}; {g1,g3} unfunded */
+    if sm_funded(b, 0u32) != 1u8 { return 4u64 }
+    if sm_funded(b, 2u32) != 1u8 { return 5u64 }
+    if sm_funded(b, 4u32) != 1u8 { return 6u64 }
+    if sm_funded(b, 1u32) != 0u8 { return 7u64 }
+    if sm_funded(b, 3u32) != 0u8 { return 8u64 }
+
+    /* (3) GAP discipline (biting): unfunded -> GAP(1), funded -> SATURATED(0) */
+    if sm_outcome(b, 0u32) != 0u8 { return 9u64 }
+    if sm_outcome(b, 1u32) != 1u8 { return 10u64 }
+    if sm_outcome(b, 3u32) != 1u8 { return 11u64 }
+
+    /* (4) determinism */
+    if sm_alloc_greedy(b) != g { return 12u64 }
+
+    /* (5) cost-denominated budget: wall-clock refused, step budget accepted */
+    if sm_budget_wallclock_refused() != 1u8 { return 13u64 }
+
+    return 99u64
+}

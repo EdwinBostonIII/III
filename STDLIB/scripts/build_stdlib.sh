@@ -1145,6 +1145,17 @@ MODULES=(
     # grown commons (tg_register, itself tc_check-gated) -- the search space contracts monotonically.
     # Composes numera/typecheck + nous/theorem_grow (no island); compiler-unreferenced -> LIBNATIVE; last.
     "nous/lemma_forge"
+    # --- PHASE III Campaign I #5: the SEARCH MARKET.  nous/search_market routes a sealed cost-denominated
+    # budget to the subgoals with the highest yield/cost ratio (the Pareto-optimal knapsack frontier),
+    # strictly beating a uniform split; an unfunded subgoal is an honest resumable GAP (nous_classify),
+    # never a wrong answer, and the budget is cost-denominated (wall-clock refused at construction).
+    # Composes nous/nous_search (no island); compiler-unreferenced -> LIBNATIVE; last.
+    "nous/search_market"
+    # --- PHASE III Campaign I #3: CEGAR.  numera/cegar_refine reasons in the SOUND interval abstraction
+    # (numera/interval_lattice) and pays for precision only on a spurious counterexample -- a proof in the
+    # abstract is a proof in the concrete, so the concrete-state explosion is never paid in full.  Composes
+    # interval_lattice (il_join + il_leq, no island); compiler-unreferenced -> LIBNATIVE; last.
+    "numera/cegar_refine"
 )
 
 PASS=0

@@ -1316,6 +1316,8 @@ declare -A EXPECTED=(
     # --- PHASE III (III-PHASE3-WALLS) Campaign I: certified portfolio search.
     [1700_beam_search]=99
     [1701_lemma_forge]=99
+    [1702_search_market]=99
+    [1703_cegar_refine]=99
 )
 
 PASS=0

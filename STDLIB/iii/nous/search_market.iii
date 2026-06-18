@@ -1,0 +1,128 @@
+/* STDLIB/iii/nous/search_market.iii -- THE SEARCH MARKET (III-PHASE3-WALLS, Campaign I, organ 5).
+ *
+ * Campaign I spends a FINITE search budget OPTIMALLY rather than searching faster.  A sealed, cost-
+ * denominated budget is routed to the subgoals with the highest expected certified yield per unit cost;
+ * a subgoal that cannot be funded is an HONEST, RESUMABLE GAP -- never a forced or wrong answer.  The
+ * allocation is deterministic (the budget is cost-denominated, never wall-clock), so the same budget
+ * always buys the same plan.
+ *
+ * THE ALLOCATION (greedy by yield/cost ratio, the Pareto-optimal knapsack frontier): repeatedly fund the
+ * unfunded subgoal with the best yield/cost ratio that still fits the remaining budget.  Ratios are
+ * compared by cross-multiplication (yield_i*cost_j vs yield_j*cost_i), integer-only, no float.  This
+ * strictly dominates a uniform (equal-share) split whenever the costs/yields vary -- the KAT pins the
+ * margin (greedy 230 vs uniform 40 on the fixture).
+ *
+ * THE GAP DISCIPLINE (the load-bearing connection, no island): the outcome of every subgoal is typed by
+ * nous_search's trichotomy (nous_classify).  A FUNDED subgoal saturates (SATURATED); an UNFUNDED one is
+ * a GAP -- the budget-hit is honest and resumable, never certified as an answer.  The budget itself is
+ * built through nous_budget_make, which REFUSES a wall-clock (non-deterministic) budget at construction.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 0.99.  Composes nous/nous_search (nous_classify + nous_budget_make)
+ * -- the trichotomy + wall-clock refusal are load-bearing.  Determinism: integer-only; cross-multiplied
+ * ratios; flag-driven loops; module-scope arrays; no float, no wall-clock.
+ */
+module nous_search_market
+
+extern @abi(c-msvc-x64) fn nous_classify(saturated: u8, has_answer: u8) -> u8 from "nous_search.iii"
+extern @abi(c-msvc-x64) fn nous_budget_make(steps: u32, cost_cap: u64, kind: u8, out: *u64) -> i32 from "nous_search.iii"
+
+const SM_N         : u32 = 5u32
+/* nous_search literals (named in nous_search.iii; literals here per the trap-2 cross-module discipline):
+ *   SATURATED=0  GAP=1  BUDGET_WALLCLOCK=255  SR_EWALL=-2 */
+const SM_WALLCLOCK : u8  = 255u8
+const SM_EWALL     : i32 = -2i32
+
+var SM_COST  : [u64; 5]
+var SM_YIELD : [u64; 5]
+var SM_FUNDED : [u8; 5]
+var SM_BUD   : [u64; 4]
+var SM_INIT  : u8 = 0u8
+
+fn sm_init() -> i32 @export {
+    if SM_INIT == 1u8 { return 0i32 }
+    SM_COST[0u64]=10u64  SM_YIELD[0u64]=100u64    /* ratio 10 */
+    SM_COST[1u64]=20u64  SM_YIELD[1u64]=60u64     /* ratio 3  */
+    SM_COST[2u64]=5u64   SM_YIELD[2u64]=40u64     /* ratio 8  */
+    SM_COST[3u64]=30u64  SM_YIELD[3u64]=30u64     /* ratio 1  */
+    SM_COST[4u64]=15u64  SM_YIELD[4u64]=90u64     /* ratio 6  */
+    SM_INIT = 1u8
+    return 0i32
+}
+
+/* the unfunded subgoal with the best yield/cost ratio that fits rem; SM_N if none fits. */
+fn sm_best_fit(rem: u64) -> u32 {
+    let mut best : u32 = SM_N
+    let mut i : u32 = 0u32
+    while i < SM_N {
+        if SM_FUNDED[(i as u64) & 0xFFFFFFFFu64] == 0u8 {
+            if SM_COST[(i as u64) & 0xFFFFFFFFu64] <= rem {
+                if best == SM_N { best = i }
+                else {
+                    let yi : u64 = SM_YIELD[(i as u64) & 0xFFFFFFFFu64]
+                    let ci : u64 = SM_COST[(i as u64) & 0xFFFFFFFFu64]
+                    let yb : u64 = SM_YIELD[(best as u64) & 0xFFFFFFFFu64]
+                    let cb : u64 = SM_COST[(best as u64) & 0xFFFFFFFFu64]
+                    if (yi * cb) > (yb * ci) { best = i }    /* ratio_i > ratio_best (cross-mult) */
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+/* greedy ratio-optimal allocation; sets SM_FUNDED; returns total certified yield. */
+fn sm_alloc_greedy(budget: u64) -> u64 @export {
+    sm_init()
+    let mut k : u32 = 0u32
+    while k < SM_N { SM_FUNDED[(k as u64) & 0xFFFFFFFFu64] = 0u8  k = k + 1u32 }
+    let mut rem : u64 = budget
+    let mut ty : u64 = 0u64
+    let mut iter : u32 = 0u32
+    while iter < SM_N {
+        let j : u32 = sm_best_fit(rem)
+        if j >= SM_N { iter = SM_N }                          /* nothing else fits -> stop (flag-driven) */
+        else {
+            SM_FUNDED[(j as u64) & 0xFFFFFFFFu64] = 1u8
+            rem = rem - SM_COST[(j as u64) & 0xFFFFFFFFu64]
+            ty = ty + SM_YIELD[(j as u64) & 0xFFFFFFFFu64]
+            iter = iter + 1u32
+        }
+    }
+    return ty
+}
+
+/* the suboptimal baseline: equal budget share per subgoal, fund iff it fits its share. */
+fn sm_alloc_uniform(budget: u64) -> u64 @export {
+    sm_init()
+    let share : u64 = budget / (SM_N as u64)
+    let mut ty : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < SM_N {
+        if SM_COST[(i as u64) & 0xFFFFFFFFu64] <= share { ty = ty + SM_YIELD[(i as u64) & 0xFFFFFFFFu64] }
+        i = i + 1u32
+    }
+    return ty
+}
+
+fn sm_funded(budget: u64, i: u32) -> u8 @export {
+    sm_alloc_greedy(budget)
+    if i >= SM_N { return 0u8 }
+    return SM_FUNDED[(i as u64) & 0xFFFFFFFFu64]
+}
+
+/* the trichotomy outcome: FUNDED -> SATURATED; UNFUNDED -> an honest resumable GAP (never a wrong answer). */
+fn sm_outcome(budget: u64, i: u32) -> u8 @export {
+    let f : u8 = sm_funded(budget, i)
+    if f == 1u8 { return nous_classify(1u8, 1u8) }            /* funded   -> SATURATED(0) */
+    return nous_classify(0u8, 1u8)                            /* unfunded -> GAP(1)       */
+}
+
+/* the budget is cost-denominated & deterministic: a wall-clock budget is REFUSED (EWALL), a step budget
+ * accepted -- allocation never depends on non-deterministic time. */
+fn sm_budget_wallclock_refused() -> u8 @export {
+    let bp : *u64 = (&SM_BUD as u64) as *u64
+    if nous_budget_make(10u32, 0u64, SM_WALLCLOCK, bp) != SM_EWALL { return 0u8 }
+    if nous_budget_make(10u32, 100u64, 0u8, bp) != 0i32 { return 0u8 }
+    return 1u8
+}

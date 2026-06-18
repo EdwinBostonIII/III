@@ -1,0 +1,263 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\self_emit.iii
+ *
+ * III STDLIB - omnia::self_emit  --  III writes its OWN self_atlas_data.iii, in III.
+ *
+ * The last non-III step was the Python generator that emitted the frozen self-model fixture.
+ * This retires it: satlas_emit_data renders a complete, compilable omnia/self_atlas_data.iii
+ * -- the module header, the chunked satlas_intern / satlas_link helpers, satlas_data_load, and
+ * every satlas_data_expect_*() (the lens signals, baked now) -- from the LOADED self_atlas, via
+ * verba/builder + verba/format, and writes it with aether/fs.  Caller maps first
+ * (scarto_map [+ scarto_mark_corpus]); this turns the live model into its deterministic fixture.
+ *
+ *   satlas_emit_data(cap, path) -> i32     render self_atlas_data.iii to path (cap: FS WRITE).
+ *
+ * Strict NIH: arena + builder + format + fs + self_atlas + self_atlas_lens (all in-tree).
+ * Discipline: W2 (<=4 params), W4 (module-scope scratch), W13 (<=20 locals), W14/W15
+ * (sentinel/index loops, no recursion).  ASCII only.  Single-threaded scratch. */
+
+module omnia_self_emit
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_from(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_to(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_name_into(n: u32, out_ptr: u64, max: u64) -> u64 from "self_atlas.iii"
+
+extern @abi(c-msvc-x64) fn salens_coupling() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_orphans() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_roots() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_leaves() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_cycle_nodes() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_redundant() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_fanin() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_top_hub_impact() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_emergence_index() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_depends() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_max_level() -> u32 from "self_atlas_lens.iii"
+
+const SE_CHUNK   : u32 = 200u32
+const SE_ARENA   : u64 = 4194304u64           /* 4 MiB scratch (file is ~120 KiB) */
+const SE_HINT    : u64 = 8192u64
+const SE_WRITE   : u32 = 2u32
+const SE_Q       : u32 = 34u32                /* " */
+const SE_NL      : u32 = 10u32                /* \n */
+
+var SE_NAME : [u8; 64]
+
+/* ---- tiny emit helpers ----------------------------------------------- */
+
+fn se_lit(b: u64, p: u64, n: u64) -> i32 { builder_push_bytes(b, p, n)  return 0i32 }
+fn se_qname(b: u64, node: u32) -> u64 {
+    builder_push_byte(b, SE_Q)
+    let nl : u64 = satlas_name_into(node, (&SE_NAME as u64), 64u64)
+    builder_push_bytes(b, (&SE_NAME as u64), nl)
+    builder_push_byte(b, SE_Q)
+    return nl
+}
+
+/* `    satlas_intern("<name>", <len>u64)\n` */
+fn se_node_line(b: u64, n: u32) -> i32 {
+    se_lit(b, ("    satlas_intern(" as u64), 18u64)
+    let nl : u64 = se_qname(b, n)
+    se_lit(b, (", " as u64), 2u64)
+    format_decimal_u32(b, nl as u32)
+    se_lit(b, ("u64)" as u64), 4u64)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+/* `    satlas_link("<a>", <la>u64, "<b>", <lb>u64)\n` */
+fn se_edge_line(b: u64, e: u32) -> i32 {
+    let ef : u32 = satlas_edge_from(e)
+    let et : u32 = satlas_edge_to(e)
+    se_lit(b, ("    satlas_link(" as u64), 16u64)
+    let fl : u64 = se_qname(b, ef)
+    se_lit(b, (", " as u64), 2u64)
+    format_decimal_u32(b, fl as u32)
+    se_lit(b, ("u64, " as u64), 5u64)
+    let tl : u64 = se_qname(b, et)
+    se_lit(b, (", " as u64), 2u64)
+    format_decimal_u32(b, tl as u32)
+    se_lit(b, ("u64)" as u64), 4u64)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+/* `fn satlas_data_<kind>_<c>() -> i32 {\n` ; kind: 0 = nodes, 1 = edges */
+fn se_chunk_open(b: u64, kind: u8, c: u32) -> i32 {
+    se_lit(b, ("fn satlas_data_" as u64), 15u64)
+    if kind == 0u8 { se_lit(b, ("nodes_" as u64), 6u64) }
+    if kind == 1u8 { se_lit(b, ("edges_" as u64), 6u64) }
+    format_decimal_u32(b, c)
+    se_lit(b, ("() -> i32 {" as u64), 11u64)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+fn se_chunk_close(b: u64) -> i32 {
+    se_lit(b, ("    return 0i32" as u64), 15u64)
+    builder_push_byte(b, SE_NL)
+    se_lit(b, ("}" as u64), 1u64)
+    builder_push_byte(b, SE_NL)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+/* ---- header / nodes / edges / load / expects ------------------------- */
+
+fn se_emit_header(b: u64) -> i32 {
+    se_lit(b, ("module omnia_self_atlas_data" as u64), 28u64)
+    builder_push_byte(b, SE_NL)
+    builder_push_byte(b, SE_NL)
+    se_lit(b, ("extern @abi(c-msvc-x64) fn " as u64), 27u64)
+    se_lit(b, ("satlas_reset() -> i32" as u64), 21u64)
+    se_lit(b, (" from " as u64), 6u64)
+    builder_push_byte(b, SE_Q)  se_lit(b, ("self_atlas.iii" as u64), 14u64)  builder_push_byte(b, SE_Q)
+    builder_push_byte(b, SE_NL)
+    se_lit(b, ("extern @abi(c-msvc-x64) fn " as u64), 27u64)
+    se_lit(b, ("satlas_intern(name_ptr: u64, len: u64) -> u32" as u64), 45u64)
+    se_lit(b, (" from " as u64), 6u64)
+    builder_push_byte(b, SE_Q)  se_lit(b, ("self_atlas.iii" as u64), 14u64)  builder_push_byte(b, SE_Q)
+    builder_push_byte(b, SE_NL)
+    se_lit(b, ("extern @abi(c-msvc-x64) fn " as u64), 27u64)
+    se_lit(b, ("satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32" as u64), 54u64)
+    se_lit(b, (" from " as u64), 6u64)
+    builder_push_byte(b, SE_Q)  se_lit(b, ("self_atlas.iii" as u64), 14u64)  builder_push_byte(b, SE_Q)
+    builder_push_byte(b, SE_NL)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+fn se_emit_nodes(b: u64) -> i32 {
+    let n : u32 = satlas_node_count()
+    let mut idx : u32 = 0u32
+    let mut c : u32 = 0u32
+    while idx < n {
+        se_chunk_open(b, 0u8, c)
+        let mut k : u32 = 0u32
+        while k < SE_CHUNK {
+            if idx < n {
+                se_node_line(b, idx)
+                idx = idx + 1u32
+            }
+            k = k + 1u32
+        }
+        se_chunk_close(b)
+        c = c + 1u32
+    }
+    return 0i32
+}
+
+fn se_emit_edges(b: u64) -> i32 {
+    let m : u32 = satlas_edge_count()
+    let mut idx : u32 = 0u32
+    let mut c : u32 = 0u32
+    while idx < m {
+        se_chunk_open(b, 1u8, c)
+        let mut k : u32 = 0u32
+        while k < SE_CHUNK {
+            if idx < m {
+                se_edge_line(b, idx)
+                idx = idx + 1u32
+            }
+            k = k + 1u32
+        }
+        se_chunk_close(b)
+        c = c + 1u32
+    }
+    return 0i32
+}
+
+fn se_ceil_chunks(total: u32) -> u32 {
+    return (total + (SE_CHUNK - 1u32)) / SE_CHUNK
+}
+
+fn se_emit_load(b: u64) -> i32 {
+    se_lit(b, ("fn satlas_data_load() -> i32 @export {" as u64), 38u64)
+    builder_push_byte(b, SE_NL)
+    se_lit(b, ("    satlas_reset()" as u64), 18u64)
+    builder_push_byte(b, SE_NL)
+    let nch : u32 = se_ceil_chunks(satlas_node_count())
+    let mut c : u32 = 0u32
+    while c < nch {
+        se_lit(b, ("    satlas_data_nodes_" as u64), 22u64)
+        format_decimal_u32(b, c)
+        se_lit(b, ("()" as u64), 2u64)
+        builder_push_byte(b, SE_NL)
+        c = c + 1u32
+    }
+    let ech : u32 = se_ceil_chunks(satlas_edge_count())
+    c = 0u32
+    while c < ech {
+        se_lit(b, ("    satlas_data_edges_" as u64), 22u64)
+        format_decimal_u32(b, c)
+        se_lit(b, ("()" as u64), 2u64)
+        builder_push_byte(b, SE_NL)
+        c = c + 1u32
+    }
+    se_lit(b, ("    return 0i32" as u64), 15u64)
+    builder_push_byte(b, SE_NL)
+    se_lit(b, ("}" as u64), 1u64)
+    builder_push_byte(b, SE_NL)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+/* `fn <name>() -> u32 @export { return <v>u32 }\n` */
+fn se_expect_fn(b: u64, name_ptr: u64, name_len: u64, value: u32) -> i32 {
+    se_lit(b, ("fn " as u64), 3u64)
+    se_lit(b, name_ptr, name_len)
+    se_lit(b, ("() -> u32 @export { return " as u64), 27u64)
+    format_decimal_u32(b, value)
+    se_lit(b, ("u32 }" as u64), 5u64)
+    builder_push_byte(b, SE_NL)
+    return 0i32
+}
+
+fn se_emit_expects(b: u64) -> i32 {
+    se_expect_fn(b, ("satlas_data_node_count" as u64), 22u64, satlas_node_count())
+    se_expect_fn(b, ("satlas_data_edge_count" as u64), 22u64, satlas_edge_count())
+    se_expect_fn(b, ("satlas_data_expect_coupling" as u64), 27u64, salens_coupling())
+    se_expect_fn(b, ("satlas_data_expect_orphans" as u64), 26u64, salens_count_orphans())
+    se_expect_fn(b, ("satlas_data_expect_roots" as u64), 24u64, salens_count_roots())
+    se_expect_fn(b, ("satlas_data_expect_leaves" as u64), 25u64, salens_count_leaves())
+    se_expect_fn(b, ("satlas_data_expect_cycle_nodes" as u64), 30u64, salens_count_cycle_nodes())
+    se_expect_fn(b, ("satlas_data_expect_redundant" as u64), 28u64, salens_count_redundant())
+    se_expect_fn(b, ("satlas_data_expect_max_fanin" as u64), 28u64, salens_max_fanin())
+    se_expect_fn(b, ("satlas_data_expect_top_hub_impact" as u64), 33u64, salens_top_hub_impact())
+    se_expect_fn(b, ("satlas_data_expect_emergence" as u64), 28u64, salens_emergence_index())
+    se_expect_fn(b, ("satlas_data_expect_max_depends" as u64), 30u64, salens_max_depends())
+    se_expect_fn(b, ("satlas_data_expect_max_level" as u64), 28u64, salens_max_level())
+    return 0i32
+}
+
+fn satlas_emit_data(cap: u64, path: u64) -> i32 @export {
+    let a : u64 = arena_new(SE_ARENA)
+    let bld : u64 = builder_new(a, SE_HINT)
+    se_emit_header(bld)
+    se_emit_nodes(bld)
+    se_emit_edges(bld)
+    se_emit_load(bld)
+    se_emit_expects(bld)
+    let base : u64 = builder_seal(bld)
+    let len : u64 = builder_len(bld)
+    let h : u64 = fs_open(cap, path, SE_WRITE)
+    if h == 0u64 { builder_drop(bld)  return -1i32 }
+    fs_write(h, base, len)
+    fs_close(h)
+    builder_drop(bld)
+    return 0i32
+}

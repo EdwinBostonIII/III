@@ -1098,6 +1098,12 @@ MODULES=(
     # last non-III step.  Externs builder/format/fs/self_atlas/self_atlas_lens (above);
     # compiler-unreferenced -> LIBNATIVE only; appended last.
     "omnia/self_report"
+    # III emits its OWN self_atlas_data.iii in III (omnia::self_emit): renders the loaded
+    # self-model as compilable .iii source (intern/link helpers + load + the expect functions)
+    # via verba/builder + verba/format, written with aether/fs -- the native replacement for the
+    # Python fixture generator.  Externs builder/format/fs/self_atlas/self_atlas_lens (above);
+    # compiler-unreferenced -> LIBNATIVE only; appended last.
+    "omnia/self_emit"
 )
 
 PASS=0

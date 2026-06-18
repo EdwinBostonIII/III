@@ -1401,6 +1401,8 @@ declare -A EXPECTED=(
     [1757_oneway_anatomy]=99
     # the reversible-computation isomorphism: Toffoli self-inverse (III contains reversible compute) + == NAND (universal).
     [1758_reversible_iso]=99
+    # SHA-256 structure: Ch is a bitwise multiplexer; Maj absorbs a repeated input (Maj(a,a,c)=a).
+    [1759_sha_structure]=99
 )
 
 PASS=0

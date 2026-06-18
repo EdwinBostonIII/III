@@ -1,0 +1,28 @@
+/* STDLIB/corpus/1759_sha_structure.iii -- SHA-256's round functions, re-proven as named structural theorems.
+ *
+ * numera/primweb proves on the bv_bits judge that SHA-256's Ch and Maj (which sha256.iii implements) are not
+ * opaque bit-twiddling but recognizable structures: Ch is a BITWISE MULTIPLEXER, Maj ABSORBS a repeated input.
+ * Borrowed primitive -> III's own proven object.  99 = all arms.
+ *
+ *   (1) Ch(e,f,g) = (e&f)^(~e&g) is a MUX: e selects f when 1, g when 0 (proven for all f,g).
+ *   (2) Maj(a,a,c) = a -- the majority of {a,a,c} absorbs to a.
+ *   (3) BITING: Maj(a,b,c) != a in general -- a genuine majority, not a projection.
+ */
+module corpus_1759_sha_structure
+
+extern @abi(c-msvc-x64) fn pw_sha_ch_is_mux() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_sha_maj_absorbs() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_sha_maj_nontrivial() -> u8 from "primweb.iii"
+
+fn main() -> u64 {
+    /* (1) Ch is a bitwise multiplexer (control selects f or g) */
+    if pw_sha_ch_is_mux() != 1u8 { return 1u64 }
+
+    /* (2) Maj absorbs a repeated input: Maj(a,a,c) = a */
+    if pw_sha_maj_absorbs() != 1u8 { return 2u64 }
+
+    /* (3) biting: Maj is a genuine majority, not a projection -- Maj(a,b,c) != a in general */
+    if pw_sha_maj_nontrivial() != 0u8 { return 3u64 }
+
+    return 99u64
+}

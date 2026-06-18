@@ -154,3 +154,42 @@ fn pw_toffoli_nontrivial() -> u8 @export {
     let c1 : u32 = bb_xor(c, bb_and(a, b))             /* one forward application */
     return bb_equal(c1, c)                              /* == 0: c' != c in general -> not the identity */
 }
+
+/* SHA-256 STRUCTURE strands -- the round functions Ch and Maj, re-proven as named structural facts on the
+ * bv_bits judge (sha256.iii implements exactly these).  Ch is secretly a BITWISE MULTIPLEXER and Maj ABSORBS
+ * a repeated input -- the mux/absorb shape the weave's don't-care optimization exploits.
+ *
+ * Ch(e,f,g) = (e&f) ^ (~e&g) is a MUX: control e selects f when 1, g when 0.  Proven for all f,g. */
+fn pw_sha_ch_is_mux() -> u8 @export {
+    bb_reset(PW_W)
+    let f    : u32 = bb_var(0u32)
+    let g    : u32 = bb_var(1u32)
+    let ones : u32 = bb_const(0xFFFFFFFFu64)            /* control e = 1 */
+    let zero : u32 = bb_const(0u64)                     /* control e = 0 */
+    let ch_hi : u32 = bb_xor(bb_and(ones, f), bb_and(bb_not(ones), g))   /* Ch(1,f,g) should be f */
+    let ch_lo : u32 = bb_xor(bb_and(zero, f), bb_and(bb_not(zero), g))   /* Ch(0,f,g) should be g */
+    let sel_hi : u8 = bb_equal(ch_hi, f)
+    let sel_lo : u8 = bb_equal(ch_lo, g)
+    if sel_hi == 1u8 { if sel_lo == 1u8 { return 1u8 } }                 /* both selections hold -> Ch IS a mux */
+    return 0u8
+}
+
+/* Maj(a,b,c) = (a&b)^(a&c)^(b&c) ABSORBS a repeated input: Maj(a,a,c) = a (the majority of {a,a,c} is a). */
+fn pw_sha_maj_absorbs() -> u8 @export {
+    bb_reset(PW_W)
+    let a : u32 = bb_var(0u32)
+    let c : u32 = bb_var(1u32)
+    let maj : u32 = bb_xor(bb_xor(bb_and(a, a), bb_and(a, c)), bb_and(a, c))   /* Maj(a,a,c) */
+    return bb_equal(maj, a)                            /* == 1: collapses to a */
+}
+
+/* BITING companion: Maj is a genuine MAJORITY, not a projection -- Maj(a,b,c) != a in general (e.g. b=c=1,a=0
+ * gives Maj=1 != 0).  The judge returns 0 on Maj == a; the KAT asserts 0, proving the absorb is non-vacuous. */
+fn pw_sha_maj_nontrivial() -> u8 @export {
+    bb_reset(PW_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let maj : u32 = bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c))
+    return bb_equal(maj, a)                            /* == 0: Maj(a,b,c) is not just a */
+}

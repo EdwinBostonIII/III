@@ -1373,6 +1373,8 @@ declare -A EXPECTED=(
     [1743_rsa_pss_544_roundtrip]=99
     # post-quantum federation quorum certificate: BFT 2f+1 over ML-DSA votes; tampered/insufficient votes rejected.
     [1744_pq_quorum]=99
+    # intent-to-execution lexical disambiguation: bitwise-intersection oracle resolves or REJECTS human intent.
+    [1745_intent_disambiguate]=99
 )
 
 PASS=0

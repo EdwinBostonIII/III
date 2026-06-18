@@ -1,0 +1,61 @@
+/* STDLIB/iii/intent/intent_lex.iii -- INTENT-TO-EXECUTION, Phase 2: the hermetic lexer.
+ *
+ * Extracts words from human text WITHOUT regular expressions (no exponential backtracking, fully
+ * deterministic): a pure byte-stepper over verba/rune's ASCII classification.  Each maximal alphabetic run
+ * is lowercased into a fixed scratch buffer, FNV-1a fingerprinted, and looked up in the static ontology
+ * (Phase 1).  A run that misses the ontology contributes the empty mask (a USER_IDENTIFIER -- a variable
+ * name, not an operator).  Token masks are written to a CALLER-PROVIDED array; if the sentence yields more
+ * tokens than the array holds, lexing REJECTS (IL_OOM) -- no dynamic resizing, no allocation.
+ *
+ * Hexad: kind_passage.  Ring: R0.  K: 1.00.  Composes verba/rune + intent/lex_ontology -- no new strings.
+ */
+module intent_intent_lex
+
+extern @abi(c-msvc-x64) fn rune_is_ascii_alpha(cp: u32) -> u8 from "rune.iii"
+extern @abi(c-msvc-x64) fn lo_init() -> i32 from "lex_ontology.iii"
+extern @abi(c-msvc-x64) fn lo_mask_of(token: u64, len: u64) -> u64 from "lex_ontology.iii"
+
+const IL_OOM    : u32 = 0xFFFFFFFFu32        /* more tokens than the caller's array holds */
+const IL_WORDMAX : u64 = 64u64
+
+var IL_WORD : [u8; 64]
+
+/* lowercase an ASCII byte (A..Z -> a..z), else unchanged. */
+fn il_lower(b: u8) -> u8 {
+    if b >= 0x41u8 { if b <= 0x5Au8 { return b + 0x20u8 } }
+    return b
+}
+
+/* tokenize `text` into per-token DOMAIN MASKS written to out_masks (capacity cap).  A token is a maximal
+ * run of ASCII letters; each is lowercased, fingerprinted, and resolved to its ontology mask (0 for a
+ * USER_IDENTIFIER).  Returns the token count, or IL_OOM if it would exceed cap.  Over-long runs are clamped
+ * to IL_WORDMAX bytes for the fingerprint (a 64-byte word is already far past any ontology key). */
+fn il_tokenize(text: u64, len: u64, out_masks: u64, cap: u64) -> u32 @export {
+    lo_init()
+    let s : *u8 = text as *u8
+    let om : *u64 = out_masks as *u64
+    let mut count : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < len {
+        if rune_is_ascii_alpha(s[i] as u32) == 0u8 {
+            i = i + 1u64
+        } else {
+            /* gather the maximal alphabetic run, lowercased, into IL_WORD; the `ingest` flag drives the
+             * loop so it stops AT the first separator, leaving i there for the outer loop to continue. */
+            let mut w : u64 = 0u64
+            let mut ingest : u8 = 1u8
+            while ingest == 1u8 {
+                if i >= len { ingest = 0u8 } else {
+                    if rune_is_ascii_alpha(s[i] as u32) == 0u8 { ingest = 0u8 } else {
+                        if w < IL_WORDMAX { IL_WORD[w] = il_lower(s[i])  w = w + 1u64 }
+                        i = i + 1u64
+                    }
+                }
+            }
+            if count >= cap { return IL_OOM }
+            om[count] = lo_mask_of((&IL_WORD as u64), w)
+            count = count + 1u64
+        }
+    }
+    return count as u32
+}

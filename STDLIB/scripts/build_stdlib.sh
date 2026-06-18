@@ -550,6 +550,11 @@ MODULES=(
     "verba/glyph_recursive"
     # FROZEN SPEC III-RES-FROZEN-001 — resolver runtime modules
     "numera/sat_arith"
+    # intent/ -- INTENT-TO-EXECUTION lexical disambiguation: human intent collapsed by bitwise intersection
+    # of a fixed FNV-1a ontology; popcount decides RESOLVE/CONTRADICTION/AMBIGUOUS.  Composes verba/rune + sat_arith.
+    "intent/lex_ontology"
+    "intent/intent_lex"
+    "intent/disambiguate"
     "verba/intent"
     "verba/ast_intent"
     "verba/intent_form"

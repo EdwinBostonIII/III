@@ -1,0 +1,118 @@
+/* STDLIB/iii/intent/lex_ontology.iii -- INTENT-TO-EXECUTION, Phase 1: the static semantic ontology.
+ *
+ * The vocabulary of III's intent compiler is a strictly bounded, compile-time-verified structure -- no
+ * external dictionary, no embeddings, no runtime strings, only 32-bit fingerprints.  Each lexeme maps an
+ * English token to a 64-bit DOMAIN MASK: the set of (subsystem, action) interpretations the token may
+ * carry.  An overloaded verb like "lock" carries several bits (freeze a store, encrypt, deny a port); an
+ * object like "database" carries the single interpretation that fixes the subsystem.  Lexical
+ * disambiguation (Phase 3) intersects these masks: the AND of a sentence's recognised lexemes is the set
+ * of interpretations consistent with ALL of them.  A token absent from the ontology is a USER_IDENTIFIER
+ * (a variable name), not an operator -- it carries no constraint.
+ *
+ * The table is FNV-1a-fingerprinted and kept sorted by fingerprint for O(log N) binary search.  This is
+ * pure bitwise constraint satisfaction over a fixed ontology -- no ML, no guessing.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00.  Composes verba/rune (Phase 2 lexing) -- this phase is data + search.
+ */
+module intent_lex_ontology
+
+/* The (subsystem, action) interpretation bits.  Bits in the same subsystem are mutually disambiguating. */
+const DOM_VBD_FREEZE     : u64 = 1u64        /* freeze a virtual-block-device state root */
+const DOM_CRYPTO_ENCRYPT : u64 = 2u64        /* apply an encryption scheme */
+const DOM_NET_DENY       : u64 = 4u64        /* deny network access to a port */
+const DOM_DETERMINISTIC  : u64 = 8u64        /* a content-addressed, reproducible computation */
+const DOM_STOCHASTIC     : u64 = 16u64       /* an oracle-dependent / random value */
+const DOM_TTL_BOUND      : u64 = 32u64       /* a temporal self-destruct bound */
+
+const LO_NOT_FOUND : u32 = 0xFFFFFFFFu32     /* token absent -> USER_IDENTIFIER (no constraint) */
+const LO_N : u64 = 16u64                     /* number of ontology entries */
+
+var LO_FP   : [u32; 16]                      /* token fingerprints, ASCENDING */
+var LO_MASK : [u64; 16]                      /* the domain mask for entry i */
+var LO_READY : [u8; 1]
+
+/* FNV-1a-32 of a lowercased ASCII token (the lexer lowercases before calling). */
+fn lo_fp(token: u64, len: u64) -> u32 @export {
+    let p : *u8 = token as *u8
+    let mut h : u32 = 2166136261u32
+    let mut i : u64 = 0u64
+    while i < len {
+        h = h ^ (p[i] as u32)
+        h = h * 16777619u32
+        i = i + 1u64
+    }
+    return h
+}
+
+/* insertion-sorted insert of (fp,mask) keeping LO_FP ascending (built once, then immutable + searchable).
+ * The `go` flag drives the while condition itself, so finding the slot leaves j at the insertion point
+ * (clobbering j in an else-branch would lose it -- the insertion-sort active-flag rule). */
+fn lo_put(n: u64, fp: u32, mask: u64) -> u64 {
+    let mut j : u64 = n
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if j == 0u64 { go = 0u8 } else {
+            if LO_FP[j - 1u64] > fp {
+                LO_FP[j] = LO_FP[j - 1u64]
+                LO_MASK[j] = LO_MASK[j - 1u64]
+                j = j - 1u64
+            } else { go = 0u8 }
+        }
+    }
+    LO_FP[j] = fp
+    LO_MASK[j] = mask
+    return n + 1u64
+}
+
+/* register a literal token's (fp,mask) by hashing the token bytes. */
+fn lo_reg(n: u64, token: u64, len: u64, mask: u64) -> u64 {
+    return lo_put(n, lo_fp(token, len), mask)
+}
+
+/* build the ontology (idempotent).  The masks are chosen so the canonical examples disambiguate:
+ *   "lock database"            -> lock{freeze,encrypt,deny} & database{freeze}            = freeze   (unique)
+ *   "encrypt the network port" -> encrypt{encrypt} & network{deny} & port{deny}          = 0        (contradiction)
+ *   "generate a random hash"   -> generate{det,stoch} & random{stoch} & hash{det}        = 0        (contradiction)
+ *   "lock the system ..."      -> lock{freeze,encrypt,deny}  (system/actors are user ids) = 3 bits  (ambiguous) */
+fn lo_init() -> i32 @export {
+    if LO_READY[0u64] == 1u8 { return 0i32 }
+    let mut n : u64 = 0u64
+    n = lo_reg(n, ("lock" as u64), 4u64, DOM_VBD_FREEZE | DOM_CRYPTO_ENCRYPT | DOM_NET_DENY)
+    n = lo_reg(n, ("freeze" as u64), 6u64, DOM_VBD_FREEZE)
+    n = lo_reg(n, ("database" as u64), 8u64, DOM_VBD_FREEZE)
+    n = lo_reg(n, ("disk" as u64), 4u64, DOM_VBD_FREEZE)
+    n = lo_reg(n, ("encrypt" as u64), 7u64, DOM_CRYPTO_ENCRYPT)
+    n = lo_reg(n, ("key" as u64), 3u64, DOM_CRYPTO_ENCRYPT)
+    n = lo_reg(n, ("deny" as u64), 4u64, DOM_NET_DENY)
+    n = lo_reg(n, ("network" as u64), 7u64, DOM_NET_DENY)
+    n = lo_reg(n, ("port" as u64), 4u64, DOM_NET_DENY)
+    n = lo_reg(n, ("hash" as u64), 4u64, DOM_DETERMINISTIC)
+    n = lo_reg(n, ("deterministic" as u64), 13u64, DOM_DETERMINISTIC)
+    n = lo_reg(n, ("generate" as u64), 8u64, DOM_DETERMINISTIC | DOM_STOCHASTIC)
+    n = lo_reg(n, ("random" as u64), 6u64, DOM_STOCHASTIC)
+    n = lo_reg(n, ("nondeterministic" as u64), 16u64, DOM_STOCHASTIC)
+    n = lo_reg(n, ("expire" as u64), 6u64, DOM_TTL_BOUND)
+    n = lo_reg(n, ("ttl" as u64), 3u64, DOM_TTL_BOUND)
+    LO_READY[0u64] = 1u8
+    return 0i32
+}
+
+/* binary search the sorted table; returns the entry index or LO_NOT_FOUND (USER_IDENTIFIER). */
+fn lo_lookup(fp: u32) -> u32 @export {
+    let mut lo : u64 = 0u64
+    let mut hi : u64 = LO_N
+    while lo < hi {
+        let mid : u64 = lo + (hi - lo) / 2u64
+        let v : u32 = LO_FP[mid]
+        if v == fp { return mid as u32 }
+        if v < fp { lo = mid + 1u64 } else { hi = mid }
+    }
+    return LO_NOT_FOUND
+}
+
+/* the domain mask of token bytes: the AND-constraint it contributes (0 = USER_IDENTIFIER, no constraint). */
+fn lo_mask_of(token: u64, len: u64) -> u64 @export {
+    let idx : u32 = lo_lookup(lo_fp(token, len))
+    if idx == LO_NOT_FOUND { return 0u64 }
+    return LO_MASK[idx as u64]
+}

@@ -1,0 +1,72 @@
+/* STDLIB/iii/intent/disambiguate.iii -- INTENT-TO-EXECUTION, Phase 3: the Oracle of Rejection.
+ *
+ * This is where the Halting Problem of Ambiguity is forced to resolve.  Human language is overloaded; the
+ * substrate does NOT guess.  It collapses the overloaded domain masks of a sentence's recognised lexemes by
+ * BITWISE INTERSECTION (the forward-backward AND) and inspects the population count of the survivor:
+ *
+ *   popcount == 1  -> RESOLVED       : a single, mathematically precise interpretation.
+ *   popcount == 0  -> CONTRADICTION  : the words cannot co-refer ("encrypt the network port" -- crypto AND
+ *                                      net-deny share no bit).  HALT, do not guess.
+ *   popcount  > 1  -> AMBIGUOUS      : the human under-specified ("lock the system" -- freeze|encrypt|deny
+ *                                      all survive).  HALT, demand more.
+ *   no recognised  -> EMPTY          : no operator words at all.
+ *
+ * Runs in a few hundred cycles: pure bitwise arithmetic over a fixed ontology, zero ML.  The compiler's job
+ * is not to figure out what the human meant -- it is to ruthlessly reject the human until they mean EXACTLY
+ * one thing.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  Composes intent/intent_lex + numera/sat_arith (popcount).
+ */
+module intent_disambiguate
+
+extern @abi(c-msvc-x64) fn il_tokenize(text: u64, len: u64, out_masks: u64, cap: u64) -> u32 from "intent_lex.iii"
+extern @abi(c-msvc-x64) fn popcount_u64(x: u64) -> u32 from "sat_arith.iii"
+
+const DIS_RESOLVED      : u32 = 0u32
+const DIS_CONTRADICTION : u32 = 1u32
+const DIS_AMBIGUOUS     : u32 = 2u32
+const DIS_EMPTY         : u32 = 3u32
+const DIS_OVERFLOW      : u32 = 4u32     /* sentence exceeded the token arena */
+const DIS_MAXTOK        : u64 = 64u64
+
+var DIS_MASKS         : [u64; 64]
+var DIS_RESOLVED_MASK : [u64; 1]
+
+/* resolve a human intent sentence to a single interpretation, or REJECT with the reason.  On DIS_RESOLVED,
+ * dis_resolved_mask() holds the unique surviving domain bit. */
+fn dis_resolve(text: u64, len: u64) -> u32 @export {
+    DIS_RESOLVED_MASK[0u64] = 0u64
+    let n : u32 = il_tokenize(text, len, (&DIS_MASKS as u64), DIS_MAXTOK)
+    if n == 0xFFFFFFFFu32 { return DIS_OVERFLOW }
+    let mut resolved : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut recognized : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < (n as u64) {
+        if DIS_MASKS[i] != 0u64 {
+            resolved = resolved & DIS_MASKS[i]
+            recognized = recognized + 1u64
+        }
+        i = i + 1u64
+    }
+    if recognized == 0u64 { return DIS_EMPTY }
+    let pc : u32 = popcount_u64(resolved)
+    if pc == 1u32 { DIS_RESOLVED_MASK[0u64] = resolved  return DIS_RESOLVED }
+    if pc == 0u32 { return DIS_CONTRADICTION }
+    return DIS_AMBIGUOUS
+}
+
+/* the unique surviving interpretation bit after a DIS_RESOLVED verdict (0 otherwise). */
+fn dis_resolved_mask() -> u64 @export { return DIS_RESOLVED_MASK[0u64] }
+
+/* the number of recognised operator lexemes in a sentence (for diagnostics / the audit manifest). */
+fn dis_recognized(text: u64, len: u64) -> u32 @export {
+    let n : u32 = il_tokenize(text, len, (&DIS_MASKS as u64), DIS_MAXTOK)
+    if n == 0xFFFFFFFFu32 { return 0u32 }
+    let mut rec : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < (n as u64) {
+        if DIS_MASKS[i] != 0u64 { rec = rec + 1u32 }
+        i = i + 1u64
+    }
+    return rec
+}

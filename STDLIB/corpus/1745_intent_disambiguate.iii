@@ -1,0 +1,49 @@
+/* STDLIB/corpus/1745_intent_disambiguate.iii -- INTENT-TO-EXECUTION lexical disambiguation conformance.
+ *
+ * intent/{lex_ontology, intent_lex, disambiguate}: human intent is collapsed by bitwise intersection of the
+ * recognised lexemes' domain masks; the population count of the survivor decides RESOLVE vs REJECT.  The
+ * compiler ruthlessly rejects the human until they mean EXACTLY one thing.  99 = all arms; 1..10 = the arm.
+ */
+module corpus_1745_intent_disambiguate
+
+extern @abi(c-msvc-x64) fn dis_resolve(text: u64, len: u64) -> u32 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn dis_resolved_mask() -> u64 from "disambiguate.iii"
+extern @abi(c-msvc-x64) fn dis_recognized(text: u64, len: u64) -> u32 from "disambiguate.iii"
+
+const DOM_VBD_FREEZE : u64 = 1u64
+const DOM_NET_DENY   : u64 = 4u64
+const DIS_RESOLVED      : u32 = 0u32
+const DIS_CONTRADICTION : u32 = 1u32
+const DIS_AMBIGUOUS     : u32 = 2u32
+const DIS_EMPTY         : u32 = 3u32
+
+fn main() -> u64 {
+    /* (1) "lock database" -> RESOLVED to freeze: lock{freeze,encrypt,deny} & database{freeze} = freeze */
+    if dis_resolve(("lock database" as u64), 13u64) != DIS_RESOLVED { return 1u64 }
+    if dis_resolved_mask() != DOM_VBD_FREEZE { return 2u64 }
+
+    /* (2) "encrypt the network port" -> CONTRADICTION: crypto-encrypt AND net-deny share no bit */
+    if dis_resolve(("encrypt the network port" as u64), 24u64) != DIS_CONTRADICTION { return 3u64 }
+
+    /* (3) "lock the system against bad actors" -> AMBIGUOUS: only "lock" is an operator; 3 bits survive */
+    if dis_resolve(("lock the system against bad actors" as u64), 34u64) != DIS_AMBIGUOUS { return 4u64 }
+
+    /* (4) "generate a random hash" -> CONTRADICTION: stochastic AND deterministic */
+    if dis_resolve(("generate a random hash" as u64), 22u64) != DIS_CONTRADICTION { return 5u64 }
+
+    /* (5) "freeze the disk" -> RESOLVED to freeze */
+    if dis_resolve(("freeze the disk" as u64), 15u64) != DIS_RESOLVED { return 6u64 }
+    if dis_resolved_mask() != DOM_VBD_FREEZE { return 7u64 }
+
+    /* (6) "deny the network port" -> RESOLVED to net-deny */
+    if dis_resolve(("deny the network port" as u64), 21u64) != DIS_RESOLVED { return 8u64 }
+    if dis_resolved_mask() != DOM_NET_DENY { return 9u64 }
+
+    /* (7) "the quick brown fox" -> EMPTY: no operator words at all */
+    if dis_resolve(("the quick brown fox" as u64), 19u64) != DIS_EMPTY { return 10u64 }
+
+    /* (8) the recognised-operator count: "lock database" has exactly 2 (lock + database) */
+    if dis_recognized(("lock database" as u64), 13u64) != 2u32 { return 11u64 }
+
+    return 99u64
+}

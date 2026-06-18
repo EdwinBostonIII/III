@@ -38,6 +38,7 @@ extern @abi(c-msvc-x64) fn satlas_edge_to(i: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_fanin(n: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_fanout(n: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_in_cycle(n: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_is_marked(n: u32) -> u8 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_remove_safe(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_impact_count(n: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_depends_count(n: u32) -> u32 from "self_atlas.iii"
@@ -251,4 +252,20 @@ fn salens_max_level() -> u32 @export {
         i = i + 1u32
     }
     return best
+}
+
+/* TRULY DORMANT modules: no production importer (fan-in 0) AND not referenced by any corpus
+ * test (unmarked).  This is the ACCURATE dead-module count -- it does not mistake a normal
+ * test-exercised leaf for dead.  Requires scarto_map + scarto_mark_corpus to have run. */
+fn salens_count_dormant() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut i : u32 = 0u32
+    let mut c : u32 = 0u32
+    while i < n {
+        if satlas_fanin(i) == 0u32 {
+            if satlas_is_marked(i) == 0u8 { c = c + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return c
 }

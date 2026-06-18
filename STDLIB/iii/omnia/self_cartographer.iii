@@ -40,6 +40,8 @@ extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_intern(name_ptr: u64, len: u64) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_find(name_ptr: u64, len: u64) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_mark(n: u32) -> i32 from "self_atlas.iii"
 
 const SCARTO_MODE_READ : u32 = 1u32
 const SCARTO_FBUF_MAX  : u64 = 262144u64
@@ -47,6 +49,10 @@ const SCARTO_DSLOT     : u64 = 256u64
 const SCARTO_DMAX      : u32 = 128u32
 const SCARTO_PATHMAX   : u64 = 255u64
 const SCARTO_MASK      : u64 = 0xFFFFFFFFu64
+const SCARTO_SENT      : u32 = 0xFFFFFFFFu32
+
+/* Walk mode: 0 = MAP (intern nodes + link edges); 1 = MARK (mark referenced nodes only). */
+var SCARTO_MODE : u8 = 0u8
 
 var SCARTO_FBUF   : [u8; 262144]
 var SCARTO_DSTACK : [u8; 32768]                 /* 128 dir paths * 256 bytes */
@@ -112,7 +118,7 @@ fn scarto_dpush(ptr: u64, len: u64) -> i32 {
 
 /* Scan a freshly-read file buffer for `from "X.iii"` edges; link base -> X for each. */
 fn scarto_parse(base_ptr: u64, base_len: u64, got: u64) -> i32 {
-    satlas_intern(base_ptr, base_len)
+    if SCARTO_MODE == 0u8 { satlas_intern(base_ptr, base_len) }
     let fb : *u8 = (&SCARTO_FBUF as u64) as *u8
     let g : u64 = got
     let mut i : u64 = 0u64
@@ -140,7 +146,13 @@ fn scarto_parse(base_ptr: u64, base_len: u64, got: u64) -> i32 {
             }
             if qend > (start + 4u64) {
                 let nlen : u64 = (qend - start) - 4u64
-                satlas_link(base_ptr, base_len, (&SCARTO_FBUF as u64) + start, nlen)
+                let tp : u64 = (&SCARTO_FBUF as u64) + start
+                if SCARTO_MODE == 0u8 {
+                    satlas_link(base_ptr, base_len, tp, nlen)
+                } else {
+                    let tn : u32 = satlas_find(tp, nlen)
+                    if tn != SCARTO_SENT { satlas_mark(tn) }
+                }
                 i = qend + 1u64
             } else {
                 i = start
@@ -163,10 +175,10 @@ fn scarto_process(cap: u64, path_ptr: u64, base_ptr: u64, base_len: u64) -> i32 
     return 0i32
 }
 
-/* Walk root recursively, populate self_atlas from every .iii module's `from` edges, and
- * return the resulting node count.  cap must carry FS READ. */
-fn scarto_map(cap: u64, root_ptr: u64, root_len: u64) -> u32 @export {
-    satlas_reset()
+/* The shared directory walk (mode-driven via SCARTO_MODE).  Iterative, one dir search open at
+ * a time (subdirectories are pushed, not opened), so a deep tree never exhausts the handle
+ * table -- the aether/fs read-all-then-recurse discipline. */
+fn scarto_walk(cap: u64, root_ptr: u64, root_len: u64) -> i32 {
     SCARTO_SP = 0u32
     scarto_dpush(root_ptr, root_len)
     while SCARTO_SP > 0u32 {
@@ -196,5 +208,23 @@ fn scarto_map(cap: u64, root_ptr: u64, root_len: u64) -> u32 @export {
             fs_dir_close(dh)
         }
     }
+    return 0i32
+}
+
+/* Walk root recursively, populate self_atlas from every .iii module from-edges, and return the
+ * resulting node count.  cap must carry FS READ. */
+fn scarto_map(cap: u64, root_ptr: u64, root_len: u64) -> u32 @export {
+    satlas_reset()
+    SCARTO_MODE = 0u8
+    scarto_walk(cap, root_ptr, root_len)
     return satlas_node_count()
+}
+
+/* Walk a SECOND tree (e.g. STDLIB/corpus) and MARK every already-mapped node it references --
+ * without adding nodes or edges.  After scarto_map(production) + scarto_mark_corpus(corpus), a
+ * node with no production importer AND no mark is TRULY dormant (the accurate dead signal). */
+fn scarto_mark_corpus(cap: u64, root_ptr: u64, root_len: u64) -> i32 @export {
+    SCARTO_MODE = 1u8
+    scarto_walk(cap, root_ptr, root_len)
+    return 0i32
 }

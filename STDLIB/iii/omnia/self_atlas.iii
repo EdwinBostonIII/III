@@ -81,6 +81,11 @@ var SATLAS_EXT    : u32 = 0xFFFFFFFFu32         /* BFS edge-exclusion: to       
 var SATLAS_LEVEL  : [u32; 2048]
 var SATLAS_LVL_DIRTY : u8 = 1u8
 
+/* Per-node external-reference mark: set by the cartographer when a module is referenced from
+ * OUTSIDE the mapped production tree (e.g. by a corpus test).  A node with no production
+ * importer AND no external reference is TRULY dormant -- the accurate "dead module" signal. */
+var SATLAS_MARK   : [u8; 2048]
+
 /* Commit scratch. */
 var SATLAS_CBUF   : [u8; 8]
 var SATLAS_DOM    : [u8; 16]                    /* "omnia/self_atlas" */
@@ -124,6 +129,11 @@ fn satlas_reset() -> i32 @export {
     SATLAS_EXF = SATLAS_SENT
     SATLAS_EXT = SATLAS_SENT
     SATLAS_LVL_DIRTY = 1u8
+    let mut i : u32 = 0u32
+    while i < SATLAS_MAX_NODES {
+        SATLAS_MARK[(i as u64) & SATLAS_MASK64] = 0u8
+        i = i + 1u32
+    }
     return SATLAS_OK
 }
 
@@ -427,6 +437,17 @@ fn satlas_level(n: u32) -> u32 @export {
     if nn >= SATLAS_NCOUNT { return 0u32 }
     satlas_ensure_levels()
     return SATLAS_LEVEL[(nn as u64) & SATLAS_MASK64]
+}
+
+/* Mark node n as externally referenced (e.g. by a corpus test). */
+fn satlas_mark(n: u32) -> i32 @export {
+    if n < SATLAS_NCOUNT { SATLAS_MARK[(n as u64) & SATLAS_MASK64] = 1u8 }
+    return SATLAS_OK
+}
+
+fn satlas_is_marked(n: u32) -> u8 @export {
+    if n >= SATLAS_NCOUNT { return 0u8 }
+    return SATLAS_MARK[(n as u64) & SATLAS_MASK64]
 }
 
 /* Would adding the dependency a->b create a directed cycle? (== b already reaches a). */

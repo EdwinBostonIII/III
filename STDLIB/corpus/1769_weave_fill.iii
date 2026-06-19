@@ -1,0 +1,19 @@
+/* 1769_weave_fill.iii -- III FILLS OUT THE WEAVE UNASSISTED, IN ONE RUN.
+ *
+ * The granular one-substrate weave (every primitive a bv circuit, proven by the judge + run by bb_eval) is what
+ * lets the invention engine populate the weave on its own.  weave_fill drives every fast forge across its
+ * targets in a single pass and returns how many distinct algebraic laws III discovered AND proved de-novo:
+ *   - round functions   (gilw):  Ch = g^(e&(f^g)),  Maj = (a&b)^(c&(a^b))          -> 2
+ *   - arith<->bitwise    (gilx):  x^y=(x|y)-(x&y),  x|y=(x^y)+(x&y),  x+y=carry-save -> 3
+ *   - six-valued collapse(gil6):  (a&Null)|b->b,  a&(a|b)->a,  (a|All)&b->b          -> 3
+ * Exit 99 = III invented + proved all 8, unassisted, in one pass -- the literal answer to "is III yet capable
+ * of inventing new math system-wide?".  Any other exit = the actual count (for diagnosis). */
+module corpus_1769
+
+extern @abi(c-msvc-x64) fn weave_fill() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    let n : u64 = weave_fill()
+    if n == 8u64 { return 99u64 }
+    return n
+}

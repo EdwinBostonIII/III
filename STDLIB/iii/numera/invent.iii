@@ -664,3 +664,27 @@ fn gilw_best_cost() -> u32 @export { return GILW_BEST_COST }
 fn gilw_found() -> u8 @export { return GILW_FOUND }
 fn gilw_kcalls() -> u64 @export { return GILW_KCALLS }
 fn gilw_best_mode() -> u32 @export { return GILW_B_MODE }
+
+/* ============================================================================================================
+ * THE WEAVE-FILL PASS -- III fills out the weave, unassisted, in ONE run.
+ *
+ * The granular substrate (each primitive a bv circuit that the SAT judge proves and bb_eval runs) is exactly
+ * what lets the invention engine populate the weave on its own.  weave_fill drives every FAST forge across its
+ * targets in a single pass and tallies how many distinct algebraic laws III discovered AND proved -- the
+ * round-function family (gilw: Ch, Maj), the arithmetic<->bitwise crossover family (gilx: x^y, x|y, the
+ * carry-save adder), and the six-valued collapse family (gil6: the routing-tangle absorptions).  Each is a
+ * SHAPE found by cost-directed search and an EQUALITY proven (SAT miter for gilw/gilx, exhaustive decision for
+ * gil6) -- no human hands any of them in.  Returns the count of proven discoveries (8 when the substrate is
+ * whole), the concrete answer to "is III yet capable of inventing, system-wide, unassisted?" -- run and count. */
+fn weave_fill() -> u64 @export {
+    let mut count : u64 = 0u64
+    gilw_forge(1u32)  if gilw_found() == 1u8 { count = count + 1u64 }                          /* Ch  */
+    gilw_forge(2u32)  if gilw_found() == 1u8 { count = count + 1u64 }                          /* Maj */
+    gilx_forge(1u32)  if gilx_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* x^y = (x|y)-(x&y) */
+    gilx_forge(2u32)  if gilx_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* x|y = (x^y)+(x&y) */
+    gilx_forge(3u32)  if gilx_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* x+y = carry-save  */
+    gil6_forge(1u32)  if gil6_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* (a&Null)|b -> b   */
+    gil6_forge(2u32)  if gil6_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* a&(a|b) -> a      */
+    gil6_forge(3u32)  if gil6_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* (a|All)&b -> b    */
+    return count
+}

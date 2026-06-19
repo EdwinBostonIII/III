@@ -1,0 +1,101 @@
+/* STDLIB/iii/katabasis/pci_enum.iii
+ *
+ * PCI CONFIG-SPACE DERIVATION -- the live-side deriver for census.iii's GPU/PCI facts.
+ *
+ * census.iii holds the EXPECTED GPU facts (VEN/DEV, rev, BAR0/1/3, bus:dev:fn); this module DERIVES them from raw
+ * PCI configuration space, so on ANY machine the live values come from the silicon, not a hardcode -- and are then
+ * drift-checked fact-by-fact against census's sealed expectation (katabasis_census_fact_matches).
+ *
+ * It is BACKEND-AGNOSTIC by design: the pure decoders + pci_enum_consider take a POINTER to a device's raw config
+ * dwords, read from WHEREVER -- a synthetic buffer (the corpus KAT, user-mode) or live CF8h/CFCh port reads (the
+ * Ring-0 gate driver).  consider() takes only 2 params (a pointer + the bus:dev:fn) so it is cg_r0-safe (cg_r0
+ * spills the 5th+ param to globals).  The decoders are the real PCI encoding (PCI Local Bus spec):
+ *   dword@0x00 = (DEVICE_ID<<16)|VENDOR_ID   (VENDOR 0xFFFF => no device)
+ *   dword@0x08 = (CLASS<<24)|(SUBCLASS<<16)|(PROGIF<<8)|REVISION   (display controller CLASS = 0x03)
+ *   BAR@0x10.. : bit0=0 memory; bits[2:1]=00 32-bit / 10 64-bit (consumes the next BAR as the high dword);
+ *                base = (BAR & ~0xF) [| (next_BAR << 32) for 64-bit].
+ * For the NVIDIA layout census records: BAR0@0x10 (regs, 32-bit), BAR1@0x14/0x18 (VRAM, 64-bit), BAR3@0x1C/0x20
+ * (RAMIN, 64-bit).  Ring R0.  KAT: corpus 1814.
+ */
+module katabasis_pci_enum
+
+/* ---- raw config-dword reader (little-endian, from any byte source) ---- */
+fn pe_ld_u32(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    let b0 : u32 = p[0u64] as u32
+    let b1 : u32 = p[1u64] as u32
+    let b2 : u32 = p[2u64] as u32
+    let b3 : u32 = p[3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* ---- pure PCI decoders (the real spec encoding) ---- */
+fn pci_vendor(dw0: u32) -> u32 { return dw0 & 0xFFFFu32 }
+fn pci_device(dw0: u32) -> u32 { return (dw0 >> 16u32) & 0xFFFFu32 }
+fn pci_present(dw0: u32) -> u8 {
+    let v : u32 = dw0 & 0xFFFFu32
+    if v == 0xFFFFu32 { return 0u8 }           /* an empty slot reads all-ones */
+    if v == 0u32 { return 0u8 }                /* (synthetic) zeroed slot */
+    return 1u8
+}
+fn pci_class(dw2: u32) -> u32 { return (dw2 >> 24u32) & 0xFFu32 }
+fn pci_rev(dw2: u32) -> u32 { return dw2 & 0xFFu32 }
+fn pci_bar_is_io(bar: u32) -> u8 { if (bar & 1u32) == 1u32 { return 1u8 }  return 0u8 }
+fn pci_bar_is_64(bar: u32) -> u8 { if (bar & 1u32) == 0u32 { if ((bar >> 1u32) & 3u32) == 2u32 { return 1u8 } }  return 0u8 }
+fn pci_bar_base32(bar: u32) -> u64 { return (bar & 0xFFFFFFF0u32) as u64 }
+fn pci_bar_base64(lo: u32, hi: u32) -> u64 { return ((lo & 0xFFFFFFF0u32) as u64) | ((hi as u64) << 32u64) }
+
+/* ---- the derived GPU record (filled by consider) ---- */
+var PE_FOUND : u8  = 0u8
+var PE_VEN   : u32 = 0u32
+var PE_DEV   : u32 = 0u32
+var PE_REV   : u32 = 0u32
+var PE_BAR0  : u64 = 0u64
+var PE_BAR1  : u64 = 0u64
+var PE_BAR3  : u64 = 0u64
+var PE_BDF   : u32 = 0u32
+
+fn pci_enum_reset() -> i32 @export {
+    PE_FOUND = 0u8  PE_VEN = 0u32  PE_DEV = 0u32  PE_REV = 0u32
+    PE_BAR0 = 0u64  PE_BAR1 = 0u64  PE_BAR3 = 0u64  PE_BDF = 0u32
+    return 0i32
+}
+
+/* Consider one device: dwords_ptr -> 7 consecutive u32 config dwords read from ANY backend (synthetic or CF8h):
+ *   [0]=cfg@0x00  [1]=cfg@0x08  [2]=BAR0@0x10  [3]=BAR1lo@0x14  [4]=BAR1hi@0x18  [5]=BAR3lo@0x1C  [6]=BAR3hi@0x20
+ * If it is present AND a display controller (class 0x03), DERIVE + record its facts and return 1 (the GPU).  Records
+ * only the FIRST GPU seen (idempotent until pci_enum_reset).  2 params => cg_r0-safe for the live driver. */
+fn pci_enum_consider(dwords_ptr: u64, bdf: u32) -> u8 @export {
+    if PE_FOUND == 1u8 { return 0u8 }
+    /* the 7 selected dwords are passed PACKED + consecutive (byte offsets 0,4,8,12,16,20,24) -- the caller
+     * (synthetic buffer or the live CF8h driver) gathers them from their real PCI offsets into this vector. */
+    let dw0 : u32 = pe_ld_u32(dwords_ptr, 0u64)
+    if pci_present(dw0) != 1u8 { return 0u8 }
+    let dw2 : u32 = pe_ld_u32(dwords_ptr, 4u64)
+    if pci_class(dw2) != 0x03u32 { return 0u8 }
+    let bar0   : u32 = pe_ld_u32(dwords_ptr, 8u64)
+    let bar1lo : u32 = pe_ld_u32(dwords_ptr, 12u64)
+    let bar1hi : u32 = pe_ld_u32(dwords_ptr, 16u64)
+    let bar3lo : u32 = pe_ld_u32(dwords_ptr, 20u64)
+    let bar3hi : u32 = pe_ld_u32(dwords_ptr, 24u64)
+    PE_VEN = pci_vendor(dw0)
+    PE_DEV = pci_device(dw0)
+    PE_REV = pci_rev(dw2)
+    PE_BAR0 = pci_bar_base32(bar0)
+    PE_BAR1 = pci_bar_base64(bar1lo, bar1hi)
+    PE_BAR3 = pci_bar_base64(bar3lo, bar3hi)
+    PE_BDF = bdf
+    PE_FOUND = 1u8
+    return 1u8
+}
+
+fn pci_gpu_found() -> u8 @export { return PE_FOUND }
+fn pci_gpu_ven() -> u32 @export { return PE_VEN }
+fn pci_gpu_dev() -> u32 @export { return PE_DEV }
+fn pci_gpu_rev() -> u32 @export { return PE_REV }
+/* (VENDOR<<16)|DEVICE -- matches census fact 0's packing. */
+fn pci_gpu_vendev() -> u64 @export { return ((PE_VEN as u64) << 16u64) | (PE_DEV as u64) }
+fn pci_gpu_bar0() -> u64 @export { return PE_BAR0 }
+fn pci_gpu_bar1() -> u64 @export { return PE_BAR1 }
+fn pci_gpu_bar3() -> u64 @export { return PE_BAR3 }
+fn pci_gpu_bdf() -> u64 @export { return PE_BDF as u64 }

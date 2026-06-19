@@ -1,0 +1,75 @@
+/* 1814_pci_enum.iii -- PCI CONFIG-SPACE DERIVATION: census.iii's GPU facts, DECODED not hardcoded.
+ *
+ * pci_enum.iii decodes raw PCI configuration space (the real PCI Local Bus encoding) to DERIVE the GPU facts
+ * census.iii holds.  This KAT feeds it FAITHFUL synthetic config dwords (the exact register layout a live CF8h/CFCh
+ * read returns) and proves the decoder is genuine -- not a constant:
+ *
+ *   (A) fed the AD103's config, it reproduces census's SEALED GPU facts exactly (vendev / rev / BAR0 / BAR1 / BAR3 /
+ *       bus:dev:fn) -- the decoder, given this machine's real config layout, derives this machine's census.  This is
+ *       the GPU analogue of the CPUID crystal: on metal the SAME decoder reads the SAME format from live silicon.
+ *   (B) fed a DIFFERENT vendor's config (AMD), it derives THOSE facts -- so it is a real decoder, not hardcoded.
+ *   (C) a non-display device (class != 0x03) and an absent slot (all-ones) are correctly skipped.
+ * Exit 99 = the GPU/PCI facts are now DERIVED from config space (the algorithm), reproducing the sealed census; the
+ * live CF8h/CFCh read is the Ring-0 gate-driver step (same proven pattern as IOCTL_SVM_PROBE). */
+module corpus_1814
+
+extern @abi(c-msvc-x64) fn pci_enum_reset() -> i32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_enum_consider(dwords_ptr: u64, bdf: u32) -> u8 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_found() -> u8 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_rev() -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_vendev() -> u64 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_bar0() -> u64 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_bar1() -> u64 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_bar3() -> u64 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_bdf() -> u64 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_fact(idx: u64) -> u64 from "census.iii"
+
+/* one device's 7 selected config dwords, packed consecutive: cfg@0x00, cfg@0x08, BAR0, BAR1lo, BAR1hi, BAR3lo, BAR3hi */
+var CFG : [u32; 7]
+
+fn main() -> u64 {
+    /* (A) AD103 config (faithful PCI encoding) -> reproduces census's sealed GPU facts */
+    pci_enum_reset()
+    CFG[0u64] = 0x271710DEu32      /* (DEV 0x2717 << 16) | VEN 0x10DE */
+    CFG[1u64] = 0x030000A1u32      /* class 0x03 (display), rev 0xA1 */
+    CFG[2u64] = 0xFB000000u32      /* BAR0: 32-bit MMIO -> 0xFB000000 */
+    CFG[3u64] = 0x0000000Cu32      /* BAR1 lo: 64-bit prefetchable */
+    CFG[4u64] = 0x000000F8u32      /* BAR1 hi -> 0xF800000000 */
+    CFG[5u64] = 0x0000000Cu32      /* BAR3 lo: 64-bit */
+    CFG[6u64] = 0x000000FCu32      /* BAR3 hi -> 0xFC00000000 */
+    if pci_enum_consider(&CFG as u64, 0x010000u32) != 1u8 { return 11u64 }
+    if pci_gpu_found() != 1u8 { return 12u64 }
+    if pci_gpu_vendev() != katabasis_census_fact(0u64) { return 13u64 }      /* 0x10DE2717 */
+    if (pci_gpu_rev() as u64) != katabasis_census_fact(1u64) { return 14u64 } /* 0xA1 */
+    if pci_gpu_bar0() != katabasis_census_fact(5u64) { return 15u64 }        /* 0xFB000000 */
+    if pci_gpu_bar1() != katabasis_census_fact(6u64) { return 16u64 }        /* 0xF800000000 */
+    if pci_gpu_bar3() != katabasis_census_fact(7u64) { return 17u64 }        /* 0xFC00000000 */
+    if pci_gpu_bdf() != katabasis_census_fact(11u64) { return 18u64 }        /* 0x010000 */
+
+    /* (B) a DIFFERENT vendor's config -> DIFFERENT derived facts (not hardcoded) */
+    pci_enum_reset()
+    CFG[0u64] = 0x744C1002u32      /* AMD: (DEV 0x744C << 16) | VEN 0x1002 */
+    CFG[1u64] = 0x030000C8u32      /* class 0x03, rev 0xC8 */
+    CFG[2u64] = 0xFC000000u32      /* BAR0 -> 0xFC000000 */
+    CFG[3u64] = 0x0000000Cu32
+    CFG[4u64] = 0x000000E0u32      /* BAR1 -> 0xE000000000 */
+    CFG[5u64] = 0u32
+    CFG[6u64] = 0u32
+    if pci_enum_consider(&CFG as u64, 0x030000u32) != 1u8 { return 19u64 }
+    if pci_gpu_vendev() != 0x1002744Cu64 { return 20u64 }
+    if pci_gpu_rev() != 0xC8u32 { return 21u64 }
+    if pci_gpu_bar0() != 0xFC000000u64 { return 22u64 }
+    if pci_gpu_bar1() != 0xE000000000u64 { return 23u64 }
+
+    /* (C) a non-display device is skipped; an absent slot is skipped */
+    pci_enum_reset()
+    CFG[0u64] = 0x100E8086u32      /* Intel NIC */
+    CFG[1u64] = 0x02000000u32      /* class 0x02 (network) */
+    if pci_enum_consider(&CFG as u64, 0x020000u32) != 0u8 { return 24u64 }
+    if pci_gpu_found() != 0u8 { return 25u64 }
+    pci_enum_reset()
+    CFG[0u64] = 0xFFFFFFFFu32      /* empty slot (all-ones) */
+    if pci_enum_consider(&CFG as u64, 0u32) != 0u8 { return 26u64 }
+
+    return 99u64
+}

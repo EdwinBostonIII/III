@@ -695,6 +695,12 @@ MODULES=(
     # family-model-stepping / logical-count / hypervisor / feature-summary -- content-addressed (sha256).  Universal
     # (any x86-64 machine), safe (unprivileged CPUID), virtualization-transparent, no hardcoded facts.  KAT 1813.
     "katabasis/cpu_census"
+    # katabasis/pci_enum -- the LIVE-side deriver for census's GPU/PCI facts: pure PCI config-space decoders (the real
+    # PCI Local Bus encoding) + pci_enum_consider (2-param, cg_r0-safe) that DERIVES VEN/DEV/rev/BAR0/BAR1/BAR3 from
+    # raw config dwords supplied by ANY backend (a synthetic buffer in the corpus, or live CF8h/CFCh reads in the
+    # Ring-0 gate driver).  Reproduces census's sealed GPU facts from a faithful config; the metal read is the gate
+    # driver's IOCTL.  KAT 1814.
+    "katabasis/pci_enum"
     "katabasis/bricking"
     "katabasis/cycle_term"
     "katabasis/gate"

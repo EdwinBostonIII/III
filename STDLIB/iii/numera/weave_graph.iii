@@ -1,45 +1,47 @@
-/* STDLIB/iii/numera/weave_graph.iii -- THE WEAVE ITSELF: the six-state-typed proof-graph of III's primitives.
+/* STDLIB/iii/numera/weave_graph.iii -- THE WEAVE ITSELF: the six-state-typed proof-graph of III's REAL primitives.
  *
- * This is the structure the weave was always meant to BE (specified in the founding chat, verbatim):
- *   "one mathematical woven structure that serves as the common denominator of every former III primitive ...
- *    capable of following its own logic to fill out its own spiderweb perfectly ... such that III understands
- *    itself through the lens of this perfect math."
- * and, on six-state's exact role:
- *   "nodes = primitive building-blocks as bitvector circuits; edges = kernel/SAT-proven relations between them;
- *    logic6 types the PROOF STATUS of the web's strands -- proven-equivalent, proven-distinct, equivalent-only-
- *    under-a-condition (Both), neither-proven-yet (Neither/Null), equivalent-universally-for-all-widths (All)."
+ * The structure the founding chat specified (verbatim): "one mathematical woven structure that serves as the
+ * common denominator of every former III primitive ... such that III understands itself through the lens of this
+ * perfect math", with six-state's exact role "nodes = primitive building-blocks as bitvector circuits; edges =
+ * SAT-proven relations; logic6 types the PROOF STATUS of the web's strands."
  *
- * So the weave is a CATEGORY, not an equation:
- *   - NODES are primitives as bv_bits circuits (the SHA-2 round functions, the rotation, the mask -- each a
- *     deterministic builder over inputs a,b,c at a chosen width).  The borrowed names dissolve: a node is the
- *     MATH, not "ChaCha's" or "Blake2's".
- *   - EDGES are SAT-proven relations between nodes (bb_equal).
- *   - SIX-STATE (numera/logic6's codes) types each edge by its PROOF STATUS -- the meta-level the user pinned
- *     six-state to.  Critically NOT on the nodes (the bits are classically 2-valued) but on the STRANDS:
- *       ALL  (5)  equivalent for ALL tested widths      -- a universal theorem (the strand is load-bearing)
- *       TRUE (1)  proven-equivalent at the canonical width
- *       BOTH (3)  equivalent ONLY under a condition (some widths, not all) -- a conditional strand, paraconsistent
- *       FALSE(2)  proven-distinct (a refuted candidate strand)
- *       NEITHER/NULL (0/4)  not yet proven -- an open strand III has yet to fill
+ * The nodes here are the ACTUAL III crypto primitives as bv_bits circuits -- the SHA-2 choice/majority functions
+ * and the ChaCha/SHA/Blake2 rotation -- the SAME circuits numera/primweb proves and numera/weave_blocks executes.
+ * The names are dissolved: a node is the MATH (a rotation, a mux), not "ChaCha's" or "Blake2's".  The edges are
+ * SAT-proven (bb_equal) relations, and they INDEX primweb's existing theorems (ws_strand_agrees_primweb checks
+ * the weave's typed edges against pw_sha_ch_optform / pw_sha_maj_optform / pw_rot_duality) -- not reinvented.
  *
- * III FILLS ITS OWN SPIDERWEB: the discovery engines (numera/invent) PROPOSE candidate strands; bb_equal PROVES
- * or refutes; this module TYPES each by its six-state proof-status; the commons (numera/present) PERSISTS them.
- * weave_graph is where that all becomes ONE object instead of scattered organs.  Composes numera/bv_bits +
- * numera/logic6 -- no island; it is the unification.
+ * SIX-STATE types each strand's PROOF STATUS (the meta-level, not the bits):
+ *   ALL  (5)  proven-equivalent for ALL tested widths -- a UNIVERSAL theorem (the SHA-2 Ch/Maj structural laws,
+ *             which are bitwise and hold at every width).
+ *   BOTH (3)  equivalent ONLY UNDER A CONDITION -- the ROTATION DUALITY rotl(x,k) == rotr(x,w-k) is real but
+ *             WIDTH-TIED: with the 32-bit crypto constants (rotl 7 vs rotr 25 = 32-7), it holds at width 32 and
+ *             is proven-distinct at width 64.  This is the genuine conditional strand -- six-state's paraconsistent
+ *             middle on a REAL primitive relation, not a manufactured example.
+ *   TRUE (1)  proven-equivalent at the canonical 32-bit crypto width.
+ *   FALSE(2)  proven-distinct (Ch is not Maj; one rotation is not another).
+ *   NEITHER/NULL (0/4)  an open strand not yet proven.
  *
- * Hexad: kind_essence (the proven self-image of III's math) + kind_compose.  Ring: R0.  K: 1.00.  Deterministic. */
+ * This is the cross-primitive index: the (rotl 7, rotr 25) strand IS the ChaCha-rotl <-> SHA/Blake2-rotr
+ * connection (the duality every primitive's rotation factors through).  III FILLS this web (numera/present's
+ * present_weave_graph enumerates + admits the proven strands); the commons PERSISTS it.  Composes numera/bv_bits
+ * + numera/primweb (no island; it is the typed index OF primweb's universe).  Ring: R0.  K: 1.00.  Deterministic. */
 module numera_weave_graph
 
 extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+/* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
+extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_rot_duality(k: u64) -> u8 from "primweb.iii"
 
-/* the six-state edge-label codes (== numera/logic6's codes). */
 const WG_NEITHER : u32 = 0u32
 const WG_TRUE    : u32 = 1u32
 const WG_FALSE   : u32 = 2u32
@@ -49,48 +51,46 @@ const WG_ALL     : u32 = 5u32
 
 const WG_NODES : u32 = 8u32
 
-/* the primitive NODES, each a bitvector circuit over inputs a,b,c at the current width.  Curated so the proven
- * relations among them exhibit the full six-state edge typing -- universal equivalences, a width-conditional
- * strand, and refuted candidates.  The names are gone: these are the MATH, the common denominators. */
-fn ws_node(idx: u32, a: u32, b: u32, c: u32) -> u32 {
-    if idx == 0u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }                 /* Ch: spec mux */
-    if idx == 1u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }                         /* Ch: optform */
-    if idx == 2u32 { return bb_or(bb_and(a, b), bb_and(bb_not(a), c)) }                  /* Ch: OR-mux */
-    if idx == 3u32 { return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }   /* Maj: spec */
-    if idx == 4u32 { return bb_xor(bb_and(a, b), bb_and(c, bb_xor(a, b))) }              /* Maj: carry-save */
-    if idx == 5u32 { return bb_and(a, bb_const(0xFFu64)) }                               /* a & 0xFF: width-conditional */
-    if idx == 6u32 { return a }                                                          /* identity */
-    return bb_and(a, b)                                                                   /* idx 7: a & b (distinct) */
+/* width-parametric rotation (the rotate the crypto primitives use): rotl/rotr by k over a w-bit word. */
+fn ws_rotl(x: u32, k: u64, w: u64) -> u32 { return bb_or(bb_shl(x, k), bb_shr(x, w - k)) }
+fn ws_rotr(x: u32, k: u64, w: u64) -> u32 { return bb_or(bb_shr(x, k), bb_shl(x, w - k)) }
+
+/* the primitive NODES -- the REAL III crypto building-blocks as bv circuits (a,b,c are inputs; w the width). */
+fn ws_node(idx: u32, w: u64, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }                 /* SHA-2 Ch: spec mux */
+    if idx == 1u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }                         /* SHA-2 Ch: optform */
+    if idx == 2u32 { return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }   /* SHA-2 Maj: spec */
+    if idx == 3u32 { return bb_xor(bb_and(a, b), bb_and(c, bb_xor(a, b))) }              /* SHA-2 Maj: carry-save */
+    if idx == 4u32 { return ws_rotl(a, 7u64, w) }                                        /* rotl 7  (ChaCha/SHA) */
+    if idx == 5u32 { return ws_rotr(a, 25u64, w) }                                       /* rotr 25 = rotl 7 @ w=32 */
+    if idx == 6u32 { return ws_rotl(a, 16u64, w) }                                       /* rotl 16 */
+    return ws_rotr(a, 16u64, w)                                                           /* rotr 16 = rotl 16 @ w=32 */
 }
 
 fn ws_node_count() -> u32 @export { return WG_NODES }
 
-/* are nodes i,j proven equivalent at width w?  Each call builds a fresh circuit pair and decides via the SAT
- * miter (UNSAT == equivalent for all inputs at this width). */
 fn ws_edge_eq_at(i: u32, j: u32, w: u64) -> u8 {
     bb_reset(w)
     let a : u32 = bb_var(0u32)
     let b : u32 = bb_var(1u32)
     let c : u32 = bb_var(2u32)
-    return bb_equal(ws_node(i, a, b, c), ws_node(j, a, b, c))
+    return bb_equal(ws_node(i, w, a, b, c), ws_node(j, w, a, b, c))
 }
 
-/* the six-state PROOF STATUS of the strand between nodes i and j -- the weave's edge label.  Tested across three
- * widths (8/16/32): equivalent at ALL -> a universal theorem (ALL); at SOME -> a width-conditional strand (BOTH);
- * at NONE -> refuted (FALSE).  This is logic6 typing the proof-status of the web, exactly as specified. */
+/* the six-state PROOF STATUS of the strand between nodes i and j.  Tested at the 32-bit crypto width and at 64:
+ * equivalent at BOTH -> universal (ALL); at exactly one -> width-conditional (BOTH); at NEITHER -> refuted (FALSE). */
 fn ws_edge_status(i: u32, j: u32) -> u32 @export {
     if i >= WG_NODES { return WG_NULL }
     if j >= WG_NODES { return WG_NULL }
-    let mut eq : u32 = 0u32
-    if ws_edge_eq_at(i, j, 8u64) == 1u8 { eq = eq + 1u32 }
-    if ws_edge_eq_at(i, j, 16u64) == 1u8 { eq = eq + 1u32 }
-    if ws_edge_eq_at(i, j, 32u64) == 1u8 { eq = eq + 1u32 }
-    if eq == 3u32 { return WG_ALL }            /* equivalent for all widths -- universal */
-    if eq > 0u32 { return WG_BOTH }            /* conditional -- some widths only */
-    return WG_FALSE                            /* proven-distinct */
+    let e32 : u8 = ws_edge_eq_at(i, j, 32u64)
+    let e64 : u8 = ws_edge_eq_at(i, j, 64u64)
+    if e32 == 1u8 { if e64 == 1u8 { return WG_ALL } }       /* universal -- holds at every width */
+    if e32 == 1u8 { return WG_BOTH }                        /* conditional -- the 32-bit-tied rotation duality */
+    if e64 == 1u8 { return WG_BOTH }
+    return WG_FALSE                                         /* proven-distinct */
 }
 
-/* proven-equivalent at the canonical width (TRUE) or proven-distinct (FALSE) -- the single-width strand verdict. */
+/* proven-equivalent at the canonical 32-bit crypto width (TRUE) or proven-distinct (FALSE). */
 fn ws_edge_proven(i: u32, j: u32) -> u32 @export {
     if i >= WG_NODES { return WG_NULL }
     if j >= WG_NODES { return WG_NULL }
@@ -98,12 +98,11 @@ fn ws_edge_proven(i: u32, j: u32) -> u32 @export {
     return WG_FALSE
 }
 
-/* THE WOVEN CENSUS: tally every undirected strand of the spiderweb by its six-state proof-status.  out -> three
- * u32 (LE): [ALL (universal theorems), BOTH (conditional strands), FALSE (refuted)].  III's whole primitive web,
- * typed.  The ALL count is the number of universal equivalences holding the weave together. */
+/* THE WOVEN CENSUS: tally every undirected strand by its six-state proof-status.  out -> three u32 (LE):
+ * [ALL (universal theorems), BOTH (width-conditional strands), FALSE (refuted)]. */
 fn ws_weave_census(out: u64) -> i32 @export {
-    let mut n_all  : u32 = 0u32
-    let mut n_both : u32 = 0u32
+    let mut n_all   : u32 = 0u32
+    let mut n_both  : u32 = 0u32
     let mut n_false : u32 = 0u32
     let mut i : u32 = 0u32
     while i < WG_NODES {
@@ -123,7 +122,6 @@ fn ws_weave_census(out: u64) -> i32 @export {
     return 0i32
 }
 
-/* the count of universal equivalence strands (ALL-typed edges) -- the load-bearing theorems of the weave. */
 fn ws_weave_universal_count() -> u32 @export {
     let mut n_all : u32 = 0u32
     let mut i : u32 = 0u32
@@ -136,6 +134,20 @@ fn ws_weave_universal_count() -> u32 @export {
         i = i + 1u32
     }
     return n_all
+}
+
+/* INDEX primweb: confirm the weave's typed edges ARE primweb's named theorems -- the Ch optform strand (0,1)
+ * matches pw_sha_ch_optform, the Maj optform strand (2,3) matches pw_sha_maj_optform, and the rotation-duality
+ * strand (4,5) -- rotl(x,7) == rotr(x,25) -- matches pw_rot_duality(7).  Returns 1 iff the weave and primweb
+ * agree on all three (the graph is the typed index OF primweb's universe, not a parallel reinvention). */
+fn ws_strand_agrees_primweb() -> u8 @export {
+    if ws_edge_proven(0u32, 1u32) != WG_TRUE { return 0u8 }
+    if pw_sha_ch_optform() != 1u8 { return 0u8 }
+    if ws_edge_proven(2u32, 3u32) != WG_TRUE { return 0u8 }
+    if pw_sha_maj_optform() != 1u8 { return 0u8 }
+    if ws_edge_proven(4u32, 5u32) != WG_TRUE { return 0u8 }     /* rotl 7 == rotr 25 at w=32 */
+    if pw_rot_duality(7u64) != 1u8 { return 0u8 }               /* primweb's same theorem */
+    return 1u8
 }
 
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {

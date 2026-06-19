@@ -1,53 +1,56 @@
-/* 1790_weave_graph.iii -- THE WEAVE ITSELF: the six-state-typed proof-graph of III's primitives.
+/* 1790_weave_graph.iii -- THE WEAVE ITSELF: the six-state-typed proof-graph of III's REAL primitives.
  *
- * The weave as the founding chat defined it: nodes = primitive building-blocks as bitvector circuits; edges =
- * SAT-proven relations; SIX-STATE (logic6) types the PROOF STATUS of each strand.  Not the module graph (that
- * was a detour) -- the PRIMITIVES, and the meta-level proof-status of the relations between them.
+ * Nodes = the ACTUAL III crypto primitives as bv_bits circuits (SHA-2 Ch/Maj, the ChaCha/SHA/Blake2 rotation --
+ * the same circuits primweb proves and weave_blocks executes).  Edges = SAT-proven (bb_equal) relations.
+ * SIX-STATE (logic6) types each strand's PROOF STATUS.  This is the typed INDEX of primweb's primitive universe.
  *
- *   (1) the Ch cluster -- spec mux / optform / OR-mux -- are pairwise ALL (proven-equivalent for every width):
- *       three universal strands, the SHA-2 choice function dissolved into one node with three proven faces.
- *   (2) Maj spec == Maj carry-save is ALL (universal) -- the majority function's second face.
- *   (3) (a & 0xFF) == a is BOTH (CONDITIONAL): equivalent ONLY at width 8 (where 0xFF is the full mask),
- *       proven-distinct at 16/32 -- a width-conditional strand, six-state's paraconsistent middle, exactly the
- *       case logic6 exists to type without exploding.
- *   (4) distinct primitives (Ch vs Maj, a vs a&b) are FALSE -- refuted strands.
- *   (5) the woven census types the WHOLE web: 4 universal (ALL) + 1 conditional (BOTH) + 23 refuted (FALSE) = 28.
- * Exit 99 = III's primitives and the proven relations between them are ONE six-state-typed object -- the weave. */
+ *   (1) SHA-2 Ch (spec mux == optform) is ALL -- a universal theorem (bitwise, holds at every width).
+ *   (2) SHA-2 Maj (spec == carry-save) is ALL -- universal.
+ *   (3) the ROTATION DUALITY rotl(x,7) == rotr(x,25) is BOTH -- real but WIDTH-TIED: with the 32-bit crypto
+ *       constants (25 = 32-7) it holds at width 32 and is proven-distinct at width 64.  This IS the ChaCha-rotl
+ *       <-> SHA/Blake2-rotr cross-primitive connection -- the genuine conditional strand, not a manufactured one.
+ *   (4) the half-width rotation coincidence rotl(x,16) == rotr(x,16) is BOTH (holds at width 32 only).
+ *   (5) distinct primitives (Ch vs Maj) are FALSE.
+ *   (6) the weave INDEXES primweb: its typed edges ARE pw_sha_ch_optform / pw_sha_maj_optform / pw_rot_duality.
+ *   (7) the woven census types the whole web: 2 universal + 2 conditional + 24 refuted = 28.
+ * Exit 99 = III's REAL primitives and the proven relations between them are ONE six-state-typed object, indexing
+ * primweb -- the weave the founding chat specified, not a mechanism demo on toy nodes. */
 module corpus_1790
 
 extern @abi(c-msvc-x64) fn ws_edge_status(i: u32, j: u32) -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_edge_proven(i: u32, j: u32) -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_weave_universal_count() -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_weave_census(out: u64) -> i32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_strand_agrees_primweb() -> u8 from "weave_graph.iii"
 
 var CEN : [u32; 3]
 
 fn main() -> u64 {
-    /* (1) the Ch cluster -- three universal-equivalence strands (ALL = 5) */
-    if ws_edge_status(0u32, 1u32) != 5u32 { return 1u64 }
-    if ws_edge_status(0u32, 2u32) != 5u32 { return 2u64 }
-    if ws_edge_status(1u32, 2u32) != 5u32 { return 3u64 }
+    /* (1)(2) the SHA-2 structural laws -- universal (ALL = 5) */
+    if ws_edge_status(0u32, 1u32) != 5u32 { return 1u64 }       /* Ch spec == optform */
+    if ws_edge_status(2u32, 3u32) != 5u32 { return 2u64 }       /* Maj spec == carry-save */
 
-    /* (2) Maj's two faces -- universal (ALL) */
-    if ws_edge_status(3u32, 4u32) != 5u32 { return 4u64 }
+    /* (3)(4) the rotation strands -- width-conditional (BOTH = 3) */
+    if ws_edge_status(4u32, 5u32) != 3u32 { return 3u64 }       /* rotl 7 == rotr 25 @ w=32 only -- the duality */
+    if ws_edge_status(6u32, 7u32) != 3u32 { return 4u64 }       /* rotl 16 == rotr 16 @ w=32 only */
 
-    /* (3) the width-conditional strand -- BOTH (3): equal at w=8 only */
-    if ws_edge_status(5u32, 6u32) != 3u32 { return 5u64 }
+    /* (5) distinct primitives -- FALSE (2) */
+    if ws_edge_status(0u32, 2u32) != 2u32 { return 5u64 }       /* Ch vs Maj */
+    if ws_edge_status(4u32, 6u32) != 2u32 { return 6u64 }       /* rotl 7 vs rotl 16 */
 
-    /* (4) refuted strands -- FALSE (2) */
-    if ws_edge_status(6u32, 7u32) != 2u32 { return 6u64 }
-    if ws_edge_status(0u32, 3u32) != 2u32 { return 7u64 }       /* Ch vs Maj */
+    /* the single-width verdict: the rotation duality IS proven at the canonical 32-bit width (TRUE) */
+    if ws_edge_proven(4u32, 5u32) != 1u32 { return 7u64 }
+    if ws_edge_proven(0u32, 2u32) != 2u32 { return 8u64 }       /* Ch vs Maj distinct even at w=32 */
 
-    /* the single-width verdict types the Ch strand TRUE (1), the distinct one FALSE (2) */
-    if ws_edge_proven(0u32, 1u32) != 1u32 { return 8u64 }
-    if ws_edge_proven(0u32, 3u32) != 2u32 { return 9u64 }
+    /* (6) the weave is the typed INDEX of primweb -- its edges ARE primweb's named theorems */
+    if ws_strand_agrees_primweb() != 1u8 { return 9u64 }
 
-    /* (5) the whole web, typed: 4 universal, 1 conditional, 23 refuted (28 strands total) */
-    if ws_weave_universal_count() != 4u32 { return 10u64 }
+    /* (7) the whole web, typed: 2 universal, 2 conditional, 24 refuted (28 strands) */
+    if ws_weave_universal_count() != 2u32 { return 10u64 }
     ws_weave_census((&CEN as u64))
-    if CEN[0u64] != 4u32 { return 11u64 }                        /* ALL */
-    if CEN[1u64] != 1u32 { return 12u64 }                        /* BOTH */
-    if CEN[2u64] != 23u32 { return 13u64 }                       /* FALSE */
+    if CEN[0u64] != 2u32 { return 11u64 }                        /* ALL */
+    if CEN[1u64] != 2u32 { return 12u64 }                        /* BOTH */
+    if CEN[2u64] != 24u32 { return 13u64 }                       /* FALSE */
     if (CEN[0u64] + CEN[1u64] + CEN[2u64]) != 28u32 { return 14u64 }
 
     return 99u64

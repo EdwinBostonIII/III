@@ -5,9 +5,9 @@
  * (numera/weave_graph), lets bb_equal TYPE each by its six-state proof-status, and ADMITS the PROVEN strands --
  * universal (ALL) and conditional (BOTH) -- into the content-addressed commons.  Refuted strands are not kept.
  *
- *   (1) III fills the web: 5 proven strands admitted (4 universal Ch/Maj equivalences + 1 width-conditional)
+ *   (1) III fills the web: 4 proven strands admitted (2 universal SHA-2 Ch/Maj laws + 2 conditional rotation strands)
  *   (2) idempotent: re-filling admits nothing new (the strands are content-addressed)
- *   (3) the typed web persists -> wipe -> reloads byte-identical (5 strands, rolling root intact)
+ *   (3) the typed web persists -> wipe -> reloads byte-identical (4 strands, rolling root intact)
  * Exit 99 = the proof-graph of III's primitives is a self-filled, persistent, six-state-typed body -- the weave. */
 module corpus_1791
 
@@ -33,11 +33,11 @@ fn main() -> u64 {
     path[8u64] = 46u8   path[9u64] = 116u8  path[10u64] = 109u8 path[11u64] = 112u8
     path[12u64] = 0u8
 
-    /* (1) III fills its own spiderweb: 5 proven strands (4 ALL + 1 BOTH) */
-    if present_weave_graph() != 5u64 { return 1u64 }
+    /* (1) III fills its own spiderweb: 4 proven strands (2 universal SHA-2 laws + 2 conditional rotation strands) */
+    if present_weave_graph() != 4u64 { return 1u64 }
 
     /* (2) idempotent: re-filling admits nothing new */
-    if present_weave_graph() != 5u64 { return 2u64 }
+    if present_weave_graph() != 4u64 { return 2u64 }
 
     /* (3) the typed web persists + reloads byte-identical */
     let mut i : u64 = 0u64
@@ -45,8 +45,8 @@ fn main() -> u64 {
     if pres_commons_persist(cap, path as u64) != 0i32 { return 3u64 }
     pres_commons_reset()
     if pres_nlaw() != 0u64 { return 4u64 }
-    if pres_commons_reload(cap, path as u64) != 5i32 { return 5u64 }
-    if pres_nlaw() != 5u64 { return 6u64 }
+    if pres_commons_reload(cap, path as u64) != 4i32 { return 5u64 }
+    if pres_nlaw() != 4u64 { return 6u64 }
     i = 0u64
     while i < 32u64 { if pres_root_byte(i) != ROOTSNAP[i] { return 7u64 }  i = i + 1u64 }
 

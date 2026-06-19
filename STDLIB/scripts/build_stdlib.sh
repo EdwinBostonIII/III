@@ -805,6 +805,9 @@ MODULES=(
     # numera/weave_interfile -- THE REPOSITORY-LEVEL WEAVE: inter-file logic as proven mathematics; capability #1,
     # inter-file don't-care annihilation (a shared block's unused feature vanishes for a caller, proven sound).
     "numera/weave_interfile"
+    # numera/weave_forge -- THE AUTONOMOUS WEAVE FILLER: the GIL fills its own spiderweb (self-directed
+    # discovery+proof+cost-selection+naming, looping); composes invent + present + the cost-truth -- no island.
+    "numera/weave_forge"
     "numera/barrett"
     "numera/egraph"
     "numera/cost_lattice"

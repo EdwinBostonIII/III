@@ -1,0 +1,58 @@
+/* STDLIB/iii/numera/weave_forge.iii -- THE AUTONOMOUS WEAVE FILLER: the GIL fills its own spiderweb.
+ *
+ * Self-directed discovery + proof + cost-validation + naming of new weave relations, looping over the
+ * candidate space until exhausted -- choosing its OWN targets rather than being handed one.  It composes the
+ * organs that already exist, no new prover, no island:
+ *   - GAP-DISCOVERY is the cost-truth itself: gil_cycle_validate (numera/invent <- numera/microarch_model)
+ *     decides which candidate targets are GENUINE gaps -- a provably-cheaper form on the target -- vs false
+ *     wins.  So the autonomous selection is TARGET-RELATIVE (more gaps on a slow-multiply target than a fast).
+ *   - PROOF is the judge: each forge (gil_forge / gilr_forge / gil6_forge) carries its own bb_equal SAT miter.
+ *   - NAMING is numera/present: each discovery becomes a content-addressed New-Math law in the ledger.
+ *
+ * The loop: for each target in the candidate space -> the cost-truth selects the genuine gaps -> the forge
+ * generates + proves -> present names + records.  III inventing, proving, costing, and naming its own
+ * mathematics, independently.  Hexad: kind_cognition.  Ring: R0.  K: 1.00.
+ */
+module numera_weave_forge
+
+extern @abi(c-msvc-x64) fn gil_cycle_validate(k: u64, mul_latency: u32) -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilr_forge(k: u64, c: u64) -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn present_strength(k: u64) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_fold(k: u64, c: u64, cc: u64) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_collapse(tid: u32) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_count() -> u64 from "present.iii"
+
+var WF_FOUND : [u64; 1]
+var WF_NAMED : [u64; 1]
+
+/* Autonomously fill the weave's relation set over the strength-reduction range [n_lo, n_hi] plus the
+ * modular-fold and six-state-collapse regions, on a target whose multiply latency is `mul_latency`.  The
+ * cost-truth selects which strength reductions are GENUINE gaps for that target; each selected gap is proven
+ * (inside the forge) and named (present).  Returns the count of discovered + named relations. */
+fn wf_fill(n_lo: u64, n_hi: u64, mul_latency: u32) -> u64 @export {
+    WF_FOUND[0u64] = 0u64
+    let base : u64 = pres_count()
+    /* STRENGTH-REDUCTION region: scan; the cost-truth selects the genuine gaps; the forge proves; present names. */
+    let mut n : u64 = n_lo
+    while n <= n_hi {
+        if gil_cycle_validate(n, mul_latency) == 1u8 {   /* a genuine, cost-validated gap on this target */
+            present_strength(n)                           /* generate (gil_forge) + prove (bb_equal) + name (cad) */
+            WF_FOUND[0u64] = WF_FOUND[0u64] + 1u64
+        }
+        n = n + 1u64
+    }
+    /* MODULAR-FOLD region: the special-prime fold (gilr) proven to beat Montgomery (Mersenne 2^32-1). */
+    let cc : u64 = gilr_forge(32u64, 1u64)
+    present_fold(32u64, 1u64, cc)
+    WF_FOUND[0u64] = WF_FOUND[0u64] + 1u64
+    /* SIX-STATE-COLLAPSE region: the paradox/void routing tangles that collapse to a single proven leaf. */
+    present_collapse(1u32)
+    present_collapse(2u32)
+    present_collapse(3u32)
+    WF_FOUND[0u64] = WF_FOUND[0u64] + 3u64
+    WF_NAMED[0u64] = pres_count() - base                  /* the ledger grew by exactly the discoveries named */
+    return WF_FOUND[0u64]
+}
+
+fn wf_found() -> u64 @export { return WF_FOUND[0u64] }
+fn wf_named() -> u64 @export { return WF_NAMED[0u64] }

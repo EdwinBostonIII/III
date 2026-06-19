@@ -1411,6 +1411,8 @@ declare -A EXPECTED=(
     [1762_weave_arx]=99
     # REPOSITORY-LEVEL WEAVE #1: inter-file don't-care annihilation -- a shared block's unused feature vanishes, proven.
     [1763_weave_interfile]=99
+    # THE AUTONOMOUS WEAVE FILLER: the GIL fills its own spiderweb (cost-truth-selected, proven, named, looping).
+    [1764_weave_forge]=99
 )
 
 PASS=0

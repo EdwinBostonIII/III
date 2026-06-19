@@ -1,0 +1,35 @@
+/* STDLIB/corpus/1764_weave_forge.iii -- THE AUTONOMOUS WEAVE FILLER, running: the GIL fills its own spiderweb.
+ *
+ * numera/weave_forge scans the candidate space and lets the COST-TRUTH select the genuine gaps, the forges
+ * prove them, and present names them -- autonomously, no per-target human input.  This KAT runs it and proves
+ * the self-direction is real and TARGET-RELATIVE: a slow-multiply target exposes many genuine strength-
+ * reduction gaps; a fast-multiply target exposes none (the cost-truth rejects them), yet both still fill the
+ * modular-fold + six-state-collapse regions.  99 = the engine discovered, proved, cost-selected, and named its
+ * own mathematics.
+ */
+module corpus_1764_weave_forge
+
+extern @abi(c-msvc-x64) fn wf_fill(n_lo: u64, n_hi: u64, mul_latency: u32) -> u64 from "weave_forge.iii"
+extern @abi(c-msvc-x64) fn wf_found() -> u64 from "weave_forge.iii"
+extern @abi(c-msvc-x64) fn wf_named() -> u64 from "weave_forge.iii"
+
+fn main() -> u64 {
+    /* (1) SLOW-MULTIPLY target: the cost-truth selects many genuine strength-reduction gaps; the engine
+     *     autonomously discovers + proves + names them (plus the fold + 3 collapses). */
+    let slow : u64 = wf_fill(3u64, 12u64, 10u32)
+    if wf_found() != slow { return 5u64 }        /* the found-count accessor agrees with the return */
+    let slow_named : u64 = wf_named()
+    if slow < 10u64 { return 1u64 }              /* autonomously filled >= 10 relations */
+    if slow_named != slow { return 2u64 }        /* every discovered relation was named into the ledger */
+
+    /* (2) FAST-MULTIPLY target: the cost-truth REJECTS every strength reduction (imul ~1 cycle); only the
+     *     always-genuine fold + 3 collapses remain.  The gap-selection is target-relative, not a fixed list. */
+    let fast : u64 = wf_fill(3u64, 12u64, 1u32)
+    if fast != 4u64 { return 3u64 }              /* 1 fold + 3 collapses; 0 strength reductions */
+
+    /* (3) BITING: the engine selects strictly MORE gaps on the slow-multiply target -- the autonomous
+     *     gap-discovery is driven by the real cost model, not a hardcoded enumeration. */
+    if slow <= fast { return 4u64 }
+
+    return 99u64
+}

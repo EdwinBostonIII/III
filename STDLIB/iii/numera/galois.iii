@@ -54,6 +54,8 @@
 module numera_galois
 
 extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+/* THE UNIFIED WEAVE: the canonical constant-time GF(2^8) multiply (galois's branchy gf8_mul melts onto it). */
+extern @abi(c-msvc-x64) fn wvb_gf8_mul(a: u32, b: u32) -> u32 from "weave_blocks.iii"
 extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
@@ -96,19 +98,9 @@ fn gf8_add(a: u32, b: u32) -> u32 @export {
  * (low 8 bits of 0x11B; the x^8 term drops via the 8-bit mask) when the
  * pre-shift bit-7 was set. Total -- every input maps to a defined element. */
 fn gf8_mul(a: u32, b: u32) -> u32 @export {
-    let mut x : u32 = a & 0xFFu32
-    let mut y : u32 = b & 0xFFu32
-    let mut r : u32 = 0u32
-    let mut i : u32 = 0u32
-    while i < 8u32 {
-        if (y & 1u32) == 1u32 { r = r ^ x }
-        let hi : u32 = x & 0x80u32
-        x = (x << 1u32) & 0xFFu32
-        if hi == 0x80u32 { x = x ^ 0x1Bu32 }
-        y = y >> 1u32
-        i = i + 1u32
-    }
-    return r & 0xFFu32
+    /* THE UNIFIED WEAVE: route onto the canonical CONSTANT-TIME GF(2^8) multiply (numera/weave_blocks) -- the
+     * old branchy form had two data-dependent branches; this UPGRADES galois to constant-time, byte-identical. */
+    return wvb_gf8_mul(a, b)
 }
 
 /* base^exp via square-and-multiply. exp>0 is an UNSIGNED u32 compare (Trap 3

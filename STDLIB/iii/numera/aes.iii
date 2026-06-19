@@ -40,6 +40,9 @@
 
 module numera_aes
 
+/* THE UNIFIED WEAVE: AES's GF(2^8) multiply melts into the canonical constant-time form in weave_blocks. */
+extern @abi(c-msvc-x64) fn wvb_gf8_mul(a: u32, b: u32) -> u32 from "weave_blocks.iii"
+
 const AES_BLOCK_BYTES : u32 = 16u32
 const AES128_ROUNDS   : u32 = 10u32
 const AES128_KEY_BYTES : u32 = 16u32
@@ -82,25 +85,9 @@ fn aes_xtime(b: u32) -> u32 {
 }
 
 fn aes_gmul(a: u32, b: u32) -> u32 {
-    let mut p : u32 = 0u32
-    let mut a_cur : u32 = a & 0xFFu32
-    let mut b_cur : u32 = b & 0xFFu32
-    let mut counter : u32 = 0u32
-    while counter < 8u32 {
-        /* [W3.18] branch-free accumulate (p ^= a_cur iff bit0(b_cur), via mask --
-         * same idiom as aes_xtime's [E2-AES-1]).  NOTE the only live caller is the
-         * GF(2^8) inverse during S-BOX TABLE INIT (all 256 public bytes; MixColumns
-         * uses xtime chains directly), so the old branch was never a secret channel
-         * -- this is hygiene + robustness for future callers.  The real deferred
-         * constant-time item remains the S-box table lookups (APOTHEOSIS S.5). */
-        let bit : u32 = b_cur & 1u32
-        let m : u32 = 0u32 - bit
-        p = p ^ (a_cur & m)
-        a_cur = aes_xtime(a_cur)
-        b_cur = b_cur >> 1u32
-        counter = counter + 1u32
-    }
-    return p & 0xFFu32
+    /* THE UNIFIED WEAVE: AES's GF(2^8) multiply IS the canonical constant-time form in numera/weave_blocks
+     * (this was its source); now single-sourced there.  aes_xtime stays -- MixColumns uses xtime chains. */
+    return wvb_gf8_mul(a, b)
 }
 
 /* ---- S-box, inverse S-box, Rcon initialisation ----

@@ -66,3 +66,28 @@ fn wvb_ch32(e: u32, f: u32, g: u32) -> u32 @export { return (e & f) ^ ((~e) & g)
 fn wvb_maj32(a: u32, b: u32, c: u32) -> u32 @export { return (a & b) ^ (a & c) ^ (b & c) }
 fn wvb_ch64(e: u64, f: u64, g: u64) -> u64 @export { return (e & f) ^ ((~e) & g) }
 fn wvb_maj64(a: u64, b: u64, c: u64) -> u64 @export { return (a & b) ^ (a & c) ^ (b & c) }
+
+/* GF(2^8) carryless multiply-reduce (AES poly 0x1B) -- THE canonical CONSTANT-TIME form (branch-free masks,
+ * no data-dependent branch).  AES's aes_gmul and galois's branchy gf8_mul compute the SAME product; both melt
+ * into this -- and routing galois onto it UPGRADES galois to constant-time (a real side-channel fix), result
+ * byte-identical. */
+fn wvb_gf8_xtime(x: u32) -> u32 {
+    let hi : u32 = (x >> 7u32) & 1u32           /* high bit */
+    let m  : u32 = 0u32 - hi                     /* mask: all-ones iff hi set */
+    return ((x << 1u32) ^ (0x1Bu32 & m)) & 0xFFu32   /* branch-free reduction */
+}
+fn wvb_gf8_mul(a: u32, b: u32) -> u32 @export {
+    let mut p  : u32 = 0u32
+    let mut ac : u32 = a & 0xFFu32
+    let mut bc : u32 = b & 0xFFu32
+    let mut i  : u32 = 0u32
+    while i < 8u32 {
+        let bit : u32 = bc & 1u32
+        let m   : u32 = 0u32 - bit                /* branch-free accumulate */
+        p  = p ^ (ac & m)
+        ac = wvb_gf8_xtime(ac)
+        bc = bc >> 1u32
+        i  = i + 1u32
+    }
+    return p & 0xFFu32
+}

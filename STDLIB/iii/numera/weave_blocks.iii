@@ -91,3 +91,25 @@ fn wvb_gf8_mul(a: u32, b: u32) -> u32 @export {
     }
     return p & 0xFFu32
 }
+
+/* 64x64 -> 128 schoolbook multiply -- the one wide-multiply the whole arithmetic tower shares (fixed-point,
+ * q128, bigint, Montgomery limbs all bottom out here).  Splits both operands into 32-bit halves, forms the four
+ * 32x32 partial products, and assembles the full 128-bit product into WVB_M128 = [lo, hi].  Pure u64 ops, no
+ * intrinsic -- the borrowed inline copies (fix_mul/q128_mul/bigint_mul_u64) dissolve into this. */
+var WVB_M128 : [u64; 2]
+fn wvb_mul64(a: u64, b: u64) -> i32 @export {
+    let a_hi : u64 = (a >> 32u64) & 0xFFFFFFFFu64
+    let a_lo : u64 = a & 0xFFFFFFFFu64
+    let b_hi : u64 = (b >> 32u64) & 0xFFFFFFFFu64
+    let b_lo : u64 = b & 0xFFFFFFFFu64
+    let ll : u64 = a_lo * b_lo
+    let lh : u64 = a_lo * b_hi
+    let hl : u64 = a_hi * b_lo
+    let hh : u64 = a_hi * b_hi
+    let mid : u64 = (ll >> 32u64) + (lh & 0xFFFFFFFFu64) + (hl & 0xFFFFFFFFu64)
+    WVB_M128[0u64] = (ll & 0xFFFFFFFFu64) | ((mid & 0xFFFFFFFFu64) << 32u64)          /* lo */
+    WVB_M128[1u64] = hh + (lh >> 32u64) + (hl >> 32u64) + (mid >> 32u64)              /* hi */
+    return 0i32
+}
+fn wvb_mul64_lo() -> u64 @export { return WVB_M128[0u64] }
+fn wvb_mul64_hi() -> u64 @export { return WVB_M128[1u64] }

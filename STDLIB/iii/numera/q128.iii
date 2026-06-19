@@ -212,6 +212,11 @@ fn q128_shr(a: u64, n: u32) -> u64 @export {
 /* --- Multiplication: 128 = 64x64 + 64x64 + 64x64 + 64x64 partial,
  * keeping only the low 128 bits (mod 2^128). --- */
 
+/* THE UNIFIED WEAVE: the 64x64->128 schoolbook lives ONCE in numera/weave_blocks. */
+extern @abi(c-msvc-x64) fn wvb_mul64(a: u64, b: u64) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_lo() -> u64 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_hi() -> u64 from "weave_blocks.iii"
+
 fn q128_mul(a: u64, b: u64) -> u64 @export {
     let sa : u32 = q128_slot_of(a)
     let sb : u32 = q128_slot_of(b)
@@ -221,33 +226,15 @@ fn q128_mul(a: u64, b: u64) -> u64 @export {
     let a_lo : u64 = Q128_LO[sa]
     let b_hi : u64 = Q128_HI[sb]
     let b_lo : u64 = Q128_LO[sb]
-    /* result_hi = a_lo*b_hi + a_hi*b_lo + (a_lo*b_lo >> 64)  (mod 2^64)
-     * result_lo = a_lo * b_lo  (mod 2^64)
-     * The (a_lo*b_lo >> 64) requires expanding via 32x32 partial products. */
-    let alo_lo : u64 = a_lo & 0xFFFFFFFFu64
-    let alo_shifted : u64 = a_lo >> 32u64
-    let alo_hi : u64 = alo_shifted & 0xFFFFFFFFu64
-    let blo_lo : u64 = b_lo & 0xFFFFFFFFu64
-    let blo_shifted : u64 = b_lo >> 32u64
-    let blo_hi : u64 = blo_shifted & 0xFFFFFFFFu64
-    let p_lolo : u64 = alo_lo * blo_lo
-    let p_lohi : u64 = alo_lo * blo_hi
-    let p_hilo : u64 = alo_hi * blo_lo
-    let p_hihi : u64 = alo_hi * blo_hi
-    let p_lolo_top : u64 = p_lolo >> 32u64
-    let p_lohi_lo : u64 = p_lohi & 0xFFFFFFFFu64
-    let p_hilo_lo : u64 = p_hilo & 0xFFFFFFFFu64
-    let m1 : u64 = p_lolo_top + p_lohi_lo
-    let m2 : u64 = m1 + p_hilo_lo
-    let m_hi : u64 = m2 >> 32u64
-    let p_lohi_hi : u64 = p_lohi >> 32u64
-    let p_hilo_hi : u64 = p_hilo >> 32u64
-    let alo_blo_hi : u64 = p_hihi + p_lohi_hi + p_hilo_hi + m_hi
-    /* a_lo * b_lo high 64 bits */
+    /* THE UNIFIED WEAVE: a_lo*b_lo's FULL 128 bits come from wvb_mul64 (numera/weave_blocks) -- its high half
+     * IS the old hand-rolled alo_blo_hi, its low half IS result_lo.  The two cross terms add on top
+     * (a_hi*b_hi*2^128 vanishes mod 2^128).  Byte-identical to the old inline schoolbook. */
+    wvb_mul64(a_lo, b_lo)
+    let alo_blo_hi : u64 = wvb_mul64_hi()
+    let result_lo : u64 = wvb_mul64_lo()
     let cross_a : u64 = a_lo * b_hi
     let cross_b : u64 = a_hi * b_lo
     let result_hi : u64 = alo_blo_hi + cross_a + cross_b
-    let result_lo : u64 = a_lo * b_lo
     return q128_from_pair(result_hi, result_lo)
 }
 

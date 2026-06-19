@@ -41,35 +41,16 @@ fn fix_sub(a: u64, b: u64) -> u64 @export {
     return a - b
 }
 
-/* mul: (a * b) >> 32, with a 128-bit intermediate computed via
- * schoolbook 64x64 split.  Each line keeps at most one parenthesised
- * subexpression to keep iiis-2's parser happy. */
+/* THE UNIFIED WEAVE: the 64x64->128 schoolbook lives ONCE in numera/weave_blocks. */
+extern @abi(c-msvc-x64) fn wvb_mul64(a: u64, b: u64) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_lo() -> u64 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_hi() -> u64 from "weave_blocks.iii"
+
+/* mul: (a * b) >> 32 -- the fixed-point window (bits 32..95) of the full 128-bit product computed by the
+ * weave's wvb_mul64.  Byte-identical: ((hi & 0xFFFFFFFF) << 32) | (lo >> 32). */
 fn fix_mul(a: u64, b: u64) -> u64 @export {
-    let a_shifted : u64 = a >> 32u64
-    let a_hi : u64 = a_shifted & 0xFFFFFFFFu64
-    let a_lo : u64 = a & 0xFFFFFFFFu64
-    let b_shifted : u64 = b >> 32u64
-    let b_hi : u64 = b_shifted & 0xFFFFFFFFu64
-    let b_lo : u64 = b & 0xFFFFFFFFu64
-    let pp_lo_lo : u64 = a_lo * b_lo
-    let pp_lo_hi : u64 = a_lo * b_hi
-    let pp_hi_lo : u64 = a_hi * b_lo
-    let pp_hi_hi : u64 = a_hi * b_hi
-    let lo_lo_high : u64 = pp_lo_lo >> 32u64
-    let pp_lo_hi_lo : u64 = pp_lo_hi & 0xFFFFFFFFu64
-    let pp_hi_lo_lo : u64 = pp_hi_lo & 0xFFFFFFFFu64
-    let mid_a : u64 = lo_lo_high + pp_lo_hi_lo
-    let mid : u64 = mid_a + pp_hi_lo_lo
-    let mid_high : u64 = mid >> 32u64
-    let mid_low : u64 = mid & 0xFFFFFFFFu64
-    let pp_lo_hi_hi : u64 = pp_lo_hi >> 32u64
-    let pp_hi_lo_hi : u64 = pp_hi_lo >> 32u64
-    let pp_hi_hi_lo : u64 = pp_hi_hi & 0xFFFFFFFFu64
-    let s1 : u64 = pp_hi_hi_lo + pp_lo_hi_hi
-    let s2 : u64 = s1 + pp_hi_lo_hi
-    let bits_64_95 : u64 = s2 + mid_high
-    let high_part : u64 = bits_64_95 << 32u64
-    return high_part | mid_low
+    wvb_mul64(a, b)
+    return ((wvb_mul64_hi() & 0xFFFFFFFFu64) << 32u64) | (wvb_mul64_lo() >> 32u64)
 }
 
 fn fix_div(a: u64, b: u64) -> u64 @export {

@@ -1419,6 +1419,8 @@ declare -A EXPECTED=(
     [1766_weave_invent]=99
     # III SPEAKS THE WEAVE: the Rosetta layer renders + content-address-NAMES the Ch/Maj forms the weave-forge invented.
     [1767_present_weave]=99
+    # ONE SUBSTRATE, TOTAL: every weave_blocks primitive class (rot64/ch64/maj64/gf8-mul/arx-mix) == bb_eval of its bv circuit, byte-identical.
+    [1768_weave_totality]=99
 )
 
 PASS=0

@@ -1,0 +1,63 @@
+/* 1805_weave_emit.iii -- GENESIS EMITS THE USABLE CIRCUIT: not just the cost, the actual minimal form to consume.
+ *
+ * ws_synth tells the weave the minimal COST of a specification; ws_emit hands back the actual minimal CIRCUIT (its
+ * root node), rebuilt from the stored recipe -- so the rest of III can USE the invented math, not merely know how
+ * cheap it is.  This is the bridge from "the weave knows" to "the weave provides".
+ *
+ *   (1) after ws_synth populates the Commons, ws_emit(sig) rebuilds the minimal circuit for Ch and Maj.
+ *   (2) the emitted circuit IS the target function: bb_signature(root) == the target signature (semantics correct).
+ *   (3) the emitted circuit IS minimal: bb_node_gate_count(root) == the synth/recall cost (no bloat re-introduced).
+ *   (4) a signature the weave never realised yields the WG_GSENT sentinel (the guard is real, not vacuous).
+ * Exit 99 = genesis output is a correct, minimal, ready-to-use circuit -- new math III can actually consume. */
+module corpus_1805
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_gate_count(root: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_synth(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_emit(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+fn ref_maj(a: u32, b: u32, c: u32) -> u32 { return bb_intern_or(bb_intern_and(a, b), bb_intern_or(bb_intern_and(a, c), bb_intern_and(b, c))) }
+
+fn main() -> u64 {
+    /* derive the target signatures from reference circuits */
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let sig_ch : u64 = bb_signature(ref_ch_opt(a, b, c), 3u32)
+    let sig_maj : u64 = bb_signature(ref_maj(a, b, c), 3u32)
+
+    /* synth populates the n=3 Commons (the whole reachable fragment) */
+    let cost_ch : u32 = ws_synth(sig_ch, 3u32)
+    if cost_ch == WG_GSENT { return 11u64 }
+    let cost_maj : u32 = ws_recall(sig_maj)
+    if cost_maj == WG_GSENT { return 12u64 }
+
+    /* (1)+(2)+(3) emit Ch: a real circuit, == the target function, at the minimal cost */
+    let root_ch : u32 = ws_emit(sig_ch, 3u32)
+    if root_ch == WG_GSENT { return 13u64 }
+    if bb_signature(root_ch, 3u32) != sig_ch { return 14u64 }
+    if bb_node_gate_count(root_ch) != cost_ch { return 15u64 }
+
+    /* emit Maj (this reopens the arena, invalidating root_ch -- already verified above) */
+    let root_maj : u32 = ws_emit(sig_maj, 3u32)
+    if root_maj == WG_GSENT { return 16u64 }
+    if bb_signature(root_maj, 3u32) != sig_maj { return 17u64 }
+    if bb_node_gate_count(root_maj) != cost_maj { return 18u64 }
+
+    /* (4) a signature outside the realised space (>8 bits for 3 vars) yields the sentinel -- the guard is real */
+    if ws_emit(0x1FFu64, 3u32) != WG_GSENT { return 19u64 }
+
+    return 99u64
+}

@@ -623,6 +623,19 @@ fn ws_synth(target: u64, nvars: u32) -> u32 @export {
     return ws_recall(target)
 }
 
+/* EMIT the minimal circuit for a target the weave has ALREADY realised (call ws_synth or ws_saturate for this nvars
+ * first -- after which the whole reachable fragment is in the Commons).  Opens a fresh arena and rebuilds the stored
+ * minimal recipe, returning its ROOT node id -- the invented circuit, ready to USE (read its signature / cost /
+ * structure in THIS arena, before any further bb_reset).  Returns WG_GSENT (not a valid node id) if the target is not
+ * realised.  This is what turns genesis from "tells you the cost" into "gives you the circuit" -- new math the rest
+ * of III can actually consume. */
+fn ws_emit(target: u64, nvars: u32) -> u32 @export {
+    let idx : u32 = ws_gen_find(target)
+    if idx == WG_GSENT { return WG_GSENT }
+    ws_arena_begin(nvars)
+    return ws_build_one(idx)
+}
+
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     let p : *u8 = (base + off) as *u8
     p[0u64] = (v & 0xFFu32) as u8

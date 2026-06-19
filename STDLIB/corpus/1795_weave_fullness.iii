@@ -1,0 +1,42 @@
+/* 1795_weave_fullness.iii -- THE WEAVE IN ITS FULLNESS: both common denominators + broad primitive coverage.
+ *
+ * Taking the weave to its absolute fullness, system-harmonious and complementary: beyond the SHA-2/rotation core,
+ * the weave now expresses BOTH kinds of common denominator the founding chat named, and covers more primitive
+ * families (Keccak, the ChaCha/Blake2 ARX core) -- each typed honestly.
+ *
+ *   (1) THE SECOND KIND OF COMMON DENOMINATOR (same RESULT, different ALGORITHM): 5*x naive (x+x+x+x+x, four
+ *       adds) is PROVEN equal to the fold ((x<<2)+x, one add); the naive algorithm costs 4 adds vs 1, so the
+ *       weave RETIRES it.  This is the mechanism that makes a primitive obsolete (Montgomery vanishes where a
+ *       cheaper fold provably wins) -- the kind (b) denominator, not just bitwise-equivalence.
+ *   (2) BROADER COVERAGE -- Keccak's chi is a REAL primitive but NOT SHA-2's Ch: the weave types the strand FALSE
+ *       (correctly separating related-but-distinct functions), while confirming chi does genuine mixing.
+ *   (3) THE CROSS-PRIMITIVE ARX CORE: the shared atom of ChaCha's quarter-round and Blake2's G-function is one
+ *       proven reversible bijection -- two borrowed names, one proven core (indexing primweb's pw_arx_atom).
+ * Exit 99 = the weave covers III's primitive universe in fullness: both denominators, multiple families, all
+ * typed by proof. */
+module corpus_1795
+
+extern @abi(c-msvc-x64) fn ws_secondkind_proven(w: u64) -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_secondkind_retires(w: u64) -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_secondkind_naive_cost(w: u64) -> u64 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_secondkind_fold_cost(w: u64) -> u64 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_chi_vs_ch_status() -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_chi_nontrivial() -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_arx_core_proven() -> u8 from "weave_graph.iii"
+
+fn main() -> u64 {
+    /* (1) the second kind of common denominator: same result, different algorithm, the costlier retired */
+    if ws_secondkind_proven(8u64) != 1u8 { return 1u64 }       /* 5x naive == 5x fold, proven for all x */
+    if ws_secondkind_naive_cost(8u64) != 4u64 { return 2u64 }  /* naive: four adds */
+    if ws_secondkind_fold_cost(8u64) != 1u64 { return 3u64 }   /* fold: one add */
+    if ws_secondkind_retires(8u64) != 1u8 { return 4u64 }      /* proven + cheaper -> the naive primitive is obsolete */
+
+    /* (2) broader coverage: Keccak chi is real, and correctly SEPARATED from SHA-2 Ch */
+    if ws_chi_vs_ch_status() != 2u32 { return 5u64 }           /* FALSE: chi is not Ch */
+    if ws_chi_nontrivial() != 1u8 { return 6u64 }              /* chi does genuine mixing (a real primitive) */
+
+    /* (3) the cross-primitive ARX core: ChaCha-QR and Blake2-G share one proven reversible atom */
+    if ws_arx_core_proven() != 1u8 { return 7u64 }
+
+    return 99u64
+}

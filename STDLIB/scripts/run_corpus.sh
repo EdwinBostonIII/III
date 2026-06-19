@@ -1473,6 +1473,8 @@ declare -A EXPECTED=(
     [1793_weave_i_bridge]=99
     # THE SELF-WEAVE ORACLE: III's architectural self-image earns its place -- ws_refactor_verdict folds would-cycle/redundant/safe into ONE six-valued verdict, more precise than the boolean lens (distinguishes redundant-in-cycle from new-cycle).
     [1794_weave_self_oracle]=99
+    # THE WEAVE IN FULLNESS: the SECOND kind of common denominator (5x naive==fold, same result/different algorithm, the costlier RETIRED); Keccak chi separated from SHA-Ch; the ChaCha-QR/Blake2-G ARX core proven (indexes primweb). Both denominators, multiple families.
+    [1795_weave_fullness]=99
 )
 
 PASS=0

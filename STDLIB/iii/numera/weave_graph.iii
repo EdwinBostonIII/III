@@ -36,12 +36,15 @@ extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_kind(kind: u32) -> u64 from "bv_bits.iii"
 /* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
 extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_rot_duality(k: u64) -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_arx_atom_invertible() -> u8 from "primweb.iii"
 
 const WG_NEITHER : u32 = 0u32
 const WG_TRUE    : u32 = 1u32
@@ -185,6 +188,79 @@ fn ws_strand_retires(i: u32, j: u32) -> u8 @export {
     if ws_node_cost(i, 32u64) == ws_node_cost(j, 32u64) { return 0u8 }
     return 1u8
 }
+
+/* ============================================================================================================
+ * THE SECOND KIND OF COMMON DENOMINATOR (the founding chat, D05 ~24517): where two primitives share not an
+ * operation-sequence but a RESULT computed by DIFFERENT ALGORITHMS, the weave proves them equivalent and selects
+ * the cheapest by the cost-truth, "which makes the loser obsolete."  This is the mechanism that genuinely RETIRES
+ * a primitive (Montgomery vanishes wherever a cheaper fold provably wins).
+ *
+ * Concrete strand (the strength-reduction instance, tractable in the SAT judge): 5*x by the naive algorithm
+ * (x+x+x+x+x, four adds) vs the strength-reduced algorithm ((x<<2)+x, one shift + one add).  SAME RESULT,
+ * DIFFERENT ALGORITHM.  Proven equal for all x; the naive form costs far more gates, so it is retired. */
+fn ws_mul5_naive(x: u32) -> u32 { return bb_add(bb_add(bb_add(bb_add(x, x), x), x), x) }   /* x+x+x+x+x */
+fn ws_mul5_fold(x: u32) -> u32 { return bb_add(bb_shl(x, 2u64), x) }                        /* (x<<2)+x */
+
+/* 1 iff the two algorithms compute the same result for all x at width w (the equivalence that licenses retirement). */
+fn ws_secondkind_proven(w: u64) -> u8 @export {
+    bb_reset(w)
+    let x : u32 = bb_var(0u32)
+    return bb_equal(ws_mul5_naive(x), ws_mul5_fold(x))
+}
+/* the cost-truth for arithmetic strands is the ADD-operation count (EK_ADD=8) -- the adder is the dominant cost
+ * of a multiply-by-constant, and bb_add is one structural node, so this counts algorithm steps faithfully. */
+fn ws_secondkind_naive_cost(w: u64) -> u64 @export {
+    bb_reset(w)
+    let x : u32 = bb_var(0u32)
+    ws_mul5_naive(x)
+    return bb_count_kind(8u32)
+}
+fn ws_secondkind_fold_cost(w: u64) -> u64 @export {
+    bb_reset(w)
+    let x : u32 = bb_var(0u32)
+    ws_mul5_fold(x)
+    return bb_count_kind(8u32)
+}
+/* 1 iff the second-kind strand RETIRES the naive algorithm: proven-equivalent AND the fold is strictly cheaper.
+ * The general/naive primitive is then obsolete for this result -- the common-denominator dissolution. */
+fn ws_secondkind_retires(w: u64) -> u8 @export {
+    if ws_secondkind_proven(w) != 1u8 { return 0u8 }
+    if ws_secondkind_fold_cost(w) < ws_secondkind_naive_cost(w) { return 1u8 }
+    return 0u8
+}
+
+/* BROADER PRIMITIVE COVERAGE: the weave also holds families beyond SHA-2/rotation, typed honestly.
+ *
+ * Keccak's chi (one lane): out = a XOR ((NOT b) AND c) -- a REAL 3-input primitive.  It is NOT SHA-2's Ch
+ * (a&b)^(~a&c): the weave types the strand FALSE, correctly SEPARATING related-but-distinct primitives (the
+ * melt-plan's note that chi shares the bv substrate but is a different Boolean function).  Returns the status. */
+fn ws_chi_vs_ch_status() -> u32 @export {
+    bb_reset(32u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let chi : u32 = bb_xor(a, bb_and(bb_not(b), c))                      /* Keccak chi lane */
+    let ch  : u32 = bb_xor(bb_and(a, b), bb_and(bb_not(a), c))           /* SHA-2 Ch */
+    if bb_equal(chi, ch) == 1u8 { return WG_ALL }
+    return WG_FALSE                                                       /* distinct -- the weave separates them */
+}
+/* but chi IS a genuine member of the web: it is its own thing, and it is invertible-structured (a permutation in
+ * Keccak).  1 iff chi is non-trivially distinct from the identity on its first input (it does real mixing). */
+fn ws_chi_nontrivial() -> u8 @export {
+    bb_reset(32u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let chi : u32 = bb_xor(a, bb_and(bb_not(b), c))
+    if bb_equal(chi, a) == 1u8 { return 0u8 }                            /* chi == a everywhere?  no -> it mixes */
+    return 1u8
+}
+
+/* THE CROSS-PRIMITIVE ARX CORE: the shared atom of ChaCha's quarter-round and Blake2's G-function -- d' =
+ * rotl(d ^ (a+b), 16) -- is a single proven bijection (numera/primweb's pw_arx_atom_invertible).  The weave
+ * INDEXES that theorem: 1 iff the ARX core every ChaCha/Blake2 mix factors through is the proven reversible atom.
+ * This is the deepest cross-primitive strand: two borrowed names, one proven core. */
+fn ws_arx_core_proven() -> u8 @export { return pw_arx_atom_invertible() }
 
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     let p : *u8 = (base + off) as *u8

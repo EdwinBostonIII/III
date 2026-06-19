@@ -1324,6 +1324,12 @@ MODULES=(
     # nous/bayes_search -- Bayesian-optimal budget allocation: the posterior expected yield (bayes_exact)
     # shifts the optimum and the regret is exact.  (PHASE IV COMPLETE.)
     "nous/bayes_search"
+    # numera/weave_self -- THE SIX-STATE SELF-WEAVE: III's own connection-structure (omnia/self_atlas) lifted
+    # into the six-valued bounded lattice (numera/logic6).  Each component-to-component dependency is one logic6
+    # value (Belnap: TRUE/FALSE/BOTH/NEITHER + NULL void), and the adjacency obeys proven laws -- transpose ==
+    # the logic6 involution, ripple == transitivity.  The weave as the math the system understands ITSELF in.
+    # Composes self_atlas + logic6 (no island); compiler-unreferenced -> LIBNATIVE; appended last (BSS-neutral).
+    "numera/weave_self"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

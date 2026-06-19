@@ -1455,6 +1455,8 @@ declare -A EXPECTED=(
     [1784_weave_conjecture3]=99
     # CONJECTURES JOIN THE COMMONS: III's 12 self-discovered identities accumulate (content-addressed) beside the 13 named laws -> the complete body of 25, persisted + reloaded byte-identical.
     [1785_weave_conjecture_commons]=99
+    # THE SIX-STATE SELF-WEAVE: III's own connection-structure lifted into logic6 -- each dependency a Belnap value (TRUE/FALSE/BOTH/NEITHER/NULL); transpose == involution, ripple == transitivity. The math the system understands ITSELF in.
+    [1786_weave_self]=99
 )
 
 PASS=0

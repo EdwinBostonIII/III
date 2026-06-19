@@ -1,0 +1,155 @@
+/* STDLIB/iii/numera/weave_self.iii -- THE WEAVE AS THE SIX-STATE MATH THE SYSTEM UNDERSTANDS ITSELF IN.
+ *
+ * This is the weave's true object: not borrowed crypto primitives, but III's OWN structure.  omnia/self_atlas
+ * holds III's native self-model -- a directed graph of its components (modules) and their dependency connections
+ * -- but it is TWO-VALUED: an edge exists or it does not, every query a boolean BFS.  That is the compromise.
+ *
+ * weave_self LIFTS that self-model into the six-valued bounded lattice (numera/logic6).  The relation between
+ * any two components a,b becomes ONE logic6 value, and the encoding is not invented -- it IS Belnap, exactly:
+ *     t = "a depends on b" (satlas_reaches a->b) ;  f = "b depends on a" (satlas_reaches b->a)
+ *       t=1 f=0  -> TRUE     a cleanly depends on b (a directed edge, forward)
+ *       t=0 f=1  -> FALSE    b depends on a (the edge is the reverse -- "a->b" is false)
+ *       t=1 f=1  -> BOTH     mutual dependency: a and b sit in one cycle (a PARACONSISTENT relation, and it
+ *                            does not explode -- ex-falso fails, the cycle is a first-class citizen, not an error)
+ *       t=0 f=0  -> NEITHER  the two are independent (a genuine structural gap between them)
+ *     a or b does not exist        -> NULL   (the void / bottom: missing component cannot masquerade as a relation)
+ *
+ * Because the encoding IS Belnap, III's own connection-structure inherits the lattice's mathematics, PROVABLY:
+ *   - TRANSPOSE = INVOLUTION:  C(a,b) == NOT C(b,a)  for every pair -- reversing a connection is the logic6
+ *     order-reversing negation (TRUE<->FALSE swap direction; BOTH and NEITHER are self-dual, as a cycle and an
+ *     independence are direction-symmetric).  The system's adjacency is a self-dual six-valued relation.
+ *   - COMPOSITION = TRANSITIVITY:  (a reaches b) AND (b reaches c) => (a reaches c), the t-bit closure -- the
+ *     ripple law: a change to c reaches a through every composed connection.
+ *
+ * So the weave is the six-state algebra in which III represents, reasons about, and (via the discovery engines)
+ * grows the understanding of its own interconnectivity.  Composes omnia/self_atlas + numera/logic6 -- no island;
+ * it is the unification of the self-model and the six-valued logic that were each built but never joined.
+ *
+ * Hexad: kind_cognition (the self-understanding) + kind_essence (a faithful self-image).  Ring: R0.  K: 1.00.
+ * Deterministic: pure functions of the loaded self-model; no IO, no clock, no learning.
+ */
+module numera_weave_self
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_reaches(src: u32, tgt: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_in_cycle(n: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_depends_count(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+
+/* the six states (matching numera/logic6's codes exactly). */
+const WS_NEITHER : u32 = 0u32
+const WS_TRUE    : u32 = 1u32
+const WS_FALSE   : u32 = 2u32
+const WS_BOTH    : u32 = 3u32
+const WS_NULL    : u32 = 4u32
+const WS_ALL     : u32 = 5u32
+
+/* THE SIX-STATE CONNECTION: the relation between components a and b as one logic6 value (Belnap-encoded). */
+fn ws_connect(a: u32, b: u32) -> u32 @export {
+    let n : u32 = satlas_node_count()
+    if a >= n { return WS_NULL }                 /* the void: a does not exist */
+    if b >= n { return WS_NULL }
+    let t : u32 = satlas_reaches(a, b) as u32     /* a depends on b */
+    let f : u32 = satlas_reaches(b, a) as u32     /* b depends on a */
+    return t | (f << 1u32)                        /* NEITHER / TRUE / FALSE / BOTH */
+}
+
+/* a component's own state: ALL if it is a universal integrator (reaches every other existing component -- the
+ * supremum, the hub the whole system rests on); BOTH if it is cyclic; else TRUE (a live, acyclic node). */
+fn ws_node_state(a: u32) -> u32 @export {
+    let n : u32 = satlas_node_count()
+    if a >= n { return WS_NULL }
+    if n > 1u32 { if satlas_depends_count(a) == (n - 1u32) { return WS_ALL } }   /* depends on all others */
+    if satlas_in_cycle(a) == 1u8 { return WS_BOTH }
+    return WS_TRUE
+}
+
+/* THE TRANSPOSE LAW: for every in-range pair, reversing a connection IS the logic6 involution -- C(a,b)==NOT
+ * C(b,a).  Returns 1 iff III's whole self-model obeys it (a self-dual six-valued adjacency). */
+fn ws_transpose_law() -> u8 @export {
+    let n : u32 = satlas_node_count()
+    let mut a : u32 = 0u32
+    while a < n {
+        let mut b : u32 = 0u32
+        while b < n {
+            if ws_connect(a, b) != l6_not(ws_connect(b, a)) { return 0u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* THE RIPPLE / COMPOSITION LAW: dependency is transitive -- if a reaches b and b reaches c then a reaches c.
+ * Expressed on the six-state relation's truth bit: ws_reaches(x,y) = the t-bit of C(x,y) (TRUE or BOTH).
+ * Returns 1 iff transitivity holds across every triple (the change-ripple closes through composed connections). */
+fn ws_reaches_bit(a: u32, b: u32) -> u8 {
+    let v : u32 = ws_connect(a, b)
+    if v == WS_TRUE { return 1u8 }
+    if v == WS_BOTH { return 1u8 }
+    return 0u8
+}
+fn ws_compose_sound() -> u8 @export {
+    let n : u32 = satlas_node_count()
+    let mut a : u32 = 0u32
+    while a < n {
+        let mut b : u32 = 0u32
+        while b < n {
+            if ws_reaches_bit(a, b) == 1u8 {
+                let mut c : u32 = 0u32
+                while c < n {
+                    if ws_reaches_bit(b, c) == 1u8 {
+                        if ws_reaches_bit(a, c) != 1u8 { return 0u8 }    /* a->b->c but not a->c: transitivity broken */
+                    }
+                    c = c + 1u32
+                }
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* THE SIX-STATE SELF-CENSUS: tally how many ordered pairs sit in each of the six states -- III's profile of its
+ * own interconnectivity (how much is independent, directed, cyclic, void).  out6 -> six u32 counts (LE),
+ * indexed [NEITHER, TRUE, FALSE, BOTH, NULL, ALL]; the ALL slot counts universal-integrator nodes (diagonal). */
+fn ws_census(out6: u64) -> i32 @export {
+    let p : *u8 = out6 as *u8
+    let mut s : u64 = 0u64
+    while s < 24u64 { p[s] = 0u8 ; s = s + 1u64 }
+    let n : u32 = satlas_node_count()
+    let mut cnt0 : u32 = 0u32  let mut cnt1 : u32 = 0u32  let mut cnt2 : u32 = 0u32
+    let mut cnt3 : u32 = 0u32  let mut cnt5 : u32 = 0u32
+    let mut a : u32 = 0u32
+    while a < n {
+        if ws_node_state(a) == WS_ALL { cnt5 = cnt5 + 1u32 }
+        let mut b : u32 = 0u32
+        while b < n {
+            let v : u32 = ws_connect(a, b)
+            if v == WS_NEITHER { cnt0 = cnt0 + 1u32 }
+            if v == WS_TRUE { cnt1 = cnt1 + 1u32 }
+            if v == WS_FALSE { cnt2 = cnt2 + 1u32 }
+            if v == WS_BOTH { cnt3 = cnt3 + 1u32 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    ws_put_u32le(out6, 0u64, cnt0)
+    ws_put_u32le(out6, 4u64, cnt1)
+    ws_put_u32le(out6, 8u64, cnt2)
+    ws_put_u32le(out6, 12u64, cnt3)
+    ws_put_u32le(out6, 16u64, 0u32)        /* NULL: no void pairs among in-range a,b */
+    ws_put_u32le(out6, 20u64, cnt5)
+    return 0i32
+}
+fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}

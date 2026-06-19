@@ -1,0 +1,67 @@
+/* 1786_weave_self.iii -- THE WEAVE IS THE SIX-STATE MATH III UNDERSTANDS ITSELF IN.
+ *
+ * Build a small self-model of components and their dependency connections, then read it through the six-valued
+ * weave: every connection is a logic6 value, and III's own structure obeys the lattice's PROVEN laws.
+ *
+ * Self-model (edges = "depends on"):  a->b ;  b<->c (a cycle) ;  d->c ;  h->{a,b,c,d} (a universal integrator)
+ *   nodes: a=0  b=1  c=2  d=3  h=4
+ *
+ *   (1) C(a,b)=TRUE (a cleanly depends on b);  C(b,a)=FALSE (the reverse);  C(b,c)=BOTH (mutual cycle, paraconsistent);
+ *       C(a,d)=NEITHER (independent);  C(a, missing)=NULL (the void)
+ *   (2) node states: h=ALL (depends on every other component -- the supremum hub); b=BOTH (cyclic); a=TRUE (acyclic live)
+ *   (3) TRANSPOSE LAW: C(a,b) == NOT C(b,a) for every pair -- the adjacency is a self-dual six-valued relation
+ *   (4) RIPPLE/COMPOSITION LAW: dependency is transitive (a->b->c => a->c) -- the change-ripple closes
+ *   (5) the six-state self-census tallies exactly one universal integrator (h)
+ * Exit 99 = III represents + reasons about its own interconnectivity in six-state mathematics, laws proven. */
+module corpus_1786
+
+extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn ws_connect(a: u32, b: u32) -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_node_state(a: u32) -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_transpose_law() -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_compose_sound() -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_census(out6: u64) -> i32 from "weave_self.iii"
+
+var CENSUS : [u32; 6]
+
+fn build_self_model() -> i32 {
+    satlas_reset()
+    satlas_link(("a" as u64), 1u64, ("b" as u64), 1u64)     /* a depends on b */
+    satlas_link(("b" as u64), 1u64, ("c" as u64), 1u64)     /* b depends on c */
+    satlas_link(("c" as u64), 1u64, ("b" as u64), 1u64)     /* c depends on b -> b<->c cycle */
+    satlas_link(("d" as u64), 1u64, ("c" as u64), 1u64)     /* d depends on c */
+    satlas_link(("h" as u64), 1u64, ("a" as u64), 1u64)     /* h depends on a,b,c,d -> the integrator */
+    satlas_link(("h" as u64), 1u64, ("b" as u64), 1u64)
+    satlas_link(("h" as u64), 1u64, ("c" as u64), 1u64)
+    satlas_link(("h" as u64), 1u64, ("d" as u64), 1u64)
+    return 0i32
+}
+
+fn main() -> u64 {
+    build_self_model()
+
+    /* (1) connection states (a=0 b=1 c=2 d=3 h=4) */
+    if ws_connect(0u32, 1u32) != 1u32 { return 1u64 }      /* C(a,b) = TRUE */
+    if ws_connect(1u32, 0u32) != 2u32 { return 2u64 }      /* C(b,a) = FALSE (reverse) */
+    if ws_connect(1u32, 2u32) != 3u32 { return 3u64 }      /* C(b,c) = BOTH (cycle) */
+    if ws_connect(0u32, 3u32) != 0u32 { return 4u64 }      /* C(a,d) = NEITHER (independent) */
+    if ws_connect(0u32, 99u32) != 4u32 { return 5u64 }     /* C(a, void) = NULL */
+
+    /* (2) node states */
+    if ws_node_state(4u32) != 5u32 { return 6u64 }         /* h = ALL (universal integrator) */
+    if ws_node_state(1u32) != 3u32 { return 7u64 }         /* b = BOTH (cyclic) */
+    if ws_node_state(0u32) != 1u32 { return 8u64 }         /* a = TRUE (acyclic live) */
+
+    /* (3) the transpose law: reversing a connection IS the logic6 involution */
+    if ws_transpose_law() != 1u8 { return 9u64 }
+
+    /* (4) the ripple/composition law: dependency is transitive */
+    if ws_compose_sound() != 1u8 { return 10u64 }
+
+    /* (5) the self-census: exactly one universal integrator */
+    ws_census((&CENSUS as u64))
+    if CENSUS[5u64] != 1u32 { return 11u64 }
+
+    return 99u64
+}

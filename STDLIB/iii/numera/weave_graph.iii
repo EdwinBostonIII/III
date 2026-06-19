@@ -43,6 +43,7 @@ extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_count_kind(kind: u32) -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_has_coupling() -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
 /* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
 extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
@@ -344,6 +345,94 @@ fn ws_toffoli_agrees_primweb() -> u8 @export {
     if ws_toffoli_is_nand() != 1u8 { return 0u8 }
     if pw_toffoli_is_nand() != 1u8 { return 0u8 }
     return 1u8
+}
+
+/* ============================================================================================================
+ * COMBINATORIAL EXPLOSION SOLVED (for the bit-independent fragment): the canonical signature turns the conjecture
+ * engine's O(n^2) pairwise-SAT comparison into O(n) signature BUCKETING.  Two forms are the same function iff
+ * they hash to the same signature -- so discovering ALL identities among n forms is: compute n signatures
+ * (n cheap bb_evals), bucket; every collision IS a proven identity, with ZERO SAT clauses.  The space being
+ * searched is no longer the INFINITE set of circuits but the BOUNDED set of FUNCTIONS (2^(2^nvars) = 256 for
+ * 3 inputs) -- the same bounded, navigable universe the reversible Toffoli group generates.  The explosion is
+ * not searched faster; it is dissolved into a lookup. */
+
+const WS_LIB_N : u32 = 7u32
+/* a library of bit-independent 3-input forms -- deliberately containing equal-but-different shapes. */
+fn ws_lib_form(idx: u32, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }                 /* Ch spec */
+    if idx == 1u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }                         /* Ch optform  (== 0) */
+    if idx == 2u32 { return bb_or(bb_and(a, b), bb_and(bb_not(a), c)) }                  /* Ch OR-mux   (== 0) */
+    if idx == 3u32 { return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }   /* Maj spec */
+    if idx == 4u32 { return bb_xor(bb_and(a, b), bb_and(c, bb_xor(a, b))) }              /* Maj carry  (== 3) */
+    if idx == 5u32 { return bb_xor(bb_xor(a, b), c) }                                    /* parity a^b^c (distinct) */
+    return bb_and(bb_and(a, b), c)                                                        /* a&b&c (distinct) */
+}
+
+var WS_SIGTAB : [u64; 8]
+
+/* THE MELTED CONJECTURE: count the identity-pairs among the library by SIGNATURE -- n bb_evals + byte compares,
+ * ZERO SAT.  Every pair sharing a signature is a proven identity.  This is the conjecture engine's O(n^2) pairwise
+ * SAT (gild3 judges 190 pairs for its 20-form library) collapsed to O(n) signature extraction + bucketing. */
+fn ws_sig_conjecture_count() -> u32 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let mut i : u32 = 0u32
+    while i < WS_LIB_N {
+        WS_SIGTAB[i as u64] = bb_signature(ws_lib_form(i, a, b, c), 3u32)     /* one eval per form */
+        i = i + 1u32
+    }
+    let mut pairs : u32 = 0u32
+    i = 0u32
+    while i < WS_LIB_N {
+        let mut j : u32 = i + 1u32
+        while j < WS_LIB_N {
+            if WS_SIGTAB[i as u64] == WS_SIGTAB[j as u64] { pairs = pairs + 1u32 }   /* byte compare, no SAT */
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return pairs
+}
+
+/* THE OLD WAY (for the cross-check): the SAME identities by O(n^2) pairwise SAT (bb_equal) -- sound but heavy.
+ * The melted count must AGREE with this (soundness), at a fraction of the cost (no clauses). */
+fn ws_sat_conjecture_count() -> u32 @export {
+    let mut pairs : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < WS_LIB_N {
+        let mut j : u32 = i + 1u32
+        while j < WS_LIB_N {
+            bb_reset(8u64)
+            let a : u32 = bb_var(0u32)
+            let b : u32 = bb_var(1u32)
+            let c : u32 = bb_var(2u32)
+            if bb_equal(ws_lib_form(i, a, b, c), ws_lib_form(j, a, b, c)) == 1u8 { pairs = pairs + 1u32 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return pairs
+}
+
+/* the BOUNDED function space: the count of DISTINCT functions among the library forms (distinct signatures) --
+ * the search space is the finite set of functions, not the infinite set of circuits.  Returns distinct count. */
+fn ws_lib_distinct_functions() -> u32 @export {
+    ws_sig_conjecture_count()                                  /* (re)fills WS_SIGTAB */
+    let mut distinct : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < WS_LIB_N {
+        let mut seen : u8 = 0u8
+        let mut j : u32 = 0u32
+        while j < i {
+            if WS_SIGTAB[j as u64] == WS_SIGTAB[i as u64] { seen = 1u8 }
+            j = j + 1u32
+        }
+        if seen == 0u8 { distinct = distinct + 1u32 }
+        i = i + 1u32
+    }
+    return distinct
 }
 
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {

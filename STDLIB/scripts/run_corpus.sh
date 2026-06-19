@@ -1479,6 +1479,8 @@ declare -A EXPECTED=(
     [1796_weave_melt]=99
     # THE UNIVERSAL REVERSIBLE PRIMITIVE in the melted weave: the Toffoli/CCNOT third output (c^(a&b)) is bit-independent, so its reversibility (self-inverse) + universality (Toffoli(a,b,1)==NAND) are SIGNATURE facts (no SAT); agrees with primweb's SAT proofs.
     [1797_weave_toffoli]=99
+    # COMBINATORIAL EXPLOSION SOLVED (bit-independent fragment): the signature collapses the conjecture engine's O(n^2) pairwise SAT into O(n) signature bucketing -- finds the SAME identities (sound vs SAT) with ZERO clauses; the function space is BOUNDED not infinite.
+    [1798_weave_explosion]=99
 )
 
 PASS=0

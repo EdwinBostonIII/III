@@ -1,0 +1,36 @@
+/* 1798_weave_explosion.iii -- COMBINATORIAL EXPLOSION SOLVED (the bit-independent fragment), demonstrated.
+ *
+ * The conjecture engine's cost is O(n^2) pairwise SAT comparisons (gild3 judges 190 pairs for 20 forms).  The
+ * canonical SIGNATURE dissolves that explosion: two forms are the same function iff they hash to the same
+ * signature, so finding ALL identities among n forms is n cheap bb_evals + bucketing -- ZERO SAT clauses.  The
+ * space searched is no longer the INFINITE set of circuits but the BOUNDED set of FUNCTIONS (256 for 3 inputs),
+ * the same finite, navigable universe the reversible Toffoli group generates.
+ *
+ * Library: 7 bit-independent 3-input forms -- {Ch spec, Ch optform, Ch OR-mux} (one function), {Maj spec, Maj
+ * carry-save} (one function), parity, and3.  4 distinct functions; 4 identity-pairs (3 in the Ch bucket + 1 Maj).
+ *
+ *   (1) the MELTED conjecture finds 4 identities by signature bucketing -- O(n), ZERO SAT
+ *   (2) the OLD pairwise SAT finds the SAME 4 (soundness: the melt agrees with the heavy judge)
+ *   (3) the function space is BOUNDED: 7 forms collapse to 4 distinct functions -- the search is finite, not infinite
+ * Exit 99 = the combinatorial explosion of pairwise judging is dissolved into a lookup, sound against SAT. */
+module corpus_1798
+
+extern @abi(c-msvc-x64) fn ws_sig_conjecture_count() -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_sat_conjecture_count() -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_lib_distinct_functions() -> u32 from "weave_graph.iii"
+
+fn main() -> u64 {
+    /* (1) the explosion dissolved: identities by SIGNATURE (n evals + bucketing, no SAT) */
+    let sig : u32 = ws_sig_conjecture_count()
+    if sig != 4u32 { return 1u64 }
+
+    /* (2) SOUND: the same identities by O(n^2) pairwise SAT -- the melt agrees with the heavy judge */
+    let sat : u32 = ws_sat_conjecture_count()
+    if sat != 4u32 { return 2u64 }
+    if sig != sat { return 3u64 }                  /* the melt is exactly as correct as SAT, for free */
+
+    /* (3) the BOUNDED function space: 7 forms -> 4 distinct functions (finite, not infinite circuit search) */
+    if ws_lib_distinct_functions() != 4u32 { return 4u64 }
+
+    return 99u64
+}

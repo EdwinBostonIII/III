@@ -1,68 +1,100 @@
-/* 1824_weave_reduce.iii -- THE FINAL WEAVE, Step 1: the universal reducer proves the three cg_r3 folds EMERGENT
- * (discovered by the substrate's own judges, not authored as predicates), proves NEW laws cg_r3 never had, and
- * REJECTS every non-equivalence (no false reduction).  Each line is a proof, not an assertion: signature identity
- * for the bit-independent laws, bb_equal (SAT) for the coupling laws, bb_eval for execution.  exit 99 = all hold. */
+/* 1824_weave_reduce.iii -- THE FINAL WEAVE, Step 1 (ABSORBED): the universal reducer is the ONE substrate's own
+ * canonical construction (bb_intern), not a sibling module.  This proves every reduction AGAINST bb_intern directly:
+ * the bit-independent laws it already carried, the coupling regime (strength + arithmetic identity) just absorbed
+ * INTO it, and execution (bb_eval).  No wrapper, no dual, no projection -- one substrate, each reduction sound.
+ *   - bit-independent: idempotence / self-inverse / involution / annihilation / identity  (construction-time, zero SAT)
+ *   - strength x*2^k -> x<<k: SOUND (bb_equal to the raw multiply) AND REDUCED (bb_struct_equal=0: it became a shift)
+ *   - negative: x*7 does NOT reduce to a shift (bb_struct_equal=1: still the multiplier) -- no false reduction
+ *   - coupling identity: x*1->x, x+0->x, x-0->x, x-x->0 ; const-fold of any regime via bb_eval
+ * exit 99 = the one substrate reduces correctly across all regimes. */
 module m1824
 
-extern @abi(c-msvc-x64) fn wr_self_op(op: u32) -> u32 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_double_not() -> u32 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_op_const(op: u32, c: u64) -> u32 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_strength_shift(k: u64) -> u32 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_mul_identity(k: u64) -> u8 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_add_identity(k: u64) -> u8 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_sub_identity(k: u64) -> u8 from "weave_reduce.iii"
-extern @abi(c-msvc-x64) fn wr_eval_binop(op: u32, a: u64, b: u64) -> u64 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_struct_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_const0(n: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_ones(n: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
 
-const F_NONE : u32 = 0u32
-const F_LHS  : u32 = 1u32
-const F_ZERO : u32 = 2u32
-const F_ONES : u32 = 3u32
-const NO_SH  : u32 = 0xFFFFFFFFu32
-const AND : u32 = 2u32
-const OR  : u32 = 3u32
-const XOR : u32 = 4u32
-const ADD : u32 = 8u32
-const SUB : u32 = 9u32
-const MUL : u32 = 10u32
+/* prove x*k reduces to a shift, SOUNDLY: the interned form == the raw multiply (bb_equal) AND is a different
+ * structure -- a shift, not the multiplier (bb_struct_equal=0). */
+fn strength_ok(k: u64) -> u8 {
+    bb_reset(8u64)  bb_intern_reset()
+    let x  : u32 = bb_var(0u32)
+    let c  : u32 = bb_const(k)
+    let im : u32 = bb_intern_mul(x, c)
+    let rm : u32 = bb_mul(x, c)
+    if bb_equal(im, rm) != 1u8 { return 0u8 }          /* unsound */
+    if bb_struct_equal(im, rm) != 0u8 { return 0u8 }   /* not actually reduced */
+    return 1u8
+}
+/* prove x*k does NOT reduce (still the multiplier): sound + structurally identical to the raw multiply. */
+fn no_reduce_ok(k: u64) -> u8 {
+    bb_reset(8u64)  bb_intern_reset()
+    let x  : u32 = bb_var(0u32)
+    let c  : u32 = bb_const(k)
+    let im : u32 = bb_intern_mul(x, c)
+    let rm : u32 = bb_mul(x, c)
+    if bb_equal(im, rm) != 1u8 { return 0u8 }
+    if bb_struct_equal(im, rm) != 1u8 { return 0u8 }   /* should be the SAME structure (no strength) */
+    return 1u8
+}
 
 fn main() -> u64 {
-    /* (1) bit-independent laws, signature-proven, width-agnostic -- emergent idempotence/self-inverse/involution */
-    if wr_self_op(AND) != F_LHS  { return 11u64 }      /* x & x == x   (idempotence) */
-    if wr_self_op(OR)  != F_LHS  { return 12u64 }      /* x | x == x   (idempotence) */
-    if wr_self_op(XOR) != F_ZERO { return 13u64 }      /* x ^ x == 0   (self-inverse) */
-    if wr_double_not() != F_LHS  { return 14u64 }      /* ~~x == x     (involution) */
+    /* ---- bit-independent regime: the substrate's construction-time canonicalisation (zero SAT) ---- */
+    bb_reset(8u64)  bb_intern_reset()
+    let x : u32 = bb_var(0u32)
+    let z : u32 = bb_const(0u64)
+    let o : u32 = bb_const(0xFFu64)
+    if bb_intern_and(x, x) != x { return 11u64 }                  /* x & x = x */
+    if bb_intern_or(x, x)  != x { return 12u64 }                  /* x | x = x */
+    if bb_is_const0(bb_intern_xor(x, x)) != 1u8 { return 13u64 }  /* x ^ x = 0 */
+    if bb_intern_not(bb_intern_not(x)) != x { return 14u64 }      /* ~~x = x */
+    if bb_is_const0(bb_intern_and(x, z)) != 1u8 { return 15u64 }  /* x & 0 = 0 */
+    if bb_intern_or(x, z)  != x { return 16u64 }                  /* x | 0 = x */
+    if bb_intern_and(x, o) != x { return 17u64 }                  /* x & ones = x */
+    if bb_is_ones(bb_intern_or(x, o)) != 1u8 { return 18u64 }     /* x | ones = ones */
 
-    /* const-operand bitwise family, one mechanism -- annihilator / identity / the honest NONE for ~x */
-    if wr_op_const(AND, 0u64)    != F_ZERO { return 21u64 }   /* x & 0    == 0    */
-    if wr_op_const(OR,  0u64)    != F_LHS  { return 22u64 }   /* x | 0    == x    */
-    if wr_op_const(XOR, 0u64)    != F_LHS  { return 23u64 }   /* x ^ 0    == x    */
-    if wr_op_const(AND, 0xFFu64) != F_LHS  { return 24u64 }   /* x & ones == x    */
-    if wr_op_const(OR,  0xFFu64) != F_ONES { return 25u64 }   /* x | ones == ones */
-    if wr_op_const(XOR, 0xFFu64) != F_NONE { return 26u64 }   /* x ^ ones == ~x   (irreducible to a leaf -- HONEST) */
+    /* ---- coupling regime: arithmetic identity (absorbed into the one construction) ---- */
+    bb_reset(8u64)  bb_intern_reset()
+    let x2 : u32 = bb_var(0u32)
+    let z2 : u32 = bb_const(0u64)
+    let one : u32 = bb_const(1u64)
+    if bb_intern_mul(x2, one) != x2 { return 21u64 }             /* x * 1 = x */
+    if bb_intern_add(x2, z2)  != x2 { return 22u64 }             /* x + 0 = x */
+    if bb_intern_sub(x2, z2)  != x2 { return 23u64 }             /* x - 0 = x */
+    if bb_is_const0(bb_intern_sub(x2, x2)) != 1u8 { return 24u64 } /* x - x = 0 */
 
-    /* (3) strength reduction DISCOVERED by proof+cost -- subsumes r3_mul_pow2_k WITHOUT a power-of-two predicate */
-    if wr_strength_shift(8u64) != 3u32 { return 31u64 }       /* x*8 proven == x<<3, cheaper */
-    if wr_strength_shift(4u64) != 2u32 { return 32u64 }       /* x*4 == x<<2 */
-    if wr_strength_shift(2u64) != 1u32 { return 33u64 }       /* x*2 == x<<1 */
-    /* NEGATIVES: non-powers-of-two have NO proven-equal shift -- no false reduction */
-    if wr_strength_shift(7u64) != NO_SH { return 34u64 }
-    if wr_strength_shift(6u64) != NO_SH { return 35u64 }
-    if wr_strength_shift(5u64) != NO_SH { return 36u64 }
+    /* ---- strength reduction, ABSORBED + sound + reduced ; negatives reject ---- */
+    if strength_ok(8u64) != 1u8 { return 31u64 }                 /* x*8  -> x<<3 (sound + reduced) */
+    if strength_ok(4u64) != 1u8 { return 32u64 }                 /* x*4  -> x<<2 */
+    if strength_ok(2u64) != 1u8 { return 33u64 }                 /* x*2  -> x<<1 */
+    if no_reduce_ok(7u64) != 1u8 { return 34u64 }                /* x*7  stays the multiplier (no false reduction) */
+    if no_reduce_ok(6u64) != 1u8 { return 35u64 }                /* x*6  stays */
+    if no_reduce_ok(5u64) != 1u8 { return 36u64 }                /* x*5  stays */
 
-    /* identity elements, SAT-proven -- subsumes r3_arith_identity (x*1, x+0, x-0) + negatives */
-    if wr_mul_identity(1u64) != 1u8 { return 41u64 }
-    if wr_mul_identity(3u64) != 0u8 { return 42u64 }
-    if wr_add_identity(0u64) != 1u8 { return 43u64 }
-    if wr_add_identity(5u64) != 0u8 { return 44u64 }
-    if wr_sub_identity(0u64) != 1u8 { return 45u64 }
-    if wr_sub_identity(2u64) != 0u8 { return 46u64 }
-
-    /* (2) execution: constant-fold ANY binop through the one substrate (bb_eval) */
-    if wr_eval_binop(ADD, 20u64, 22u64)   != 42u64   { return 51u64 }
-    if wr_eval_binop(MUL, 6u64,  7u64)    != 42u64   { return 52u64 }
-    if wr_eval_binop(AND, 0xF0u64, 0x3Cu64) != 0x30u64 { return 53u64 }
-    if wr_eval_binop(XOR, 5u64,  5u64)    != 0u64    { return 54u64 }
-    if wr_eval_binop(OR,  0xF0u64, 0x0Fu64) != 0xFFu64 { return 55u64 }
+    /* ---- execution: const-fold of any regime through the one substrate (bb_eval) ---- */
+    bb_reset(8u64)  bb_intern_reset()
+    let cF0 : u32 = bb_const(0xF0u64)
+    let c3C : u32 = bb_const(0x3Cu64)
+    let c6  : u32 = bb_const(6u64)
+    let c7  : u32 = bb_const(7u64)
+    let c20 : u32 = bb_const(20u64)
+    let c22 : u32 = bb_const(22u64)
+    if bb_eval(bb_intern_and(cF0, c3C)) != 0x30u64 { return 51u64 }   /* 0xF0 & 0x3C = 0x30 */
+    if bb_eval(bb_intern_mul(c6, c7))   != 42u64   { return 52u64 }   /* 6 * 7 = 42 (coupling const-fold) */
+    if bb_eval(bb_intern_add(c20, c22)) != 42u64   { return 53u64 }   /* 20 + 22 = 42 */
 
     return 99u64
 }

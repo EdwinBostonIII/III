@@ -1370,11 +1370,10 @@ MODULES=(
     "numera/quine6"   # the six-state self-describing content-address (native-weave seal + behavioral-seed core) -- KAT 1815
     "numera/voice"    # Voice as a 3-effect system (Active/Middle/Passive) with EK_NULL evaporation -- KAT 1816
     "numera/tense"    # Tense as data lifetime (Aorist use-once / Perfect immutable / Present) -- KAT 1822
-    # THE FINAL WEAVE (Step 1): the universal expression reducer.  An optimization is the substrate ANSWERING by
-    # proof, not a predicate attributed to a function: bit-independent laws by truth-table signature (width-agnostic),
-    # strength/identity by bb_equal (SAT), execution by bb_eval.  The three cg_r3 folds become EMERGENT here, new
-    # laws appear, non-equivalences are rejected.  Composes numera/bv_bits ONLY -- the one substrate, no island.
-    "numera/weave_reduce"   # universal reducer; folds emergent + proof-carrying -- KAT 1824
+    # THE FINAL WEAVE (Step 1): the universal reducer is the ONE substrate's own canonical construction (bb_intern in
+    # numera/bv_bits), NOT a sibling module.  The coupling regime (strength x*2^k->x<<k + arithmetic identity) was
+    # ABSORBED into bv_bits' bb_intern_mul/add/sub; the bit-independent laws + const-fold it already carried.  No new
+    # module, no dual, no per-law logic -- one substrate, each reduction sound (proven once by bb_equal).  KAT 1824.
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

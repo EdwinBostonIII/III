@@ -17,6 +17,30 @@
 #define IOCTL_PCI_ENUM        0x22200Cu   /* read-only: derive the GPU facts from live PCI config space (CF8h/CFCh) */
 #define IOCTL_BEHAVIORAL_FP   0x222010u   /* read-only: the machine's behavioral fingerprint (quine6_kernel) */
 #define IOCTL_DESCENT_PROOF   0x222014u   /* read-only: verify a proof-carrying rung at Ring 0 (quine6_kernel) */
+#define IOCTL_VOICE_GATE      0x222018u   /* read-only: the capability-typed-effect decision (voice + crystal_cap) */
+
+/* Ring-0 capability-typed-effect decision: the gate mints the crystal capability from live hypervisor-present and
+   reports whether a proposed ACTIVE metal write realizes or evaporates -- WITHOUT writing.  The unbrickable-by-
+   construction property, observable: active-write realizes IFF bare metal (CAP_METAL held); passive read always. */
+static int probe_voice(HANDLE h)
+{
+    uint64_t out[4] = { 0, 0, 0, 0 };
+    DWORD ret = 0;
+    if (!DeviceIoControl(h, IOCTL_VOICE_GATE, NULL, 0, out, (DWORD)sizeof(out), &ret, NULL)) {
+        printf("  VOICE_GATE DeviceIoControl FAILED (err=%lu)\n", GetLastError()); return 1; }
+    uint64_t hv = out[0], caps = out[1], active = out[2], passive = out[3];
+    int expect_active = (hv == 0) ? 1 : 0;          /* realizes IFF bare metal */
+    int active_ok  = ((int)active == expect_active);
+    int passive_ok = ((int)passive == 1);           /* passive read always realizes */
+    printf("  Ring-0 capability-typed-effect: hv-present=%llu caps=0x%02llx  active-metal-write-realizes=%llu (expect %d) passive-read-realizes=%llu\n",
+           (unsigned long long)hv, (unsigned long long)caps, (unsigned long long)active, expect_active, (unsigned long long)passive);
+    if (active_ok && passive_ok) {
+        printf("    => the unsafe write's permissibility is DERIVED from the live crystal (voice + crystal_cap live; unbrickable-by-construction, observable).\n");
+        return 0;
+    }
+    printf("    => UNEXPECTED: the capability-typed-effect decision did not track the crystal.\n");
+    return 1;
+}
 
 /* Ring-0 proof-carrying descent: obtain a rung's proof from the kernel, then prove a VALID proof admits and a
    FORGED one is rejected -- in-kernel verification, content-address-bound to the rung. */
@@ -171,6 +195,8 @@ int main(void)
     probe_bfp(h);   /* Ring-0: the machine's behavioral fingerprint (quine6_kernel live) */
     printf("\n");
     probe_dp(h);    /* Ring-0: verify proof-carrying rungs (descent_proof live) */
+    printf("\n");
+    probe_voice(h); /* Ring-0: the capability-typed-effect decision (voice + crystal_cap live) */
     printf("\n");
     /* family=2 (F2 WriteMetal), tk=1, target 0x20000=SHARED / 0x1000=HSAVE-brick, hexad=728 (all-POS),
        wcap=0x200000 (WriteMetal right), dcap=0x800000 (Descend-only -> wrong for WriteMetal). */

@@ -1,0 +1,26 @@
+/* crystal_cap_kernel.iii -- the kernel (cg_r0) incarnation of the crystal capability mint (the rule).
+ *
+ * The cg_r0-safe subset of katabasis/crystal_cap: the pure mint RULE + lattice.  The gate reads hypervisor-present
+ * from its own CPUID (iii_kio_cpuid leaf 1, ECX[31]) and passes it here -- bare metal mints the full lattice
+ * (incl. CAP_METAL / CAP_HV), a hypervisor withholds METAL/HV.  No cpu_census/cpufeat dependency (which would pull
+ * the iii_cpuid helper); the live hypervisor-present fact comes from the gate's existing kernel CPUID shim.  This is
+ * the capability half of the capability-typed-effect: "you cannot hold the capability an unsafe write would
+ * consume."  Pure, NIH.  Ring R0. */
+module crystal_cap_kernel
+
+const CAP_READ   : u32 = 1u32
+const CAP_PCI    : u32 = 2u32
+const CAP_KERNEL : u32 = 4u32
+const CAP_METAL  : u32 = 8u32
+const CAP_HV     : u32 = 16u32
+
+/* the mint rule from the live hypervisor-present fact. */
+fn cck_for(hv_present: u64) -> u32 @export {
+    if hv_present == 0u64 { return CAP_READ | CAP_PCI | CAP_KERNEL | CAP_METAL | CAP_HV }   /* bare metal */
+    return CAP_READ | CAP_PCI | CAP_KERNEL                                                  /* virtualized */
+}
+
+fn cck_grants(caps: u32, bit: u32) -> u8 @export {
+    if (caps & bit) != 0u32 { return 1u8 }
+    return 0u8
+}

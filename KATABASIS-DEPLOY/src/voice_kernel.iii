@@ -1,0 +1,21 @@
+/* voice_kernel.iii -- the kernel (cg_r0) incarnation of the Voice effect calculus (per-op core).
+ *
+ * The cg_r0-safe subset of numera/voice: the per-operation admission (Active needs a capability, Middle needs an
+ * envelope, Passive always realizes; else VK_NULL = evaporated).  PURE -- no *u8, no arrays (the array-based
+ * residual-program pass is omitted; the gate gates one op at a time).  This is the effect half of the
+ * capability-typed-effect: the gate decides whether a proposed metal op realizes or EVAPORATES.  Ring R0. */
+module voice_kernel
+
+const VK_NULL : u32 = 0xFFFFFFFFu32     /* evaporated / unrepresentable */
+
+fn vk_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 @export {
+    if voice == 0u32 { return op_token }                                   /* PASSIVE: read, always realizes */
+    if voice == 1u32 { if has_env == 1u8 { return op_token }  return VK_NULL }   /* MIDDLE: needs an envelope */
+    if voice == 2u32 { if has_cap == 1u8 { return op_token }  return VK_NULL }   /* ACTIVE: needs a capability */
+    return VK_NULL
+}
+
+fn vk_realizes(voice: u32, has_cap: u8, has_env: u8) -> u8 @export {
+    if vk_admit(voice, 1u32, has_cap, has_env) == VK_NULL { return 0u8 }
+    return 1u8
+}

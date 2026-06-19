@@ -43,6 +43,10 @@ extern @abi(c-msvc-x64) fn bfpk_compute() -> u32 from "behavioral_fp_kernel.iii"
 /* --- proof-carrying descent (kernel incarnation; composes quine6_kernel) --- */
 extern @abi(c-msvc-x64) fn dpk_proof(action: u32, precond: u32, prior_proof: u32) -> u32 from "descent_proof_kernel.iii"
 extern @abi(c-msvc-x64) fn dpk_admit(action: u32, precond: u32, prior_proof: u32, claimed_proof: u32) -> u8 from "descent_proof_kernel.iii"
+/* --- the capability-typed-effect: Voice (effect) + crystal capability (kernel incarnations) --- */
+extern @abi(c-msvc-x64) fn vk_realizes(voice: u32, has_cap: u8, has_env: u8) -> u8 from "voice_kernel.iii"
+extern @abi(c-msvc-x64) fn cck_for(hv_present: u64) -> u32 from "crystal_cap_kernel.iii"
+extern @abi(c-msvc-x64) fn cck_grants(caps: u32, bit: u32) -> u8 from "crystal_cap_kernel.iii"
 
 /* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
@@ -103,6 +107,7 @@ fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
     if code == 0x22200Cu32 { need_out = 56u64 }      /* IOCTL_PCI_ENUM: 7 x u64 derived GPU facts, no input */
     if code == 0x222010u32 { need_out = 8u64 }       /* IOCTL_BEHAVIORAL_FP: 1 x u64 behavioral fingerprint, no input */
     if code == 0x222014u32 { need_out = 16u64 ; need_in = 32u64 }   /* IOCTL_DESCENT_PROOF: in 4 x u64, out 2 x u64 */
+    if code == 0x222018u32 { need_out = 32u64 }                     /* IOCTL_VOICE_GATE: 4 x u64 decision, no input */
     if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
     if buf == 0u64 { return 0u32 }
     if wdm_out_len(stk) < need_out { return 0u32 }
@@ -290,6 +295,27 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         (buf as *u64)[1u64] = dp_p as u64
         status = 0u64
         info   = 16u64
+    }
+    if code2 == 0x222018u32 {
+        /* IOCTL_VOICE_GATE (READ-ONLY): the capability-typed-effect DECISION at Ring 0 -- without performing any
+           write.  Read hypervisor-present (CPUID.1.ECX[31]) -> mint the crystal capability -> decide whether a
+           proposed ACTIVE metal write realizes (needs CAP_METAL) or EVAPORATES, and confirm a PASSIVE read always
+           realizes.  On bare metal CAP_METAL is minted and the write realizes; under a hypervisor it is withheld
+           and the write evaporates -- "you cannot hold the capability an unsafe write would consume."
+           out: [0]=hv_present [1]=minted caps [2]=active-metal-write-realizes [3]=passive-read-realizes. */
+        iii_kio_cpuid(1u32, 0u32, &G_CPUID as u64)
+        let vg_ecx     : u64 = G_CPUID[1u64] & 0xFFFFFFFFu64
+        let vg_hv      : u64 = (vg_ecx >> 31u64) & 1u64
+        let vg_caps    : u32 = cck_for(vg_hv)
+        let vg_metal   : u8  = cck_grants(vg_caps, 8u32)          /* CAP_METAL = 8 */
+        let vg_active  : u8  = vk_realizes(2u32, vg_metal, 0u8)   /* VOICE_ACTIVE: realizes iff CAP_METAL held */
+        let vg_passive : u8  = vk_realizes(0u32, 0u8, 0u8)        /* VOICE_PASSIVE: read always realizes */
+        (buf as *u64)[0u64] = vg_hv
+        (buf as *u64)[1u64] = vg_caps as u64
+        (buf as *u64)[2u64] = vg_active as u64
+        (buf as *u64)[3u64] = vg_passive as u64
+        status = 0u64
+        info   = 32u64
     }
     wdm_set_status(irp, status, info)
     iii_kio_complete_request(irp, 0u64)

@@ -1051,6 +1051,56 @@ fn gild_rotcompose(a: u64, b: u64) -> u8 @export {
 }
 
 /* ============================================================================================================
+ * AUTONOMOUS CONJECTURE: III generates its OWN candidate identities and discovers which hold -- no templates.
+ *
+ * Until here a human named each family and III proved it.  Here III itself enumerates a library of small 2-var
+ * Boolean expressions and tests EVERY distinct pair for equivalence; the SAT judge proves or refutes each, and
+ * the proven equivalences are identities III FOUND without being told them (e.g. nor==~a&~b and nand==~a|~b are
+ * De Morgan; xnor == a&b|~a&~b; ~a^b==xnor).  Sound by construction: bb_equal never reports a false equivalence,
+ * so every discovery is a true theorem.  This is invention proper -- conjecture, then proof. */
+fn gild_expr(idx: u32, a: u32, b: u32) -> u32 {
+    if idx == 0u32 { return a }
+    if idx == 1u32 { return b }
+    if idx == 2u32 { return bb_and(a, b) }
+    if idx == 3u32 { return bb_or(a, b) }
+    if idx == 4u32 { return bb_xor(a, b) }
+    if idx == 5u32 { return bb_not(bb_and(a, b)) }                                  /* nand */
+    if idx == 6u32 { return bb_not(bb_or(a, b)) }                                   /* nor  */
+    if idx == 7u32 { return bb_not(bb_xor(a, b)) }                                  /* xnor */
+    if idx == 8u32 { return bb_and(bb_not(a), bb_not(b)) }                          /* ~a&~b */
+    if idx == 9u32 { return bb_or(bb_not(a), bb_not(b)) }                           /* ~a|~b */
+    if idx == 10u32 { return bb_xor(bb_not(a), b) }                                 /* ~a^b  */
+    if idx == 11u32 { return bb_and(a, bb_not(b)) }                                 /* a&~b  */
+    if idx == 12u32 { return bb_or(a, bb_not(b)) }                                  /* a|~b  */
+    if idx == 13u32 { return bb_or(bb_and(a, b), bb_and(bb_not(a), bb_not(b))) }    /* a&b | ~a&~b */
+    return 0xFFFFFFFFu32
+}
+const GILC_N : u32 = 14u32
+
+var GILC_KCALLS : u64 = 0u64       /* SAT judgements made (every distinct pair) */
+
+/* test every distinct expression pair; return the count of PROVEN equivalences III discovered. */
+fn gild_conjecture_count() -> u64 @export {
+    GILC_KCALLS = 0u64
+    let mut found : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < GILC_N {
+        let mut j : u32 = i + 1u32
+        while j < GILC_N {
+            bb_reset(GILD_W)
+            let a : u32 = bb_var(0u32)
+            let b : u32 = bb_var(1u32)
+            GILC_KCALLS = GILC_KCALLS + 1u64
+            if bb_equal(gild_expr(i, a, b), gild_expr(j, a, b)) == 1u8 { found = found + 1u64 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return found
+}
+fn gild_conjecture_kcalls() -> u64 @export { return GILC_KCALLS }
+
+/* ============================================================================================================
  * THE WEAVE CENSUS -- III knows the full extent of the mathematics it has discovered + proven over its weave.
  *
  * A single number that IS the wealth of the self-discovered weave: every proven law across every family,

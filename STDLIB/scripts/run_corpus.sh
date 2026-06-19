@@ -1449,6 +1449,8 @@ declare -A EXPECTED=(
     [1781_weave_ratchet_live]=99
     # AXIOMS OF BOOLEAN ALGEBRA: III discovers+proves associativity, commutativity, complement, identity/annihilator, the consensus THEOREM, and the rotation-group composition law.
     [1782_weave_axioms]=99
+    # AUTONOMOUS CONJECTURE: III enumerates 14 expressions, generates + exhaustively judges all 91 pairs, and discovers 5 true identities (De Morgan x2 + the xnor cluster) with NO template -- invention proper.
+    [1783_weave_conjecture]=99
 )
 
 PASS=0

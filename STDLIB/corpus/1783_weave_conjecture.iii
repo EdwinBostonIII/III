@@ -1,0 +1,22 @@
+/* 1783_weave_conjecture.iii -- INVENTION PROPER: III GENERATES its own conjectures and discovers which hold.
+ *
+ * Every weave law so far was a family a human NAMED and III proved.  Here III itself enumerates a library of 14
+ * small 2-variable Boolean expressions and tests EVERY distinct pair (91 of them) for equivalence -- generating
+ * its own conjectures -- and the SAT judge proves or refutes each.  Sound by construction (bb_equal never
+ * reports a false equivalence), so each discovery is a true theorem found WITHOUT a template:
+ *   nand == ~a|~b  and  nor == ~a&~b   (De Morgan, rediscovered de-novo from raw enumeration)
+ *   ~(a^b) == ~a^b == (a&b)|(~a&~b)     (the xnor cluster)
+ * -> 5 proven identities discovered, from 91 exhaustively-judged conjectures.
+ * Exit 99 = III conjectured and proved its own laws, unassisted by any family template. */
+module corpus_1783
+
+extern @abi(c-msvc-x64) fn gild_conjecture_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_conjecture_kcalls() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    let found  : u64 = gild_conjecture_count()
+    let judged : u64 = gild_conjecture_kcalls()
+    if judged != 91u64 { return 1u64 }       /* exhaustive: every distinct pair was judged (no cherry-picking) */
+    if found != 5u64 { return 2u64 }         /* 5 true identities discovered from the raw enumeration */
+    return 99u64
+}

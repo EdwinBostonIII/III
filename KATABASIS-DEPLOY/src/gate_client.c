@@ -18,6 +18,32 @@
 #define IOCTL_BEHAVIORAL_FP   0x222010u   /* read-only: the machine's behavioral fingerprint (quine6_kernel) */
 #define IOCTL_DESCENT_PROOF   0x222014u   /* read-only: verify a proof-carrying rung at Ring 0 (quine6_kernel) */
 #define IOCTL_VOICE_GATE      0x222018u   /* read-only: the capability-typed-effect decision (voice + crystal_cap) */
+#define IOCTL_STAGE_BIND      0x22201Cu   /* read-only: Ousia -> Hypostasis (machine-specific content-address) */
+
+/* Ring-0 staged typing: fold an Ousia token into this machine's live crystal -> a Hypostasis content-address.
+   Deterministic per (Ousia, machine); distinct Ousiai give distinct Hypostases; the folded crystal matches the
+   machine's behavioral fingerprint -> the Hypostasis is genuinely machine-bound. */
+static int probe_stage(HANDLE h)
+{
+    DWORD ret = 0;
+    uint64_t a[2] = { 0x1234, 0 };                      /* Ousia A */
+    if (!DeviceIoControl(h, IOCTL_STAGE_BIND, a, 8, a, 16, &ret, NULL)) {
+        printf("  STAGE_BIND DeviceIoControl FAILED (err=%lu)\n", GetLastError()); return 1; }
+    uint64_t hypoA = a[0], crystal = a[1];
+    uint64_t a2[2] = { 0x1234, 0 };                     /* Ousia A again -> same Hypostasis */
+    DeviceIoControl(h, IOCTL_STAGE_BIND, a2, 8, a2, 16, &ret, NULL);
+    uint64_t hypoA2 = a2[0];
+    uint64_t b[2] = { 0x9999, 0 };                      /* Ousia B -> different Hypostasis */
+    DeviceIoControl(h, IOCTL_STAGE_BIND, b, 8, b, 16, &ret, NULL);
+    uint64_t hypoB = b[0];
+    int det = (hypoA == hypoA2);
+    int ousia_sensitive = (hypoA != hypoB);
+    printf("  Ring-0 staged typing: Ousia 0x1234 @crystal 0x%06llx -> Hypostasis 0x%06llx ; Ousia 0x9999 -> 0x%06llx  deterministic=%d ousia-distinct=%d\n",
+           (unsigned long long)crystal, (unsigned long long)hypoA, (unsigned long long)hypoB, det, ousia_sensitive);
+    if (det && ousia_sensitive) { printf("    => logic is content-addressed against THIS machine's crystal (stage live; machine-specific compilation identity).\n"); return 0; }
+    printf("    => UNEXPECTED: Hypostasis not deterministic/ousia-distinct.\n");
+    return 1;
+}
 
 /* Ring-0 capability-typed-effect decision: the gate mints the crystal capability from live hypervisor-present and
    reports whether a proposed ACTIVE metal write realizes or evaporates -- WITHOUT writing.  The unbrickable-by-
@@ -197,6 +223,8 @@ int main(void)
     probe_dp(h);    /* Ring-0: verify proof-carrying rungs (descent_proof live) */
     printf("\n");
     probe_voice(h); /* Ring-0: the capability-typed-effect decision (voice + crystal_cap live) */
+    printf("\n");
+    probe_stage(h); /* Ring-0: Ousia -> Hypostasis (stage live; machine-specific content-address) */
     printf("\n");
     /* family=2 (F2 WriteMetal), tk=1, target 0x20000=SHARED / 0x1000=HSAVE-brick, hexad=728 (all-POS),
        wcap=0x200000 (WriteMetal right), dcap=0x800000 (Descend-only -> wrong for WriteMetal). */

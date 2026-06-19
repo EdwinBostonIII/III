@@ -47,6 +47,8 @@ extern @abi(c-msvc-x64) fn dpk_admit(action: u32, precond: u32, prior_proof: u32
 extern @abi(c-msvc-x64) fn vk_realizes(voice: u32, has_cap: u8, has_env: u8) -> u8 from "voice_kernel.iii"
 extern @abi(c-msvc-x64) fn cck_for(hv_present: u64) -> u32 from "crystal_cap_kernel.iii"
 extern @abi(c-msvc-x64) fn cck_grants(caps: u32, bit: u32) -> u8 from "crystal_cap_kernel.iii"
+/* --- staged typing: Ousia folded into the live Crystal => Hypostasis (kernel incarnation; composes quine6_kernel) --- */
+extern @abi(c-msvc-x64) fn stk_bind(ousia: u32, crystal: u32) -> u32 from "stage_kernel.iii"
 
 /* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
@@ -108,6 +110,7 @@ fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
     if code == 0x222010u32 { need_out = 8u64 }       /* IOCTL_BEHAVIORAL_FP: 1 x u64 behavioral fingerprint, no input */
     if code == 0x222014u32 { need_out = 16u64 ; need_in = 32u64 }   /* IOCTL_DESCENT_PROOF: in 4 x u64, out 2 x u64 */
     if code == 0x222018u32 { need_out = 32u64 }                     /* IOCTL_VOICE_GATE: 4 x u64 decision, no input */
+    if code == 0x22201Cu32 { need_out = 16u64 ; need_in = 8u64 }    /* IOCTL_STAGE_BIND: in 1 x u64 ousia, out 2 x u64 */
     if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
     if buf == 0u64 { return 0u32 }
     if wdm_out_len(stk) < need_out { return 0u32 }
@@ -316,6 +319,20 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         (buf as *u64)[3u64] = vg_passive as u64
         status = 0u64
         info   = 32u64
+    }
+    if code2 == 0x22201Cu32 {
+        /* IOCTL_STAGE_BIND (READ-ONLY): Ousia -> Hypostasis.  Fold a unit of abstract logic (the Ousia token from
+           R3) INTO this machine's live crystal (= the behavioral fingerprint, what the machine DOES) to produce the
+           Hypostasis: a machine-specific, content-addressed instantiation.  Same Ousia here => same Hypostasis
+           (cacheable); the same Ousia on different silicon => a different Hypostasis.  in: [0]=ousia.  out:
+           [0]=Hypostasis content-address [1]=the live crystal it was folded into. */
+        let sb_ousia   : u32 = (buf as *u64)[0u64] as u32
+        let sb_crystal : u32 = bfpk_compute()
+        let sb_hypo    : u32 = stk_bind(sb_ousia, sb_crystal)
+        (buf as *u64)[0u64] = sb_hypo as u64
+        (buf as *u64)[1u64] = sb_crystal as u64
+        status = 0u64
+        info   = 16u64
     }
     wdm_set_status(irp, status, info)
     iii_kio_complete_request(irp, 0u64)

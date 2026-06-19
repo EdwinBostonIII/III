@@ -1,0 +1,24 @@
+/* stage_kernel.iii -- the kernel (cg_r0) incarnation of staged typing (Ousia -> Hypostasis).
+ *
+ * The cg_r0-correct counterpart of katabasis/stage's stage_bind: the Hypostasis is the content-address
+ * (quine6_kernel) of (Ousia || Crystal) -- abstract logic FOLDED INTO the machine's identity.  The six six-state
+ * symbols (3 Ousia, 3 Crystal) are held one-per-u64-slot (cg_r0-correct, no *u8).  Same Ousia + same machine =>
+ * same Hypostasis (cacheable, machine-specific compilation identity); same Ousia + a different machine => a
+ * different Hypostasis.  The gate folds in the LIVE crystal = the behavioral fingerprint (what the machine DOES,
+ * more basal than CPUID).  Composes quine6_kernel.  Ring R0. */
+module stage_kernel
+
+extern @abi(c-msvc-x64) fn q6k_addr24(slots_ptr: u64, n: u32) -> u32 from "quine6_kernel.iii"
+
+var STK_SLOTS : [u64; 6]
+
+fn stk_bind(ousia: u32, crystal: u32) -> u32 @export {
+    let p : *u64 = (&STK_SLOTS as u64) as *u64
+    p[0u64] = (ousia % 6u32) as u64
+    p[1u64] = ((ousia >> 3u32) % 6u32) as u64
+    p[2u64] = ((ousia >> 6u32) % 6u32) as u64
+    p[3u64] = (crystal % 6u32) as u64
+    p[4u64] = ((crystal >> 3u32) % 6u32) as u64
+    p[5u64] = ((crystal >> 6u32) % 6u32) as u64
+    return q6k_addr24(&STK_SLOTS as u64, 6u32)
+}

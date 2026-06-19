@@ -40,7 +40,8 @@ echo "[1] cg_r0 -> .o : IOCTL driver + kernel-safe subsets (cpufeat/weave_blocks
 "./$IIIS" "$S/descent_proof_kernel.iii" --ring R0 --compile-only --out "$O/descent_proof_kernel.o"
 "./$IIIS" "$S/voice_kernel.iii" --ring R0 --compile-only --out "$O/voice_kernel.o"
 "./$IIIS" "$S/crystal_cap_kernel.iii" --ring R0 --compile-only --out "$O/crystal_cap_kernel.o"
-OBJS=("$O/gate_driver.o" "$O/cpufeat_kernel.o" "$O/weave_blocks_kernel.o" "$O/cad_kernel.o" "$O/behavioral_seed_kernel.o" "$O/quine6_kernel.o" "$O/behavioral_fp_kernel.o" "$O/descent_proof_kernel.o" "$O/voice_kernel.o" "$O/crystal_cap_kernel.o")
+"./$IIIS" "$S/stage_kernel.iii" --ring R0 --compile-only --out "$O/stage_kernel.o"
+OBJS=("$O/gate_driver.o" "$O/cpufeat_kernel.o" "$O/weave_blocks_kernel.o" "$O/cad_kernel.o" "$O/behavioral_seed_kernel.o" "$O/quine6_kernel.o" "$O/behavioral_fp_kernel.o" "$O/descent_proof_kernel.o" "$O/voice_kernel.o" "$O/crystal_cap_kernel.o" "$O/stage_kernel.o")
 for m in "${MODS[@]}"; do n=$(basename "$m"); "./$IIIS" "STDLIB/iii/$m.iii" --ring R0 --compile-only --out "$O/$n.o"; OBJS+=("$O/$n.o"); done
 
 echo "[2] assemble kernel witness leaf + hand-asm ntoskrnl marshalling shims"

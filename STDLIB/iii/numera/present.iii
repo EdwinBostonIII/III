@@ -22,6 +22,10 @@ extern @abi(c-msvc-x64) fn gilw_forge(kind: u32) -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gilw_found() -> u8 from "invent.iii"
 extern @abi(c-msvc-x64) fn gilw_best_cost() -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
 
 var PRES_BUF   : [u8; 128]
 var PRES_LEN   : [u64; 1]
@@ -197,3 +201,82 @@ fn present_commons_fill() -> u64 @export {
 fn pres_nlaw() -> u64 @export { return PRES_NLAW[0u64] }
 fn pres_admitted() -> u64 @export { return PRES_ADMITTED[0u64] }
 fn pres_root_byte(i: u64) -> u32 @export { if i >= 32u64 { return 0x100u32 }  return PRES_ROOT[i] as u32 }
+
+/* ===== THE RATCHET ACROSS TIME: the commons PERSISTS, so a later run inherits what III already discovered. =====
+ * Mirrors the theorem_grow seal-and-write discipline.  Image body = [magic u32 LE][nlaw u32 LE][root 32][addr*32];
+ * a 32-byte seal = cad(body) is appended.  Reload re-hashes the body and refuses a tampered file (seal mismatch),
+ * then restores the whole accumulated body.  The commons stops being a within-run artifact and becomes the
+ * growing memory of III's self-discovered mathematics -- exactly the ratchet the Autogenesis plan rests on. */
+const PRES_MAGIC  : u32 = 0x57564143u32       /* 'CAVW' LE -- commons-of-the-weave */
+const PRES_IMGCAP : u64 = 2200u64
+var PRES_IMG  : [u8; 2200]
+var PRES_SEAL : [u8; 32]
+
+fn _pres_put_u32le(off: u64, v: u32) -> u64 {
+    PRES_IMG[off] = (v & 0xFFu32) as u8
+    PRES_IMG[off + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    PRES_IMG[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    PRES_IMG[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return off + 4u64
+}
+fn _pres_get_u32le(off: u64) -> u32 {
+    return (PRES_IMG[off] as u32) | ((PRES_IMG[off + 1u64] as u32) << 8u32) | ((PRES_IMG[off + 2u64] as u32) << 16u32) | ((PRES_IMG[off + 3u64] as u32) << 24u32)
+}
+
+/* build the image body into PRES_IMG; returns its length (header 40 + 32*nlaw). */
+fn _pres_build_image() -> u64 {
+    let mut off : u64 = 0u64
+    off = _pres_put_u32le(off, PRES_MAGIC)
+    off = _pres_put_u32le(off, PRES_NLAW[0u64] as u32)
+    let mut j : u64 = 0u64
+    while j < 32u64 { PRES_IMG[off + j] = PRES_ROOT[j] ; j = j + 1u64 }
+    off = off + 32u64
+    let total : u64 = PRES_NLAW[0u64] * 32u64
+    j = 0u64
+    while j < total { PRES_IMG[off + j] = PRES_LAW[j] ; j = j + 1u64 }
+    return off + total
+}
+
+/* seal the commons image and write it to disk (cap must grant fs write+create). */
+fn pres_commons_persist(cap: u64, path: u64) -> i32 @export {
+    let bodylen : u64 = _pres_build_image()
+    cad_oneshot(0u32, (&PRES_IMG as u64) as *u8, bodylen, ((&PRES_IMG as u64) + bodylen) as *u8)   /* append seal */
+    let total : u64 = bodylen + 32u64
+    let h : u64 = fs_open(cap, path, 2u32)
+    if h == 0u64 { return -1i32 }
+    let w : u64 = fs_write(h, (&PRES_IMG as u64), total)
+    fs_close(h)
+    if w != total { return -2i32 }
+    return 0i32
+}
+
+/* clear the in-memory commons (to prove reload restores it). */
+fn pres_commons_reset() -> i32 @export {
+    PRES_NLAW[0u64] = 0u64
+    let mut j : u64 = 0u64
+    while j < 32u64 { PRES_ROOT[j] = 0u8 ; j = j + 1u64 }
+    return 0i32
+}
+
+/* read back, RE-CHECK the seal (tamper -> -1), and restore the accumulated commons.  Returns the law count. */
+fn pres_commons_reload(cap: u64, path: u64) -> i32 @export {
+    let h : u64 = fs_open(cap, path, 1u32)
+    if h == 0u64 { return -3i32 }
+    let nread : u64 = fs_read(h, (&PRES_IMG as u64), PRES_IMGCAP)
+    fs_close(h)
+    if nread < 40u64 { return -2i32 }
+    let bodylen : u64 = nread - 32u64
+    cad_oneshot(0u32, (&PRES_IMG as u64) as *u8, bodylen, (&PRES_SEAL as u64) as *u8)
+    let mut k : u64 = 0u64
+    while k < 32u64 { if PRES_SEAL[k] != PRES_IMG[bodylen + k] { return -1i32 }  k = k + 1u64 }    /* tamper-evident */
+    if _pres_get_u32le(0u64) != PRES_MAGIC { return -2i32 }
+    let n : u32 = _pres_get_u32le(4u64)
+    if (n as u64) > PRES_MAXLAW { return -2i32 }
+    let mut j : u64 = 0u64
+    while j < 32u64 { PRES_ROOT[j] = PRES_IMG[8u64 + j] ; j = j + 1u64 }
+    let total : u64 = (n as u64) * 32u64
+    j = 0u64
+    while j < total { PRES_LAW[j] = PRES_IMG[40u64 + j] ; j = j + 1u64 }
+    PRES_NLAW[0u64] = n as u64
+    return n as i32
+}

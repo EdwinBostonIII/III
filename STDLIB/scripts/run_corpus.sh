@@ -1425,6 +1425,8 @@ declare -A EXPECTED=(
     [1769_weave_fill]=99
     # WEAVE COMMONS: III ACCUMULATES its discoveries -- present_commons_fill grows a content-addressed body (8 laws, rolling root) that re-citation finds whole (idempotent fixpoint).
     [1770_weave_commons]=99
+    # WEAVE COMMONS PERSISTS: the ratchet across time -- seal+write to disk, wipe, reload byte-identical (tamper-evident); III's discoveries survive a run.
+    [1771_weave_commons_persist]=99
 )
 
 PASS=0

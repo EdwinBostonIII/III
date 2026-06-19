@@ -1,0 +1,66 @@
+/* 1771_weave_commons_persist.iii -- THE RATCHET ACROSS TIME: III's self-discovered commons SURVIVES.
+ *
+ * A growing commons that evaporates each run is no ratchet.  Here the weave commons is SEALED + WRITTEN to disk
+ * and RELOADED into a fresh, wiped state -- so a later run inherits exactly what III already discovered, and the
+ * tamper-evident seal means a corrupted file is refused, never silently trusted.  This is the Autogenesis ratchet
+ * made concrete for the weave: discovery accumulates, persists, and is re-citable across time.
+ *
+ *   (1) present_commons_fill grows the commons to 8 distinct proven laws; snapshot the rolling root
+ *   (2) pres_commons_persist seals (cad) + writes the image to ./iii_weave_commons.tmp
+ *   (3) pres_commons_reset wipes the in-memory commons (size -> 0)
+ *   (4) pres_commons_reload re-checks the seal and RESTORES the body -> 8 laws, root byte-identical to (1)
+ *   (5) the reloaded commons is FUNCTIONALLY whole: re-running the fill admits nothing new (all cited)
+ * Exit 99 = III's mathematics persisted and was inherited intact across a wipe -- the ratchet holds. */
+module corpus_1771
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn present_commons_fill() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_nlaw() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_root_byte(i: u64) -> u32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_persist(cap: u64, path: u64) -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reset() -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reload(cap: u64, path: u64) -> i32 from "present.iii"
+
+var ROOTSNAP : [u32; 32]
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)        /* fs read|write|create */
+    let path : *u8 = malloc(28u64)                           /* "./iii_weave_commons.tmp" */
+    path[0u64] = 46u8   path[1u64] = 47u8   path[2u64] = 105u8  path[3u64] = 105u8
+    path[4u64] = 105u8  path[5u64] = 95u8   path[6u64] = 119u8  path[7u64] = 101u8
+    path[8u64] = 97u8   path[9u64] = 118u8  path[10u64] = 101u8 path[11u64] = 95u8
+    path[12u64] = 99u8  path[13u64] = 111u8 path[14u64] = 109u8 path[15u64] = 109u8
+    path[16u64] = 111u8 path[17u64] = 110u8 path[18u64] = 115u8 path[19u64] = 46u8
+    path[20u64] = 116u8 path[21u64] = 109u8 path[22u64] = 112u8 path[23u64] = 0u8
+
+    /* (1) grow + snapshot root */
+    let n1 : u64 = present_commons_fill()
+    if n1 != 8u64 { return n1 }
+    let mut i : u64 = 0u64
+    while i < 32u64 { ROOTSNAP[i] = pres_root_byte(i)  i = i + 1u64 }
+
+    /* (2) persist */
+    if pres_commons_persist(cap, path as u64) != 0i32 { return 1u64 }
+
+    /* (3) wipe */
+    pres_commons_reset()
+    if pres_nlaw() != 0u64 { return 2u64 }
+
+    /* (4) reload restores the body */
+    if pres_commons_reload(cap, path as u64) != 8i32 { return 3u64 }
+    if pres_nlaw() != 8u64 { return 4u64 }
+
+    /* root byte-identical to before the wipe */
+    i = 0u64
+    while i < 32u64 { if pres_root_byte(i) != ROOTSNAP[i] { return 5u64 }  i = i + 1u64 }
+
+    /* (5) the reloaded commons is functionally whole: re-fill admits nothing new */
+    if present_commons_fill() != 8u64 { return 6u64 }
+
+    fs_delete(cap, path as u64)                              /* cleanup the scratch file */
+    return 99u64
+}

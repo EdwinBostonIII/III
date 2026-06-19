@@ -1,12 +1,13 @@
-/* STDLIB/iii/katabasis/behavioral_seed.iii -- THE BEHAVIORAL BOOTSTRAP SEED (more basal than CPUID).
+/* STDLIB/iii/katabasis/behavioral_seed.iii -- THE BEHAVIORAL BOOTSTRAP SEED (more basal than CPUID).  (FINAL.)
  *
- * POC for "something more basal/agnostic than the CPUID oracle": instead of asking the machine to DESCRIBE itself
- * (a claim a hypervisor can forge), III verifies the machine DOES the one thing every digital computer must do for
- * III to exist -- compute Boolean/six-state logic faithfully -- by a KNOWN-ANSWER self-test of the weave's own laws,
- * plus a six-state quine self-coincidence.  The "answers" are true by mathematics (De Morgan, involution, XOR
- * cancellation), so a substrate that computes them wrong is caught -- ISA/firmware/hypervisor-agnostic (it observes
- * behavior, not claims).  Fail-closed: if the substrate doesn't reproduce its own logic + quine, III refuses to run.
- * Composes numera/quine6.  Ring R0.  KAT: corpus 1819. */
+ * III's foundation is its own behavior, not a hardware claim: before trusting any oracle, verify the substrate DOES
+ * the one thing every digital computer must do for III to exist -- compute the weave's logic + arithmetic faithfully
+ * -- by a KNOWN-ANSWER self-test of the algebraic laws III itself discovered (De Morgan, involution, idempotence,
+ * identity, annihilator, absorption, distributivity, XOR-cancellation, commutativity, associativity, shift-mask, and
+ * the arithmetic identities), plus a six-state quine self-coincidence (numera/quine6).  Every answer is TRUE by
+ * mathematics, so a substrate that miscomputes any gate or carry is CAUGHT.  Observes BEHAVIOR not CLAIMS ->
+ * ISA/firmware/hypervisor-agnostic; fail-closed (refuse to run on an unfaithful substrate).  CPUID/PCI are a
+ * capability-discovery layer ABOVE this behavioral floor.  Composes quine6.  Ring R0.  KAT: corpus 1819. */
 module katabasis_behavioral_seed
 
 extern @abi(c-msvc-x64) fn q6_seal_into(buf_ptr: u64, k: u32) -> u32 from "quine6.iii"
@@ -14,25 +15,53 @@ extern @abi(c-msvc-x64) fn q6_self_coincident(buf_ptr: u64, k: u32) -> u8 from "
 
 var BSEED_Q : [u8; 16]
 
-/* known-answer self-test of the weave's logic on real silicon: every identity is TRUE by math, so a faithful
- * substrate returns 1; a substrate that miscomputes any gate returns 0. */
+/* the full boolean-algebra self-test on real silicon -- 1 iff every law holds, 0 if any gate miscomputes. */
 fn bseed_logic_faithful() -> u8 @export {
     let a : u32 = 0xA5A5A5A5u32
     let b : u32 = 0x3C3C3C3Cu32
-    if (~(a & b)) != ((~a) | (~b)) { return 0u8 }     /* De Morgan */
-    if (~(a | b)) != ((~a) & (~b)) { return 0u8 }     /* De Morgan */
-    if (~(~a)) != a { return 0u8 }                    /* involution */
-    if (a ^ a) != 0u32 { return 0u8 }                 /* self-inverse */
-    if (a & a) != a { return 0u8 }                    /* idempotent */
-    if (a | 0u32) != a { return 0u8 }                 /* identity */
-    if ((a ^ b) ^ b) != a { return 0u8 }              /* XOR cancellation */
+    let c : u32 = 0x0F0F0F0Fu32
+    if (~(a & b)) != ((~a) | (~b)) { return 0u8 }                         /* De Morgan 1 */
+    if (~(a | b)) != ((~a) & (~b)) { return 0u8 }                         /* De Morgan 2 */
+    if (~(~a)) != a { return 0u8 }                                        /* involution */
+    if (a & a) != a { return 0u8 }                                       /* idempotence (and) */
+    if (a | a) != a { return 0u8 }                                       /* idempotence (or) */
+    if (a | 0u32) != a { return 0u8 }                                    /* identity (or) */
+    if (a & 0xFFFFFFFFu32) != a { return 0u8 }                           /* identity (and) */
+    if (a ^ 0u32) != a { return 0u8 }                                    /* identity (xor) */
+    if (a & 0u32) != 0u32 { return 0u8 }                                 /* annihilator (and) */
+    if (a | 0xFFFFFFFFu32) != 0xFFFFFFFFu32 { return 0u8 }               /* annihilator (or) */
+    if (a ^ a) != 0u32 { return 0u8 }                                    /* self-inverse */
+    if (a & (a | b)) != a { return 0u8 }                                 /* absorption 1 */
+    if (a | (a & b)) != a { return 0u8 }                                 /* absorption 2 */
+    if (a & (b | c)) != ((a & b) | (a & c)) { return 0u8 }               /* distributivity 1 */
+    if (a | (b & c)) != ((a | b) & (a | c)) { return 0u8 }               /* distributivity 2 */
+    if ((a ^ b) ^ b) != a { return 0u8 }                                 /* XOR cancellation */
+    if (a & b) != (b & a) { return 0u8 }                                 /* commutativity (and) */
+    if (a ^ b) != (b ^ a) { return 0u8 }                                 /* commutativity (xor) */
+    if ((a & b) & c) != (a & (b & c)) { return 0u8 }                     /* associativity (and) */
+    if (((a << 8u32) >> 8u32) & 0xFFFFFFu32) != (a & 0xFFFFFFu32) { return 0u8 }   /* shift-mask */
     return 1u8
 }
 
-/* THE BOOTSTRAP ATTEST: the substrate computes the weave's logic faithfully AND reproduces a canonical six-state
- * quine.  1 = III may run on this machine; 0 = refuse (fail-closed).  No oracle, no I/O -- pure computation. */
+/* the arithmetic self-test (carry/multiply/shift) -- 1 iff faithful. */
+fn bseed_arith_faithful() -> u8 @export {
+    let a : u32 = 0x12345678u32
+    let b : u32 = 0x9ABCDEF0u32
+    if (a + b) != (b + a) { return 0u8 }                                 /* commutativity (+) */
+    if (a + 0u32) != a { return 0u8 }                                    /* additive identity */
+    if (a * 1u32) != a { return 0u8 }                                    /* multiplicative identity */
+    if (a - a) != 0u32 { return 0u8 }                                    /* additive inverse */
+    if (a * 2u32) != (a + a) { return 0u8 }                              /* doubling */
+    if (a << 1u32) != (a * 2u32) { return 0u8 }                          /* shift == multiply by 2 */
+    if (a * 0u32) != 0u32 { return 0u8 }                                 /* multiplicative annihilator */
+    return 1u8
+}
+
+/* THE BOOTSTRAP ATTEST: the substrate computes the weave's logic AND arithmetic faithfully, AND reproduces a
+ * canonical six-state quine.  1 = III may run here; 0 = refuse (fail-closed).  Pure computation, no oracle, no I/O. */
 fn bseed_attest() -> u8 @export {
     if bseed_logic_faithful() != 1u8 { return 0u8 }
+    if bseed_arith_faithful() != 1u8 { return 0u8 }
     let mut i : u32 = 0u32
     while i < 13u32 { let p : *u8 = (&BSEED_Q as u64 + (i as u64)) as *u8  p[0u64] = ((i * 5u32 + 2u32) % 6u32) as u8  i = i + 1u32 }
     q6_seal_into(&BSEED_Q as u64, 13u32)

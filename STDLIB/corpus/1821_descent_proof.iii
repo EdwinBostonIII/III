@@ -1,20 +1,49 @@
-/* 1821_descent_proof.iii -- PROOF-CARRYING DESCENT (POC).
- * Proves: a rung with a valid proof is admitted; a forged proof is rejected (negative); the proof is BOUND to the
- * precondition (same action, different precondition -> rejected); re-proving under the new precondition admits.
- * Exit 99. */
+/* 1821_descent_proof.iii -- PROOF-CARRYING DESCENT, chained (production / evergreen): comprehensive proof.
+ * Proves: a valid rung is admitted; a forged proof is rejected (negative); the proof is bound to the precondition
+ * (negative) and to the prior proof (chain linkage); a 3-rung chain verifies; corrupting one proof breaks the chain
+ * (negative); reordering rungs breaks the chain (negative).  Exit 99. */
 module corpus_1821
 
-extern @abi(c-msvc-x64) fn dp_proof(action: u32, precond: u32) -> u32 from "descent_proof.iii"
-extern @abi(c-msvc-x64) fn dp_admit(action: u32, precond: u32, claimed_proof: u32) -> u8 from "descent_proof.iii"
+extern @abi(c-msvc-x64) fn dp_proof(action: u32, precond: u32, prior_proof: u32) -> u32 from "descent_proof.iii"
+extern @abi(c-msvc-x64) fn dp_admit(action: u32, precond: u32, prior_proof: u32, claimed_proof: u32) -> u8 from "descent_proof.iii"
+extern @abi(c-msvc-x64) fn dp_verify_chain(actions_ptr: u64, preconds_ptr: u64, proofs_ptr: u64, n: u32) -> u8 from "descent_proof.iii"
+
+var ACT : [u32; 3]
+var PRE : [u32; 3]
+var PRF : [u32; 3]
+
+fn wr(base: u64, i: u64, v: u32) -> i32 { let p : *u32 = (base + i * 4u64) as *u32  p[0u64] = v  return 0i32 }
+fn rd(base: u64, i: u64) -> u32 { let p : *u32 = (base + i * 4u64) as *u32  return p[0u64] }
 
 fn main() -> u64 {
-    let action  : u32 = 0x2Au32
-    let precond : u32 = 0x13u32
-    let proof : u32 = dp_proof(action, precond)
-    if dp_admit(action, precond, proof) != 1u8 { return 11u64 }              /* valid rung admitted */
-    if dp_admit(action, precond, proof ^ 1u32) != 0u8 { return 12u64 }       /* NEGATIVE: forged proof rejected */
-    if dp_admit(action, precond + 1u32, proof) != 0u8 { return 13u64 }       /* NEGATIVE: proof bound to precondition */
-    let proof2 : u32 = dp_proof(action, precond + 1u32)
-    if dp_admit(action, precond + 1u32, proof2) != 1u8 { return 14u64 }      /* re-proven under new precond admits */
+    /* single-rung: valid admitted; forged rejected; precondition- and prior-bound */
+    let pr0 : u32 = dp_proof(0x2Au32, 0x13u32, 0u32)
+    if dp_admit(0x2Au32, 0x13u32, 0u32, pr0) != 1u8 { return 11u64 }
+    if dp_admit(0x2Au32, 0x13u32, 0u32, pr0 ^ 1u32) != 0u8 { return 12u64 }      /* NEGATIVE: forged */
+    if dp_admit(0x2Au32, 0x14u32, 0u32, pr0) != 0u8 { return 13u64 }            /* NEGATIVE: precondition-bound */
+    if dp_admit(0x2Au32, 0x13u32, 0x99u32, pr0) != 0u8 { return 14u64 }         /* NEGATIVE: prior-bound */
+
+    /* build a 3-rung chain */
+    wr(&ACT as u64, 0u64, 0x10u32)  wr(&PRE as u64, 0u64, 0x01u32)
+    wr(&ACT as u64, 1u64, 0x20u32)  wr(&PRE as u64, 1u64, 0x02u32)
+    wr(&ACT as u64, 2u64, 0x30u32)  wr(&PRE as u64, 2u64, 0x03u32)
+    let p0 : u32 = dp_proof(rd(&ACT as u64,0u64), rd(&PRE as u64,0u64), 0u32)
+    wr(&PRF as u64, 0u64, p0)
+    let p1 : u32 = dp_proof(rd(&ACT as u64,1u64), rd(&PRE as u64,1u64), p0)
+    wr(&PRF as u64, 1u64, p1)
+    let p2 : u32 = dp_proof(rd(&ACT as u64,2u64), rd(&PRE as u64,2u64), p1)
+    wr(&PRF as u64, 2u64, p2)
+    if dp_verify_chain(&ACT as u64, &PRE as u64, &PRF as u64, 3u32) != 1u8 { return 15u64 }
+
+    /* NEGATIVE: corrupt the middle proof -> chain breaks */
+    wr(&PRF as u64, 1u64, p1 ^ 1u32)
+    if dp_verify_chain(&ACT as u64, &PRE as u64, &PRF as u64, 3u32) != 0u8 { return 16u64 }
+    wr(&PRF as u64, 1u64, p1)                                                    /* restore */
+    if dp_verify_chain(&ACT as u64, &PRE as u64, &PRF as u64, 3u32) != 1u8 { return 17u64 }
+
+    /* NEGATIVE: reorder rungs 0 and 1 (proofs unchanged) -> chain re-derivation no longer matches */
+    wr(&ACT as u64, 0u64, 0x20u32)  wr(&PRE as u64, 0u64, 0x02u32)
+    wr(&ACT as u64, 1u64, 0x10u32)  wr(&PRE as u64, 1u64, 0x01u32)
+    if dp_verify_chain(&ACT as u64, &PRE as u64, &PRF as u64, 3u32) != 0u8 { return 18u64 }
     return 99u64
 }

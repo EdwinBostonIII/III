@@ -1,17 +1,17 @@
-/* STDLIB/iii/katabasis/descent_proof.iii -- PROOF-CARRYING DESCENT (POC).
+/* STDLIB/iii/katabasis/descent_proof.iii -- PROOF-CARRYING DESCENT (chained).  (FINAL / evergreen.)
  *
- * Each descent rung carries a proof = the content-address of (action || precondition); the gate ADMITS the rung only
- * if the proof recomputes correctly, so a rung is bound to its precondition (you cannot replay an action under a
- * different precondition, nor forge a proof).  Composes numera/quine6 as the content-address.  Ring R0.
- * KAT: corpus 1821. */
+ * Each descent rung carries a proof = the content-address (numera/quine6) of (action || precondition || prior-proof).
+ * Binding to the precondition means an action cannot be replayed under a different precondition; binding to the prior
+ * proof CHAINS the rungs, so the whole descent is a tamper-evident sequence -- no rung can be forged, reordered, or
+ * inserted without breaking the chain.  Composes quine6.  Ring R0.  KAT: corpus 1821. */
 module katabasis_descent_proof
 
-extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_addr24(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
 
-var DP_BUF : [u8; 8]
+var DP_BUF : [u8; 12]
 
-/* the proof of a rung = content-address binding the action to its precondition. */
-fn dp_proof(action: u32, precond: u32) -> u32 @export {
+/* the proof of a rung, chained to the prior rung's proof (0 for the genesis rung). */
+fn dp_proof(action: u32, precond: u32, prior_proof: u32) -> u32 @export {
     let p : *u8 = (&DP_BUF as u64) as *u8
     p[0u64] = (action % 6u32) as u8
     p[1u64] = ((action >> 3u32) % 6u32) as u8
@@ -19,11 +19,31 @@ fn dp_proof(action: u32, precond: u32) -> u32 @export {
     p[3u64] = (precond % 6u32) as u8
     p[4u64] = ((precond >> 3u32) % 6u32) as u8
     p[5u64] = ((precond >> 6u32) % 6u32) as u8
-    return q6_addr(&DP_BUF as u64, 6u32)
+    p[6u64] = (prior_proof % 6u32) as u8
+    p[7u64] = ((prior_proof >> 3u32) % 6u32) as u8
+    p[8u64] = ((prior_proof >> 6u32) % 6u32) as u8
+    return q6_addr24(&DP_BUF as u64, 9u32)
 }
 
-/* the gate: admit the rung iff its carried proof matches the recomputed one (valid + precondition-bound). */
-fn dp_admit(action: u32, precond: u32, claimed_proof: u32) -> u8 @export {
-    if dp_proof(action, precond) == claimed_proof { return 1u8 }
+/* the gate: admit a rung iff its carried proof matches the recomputed one. */
+fn dp_admit(action: u32, precond: u32, prior_proof: u32, claimed_proof: u32) -> u8 @export {
+    if dp_proof(action, precond, prior_proof) == claimed_proof { return 1u8 }
     return 0u8
+}
+
+/* verify a whole descent chain: parallel u32 arrays actions[i], preconds[i], proofs[i].  Each proof must be the
+ * content-address of its (action, precond, prior-proof); a single break (forge / reorder / insert) -> reject. */
+fn dp_verify_chain(actions_ptr: u64, preconds_ptr: u64, proofs_ptr: u64, n: u32) -> u8 @export {
+    let mut prior : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let ap : *u32 = (actions_ptr + (i as u64) * 4u64) as *u32
+        let pp : *u32 = (preconds_ptr + (i as u64) * 4u64) as *u32
+        let xp : *u32 = (proofs_ptr + (i as u64) * 4u64) as *u32
+        let expect : u32 = dp_proof(ap[0u64], pp[0u64], prior)
+        if expect != xp[0u64] { return 0u8 }
+        prior = expect
+        i = i + 1u32
+    }
+    return 1u8
 }

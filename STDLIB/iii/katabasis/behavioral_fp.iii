@@ -1,34 +1,53 @@
-/* STDLIB/iii/katabasis/behavioral_fp.iii -- BEHAVIORAL FINGERPRINT + CLAIM CROSS-CHECK (POC).
+/* STDLIB/iii/katabasis/behavioral_fp.iii -- BEHAVIORAL FINGERPRINT + DRIFT DETECTION.  (FINAL / evergreen.)
  *
- * Beyond the CPUID *claim*, compute a fingerprint of what the machine actually DOES: content-address a battery of
- * canonical computation results (six-state-reduced).  A hypervisor that lies in CPUID but faithfully emulates
- * computation passes (that's the honest substrate III wants); one that diverges functionally is detected.  The
- * cross-check compares a CLAIMED value against the behavioral truth -> drift if they disagree.  Composes
- * numera/quine6.  Ring R0.  KAT: corpus 1820. */
+ * Beyond the CPUID *claim*, a fingerprint of what the machine actually DOES: content-address (numera/quine6) of a
+ * battery of canonical computation results (logic + arithmetic + shift), at 24-bit and 48-bit width.  A host that
+ * lies in CPUID but emulates computation faithfully passes (the honest substrate III wants); a functionally-divergent
+ * one is detected.  bfp_drift compares a SEALED expected fingerprint against the live one -> any change (migration,
+ * tamper, dishonest emulation that diverges) is drift.  Composes quine6.  Ring R0.  KAT: corpus 1820.
+ *
+ * HONEST BOUNDARY: this detects FUNCTIONAL divergence, not a perfectly-faithful emulator (guest-containment is
+ * irreducible).  It is tamper-EVIDENT for behavior, not an unforgeable oracle. */
 module katabasis_behavioral_fp
 
-extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_addr24(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_addr48(input_ptr: u64, n: u32) -> u64 from "quine6.iii"
 
-var BFP_RESULTS : [u8; 8]
+var BFP_RESULTS : [u8; 12]
 
-/* fold canonical op RESULTS (six-state-reduced) into a behavioral fingerprint. */
-fn bfp_compute() -> u32 @export {
+/* reduce the canonical op battery to twelve six-state symbols (the machine's behavior on known inputs). */
+fn bfp_fill() -> i32 {
     let a : u32 = 0xA5A5A5A5u32
     let b : u32 = 0x3C3C3C3Cu32
     let p : *u8 = (&BFP_RESULTS as u64) as *u8
-    p[0u64] = ((a & b) % 6u32) as u8
-    p[1u64] = ((a | b) % 6u32) as u8
-    p[2u64] = ((a ^ b) % 6u32) as u8
-    p[3u64] = ((a + b) % 6u32) as u8
-    p[4u64] = ((a * 3u32) % 6u32) as u8
-    p[5u64] = ((a >> 5u32) % 6u32) as u8
-    p[6u64] = (((~a) & b) % 6u32) as u8
-    p[7u64] = ((b * b) % 6u32) as u8
-    return q6_addr(&BFP_RESULTS as u64, 8u32)
+    p[0u64]  = ((a & b) % 6u32) as u8
+    p[1u64]  = ((a | b) % 6u32) as u8
+    p[2u64]  = ((a ^ b) % 6u32) as u8
+    p[3u64]  = ((a + b) % 6u32) as u8
+    p[4u64]  = ((a * 3u32) % 6u32) as u8
+    p[5u64]  = ((a >> 5u32) % 6u32) as u8
+    p[6u64]  = (((~a) & b) % 6u32) as u8
+    p[7u64]  = ((b * b) % 6u32) as u8
+    p[8u64]  = ((a << 3u32) % 6u32) as u8
+    p[9u64]  = ((a - b) % 6u32) as u8
+    p[10u64] = ((a ^ (b + 1u32)) % 6u32) as u8
+    p[11u64] = (((a & 0xFFu32) * (b & 0xFFu32)) % 6u32) as u8
+    return 0i32
 }
 
-/* 1 = the claimed value matches the behavioral truth; 0 = drift (the claim diverges from what the machine does). */
+/* the 24-bit behavioral fingerprint. */
+fn bfp_compute() -> u32 @export { bfp_fill()  return q6_addr24(&BFP_RESULTS as u64, 12u32) }
+/* the 48-bit behavioral fingerprint (lower collision). */
+fn bfp_compute48() -> u64 @export { bfp_fill()  return q6_addr48(&BFP_RESULTS as u64, 12u32) }
+
+/* 1 = the claimed value matches the behavioral truth; 0 = drift. */
 fn bfp_consistent(claimed: u32, behavioral: u32) -> u8 @export {
     if claimed == behavioral { return 1u8 }
+    return 0u8
+}
+
+/* 1 = drift detected (the sealed expectation no longer matches the live behavior); 0 = stable. */
+fn bfp_drift(sealed_expected: u32) -> u8 @export {
+    if bfp_compute() != sealed_expected { return 1u8 }
     return 0u8
 }

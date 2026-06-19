@@ -1,21 +1,24 @@
-/* 1819_behavioral_seed.iii -- THE BEHAVIORAL BOOTSTRAP SEED (more basal than CPUID) (POC).
- * Proves: this substrate computes the weave's logic faithfully (known-answer self-test) AND reproduces a canonical
- * six-state quine -> bseed_attest()==1 (III may run); the ops are non-vacuous (distinct correct values, teeth).
- * Exit 99. */
+/* 1819_behavioral_seed.iii -- THE BEHAVIORAL BOOTSTRAP SEED (production / evergreen): comprehensive proof.
+ * Proves: this substrate computes the FULL weave boolean-algebra battery AND the arithmetic battery faithfully
+ * (known-answer), AND reproduces a six-state quine -> bseed_attest()==1 (III may run); the gates are non-vacuous
+ * (distinct correct values), so the self-test has teeth.  Exit 99. */
 module corpus_1819
 
 extern @abi(c-msvc-x64) fn bseed_logic_faithful() -> u8 from "behavioral_seed.iii"
+extern @abi(c-msvc-x64) fn bseed_arith_faithful() -> u8 from "behavioral_seed.iii"
 extern @abi(c-msvc-x64) fn bseed_attest() -> u8 from "behavioral_seed.iii"
 
 fn main() -> u64 {
-    if bseed_logic_faithful() != 1u8 { return 11u64 }   /* substrate computes Boolean/six-state logic faithfully */
-    if bseed_attest() != 1u8 { return 12u64 }           /* faithful + quine self-coincident -> bootstrap OK */
+    if bseed_logic_faithful() != 1u8 { return 11u64 }   /* full boolean-algebra battery holds */
+    if bseed_arith_faithful() != 1u8 { return 12u64 }   /* arithmetic battery holds */
+    if bseed_attest() != 1u8 { return 13u64 }           /* faithful + quine self-coincident -> bootstrap OK */
 
     /* non-vacuity (teeth): the gates produce DISTINCT correct values, not constants */
     let a : u32 = 0xA5A5A5A5u32
     let b : u32 = 0x3C3C3C3Cu32
-    if (~a) == a { return 13u64 }                       /* NOT is non-trivial */
-    if (a & b) == (a | b) { return 14u64 }              /* AND and OR differ here */
-    if (a ^ a) == 1u32 { return 15u64 }                 /* a faulty substrate computing a^a==1 would be caught */
+    if (~a) == a { return 14u64 }
+    if (a & b) == (a | b) { return 15u64 }
+    if (a + b) == (a ^ b) { return 16u64 }              /* add != xor here (carry happens) -> arithmetic is real */
+    if (a ^ a) == 1u32 { return 17u64 }                 /* a faulty substrate (a^a==1) would be caught */
     return 99u64
 }

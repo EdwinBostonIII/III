@@ -1,0 +1,60 @@
+/* 1801_bb_struct_equal.iii -- THE TOPOLOGICAL PASS: width-agnostic structural equality.
+ *
+ * bb_struct_equal walks the spine (kinds/var-ids/const-values/shift-amounts) WITHOUT touching BB_W, BB_NVAL, or
+ * the SAT solver.  A 1 means the two DAGs are the identical circuit -- a SOUND structural fact.  For the
+ * width-invariant fragment (no shifts/arith, no width-sensitive consts) it is an ALL-WIDTH truth, replacing the
+ * two-width SAT probe -- which is what deletes the rotation-duality "BOTH" artifact for genuinely BITWISE
+ * functions, while keeping rotation honestly width-local (its spine bakes in width-derived shift constants).
+ *
+ *   (1) two RAW builds of Ch (different node ids) are STRUCTURALLY equal -- one pass, no eval, no SAT
+ *   (2) and it is an all-width truth (bitwise fragment): bb_struct_all_widths == 1; bb_equal confirms (sound)
+ *   (3) Ch spec vs optform: structurally DIFFERENT (bb_struct_equal == 0) -- semantic equivalence is the
+ *       signature's/SAT's job, correctly NOT claimed by the structural pass (sound + honest about its scope)
+ *   (4) ROTATION GATING: two raw builds of rotl(x,7) are structurally equal, BUT bb_struct_all_widths == 0
+ *       (it is bit-COUPLING), so the all-width verdict is correctly withheld -- rotation stays width-local (BOTH)
+ * Exit 99 = structural identity is a width-agnostic proof for the bitwise fragment, the bifurcator keeping it honest. */
+module corpus_1801
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_struct_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_struct_all_widths(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+fn ch_spec(a: u32, b: u32, c: u32) -> u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }
+fn ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }
+
+fn main() -> u64 {
+    /* (1) two RAW builds of Ch-spec: different node ids, structurally identical */
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)  let b : u32 = bb_var(1u32)  let c : u32 = bb_var(2u32)
+    let r1 : u32 = ch_spec(a, b, c)
+    let r2 : u32 = ch_spec(a, b, c)
+    if r1 == r2 { return 1u64 }                                  /* raw builders do NOT dedup -> distinct ids */
+    if bb_struct_equal(r1, r2) != 1u8 { return 2u64 }            /* yet structurally identical, one pass */
+
+    /* (2) all-width truth (bitwise) + soundness vs the SAT judge */
+    if bb_struct_all_widths(r1, r2) != 1u8 { return 3u64 }
+    if bb_equal(r1, r2) != 1u8 { return 4u64 }                   /* sound: structural => equal */
+
+    /* (3) Ch spec vs optform: structurally DIFFERENT (the structural pass does not over-claim) */
+    let so : u32 = ch_opt(a, b, c)
+    if bb_struct_equal(r1, so) != 0u8 { return 5u64 }            /* semantic, not structural -> 0 here */
+    if bb_equal(r1, so) != 1u8 { return 6u64 }                   /* (they ARE semantically equal -- SAT's job) */
+
+    /* (4) rotation gating: structurally equal, but the all-width verdict is withheld (bit-coupling) */
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)
+    let t3 : u32 = bb_or(bb_shl(x, 7u64), bb_shr(x, 1u64))       /* rotl(x,7) @ w=8 */
+    let t4 : u32 = bb_or(bb_shl(x, 7u64), bb_shr(x, 1u64))
+    if bb_struct_equal(t3, t4) != 1u8 { return 7u64 }            /* same structure */
+    if bb_struct_all_widths(t3, t4) != 0u8 { return 8u64 }       /* but bit-coupling -> NOT all-width (honest) */
+
+    return 99u64
+}

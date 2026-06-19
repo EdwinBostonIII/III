@@ -1485,6 +1485,8 @@ declare -A EXPECTED=(
     [1799_invent_loop]=99
     # CANONICAL CONSTRUCTION (bb_intern): a purely additive layer over the untouched bv_bits builders -- local rewrites + commutative ordering + stale-safe hash-cons, so equal-by-rewrite forms reach the SAME id (equal by construction, ZERO SAT) and the DAG shrinks. The build IS the optimization.
     [1800_bb_intern]=99
+    # THE TOPOLOGICAL PASS (bb_struct_equal): width-agnostic STRUCTURAL equality (spine walk, no BB_W/eval/SAT); sound + incomplete. bb_struct_all_widths lifts it to an all-width truth ONLY for the bitwise fragment (no coupling/consts) -- deletes the rotation-duality BOTH artifact for bitwise, keeps rotation width-local.
+    [1801_bb_struct_equal]=99
 )
 
 PASS=0

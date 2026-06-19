@@ -723,3 +723,70 @@ fn bb_intern_equal(a: u32, b: u32) -> u8 @export {
     if a == b { return 1u8 }
     return bb_equal(a, b)
 }
+
+/* ============================================================================================================
+ * THE TOPOLOGICAL PASS (bb_struct_equal): width-agnostic STRUCTURAL equality -- a backward walk of the spine that
+ * never touches BB_W, BB_NVAL, or the SAT solver.  It compares only kinds, variable ids, constant values, and
+ * shift amounts.  SOUND (a 1 means the two DAGs are the identical circuit), INCOMPLETE (semantic equivalences
+ * with different structure -- Ch spec vs optform -- return 0; use the signature / SAT for those).  Operands are
+ * paired directly (correct for bb_intern's canonically-ordered forms; a false-negative at worst otherwise -- never
+ * a false positive).  The a==b fast-path makes hash-cons-shared subtrees free. */
+
+const BB_SE_MAX : u32 = 512u32
+var BB_SE_SX : [u32; 512]
+var BB_SE_SY : [u32; 512]
+
+fn bb_kind_arity2(k: u32) -> u8 {
+    if k == EK_AND { return 1u8 }
+    if k == EK_OR { return 1u8 }
+    if k == EK_XOR { return 1u8 }
+    if k == EK_ADD { return 1u8 }
+    if k == EK_SUB { return 1u8 }
+    if k == EK_MUL { return 1u8 }
+    return 0u8
+}
+
+fn bb_struct_equal(a: u32, b: u32) -> u8 @export {
+    let mut sp : u32 = 0u32
+    BB_SE_SX[0u64] = a  BB_SE_SY[0u64] = b  sp = 1u32
+    let mut ok : u8 = 1u8
+    while sp > 0u32 {
+        sp = sp - 1u32
+        let x : u32 = BB_SE_SX[sp as u64]
+        let y : u32 = BB_SE_SY[sp as u64]
+        if x != y {
+            if x >= BB_NN { ok = 0u8  sp = 0u32 } else { if y >= BB_NN { ok = 0u8  sp = 0u32 } else {
+                let kx : u32 = BB_NKIND[x as u64]
+                let ky : u32 = BB_NKIND[y as u64]
+                if kx != ky { ok = 0u8  sp = 0u32 } else {
+                    if kx == EK_VAR { if BB_NA[x as u64] != BB_NA[y as u64] { ok = 0u8  sp = 0u32 } }
+                    if kx == EK_CONST { if (BB_NCONST[x as u64] & bb_wmask()) != (BB_NCONST[y as u64] & bb_wmask()) { ok = 0u8  sp = 0u32 } }
+                    if kx == EK_NOT {
+                        if sp >= BB_SE_MAX { ok = 0u8  sp = 0u32 } else { BB_SE_SX[sp as u64] = BB_NA[x as u64]  BB_SE_SY[sp as u64] = BB_NA[y as u64]  sp = sp + 1u32 }
+                    }
+                    if kx == EK_SHL { if BB_NK[x as u64] != BB_NK[y as u64] { ok = 0u8  sp = 0u32 } else { if sp >= BB_SE_MAX { ok = 0u8  sp = 0u32 } else { BB_SE_SX[sp as u64] = BB_NA[x as u64]  BB_SE_SY[sp as u64] = BB_NA[y as u64]  sp = sp + 1u32 } } }
+                    if kx == EK_SHR { if BB_NK[x as u64] != BB_NK[y as u64] { ok = 0u8  sp = 0u32 } else { if sp >= BB_SE_MAX { ok = 0u8  sp = 0u32 } else { BB_SE_SX[sp as u64] = BB_NA[x as u64]  BB_SE_SY[sp as u64] = BB_NA[y as u64]  sp = sp + 1u32 } } }
+                    if bb_kind_arity2(kx) == 1u8 {
+                        if (sp + 1u32) >= BB_SE_MAX { ok = 0u8  sp = 0u32 } else {
+                            BB_SE_SX[sp as u64] = BB_NA[x as u64]  BB_SE_SY[sp as u64] = BB_NA[y as u64]  sp = sp + 1u32
+                            BB_SE_SX[sp as u64] = BB_NB[x as u64]  BB_SE_SY[sp as u64] = BB_NB[y as u64]  sp = sp + 1u32
+                        }
+                    }
+                }
+            } }
+        }
+    }
+    return ok
+}
+
+/* the ALL-WIDTH lift of the structural pass: structural identity is an absolute truth at EVERY width ONLY for the
+ * width-invariant fragment -- no bit-coupling (SHL/SHR/ADD/SUB/MUL bake width-derived constants into the spine)
+ * and no width-sensitive constants.  So this returns 1 iff a,b are structurally identical AND the session is the
+ * pure VAR/AND/OR/XOR/NOT fragment.  THIS is what deletes the rotation-duality "BOTH" artifact for bitwise
+ * functions (one structural pass replaces the two-width probe) while keeping rotation honestly width-local. */
+fn bb_struct_all_widths(a: u32, b: u32) -> u8 @export {
+    if bb_struct_equal(a, b) != 1u8 { return 0u8 }
+    if bb_has_coupling() != 0u8 { return 0u8 }                 /* shifts/arith -> width-dependent */
+    if bb_count_kind(EK_CONST) > 0u64 { return 0u8 }           /* a const is width-sensitive (all-ones differs by width) */
+    return 1u8
+}

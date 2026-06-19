@@ -1445,6 +1445,8 @@ declare -A EXPECTED=(
     [1779_weave_census]=99
     # RATCHET ACROSS TIME: the gilm lemma library persists (seal+reload, tamper-evident); a future run inherits the solved targets -> re-discovery free across runs.
     [1780_weave_ratchet_persist]=99
+    # RATCHET LIVE: present_duality routes the expensive ~500-SAT family through the cited path, so repeated full-weave derivation (census/federation) forges it once then cites -- load-bearing, not a demo.
+    [1781_weave_ratchet_live]=99
 )
 
 PASS=0

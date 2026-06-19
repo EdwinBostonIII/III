@@ -27,6 +27,7 @@ extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii
 extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
 extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
 extern @abi(c-msvc-x64) fn gild_rotdual_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_rotdual_count_cited() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gild_selflaw_rhs(op: u32) -> i32 from "invent.iii"
 
 var PRES_BUF   : [u8; 128]
@@ -203,7 +204,7 @@ fn present_commons_fill() -> u64 @export {
 /* render + name the STRUCTURAL strand gild discovered: the whole rotation-duality family, tied to a live verdict
  * (gild_rotdual_count == 31 = the complete family).  Returns 0 if the family is not whole (never a fabricated law). */
 fn present_duality() -> u64 @export {
-    if gild_rotdual_count() != 31u64 { return 0u64 }
+    if gild_rotdual_count_cited() != 31u64 { return 0u64 }      /* ratcheted: the ~500-SAT family is forged once, then cited */
     PRES_LEN[0u64] = 0u64
     pres_str(("rotl(x,k) = rotr(x, 32-k)" as u64), 25u64)
     pres_seal()

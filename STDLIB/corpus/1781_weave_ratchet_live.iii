@@ -1,0 +1,26 @@
+/* 1781_weave_ratchet_live.iii -- THE RATCHET IS LOAD-BEARING: repeated derivation does not re-pay the search.
+ *
+ * present_duality (used by present_weave_full, and so by the census + federation, which re-derives the whole
+ * weave 3x) routes the expensive ~500-SAT rotation-duality discovery through the cited path.  So the second and
+ * later derivations CITE the family instead of re-forging it -- the ratchet is not a demo, it is wired into the
+ * live discovery pipeline.  The grown library makes the system faster, in the path that actually runs.
+ *
+ *   present_duality() #1 -> forges the family (gilm_forged == 1)
+ *   present_duality() #2 -> CITES it (gilm_forged STILL 1; gilm_cited >= 1)
+ * Exit 99 = repeated full-weave structural discovery is free after the first. */
+module corpus_1781
+
+extern @abi(c-msvc-x64) fn gilm_reset() -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_forged() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_cited() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn present_duality() -> u64 from "present.iii"
+
+fn main() -> u64 {
+    gilm_reset()
+    if present_duality() == 0u64 { return 1u64 }       /* renders the family law -> forged */
+    if gilm_forged() != 1u64 { return 2u64 }           /* the family forged exactly once */
+    if present_duality() == 0u64 { return 3u64 }       /* re-derive */
+    if gilm_forged() != 1u64 { return 4u64 }           /* STILL 1 -- the live pipeline CITED, did not re-forge */
+    if gilm_cited() < 1u64 { return 5u64 }
+    return 99u64
+}

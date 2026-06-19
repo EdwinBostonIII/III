@@ -688,3 +688,82 @@ fn weave_fill() -> u64 @export {
     gil6_forge(3u32)  if gil6_best_mode() != 0xFFFFFFFFu32 { count = count + 1u64 }            /* (a|All)&b -> b    */
     return count
 }
+
+/* ============================================================================================================
+ * GILD -- GENERATIVE IDENTITY DISCOVERY: the weave's STRUCTURAL strands EMERGE, they are not hand-authored.
+ *
+ * primweb proved structural relations one at a time, each a human-picked instance (rotation duality at ONE k,
+ * the self-coincidence asserted at k=16).  gild makes those strands SELF-DISCOVERED: it searches the relation
+ * space and the SAT judge proves what holds, so the weave populates its own structural web -- and finds the
+ * WHOLE family the hand-authored strand only sampled.  Discovery, not verification: the engine is NOT told the
+ * dual amount; it searches for the j that makes rotl(x,k) == rotr(x,j) and proves it.  Width 32 = the crypto
+ * word, so the discovered self-coincidence is k=16 exactly as primewb's pw_rot_coincide hand-asserts. */
+const GILD_W : u64 = 32u64
+
+fn gild_rotl(x: u32, k: u64) -> u32 {
+    if k == 0u64 { return x }
+    return bb_or(bb_shl(x, k), bb_shr(x, GILD_W - k))
+}
+fn gild_rotr(x: u32, k: u64) -> u32 {
+    if k == 0u64 { return x }
+    return bb_or(bb_shr(x, k), bb_shl(x, GILD_W - k))
+}
+
+/* DISCOVER the dual rotation j such that rotl(x,k) == rotr(x,j) for ALL x; -1 if none in range.  The engine is
+ * not told j = w-k -- it searches and the SAT miter proves the survivor. */
+fn gild_rotdual_find(k: u64) -> i64 @export {
+    let mut j : u64 = 1u64
+    while j < GILD_W {
+        bb_reset(GILD_W)
+        let x : u32 = bb_var(0u32)
+        if bb_equal(gild_rotl(x, k), gild_rotr(x, j)) == 1u8 { return j as i64 }
+        j = j + 1u64
+    }
+    return -1i64
+}
+
+/* DISCOVER the FULL rotation-duality family: for every k in 1..w-1 the discovered dual exists and equals w-k.
+ * Returns the count whose discovered dual satisfies j == w-k (= w-1 = 31 when the whole family is present) --
+ * the complete strand primweb only hand-sampled. */
+fn gild_rotdual_count() -> u64 @export {
+    let mut count : u64 = 0u64
+    let mut k : u64 = 1u64
+    while k < GILD_W {
+        let j : i64 = gild_rotdual_find(k)
+        if j == (GILD_W - k) as i64 { count = count + 1u64 }
+        k = k + 1u64
+    }
+    return count
+}
+
+/* DISCOVER the unique self-dual amount: the k where rotl(x,k) == rotr(x,k) (the half-width coincidence, k=16). */
+fn gild_selfdual_k() -> i64 @export {
+    let mut k : u64 = 1u64
+    while k < GILD_W {
+        bb_reset(GILD_W)
+        let x : u32 = bb_var(0u32)
+        if bb_equal(gild_rotl(x, k), gild_rotr(x, k)) == 1u8 { return k as i64 }
+        k = k + 1u64
+    }
+    return -1i64
+}
+
+/* DISCOVER the SELF-LAW family: what does op(x,x) collapse to?  The engine applies op in {sub,xor,and,or} to
+ * (x,x) and SEARCHES the RHS among {0, x, all-ones}, the SAT judge proving the collapse.  It rediscovers the
+ * very laws bv_commons HAND-LISTS (sub.self=0, xor.self=0, and.self=x, or.self=x) -- now found, not authored.
+ * op: 0=sub 1=xor 2=and 3=or.  Returns 0 if op(x,x)==0, 1 if ==x, 2 if ==all-ones, -1 if none. */
+fn gild_selflaw_lhs(op: u32, x: u32) -> u32 {
+    if op == 0u32 { return bb_sub(x, x) }
+    if op == 1u32 { return bb_xor(x, x) }
+    if op == 2u32 { return bb_and(x, x) }
+    return bb_or(x, x)
+}
+fn gild_selflaw_rhs(op: u32) -> i32 @export {
+    bb_reset(GILD_W)
+    let x : u32 = bb_var(0u32)
+    let lhs : u32 = gild_selflaw_lhs(op, x)
+    if bb_equal(lhs, bb_const(0u64)) == 1u8 { return 0i32 }                       /* collapses to 0 */
+    if bb_equal(lhs, bb_var(0u32)) == 1u8 { return 1i32 }                         /* collapses to x */
+    if bb_equal(lhs, bb_const(0xFFFFFFFFu64)) == 1u8 { return 2i32 }              /* collapses to all-ones */
+    return -1i32
+}

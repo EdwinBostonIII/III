@@ -1427,6 +1427,10 @@ declare -A EXPECTED=(
     [1770_weave_commons]=99
     # WEAVE COMMONS PERSISTS: the ratchet across time -- seal+write to disk, wipe, reload byte-identical (tamper-evident); III's discoveries survive a run.
     [1771_weave_commons_persist]=99
+    # STRAND DISCOVERY: primweb's hand-authored rotation-duality strand now EMERGES -- gild searches+proves the FULL family (31 members) + the k=16 self-coincidence.
+    [1772_weave_strand_discover]=99
+    # SELF-LAW DISCOVERY: III rediscovers the self-laws bv_commons hand-lists (x-x=0, x^x=0, x&x=x, x|x=x) by searching op(x,x)'s RHS + SAT-proving.
+    [1773_weave_selflaw_discover]=99
 )
 
 PASS=0

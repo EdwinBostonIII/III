@@ -1,0 +1,21 @@
+/* 1773_weave_selflaw_discover.iii -- III DISCOVERS THE SELF-LAWS bv_commons HAND-LISTS.
+ *
+ * bv_commons.iii admits a ten-law machine-word library by HAND -- sub.self (x-x=0), xor.self (x^x=0),
+ * and.self (x&x=x), or.self (x|x=x), ... -- each a human-authored statement the kernel re-proves by refl.
+ * gild makes the boolean core of that library SELF-DISCOVERED: the engine applies each op to (x,x) and SEARCHES
+ * the right-hand side among {0, x, all-ones}, the SAT judge proving the collapse.  No statement is handed in;
+ * III finds what op(x,x) IS.  The weave's structural floor is now discovered, not authored.
+ *
+ *   sub.self -> 0 ;  xor.self -> 0 ;  and.self -> x ;  or.self -> x   (rhs codes 0,0,1,1)
+ * Exit 99 = III rediscovered the self-law family by search + proof. */
+module corpus_1773
+
+extern @abi(c-msvc-x64) fn gild_selflaw_rhs(op: u32) -> i32 from "invent.iii"
+
+fn main() -> u64 {
+    if gild_selflaw_rhs(0u32) != 0i32 { return 1u64 }      /* x - x  discovered = 0 */
+    if gild_selflaw_rhs(1u32) != 0i32 { return 2u64 }      /* x ^ x  discovered = 0 */
+    if gild_selflaw_rhs(2u32) != 1i32 { return 3u64 }      /* x & x  discovered = x */
+    if gild_selflaw_rhs(3u32) != 1i32 { return 4u64 }      /* x | x  discovered = x */
+    return 99u64
+}

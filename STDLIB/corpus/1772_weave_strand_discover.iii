@@ -1,0 +1,24 @@
+/* 1772_weave_strand_discover.iii -- THE WEAVE'S STRUCTURAL STRANDS NOW EMERGE FROM DISCOVERY.
+ *
+ * primweb HAND-AUTHORED the rotation-duality strand: it proved rotl(x,k)==rotr(x,32-k) for a single picked k,
+ * and asserted the self-coincidence at k=16.  gild makes the strand SELF-DISCOVERED and COMPLETE: the engine
+ * is not told the dual amount -- it SEARCHES for the j that makes rotl(x,k)==rotr(x,j) and the SAT judge proves
+ * the survivor, across the WHOLE family.  This is the weave populating its own structural web, end to end.
+ *
+ *   (1) the engine discovers the dual of rotl(x,7) is rotr(x,25), and of rotl(x,12) is rotr(x,20) -- searched, proven
+ *   (2) the FULL rotation-duality family: every k in 1..31 has discovered dual j==32-k  -> 31 members
+ *   (3) the unique self-dual amount (rotl(x,k)==rotr(x,k)) is discovered to be k=16, the half-width coincidence
+ * Exit 99 = the structural strand primweb hand-sampled is now autonomously discovered as a complete family. */
+module corpus_1772
+
+extern @abi(c-msvc-x64) fn gild_rotdual_find(k: u64) -> i64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_rotdual_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_selfdual_k() -> i64 from "invent.iii"
+
+fn main() -> u64 {
+    if gild_rotdual_find(7u64) != 25i64 { return 1u64 }        /* 32 - 7  = 25, discovered + proven */
+    if gild_rotdual_find(12u64) != 20i64 { return 2u64 }       /* 32 - 12 = 20 */
+    if gild_rotdual_count() != 31u64 { return 3u64 }           /* the COMPLETE family, all 31 members */
+    if gild_selfdual_k() != 16i64 { return 4u64 }              /* the unique half-width self-coincidence */
+    return 99u64
+}

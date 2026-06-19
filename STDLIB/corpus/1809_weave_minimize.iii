@@ -1,0 +1,51 @@
+/* 1809_weave_minimize.iii -- CONTEXTUAL BLOAT ANNIHILATION BY BEHAVIOUR: III distils a bloated circuit to its minimum.
+ *
+ * ws_minimize takes ANY built bit-independent circuit, captures its behaviour (signature), and hands back the
+ * GLOBAL-minimal circuit realising that behaviour -- found by the weave's genesis.  It is structure-blind, so dead
+ * branches, duplicated sub-DAGs, and generalised-suite bloat cannot survive: only the minimal essence remains.
+ * This is the vision's "distil generic software into a hyper-specialised bare-metal circuit," as a reusable op.
+ *
+ *   (1) a deliberately BLOATED Maj (the majority function built twice with non-interning gates, then OR'd together)
+ *       has many gates (the redundancy is real -- non-intern keeps both copies).
+ *   (2) ws_minimize distils it: the result IS the same function (signature preserved) ...
+ *   (3) ... and is DRAMATICALLY smaller -- strictly fewer gates than the bloated form, and within Maj's true minimum.
+ * Exit 99 = III distils a bloated circuit to its proven minimum by behaviour -- bloat physically annihilated. */
+module corpus_1809
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_cost(root: u32, metric: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_set_metric(m: u32) -> i32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_minimize(root: u32, nvars: u32) -> u32 from "weave_graph.iii"
+
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+/* the majority function, built with NON-interning gates so redundancy is preserved: (a&b)|(a&c)|(b&c) = 5 gates. */
+fn maj_raw(a: u32, b: u32, c: u32) -> u32 { return bb_or(bb_or(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }
+
+fn main() -> u64 {
+    ws_set_metric(0u32)                               /* total-gate metric: the bloat we annihilate is gate count */
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+
+    /* (1) a bloated Maj: two independent copies OR'd -- the redundancy survives (non-intern builders) */
+    let bloated : u32 = bb_or(maj_raw(a, b, c), maj_raw(a, b, c))
+    let bloat_g : u32 = bb_node_cost(bloated, 0u32)
+    let sig : u64 = bb_signature(bloated, 3u32)
+    if bloat_g < 8u32 { return 11u64 }                /* the bloat is real (>= 8 gates) */
+
+    /* (2)+(3) distil it: same function, dramatically fewer gates */
+    let minroot : u32 = ws_minimize(bloated, 3u32)
+    if minroot == WG_GSENT { return 12u64 }
+    if bb_signature(minroot, 3u32) != sig { return 13u64 }        /* still Maj */
+    let min_g : u32 = bb_node_cost(minroot, 0u32)
+    if min_g >= bloat_g { return 14u64 }                          /* strictly smaller */
+    if min_g > 5u32 { return 15u64 }                             /* and within Maj's true minimum */
+
+    return 99u64
+}

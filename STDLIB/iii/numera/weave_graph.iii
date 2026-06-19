@@ -652,6 +652,18 @@ fn ws_emit(target: u64, nvars: u32) -> u32 @export {
     return ws_build_one(idx)
 }
 
+/* DISTIL any bit-independent circuit to its GLOBAL minimum: capture the circuit's behaviour (its signature), invent
+ * the minimal realisation of that behaviour (genesis), and hand back the minimal circuit.  Feed III a bloated or
+ * generalised circuit -> get its proven-minimal equivalent -- contextual bloat annihilation BY BEHAVIOUR (the
+ * strongest form: structure-blind, so dead branches and redundancy cannot survive).  Respects the active cost metric.
+ * The argument `root` must be built in the current arena; the returned minimal root lives in a FRESH arena (read it
+ * before any further bb_reset).  Returns WG_GSENT if the behaviour is unrealisable in the reachable fragment. */
+fn ws_minimize(root: u32, nvars: u32) -> u32 @export {
+    let sig : u64 = bb_signature(root, nvars)
+    ws_synth(sig, nvars)
+    return ws_emit(sig, nvars)
+}
+
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     let p : *u8 = (base + off) as *u8
     p[0u64] = (v & 0xFFu32) as u8

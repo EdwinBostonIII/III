@@ -1,0 +1,71 @@
+/* 1766_weave_invent.iii -- INVENT FILLS OUT THE WEAVE, INDEPENDENTLY, AND IT RUNS.
+ *
+ * The weave's structural primitives (the SHA-2 round functions Ch and Maj) were PROVEN by hand in primweb.
+ * Here III DISCOVERS their cheaper forms de-novo: the generative engine (numera/invent gilw_forge) searches the
+ * bv operation algebra cost-first and the SAT judge proves equality for ALL inputs -- no human hands it either
+ * shape.  Then, because bv_bits is now ONE substrate (bb_eval), the discovered circuit is EXECUTED and shown
+ * byte-identical to the native round function.  Discovered, proven, executed -- one object, unassisted.
+ *
+ *   (1) gilw_forge(Ch)  -> a strictly-cheaper proven form (4 ops -> 3: one AND fewer, no NOT); found=1
+ *   (2) the discovered Ch circuit, bb_eval'd, == native wvb_ch32 on vectors  (exec layer == discovery)
+ *   (3) gilw_forge(Maj) -> a strictly-cheaper proven form (5 ops -> 4: the carry-save / adder-carry form)
+ *   (4) the discovered Maj circuit, bb_eval'd, == native wvb_maj32 on vectors
+ *   (5) and each discovered form is SAT-proven equal to its native spec (the proof half still bites)
+ * Exit 99 = III invented the weave's structure itself, proved it, and ran it -- on the single substrate. */
+module corpus_1766
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+extern @abi(c-msvc-x64) fn wvb_ch32(e: u32, f: u32, g: u32) -> u32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_maj32(a: u32, b: u32, c: u32) -> u32 from "weave_blocks.iii"
+
+extern @abi(c-msvc-x64) fn gilw_forge(kind: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_found() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_build_best(a: u32, b: u32, c: u32) -> u32 from "invent.iii"
+
+fn main() -> u64 {
+    /* (1) III DISCOVERS a cheaper proven form of Ch (4-op spec -> strictly fewer). */
+    let chcost : u32 = gilw_forge(1u32)
+    if gilw_found() != 1u8 { return 1u64 }
+    if chcost >= 4u32 { return 2u64 }
+
+    /* (2)+(5) rebuild the discovered Ch circuit, EXECUTE it, and PROVE it == the native spec. */
+    bb_reset(32u64)
+    let e : u32 = bb_var(0u32)
+    let f : u32 = bb_var(1u32)
+    let g : u32 = bb_var(2u32)
+    let ch_disc : u32 = gilw_build_best(e, f, g)
+    let ch_nat  : u32 = bb_xor(bb_and(e, f), bb_and(bb_not(e), g))
+    if bb_equal(ch_disc, ch_nat) != 1u8 { return 3u64 }                 /* proven equal for ALL inputs */
+    bb_set_input(0u32, 0xF0F0F0F0u64)
+    bb_set_input(1u32, 0x12345678u64)
+    bb_set_input(2u32, 0x9ABCDEF0u64)
+    if bb_eval(ch_disc) != (wvb_ch32(0xF0F0F0F0u32, 0x12345678u32, 0x9ABCDEF0u32) as u64) { return 4u64 }
+
+    /* (3) III DISCOVERS a cheaper proven form of Maj (5-op spec -> strictly fewer: the carry-save form). */
+    let majcost : u32 = gilw_forge(2u32)
+    if gilw_found() != 1u8 { return 5u64 }
+    if majcost >= 5u32 { return 6u64 }
+
+    /* (4)+(5) rebuild the discovered Maj circuit, EXECUTE it, and PROVE it == the native spec. */
+    bb_reset(32u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let maj_disc : u32 = gilw_build_best(a, b, c)
+    let maj_nat  : u32 = bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c))
+    if bb_equal(maj_disc, maj_nat) != 1u8 { return 7u64 }
+    bb_set_input(0u32, 0xCCCCCCCCu64)
+    bb_set_input(1u32, 0xAAAAAAAAu64)
+    bb_set_input(2u32, 0xF0F0F0F0u64)
+    if bb_eval(maj_disc) != (wvb_maj32(0xCCCCCCCCu32, 0xAAAAAAAAu32, 0xF0F0F0F0u32) as u64) { return 8u64 }
+
+    return 99u64
+}

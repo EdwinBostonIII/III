@@ -66,6 +66,46 @@ var BB_DIAG_ADD   : i32 = 0i32         /* diagnostics: first bad sat_add_clause 
 var BB_DIAG_SOLVE : i32 = 0x7Fi32      /* diagnostics: sat_solve rc */
 var BB_DIAG_INIT  : i32 = 0x7Fi32      /* diagnostics: sat_init rc */
 
+/* ============================================================================================================
+ * THE STRUCTURAL SPINE -- what makes the circuit ONE substrate, not two.
+ *
+ * The bit-indirection above (BB_BITVAR) is the SAT encoding: it lets the judge REASON over a circuit.  But a
+ * circuit the judge can reason over is the SAME object that should EXECUTE -- otherwise every primitive is
+ * authored twice (a proof form AND a runtime form, the two-layer split).  The structural spine records, per
+ * node, the OPERATION that built it (kind + operand node-ids + shift amount / const), so the very DAG the SAT
+ * miter decides can also be EVALUATED on concrete inputs (bb_eval).  One definition; the judge proves it, the
+ * evaluator runs it, the invention engine mutates it.  Nodes are built bottom-up, so a node's operands always
+ * have SMALLER ids -- evaluation is a single forward sweep, no recursion, no stack. */
+const EK_VAR   : u32 = 0u32
+const EK_CONST : u32 = 1u32
+const EK_AND   : u32 = 2u32
+const EK_OR    : u32 = 3u32
+const EK_XOR   : u32 = 4u32
+const EK_NOT   : u32 = 5u32
+const EK_SHL   : u32 = 6u32
+const EK_SHR   : u32 = 7u32
+const EK_ADD   : u32 = 8u32
+const EK_SUB   : u32 = 9u32
+const EK_MUL   : u32 = 10u32
+
+var BB_NKIND  : [u32; 128]             /* per-node operation kind (EK_*) */
+var BB_NA     : [u32; 128]             /* operand a node-id  (or VAR index for EK_VAR) */
+var BB_NB     : [u32; 128]             /* operand b node-id  (binary ops) */
+var BB_NK     : [u64; 128]             /* shift amount k     (EK_SHL/EK_SHR) */
+var BB_NCONST : [u64; 128]            /* literal value      (EK_CONST) */
+var BB_INVAL  : [u64; 8]               /* concrete input word per VAR index (bb_set_input) */
+var BB_NVAL   : [u64; 128]             /* evaluation scratch: the concrete value of each node */
+
+/* record node n's structure (called by every builder right after bb_node_alloc). */
+fn bb_struct(n: u32, kind: u32, a: u32, b: u32, k: u64) -> u64 {
+    if n >= BB_MAX_NODES { return 0u64 }
+    BB_NKIND[n as u64] = kind
+    BB_NA[n as u64]    = a
+    BB_NB[n as u64]    = b
+    BB_NK[n as u64]    = k
+    return 0u64
+}
+
 fn bb_diag_add() -> i32 @export { return BB_DIAG_ADD }
 fn bb_diag_solve() -> i32 @export { return BB_DIAG_SOLVE }
 fn bb_diag_init() -> i32 @export { return BB_DIAG_INIT }
@@ -190,6 +230,7 @@ fn bb_var(v: u32) -> u32 @export {
     let b : u32 = BB_INBASE[v as u64]
     let mut i : u64 = 0u64
     while i < BB_W { bb_setbit(n, i, b + (i as u32)) ; i = i + 1u64 }
+    bb_struct(n, EK_VAR, v, 0u32, 0u64)            /* the spine: this node IS input v */
     return n
 }
 
@@ -201,6 +242,8 @@ fn bb_const(c: u64) -> u32 @export {
         if ((c >> i) & 1u64) == 1u64 { bb_setbit(n, i, BB_OVAR) } else { bb_setbit(n, i, BB_ZVAR) }
         i = i + 1u64
     }
+    bb_struct(n, EK_CONST, 0u32, 0u32, 0u64)       /* the spine: this node IS the literal c */
+    BB_NCONST[n as u64] = c
     return n
 }
 
@@ -215,6 +258,7 @@ fn bb_and(a: u32, b: u32) -> u32 @export {
         bb_setbit(n, i, z)
         i = i + 1u64
     }
+    bb_struct(n, EK_AND, a, b, 0u64)
     return n
 }
 fn bb_or(a: u32, b: u32) -> u32 @export {
@@ -228,6 +272,7 @@ fn bb_or(a: u32, b: u32) -> u32 @export {
         bb_setbit(n, i, z)
         i = i + 1u64
     }
+    bb_struct(n, EK_OR, a, b, 0u64)
     return n
 }
 fn bb_xor(a: u32, b: u32) -> u32 @export {
@@ -241,6 +286,7 @@ fn bb_xor(a: u32, b: u32) -> u32 @export {
         bb_setbit(n, i, z)
         i = i + 1u64
     }
+    bb_struct(n, EK_XOR, a, b, 0u64)
     return n
 }
 fn bb_not(a: u32) -> u32 @export {
@@ -253,6 +299,7 @@ fn bb_not(a: u32) -> u32 @export {
         bb_setbit(n, i, z)
         i = i + 1u64
     }
+    bb_struct(n, EK_NOT, a, 0u32, 0u64)
     return n
 }
 
@@ -265,6 +312,7 @@ fn bb_shl(a: u32, k: u64) -> u32 @export {
         if i < k { bb_setbit(n, i, BB_ZVAR) } else { bb_setbit(n, i, bb_bit(a, i - k)) }
         i = i + 1u64
     }
+    bb_struct(n, EK_SHL, a, 0u32, k)
     return n
 }
 fn bb_shr(a: u32, k: u64) -> u32 @export {
@@ -275,6 +323,7 @@ fn bb_shr(a: u32, k: u64) -> u32 @export {
         if i + k < BB_W { bb_setbit(n, i, bb_bit(a, i + k)) } else { bb_setbit(n, i, BB_ZVAR) }
         i = i + 1u64
     }
+    bb_struct(n, EK_SHR, a, 0u32, k)
     return n
 }
 
@@ -294,13 +343,18 @@ fn bb_add_core(a: u32, b: u32, cin: u32) -> u32 {
 fn bb_add(a: u32, b: u32) -> u32 @export {
     if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] untrusted node ids */
     if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
-    return bb_add_core(a, b, BB_ZVAR)
+    let n : u32 = bb_add_core(a, b, BB_ZVAR)
+    bb_struct(n, EK_ADD, a, b, 0u64)
+    return n
 }
 /* a - b = a + ~b + 1 */
 fn bb_sub(a: u32, b: u32) -> u32 @export {
     if a >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }   /* [W19] guard b BEFORE bb_not(b) reads OOB */
     if b >= BB_MAX_NODES { BB_ERR = 1u8 ; return BB_SENT }
-    return bb_add_core(a, bb_not(b), BB_OVAR)
+    let nb : u32 = bb_not(b)
+    let n : u32 = bb_add_core(a, nb, BB_OVAR)
+    bb_struct(n, EK_SUB, a, b, 0u64)               /* eval: (a + ~b + 1) = a - b mod 2^w */
+    return n
 }
 
 /* mul: shift-add accumulation.  Row j (a's bit j gating b), truncated adders from bit j upward. */
@@ -340,6 +394,7 @@ fn bb_mul(a: u32, b: u32) -> u32 @export {
     let n : u32 = bb_node_alloc()
     i = 0u64
     while i < BB_W { bb_setbit(n, i, BB_ACC[i]) ; i = i + 1u64 }
+    bb_struct(n, EK_MUL, a, b, 0u64)
     return n
 }
 
@@ -406,4 +461,63 @@ fn bb_equal(a: u32, b: u32) -> u8 @export {
     BB_SP = save_sp
     BB_NCL = save_ncl
     return verdict
+}
+
+/* ============================================================================================================
+ * THE EVALUATOR -- the circuit EXECUTES (the half that makes the substrate ONE, not two).
+ *
+ * Set the concrete input words with bb_set_input(v, value), then bb_eval(node) sweeps the DAG FORWARD -- every
+ * operand id is smaller than the node that uses it (bottom-up construction), so one pass over 0..node computes
+ * each node's concrete w-bit value with no recursion.  The very DAG the SAT judge (bb_equal) PROVES is the DAG
+ * this evaluator RUNS: a primitive is now a single object that is both proven and executed, never a proof form
+ * plus a divorced runtime copy.  bb_eval(circuit) reproduces the native primitive byte-for-byte, so the native
+ * (wvb_*) form is the proven-equal fast PROJECTION of this one definition, not a second authored layer. */
+fn bb_set_input(v: u32, val: u64) -> i32 @export {
+    if v >= BB_MAX_INPUTS { return 0xFi32 }
+    BB_INVAL[v as u64] = val
+    return 0i32
+}
+
+/* the w-bit width mask, built without a shift-by-width (w in 1..64, so 1u64<<64 UB never happens). */
+fn bb_wmask() -> u64 {
+    let mut m : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < BB_W { m = (m << 1u64) | 1u64 ; i = i + 1u64 }
+    return m
+}
+
+/* evaluate node `t` on the current inputs (bb_set_input); returns its concrete value over Z/2^w (0 if t is out
+ * of range).  Pure function of the construction sequence + inputs -- deterministic, like the encoder. */
+fn bb_eval(t: u32) -> u64 @export {
+    if t >= BB_NN { return 0u64 }
+    let mask : u64 = bb_wmask()
+    let mut n : u32 = 0u32
+    while n <= t {
+        let kind : u32 = BB_NKIND[n as u64]
+        let ia   : u32 = BB_NA[n as u64]
+        let ib   : u32 = BB_NB[n as u64]
+        let va   : u64 = BB_NVAL[ia as u64]                 /* operands precede n -> already evaluated */
+        let vb   : u64 = BB_NVAL[ib as u64]
+        let mut v : u64 = 0u64
+        if kind == EK_VAR   { if (ia as u64) < 8u64 { v = BB_INVAL[ia as u64] & mask } }
+        if kind == EK_CONST { v = BB_NCONST[n as u64] & mask }
+        if kind == EK_AND   { v = (va & vb) & mask }
+        if kind == EK_OR    { v = (va | vb) & mask }
+        if kind == EK_XOR   { v = (va ^ vb) & mask }
+        if kind == EK_NOT   { v = (~va) & mask }
+        if kind == EK_SHL   {
+            let k : u64 = BB_NK[n as u64]
+            if k < 64u64 { v = (va << k) & mask }
+        }
+        if kind == EK_SHR   {
+            let k : u64 = BB_NK[n as u64]
+            if k < 64u64 { v = (va >> k) & mask }
+        }
+        if kind == EK_ADD   { v = (va + vb) & mask }
+        if kind == EK_SUB   { v = (va - vb) & mask }
+        if kind == EK_MUL   { v = (va * vb) & mask }
+        BB_NVAL[n as u64] = v
+        n = n + 1u32
+    }
+    return BB_NVAL[t as u64]
 }

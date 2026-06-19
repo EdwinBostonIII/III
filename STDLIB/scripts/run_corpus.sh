@@ -1413,6 +1413,10 @@ declare -A EXPECTED=(
     [1763_weave_interfile]=99
     # THE AUTONOMOUS WEAVE FILLER: the GIL fills its own spiderweb (cost-truth-selected, proven, named, looping).
     [1764_weave_forge]=99
+    # THE ONE SUBSTRATE: a bv_bits circuit is BOTH proven (SAT judge) AND executed (bb_eval) -- exec layer == proof layer, one object.
+    [1765_weave_oneeval]=99
+    # INVENT FILLS THE WEAVE: III discovers Ch (4->3 ops) and Maj (5->4, carry-save) de-novo, proves them, and RUNS them via bb_eval.
+    [1766_weave_invent]=99
 )
 
 PASS=0

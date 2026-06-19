@@ -1,0 +1,127 @@
+/* 1765_weave_oneeval.iii -- THE ONE SUBSTRATE: a bv_bits circuit is BOTH proven AND executed.
+ *
+ * The grievance the weave answers: a primitive must not be authored twice -- once as a runtime form
+ * (weave_blocks/wvb_*) and once as a divorced proof circuit (primweb).  bv_bits now carries a structural spine
+ * + bb_eval, so ONE circuit definition is the whole truth: the SAT judge PROVES it and the evaluator RUNS it.
+ *
+ * This KAT proves the collapse is real and load-bearing, on representative weave primitives:
+ *   (1) rotl32  -- bb_eval(or(shl(x,k),shr(x,32-k))) == wvb_rotl32(x,k)  byte-for-byte, every test vector
+ *   (2) Ch      -- bb_eval(xor(and(e,f),and(~e,g)))  == wvb_ch32(e,f,g)
+ *   (3) Maj     -- bb_eval(maj circuit)              == wvb_maj32(a,b,c)
+ *   (4) mul     -- bb_eval(mul(a,b)) at w=64         == wvb_mul64_lo(a,b)  (the low word the judge models)
+ *   (5) PROOF still bites: the SAT judge proves Ch == its one-AND-fewer optform; eval AGREES concretely
+ *   (6) INVENT on the one substrate: gil_forge(7) DISCOVERS 7*x=(x<<3)-x; bb_equal PROVES it; bb_eval EXECUTES
+ *       both target and discovered form to the SAME concrete value -- discovered, proven, executed, one object.
+ * Exit 99 = the exec layer and the proof layer are the SAME bv_bits circuit, demonstrated, no second copy. */
+module corpus_1765
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_set_input(v: u32, val: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+
+extern @abi(c-msvc-x64) fn wvb_rotl32(x: u32, n: u32) -> u32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_ch32(e: u32, f: u32, g: u32) -> u32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_maj32(a: u32, b: u32, c: u32) -> u32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64(a: u64, b: u64) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_lo() -> u64 from "weave_blocks.iii"
+
+extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
+
+/* build rotl32(x,k) as a bv circuit over var 0; eval it on `xv` and compare to the native wvb_rotl32. */
+fn check_rotl(k: u64, xv: u64) -> u8 {
+    bb_reset(32u64)
+    let x   : u32 = bb_var(0u32)
+    let rot : u32 = bb_or(bb_shl(x, k), bb_shr(x, 32u64 - k))
+    bb_set_input(0u32, xv)
+    let got  : u64 = bb_eval(rot)
+    let want : u64 = wvb_rotl32(xv as u32, k as u32) as u64
+    if got == want { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    /* (1) rotl32: the bv circuit, EXECUTED, reproduces the native rotation for the ChaCha amounts + edge bits. */
+    if check_rotl(7u64,  0x12345678u64) != 1u8 { return 1u64 }
+    if check_rotl(12u64, 0xDEADBEEFu64) != 1u8 { return 2u64 }
+    if check_rotl(8u64,  0x80000001u64) != 1u8 { return 3u64 }
+    if check_rotl(16u64, 0x0000FFFFu64) != 1u8 { return 4u64 }
+    if check_rotl(1u64,  0xFFFFFFFFu64) != 1u8 { return 5u64 }
+
+    /* (2) Ch(e,f,g) = (e&f) ^ (~e&g): circuit eval == native wvb_ch32 */
+    bb_reset(32u64)
+    let e1 : u32 = bb_var(0u32)
+    let f1 : u32 = bb_var(1u32)
+    let g1 : u32 = bb_var(2u32)
+    let ch : u32 = bb_xor(bb_and(e1, f1), bb_and(bb_not(e1), g1))
+    bb_set_input(0u32, 0xF0F0F0F0u64)
+    bb_set_input(1u32, 0x12345678u64)
+    bb_set_input(2u32, 0x9ABCDEF0u64)
+    if bb_eval(ch) != (wvb_ch32(0xF0F0F0F0u32, 0x12345678u32, 0x9ABCDEF0u32) as u64) { return 6u64 }
+
+    /* (3) Maj(a,b,c) = (a&b)^(a&c)^(b&c): circuit eval == native wvb_maj32 */
+    bb_reset(32u64)
+    let a3 : u32 = bb_var(0u32)
+    let b3 : u32 = bb_var(1u32)
+    let c3 : u32 = bb_var(2u32)
+    let maj : u32 = bb_xor(bb_xor(bb_and(a3, b3), bb_and(a3, c3)), bb_and(b3, c3))
+    bb_set_input(0u32, 0xCCCCCCCCu64)
+    bb_set_input(1u32, 0xAAAAAAAAu64)
+    bb_set_input(2u32, 0xF0F0F0F0u64)
+    if bb_eval(maj) != (wvb_maj32(0xCCCCCCCCu32, 0xAAAAAAAAu32, 0xF0F0F0F0u32) as u64) { return 7u64 }
+
+    /* (4) mul: bb_mul at w=64, EXECUTED, == the native wide-multiply's low word (what the judge models mod 2^64). */
+    bb_reset(64u64)
+    let am : u32 = bb_var(0u32)
+    let bm : u32 = bb_var(1u32)
+    let pr : u32 = bb_mul(am, bm)
+    let av : u64 = 0x00000001DEADBEEFu64
+    let bv : u64 = 0x00000000FEEDFACEu64
+    bb_set_input(0u32, av)
+    bb_set_input(1u32, bv)
+    wvb_mul64(av, bv)
+    if bb_eval(pr) != wvb_mul64_lo() { return 8u64 }
+
+    /* (5) the PROOF layer still bites AND agrees with execution: Ch == one-AND-fewer optform g^(e&(f^g)). */
+    bb_reset(32u64)
+    let e5 : u32 = bb_var(0u32)
+    let f5 : u32 = bb_var(1u32)
+    let g5 : u32 = bb_var(2u32)
+    let orig  : u32 = bb_xor(bb_and(e5, f5), bb_and(bb_not(e5), g5))
+    let cheap : u32 = bb_xor(g5, bb_and(e5, bb_xor(f5, g5)))
+    if bb_equal(orig, cheap) != 1u8 { return 9u64 }            /* SAT proves them equal for ALL inputs */
+    bb_set_input(0u32, 0x5A5A5A5Au64)
+    bb_set_input(1u32, 0x0F0F0F0Fu64)
+    bb_set_input(2u32, 0x33333333u64)
+    if bb_eval(orig) != bb_eval(cheap) { return 10u64 }        /* and execution AGREES concretely */
+
+    /* (6) INVENT on the ONE substrate: discover 7*x=(x<<3)-x, PROVE it, EXECUTE both to the same value. */
+    gil_forge(7u64)
+    if gil_best_kind() != 2u32 { return 11u64 }                /* shape (x<<a) - x */
+    let ga : u64 = gil_best_a()                                /* a = 3 for k=7 */
+    bb_reset(64u64)
+    let xi   : u32 = bb_var(0u32)
+    let tgt  : u32 = bb_mul(xi, bb_const(7u64))
+    let form : u32 = bb_sub(bb_shl(xi, ga), xi)
+    if bb_equal(tgt, form) != 1u8 { return 12u64 }             /* the discovered law, PROVEN by SAT */
+    let xv : u64 = 0x0123456789ABCDEFu64
+    bb_set_input(0u32, xv)
+    let et : u64 = bb_eval(tgt)
+    let ef : u64 = bb_eval(form)
+    if et != ef { return 13u64 }                              /* discovered form EXECUTES to the same value */
+    if et != (xv * 7u64) { return 14u64 }                     /* and that value really is 7*x mod 2^64 */
+
+    return 99u64
+}

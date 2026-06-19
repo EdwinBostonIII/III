@@ -510,3 +510,157 @@ fn gil_cycle_validate(k: u64, mul_latency: u32) -> u8 @export {
     if cyc_form < cyc_imul { return 1u8 }
     return 0u8
 }
+
+/* ============================================================================================================
+ * THE WEAVE FORGE -- invent fills out the weave independently.
+ *
+ * Points the same generate->value-sieve->SAT-judge engine at the WEAVE's own structural primitives: the SHA-2
+ * round functions Ch and Maj.  primweb PROVED their cheaper forms by hand; this forge DISCOVERS them de-novo --
+ * the SHAPE found by cost-directed search over the leaf set {a,b,c, a^b, a^c, b^c} and the op set {and,or,xor},
+ * the EQUALITY proven by the bb_equal SAT miter for ALL inputs.  III rediscovers Ch(e,f,g) = g ^ (e&(f^g))
+ * (one AND fewer, no NOT) and Maj(a,b,c) = (a&b) ^ (c&(a^b)) (the carry-save / adder-carry form) without being
+ * handed either.  The winning descriptor is recorded, so gilw_build_best rebuilds the discovered circuit on
+ * any var set -- and bv_bits' bb_eval EXECUTES it: discovered, proven, runnable -- one object on one substrate.
+ *
+ * Grammar: mode 1 = outer(leaf_i, inner(leaf_j,leaf_k)) [Ch's shape]; mode 2 = outer(inner(leaf_i,leaf_j),
+ * inner(leaf_k,leaf_l)) [Maj's shape].  NOT-leaves are deliberately excluded -- the discovery is the NO-NOT
+ * cheaper form, so the grammar must be able to express it without them.  Proven at w=8 (Ch/Maj are bitwise --
+ * per-bit identities hold at every width); the rebuilt circuit is width-agnostic. */
+const GILW_W : u64 = 8u64
+
+var GILW_KCALLS    : u64 = 0u64
+var GILW_BEST_COST : u32 = 0u32
+var GILW_FOUND     : u8  = 0u8
+var GILW_B_MODE : u32 = 0u32
+var GILW_B_OO   : u32 = 0u32
+var GILW_B_AOP  : u32 = 0u32
+var GILW_B_BOP  : u32 = 0u32
+var GILW_B_AI   : u32 = 0u32
+var GILW_B_AJ   : u32 = 0u32
+var GILW_B_BI   : u32 = 0u32
+var GILW_B_BJ   : u32 = 0u32
+
+/* leaf set over var nodes a,b,c -- base (cost 0) + the three xor-pairs (cost 1). */
+fn gilw_leaf(idx: u32, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return a }
+    if idx == 1u32 { return b }
+    if idx == 2u32 { return c }
+    if idx == 3u32 { return bb_xor(a, b) }
+    if idx == 4u32 { return bb_xor(a, c) }
+    if idx == 5u32 { return bb_xor(b, c) }
+    return 0xFFFFFFFFu32
+}
+fn gilw_leafcost(idx: u32) -> u32 { if idx <= 2u32 { return 0u32 }  return 1u32 }
+fn gilw_op(op: u32, p: u32, q: u32) -> u32 {
+    if op == 0u32 { return bb_and(p, q) }
+    if op == 1u32 { return bb_or(p, q) }
+    return bb_xor(p, q)
+}
+
+/* the weave target function (the incumbent op-count to beat). 1 = Ch, 2 = Maj. */
+fn gilw_target(kind: u32, a: u32, b: u32, c: u32) -> u32 {
+    if kind == 1u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }            /* Ch = (a&b)^(~a&c) */
+    return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c))                  /* Maj = (a&b)^(a&c)^(b&c) */
+}
+fn gilw_target_cost(kind: u32) -> u32 { if kind == 1u32 { return 4u32 }  return 5u32 }
+
+/* build a candidate from the descriptor over var nodes a,b,c. */
+fn gilw_build(mode: u32, oo: u32, aop: u32, ai: u32, aj: u32, bop: u32, bi: u32, bj: u32, a: u32, b: u32, c: u32) -> u32 {
+    if mode == 1u32 {
+        return gilw_op(oo, gilw_leaf(ai, a, b, c), gilw_op(aop, gilw_leaf(bi, a, b, c), gilw_leaf(bj, a, b, c)))
+    }
+    return gilw_op(oo, gilw_op(aop, gilw_leaf(ai, a, b, c), gilw_leaf(aj, a, b, c)), gilw_op(bop, gilw_leaf(bi, a, b, c), gilw_leaf(bj, a, b, c)))
+}
+
+/* rebuild the DISCOVERED best form over the caller's var nodes (so bb_eval can EXECUTE it). */
+fn gilw_build_best(a: u32, b: u32, c: u32) -> u32 @export {
+    return gilw_build(GILW_B_MODE, GILW_B_OO, GILW_B_AOP, GILW_B_AI, GILW_B_AJ, GILW_B_BOP, GILW_B_BI, GILW_B_BJ, a, b, c)
+}
+
+/* sieve then judge one candidate; adopt + record descriptor iff strictly cheaper and SAT-proven equal. */
+fn gilw_consider(kind: u32, mode: u32, oo: u32, aop: u32, ai: u32, aj: u32, bop: u32, bi: u32, bj: u32) -> i32 {
+    let mut cost : u32 = 0u32
+    if mode == 1u32 { cost = gilw_leafcost(ai) + gilw_leafcost(bi) + gilw_leafcost(bj) + 2u32 }
+    else { cost = gilw_leafcost(ai) + gilw_leafcost(aj) + gilw_leafcost(bi) + gilw_leafcost(bj) + 3u32 }
+    if cost >= GILW_BEST_COST { return 0i32 }
+    bb_reset(GILW_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let target : u32 = gilw_target(kind, a, b, c)
+    let cand : u32 = gilw_build(mode, oo, aop, ai, aj, bop, bi, bj, a, b, c)
+    GILW_KCALLS = GILW_KCALLS + 1u64
+    if bb_equal(target, cand) == 1u8 {
+        GILW_BEST_COST = cost
+        GILW_FOUND = 1u8
+        GILW_B_MODE = mode  GILW_B_OO = oo  GILW_B_AOP = aop  GILW_B_BOP = bop
+        GILW_B_AI = ai  GILW_B_AJ = aj  GILW_B_BI = bi  GILW_B_BJ = bj
+        return 1i32
+    }
+    return 0i32
+}
+
+/* FORGE: discover the cheapest provably-equal form of weave function `kind`. */
+fn gilw_forge(kind: u32) -> u32 @export {
+    GILW_KCALLS = 0u64
+    GILW_FOUND = 0u8
+    GILW_BEST_COST = gilw_target_cost(kind)
+    /* mode 1: outer(leaf, inner(leaf,leaf)) -- Ch's shape */
+    let mut oo : u32 = 0u32
+    while oo < 3u32 {
+        let mut aop : u32 = 0u32
+        while aop < 3u32 {
+            let mut ai : u32 = 0u32
+            while ai < 6u32 {
+                let mut bi : u32 = 0u32
+                while bi < 6u32 {
+                    let mut bj : u32 = 0u32
+                    while bj < 6u32 {
+                        gilw_consider(kind, 1u32, oo, aop, ai, 0u32, 0u32, bi, bj)
+                        bj = bj + 1u32
+                    }
+                    bi = bi + 1u32
+                }
+                ai = ai + 1u32
+            }
+            aop = aop + 1u32
+        }
+        oo = oo + 1u32
+    }
+    /* mode 2: outer(inner(leaf,leaf), inner(leaf,leaf)) -- Maj's shape */
+    oo = 0u32
+    while oo < 3u32 {
+        let mut aop : u32 = 0u32
+        while aop < 3u32 {
+            let mut bop : u32 = 0u32
+            while bop < 3u32 {
+                let mut ai : u32 = 0u32
+                while ai < 6u32 {
+                    let mut aj : u32 = 0u32
+                    while aj < 6u32 {
+                        let mut bi : u32 = 0u32
+                        while bi < 6u32 {
+                            let mut bj : u32 = 0u32
+                            while bj < 6u32 {
+                                gilw_consider(kind, 2u32, oo, aop, ai, aj, bop, bi, bj)
+                                bj = bj + 1u32
+                            }
+                            bi = bi + 1u32
+                        }
+                        aj = aj + 1u32
+                    }
+                    ai = ai + 1u32
+                }
+                bop = bop + 1u32
+            }
+            aop = aop + 1u32
+        }
+        oo = oo + 1u32
+    }
+    return GILW_BEST_COST
+}
+
+fn gilw_best_cost() -> u32 @export { return GILW_BEST_COST }
+fn gilw_found() -> u8 @export { return GILW_FOUND }
+fn gilw_kcalls() -> u64 @export { return GILW_KCALLS }
+fn gilw_best_mode() -> u32 @export { return GILW_B_MODE }

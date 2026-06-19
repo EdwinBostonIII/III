@@ -521,3 +521,17 @@ fn bb_eval(t: u32) -> u64 @export {
     }
     return BB_NVAL[t as u64]
 }
+
+/* THE SUBSTRATE MEASURES ITS OWN GATE COST: count nodes of a given kind in the current DAG.  AND-count is the
+ * cost that dominates a gate-count / zk-proving target (each AND is a multiplication gate / a constraint), so a
+ * form with strictly fewer ANDs is a real win THERE -- the cost-truth the adoption gate reads, not asserted. */
+fn bb_count_kind(kind: u32) -> u64 @export {
+    let mut c : u64 = 0u64
+    let mut n : u32 = 0u32
+    while n < BB_NN {
+        if BB_NKIND[n as u64] == kind { c = c + 1u64 }
+        n = n + 1u32
+    }
+    return c
+}
+fn bb_count_and() -> u64 @export { return bb_count_kind(EK_AND) }

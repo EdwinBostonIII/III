@@ -1433,6 +1433,8 @@ declare -A EXPECTED=(
     [1773_weave_selflaw_discover]=99
     # END TO END: one pass discovers the WHOLE weave (13 laws: 8 optimization + 5 structural), accumulates into the commons, persists + reloads byte-identical.
     [1774_weave_endtoend]=99
+    # COST-TRUE ADOPTION (fork a): the discovered Ch/Maj optform (fewer ANDs, measured by bb_count_and) is ADOPTED on gate-count/zk targets, abstained on x86 -- cost-true, soundness-gated.
+    [1775_weave_adopt]=99
 )
 
 PASS=0

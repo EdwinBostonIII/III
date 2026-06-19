@@ -1,0 +1,27 @@
+/* 1775_weave_adopt.iii -- COST-TRUE ADOPTION: a discovered cheaper form is adopted only where it truly wins.
+ *
+ * The Ch/Maj optforms have strictly FEWER ANDs than the spec.  On a gate-count / zk-proving target every AND is
+ * a multiplication-gate / constraint, so the optform is a real win and is ADOPTED.  On x86 the win is marginal
+ * (native mux, ~1-cycle ops), so the gate ABSTAINS -- cost-true, not forced.  Adoption is gated on a SOUND
+ * equivalence proof (bb_equal); an unproven form is REFUSED.  This is fork (a) completed honestly: the system's
+ * own cost discipline decides, and the optform is adopted exactly where it is genuinely cheaper.
+ *
+ *   (1) the cost basis is measured, not asserted: Ch spec = 2 ANDs, optform = 1 AND
+ *   (2) gate-count target -> ADOPT (1) for both Ch and Maj; x86 target -> abstain (0)
+ * Exit 99 = adoption is cost-true and soundness-gated. */
+module corpus_1775
+
+extern @abi(c-msvc-x64) fn gild_ch_spec_ands() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_ch_opt_ands() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_adopt_ch(target: u32) -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_adopt_maj(target: u32) -> i32 from "invent.iii"
+
+fn main() -> u64 {
+    if gild_ch_spec_ands() != 2u64 { return 1u64 }       /* measured: the spec really has 2 ANDs */
+    if gild_ch_opt_ands() != 1u64 { return 2u64 }        /* measured: the optform really has 1 AND */
+    if gild_adopt_ch(1u32) != 1i32 { return 3u64 }       /* gate-count/zk -> ADOPT (the AND saving is real) */
+    if gild_adopt_ch(0u32) != 0i32 { return 4u64 }       /* x86 -> abstain (marginal, cost-true) */
+    if gild_adopt_maj(1u32) != 1i32 { return 5u64 }      /* Maj gate-count -> ADOPT (2 ANDs < 3) */
+    if gild_adopt_maj(0u32) != 0i32 { return 6u64 }      /* Maj x86 -> abstain */
+    return 99u64
+}

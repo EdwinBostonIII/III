@@ -35,6 +35,7 @@ extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
@@ -766,4 +767,79 @@ fn gild_selflaw_rhs(op: u32) -> i32 @export {
     if bb_equal(lhs, bb_var(0u32)) == 1u8 { return 1i32 }                         /* collapses to x */
     if bb_equal(lhs, bb_const(0xFFFFFFFFu64)) == 1u8 { return 2i32 }              /* collapses to all-ones */
     return -1i32
+}
+
+/* ============================================================================================================
+ * COST-TRUE ADOPTION: a discovered cheaper form is adopted only where it is ACTUALLY cheaper on the target.
+ *
+ * The Ch/Maj optforms gild/gilw discover have strictly FEWER ANDs (Ch: 1 vs 2; Maj: 2 vs 3).  On a gate-count
+ * or zk-proving target every AND is a multiplication-gate / a constraint, so the optform is a real win and is
+ * ADOPTED.  On x86 the spec ops are ~1 cycle and the multiplexer is native, so the win is marginal -> the gate
+ * ABSTAINS (cost-true, not forced -- forcing adoption against the proven cost model would be a regression).
+ * The adoption is gated on a SOUND equivalence proof: a form that does not bb_equal the spec is never adopted. */
+
+/* AND-count of the Ch SPEC form (e&f)^(~e&g). */
+fn gild_ch_spec_ands() -> u64 @export {
+    bb_reset(GILD_W)
+    let e : u32 = bb_var(0u32)
+    let f : u32 = bb_var(1u32)
+    let g : u32 = bb_var(2u32)
+    bb_xor(bb_and(e, f), bb_and(bb_not(e), g))
+    return bb_count_and()
+}
+/* AND-count of the Ch OPTFORM g^(e&(f^g)). */
+fn gild_ch_opt_ands() -> u64 @export {
+    bb_reset(GILD_W)
+    let e : u32 = bb_var(0u32)
+    let f : u32 = bb_var(1u32)
+    let g : u32 = bb_var(2u32)
+    bb_xor(g, bb_and(e, bb_xor(f, g)))
+    return bb_count_and()
+}
+
+/* DECIDE adoption of the Ch optform for `target` (0 = x86/cycle, 1 = gate-count/zk).  Returns 1 = adopt,
+ * 0 = abstain, -1 = REFUSED (the optform is not proven equal to the spec -> never adopt an unproven form). */
+fn gild_adopt_ch(target: u32) -> i32 @export {
+    let spec_ands : u64 = gild_ch_spec_ands()
+    let opt_ands  : u64 = gild_ch_opt_ands()
+    bb_reset(GILD_W)
+    let e : u32 = bb_var(0u32)
+    let f : u32 = bb_var(1u32)
+    let g : u32 = bb_var(2u32)
+    let spec : u32 = bb_xor(bb_and(e, f), bb_and(bb_not(e), g))
+    let opt  : u32 = bb_xor(g, bb_and(e, bb_xor(f, g)))
+    if bb_equal(spec, opt) != 1u8 { return -1i32 }                  /* soundness gate: prove before adopt */
+    if target == 1u32 {
+        if opt_ands < spec_ands { return 1i32 }                    /* gate-count: the AND saving is real -> ADOPT */
+        return 0i32
+    }
+    return 0i32                                                    /* x86: marginal -> abstain (cost-true) */
+}
+
+/* the same, for Maj: spec (a&b)^(a&c)^(b&c) [3 ANDs] vs carry-save (a&b)^(c&(a^b)) [2 ANDs]. */
+fn gild_adopt_maj(target: u32) -> i32 @export {
+    bb_reset(GILD_W)
+    let a1 : u32 = bb_var(0u32)
+    let b1 : u32 = bb_var(1u32)
+    let c1 : u32 = bb_var(2u32)
+    bb_xor(bb_xor(bb_and(a1, b1), bb_and(a1, c1)), bb_and(b1, c1))
+    let spec_ands : u64 = bb_count_and()
+    bb_reset(GILD_W)
+    let a2 : u32 = bb_var(0u32)
+    let b2 : u32 = bb_var(1u32)
+    let c2 : u32 = bb_var(2u32)
+    bb_xor(bb_and(a2, b2), bb_and(c2, bb_xor(a2, b2)))
+    let opt_ands : u64 = bb_count_and()
+    bb_reset(GILD_W)
+    let a3 : u32 = bb_var(0u32)
+    let b3 : u32 = bb_var(1u32)
+    let c3 : u32 = bb_var(2u32)
+    let spec : u32 = bb_xor(bb_xor(bb_and(a3, b3), bb_and(a3, c3)), bb_and(b3, c3))
+    let opt  : u32 = bb_xor(bb_and(a3, b3), bb_and(c3, bb_xor(a3, b3)))
+    if bb_equal(spec, opt) != 1u8 { return -1i32 }
+    if target == 1u32 {
+        if opt_ands < spec_ands { return 1i32 }
+        return 0i32
+    }
+    return 0i32
 }

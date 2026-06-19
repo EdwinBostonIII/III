@@ -29,21 +29,23 @@ fn pe_ld_u32(base: u64, off: u64) -> u32 {
     return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
 }
 
-/* ---- pure PCI decoders (the real spec encoding) ---- */
-fn pci_vendor(dw0: u32) -> u32 { return dw0 & 0xFFFFu32 }
-fn pci_device(dw0: u32) -> u32 { return (dw0 >> 16u32) & 0xFFFFu32 }
-fn pci_present(dw0: u32) -> u8 {
+/* ---- pure PCI decoders (the real spec encoding) -- @export so the Ring-0 driver calls them DIRECTLY on single
+ * dwords it reads via CF8h (each takes one u32 -> cg_r0-safe; no packed buffer, sidestepping cg_r0's 8-byte-uniform
+ * array layout).  The corpus KAT proves them directly too. ---- */
+fn pci_vendor(dw0: u32) -> u32 @export { return dw0 & 0xFFFFu32 }
+fn pci_device(dw0: u32) -> u32 @export { return (dw0 >> 16u32) & 0xFFFFu32 }
+fn pci_present(dw0: u32) -> u8 @export {
     let v : u32 = dw0 & 0xFFFFu32
     if v == 0xFFFFu32 { return 0u8 }           /* an empty slot reads all-ones */
     if v == 0u32 { return 0u8 }                /* (synthetic) zeroed slot */
     return 1u8
 }
-fn pci_class(dw2: u32) -> u32 { return (dw2 >> 24u32) & 0xFFu32 }
-fn pci_rev(dw2: u32) -> u32 { return dw2 & 0xFFu32 }
-fn pci_bar_is_io(bar: u32) -> u8 { if (bar & 1u32) == 1u32 { return 1u8 }  return 0u8 }
-fn pci_bar_is_64(bar: u32) -> u8 { if (bar & 1u32) == 0u32 { if ((bar >> 1u32) & 3u32) == 2u32 { return 1u8 } }  return 0u8 }
-fn pci_bar_base32(bar: u32) -> u64 { return (bar & 0xFFFFFFF0u32) as u64 }
-fn pci_bar_base64(lo: u32, hi: u32) -> u64 { return ((lo & 0xFFFFFFF0u32) as u64) | ((hi as u64) << 32u64) }
+fn pci_class(dw2: u32) -> u32 @export { return (dw2 >> 24u32) & 0xFFu32 }
+fn pci_rev(dw2: u32) -> u32 @export { return dw2 & 0xFFu32 }
+fn pci_bar_is_io(bar: u32) -> u8 @export { if (bar & 1u32) == 1u32 { return 1u8 }  return 0u8 }
+fn pci_bar_is_64(bar: u32) -> u8 @export { if (bar & 1u32) == 0u32 { if ((bar >> 1u32) & 3u32) == 2u32 { return 1u8 } }  return 0u8 }
+fn pci_bar_base32(bar: u32) -> u64 @export { return (bar & 0xFFFFFFF0u32) as u64 }
+fn pci_bar_base64(lo: u32, hi: u32) -> u64 @export { return ((lo & 0xFFFFFFF0u32) as u64) | ((hi as u64) << 32u64) }
 
 /* ---- the derived GPU record (filled by consider) ---- */
 var PE_FOUND : u8  = 0u8

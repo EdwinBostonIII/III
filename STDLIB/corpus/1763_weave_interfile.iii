@@ -10,6 +10,8 @@ module corpus_1763_weave_interfile
 
 extern @abi(c-msvc-x64) fn wif_chacha_annihilates_message() -> u8 from "weave_interfile.iii"
 extern @abi(c-msvc-x64) fn wif_used_feature_survives() -> u8 from "weave_interfile.iii"
+extern @abi(c-msvc-x64) fn wif_arx_invertible() -> u8 from "weave_interfile.iii"
+extern @abi(c-msvc-x64) fn wif_arx_wrong_inverse() -> u8 from "weave_interfile.iii"
 
 fn main() -> u64 {
     /* (1) inter-file don't-care annihilation: ChaCha's x=y=0 invocation == the message-free mix (proven) */
@@ -17,6 +19,13 @@ fn main() -> u64 {
 
     /* (2) BITING: a USED feature (symbolic message words) does NOT annihilate -- the result differs */
     if wif_used_feature_survives() != 0u8 { return 2u64 }
+
+    /* (3) CAPABILITY #4: the shared ARX block is a BIJECTION (invertible) -> zero-loss composition at a
+     *     file-boundary seam.  inverse(forward) == identity for all inputs, proven. */
+    if wif_arx_invertible() != 1u8 { return 3u64 }
+
+    /* (4) BITING: a broken inverse does NOT recover the input -- the bijection proof has teeth. */
+    if wif_arx_wrong_inverse() != 0u8 { return 4u64 }
 
     return 99u64
 }

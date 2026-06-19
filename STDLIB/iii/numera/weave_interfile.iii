@@ -21,6 +21,7 @@ extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
@@ -113,4 +114,66 @@ fn wif_used_feature_survives() -> u8 @export {
     wif_arx(a, b, c, d, x, y)          /* the feature USED: symbolic message words */
     let same : u32 = wif_diff()
     return bb_equal(same, bb_const(0u64))   /* == 0: they DIFFER -> the used feature does not annihilate */
+}
+
+fn wif_rotr(x: u32, n: u64) -> u32 { return bb_or(bb_shr(x, n), bb_shl(x, 32u64 - n)) }
+
+/* CAPABILITY #4 foundation -- ZERO-LOSS COMPOSITION: the weave's ARX block (message-free, as ChaCha runs it)
+ * is a BIJECTION -- an explicit inverse recovers the input exactly (each step inverts: add<->sub, xor<->xor,
+ * rotl<->rotr).  Proven for ALL inputs by the bv judge.  Because each shared block is invertible, stitching
+ * two of them across a file boundary loses NO information at the seam -- the routing tax has nothing to
+ * preserve; the composition is one continuous reversible topology.  Returns 1 iff inverse(forward) == identity. */
+fn wif_arx_invertible() -> u8 @export {
+    bb_reset(WIF_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let d : u32 = bb_var(3u32)
+    /* FORWARD (ChaCha-form ARX mix, no message) */
+    let a1 : u32 = bb_add(a, b)
+    let d1 : u32 = wif_rotl(bb_xor(d, a1), 16u64)
+    let c1 : u32 = bb_add(c, d1)
+    let b1 : u32 = wif_rotl(bb_xor(b, c1), 12u64)
+    let a2 : u32 = bb_add(a1, b1)
+    let d2 : u32 = wif_rotl(bb_xor(d1, a2), 8u64)
+    let c2 : u32 = bb_add(c1, d2)
+    let b2 : u32 = wif_rotl(bb_xor(b1, c2), 7u64)
+    /* INVERSE (recover a,b,c,d from a2,b2,c2,d2 -- reverse each step) */
+    let rb1 : u32 = bb_xor(wif_rotr(b2, 7u64), c2)      /* b1 = rotr(b2,7) ^ c2 */
+    let rc1 : u32 = bb_sub(c2, d2)                      /* c1 = c2 - d2 */
+    let rd1 : u32 = bb_xor(wif_rotr(d2, 8u64), a2)      /* d1 = rotr(d2,8) ^ a2 */
+    let ra1 : u32 = bb_sub(a2, rb1)                     /* a1 = a2 - b1 */
+    let rb  : u32 = bb_xor(wif_rotr(rb1, 12u64), rc1)   /* b  = rotr(b1,12) ^ c1 */
+    let rc  : u32 = bb_sub(rc1, rd1)                    /* c  = c1 - d1 */
+    let rd  : u32 = bb_xor(wif_rotr(rd1, 16u64), ra1)   /* d  = rotr(d1,16) ^ a1 */
+    let ra  : u32 = bb_sub(ra1, rb)                     /* a  = a1 - b */
+    let diff : u32 = bb_or(bb_or(bb_xor(ra, a), bb_xor(rb, b)), bb_or(bb_xor(rc, c), bb_xor(rd, d)))
+    return bb_equal(diff, bb_const(0u64))   /* == 1: bijection -> zero-loss composition at the seam */
+}
+
+/* BITING: a WRONG inverse (one sub replaced by add) does NOT recover the input -- the invertibility has teeth. */
+fn wif_arx_wrong_inverse() -> u8 @export {
+    bb_reset(WIF_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let d : u32 = bb_var(3u32)
+    let a1 : u32 = bb_add(a, b)
+    let d1 : u32 = wif_rotl(bb_xor(d, a1), 16u64)
+    let c1 : u32 = bb_add(c, d1)
+    let b1 : u32 = wif_rotl(bb_xor(b, c1), 12u64)
+    let a2 : u32 = bb_add(a1, b1)
+    let d2 : u32 = wif_rotl(bb_xor(d1, a2), 8u64)
+    let c2 : u32 = bb_add(c1, d2)
+    let b2 : u32 = wif_rotl(bb_xor(b1, c2), 7u64)
+    let rb1 : u32 = bb_xor(wif_rotr(b2, 7u64), c2)
+    let rc1 : u32 = bb_add(c2, d2)                      /* WRONG: + instead of - */
+    let rd1 : u32 = bb_xor(wif_rotr(d2, 8u64), a2)
+    let ra1 : u32 = bb_sub(a2, rb1)
+    let rb  : u32 = bb_xor(wif_rotr(rb1, 12u64), rc1)
+    let rc  : u32 = bb_sub(rc1, rd1)
+    let rd  : u32 = bb_xor(wif_rotr(rd1, 16u64), ra1)
+    let ra  : u32 = bb_sub(ra1, rb)
+    let diff : u32 = bb_or(bb_or(bb_xor(ra, a), bb_xor(rb, b)), bb_or(bb_xor(rc, c), bb_xor(rd, d)))
+    return bb_equal(diff, bb_const(0u64))   /* == 0: the broken inverse fails to recover */
 }

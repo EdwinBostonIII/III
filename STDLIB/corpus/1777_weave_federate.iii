@@ -1,0 +1,53 @@
+/* 1777_weave_federate.iii -- FEDERATION WITH ZERO TRUST: a peer RE-DERIVES the commons; it does not trust it.
+ *
+ * The weave commons crosses the wire as its sealed image.  A receiving peer does NOT trust the sender: it
+ * INDEPENDENTLY re-derives the whole weave with its own engine and accepts the received body iff the body's
+ * root equals the receiver's own derivation.  The federation guarantee is REPRODUCIBILITY -- any peer with the
+ * same engine arrives at the identical body -- not authority.  A non-matching (or tampered) body is REJECTED.
+ *
+ *   (1) a full commons (13 laws) is sealed + sent; a peer re-derives + verifies it -> 1 (reproducible)
+ *   (2) a PARTIAL commons (8 laws) is sent; the peer re-derives the FULL weave and the roots MISMATCH -> 0 (rejected)
+ * Exit 99 = the weave commons is federatable, zero-trust: accepted iff independently reproduced. */
+module corpus_1777
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn present_weave_full() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_commons_fill() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reset() -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_persist(cap: u64, path: u64) -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_federate_recv(cap: u64, path: u64) -> i32 from "present.iii"
+
+fn setpath(p: *u8, last: u8) -> i32 {
+    p[0u64] = 46u8   p[1u64] = 47u8   p[2u64] = 105u8  p[3u64] = 105u8
+    p[4u64] = 105u8  p[5u64] = 95u8   p[6u64] = 119u8  p[7u64] = 101u8
+    p[8u64] = 97u8   p[9u64] = 118u8  p[10u64] = 101u8 p[11u64] = 95u8
+    p[12u64] = 102u8 p[13u64] = 101u8 p[14u64] = 100u8 p[15u64] = last
+    p[16u64] = 46u8  p[17u64] = 116u8 p[18u64] = 109u8 p[19u64] = 112u8
+    p[20u64] = 0u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let pa : *u8 = malloc(24u64)  setpath(pa, 65u8)        /* "./iii_weave_fedA.tmp" */
+    let pb : *u8 = malloc(24u64)  setpath(pb, 66u8)        /* "./iii_weave_fedB.tmp" */
+
+    /* (1) sender seals the full commons; a peer re-derives + verifies it */
+    present_weave_full()
+    if pres_commons_persist(cap, pa as u64) != 0i32 { return 1u64 }
+    if pres_commons_federate_recv(cap, pa as u64) != 1i32 { return 2u64 }   /* verified: reproducible */
+
+    /* (2) zero-trust rejection: a partial (8-law) body does NOT match the receiver's full re-derivation */
+    pres_commons_reset()
+    present_commons_fill()
+    if pres_commons_persist(cap, pb as u64) != 0i32 { return 3u64 }
+    if pres_commons_federate_recv(cap, pb as u64) != 0i32 { return 4u64 }   /* rejected: not reproduced */
+
+    fs_delete(cap, pa as u64)
+    fs_delete(cap, pb as u64)
+    return 99u64
+}

@@ -323,3 +323,40 @@ fn pres_commons_reload(cap: u64, path: u64) -> i32 @export {
     PRES_NLAW[0u64] = n as u64
     return n as i32
 }
+
+/* ===== FEDERATION: the commons is shareable with ZERO TRUST -- a peer re-derives, it does not trust the sender.
+ * The wire format is the sealed image.  peek_root reads ONLY the root field (seal-checked) without disturbing the
+ * in-memory commons; federate_recv INDEPENDENTLY re-derives the whole weave and accepts the received body iff its
+ * root matches the independent derivation.  A tampered or non-matching body is REJECTED -- the federation
+ * guarantee is REPRODUCIBILITY (any peer with the same engine derives the identical body), not authority. */
+var PRES_RECVROOT : [u8; 32]
+
+/* read just the root of a received commons image (seal-checked); does not touch the in-memory commons. */
+fn pres_commons_peek_root(cap: u64, path: u64, out32: u64) -> i32 @export {
+    let h : u64 = fs_open(cap, path, 1u32)
+    if h == 0u64 { return -3i32 }
+    let nread : u64 = fs_read(h, (&PRES_IMG as u64), PRES_IMGCAP)
+    fs_close(h)
+    if nread < 40u64 { return -2i32 }
+    let bodylen : u64 = nread - 32u64
+    cad_oneshot(0u32, (&PRES_IMG as u64) as *u8, bodylen, (&PRES_SEAL as u64) as *u8)
+    let mut k : u64 = 0u64
+    while k < 32u64 { if PRES_SEAL[k] != PRES_IMG[bodylen + k] { return -1i32 }  k = k + 1u64 }   /* tamper */
+    if _pres_get_u32le(0u64) != PRES_MAGIC { return -2i32 }
+    let outp : *u8 = out32 as *u8
+    let mut j : u64 = 0u64
+    while j < 32u64 { outp[j] = PRES_IMG[8u64 + j] ; j = j + 1u64 }
+    return 0i32
+}
+
+/* RECEIVE a federated commons with zero trust: independently re-derive the whole weave, then accept the received
+ * body iff its root equals the independent derivation.  1 = verified (reproducible), 0 = rejected (mismatch),
+ * <0 = unreadable / tampered. */
+fn pres_commons_federate_recv(cap: u64, path: u64) -> i32 @export {
+    pres_commons_reset()
+    present_weave_full()                                                       /* the receiver's OWN derivation */
+    if pres_commons_peek_root(cap, path, (&PRES_RECVROOT as u64)) != 0i32 { return -1i32 }
+    let mut k : u64 = 0u64
+    while k < 32u64 { if PRES_ROOT[k] != PRES_RECVROOT[k] { return 0i32 }  k = k + 1u64 }
+    return 1i32                                                                /* matches an independent derivation */
+}

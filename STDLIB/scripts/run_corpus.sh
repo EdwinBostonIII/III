@@ -1437,6 +1437,8 @@ declare -A EXPECTED=(
     [1775_weave_adopt]=99
     # THE RATCHET (fork b): the lemma library makes re-discovery FREE -- pass 1 forges, pass 2 cites (0 kernel work); search shrinks as the commons grows.
     [1776_weave_ratchet]=99
+    # FEDERATION (fork c): the commons crosses the wire zero-trust -- a peer RE-DERIVES the weave and accepts iff the body's root matches its own derivation; a non-matching body is rejected.
+    [1777_weave_federate]=99
 )
 
 PASS=0

@@ -1469,6 +1469,8 @@ declare -A EXPECTED=(
     [1791_weave_graph_fill]=99
     # THE COST-TRUTH RETIRES THE LOSER: on a proven-equivalent (ALL) strand the weave selects the cheaper form by AND-gate count (bb_count_and) and retires the costlier -- SHA-2 Ch spec(2 ANDs)->optform(1), Maj spec(3)->carry-save(2). Obsolescence by proven cost-truth.
     [1792_weave_cost_select]=99
+    # THE VARIABLE-i BRIDGE (reusable): wv_lower_sound certifies a don't-care collapse (care & (orig^opt)==0). REAL instance: a+b collapses to a^b on the bit-0 care-set (carry is don't-care) -- sound on care, unsound in binary.
+    [1793_weave_i_bridge]=99
 )
 
 PASS=0

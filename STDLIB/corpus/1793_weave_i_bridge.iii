@@ -1,0 +1,37 @@
+/* 1793_weave_i_bridge.iii -- THE VARIABLE-`i` BRIDGE, made a REUSABLE procedure with a REAL strength reduction.
+ *
+ * The most profound leaf of the founding chat (USER_SPINE 1743): the weave as the variable `i` -- an abstract
+ * dimension you LIFT a 2-state computation into, where don't-cares are first-class, optimize through that freedom,
+ * then LOWER back to 2-state PROVEN-equal on the care-set.  The move is unsound in plain binary and sound in the
+ * weave, and III proves exactly that boundary so an "impossible" optimization can never emit wrong code.
+ *
+ * wv_lower_sound is now the GENERAL procedure (any optimizer builds orig/opt/care and calls it to certify a
+ * don't-care collapse).  Two instances prove it carries real weight:
+ *   (1) the invariant don't-care: a AND b collapses to a on the care-set a->b -- sound on care, unsound in binary
+ *   (2) the masked-output don't-care, a REAL strength reduction: when only bit 0 of a sum matters, the carry chain
+ *       is don't-care, so a + b collapses to a XOR b -- an expensive ADD becomes a cheap XOR, sound on the care-set
+ *       and UNSOUND in full binary (the carries differ above bit 0).  The variable-`i` move on real arithmetic.
+ *   (3) the don't-care freedom is real (non-empty), not a vacuous pass.
+ * Exit 99 = the bridge is a reusable, proof-gated optimization procedure -- "impossible" moves made safe by proof. */
+module corpus_1793
+
+extern @abi(c-msvc-x64) fn wv_optimizes_on_care() -> u8 from "weave.iii"
+extern @abi(c-msvc-x64) fn wv_unsound_in_binary() -> u8 from "weave.iii"
+extern @abi(c-msvc-x64) fn wv_dontcare_nonempty() -> u8 from "weave.iii"
+extern @abi(c-msvc-x64) fn wv_add_collapses_to_xor() -> u8 from "weave.iii"
+extern @abi(c-msvc-x64) fn wv_add_xor_unsound_binary() -> u8 from "weave.iii"
+
+fn main() -> u64 {
+    /* (1) the invariant don't-care collapse is proven sound on the care-set (via the general procedure) */
+    if wv_optimizes_on_care() != 1u8 { return 1u64 }
+    if wv_unsound_in_binary() != 0u8 { return 2u64 }      /* but unsound in plain binary */
+
+    /* (3) the don't-care freedom is real */
+    if wv_dontcare_nonempty() != 0u8 { return 3u64 }
+
+    /* (2) the REAL strength reduction: ADD collapses to XOR on the bit-0 care-set */
+    if wv_add_collapses_to_xor() != 1u8 { return 4u64 }   /* sound on the care-set */
+    if wv_add_xor_unsound_binary() != 0u8 { return 5u64 } /* unsound in full binary -- lives only in the weave */
+
+    return 99u64
+}

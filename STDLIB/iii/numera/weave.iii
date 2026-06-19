@@ -24,17 +24,23 @@ extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 
 const WV_W : u64 = 8u64        /* the identities are per-bit; an 8-bit vector proves them for every bit at once */
 
-/* THE LOWERING SOUNDNESS PROOF (the heart of the bridge): an optimized binary form `opt` is sound for the
- * original `orig` ON the care-set `care` iff  care AND (orig XOR opt) == 0  for ALL inputs -- i.e. wherever the
- * input matters, the optimized form agrees with the original.  Proven by the bv judge (bb_equal to const 0).
- *
- * POC instance: orig = a AND b ; opt = a ; care = (NOT a) OR b  (the invariant a -> b -- the don't-care set is
- * exactly a AND NOT b, the inputs that "never occur").  On the care-set, a AND b collapses to a; III proves it.
- * Returns 1 iff the lowering is proven sound on the care-set. */
+/* THE LOWERING SOUNDNESS PROCEDURE (the heart of the bridge, REUSABLE): an optimized binary form `opt` is sound
+ * for the original `orig` ON the care-set `care` iff  care AND (orig XOR opt) == 0  for ALL inputs -- wherever the
+ * input/output matters, the optimized form agrees with the original.  Proven by the bv judge (bb_equal to 0).
+ * This is the universal lower-with-proof step: any optimizer builds orig/opt/care as bv circuits and calls this
+ * to certify a don't-care collapse before emitting.  Caller owns bb_reset + the three circuits. */
+fn wv_lower_sound(orig: u32, opt: u32, care: u32) -> u8 @export {
+    return bb_equal(bb_and(care, bb_xor(orig, opt)), bb_const(0u64))
+}
+
+/* POC instance (the invariant don't-care): orig = a AND b ; opt = a ; care = (NOT a) OR b  (the invariant a -> b
+ * -- the don't-care set is exactly a AND NOT b, the inputs that "never occur").  On the care-set, a AND b
+ * collapses to a; III proves it via the general procedure.  Returns 1 iff the lowering is proven sound. */
 fn wv_optimizes_on_care() -> u8 @export {
     bb_reset(WV_W)
     let a    : u32 = bb_var(0u32)
@@ -42,8 +48,32 @@ fn wv_optimizes_on_care() -> u8 @export {
     let orig : u32 = bb_and(a, b)
     let opt  : u32 = a
     let care : u32 = bb_or(bb_not(a), b)               /* the care-set: a -> b (don't-care = a AND NOT b) */
-    let diff_where_it_matters : u32 = bb_and(care, bb_xor(orig, opt))
-    return bb_equal(diff_where_it_matters, bb_const(0u64))
+    return wv_lower_sound(orig, opt, care)
+}
+
+/* REAL STRENGTH REDUCTION through the bridge (the masked-output don't-care): when only the LOW BIT of a sum is
+ * cared about, the carry chain is entirely don't-care, so the expensive ADD collapses to a cheap XOR.  orig =
+ * a + b (a carry chain) ; opt = a XOR b (no carry) ; care = bit 0 only.  They agree on bit 0 (no carry INTO bit
+ * 0), so the lowering is sound on the care-set -- a genuine ADD->XOR strength reduction that is UNSOUND in full
+ * binary (carries differ at higher bits) and SOUND in the weave.  Exactly the variable-`i` move on real ops. */
+fn wv_add_collapses_to_xor() -> u8 @export {
+    bb_reset(WV_W)
+    let a    : u32 = bb_var(0u32)
+    let b    : u32 = bb_var(1u32)
+    let orig : u32 = bb_add(a, b)                      /* expensive: ripple-carry */
+    let opt  : u32 = bb_xor(a, b)                      /* cheap: carry-free */
+    let care : u32 = bb_const(0x01u64)                 /* only bit 0 matters; the carry is don't-care */
+    return wv_lower_sound(orig, opt, care)
+}
+
+/* BITING companion: the ADD->XOR move is UNSOUND in plain binary -- a + b != a XOR b once any carry occurs.
+ * Returns the judge's verdict on UNCONDITIONAL equality; the KAT asserts 0 (they differ), proving the strength
+ * reduction lives ONLY in the weave's don't-care dimension -- without the care-set it would emit wrong code. */
+fn wv_add_xor_unsound_binary() -> u8 @export {
+    bb_reset(WV_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    return bb_equal(bb_add(a, b), bb_xor(a, b))        /* a+b == a^b everywhere?  No -> 0 */
 }
 
 /* THE BITING COMPANION (why the weave is necessary): the SAME optimization is UNSOUND in plain 2-state --

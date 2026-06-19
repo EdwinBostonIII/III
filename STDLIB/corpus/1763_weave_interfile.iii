@@ -1,0 +1,22 @@
+/* STDLIB/corpus/1763_weave_interfile.iii -- THE REPOSITORY-LEVEL WEAVE: inter-file don't-care annihilation.
+ *
+ * numera/weave_interfile proves, on the bv_bits judge, the first capability of treating file boundaries as
+ * mathematics: a shared block's UNUSED feature is annihilated for a caller that doesn't use it.  The shared
+ * ARX mix (weave_blocks) offers message injection; ChaCha invokes it with x=y=0, so its message path is
+ * NULL/don't-care and the weave proves it vanishes -- the message-free mix is byte-equal to ChaCha's
+ * invocation.  Biting: when the feature is USED, it provably survives.  99 = both arms.
+ */
+module corpus_1763_weave_interfile
+
+extern @abi(c-msvc-x64) fn wif_chacha_annihilates_message() -> u8 from "weave_interfile.iii"
+extern @abi(c-msvc-x64) fn wif_used_feature_survives() -> u8 from "weave_interfile.iii"
+
+fn main() -> u64 {
+    /* (1) inter-file don't-care annihilation: ChaCha's x=y=0 invocation == the message-free mix (proven) */
+    if wif_chacha_annihilates_message() != 1u8 { return 1u64 }
+
+    /* (2) BITING: a USED feature (symbolic message words) does NOT annihilate -- the result differs */
+    if wif_used_feature_survives() != 0u8 { return 2u64 }
+
+    return 99u64
+}

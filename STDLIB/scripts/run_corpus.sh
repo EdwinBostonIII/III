@@ -1409,6 +1409,8 @@ declare -A EXPECTED=(
     [1761_sha_optform]=99
     # THE UNIFIED WEAVE: one ARX core IS both ChaCha's quarter-round AND Blake2's G (rotation-duality load-bearing).
     [1762_weave_arx]=99
+    # REPOSITORY-LEVEL WEAVE #1: inter-file don't-care annihilation -- a shared block's unused feature vanishes, proven.
+    [1763_weave_interfile]=99
 )
 
 PASS=0

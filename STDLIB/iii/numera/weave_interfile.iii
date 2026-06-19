@@ -1,0 +1,116 @@
+/* STDLIB/iii/numera/weave_interfile.iii -- THE REPOSITORY-LEVEL WEAVE: inter-file logic as proven mathematics.
+ *
+ * The weave already spans file boundaries (chacha20/blake2s/sha* route through numera/weave_blocks).  This
+ * organ proves the FIRST capability of treating those boundaries as mathematics rather than mechanical edges:
+ *
+ *   INTER-FILE DON'T-CARE ANNIHILATION.  A shared block (wvb_arx_mix) offers a feature -- message injection
+ *   (x,y) -- that a caller may not use.  ChaCha (chacha20.iii) invokes it across the file boundary with
+ *   x=y=0: the message path is NULL / don't-care for ChaCha's binary, and the weave ANNIHILATES it -- the full
+ *   mix with x=y=0 is PROVEN EQUAL (numera/bv_bits) to the message-free mix.  The 90% of a shared block a
+ *   caller doesn't use is swallowed by the void at the math level, proven sound -- not heuristically trimmed.
+ *
+ *   BITING: when the feature IS used (x,y symbolic), the message path provably does NOT annihilate -- so the
+ *   annihilation is specific to the don't-care, not a vacuous identity.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  Composes numera/bv_bits -- the weave reasoning about its own
+ * inter-file structure in the same mathematics it reasons about ciphers.  No island.
+ */
+module numera_weave_interfile
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const WIF_W : u64 = 32u64
+
+fn wif_rotl(x: u32, n: u64) -> u32 { return bb_or(bb_shl(x, n), bb_shr(x, 32u64 - n)) }
+
+/* Build the ARX mix's FOUR output lanes into WIF_OUT, parameterised by message nodes x,y (the shared block's
+ * feature) -- a faithful symbolic model of wvb_arx_mix with ChaCha's rotation amounts {16,12,8,7}. */
+var WIF_OUT : [u32; 4]
+fn wif_arx(a0: u32, b0: u32, c0: u32, d0: u32, x: u32, y: u32) -> i32 {
+    let mut a : u32 = a0
+    let mut b : u32 = b0
+    let mut c : u32 = c0
+    let mut d : u32 = d0
+    a = bb_add(bb_add(a, b), x)
+    d = wif_rotl(bb_xor(d, a), 16u64)
+    c = bb_add(c, d)
+    b = wif_rotl(bb_xor(b, c), 12u64)
+    a = bb_add(bb_add(a, b), y)
+    d = wif_rotl(bb_xor(d, a), 8u64)
+    c = bb_add(c, d)
+    b = wif_rotl(bb_xor(b, c), 7u64)
+    WIF_OUT[0u64] = a  WIF_OUT[1u64] = b  WIF_OUT[2u64] = c  WIF_OUT[3u64] = d
+    return 0i32
+}
+
+/* the STRUCTURALLY message-free mix (the annihilated form: no +x,+y terms at all) -- what ChaCha effectively
+ * runs once the don't-care feature is removed.  Proving wif_arx(.,0,0) == this is the annihilation theorem. */
+fn wif_arx_nomsg(a0: u32, b0: u32, c0: u32, d0: u32) -> i32 {
+    let mut a : u32 = a0
+    let mut b : u32 = b0
+    let mut c : u32 = c0
+    let mut d : u32 = d0
+    a = bb_add(a, b)
+    d = wif_rotl(bb_xor(d, a), 16u64)
+    c = bb_add(c, d)
+    b = wif_rotl(bb_xor(b, c), 12u64)
+    a = bb_add(a, b)
+    d = wif_rotl(bb_xor(d, a), 8u64)
+    c = bb_add(c, d)
+    b = wif_rotl(bb_xor(b, c), 7u64)
+    WIF_OUT[0u64] = a  WIF_OUT[1u64] = b  WIF_OUT[2u64] = c  WIF_OUT[3u64] = d
+    return 0i32
+}
+
+/* the difference (OR of per-lane XORs) between the last-built mix and a saved 4-lane snapshot; 0 iff identical */
+var WIF_SNAP : [u32; 4]
+fn wif_snapshot() -> i32 { WIF_SNAP[0u64] = WIF_OUT[0u64]  WIF_SNAP[1u64] = WIF_OUT[1u64]  WIF_SNAP[2u64] = WIF_OUT[2u64]  WIF_SNAP[3u64] = WIF_OUT[3u64]  return 0i32 }
+fn wif_diff() -> u32 {
+    let d0 : u32 = bb_xor(WIF_OUT[0u64], WIF_SNAP[0u64])
+    let d1 : u32 = bb_xor(WIF_OUT[1u64], WIF_SNAP[1u64])
+    let d2 : u32 = bb_xor(WIF_OUT[2u64], WIF_SNAP[2u64])
+    let d3 : u32 = bb_xor(WIF_OUT[3u64], WIF_SNAP[3u64])
+    return bb_or(bb_or(d0, d1), bb_or(d2, d3))
+}
+
+/* CAPABILITY #1: ChaCha's invocation (x=y=0) annihilates the message path -- proven equal to the message-free
+ * mix.  Returns 1 iff the judge proves the don't-care feature vanishes. */
+fn wif_chacha_annihilates_message() -> u8 @export {
+    bb_reset(WIF_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let d : u32 = bb_var(3u32)
+    let z : u32 = bb_const(0u64)
+    wif_arx_nomsg(a, b, c, d)           /* the annihilated form (no message terms at all) */
+    wif_snapshot()
+    wif_arx(a, b, c, d, z, z)           /* ChaCha's actual invocation: the +x,+y terms with x=y=0 */
+    /* the judge must prove the +0 message-adds reduce to identity, lifted through the whole mix. */
+    let same : u32 = wif_diff()
+    return bb_equal(same, bb_const(0u64))   /* == 1: the don't-care message path annihilates */
+}
+
+/* BITING: when the feature IS used (x,y symbolic, distinct), the mix provably DIFFERS from the message-free
+ * one -- so the annihilation above is specific to the don't-care, not a vacuous tautology.  KAT asserts 0. */
+fn wif_used_feature_survives() -> u8 @export {
+    bb_reset(WIF_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let d : u32 = bb_var(3u32)
+    let x : u32 = bb_var(4u32)
+    let y : u32 = bb_var(5u32)
+    wif_arx_nomsg(a, b, c, d)          /* the annihilated (message-free) form */
+    wif_snapshot()
+    wif_arx(a, b, c, d, x, y)          /* the feature USED: symbolic message words */
+    let same : u32 = wif_diff()
+    return bb_equal(same, bb_const(0u64))   /* == 0: they DIFFER -> the used feature does not annihilate */
+}

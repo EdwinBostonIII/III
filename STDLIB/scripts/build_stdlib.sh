@@ -802,6 +802,9 @@ MODULES=(
     # weave, collapse through the freedom, lower back to 2-state PROVEN equal on the care-set.  The universal
     # optimization procedure; composes numera/bv_bits + numera/logic6 -- no island.
     "numera/weave"
+    # numera/weave_interfile -- THE REPOSITORY-LEVEL WEAVE: inter-file logic as proven mathematics; capability #1,
+    # inter-file don't-care annihilation (a shared block's unused feature vanishes for a caller, proven sound).
+    "numera/weave_interfile"
     "numera/barrett"
     "numera/egraph"
     "numera/cost_lattice"

@@ -1,0 +1,68 @@
+/* 1824_weave_reduce.iii -- THE FINAL WEAVE, Step 1: the universal reducer proves the three cg_r3 folds EMERGENT
+ * (discovered by the substrate's own judges, not authored as predicates), proves NEW laws cg_r3 never had, and
+ * REJECTS every non-equivalence (no false reduction).  Each line is a proof, not an assertion: signature identity
+ * for the bit-independent laws, bb_equal (SAT) for the coupling laws, bb_eval for execution.  exit 99 = all hold. */
+module m1824
+
+extern @abi(c-msvc-x64) fn wr_self_op(op: u32) -> u32 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_double_not() -> u32 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_op_const(op: u32, c: u64) -> u32 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_strength_shift(k: u64) -> u32 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_mul_identity(k: u64) -> u8 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_add_identity(k: u64) -> u8 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_sub_identity(k: u64) -> u8 from "weave_reduce.iii"
+extern @abi(c-msvc-x64) fn wr_eval_binop(op: u32, a: u64, b: u64) -> u64 from "weave_reduce.iii"
+
+const F_NONE : u32 = 0u32
+const F_LHS  : u32 = 1u32
+const F_ZERO : u32 = 2u32
+const F_ONES : u32 = 3u32
+const NO_SH  : u32 = 0xFFFFFFFFu32
+const AND : u32 = 2u32
+const OR  : u32 = 3u32
+const XOR : u32 = 4u32
+const ADD : u32 = 8u32
+const SUB : u32 = 9u32
+const MUL : u32 = 10u32
+
+fn main() -> u64 {
+    /* (1) bit-independent laws, signature-proven, width-agnostic -- emergent idempotence/self-inverse/involution */
+    if wr_self_op(AND) != F_LHS  { return 11u64 }      /* x & x == x   (idempotence) */
+    if wr_self_op(OR)  != F_LHS  { return 12u64 }      /* x | x == x   (idempotence) */
+    if wr_self_op(XOR) != F_ZERO { return 13u64 }      /* x ^ x == 0   (self-inverse) */
+    if wr_double_not() != F_LHS  { return 14u64 }      /* ~~x == x     (involution) */
+
+    /* const-operand bitwise family, one mechanism -- annihilator / identity / the honest NONE for ~x */
+    if wr_op_const(AND, 0u64)    != F_ZERO { return 21u64 }   /* x & 0    == 0    */
+    if wr_op_const(OR,  0u64)    != F_LHS  { return 22u64 }   /* x | 0    == x    */
+    if wr_op_const(XOR, 0u64)    != F_LHS  { return 23u64 }   /* x ^ 0    == x    */
+    if wr_op_const(AND, 0xFFu64) != F_LHS  { return 24u64 }   /* x & ones == x    */
+    if wr_op_const(OR,  0xFFu64) != F_ONES { return 25u64 }   /* x | ones == ones */
+    if wr_op_const(XOR, 0xFFu64) != F_NONE { return 26u64 }   /* x ^ ones == ~x   (irreducible to a leaf -- HONEST) */
+
+    /* (3) strength reduction DISCOVERED by proof+cost -- subsumes r3_mul_pow2_k WITHOUT a power-of-two predicate */
+    if wr_strength_shift(8u64) != 3u32 { return 31u64 }       /* x*8 proven == x<<3, cheaper */
+    if wr_strength_shift(4u64) != 2u32 { return 32u64 }       /* x*4 == x<<2 */
+    if wr_strength_shift(2u64) != 1u32 { return 33u64 }       /* x*2 == x<<1 */
+    /* NEGATIVES: non-powers-of-two have NO proven-equal shift -- no false reduction */
+    if wr_strength_shift(7u64) != NO_SH { return 34u64 }
+    if wr_strength_shift(6u64) != NO_SH { return 35u64 }
+    if wr_strength_shift(5u64) != NO_SH { return 36u64 }
+
+    /* identity elements, SAT-proven -- subsumes r3_arith_identity (x*1, x+0, x-0) + negatives */
+    if wr_mul_identity(1u64) != 1u8 { return 41u64 }
+    if wr_mul_identity(3u64) != 0u8 { return 42u64 }
+    if wr_add_identity(0u64) != 1u8 { return 43u64 }
+    if wr_add_identity(5u64) != 0u8 { return 44u64 }
+    if wr_sub_identity(0u64) != 1u8 { return 45u64 }
+    if wr_sub_identity(2u64) != 0u8 { return 46u64 }
+
+    /* (2) execution: constant-fold ANY binop through the one substrate (bb_eval) */
+    if wr_eval_binop(ADD, 20u64, 22u64)   != 42u64   { return 51u64 }
+    if wr_eval_binop(MUL, 6u64,  7u64)    != 42u64   { return 52u64 }
+    if wr_eval_binop(AND, 0xF0u64, 0x3Cu64) != 0x30u64 { return 53u64 }
+    if wr_eval_binop(XOR, 5u64,  5u64)    != 0u64    { return 54u64 }
+    if wr_eval_binop(OR,  0xF0u64, 0x0Fu64) != 0xFFu64 { return 55u64 }
+
+    return 99u64
+}

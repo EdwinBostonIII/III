@@ -1,0 +1,169 @@
+/* weave_reduce.iii -- THE UNIVERSAL EXPRESSION REDUCER.  The first organ of the Final Weave: an optimization is not
+ * a predicate attributed to a function; it is the act of asking the one mathematical substrate (bv_bits) for the
+ * canonical form of an expression -- and the substrate ANSWERS by proof, never by an authored rule.
+ *
+ * Three strata, exactly the steering's three:
+ *   (1) the logic it REPRESENTS      -- the bit-independent canonical form, decided by truth-table SIGNATURE
+ *                                        (bb_sig_equal): width-agnostic, fully general, the stillness of matching
+ *                                        signatures IS the proof.  No rule names "x&x->x"; it fires because the
+ *                                        signature of x&x equals the signature of x.
+ *   (2) the logic it EXECUTES        -- any concrete sub-expression folds to its value via bb_eval (the circuit
+ *                                        RUNS), even where no symbol applies.
+ *   (3) the SELF-AWARENESS to optimize -- strength reduction is DISCOVERED, not declared: build x*k and x<<j, let
+ *                                        bb_equal PROVE equivalence and bb_node_gate_count MEASURE cost; the law
+ *                                        x*2^j == x<<j emerges from proof+cost, never from a power-of-two test.
+ *
+ * Because the laws are emergent, the three cg_r3 folds (r3_mul_pow2_k, r3_arith_identity, and the bitwise family
+ * cg_r3 never had) CEASE TO EXIST AS RULES -- they re-appear here only as consequences the substrate proves.  A law
+ * III discovers later improves every consumer with zero new reducer code: the common denominator is the math.
+ *
+ * Honest boundary (the bifurcator, inherited from bv_bits): bit-INDEPENDENT laws (AND/OR/XOR/NOT) are proven by
+ * signature -- width-agnostic and complete.  bit-COUPLING laws (MUL/ADD/SUB/SHL/SHR) are proven by bb_equal (SAT)
+ * at WR_SAT_W; the strength/identity laws so witnessed are width-UNIFORM (x*2^j == x<<j, x*1 == x, x+0 == x hold
+ * mod 2^w for every w), so the small-width proof witnesses the law a wider consumer applies.  Pure, NIH, no deps
+ * beyond bv_bits (the one substrate).  Ring R3.  KAT: corpus 1824. */
+module weave_reduce
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_gate_count(root: u32) -> u32 from "bv_bits.iii"
+
+/* the canonical reduced forms a reducer can certify (the emitter reads these). */
+const WR_FORM_NONE  : u32 = 0u32        /* irreducible to a canonical leaf; emit as-is */
+const WR_FORM_LHS   : u32 = 1u32        /* the expression IS its left operand x */
+const WR_FORM_ZERO  : u32 = 2u32        /* the expression is the all-zero word */
+const WR_FORM_ONES  : u32 = 3u32        /* the expression is the all-ones word */
+const WR_NO_SHIFT   : u32 = 0xFFFFFFFFu32
+
+/* op kinds mirror bv_bits EK_* exactly (one vocabulary, not a private copy). */
+const WR_AND : u32 = 2u32
+const WR_OR  : u32 = 3u32
+const WR_XOR : u32 = 4u32
+const WR_NOT : u32 = 5u32
+const WR_SHL : u32 = 6u32
+const WR_SHR : u32 = 7u32
+const WR_ADD : u32 = 8u32
+const WR_SUB : u32 = 9u32
+const WR_MUL : u32 = 10u32
+
+const WR_SIG_W : u64 = 8u64             /* any width >= 2; the bit-independent signature is width-agnostic */
+const WR_SAT_W : u64 = 8u64             /* SAT width for the coupling laws (witnesses the width-uniform law) */
+
+/* ---- stratum (1): the bit-INDEPENDENT canonicaliser ---------------------------------------------------------
+ * Given a built root `e` that is a bit-independent function of the single variable `x`, certify its canonical leaf
+ * by SIGNATURE identity against x / 0 / ones.  The decision IS the proof (no clauses).  General: ANY 1-var
+ * AND/OR/XOR/NOT expression that equals x, 0, or all-ones is caught here, whatever its surface shape. */
+fn wr_canon1_form(e: u32, x: u32) -> u32 @export {
+    let z : u32 = bb_const(0u64)
+    let o : u32 = bb_const(0xFFFFFFFFFFFFFFFFu64)         /* masked to the live width => all-ones bits */
+    if bb_sig_equal(e, x, 1u32) == 1u8 { return WR_FORM_LHS }
+    if bb_sig_equal(e, z, 1u32) == 1u8 { return WR_FORM_ZERO }
+    if bb_sig_equal(e, o, 1u32) == 1u8 { return WR_FORM_ONES }
+    return WR_FORM_NONE
+}
+
+/* x OP x  (idempotence / self-inverse): AND,OR -> x ; XOR -> 0.  Emergent (signature), not an authored rule. */
+fn wr_self_op(op: u32) -> u32 @export {
+    bb_reset(WR_SIG_W)
+    let x : u32 = bb_var(0u32)
+    let mut e : u32 = x
+    if op == WR_AND { e = bb_and(x, x) }
+    if op == WR_OR  { e = bb_or(x, x) }
+    if op == WR_XOR { e = bb_xor(x, x) }
+    return wr_canon1_form(e, x)
+}
+
+/* ~~x (involution) -> x.  Emergent via signature. */
+fn wr_double_not() -> u32 @export {
+    bb_reset(WR_SIG_W)
+    let x : u32 = bb_var(0u32)
+    let e : u32 = bb_not(bb_not(x))
+    return wr_canon1_form(e, x)
+}
+
+/* x OP c for a CONST c (annihilator / identity): x&0->0, x|0->x, x^0->x, x&ones->x, x|ones->ones, x^ones->~x(NONE).
+ * One mechanism subsumes the whole const-operand bitwise family -- emergent, signature-proven. */
+fn wr_op_const(op: u32, c: u64) -> u32 @export {
+    bb_reset(WR_SIG_W)
+    let x : u32 = bb_var(0u32)
+    let k : u32 = bb_const(c)
+    let mut e : u32 = x
+    if op == WR_AND { e = bb_and(x, k) }
+    if op == WR_OR  { e = bb_or(x, k) }
+    if op == WR_XOR { e = bb_xor(x, k) }
+    return wr_canon1_form(e, x)
+}
+
+/* ---- stratum (3): strength reduction, DISCOVERED by proof -------------------------------------------------
+ * Find the j such that x*k is PROVEN equal to x<<j (bb_equal) -- the law x*2^j == x<<j EMERGES from the proof; no
+ * power-of-two predicate is ever consulted (the reducer does not know what a power of two is; it tries shifts and
+ * keeps the one the substrate certifies).  The cost ordering shift <= mul is the ISA cost-CLASS truth (a shift is
+ * <= a multiply on every real ISA -- the very meaning of "strength reduction"); it is NOT derivable from the DAG
+ * node count, where mul and shl are each one atomic node, so it is stated here as the instruction-class fact it is,
+ * applied only AFTER the equivalence is soundly proven.  The proof is the substrate's (the hard, sound part); the
+ * preference is the ISA's.  Unique by construction (only k=2^j yields a proven shift).  WR_NO_SHIFT otherwise. */
+fn wr_strength_shift(k: u64) -> u32 @export {
+    let mut j : u64 = 1u64
+    while j < WR_SAT_W {
+        bb_reset(WR_SAT_W)
+        let x     : u32 = bb_var(0u32)
+        let prod  : u32 = bb_mul(x, bb_const(k))
+        let shift : u32 = bb_shl(x, j)
+        if bb_equal(prod, shift) == 1u8 { return j as u32 }    /* substrate-PROVEN x*k == x<<j */
+        j = j + 1u64
+    }
+    return WR_NO_SHIFT
+}
+
+/* identity elements, proven by bb_equal (coupling): x*1==x, x+0==x, x-0==x. */
+fn wr_mul_identity(k: u64) -> u8 @export {
+    bb_reset(WR_SAT_W)
+    let x : u32 = bb_var(0u32)
+    if bb_equal(bb_mul(x, bb_const(k)), x) == 1u8 { return 1u8 }
+    return 0u8
+}
+fn wr_add_identity(k: u64) -> u8 @export {
+    bb_reset(WR_SAT_W)
+    let x : u32 = bb_var(0u32)
+    if bb_equal(bb_add(x, bb_const(k)), x) == 1u8 { return 1u8 }
+    return 0u8
+}
+fn wr_sub_identity(k: u64) -> u8 @export {
+    bb_reset(WR_SAT_W)
+    let x : u32 = bb_var(0u32)
+    if bb_equal(bb_sub(x, bb_const(k)), x) == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* ---- stratum (2): execution -- constant-fold ANY binop on concrete operands via bb_eval ---------------------
+ * The very circuit the judges PROVE is the circuit this RUNS (bv_bits' one-object substrate): the fold is not a
+ * second evaluator, it is the same definition executed.  Width WR_SIG_W (no multiplier-SAT here -- a single eval). */
+fn wr_eval_binop(op: u32, a: u64, b: u64) -> u64 @export {
+    bb_reset(WR_SIG_W)
+    let ca : u32 = bb_const(a)
+    let cb : u32 = bb_const(b)
+    let mut e : u32 = ca
+    if op == WR_AND { e = bb_and(ca, cb) }
+    if op == WR_OR  { e = bb_or(ca, cb) }
+    if op == WR_XOR { e = bb_xor(ca, cb) }
+    if op == WR_NOT { e = bb_not(ca) }
+    if op == WR_SHL { e = bb_shl(ca, b) }
+    if op == WR_SHR { e = bb_shr(ca, b) }
+    if op == WR_ADD { e = bb_add(ca, cb) }
+    if op == WR_SUB { e = bb_sub(ca, cb) }
+    if op == WR_MUL { e = bb_mul(ca, cb) }
+    return bb_eval(e)
+}

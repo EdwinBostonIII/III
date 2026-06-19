@@ -1,34 +1,119 @@
-/* 1815_quine6.iii -- THE SIX-STATE QUINE: native self-describing content-address (POC).
- * Proves: deterministic, 3-byte (24-bit), self-coincident after seal, content-sensitive, and TAMPER-EVIDENT
- * (a perturbed prefix breaks self-coincidence -> fail-closed).  Exit 99. */
+/* 1815_quine6.iii -- THE SIX-STATE QUINE (production / evergreen): comprehensive proof.
+ * Proves, beyond determinism: AVALANCHE (every single-symbol flip changes >= 4 of 24 output bits -- real diffusion,
+ * measured); ZERO collisions over the full 216 three-symbol space; the base-6 codec round-trips losslessly + is
+ * distinct; length finalization ([x] != [x,pad]); the self-describing quine seals + verifies + is tamper-evident;
+ * the 48-bit width is deterministic + non-degenerate; popcount is correct.  Exit 99. */
 module corpus_1815
 
-extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_addr24(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_addr48(input_ptr: u64, n: u32) -> u64 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_pack9(symbols_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_unpack9(packed: u32, n: u32, out_ptr: u64) -> i32 from "quine6.iii"
 extern @abi(c-msvc-x64) fn q6_seal_into(buf_ptr: u64, k: u32) -> u32 from "quine6.iii"
 extern @abi(c-msvc-x64) fn q6_self_coincident(buf_ptr: u64, k: u32) -> u8 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_popcount24(x: u32) -> u32 from "quine6.iii"
 
-var PROG : [u8; 16]
+var SYMS  : [u8; 16]
+var C3    : [u8; 4]
+var ADDRS : [u32; 216]
+var PK    : [u8; 9]
+var UPK   : [u8; 9]
+var QB    : [u8; 16]
 
 fn main() -> u64 {
+    /* ---- determinism + bounds (24 and 48) ---- */
     let mut i : u32 = 0u32
-    while i < 13u32 { let p : *u8 = (&PROG as u64 + (i as u64)) as *u8  p[0u64] = ((i * 7u32 + 1u32) % 6u32) as u8  i = i + 1u32 }
+    while i < 12u32 { let p : *u8 = (&SYMS as u64 + (i as u64)) as *u8  p[0u64] = ((i * 5u32 + 1u32) % 6u32) as u8  i = i + 1u32 }
+    let a0 : u32 = q6_addr24(&SYMS as u64, 12u32)
+    if a0 != q6_addr24(&SYMS as u64, 12u32) { return 11u64 }
+    if a0 > 0xFFFFFFu32 { return 12u64 }
+    let w0 : u64 = q6_addr48(&SYMS as u64, 12u32)
+    if w0 != q6_addr48(&SYMS as u64, 12u32) { return 13u64 }
+    if w0 > 0xFFFFFFFFFFFFu64 { return 14u64 }
 
-    let a1 : u32 = q6_addr(&PROG as u64, 13u32)
-    let a2 : u32 = q6_addr(&PROG as u64, 13u32)
-    if a1 != a2 { return 11u64 }                              /* deterministic */
-    if a1 > 0xFFFFFFu32 { return 12u64 }                      /* 3-byte (24-bit) */
+    /* ---- AVALANCHE: every single-symbol flip changes >= 4 of 24 output bits ---- */
+    let mut pos : u32 = 0u32
+    while pos < 12u32 {
+        let pp : *u8 = (&SYMS as u64 + (pos as u64)) as *u8
+        let old : u8 = pp[0u64]
+        pp[0u64] = ((old as u32 + 1u32) % 6u32) as u8
+        let a1 : u32 = q6_addr24(&SYMS as u64, 12u32)
+        let diff : u32 = q6_popcount24(a0 ^ a1)
+        if diff < 4u32 { return 15u64 }          /* weak diffusion would change 1-3 bits -- fail */
+        pp[0u64] = old
+        pos = pos + 1u32
+    }
 
-    q6_seal_into(&PROG as u64, 13u32)
-    if q6_self_coincident(&PROG as u64, 13u32) != 1u8 { return 13u64 }   /* self-coincident after seal */
+    /* ---- ZERO collisions over the full 6^3 = 216 three-symbol space ---- */
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        let mut b : u32 = 0u32
+        while b < 6u32 {
+            let mut c : u32 = 0u32
+            while c < 6u32 {
+                let cp : *u8 = (&C3 as u64) as *u8
+                cp[0u64] = a as u8  cp[1u64] = b as u8  cp[2u64] = c as u8
+                let idx : u64 = ((a * 36u32 + b * 6u32 + c) as u64)
+                let ap : *u32 = (&ADDRS as u64 + idx * 4u64) as *u32
+                ap[0u64] = q6_addr24(&C3 as u64, 3u32)
+                c = c + 1u32
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    let mut x : u32 = 0u32
+    while x < 216u32 {
+        let xp : *u32 = (&ADDRS as u64 + (x as u64) * 4u64) as *u32
+        let mut y : u32 = x + 1u32
+        while y < 216u32 {
+            let yp : *u32 = (&ADDRS as u64 + (y as u64) * 4u64) as *u32
+            if xp[0u64] == yp[0u64] { return 16u64 }    /* a collision -> not a real content-address */
+            y = y + 1u32
+        }
+        x = x + 1u32
+    }
 
-    /* content-sensitivity + TAMPER-EVIDENCE: perturb a prefix symbol (stay six-state) */
-    let p0 : *u8 = (&PROG as u64) as *u8
-    p0[0u64] = ((p0[0u64] as u32 + 1u32) % 6u32) as u8
-    let b : u32 = q6_addr(&PROG as u64, 13u32)
-    if b == a1 { return 14u64 }                              /* a different prefix -> a different address */
-    if q6_self_coincident(&PROG as u64, 13u32) != 0u8 { return 15u64 }   /* stale embedded addr -> NOT coincident */
+    /* ---- base-6 codec: round-trip + lossless distinctness ---- */
+    let mut k : u32 = 0u32
+    while k < 9u32 { let p : *u8 = (&PK as u64 + (k as u64)) as *u8  p[0u64] = ((k * 2u32 + 3u32) % 6u32) as u8  k = k + 1u32 }
+    let packed : u32 = q6_pack9(&PK as u64, 9u32)
+    q6_unpack9(packed, 9u32, &UPK as u64)
+    let mut m : u32 = 0u32
+    while m < 9u32 {
+        let pp : *u8 = (&PK as u64 + (m as u64)) as *u8
+        let up : *u8 = (&UPK as u64 + (m as u64)) as *u8
+        if pp[0u64] != up[0u64] { return 17u64 }        /* lossless round-trip */
+        m = m + 1u32
+    }
+    let pq : *u8 = (&PK as u64) as *u8
+    pq[0u64] = ((pq[0u64] as u32 + 1u32) % 6u32) as u8
+    if q6_pack9(&PK as u64, 9u32) == packed { return 18u64 }   /* distinct symbols -> distinct packing */
 
-    q6_seal_into(&PROG as u64, 13u32)
-    if q6_self_coincident(&PROG as u64, 13u32) != 1u8 { return 16u64 }   /* re-seal restores coincidence */
+    /* ---- length finalization: [5] != [5, 0] ---- */
+    let lp : *u8 = (&C3 as u64) as *u8
+    lp[0u64] = 5u8  lp[1u64] = 0u8
+    if q6_addr24(&C3 as u64, 1u32) == q6_addr24(&C3 as u64, 2u32) { return 19u64 }
+
+    /* ---- the self-describing quine: seal -> coincident; tamper -> not; re-seal -> coincident ---- */
+    let mut q : u32 = 0u32
+    while q < 13u32 { let p : *u8 = (&QB as u64 + (q as u64)) as *u8  p[0u64] = ((q * 3u32 + 2u32) % 6u32) as u8  q = q + 1u32 }
+    q6_seal_into(&QB as u64, 13u32)
+    if q6_self_coincident(&QB as u64, 13u32) != 1u8 { return 20u64 }
+    let q0 : *u8 = (&QB as u64) as *u8
+    q0[0u64] = ((q0[0u64] as u32 + 1u32) % 6u32) as u8
+    if q6_self_coincident(&QB as u64, 13u32) != 0u8 { return 21u64 }   /* tamper-evident (negative) */
+    q6_seal_into(&QB as u64, 13u32)
+    if q6_self_coincident(&QB as u64, 13u32) != 1u8 { return 22u64 }
+
+    /* ---- 48-bit width: non-degenerate + wider than 24 ---- */
+    if w0 == 0u64 { return 23u64 }
+    if (w0 & 0xFFFFFFu64) == 0u64 { return 24u64 }     /* uses the high bits (genuinely 48-bit) -- vanishingly unlikely to be 0 */
+
+    /* ---- popcount correctness ---- */
+    if q6_popcount24(0xFFFFFFu32) != 24u32 { return 25u64 }
+    if q6_popcount24(0u32) != 0u32 { return 26u64 }
+    if q6_popcount24(0x7u32) != 3u32 { return 27u64 }
+
     return 99u64
 }

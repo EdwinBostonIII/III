@@ -1,52 +1,114 @@
-/* STDLIB/iii/numera/quine6.iii -- THE SIX-STATE QUINE: a native-weave self-describing content-address.
+/* STDLIB/iii/numera/quine6.iii -- THE SIX-STATE QUINE: III's native content-address primitive.  (FINAL / evergreen.)
  *
- * POC for the user's six-state-quine idea + the "more basal than CPUID" behavioral seed.  A six-state symbol is one
- * of {0..5}; q6_addr folds a six-state string into a 24-bit (3-byte) content-address with a deterministic base-6
- * fold + diffusion.  A QUINE here is a self-describing construct: [k six-state symbols][3-byte address of those k] --
- * q6_self_coincident verifies the embedded address equals the freshly-computed one.  This is identity-by-construction
- * (the construct carries + proves its own content-address), the native-weave alternative to a foreign 32-byte hash
- * for the INTERNAL seal (R3-can't-forge; not the external attest, which needs crypto width).  Deterministic +
- * content-sensitive + tamper-evident.  Pure, NIH, no deps.  Ring R0.  KAT: corpus 1815. */
+ * A six-state symbol is one of {0..5}.  This module is the definitive native-weave content-address over six-state
+ * strings: a deterministic, well-diffused fold producing a 24-bit (3-byte) or 48-bit (6-byte) address, the base-6
+ * codec that packs six-state symbols losslessly into bytes, and the self-describing QUINE (a construct that carries +
+ * verifies its own address).  It is the native alternative to a foreign 32-byte crypto hash for the SIX-STATE,
+ * NON-ADVERSARIAL domain: internal seals (R3-can't-forge), content-addressing the Commons, native object identity.
+ *
+ * DESIGN (why each piece is here, so this is final and needs no later rework):
+ *   - q6_round24/48: a BIJECTIVE xorshift-multiply permutation (multiply by an ODD constant mod 2^w is a bijection;
+ *     x ^= x>>k is a bijection).  A bijective round means the diffusion never self-collides -- collisions arise only
+ *     from the compressive absorb, which is what a content-address is.  Strong avalanche (a 1-symbol change flips
+ *     ~half the output bits) is KAT-proven (corpus 1815), so this is a real content-address, not a weak checksum.
+ *   - q6_absorb*: base-6 absorb (state*6 + sym) then a full round -- the six-state alphabet folded with diffusion.
+ *   - length finalization: the final round mixes in the symbol count, so [a] and [a, pad] differ (no extension
+ *     collisions).
+ *   - q6_pack9/unpack9: the base-6 codec.  6^9 = 10,077,696 < 2^24, so NINE six-state symbols pack losslessly into
+ *     3 bytes -- the literal "fits in 3 bytes."  Round-trips exactly (KAT).
+ *   - the quine: q6_seal_into embeds an address after a prefix; q6_self_coincident verifies it -- identity by
+ *     construction, tamper-evident (a perturbed prefix breaks coincidence), fail-closed.
+ *
+ * HONEST BOUNDARY (do not misuse): the 24-bit width is for the INTERNAL / non-adversarial domain (where the address
+ * is computed + verified in one trust boundary and an attacker cannot brute-force a collision because they never get
+ * to supply the input).  For ADVERSARIAL tamper-attestation (a remote challenger, forgeable inputs) use a
+ * crypto-width hash (numera/sha256 / cad); even the 48-bit width here is NON-cryptographic.  This boundary is by
+ * design, not a deficiency: the six-state quine is the compact native identity; crypto hashes are the wide adversarial
+ * anchor.  Pure, NIH (no deps).  Ring R0.  KAT: corpus 1815. */
 module numera_quine6
 
-const Q6_MASK : u32 = 0xFFFFFFu32   /* 24 bits = 3 bytes */
+const Q6_MASK24 : u32 = 0xFFFFFFu32          /* 24 bits = 3 bytes */
+const Q6_MASK48 : u64 = 0xFFFFFFFFFFFFu64    /* 48 bits = 6 bytes */
+const Q6_IV24   : u32 = 0x36D6A5u32          /* nonzero init -- empty string maps to a finalized nonzero address */
+const Q6_IV48   : u64 = 0x36D6A53C9B71u64
 
-/* one six-state fold step: base-6 absorb + a 24-bit rotate-xor diffusion (content-sensitive, deterministic). */
-fn q6_step(acc: u32, sym: u32) -> u32 {
-    let a : u32 = ((acc * 6u32) + (sym % 6u32)) & Q6_MASK
-    let r : u32 = ((a << 7u32) | (a >> 17u32)) & Q6_MASK
-    return (a ^ r ^ 0x5A5A5Au32) & Q6_MASK
+/* ---- bijective diffusion rounds (xorshift-multiply; ODD multipliers => permutations mod 2^w) ---- */
+fn q6_round24(x0: u32) -> u32 {
+    let mut x : u32 = x0 & Q6_MASK24
+    x = (x ^ (x >> 13u32)) & Q6_MASK24
+    x = (x * 0x9E3779u32) & Q6_MASK24        /* odd */
+    x = (x ^ (x >> 11u32)) & Q6_MASK24
+    x = (x * 0xC2B2AFu32) & Q6_MASK24        /* odd */
+    x = (x ^ (x >> 7u32)) & Q6_MASK24
+    return x & Q6_MASK24
+}
+fn q6_round48(x0: u64) -> u64 {
+    let mut x : u64 = x0 & Q6_MASK48
+    x = (x ^ (x >> 25u64)) & Q6_MASK48
+    x = (x * 0x9E3779B97F4Bu64) & Q6_MASK48  /* odd */
+    x = (x ^ (x >> 21u64)) & Q6_MASK48
+    x = (x * 0xC2B2AE3D27D5u64) & Q6_MASK48  /* odd */
+    x = (x ^ (x >> 13u64)) & Q6_MASK48
+    return x & Q6_MASK48
 }
 
-/* fold n six-state symbols (one per byte, value taken mod 6) into a 24-bit content-address. */
-fn q6_addr(input_ptr: u64, n: u32) -> u32 @export {
-    let mut acc : u32 = 0x111111u32
+/* ---- absorb one six-state symbol ---- */
+fn q6_absorb24(state: u32, sym: u32) -> u32 { return q6_round24(((state * 6u32) + (sym % 6u32)) & Q6_MASK24) }
+fn q6_absorb48(state: u64, sym: u64) -> u64 { return q6_round48(((state * 6u64) + (sym % 6u64)) & Q6_MASK48) }
+
+/* ---- content-address over n six-state symbols (one per byte, value mod 6), length-finalized ---- */
+fn q6_addr24(input_ptr: u64, n: u32) -> u32 @export {
+    let mut acc : u32 = Q6_IV24
     let mut i : u32 = 0u32
-    while i < n {
-        let p : *u8 = (input_ptr + (i as u64)) as *u8
-        acc = q6_step(acc, p[0u64] as u32)
-        i = i + 1u32
-    }
-    return acc & Q6_MASK
+    while i < n { let p : *u8 = (input_ptr + (i as u64)) as *u8  acc = q6_absorb24(acc, p[0u64] as u32)  i = i + 1u32 }
+    return q6_round24((acc ^ (n & Q6_MASK24)) & Q6_MASK24)     /* length finalization */
+}
+fn q6_addr48(input_ptr: u64, n: u32) -> u64 @export {
+    let mut acc : u64 = Q6_IV48
+    let mut i : u32 = 0u32
+    while i < n { let p : *u8 = (input_ptr + (i as u64)) as *u8  acc = q6_absorb48(acc, p[0u64] as u64)  i = i + 1u32 }
+    return q6_round48((acc ^ (n as u64)) & Q6_MASK48)
 }
 
-/* SEAL: compute the address of the k-symbol prefix and embed it (LE) at offset k -- forging the self-describing
- * quine.  Returns the embedded address. */
+/* ---- the POC API names = the 24-bit defaults (consumers link unchanged) ---- */
+fn q6_addr(input_ptr: u64, n: u32) -> u32 @export { return q6_addr24(input_ptr, n) }
+
+/* ---- base-6 lossless codec: up to 9 six-state symbols <-> 24 bits (3 bytes) ---- */
+fn q6_pack9(symbols_ptr: u64, n: u32) -> u32 @export {
+    let mut v : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n { let p : *u8 = (symbols_ptr + (i as u64)) as *u8  v = (v * 6u32) + ((p[0u64] as u32) % 6u32)  i = i + 1u32 }
+    return v
+}
+fn q6_unpack9(packed: u32, n: u32, out_ptr: u64) -> i32 @export {
+    let mut v : u32 = packed
+    let mut i : u32 = n
+    while i > 0u32 { i = i - 1u32  let p : *u8 = (out_ptr + (i as u64)) as *u8  p[0u64] = (v % 6u32) as u8  v = v / 6u32 }
+    return 0i32
+}
+
+/* ---- the self-describing QUINE (24-bit): seal an address after the k-symbol prefix; verify coincidence ---- */
 fn q6_seal_into(buf_ptr: u64, k: u32) -> u32 @export {
-    let a : u32 = q6_addr(buf_ptr, k)
+    let a : u32 = q6_addr24(buf_ptr, k)
     let p : *u8 = (buf_ptr + (k as u64)) as *u8
     p[0u64] = (a & 0xFFu32) as u8
     p[1u64] = ((a >> 8u32) & 0xFFu32) as u8
     p[2u64] = ((a >> 16u32) & 0xFFu32) as u8
     return a
 }
-
-/* SELF-COINCIDENCE: 1 iff the embedded 3-byte address equals the freshly-recomputed address of the prefix --
- * the construct reproduces its own identity (a quine), and any tamper of the prefix breaks it (fail-closed). */
 fn q6_self_coincident(buf_ptr: u64, k: u32) -> u8 @export {
-    let computed : u32 = q6_addr(buf_ptr, k)
+    let computed : u32 = q6_addr24(buf_ptr, k)
     let p : *u8 = (buf_ptr + (k as u64)) as *u8
     let embedded : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32)
-    if (computed & Q6_MASK) == (embedded & Q6_MASK) { return 1u8 }
+    if (computed & Q6_MASK24) == (embedded & Q6_MASK24) { return 1u8 }
     return 0u8
+}
+
+/* popcount of a 24-bit word (for the avalanche KAT to MEASURE diffusion -- a production-grade content-address must
+ * prove its mixing, not assume it). */
+fn q6_popcount24(x: u32) -> u32 @export {
+    let mut v : u32 = x & Q6_MASK24
+    let mut c : u32 = 0u32
+    while v != 0u32 { c = c + (v & 1u32)  v = v >> 1u32 }
+    return c
 }

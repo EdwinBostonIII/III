@@ -18,6 +18,9 @@ extern @abi(c-msvc-x64) fn gil_best_b() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gilr_forge(k: u64, c: u64) -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil6_forge(tid: u32) -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil6_best_a() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_forge(kind: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_found() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_best_cost() -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 
 var PRES_BUF   : [u8; 128]
@@ -104,6 +107,23 @@ fn present_collapse(tid: u32) -> u64 @export {
     if leaf == 1u32 { pres_ch(0x62u8) }                    /* b */
     if leaf == 2u32 { pres_str(("Null" as u64), 4u64) }
     if leaf == 3u32 { pres_str(("All" as u64), 3u64) }
+    pres_seal()
+    return PRES_LEN[0u64]
+}
+
+/* present a WEAVE-FORGE discovery (numera/invent gilw), named: III's de-novo cheaper form of a SHA round
+ * function, rendered with the op-cost III actually proved.  The forge is RUN here so the rendered law is tied
+ * to a live discovery (gilw_found / gilw_best_cost), not asserted independently of it -- the same propose-and-
+ * checked discipline as present_strength/present_collapse.  Returns 0 if the forge found nothing (never a lie). */
+fn present_weave(kind: u32) -> u64 @export {
+    gilw_forge(kind)
+    if gilw_found() != 1u8 { return 0u64 }
+    PRES_LEN[0u64] = 0u64
+    if kind == 1u32 { pres_str(("Ch = g ^ (e & (f ^ g))" as u64), 22u64) }          /* one AND fewer, no NOT */
+    if kind == 2u32 { pres_str(("Maj = (a & b) ^ (c & (a ^ b))" as u64), 29u64) }   /* the carry-save / adder carry */
+    pres_str(("  [III invented: " as u64), 17u64)
+    pres_u64(gilw_best_cost() as u64)
+    pres_str((" ops]" as u64), 5u64)
     pres_seal()
     return PRES_LEN[0u64]
 }

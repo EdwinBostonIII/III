@@ -1,0 +1,38 @@
+/* 1767_present_weave.iii -- III SPEAKS THE WEAVE IT INVENTED.
+ *
+ * The Rosetta layer (numera/present) already names strength-reductions, modular folds, and 6-valued collapses
+ * as human-readable New Math.  present_weave closes the loop on the weave: it RUNS the weave-forge (gilw),
+ * which discovers + proves the cheaper SHA round-function form, then renders + content-address-NAMES it -- so a
+ * developer reads "Ch = g ^ (e & (f ^ g))  [III invented: 3 ops]" without touching the search machinery.
+ *
+ *   (1) present_weave(Ch)  renders a non-empty law beginning "Ch"  and bumps the New-Math ledger
+ *   (2) present_weave(Maj) renders a non-empty law beginning "Maj"
+ *   (3) the ledger count advances by exactly two (two discoveries named, tied to live forge verdicts)
+ * Exit 99 = III named its own weave discoveries, propose-and-checked, no fabricated law. */
+module corpus_1767
+
+extern @abi(c-msvc-x64) fn present_weave(kind: u32) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_byte(i: u64) -> u32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_count() -> u64 from "present.iii"
+
+fn main() -> u64 {
+    let c0 : u64 = pres_count()
+
+    /* (1) Ch */
+    let l1 : u64 = present_weave(1u32)
+    if l1 == 0u64 { return 1u64 }
+    if pres_byte(0u64) != 0x43u32 { return 2u64 }      /* 'C' */
+    if pres_byte(1u64) != 0x68u32 { return 3u64 }      /* 'h' */
+
+    /* (2) Maj */
+    let l2 : u64 = present_weave(2u32)
+    if l2 == 0u64 { return 4u64 }
+    if pres_byte(0u64) != 0x4Du32 { return 5u64 }      /* 'M' */
+    if pres_byte(1u64) != 0x61u32 { return 6u64 }      /* 'a' */
+    if pres_byte(2u64) != 0x6Au32 { return 7u64 }      /* 'j' */
+
+    /* (3) the ledger advanced by exactly two named discoveries */
+    if pres_count() != c0 + 2u64 { return 8u64 }
+
+    return 99u64
+}

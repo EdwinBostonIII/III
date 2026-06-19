@@ -1417,6 +1417,8 @@ declare -A EXPECTED=(
     [1765_weave_oneeval]=99
     # INVENT FILLS THE WEAVE: III discovers Ch (4->3 ops) and Maj (5->4, carry-save) de-novo, proves them, and RUNS them via bb_eval.
     [1766_weave_invent]=99
+    # III SPEAKS THE WEAVE: the Rosetta layer renders + content-address-NAMES the Ch/Maj forms the weave-forge invented.
+    [1767_present_weave]=99
 )
 
 PASS=0

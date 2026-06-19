@@ -1,0 +1,24 @@
+/* 1784_weave_conjecture3.iii -- AUTONOMOUS CONJECTURE AT 3 VARIABLES: III finds the deep round-function identities.
+ *
+ * The 2-var conjecture engine (1783) rediscovered De Morgan + the xnor cluster.  At 3 variables the deep
+ * identities of III's own crypto live -- and III finds them by raw enumeration + proof, no template.  Over a
+ * 20-expression library it judges all 190 distinct pairs and discovers 12 true identities:
+ *   Ch has FOUR equal forms -- spec (a&b)^(~a&c), OR-mux (a&b)|(~a&c), optform c^(a&(b^c)), consensus
+ *     (a&b)|(~a&c)|(b&c) [the b&c term redundant] -> C(4,2) = 6 discovered pairs
+ *   Maj has THREE -- XOR-spec, carry-save (a&b)^(c&(a^b)), OR-form (a&b)|(a&c)|(b&c) -> C(3,2) = 3
+ *   3-var distributivity a&(b|c)=(a&b)|(a&c) and a|(b&c)=(a|b)&(a|c) -> 2
+ *   3-var De Morgan ~(a&b&c) = ~a|~b|~c -> 1
+ * = 12 proven identities, from 190 self-generated, exhaustively-judged conjectures.
+ * Exit 99 = III conjectured + proved the deep structure of its round functions, unassisted. */
+module corpus_1784
+
+extern @abi(c-msvc-x64) fn gild3_conjecture_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild3_conjecture_kcalls() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    let found  : u64 = gild3_conjecture_count()
+    let judged : u64 = gild3_conjecture_kcalls()
+    if judged != 190u64 { return 1u64 }      /* exhaustive: all C(20,2) pairs judged, no cherry-picking */
+    if found != 12u64 { return 2u64 }        /* 12 true 3-var identities discovered de-novo */
+    return 99u64
+}

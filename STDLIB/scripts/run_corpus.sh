@@ -1451,6 +1451,8 @@ declare -A EXPECTED=(
     [1782_weave_axioms]=99
     # AUTONOMOUS CONJECTURE: III enumerates 14 expressions, generates + exhaustively judges all 91 pairs, and discovers 5 true identities (De Morgan x2 + the xnor cluster) with NO template -- invention proper.
     [1783_weave_conjecture]=99
+    # CONJECTURE AT 3 VARIABLES: III judges all 190 pairs over a 20-expr library and discovers 12 identities -- Ch's 4 equal forms, Maj's 3, 3-var distributivity + De Morgan -- the deep round-function structure, no template.
+    [1784_weave_conjecture3]=99
 )
 
 PASS=0

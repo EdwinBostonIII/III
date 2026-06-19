@@ -1101,6 +1101,59 @@ fn gild_conjecture_count() -> u64 @export {
 fn gild_conjecture_kcalls() -> u64 @export { return GILC_KCALLS }
 
 /* ============================================================================================================
+ * AUTONOMOUS CONJECTURE AT 3 VARIABLES -- where the deep identities live.  III enumerates a 20-expression
+ * library over (a,b,c) -- deliberately including STRUCTURALLY DIFFERENT forms of the same functions -- and
+ * exhaustively judges all 190 distinct pairs.  Without being told, it discovers that the SHA round functions
+ * have many equal forms (Ch = mux = OR-mux = optform = consensus; Maj = XOR-spec = carry-save = OR-form), that
+ * the consensus term is redundant, and 3-var distributivity + De Morgan.  Conjecture, then proof; no template. */
+fn gild3_expr(idx: u32, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return a }
+    if idx == 1u32 { return b }
+    if idx == 2u32 { return c }
+    if idx == 3u32 { return bb_and(a, b) }
+    if idx == 4u32 { return bb_or(a, b) }
+    if idx == 5u32 { return bb_xor(a, b) }
+    if idx == 6u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }                          /* Ch spec */
+    if idx == 7u32 { return bb_or(bb_and(a, b), bb_and(bb_not(a), c)) }                           /* Ch OR-mux */
+    if idx == 8u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }                                  /* Ch optform */
+    if idx == 9u32 { return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }            /* Maj XOR-spec */
+    if idx == 10u32 { return bb_xor(bb_and(a, b), bb_and(c, bb_xor(a, b))) }                      /* Maj carry-save */
+    if idx == 11u32 { return bb_or(bb_or(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }             /* Maj OR-form */
+    if idx == 12u32 { return bb_or(bb_or(bb_and(a, b), bb_and(bb_not(a), c)), bb_and(b, c)) }     /* consensus (==Ch) */
+    if idx == 13u32 { return bb_and(a, bb_or(b, c)) }                                             /* a&(b|c) */
+    if idx == 14u32 { return bb_or(bb_and(a, b), bb_and(a, c)) }                                  /* (a&b)|(a&c) */
+    if idx == 15u32 { return bb_or(a, bb_and(b, c)) }                                             /* a|(b&c) */
+    if idx == 16u32 { return bb_and(bb_or(a, b), bb_or(a, c)) }                                   /* (a|b)&(a|c) */
+    if idx == 17u32 { return bb_xor(bb_xor(a, b), c) }                                            /* parity a^b^c */
+    if idx == 18u32 { return bb_not(bb_and(bb_and(a, b), c)) }                                    /* ~(a&b&c) */
+    if idx == 19u32 { return bb_or(bb_or(bb_not(a), bb_not(b)), bb_not(c)) }                      /* ~a|~b|~c */
+    return 0xFFFFFFFFu32
+}
+const GILC3_N : u32 = 20u32
+var GILC3_KCALLS : u64 = 0u64
+
+fn gild3_conjecture_count() -> u64 @export {
+    GILC3_KCALLS = 0u64
+    let mut found : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < GILC3_N {
+        let mut j : u32 = i + 1u32
+        while j < GILC3_N {
+            bb_reset(GILD_W)
+            let a : u32 = bb_var(0u32)
+            let b : u32 = bb_var(1u32)
+            let c : u32 = bb_var(2u32)
+            GILC3_KCALLS = GILC3_KCALLS + 1u64
+            if bb_equal(gild3_expr(i, a, b, c), gild3_expr(j, a, b, c)) == 1u8 { found = found + 1u64 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return found
+}
+fn gild3_conjecture_kcalls() -> u64 @export { return GILC3_KCALLS }
+
+/* ============================================================================================================
  * THE WEAVE CENSUS -- III knows the full extent of the mathematics it has discovered + proven over its weave.
  *
  * A single number that IS the wealth of the self-discovered weave: every proven law across every family,

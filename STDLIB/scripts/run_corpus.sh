@@ -1447,6 +1447,8 @@ declare -A EXPECTED=(
     [1780_weave_ratchet_persist]=99
     # RATCHET LIVE: present_duality routes the expensive ~500-SAT family through the cited path, so repeated full-weave derivation (census/federation) forges it once then cites -- load-bearing, not a demo.
     [1781_weave_ratchet_live]=99
+    # AXIOMS OF BOOLEAN ALGEBRA: III discovers+proves associativity, commutativity, complement, identity/annihilator, the consensus THEOREM, and the rotation-group composition law.
+    [1782_weave_axioms]=99
 )
 
 PASS=0

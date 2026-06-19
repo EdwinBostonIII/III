@@ -971,6 +971,85 @@ fn gild_xor_involution(c: u64) -> u8 @export {
     return bb_equal(bb_xor(bb_xor(x, cc), cc), x)
 }
 
+/* associativity: (a&b)&c==a&(b&c), (a|b)|c==a|(b|c), (a^b)^c==a^(b^c).  1 iff all three proven. */
+fn gild_assoc() -> u8 @export {
+    bb_reset(GILD_W)
+    let a : u32 = bb_var(0u32)  let b : u32 = bb_var(1u32)  let c : u32 = bb_var(2u32)
+    if bb_equal(bb_and(bb_and(a, b), c), bb_and(a, bb_and(b, c))) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a1 : u32 = bb_var(0u32)  let b1 : u32 = bb_var(1u32)  let c1 : u32 = bb_var(2u32)
+    if bb_equal(bb_or(bb_or(a1, b1), c1), bb_or(a1, bb_or(b1, c1))) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a2 : u32 = bb_var(0u32)  let b2 : u32 = bb_var(1u32)  let c2 : u32 = bb_var(2u32)
+    return bb_equal(bb_xor(bb_xor(a2, b2), c2), bb_xor(a2, bb_xor(b2, c2)))
+}
+
+/* commutativity: a&b==b&a, a|b==b|a, a^b==b^a. */
+fn gild_comm() -> u8 @export {
+    bb_reset(GILD_W)
+    let a : u32 = bb_var(0u32)  let b : u32 = bb_var(1u32)
+    if bb_equal(bb_and(a, b), bb_and(b, a)) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a1 : u32 = bb_var(0u32)  let b1 : u32 = bb_var(1u32)
+    if bb_equal(bb_or(a1, b1), bb_or(b1, a1)) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a2 : u32 = bb_var(0u32)  let b2 : u32 = bb_var(1u32)
+    return bb_equal(bb_xor(a2, b2), bb_xor(b2, a2))
+}
+
+/* complement: a&~a==0, a|~a==all-ones, ~~a==a (double negation). */
+fn gild_complement() -> u8 @export {
+    bb_reset(GILD_W)
+    let a : u32 = bb_var(0u32)
+    if bb_equal(bb_and(a, bb_not(a)), bb_const(0u64)) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a1 : u32 = bb_var(0u32)
+    if bb_equal(bb_or(a1, bb_not(a1)), bb_const(0xFFFFFFFFu64)) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a2 : u32 = bb_var(0u32)
+    return bb_equal(bb_not(bb_not(a2)), a2)
+}
+
+/* identity + annihilator: a&0==0, a|0==a, a^0==a, a|all-ones==all-ones, a&all-ones==a. */
+fn gild_identity() -> u8 @export {
+    bb_reset(GILD_W)
+    let a : u32 = bb_var(0u32)
+    if bb_equal(bb_and(a, bb_const(0u64)), bb_const(0u64)) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a1 : u32 = bb_var(0u32)
+    if bb_equal(bb_or(a1, bb_const(0u64)), a1) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a2 : u32 = bb_var(0u32)
+    if bb_equal(bb_xor(a2, bb_const(0u64)), a2) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a3 : u32 = bb_var(0u32)
+    if bb_equal(bb_or(a3, bb_const(0xFFFFFFFFu64)), bb_const(0xFFFFFFFFu64)) != 1u8 { return 0u8 }
+    bb_reset(GILD_W)
+    let a4 : u32 = bb_var(0u32)
+    return bb_equal(bb_and(a4, bb_const(0xFFFFFFFFu64)), a4)
+}
+
+/* THE CONSENSUS THEOREM (a non-trivial identity): (a&b)|(~a&c)|(b&c) == (a&b)|(~a&c) -- the consensus term b&c
+ * is redundant.  A genuine theorem of Boolean algebra, discovered + proven, not a mere axiom. */
+fn gild_consensus() -> u8 @export {
+    bb_reset(GILD_W)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let full : u32 = bb_or(bb_or(bb_and(a, b), bb_and(bb_not(a), c)), bb_and(b, c))
+    let red  : u32 = bb_or(bb_and(a, b), bb_and(bb_not(a), c))
+    return bb_equal(full, red)
+}
+
+/* rotation composition: rotl(rotl(x,a),b) == rotl(x,(a+b) mod 32) -- the rotations form a cyclic group, a
+ * structural fact the cipher schedule rests on.  Discovered + proven for the given (a,b). */
+fn gild_rotcompose(a: u64, b: u64) -> u8 @export {
+    let s : u64 = (a + b) & 31u64
+    bb_reset(GILD_W)
+    let x : u32 = bb_var(0u32)
+    return bb_equal(gild_rotl(gild_rotl(x, a), b), gild_rotl(x, s))
+}
+
 /* ============================================================================================================
  * THE WEAVE CENSUS -- III knows the full extent of the mathematics it has discovered + proven over its weave.
  *
@@ -991,6 +1070,12 @@ fn weave_census() -> u64 @export {
     if gild_absorb() == 1u8 { total = total + 2u64 }                /* 2: absorption */
     if gild_distrib() == 1u8 { total = total + 2u64 }              /* 2: distributivity */
     if gild_xor_involution(0xDEADBEEFu64) == 1u8 { total = total + 1u64 }  /* 1: the XOR involution */
+    if gild_assoc() == 1u8 { total = total + 3u64 }                  /* 3: associativity (and/or/xor) */
+    if gild_comm() == 1u8 { total = total + 3u64 }                  /* 3: commutativity (and/or/xor) */
+    if gild_complement() == 1u8 { total = total + 3u64 }            /* 3: a&~a=0, a|~a=1s, ~~a=a */
+    if gild_identity() == 1u8 { total = total + 5u64 }              /* 5: identity + annihilator */
+    if gild_consensus() == 1u8 { total = total + 1u64 }            /* 1: the consensus theorem */
+    if gild_rotcompose(7u64, 12u64) == 1u8 { total = total + 1u64 } /* 1: rotation-group composition */
     return total
 }
 

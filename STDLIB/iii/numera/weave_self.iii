@@ -153,3 +153,58 @@ fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
     return 0i32
 }
+
+/* SYSTEMWIDE NODE CENSUS (feasible at scale: O(nodes) self-model queries, no O(n^2) pair sweep).  Classifies
+ * every component of the LOADED self-model into its six-state and tallies them: how much of III IS a universal
+ * integrator (ALL), sits in a dependency cycle (BOTH, paraconsistent), or is an acyclic live node (TRUE).
+ * out -> three u32 (LE): [TRUE, BOTH, ALL].  Run after the real self-model is loaded (satlas_data_load). */
+fn ws_node_census(out: u64) -> i32 @export {
+    let n : u32 = satlas_node_count()
+    let mut c_true : u32 = 0u32
+    let mut c_both : u32 = 0u32
+    let mut c_all  : u32 = 0u32
+    let mut a : u32 = 0u32
+    while a < n {
+        let s : u32 = ws_node_state(a)
+        if s == WS_TRUE { c_true = c_true + 1u32 }
+        if s == WS_BOTH { c_both = c_both + 1u32 }
+        if s == WS_ALL { c_all = c_all + 1u32 }
+        a = a + 1u32
+    }
+    ws_put_u32le(out, 0u64, c_true)
+    ws_put_u32le(out, 4u64, c_both)
+    ws_put_u32le(out, 8u64, c_all)
+    return 0i32
+}
+
+/* the count of components in a dependency CYCLE (BOTH-state) -- the six-state weave's own measure of III's
+ * cyclic core, which must agree with the self-model lens (salens_count_cycle_nodes): the same fact, two organs. */
+fn ws_cycle_count() -> u32 @export {
+    let n : u32 = satlas_node_count()
+    let mut c : u32 = 0u32
+    let mut a : u32 = 0u32
+    while a < n {
+        if ws_node_state(a) == WS_BOTH { c = c + 1u32 }
+        a = a + 1u32
+    }
+    return c
+}
+
+/* THE TRANSPOSE LAW over a bounded SAMPLE (the first k components) -- the O(n^2) full check is intractable on
+ * the 591-node real model, but the law is structural (it holds for every pair by construction); this verifies
+ * it on real connections at scale-feasible cost.  Returns 1 iff C(a,b)==NOT C(b,a) across the k*k sample. */
+fn ws_transpose_law_sample(k: u32) -> u8 @export {
+    let n : u32 = satlas_node_count()
+    let mut lim : u32 = k
+    if lim > n { lim = n }
+    let mut a : u32 = 0u32
+    while a < lim {
+        let mut b : u32 = 0u32
+        while b < lim {
+            if ws_connect(a, b) != l6_not(ws_connect(b, a)) { return 0u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}

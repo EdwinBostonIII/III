@@ -1,0 +1,47 @@
+/* 1787_weave_self_systemwide.iii -- THE SIX-STATE WEAVE OVER III'S ACTUAL STRUCTURE, SYSTEMWIDE.
+ *
+ * 1786 proved the six-state self-weave on a hand-built model.  Here it runs over III's REAL self-model
+ * (omnia/self_atlas_data -- III's own module dependency graph, loaded at runtime), so the six-valued
+ * representation of the system's connections is the WHOLE system's, not a sample of it.
+ *
+ *   (1) the real self-model loads faithfully (self_atlas node count == the data's own node count)
+ *   (2) CROSS-VALIDATION: the weave's cyclic core (the BOTH-state components) EQUALS the self-model lens's
+ *       independent cycle-node count -- the same structural fact, computed by two different organs, agreeing.
+ *       It is non-vacuous: III genuinely has a dependency cycle core (the intentional co-recursion triad).
+ *   (3) the TRANSPOSE LAW (C(a,b)==NOT C(b,a)) holds on REAL connections (a feasible 40-component sample of
+ *       the intractable full O(n^2) sweep; the law is structural, so the sample is a witness, not a hope).
+ *   (4) the systemwide node-census's BOTH tally equals the cyclic core -- internally consistent.
+ * Exit 99 = III expresses its OWN interconnectivity, systemwide, as six-state mathematics, cross-validated. */
+module corpus_1787
+
+extern @abi(c-msvc-x64) fn satlas_data_load() -> i32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_data_node_count() -> u32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn salens_count_cycle_nodes() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn ws_cycle_count() -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_transpose_law_sample(k: u32) -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_node_census(out: u64) -> i32 from "weave_self.iii"
+
+var NC : [u32; 3]
+
+fn main() -> u64 {
+    satlas_data_load()
+
+    /* (1) the real self-model is loaded */
+    if satlas_node_count() != satlas_data_node_count() { return 1u64 }
+    if satlas_node_count() == 0u32 { return 2u64 }
+
+    /* (2) the six-state cyclic core == the lens's cycle-node count (two organs, one fact), non-vacuous */
+    let cyc : u32 = ws_cycle_count()
+    if cyc != salens_count_cycle_nodes() { return 3u64 }
+    if cyc == 0u32 { return 4u64 }
+
+    /* (3) the transpose law holds on real connections (bounded sample of the intractable full sweep) */
+    if ws_transpose_law_sample(40u32) != 1u8 { return 5u64 }
+
+    /* (4) the systemwide node-census is internally consistent (its BOTH tally == the cyclic core) */
+    ws_node_census((&NC as u64))
+    if NC[1u64] != cyc { return 6u64 }
+
+    return 99u64
+}

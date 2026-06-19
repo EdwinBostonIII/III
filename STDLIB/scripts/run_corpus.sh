@@ -1457,6 +1457,8 @@ declare -A EXPECTED=(
     [1785_weave_conjecture_commons]=99
     # THE SIX-STATE SELF-WEAVE: III's own connection-structure lifted into logic6 -- each dependency a Belnap value (TRUE/FALSE/BOTH/NEITHER/NULL); transpose == involution, ripple == transitivity. The math the system understands ITSELF in.
     [1786_weave_self]=99
+    # SIX-STATE SELF-WEAVE, SYSTEMWIDE: runs over III's REAL self-model (self_atlas_data); the weave's cyclic BOTH-core == the lens's cycle-node count (two organs, one fact); transpose law holds on real connections.
+    [1787_weave_self_systemwide]=99
 )
 
 PASS=0

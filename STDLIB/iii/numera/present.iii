@@ -14,6 +14,7 @@ module numera_present
 extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_b() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gilr_forge(k: u64, c: u64) -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil6_forge(tid: u32) -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil6_best_a() -> u32 from "invent.iii"
@@ -62,7 +63,8 @@ fn present_strength(k: u64) -> u64 @export {
     if kind == 1u32 { pres_str(("x << " as u64), 5u64)  pres_u64(a) }
     if kind == 2u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") - x" as u64), 5u64) }
     if kind == 3u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") + x" as u64), 5u64) }
-    if kind == 4u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") + (x << b)" as u64), 11u64) }
+    if kind == 4u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") + (x << " as u64), 10u64)  pres_u64(gil_best_b())  pres_ch(0x29u8) }
+    if kind == 5u32 { pres_str(("(x << " as u64), 6u64)  pres_u64(a)  pres_str((") - (x << " as u64), 10u64)  pres_u64(gil_best_b())  pres_ch(0x29u8) }
     pres_seal()
     return PRES_LEN[0u64]
 }

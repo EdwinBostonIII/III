@@ -135,6 +135,7 @@ fn gil_forge(k: u64) -> u32 @export {
 fn gil_best_cost() -> u32 @export { return GIL_BEST_COST }
 fn gil_best_kind() -> u32 @export { return GIL_BEST_KIND }
 fn gil_best_a() -> u64 @export { return GIL_BEST_A }
+fn gil_best_b() -> u64 @export { return GIL_BEST_B }
 fn gil_kernel_calls() -> u64 @export { return GIL_KERNEL_CALLS }
 fn gil_sieve_drops() -> u64 @export { return GIL_SIEVE_DROPS }
 

@@ -200,12 +200,11 @@ fn zkf_csub_p(addr: u64, extra_high: u64) -> i32 {
     while i < 12u64 {
         let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
         ZKF_T[i] = v & 0xFFFFFFFFu64
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = 1u64 - ((v >> 32u64) & 1u64)   /* branchless borrow: bit 32 of v is the no-borrow flag (constant-time) */
         i = i + 1u64
     }
-    let mut ge : u64 = 0u64
-    if extra_high != 0u64 { ge = 1u64 }
-    if borrow == 0u64 { ge = 1u64 }
+    let eh : u64 = (extra_high | (0u64 - extra_high)) >> 63u64   /* 1 iff extra_high != 0, branchless */
+    let ge : u64 = eh | (1u64 - borrow)                          /* select iff extra_high!=0 OR no borrow (a >= p) */
     let mask : u64 = 0u64 - ge
     let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
     i = 0u64
@@ -249,7 +248,7 @@ fn zkf_sub(r: u64, a: u64, b: u64) -> i32 {
     while i < 12u64 {
         let v : u64 = 0x100000000u64 + (ZKF[ab + i] as u64) - (ZKF[bb + i] as u64) - borrow
         ZKF[rb + i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = 1u64 - ((v >> 32u64) & 1u64)   /* branchless borrow: bit 32 of v is the no-borrow flag (constant-time) */
         i = i + 1u64
     }
     let mask : u64 = 0u64 - borrow
@@ -1290,12 +1289,11 @@ fn frq_csub_p(addr: u64, extra_high: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
         ZKFR_T[i] = v & 0xFFFFFFFFu64
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = 1u64 - ((v >> 32u64) & 1u64)   /* branchless borrow: bit 32 of v is the no-borrow flag (constant-time) */
         i = i + 1u64
     }
-    let mut ge : u64 = 0u64
-    if extra_high != 0u64 { ge = 1u64 }
-    if borrow == 0u64 { ge = 1u64 }
+    let eh : u64 = (extra_high | (0u64 - extra_high)) >> 63u64   /* 1 iff extra_high != 0, branchless */
+    let ge : u64 = eh | (1u64 - borrow)                          /* select iff extra_high!=0 OR no borrow (a >= p) */
     let mask : u64 = 0u64 - ge
     let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
     i = 0u64
@@ -1371,7 +1369,7 @@ fn frq_sub(r: u64, a: u64, b: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 + (ZKFR[ab + i] as u64) - (ZKFR[bb + i] as u64) - borrow
         ZKFR[rb + i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = 1u64 - ((v >> 32u64) & 1u64)   /* branchless borrow: bit 32 of v is the no-borrow flag (constant-time) */
         i = i + 1u64
     }
     let mask : u64 = 0u64 - borrow
@@ -1448,7 +1446,7 @@ fn frq_inv(r: u64, a: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = (ZKFR_PM2[i] as u64) + 0x100000000u64 - borrow
         ZKFR_PM2[i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = 1u64 - ((v >> 32u64) & 1u64)   /* branchless borrow: bit 32 of v is the no-borrow flag (constant-time) */
         i = i + 1u64
     }
     frq_copy(253u64, a)

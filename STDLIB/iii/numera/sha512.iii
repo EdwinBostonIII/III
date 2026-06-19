@@ -42,6 +42,9 @@ extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
 /* THE UNIFIED WEAVE: SHA-512's right-rotation IS the weave's universal 64-bit rotation: rotr64(x,n) ==
  * wvb_rotl64(x, 64-n), the proven duality made load-bearing at 64 bits. */
 extern @abi(c-msvc-x64) fn wvb_rotl64(x: u64, n: u64) -> u64 from "weave_blocks.iii"
+/* SHA-2 Ch/Maj melt into the SAME shared weave block as sha256 (byte-identical op-sequence, 64-bit). */
+extern @abi(c-msvc-x64) fn wvb_ch64(e: u64, f: u64, g: u64) -> u64 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_maj64(a: u64, b: u64, c: u64) -> u64 from "weave_blocks.iii"
 var SHA512_PART    : [u64; 4]      /* partial[j] = W[t+j-16] + sigma0(W[t+j-15]) + W[t+j-7] */
 var SHA512_SCHED_T : u32 = 0u32    /* current 4-group start index t */
 var SHA512_FORCE   : u32 = 0u32    /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
@@ -258,10 +261,10 @@ fn sha512_block() -> u32 {
     let mut k : u32 = 0u32
     while k < 80u32 {
         let big_s1 : u64 = sha512_rotr(e, 14u64) ^ sha512_rotr(e, 18u64) ^ sha512_rotr(e, 41u64)
-        let ch     : u64 = (e & f) ^ ((~e) & g)
+        let ch     : u64 = wvb_ch64(e, f, g)
         let t1     : u64 = h + big_s1 + ch + SHA512_K[k] + SHA512_W[k]
         let big_s0 : u64 = sha512_rotr(a, 28u64) ^ sha512_rotr(a, 34u64) ^ sha512_rotr(a, 39u64)
-        let mj     : u64 = (a & b) ^ (a & c) ^ (b & c)
+        let mj     : u64 = wvb_maj64(a, b, c)
         let t2     : u64 = big_s0 + mj
         h = g
         g = f

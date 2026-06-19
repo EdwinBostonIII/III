@@ -57,3 +57,12 @@ fn wvb_arx_mix(va: u32, vb: u32, vc: u32, vd: u32, x: u32, y: u32, r0: u32, r1: 
 }
 
 fn wvb_a(i: u64) -> u32 @export { if i >= 4u64 { return 0u32 }  return WVB_A[i] }
+
+/* SHA-2 Boolean round functions -- the shared block sha256 (u32) AND sha512 (u64) melt into; BYTE-IDENTICAL
+ * op-sequences across widths.  Ch = choose (a bitwise multiplexer, proven pw_sha_ch_is_mux); Maj = majority
+ * (proven pw_sha_maj_absorbs; ≡ the full-adder carry).  The proof half is already in primweb -- this is the
+ * single-source IMPLEMENTATION the borrowed Ch/Maj dissolve into. */
+fn wvb_ch32(e: u32, f: u32, g: u32) -> u32 @export { return (e & f) ^ ((~e) & g) }
+fn wvb_maj32(a: u32, b: u32, c: u32) -> u32 @export { return (a & b) ^ (a & c) ^ (b & c) }
+fn wvb_ch64(e: u64, f: u64, g: u64) -> u64 @export { return (e & f) ^ ((~e) & g) }
+fn wvb_maj64(a: u64, b: u64, c: u64) -> u64 @export { return (a & b) ^ (a & c) ^ (b & c) }

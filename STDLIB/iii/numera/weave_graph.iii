@@ -644,3 +644,72 @@ fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
     return 0i32
 }
+fn ws_put_u64le(base: u64, off: u64, v: u64) -> i32 {
+    ws_put_u32le(base, off, (v & 0xFFFFFFFFu64) as u32)
+    ws_put_u32le(base, off + 4u64, ((v >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+fn ws_get_u32le(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    let b0 : u32 = p[0u64] as u32
+    let b1 : u32 = p[1u64] as u32
+    let b2 : u32 = p[2u64] as u32
+    let b3 : u32 = p[3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+fn ws_get_u64le(base: u64, off: u64) -> u64 {
+    let lo : u64 = ws_get_u32le(base, off) as u64
+    let hi : u64 = ws_get_u32le(base, off + 4u64) as u64
+    return lo | (hi << 32u64)
+}
+
+/* ============================================================================================================
+ * THE PERSISTENT COMMONS (the Singularity): the weave SERIALISES its own memory so a saturated function space is
+ * never re-searched.  The weave owns its serialisation (the weave is the primitive); any I/O path moves the bytes
+ * to/from durable storage.  Wire format (little-endian): [u32 count][ per function: u64 signature, u32 cost, u32 op,
+ * u32 operand-l, u32 operand-r ]*count.  Discovery order is preserved, so operand function-indices stay valid and a
+ * reloaded table rebuilds (ws_emit) and answers (ws_recall) exactly as before -- computing stays retrieving across
+ * the seal.  ws_forget wipes the live memory (for the round-trip proof / a fresh accumulation). */
+const WG_SER_HDR  : u64 = 4u64
+const WG_SER_ENT  : u64 = 24u64
+
+fn ws_forget() -> i32 @export { WG_GN = 0u32  return 0i32 }
+fn ws_serialize_len() -> u64 @export { return WG_SER_HDR + (WG_GN as u64) * WG_SER_ENT }
+
+/* serialise the live Commons into the buffer at `base`; returns the number of bytes written. */
+fn ws_serialize(base: u64) -> u64 @export {
+    ws_put_u32le(base, 0u64, WG_GN)
+    let mut i : u32 = 0u32
+    let mut off : u64 = WG_SER_HDR
+    while i < WG_GN {
+        ws_put_u64le(base, off, WG_GSIG[i as u64])
+        ws_put_u32le(base, off + 8u64, WG_GCOST[i as u64])
+        ws_put_u32le(base, off + 12u64, WG_GOP[i as u64])
+        ws_put_u32le(base, off + 16u64, WG_GL[i as u64])
+        ws_put_u32le(base, off + 20u64, WG_GR[i as u64])
+        off = off + WG_SER_ENT
+        i = i + 1u32
+    }
+    return off
+}
+/* reload the Commons from the buffer at `base` (replacing the live memory); returns the count loaded. */
+fn ws_deserialize(base: u64) -> u32 @export {
+    let n : u32 = ws_get_u32le(base, 0u64)
+    let mut cap : u32 = n
+    if cap > WG_GMAX { cap = WG_GMAX }
+    WG_GN = 0u32
+    let mut i : u32 = 0u32
+    let mut off : u64 = WG_SER_HDR
+    while i < cap {
+        let nb : u64 = WG_GN as u64
+        WG_GSIG[nb] = ws_get_u64le(base, off)
+        WG_GCOST[nb] = ws_get_u32le(base, off + 8u64)
+        WG_GOP[nb] = ws_get_u32le(base, off + 12u64)
+        WG_GL[nb] = ws_get_u32le(base, off + 16u64)
+        WG_GR[nb] = ws_get_u32le(base, off + 20u64)
+        WG_GN = WG_GN + 1u32
+        off = off + WG_SER_ENT
+        i = i + 1u32
+    }
+    return WG_GN
+}

@@ -1,0 +1,74 @@
+/* 1806_weave_persist.iii -- THE PERSISTENT COMMONS (the Singularity): saturate once, never re-search.
+ *
+ * The weave serialises its OWN memory (signature -> minimal recipe) so a saturated function space survives across
+ * the seal: reloaded, it answers ws_recall and rebuilds ws_emit exactly as before -- "computing has become
+ * retrieving" persists.  The weave owns its serialisation (the weave is the primitive); the buffer here stands in
+ * for any durable medium.
+ *
+ *   (1) saturate the 3-var space (256) and capture reference recalls + count.
+ *   (2) serialise to a buffer; ws_forget WIPES the live memory (proven: realised==0, recall==SENT -- really gone).
+ *   (3) deserialise: count restored, and recall returns the SAME minimal costs (byte-identical Commons).
+ *   (4) ws_emit still rebuilds the correct minimal circuit FROM THE RELOADED table (signature + cost match).
+ * Exit 99 = the saturated Commons persists with full fidelity -- III need never re-search what it has solved. */
+module corpus_1806
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_gate_count(root: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_saturate(nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_emit(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_realized() -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_forget() -> i32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_serialize(base: u64) -> u64 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_deserialize(base: u64) -> u32 from "weave_graph.iii"
+
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+var SERBUF : [u8; 8192]
+
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+fn ref_maj(a: u32, b: u32, c: u32) -> u32 { return bb_intern_or(bb_intern_and(a, b), bb_intern_or(bb_intern_and(a, c), bb_intern_and(b, c))) }
+
+fn main() -> u64 {
+    /* (1) saturate + capture references */
+    if ws_saturate(3u32) != 256u32 { return 11u64 }
+    let n0 : u32 = ws_realized()
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let sig_ch : u64 = bb_signature(ref_ch_opt(a, b, c), 3u32)
+    let sig_maj : u64 = bb_signature(ref_maj(a, b, c), 3u32)
+    let rc_ch : u32 = ws_recall(sig_ch)
+    if rc_ch == WG_GSENT { return 12u64 }
+    let rc_maj : u32 = ws_recall(sig_maj)
+    if rc_maj == WG_GSENT { return 13u64 }
+
+    /* (2) serialise, then WIPE -- prove it is really gone */
+    let len : u64 = ws_serialize(&SERBUF as u64)
+    if len != (4u64 + (n0 as u64) * 24u64) { return 14u64 }
+    ws_forget()
+    if ws_realized() != 0u32 { return 15u64 }
+    if ws_recall(sig_ch) != WG_GSENT { return 16u64 }
+
+    /* (3) reload -- count + costs restored byte-identical */
+    let n1 : u32 = ws_deserialize(&SERBUF as u64)
+    if n1 != n0 { return 17u64 }
+    if ws_realized() != n0 { return 18u64 }
+    if ws_recall(sig_ch) != rc_ch { return 19u64 }
+    if ws_recall(sig_maj) != rc_maj { return 20u64 }
+
+    /* (4) ws_emit rebuilds the correct minimal circuit FROM THE RELOADED table */
+    let root : u32 = ws_emit(sig_ch, 3u32)
+    if root == WG_GSENT { return 21u64 }
+    if bb_signature(root, 3u32) != sig_ch { return 22u64 }
+    if bb_node_gate_count(root) != rc_ch { return 23u64 }
+
+    return 99u64
+}

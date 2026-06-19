@@ -1491,6 +1491,8 @@ declare -A EXPECTED=(
     [1804_weave_genesis]=99
     # GENESIS EMITS THE USABLE CIRCUIT (ws_emit): after ws_synth/ws_saturate, ws_emit(sig) rebuilds the stored minimal recipe and returns its root node -- the actual invented circuit, ready to consume (not just its cost). Verified the emitted circuit's signature == target AND its gate count == the synth minimum; a non-realised signature yields the sentinel.
     [1805_weave_emit]=99
+    # THE PERSISTENT COMMONS (the Singularity): the weave serialises its OWN memory (signature->minimal recipe), so a saturated function space survives the seal. saturate(3)=256 -> serialize -> ws_forget (wipes; recall==SENT) -> deserialize -> recall returns the SAME costs AND ws_emit rebuilds the correct minimal circuit from the reloaded table. Computing stays retrieving across runs; III need never re-search what it has solved.
+    [1806_weave_persist]=99
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

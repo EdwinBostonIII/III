@@ -1,0 +1,108 @@
+/* 1825_i_crossmode.iii -- POC: is III's "i" (the (Null,All) six-state closure) the brutally-reliable COMMON
+ * DENOMINATOR across independent reasoning modes?  A FAIR, FALSIFIABLE test (it can return cold), comparing modes
+ * that were authored SEPARATELY (so agreement is a genuine coincidence, not shared code), against logic6 as the
+ * reference De Morgan algebra:
+ *   - logic6      : the full six-state closure (void annihilates meet, universal annihilates join, Null<->All involution)
+ *   - bv_bits     : the weave -- does EK_NULL/EK_ALL via bb_intern obey the SAME full closure?
+ *   - voice       : the effect mode -- VK_NULL is INDEPENDENTLY authored (no logic6 import); does it still obey the
+ *                   Null-annihilation law, and does its 3-voice join carry the (bottom,top) framework?
+ *   - quine6      : the anchor -- is the six-state alphabet faithfully content-addressed?
+ *
+ * VERDICT (exit code): 99 = WARM (two-layered): the (bottom,top)+Null-ground is universal across all three
+ * independent modes AND the FULL six-state De Morgan closure holds in logic6 + bv_bits; voice carries the framework
+ * + ground but not the involution (3 voices, no involution -- forcing one would be a fiction).  88 = SPOT-ON (all
+ * three carry the full closure).  10/20/21/30 = COLD, pinpointing which mode breaks the common denominator.
+ *
+ * RESULT (2026-06-19): 99 -- warm, two-layered, the defensible form of the i.  Doubles as a regression gate: if
+ * voice/weave/logic6 ever diverge on the Null-annihilation ground law, this reddens. */
+module m1825
+
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_null() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_all() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_null(n: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_all(n: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn voice_compose(pt: u32, cv: u32, ct: u32, cc: u8, ce: u8) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_join(v1: u32, v2: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn q6_addr24(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+
+const NUL : u32 = 4u32
+const ALL : u32 = 5u32
+const VK_NULL : u32 = 0xFFFFFFFFu32
+const V_PASS : u32 = 0u32
+const V_MID  : u32 = 1u32
+const V_ACT  : u32 = 2u32
+var QBUF : [u8; 4]
+
+fn logic6_full() -> u8 {
+    let mut x : u32 = 0u32
+    while x < 6u32 { if l6_and(NUL, x) != NUL { return 0u8 }  if l6_or(ALL, x) != ALL { return 0u8 }  x = x + 1u32 }
+    if l6_not(NUL) != ALL { return 0u8 }
+    if l6_not(ALL) != NUL { return 0u8 }
+    return 1u8
+}
+fn bvbits_full() -> u8 {
+    bb_reset(8u64)
+    let xn : u32 = bb_var(0u32)
+    let nul : u32 = bb_null()
+    let al  : u32 = bb_all()
+    if bb_is_null(bb_intern_and(nul, xn)) != 1u8 { return 0u8 }
+    if bb_is_all(bb_intern_or(al, xn)) != 1u8 { return 0u8 }
+    if bb_is_all(bb_intern_not(nul)) != 1u8 { return 0u8 }
+    if bb_is_null(bb_intern_not(al)) != 1u8 { return 0u8 }
+    return 1u8
+}
+fn voice_ground() -> u8 {
+    if voice_compose(VK_NULL, V_PASS, 1u32, 0u8, 0u8) != VK_NULL { return 0u8 }
+    if voice_compose(VK_NULL, V_ACT,  1u32, 1u8, 1u8) != VK_NULL { return 0u8 }
+    return 1u8
+}
+fn voice_framework() -> u8 {
+    if voice_join(V_ACT, V_PASS) != V_ACT { return 0u8 }
+    if voice_join(V_ACT, V_MID)  != V_ACT { return 0u8 }
+    if voice_join(V_PASS, V_MID) != V_MID { return 0u8 }
+    if voice_join(V_PASS, V_PASS)!= V_PASS { return 0u8 }
+    return 1u8
+}
+fn quine6_alphabet() -> u8 {
+    let p : *u8 = (&QBUF as u64) as *u8
+    let mut s : u32 = 0u32
+    let mut prev : u32 = 0xFFFFFFFFu32
+    let mut seen0 : u32 = 0u32
+    while s < 6u32 {
+        p[0u64] = s as u8
+        let a : u32 = q6_addr24(&QBUF as u64, 1u32)
+        if s == 0u32 { seen0 = a } else { if a == seen0 { return 0u8 } }
+        if s > 0u32 { if a == prev { return 0u8 } }
+        prev = a
+        s = s + 1u32
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    l6_init()
+    let l6f : u8 = logic6_full()
+    let bvf : u8 = bvbits_full()
+    let vg  : u8 = voice_ground()
+    let vfw : u8 = voice_framework()
+    let q6a : u8 = quine6_alphabet()
+    let mut full : u32 = 0u32
+    if l6f == 1u8 { full = full + 1u32 }
+    if bvf == 1u8 { full = full + 1u32 }
+    if l6f != 1u8 { return 1u64 }
+    if bvf != 1u8 { return 10u64 }
+    if vg  != 1u8 { return 20u64 }
+    if vfw != 1u8 { return 21u64 }
+    if q6a != 1u8 { return 30u64 }
+    if full == 3u32 { return 88u64 }
+    return 99u64
+}

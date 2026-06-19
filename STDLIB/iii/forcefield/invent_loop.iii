@@ -43,6 +43,8 @@ extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii
 extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn ws_is_bit_independent() -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_synth(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_emit(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn fw_init(incumbent: u64) -> i32 from "forked_walk.iii"
 extern @abi(c-msvc-x64) fn fw_explore(target: u64) -> u64 from "forked_walk.iii"
 extern @abi(c-msvc-x64) fn fw_commit() -> u32 from "forked_walk.iii"
@@ -218,4 +220,22 @@ fn il_route_mul5() -> u32 @export {
     let x : u32 = bb_var(0u32)
     il_mul5_naive(x)
     return il_route()
+}
+
+/* ============================================================================================================
+ * THE GENERAL BIT-INDEPENDENT ARM, POWERED BY THE WEAVE'S GENESIS.  il_signature_arm above is the historical,
+ * Ch-specific demonstration (it dissolves the search over three hand-written Ch forms).  This generalises it: the
+ * invention driver no longer needs hand-written candidate forms at all -- it hands the TARGET SIGNATURE to the
+ * weave's genesis (ws_synth), which invents the minimal realisation of ANY bit-independent function (under the
+ * active cost metric, ws_set_metric).  invent_loop CONSUMES the weave; it does not re-implement it (the weave is
+ * the primitive).  This is the search-dissolved arm for the whole fragment, not one function. */
+
+/* the minimal cost of the bit-independent function with this signature, invented by the weave's genesis. */
+fn il_invent_signature(target_sig: u64, nvars: u32) -> u32 @export {
+    return ws_synth(target_sig, nvars)
+}
+/* and the actual minimal CIRCUIT (root node) for it -- the invention driver yields a usable form, not just a cost.
+ * (Call after il_invent_signature for this nvars; read the root in the current arena before any bb_reset.) */
+fn il_invent_emit(target_sig: u64, nvars: u32) -> u32 @export {
+    return ws_emit(target_sig, nvars)
 }

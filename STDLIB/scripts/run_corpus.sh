@@ -1495,6 +1495,8 @@ declare -A EXPECTED=(
     [1806_weave_persist]=99
     # GENESIS MINIMISES THE METRIC THAT MATTERS (configurable cost): bb_node_cost(root,metric) -- 0=total gates, 1=NONLINEAR-gate count #(AND,OR) (the ZK/MPC/side-channel crypto cost; XOR/NOT are GF(2)-linear/free -- OR is counted too since a|b is nonlinear and AND can hide in OR via De Morgan). ws_set_metric drives genesis. Ch total-gate min (2..3) vs nonlinear-min == 1; the emitted nonlinear-optimal circuit IS Ch with exactly one nonlinear gate. III invents the form cheapest where it is USED.
     [1807_weave_metric]=99
+    # THE INVENTION DRIVER POWERED BY GENESIS (the Ouroboros wire): invent_loop's bit-independent invention no longer needs hand-written candidate forms -- il_invent_signature hands the target SIGNATURE to the weave's genesis (ws_synth) and gets the minimal realisation of ANY function; il_invent_emit yields the actual circuit. invent_loop CONSUMES the weave (the weave is the primitive). Agrees with the bespoke Ch arm; generalises to Maj/MUX the bespoke arm never had forms for.
+    [1808_invent_genesis_arm]=99
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

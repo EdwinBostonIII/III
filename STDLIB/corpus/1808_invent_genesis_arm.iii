@@ -1,0 +1,63 @@
+/* 1808_invent_genesis_arm.iii -- THE INVENTION DRIVER, POWERED BY THE WEAVE'S GENESIS (the Ouroboros wire).
+ *
+ * invent_loop's bit-independent invention no longer needs hand-written candidate forms.  Where il_signature_arm
+ * dissolved the search over three hand-written Ch forms, il_invent_signature hands the TARGET SIGNATURE to the
+ * weave's genesis (ws_synth) and gets back the minimal realisation of ANY bit-independent function -- and
+ * il_invent_emit hands back the actual minimal CIRCUIT.  invent_loop CONSUMES the weave (the weave is the
+ * primitive); it does not re-implement it.  III's optimisation driver now uses III's own invented minima.
+ *
+ *   (1) the general arm invents Ch and AGREES with the historical bespoke Ch arm (consolidation, no regression).
+ *   (2) GENERALITY: it invents Maj and MUX too -- targets the bespoke arm never had forms for.
+ *   (3) USABLE: il_invent_emit yields a real circuit that IS Maj, at exactly the invented (nonlinear) cost.
+ * Exit 99 = III's invention driver invents minimal bit-independent math for ANY target, by consuming the weave. */
+module corpus_1808
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_cost(root: u32, metric: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_set_metric(m: u32) -> i32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn il_invent_signature(target_sig: u64, nvars: u32) -> u32 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_invent_emit(target_sig: u64, nvars: u32) -> u32 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_signature_arm() -> u64 from "invent_loop.iii"
+
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+fn ref_maj(a: u32, b: u32, c: u32) -> u32 { return bb_intern_or(bb_intern_and(a, b), bb_intern_or(bb_intern_and(a, c), bb_intern_and(b, c))) }
+fn ref_mux(s: u32, x: u32, y: u32) -> u32 { return bb_intern_or(bb_intern_and(s, x), bb_intern_and(bb_intern_not(s), y)) }
+
+fn main() -> u64 {
+    ws_set_metric(1u32)                               /* nonlinear-gate cost (the crypto metric) */
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let sig_ch : u64 = bb_signature(ref_ch_opt(a, b, c), 3u32)
+    let sig_maj : u64 = bb_signature(ref_maj(a, b, c), 3u32)
+    let sig_mux : u64 = bb_signature(ref_mux(a, b, c), 3u32)
+
+    /* (1) the general arm invents Ch and agrees with the bespoke Ch arm (Ch's single nonlinear gate) */
+    let gch : u32 = il_invent_signature(sig_ch, 3u32)
+    if gch != 1u32 { return 11u64 }
+    if (il_signature_arm() as u32) != gch { return 12u64 }     /* the historical AND-count arm agrees for Ch */
+
+    /* (2) GENERALITY: invent Maj and MUX -- targets the bespoke arm never had forms for */
+    let gmaj : u32 = il_invent_signature(sig_maj, 3u32)
+    if gmaj == WG_GSENT { return 13u64 }
+    let gmux : u32 = il_invent_signature(sig_mux, 3u32)
+    if gmux == WG_GSENT { return 14u64 }
+
+    /* (3) USABLE: emit the Maj circuit the driver invented; it IS Maj, at exactly the invented cost */
+    let root : u32 = il_invent_emit(sig_maj, 3u32)
+    if root == WG_GSENT { return 15u64 }
+    if bb_signature(root, 3u32) != sig_maj { return 16u64 }
+    if bb_node_cost(root, 1u32) != gmaj { return 17u64 }
+
+    return 99u64
+}

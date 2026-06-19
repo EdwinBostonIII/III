@@ -1465,8 +1465,10 @@ declare -A EXPECTED=(
     [1789_weave_ripple]=99
     # THE WEAVE ITSELF: the six-state-typed proof-graph of III's PRIMITIVES -- nodes = bitvector circuits, edges = SAT-proven relations, logic6 types each strand's proof-status (ALL universal / BOTH conditional / FALSE refuted). 4 universal + 1 conditional + 23 refuted = 28.
     [1790_weave_graph]=99
-    # III FILLS ITS OWN SPIDERWEB: present_weave_graph enumerates + types every strand and ADMITS the proven ones (4 ALL + 1 BOTH) into the content-addressed commons; idempotent; the typed web persists + reloads byte-identical.
+    # III FILLS ITS OWN SPIDERWEB: present_weave_graph enumerates + types every strand and ADMITS the proven ones into the content-addressed commons; idempotent; the typed web persists + reloads byte-identical.
     [1791_weave_graph_fill]=99
+    # THE COST-TRUTH RETIRES THE LOSER: on a proven-equivalent (ALL) strand the weave selects the cheaper form by AND-gate count (bb_count_and) and retires the costlier -- SHA-2 Ch spec(2 ANDs)->optform(1), Maj spec(3)->carry-save(2). Obsolescence by proven cost-truth.
+    [1792_weave_cost_select]=99
 )
 
 PASS=0

@@ -1,0 +1,41 @@
+/* 1792_weave_cost_select.iii -- THE COST-TRUTH RETIRES THE LOSER: the weave makes a redundant primitive obsolete.
+ *
+ * The founding chat's second face of the common denominator: "prove them equivalent and select the cheapest by
+ * the cost-truth, which makes the loser obsolete."  On the weave's proven-equivalent (ALL) strands, the weave
+ * does not keep both forms -- it weighs them by gate cost (bb_count_and, the cost-truth) and retires the costlier.
+ *
+ *   (1) the SHA-2 Ch and Maj strands are proven-equivalent (ALL) -- the precondition for retirement
+ *   (2) the cost-truth: Ch spec mux = 2 ANDs, optform = 1; Maj spec = 3 ANDs, carry-save = 2
+ *   (3) the weave SELECTS the cheaper form (optform, carry-save) and RETIRES the spec forms -- proof- AND
+ *       cost-backed obsolescence, exactly the mechanism that dissolves a redundant primitive
+ *   (4) a NON-equivalent pair (Ch vs Maj) retires nothing -- you cannot retire what is not proven redundant
+ * Exit 99 = the weave makes its own primitives obsolete by proven cost-truth, not by fiat. */
+module corpus_1792
+
+extern @abi(c-msvc-x64) fn ws_edge_status(i: u32, j: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_node_cost_at(idx: u32) -> u64 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_strand_cheaper(i: u32, j: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_strand_retires(i: u32, j: u32) -> u8 from "weave_graph.iii"
+
+fn main() -> u64 {
+    /* (1) the strands are proven-equivalent (ALL = universal) */
+    if ws_edge_status(0u32, 1u32) != 5u32 { return 1u64 }       /* Ch spec == optform */
+    if ws_edge_status(2u32, 3u32) != 5u32 { return 2u64 }       /* Maj spec == carry-save */
+
+    /* (2) the cost-truth: the spec forms are costlier */
+    if ws_node_cost_at(0u32) != 2u64 { return 3u64 }            /* Ch spec mux: 2 ANDs */
+    if ws_node_cost_at(1u32) != 1u64 { return 4u64 }            /* Ch optform: 1 AND */
+    if ws_node_cost_at(2u32) != 3u64 { return 5u64 }            /* Maj spec: 3 ANDs */
+    if ws_node_cost_at(3u32) != 2u64 { return 6u64 }            /* Maj carry-save: 2 ANDs */
+
+    /* (3) the weave SELECTS the cheaper proven-equivalent form and RETIRES the spec */
+    if ws_strand_cheaper(0u32, 1u32) != 1u32 { return 7u64 }    /* keep Ch optform */
+    if ws_strand_cheaper(2u32, 3u32) != 3u32 { return 8u64 }    /* keep Maj carry-save */
+    if ws_strand_retires(0u32, 1u32) != 1u8 { return 9u64 }     /* Ch spec retired */
+    if ws_strand_retires(2u32, 3u32) != 1u8 { return 10u64 }    /* Maj spec retired */
+
+    /* (4) you cannot retire what is not proven redundant */
+    if ws_strand_retires(0u32, 2u32) != 0u8 { return 11u64 }    /* Ch vs Maj: distinct, nothing retired */
+
+    return 99u64
+}

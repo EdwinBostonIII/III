@@ -37,6 +37,7 @@ extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
 /* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
 extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
@@ -147,6 +148,41 @@ fn ws_strand_agrees_primweb() -> u8 @export {
     if pw_sha_maj_optform() != 1u8 { return 0u8 }
     if ws_edge_proven(4u32, 5u32) != WG_TRUE { return 0u8 }     /* rotl 7 == rotr 25 at w=32 */
     if pw_rot_duality(7u64) != 1u8 { return 0u8 }               /* primweb's same theorem */
+    return 1u8
+}
+
+/* ============================================================================================================
+ * THE COST-TRUTH SELECT (the second face of the common denominator): when two nodes are PROVEN EQUIVALENT, the
+ * weave does not keep both -- it SELECTS the cheaper by gate cost (AND-gate count, the bb_bits cost-truth) and
+ * the costlier is OBSOLETE.  This is "select the cheapest by the cost-truth, which makes the loser obsolete"
+ * (the founding chat): the Ch spec mux costs 2 ANDs, the optform 1 -- so the spec is retired; the Maj spec costs
+ * 3 ANDs, the carry-save 2 -- the spec is retired.  Borrowed names dissolved AND the redundant form eliminated. */
+
+/* the AND-gate cost of a node's circuit at width w (the cost-truth's measure). */
+fn ws_node_cost(idx: u32, w: u64) -> u64 {
+    bb_reset(w)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    ws_node(idx, w, a, b, c)
+    return bb_count_and()
+}
+fn ws_node_cost_at(idx: u32) -> u64 @export { return ws_node_cost(idx, 32u64) }
+
+/* for a strand, the CHEAPER node (fewer AND-gates) -- the one the weave keeps canonical; the other is obsolete.
+ * Returns the index of the cheaper node (i on a tie). */
+fn ws_strand_cheaper(i: u32, j: u32) -> u32 @export {
+    let ci : u64 = ws_node_cost(i, 32u64)
+    let cj : u64 = ws_node_cost(j, 32u64)
+    if cj < ci { return j }
+    return i
+}
+
+/* 1 iff the strand (i,j) is PROVEN-EQUIVALENT at the crypto width AND the two forms have DIFFERENT cost -- i.e.
+ * the weave can retire the costlier without changing behavior (a genuine obsolescence, proof- and cost-backed). */
+fn ws_strand_retires(i: u32, j: u32) -> u8 @export {
+    if ws_edge_proven(i, j) != WG_TRUE { return 0u8 }
+    if ws_node_cost(i, 32u64) == ws_node_cost(j, 32u64) { return 0u8 }
     return 1u8
 }
 

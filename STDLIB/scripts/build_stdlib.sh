@@ -1330,6 +1330,12 @@ MODULES=(
     # the logic6 involution, ripple == transitivity.  The weave as the math the system understands ITSELF in.
     # Composes self_atlas + logic6 (no island); compiler-unreferenced -> LIBNATIVE; appended last (BSS-neutral).
     "numera/weave_self"
+    # numera/weave_graph -- THE WEAVE ITSELF: the six-state-typed proof-graph of III's PRIMITIVES.  Nodes =
+    # primitive building-blocks as bitvector circuits; edges = SAT-proven relations (bb_equal); logic6 types each
+    # strand's PROOF STATUS -- ALL (universal-for-all-widths), BOTH (width-conditional), FALSE (refuted),
+    # NEITHER/NULL (open).  The common-denominator spiderweb the founding chat specified: nodes are the math, the
+    # borrowed names dissolved.  Composes numera/bv_bits + logic6 codes (no island); LIBNATIVE; appended last.
+    "numera/weave_graph"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

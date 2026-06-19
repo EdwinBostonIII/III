@@ -1,0 +1,148 @@
+/* STDLIB/iii/numera/weave_graph.iii -- THE WEAVE ITSELF: the six-state-typed proof-graph of III's primitives.
+ *
+ * This is the structure the weave was always meant to BE (specified in the founding chat, verbatim):
+ *   "one mathematical woven structure that serves as the common denominator of every former III primitive ...
+ *    capable of following its own logic to fill out its own spiderweb perfectly ... such that III understands
+ *    itself through the lens of this perfect math."
+ * and, on six-state's exact role:
+ *   "nodes = primitive building-blocks as bitvector circuits; edges = kernel/SAT-proven relations between them;
+ *    logic6 types the PROOF STATUS of the web's strands -- proven-equivalent, proven-distinct, equivalent-only-
+ *    under-a-condition (Both), neither-proven-yet (Neither/Null), equivalent-universally-for-all-widths (All)."
+ *
+ * So the weave is a CATEGORY, not an equation:
+ *   - NODES are primitives as bv_bits circuits (the SHA-2 round functions, the rotation, the mask -- each a
+ *     deterministic builder over inputs a,b,c at a chosen width).  The borrowed names dissolve: a node is the
+ *     MATH, not "ChaCha's" or "Blake2's".
+ *   - EDGES are SAT-proven relations between nodes (bb_equal).
+ *   - SIX-STATE (numera/logic6's codes) types each edge by its PROOF STATUS -- the meta-level the user pinned
+ *     six-state to.  Critically NOT on the nodes (the bits are classically 2-valued) but on the STRANDS:
+ *       ALL  (5)  equivalent for ALL tested widths      -- a universal theorem (the strand is load-bearing)
+ *       TRUE (1)  proven-equivalent at the canonical width
+ *       BOTH (3)  equivalent ONLY under a condition (some widths, not all) -- a conditional strand, paraconsistent
+ *       FALSE(2)  proven-distinct (a refuted candidate strand)
+ *       NEITHER/NULL (0/4)  not yet proven -- an open strand III has yet to fill
+ *
+ * III FILLS ITS OWN SPIDERWEB: the discovery engines (numera/invent) PROPOSE candidate strands; bb_equal PROVES
+ * or refutes; this module TYPES each by its six-state proof-status; the commons (numera/present) PERSISTS them.
+ * weave_graph is where that all becomes ONE object instead of scattered organs.  Composes numera/bv_bits +
+ * numera/logic6 -- no island; it is the unification.
+ *
+ * Hexad: kind_essence (the proven self-image of III's math) + kind_compose.  Ring: R0.  K: 1.00.  Deterministic. */
+module numera_weave_graph
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+/* the six-state edge-label codes (== numera/logic6's codes). */
+const WG_NEITHER : u32 = 0u32
+const WG_TRUE    : u32 = 1u32
+const WG_FALSE   : u32 = 2u32
+const WG_BOTH    : u32 = 3u32
+const WG_NULL    : u32 = 4u32
+const WG_ALL     : u32 = 5u32
+
+const WG_NODES : u32 = 8u32
+
+/* the primitive NODES, each a bitvector circuit over inputs a,b,c at the current width.  Curated so the proven
+ * relations among them exhibit the full six-state edge typing -- universal equivalences, a width-conditional
+ * strand, and refuted candidates.  The names are gone: these are the MATH, the common denominators. */
+fn ws_node(idx: u32, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }                 /* Ch: spec mux */
+    if idx == 1u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }                         /* Ch: optform */
+    if idx == 2u32 { return bb_or(bb_and(a, b), bb_and(bb_not(a), c)) }                  /* Ch: OR-mux */
+    if idx == 3u32 { return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }   /* Maj: spec */
+    if idx == 4u32 { return bb_xor(bb_and(a, b), bb_and(c, bb_xor(a, b))) }              /* Maj: carry-save */
+    if idx == 5u32 { return bb_and(a, bb_const(0xFFu64)) }                               /* a & 0xFF: width-conditional */
+    if idx == 6u32 { return a }                                                          /* identity */
+    return bb_and(a, b)                                                                   /* idx 7: a & b (distinct) */
+}
+
+fn ws_node_count() -> u32 @export { return WG_NODES }
+
+/* are nodes i,j proven equivalent at width w?  Each call builds a fresh circuit pair and decides via the SAT
+ * miter (UNSAT == equivalent for all inputs at this width). */
+fn ws_edge_eq_at(i: u32, j: u32, w: u64) -> u8 {
+    bb_reset(w)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    return bb_equal(ws_node(i, a, b, c), ws_node(j, a, b, c))
+}
+
+/* the six-state PROOF STATUS of the strand between nodes i and j -- the weave's edge label.  Tested across three
+ * widths (8/16/32): equivalent at ALL -> a universal theorem (ALL); at SOME -> a width-conditional strand (BOTH);
+ * at NONE -> refuted (FALSE).  This is logic6 typing the proof-status of the web, exactly as specified. */
+fn ws_edge_status(i: u32, j: u32) -> u32 @export {
+    if i >= WG_NODES { return WG_NULL }
+    if j >= WG_NODES { return WG_NULL }
+    let mut eq : u32 = 0u32
+    if ws_edge_eq_at(i, j, 8u64) == 1u8 { eq = eq + 1u32 }
+    if ws_edge_eq_at(i, j, 16u64) == 1u8 { eq = eq + 1u32 }
+    if ws_edge_eq_at(i, j, 32u64) == 1u8 { eq = eq + 1u32 }
+    if eq == 3u32 { return WG_ALL }            /* equivalent for all widths -- universal */
+    if eq > 0u32 { return WG_BOTH }            /* conditional -- some widths only */
+    return WG_FALSE                            /* proven-distinct */
+}
+
+/* proven-equivalent at the canonical width (TRUE) or proven-distinct (FALSE) -- the single-width strand verdict. */
+fn ws_edge_proven(i: u32, j: u32) -> u32 @export {
+    if i >= WG_NODES { return WG_NULL }
+    if j >= WG_NODES { return WG_NULL }
+    if ws_edge_eq_at(i, j, 32u64) == 1u8 { return WG_TRUE }
+    return WG_FALSE
+}
+
+/* THE WOVEN CENSUS: tally every undirected strand of the spiderweb by its six-state proof-status.  out -> three
+ * u32 (LE): [ALL (universal theorems), BOTH (conditional strands), FALSE (refuted)].  III's whole primitive web,
+ * typed.  The ALL count is the number of universal equivalences holding the weave together. */
+fn ws_weave_census(out: u64) -> i32 @export {
+    let mut n_all  : u32 = 0u32
+    let mut n_both : u32 = 0u32
+    let mut n_false : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < WG_NODES {
+        let mut j : u32 = i + 1u32
+        while j < WG_NODES {
+            let s : u32 = ws_edge_status(i, j)
+            if s == WG_ALL { n_all = n_all + 1u32 }
+            if s == WG_BOTH { n_both = n_both + 1u32 }
+            if s == WG_FALSE { n_false = n_false + 1u32 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    ws_put_u32le(out, 0u64, n_all)
+    ws_put_u32le(out, 4u64, n_both)
+    ws_put_u32le(out, 8u64, n_false)
+    return 0i32
+}
+
+/* the count of universal equivalence strands (ALL-typed edges) -- the load-bearing theorems of the weave. */
+fn ws_weave_universal_count() -> u32 @export {
+    let mut n_all : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < WG_NODES {
+        let mut j : u32 = i + 1u32
+        while j < WG_NODES {
+            if ws_edge_status(i, j) == WG_ALL { n_all = n_all + 1u32 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return n_all
+}
+
+fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}

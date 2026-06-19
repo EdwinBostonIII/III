@@ -1463,6 +1463,8 @@ declare -A EXPECTED=(
     [1788_weave_self_commons]=99
     # EDGES/RIPPLES SYSTEMWIDE: a change to component x ripples through x's COLUMN of the six-state self-relation; ws_ripple_affected(x) == satlas_impact_count(x) (boolean blast), cross-validated on the real model; ripple-meet algebra holds.
     [1789_weave_ripple]=99
+    # THE WEAVE ITSELF: the six-state-typed proof-graph of III's PRIMITIVES -- nodes = bitvector circuits, edges = SAT-proven relations, logic6 types each strand's proof-status (ALL universal / BOTH conditional / FALSE refuted). 4 universal + 1 conditional + 23 refuted = 28.
+    [1790_weave_graph]=99
 )
 
 PASS=0

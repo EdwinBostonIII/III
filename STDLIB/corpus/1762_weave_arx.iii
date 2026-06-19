@@ -1,0 +1,65 @@
+/* STDLIB/corpus/1762_weave_arx.iii -- THE UNIFIED WEAVE: ONE ARX core IS both ChaCha's QR and Blake2's G.
+ *
+ * numera/weave_blocks::wvb_arx_mix is the shared add-xor-rotate mix the borrowed primitives now route through.
+ * This KAT proves -- against INDEPENDENT inline references -- that the single core reproduces BOTH:
+ *   ChaCha quarter-round  == wvb_arx_mix(a,b,c,d, 0,0, 16,12, 8, 7)   (no message, left-rotations)
+ *   Blake2 G              == wvb_arx_mix(a,b,c,d, x,y, 16,20,24,25)   (message x,y; RIGHT-rotations as left)
+ * The Blake2 reference rotates RIGHT {16,12,8,7}; the core rotates LEFT {16,20,24,25}.  Their agreement is the
+ * proven identity rotl(x,k)==rotr(x,32-k) (numera/primweb) made LOAD-BEARING.  99 = the unification holds.
+ */
+module corpus_1762_weave_arx
+
+extern @abi(c-msvc-x64) fn wvb_arx_mix(va: u32, vb: u32, vc: u32, vd: u32, x: u32, y: u32, r0: u32, r1: u32, r2: u32, r3: u32) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_a(i: u64) -> u32 from "weave_blocks.iii"
+
+fn wrotl(v: u32, n: u32) -> u32 { return (v << n) | (v >> (32u32 - n)) }
+fn wrotr(v: u32, n: u32) -> u32 { return (v >> n) | (v << (32u32 - n)) }
+
+fn main() -> u64 {
+    let a0 : u32 = 0x11111111u32
+    let b0 : u32 = 0x22222222u32
+    let c0 : u32 = 0x33333333u32
+    let d0 : u32 = 0x44444444u32
+
+    /* (1) ChaCha quarter-round, inline reference (RFC 8439 §2.1, left-rotations) */
+    let mut a : u32 = a0
+    let mut b : u32 = b0
+    let mut c : u32 = c0
+    let mut d : u32 = d0
+    a = a + b
+    d = wrotl(d ^ a, 16u32)
+    c = c + d
+    b = wrotl(b ^ c, 12u32)
+    a = a + b
+    d = wrotl(d ^ a, 8u32)
+    c = c + d
+    b = wrotl(b ^ c, 7u32)
+    wvb_arx_mix(a0, b0, c0, d0, 0u32, 0u32, 16u32, 12u32, 8u32, 7u32)
+    if wvb_a(0u64) != a { return 1u64 }
+    if wvb_a(1u64) != b { return 2u64 }
+    if wvb_a(2u64) != c { return 3u64 }
+    if wvb_a(3u64) != d { return 4u64 }
+
+    /* (2) Blake2 G, inline reference (RFC 7693 §3.1, RIGHT-rotations + message words) */
+    let x : u32 = 0x55555555u32
+    let y : u32 = 0x66666666u32
+    let mut va : u32 = a0
+    let mut vb : u32 = b0
+    let mut vc : u32 = c0
+    let mut vd : u32 = d0
+    va = va + vb + x
+    vd = wrotr(vd ^ va, 16u32)
+    vc = vc + vd
+    vb = wrotr(vb ^ vc, 12u32)
+    va = va + vb + y
+    vd = wrotr(vd ^ va, 8u32)
+    vc = vc + vd
+    vb = wrotr(vb ^ vc, 7u32)
+    wvb_arx_mix(a0, b0, c0, d0, x, y, 16u32, 20u32, 24u32, 25u32)
+    if wvb_a(0u64) != va { return 5u64 }
+    if wvb_a(1u64) != vb { return 6u64 }
+    if wvb_a(2u64) != vc { return 7u64 }
+    if wvb_a(3u64) != vd { return 8u64 }
+
+    return 99u64
+}

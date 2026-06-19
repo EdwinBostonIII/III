@@ -39,6 +39,9 @@ var SHA512_INIT    : u8  = 0u8
 
 /* --- §3.5 AVX-512 message-schedule sigma0 (4-wide, prior-word part) --- */
 extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+/* THE UNIFIED WEAVE: SHA-512's right-rotation IS the weave's universal 64-bit rotation: rotr64(x,n) ==
+ * wvb_rotl64(x, 64-n), the proven duality made load-bearing at 64 bits. */
+extern @abi(c-msvc-x64) fn wvb_rotl64(x: u64, n: u64) -> u64 from "weave_blocks.iii"
 var SHA512_PART    : [u64; 4]      /* partial[j] = W[t+j-16] + sigma0(W[t+j-15]) + W[t+j-7] */
 var SHA512_SCHED_T : u32 = 0u32    /* current 4-group start index t */
 var SHA512_FORCE   : u32 = 0u32    /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
@@ -46,7 +49,7 @@ var SHA512_FORCE   : u32 = 0u32    /* 0=auto, 1=scalar, 2=avx512 (bit-identity o
 /* --- ROTR for 64-bit words --- */
 
 fn sha512_rotr(x: u64, n: u64) -> u64 {
-    return (x >> n) | (x << (64u64 - n))
+    return wvb_rotl64(x, 64u64 - n)   /* rotr64(x,n) == rotl64(x,64-n): the weave's universal 64-bit rotation */
 }
 
 /* --- K-table init (FIPS 180-4 §4.2.3) --- */

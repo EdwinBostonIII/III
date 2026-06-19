@@ -40,6 +40,10 @@ var B2S_FORCE    : u32           /* §3.5 dispatch override: 0=auto, 1=scalar, 2
 
 extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
 extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+/* THE UNIFIED WEAVE: Blake2's G IS the shared ARX mix (numera/weave_blocks) with message words; its right-
+ * rotations {16,12,8,7} are left-rotations {16,20,24,25} by the proven rotl(x,k)==rotr(x,32-k). */
+extern @abi(c-msvc-x64) fn wvb_arx_mix(va: u32, vb: u32, vc: u32, vd: u32, x: u32, y: u32, r0: u32, r1: u32, r2: u32, r3: u32) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_a(i: u64) -> u32 from "weave_blocks.iii"
 
 fn b2s_init_iv() -> i32 {
     if B2S_IV_INIT == 1u8 { return 0i32 }
@@ -188,25 +192,14 @@ fn b2s_rotr32(x: u32, n: u32) -> u32 {
 
 /* G mixing function (RFC 7693 §3.1) operates on B2S_V */
 fn b2s_mix(a: u32, b: u32, c: u32, d: u32) -> i32 {
-    let mut va : u32 = B2S_V[a]
-    let mut vb : u32 = B2S_V[b]
-    let mut vc : u32 = B2S_V[c]
-    let mut vd : u32 = B2S_V[d]
-    /* x and y are stored in B2S_M_X / B2S_M_Y module-scope (set by caller) */
-    let x : u32 = B2S_MIX_X
-    let y : u32 = B2S_MIX_Y
-    va = (va + vb + x)
-    vd = b2s_rotr32(vd ^ va, 16u32)
-    vc = (vc + vd)
-    vb = b2s_rotr32(vb ^ vc, 12u32)
-    va = (va + vb + y)
-    vd = b2s_rotr32(vd ^ va, 8u32)
-    vc = (vc + vd)
-    vb = b2s_rotr32(vb ^ vc, 7u32)
-    B2S_V[a] = va
-    B2S_V[b] = vb
-    B2S_V[c] = vc
-    B2S_V[d] = vd
+    /* THE UNIFIED WEAVE: G is the shared ARX mix with message words (B2S_MIX_X/Y).  Blake2's right-rotations
+     * {16,12,8,7} become the core's left-rotations {16,20,24,25} via the proven rotl(x,k)==rotr(x,32-k) --
+     * byte-identical to the inline b2s_rotr32 form. */
+    wvb_arx_mix(B2S_V[a], B2S_V[b], B2S_V[c], B2S_V[d], B2S_MIX_X, B2S_MIX_Y, 16u32, 20u32, 24u32, 25u32)
+    B2S_V[a] = wvb_a(0u64)
+    B2S_V[b] = wvb_a(1u64)
+    B2S_V[c] = wvb_a(2u64)
+    B2S_V[d] = wvb_a(3u64)
     return 0i32
 }
 

@@ -43,6 +43,9 @@ var KK_PAR_D  : [u64; 5]
 
 /* §3.5 AVX-512 chi (vpternlogq $0xD2 = B ^ (~B[x+1] & B[x+2]), per row). */
 extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+/* THE UNIFIED WEAVE: Keccak's theta+rho rotation IS the weave's universal 64-bit rotation (numera/weave_blocks).
+ * (Reference path; the AVX-512 lane path is a proven-equivalent acceleration of the same weave rotation.) */
+extern @abi(c-msvc-x64) fn wvb_rotl64(x: u64, n: u64) -> u64 from "weave_blocks.iii"
 var KK_CHI_IDX1  : [u64; 8]    /* vpermq idx (x+1)%5 within row: [1,2,3,4,0,5,6,7] */
 var KK_CHI_IDX2  : [u64; 8]    /* vpermq idx (x+2)%5 within row: [2,3,4,0,1,5,6,7] */
 var KK_CHI_FORCE : u32 = 0u32  /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
@@ -136,12 +139,8 @@ fn _kk_init_chi_idx() -> u32 {
 }
 
 fn keccak_rotl64(x: u64, n: u32) -> u64 {
-    let x_l : u64 = x
-    let n_l : u64 = (n as u64) & 63u64
-    if n_l == 0u64 { return x_l }
-    let l : u64 = x_l << n_l
-    let r : u64 = x_l >> (64u64 - n_l)
-    return l | r
+    /* THE UNIFIED WEAVE: route through the universal 64-bit rotation (mask n&63 + n==0 guard live inside it). */
+    return wvb_rotl64(x, n as u64)
 }
 
 fn _kk_load_lane(state_ptr: u64, idx: u32) -> u64 {

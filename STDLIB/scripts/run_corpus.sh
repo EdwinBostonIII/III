@@ -1407,6 +1407,8 @@ declare -A EXPECTED=(
     [1760_gil_cycle_validate]=99
     # SHA-2 two-tree optimization identities: Ch one-AND-fewer + Maj carry-save (= the adder carry), proven.
     [1761_sha_optform]=99
+    # THE UNIFIED WEAVE: one ARX core IS both ChaCha's quarter-round AND Blake2's G (rotation-duality load-bearing).
+    [1762_weave_arx]=99
 )
 
 PASS=0

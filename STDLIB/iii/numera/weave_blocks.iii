@@ -1,0 +1,59 @@
+/* STDLIB/iii/numera/weave_blocks.iii -- THE UNIFIED WEAVE: shared, proven primitive building blocks that
+ * DYNAMICALLY REPLACE the borrowed primitives' bespoke implementations and the seams between their logic.
+ *
+ * Not a proof ABOUT the primitives -- the actual shared IMPLEMENTATION they route through.  The first block is
+ * the ARX double-mix shared by ChaCha's quarter-round AND Blake2s's G: structurally identical (add-xor-rotate
+ * x4), differing only in (message words, rotation amounts).  ChaCha rotates LEFT {16,12,8,7}; Blake2 rotates
+ * RIGHT {16,12,8,7}.  By the PROVEN identity rotl(x,k)==rotr(x,32-k) (numera/primweb), Blake2's right-rotations
+ * ARE left-rotations {16,20,24,25} -- so ONE rotl-only core serves both.  The spiderweb proof made LOAD-BEARING:
+ * it is what lets the two ciphers dissolve into a single shared block.
+ *
+ *   ChaCha quarter-round  == wvb_arx_mix(a,b,c,d,  0, 0, 16,12, 8, 7)   (no message)
+ *   Blake2 G              == wvb_arx_mix(a,b,c,d,  x, y, 16,20,24,25)   (message x,y; right-rot as left)
+ *
+ * Byte-equivalent to the inline forms (u32 arithmetic wraps mod 2^32; verified by both ciphers' KAT vectors).
+ * Hexad: kind_passage.  Ring: R0.  K: 1.00.  No island -- it is the unification the primitives now route through.
+ */
+module numera_weave_blocks
+
+/* 32-bit left-rotate -- THE one rotation primitive the WHOLE weave shares (ChaCha/Blake2/SHA-2/Keccak all
+ * rotate; a right-rotate is rotl(x,32-n) by the proven duality).  The deepest common-denominator thread.
+ * n in (0,32). */
+fn wvb_rotl32(x: u32, n: u32) -> u32 @export {
+    return ((x << n) | (x >> (32u32 - n)))
+}
+
+/* 64-bit left-rotate -- the universal rotation for the 64-bit family (Keccak theta+rho, SHA-512 Sigma; a
+ * right-rotate is rotl64(x,64-n)).  Masks n&63 and GUARDS n==0 (else x>>64 is UB) -- byte-identical to
+ * keccak_rotl64 and sha512_rotr.  The same common-denominator thread, at 64 bits. */
+fn wvb_rotl64(x: u64, n: u64) -> u64 @export {
+    let m : u64 = n & 63u64
+    if m == 0u64 { return x }
+    return (x << m) | (x >> (64u64 - m))
+}
+
+var WVB_A : [u32; 4]      /* the 4 mixed lanes out: [a, b, c, d] */
+
+/* The shared ARX double-mix.  Reads 4 lanes + 2 message words + 4 rotation amounts; writes the 4 results to
+ * WVB_A (read back via wvb_a).  u32 arithmetic wraps mod 2^32, matching both ciphers' inline forms exactly. */
+fn wvb_arx_mix(va: u32, vb: u32, vc: u32, vd: u32, x: u32, y: u32, r0: u32, r1: u32, r2: u32, r3: u32) -> i32 @export {
+    let mut a : u32 = va
+    let mut b : u32 = vb
+    let mut c : u32 = vc
+    let mut d : u32 = vd
+    a = a + b + x
+    d = wvb_rotl32(d ^ a, r0)
+    c = c + d
+    b = wvb_rotl32(b ^ c, r1)
+    a = a + b + y
+    d = wvb_rotl32(d ^ a, r2)
+    c = c + d
+    b = wvb_rotl32(b ^ c, r3)
+    WVB_A[0u64] = a
+    WVB_A[1u64] = b
+    WVB_A[2u64] = c
+    WVB_A[3u64] = d
+    return 0i32
+}
+
+fn wvb_a(i: u64) -> u32 @export { if i >= 4u64 { return 0u32 }  return WVB_A[i] }

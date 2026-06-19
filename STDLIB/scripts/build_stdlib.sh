@@ -381,6 +381,9 @@ MODULES=(
     "numera/aes_siv"
     "aether/http_server"
     "verba/uri"
+    # numera/weave_blocks -- THE UNIFIED WEAVE: shared proven primitive building blocks (ARX mix shared by
+    # ChaCha + Blake2; more to come) that the borrowed primitives now route through.  No island -- the unification.
+    "numera/weave_blocks"
     "numera/chacha20"
     "numera/poly1305"
     "numera/chacha20_poly1305"

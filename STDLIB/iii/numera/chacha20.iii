@@ -44,6 +44,9 @@ var CC20_FORCE : u32          /* RITCHIE §3.5 dispatch override: 0=auto, 1=scal
 
 extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
 extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+/* THE UNIFIED WEAVE: ChaCha's quarter-round IS the shared ARX mix (numera/weave_blocks), no message, rotl {16,12,8,7}. */
+extern @abi(c-msvc-x64) fn wvb_arx_mix(va: u32, vb: u32, vc: u32, vd: u32, x: u32, y: u32, r0: u32, r1: u32, r2: u32, r3: u32) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_a(i: u64) -> u32 from "weave_blocks.iii"
 
 /* ---- Helpers: load/store u32 LE ---- */
 
@@ -58,26 +61,13 @@ fn cc20_load_u32_le(p: *u8, off: u32) -> u32 {
 /* ---- Quarter-round on CC20_WORK ---- */
 
 fn cc20_quarter_round(ai: u32, bi: u32, ci: u32, di: u32) -> i32 {
-    let mut a : u32 = CC20_WORK[ai]
-    let mut b : u32 = CC20_WORK[bi]
-    let mut c : u32 = CC20_WORK[ci]
-    let mut d : u32 = CC20_WORK[di]
-    a = (a + b) & 0xFFFFFFFFu32
-    d = (d ^ a) & 0xFFFFFFFFu32
-    d = ((d << 16u32) | (d >> 16u32)) & 0xFFFFFFFFu32
-    c = (c + d) & 0xFFFFFFFFu32
-    b = (b ^ c) & 0xFFFFFFFFu32
-    b = ((b << 12u32) | (b >> 20u32)) & 0xFFFFFFFFu32
-    a = (a + b) & 0xFFFFFFFFu32
-    d = (d ^ a) & 0xFFFFFFFFu32
-    d = ((d << 8u32) | (d >> 24u32)) & 0xFFFFFFFFu32
-    c = (c + d) & 0xFFFFFFFFu32
-    b = (b ^ c) & 0xFFFFFFFFu32
-    b = ((b << 7u32) | (b >> 25u32)) & 0xFFFFFFFFu32
-    CC20_WORK[ai] = a
-    CC20_WORK[bi] = b
-    CC20_WORK[ci] = c
-    CC20_WORK[di] = d
+    /* THE UNIFIED WEAVE: the quarter-round IS the shared ARX mix -- no message (x=y=0), left-rotations
+     * {16,12,8,7}.  Byte-identical to the inline form (u32 wraps mod 2^32; the old & 0xFFFFFFFF was redundant). */
+    wvb_arx_mix(CC20_WORK[ai], CC20_WORK[bi], CC20_WORK[ci], CC20_WORK[di], 0u32, 0u32, 16u32, 12u32, 8u32, 7u32)
+    CC20_WORK[ai] = wvb_a(0u64)
+    CC20_WORK[bi] = wvb_a(1u64)
+    CC20_WORK[ci] = wvb_a(2u64)
+    CC20_WORK[di] = wvb_a(3u64)
     return 0i32
 }
 

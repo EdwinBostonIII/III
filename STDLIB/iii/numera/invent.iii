@@ -1131,10 +1131,13 @@ fn gild3_expr(idx: u32, a: u32, b: u32, c: u32) -> u32 {
 }
 const GILC3_N : u32 = 20u32
 var GILC3_KCALLS : u64 = 0u64
+var GILC3_DI : [u32; 64]        /* discovered pairs: left index */
+var GILC3_DJ : [u32; 64]        /* discovered pairs: right index */
+var GILC3_DN : u64 = 0u64       /* count of discovered pairs */
 
 fn gild3_conjecture_count() -> u64 @export {
     GILC3_KCALLS = 0u64
-    let mut found : u64 = 0u64
+    GILC3_DN = 0u64
     let mut i : u32 = 0u32
     while i < GILC3_N {
         let mut j : u32 = i + 1u32
@@ -1144,14 +1147,20 @@ fn gild3_conjecture_count() -> u64 @export {
             let b : u32 = bb_var(1u32)
             let c : u32 = bb_var(2u32)
             GILC3_KCALLS = GILC3_KCALLS + 1u64
-            if bb_equal(gild3_expr(i, a, b, c), gild3_expr(j, a, b, c)) == 1u8 { found = found + 1u64 }
+            if bb_equal(gild3_expr(i, a, b, c), gild3_expr(j, a, b, c)) == 1u8 {
+                if GILC3_DN < 64u64 { GILC3_DI[GILC3_DN] = i ; GILC3_DJ[GILC3_DN] = j ; GILC3_DN = GILC3_DN + 1u64 }
+            }
             j = j + 1u32
         }
         i = i + 1u32
     }
-    return found
+    return GILC3_DN
 }
 fn gild3_conjecture_kcalls() -> u64 @export { return GILC3_KCALLS }
+/* expose the discovered pairs so the Rosetta layer can render + accumulate them into the commons. */
+fn gild3_disc_count() -> u64 @export { return GILC3_DN }
+fn gild3_disc_i(k: u64) -> u32 @export { if k >= GILC3_DN { return 0xFFu32 }  return GILC3_DI[k] }
+fn gild3_disc_j(k: u64) -> u32 @export { if k >= GILC3_DN { return 0xFFu32 }  return GILC3_DJ[k] }
 
 /* ============================================================================================================
  * THE WEAVE CENSUS -- III knows the full extent of the mathematics it has discovered + proven over its weave.

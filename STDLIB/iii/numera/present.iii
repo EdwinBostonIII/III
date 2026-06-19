@@ -29,6 +29,10 @@ extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
 extern @abi(c-msvc-x64) fn gild_rotdual_count() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gild_rotdual_count_cited() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gild_selflaw_rhs(op: u32) -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild3_conjecture_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild3_disc_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild3_disc_i(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild3_disc_j(k: u64) -> u32 from "invent.iii"
 
 var PRES_BUF   : [u8; 128]
 var PRES_LEN   : [u64; 1]
@@ -239,6 +243,35 @@ fn present_weave_full() -> u64 @export {
     present_selflaw(1u32)
     present_selflaw(2u32)
     present_selflaw(3u32)
+    return PRES_NLAW[0u64]
+}
+
+/* ACCUMULATE THE SELF-GENERATED CONJECTURES: III's autonomously-discovered 3-var identities join the commons.
+ * Each discovered pair (i,j) is rendered "g3:i=j" (i,j index the documented expression library) and admitted,
+ * content-addressed, so the laws III CONJECTURED sit beside the named-family laws it proved -- one persistent
+ * body of self-discovered mathematics, named-and-found alike.  Returns the commons size. */
+fn present_conjecture3() -> u64 @export {
+    gild3_conjecture_count()                                   /* discover + record the pairs */
+    let n : u64 = gild3_disc_count()
+    let mut k : u64 = 0u64
+    while k < n {
+        let i : u32 = gild3_disc_i(k)
+        let j : u32 = gild3_disc_j(k)
+        PRES_LEN[0u64] = 0u64
+        pres_str(("g3:" as u64), 3u64)
+        pres_u64(i as u64)
+        pres_ch(0x3Du8)                                       /* '=' */
+        pres_u64(j as u64)
+        pres_seal()                                           /* admit into the commons */
+        k = k + 1u64
+    }
+    return PRES_NLAW[0u64]
+}
+
+/* THE COMPLETE SELF-DISCOVERED WEAVE: named-family laws AND self-conjectured identities, accumulated together. */
+fn present_weave_complete() -> u64 @export {
+    present_weave_full()          /* 13 named-family laws */
+    present_conjecture3()         /* + the self-conjectured 3-var identities */
     return PRES_NLAW[0u64]
 }
 

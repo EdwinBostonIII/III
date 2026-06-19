@@ -1453,6 +1453,8 @@ declare -A EXPECTED=(
     [1783_weave_conjecture]=99
     # CONJECTURE AT 3 VARIABLES: III judges all 190 pairs over a 20-expr library and discovers 12 identities -- Ch's 4 equal forms, Maj's 3, 3-var distributivity + De Morgan -- the deep round-function structure, no template.
     [1784_weave_conjecture3]=99
+    # CONJECTURES JOIN THE COMMONS: III's 12 self-discovered identities accumulate (content-addressed) beside the 13 named laws -> the complete body of 25, persisted + reloaded byte-identical.
+    [1785_weave_conjecture_commons]=99
 )
 
 PASS=0

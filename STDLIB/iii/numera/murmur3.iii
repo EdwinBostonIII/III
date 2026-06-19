@@ -17,8 +17,10 @@ module numera_murmur3
 /* COMBINE-10: the block load is byte-identically endian's little-endian u32 load. */
 extern @abi(c-msvc-x64) fn endian_load_u32_le(p: *u8, off: u64) -> u32 from "endian.iii"
 
+/* THE UNIFIED WEAVE: murmur's rotate IS the universal 32-bit rotation (numera/weave_blocks). */
+extern @abi(c-msvc-x64) fn wvb_rotl32(x: u32, n: u32) -> u32 from "weave_blocks.iii"
 fn mm3_rotl32(x: u32, n: u32) -> u32 {
-    return ((x << n) | (x >> (32u32 - n)))}
+    return wvb_rotl32(x, n)}
 
 fn mm3_fmix32(h: u32) -> u32 {
     let mut x : u32 = h    x = (x ^ (x >> 16u32))    x = (x * 0x85EBCA6Bu32)    x = (x ^ (x >> 13u32))    x = (x * 0xC2B2AE35u32)    x = (x ^ (x >> 16u32))    return x

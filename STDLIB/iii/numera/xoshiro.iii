@@ -45,8 +45,10 @@ var XO_SB : [u64; 64]
 var XO_SC : [u64; 64]
 var XO_SD : [u64; 64]
 
+/* THE UNIFIED WEAVE: xoshiro's rotate IS the universal 64-bit rotation (numera/weave_blocks). */
+extern @abi(c-msvc-x64) fn wvb_rotl64(x: u64, n: u64) -> u64 from "weave_blocks.iii"
 fn xo_rotl(x: u64, k: u64) -> u64 {
-    return (x << k) | (x >> (64u64 - k))
+    return wvb_rotl64(x, k)
 }
 
 fn xoshiro_seed(s0: u64, s1: u64, s2: u64, s3: u64) -> i32 @k(value=1000000000) @export {

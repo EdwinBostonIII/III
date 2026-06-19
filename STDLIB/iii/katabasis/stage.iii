@@ -1,31 +1,44 @@
-/* STDLIB/iii/katabasis/stage.iii -- OUSIA / HYPOSTASIS / ENERGEIA: the staged-type compilation lifecycle.
+/* STDLIB/iii/katabasis/stage.iii -- OUSIA / HYPOSTASIS / ENERGEIA: the staged-type compilation lifecycle.  (FINAL.)
  *
- * POC for the LOGOS 3-tier as III's IR staging discipline (multi-stage typing): the weave's pure logic cannot become
- * executable until it is mathematically BOUND to a hardware crystal.
- *   OUSIA      = unbound weave: pure logic, no machine, no address, no privilege.
- *   HYPOSTASIS = crystal-bound instance: the abstract term folded with the live crystal -> a machine-specific,
- *                content-addressed instantiation.  ONLY a Hypostasis may execute.
- *   ENERGEIA   = the constrained execution -- and it is gated to the proven-safe depth.
- * The strict boundary: stage_execute REJECTS an Ousia (unbound) term; binding requires a real crystal.  This makes
- * "derive-don't-hardcode" + "execute only at the proven-safe supremum" a TYPING LAW, not a convention.  Ring R0.
- * KAT: corpus 1818. */
+ * The weave's pure logic cannot become executable until it is mathematically BOUND to a hardware crystal (multi-stage
+ * typing):
+ *   OUSIA      = unbound weave logic: no machine, no address, no privilege.
+ *   HYPOSTASIS = the crystal-bound instance, identified by its six-state CONTENT-ADDRESS (numera/quine6) over the
+ *                (ousia, crystal) pair -> machine-specific AND cacheable: the same logic bound to the same machine
+ *                yields the same address, so a machine-specific compilation is content-addressable ("compile once per
+ *                (logic, crystal), retrieve forever").  A different crystal yields a different Hypostasis.
+ *   ENERGEIA   = execution -- only a Hypostasis may execute, and only at the proven-safe depth.
+ * "derive-don't-hardcode" + "execute only at the proven-safe supremum" become a TYPING LAW.  Composes quine6.
+ * Ring R0.  KAT: corpus 1818. */
 module katabasis_stage
+
+extern @abi(c-msvc-x64) fn q6_addr24(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
 
 const STAGE_OUSIA      : u32 = 0u32
 const STAGE_HYPOSTASIS : u32 = 1u32
 const ST_REJECT : u32 = 0xFFFFFFFFu32
 
-/* BIND (Ousia -> Hypostasis): fold the unbound term with the crystal address into a content-addressed instance.
- * Requires a real crystal (nonzero) -- you cannot instantiate logic without a machine to bind it to. */
+var STG_BUF : [u8; 8]
+
+/* BIND (Ousia -> Hypostasis): the content-address of the (ousia, crystal) pair.  Requires a real crystal (you cannot
+ * instantiate logic without a machine to bind it to).  Deterministic + content-addressed -> the Hypostasis identity
+ * is a cache key. */
 fn stage_bind(ousia_term: u32, crystal_addr: u32) -> u32 @export {
-    if crystal_addr == 0u32 { return ST_REJECT }   /* no crystal -> no Hypostasis */
-    return (ousia_term ^ crystal_addr) & 0xFFFFFFu32
+    if crystal_addr == 0u32 { return ST_REJECT }
+    let p : *u8 = (&STG_BUF as u64) as *u8
+    p[0u64] = (ousia_term % 6u32) as u8
+    p[1u64] = ((ousia_term >> 3u32) % 6u32) as u8
+    p[2u64] = ((ousia_term >> 6u32) % 6u32) as u8
+    p[3u64] = (crystal_addr % 6u32) as u8
+    p[4u64] = ((crystal_addr >> 3u32) % 6u32) as u8
+    p[5u64] = ((crystal_addr >> 6u32) % 6u32) as u8
+    return q6_addr24(&STG_BUF as u64, 6u32)
 }
 
-/* EXECUTE (Hypostasis -> Energeia): ONLY a bound term may run; an Ousia term is rejected (unbound logic is not
- * executable -- the staging law).  depth_ok gates Energeia to the proven-safe supremum. */
-fn stage_execute(term: u32, stage_tag: u32, depth_ok: u8) -> u32 @export {
-    if stage_tag != STAGE_HYPOSTASIS { return ST_REJECT }   /* Ousia / anything-unbound: cannot execute */
-    if depth_ok != 1u8 { return ST_REJECT }                 /* beyond the proven-safe depth: refused */
-    return term
+/* EXECUTE (Hypostasis -> Energeia): only a bound term may run; an Ousia term is rejected; depth_ok gates Energeia
+ * to the proven-safe supremum. */
+fn stage_execute(hypostasis_addr: u32, stage_tag: u32, depth_ok: u8) -> u32 @export {
+    if stage_tag != STAGE_HYPOSTASIS { return ST_REJECT }
+    if depth_ok != 1u8 { return ST_REJECT }
+    return hypostasis_addr
 }

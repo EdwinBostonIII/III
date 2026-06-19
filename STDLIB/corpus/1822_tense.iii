@@ -1,24 +1,50 @@
-/* 1822_tense.iii -- TENSE AS DATA LIFETIME (Aorist / Perfect / Present) (POC).
- * Proves: a Perfect value is writable before bind but IMMUTABLE after (negative); an Aorist value is USE-ONCE
- * (reuse rejected, negative); a Present value is always writable + reusable.  Exit 99. */
+/* 1822_tense.iii -- TENSE lifetime typing (production / evergreen): comprehensive proof.
+ * Proves the lifecycle state machine: PERFECT is writable until bind then IMMUTABLE (negative on write-after-bind);
+ * AORIST is USE-ONCE (negative on any op after consume); PRESENT is always free; and the convenience predicates.
+ * Exit 99. */
 module corpus_1822
 
+extern @abi(c-msvc-x64) fn tense_step(tense: u32, state: u32, op: u32) -> u32 from "tense.iii"
 extern @abi(c-msvc-x64) fn tense_can_write(tense: u32, already_bound: u8) -> u8 from "tense.iii"
 extern @abi(c-msvc-x64) fn tense_can_reuse(tense: u32, already_used: u8) -> u8 from "tense.iii"
 
-const TENSE_AORIST  : u32 = 0u32
+const TENSE_AORIST : u32 = 0u32
 const TENSE_PERFECT : u32 = 1u32
 const TENSE_PRESENT : u32 = 2u32
+const TST_FRESH : u32 = 0u32
+const TST_BOUND : u32 = 1u32
+const TST_USED : u32 = 2u32
+const TOP_WRITE : u32 = 0u32
+const TOP_READ : u32 = 1u32
+const TOP_BIND : u32 = 2u32
+const TOP_CONSUME : u32 = 3u32
+const T_REJECT : u32 = 0xFFFFFFFFu32
 
 fn main() -> u64 {
-    /* Perfect: writable before bind, immutable after (the crystal) */
-    if tense_can_write(TENSE_PERFECT, 0u8) != 1u8 { return 11u64 }
-    if tense_can_write(TENSE_PERFECT, 1u8) != 0u8 { return 12u64 }   /* NEGATIVE: immutable after bind */
-    /* Aorist: use-once */
-    if tense_can_reuse(TENSE_AORIST, 0u8) != 1u8 { return 13u64 }
-    if tense_can_reuse(TENSE_AORIST, 1u8) != 0u8 { return 14u64 }    /* NEGATIVE: reuse rejected */
-    /* Present: always */
-    if tense_can_write(TENSE_PRESENT, 1u8) != 1u8 { return 15u64 }
-    if tense_can_reuse(TENSE_PRESENT, 1u8) != 1u8 { return 16u64 }
+    /* PERFECT: write(fresh) ok -> bind -> write(bound) REJECT -> read(bound) ok */
+    if tense_step(TENSE_PERFECT, TST_FRESH, TOP_WRITE) == T_REJECT { return 11u64 }
+    let pb : u32 = tense_step(TENSE_PERFECT, TST_FRESH, TOP_BIND)
+    if pb == T_REJECT { return 12u64 }
+    if (pb & TST_BOUND) == 0u32 { return 13u64 }
+    if tense_step(TENSE_PERFECT, pb, TOP_WRITE) != T_REJECT { return 14u64 }   /* NEGATIVE: immutable after bind */
+    if tense_step(TENSE_PERFECT, pb, TOP_READ) == T_REJECT { return 15u64 }    /* read still ok */
+
+    /* AORIST: write(fresh) ok -> consume -> {consume,read}(used) REJECT */
+    if tense_step(TENSE_AORIST, TST_FRESH, TOP_WRITE) == T_REJECT { return 16u64 }
+    let au : u32 = tense_step(TENSE_AORIST, TST_FRESH, TOP_CONSUME)
+    if au == T_REJECT { return 17u64 }
+    if (au & TST_USED) == 0u32 { return 18u64 }
+    if tense_step(TENSE_AORIST, au, TOP_CONSUME) != T_REJECT { return 19u64 }  /* NEGATIVE: use-once */
+    if tense_step(TENSE_AORIST, au, TOP_READ) != T_REJECT { return 20u64 }     /* NEGATIVE: dead after use */
+
+    /* PRESENT: everything always allowed */
+    if tense_step(TENSE_PRESENT, TST_BOUND | TST_USED, TOP_WRITE) == T_REJECT { return 21u64 }
+    if tense_step(TENSE_PRESENT, TST_BOUND | TST_USED, TOP_CONSUME) == T_REJECT { return 22u64 }
+
+    /* convenience predicates (negatives) */
+    if tense_can_write(TENSE_PERFECT, 1u8) != 0u8 { return 23u64 }   /* Perfect immutable after bind */
+    if tense_can_write(TENSE_PERFECT, 0u8) != 1u8 { return 24u64 }
+    if tense_can_reuse(TENSE_AORIST, 1u8) != 0u8 { return 25u64 }    /* Aorist use-once */
+    if tense_can_reuse(TENSE_PRESENT, 1u8) != 1u8 { return 26u64 }
     return 99u64
 }

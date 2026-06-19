@@ -1,37 +1,66 @@
-/* STDLIB/iii/katabasis/crystal_cap.iii -- THE CRYSTAL AS A CAPABILITY MINT.
+/* STDLIB/iii/katabasis/crystal_cap.iii -- THE CRYSTAL AS A CAPABILITY MINT.  (FINAL / evergreen.)
  *
- * POC: binding the weave to a hardware crystal (Hypostasis) MINTS exactly the capabilities the proven-safe depth
- * allows.  Active (write) ops then consume these -- so "bricking is unrepresentable" becomes "you cannot hold the
- * capability an unsafe op would consume."  The mint reads the DERIVED crystal (katabasis/cpu_census, CPUID), so the
- * capability set is a function of the live silicon, not a hardcode.  Composes cpu_census; pure rule otherwise.
- *   ccap_for(hv_present): the rule -- reads + kernel always; bare-metal CAP_METAL only when NOT virtualized.
- *   ccap_mint(): the live mint from the real crystal (cpu_census fact 5 = hypervisor-present).
+ * Binding the weave to a hardware crystal (Hypostasis) MINTS exactly the object-capabilities the proven-safe depth
+ * allows, derived from the LIVE silicon (katabasis/cpu_census, CPUID).  Active ops consume these, so "bricking is
+ * unrepresentable" becomes "you cannot hold the capability an unsafe op would consume."  Object-capability discipline:
+ * a capability set can only be ATTENUATED (narrowed), never widened.
+ *
+ * The lattice (bitmask; subset = <=):  READ < +PCI < +KERNEL < +METAL < +HV, organized by ring depth:
+ *   DEPTH_R3  -> READ | PCI            (unprivileged: the universal latch)
+ *   DEPTH_R0  -> + KERNEL              (Ring-0 residency)
+ *   DEPTH_RM1 -> + METAL | HV          (bare-metal write + Ring-1 ownership)
+ * The proven-safe depth from the crystal: bare metal -> RM1; under a hypervisor -> capped at R0 (METAL/HV withheld,
+ * so a bare-metal write evaporates for lack of its capability).  Composes cpu_census; pure lattice otherwise.
  * Ring R0.  KAT: corpus 1817. */
 module katabasis_crystal_cap
 
 extern @abi(c-msvc-x64) fn katabasis_cpu_census_build() -> i32 from "cpu_census.iii"
 extern @abi(c-msvc-x64) fn katabasis_cpu_census_fact(idx: u64) -> u64 from "cpu_census.iii"
 
-const CAP_READ   : u32 = 1u32   /* passive reads (CPUID/PCI) -- always */
-const CAP_KERNEL : u32 = 2u32   /* Ring-0 residency */
-const CAP_METAL  : u32 = 4u32   /* bare-metal write / Ring-1 ownership -- ONLY when not under a hypervisor */
+const CAP_READ   : u32 = 1u32
+const CAP_PCI    : u32 = 2u32
+const CAP_KERNEL : u32 = 4u32
+const CAP_METAL  : u32 = 8u32
+const CAP_HV     : u32 = 16u32
 
-/* the mint RULE: a pure function of the hypervisor-present fact. */
-fn ccap_for(hv_present: u64) -> u32 @export {
-    let mut caps : u32 = CAP_READ | CAP_KERNEL
-    if hv_present == 0u64 { caps = caps | CAP_METAL }   /* bare metal -> metal cap; virtualized -> withheld */
-    return caps
+const DEPTH_R3  : u32 = 0u32
+const DEPTH_R0  : u32 = 1u32
+const DEPTH_RM1 : u32 = 2u32
+
+/* the maximal capability set at a ring depth (the lattice). */
+fn ccap_depth_max(depth: u32) -> u32 @export {
+    if depth == DEPTH_RM1 { return CAP_READ | CAP_PCI | CAP_KERNEL | CAP_METAL | CAP_HV }
+    if depth == DEPTH_R0  { return CAP_READ | CAP_PCI | CAP_KERNEL }
+    if depth == DEPTH_R3  { return CAP_READ | CAP_PCI }
+    return CAP_READ
 }
+
+/* the proven-safe depth derived from the crystal. */
+fn ccap_depth_for(hv_present: u64) -> u32 @export {
+    if hv_present == 0u64 { return DEPTH_RM1 }     /* bare metal */
+    return DEPTH_R0                                /* virtualized: cap at Ring-0, withhold METAL/HV */
+}
+
+/* the mint RULE: the caps of the proven-safe depth. */
+fn ccap_for(hv_present: u64) -> u32 @export { return ccap_depth_max(ccap_depth_for(hv_present)) }
 
 /* the LIVE mint from the derived crystal. */
 fn ccap_mint() -> u32 @export {
     katabasis_cpu_census_build()
-    let hv : u64 = katabasis_cpu_census_fact(5u64)      /* fact 5 = hypervisor-present (CPUID leaf1 ECX[31]) */
-    return ccap_for(hv)
+    return ccap_for(katabasis_cpu_census_fact(5u64))     /* fact 5 = hypervisor-present */
 }
 
-/* does the live crystal grant a given capability? (Active ops query this; absence -> the op evaporates.) */
-fn ccap_grants(cap_bit: u32) -> u8 @export {
-    if (ccap_mint() & cap_bit) != 0u32 { return 1u8 }
+/* ATTENUATION (object-capability): keep only the bits in keep_mask -- can ONLY narrow, never widen. */
+fn ccap_attenuate(caps: u32, keep_mask: u32) -> u32 @export { return caps & keep_mask }
+
+/* is `sub` a subset of `sup` (i.e., `sub` grants nothing `sup` does not)? */
+fn ccap_subset(sub: u32, sup: u32) -> u8 @export {
+    if (sub & sup) == sub { return 1u8 }
+    return 0u8
+}
+
+/* does this capability set grant a specific capability? */
+fn ccap_grants(caps: u32, bit: u32) -> u8 @export {
+    if (caps & bit) != 0u32 { return 1u8 }
     return 0u8
 }

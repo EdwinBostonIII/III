@@ -1,27 +1,39 @@
-/* 1818_stage.iii -- OUSIA / HYPOSTASIS / ENERGEIA staged typing (POC).
- * Proves: an OUSIA (unbound) term CANNOT execute (negative -- the staging law); binding requires a real crystal;
- * a HYPOSTASIS executes at the proven-safe depth; execution BEYOND the proven-safe depth is refused (negative).
- * Exit 99. */
+/* 1818_stage.iii -- OUSIA / HYPOSTASIS / ENERGEIA staged typing (production / evergreen): comprehensive proof.
+ * Proves: binding needs a real crystal (negative); the Hypostasis is CONTENT-ADDRESSED -- deterministic (cacheable)
+ * and machine-specific (a different crystal -> a different address) and logic-specific; an OUSIA (unbound) term
+ * CANNOT execute (negative); a HYPOSTASIS executes at the proven-safe depth; execution BEYOND the depth is refused
+ * (negative).  Exit 99. */
 module corpus_1818
 
 extern @abi(c-msvc-x64) fn stage_bind(ousia_term: u32, crystal_addr: u32) -> u32 from "stage.iii"
-extern @abi(c-msvc-x64) fn stage_execute(term: u32, stage_tag: u32, depth_ok: u8) -> u32 from "stage.iii"
+extern @abi(c-msvc-x64) fn stage_execute(hypostasis_addr: u32, stage_tag: u32, depth_ok: u8) -> u32 from "stage.iii"
 
 const STAGE_OUSIA : u32 = 0u32
 const STAGE_HYPOSTASIS : u32 = 1u32
 const ST_REJECT : u32 = 0xFFFFFFFFu32
 
 fn main() -> u64 {
-    /* NEGATIVE: unbound Ousia logic cannot execute */
-    if stage_execute(0x123u32, STAGE_OUSIA, 1u8) != ST_REJECT { return 11u64 }
-    /* binding requires a real crystal */
-    if stage_bind(0x123u32, 0u32) != ST_REJECT { return 12u64 }
-    /* bind Ousia + crystal -> Hypostasis */
-    let hyp : u32 = stage_bind(0x123u32, 0xABCDEFu32)
-    if hyp == ST_REJECT { return 13u64 }
-    /* Hypostasis executes at the proven-safe depth -> Energeia proceeds */
-    if stage_execute(hyp, STAGE_HYPOSTASIS, 1u8) != hyp { return 14u64 }
+    /* binding requires a real crystal (negative) */
+    if stage_bind(0x123u32, 0u32) != ST_REJECT { return 11u64 }
+
+    /* content-addressed Hypostasis: deterministic (same logic+machine -> same address = a cache key) */
+    let h1 : u32 = stage_bind(0x123u32, 0xABCDEFu32)
+    let h1b : u32 = stage_bind(0x123u32, 0xABCDEFu32)
+    if h1 == ST_REJECT { return 12u64 }
+    if h1 != h1b { return 13u64 }                               /* deterministic -> cacheable */
+
+    /* machine-specific: a DIFFERENT crystal -> a different Hypostasis */
+    let h2 : u32 = stage_bind(0x123u32, 0x123456u32)
+    if h2 == h1 { return 14u64 }
+    /* logic-specific: a DIFFERENT ousia -> a different Hypostasis */
+    let h3 : u32 = stage_bind(0x999u32, 0xABCDEFu32)
+    if h3 == h1 { return 15u64 }
+
+    /* NEGATIVE: an OUSIA (unbound) term cannot execute */
+    if stage_execute(h1, STAGE_OUSIA, 1u8) != ST_REJECT { return 16u64 }
+    /* a HYPOSTASIS executes at the proven-safe depth -> Energeia */
+    if stage_execute(h1, STAGE_HYPOSTASIS, 1u8) != h1 { return 17u64 }
     /* NEGATIVE: beyond the proven-safe depth -> refused */
-    if stage_execute(hyp, STAGE_HYPOSTASIS, 0u8) != ST_REJECT { return 15u64 }
+    if stage_execute(h1, STAGE_HYPOSTASIS, 0u8) != ST_REJECT { return 18u64 }
     return 99u64
 }

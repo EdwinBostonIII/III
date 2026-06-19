@@ -1,27 +1,58 @@
-/* 1817_crystal_cap.iii -- THE CRYSTAL AS A CAPABILITY MINT (POC).
- * Proves: bare-metal (hv=0) mints CAP_METAL; under a hypervisor (hv=1) CAP_METAL is WITHHELD (negative -- a
- * bare-metal write op would evaporate for lack of the capability); reads/kernel always; the LIVE mint (real CPUID
- * crystal) always grants reads.  Exit 99. */
+/* 1817_crystal_cap.iii -- THE CRYSTAL AS A CAPABILITY MINT (production / evergreen): comprehensive proof.
+ * Proves: the depth lattice (R3 subset R0 subset RM1); the mint rule (bare-metal grants METAL+HV, under-hypervisor
+ * WITHHOLDS them -- negative); attenuation can only NARROW (cannot widen -- negative); subset semantics; the live
+ * mint grants reads.  Exit 99. */
 module corpus_1817
 
+extern @abi(c-msvc-x64) fn ccap_depth_max(depth: u32) -> u32 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_depth_for(hv_present: u64) -> u32 from "crystal_cap.iii"
 extern @abi(c-msvc-x64) fn ccap_for(hv_present: u64) -> u32 from "crystal_cap.iii"
 extern @abi(c-msvc-x64) fn ccap_mint() -> u32 from "crystal_cap.iii"
-extern @abi(c-msvc-x64) fn ccap_grants(cap_bit: u32) -> u8 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_attenuate(caps: u32, keep_mask: u32) -> u32 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_subset(sub: u32, sup: u32) -> u8 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_grants(caps: u32, bit: u32) -> u8 from "crystal_cap.iii"
 
 const CAP_READ : u32 = 1u32
-const CAP_KERNEL : u32 = 2u32
-const CAP_METAL : u32 = 4u32
+const CAP_PCI : u32 = 2u32
+const CAP_KERNEL : u32 = 4u32
+const CAP_METAL : u32 = 8u32
+const CAP_HV : u32 = 16u32
+const DEPTH_R3 : u32 = 0u32
+const DEPTH_R0 : u32 = 1u32
+const DEPTH_RM1 : u32 = 2u32
 
 fn main() -> u64 {
-    /* RULE: bare metal grants the metal capability */
-    if (ccap_for(0u64) & CAP_METAL) == 0u32 { return 11u64 }
-    /* NEGATIVE: under a hypervisor, metal is withheld -- an Active bare-metal write cannot acquire its capability */
-    if (ccap_for(1u64) & CAP_METAL) != 0u32 { return 12u64 }
-    /* reads + kernel are always minted */
-    if (ccap_for(1u64) & CAP_READ) == 0u32 { return 13u64 }
-    if (ccap_for(0u64) & CAP_KERNEL) == 0u32 { return 14u64 }
-    /* the LIVE mint from the real derived crystal grants reads (the universal latch is always available) */
-    if (ccap_mint() & CAP_READ) == 0u32 { return 15u64 }
-    if ccap_grants(CAP_READ) != 1u8 { return 16u64 }
+    /* the depth lattice is a subset chain R3 subset R0 subset RM1 (monotone) */
+    if ccap_subset(ccap_depth_max(DEPTH_R3), ccap_depth_max(DEPTH_R0)) != 1u8 { return 11u64 }
+    if ccap_subset(ccap_depth_max(DEPTH_R0), ccap_depth_max(DEPTH_RM1)) != 1u8 { return 12u64 }
+    if ccap_subset(ccap_depth_max(DEPTH_RM1), ccap_depth_max(DEPTH_R0)) != 0u8 { return 13u64 }  /* strict (negative) */
+
+    /* the mint rule: bare metal grants METAL + HV */
+    if ccap_grants(ccap_for(0u64), CAP_METAL) != 1u8 { return 14u64 }
+    if ccap_grants(ccap_for(0u64), CAP_HV) != 1u8 { return 15u64 }
+    /* NEGATIVE: under a hypervisor, METAL + HV are withheld (a bare-metal write evaporates for lack of the cap) */
+    if ccap_grants(ccap_for(1u64), CAP_METAL) != 0u8 { return 16u64 }
+    if ccap_grants(ccap_for(1u64), CAP_HV) != 0u8 { return 17u64 }
+    /* reads/PCI/kernel are minted at both */
+    if ccap_grants(ccap_for(1u64), CAP_READ) != 1u8 { return 18u64 }
+    if ccap_grants(ccap_for(1u64), CAP_PCI) != 1u8 { return 19u64 }
+    if ccap_grants(ccap_for(1u64), CAP_KERNEL) != 1u8 { return 20u64 }
+    if ccap_depth_for(0u64) != DEPTH_RM1 { return 21u64 }
+    if ccap_depth_for(1u64) != DEPTH_R0 { return 22u64 }
+
+    /* ATTENUATION can only NARROW: the result is a subset of the input */
+    let full : u32 = ccap_depth_max(DEPTH_RM1)
+    let att : u32 = ccap_attenuate(full, CAP_READ | CAP_PCI)
+    if ccap_subset(att, full) != 1u8 { return 23u64 }
+    if ccap_grants(att, CAP_METAL) != 0u8 { return 24u64 }
+    /* NEGATIVE: you cannot WIDEN -- attenuating READ with a METAL keep-mask does NOT grant METAL */
+    if ccap_grants(ccap_attenuate(CAP_READ, CAP_METAL), CAP_METAL) != 0u8 { return 25u64 }
+
+    /* subset semantics */
+    if ccap_subset(CAP_READ, CAP_READ | CAP_KERNEL) != 1u8 { return 26u64 }
+    if ccap_subset(CAP_METAL, CAP_READ) != 0u8 { return 27u64 }   /* negative */
+
+    /* the live mint grants reads (the universal latch) */
+    if ccap_grants(ccap_mint(), CAP_READ) != 1u8 { return 28u64 }
     return 99u64
 }

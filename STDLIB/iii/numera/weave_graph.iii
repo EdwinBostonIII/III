@@ -468,14 +468,14 @@ const WG_GAND : u32 = 2u32
 const WG_GOR  : u32 = 3u32
 const WG_GXOR : u32 = 4u32
 const WG_GNOT : u32 = 5u32
-const WG_GMAX : u32 = 2048u32           /* the memory holds as many functions as the substrate can construct (bb_capacity) */
+const WG_GMAX : u32 = 8192u32           /* the Commons holds up to this many realised functions (decoupled from the bounded construction arena -- it is the MEMORY, sized for the working set incl. cost-bounded larger-n synthesis) */
 const WG_GSENT : u32 = 0xFFFFFFFFu32
 
-var WG_GSIG  : [u64; 2048]
-var WG_GCOST : [u32; 2048]
-var WG_GOP   : [u32; 2048]
-var WG_GL    : [u32; 2048]
-var WG_GR    : [u32; 2048]
+var WG_GSIG  : [u64; 8192]
+var WG_GCOST : [u32; 8192]
+var WG_GOP   : [u32; 8192]
+var WG_GL    : [u32; 8192]
+var WG_GR    : [u32; 8192]
 var WG_GN    : u32 = 0u32
 /* the construction ARENA is transient and bounded -- decoupled from the (large) memory above.  WG_VARNODE / WG_C0 /
  * WG_C1 hold the CANONICAL leaf node-ids for the current arena (bb_var allocates a fresh node per call, so caching
@@ -485,12 +485,15 @@ var WG_VARNODE : [u32; 8]
 var WG_C0    : u32 = 0u32
 var WG_C1    : u32 = 0u32
 var WG_EPOCH : u32 = 0u32
-var WG_BUILTID : [u32; 2048]
-var WG_BUILTEP : [u32; 2048]
+var WG_BUILTID : [u32; 8192]
+var WG_BUILTEP : [u32; 8192]
 /* the COST METRIC genesis minimises (0 = total gates [default], 1 = nonlinear-gate count = #(AND,OR); XOR/NOT are
  * GF(2)-linear and free -- the crypto cost model).  Set it BEFORE ws_saturate/ws_synth.  Default 0 -> bb_node_cost
  * (root,0) == bb_node_gate_count, so the default is identical to the original behaviour. */
 var WG_METRIC : u32 = 0u32
+/* the COST CEILING for cost-bounded synthesis (ws_synth_bounded): a candidate with cost above it is not admitted.
+ * Default = unbounded, so ws_saturate / ws_synth are unaffected. */
+var WG_MAXCOST : u32 = 0xFFFFFFFFu32
 
 fn ws_realized() -> u32 @export { return WG_GN }
 /* select the cost metric genesis minimises (0 = total gates, 1 = AND-count / multiplicative complexity). */
@@ -519,6 +522,7 @@ fn ws_gen_find(sig: u64) -> u32 {
  * a known one.  The cheaper-recipe case is what makes the round a COST fixpoint (not merely a membership one): a
  * later-discovered cheaper operand must be allowed to relax every recipe that can use it. */
 fn ws_gen_admit(sig: u64, cost: u32, op: u32, l: u32, r: u32) -> u8 {
+    if cost > WG_MAXCOST { return 0u8 }                /* cost-bounded synthesis: do not admit above the ceiling */
     let idx : u32 = ws_gen_find(sig)
     if idx != WG_GSENT {
         /* RELAX, but keep the recipe DAG ACYCLIC: a cheaper recipe for an EXISTING function may only point to
@@ -637,6 +641,24 @@ fn ws_synth(target: u64, nvars: u32) -> u32 @export {
         if ws_gen_round(nvars) == 0u32 { go = 0u8 }
     }
     return ws_recall(target)
+}
+
+/* TARGETED, COST-BOUNDED synthesis: grow the reachable fragment to a cost-fixpoint but admit ONLY realisations of
+ * cost <= max_cost.  Returns the MINIMAL cost of the target (provably minimal among all realisations of cost
+ * <= max_cost -- every cheaper form is explored), or WG_GSENT if the target needs more than max_cost.  This is what
+ * makes synthesis tractable beyond the fully-saturable n<=3: a shallow target at larger nvars is found WITHOUT
+ * saturating the whole (exponential) space, because the ceiling keeps the explored set to the low-cost fragment. */
+fn ws_synth_bounded(target: u64, nvars: u32, max_cost: u32) -> u32 @export {
+    WG_MAXCOST = max_cost
+    WG_GN = 0u32
+    ws_gen_seed(nvars)
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if ws_gen_round(nvars) == 0u32 { go = 0u8 }
+    }
+    let r : u32 = ws_recall(target)
+    WG_MAXCOST = 0xFFFFFFFFu32
+    return r
 }
 
 /* EMIT the minimal circuit for a target the weave has ALREADY realised (call ws_synth or ws_saturate for this nvars

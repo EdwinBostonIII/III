@@ -1,0 +1,51 @@
+/* 1810_weave_synth_n4.iii -- TRACTABLE n=4 SYNTHESIS: cost-bounded genesis invents beyond the saturable space.
+ *
+ * Full saturation works to the bit-independent space III can exhaust (n<=3 -> 256 functions).  The 4-variable space
+ * is 2^16 = 65536 functions -- too large to saturate.  ws_synth_bounded grows the reachable fragment to a
+ * cost-fixpoint but admits only realisations of cost <= max_cost, so a SHALLOW 4-var target is found WITHOUT
+ * saturating the whole space: the ceiling keeps the explored set in the low-cost fragment.  The result is provably
+ * minimal among all realisations of cost <= max_cost.
+ *
+ *   (1) 4-input XOR (a^b^c^d) is synthesised at n=4 with ceiling 3 -> minimal cost 3 (a^b^c^d needs 3 XOR gates),
+ *       found without saturating 65536 functions.
+ *   (2) USABLE: the synthesised circuit emits, IS the 4-input XOR, at exactly cost 3.
+ *   (3) the bound is REAL: with ceiling 0 (only the cost-0 leaves), the multi-gate target is unrealisable (SENT).
+ * Exit 99 = III synthesises minimal bit-independent math at n=4 tractably -- beyond the fully-saturable fragment. */
+module corpus_1810
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_cost(root: u32, metric: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_synth_bounded(target: u64, nvars: u32, max_cost: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_emit(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* derive the 4-input XOR target signature (width 2^4 = 16) */
+    bb_reset(16u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let d : u32 = bb_var(3u32)
+    let x4 : u32 = bb_intern_xor(bb_intern_xor(a, b), bb_intern_xor(c, d))
+    let sig : u64 = bb_signature(x4, 4u32)
+
+    /* (1) cost-bounded n=4 synthesis: minimal cost 3, found without saturating 65536 functions */
+    let cost : u32 = ws_synth_bounded(sig, 4u32, 3u32)
+    if cost != 3u32 { return 11u64 }
+
+    /* (2) USABLE: emit the synthesised circuit -- it IS the 4-input XOR, at cost 3 */
+    let root : u32 = ws_emit(sig, 4u32)
+    if root == WG_GSENT { return 12u64 }
+    if bb_signature(root, 4u32) != sig { return 13u64 }
+    if bb_node_cost(root, 0u32) != 3u32 { return 14u64 }
+
+    /* (3) the bound is real: ceiling 0 admits only the cost-0 leaves, so a multi-gate target is unrealisable */
+    if ws_synth_bounded(sig, 4u32, 0u32) != WG_GSENT { return 15u64 }
+
+    return 99u64
+}

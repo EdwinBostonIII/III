@@ -1,11 +1,15 @@
-/* STDLIB/iii/numera/weave_self.iii -- THE WEAVE AS THE SIX-STATE MATH THE SYSTEM UNDERSTANDS ITSELF IN.
+/* STDLIB/iii/numera/weave_self.iii -- THE SELF-WEAVE: III's ARCHITECTURAL SELF-IMAGE, the conscience of change.
  *
- * This is the weave's true object: not borrowed crypto primitives, but III's OWN structure.  omnia/self_atlas
- * holds III's native self-model -- a directed graph of its components (modules) and their dependency connections
- * -- but it is TWO-VALUED: an edge exists or it does not, every query a boolean BFS.  That is the compromise.
+ * Identity (named precisely so it is not confused with the primitive weave): this is NOT numera/weave_graph (the
+ * proof-graph of III's crypto PRIMITIVES).  This is the SELF-WEAVE -- III's image of its own ARCHITECTURE, the
+ * six-valued lattice of its module structure.  The two are COMPLEMENTARY self-portraits: weave_graph is how III
+ * sees its own MATH; the self-weave is how III sees its own BODY (what depends on what), and -- the reason it
+ * earns its place -- it is the ORACLE OF STRUCTURAL CHANGE: before any refactor, it says in ONE six-valued verdict
+ * whether the change is safe, rippling, cyclic, or redundant, where the boolean lens needs three separate queries.
  *
- * weave_self LIFTS that self-model into the six-valued bounded lattice (numera/logic6).  The relation between
- * any two components a,b becomes ONE logic6 value, and the encoding is not invented -- it IS Belnap, exactly:
+ * omnia/self_atlas holds the native self-model -- a directed dependency graph -- but TWO-VALUED: an edge exists or
+ * not.  The self-weave LIFTS it into the six-valued bounded lattice (numera/logic6).  The relation between any two
+ * components a,b becomes ONE logic6 value, and the encoding is not invented -- it IS Belnap, exactly:
  *     t = "a depends on b" (satlas_reaches a->b) ;  f = "b depends on a" (satlas_reaches b->a)
  *       t=1 f=0  -> TRUE     a cleanly depends on b (a directed edge, forward)
  *       t=0 f=1  -> FALSE    b depends on a (the edge is the reverse -- "a->b" is false)
@@ -15,18 +19,15 @@
  *     a or b does not exist        -> NULL   (the void / bottom: missing component cannot masquerade as a relation)
  *
  * Because the encoding IS Belnap, III's own connection-structure inherits the lattice's mathematics, PROVABLY:
- *   - TRANSPOSE = INVOLUTION:  C(a,b) == NOT C(b,a)  for every pair -- reversing a connection is the logic6
- *     order-reversing negation (TRUE<->FALSE swap direction; BOTH and NEITHER are self-dual, as a cycle and an
- *     independence are direction-symmetric).  The system's adjacency is a self-dual six-valued relation.
- *   - COMPOSITION = TRANSITIVITY:  (a reaches b) AND (b reaches c) => (a reaches c), the t-bit closure -- the
- *     ripple law: a change to c reaches a through every composed connection.
- *
- * So the weave is the six-state algebra in which III represents, reasons about, and (via the discovery engines)
- * grows the understanding of its own interconnectivity.  Composes omnia/self_atlas + numera/logic6 -- no island;
- * it is the unification of the self-model and the six-valued logic that were each built but never joined.
+ *   - TRANSPOSE = INVOLUTION:  C(a,b) == NOT C(b,a)  for every pair (the adjacency is a self-dual six-valued relation).
+ *   - COMPOSITION = TRANSITIVITY:  (a reaches b) AND (b reaches c) => (a reaches c) -- the ripple law.
+ * And it does what two-valued cannot: ws_refactor_verdict folds "would this change cycle / is it redundant / is it
+ * safe" into ONE six-valued answer -- the paraconsistent BOTH naming a cycle-risk WITHOUT the reasoning exploding.
+ * That is the genuine value six-state adds over the boolean lens: a unified verdict, not a relabeling.
  *
  * Hexad: kind_cognition (the self-understanding) + kind_essence (a faithful self-image).  Ring: R0.  K: 1.00.
- * Deterministic: pure functions of the loaded self-model; no IO, no clock, no learning.
+ * Deterministic: pure functions of the loaded self-model; no IO, no clock, no learning.  Composes omnia/self_atlas
+ * + numera/logic6 -- no island.  [[project_iii_weave_one_substrate]] for why this is the SELF-weave, not the weave.
  */
 module numera_weave_self
 
@@ -111,6 +112,37 @@ fn ws_compose_sound() -> u8 @export {
         a = a + 1u32
     }
     return 1u8
+}
+
+/* ============================================================================================================
+ * THE ORACLE OF STRUCTURAL CHANGE (the self-weave's reason to exist): before a refactor adds a dependency a->b,
+ * one six-valued verdict says what it means -- where the boolean lens needs would_cycle + remove_safe + reaches
+ * as three separate calls, the self-weave folds them into the lattice:
+ *     NULL    (4)  a or b does not exist -- the change is malformed (the void)
+ *     FALSE   (2)  a == b -- a self-edge, degenerate (refused)
+ *     TRUE    (1)  a ALREADY reaches b -- the new edge is REDUNDANT (derivable); adding it changes nothing, SAFE
+ *     BOTH    (3)  b reaches a -- adding a->b CLOSES A CYCLE: a paraconsistent mutual dependency, CYCLE-RISK (the
+ *                  verdict that does not explode -- the cycle is named, not an error that poisons the analysis)
+ *     NEITHER (0)  a and b are independent -- a CLEAN new dependency, SAFE to add
+ * This is the genuine six-state value over two-valued: a single unified verdict an optimizer/refactor organ reads
+ * to decide, in the same algebra the rest of the self-weave speaks. */
+fn ws_refactor_verdict(a: u32, b: u32) -> u32 @export {
+    let n : u32 = satlas_node_count()
+    if a >= n { return WS_NULL }
+    if b >= n { return WS_NULL }
+    if a == b { return WS_FALSE }                          /* degenerate self-edge */
+    if satlas_reaches(a, b) == 1u8 { return WS_TRUE }      /* already derivable -> redundant, safe */
+    if satlas_reaches(b, a) == 1u8 { return WS_BOTH }      /* would close a cycle -> cycle-risk */
+    return WS_NEITHER                                       /* independent -> clean safe dependency */
+}
+
+/* the verdict's plain reading: 1 iff adding a->b is SAFE (redundant OR a clean independent dependency), 0 iff it
+ * is unsafe (cycle-risk) or malformed.  The actionable bit the refactor organ gates on. */
+fn ws_refactor_safe(a: u32, b: u32) -> u8 @export {
+    let v : u32 = ws_refactor_verdict(a, b)
+    if v == WS_TRUE { return 1u8 }
+    if v == WS_NEITHER { return 1u8 }
+    return 0u8
 }
 
 /* THE SIX-STATE SELF-CENSUS: tally how many ordered pairs sit in each of the six states -- III's profile of its

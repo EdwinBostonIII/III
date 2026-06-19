@@ -1471,6 +1471,8 @@ declare -A EXPECTED=(
     [1792_weave_cost_select]=99
     # THE VARIABLE-i BRIDGE (reusable): wv_lower_sound certifies a don't-care collapse (care & (orig^opt)==0). REAL instance: a+b collapses to a^b on the bit-0 care-set (carry is don't-care) -- sound on care, unsound in binary.
     [1793_weave_i_bridge]=99
+    # THE SELF-WEAVE ORACLE: III's architectural self-image earns its place -- ws_refactor_verdict folds would-cycle/redundant/safe into ONE six-valued verdict, more precise than the boolean lens (distinguishes redundant-in-cycle from new-cycle).
+    [1794_weave_self_oracle]=99
 )
 
 PASS=0

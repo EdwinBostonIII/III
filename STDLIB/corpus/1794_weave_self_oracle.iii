@@ -1,0 +1,59 @@
+/* 1794_weave_self_oracle.iii -- THE SELF-WEAVE earns its place: the six-valued ORACLE OF STRUCTURAL CHANGE.
+ *
+ * The self-weave is III's architectural self-image (distinct from the primitive weave).  Its reason to exist is
+ * ws_refactor_verdict: before a refactor adds a dependency a->b, ONE six-valued verdict says what it means, where
+ * the boolean lens needs three separate queries -- and it is genuinely MORE PRECISE than two-valued.
+ *
+ * Self-model: a->b, b<->c (cycle), d->a, e->g.  nodes: a=0 b=1 c=2 d=3 e=4 g=5.
+ *
+ *   (1) verdict(a,b)=TRUE (a already reaches b -> redundant, safe); verdict(c,a)=BOTH (closes a cycle -> risk);
+ *       verdict(e,a)=NEITHER (independent -> clean safe); verdict(a,a)=FALSE (self-edge); verdict(a,?)=NULL (void)
+ *   (2) the actionable safe-bit: redundant + independent are SAFE, cycle-risk + malformed are NOT
+ *   (3) CONSISTENT with self_atlas where they overlap: when a does not already reach b, safe(a,b) == NOT would_cycle
+ *   (4) RICHER than self_atlas where they do not: on the mutually-cyclic pair b<->c, the verdict is TRUE
+ *       (adding b->c is REDUNDANT -- it is already there) while would_cycle says 1 (cycle) -- six-state distinguishes
+ *       "redundant within an existing cycle" from "would create a new cycle"; two-valued cannot.
+ * Exit 99 = the self-weave gives III a unified, more-precise six-valued conscience of structural change. */
+module corpus_1794
+
+extern @abi(c-msvc-x64) fn satlas_reset() -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_would_cycle(a: u32, b: u32) -> u8 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn ws_refactor_verdict(a: u32, b: u32) -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_refactor_safe(a: u32, b: u32) -> u8 from "weave_self.iii"
+
+fn build() -> i32 {
+    satlas_reset()
+    satlas_link(("a" as u64), 1u64, ("b" as u64), 1u64)
+    satlas_link(("b" as u64), 1u64, ("c" as u64), 1u64)
+    satlas_link(("c" as u64), 1u64, ("b" as u64), 1u64)     /* b<->c cycle */
+    satlas_link(("d" as u64), 1u64, ("a" as u64), 1u64)
+    satlas_link(("e" as u64), 1u64, ("g" as u64), 1u64)     /* e,g independent of a/b/c/d */
+    return 0i32
+}
+
+fn main() -> u64 {
+    build()
+
+    /* (1) the six-valued verdicts */
+    if ws_refactor_verdict(0u32, 1u32) != 1u32 { return 1u64 }      /* a->b : TRUE  (redundant) */
+    if ws_refactor_verdict(2u32, 0u32) != 3u32 { return 2u64 }      /* c->a : BOTH  (cycle-risk) */
+    if ws_refactor_verdict(4u32, 0u32) != 0u32 { return 3u64 }      /* e->a : NEITHER (clean safe) */
+    if ws_refactor_verdict(0u32, 0u32) != 2u32 { return 4u64 }      /* a->a : FALSE (self-edge) */
+    if ws_refactor_verdict(0u32, 99u32) != 4u32 { return 5u64 }     /* a->void : NULL */
+
+    /* (2) the actionable safe-bit */
+    if ws_refactor_safe(0u32, 1u32) != 1u8 { return 6u64 }          /* redundant -> safe */
+    if ws_refactor_safe(2u32, 0u32) != 0u8 { return 7u64 }          /* cycle-risk -> unsafe */
+    if ws_refactor_safe(4u32, 0u32) != 1u8 { return 8u64 }          /* independent -> safe */
+
+    /* (3) consistent with self_atlas where a does not already reach b */
+    if satlas_would_cycle(4u32, 0u32) != 0u8 { return 9u64 }        /* e->a no cycle ; safe agrees */
+    if satlas_would_cycle(2u32, 0u32) != 1u8 { return 10u64 }       /* c->a cycle ; unsafe agrees */
+
+    /* (4) RICHER than self_atlas on the mutually-cyclic pair: redundant (TRUE), not merely "cycle" */
+    if ws_refactor_verdict(1u32, 2u32) != 1u32 { return 11u64 }     /* b->c : TRUE (redundant, already there) */
+    if satlas_would_cycle(1u32, 2u32) != 1u8 { return 12u64 }       /* two-valued only says "cycle" -- they differ */
+
+    return 99u64
+}

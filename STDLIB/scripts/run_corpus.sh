@@ -1509,6 +1509,15 @@ declare -A EXPECTED=(
     [1813_cpu_census]=99
     # PCI CONFIG-SPACE DERIVATION (katabasis/pci_enum): census's GPU facts DECODED from raw PCI config space (real PCI Local Bus encoding -- VEN/DEV@0, class/rev@8, BAR base = bar&~0xF with 64-bit BAR pairs), not hardcoded. Fed the AD103's faithful config it reproduces census's SEALED GPU facts (vendev/rev/BAR0/BAR1/BAR3/bdf); fed a DIFFERENT vendor (AMD) it derives THOSE (real decoder, not hardcoded); non-display + absent slots skipped. The live CF8h/CFCh read is the Ring-0 gate-driver IOCTL (same proven pattern as IOCTL_SVM_PROBE / iii_kio_cpuid).
     [1814_pci_enum]=99
+    # METAL-ARCHITECTURE POCs (deep-think/architect): the staged-typed descent IR + native six-state identity.
+    [1815_quine6]=99           # six-state self-describing content-address: deterministic, 3-byte, self-coincident, tamper-evident
+    [1816_voice]=99            # Voice 3-effect system: Active-without-capability EVAPORATES (EK_NULL); evaporation pass -> safe residual
+    [1817_crystal_cap]=99      # crystal-as-capability mint: bare-metal grants CAP_METAL, under-hypervisor WITHHOLDS it; live mint from real CPUID
+    [1818_stage]=99            # Ousia/Hypostasis/Energeia: unbound logic CANNOT execute; bind needs a crystal; execution gated to proven-safe depth
+    [1819_behavioral_seed]=99  # the more-basal-than-CPUID seed: known-answer logic self-test + six-state quine -> substrate-faithful, fail-closed
+    [1820_behavioral_fp]=99    # behavioral fingerprint deterministic + non-degenerate; a divergent (forged) claim detected as drift
+    [1821_descent_proof]=99    # proof-carrying descent: valid rung admitted; forged proof rejected; proof BOUND to the precondition
+    [1822_tense]=99            # Tense lifetimes: Perfect immutable-after-bind; Aorist use-once; Present always
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

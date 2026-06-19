@@ -1,0 +1,26 @@
+/* STDLIB/iii/numera/tense.iii -- TENSE AS DATA LIFETIME (Aorist / Perfect / Present) (POC).
+ *
+ * POC for the LOGOS "Tense" tier as a lifetime/linearity typing discipline (a re-framing of affine + immutability):
+ *   AORIST  = ephemeral, USE-ONCE (e.g., a CF8h PCI read folded into the crystal then discarded).
+ *   PERFECT = action completed with ongoing effect: IMMUTABLE after binding (e.g., the hardware crystal).
+ *   PRESENT = live, mutable.
+ * The type system enforces: a Perfect value cannot be written after bind; an Aorist value cannot be reused.
+ * Pure, NIH.  Ring R0.  KAT: corpus 1822. */
+module numera_tense
+
+const TENSE_AORIST  : u32 = 0u32
+const TENSE_PERFECT : u32 = 1u32
+const TENSE_PRESENT : u32 = 2u32
+
+/* may this value be WRITTEN, given its tense + whether it is already bound? */
+fn tense_can_write(tense: u32, already_bound: u8) -> u8 @export {
+    if tense == TENSE_PERFECT { if already_bound == 1u8 { return 0u8 }  return 1u8 }   /* immutable after bind */
+    if tense == TENSE_AORIST { return 1u8 }
+    return 1u8                                                                          /* Present: always */
+}
+
+/* may this value be REUSED, given its tense + whether it was already used? */
+fn tense_can_reuse(tense: u32, already_used: u8) -> u8 @export {
+    if tense == TENSE_AORIST { if already_used == 1u8 { return 0u8 }  return 1u8 }      /* use-once */
+    return 1u8                                                                          /* Perfect/Present: reusable */
+}

@@ -1,0 +1,27 @@
+/* 1817_crystal_cap.iii -- THE CRYSTAL AS A CAPABILITY MINT (POC).
+ * Proves: bare-metal (hv=0) mints CAP_METAL; under a hypervisor (hv=1) CAP_METAL is WITHHELD (negative -- a
+ * bare-metal write op would evaporate for lack of the capability); reads/kernel always; the LIVE mint (real CPUID
+ * crystal) always grants reads.  Exit 99. */
+module corpus_1817
+
+extern @abi(c-msvc-x64) fn ccap_for(hv_present: u64) -> u32 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_mint() -> u32 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_grants(cap_bit: u32) -> u8 from "crystal_cap.iii"
+
+const CAP_READ : u32 = 1u32
+const CAP_KERNEL : u32 = 2u32
+const CAP_METAL : u32 = 4u32
+
+fn main() -> u64 {
+    /* RULE: bare metal grants the metal capability */
+    if (ccap_for(0u64) & CAP_METAL) == 0u32 { return 11u64 }
+    /* NEGATIVE: under a hypervisor, metal is withheld -- an Active bare-metal write cannot acquire its capability */
+    if (ccap_for(1u64) & CAP_METAL) != 0u32 { return 12u64 }
+    /* reads + kernel are always minted */
+    if (ccap_for(1u64) & CAP_READ) == 0u32 { return 13u64 }
+    if (ccap_for(0u64) & CAP_KERNEL) == 0u32 { return 14u64 }
+    /* the LIVE mint from the real derived crystal grants reads (the universal latch is always available) */
+    if (ccap_mint() & CAP_READ) == 0u32 { return 15u64 }
+    if ccap_grants(CAP_READ) != 1u8 { return 16u64 }
+    return 99u64
+}

@@ -1,0 +1,37 @@
+/* STDLIB/iii/katabasis/crystal_cap.iii -- THE CRYSTAL AS A CAPABILITY MINT.
+ *
+ * POC: binding the weave to a hardware crystal (Hypostasis) MINTS exactly the capabilities the proven-safe depth
+ * allows.  Active (write) ops then consume these -- so "bricking is unrepresentable" becomes "you cannot hold the
+ * capability an unsafe op would consume."  The mint reads the DERIVED crystal (katabasis/cpu_census, CPUID), so the
+ * capability set is a function of the live silicon, not a hardcode.  Composes cpu_census; pure rule otherwise.
+ *   ccap_for(hv_present): the rule -- reads + kernel always; bare-metal CAP_METAL only when NOT virtualized.
+ *   ccap_mint(): the live mint from the real crystal (cpu_census fact 5 = hypervisor-present).
+ * Ring R0.  KAT: corpus 1817. */
+module katabasis_crystal_cap
+
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_build() -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_fact(idx: u64) -> u64 from "cpu_census.iii"
+
+const CAP_READ   : u32 = 1u32   /* passive reads (CPUID/PCI) -- always */
+const CAP_KERNEL : u32 = 2u32   /* Ring-0 residency */
+const CAP_METAL  : u32 = 4u32   /* bare-metal write / Ring-1 ownership -- ONLY when not under a hypervisor */
+
+/* the mint RULE: a pure function of the hypervisor-present fact. */
+fn ccap_for(hv_present: u64) -> u32 @export {
+    let mut caps : u32 = CAP_READ | CAP_KERNEL
+    if hv_present == 0u64 { caps = caps | CAP_METAL }   /* bare metal -> metal cap; virtualized -> withheld */
+    return caps
+}
+
+/* the LIVE mint from the derived crystal. */
+fn ccap_mint() -> u32 @export {
+    katabasis_cpu_census_build()
+    let hv : u64 = katabasis_cpu_census_fact(5u64)      /* fact 5 = hypervisor-present (CPUID leaf1 ECX[31]) */
+    return ccap_for(hv)
+}
+
+/* does the live crystal grant a given capability? (Active ops query this; absence -> the op evaporates.) */
+fn ccap_grants(cap_bit: u32) -> u8 @export {
+    if (ccap_mint() & cap_bit) != 0u32 { return 1u8 }
+    return 0u8
+}

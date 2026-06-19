@@ -1,0 +1,17 @@
+/* 1820_behavioral_fp.iii -- BEHAVIORAL FINGERPRINT + CLAIM CROSS-CHECK (POC).
+ * Proves: the behavioral fingerprint is deterministic + non-degenerate; a faithful claim is consistent; a divergent
+ * (forged) claim is detected as drift (negative).  Exit 99. */
+module corpus_1820
+
+extern @abi(c-msvc-x64) fn bfp_compute() -> u32 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn bfp_consistent(claimed: u32, behavioral: u32) -> u8 from "behavioral_fp.iii"
+
+fn main() -> u64 {
+    let f1 : u32 = bfp_compute()
+    let f2 : u32 = bfp_compute()
+    if f1 != f2 { return 11u64 }                        /* deterministic */
+    if f1 == 0u32 { return 12u64 }                      /* non-degenerate */
+    if bfp_consistent(f1, f2) != 1u8 { return 13u64 }   /* a faithful claim matches the behavioral truth */
+    if bfp_consistent(f1 ^ 1u32, f1) != 0u8 { return 14u64 }   /* NEGATIVE: a divergent claim is drift */
+    return 99u64
+}

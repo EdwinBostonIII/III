@@ -1,0 +1,34 @@
+/* 1815_quine6.iii -- THE SIX-STATE QUINE: native self-describing content-address (POC).
+ * Proves: deterministic, 3-byte (24-bit), self-coincident after seal, content-sensitive, and TAMPER-EVIDENT
+ * (a perturbed prefix breaks self-coincidence -> fail-closed).  Exit 99. */
+module corpus_1815
+
+extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_seal_into(buf_ptr: u64, k: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_self_coincident(buf_ptr: u64, k: u32) -> u8 from "quine6.iii"
+
+var PROG : [u8; 16]
+
+fn main() -> u64 {
+    let mut i : u32 = 0u32
+    while i < 13u32 { let p : *u8 = (&PROG as u64 + (i as u64)) as *u8  p[0u64] = ((i * 7u32 + 1u32) % 6u32) as u8  i = i + 1u32 }
+
+    let a1 : u32 = q6_addr(&PROG as u64, 13u32)
+    let a2 : u32 = q6_addr(&PROG as u64, 13u32)
+    if a1 != a2 { return 11u64 }                              /* deterministic */
+    if a1 > 0xFFFFFFu32 { return 12u64 }                      /* 3-byte (24-bit) */
+
+    q6_seal_into(&PROG as u64, 13u32)
+    if q6_self_coincident(&PROG as u64, 13u32) != 1u8 { return 13u64 }   /* self-coincident after seal */
+
+    /* content-sensitivity + TAMPER-EVIDENCE: perturb a prefix symbol (stay six-state) */
+    let p0 : *u8 = (&PROG as u64) as *u8
+    p0[0u64] = ((p0[0u64] as u32 + 1u32) % 6u32) as u8
+    let b : u32 = q6_addr(&PROG as u64, 13u32)
+    if b == a1 { return 14u64 }                              /* a different prefix -> a different address */
+    if q6_self_coincident(&PROG as u64, 13u32) != 0u8 { return 15u64 }   /* stale embedded addr -> NOT coincident */
+
+    q6_seal_into(&PROG as u64, 13u32)
+    if q6_self_coincident(&PROG as u64, 13u32) != 1u8 { return 16u64 }   /* re-seal restores coincidence */
+    return 99u64
+}

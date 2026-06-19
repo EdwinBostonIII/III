@@ -1,0 +1,34 @@
+/* STDLIB/iii/katabasis/behavioral_fp.iii -- BEHAVIORAL FINGERPRINT + CLAIM CROSS-CHECK (POC).
+ *
+ * Beyond the CPUID *claim*, compute a fingerprint of what the machine actually DOES: content-address a battery of
+ * canonical computation results (six-state-reduced).  A hypervisor that lies in CPUID but faithfully emulates
+ * computation passes (that's the honest substrate III wants); one that diverges functionally is detected.  The
+ * cross-check compares a CLAIMED value against the behavioral truth -> drift if they disagree.  Composes
+ * numera/quine6.  Ring R0.  KAT: corpus 1820. */
+module katabasis_behavioral_fp
+
+extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+
+var BFP_RESULTS : [u8; 8]
+
+/* fold canonical op RESULTS (six-state-reduced) into a behavioral fingerprint. */
+fn bfp_compute() -> u32 @export {
+    let a : u32 = 0xA5A5A5A5u32
+    let b : u32 = 0x3C3C3C3Cu32
+    let p : *u8 = (&BFP_RESULTS as u64) as *u8
+    p[0u64] = ((a & b) % 6u32) as u8
+    p[1u64] = ((a | b) % 6u32) as u8
+    p[2u64] = ((a ^ b) % 6u32) as u8
+    p[3u64] = ((a + b) % 6u32) as u8
+    p[4u64] = ((a * 3u32) % 6u32) as u8
+    p[5u64] = ((a >> 5u32) % 6u32) as u8
+    p[6u64] = (((~a) & b) % 6u32) as u8
+    p[7u64] = ((b * b) % 6u32) as u8
+    return q6_addr(&BFP_RESULTS as u64, 8u32)
+}
+
+/* 1 = the claimed value matches the behavioral truth; 0 = drift (the claim diverges from what the machine does). */
+fn bfp_consistent(claimed: u32, behavioral: u32) -> u8 @export {
+    if claimed == behavioral { return 1u8 }
+    return 0u8
+}

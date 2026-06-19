@@ -701,6 +701,12 @@ MODULES=(
     # Ring-0 gate driver).  Reproduces census's sealed GPU facts from a faithful config; the metal read is the gate
     # driver's IOCTL.  KAT 1814.
     "katabasis/pci_enum"
+    # KATABASIS metal-architecture POCs (deep-think/architect): the staged-typed descent IR.
+    "katabasis/crystal_cap"       # crystal-as-capability mint (depth-cap from CPUID; Active ops consume) -- KAT 1817
+    "katabasis/stage"             # Ousia/Hypostasis/Energeia staged typing (weave can't execute until crystal-bound) -- KAT 1818
+    "katabasis/behavioral_seed"   # behavioral bootstrap seed (more basal than CPUID: known-answer logic self-test + quine) -- KAT 1819
+    "katabasis/behavioral_fp"     # behavioral fingerprint + claim cross-check (functional drift vs the CPUID claim) -- KAT 1820
+    "katabasis/descent_proof"     # proof-carrying descent (each rung bound to its precondition by content-address) -- KAT 1821
     "katabasis/bricking"
     "katabasis/cycle_term"
     "katabasis/gate"
@@ -1360,6 +1366,10 @@ MODULES=(
     # look up + walk genesis's minimal recipes at codegen with zero engine ("computing becomes retrieving" in the
     # compiler).  Standalone; LIBNATIVE; appended last.
     "numera/gx_bridge"
+    # numera metal-architecture POCs (deep-think/architect): native six-state identity + safety-as-grammar type tiers.
+    "numera/quine6"   # the six-state self-describing content-address (native-weave seal + behavioral-seed core) -- KAT 1815
+    "numera/voice"    # Voice as a 3-effect system (Active/Middle/Passive) with EK_NULL evaporation -- KAT 1816
+    "numera/tense"    # Tense as data lifetime (Aorist use-once / Perfect immutable / Present) -- KAT 1822
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1,0 +1,40 @@
+/* STDLIB/iii/katabasis/behavioral_seed.iii -- THE BEHAVIORAL BOOTSTRAP SEED (more basal than CPUID).
+ *
+ * POC for "something more basal/agnostic than the CPUID oracle": instead of asking the machine to DESCRIBE itself
+ * (a claim a hypervisor can forge), III verifies the machine DOES the one thing every digital computer must do for
+ * III to exist -- compute Boolean/six-state logic faithfully -- by a KNOWN-ANSWER self-test of the weave's own laws,
+ * plus a six-state quine self-coincidence.  The "answers" are true by mathematics (De Morgan, involution, XOR
+ * cancellation), so a substrate that computes them wrong is caught -- ISA/firmware/hypervisor-agnostic (it observes
+ * behavior, not claims).  Fail-closed: if the substrate doesn't reproduce its own logic + quine, III refuses to run.
+ * Composes numera/quine6.  Ring R0.  KAT: corpus 1819. */
+module katabasis_behavioral_seed
+
+extern @abi(c-msvc-x64) fn q6_seal_into(buf_ptr: u64, k: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_self_coincident(buf_ptr: u64, k: u32) -> u8 from "quine6.iii"
+
+var BSEED_Q : [u8; 16]
+
+/* known-answer self-test of the weave's logic on real silicon: every identity is TRUE by math, so a faithful
+ * substrate returns 1; a substrate that miscomputes any gate returns 0. */
+fn bseed_logic_faithful() -> u8 @export {
+    let a : u32 = 0xA5A5A5A5u32
+    let b : u32 = 0x3C3C3C3Cu32
+    if (~(a & b)) != ((~a) | (~b)) { return 0u8 }     /* De Morgan */
+    if (~(a | b)) != ((~a) & (~b)) { return 0u8 }     /* De Morgan */
+    if (~(~a)) != a { return 0u8 }                    /* involution */
+    if (a ^ a) != 0u32 { return 0u8 }                 /* self-inverse */
+    if (a & a) != a { return 0u8 }                    /* idempotent */
+    if (a | 0u32) != a { return 0u8 }                 /* identity */
+    if ((a ^ b) ^ b) != a { return 0u8 }              /* XOR cancellation */
+    return 1u8
+}
+
+/* THE BOOTSTRAP ATTEST: the substrate computes the weave's logic faithfully AND reproduces a canonical six-state
+ * quine.  1 = III may run on this machine; 0 = refuse (fail-closed).  No oracle, no I/O -- pure computation. */
+fn bseed_attest() -> u8 @export {
+    if bseed_logic_faithful() != 1u8 { return 0u8 }
+    let mut i : u32 = 0u32
+    while i < 13u32 { let p : *u8 = (&BSEED_Q as u64 + (i as u64)) as *u8  p[0u64] = ((i * 5u32 + 2u32) % 6u32) as u8  i = i + 1u32 }
+    q6_seal_into(&BSEED_Q as u64, 13u32)
+    return q6_self_coincident(&BSEED_Q as u64, 13u32)
+}

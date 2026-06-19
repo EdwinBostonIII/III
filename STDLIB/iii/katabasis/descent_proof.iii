@@ -1,0 +1,29 @@
+/* STDLIB/iii/katabasis/descent_proof.iii -- PROOF-CARRYING DESCENT (POC).
+ *
+ * Each descent rung carries a proof = the content-address of (action || precondition); the gate ADMITS the rung only
+ * if the proof recomputes correctly, so a rung is bound to its precondition (you cannot replay an action under a
+ * different precondition, nor forge a proof).  Composes numera/quine6 as the content-address.  Ring R0.
+ * KAT: corpus 1821. */
+module katabasis_descent_proof
+
+extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+
+var DP_BUF : [u8; 8]
+
+/* the proof of a rung = content-address binding the action to its precondition. */
+fn dp_proof(action: u32, precond: u32) -> u32 @export {
+    let p : *u8 = (&DP_BUF as u64) as *u8
+    p[0u64] = (action % 6u32) as u8
+    p[1u64] = ((action >> 3u32) % 6u32) as u8
+    p[2u64] = ((action >> 6u32) % 6u32) as u8
+    p[3u64] = (precond % 6u32) as u8
+    p[4u64] = ((precond >> 3u32) % 6u32) as u8
+    p[5u64] = ((precond >> 6u32) % 6u32) as u8
+    return q6_addr(&DP_BUF as u64, 6u32)
+}
+
+/* the gate: admit the rung iff its carried proof matches the recomputed one (valid + precondition-bound). */
+fn dp_admit(action: u32, precond: u32, claimed_proof: u32) -> u8 @export {
+    if dp_proof(action, precond) == claimed_proof { return 1u8 }
+    return 0u8
+}

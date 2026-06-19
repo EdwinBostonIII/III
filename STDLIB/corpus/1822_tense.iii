@@ -1,0 +1,24 @@
+/* 1822_tense.iii -- TENSE AS DATA LIFETIME (Aorist / Perfect / Present) (POC).
+ * Proves: a Perfect value is writable before bind but IMMUTABLE after (negative); an Aorist value is USE-ONCE
+ * (reuse rejected, negative); a Present value is always writable + reusable.  Exit 99. */
+module corpus_1822
+
+extern @abi(c-msvc-x64) fn tense_can_write(tense: u32, already_bound: u8) -> u8 from "tense.iii"
+extern @abi(c-msvc-x64) fn tense_can_reuse(tense: u32, already_used: u8) -> u8 from "tense.iii"
+
+const TENSE_AORIST  : u32 = 0u32
+const TENSE_PERFECT : u32 = 1u32
+const TENSE_PRESENT : u32 = 2u32
+
+fn main() -> u64 {
+    /* Perfect: writable before bind, immutable after (the crystal) */
+    if tense_can_write(TENSE_PERFECT, 0u8) != 1u8 { return 11u64 }
+    if tense_can_write(TENSE_PERFECT, 1u8) != 0u8 { return 12u64 }   /* NEGATIVE: immutable after bind */
+    /* Aorist: use-once */
+    if tense_can_reuse(TENSE_AORIST, 0u8) != 1u8 { return 13u64 }
+    if tense_can_reuse(TENSE_AORIST, 1u8) != 0u8 { return 14u64 }    /* NEGATIVE: reuse rejected */
+    /* Present: always */
+    if tense_can_write(TENSE_PRESENT, 1u8) != 1u8 { return 15u64 }
+    if tense_can_reuse(TENSE_PRESENT, 1u8) != 1u8 { return 16u64 }
+    return 99u64
+}

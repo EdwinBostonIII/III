@@ -1,0 +1,27 @@
+/* 1818_stage.iii -- OUSIA / HYPOSTASIS / ENERGEIA staged typing (POC).
+ * Proves: an OUSIA (unbound) term CANNOT execute (negative -- the staging law); binding requires a real crystal;
+ * a HYPOSTASIS executes at the proven-safe depth; execution BEYOND the proven-safe depth is refused (negative).
+ * Exit 99. */
+module corpus_1818
+
+extern @abi(c-msvc-x64) fn stage_bind(ousia_term: u32, crystal_addr: u32) -> u32 from "stage.iii"
+extern @abi(c-msvc-x64) fn stage_execute(term: u32, stage_tag: u32, depth_ok: u8) -> u32 from "stage.iii"
+
+const STAGE_OUSIA : u32 = 0u32
+const STAGE_HYPOSTASIS : u32 = 1u32
+const ST_REJECT : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* NEGATIVE: unbound Ousia logic cannot execute */
+    if stage_execute(0x123u32, STAGE_OUSIA, 1u8) != ST_REJECT { return 11u64 }
+    /* binding requires a real crystal */
+    if stage_bind(0x123u32, 0u32) != ST_REJECT { return 12u64 }
+    /* bind Ousia + crystal -> Hypostasis */
+    let hyp : u32 = stage_bind(0x123u32, 0xABCDEFu32)
+    if hyp == ST_REJECT { return 13u64 }
+    /* Hypostasis executes at the proven-safe depth -> Energeia proceeds */
+    if stage_execute(hyp, STAGE_HYPOSTASIS, 1u8) != hyp { return 14u64 }
+    /* NEGATIVE: beyond the proven-safe depth -> refused */
+    if stage_execute(hyp, STAGE_HYPOSTASIS, 0u8) != ST_REJECT { return 15u64 }
+    return 99u64
+}

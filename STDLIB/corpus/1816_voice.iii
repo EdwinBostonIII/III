@@ -1,0 +1,33 @@
+/* 1816_voice.iii -- VOICE EFFECT-SYSTEM + EVAPORATION (POC).
+ * Proves: Passive always realizes; ACTIVE without a capability EVAPORATES (the core safety claim, negative);
+ * Active with cap realizes; Middle without an envelope evaporates; the evaporation pass yields the safe residual.
+ * Exit 99. */
+module corpus_1816
+
+extern @abi(c-msvc-x64) fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_realizes(voice: u32, has_cap: u8, has_env: u8) -> u8 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_residual_count(voices_ptr: u64, caps_ptr: u64, envs_ptr: u64, n: u32) -> u32 from "voice.iii"
+
+var VS : [u8; 4]
+var CS : [u8; 4]
+var ES : [u8; 4]
+
+fn main() -> u64 {
+    /* PASSIVE always realizes (no cap, no env) */
+    if voice_realizes(0u32, 0u8, 0u8) != 1u8 { return 11u64 }
+    /* ACTIVE without capability EVAPORATES (negative) */
+    if voice_admit(2u32, 0xAAu32, 0u8, 0u8) != 0xFFFFFFFFu32 { return 12u64 }
+    if voice_realizes(2u32, 0u8, 0u8) != 0u8 { return 13u64 }
+    /* ACTIVE with capability realizes */
+    if voice_admit(2u32, 0xAAu32, 1u8, 0u8) != 0xAAu32 { return 14u64 }
+    /* MIDDLE without envelope evaporates (negative); with envelope realizes */
+    if voice_realizes(1u32, 1u8, 0u8) != 0u8 { return 15u64 }
+    if voice_realizes(1u32, 0u8, 1u8) != 1u8 { return 16u64 }
+
+    /* EVAPORATION PASS: [PASSIVE, ACTIVE(no cap), ACTIVE(cap), MIDDLE(no env)] -> residual = 2 (passive + active-cap) */
+    let vp : *u8 = (&VS as u64) as *u8   vp[0u64]=0u8  vp[1u64]=2u8  vp[2u64]=2u8  vp[3u64]=1u8
+    let cp : *u8 = (&CS as u64) as *u8   cp[0u64]=0u8  cp[1u64]=0u8  cp[2u64]=1u8  cp[3u64]=1u8
+    let ep : *u8 = (&ES as u64) as *u8   ep[0u64]=0u8  ep[1u64]=0u8  ep[2u64]=0u8  ep[3u64]=0u8
+    if voice_residual_count(&VS as u64, &CS as u64, &ES as u64, 4u32) != 2u32 { return 17u64 }
+    return 99u64
+}

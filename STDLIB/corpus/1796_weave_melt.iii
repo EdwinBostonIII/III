@@ -1,0 +1,98 @@
+/* 1796_weave_melt.iii -- THE MELTED WEAVE (POC): the generator, the judge, the i-bridge, and width, dissolved
+ * into ONE deterministic mechanism for the bit-independent fragment -- the canonical truth-table signature --
+ * with a TOPOLOGICAL BIFURCATOR keeping the SAT judge exactly where the math forbids the melt.
+ *
+ * The "fondue" un-clumped:
+ *   (1) THE JUDGE MELTS: Ch spec and Ch optform are decided EQUAL by SIGNATURE IDENTITY (bb_sig_equal) -- a
+ *       truth-table byte compare, zero SAT clauses.  It is SOUND: the SAT judge bb_equal agrees.  Ch != Maj.
+ *   (2) WIDTH MELTS: the signature is one byte computed once (at w=8), yet the law holds at EVERY width -- the
+ *       SAT judge confirms it at w=32 AND w=64.  A bitwise function's truth table is width-invariant; the proof
+ *       is width-agnostic, not tied to w=32/64.
+ *   (3) THE i-BRIDGE MELTS: the don't-care optimization a&b -> a on the care-set a->b is a MASKED signature
+ *       compare (bb_sig_care_match) -- the care-set's own signature IS the mask, the don't-cares drop out
+ *       physically.  No separate care-set SAT.  It is unsound in FULL binary (bb_sig_equal == 0), sound on care.
+ *   (4) THE BIFURCATOR keeps the judge honest: rotation is bit-COUPLING (bit n crosses bit boundaries), so it
+ *       is NOT a truth table -- ws_is_bit_independent == 0, it routes to the SAT judge, and ws_decide returns
+ *       TRUE (proven at the physical width).  Ch is bit-independent -> ws_decide returns ALL (universal).
+ *   (5) THE GENERATOR MELTS: invention stops searching -- two forms with the SAME signature ARE the same
+ *       function (instant), and the cheaper one (Ch optform, 1 AND vs the spec's 2) is the canonical pick.
+ * Exit 99 = the weave is a single self-resolving canonical mechanism where it can be, and an honest judge where
+ * it must be. */
+module corpus_1796
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shr(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sig_care_match(spec: u32, impl: u32, nvars: u32, care_mask: u64) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_is_bit_independent() -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_decide(a: u32, b: u32, nvars: u32) -> u32 from "weave_graph.iii"
+
+fn ch_spec(a: u32, b: u32, c: u32) -> u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }
+fn ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }
+fn maj(a: u32, b: u32, c: u32) -> u32 { return bb_xor(bb_xor(bb_and(a, b), bb_and(a, c)), bb_and(b, c)) }
+
+fn main() -> u64 {
+    /* (1) THE JUDGE MELTS -- signature identity, sound vs SAT */
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let spec : u32 = ch_spec(a, b, c)
+    let opt  : u32 = ch_opt(a, b, c)
+    let mj   : u32 = maj(a, b, c)
+    if bb_sig_equal(spec, opt, 3u32) != 1u8 { return 1u64 }    /* melted judge: equal, no SAT */
+    if bb_sig_equal(spec, mj, 3u32) != 0u8 { return 2u64 }     /* Ch != Maj */
+    if bb_equal(spec, opt) != 1u8 { return 3u64 }              /* SAT AGREES -> the signature judge is sound */
+    if ws_is_bit_independent() != 1u8 { return 4u64 }          /* Ch routes to the signature */
+
+    /* (2) WIDTH MELTS -- the one signature is correct at every width (SAT confirms at 32 and 64) */
+    bb_reset(32u64)
+    let a2 : u32 = bb_var(0u32)  let b2 : u32 = bb_var(1u32)  let c2 : u32 = bb_var(2u32)
+    if bb_equal(ch_spec(a2, b2, c2), ch_opt(a2, b2, c2)) != 1u8 { return 5u64 }
+    bb_reset(64u64)
+    let a3 : u32 = bb_var(0u32)  let b3 : u32 = bb_var(1u32)  let c3 : u32 = bb_var(2u32)
+    if bb_equal(ch_spec(a3, b3, c3), ch_opt(a3, b3, c3)) != 1u8 { return 6u64 }
+
+    /* (3) THE i-BRIDGE MELTS -- don't-care optimization as a masked signature compare, no SAT */
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)  let y : u32 = bb_var(1u32)
+    let dspec : u32 = bb_and(x, y)                   /* a & b */
+    let dimpl : u32 = x                              /* a */
+    let care  : u32 = bb_or(bb_not(x), y)            /* the care-set a -> b */
+    let cm : u64 = bb_signature(care, 2u32)          /* the care-set's OWN signature IS the care mask */
+    if bb_sig_care_match(dspec, dimpl, 2u32, cm) != 1u8 { return 7u64 }   /* sound on the care-set */
+    if bb_sig_equal(dspec, dimpl, 2u32) != 0u8 { return 8u64 }            /* unsound in full binary */
+
+    /* (4) THE BIFURCATOR -- rotation is bit-coupling -> SAT route, width-bound */
+    bb_reset(32u64)
+    let r : u32 = bb_var(0u32)
+    let rl : u32 = bb_or(bb_shl(r, 7u64), bb_shr(r, 25u64))     /* rotl 7 */
+    let rr : u32 = bb_or(bb_shr(r, 25u64), bb_shl(r, 7u64))     /* rotr 25 == rotl 7 @ w=32 */
+    if ws_is_bit_independent() != 0u8 { return 9u64 }           /* rotation is bit-COUPLING */
+    if ws_decide(rl, rr, 1u32) != 1u32 { return 10u64 }         /* TRUE: SAT-proven at this physical width */
+    bb_reset(8u64)
+    let a4 : u32 = bb_var(0u32)  let b4 : u32 = bb_var(1u32)  let c4 : u32 = bb_var(2u32)
+    if ws_decide(ch_spec(a4, b4, c4), ch_opt(a4, b4, c4), 3u32) != 5u32 { return 11u64 }   /* ALL: universal, no SAT */
+
+    /* (5) THE GENERATOR MELTS -- same signature == same function; pick the cheaper canonical form */
+    bb_reset(8u64)
+    let a5 : u32 = bb_var(0u32)  let b5 : u32 = bb_var(1u32)  let c5 : u32 = bb_var(2u32)
+    ch_spec(a5, b5, c5)
+    let spec_cost : u64 = bb_count_and()             /* Ch spec: 2 ANDs */
+    bb_reset(8u64)
+    let a6 : u32 = bb_var(0u32)  let b6 : u32 = bb_var(1u32)  let c6 : u32 = bb_var(2u32)
+    ch_opt(a6, b6, c6)
+    let opt_cost : u64 = bb_count_and()              /* Ch optform: 1 AND */
+    if opt_cost >= spec_cost { return 12u64 }        /* the optform is strictly cheaper -> the canonical pick */
+
+    return 99u64
+}

@@ -535,3 +535,70 @@ fn bb_count_kind(kind: u32) -> u64 @export {
     return c
 }
 fn bb_count_and() -> u64 @export { return bb_count_kind(EK_AND) }
+
+/* ============================================================================================================
+ * THE MELTED JUDGE (the canonical form via truth-table signatures).  For a BIT-INDEPENDENT function (built only
+ * from AND/OR/XOR/NOT) of nvars inputs, its complete truth table -- its CANONICAL SIGNATURE -- is computed in ONE
+ * bb_eval at width 2^nvars by setting the inputs to the truth-table column constants.  Equality of two such
+ * functions is then SIGNATURE IDENTITY, not a SAT proof: zero clauses, deterministic, and WIDTH-AGNOSTIC (a
+ * bitwise function's truth table is identical at every width).  The optimization IS the canonicalization; the
+ * stillness of matching signatures is the proof.  This melts the generator+judge+i-bridge+width clumps into one
+ * deterministic mechanism for the bit-independent fragment -- reusing bb_eval, no new island.
+ *
+ * Honest boundary (the topological bifurcator): bit-COUPLING ops (ADD/SUB/MUL/SHL/SHR) cross bit positions, so a
+ * truth-table signature does NOT capture them -- those route to the SAT judge bb_equal, bound to a physical width.
+ * bb_has_coupling is the router. */
+
+/* the truth-table column for input j over 2^nvars rows: bit i = (i >> j) & 1  (j=0 -> 0xAA.., j=1 -> 0xCC..). */
+fn bb_sig_col(j: u32, nvars: u32) -> u64 {
+    let rows : u64 = 1u64 << (nvars as u64)
+    let mut col : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < rows {
+        if ((i >> (j as u64)) & 1u64) == 1u64 { col = col | (1u64 << i) }
+        i = i + 1u64
+    }
+    return col
+}
+/* the low-(2^nvars)-bit mask, built by OR-loop (no shift-by-64 UB even at nvars=6). */
+fn bb_sig_mask(nvars: u32) -> u64 {
+    let rows : u64 = 1u64 << (nvars as u64)
+    let mut m : u64 = 0u64
+    let mut b : u64 = 0u64
+    while b < rows { m = (m << 1u64) | 1u64  b = b + 1u64 }
+    return m
+}
+/* the CANONICAL SIGNATURE of `root` as a bit-independent function of nvars inputs (nvars <= 6 -> 2^nvars <= 64).
+ * Sets the column inputs, evaluates once, returns the truth table.  Current width must be >= 2^nvars.  Two roots
+ * are the SAME FUNCTION iff their signatures are equal -- this value IS the function's identity. */
+fn bb_signature(root: u32, nvars: u32) -> u64 @export {
+    let mut j : u32 = 0u32
+    while j < nvars { bb_set_input(j, bb_sig_col(j, nvars))  j = j + 1u32 }
+    return bb_eval(root) & bb_sig_mask(nvars)
+}
+/* THE MELTED JUDGE: 1 iff a and b are the SAME bit-independent function (signature identity) -- no SAT, no
+ * clauses, width-agnostic.  Sound for the bit-independent fragment (guard with bb_has_coupling). */
+fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 @export {
+    if bb_signature(a, nvars) == bb_signature(b, nvars) { return 1u8 }
+    return 0u8
+}
+/* THE i-BRIDGE, MELTED INTO THE SIGNATURE: `impl` is a sound optimization of `spec` ON THE CARE-SET iff their
+ * signatures agree on the care rows -- a MASKED byte compare (don't-care rows = 0 in care_mask carry zero weight,
+ * dropping out physically).  No separate care-set SAT: the don't-cares evaporate from the comparison. */
+fn bb_sig_care_match(spec: u32, impl: u32, nvars: u32, care_mask: u64) -> u8 @export {
+    let s : u64 = bb_signature(spec, nvars) & care_mask
+    let i : u64 = bb_signature(impl, nvars) & care_mask
+    if s == i { return 1u8 }
+    return 0u8
+}
+/* THE TOPOLOGICAL TEST (the bifurcator's router): 1 iff the current DAG contains a BIT-COUPLING node
+ * (ADD/SUB/MUL/SHL/SHR) -- bit n depends on other bits, the signature cannot capture it, route to SAT (bb_equal,
+ * width-bound).  0 iff purely bit-independent (AND/OR/XOR/NOT) -> the signature route (width-agnostic). */
+fn bb_has_coupling() -> u8 @export {
+    if bb_count_kind(EK_ADD) > 0u64 { return 1u8 }
+    if bb_count_kind(EK_SUB) > 0u64 { return 1u8 }
+    if bb_count_kind(EK_MUL) > 0u64 { return 1u8 }
+    if bb_count_kind(EK_SHL) > 0u64 { return 1u8 }
+    if bb_count_kind(EK_SHR) > 0u64 { return 1u8 }
+    return 0u8
+}

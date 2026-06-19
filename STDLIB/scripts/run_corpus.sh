@@ -1475,6 +1475,8 @@ declare -A EXPECTED=(
     [1794_weave_self_oracle]=99
     # THE WEAVE IN FULLNESS: the SECOND kind of common denominator (5x naive==fold, same result/different algorithm, the costlier RETIRED); Keccak chi separated from SHA-Ch; the ChaCha-QR/Blake2-G ARX core proven (indexes primweb). Both denominators, multiple families.
     [1795_weave_fullness]=99
+    # THE MELTED WEAVE (POC): canonical truth-table SIGNATURE melts judge+width+i-bridge+generator for the bit-independent fragment (bb_sig_equal, no SAT, width-agnostic, sound vs bb_equal); the TOPOLOGICAL BIFURCATOR (bb_has_coupling) keeps SAT where bit-coupling forbids the melt.
+    [1796_weave_melt]=99
 )
 
 PASS=0

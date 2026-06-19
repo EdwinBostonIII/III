@@ -40,6 +40,8 @@ extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_count_kind(kind: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_has_coupling() -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
 /* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
 extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
@@ -207,6 +209,31 @@ fn ws_secondkind_proven(w: u64) -> u8 @export {
     let x : u32 = bb_var(0u32)
     return bb_equal(ws_mul5_naive(x), ws_mul5_fold(x))
 }
+/* ============================================================================================================
+ * THE TOPOLOGICAL BIFURCATOR (the melt, made honest): decide whether two circuits are equal by ROUTING on their
+ * data-flow topology, not by one fixed method.  A bit-INDEPENDENT circuit (only AND/OR/XOR/NOT -- bit n depends
+ * only on bit n of its inputs) is decided by the MELTED SIGNATURE JUDGE (bb_sig_equal): a truth-table byte
+ * compare, no SAT, no clauses, and WIDTH-AGNOSTIC -- the result holds at every width because the truth table is
+ * the same at every width.  A bit-COUPLING circuit (ADD/SUB/MUL/SHL/SHR -- bit n crosses into other bits) cannot
+ * be a truth-table; it routes to the SAT judge (bb_equal), bound to a physical width, where a width-conditional
+ * verdict (the rotation-duality BOTH) is a REAL mathematical limitation of diagonal data-flow, not an artifact.
+ * One mechanism, the right tool per topology -- the four clumps melted where they CAN melt, the judge kept where
+ * the math genuinely forbids it. */
+
+fn ws_is_bit_independent() -> u8 @export { if bb_has_coupling() == 0u8 { return 1u8 }  return 0u8 }
+
+/* the bifurcated verdict: ALL (signature-proven, width-agnostic universal) for the bit-independent fragment;
+ * TRUE (SAT-proven at the built width) for the bit-coupling fragment; FALSE if distinct.  a,b are built in the
+ * current bb session; nvars is the input count for the signature route. */
+fn ws_decide(a: u32, b: u32, nvars: u32) -> u32 @export {
+    if bb_has_coupling() == 0u8 {
+        if bb_sig_equal(a, b, nvars) == 1u8 { return WG_ALL }       /* signature: universal, no SAT */
+        return WG_FALSE
+    }
+    if bb_equal(a, b) == 1u8 { return WG_TRUE }                     /* SAT: proven at this physical width */
+    return WG_FALSE
+}
+
 /* the cost-truth for arithmetic strands is the ADD-operation count (EK_ADD=8) -- the adder is the dominant cost
  * of a multiply-by-constant, and bb_add is one structural node, so this counts algorithm steps faithfully. */
 fn ws_secondkind_naive_cost(w: u64) -> u64 @export {

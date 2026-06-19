@@ -1481,6 +1481,8 @@ declare -A EXPECTED=(
     [1797_weave_toffoli]=99
     # COMBINATORIAL EXPLOSION SOLVED (bit-independent fragment): the signature collapses the conjecture engine's O(n^2) pairwise SAT into O(n) signature bucketing -- finds the SAME identities (sound vs SAT) with ZERO clauses; the function space is BOUNDED not infinite.
     [1798_weave_explosion]=99
+    # THE REVERSIBLE SIGNATURE-GUIDED INVENTION LOOP: one driver routes by topology -- bit-independent -> O(1) signature lookup (no SAT); bit-coupling -> bounded-space reversible walk (forked_walk, SAT-judged, rollback rejects, commit cheapest). The fused explosion-defeater.
+    [1799_invent_loop]=99
 )
 
 PASS=0

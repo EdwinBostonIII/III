@@ -1337,6 +1337,13 @@ MODULES=(
     # NEITHER/NULL (open).  The common-denominator spiderweb the founding chat specified: nodes are the math, the
     # borrowed names dissolved.  Composes numera/bv_bits + logic6 codes (no island); LIBNATIVE; appended last.
     "numera/weave_graph"
+    # forcefield/invent_loop -- THE REVERSIBLE SIGNATURE-GUIDED INVENTION LOOP: the fused explosion-defeater.  One
+    # driver routes invention by data-flow topology -- the BIT-INDEPENDENT fragment dissolves to an O(1) signature
+    # lookup (no SAT), the BIT-COUPLING fragment to a BOUNDED-SPACE reversible walk (forked_walk: speculate ->
+    # rollback rejects -> commit cheapest, SAT-judged), sound because the substrate is reversible (the Toffoli's
+    # gift).  Composes weave_graph (bifurcator+signature) + bv_bits (judge+cost) + forked_walk (reversible search)
+    # -- the composition-driver pattern (cf. nous/beam_search), no island; LIBNATIVE; appended last.
+    "forcefield/invent_loop"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1,0 +1,163 @@
+/* STDLIB/iii/forcefield/invent_loop.iii -- THE REVERSIBLE SIGNATURE-GUIDED INVENTION LOOP.
+ *
+ * The fusion of the explosion-defeaters into ONE driver.  Invention = "find the cheapest form equivalent to a
+ * target."  The loop ROUTES by data-flow topology (the bifurcator) and uses the right defeater on each fragment:
+ *
+ *   - BIT-INDEPENDENT target (AND/OR/XOR/NOT): the SIGNATURE arm.  The canonical truth-table signature is the
+ *     function's identity, so equivalence is a byte compare (no SAT) and the search DISSOLVES into a lookup:
+ *     among the candidate forms (all proven the same function by signature), return the cheapest by gate cost.
+ *     O(1) per candidate, ZERO clauses, width-agnostic.  The combinatorial search is not done faster -- it is gone.
+ *
+ *   - BIT-COUPLING target (ADD/SUB/MUL/SHL/ROT): the REVERSIBLE arm.  Signatures cannot capture bit-crossing, so
+ *     the judge is SAT (bb_equal), and the search is a BOUNDED-SPACE reversible walk (forcefield/forked_walk):
+ *     each candidate is a speculative branch in a reversible envelope; a rejected branch is ROLLED BACK
+ *     (uncomputed) leaving zero trace, so the explored state never accumulates -- O(depth) space, not
+ *     O(branches).  The cheapest proven-equivalent branch commits iff its value strictly rises (commit_gate).
+ *     This is sound because the substrate is reversible -- the property the Toffoli isomorphism proves.
+ *
+ * One loop, every axis of explosion defeated where it lives: the signature kills the proof+search cost for the
+ * bit-independent fragment outright; reversible backtracking bounds the space for the bit-coupling fragment.
+ * Composes numera/weave_graph (bifurcator + signature) + numera/bv_bits (judge + cost) + forcefield/forked_walk
+ * (reversible search) -- the composition-driver pattern (cf. nous/beam_search), no island.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  Determinism: integer-only; the only "search" is the reversible
+ * value-gated walk; no float, no clock on any decide path.
+ */
+module forcefield_invent_loop
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_count_kind(kind: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_is_bit_independent() -> u8 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn fw_init(incumbent: u64) -> i32 from "forked_walk.iii"
+extern @abi(c-msvc-x64) fn fw_explore(target: u64) -> u64 from "forked_walk.iii"
+extern @abi(c-msvc-x64) fn fw_commit() -> u32 from "forked_walk.iii"
+extern @abi(c-msvc-x64) fn fw_best() -> u64 from "forked_walk.iii"
+
+const IL_BIG     : u64 = 1000u64    /* value = IL_BIG - cost, so a CHEAPER form has a HIGHER walk value */
+const IL_EK_AND  : u32 = 2u32       /* bv_bits EK_AND -- the cost-truth for bit-independent (Boolean) forms */
+const IL_EK_ADD  : u32 = 8u32       /* bv_bits EK_ADD -- the cost-truth for arithmetic forms */
+const IL_ROUTE_SIG : u32 = 0u32
+const IL_ROUTE_REV : u32 = 1u32
+
+/* ---- the candidate forms ---- */
+/* bit-independent: the SHA-2 Ch function in three equal shapes (the search dissolves to picking the cheapest). */
+fn il_ch_form(idx: u32, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return bb_xor(bb_and(a, b), bb_and(bb_not(a), c)) }     /* spec  : 2 ANDs */
+    if idx == 1u32 { return bb_xor(c, bb_and(a, bb_xor(b, c))) }             /* optform: 1 AND */
+    return bb_or(bb_and(a, b), bb_and(bb_not(a), c))                         /* OR-mux: 2 ANDs */
+}
+/* bit-coupling: 5*x by two algorithms (naive sum vs strength-reduced fold). */
+fn il_mul5_naive(x: u32) -> u32 { return bb_add(bb_add(bb_add(bb_add(x, x), x), x), x) }   /* 4 ADDs */
+fn il_mul5_fold(x: u32) -> u32 { return bb_add(bb_shl(x, 2u64), x) }                       /* 1 ADD */
+
+/* the AND-cost of a Ch form (built alone). */
+fn il_ch_cost(idx: u32) -> u64 {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    il_ch_form(idx, a, b, c)
+    return bb_count_kind(IL_EK_AND)
+}
+/* the ADD-cost of a 5x form (built alone): kind 0 = naive, kind 1 = fold. */
+fn il_mul5_cost(which: u32) -> u64 {
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)
+    if which == 0u32 { il_mul5_naive(x) } else { il_mul5_fold(x) }
+    return bb_count_kind(IL_EK_ADD)
+}
+
+/* ---- the two arms ---- */
+
+/* THE SIGNATURE ARM: the search dissolved.  Confirm the candidate forms are the same function by SIGNATURE (no
+ * SAT), then return the cheapest by gate cost -- a direct minimisation over a proven-equal set. */
+fn il_signature_arm() -> u64 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let s : u32 = il_ch_form(0u32, a, b, c)
+    let o : u32 = il_ch_form(1u32, a, b, c)
+    let m : u32 = il_ch_form(2u32, a, b, c)
+    if bb_sig_equal(s, o, 3u32) != 1u8 { return 0u64 }      /* same function -- byte compare, no SAT */
+    if bb_sig_equal(s, m, 3u32) != 1u8 { return 0u64 }
+    let mut best : u64 = il_ch_cost(0u32)
+    let c1 : u64 = il_ch_cost(1u32)
+    let c2 : u64 = il_ch_cost(2u32)
+    if c1 < best { best = c1 }
+    if c2 < best { best = c2 }
+    return best                                             /* the cheapest equivalent form's cost */
+}
+
+/* THE REVERSIBLE ARM: a bounded-space reversible walk over the candidate forms.  Each candidate is SAT-verified
+ * equivalent (the judge, since signatures cannot capture the carry chain), then explored as a forked_walk branch
+ * (rolled back after evaluation -- zero trace, O(depth) space); the cheapest proven-equivalent branch commits.
+ * Returns the cheapest equivalent form's cost (decoded from the best walk value). */
+fn il_reversible_arm() -> u64 @export {
+    let cost_naive : u64 = il_mul5_cost(0u32)
+    let cost_fold  : u64 = il_mul5_cost(1u32)
+    /* the judge for the bit-coupling fragment: is the fold genuinely equivalent to the naive 5x? */
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)
+    let eq : u8 = bb_equal(il_mul5_naive(x), il_mul5_fold(x))
+    /* the reversible bounded-space walk: incumbent = naive; explore both branches (each rolled back), keep best. */
+    fw_init(IL_BIG - cost_naive)
+    fw_explore(IL_BIG - cost_naive)                         /* the naive branch (speculate -> rollback) */
+    if eq == 1u8 { fw_explore(IL_BIG - cost_fold) }         /* the fold branch, only if proven equivalent */
+    fw_commit()                                             /* commit the cheapest (highest value) */
+    return IL_BIG - fw_best()                               /* decode: cheapest cost */
+}
+
+/* ---- the fused loop ---- */
+
+/* which arm a target routes to, by its data-flow topology (the bifurcator).  The target must be built in the
+ * current bb session before calling. */
+fn il_route() -> u32 @export {
+    if ws_is_bit_independent() == 1u8 { return IL_ROUTE_SIG }
+    return IL_ROUTE_REV
+}
+
+/* INVENT over the Ch target: build it, route (bit-independent -> signature arm), return the cheapest form cost. */
+fn il_invent_ch() -> u64 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    il_ch_form(0u32, a, b, c)                               /* the target sets the topology */
+    if il_route() == IL_ROUTE_SIG { return il_signature_arm() }
+    return il_reversible_arm()
+}
+
+/* INVENT over the 5x target: build it, route (bit-coupling -> reversible arm), return the cheapest form cost. */
+fn il_invent_mul5() -> u64 @export {
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)
+    il_mul5_naive(x)                                        /* the target sets the topology (has ADDs) */
+    if il_route() == IL_ROUTE_SIG { return il_signature_arm() }
+    return il_reversible_arm()
+}
+
+/* route probes: the Ch target is bit-independent -> IL_ROUTE_SIG (0); the 5x target is bit-coupling -> IL_ROUTE_REV (1). */
+fn il_route_ch() -> u32 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    il_ch_form(0u32, a, b, c)
+    return il_route()
+}
+fn il_route_mul5() -> u32 @export {
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)
+    il_mul5_naive(x)
+    return il_route()
+}

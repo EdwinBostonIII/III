@@ -1,0 +1,40 @@
+/* 1799_invent_loop.iii -- THE REVERSIBLE SIGNATURE-GUIDED INVENTION LOOP: the explosion-defeaters, fused.
+ *
+ * One driver routes invention by data-flow topology and uses the right defeater on each fragment:
+ *   - BIT-INDEPENDENT target (Ch): the SIGNATURE arm -- the search DISSOLVES into a lookup.  The candidate forms
+ *     are proven the same function by signature (byte compare, NO SAT), and the cheapest by gate cost is returned
+ *     (Ch optform, 1 AND, vs spec/OR-mux at 2).  O(1), zero clauses, width-agnostic.
+ *   - BIT-COUPLING target (5x): the REVERSIBLE arm -- a bounded-space reversible walk (forked_walk).  Each
+ *     candidate is SAT-verified equivalent (the judge), explored as a speculative branch in a reversible
+ *     envelope (rolled back -> zero trace -> O(depth) space), and the cheapest commits (5x fold, 1 ADD, vs the
+ *     naive 4).  Sound because the substrate is reversible -- the Toffoli isomorphism's gift.
+ *
+ *   (1) the Ch target ROUTES to the signature arm (il_route_ch == 0); il_invent_ch returns 1 (the optform, 1 AND)
+ *   (2) the 5x target ROUTES to the reversible arm (il_route_mul5 == 1); il_invent_mul5 returns 1 (the fold, 1 ADD)
+ *   (3) the arms agree directly (il_signature_arm == 1, il_reversible_arm == 1)
+ * Exit 99 = one loop, every axis of explosion defeated where it lives -- the search dissolved for the bit-
+ * independent fragment, bounded-space reversible for the bit-coupling fragment. */
+module corpus_1799
+
+extern @abi(c-msvc-x64) fn il_invent_ch() -> u64 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_invent_mul5() -> u64 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_signature_arm() -> u64 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_reversible_arm() -> u64 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_route_ch() -> u32 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_route_mul5() -> u32 from "invent_loop.iii"
+
+fn main() -> u64 {
+    /* (1) the Ch target routes to the signature arm and the loop returns the cheapest form (optform = 1 AND) */
+    if il_route_ch() != 0u32 { return 1u64 }              /* IL_ROUTE_SIG */
+    if il_invent_ch() != 1u64 { return 2u64 }
+
+    /* (2) the 5x target routes to the reversible arm and the loop returns the cheapest form (fold = 1 ADD) */
+    if il_route_mul5() != 1u32 { return 3u64 }            /* IL_ROUTE_REV */
+    if il_invent_mul5() != 1u64 { return 4u64 }
+
+    /* (3) the arms, directly: each finds the cheapest equivalent */
+    if il_signature_arm() != 1u64 { return 5u64 }         /* the search dissolved, no SAT */
+    if il_reversible_arm() != 1u64 { return 6u64 }        /* bounded-space reversible walk, SAT-judged */
+
+    return 99u64
+}

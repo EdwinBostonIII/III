@@ -1,0 +1,39 @@
+/* 1770_weave_commons.iii -- THE WEAVE IS A LIVING COMMONS III GROWS ITSELF.
+ *
+ * The weave-forge discovers; present renders + content-addresses; and now the commons ACCUMULATES: each proven
+ * law is admitted once, by content address, into a growing body with a rolling tamper-evident root.  This is
+ * the ontological turn -- the weave is not a static table of hand-authored proofs; it IS the self-discovered,
+ * self-naming, self-accumulating mathematical commons of III.
+ *
+ *   (1) present_commons_fill() drives discovery across THREE families (round-fn, strength, six-valued) and
+ *       admits each proven law -> the commons GROWS to 8 distinct laws (from 0)
+ *   (2) the rolling root is a LIVE witness: non-zero after folding the 8 admissions
+ *   (3) running the SAME pass again is a FIXPOINT: every law is found already present and CITED, not re-added
+ *       -> size unchanged (8), and the final seal admitted nothing new (pres_admitted == 0)
+ * Exit 99 = III accumulated its own discoveries into a growing, idempotent, content-addressed commons. */
+module corpus_1770
+
+extern @abi(c-msvc-x64) fn present_commons_fill() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_nlaw() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_admitted() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_root_byte(i: u64) -> u32 from "present.iii"
+
+fn main() -> u64 {
+    let c0 : u64 = pres_nlaw()
+    let n1 : u64 = present_commons_fill()
+    if n1 <= c0 { return 1u64 }                          /* the commons GREW */
+    if n1 != 8u64 { return n1 }                          /* 8 distinct laws (else report the actual count) */
+
+    /* the rolling root is a live witness -- non-zero after folding 8 admissions */
+    let mut nz : u32 = 0u32
+    let mut i  : u64 = 0u64
+    while i < 32u64 { if pres_root_byte(i) != 0u32 { nz = 1u32 }  i = i + 1u64 }
+    if nz != 1u32 { return 2u64 }
+
+    /* idempotent: re-running admits NOTHING new (content-addressed citation) */
+    let n2 : u64 = present_commons_fill()
+    if n2 != n1 { return 3u64 }                          /* fixpoint -- the body grew, then re-citation found it whole */
+    if pres_admitted() != 0u64 { return 4u64 }          /* the last seal CITED, did not admit */
+
+    return 99u64
+}

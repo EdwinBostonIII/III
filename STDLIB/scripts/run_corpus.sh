@@ -1423,6 +1423,8 @@ declare -A EXPECTED=(
     [1768_weave_totality]=99
     # WEAVE-FILL: III fills the weave unassisted in one pass -- 8 algebraic laws (round-fn + crossover + 6-valued) discovered AND proved de-novo.
     [1769_weave_fill]=99
+    # WEAVE COMMONS: III ACCUMULATES its discoveries -- present_commons_fill grows a content-addressed body (8 laws, rolling root) that re-citation finds whole (idempotent fixpoint).
+    [1770_weave_commons]=99
 )
 
 PASS=0

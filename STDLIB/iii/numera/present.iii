@@ -48,10 +48,54 @@ fn pres_u64(v: u64) -> i32 {
     return 0i32
 }
 
-/* finalize: content-address the law text -> the unique name; bump the ledger. */
+/* THE WEAVE COMMONS -- the weave stops being a static set of proofs and BECOMES a GROWING body of III's own
+ * self-discovered mathematics.  Each rendered law is content-addressed (cad over its text); the commons is the
+ * SET of those addresses.  Admitting is idempotent: a law already present is CITED, not re-added, so the commons
+ * grows monotonically and a re-run is a fixpoint.  A rolling root  root := cad(root || new_addr)  is a compact,
+ * tamper-evident witness of the whole accumulated body -- it changes iff a genuinely new law enters. */
+const PRES_MAXLAW : u64 = 64u64
+var PRES_LAW      : [u8; 2048]      /* up to 64 law addresses, 32 bytes each */
+var PRES_NLAW     : [u64; 1]        /* count of DISTINCT laws in the commons (monotone) */
+var PRES_ROOT     : [u8; 32]        /* the rolling commons root */
+var PRES_ADMITTED : [u64; 1]        /* 1 iff the last seal admitted a NEW law (0 = cited) */
+var PRES_CATBUF   : [u8; 64]        /* root || new_addr scratch for the rolling fold */
+
+/* is the just-sealed name (PRES_NAME) already in the commons?  returns its index, or -1. */
+fn _pres_seen() -> i64 {
+    let mut i : u64 = 0u64
+    while i < PRES_NLAW[0u64] {
+        let mut eq : u8 = 1u8
+        let mut j : u64 = 0u64
+        while j < 32u64 {
+            if PRES_LAW[i * 32u64 + j] != PRES_NAME[j] { eq = 0u8 }
+            j = j + 1u64
+        }
+        if eq == 1u8 { return i as i64 }
+        i = i + 1u64
+    }
+    return -1i64
+}
+
+/* admit PRES_NAME into the commons if new (grow + fold the root); else cite (no growth). */
+fn _pres_admit() -> i32 {
+    if _pres_seen() >= 0i64 { PRES_ADMITTED[0u64] = 0u64 ; return 0i32 }          /* cited */
+    if PRES_NLAW[0u64] >= PRES_MAXLAW { PRES_ADMITTED[0u64] = 0u64 ; return -1i32 }
+    let base : u64 = PRES_NLAW[0u64] * 32u64
+    let mut j : u64 = 0u64
+    while j < 32u64 { PRES_LAW[base + j] = PRES_NAME[j] ; j = j + 1u64 }
+    j = 0u64
+    while j < 32u64 { PRES_CATBUF[j] = PRES_ROOT[j] ; PRES_CATBUF[32u64 + j] = PRES_NAME[j] ; j = j + 1u64 }
+    cad_oneshot(0u32, (&PRES_CATBUF as u64) as *u8, 64u64, (&PRES_ROOT as u64) as *u8)   /* root := cad(root || addr) */
+    PRES_NLAW[0u64] = PRES_NLAW[0u64] + 1u64
+    PRES_ADMITTED[0u64] = 1u64
+    return 0i32
+}
+
+/* finalize: content-address the law text -> the unique name; bump the render ledger; admit into the commons. */
 fn pres_seal() -> i32 {
     cad_oneshot(0u32, (&PRES_BUF as u64) as *u8, PRES_LEN[0u64], (&PRES_NAME as u64) as *u8)
     PRES_COUNT[0u64] = PRES_COUNT[0u64] + 1u64
+    _pres_admit()
     return 0i32
 }
 
@@ -133,3 +177,23 @@ fn pres_len() -> u64 @export { return PRES_LEN[0u64] }
 fn pres_byte(i: u64) -> u32 @export { if i >= PRES_LEN[0u64] { return 0x100u32 }  return PRES_BUF[i] as u32 }
 fn pres_name_byte(i: u64) -> u32 @export { if i >= 32u64 { return 0x100u32 }  return PRES_NAME[i] as u32 }
 fn pres_count() -> u64 @export { return PRES_COUNT[0u64] }
+
+/* THE FILL PASS THAT GROWS THE COMMONS: discover across families and admit every proven law into the weave
+ * commons (content-addressed, idempotent).  Returns the commons size -- the number of DISTINCT self-discovered
+ * laws III has accumulated.  Run it twice and the size is a FIXPOINT: the body grew, then re-citation found it
+ * whole.  This is the weave as a living commons III populates itself, not a static table someone authored. */
+fn present_commons_fill() -> u64 @export {
+    present_weave(1u32)        /* Ch  = g ^ (e & (f ^ g)) */
+    present_weave(2u32)        /* Maj = (a & b) ^ (c & (a ^ b)) */
+    present_strength(7u64)     /* 7*x = (x<<3) - x */
+    present_strength(9u64)     /* 9*x = (x<<3) + x */
+    present_strength(5u64)     /* 5*x = (x<<2) + x */
+    present_collapse(1u32)     /* (a & Null) | b -> b */
+    present_collapse(2u32)     /* a & (a | b)   -> a */
+    present_collapse(3u32)     /* (a | All) & b -> b */
+    return PRES_NLAW[0u64]
+}
+
+fn pres_nlaw() -> u64 @export { return PRES_NLAW[0u64] }
+fn pres_admitted() -> u64 @export { return PRES_ADMITTED[0u64] }
+fn pres_root_byte(i: u64) -> u32 @export { if i >= 32u64 { return 0x100u32 }  return PRES_ROOT[i] as u32 }

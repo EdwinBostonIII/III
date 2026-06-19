@@ -770,56 +770,6 @@ fn bb_intern_equal(a: u32, b: u32) -> u8 @export {
     return bb_equal(a, b)
 }
 
-/* ---- THE COUPLING-REGIME INTERNERS: const-fold + arithmetic identity + STRENGTH, in the ONE canonical construction.
- * bv_bits draws the honest boundary -- bit-independent ops (AND/OR/XOR/NOT) canonicalise above by signature-class
- * rewrites; the bit-COUPLING ops (MUL/ADD/SUB) canonicalise here.  Each is a sound circuit-minimising rewrite applied
- * at CONSTRUCTION (a cheap structural guard, no SAT), whose equivalence is PROVEN ONCE by the SAT judge bb_equal
- * (corpus 1824) -- the proof-time(once)/apply-time(cheap) split.  Strength (x*2^k -> x<<k) is the codegen fold made
- * EMERGENT: it is not an authored predicate in any consumer, it is what building a multiply-by-a-power-of-two IN THE
- * SUBSTRATE yields.  bb_mul/bb_add/bb_sub remain the untouched fallbacks; existing decisions are byte-identical. */
-fn bb_pow2_log(v: u64) -> u32 {
-    if v < 2u64 { return 0xFFFFFFFFu32 }
-    if (v & (v - 1u64)) != 0u64 { return 0xFFFFFFFFu32 }    /* not a power of two */
-    let mut k : u32 = 0u32
-    let mut t : u64 = v
-    while t > 1u64 { t = t >> 1u64  k = k + 1u32 }
-    return k
-}
-fn bb_intern_mul(a: u32, b: u32) -> u32 @export {
-    if a >= BB_MAX_NODES { BB_ERR = 1u8  return BB_SENT }
-    if b >= BB_MAX_NODES { BB_ERR = 1u8  return BB_SENT }
-    if bb_is_const(a) == 1u8 { if bb_is_const(b) == 1u8 { return bb_intern_const((bb_const_val(a) * bb_const_val(b)) & bb_wmask()) } }  /* const-fold */
-    if bb_is_const0(a) == 1u8 { return a }                                  /* 0 * x = 0 */
-    if bb_is_const0(b) == 1u8 { return b }
-    if bb_is_const(b) == 1u8 {
-        if bb_const_val(b) == 1u64 { return a }                            /* x * 1 = x (identity) */
-        let kb : u32 = bb_pow2_log(bb_const_val(b))
-        if kb != 0xFFFFFFFFu32 { return bb_shl(a, kb as u64) }              /* x * 2^k = x<<k (STRENGTH) */
-    }
-    if bb_is_const(a) == 1u8 {
-        if bb_const_val(a) == 1u64 { return b }                            /* 1 * x = x */
-        let ka : u32 = bb_pow2_log(bb_const_val(a))
-        if ka != 0xFFFFFFFFu32 { return bb_shl(b, ka as u64) }              /* 2^k * x = x<<k */
-    }
-    return bb_mul(a, b)                                                     /* fallback: the honest multiplier */
-}
-fn bb_intern_add(a: u32, b: u32) -> u32 @export {
-    if a >= BB_MAX_NODES { BB_ERR = 1u8  return BB_SENT }
-    if b >= BB_MAX_NODES { BB_ERR = 1u8  return BB_SENT }
-    if bb_is_const(a) == 1u8 { if bb_is_const(b) == 1u8 { return bb_intern_const((bb_const_val(a) + bb_const_val(b)) & bb_wmask()) } }  /* const-fold */
-    if bb_is_const0(a) == 1u8 { return b }                                  /* 0 + x = x (identity) */
-    if bb_is_const0(b) == 1u8 { return a }                                  /* x + 0 = x */
-    return bb_add(a, b)
-}
-fn bb_intern_sub(a: u32, b: u32) -> u32 @export {
-    if a >= BB_MAX_NODES { BB_ERR = 1u8  return BB_SENT }
-    if b >= BB_MAX_NODES { BB_ERR = 1u8  return BB_SENT }
-    if bb_is_const(a) == 1u8 { if bb_is_const(b) == 1u8 { return bb_intern_const((bb_const_val(a) - bb_const_val(b)) & bb_wmask()) } }  /* const-fold */
-    if bb_is_const0(b) == 1u8 { return a }                                  /* x - 0 = x (identity) */
-    if a == b { return bb_intern_const(0u64) }                             /* x - x = 0 (self-inverse) */
-    return bb_sub(a, b)
-}
-
 /* ============================================================================================================
  * THE TOPOLOGICAL PASS (bb_struct_equal): width-agnostic STRUCTURAL equality -- a backward walk of the spine that
  * never touches BB_W, BB_NVAL, or the SAT solver.  It compares only kinds, variable ids, constant values, and

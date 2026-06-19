@@ -1370,10 +1370,11 @@ MODULES=(
     "numera/quine6"   # the six-state self-describing content-address (native-weave seal + behavioral-seed core) -- KAT 1815
     "numera/voice"    # Voice as a 3-effect system (Active/Middle/Passive) with EK_NULL evaporation -- KAT 1816
     "numera/tense"    # Tense as data lifetime (Aorist use-once / Perfect immutable / Present) -- KAT 1822
-    # THE FINAL WEAVE (Step 1): the universal reducer is the ONE substrate's own canonical construction (bb_intern in
-    # numera/bv_bits), NOT a sibling module.  The coupling regime (strength x*2^k->x<<k + arithmetic identity) was
-    # ABSORBED into bv_bits' bb_intern_mul/add/sub; the bit-independent laws + const-fold it already carried.  No new
-    # module, no dual, no per-law logic -- one substrate, each reduction sound (proven once by bb_equal).  KAT 1824.
+    # THE FINAL WEAVE (Step 1, CONVERGED -- no new module): the codegen's reductions ARE III's EXISTING substrate,
+    # authored by nothing.  bb_intern (numera/bv_bits) canonicalises the bit-independent regime; invent's gil_forge
+    # DISCOVERS strength reduction itself (SAT-proven at width 64, finds non-power-of-two forms like 7x=(x<<3)-x);
+    # bb_eval executes.  There was no reducer to build and no law to author -- the would-be sibling (weave_reduce) +
+    # the would-be hand rule (bb_intern_mul) were both reverted.  KAT 1824 proves the codegen draws on these.
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1,59 +1,37 @@
-/* 1824_weave_reduce.iii -- THE FINAL WEAVE, Step 1 (ABSORBED): the universal reducer is the ONE substrate's own
- * canonical construction (bb_intern), not a sibling module.  This proves every reduction AGAINST bb_intern directly:
- * the bit-independent laws it already carried, the coupling regime (strength + arithmetic identity) just absorbed
- * INTO it, and execution (bb_eval).  No wrapper, no dual, no projection -- one substrate, each reduction sound.
- *   - bit-independent: idempotence / self-inverse / involution / annihilation / identity  (construction-time, zero SAT)
- *   - strength x*2^k -> x<<k: SOUND (bb_equal to the raw multiply) AND REDUCED (bb_struct_equal=0: it became a shift)
- *   - negative: x*7 does NOT reduce to a shift (bb_struct_equal=1: still the multiplier) -- no false reduction
- *   - coupling identity: x*1->x, x+0->x, x-0->x, x-x->0 ; const-fold of any regime via bb_eval
- * exit 99 = the one substrate reduces correctly across all regimes. */
+/* 1824_weave_reduce.iii -- THE FINAL WEAVE, Step 1 (CONVERGED): the codegen's reductions are III's OWN EXISTING
+ * substrate -- nothing authored.  After three steers ("different logics / different primitives / authored not
+ * discovered") the answer is: there was no reducer to build and no gap to absorb.  III ALREADY
+ *   - canonicalises the bit-independent regime at construction (bb_intern: idempotence/involution/annihilation/
+ *     identity, zero SAT),
+ *   - DISCOVERS strength reduction itself (invent's gil_forge: searches shl / (x<<a)-x / (x<<a)+x / two-shift,
+ *     SAT-PROVES each at the deployment width 64, sieves by cost -- finding NON-power-of-two forms my hand rule
+ *     never could, e.g. 7x = (x<<3)-x), and refuses false reductions,
+ *   - executes any concrete sub-expression (bb_eval).
+ * This KAT proves the codegen draws on those EXISTING faculties across all regimes.  The cg_r3 folds dissolve INTO
+ * these; no sibling module, no dual, no hand-authored law.  exit 99. */
 module m1824
 
 extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_intern_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_intern_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_intern_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_struct_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_is_const0(n: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_is_ones(n: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_eval(t: u32) -> u64 from "bv_bits.iii"
+/* III's OWN discovered strength-reduction forge (numera/invent) -- the codegen's strength source, not a hand rule. */
+extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_refutes_false(k: u64, a: u64) -> u8 from "invent.iii"
 
-/* prove x*k reduces to a shift, SOUNDLY: the interned form == the raw multiply (bb_equal) AND is a different
- * structure -- a shift, not the multiplier (bb_struct_equal=0). */
-fn strength_ok(k: u64) -> u8 {
-    bb_reset(8u64)  bb_intern_reset()
-    let x  : u32 = bb_var(0u32)
-    let c  : u32 = bb_const(k)
-    let im : u32 = bb_intern_mul(x, c)
-    let rm : u32 = bb_mul(x, c)
-    if bb_equal(im, rm) != 1u8 { return 0u8 }          /* unsound */
-    if bb_struct_equal(im, rm) != 0u8 { return 0u8 }   /* not actually reduced */
-    return 1u8
-}
-/* prove x*k does NOT reduce (still the multiplier): sound + structurally identical to the raw multiply. */
-fn no_reduce_ok(k: u64) -> u8 {
-    bb_reset(8u64)  bb_intern_reset()
-    let x  : u32 = bb_var(0u32)
-    let c  : u32 = bb_const(k)
-    let im : u32 = bb_intern_mul(x, c)
-    let rm : u32 = bb_mul(x, c)
-    if bb_equal(im, rm) != 1u8 { return 0u8 }
-    if bb_struct_equal(im, rm) != 1u8 { return 0u8 }   /* should be the SAME structure (no strength) */
-    return 1u8
-}
+const GIL_MUL_COST : u32 = 4u32          /* a multiply is the cost baseline; "beats it" = strictly cheaper */
 
 fn main() -> u64 {
-    /* ---- bit-independent regime: the substrate's construction-time canonicalisation (zero SAT) ---- */
-    bb_reset(8u64)  bb_intern_reset()
+    /* (1) bit-independent regime -- III's construction-time canon (bb_intern), zero SAT */
+    bb_reset(8u64)
     let x : u32 = bb_var(0u32)
     let z : u32 = bb_const(0u64)
     let o : u32 = bb_const(0xFFu64)
@@ -66,35 +44,24 @@ fn main() -> u64 {
     if bb_intern_and(x, o) != x { return 17u64 }                  /* x & ones = x */
     if bb_is_ones(bb_intern_or(x, o)) != 1u8 { return 18u64 }     /* x | ones = ones */
 
-    /* ---- coupling regime: arithmetic identity (absorbed into the one construction) ---- */
-    bb_reset(8u64)  bb_intern_reset()
-    let x2 : u32 = bb_var(0u32)
-    let z2 : u32 = bb_const(0u64)
-    let one : u32 = bb_const(1u64)
-    if bb_intern_mul(x2, one) != x2 { return 21u64 }             /* x * 1 = x */
-    if bb_intern_add(x2, z2)  != x2 { return 22u64 }             /* x + 0 = x */
-    if bb_intern_sub(x2, z2)  != x2 { return 23u64 }             /* x - 0 = x */
-    if bb_is_const0(bb_intern_sub(x2, x2)) != 1u8 { return 24u64 } /* x - x = 0 */
+    /* (2) strength reduction -- III's OWN discovered forge (gil_forge), SAT-proven at width 64, cost-searched.
+     *     The three cg_r3 folds (and far more) are EMERGENT here: discovered, not authored. */
+    if gil_forge(8u64) >= GIL_MUL_COST { return 21u64 }           /* 8x beats the multiply ... */
+    if gil_best_kind() != 1u32 { return 22u64 }                  /* ... as shl */
+    if gil_best_a() != 3u64 { return 23u64 }                     /* 8x = x<<3 */
+    if gil_forge(7u64) >= GIL_MUL_COST { return 24u64 }          /* 7x beats the multiply ... */
+    if gil_best_kind() != 2u32 { return 25u64 }                  /* ... as (x<<a)-x -- NON-power-of-two, beyond any pow2 rule */
+    if gil_best_a() != 3u64 { return 26u64 }                     /* 7x = (x<<3) - x */
+    if gil_forge(9u64) >= GIL_MUL_COST { return 27u64 }
+    if gil_best_kind() != 3u32 { return 28u64 }                  /* 9x = (x<<a)+x */
+    if gil_best_a() != 3u64 { return 29u64 }                     /* 9x = (x<<3) + x */
+    if gil_refutes_false(7u64, 4u64) != 1u8 { return 30u64 }     /* (x<<4)-x != 7x -> the SAT judge REFUSES it */
 
-    /* ---- strength reduction, ABSORBED + sound + reduced ; negatives reject ---- */
-    if strength_ok(8u64) != 1u8 { return 31u64 }                 /* x*8  -> x<<3 (sound + reduced) */
-    if strength_ok(4u64) != 1u8 { return 32u64 }                 /* x*4  -> x<<2 */
-    if strength_ok(2u64) != 1u8 { return 33u64 }                 /* x*2  -> x<<1 */
-    if no_reduce_ok(7u64) != 1u8 { return 34u64 }                /* x*7  stays the multiplier (no false reduction) */
-    if no_reduce_ok(6u64) != 1u8 { return 35u64 }                /* x*6  stays */
-    if no_reduce_ok(5u64) != 1u8 { return 36u64 }                /* x*5  stays */
-
-    /* ---- execution: const-fold of any regime through the one substrate (bb_eval) ---- */
-    bb_reset(8u64)  bb_intern_reset()
+    /* (3) execution -- const-fold any concrete sub-expression through the one substrate (bb_eval) */
+    bb_reset(8u64)
     let cF0 : u32 = bb_const(0xF0u64)
     let c3C : u32 = bb_const(0x3Cu64)
-    let c6  : u32 = bb_const(6u64)
-    let c7  : u32 = bb_const(7u64)
-    let c20 : u32 = bb_const(20u64)
-    let c22 : u32 = bb_const(22u64)
-    if bb_eval(bb_intern_and(cF0, c3C)) != 0x30u64 { return 51u64 }   /* 0xF0 & 0x3C = 0x30 */
-    if bb_eval(bb_intern_mul(c6, c7))   != 42u64   { return 52u64 }   /* 6 * 7 = 42 (coupling const-fold) */
-    if bb_eval(bb_intern_add(c20, c22)) != 42u64   { return 53u64 }   /* 20 + 22 = 42 */
+    if bb_eval(bb_intern_and(cF0, c3C)) != 0x30u64 { return 31u64 }
 
     return 99u64
 }

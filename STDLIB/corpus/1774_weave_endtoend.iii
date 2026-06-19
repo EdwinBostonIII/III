@@ -1,0 +1,55 @@
+/* 1774_weave_endtoend.iii -- THE WEAVE, INVENT-POPULATED END TO END, ACCUMULATED + PERSISTED.
+ *
+ * The capstone: ONE pass has III discover the WHOLE weave -- the optimization strands (Ch, Maj via gilw; the
+ * crossover identities via gilx; the six-valued collapses via gil6; the strength reductions via gil) AND the
+ * STRUCTURAL strands gild discovers (the rotation-duality family + the four self-laws) -- render + name each,
+ * accumulate them into the content-addressed commons, and seal the whole body to disk.  Nothing hand-authored;
+ * everything searched + SAT-proven + accumulated + made to survive across time.
+ *
+ *   (1) present_weave_full() grows the commons to 13 distinct self-discovered laws (8 optimization + 5 structural)
+ *   (2) the body is persisted, the in-memory commons wiped, and RELOADED byte-identical (13 laws, root intact)
+ * Exit 99 = the weave is invent-populated end to end, and III's whole self-discovered mathematics persists. */
+module corpus_1774
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn present_weave_full() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_nlaw() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_root_byte(i: u64) -> u32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_persist(cap: u64, path: u64) -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reset() -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reload(cap: u64, path: u64) -> i32 from "present.iii"
+
+var ROOTSNAP : [u32; 32]
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let path : *u8 = malloc(24u64)                          /* "./iii_weave_full.tmp" */
+    path[0u64] = 46u8   path[1u64] = 47u8   path[2u64] = 105u8  path[3u64] = 105u8
+    path[4u64] = 105u8  path[5u64] = 95u8   path[6u64] = 119u8  path[7u64] = 101u8
+    path[8u64] = 97u8   path[9u64] = 118u8  path[10u64] = 101u8 path[11u64] = 95u8
+    path[12u64] = 102u8 path[13u64] = 117u8 path[14u64] = 108u8 path[15u64] = 108u8
+    path[16u64] = 46u8  path[17u64] = 116u8 path[18u64] = 109u8 path[19u64] = 112u8
+    path[20u64] = 0u8
+
+    /* (1) discover + accumulate the WHOLE weave */
+    let n : u64 = present_weave_full()
+    if n != 13u64 { return n }
+    let mut i : u64 = 0u64
+    while i < 32u64 { ROOTSNAP[i] = pres_root_byte(i)  i = i + 1u64 }
+
+    /* (2) persist -> wipe -> reload byte-identical */
+    if pres_commons_persist(cap, path as u64) != 0i32 { return 1u64 }
+    pres_commons_reset()
+    if pres_nlaw() != 0u64 { return 2u64 }
+    if pres_commons_reload(cap, path as u64) != 13i32 { return 3u64 }
+    if pres_nlaw() != 13u64 { return 4u64 }
+    i = 0u64
+    while i < 32u64 { if pres_root_byte(i) != ROOTSNAP[i] { return 5u64 }  i = i + 1u64 }
+
+    fs_delete(cap, path as u64)
+    return 99u64
+}

@@ -26,6 +26,8 @@ extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "
 extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
 extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
 extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn gild_rotdual_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_selflaw_rhs(op: u32) -> i32 from "invent.iii"
 
 var PRES_BUF   : [u8; 128]
 var PRES_LEN   : [u64; 1]
@@ -195,6 +197,47 @@ fn present_commons_fill() -> u64 @export {
     present_collapse(1u32)     /* (a & Null) | b -> b */
     present_collapse(2u32)     /* a & (a | b)   -> a */
     present_collapse(3u32)     /* (a | All) & b -> b */
+    return PRES_NLAW[0u64]
+}
+
+/* render + name the STRUCTURAL strand gild discovered: the whole rotation-duality family, tied to a live verdict
+ * (gild_rotdual_count == 31 = the complete family).  Returns 0 if the family is not whole (never a fabricated law). */
+fn present_duality() -> u64 @export {
+    if gild_rotdual_count() != 31u64 { return 0u64 }
+    PRES_LEN[0u64] = 0u64
+    pres_str(("rotl(x,k) = rotr(x, 32-k)" as u64), 25u64)
+    pres_seal()
+    return PRES_LEN[0u64]
+}
+
+/* render + name a SELF-LAW gild discovered: "x <op> x = <rhs>", with the rhs read from what gild proved.
+ * op: 0=- 1=^ 2=& 3=|.  Returns 0 if gild found no collapse (never a fabricated law). */
+fn present_selflaw(op: u32) -> u64 @export {
+    let rhs : i32 = gild_selflaw_rhs(op)
+    if rhs < 0i32 { return 0u64 }
+    PRES_LEN[0u64] = 0u64
+    pres_ch(0x78u8) ; pres_ch(0x20u8)                                  /* "x " */
+    if op == 0u32 { pres_ch(0x2Du8) }                                  /* - */
+    if op == 1u32 { pres_ch(0x5Eu8) }                                  /* ^ */
+    if op == 2u32 { pres_ch(0x26u8) }                                  /* & */
+    if op == 3u32 { pres_ch(0x7Cu8) }                                  /* | */
+    pres_ch(0x20u8) ; pres_ch(0x78u8) ; pres_ch(0x20u8) ; pres_ch(0x3Du8) ; pres_ch(0x20u8)   /* " x = " */
+    if rhs == 0i32 { pres_ch(0x30u8) }                                 /* 0 */
+    if rhs == 1i32 { pres_ch(0x78u8) }                                 /* x */
+    pres_seal()
+    return PRES_LEN[0u64]
+}
+
+/* THE WEAVE, INVENT-POPULATED END TO END: one pass discovers + accumulates the WHOLE weave into the commons --
+ * the optimization strands (gilw/gil/gil6 via present_commons_fill) AND the structural strands gild discovers
+ * (rotation duality + the four self-laws).  Returns the commons size (13 distinct laws when the weave is whole). */
+fn present_weave_full() -> u64 @export {
+    present_commons_fill()        /* 8: Ch, Maj, 7x, 9x, 5x, 3 collapses */
+    present_duality()             /* +1: the rotation-duality family */
+    present_selflaw(0u32)         /* +4: x-x=0, x^x=0, x&x=x, x|x=x */
+    present_selflaw(1u32)
+    present_selflaw(2u32)
+    present_selflaw(3u32)
     return PRES_NLAW[0u64]
 }
 

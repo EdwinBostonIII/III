@@ -1431,6 +1431,8 @@ declare -A EXPECTED=(
     [1772_weave_strand_discover]=99
     # SELF-LAW DISCOVERY: III rediscovers the self-laws bv_commons hand-lists (x-x=0, x^x=0, x&x=x, x|x=x) by searching op(x,x)'s RHS + SAT-proving.
     [1773_weave_selflaw_discover]=99
+    # END TO END: one pass discovers the WHOLE weave (13 laws: 8 optimization + 5 structural), accumulates into the commons, persists + reloads byte-identical.
+    [1774_weave_endtoend]=99
 )
 
 PASS=0

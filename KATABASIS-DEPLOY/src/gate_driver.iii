@@ -35,6 +35,10 @@ extern @abi(c-msvc-x64) fn pci_rev(dw2: u32) -> u32 from "pci_enum.iii"
 extern @abi(c-msvc-x64) fn pci_bar_base32(bar: u32) -> u64 from "pci_enum.iii"
 extern @abi(c-msvc-x64) fn pci_bar_base64(lo: u32, hi: u32) -> u64 from "pci_enum.iii"
 
+/* --- the behavioral floor anchor (kernel incarnation; more basal than CPUID) --- */
+extern @abi(c-msvc-x64) fn bsk_logic_faithful() -> u8 from "behavioral_seed_kernel.iii"
+extern @abi(c-msvc-x64) fn bsk_arith_faithful() -> u8 from "behavioral_seed_kernel.iii"
+
 /* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
@@ -272,6 +276,13 @@ fn gate_unload(driver_object: u64) -> u64 {
 fn driver_entry(driver_object: u64, registry_path: u64) -> u64 {
     sha256_sched_force(1u32)
     keccak_chi_force_path(1u32)
+    /* THE BEHAVIORAL FLOOR ANCHOR (more basal than CPUID), FAIL-CLOSED: refuse to go resident unless this substrate
+       computes III's boolean algebra + arithmetic faithfully -- a known-answer self-test whose answers are true by
+       mathematics, so a substrate (or a miscompilation) that gets any gate or carry wrong stops the load here.  This
+       runs BEFORE any oracle read or device creation: III verifies the machine *does* logic correctly before it
+       trusts anything the machine *claims*.  Pure computation, no metal, no I/O. */
+    if bsk_logic_faithful() != 1u8 { return 0xC0000001u64 }   /* STATUS_UNSUCCESSFUL -- unfaithful substrate, do not load */
+    if bsk_arith_faithful() != 1u8 { return 0xC0000001u64 }
     /* M23 / capability 11 -- the BELOW-OS behavioral quine-seal.  FAIL-CLOSED: refuse to go resident
        if the sealed hasher does not compute the FIPS-180-2 vector at Ring 0 (a broken/miscompiled
        sealer is an incoherent self -- "refuse to ship or run an incoherent self", capability 1, at the

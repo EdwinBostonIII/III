@@ -34,7 +34,8 @@ echo "[1] cg_r0 -> .o : IOCTL driver + kernel-safe subsets (cpufeat/weave_blocks
 "./$IIIS" "$S/cpufeat_kernel.iii" --ring R0 --compile-only --out "$O/cpufeat_kernel.o"
 "./$IIIS" "$S/weave_blocks_kernel.iii" --ring R0 --compile-only --out "$O/weave_blocks_kernel.o"
 "./$IIIS" "$S/cad_kernel.iii" --ring R0 --compile-only --out "$O/cad_kernel.o"
-OBJS=("$O/gate_driver.o" "$O/cpufeat_kernel.o" "$O/weave_blocks_kernel.o" "$O/cad_kernel.o")
+"./$IIIS" "$S/behavioral_seed_kernel.iii" --ring R0 --compile-only --out "$O/behavioral_seed_kernel.o"
+OBJS=("$O/gate_driver.o" "$O/cpufeat_kernel.o" "$O/weave_blocks_kernel.o" "$O/cad_kernel.o" "$O/behavioral_seed_kernel.o")
 for m in "${MODS[@]}"; do n=$(basename "$m"); "./$IIIS" "STDLIB/iii/$m.iii" --ring R0 --compile-only --out "$O/$n.o"; OBJS+=("$O/$n.o"); done
 
 echo "[2] assemble kernel witness leaf + hand-asm ntoskrnl marshalling shims"

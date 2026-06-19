@@ -1,0 +1,50 @@
+/* behavioral_seed_kernel.iii -- the kernel (cg_r0) incarnation of the behavioral floor anchor.
+ *
+ * The cg_r0-CORRECT subset of katabasis/behavioral_seed for in-gate use: the known-answer self-test of the weave's
+ * boolean algebra + arithmetic, in PURE u32 ops only (no *u8 byte access -- cg_r0 is 8-byte-uniform and would
+ * mis-stride a *u8 loop; no arrays; no >4-param fns; sequential control flow).  Every identity is true by
+ * mathematics, so a substrate (or a miscompilation) that computes any gate/carry wrong returns 0 and the gate
+ * refuses to load.  This is the kernel-incarnation of the more-basal-than-CPUID floor anchor; the quine half of
+ * behavioral_seed is intentionally omitted here (it needs a cg_r0-correct byte path -- a separate kernel subset).
+ * Pure, NIH, no deps.  Ring R0.  cg_r3 KAT: corpus 1824. */
+module behavioral_seed_kernel
+
+fn bsk_logic_faithful() -> u8 @export {
+    let a : u32 = 0xA5A5A5A5u32
+    let b : u32 = 0x3C3C3C3Cu32
+    let c : u32 = 0x0F0F0F0Fu32
+    if (~(a & b)) != ((~a) | (~b)) { return 0u8 }                         /* De Morgan 1 */
+    if (~(a | b)) != ((~a) & (~b)) { return 0u8 }                         /* De Morgan 2 */
+    if (~(~a)) != a { return 0u8 }                                        /* involution */
+    if (a & a) != a { return 0u8 }                                       /* idempotence (and) */
+    if (a | a) != a { return 0u8 }                                       /* idempotence (or) */
+    if (a | 0u32) != a { return 0u8 }                                    /* identity (or) */
+    if (a & 0xFFFFFFFFu32) != a { return 0u8 }                           /* identity (and) */
+    if (a ^ 0u32) != a { return 0u8 }                                    /* identity (xor) */
+    if (a & 0u32) != 0u32 { return 0u8 }                                 /* annihilator (and) */
+    if (a | 0xFFFFFFFFu32) != 0xFFFFFFFFu32 { return 0u8 }               /* annihilator (or) */
+    if (a ^ a) != 0u32 { return 0u8 }                                    /* self-inverse */
+    if (a & (a | b)) != a { return 0u8 }                                 /* absorption 1 */
+    if (a | (a & b)) != a { return 0u8 }                                 /* absorption 2 */
+    if (a & (b | c)) != ((a & b) | (a & c)) { return 0u8 }               /* distributivity 1 */
+    if (a | (b & c)) != ((a | b) & (a | c)) { return 0u8 }               /* distributivity 2 */
+    if ((a ^ b) ^ b) != a { return 0u8 }                                 /* XOR cancellation */
+    if (a & b) != (b & a) { return 0u8 }                                 /* commutativity (and) */
+    if (a ^ b) != (b ^ a) { return 0u8 }                                 /* commutativity (xor) */
+    if ((a & b) & c) != (a & (b & c)) { return 0u8 }                     /* associativity (and) */
+    if (((a << 8u32) >> 8u32) & 0xFFFFFFu32) != (a & 0xFFFFFFu32) { return 0u8 }   /* shift-mask */
+    return 1u8
+}
+
+fn bsk_arith_faithful() -> u8 @export {
+    let a : u32 = 0x12345678u32
+    let b : u32 = 0x9ABCDEF0u32
+    if (a + b) != (b + a) { return 0u8 }                                 /* commutativity (+) */
+    if (a + 0u32) != a { return 0u8 }                                    /* additive identity */
+    if (a * 1u32) != a { return 0u8 }                                    /* multiplicative identity */
+    if (a - a) != 0u32 { return 0u8 }                                    /* additive inverse */
+    if (a * 2u32) != (a + a) { return 0u8 }                              /* doubling */
+    if (a << 1u32) != (a * 2u32) { return 0u8 }                          /* shift == multiply by 2 */
+    if (a * 0u32) != 0u32 { return 0u8 }                                 /* multiplicative annihilator */
+    return 1u8
+}

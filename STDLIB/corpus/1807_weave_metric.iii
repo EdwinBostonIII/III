@@ -1,0 +1,64 @@
+/* 1807_weave_metric.iii -- GENESIS MINIMISES THE METRIC THAT MATTERS: total gates vs nonlinear-gate count.
+ *
+ * "Cheapest" depends on the substrate.  For hardware, total gate count.  For ZK / MPC / masked-against-side-channel
+ * crypto, the cost is the count of NONLINEAR gates -- AND and OR (each a multiplication / a constraint); XOR and NOT
+ * are GF(2)-linear and free.  (OR must be counted too: a|b = a^b^(a&b) is nonlinear, and any AND can be rewritten as
+ * OR+NOTs, so counting AND alone would let the synthesiser hide nonlinearity in OR gates.)  Genesis is now
+ * metric-configurable (ws_set_metric), so it invents the optimum for the COST MODEL OF THE TARGET DOMAIN.
+ *
+ *   (1) total-gate metric (0): the min for Ch is its gate-optimal form (2..3 gates).
+ *   (2) nonlinear metric (1): the min for Ch is 1 -- Ch is nonlinear, so >= 1, and the optform achieves exactly one.
+ *   (3) the same function has a STRICTLY smaller nonlinear-min than gate-min: the metric changes the optimum.
+ *   (4) the emitted nonlinear-optimal circuit IS Ch and has exactly one nonlinear gate -- a real, crypto-cheapest form.
+ * Exit 99 = genesis optimises the selected cost model; III invents the form that is cheapest where it is USED. */
+module corpus_1807
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_cost(root: u32, metric: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_saturate(nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_emit(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_set_metric(m: u32) -> i32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_metric() -> u32 from "weave_graph.iii"
+
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+
+fn main() -> u64 {
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let sig_ch : u64 = bb_signature(ref_ch_opt(a, b, c), 3u32)
+
+    /* (1) total-gate metric */
+    ws_set_metric(0u32)
+    if ws_metric() != 0u32 { return 11u64 }
+    if ws_saturate(3u32) != 256u32 { return 12u64 }
+    let g : u32 = ws_recall(sig_ch)
+    if g < 2u32 { return 13u64 }
+    if g > 3u32 { return 14u64 }
+
+    /* (2) nonlinear-gate metric */
+    ws_set_metric(1u32)
+    if ws_saturate(3u32) != 256u32 { return 15u64 }
+    let m : u32 = ws_recall(sig_ch)
+    if m != 1u32 { return 16u64 }
+
+    /* (3) the metric changes the optimum: Ch's nonlinear cost is strictly below its total-gate cost */
+    if m >= g { return 17u64 }
+
+    /* (4) the emitted nonlinear-optimal circuit IS Ch and has exactly one nonlinear gate */
+    let root : u32 = ws_emit(sig_ch, 3u32)
+    if root == WG_GSENT { return 18u64 }
+    if bb_signature(root, 3u32) != sig_ch { return 19u64 }
+    if bb_node_cost(root, 1u32) != 1u32 { return 20u64 }
+
+    return 99u64
+}

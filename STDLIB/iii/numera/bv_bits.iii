@@ -871,3 +871,49 @@ fn bb_node_gate_count(root: u32) -> u32 @export {
     }
     return c
 }
+
+/* PER-CIRCUIT COST under a selectable METRIC.  metric 0 = total gate count (byte-identical to bb_node_gate_count);
+ * metric 1 = NONLINEAR-gate count -- the count of AND and OR gates, which are the GF(2)-NONLINEAR operations (XOR and
+ * NOT are linear/affine, hence free).  This is the cost model that matters for ZK / MPC / masked-against-side-channel
+ * crypto (each nonlinear gate is a multiplication / a constraint).  It MUST count OR as well as AND: a|b = a^b^(a&b)
+ * is nonlinear, and any AND can be rewritten as OR+NOTs (De Morgan), so counting AND alone would let a synthesiser
+ * "hide" nonlinearity in OR gates and report a false zero.  A synthesiser ranking by metric 1 invents the form with
+ * the fewest nonlinear gates -- a DIFFERENT (and, for crypto, the RIGHT) optimum than fewest total gates.
+ * Cone-restricted to the transitive fan-in of root; sharing counted once. */
+const BB_METRIC_GATES  : u32 = 0u32
+const BB_METRIC_NONLIN : u32 = 1u32
+fn bb_node_cost(root: u32, metric: u32) -> u32 @export {
+    if root >= BB_NN { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < BB_NN { BB_GC_MARK[i as u64] = 0u8  i = i + 1u32 }
+    BB_GC_MARK[root as u64] = 1u8
+    let mut idx : u32 = root + 1u32
+    while idx > 0u32 {
+        idx = idx - 1u32
+        if BB_GC_MARK[idx as u64] == 1u8 {
+            let k : u32 = BB_NKIND[idx as u64]
+            if k == EK_NOT { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if k == EK_SHL { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if k == EK_SHR { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if bb_kind_arity2(k) == 1u8 { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8  BB_GC_MARK[BB_NB[idx as u64] as u64] = 1u8 }
+        }
+    }
+    let mut c : u32 = 0u32
+    let mut n : u32 = 0u32
+    while n < BB_NN {
+        if BB_GC_MARK[n as u64] == 1u8 {
+            let k : u32 = BB_NKIND[n as u64]
+            if metric == BB_METRIC_NONLIN {
+                if k == EK_AND { c = c + 1u32 }       /* AND and OR are the GF(2)-nonlinear gates -- count BOTH */
+                if k == EK_OR { c = c + 1u32 }
+            } else {
+                if k == EK_NOT { c = c + 1u32 }
+                if k == EK_SHL { c = c + 1u32 }
+                if k == EK_SHR { c = c + 1u32 }
+                if bb_kind_arity2(k) == 1u8 { c = c + 1u32 }
+            }
+        }
+        n = n + 1u32
+    }
+    return c
+}

@@ -52,6 +52,7 @@ extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.ii
 extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_node_gate_count(root: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_cost(root: u32, metric: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_capacity() -> u32 from "bv_bits.iii"
 /* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
 extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
@@ -486,8 +487,15 @@ var WG_C1    : u32 = 0u32
 var WG_EPOCH : u32 = 0u32
 var WG_BUILTID : [u32; 2048]
 var WG_BUILTEP : [u32; 2048]
+/* the COST METRIC genesis minimises (0 = total gates [default], 1 = nonlinear-gate count = #(AND,OR); XOR/NOT are
+ * GF(2)-linear and free -- the crypto cost model).  Set it BEFORE ws_saturate/ws_synth.  Default 0 -> bb_node_cost
+ * (root,0) == bb_node_gate_count, so the default is identical to the original behaviour. */
+var WG_METRIC : u32 = 0u32
 
 fn ws_realized() -> u32 @export { return WG_GN }
+/* select the cost metric genesis minimises (0 = total gates, 1 = AND-count / multiplicative complexity). */
+fn ws_set_metric(m: u32) -> i32 @export { WG_METRIC = m  return 0i32 }
+fn ws_metric() -> u32 @export { return WG_METRIC }
 
 /* O(1) RETRIEVAL: the minimal gate cost of the function with this signature in the weave's memory; SENT if the
  * weave has not yet realised it.  This is "computing becomes retrieving" -- a future query is a table lookup. */
@@ -513,7 +521,15 @@ fn ws_gen_find(sig: u64) -> u32 {
 fn ws_gen_admit(sig: u64, cost: u32, op: u32, l: u32, r: u32) -> u8 {
     let idx : u32 = ws_gen_find(sig)
     if idx != WG_GSENT {
-        if cost < WG_GCOST[idx as u64] { WG_GCOST[idx as u64] = cost  WG_GOP[idx as u64] = op  WG_GL[idx as u64] = l  WG_GR[idx as u64] = r  return 1u8 }
+        /* RELAX, but keep the recipe DAG ACYCLIC: a cheaper recipe for an EXISTING function may only point to
+         * STRICTLY-EARLIER functions (l < idx, r < idx).  Without this, cost relaxation could re-point f at operands
+         * discovered LATER (higher index) -- which may transitively reference f -- making ws_build_one recurse forever.
+         * New functions (the append path below) always satisfy this since their operands pre-exist.  Leaves carry a
+         * var/const index in l (never relaxed: cost 0 is minimal), so the guard never misfires on them. */
+        if cost < WG_GCOST[idx as u64] { if l < idx { if r < idx {
+            WG_GCOST[idx as u64] = cost  WG_GOP[idx as u64] = op  WG_GL[idx as u64] = l  WG_GR[idx as u64] = r
+            return 1u8
+        } } }
         return 0u8
     }
     if WG_GN >= WG_GMAX { return 0u8 }
@@ -575,18 +591,18 @@ fn ws_gen_round(nvars: u32) -> u32 {
     while i < cur {
         ws_arena_begin(nvars)
         let nn : u32 = bb_intern_not(ws_build_one(i))
-        if ws_gen_admit(bb_signature(nn, nvars), bb_node_gate_count(nn), WG_GNOT, i, 0u32) == 1u8 { ch = ch + 1u32 }
+        if ws_gen_admit(bb_signature(nn, nvars), bb_node_cost(nn, WG_METRIC), WG_GNOT, i, 0u32) == 1u8 { ch = ch + 1u32 }
         let mut j : u32 = i
         while j < cur {
             ws_arena_begin(nvars)
             let bi : u32 = ws_build_one(i)
             let bj : u32 = ws_build_one(j)
             let na : u32 = bb_intern_and(bi, bj)
-            if ws_gen_admit(bb_signature(na, nvars), bb_node_gate_count(na), WG_GAND, i, j) == 1u8 { ch = ch + 1u32 }
+            if ws_gen_admit(bb_signature(na, nvars), bb_node_cost(na, WG_METRIC), WG_GAND, i, j) == 1u8 { ch = ch + 1u32 }
             let no : u32 = bb_intern_or(bi, bj)
-            if ws_gen_admit(bb_signature(no, nvars), bb_node_gate_count(no), WG_GOR, i, j) == 1u8 { ch = ch + 1u32 }
+            if ws_gen_admit(bb_signature(no, nvars), bb_node_cost(no, WG_METRIC), WG_GOR, i, j) == 1u8 { ch = ch + 1u32 }
             let nx : u32 = bb_intern_xor(bi, bj)
-            if ws_gen_admit(bb_signature(nx, nvars), bb_node_gate_count(nx), WG_GXOR, i, j) == 1u8 { ch = ch + 1u32 }
+            if ws_gen_admit(bb_signature(nx, nvars), bb_node_cost(nx, WG_METRIC), WG_GXOR, i, j) == 1u8 { ch = ch + 1u32 }
             j = j + 1u32
         }
         i = i + 1u32

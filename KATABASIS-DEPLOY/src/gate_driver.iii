@@ -49,6 +49,8 @@ extern @abi(c-msvc-x64) fn cck_for(hv_present: u64) -> u32 from "crystal_cap_ker
 extern @abi(c-msvc-x64) fn cck_grants(caps: u32, bit: u32) -> u8 from "crystal_cap_kernel.iii"
 /* --- staged typing: Ousia folded into the live Crystal => Hypostasis (kernel incarnation; composes quine6_kernel) --- */
 extern @abi(c-msvc-x64) fn stk_bind(ousia: u32, crystal: u32) -> u32 from "stage_kernel.iii"
+/* --- Tense: the data-lifetime state machine (kernel incarnation) --- */
+extern @abi(c-msvc-x64) fn tnk_step(tense: u32, state: u32, op: u32) -> u32 from "tense_kernel.iii"
 
 /* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
@@ -111,6 +113,7 @@ fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
     if code == 0x222014u32 { need_out = 16u64 ; need_in = 32u64 }   /* IOCTL_DESCENT_PROOF: in 4 x u64, out 2 x u64 */
     if code == 0x222018u32 { need_out = 32u64 }                     /* IOCTL_VOICE_GATE: 4 x u64 decision, no input */
     if code == 0x22201Cu32 { need_out = 16u64 ; need_in = 8u64 }    /* IOCTL_STAGE_BIND: in 1 x u64 ousia, out 2 x u64 */
+    if code == 0x222020u32 { need_out = 8u64 ; need_in = 24u64 }    /* IOCTL_TENSE: in 3 x u64 (tense,state,op), out 1 x u64 */
     if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
     if buf == 0u64 { return 0u32 }
     if wdm_out_len(stk) < need_out { return 0u32 }
@@ -333,6 +336,17 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         (buf as *u64)[1u64] = sb_crystal as u64
         status = 0u64
         info   = 16u64
+    }
+    if code2 == 0x222020u32 {
+        /* IOCTL_TENSE (READ-ONLY): answer a data-lifetime transition at Ring 0.  in: [0]=tense [1]=state [2]=op.
+           out: [0]=next state (0xFFFFFFFF = T_REJECT, an illegal transition: a post-bind write to a Perfect value,
+           a second read of an Aorist value, etc.).  Data-lifetime safety becomes a gate decision. */
+        let tn_tense : u32 = (buf as *u64)[0u64] as u32
+        let tn_state : u32 = (buf as *u64)[1u64] as u32
+        let tn_op    : u32 = (buf as *u64)[2u64] as u32
+        (buf as *u64)[0u64] = tnk_step(tn_tense, tn_state, tn_op) as u64
+        status = 0u64
+        info   = 8u64
     }
     wdm_set_status(irp, status, info)
     iii_kio_complete_request(irp, 0u64)

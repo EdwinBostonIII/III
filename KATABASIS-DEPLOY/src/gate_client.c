@@ -19,6 +19,35 @@
 #define IOCTL_DESCENT_PROOF   0x222014u   /* read-only: verify a proof-carrying rung at Ring 0 (quine6_kernel) */
 #define IOCTL_VOICE_GATE      0x222018u   /* read-only: the capability-typed-effect decision (voice + crystal_cap) */
 #define IOCTL_STAGE_BIND      0x22201Cu   /* read-only: Ousia -> Hypostasis (machine-specific content-address) */
+#define IOCTL_TENSE           0x222020u   /* read-only: data-lifetime transition (Aorist/Perfect/Present) */
+
+/* Ring-0 lifetime state machine: a battery of key transitions proving the discipline -- Aorist is use-once,
+   Perfect is immutable+reusable, Present is mutable.  Each (tense,state,op) -> next state; 0xFFFFFFFF = T_REJECT. */
+static uint64_t tense_step(HANDLE h, uint64_t tense, uint64_t state, uint64_t op)
+{
+    uint64_t io[3] = { tense, state, op }; DWORD ret = 0;
+    DeviceIoControl(h, IOCTL_TENSE, io, 24, io, 8, &ret, NULL);
+    return io[0];
+}
+static int probe_tense(HANDLE h)
+{
+    const uint64_t REJ = 0xFFFFFFFFull;
+    /* AORIST(0): BOUND(1)+CONSUME(3)->USED(2); then USED+READ -> REJECT (use-once). */
+    uint64_t aorist_consume = tense_step(h, 0,1,3);
+    uint64_t aorist_reread  = tense_step(h, 0,2,1);
+    /* PERFECT(1): BOUND+WRITE -> REJECT (immutable); BOUND+READ -> BOUND(1) (reusable). */
+    uint64_t perfect_write  = tense_step(h, 1,1,0);
+    uint64_t perfect_read   = tense_step(h, 1,1,1);
+    /* PRESENT(2): BOUND+WRITE -> BOUND(1) (mutable). */
+    uint64_t present_write  = tense_step(h, 2,1,0);
+    int ok = (aorist_consume==2) && (aorist_reread==REJ) && (perfect_write==REJ) && (perfect_read==1) && (present_write==1);
+    printf("  Ring-0 lifetime state machine: Aorist consume->%llu reread->%s ; Perfect write->%s read->%llu ; Present write->%llu\n",
+           (unsigned long long)aorist_consume, (aorist_reread==REJ?"REJECT":"?"),
+           (perfect_write==REJ?"REJECT":"?"), (unsigned long long)perfect_read, (unsigned long long)present_write);
+    if (ok) { printf("    => data-lifetime safety is a Ring-0 decision (tense live: use-once / immutable / mutable enforced).\n"); return 0; }
+    printf("    => UNEXPECTED: a lifetime transition did not match the discipline.\n");
+    return 1;
+}
 
 /* Ring-0 staged typing: fold an Ousia token into this machine's live crystal -> a Hypostasis content-address.
    Deterministic per (Ousia, machine); distinct Ousiai give distinct Hypostases; the folded crystal matches the
@@ -225,6 +254,8 @@ int main(void)
     probe_voice(h); /* Ring-0: the capability-typed-effect decision (voice + crystal_cap live) */
     printf("\n");
     probe_stage(h); /* Ring-0: Ousia -> Hypostasis (stage live; machine-specific content-address) */
+    printf("\n");
+    probe_tense(h); /* Ring-0: data-lifetime state machine (tense live) -- the 8th and last mechanism */
     printf("\n");
     /* family=2 (F2 WriteMetal), tk=1, target 0x20000=SHARED / 0x1000=HSAVE-brick, hexad=728 (all-POS),
        wcap=0x200000 (WriteMetal right), dcap=0x800000 (Descend-only -> wrong for WriteMetal). */

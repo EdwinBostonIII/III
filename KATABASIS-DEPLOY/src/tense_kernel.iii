@@ -1,0 +1,46 @@
+/* tense_kernel.iii -- the kernel (cg_r0) incarnation of the Tense lifetime state machine.
+ *
+ * The cg_r0-safe subset of numera/tense: a value's lifetime as a transition function over states
+ * {FRESH=0, BOUND=1, USED=2} under ops {WRITE=0, READ=1, BIND=2, CONSUME=3}, parameterized by Tense:
+ *   AORIST  (0) -- ephemeral, USE-ONCE: a read or consume after binding spends it (-> USED).
+ *   PERFECT (1) -- immutable after bind, PERSISTENT: many reads, never a post-bind write, never consumed.
+ *   PRESENT (2) -- mutable current: write + read freely while bound; consume ends it.
+ * An illegal transition returns T_REJECT.  PURE (no *u8, no arrays).  This makes data-lifetime safety a Ring-0
+ * decision the gate can answer for R3.  Ring R0. */
+module tense_kernel
+
+const T_REJECT : u32 = 0xFFFFFFFFu32
+
+fn tnk_step(tense: u32, state: u32, op: u32) -> u32 @export {
+    if state == 2u32 { return T_REJECT }                 /* USED: terminal in every tense */
+    if op == 2u32 {                                      /* BIND */
+        if state == 0u32 { return 1u32 }                 /* FRESH -> BOUND */
+        return T_REJECT                                  /* re-bind illegal */
+    }
+    if state == 0u32 {                                   /* FRESH (pre-bind): only WRITE is legal */
+        if op == 0u32 { return 0u32 }
+        return T_REJECT
+    }
+    /* state == BOUND from here */
+    if tense == 0u32 {                                   /* AORIST: use-once */
+        if op == 1u32 { return 2u32 }                    /* READ spends it -> USED */
+        if op == 3u32 { return 2u32 }                    /* CONSUME -> USED */
+        return T_REJECT                                  /* no post-bind WRITE */
+    }
+    if tense == 1u32 {                                   /* PERFECT: immutable + persistent */
+        if op == 1u32 { return 1u32 }                    /* READ ok, stays BOUND (reusable) */
+        return T_REJECT                                  /* no WRITE (immutable), no CONSUME (persists) */
+    }
+    if tense == 2u32 {                                   /* PRESENT: mutable current */
+        if op == 0u32 { return 1u32 }                    /* WRITE ok, stays BOUND (mutable) */
+        if op == 1u32 { return 1u32 }                    /* READ ok */
+        if op == 3u32 { return 2u32 }                    /* CONSUME -> USED */
+        return T_REJECT
+    }
+    return T_REJECT
+}
+
+fn tnk_can_write(tense: u32, state: u32) -> u8 @export {
+    if tnk_step(tense, state, 0u32) == T_REJECT { return 0u8 }
+    return 1u8
+}

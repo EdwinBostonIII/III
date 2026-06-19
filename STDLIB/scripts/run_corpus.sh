@@ -1435,6 +1435,8 @@ declare -A EXPECTED=(
     [1774_weave_endtoend]=99
     # COST-TRUE ADOPTION (fork a): the discovered Ch/Maj optform (fewer ANDs, measured by bb_count_and) is ADOPTED on gate-count/zk targets, abstained on x86 -- cost-true, soundness-gated.
     [1775_weave_adopt]=99
+    # THE RATCHET (fork b): the lemma library makes re-discovery FREE -- pass 1 forges, pass 2 cites (0 kernel work); search shrinks as the commons grows.
+    [1776_weave_ratchet]=99
 )
 
 PASS=0

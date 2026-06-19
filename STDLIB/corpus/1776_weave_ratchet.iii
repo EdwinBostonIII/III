@@ -1,0 +1,44 @@
+/* 1776_weave_ratchet.iii -- THE RATCHET: re-discovery is FREE; search shrinks as the lemma library grows.
+ *
+ * The Phase III lemma-forge promise: "every later search cites it by hash instead of re-deriving it, so the
+ * search space shrinks monotonically as the library grows."  gilm makes it concrete + measurable: the first
+ * pass over a set of targets FORGES (kernel work); a second pass over the SAME targets does ZERO forges -- each
+ * is cited from the memo.  The commons doesn't just accumulate; it makes the system FASTER as it grows.
+ *
+ *   pass 1: forge Ch, Maj, and the rotation-duality family -> 3 forges, 0 cites, library size 3
+ *   pass 2: the SAME three -> 0 NEW forges, 3 cites (re-discovery is free)
+ *   the cited results are correct: Ch optform cost = 3, the duality family = 31 members
+ * Exit 99 = the ratchet holds; the grown library short-circuits re-discovery. */
+module corpus_1776
+
+extern @abi(c-msvc-x64) fn gilm_reset() -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_forged() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_cited() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_size() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_forge_cited(kind: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_rotdual_count_cited() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    gilm_reset()
+
+    /* pass 1 -- all three targets are unknown -> 3 forges */
+    gilw_forge_cited(1u32)
+    gilw_forge_cited(2u32)
+    gild_rotdual_count_cited()
+    if gilm_forged() != 3u64 { return 1u64 }
+    if gilm_cited() != 0u64 { return 2u64 }
+    if gilm_size() != 3u64 { return 3u64 }
+
+    /* pass 2 -- the same three are now in the library -> 0 new forges, 3 cites */
+    gilw_forge_cited(1u32)
+    gilw_forge_cited(2u32)
+    gild_rotdual_count_cited()
+    if gilm_forged() != 3u64 { return 4u64 }              /* the ratchet: NO new kernel work */
+    if gilm_cited() != 3u64 { return 5u64 }
+
+    /* the cited results are the true ones */
+    if gilw_forge_cited(1u32) != 3u32 { return 6u64 }     /* Ch optform cost = 3, cited */
+    if gild_rotdual_count_cited() != 31u64 { return 7u64 }/* the full duality family = 31, cited */
+
+    return 99u64
+}

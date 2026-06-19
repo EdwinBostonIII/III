@@ -843,3 +843,56 @@ fn gild_adopt_maj(target: u32) -> i32 @export {
     }
     return 0i32
 }
+
+/* ============================================================================================================
+ * THE RATCHET (gilm) -- the lemma library that makes re-discovery FREE: search shrinks as the commons grows.
+ *
+ * Every forged-and-proven law is deposited in a memo keyed by its target.  A later request for a KNOWN target
+ * returns the cached result with ZERO kernel work (a cite); only an UNKNOWN target pays a forge.  This is the
+ * Phase III lemma-forge ratchet made concrete: "every later search cites it by hash instead of re-deriving it,
+ * so the search space shrinks monotonically as the lemma library grows."  Counters (gilm_forged/gilm_cited)
+ * make the ratchet measurable -- pass 1 forges, pass 2 over the same targets does ZERO forges. */
+var GILM_KEYS   : [u32; 64]
+var GILM_VALS   : [i64; 64]
+var GILM_N      : u64 = 0u64
+var GILM_FORGED : u64 = 0u64
+var GILM_CITED  : u64 = 0u64
+
+fn gilm_reset() -> i32 @export { GILM_N = 0u64 ; GILM_FORGED = 0u64 ; GILM_CITED = 0u64 ; return 0i32 }
+fn gilm_forged() -> u64 @export { return GILM_FORGED }
+fn gilm_cited() -> u64 @export { return GILM_CITED }
+fn gilm_size() -> u64 @export { return GILM_N }
+
+fn gilm_lookup(key: u32) -> i64 {
+    let mut i : u64 = 0u64
+    while i < GILM_N {
+        if GILM_KEYS[i] == key { GILM_CITED = GILM_CITED + 1u64 ; return GILM_VALS[i] }
+        i = i + 1u64
+    }
+    return -999i64
+}
+fn gilm_store(key: u32, val: i64) -> i32 {
+    if GILM_N < 64u64 { GILM_KEYS[GILM_N] = key ; GILM_VALS[GILM_N] = val ; GILM_N = GILM_N + 1u64 }
+    return 0i32
+}
+
+/* cite-before-forge for the round-function forge: a known kind is cited (no kernel work), else forged once. */
+fn gilw_forge_cited(kind: u32) -> u32 @export {
+    let key : u32 = 0x10000u32 | kind
+    let hit : i64 = gilm_lookup(key)
+    if hit != -999i64 { return hit as u32 }                /* CITED -- zero kernel work */
+    GILM_FORGED = GILM_FORGED + 1u64
+    let cost : u32 = gilw_forge(kind)                      /* FORGE -- the only kernel work */
+    gilm_store(key, cost as i64)
+    return cost
+}
+/* cite-before-forge for the (expensive ~500-SAT) rotation-duality family discovery. */
+fn gild_rotdual_count_cited() -> u64 @export {
+    let key : u32 = 0x20001u32
+    let hit : i64 = gilm_lookup(key)
+    if hit != -999i64 { return hit as u64 }
+    GILM_FORGED = GILM_FORGED + 1u64
+    let c : u64 = gild_rotdual_count()
+    gilm_store(key, c as i64)
+    return c
+}

@@ -1,0 +1,28 @@
+/* behavioral_fp_kernel.iii -- the kernel (cg_r0) incarnation of the behavioral fingerprint.
+ *
+ * The cg_r0-correct counterpart of katabasis/behavioral_fp: reduce a canonical op battery (logic + arithmetic +
+ * shift) to six-state symbols held one-per-u64-slot (cg_r0-correct, no *u8), then content-address them via
+ * quine6_kernel.  Because q6k(slots) == q6(packed) for the same symbol sequence, this in-kernel fingerprint EQUALS
+ * the user-mode behavioral_fp for the same battery -- so a challenger can compare them.  Used by the gate's
+ * IOCTL_BEHAVIORAL_FP to report what the machine actually DOES (functional identity), for drift/migration/tamper
+ * detection.  Composes quine6_kernel.  Ring R0. */
+module behavioral_fp_kernel
+
+extern @abi(c-msvc-x64) fn q6k_addr24(slots_ptr: u64, n: u32) -> u32 from "quine6_kernel.iii"
+
+var BFPK_SLOTS : [u64; 8]
+
+fn bfpk_compute() -> u32 @export {
+    let a : u32 = 0xA5A5A5A5u32
+    let b : u32 = 0x3C3C3C3Cu32
+    let p : *u64 = (&BFPK_SLOTS as u64) as *u64
+    p[0u64] = ((a & b) % 6u32) as u64
+    p[1u64] = ((a | b) % 6u32) as u64
+    p[2u64] = ((a ^ b) % 6u32) as u64
+    p[3u64] = ((a + b) % 6u32) as u64
+    p[4u64] = ((a * 3u32) % 6u32) as u64
+    p[5u64] = ((a >> 5u32) % 6u32) as u64
+    p[6u64] = (((~a) & b) % 6u32) as u64
+    p[7u64] = ((b * b) % 6u32) as u64
+    return q6k_addr24(&BFPK_SLOTS as u64, 8u32)
+}

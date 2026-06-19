@@ -38,6 +38,11 @@ extern @abi(c-msvc-x64) fn pci_bar_base64(lo: u32, hi: u32) -> u64 from "pci_enu
 /* --- the behavioral floor anchor (kernel incarnation; more basal than CPUID) --- */
 extern @abi(c-msvc-x64) fn bsk_logic_faithful() -> u8 from "behavioral_seed_kernel.iii"
 extern @abi(c-msvc-x64) fn bsk_arith_faithful() -> u8 from "behavioral_seed_kernel.iii"
+/* --- the behavioral fingerprint (kernel incarnation; composes quine6_kernel) --- */
+extern @abi(c-msvc-x64) fn bfpk_compute() -> u32 from "behavioral_fp_kernel.iii"
+/* --- proof-carrying descent (kernel incarnation; composes quine6_kernel) --- */
+extern @abi(c-msvc-x64) fn dpk_proof(action: u32, precond: u32, prior_proof: u32) -> u32 from "descent_proof_kernel.iii"
+extern @abi(c-msvc-x64) fn dpk_admit(action: u32, precond: u32, prior_proof: u32, claimed_proof: u32) -> u8 from "descent_proof_kernel.iii"
 
 /* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
@@ -96,6 +101,8 @@ fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
     if code == 0x222004u32 { need_out = 32u64 }
     if code == 0x222008u32 { need_out = 32u64 }      /* IOCTL_ATTEST: 32-byte measurement out, no input */
     if code == 0x22200Cu32 { need_out = 56u64 }      /* IOCTL_PCI_ENUM: 7 x u64 derived GPU facts, no input */
+    if code == 0x222010u32 { need_out = 8u64 }       /* IOCTL_BEHAVIORAL_FP: 1 x u64 behavioral fingerprint, no input */
+    if code == 0x222014u32 { need_out = 16u64 ; need_in = 32u64 }   /* IOCTL_DESCENT_PROOF: in 4 x u64, out 2 x u64 */
     if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
     if buf == 0u64 { return 0u32 }
     if wdm_out_len(stk) < need_out { return 0u32 }
@@ -259,6 +266,30 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         if bdf != 0xFFFFFFFFu32 { pci_report(bdf, buf) }
         status = 0u64
         info   = 56u64
+    }
+    if code2 == 0x222010u32 {
+        /* IOCTL_BEHAVIORAL_FP (READ-ONLY): report what the machine actually DOES -- the behavioral fingerprint
+           (content-address of a canonical op battery, via the cg_r0-correct quine6_kernel).  A challenger compares
+           it across time/machines to detect drift, migration, or a functionally-divergent (dishonest) host.  Pure
+           computation, no metal writes.  out: [0]=behavioral fingerprint (24-bit). */
+        (buf as *u64)[0u64] = bfpk_compute() as u64
+        status = 0u64
+        info   = 8u64
+    }
+    if code2 == 0x222014u32 {
+        /* IOCTL_DESCENT_PROOF (READ-ONLY): verify a proof-carrying rung at Ring 0.  in: [0]=action [1]=precond
+           [2]=prior_proof [3]=claimed_proof.  Reads ALL inputs first, then writes out: [0]=admit(1/0) [1]=the
+           recomputed proof (so R3 can obtain a rung's proof, then re-submit it / a forgery, and see admit flip). */
+        let dp_action : u32 = (buf as *u64)[0u64] as u32
+        let dp_pre    : u32 = (buf as *u64)[1u64] as u32
+        let dp_prior  : u32 = (buf as *u64)[2u64] as u32
+        let dp_claim  : u32 = (buf as *u64)[3u64] as u32
+        let dp_p      : u32 = dpk_proof(dp_action, dp_pre, dp_prior)
+        let dp_ok     : u8  = dpk_admit(dp_action, dp_pre, dp_prior, dp_claim)
+        (buf as *u64)[0u64] = dp_ok as u64
+        (buf as *u64)[1u64] = dp_p as u64
+        status = 0u64
+        info   = 16u64
     }
     wdm_set_status(irp, status, info)
     iii_kio_complete_request(irp, 0u64)

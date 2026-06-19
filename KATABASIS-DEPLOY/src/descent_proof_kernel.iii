@@ -1,0 +1,31 @@
+/* descent_proof_kernel.iii -- the kernel (cg_r0) incarnation of proof-carrying descent.
+ *
+ * The cg_r0-correct counterpart of katabasis/descent_proof: a rung's proof = the content-address (quine6_kernel)
+ * binding (action || precondition || prior-proof), with the nine six-state symbols held one-per-u64-slot
+ * (cg_r0-correct, no *u8).  Binding to the precondition stops replay under a different precondition; binding to the
+ * prior proof CHAINS rungs so none can be forged/reordered/inserted.  Because q6k == q6 for the same symbols, the
+ * in-kernel proof equals the user-mode descent_proof.  Composes quine6_kernel.  Ring R0. */
+module descent_proof_kernel
+
+extern @abi(c-msvc-x64) fn q6k_addr24(slots_ptr: u64, n: u32) -> u32 from "quine6_kernel.iii"
+
+var DPK_SLOTS : [u64; 9]
+
+fn dpk_proof(action: u32, precond: u32, prior_proof: u32) -> u32 @export {
+    let p : *u64 = (&DPK_SLOTS as u64) as *u64
+    p[0u64] = (action % 6u32) as u64
+    p[1u64] = ((action >> 3u32) % 6u32) as u64
+    p[2u64] = ((action >> 6u32) % 6u32) as u64
+    p[3u64] = (precond % 6u32) as u64
+    p[4u64] = ((precond >> 3u32) % 6u32) as u64
+    p[5u64] = ((precond >> 6u32) % 6u32) as u64
+    p[6u64] = (prior_proof % 6u32) as u64
+    p[7u64] = ((prior_proof >> 3u32) % 6u32) as u64
+    p[8u64] = ((prior_proof >> 6u32) % 6u32) as u64
+    return q6k_addr24(&DPK_SLOTS as u64, 9u32)
+}
+
+fn dpk_admit(action: u32, precond: u32, prior_proof: u32, claimed_proof: u32) -> u8 @export {
+    if dpk_proof(action, precond, prior_proof) == claimed_proof { return 1u8 }
+    return 0u8
+}

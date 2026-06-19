@@ -15,6 +15,49 @@
 #define IOCTL_KATABASIS_ADMIT 0x222000u   /* CTL_CODE(FILE_DEVICE_UNKNOWN,0x800,METHOD_BUFFERED,FILE_ANY_ACCESS) */
 #define IOCTL_SVM_PROBE       0x222004u   /* Ring-1 I0: read-only SVM capability report */
 #define IOCTL_PCI_ENUM        0x22200Cu   /* read-only: derive the GPU facts from live PCI config space (CF8h/CFCh) */
+#define IOCTL_BEHAVIORAL_FP   0x222010u   /* read-only: the machine's behavioral fingerprint (quine6_kernel) */
+#define IOCTL_DESCENT_PROOF   0x222014u   /* read-only: verify a proof-carrying rung at Ring 0 (quine6_kernel) */
+
+/* Ring-0 proof-carrying descent: obtain a rung's proof from the kernel, then prove a VALID proof admits and a
+   FORGED one is rejected -- in-kernel verification, content-address-bound to the rung. */
+static int probe_dp(HANDLE h)
+{
+    DWORD ret = 0;
+    uint64_t a[4] = { 0x2A, 0x13, 0, 0 };               /* action, precond, prior, claimed(dummy) */
+    if (!DeviceIoControl(h, IOCTL_DESCENT_PROOF, a, (DWORD)sizeof(a), a, 16, &ret, NULL)) {
+        printf("  DESCENT_PROOF DeviceIoControl FAILED (err=%lu)\n", GetLastError()); return 1; }
+    uint64_t proof = a[1];                               /* the kernel's recomputed proof for this rung */
+    uint64_t b[4] = { 0x2A, 0x13, 0, proof };            /* valid claim */
+    DeviceIoControl(h, IOCTL_DESCENT_PROOF, b, (DWORD)sizeof(b), b, 16, &ret, NULL);
+    int valid_ok = (b[0] == 1);
+    uint64_t c[4] = { 0x2A, 0x13, 0, proof ^ 1 };        /* forged claim */
+    DeviceIoControl(h, IOCTL_DESCENT_PROOF, c, (DWORD)sizeof(c), c, 16, &ret, NULL);
+    int forged_rej = (c[0] == 0);
+    printf("  Ring-0 proof-carrying descent: proof=0x%06llx  valid-admits=%d forged-rejects=%d\n",
+           (unsigned long long)proof, valid_ok, forged_rej);
+    if (valid_ok && forged_rej) { printf("    => the gate verifies proof-carrying rungs at Ring 0 (descent_proof live).\n"); return 0; }
+    printf("    => UNEXPECTED: proof verification did not behave as required.\n");
+    return 1;
+}
+
+/* Ring-0 behavioral fingerprint: what the machine actually DOES on a canonical op battery, content-addressed via
+   the cg_r0-correct quine6_kernel.  Deterministic + non-degenerate; a challenger compares it across time/machines
+   to detect drift/migration/dishonest emulation. */
+static int probe_bfp(HANDLE h)
+{
+    uint64_t out1[1] = { 0 }, out2[1] = { 0 };
+    DWORD ret = 0;
+    BOOL ok1 = DeviceIoControl(h, IOCTL_BEHAVIORAL_FP, NULL, 0, out1, (DWORD)sizeof(out1), &ret, NULL);
+    BOOL ok2 = DeviceIoControl(h, IOCTL_BEHAVIORAL_FP, NULL, 0, out2, (DWORD)sizeof(out2), &ret, NULL);
+    if (!ok1 || !ok2) { printf("  BEHAVIORAL_FP DeviceIoControl FAILED (err=%lu)\n", GetLastError()); return 1; }
+    int det = (out1[0] == out2[0]);
+    int nz  = (out1[0] != 0);
+    printf("  Ring-0 behavioral fingerprint: 0x%06llx   deterministic=%d non-degenerate=%d\n",
+           (unsigned long long)out1[0], det, nz);
+    if (det && nz) { printf("    => the gate reports a stable behavioral identity (quine6_kernel live at Ring 0).\n"); return 0; }
+    printf("    => UNEXPECTED: fingerprint not stable/non-zero.\n");
+    return 1;
+}
 
 static const char *VN[4] = { "OK", "REJECT_SEAL", "REJECT_CAP", "REJECT_HEXAD" };
 
@@ -124,6 +167,10 @@ int main(void)
     probe_svm(h);   /* Ring-1 I0: report SVM ground truth (read-only) before the gate cases */
     printf("\n");
     probe_pci(h);   /* Ring-0: derive census's GPU facts from live PCI config space (read-only) */
+    printf("\n");
+    probe_bfp(h);   /* Ring-0: the machine's behavioral fingerprint (quine6_kernel live) */
+    printf("\n");
+    probe_dp(h);    /* Ring-0: verify proof-carrying rungs (descent_proof live) */
     printf("\n");
     /* family=2 (F2 WriteMetal), tk=1, target 0x20000=SHARED / 0x1000=HSAVE-brick, hexad=728 (all-POS),
        wcap=0x200000 (WriteMetal right), dcap=0x800000 (Descend-only -> wrong for WriteMetal). */

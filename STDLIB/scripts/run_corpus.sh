@@ -1477,6 +1477,8 @@ declare -A EXPECTED=(
     [1795_weave_fullness]=99
     # THE MELTED WEAVE (POC): canonical truth-table SIGNATURE melts judge+width+i-bridge+generator for the bit-independent fragment (bb_sig_equal, no SAT, width-agnostic, sound vs bb_equal); the TOPOLOGICAL BIFURCATOR (bb_has_coupling) keeps SAT where bit-coupling forbids the melt.
     [1796_weave_melt]=99
+    # THE UNIVERSAL REVERSIBLE PRIMITIVE in the melted weave: the Toffoli/CCNOT third output (c^(a&b)) is bit-independent, so its reversibility (self-inverse) + universality (Toffoli(a,b,1)==NAND) are SIGNATURE facts (no SAT); agrees with primweb's SAT proofs.
+    [1797_weave_toffoli]=99
 )
 
 PASS=0

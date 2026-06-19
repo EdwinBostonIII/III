@@ -30,6 +30,7 @@ module numera_weave_graph
 
 extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
@@ -47,6 +48,8 @@ extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_rot_duality(k: u64) -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_arx_atom_invertible() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_toffoli_self_inverse() -> u8 from "primweb.iii"
+extern @abi(c-msvc-x64) fn pw_toffoli_is_nand() -> u8 from "primweb.iii"
 
 const WG_NEITHER : u32 = 0u32
 const WG_TRUE    : u32 = 1u32
@@ -288,6 +291,60 @@ fn ws_chi_nontrivial() -> u8 @export {
  * INDEXES that theorem: 1 iff the ARX core every ChaCha/Blake2 mix factors through is the proven reversible atom.
  * This is the deepest cross-primitive strand: two borrowed names, one proven core. */
 fn ws_arx_core_proven() -> u8 @export { return pw_arx_atom_invertible() }
+
+/* ============================================================================================================
+ * THE UNIVERSAL REVERSIBLE PRIMITIVE, MELTED: the Toffoli / CCNOT gate (a,b,c) -> (a, b, c ^ (a&b)).  Its third
+ * output is c ^ (a&b) -- a BIT-INDEPENDENT 3-input function, so the melt handles it WITHOUT SAT: its defining
+ * properties are truth-table SIGNATURE facts.  This is the gate that makes III's logic isomorphic to reversible
+ * computation (Landauer ~zero-heat), and the weave now holds it as a node typed by the melted judge, indexing
+ * primweb's existing SAT proofs (anti-island). */
+fn ws_toffoli(a: u32, b: u32, c: u32) -> u32 { return bb_xor(c, bb_and(a, b)) }      /* the third output */
+
+/* REVERSIBILITY, by signature: applying the Toffoli third-output twice returns c -- a SELF-INVERSE permutation.
+ * (c ^ (a&b)) ^ (a&b) == c.  Proven by SIGNATURE IDENTITY over 3 inputs (no SAT): the universal reversible gate's
+ * reversibility is a truth-table fact, melted.  Returns 1 iff self-inverse. */
+fn ws_toffoli_selfinverse() -> u8 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let once  : u32 = ws_toffoli(a, b, c)
+    let twice : u32 = ws_toffoli(a, b, once)
+    return bb_sig_equal(twice, c, 3u32)                 /* twice == c  ->  self-inverse */
+}
+
+/* UNIVERSALITY, by signature: with c = 1 (all ones), the Toffoli third output is 1 ^ (a&b) = NOT(a&b) = NAND,
+ * which is functionally complete -- so reversible computation expresses ANY Boolean function.  Proven by signature
+ * identity over the 2 free inputs (no SAT).  Returns 1 iff Toffoli(a,b,1) == NAND(a,b). */
+fn ws_toffoli_is_nand() -> u8 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let ones : u32 = bb_const(0xFFu64)                  /* c = 1 on every signature row */
+    let toff : u32 = ws_toffoli(a, b, ones)             /* 1 ^ (a&b) */
+    let nand : u32 = bb_not(bb_and(a, b))
+    return bb_sig_equal(toff, nand, 2u32)
+}
+
+/* the Toffoli is bit-independent (only AND/XOR) -> the melt's signature route applies (no bit-coupling). */
+fn ws_toffoli_bit_independent() -> u8 @export {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    ws_toffoli(a, b, c)
+    return ws_is_bit_independent()
+}
+
+/* INDEX primweb: confirm the weave's signature-melted Toffoli facts AGREE with primweb's SAT proofs
+ * (pw_toffoli_self_inverse, pw_toffoli_is_nand) -- the melt and the judge reach the same truth, the melt for free. */
+fn ws_toffoli_agrees_primweb() -> u8 @export {
+    if ws_toffoli_selfinverse() != 1u8 { return 0u8 }
+    if pw_toffoli_self_inverse() != 1u8 { return 0u8 }
+    if ws_toffoli_is_nand() != 1u8 { return 0u8 }
+    if pw_toffoli_is_nand() != 1u8 { return 0u8 }
+    return 1u8
+}
 
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     let p : *u8 = (base + off) as *u8

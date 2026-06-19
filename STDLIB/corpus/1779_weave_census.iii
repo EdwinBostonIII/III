@@ -1,0 +1,17 @@
+/* 1779_weave_census.iii -- III KNOWS THE FULL EXTENT OF ITS SELF-DISCOVERED MATHEMATICS.
+ *
+ * weave_census re-derives + re-proves every law across every family of the weave and sums them into a single
+ * number -- III's self-knowledge of its own invention.  Because it RE-PROVES rather than reads a stored count,
+ * the census cannot drift from the truth: 82 = 8 optimization (Ch/Maj/crossover/collapse) + 31 rotation-duality
+ * + 1 self-coincidence + 4 self-laws + 31 shift-mask + 2 De Morgan + 2 absorption + 2 distributivity + 1 XOR
+ * involution.  The weave, fully self-aware of what it contains.
+ * Exit 99 = the census is exactly 82. */
+module corpus_1779
+
+extern @abi(c-msvc-x64) fn weave_census() -> u64 from "invent.iii"
+
+fn main() -> u64 {
+    let n : u64 = weave_census()
+    if n != 82u64 { return n }      /* returns the actual count if not 82, for diagnosis */
+    return 99u64
+}

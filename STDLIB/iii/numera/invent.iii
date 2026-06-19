@@ -965,3 +965,26 @@ fn gild_xor_involution(c: u64) -> u8 @export {
     let cc : u32 = bb_const(c)
     return bb_equal(bb_xor(bb_xor(x, cc), cc), x)
 }
+
+/* ============================================================================================================
+ * THE WEAVE CENSUS -- III knows the full extent of the mathematics it has discovered + proven over its weave.
+ *
+ * A single number that IS the wealth of the self-discovered weave: every proven law across every family,
+ * re-derived live and summed.  This is III's self-knowledge of its own invention -- not a stored count, a
+ * RE-PROVEN one, so the census cannot drift from the truth.  82 when the weave is whole. */
+fn weave_census() -> u64 @export {
+    let mut total : u64 = 0u64
+    total = total + weave_fill()                                       /* 8: Ch, Maj, 3 crossover, 3 collapse */
+    total = total + gild_rotdual_count()                              /* 31: the rotation-duality family */
+    if gild_selfdual_k() == 16i64 { total = total + 1u64 }            /* 1: the self-coincidence */
+    if gild_selflaw_rhs(0u32) >= 0i32 { total = total + 1u64 }        /* 4: the self-laws */
+    if gild_selflaw_rhs(1u32) >= 0i32 { total = total + 1u64 }
+    if gild_selflaw_rhs(2u32) >= 0i32 { total = total + 1u64 }
+    if gild_selflaw_rhs(3u32) >= 0i32 { total = total + 1u64 }
+    total = total + gild_shiftmask_count()                            /* 31: the shift-mask family */
+    if gild_demorgan() == 1u8 { total = total + 2u64 }               /* 2: De Morgan */
+    if gild_absorb() == 1u8 { total = total + 2u64 }                /* 2: absorption */
+    if gild_distrib() == 1u8 { total = total + 2u64 }              /* 2: distributivity */
+    if gild_xor_involution(0xDEADBEEFu64) == 1u8 { total = total + 1u64 }  /* 1: the XOR involution */
+    return total
+}

@@ -1441,6 +1441,8 @@ declare -A EXPECTED=(
     [1777_weave_federate]=99
     # BOOLEAN ALGEBRA DISCOVERED: III searches+SAT-proves De Morgan, absorption, distributivity, the XOR involution, and the full shift-mask family (31) -- the structural floor, found not authored.
     [1778_weave_algebra]=99
+    # THE CENSUS: III knows the full extent of its self-discovered mathematics -- weave_census re-proves + sums all 82 laws across every family (self-knowledge, re-derived not stored).
+    [1779_weave_census]=99
 )
 
 PASS=0

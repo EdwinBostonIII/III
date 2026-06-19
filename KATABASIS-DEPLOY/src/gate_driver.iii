@@ -24,6 +24,16 @@ extern @abi(c-msvc-x64) fn iii_kio_delete_device(dev: u64) -> u64 from "kernel_a
 extern @abi(c-msvc-x64) fn iii_kio_delete_symlink() -> u64 from "kernel_abi.s"
 extern @abi(c-msvc-x64) fn iii_kio_cpuid(leaf: u32, subleaf: u32, out4: u64) -> u64 from "kernel_abi.s"
 extern @abi(c-msvc-x64) fn iii_kio_readmsr(msr: u32) -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_pci_cfg_read(cf8_addr: u32) -> u32 from "kernel_abi.s"
+
+/* --- PCI config-space DERIVATION (the live deriver for census's GPU facts; pure decoders @ katabasis/pci_enum) --- */
+extern @abi(c-msvc-x64) fn pci_vendor(dw0: u32) -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_device(dw0: u32) -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_present(dw0: u32) -> u8 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_class(dw2: u32) -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_rev(dw2: u32) -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_bar_base32(bar: u32) -> u64 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_bar_base64(lo: u32, hi: u32) -> u64 from "pci_enum.iii"
 
 /* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
@@ -81,6 +91,7 @@ fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
     if code == 0x222000u32 { need_out = 8u64 ; need_in = 48u64 }
     if code == 0x222004u32 { need_out = 32u64 }
     if code == 0x222008u32 { need_out = 32u64 }      /* IOCTL_ATTEST: 32-byte measurement out, no input */
+    if code == 0x22200Cu32 { need_out = 56u64 }      /* IOCTL_PCI_ENUM: 7 x u64 derived GPU facts, no input */
     if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
     if buf == 0u64 { return 0u32 }
     if wdm_out_len(stk) < need_out { return 0u32 }
@@ -109,6 +120,66 @@ fn gate_self_attest(driver_object: u64) -> u64 {
     let ibase : u64 = (dobj as *u64)[3u64]                  /* DRIVER_OBJECT.DriverStart @0x18 = ASLR load base */
     ks_self_measure(ibase, &G_ATTEST as u64)
     return 0u64
+}
+
+/* --- IOCTL_PCI_ENUM (read-only): DERIVE census's GPU facts from live PCI config space via CF8h/CFCh ---
+   bdf packs bus<<16 | dev<<11 | fn<<8 (doubles as the CF8 low bits AND census fact 11).  Helpers are factored +
+   flag-driven (no break) + <=2 params for cg_r0; decoded by katabasis/pci_enum's PURE decoders on single dwords
+   (no packed buffer -> sidesteps cg_r0's 8-byte-uniform arrays).  All reads non-destructive; absent slot = all-ones. */
+fn pci_cfg(bdf: u32, off: u32) -> u32 {
+    return iii_kio_pci_cfg_read(0x80000000u32 | bdf | (off & 0xFCu32))
+}
+fn pci_probe_at(bdf: u32) -> u8 {
+    let dw0 : u32 = pci_cfg(bdf, 0u32)
+    if pci_present(dw0) != 1u8 { return 0u8 }
+    let dw2 : u32 = pci_cfg(bdf, 8u32)
+    if pci_class(dw2) != 0x03u32 { return 0u8 }       /* display controller */
+    return 1u8
+}
+fn pci_scan_bus(bus: u32) -> u32 {
+    let mut found : u32 = 0xFFFFFFFFu32
+    let mut dev : u32 = 0u32
+    while dev < 32u32 {
+        if found == 0xFFFFFFFFu32 {
+            let mut fnum : u32 = 0u32
+            while fnum < 8u32 {
+                if found == 0xFFFFFFFFu32 {
+                    let bdf : u32 = (bus << 16u32) | (dev << 11u32) | (fnum << 8u32)
+                    if pci_probe_at(bdf) == 1u8 { found = bdf }
+                }
+                fnum = fnum + 1u32
+            }
+        }
+        dev = dev + 1u32
+    }
+    return found
+}
+fn pci_find_gpu_bdf() -> u32 {
+    let mut found : u32 = 0xFFFFFFFFu32
+    let mut bus : u32 = 0u32
+    while bus < 256u32 {
+        if found == 0xFFFFFFFFu32 {
+            let r : u32 = pci_scan_bus(bus)
+            if r != 0xFFFFFFFFu32 { found = r }
+        }
+        bus = bus + 1u32
+    }
+    return found
+}
+/* write the found GPU's DERIVED facts to the METHOD_BUFFERED output (7 x u64): [0]=found [1]=vendev [2]=rev
+   [3]=BAR0 [4]=BAR1 [5]=BAR3 [6]=bdf. */
+fn pci_report(bdf: u32, buf: u64) -> i32 {
+    let b : u64 = buf
+    let dw0 : u32 = pci_cfg(bdf, 0u32)
+    let dw2 : u32 = pci_cfg(bdf, 8u32)
+    (b as *u64)[0u64] = 1u64
+    (b as *u64)[1u64] = ((pci_vendor(dw0) as u64) << 16u64) | (pci_device(dw0) as u64)
+    (b as *u64)[2u64] = pci_rev(dw2) as u64
+    (b as *u64)[3u64] = pci_bar_base32(pci_cfg(bdf, 16u32))
+    (b as *u64)[4u64] = pci_bar_base64(pci_cfg(bdf, 20u32), pci_cfg(bdf, 24u32))
+    (b as *u64)[5u64] = pci_bar_base64(pci_cfg(bdf, 28u32), pci_cfg(bdf, 32u32))
+    (b as *u64)[6u64] = bdf as u64
+    return 0i32
 }
 
 /* --- IRP_MJ_DEVICE_CONTROL: the gate decision --- */
@@ -174,6 +245,16 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         gate_attest_report(buf)
         status = 0u64
         info   = 32u64
+    }
+    if code2 == 0x22200Cu32 {
+        /* IOCTL_PCI_ENUM (READ-ONLY): scan PCI config space (CF8h/CFCh) for the display controller and DERIVE
+           its facts (VEN/DEV, rev, BAR0/1/3, bus:dev:fn).  No device writes -- the OUT to 0xCF8 only selects a
+           register.  out (7 x u64): [0]=found [1]=vendev [2]=rev [3]=BAR0 [4]=BAR1 [5]=BAR3 [6]=bdf. */
+        let bdf : u32 = pci_find_gpu_bdf()
+        (buf as *u64)[0u64] = 0u64                    /* default: not found */
+        if bdf != 0xFFFFFFFFu32 { pci_report(bdf, buf) }
+        status = 0u64
+        info   = 56u64
     }
     wdm_set_status(irp, status, info)
     iii_kio_complete_request(irp, 0u64)

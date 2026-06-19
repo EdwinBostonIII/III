@@ -1,0 +1,38 @@
+/* cad_kernel.iii -- kernel-safe subset of numera/cad for the Ring-0 gate closure.
+ *
+ * numera/cad routes content-addressing through sha256_dispatch (the hw/scalar SELECTOR), which pulls numera/cpufeat
+ * -> kernel32 (IsProcessorFeaturePresent) -- illegal in Ring 0.  The gate seals the cycle and verifies it ENTIRELY
+ * in-kernel (the seal never leaves; R3 drives verdicts via params + seal_mode), so the content-address only needs to
+ * be DETERMINISTIC + self-consistent, not byte-identical to userland cad.  So this subset implements cad's four
+ * closure-used entry points over SCALAR sha256 DIRECTLY (numera/sha256, with the driver's sha256_sched_force(1)) --
+ * no dispatch, no cpufeat, no AVX.  This mirrors what content_addr did before the cad merge.  Ring R0. */
+module cad_kernel
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot_packed(src: *u8, byte_len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot_packed_bp(src: *u8, byte_len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* suite is ignored: the gate seals with sha256, and self-consistency (seal == verify) is all that matters. */
+fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 @export {
+    sha256_oneshot(msg, len, out)
+    return 0i32
+}
+fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 @export {
+    sha256_oneshot_packed(msg, byte_len, out)
+    return 0i32
+}
+fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 @export {
+    sha256_oneshot_packed_bp(msg, byte_len, out)
+    return 0i32
+}
+/* 32-byte digest compare as four u64 slots -- cg_r0 is 8-byte-uniform, so a *u8 byte loop would stride wrong;
+ * reading 4 u64 is exact + correct. */
+fn cad_eq(a: *u8, b: *u8) -> u8 @export {
+    let pa : u64 = a as u64
+    let pb : u64 = b as u64
+    if (pa as *u64)[0u64] != (pb as *u64)[0u64] { return 0u8 }
+    if (pa as *u64)[1u64] != (pb as *u64)[1u64] { return 0u8 }
+    if (pa as *u64)[2u64] != (pb as *u64)[2u64] { return 0u8 }
+    if (pa as *u64)[3u64] != (pb as *u64)[3u64] { return 0u8 }
+    return 1u8
+}

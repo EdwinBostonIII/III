@@ -1,57 +1,66 @@
 # III Stage-0 Ring-0 codegen output (Windows kernel-mode .sys)
 # Output binary: iiis-0.sys
     .att_syntax
+    .section .rdata,"dr"
+L_str_0:
+    .ascii "sha256.iii\0"
+L_str_1:
+    .ascii "sha256_ni.iii\0"
+L_str_2:
+    .ascii "cpufeat.iii\0"
+L_str_3:
+    .ascii "sha256.iii\0"
+L_str_4:
+    .ascii "sha256.iii\0"
+L_str_5:
+    .ascii "sha256.iii\0"
+L_str_6:
+    .ascii "sha256_ni.iii\0"
+L_str_7:
+    .ascii "sha256_ni.iii\0"
+L_str_8:
+    .ascii "sha256_ni.iii\0"
     .section .rodata
-L_p_KGV_OK:
+L_p_SHA_PATH_SOFTWARE:
     .quad 0x0
-L_p_KGV_REJECT_SEAL:
+L_p_SHA_PATH_SHA_NI:
     .quad 0x1
-L_p_KGV_REJECT_CAP:
-    .quad 0x2
-L_p_KGV_REJECT_HEXAD:
-    .quad 0x3
-L_p_KGV_REJECT_IRREVERSIBLE:
-    .quad 0x4
-L_p_KGV_FAIL_CLOSED:
-    .quad 0x5
-L_p_KGV_STEP_NONE:
+L_p_SHA_OV_AUTO:
     .quad 0x0
-L_p_KGV_STEP_SEAL:
+L_p_SHA_OV_SOFTWARE:
     .quad 0x1
-L_p_KGV_STEP_CAP:
+L_p_SHA_OV_SHA_NI:
     .quad 0x2
-L_p_KGV_STEP_HEXAD:
-    .quad 0x3
-L_p_KGV_STEP_SID:
-    .quad 0x4
-L_p_KGV_STEP_PERFORM:
-    .quad 0x5
-L_p_KGV_STEP_WITNESS:
-    .quad 0x6
+    .section .data
+    .global L_p_SHA_DISPATCH_OV
+L_p_SHA_DISPATCH_OV:
+    .quad 0x0
+    .global L_p_SHA_DISPATCH_ACTIVE
+L_p_SHA_DISPATCH_ACTIVE:
+    .quad 0x0
     .section .text,"xr"  /* PE/COFF Â§6 */
     /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_katabasis_gate_step_verdict
-L_p_katabasis_gate_step_verdict:
-    .seh_proc L_p_katabasis_gate_step_verdict
+    .global L_p_sha256_dispatch_select
+L_p_sha256_dispatch_select:
+    .seh_proc L_p_sha256_dispatch_select
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movq %rcx, -8(%rbp)
     /* witness enter (D9, ADR-024) */
     movq $1, %rcx  /* IIIW_ENTER */
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movl -8(%rbp), %eax
+    movq L_p_SHA_DISPATCH_OV(%rip), %rax
     pushq %rax
     popq %rax
-    movq %rax, -16(%rbp)
-    movl -16(%rbp), %eax
+    movq %rax, -8(%rbp)
+    movl -8(%rbp), %eax
     pushq %rax
-    movq L_p_KGV_STEP_SEAL(%rip), %rax
+    movq L_p_SHA_OV_SOFTWARE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -62,7 +71,7 @@ L_p_katabasis_gate_step_verdict:
     popq %rax
     testq %rax, %rax
     jz L_if_end_1
-    movq L_p_KGV_REJECT_SEAL(%rip), %rax
+    movq L_p_SHA_PATH_SOFTWARE(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -77,9 +86,11 @@ L_p_katabasis_gate_step_verdict:
     popq %rbp
     retq
 L_if_end_1:
-    movl -16(%rbp), %eax
+    subq $32, %rsp
+    callq L_p_cpufeat_has_sha
+    addq $32, %rsp
     pushq %rax
-    movq L_p_KGV_STEP_CAP(%rip), %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -90,7 +101,7 @@ L_if_end_1:
     popq %rax
     testq %rax, %rax
     jz L_if_end_3
-    movq L_p_KGV_REJECT_CAP(%rip), %rax
+    movq L_p_SHA_PATH_SHA_NI(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -105,9 +116,51 @@ L_if_end_1:
     popq %rbp
     retq
 L_if_end_3:
+    movq L_p_SHA_PATH_SOFTWARE(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p_sha256_dispatch_force_path
+L_p_sha256_dispatch_force_path:
+    .seh_proc L_p_sha256_dispatch_force_path
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
     movl -16(%rbp), %eax
     pushq %rax
-    movq L_p_KGV_STEP_HEXAD(%rip), %rax
+    movq L_p_SHA_PATH_SOFTWARE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -118,7 +171,13 @@ L_if_end_3:
     popq %rax
     testq %rax, %rax
     jz L_if_end_5
-    movq L_p_KGV_REJECT_HEXAD(%rip), %rax
+    movq L_p_SHA_OV_SOFTWARE(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, L_p_SHA_DISPATCH_OV(%rip)
+    subq $32, %rsp
+    callq L_p_sha256_dispatch_select
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -135,7 +194,7 @@ L_if_end_3:
 L_if_end_5:
     movl -16(%rbp), %eax
     pushq %rax
-    movq L_p_KGV_STEP_SID(%rip), %rax
+    movq L_p_SHA_PATH_SHA_NI(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -146,7 +205,13 @@ L_if_end_5:
     popq %rax
     testq %rax, %rax
     jz L_if_end_7
-    movq L_p_KGV_REJECT_IRREVERSIBLE(%rip), %rax
+    movq L_p_SHA_OV_SHA_NI(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, L_p_SHA_DISPATCH_OV(%rip)
+    subq $32, %rsp
+    callq L_p_sha256_dispatch_select
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -161,9 +226,80 @@ L_if_end_5:
     popq %rbp
     retq
 L_if_end_7:
-    movl -16(%rbp), %eax
+    subq $32, %rsp
+    callq L_p_sha256_dispatch_select
+    addq $32, %rsp
     pushq %rax
-    movq L_p_KGV_STEP_PERFORM(%rip), %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p_sha256_dispatch_path
+L_p_sha256_dispatch_path:
+    .seh_proc L_p_sha256_dispatch_path
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    subq $32, %rsp
+    callq L_p_sha256_dispatch_select
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p_sha256_dispatch_oneshot
+L_p_sha256_dispatch_oneshot:
+    .seh_proc L_p_sha256_dispatch_oneshot
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    subq $32, %rsp
+    callq L_p_sha256_dispatch_select
+    addq $32, %rsp
+    pushq %rax
+    movq L_p_SHA_PATH_SHA_NI(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -174,7 +310,18 @@ L_if_end_7:
     popq %rax
     testq %rax, %rax
     jz L_if_end_9
-    movq L_p_KGV_FAIL_CLOSED(%rip), %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_sha256_ni_oneshot
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -189,9 +336,57 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movl -16(%rbp), %eax
+    movq -8(%rbp), %rax
     pushq %rax
-    movq L_p_KGV_STEP_WITNESS(%rip), %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_sha256_oneshot
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p_sha256_dispatch_init
+L_p_sha256_dispatch_init:
+    .seh_proc L_p_sha256_dispatch_init
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    subq $32, %rsp
+    callq L_p_sha256_dispatch_select
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, L_p_SHA_DISPATCH_ACTIVE(%rip)
+    movq L_p_SHA_DISPATCH_ACTIVE(%rip), %rax
+    pushq %rax
+    movq L_p_SHA_PATH_SHA_NI(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -202,7 +397,9 @@ L_if_end_9:
     popq %rax
     testq %rax, %rax
     jz L_if_end_11
-    movq L_p_KGV_OK(%rip), %rax
+    subq $32, %rsp
+    callq L_p_sha256_ni_init
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -217,7 +414,9 @@ L_if_end_9:
     popq %rbp
     retq
 L_if_end_11:
-    movq L_p_KGV_FAIL_CLOSED(%rip), %rax
+    subq $32, %rsp
+    callq L_p_sha256_init
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -234,9 +433,9 @@ L_if_end_11:
     .seh_endproc
     .section .text,"xr"  /* PE/COFF Â§6 */
     /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_katabasis_gate_next_step
-L_p_katabasis_gate_next_step:
-    .seh_proc L_p_katabasis_gate_next_step
+    .global L_p_sha256_dispatch_update
+L_p_sha256_dispatch_update:
+    .seh_proc L_p_sha256_dispatch_update
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -244,18 +443,15 @@ L_p_katabasis_gate_next_step:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
     /* witness enter (D9, ADR-024) */
     movq $1, %rcx  /* IIIW_ENTER */
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movl -8(%rbp), %eax
+    movq L_p_SHA_DISPATCH_ACTIVE(%rip), %rax
     pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq L_p_KGV_STEP_SEAL(%rip), %rax
+    movq L_p_SHA_PATH_SHA_NI(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -266,7 +462,15 @@ L_p_katabasis_gate_next_step:
     popq %rax
     testq %rax, %rax
     jz L_if_end_13
-    movq L_p_KGV_STEP_CAP(%rip), %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_sha256_ni_update
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -281,9 +485,49 @@ L_p_katabasis_gate_next_step:
     popq %rbp
     retq
 L_if_end_13:
-    movl -16(%rbp), %eax
+    movq -8(%rbp), %rax
     pushq %rax
-    movq L_p_KGV_STEP_CAP(%rip), %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_sha256_update
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p_sha256_dispatch_final
+L_p_sha256_dispatch_final:
+    .seh_proc L_p_sha256_dispatch_final
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    movq L_p_SHA_DISPATCH_ACTIVE(%rip), %rax
+    pushq %rax
+    movq L_p_SHA_PATH_SHA_NI(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -294,7 +538,12 @@ L_if_end_13:
     popq %rax
     testq %rax, %rax
     jz L_if_end_15
-    movq L_p_KGV_STEP_HEXAD(%rip), %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_sha256_ni_final
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -309,389 +558,12 @@ L_if_end_13:
     popq %rbp
     retq
 L_if_end_15:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq L_p_KGV_STEP_HEXAD(%rip), %rax
+    movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_17
-    movq L_p_KGV_STEP_SID(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
     subq $32, %rsp
-    callq iii_witness_emit_kernel
+    callq L_p_sha256_final
     addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_17:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq L_p_KGV_STEP_SID(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_19
-    movq L_p_KGV_STEP_PERFORM(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_19:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq L_p_KGV_STEP_PERFORM(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_21
-    movq L_p_KGV_STEP_WITNESS(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_21:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq L_p_KGV_STEP_WITNESS(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_23
-    movq L_p_KGV_STEP_NONE(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_23:
-    movq L_p_KGV_STEP_NONE(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_katabasis_gate_decide
-L_p_katabasis_gate_decide:
-    .seh_proc L_p_katabasis_gate_decide
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_25
-    movq L_p_KGV_REJECT_SEAL(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_25:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_27
-    movq L_p_KGV_REJECT_CAP(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_27:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_29
-    movq L_p_KGV_REJECT_HEXAD(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_29:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_31
-    movq L_p_KGV_REJECT_IRREVERSIBLE(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_31:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_33
-    movq L_p_KGV_FAIL_CLOSED(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_33:
-    movq L_p_KGV_OK(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_katabasis_verdict_is_ok
-L_p_katabasis_verdict_is_ok:
-    .seh_proc L_p_katabasis_verdict_is_ok
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq L_p_KGV_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_35
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_35:
-    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     pushq %rax

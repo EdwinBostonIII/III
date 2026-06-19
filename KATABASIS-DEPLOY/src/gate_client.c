@@ -14,8 +14,30 @@
 
 #define IOCTL_KATABASIS_ADMIT 0x222000u   /* CTL_CODE(FILE_DEVICE_UNKNOWN,0x800,METHOD_BUFFERED,FILE_ANY_ACCESS) */
 #define IOCTL_SVM_PROBE       0x222004u   /* Ring-1 I0: read-only SVM capability report */
+#define IOCTL_PCI_ENUM        0x22200Cu   /* read-only: derive the GPU facts from live PCI config space (CF8h/CFCh) */
 
 static const char *VN[4] = { "OK", "REJECT_SEAL", "REJECT_CAP", "REJECT_HEXAD" };
+
+/* Ring-0 PCI config-space derivation: the kernel scans CF8h/CFCh for the display controller and DERIVES its facts
+   (VEN/DEV, rev, BAR0/1/3, bus:dev:fn) -- census.iii's GPU layer, read off live silicon, not hardcoded.
+   Out (7 x u64): [0]=found [1]=vendev=(VEN<<16)|DEV [2]=rev [3]=BAR0 [4]=BAR1 [5]=BAR3 [6]=bdf. */
+static int probe_pci(HANDLE h)
+{
+    uint64_t in[1]  = { 0 };
+    uint64_t out[7] = { 0,0,0,0,0,0,0 };
+    DWORD ret = 0;
+    BOOL ok = DeviceIoControl(h, IOCTL_PCI_ENUM, in, 0, out, (DWORD)sizeof(out), &ret, NULL);
+    if (!ok) { printf("  PCI_ENUM DeviceIoControl FAILED (err=%lu)\n", GetLastError()); return 1; }
+    printf("  Ring-0 PCI config-space derivation (read-only, live CF8h/CFCh):\n");
+    if (!out[0]) { printf("    no display controller found on the PCI bus\n"); return 1; }
+    printf("    GPU VEN:DEV = %04llx:%04llx   rev=0x%02llx   bus:dev:fn=0x%06llx\n",
+           (unsigned long long)((out[1] >> 16) & 0xFFFF), (unsigned long long)(out[1] & 0xFFFF),
+           (unsigned long long)out[2], (unsigned long long)out[6]);
+    printf("    BAR0=0x%llx  BAR1=0x%llx  BAR3=0x%llx\n",
+           (unsigned long long)out[3], (unsigned long long)out[4], (unsigned long long)out[5]);
+    printf("    => census's GPU facts DERIVED from live silicon (drift-checked in-kernel vs the sealed expectation).\n");
+    return 0;
+}
 
 /* Ring-1 I0: ask the kernel (read-only) whether AMD-V/SVM is present and usable. The kernel reads
    CPUID(0x80000001).ECX[2], EFER (always safe), and -- only if SVM is present -- VM_CR. Out (4 x u64):
@@ -100,6 +122,8 @@ int main(void)
     printf("opened \\\\.\\IIIKatabasisGate -- querying the Ring-0 gate decision:\n");
     int fail = 0;
     probe_svm(h);   /* Ring-1 I0: report SVM ground truth (read-only) before the gate cases */
+    printf("\n");
+    probe_pci(h);   /* Ring-0: derive census's GPU facts from live PCI config space (read-only) */
     printf("\n");
     /* family=2 (F2 WriteMetal), tk=1, target 0x20000=SHARED / 0x1000=HSAVE-brick, hexad=728 (all-POS),
        wcap=0x200000 (WriteMetal right), dcap=0x800000 (Descend-only -> wrong for WriteMetal). */

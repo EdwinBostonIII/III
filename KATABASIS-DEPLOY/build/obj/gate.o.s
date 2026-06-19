@@ -3,15 +3,15 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_1:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_2:
-    .ascii "cycle_term.iiicycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_3:
-    .ascii "cycle_term.iiicycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_4:
-    .ascii "cycle_admit.iiicycle_family.iii\0"
+    .ascii "cycle_admit.iii\0"
 L_str_5:
     .ascii "cycle_family.iii\0"
     .section .rodata
@@ -44,7 +44,7 @@ L_p_katabasis_gate_decide_term:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -112,7 +112,7 @@ L_if_end_1:
     popq %rbp
     retq
 L_if_end_3:
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -121,7 +121,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -130,7 +130,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -139,7 +139,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -148,13 +148,16 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movzwq %ax, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
-    movq -64(%rbp), %rax
+    movl -64(%rbp), %eax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
@@ -194,7 +197,7 @@ L_if_end_3:
     popq %rbp
     retq
 L_if_end_5:
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp

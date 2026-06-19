@@ -3,56 +3,40 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.skernel_abi.skernel_abi.skernel_abi.skernel_abi.skernel_abi.skernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_1:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.skernel_abi.skernel_abi.skernel_abi.skernel_abi.skernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_2:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.skernel_abi.skernel_abi.skernel_abi.skernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_3:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.skernel_abi.skernel_abi.skernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_4:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.skernel_abi.skernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_5:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.skernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_6:
-    .ascii "kernel_abi.s\0"
+    .ascii "kernel_abi.sxii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_7:
-    .ascii "kernel_abi.s\0"
+    .ascii "xii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_8:
-    .ascii "pci_enum.iii\0"
+    .ascii "capability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_9:
-    .ascii "pci_enum.iii\0"
+    .ascii "capability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_10:
-    .ascii "pci_enum.iii\0"
+    .ascii "cycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_11:
-    .ascii "pci_enum.iii\0"
+    .ascii "cycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_12:
-    .ascii "pci_enum.iii\0"
+    .ascii "seal.iiiadmit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_13:
-    .ascii "pci_enum.iii\0"
+    .ascii "admit.iiisha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_14:
-    .ascii "pci_enum.iii\0"
+    .ascii "sha256.iiikeccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_15:
-    .ascii "xii_term.iii\0"
+    .ascii "keccak.iiiquine_seal.iiiquine_seal.iii\0"
 L_str_16:
-    .ascii "capability.iii\0"
+    .ascii "quine_seal.iiiquine_seal.iii\0"
 L_str_17:
-    .ascii "capability.iii\0"
-L_str_18:
-    .ascii "cycle_term.iii\0"
-L_str_19:
-    .ascii "cycle_term.iii\0"
-L_str_20:
-    .ascii "seal.iii\0"
-L_str_21:
-    .ascii "admit.iii\0"
-L_str_22:
-    .ascii "sha256.iii\0"
-L_str_23:
-    .ascii "keccak.iii\0"
-L_str_24:
-    .ascii "quine_seal.iii\0"
-L_str_25:
     .ascii "quine_seal.iii\0"
     .section .bss
     .global L_p_G_DEVOBJ
@@ -138,9 +122,6 @@ L_p_wdm_ioctl_code:
     popq %rcx
     popq %rax
     andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -482,7 +463,7 @@ L_p_gate_validated_code:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movl -24(%rbp), %eax
+    movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x222000, %rax
     pushq %rax
@@ -504,7 +485,7 @@ L_p_gate_validated_code:
     popq %rax
     movq %rax, -40(%rbp)
 L_if_end_1:
-    movl -24(%rbp), %eax
+    movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x222004, %rax
     pushq %rax
@@ -522,9 +503,9 @@ L_if_end_1:
     popq %rax
     movq %rax, -32(%rbp)
 L_if_end_3:
-    movl -24(%rbp), %eax
+    movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x222008, %rax
+    movabsq $0x222009, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -540,24 +521,6 @@ L_if_end_3:
     popq %rax
     movq %rax, -32(%rbp)
 L_if_end_5:
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x22200c, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_7
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-L_if_end_7:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -570,8 +533,36 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
+    jz L_if_end_7
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_7:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
     jz L_if_end_9
-    movl -24(%rbp), %eax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -586,14 +577,19 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movq -16(%rbp), %rax
+    movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_wdm_out_len
+    addq $32, %rsp
+    pushq %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    sete %al
+    setl %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -618,15 +614,15 @@ L_if_end_11:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_p_wdm_out_len
+    callq L_p_wdm_in_len
     addq $32, %rsp
     pushq %rax
-    movq -32(%rbp), %rax
+    movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setb %al
+    setl %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -647,40 +643,7 @@ L_if_end_11:
     popq %rbp
     retq
 L_if_end_13:
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_wdm_in_len
-    addq $32, %rsp
-    pushq %rax
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_15
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_15:
-    movl -24(%rbp), %eax
+    movq -24(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -838,7 +801,7 @@ L_p_gate_self_attest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_15
     movabsq $0xc0000001, %rax
     pushq %rax
     popq %rax
@@ -853,7 +816,7 @@ L_p_gate_self_attest:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_17:
+L_if_end_15:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -877,710 +840,6 @@ L_if_end_17:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_pci_cfg
-L_p_pci_cfg:
-    .seh_proc L_p_pci_cfg
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movabsq $0x80000000, %rax
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xfc, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_iii_kio_pci_cfg_read
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_pci_probe_at
-L_p_pci_probe_at:
-    .seh_proc L_p_pci_probe_at
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_present
-    addq $32, %rsp
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_19
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_19:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_class
-    addq $32, %rsp
-    pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_21
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-L_if_end_21:
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_pci_scan_bus
-L_p_pci_scan_bus:
-    .seh_proc L_p_pci_scan_bus
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-L_for_top_22:
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setl %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_for_end_23
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_25
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-L_for_top_26:
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setl %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_for_end_27
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_29
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    movl %eax, %eax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0xb, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_probe_at
-    addq $32, %rsp
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_31
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-L_if_end_31:
-L_if_end_29:
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    jmp L_for_top_26
-L_for_end_27:
-L_if_end_25:
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    jmp L_for_top_22
-L_for_end_23:
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_pci_find_gpu_bdf
-L_p_pci_find_gpu_bdf:
-    .seh_proc L_p_pci_find_gpu_bdf
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-L_for_top_32:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x100, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setl %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_for_end_33
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_35
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_scan_bus
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_37
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-L_if_end_37:
-L_if_end_35:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    jmp L_for_top_32
-L_for_end_33:
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    pushq %rax
-    movq $2, %rcx  /* IIIW_EXIT */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    popq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .text,"xr"  /* PE/COFF Â§6 */
-    /* IRQL_REQUIRES_MAX(2) */
-    .global L_p_pci_report
-L_p_pci_report:
-    .seh_proc L_p_pci_report
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    /* witness enter (D9, ADR-024) */
-    movq $1, %rcx  /* IIIW_ENTER */
-    subq $32, %rsp
-    callq iii_witness_emit_kernel
-    addq $32, %rsp
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_vendor
-    addq $32, %rsp
-    pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_device
-    addq $32, %rsp
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_rev
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_bar_base32
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x18, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_bar_base64
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x1c, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_cfg
-    addq $32, %rsp
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_bar_base64
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x5, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1660,7 +919,7 @@ L_p_gate_ioctl:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movl -56(%rbp), %eax
+    movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -1672,13 +931,13 @@ L_p_gate_ioctl:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_17
     movabsq $0xc0000023, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_if_end_39:
-    movl -56(%rbp), %eax
+L_if_end_17:
+    movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x222000, %rax
     pushq %rax
@@ -1690,7 +949,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_19
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1698,9 +957,6 @@ L_if_end_39:
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
@@ -1711,9 +967,6 @@ L_if_end_39:
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -1734,9 +987,6 @@ L_if_end_39:
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
@@ -1786,13 +1036,13 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -120(%rbp)
-    movl -64(%rbp), %eax
+    movq -64(%rbp), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movq -72(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movl -88(%rbp), %eax
+    movq -88(%rbp), %rax
     pushq %rax
     popq %r9
     popq %r8
@@ -1804,12 +1054,9 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -128(%rbp)
-    movl -128(%rbp), %eax
+    movq -128(%rbp), %rax
     pushq %rax
     movq -120(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -1819,7 +1066,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
-    movl -136(%rbp), %eax
+    movq -136(%rbp), %rax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax
@@ -1850,7 +1097,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_21
     movabsq $0x9, %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -1869,12 +1116,9 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -152(%rbp)
-    movl -152(%rbp), %eax
+    movq -152(%rbp), %rax
     pushq %rax
     movq -120(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -1884,7 +1128,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -160(%rbp)
-    movl -160(%rbp), %eax
+    movq -160(%rbp), %rax
     pushq %rax
     leaq L_p_G_WRONG(%rip), %rax
     pushq %rax
@@ -1903,8 +1147,8 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -144(%rbp)
-L_if_end_43:
-    movl -136(%rbp), %eax
+L_if_end_21:
+    movq -136(%rbp), %rax
     pushq %rax
     movq -144(%rbp), %rax
     pushq %rax
@@ -1916,7 +1160,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     movq %rax, -168(%rbp)
-    movl -168(%rbp), %eax
+    movq -168(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1936,8 +1180,8 @@ L_if_end_43:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_if_end_41:
-    movl -56(%rbp), %eax
+L_if_end_19:
+    movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x222004, %rax
     pushq %rax
@@ -1949,7 +1193,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_23
     movabsq $0x80000001, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2023,7 +1267,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_25
     movabsq $0xc0010114, %rax
     pushq %rax
     popq %rcx
@@ -2033,7 +1277,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     movq %rax, -200(%rbp)
-L_if_end_47:
+L_if_end_25:
     movq -184(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2090,8 +1334,8 @@ L_if_end_47:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_if_end_45:
-    movl -56(%rbp), %eax
+L_if_end_23:
+    movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x222008, %rax
     pushq %rax
@@ -2103,7 +1347,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_27
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2120,72 +1364,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_if_end_49:
-    movl -56(%rbp), %eax
-    pushq %rax
-    movabsq $0x22200c, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_51
-    subq $32, %rsp
-    callq L_p_pci_find_gpu_bdf
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -208(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    popq %rdx
-    movq %rdx, (%rax,%rcx,8)
-    movl -208(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_53
-    movl -208(%rbp), %eax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    subq $32, %rsp
-    callq L_p_pci_report
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-L_if_end_53:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movabsq $0x38, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-L_if_end_51:
+L_if_end_27:
     movq -16(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -2334,7 +1513,7 @@ DriverEntry:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_29
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2349,7 +1528,7 @@ DriverEntry:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_55:
+L_if_end_29:
     movq -8(%rbp), %rax
     pushq %rax
     leaq L_p_G_DEVOBJ(%rip), %rax

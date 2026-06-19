@@ -3,7 +3,7 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "hexad_algebra.iiihexad_reach.iii\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
     .ascii "hexad_reach.iii\0"
     .section .rodata
@@ -55,7 +55,7 @@ L_p_katabasis_bar_region:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setl %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -83,7 +83,7 @@ L_if_end_1:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setl %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -111,7 +111,7 @@ L_if_end_3:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setl %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -139,7 +139,7 @@ L_if_end_5:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setl %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -167,7 +167,7 @@ L_if_end_7:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setl %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -195,7 +195,7 @@ L_if_end_9:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setl %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax

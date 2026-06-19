@@ -3,7 +3,7 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "hexad_algebra.iiihexad_reach.iii\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
     .ascii "hexad_reach.iii\0"
     .section .rodata
@@ -42,11 +42,11 @@ L_p_katabasis_svm_region:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1000, %rax
     pushq %rax
@@ -74,7 +74,7 @@ L_p_katabasis_svm_region:
     popq %rbp
     retq
 L_if_end_1:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x2000, %rax
     pushq %rax
@@ -102,7 +102,7 @@ L_if_end_1:
     popq %rbp
     retq
 L_if_end_3:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xa000, %rax
     pushq %rax
@@ -130,7 +130,7 @@ L_if_end_3:
     popq %rbp
     retq
 L_if_end_5:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x10000, %rax
     pushq %rax
@@ -158,7 +158,7 @@ L_if_end_5:
     popq %rbp
     retq
 L_if_end_7:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x20000, %rax
     pushq %rax
@@ -186,7 +186,7 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3e000, %rax
     pushq %rax
@@ -214,7 +214,7 @@ L_if_end_9:
     popq %rbp
     retq
 L_if_end_11:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3f000, %rax
     pushq %rax
@@ -242,7 +242,7 @@ L_if_end_11:
     popq %rbp
     retq
 L_if_end_13:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x40000, %rax
     pushq %rax
@@ -302,11 +302,11 @@ L_p_katabasis_svm_region_hexad:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1000, %rax
     pushq %rax
@@ -334,7 +334,7 @@ L_p_katabasis_svm_region_hexad:
     popq %rbp
     retq
 L_if_end_17:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x2000, %rax
     pushq %rax
@@ -362,7 +362,7 @@ L_if_end_17:
     popq %rbp
     retq
 L_if_end_19:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xa000, %rax
     pushq %rax
@@ -390,7 +390,7 @@ L_if_end_19:
     popq %rbp
     retq
 L_if_end_21:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x10000, %rax
     pushq %rax
@@ -418,7 +418,7 @@ L_if_end_21:
     popq %rbp
     retq
 L_if_end_23:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x20000, %rax
     pushq %rax
@@ -446,7 +446,7 @@ L_if_end_23:
     popq %rbp
     retq
 L_if_end_25:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3e000, %rax
     pushq %rax
@@ -474,7 +474,7 @@ L_if_end_25:
     popq %rbp
     retq
 L_if_end_27:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3f000, %rax
     pushq %rax
@@ -502,7 +502,7 @@ L_if_end_27:
     popq %rbp
     retq
 L_if_end_29:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x40000, %rax
     pushq %rax
@@ -562,13 +562,13 @@ L_p_katabasis_svm_write_admissible:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
     movabsq $0x2d8, %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -621,11 +621,11 @@ L_p_katabasis_svm_cycle_hexad:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -679,13 +679,13 @@ L_p_katabasis_svm_cycle_admissible:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx

@@ -4,6 +4,12 @@
     .section .rdata,"dr"
 L_str_0:
     .ascii "sha256.iii\0"
+L_str_1:
+    .ascii "sha256.iii\0"
+L_str_2:
+    .ascii "sha256.iii\0"
+L_str_3:
+    .ascii "sha256.iii\0"
     .section .rodata
 L_p_XII_KIND_K01_FORM:
     .quad 0x0
@@ -53,8 +59,20 @@ L_p_XII_KIND_FIF:
     .quad 0x16
 L_p_XII_KIND_FLOOP:
     .quad 0x17
+L_p_XII_KIND_TRIT_VAL:
+    .quad 0x18
+L_p_XII_KIND_TRIT_NOT:
+    .quad 0x19
+L_p_XII_KIND_TRIT_AND:
+    .quad 0x1a
+L_p_XII_KIND_TRIT_OR:
+    .quad 0x1b
+L_p_XII_KIND_TRIT_SUM:
+    .quad 0x1c
+L_p_XII_KIND_TRIT_MUL:
+    .quad 0x1d
 L_p_XII_KIND_MAX:
-    .quad 0x17
+    .quad 0x1d
 L_p_XII_BASIS_KIND_LAST:
     .quad 0x11
 L_p_XII_NULL_REF:
@@ -97,6 +115,10 @@ L_p_XII_TERM_ARENA:
     .global L_p_XII_TERM_NEXT
 L_p_XII_TERM_NEXT:
     .quad 0x0
+    .section .bss
+    .global L_p_XII_SPINE
+L_p_XII_SPINE:
+    .zero 8192
     .section .text,"xr"  /* PE/COFF Â§6 */
     /* IRQL_REQUIRES_MAX(2) */
     .global L_p_xii_term_arena_reset
@@ -122,7 +144,7 @@ L_p_xii_term_arena_reset:
     popq %rax
     movq %rax, -8(%rbp)
 L_for_top_0:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_BYTES(%rip), %rax
     pushq %rax
@@ -141,19 +163,20 @@ L_for_top_0:
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
@@ -254,7 +277,7 @@ L_p__xii_term_write_u32:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xff, %rax
     pushq %rax
@@ -263,16 +286,19 @@ L_p__xii_term_write_u32:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
@@ -287,22 +313,26 @@ L_p__xii_term_write_u32:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
@@ -317,22 +347,26 @@ L_p__xii_term_write_u32:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x18, %rax
     pushq %rax
@@ -347,16 +381,20 @@ L_p__xii_term_write_u32:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -396,95 +434,113 @@ L_p__xii_term_read_u32:
     addq $32, %rsp
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
     popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
     movq %rax, -16(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
     popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
     movq %rax, -24(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
     popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
     movq %rax, -32(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
-    movq -16(%rbp), %rax
+    movl %eax, %eax
     pushq %rax
-    movq -24(%rbp), %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
     popq %rcx
     popq %rax
     shlq %cl, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     orq %rcx, %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
     popq %rcx
     popq %rax
     shlq %cl, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     orq %rcx, %rax
     pushq %rax
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x18, %rax
     pushq %rax
     popq %rcx
     popq %rax
     shlq %cl, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -530,10 +586,13 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -554,16 +613,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -584,16 +647,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -614,16 +681,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -644,16 +715,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -674,16 +749,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -704,16 +783,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -734,16 +817,20 @@ L_p__xii_term_write_u64:
     andq %rcx, %rax
     pushq %rax
     popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -783,7 +870,7 @@ L_p__xii_term_read_u64:
     addq $32, %rsp
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -793,13 +880,14 @@ L_p__xii_term_read_u64:
     movq %rax, -16(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -809,13 +897,14 @@ L_p__xii_term_read_u64:
     movq %rax, -24(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -825,13 +914,14 @@ L_p__xii_term_read_u64:
     movq %rax, -32(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -841,13 +931,14 @@ L_p__xii_term_read_u64:
     movq %rax, -40(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -857,13 +948,14 @@ L_p__xii_term_read_u64:
     movq %rax, -48(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -873,13 +965,14 @@ L_p__xii_term_read_u64:
     movq %rax, -56(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -889,13 +982,14 @@ L_p__xii_term_read_u64:
     movq %rax, -64(%rbp)
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1030,7 +1124,7 @@ L_p_xii_term_alloc:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1058,23 +1152,25 @@ L_p_xii_term_alloc:
     popq %rbp
     retq
 L_if_end_3:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, L_p_XII_TERM_NEXT(%rip)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -1083,7 +1179,7 @@ L_if_end_3:
     popq %rax
     movq %rax, -24(%rbp)
 L_for_top_4:
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
@@ -1102,37 +1198,40 @@ L_for_top_4:
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     jmp L_for_top_4
 L_for_end_5:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -1143,13 +1242,14 @@ L_for_end_5:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xc, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -1160,13 +1260,14 @@ L_for_end_5:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -1177,7 +1278,7 @@ L_for_end_5:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1210,7 +1311,7 @@ L_p_xii_term_set_kind:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1247,13 +1348,14 @@ L_if_end_7:
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1291,7 +1393,7 @@ L_p_xii_term_get_kind:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1321,13 +1423,14 @@ L_p_xii_term_get_kind:
 L_if_end_9:
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1364,7 +1467,7 @@ L_p_xii_term_set_flags:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1401,19 +1504,21 @@ L_if_end_11:
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1451,7 +1556,7 @@ L_p_xii_term_get_flags:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1481,19 +1586,21 @@ L_p_xii_term_get_flags:
 L_if_end_13:
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1530,7 +1637,7 @@ L_p_xii_term_set_hexad:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1567,25 +1674,27 @@ L_if_end_15:
     pushq %rax
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1594,7 +1703,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -1643,7 +1752,7 @@ L_p_xii_term_get_hexad:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1673,19 +1782,21 @@ L_p_xii_term_get_hexad:
 L_if_end_17:
     leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1722,7 +1833,7 @@ L_p_xii_term_set_subform:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1753,21 +1864,23 @@ L_p_xii_term_set_subform:
     popq %rbp
     retq
 L_if_end_19:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -1808,7 +1921,7 @@ L_p_xii_term_get_subform:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1836,19 +1949,21 @@ L_p_xii_term_get_subform:
     popq %rbp
     retq
 L_if_end_21:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1886,7 +2001,7 @@ L_p_xii_term_set_child_a:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -1917,21 +2032,23 @@ L_p_xii_term_set_child_a:
     popq %rbp
     retq
 L_if_end_23:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -1972,7 +2089,7 @@ L_p_xii_term_get_child_a:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2000,19 +2117,21 @@ L_p_xii_term_get_child_a:
     popq %rbp
     retq
 L_if_end_25:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2050,7 +2169,7 @@ L_p_xii_term_set_child_b:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2081,21 +2200,23 @@ L_p_xii_term_set_child_b:
     popq %rbp
     retq
 L_if_end_27:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0xc, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -2136,7 +2257,7 @@ L_p_xii_term_get_child_b:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2164,19 +2285,21 @@ L_p_xii_term_get_child_b:
     popq %rbp
     retq
 L_if_end_29:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0xc, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2214,7 +2337,7 @@ L_p_xii_term_set_child_c:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2245,21 +2368,23 @@ L_p_xii_term_set_child_c:
     popq %rbp
     retq
 L_if_end_31:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -2268,7 +2393,7 @@ L_if_end_31:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2277,7 +2402,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -2326,7 +2451,7 @@ L_p_xii_term_get_child_c:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2354,19 +2479,21 @@ L_p_xii_term_get_child_c:
     popq %rbp
     retq
 L_if_end_33:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2404,7 +2531,7 @@ L_p_xii_term_set_aux:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2435,19 +2562,21 @@ L_p_xii_term_set_aux:
     popq %rbp
     retq
 L_if_end_35:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x14, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -2490,7 +2619,7 @@ L_p_xii_term_get_aux:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2518,19 +2647,21 @@ L_p_xii_term_get_aux:
     popq %rbp
     retq
 L_if_end_37:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x14, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2568,7 +2699,7 @@ L_p_xii_term_set_weight_mpo:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2599,21 +2730,23 @@ L_p_xii_term_set_weight_mpo:
     popq %rbp
     retq
 L_if_end_39:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x1c, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -2622,7 +2755,7 @@ L_if_end_39:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2631,7 +2764,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -2680,7 +2813,7 @@ L_p_xii_term_get_weight_mpo:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -2708,19 +2841,21 @@ L_p_xii_term_get_weight_mpo:
     popq %rbp
     retq
 L_if_end_41:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     movabsq $0x1c, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -2764,7 +2899,7 @@ L_p_xii_term_make_basis:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -2792,7 +2927,7 @@ L_p_xii_term_make_basis:
     popq %rbp
     retq
 L_if_end_43:
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -2803,9 +2938,9 @@ L_if_end_43:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -2814,7 +2949,600 @@ L_if_end_43:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p__xii_make_fusion2_raw
+L_p__xii_make_fusion2_raw:
+    .seh_proc L_p__xii_make_fusion2_raw
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    subq $32, %rsp
+    callq L_p_xii_term_alloc
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq L_p_XII_NULL_REF(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_45
+    movq L_p_XII_NULL_REF(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_45:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_set_kind
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_set_child_a
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_set_child_b
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p__xii_make_right
+L_p__xii_make_right:
+    .seh_proc L_p__xii_make_right
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_kind
+    addq $32, %rsp
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_47
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_47:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+L_for_top_48:
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_kind
+    addq $32, %rsp
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_for_end_49
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x400, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setge %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_51:
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_child_a
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_p_XII_SPINE(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    popq %rdx
+    movq %rdx, (%rax,%rcx,8)
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_child_b
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    jmp L_for_top_48
+L_for_end_49:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+L_for_top_52:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setg %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_for_end_53
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    leaq L_p_XII_SPINE(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    jmp L_for_top_52
+L_for_end_53:
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p__xii_make_left
+L_p__xii_make_left:
+    .seh_proc L_p__xii_make_left
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_kind
+    addq $32, %rsp
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_55:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+L_for_top_56:
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_kind
+    addq $32, %rsp
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_for_end_57
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x400, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setge %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_59
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_59:
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_child_b
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_p_XII_SPINE(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    popq %rdx
+    movq %rdx, (%rax,%rcx,8)
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_xii_term_get_child_a
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    jmp L_for_top_56
+L_for_end_57:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+L_for_top_60:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setg %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_for_end_61
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    leaq L_p_XII_SPINE(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    jmp L_for_top_60
+L_for_end_61:
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -2848,15 +3576,9 @@ L_p_xii_term_make_fusion2:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    subq $32, %rsp
-    callq L_p_xii_term_alloc
-    addq $32, %rsp
+    movq -8(%rbp), %rax
     pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    movq L_p_XII_NULL_REF(%rip), %rax
+    movq L_p_XII_KIND_FCOMPOSE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2866,8 +3588,19 @@ L_p_xii_term_make_fusion2:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
-    movq L_p_XII_NULL_REF(%rip), %rax
+    jz L_if_end_63
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_right
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -2881,41 +3614,136 @@ L_p_xii_term_make_fusion2:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_45:
-    movq -32(%rbp), %rax
-    pushq %rax
+L_if_end_63:
     movq -8(%rbp), %rax
     pushq %rax
+    movq L_p_XII_KIND_FTHEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_65
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
     popq %rdx
     popq %rcx
     subq $32, %rsp
-    callq L_p_xii_term_set_kind
+    callq L_p__xii_make_right
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
     pushq %rax
-    movq -16(%rbp), %rax
     pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_65:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq L_p_XII_KIND_FWITH(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_67
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
     popq %rdx
     popq %rcx
     subq $32, %rsp
-    callq L_p_xii_term_set_child_a
+    callq L_p__xii_make_right
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
     pushq %rax
-    movq -24(%rbp), %rax
     pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_67:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq L_p_XII_KIND_FUNDER(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_69
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
     popq %rdx
     popq %rcx
     subq $32, %rsp
-    callq L_p_xii_term_set_child_b
+    callq L_p__xii_make_left
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_69:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %r8
+    popq %rdx
+    popq %rcx
+    subq $32, %rsp
+    callq L_p__xii_make_fusion2_raw
+    addq $32, %rsp
     pushq %rax
     popq %rax
     pushq %rax
@@ -2955,7 +3783,7 @@ L_p_xii_term_make_if:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -2967,7 +3795,7 @@ L_p_xii_term_make_if:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_71
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
     popq %rax
@@ -2982,8 +3810,8 @@ L_p_xii_term_make_if:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_47:
-    movq -32(%rbp), %rax
+L_if_end_71:
+    movl -32(%rbp), %eax
     pushq %rax
     movq L_p_XII_KIND_FIF(%rip), %rax
     pushq %rax
@@ -2994,9 +3822,9 @@ L_if_end_47:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -3005,9 +3833,9 @@ L_if_end_47:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -3016,9 +3844,9 @@ L_if_end_47:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -3027,7 +3855,7 @@ L_if_end_47:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -3066,7 +3894,7 @@ L_p_xii_term_make_loop:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -3078,7 +3906,7 @@ L_p_xii_term_make_loop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_73
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
     popq %rax
@@ -3093,8 +3921,8 @@ L_p_xii_term_make_loop:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_49:
-    movq -24(%rbp), %rax
+L_if_end_73:
+    movl -24(%rbp), %eax
     pushq %rax
     movq L_p_XII_KIND_FLOOP(%rip), %rax
     pushq %rax
@@ -3105,9 +3933,9 @@ L_if_end_49:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -3116,7 +3944,7 @@ L_if_end_49:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -3127,7 +3955,7 @@ L_if_end_49:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -3159,7 +3987,7 @@ L_p_xii_term_is_basis:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -3180,7 +4008,7 @@ L_p_xii_term_is_basis:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_75
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3195,7 +4023,7 @@ L_p_xii_term_is_basis:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_51:
+L_if_end_75:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3228,7 +4056,7 @@ L_p_xii_term_is_fusion:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -3249,7 +4077,7 @@ L_p_xii_term_is_fusion:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_77
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3264,7 +4092,7 @@ L_p_xii_term_is_fusion:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_53:
+L_if_end_77:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3297,7 +4125,7 @@ L_p_xii_term_is_null:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -3309,7 +4137,7 @@ L_p_xii_term_is_null:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_79
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3324,7 +4152,7 @@ L_p_xii_term_is_null:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_55:
+L_if_end_79:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3358,7 +4186,7 @@ L_p_xii_term_is_kind:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -3379,7 +4207,7 @@ L_p_xii_term_is_kind:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_81
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3394,7 +4222,7 @@ L_p_xii_term_is_kind:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_57:
+L_if_end_81:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3428,7 +4256,7 @@ L_p_xii_term_mhash:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_NULL_REF(%rip), %rax
     pushq %rax
@@ -3440,13 +4268,13 @@ L_p_xii_term_mhash:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_83
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_for_top_60:
-    movq -24(%rbp), %rax
+L_for_top_84:
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
     pushq %rax
@@ -3458,31 +4286,32 @@ L_for_top_60:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_for_end_61
+    jz L_for_end_85
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    jmp L_for_top_60
-L_for_end_61:
+    jmp L_for_top_84
+L_for_end_85:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3497,8 +4326,8 @@ L_for_end_61:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_59:
-    movq -8(%rbp), %rax
+L_if_end_83:
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_ARENA_CAP(%rip), %rax
     pushq %rax
@@ -3510,7 +4339,7 @@ L_if_end_59:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_87
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3528,44 +4357,83 @@ L_if_end_59:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_63:
-    movq -8(%rbp), %rax
+L_if_end_87:
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_XII_TERM_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     imulq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    leaq L_p_XII_TERM_ARENA(%rip), %rax
+    subq $32, %rsp
+    callq L_p_sha256_init
+    addq $32, %rsp
     pushq %rax
     popq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movq -32(%rbp), %rax
+L_for_top_88:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setl %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
-    movq -40(%rbp), %rax
+    testq %rax, %rax
+    jz L_for_end_89
+    leaq L_p_XII_TERM_ARENA(%rip), %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
-    movabsq $0x20, %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    popq %rax
+    movl %eax, %eax
     pushq %rax
-    popq %r8
-    popq %rdx
     popq %rcx
     subq $32, %rsp
-    callq L_p_sha256_oneshot
+    callq L_p_sha256_update_byte
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    jmp L_for_top_88
+L_for_end_89:
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_sha256_final
     addq $32, %rsp
     pushq %rax
     popq %rax

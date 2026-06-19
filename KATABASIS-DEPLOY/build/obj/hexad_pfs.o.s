@@ -3,21 +3,21 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "hexad_algebra.iiinonecapsule_updatemicrocode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "hexad_algebra.iii\0"
 L_str_1:
-    .ascii "nonecapsule_updatemicrocode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "none\0"
 L_str_2:
-    .ascii "capsule_updatemicrocode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "capsule_update\0"
 L_str_3:
-    .ascii "microcode_loadbootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "microcode_load\0"
 L_str_4:
-    .ascii "bootorder_setreal_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "bootorder_set\0"
 L_str_5:
-    .ascii "real_nvram_writeme_psp_mailboxsmram_writeunknown\0"
+    .ascii "real_nvram_write\0"
 L_str_6:
-    .ascii "me_psp_mailboxsmram_writeunknown\0"
+    .ascii "me_psp_mailbox\0"
 L_str_7:
-    .ascii "smram_writeunknown\0"
+    .ascii "smram_write\0"
 L_str_8:
     .ascii "unknown\0"
     .section .rodata
@@ -116,7 +116,7 @@ L_p__hxp_fill:
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -204,7 +204,7 @@ L_p__hxp_fill:
     popq %rbp
     retq
 L_if_end_1:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -277,7 +277,7 @@ L_if_end_1:
     popq %rbp
     retq
 L_if_end_3:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
@@ -350,7 +350,7 @@ L_if_end_3:
     popq %rbp
     retq
 L_if_end_5:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
@@ -423,7 +423,7 @@ L_if_end_5:
     popq %rbp
     retq
 L_if_end_7:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax
@@ -496,7 +496,7 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax
@@ -631,7 +631,7 @@ L_p_iii_hexad_pfs:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -739,7 +739,7 @@ L_p_iii_hexad_pfs_kind:
     popq %rax
     movq %rax, -16(%rbp)
 L_for_top_14:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_HXP_PFS_COUNT(%rip), %rax
     pushq %rax
@@ -752,7 +752,7 @@ L_for_top_14:
     popq %rax
     testq %rax, %rax
     jz L_for_end_15
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -790,7 +790,7 @@ L_for_top_14:
     popq %rax
     testq %rax, %rax
     jz L_if_end_19
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -806,13 +806,14 @@ L_for_top_14:
     retq
 L_if_end_19:
 L_if_end_17:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -850,7 +851,7 @@ L_p_iii_hexad_pfs_name:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -878,7 +879,7 @@ L_p_iii_hexad_pfs_name:
     popq %rbp
     retq
 L_if_end_21:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -906,7 +907,7 @@ L_if_end_21:
     popq %rbp
     retq
 L_if_end_23:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -934,7 +935,7 @@ L_if_end_23:
     popq %rbp
     retq
 L_if_end_25:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
@@ -962,7 +963,7 @@ L_if_end_25:
     popq %rbp
     retq
 L_if_end_27:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
@@ -990,7 +991,7 @@ L_if_end_27:
     popq %rbp
     retq
 L_if_end_29:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax
@@ -1018,7 +1019,7 @@ L_if_end_29:
     popq %rbp
     retq
 L_if_end_31:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax

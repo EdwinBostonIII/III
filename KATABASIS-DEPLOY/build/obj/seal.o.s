@@ -3,18 +3,20 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "sha256.iiicontent_addr.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cad.iii\0"
 L_str_1:
-    .ascii "content_addr.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cad.iii\0"
 L_str_2:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cad.iii\0"
 L_str_3:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_4:
-    .ascii "cycle_term.iiicycle_term.iiicycle_term.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_5:
-    .ascii "cycle_term.iiicycle_term.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_6:
+    .ascii "cycle_term.iii\0"
+L_str_7:
     .ascii "cycle_term.iii\0"
     .section .bss
     .global L_p_KCS_BUF
@@ -41,7 +43,7 @@ L_p_katabasis_cycle_seal:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -49,7 +51,7 @@ L_p_katabasis_cycle_seal:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -58,7 +60,7 @@ L_p_katabasis_cycle_seal:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -67,7 +69,7 @@ L_p_katabasis_cycle_seal:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -76,7 +78,7 @@ L_p_katabasis_cycle_seal:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -85,7 +87,7 @@ L_p_katabasis_cycle_seal:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -166,6 +168,8 @@ L_p_katabasis_cycle_seal:
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
+    movabsq $0x0, %rax
+    pushq %rax
     leaq L_p_KCS_BUF(%rip), %rax
     pushq %rax
     popq %rax
@@ -174,15 +178,13 @@ L_p_katabasis_cycle_seal:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
+    popq %r9
     popq %r8
     popq %rdx
     popq %rcx
     subq $32, %rsp
-    callq L_p_sha256_oneshot
+    callq L_p_cad_oneshot_packed
     addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -215,7 +217,7 @@ L_p_katabasis_cycle_seal_verify:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -223,7 +225,7 @@ L_p_katabasis_cycle_seal_verify:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     leaq L_p_KCS_TMP(%rip), %rax
     pushq %rax
@@ -245,7 +247,7 @@ L_p_katabasis_cycle_seal_verify:
     popq %rdx
     popq %rcx
     subq $32, %rsp
-    callq L_p_ca_eq
+    callq L_p_cad_eq
     addq $32, %rsp
     pushq %rax
     popq %rax

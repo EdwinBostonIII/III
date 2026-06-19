@@ -3,19 +3,19 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_2:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_3:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_4:
-    .ascii "xii_term.iiixii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_5:
-    .ascii "xii_term.iiixii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_6:
-    .ascii "xii_term.iiixii_term.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_7:
     .ascii "xii_term.iii\0"
     .section .rodata
@@ -47,11 +47,11 @@ L_p_katabasis_cycle_act:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -59,31 +59,45 @@ L_p_katabasis_cycle_act:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     movabsq $0x18, %rax
     pushq %rax
     popq %rcx
     popq %rax
     shlq %cl, %rax
+    movl %eax, %eax
     pushq %rax
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
     popq %rcx
     popq %rax
     shlq %cl, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rcx
     popq %rax
     orq %rcx, %rax
     pushq %rax
-    movq -64(%rbp), %rax
+    movl -64(%rbp), %eax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -99,7 +113,7 @@ L_p_katabasis_cycle_act:
     movq %rax, -72(%rbp)
     movq L_p_KCT_KIND_ACT(%rip), %rax
     pushq %rax
-    movq -72(%rbp), %rax
+    movl -72(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -109,7 +123,7 @@ L_p_katabasis_cycle_act:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     movq L_p_KCT_NULL(%rip), %rax
     pushq %rax
@@ -137,7 +151,7 @@ L_p_katabasis_cycle_act:
     popq %rbp
     retq
 L_if_end_1:
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
@@ -148,7 +162,7 @@ L_if_end_1:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -181,17 +195,17 @@ L_p_katabasis_cycle_under_cap:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
     movq L_p_KCT_KIND_GRANT(%rip), %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -201,7 +215,7 @@ L_p_katabasis_cycle_under_cap:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     movq L_p_KCT_NULL(%rip), %rax
     pushq %rax
@@ -231,9 +245,9 @@ L_p_katabasis_cycle_under_cap:
 L_if_end_3:
     movq L_p_KCT_KIND_FUNDER(%rip), %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %r8
     popq %rdx
@@ -272,11 +286,11 @@ L_p_katabasis_cycle_act_of:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCT_KIND_FUNDER(%rip), %rax
     pushq %rax
@@ -297,7 +311,7 @@ L_p_katabasis_cycle_act_of:
     popq %rax
     testq %rax, %rax
     jz L_if_end_5
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -317,7 +331,7 @@ L_p_katabasis_cycle_act_of:
     popq %rbp
     retq
 L_if_end_5:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -349,11 +363,11 @@ L_p_katabasis_cycle_family:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -362,7 +376,7 @@ L_p_katabasis_cycle_family:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -371,7 +385,7 @@ L_p_katabasis_cycle_family:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x18, %rax
     pushq %rax
@@ -415,11 +429,11 @@ L_p_katabasis_cycle_target_kind:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -428,7 +442,7 @@ L_p_katabasis_cycle_target_kind:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -437,7 +451,7 @@ L_p_katabasis_cycle_target_kind:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
@@ -481,11 +495,11 @@ L_p_katabasis_cycle_action_hexad:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -494,7 +508,7 @@ L_p_katabasis_cycle_action_hexad:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -503,7 +517,7 @@ L_p_katabasis_cycle_action_hexad:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0xffff, %rax
     pushq %rax
@@ -541,11 +555,11 @@ L_p_katabasis_cycle_target:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -554,7 +568,7 @@ L_p_katabasis_cycle_target:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -591,11 +605,11 @@ L_p_katabasis_cycle_cap:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCT_KIND_FUNDER(%rip), %rax
     pushq %rax
@@ -631,7 +645,7 @@ L_p_katabasis_cycle_cap:
     popq %rbp
     retq
 L_if_end_7:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -640,7 +654,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -677,11 +691,11 @@ L_p_katabasis_cycle_is_wellformed:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCT_KIND_FUNDER(%rip), %rax
     pushq %rax
@@ -717,7 +731,7 @@ L_p_katabasis_cycle_is_wellformed:
     popq %rbp
     retq
 L_if_end_9:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -726,7 +740,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -735,7 +749,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq L_p_KCT_KIND_ACT(%rip), %rax
     pushq %rax
@@ -771,7 +785,7 @@ L_if_end_9:
     popq %rbp
     retq
 L_if_end_11:
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movq L_p_KCT_KIND_GRANT(%rip), %rax
     pushq %rax

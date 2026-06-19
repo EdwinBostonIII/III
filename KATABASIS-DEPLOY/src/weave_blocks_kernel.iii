@@ -1,0 +1,17 @@
+/* weave_blocks_kernel.iii -- kernel-safe subset of numera/weave_blocks for the Ring-0 gate closure.
+ *
+ * numera/weave_blocks exports wvb_arx_mix(va,vb,vc,vd,x,y,r0,r1,r2,r3) -- TEN parameters, which cg_r0 cannot
+ * pass (the Win64 4-register limit; args 5+ spill to undefined globals).  The gate's hash closure (sha256/keccak)
+ * needs only the four SIMPLE block helpers, all <=3 params and pure -- so this kernel subset provides exactly those,
+ * byte-identical to the stdlib bodies, and the full ARX module stays cg_r3/userland-only.  Same pattern as
+ * cpufeat_kernel.  Ring R0. */
+module weave_blocks_kernel
+
+fn wvb_rotl32(x: u32, n: u32) -> u32 @export {
+    return ((x << n) | (x >> (32u32 - n)))
+}
+fn wvb_rotl64(x: u64, n: u64) -> u64 @export {
+    return ((x << n) | (x >> (64u64 - n)))
+}
+fn wvb_ch32(e: u32, f: u32, g: u32) -> u32 @export { return (e & f) ^ ((~e) & g) }
+fn wvb_maj32(a: u32, b: u32, c: u32) -> u32 @export { return (a & b) ^ (a & c) ^ (b & c) }

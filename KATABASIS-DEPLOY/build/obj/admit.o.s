@@ -3,13 +3,13 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "cycle_term.iiicycle_term.iiiseal.iiicaps.iiigate.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_1:
-    .ascii "cycle_term.iiiseal.iiicaps.iiigate.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_2:
-    .ascii "seal.iiicaps.iiigate.iii\0"
+    .ascii "seal.iii\0"
 L_str_3:
-    .ascii "caps.iiigate.iii\0"
+    .ascii "caps.iii\0"
 L_str_4:
     .ascii "gate.iii\0"
     .section .text,"xr"  /* PE/COFF Â§6 */
@@ -30,7 +30,7 @@ L_p_katabasis_gate_admit:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -38,7 +38,7 @@ L_p_katabasis_gate_admit:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
@@ -50,7 +50,7 @@ L_p_katabasis_gate_admit:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -59,7 +59,7 @@ L_p_katabasis_gate_admit:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -68,9 +68,9 @@ L_p_katabasis_gate_admit:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
     pushq %rax
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -80,7 +80,7 @@ L_p_katabasis_gate_admit:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax

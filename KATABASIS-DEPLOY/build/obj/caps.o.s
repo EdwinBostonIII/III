@@ -36,11 +36,11 @@ L_p_katabasis_family_required_right:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -68,7 +68,7 @@ L_p_katabasis_family_required_right:
     popq %rbp
     retq
 L_if_end_1:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -96,7 +96,7 @@ L_if_end_1:
     popq %rbp
     retq
 L_if_end_3:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
@@ -124,7 +124,7 @@ L_if_end_3:
     popq %rbp
     retq
 L_if_end_5:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
@@ -152,7 +152,7 @@ L_if_end_5:
     popq %rbp
     retq
 L_if_end_7:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x5, %rax
     pushq %rax
@@ -180,7 +180,7 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax
@@ -208,7 +208,7 @@ L_if_end_9:
     popq %rbp
     retq
 L_if_end_11:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x7, %rax
     pushq %rax
@@ -236,7 +236,7 @@ L_if_end_11:
     popq %rbp
     retq
 L_if_end_13:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
@@ -264,7 +264,7 @@ L_if_end_13:
     popq %rbp
     retq
 L_if_end_15:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x9, %rax
     pushq %rax
@@ -325,7 +325,7 @@ L_p_katabasis_cap_check:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -333,7 +333,7 @@ L_p_katabasis_cap_check:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp

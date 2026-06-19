@@ -52,6 +52,14 @@ L_p_CAP_RIGHT_PATTERN_REGISTER:
     .quad 0x20000
 L_p_CAP_RIGHT_TRANSFORM_RUN:
     .quad 0x40000
+L_p_CAP_RIGHT_AUTOGENESIS:
+    .quad 0x80000
+L_p_CAP_RIGHT_AUTOGENESIS_COMMIT:
+    .quad 0x100000
+L_p_CAP_RIGHT_PERCEIVE:
+    .quad 0x200000
+L_p_CAP_RIGHT_SAMPLE:
+    .quad 0x400000
 L_p_CAP_RIGHT_ENV:
     .quad 0x8000000000000000
 L_p_CAP_MAX_INSTANCES:
@@ -97,7 +105,7 @@ L_p_cap_alloc_slot:
     popq %rax
     movq %rax, -8(%rbp)
 L_for_top_0:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movq L_p_CAP_MAX_INSTANCES(%rip), %rax
     pushq %rax
@@ -112,7 +120,7 @@ L_for_top_0:
     jz L_for_end_1
     leaq L_p_CAP_LIVE(%rip), %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -129,7 +137,7 @@ L_for_top_0:
     popq %rax
     testq %rax, %rax
     jz L_if_end_3
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -144,13 +152,14 @@ L_for_top_0:
     popq %rbp
     retq
 L_if_end_3:
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
@@ -233,7 +242,7 @@ L_if_end_5:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setge %al
+    setae %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -257,10 +266,13 @@ L_if_end_7:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
     movq %rax, -24(%rbp)
     leaq L_p_CAP_LIVE(%rip), %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -292,7 +304,7 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -458,7 +470,7 @@ L_p_cap_attenuate:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -488,7 +500,7 @@ L_p_cap_attenuate:
 L_if_end_13:
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -526,7 +538,7 @@ L_if_end_15:
     movq %rax, -40(%rbp)
     leaq L_p_CAP_RIGHTS(%rip), %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -552,7 +564,7 @@ L_if_end_15:
     movq %rax, -56(%rbp)
     leaq L_p_CAP_EXPIRES(%rip), %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -602,7 +614,7 @@ L_if_end_19:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setg %al
+    seta %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -620,7 +632,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -654,7 +666,7 @@ L_if_end_23:
     pushq %rax
     leaq L_p_CAP_RIGHTS(%rip), %rax
     pushq %rax
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -666,7 +678,7 @@ L_if_end_23:
     pushq %rax
     leaq L_p_CAP_PARENT(%rip), %rax
     pushq %rax
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -678,7 +690,7 @@ L_if_end_23:
     pushq %rax
     leaq L_p_CAP_EXPIRES(%rip), %rax
     pushq %rax
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -690,7 +702,7 @@ L_if_end_23:
     pushq %rax
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -702,13 +714,13 @@ L_if_end_23:
     pushq %rax
     leaq L_p_CAP_LIVE(%rip), %rax
     pushq %rax
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     popq %rdx
     movq %rdx, (%rax,%rcx,8)
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -756,7 +768,7 @@ L_p_cap_verify_rights:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -786,7 +798,7 @@ L_p_cap_verify_rights:
 L_if_end_25:
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -840,7 +852,7 @@ L_for_top_28:
     popq %rax
     testq %rax, %rax
     jz L_for_end_29
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     movq L_p_CAP_MAX_INSTANCES(%rip), %rax
     pushq %rax
@@ -877,7 +889,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -907,7 +919,7 @@ L_if_end_31:
 L_if_end_33:
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -941,7 +953,7 @@ L_if_end_33:
 L_if_end_35:
     leaq L_p_CAP_PARENT(%rip), %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -949,13 +961,14 @@ L_if_end_35:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -963,7 +976,7 @@ L_if_end_35:
 L_for_end_29:
     leaq L_p_CAP_RIGHTS(%rip), %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1048,7 +1061,7 @@ L_p_cap_verify_at:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1078,7 +1091,7 @@ L_p_cap_verify_at:
 L_if_end_39:
     leaq L_p_CAP_EXPIRES(%rip), %rax
     pushq %rax
-    movq -32(%rbp), %rax
+    movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1106,7 +1119,7 @@ L_if_end_39:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setge %al
+    setae %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -1178,7 +1191,7 @@ L_p_cap_revoke:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1232,7 +1245,7 @@ L_for_top_46:
     popq %rax
     testq %rax, %rax
     jz L_for_end_47
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     movq L_p_CAP_MAX_INSTANCES(%rip), %rax
     pushq %rax
@@ -1304,7 +1317,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1334,7 +1347,7 @@ L_if_end_51:
 L_if_end_55:
     leaq L_p_CAP_PARENT(%rip), %rax
     pushq %rax
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1342,13 +1355,14 @@ L_if_end_55:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -40(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -1392,7 +1406,7 @@ L_if_end_57:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq -64(%rbp), %rax
+    movl -64(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1426,7 +1440,7 @@ L_if_end_59:
     pushq %rax
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -64(%rbp), %rax
+    movl -64(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1473,7 +1487,7 @@ L_p_cap_rights:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1503,11 +1517,42 @@ L_p_cap_rights:
 L_if_end_61:
     leaq L_p_CAP_RIGHTS(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .text,"xr"  /* PE/COFF Â§6 */
+    /* IRQL_REQUIRES_MAX(2) */
+    .global L_p_cap_right_reflect
+L_p_cap_right_reflect:
+    .seh_proc L_p_cap_right_reflect
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    /* witness enter (D9, ADR-024) */
+    movq $1, %rcx  /* IIIW_ENTER */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    movq L_p_CAP_RIGHT_AMEND(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1548,7 +1593,7 @@ L_p_cap_parent:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1578,7 +1623,7 @@ L_p_cap_parent:
 L_if_end_63:
     leaq L_p_CAP_PARENT(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1623,7 +1668,7 @@ L_p_cap_is_revoked:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1651,13 +1696,151 @@ L_p_cap_is_revoked:
     popq %rbp
     retq
 L_if_end_65:
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+L_for_top_66:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_for_end_67
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq L_p_CAP_MAX_INSTANCES(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setg %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_69
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_69:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_p_cap_slot_of
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_71:
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_73:
+    leaq L_p_CAP_PARENT(%rip), %rax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    jmp L_for_top_66
+L_for_end_67:
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1698,7 +1881,7 @@ L_p_cap_expires_at:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1710,7 +1893,7 @@ L_p_cap_expires_at:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_75
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1725,10 +1908,10 @@ L_p_cap_expires_at:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_67:
+L_if_end_75:
     leaq L_p_CAP_EXPIRES(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1773,7 +1956,7 @@ L_p_cap_drop:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -1785,7 +1968,7 @@ L_p_cap_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_77
     movq L_p_CAP_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1800,7 +1983,7 @@ L_p_cap_drop:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_69:
+L_if_end_77:
     movq -8(%rbp), %rax
     pushq %rax
     movq L_p_CAP_ENV_ROOT(%rip), %rax
@@ -1813,7 +1996,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_71
+    jz L_if_end_79
     movq L_p_CAP_E_DENIED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1828,14 +2011,99 @@ L_if_end_69:
     movq %rbp, %rsp
     popq %rbp
     retq
-L_if_end_71:
+L_if_end_79:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+L_for_top_80:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movq L_p_CAP_MAX_INSTANCES(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setl %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_for_end_81
+    leaq L_p_CAP_LIVE(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_83
+    leaq L_p_CAP_PARENT(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_85
+    movq L_p_CAP_E_DENIED(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    pushq %rax
+    movq $2, %rcx  /* IIIW_EXIT */
+    subq $32, %rsp
+    callq iii_witness_emit_kernel
+    addq $32, %rsp
+    popq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+L_if_end_85:
+L_if_end_83:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    jmp L_for_top_80
+L_for_end_81:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     pushq %rax
     leaq L_p_CAP_LIVE(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1847,7 +2115,7 @@ L_if_end_71:
     pushq %rax
     leaq L_p_CAP_RIGHTS(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1859,7 +2127,7 @@ L_if_end_71:
     pushq %rax
     leaq L_p_CAP_PARENT(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1871,7 +2139,7 @@ L_if_end_71:
     pushq %rax
     leaq L_p_CAP_EXPIRES(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1883,7 +2151,7 @@ L_if_end_71:
     pushq %rax
     leaq L_p_CAP_REVOKED(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax

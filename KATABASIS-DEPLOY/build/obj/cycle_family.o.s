@@ -65,11 +65,11 @@ L_p_katabasis_cycle_family_valid:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F1_READ_METAL(%rip), %rax
     pushq %rax
@@ -97,7 +97,7 @@ L_p_katabasis_cycle_family_valid:
     popq %rbp
     retq
 L_if_end_1:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F2_WRITE_METAL(%rip), %rax
     pushq %rax
@@ -125,7 +125,7 @@ L_if_end_1:
     popq %rbp
     retq
 L_if_end_3:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F3_CENSUS(%rip), %rax
     pushq %rax
@@ -153,7 +153,7 @@ L_if_end_3:
     popq %rbp
     retq
 L_if_end_5:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F4_SNAPSHOT(%rip), %rax
     pushq %rax
@@ -181,7 +181,7 @@ L_if_end_5:
     popq %rbp
     retq
 L_if_end_7:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F5_DESCEND(%rip), %rax
     pushq %rax
@@ -209,7 +209,7 @@ L_if_end_7:
     popq %rbp
     retq
 L_if_end_9:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F6_OBSERVE(%rip), %rax
     pushq %rax
@@ -237,7 +237,7 @@ L_if_end_9:
     popq %rbp
     retq
 L_if_end_11:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F7_SELF_VERIFY(%rip), %rax
     pushq %rax
@@ -265,7 +265,7 @@ L_if_end_11:
     popq %rbp
     retq
 L_if_end_13:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F8_CAP_OP(%rip), %rax
     pushq %rax
@@ -293,7 +293,7 @@ L_if_end_13:
     popq %rbp
     retq
 L_if_end_15:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F9_COPROC(%rip), %rax
     pushq %rax
@@ -353,11 +353,11 @@ L_p_katabasis_cycle_family_class:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F1_READ_METAL(%rip), %rax
     pushq %rax
@@ -385,7 +385,7 @@ L_p_katabasis_cycle_family_class:
     popq %rbp
     retq
 L_if_end_19:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F2_WRITE_METAL(%rip), %rax
     pushq %rax
@@ -413,7 +413,7 @@ L_if_end_19:
     popq %rbp
     retq
 L_if_end_21:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F3_CENSUS(%rip), %rax
     pushq %rax
@@ -441,7 +441,7 @@ L_if_end_21:
     popq %rbp
     retq
 L_if_end_23:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F4_SNAPSHOT(%rip), %rax
     pushq %rax
@@ -469,7 +469,7 @@ L_if_end_23:
     popq %rbp
     retq
 L_if_end_25:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F5_DESCEND(%rip), %rax
     pushq %rax
@@ -497,7 +497,7 @@ L_if_end_25:
     popq %rbp
     retq
 L_if_end_27:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F6_OBSERVE(%rip), %rax
     pushq %rax
@@ -525,7 +525,7 @@ L_if_end_27:
     popq %rbp
     retq
 L_if_end_29:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F7_SELF_VERIFY(%rip), %rax
     pushq %rax
@@ -553,7 +553,7 @@ L_if_end_29:
     popq %rbp
     retq
 L_if_end_31:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F8_CAP_OP(%rip), %rax
     pushq %rax
@@ -581,7 +581,7 @@ L_if_end_31:
     popq %rbp
     retq
 L_if_end_33:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F9_COPROC(%rip), %rax
     pushq %rax
@@ -641,11 +641,11 @@ L_p_katabasis_cycle_family_inverse:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F1_READ_METAL(%rip), %rax
     pushq %rax
@@ -673,7 +673,7 @@ L_p_katabasis_cycle_family_inverse:
     popq %rbp
     retq
 L_if_end_37:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F2_WRITE_METAL(%rip), %rax
     pushq %rax
@@ -701,7 +701,7 @@ L_if_end_37:
     popq %rbp
     retq
 L_if_end_39:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F3_CENSUS(%rip), %rax
     pushq %rax
@@ -729,7 +729,7 @@ L_if_end_39:
     popq %rbp
     retq
 L_if_end_41:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F4_SNAPSHOT(%rip), %rax
     pushq %rax
@@ -757,7 +757,7 @@ L_if_end_41:
     popq %rbp
     retq
 L_if_end_43:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F5_DESCEND(%rip), %rax
     pushq %rax
@@ -785,7 +785,7 @@ L_if_end_43:
     popq %rbp
     retq
 L_if_end_45:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F6_OBSERVE(%rip), %rax
     pushq %rax
@@ -813,7 +813,7 @@ L_if_end_45:
     popq %rbp
     retq
 L_if_end_47:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F7_SELF_VERIFY(%rip), %rax
     pushq %rax
@@ -841,7 +841,7 @@ L_if_end_47:
     popq %rbp
     retq
 L_if_end_49:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F8_CAP_OP(%rip), %rax
     pushq %rax
@@ -869,7 +869,7 @@ L_if_end_49:
     popq %rbp
     retq
 L_if_end_51:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F9_COPROC(%rip), %rax
     pushq %rax
@@ -929,11 +929,11 @@ L_p_katabasis_cycle_is_dangerous:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F2_WRITE_METAL(%rip), %rax
     pushq %rax
@@ -961,7 +961,7 @@ L_p_katabasis_cycle_is_dangerous:
     popq %rbp
     retq
 L_if_end_55:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F5_DESCEND(%rip), %rax
     pushq %rax
@@ -989,7 +989,7 @@ L_if_end_55:
     popq %rbp
     retq
 L_if_end_57:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     movq L_p_KCF_F9_COPROC(%rip), %rax
     pushq %rax
@@ -1049,11 +1049,11 @@ L_p_katabasis_cycle_has_inverse:
     subq $32, %rsp
     callq iii_witness_emit_kernel
     addq $32, %rsp
-    movq -8(%rbp), %rax
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1086,7 +1086,7 @@ L_p_katabasis_cycle_has_inverse:
     popq %rbp
     retq
 L_if_end_61:
-    movq -16(%rbp), %rax
+    movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp

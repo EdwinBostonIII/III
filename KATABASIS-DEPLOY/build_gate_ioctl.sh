@@ -13,20 +13,28 @@ B=KATABASIS-DEPLOY/build
 O=$B/obj
 mkdir -p "$O"
 
-# gate-admit dependency closure, leaves first (same as the Tier-2 resident gate).
+# gate-admit dependency closure, leaves first.  Repaired for the post-Jun-6 stdlib drift: content_addr was folded
+# into numera/cad (dead here); the closure grew trit (hexad_algebra) + quine_seal (M23 attest) + the wvb_* helpers
+# (sha256/keccak).  Kernel-INCOMPATIBLE deps are replaced by cg_r0-safe subsets compiled below (NOT listed here):
+#   numera/weave_blocks -> weave_blocks_kernel (its wvb_arx_mix has 10 params, > cg_r0's 4); numera/cad ->
+#   cad_kernel (cad routes through sha256_dispatch -> cpufeat -> kernel32, illegal in R0).  pci_enum = the new
+#   live PCI-config deriver for census's GPU facts.
 MODS=(
   omnia/hexad_algebra omnia/hexad_pfs omnia/hexad_reach omnia/xii_term
-  numera/sha256 numera/keccak256 numera/keccak numera/content_addr
+  numera/trit numera/sha256 numera/keccak256 numera/keccak
   aether/capability
   katabasis/svm_layout katabasis/bar_layout katabasis/cycle_family
   katabasis/cycle_admit katabasis/cycle_term katabasis/seal katabasis/caps
-  katabasis/gate_verdict katabasis/gate katabasis/admit
+  katabasis/quine_seal katabasis/gate_verdict katabasis/gate katabasis/admit
+  katabasis/pci_enum
 )
 
-echo "[1] cg_r0 -> .o : IOCTL driver + kernel cpufeat shim + ${#MODS[@]} closure modules"
+echo "[1] cg_r0 -> .o : IOCTL driver + kernel-safe subsets (cpufeat/weave_blocks/cad) + ${#MODS[@]} closure modules"
 "./$IIIS" "$S/gate_driver.iii"   --ring R0 --compile-only --out "$O/gate_driver.o"
 "./$IIIS" "$S/cpufeat_kernel.iii" --ring R0 --compile-only --out "$O/cpufeat_kernel.o"
-OBJS=("$O/gate_driver.o" "$O/cpufeat_kernel.o")
+"./$IIIS" "$S/weave_blocks_kernel.iii" --ring R0 --compile-only --out "$O/weave_blocks_kernel.o"
+"./$IIIS" "$S/cad_kernel.iii" --ring R0 --compile-only --out "$O/cad_kernel.o"
+OBJS=("$O/gate_driver.o" "$O/cpufeat_kernel.o" "$O/weave_blocks_kernel.o" "$O/cad_kernel.o")
 for m in "${MODS[@]}"; do n=$(basename "$m"); "./$IIIS" "STDLIB/iii/$m.iii" --ring R0 --compile-only --out "$O/$n.o"; OBJS+=("$O/$n.o"); done
 
 echo "[2] assemble kernel witness leaf + hand-asm ntoskrnl marshalling shims"

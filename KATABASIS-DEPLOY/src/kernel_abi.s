@@ -171,3 +171,22 @@ L_p_iii_kio_readmsr:
     orq  %rdx, %rax              # RAX = (EDX<<32) | EAX
     retq
     .seh_endproc
+
+# u32 iii_kio_pci_cfg_read(u32 cf8_addr /rcx) -> config dword in EAX (zero-extends RAX).
+#   The architected PCI config mechanism #1: write CONFIG_ADDRESS (0xCF8) to SELECT a (bus:dev:fn:reg), then
+#   read CONFIG_DATA (0xCFC).  A config-space READ -- NON-DESTRUCTIVE (the OUT only selects the register; it is
+#   NOT a device write).  Privileged port I/O (Ring 0) but cannot fault / cannot brick: an absent slot returns
+#   all-ones.  Caller builds cf8_addr = 0x80000000 | bus<<16 | dev<<11 | fn<<8 | (reg & 0xFC).  Worst case under
+#   concurrent HAL access is a TORN read (a wrong dword) -> caught by the census drift-check, never a crash.
+#   Leaf: only EAX/EDX (caller-saved) touched; no stack, no callee-saved regs.
+    .global L_p_iii_kio_pci_cfg_read
+    .seh_proc L_p_iii_kio_pci_cfg_read
+L_p_iii_kio_pci_cfg_read:
+    .seh_endprologue
+    movl %ecx, %eax             # cf8_addr
+    movl $0xCF8, %edx
+    outl %eax, %dx              # CONFIG_ADDRESS <- cf8_addr  (select the register; dword OUT)
+    movl $0xCFC, %edx
+    inl  %dx, %eax              # EAX <- CONFIG_DATA          (read the selected dword)
+    retq
+    .seh_endproc

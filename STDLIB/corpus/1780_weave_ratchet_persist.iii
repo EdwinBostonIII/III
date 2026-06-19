@@ -1,0 +1,63 @@
+/* 1780_weave_ratchet_persist.iii -- THE RATCHET ACROSS TIME: the lemma library survives a wipe and is inherited.
+ *
+ * The ratchet (gilm) made re-discovery free within a run; persistence makes it free across runs.  The solved-
+ * target library is sealed to disk and reloaded into a wiped state, so a future run inherits what was already
+ * proven and re-discovery short-circuits -- the search space shrinks across TIME, not just within one process.
+ *
+ *   pass 1 (cold): forge Ch, Maj, the rotation-duality family -> 3 forges, library size 3
+ *   persist -> wipe (size 0) -> reload (size 3, seal-checked)
+ *   pass 2 (inherited): the SAME three -> 0 NEW forges, 3 cites; the inherited results are the true ones
+ * Exit 99 = the ratchet spans runs. */
+module corpus_1780
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn gilm_reset() -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_forged() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_cited() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_size() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_forge_cited(kind: u32) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_rotdual_count_cited() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_persist(cap: u64, path: u64) -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilm_reload(cap: u64, path: u64) -> i32 from "invent.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let path : *u8 = malloc(16u64)                          /* "./iii_gilm.tmp" */
+    path[0u64] = 46u8   path[1u64] = 47u8   path[2u64] = 105u8  path[3u64] = 105u8
+    path[4u64] = 105u8  path[5u64] = 95u8   path[6u64] = 103u8  path[7u64] = 105u8
+    path[8u64] = 108u8  path[9u64] = 109u8  path[10u64] = 46u8  path[11u64] = 116u8
+    path[12u64] = 109u8 path[13u64] = 112u8 path[14u64] = 0u8
+
+    /* pass 1 -- cold */
+    gilm_reset()
+    gilw_forge_cited(1u32)
+    gilw_forge_cited(2u32)
+    gild_rotdual_count_cited()
+    if gilm_forged() != 3u64 { return 1u64 }
+    if gilm_size() != 3u64 { return 2u64 }
+
+    /* persist -> wipe -> reload */
+    if gilm_persist(cap, path as u64) != 0i32 { return 3u64 }
+    gilm_reset()
+    if gilm_size() != 0u64 { return 4u64 }
+    if gilm_reload(cap, path as u64) != 3i32 { return 5u64 }
+    if gilm_size() != 3u64 { return 6u64 }
+
+    /* pass 2 -- inherited: 0 new forges, 3 cites */
+    gilw_forge_cited(1u32)
+    gilw_forge_cited(2u32)
+    gild_rotdual_count_cited()
+    if gilm_forged() != 0u64 { return 7u64 }               /* the ratchet survived: NO kernel work */
+    if gilm_cited() != 3u64 { return 8u64 }
+
+    /* the inherited results are the true ones */
+    if gilw_forge_cited(1u32) != 3u32 { return 9u64 }
+    if gild_rotdual_count_cited() != 31u64 { return 10u64 }
+
+    fs_delete(cap, path as u64)
+    return 99u64
+}

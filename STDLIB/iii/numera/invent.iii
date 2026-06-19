@@ -44,6 +44,11 @@ extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn ma_init() -> i32 from "microarch_model.iii"
 extern @abi(c-msvc-x64) fn ma_set_latency(opcode: u32, cycles: u32) -> i32 from "microarch_model.iii"
 extern @abi(c-msvc-x64) fn ma_simulate(ops: *u32, n: u32, deps: *u32, dep_n: u32, out_cycles: *u64) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
 
 const GIL_W        : u64 = 64u64       /* prove at the deployment machine width */
 const GIL_MUL_COST : u32 = 4u32        /* the value gradient: a multiply is the expensive baseline */
@@ -987,4 +992,83 @@ fn weave_census() -> u64 @export {
     if gild_distrib() == 1u8 { total = total + 2u64 }              /* 2: distributivity */
     if gild_xor_involution(0xDEADBEEFu64) == 1u8 { total = total + 1u64 }  /* 1: the XOR involution */
     return total
+}
+
+/* ============================================================================================================
+ * THE RATCHET ACROSS TIME: the lemma library (gilm) PERSISTS, so a future run inherits the solved targets and
+ * skips re-forging them.  Image = [magic u32][n u32]([key u32][val u64])*, with an appended cad seal; reload
+ * re-checks the seal (tamper -> refused) and restores keys+vals.  The ratchet now spans runs -- search shrinks
+ * across time, not just within one process. */
+const GILM_MAGIC  : u32 = 0x4D4C4947u32        /* 'GILM' LE */
+const GILM_IMGCAP : u64 = 2048u64
+var GILM_IMG  : [u8; 2048]
+var GILM_SEAL : [u8; 32]
+
+fn _gilm_put_u32le(off: u64, v: u32) -> u64 {
+    GILM_IMG[off] = (v & 0xFFu32) as u8
+    GILM_IMG[off + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    GILM_IMG[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    GILM_IMG[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return off + 4u64
+}
+fn _gilm_get_u32le(off: u64) -> u32 {
+    return (GILM_IMG[off] as u32) | ((GILM_IMG[off + 1u64] as u32) << 8u32) | ((GILM_IMG[off + 2u64] as u32) << 16u32) | ((GILM_IMG[off + 3u64] as u32) << 24u32)
+}
+fn _gilm_put_u64le(off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { GILM_IMG[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8 ; i = i + 1u64 }
+    return off + 8u64
+}
+fn _gilm_get_u64le(off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((GILM_IMG[off + i] as u64) << (i * 8u64)) ; i = i + 1u64 }
+    return v
+}
+
+fn gilm_persist(cap: u64, path: u64) -> i32 @export {
+    let mut off : u64 = 0u64
+    off = _gilm_put_u32le(off, GILM_MAGIC)
+    off = _gilm_put_u32le(off, GILM_N as u32)
+    let mut i : u64 = 0u64
+    while i < GILM_N {
+        off = _gilm_put_u32le(off, GILM_KEYS[i])
+        off = _gilm_put_u64le(off, GILM_VALS[i] as u64)
+        i = i + 1u64
+    }
+    cad_oneshot(0u32, (&GILM_IMG as u64) as *u8, off, ((&GILM_IMG as u64) + off) as *u8)   /* append seal */
+    let total : u64 = off + 32u64
+    let h : u64 = fs_open(cap, path, 2u32)
+    if h == 0u64 { return -1i32 }
+    let w : u64 = fs_write(h, (&GILM_IMG as u64), total)
+    fs_close(h)
+    if w != total { return -2i32 }
+    return 0i32
+}
+
+fn gilm_reload(cap: u64, path: u64) -> i32 @export {
+    let h : u64 = fs_open(cap, path, 1u32)
+    if h == 0u64 { return -3i32 }
+    let nread : u64 = fs_read(h, (&GILM_IMG as u64), GILM_IMGCAP)
+    fs_close(h)
+    if nread < 40u64 { return -2i32 }
+    let bodylen : u64 = nread - 32u64
+    cad_oneshot(0u32, (&GILM_IMG as u64) as *u8, bodylen, (&GILM_SEAL as u64) as *u8)
+    let mut k : u64 = 0u64
+    while k < 32u64 { if GILM_SEAL[k] != GILM_IMG[bodylen + k] { return -1i32 }  k = k + 1u64 }   /* tamper */
+    if _gilm_get_u32le(0u64) != GILM_MAGIC { return -2i32 }
+    let n : u32 = _gilm_get_u32le(4u64)
+    if (n as u64) > 64u64 { return -2i32 }
+    GILM_N = 0u64
+    let mut off : u64 = 8u64
+    let mut i : u32 = 0u32
+    while i < n {
+        let key : u32 = _gilm_get_u32le(off)
+        off = off + 4u64
+        let val : u64 = _gilm_get_u64le(off)
+        off = off + 8u64
+        if GILM_N < 64u64 { GILM_KEYS[GILM_N] = key ; GILM_VALS[GILM_N] = val as i64 ; GILM_N = GILM_N + 1u64 }
+        i = i + 1u32
+    }
+    return GILM_N as i32
 }

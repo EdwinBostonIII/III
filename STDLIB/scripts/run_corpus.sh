@@ -1443,6 +1443,8 @@ declare -A EXPECTED=(
     [1778_weave_algebra]=99
     # THE CENSUS: III knows the full extent of its self-discovered mathematics -- weave_census re-proves + sums all 82 laws across every family (self-knowledge, re-derived not stored).
     [1779_weave_census]=99
+    # RATCHET ACROSS TIME: the gilm lemma library persists (seal+reload, tamper-evident); a future run inherits the solved targets -> re-discovery free across runs.
+    [1780_weave_ratchet_persist]=99
 )
 
 PASS=0

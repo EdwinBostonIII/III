@@ -686,6 +686,23 @@ fn ws_minimize(root: u32, nvars: u32) -> u32 @export {
     return ws_emit(sig, nvars)
 }
 
+/* THE OUROBOROS GATE: III judges the minimality of a form it ALREADY ships.  Given a shipped circuit and the cost it
+ * is CLAIMED to be minimal at, genesis independently re-derives the true minimum (under the active metric) and
+ * returns a verdict.  This closes the loop -- III certifies its own math, and where genesis is cheaper it can adopt
+ * the better form (available via ws_emit on the same signature).  A decision/gate, not a live mutation. */
+const WS_CERT_OK         : u32 = 0u32    /* CERTIFIED minimal: the claim equals genesis's minimum */
+const WS_CERT_IMPROVABLE : u32 = 1u32    /* genesis found a strictly cheaper form -- adopt it */
+const WS_CERT_INVALID    : u32 = 2u32    /* the claim is below the true minimum (a wrong claim) or unrealisable */
+fn ws_certify_minimal(spec_root: u32, nvars: u32, claimed_cost: u32) -> u32 @export {
+    let sig : u64 = bb_signature(spec_root, nvars)
+    ws_synth(sig, nvars)
+    let m : u32 = ws_recall(sig)
+    if m == WG_GSENT { return WS_CERT_INVALID }
+    if claimed_cost < m { return WS_CERT_INVALID }
+    if claimed_cost == m { return WS_CERT_OK }
+    return WS_CERT_IMPROVABLE
+}
+
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {
     let p : *u8 = (base + off) as *u8
     p[0u64] = (v & 0xFFu32) as u8

@@ -1501,6 +1501,8 @@ declare -A EXPECTED=(
     [1809_weave_minimize]=99
     # TRACTABLE n=4 SYNTHESIS (ws_synth_bounded): full saturation works to the saturable space (n<=3 -> 256); the 4-var space is 2^16=65536, too large. Cost-bounded synthesis grows to a cost-fixpoint admitting only realisations of cost <= max_cost, so a SHALLOW 4-var target is found WITHOUT saturating the whole space (provably minimal within the bound). 4-input XOR synthesised at n=4, ceiling 3 -> minimal cost 3, emits to the correct circuit; ceiling 0 -> SENT (the bound is real). Commons scaled to 8192.
     [1810_weave_synth_n4]=99
+    # THE OUROBOROS GATE (ws_certify_minimal): III judges the minimality of forms it ALREADY ships -- genesis re-derives the true minimum and verdicts CERTIFIED (claim==min) / IMPROVABLE (genesis cheaper -> adopt via ws_emit) / INVALID (claim below true min). The loop closes: III certifies/improves its own math, a decision not a live mutation. Ch optform (3) CERTIFIED, Ch spec (4) IMPROVABLE, a false claim (2) INVALID.
+    [1811_weave_certify]=99
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

@@ -1,0 +1,62 @@
+/* 1811_weave_certify.iii -- THE OUROBOROS GATE: III certifies (or improves) the minimality of its own forms.
+ *
+ * The loop closes: genesis re-derives the true minimum of a form III already ships and returns a verdict --
+ * CERTIFIED (the form is minimal), IMPROVABLE (genesis found cheaper -> adopt it, available via ws_emit), or
+ * INVALID (the claimed cost is below the true minimum).  III judges its own math; "adopt if cheaper" becomes a
+ * decision III can make about itself, with no risky live mutation.
+ *
+ *   (1) the Ch optform (3 gates) is CERTIFIED minimal -- genesis's minimum equals the claim.
+ *   (2) the Ch spec (4 gates) is IMPROVABLE -- genesis re-derives a 3-gate form III should adopt.
+ *   (3) a false claim (2 gates for Ch, below the true minimum) is INVALID -- the gate rejects it.
+ * Exit 99 = III independently certifies/improves the minimality of the forms it ships -- the Ouroboros, judging. */
+module corpus_1811
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_cost(root: u32, metric: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_set_metric(m: u32) -> i32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_certify_minimal(spec_root: u32, nvars: u32, claimed_cost: u32) -> u32 from "weave_graph.iii"
+
+const WS_CERT_OK         : u32 = 0u32
+const WS_CERT_IMPROVABLE : u32 = 1u32
+const WS_CERT_INVALID    : u32 = 2u32
+
+fn ref_ch_spec(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(bb_intern_and(a, b), bb_intern_and(bb_intern_not(a), c)) }
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+
+fn main() -> u64 {
+    ws_set_metric(0u32)                                        /* total-gate metric */
+
+    /* (1) the Ch optform is CERTIFIED minimal */
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let opt : u32 = ref_ch_opt(a, b, c)
+    let copt : u32 = bb_node_cost(opt, 0u32)
+    if ws_certify_minimal(opt, 3u32, copt) != WS_CERT_OK { return 11u64 }
+
+    /* (2) the Ch spec is IMPROVABLE -- genesis finds a cheaper form */
+    bb_reset(8u64)  bb_intern_reset()
+    let a2 : u32 = bb_var(0u32)
+    let b2 : u32 = bb_var(1u32)
+    let c2 : u32 = bb_var(2u32)
+    let spec : u32 = ref_ch_spec(a2, b2, c2)
+    let cspec : u32 = bb_node_cost(spec, 0u32)
+    if cspec <= copt { return 12u64 }                         /* the spec really is more expensive than the optform */
+    if ws_certify_minimal(spec, 3u32, cspec) != WS_CERT_IMPROVABLE { return 13u64 }
+
+    /* (3) a false claim (below the true minimum) is INVALID */
+    bb_reset(8u64)  bb_intern_reset()
+    let a3 : u32 = bb_var(0u32)
+    let b3 : u32 = bb_var(1u32)
+    let c3 : u32 = bb_var(2u32)
+    let opt3 : u32 = ref_ch_opt(a3, b3, c3)
+    if ws_certify_minimal(opt3, 3u32, 2u32) != WS_CERT_INVALID { return 14u64 }
+
+    return 99u64
+}

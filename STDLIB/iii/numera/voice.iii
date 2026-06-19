@@ -1,20 +1,50 @@
-/* STDLIB/iii/numera/voice.iii -- VOICE AS A THREE-EFFECT SYSTEM (Active / Middle / Passive).
+/* STDLIB/iii/numera/voice.iii -- VOICE: III's effect calculus (Active / Middle / Passive).  (FINAL / evergreen.)
  *
- * POC for safety-as-grammar: every metal operation carries a VOICE that determines its proof obligation, so the
- * synthesis engine knows the safety implication from the op's type -- no separate checker.
- *   PASSIVE (read; the universal latch -- CPUID/PCI): always realizes.  No obligation.
- *   MIDDLE  (reversible self-probe -- the throwaway-guest): realizes ONLY inside a rollback envelope, else EVAPORATES.
- *   ACTIVE  (external write -- bare-metal assert): realizes ONLY with a crystal-minted capability, else EVAPORATES.
- * "Evaporates" = VK_NULL: the op becomes unrepresentable and contributes nothing (the EK_NULL / logic6 don't-care
- * principle applied to safety -- unsafe code does not error, it VANISHES).  Pure, NIH.  Ring R0.  KAT: corpus 1816. */
+ * Safety-as-grammar: every operation carries a VOICE that fixes its proof obligation, so the synthesis engine knows
+ * the safety implication from the op's type -- no separate checker, and unsafe code does not error, it VANISHES.
+ *   PASSIVE (read; the universal latch -- CPUID/PCI): obligation NONE -- always realizes.
+ *   MIDDLE  (reversible self-probe -- the throwaway-guest): obligation ENVELOPE -- realizes only inside a rollback
+ *           envelope, else evaporates.
+ *   ACTIVE  (external write -- bare-metal assert): obligation CAPABILITY -- realizes only with a crystal-minted
+ *           capability, else evaporates.
+ * "Evaporate" = VK_NULL, the ANNIHILATOR: it is the effect-layer instance of logic6's EK_NULL annihilation
+ * (NULL absorbs).  The production upgrade over a per-op check is DATAFLOW PROPAGATION: an op that consumes an
+ * evaporated value itself evaporates (transitively) -- so an unsafe op and its entire dependent subgraph vanish from
+ * the emitted program, leaving only the proven-safe residual.
+ *
+ * ALGEBRA (proven, corpus 1816):
+ *   - the voice lattice PASSIVE <= MIDDLE <= ACTIVE with voice_join = max (commutative, associative, idempotent,
+ *     PASSIVE the identity) -- the voice of a composition is its most-dangerous part.
+ *   - VK_NULL is the absorbing element of composition (the NULL-annihilation law, shared with logic6 EK_NULL).
+ *   - THE SAFETY THEOREM: no ACTIVE op realizes without its capability (and no MIDDLE without its envelope) -- holds
+ *     over every voice x capability x envelope combination and under composition.
+ *   - monotonicity: granting more capability/envelope never removes a realization.
+ * Pure, NIH, no deps.  Ring R0. */
 module numera_voice
 
 const VOICE_PASSIVE : u32 = 0u32
 const VOICE_MIDDLE  : u32 = 1u32
 const VOICE_ACTIVE  : u32 = 2u32
-const VK_NULL : u32 = 0xFFFFFFFFu32   /* evaporated / unrepresentable */
+const VK_NULL : u32 = 0xFFFFFFFFu32     /* evaporated / unrepresentable (the annihilator) */
 
-/* admit one op: returns its realized token, or VK_NULL if it evaporates (the safety obligation unmet). */
+const OBL_NONE       : u32 = 0u32
+const OBL_ENVELOPE   : u32 = 1u32
+const OBL_CAPABILITY : u32 = 2u32
+
+/* the proof obligation a voice imposes. */
+fn voice_obligation(voice: u32) -> u32 @export {
+    if voice == VOICE_ACTIVE { return OBL_CAPABILITY }
+    if voice == VOICE_MIDDLE { return OBL_ENVELOPE }
+    return OBL_NONE
+}
+
+/* the voice lattice join (max): the composition takes the most-dangerous voice. */
+fn voice_join(v1: u32, v2: u32) -> u32 @export {
+    if v1 >= v2 { return v1 }
+    return v2
+}
+
+/* admit one op: its realized token, or VK_NULL if its obligation is unmet (it evaporates). */
 fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 @export {
     if voice == VOICE_PASSIVE { return op_token }
     if voice == VOICE_MIDDLE  { if has_env == 1u8 { return op_token }  return VK_NULL }
@@ -22,24 +52,44 @@ fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 @expo
     return VK_NULL
 }
 
-/* 1 iff the op realizes (did not evaporate). */
+/* 1 iff the op realizes (obligation met). */
 fn voice_realizes(voice: u32, has_cap: u8, has_env: u8) -> u8 @export {
     if voice_admit(voice, 1u32, has_cap, has_env) == VK_NULL { return 0u8 }
     return 1u8
 }
 
-/* THE EVAPORATION PASS: over a program of parallel arrays (voices[i], caps[i], envs[i]), count the ops that
- * REALIZE -- unsafe Active/Middle ops evaporate and are not counted (they emit nothing).  The realized count is the
- * size of the safe residual program. */
-fn voice_residual_count(voices_ptr: u64, caps_ptr: u64, envs_ptr: u64, n: u32) -> u32 @export {
-    let mut realized : u32 = 0u32
+/* COMPOSE: a consumer op fed a producer's result.  If the producer evaporated, the consumer evaporates
+ * (annihilation: VK_NULL absorbs); otherwise the consumer realizes per its own obligation. */
+fn voice_compose(producer_token: u32, cons_voice: u32, cons_token: u32, cons_cap: u8, cons_env: u8) -> u32 @export {
+    if producer_token == VK_NULL { return VK_NULL }
+    return voice_admit(cons_voice, cons_token, cons_cap, cons_env)
+}
+
+/* ---- THE EVAPORATION PASS with DATAFLOW ----
+ * Parallel arrays over n ops: voices[i], caps[i], envs[i], deps[i] (the index of the producer op i consumes, or
+ * 0xFF for none; deps point to EARLIER ops -> acyclic).  An op realizes iff its own obligation is met AND its
+ * producer (if any) realized.  Returns the size of the proven-safe residual program. */
+var VRES_REALIZED : [u8; 256]
+fn voice_residual_count(voices_ptr: u64, caps_ptr: u64, envs_ptr: u64, deps_ptr: u64, n: u32) -> u32 @export {
+    let mut count : u32 = 0u32
     let mut i : u32 = 0u32
     while i < n {
         let vp : *u8 = (voices_ptr + (i as u64)) as *u8
         let cp : *u8 = (caps_ptr + (i as u64)) as *u8
         let ep : *u8 = (envs_ptr + (i as u64)) as *u8
-        if voice_realizes(vp[0u64] as u32, cp[0u64], ep[0u64]) == 1u8 { realized = realized + 1u32 }
+        let dp : *u8 = (deps_ptr + (i as u64)) as *u8
+        let mut ok : u8 = voice_realizes(vp[0u64] as u32, cp[0u64], ep[0u64])
+        if ok == 1u8 {
+            let dep : u8 = dp[0u64]
+            if dep != 0xFFu8 {
+                let rp : *u8 = (&VRES_REALIZED as u64 + (dep as u64)) as *u8
+                if rp[0u64] == 0u8 { ok = 0u8 }      /* producer evaporated -> consumer annihilates */
+            }
+        }
+        let myp : *u8 = (&VRES_REALIZED as u64 + (i as u64)) as *u8
+        myp[0u64] = ok
+        if ok == 1u8 { count = count + 1u32 }
         i = i + 1u32
     }
-    return realized
+    return count
 }

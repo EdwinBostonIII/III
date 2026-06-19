@@ -1,33 +1,87 @@
-/* 1816_voice.iii -- VOICE EFFECT-SYSTEM + EVAPORATION (POC).
- * Proves: Passive always realizes; ACTIVE without a capability EVAPORATES (the core safety claim, negative);
- * Active with cap realizes; Middle without an envelope evaporates; the evaporation pass yields the safe residual.
- * Exit 99. */
+/* 1816_voice.iii -- VOICE effect calculus (production / evergreen): comprehensive proof.
+ * Proves: obligations per voice; the voice-lattice laws (commutative/associative/idempotent/identity); THE SAFETY
+ * THEOREM swept over every voice x cap x env (no Active realizes without a capability, no Middle without an
+ * envelope); monotonicity; VK_NULL annihilation under composition; and DATAFLOW EVAPORATION -- an op that consumes an
+ * evaporated value annihilates even if its own obligation is met.  Exit 99. */
 module corpus_1816
 
+extern @abi(c-msvc-x64) fn voice_obligation(voice: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_join(v1: u32, v2: u32) -> u32 from "voice.iii"
 extern @abi(c-msvc-x64) fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 from "voice.iii"
 extern @abi(c-msvc-x64) fn voice_realizes(voice: u32, has_cap: u8, has_env: u8) -> u8 from "voice.iii"
-extern @abi(c-msvc-x64) fn voice_residual_count(voices_ptr: u64, caps_ptr: u64, envs_ptr: u64, n: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_compose(producer_token: u32, cons_voice: u32, cons_token: u32, cons_cap: u8, cons_env: u8) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_residual_count(voices_ptr: u64, caps_ptr: u64, envs_ptr: u64, deps_ptr: u64, n: u32) -> u32 from "voice.iii"
 
-var VS : [u8; 4]
-var CS : [u8; 4]
-var ES : [u8; 4]
+const VOICE_PASSIVE : u32 = 0u32
+const VOICE_MIDDLE  : u32 = 1u32
+const VOICE_ACTIVE  : u32 = 2u32
+const VK_NULL : u32 = 0xFFFFFFFFu32
+const OBL_NONE : u32 = 0u32
+const OBL_ENVELOPE : u32 = 1u32
+const OBL_CAPABILITY : u32 = 2u32
+
+var VS : [u8; 5]
+var CS : [u8; 5]
+var ES : [u8; 5]
+var DS : [u8; 5]
 
 fn main() -> u64 {
-    /* PASSIVE always realizes (no cap, no env) */
-    if voice_realizes(0u32, 0u8, 0u8) != 1u8 { return 11u64 }
-    /* ACTIVE without capability EVAPORATES (negative) */
-    if voice_admit(2u32, 0xAAu32, 0u8, 0u8) != 0xFFFFFFFFu32 { return 12u64 }
-    if voice_realizes(2u32, 0u8, 0u8) != 0u8 { return 13u64 }
-    /* ACTIVE with capability realizes */
-    if voice_admit(2u32, 0xAAu32, 1u8, 0u8) != 0xAAu32 { return 14u64 }
-    /* MIDDLE without envelope evaporates (negative); with envelope realizes */
-    if voice_realizes(1u32, 1u8, 0u8) != 0u8 { return 15u64 }
-    if voice_realizes(1u32, 0u8, 1u8) != 1u8 { return 16u64 }
+    /* obligations */
+    if voice_obligation(VOICE_PASSIVE) != OBL_NONE { return 11u64 }
+    if voice_obligation(VOICE_MIDDLE) != OBL_ENVELOPE { return 12u64 }
+    if voice_obligation(VOICE_ACTIVE) != OBL_CAPABILITY { return 13u64 }
 
-    /* EVAPORATION PASS: [PASSIVE, ACTIVE(no cap), ACTIVE(cap), MIDDLE(no env)] -> residual = 2 (passive + active-cap) */
-    let vp : *u8 = (&VS as u64) as *u8   vp[0u64]=0u8  vp[1u64]=2u8  vp[2u64]=2u8  vp[3u64]=1u8
-    let cp : *u8 = (&CS as u64) as *u8   cp[0u64]=0u8  cp[1u64]=0u8  cp[2u64]=1u8  cp[3u64]=1u8
-    let ep : *u8 = (&ES as u64) as *u8   ep[0u64]=0u8  ep[1u64]=0u8  ep[2u64]=0u8  ep[3u64]=0u8
-    if voice_residual_count(&VS as u64, &CS as u64, &ES as u64, 4u32) != 2u32 { return 17u64 }
+    /* lattice laws */
+    if voice_join(VOICE_PASSIVE, VOICE_ACTIVE) != VOICE_ACTIVE { return 14u64 }   /* max */
+    if voice_join(VOICE_ACTIVE, VOICE_MIDDLE) != voice_join(VOICE_MIDDLE, VOICE_ACTIVE) { return 15u64 } /* commutative */
+    if voice_join(voice_join(VOICE_PASSIVE, VOICE_MIDDLE), VOICE_ACTIVE) != voice_join(VOICE_PASSIVE, voice_join(VOICE_MIDDLE, VOICE_ACTIVE)) { return 16u64 } /* associative */
+    if voice_join(VOICE_MIDDLE, VOICE_MIDDLE) != VOICE_MIDDLE { return 17u64 }    /* idempotent */
+    if voice_join(VOICE_PASSIVE, VOICE_MIDDLE) != VOICE_MIDDLE { return 18u64 }   /* PASSIVE is identity */
+
+    /* THE SAFETY THEOREM: sweep every voice x cap x env */
+    let mut v : u32 = 0u32
+    while v <= 2u32 {
+        let mut cap : u32 = 0u32
+        while cap <= 1u32 {
+            let mut env : u32 = 0u32
+            while env <= 1u32 {
+                let r : u8 = voice_realizes(v, cap as u8, env as u8)
+                let mut expect : u8 = 0u8
+                if v == VOICE_PASSIVE { expect = 1u8 }
+                if v == VOICE_MIDDLE { if env == 1u32 { expect = 1u8 } }
+                if v == VOICE_ACTIVE { if cap == 1u32 { expect = 1u8 } }
+                if r != expect { return 19u64 }
+                env = env + 1u32
+            }
+            cap = cap + 1u32
+        }
+        v = v + 1u32
+    }
+    /* the headline guarantee, explicit: an ACTIVE op with NO capability NEVER realizes */
+    if voice_admit(VOICE_ACTIVE, 0xAAu32, 0u8, 1u8) != VK_NULL { return 20u64 }
+
+    /* monotonicity: realizing with (0,0) implies realizing with (1,1) for every voice */
+    let mut vv : u32 = 0u32
+    while vv <= 2u32 {
+        if voice_realizes(vv, 0u8, 0u8) == 1u8 { if voice_realizes(vv, 1u8, 1u8) != 1u8 { return 21u64 } }
+        vv = vv + 1u32
+    }
+
+    /* VK_NULL annihilation under composition */
+    if voice_compose(VK_NULL, VOICE_PASSIVE, 0x55u32, 1u8, 1u8) != VK_NULL { return 22u64 }
+    /* a realized producer + a met consumer obligation -> realizes */
+    if voice_compose(0x55u32, VOICE_ACTIVE, 0x66u32, 1u8, 0u8) != 0x66u32 { return 23u64 }
+    /* a realized producer + an UNMET consumer obligation -> evaporates */
+    if voice_compose(0x55u32, VOICE_ACTIVE, 0x66u32, 0u8, 0u8) != VK_NULL { return 24u64 }
+
+    /* DATAFLOW EVAPORATION: op2 has its capability but consumes evaporated op1 -> it annihilates */
+    let vp : *u8 = (&VS as u64) as *u8   vp[0u64]=0u8  vp[1u64]=2u8  vp[2u64]=2u8  vp[3u64]=2u8  vp[4u64]=1u8
+    let cp : *u8 = (&CS as u64) as *u8   cp[0u64]=0u8  cp[1u64]=0u8  cp[2u64]=1u8  cp[3u64]=1u8  cp[4u64]=0u8
+    let ep : *u8 = (&ES as u64) as *u8   ep[0u64]=0u8  ep[1u64]=0u8  ep[2u64]=0u8  ep[3u64]=0u8  ep[4u64]=1u8
+    let dp : *u8 = (&DS as u64) as *u8   dp[0u64]=0xFFu8  dp[1u64]=0xFFu8  dp[2u64]=1u8  dp[3u64]=0u8  dp[4u64]=3u8
+    /* op0 PASSIVE->ok; op1 ACTIVE no-cap->evaporate; op2 ACTIVE cap but dep=op1 evaporated->annihilate;
+       op3 ACTIVE cap dep=op0 ok->ok; op4 MIDDLE env dep=op3 ok->ok.  residual = 3. */
+    if voice_residual_count(&VS as u64, &CS as u64, &ES as u64, &DS as u64, 5u32) != 3u32 { return 25u64 }
+
     return 99u64
 }

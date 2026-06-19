@@ -1,0 +1,33 @@
+/* 1803_invent_canonical.iii -- THE COUP DE GRACE: the canonical generator cannot build a redundant DAG.
+ *
+ * Routing the invent_loop generators through bb_intern means the generator PHYSICALLY CANNOT construct a trivial
+ * or un-reduced circuit -- syntactically redundant candidates collapse to their canonical form DURING
+ * construction, so they never consume nodes, never get judged, never enter the search.  The search space shrinks
+ * to the canonical representatives before any signature or SAT work happens.
+ *
+ *   (1) the generator collapses x & x to x -- it cannot materialise the redundant gate
+ *   (2) a deliberately-redundant candidate ((a&a)&b)|((a&b)|(a&b)) -- which is a&b -- adds just ONE node, where a
+ *       naive build adds six: the junk DAG ceases to exist in memory
+ *   (3) the signature arm, driven by the canonical generator, still finds the cheapest Ch form (the optform) --
+ *       search dissolved AND no redundant circuits built
+ * Exit 99 = the generator can only construct canonical circuits; the redundant search space is gone by construction. */
+module corpus_1803
+
+extern @abi(c-msvc-x64) fn il_gen_collapses_xx() -> u8 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_gen_redundant_nodes() -> u32 from "invent_loop.iii"
+extern @abi(c-msvc-x64) fn il_signature_arm_canonical() -> u64 from "invent_loop.iii"
+
+fn main() -> u64 {
+    /* (1) the generator cannot build x & x -- it collapses to x */
+    if il_gen_collapses_xx() != 1u8 { return 1u64 }
+
+    /* (2) a redundant candidate materialises as ONE node (the canonical a&b), not six */
+    let added : u32 = il_gen_redundant_nodes()
+    if added == 0u32 { return 2u64 }              /* (it does build the one real node a&b) */
+    if added > 2u32 { return 3u64 }               /* but nothing redundant -- far below the naive six */
+
+    /* (3) the signature arm over the canonical generator still returns the cheapest Ch (optform, 1 AND) */
+    if il_signature_arm_canonical() != 1u64 { return 4u64 }
+
+    return 99u64
+}

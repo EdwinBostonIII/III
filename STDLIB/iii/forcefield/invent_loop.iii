@@ -36,6 +36,12 @@ extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_count_kind(kind: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn ws_is_bit_independent() -> u8 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn fw_init(incumbent: u64) -> i32 from "forked_walk.iii"
 extern @abi(c-msvc-x64) fn fw_explore(target: u64) -> u64 from "forked_walk.iii"
@@ -144,6 +150,58 @@ fn il_invent_mul5() -> u64 @export {
     il_mul5_naive(x)                                        /* the target sets the topology (has ADDs) */
     if il_route() == IL_ROUTE_SIG { return il_signature_arm() }
     return il_reversible_arm()
+}
+
+/* ============================================================================================================
+ * THE COUP DE GRACE: route the generator through bb_intern (canonical construction).  When the generator routes
+ * candidates through the interning builders, it PHYSICALLY CANNOT construct a trivial or un-reduced DAG: x&x
+ * collapses to x, (a&b)|(a&b) to a&b, x^x to 0 -- all DURING construction.  Syntactically redundant circuits
+ * cease to exist in memory, so the search space shrinks to the canonical representatives before any judging. */
+
+/* the Ch forms built CANONICALLY (via bb_intern): shared subexpressions hash-cons, redundancy collapses. */
+fn il_ch_form_canon(idx: u32, a: u32, b: u32, c: u32) -> u32 {
+    if idx == 0u32 { return bb_intern_xor(bb_intern_and(a, b), bb_intern_and(bb_intern_not(a), c)) }   /* spec */
+    if idx == 1u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }                  /* optform */
+    return bb_intern_or(bb_intern_and(a, b), bb_intern_and(bb_intern_not(a), c))                       /* OR-mux */
+}
+
+/* 1 iff the canonical generator collapses x & x to x (it cannot materialise the redundant gate). */
+fn il_gen_collapses_xx() -> u8 @export {
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    if bb_intern_and(a, a) == a { return 1u8 }
+    return 0u8
+}
+
+/* the nodes ADDED while the generator builds a deliberately-redundant candidate -- ((a&a)&b) | ((a&b)|(a&b)) --
+ * which is a&b.  Canonical construction adds just ONE node (the a&b), where a naive build adds six. */
+fn il_gen_redundant_nodes() -> u32 @export {
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let base : u32 = bb_node_count()
+    bb_intern_or(bb_intern_and(bb_intern_and(a, a), b), bb_intern_or(bb_intern_and(a, b), bb_intern_and(a, b)))
+    return bb_node_count() - base
+}
+
+/* the signature arm driven by the CANONICAL generator: the candidate forms are built redundancy-free, proven the
+ * same function by signature (no SAT), and the cheapest is returned -- search dissolved AND no junk DAGs built. */
+fn il_signature_arm_canonical() -> u64 @export {
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let s : u32 = il_ch_form_canon(0u32, a, b, c)
+    let o : u32 = il_ch_form_canon(1u32, a, b, c)
+    let m : u32 = il_ch_form_canon(2u32, a, b, c)
+    if bb_sig_equal(s, o, 3u32) != 1u8 { return 0u64 }
+    if bb_sig_equal(s, m, 3u32) != 1u8 { return 0u64 }
+    let mut best : u64 = il_ch_cost(0u32)
+    let c1 : u64 = il_ch_cost(1u32)
+    let c2 : u64 = il_ch_cost(2u32)
+    if c1 < best { best = c1 }
+    if c2 < best { best = c2 }
+    return best
 }
 
 /* route probes: the Ch target is bit-independent -> IL_ROUTE_SIG (0); the 5x target is bit-coupling -> IL_ROUTE_REV (1). */

@@ -1489,6 +1489,8 @@ declare -A EXPECTED=(
     [1801_bb_struct_equal]=99
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
+    # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.
+    [1803_invent_canonical]=99
 )
 
 PASS=0

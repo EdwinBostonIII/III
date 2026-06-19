@@ -1,0 +1,51 @@
+/* quine6_kernel.iii -- the kernel (cg_r0) incarnation of the six-state content-address.
+ *
+ * numera/quine6 reads its six-state symbols from PACKED BYTES via *u8 indexing -- correct under cg_r3, but cg_r0 is
+ * 8-byte-uniform and would mis-stride a *u8 loop.  This subset folds the SAME algebra (identical round + absorb +
+ * length finalization) over a u64-SLOT array (one symbol per 8-byte slot, low byte = the symbol), so every read is
+ * an 8-byte-aligned slot access -- cg_r0-CORRECT.  Because the fold is over the symbol VALUES (not the byte layout),
+ * q6k_addr24(slots) == q6_addr24(packed) for the same symbol sequence (proven in the verification), so the kernel
+ * seal is faithful to the user-mode primitive.  This is the cg_r0-correct foundation for the in-gate seal +
+ * descent_proof + behavioral_fp kernel incarnations.  Pure, NIH, no deps.  Ring R0. */
+module quine6_kernel
+
+const Q6K_MASK24 : u32 = 0xFFFFFFu32
+const Q6K_IV24   : u32 = 0x36D6A5u32
+
+/* identical bijective diffusion round to numera/quine6's q6_round24. */
+fn q6k_round24(x0: u32) -> u32 {
+    let mut x : u32 = x0 & Q6K_MASK24
+    x = (x ^ (x >> 13u32)) & Q6K_MASK24
+    x = (x * 0x9E3779u32) & Q6K_MASK24
+    x = (x ^ (x >> 11u32)) & Q6K_MASK24
+    x = (x * 0xC2B2AFu32) & Q6K_MASK24
+    x = (x ^ (x >> 7u32)) & Q6K_MASK24
+    return x & Q6K_MASK24
+}
+fn q6k_absorb24(state: u32, sym: u32) -> u32 { return q6k_round24(((state * 6u32) + (sym % 6u32)) & Q6K_MASK24) }
+
+/* content-address over n six-state symbols held one-per-u64-slot (cg_r0-correct 8-byte indexing). */
+fn q6k_addr24(slots_ptr: u64, n: u32) -> u32 @export {
+    let mut acc : u32 = Q6K_IV24
+    let mut i : u32 = 0u32
+    while i < n {
+        let p : *u64 = (slots_ptr + (i as u64) * 8u64) as *u64
+        acc = q6k_absorb24(acc, (p[0u64] & 0xFFu64) as u32)
+        i = i + 1u32
+    }
+    return q6k_round24((acc ^ (n & Q6K_MASK24)) & Q6K_MASK24)
+}
+
+/* SEAL into a u64 slot at index k (the gate stores the address there); VERIFY recomputes + compares. */
+fn q6k_seal_into(slots_ptr: u64, k: u32) -> u32 @export {
+    let a : u32 = q6k_addr24(slots_ptr, k)
+    let p : *u64 = (slots_ptr + (k as u64) * 8u64) as *u64
+    p[0u64] = a as u64
+    return a
+}
+fn q6k_self_coincident(slots_ptr: u64, k: u32) -> u8 @export {
+    let a : u32 = q6k_addr24(slots_ptr, k)
+    let p : *u64 = (slots_ptr + (k as u64) * 8u64) as *u64
+    if (p[0u64] & 0xFFFFFFu64) == (a as u64) { return 1u8 }
+    return 0u8
+}

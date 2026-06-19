@@ -37,7 +37,9 @@ extern @abi(c-msvc-x64) fn sat_solve() -> i32 from "sat.iii"
 const BB_SAT_SAT   : i32 = 1i32
 const BB_SAT_UNSAT : i32 = 2i32
 
-const BB_MAX_NODES  : u32 = 128u32
+const BB_MAX_NODES  : u32 = 2048u32        /* the construction working set (only the per-node arrays + BB_BITVAR
+                                            * scale with it; the SAT solver is independent and far larger -- a
+                                            * real working set, not a toy that forces batching in consumers) */
 const BB_MAX_INPUTS : u32 = 8u32
 const BB_MAX_VARS   : u32 = 60000u32
 const BB_STREAM_CAP : u64 = 524288u64
@@ -55,7 +57,7 @@ var BB_ERR    : u8  = 0u8              /* sticky capacity/input error -> bb_equa
 var BB_ZVAR   : u32 = 0u32             /* the globally pinned-0 var */
 var BB_OVAR   : u32 = 0u32             /* the globally pinned-1 var */
 var BB_INBASE : [u32; 8]               /* first sat var of input v's bits (0 = unallocated) */
-var BB_BITVAR : [u32; 8192]            /* node-bit -> sat var id (BB_MAX_NODES * 64) */
+var BB_BITVAR : [u32; 131072]          /* node-bit -> sat var id (BB_MAX_NODES * 64) */
 var BB_STREAM : [u32; 524288]          /* buffered clauses: [n, lits...]* */
 var BB_SP     : u64 = 0u64             /* stream cursor */
 var BB_NCL    : u64 = 0u64             /* buffered clause count */
@@ -90,13 +92,13 @@ const EK_MUL   : u32 = 10u32
 const EK_NULL  : u32 = 11u32       /* logic6 bottom: the VOID / impossible -- meet-annihilator, join-identity */
 const EK_ALL   : u32 = 12u32       /* logic6 top: the total DON'T-CARE -- join-annihilator, meet-identity */
 
-var BB_NKIND  : [u32; 128]             /* per-node operation kind (EK_*) */
-var BB_NA     : [u32; 128]             /* operand a node-id  (or VAR index for EK_VAR) */
-var BB_NB     : [u32; 128]             /* operand b node-id  (binary ops) */
-var BB_NK     : [u64; 128]             /* shift amount k     (EK_SHL/EK_SHR) */
-var BB_NCONST : [u64; 128]            /* literal value      (EK_CONST) */
+var BB_NKIND  : [u32; 2048]            /* per-node operation kind (EK_*) */
+var BB_NA     : [u32; 2048]            /* operand a node-id  (or VAR index for EK_VAR) */
+var BB_NB     : [u32; 2048]            /* operand b node-id  (binary ops) */
+var BB_NK     : [u64; 2048]            /* shift amount k     (EK_SHL/EK_SHR) */
+var BB_NCONST : [u64; 2048]           /* literal value      (EK_CONST) */
 var BB_INVAL  : [u64; 8]               /* concrete input word per VAR index (bb_set_input) */
-var BB_NVAL   : [u64; 128]             /* evaluation scratch: the concrete value of each node */
+var BB_NVAL   : [u64; 2048]            /* evaluation scratch: the concrete value of each node */
 
 /* record node n's structure (called by every builder right after bb_node_alloc). */
 fn bb_struct(n: u32, kind: u32, a: u32, b: u32, k: u64) -> u64 {
@@ -616,18 +618,21 @@ fn bb_has_coupling() -> u8 @export {
  * The hash-cons is STALE-SAFE: every hit is re-validated against the spine, so a missed reset can never return a
  * wrong id (a stale entry fails validation -> treated as a miss -> rebuilt). */
 
-const BB_HC_MAX  : u32 = 256u32
+const BB_HC_MAX  : u32 = 2048u32
 const BB_HC_NONE : u32 = 0xFFFFFFFFu32
-var BB_HC_KIND : [u32; 256]
-var BB_HC_A    : [u32; 256]
-var BB_HC_B    : [u32; 256]
-var BB_HC_ID   : [u32; 256]
+var BB_HC_KIND : [u32; 2048]
+var BB_HC_A    : [u32; 2048]
+var BB_HC_B    : [u32; 2048]
+var BB_HC_ID   : [u32; 2048]
 var BB_HC_N    : u32 = 0u32
 
 var BB_NULL_NODE : u32 = 0xFFFFFFFFu32
 var BB_ALL_NODE  : u32 = 0xFFFFFFFFu32
 fn bb_intern_reset() -> i32 @export { BB_HC_N = 0u32  BB_NULL_NODE = 0xFFFFFFFFu32  BB_ALL_NODE = 0xFFFFFFFFu32  return 0i32 }
 fn bb_node_count() -> u32 @export { return BB_NN }
+/* the substrate's construction working-set capacity -- consumers derive their node budget from THIS, never a
+ * hardcoded magic number, so a change here propagates everywhere. */
+fn bb_capacity() -> u32 @export { return BB_MAX_NODES }
 
 /* THE LOGIC6 LEAVES: six-state as the SUBSTANCE of the node, not a label.  EK_NULL (the void / impossible) and
  * EK_ALL (the total don't-care) are native leaf kinds.  They carry NO 2-state bit encoding -- they are
@@ -773,9 +778,9 @@ fn bb_intern_equal(a: u32, b: u32) -> u8 @export {
  * paired directly (correct for bb_intern's canonically-ordered forms; a false-negative at worst otherwise -- never
  * a false positive).  The a==b fast-path makes hash-cons-shared subtrees free. */
 
-const BB_SE_MAX : u32 = 512u32
-var BB_SE_SX : [u32; 512]
-var BB_SE_SY : [u32; 512]
+const BB_SE_MAX : u32 = 4096u32
+var BB_SE_SX : [u32; 4096]
+var BB_SE_SY : [u32; 4096]
 
 fn bb_kind_arity2(k: u32) -> u8 {
     if k == EK_AND { return 1u8 }
@@ -830,4 +835,39 @@ fn bb_struct_all_widths(a: u32, b: u32) -> u8 @export {
     if bb_has_coupling() != 0u8 { return 0u8 }                 /* shifts/arith -> width-dependent */
     if bb_count_kind(EK_CONST) > 0u64 { return 0u8 }           /* a const is width-sensitive (all-ones differs by width) */
     return 1u8
+}
+
+/* PER-CIRCUIT GATE COST: the number of DISTINCT gate nodes (AND/OR/XOR/NOT/SHL/SHR/ADD/SUB/MUL) in the transitive
+ * fan-in of `root` -- the true DAG gate count (sharing counted once), the minimal-cost metric a synthesizer ranks
+ * by.  No stack: operands always have smaller ids than their node, so a single high-to-low sweep marks the cone. */
+var BB_GC_MARK : [u8; 2048]
+fn bb_node_gate_count(root: u32) -> u32 @export {
+    if root >= BB_NN { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < BB_NN { BB_GC_MARK[i as u64] = 0u8  i = i + 1u32 }
+    BB_GC_MARK[root as u64] = 1u8
+    let mut idx : u32 = root + 1u32
+    while idx > 0u32 {
+        idx = idx - 1u32
+        if BB_GC_MARK[idx as u64] == 1u8 {
+            let k : u32 = BB_NKIND[idx as u64]
+            if k == EK_NOT { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if k == EK_SHL { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if k == EK_SHR { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8 }
+            if bb_kind_arity2(k) == 1u8 { BB_GC_MARK[BB_NA[idx as u64] as u64] = 1u8  BB_GC_MARK[BB_NB[idx as u64] as u64] = 1u8 }
+        }
+    }
+    let mut c : u32 = 0u32
+    let mut n : u32 = 0u32
+    while n < BB_NN {
+        if BB_GC_MARK[n as u64] == 1u8 {
+            let k : u32 = BB_NKIND[n as u64]
+            if k == EK_NOT { c = c + 1u32 }
+            if k == EK_SHL { c = c + 1u32 }
+            if k == EK_SHR { c = c + 1u32 }
+            if bb_kind_arity2(k) == 1u8 { c = c + 1u32 }
+        }
+        n = n + 1u32
+    }
+    return c
 }

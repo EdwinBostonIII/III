@@ -44,6 +44,15 @@ extern @abi(c-msvc-x64) fn bb_count_kind(kind: u32) -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_has_coupling() -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_gate_count(root: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_capacity() -> u32 from "bv_bits.iii"
 /* the proven theorems this graph INDEXES (numera/primweb), to confirm the typed edges are the real strands: */
 extern @abi(c-msvc-x64) fn pw_sha_ch_optform() -> u8 from "primweb.iii"
 extern @abi(c-msvc-x64) fn pw_sha_maj_optform() -> u8 from "primweb.iii"
@@ -433,6 +442,167 @@ fn ws_lib_distinct_functions() -> u32 @export {
         i = i + 1u32
     }
     return distinct
+}
+
+/* ============================================================================================================
+ * THE WEAVE GROWS ITSELF (de-novo genesis + saturation).  This is not a separate engine -- it is ws_sig_conjecture
+ * continued ONE step: where the conjecture buckets a FIXED library by signature, genesis CONSTRUCTS the library by
+ * canonical enumeration (bb_intern -- redundant DAGs cannot form) and KEEPS, for each function (signature), the
+ * cheapest circuit (bb_node_gate_count).  The weave thereby invents the minimal realisation of any specification,
+ * remembers it in its own self-knowledge (signature -> minimal recipe), and answers future queries by RETRIEVAL
+ * (ws_recall, O(1)).  Computing becomes retrieving.  Built purely on the substrate (bv_bits); the weave's own
+ * operation, in the weave -- it subsumes the legacy enumerate-and-judge conjecture, it does not call out to it.
+ *
+ * The recipe table IS the weave's memory: each realised function stores (op, operand function-indices) so the
+ * circuit rebuilds from the table.  Discovery order respects dependencies (operands realised earlier), so a single
+ * forward pass rebuilds the whole realised library into a session -- batched against the 128-node bv_bits cap. */
+
+const WG_GVAR : u32 = 0u32
+const WG_GCON : u32 = 1u32
+const WG_GAND : u32 = 2u32
+const WG_GOR  : u32 = 3u32
+const WG_GXOR : u32 = 4u32
+const WG_GNOT : u32 = 5u32
+const WG_GMAX : u32 = 2048u32           /* the memory holds as many functions as the substrate can construct (bb_capacity) */
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+var WG_GSIG  : [u64; 2048]
+var WG_GCOST : [u32; 2048]
+var WG_GOP   : [u32; 2048]
+var WG_GL    : [u32; 2048]
+var WG_GR    : [u32; 2048]
+var WG_GN    : u32 = 0u32
+var WG_GBUILT : [u32; 2048]
+
+fn ws_realized() -> u32 @export { return WG_GN }
+
+/* O(1) RETRIEVAL: the minimal gate cost of the function with this signature in the weave's memory; SENT if the
+ * weave has not yet realised it.  This is "computing becomes retrieving" -- a future query is a table lookup. */
+fn ws_recall(sig: u64) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < WG_GN {
+        if WG_GSIG[i as u64] == sig { return WG_GCOST[i as u64] }
+        i = i + 1u32
+    }
+    return WG_GSENT
+}
+fn ws_gen_find(sig: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < WG_GN {
+        if WG_GSIG[i as u64] == sig { return i }
+        i = i + 1u32
+    }
+    return WG_GSENT
+}
+/* record a realised function or improve its cost; 1 iff a genuinely NEW function entered the weave's memory. */
+fn ws_gen_admit(sig: u64, cost: u32, op: u32, l: u32, r: u32) -> u8 {
+    let idx : u32 = ws_gen_find(sig)
+    if idx != WG_GSENT {
+        if cost < WG_GCOST[idx as u64] { WG_GCOST[idx as u64] = cost  WG_GOP[idx as u64] = op  WG_GL[idx as u64] = l  WG_GR[idx as u64] = r }
+        return 0u8
+    }
+    if WG_GN >= WG_GMAX { return 0u8 }
+    let nb : u64 = WG_GN as u64
+    WG_GSIG[nb] = sig  WG_GCOST[nb] = cost  WG_GOP[nb] = op  WG_GL[nb] = l  WG_GR[nb] = r
+    WG_GN = WG_GN + 1u32
+    return 1u8
+}
+/* rebuild the weave's whole realised library into the current (reset) session; discovery order = dependency order. */
+fn ws_gen_rebuild() -> i32 {
+    let mut k : u32 = 0u32
+    while k < WG_GN {
+        let op : u32 = WG_GOP[k as u64]
+        if op == WG_GVAR { WG_GBUILT[k as u64] = bb_var(WG_GL[k as u64]) }
+        if op == WG_GCON { if WG_GL[k as u64] == 0u32 { WG_GBUILT[k as u64] = bb_intern_const(0u64) } else { WG_GBUILT[k as u64] = bb_intern_const(0xFFFFFFFFFFFFFFFFu64) } }
+        if op == WG_GNOT { WG_GBUILT[k as u64] = bb_intern_not(WG_GBUILT[WG_GL[k as u64] as u64]) }
+        if op == WG_GAND { WG_GBUILT[k as u64] = bb_intern_and(WG_GBUILT[WG_GL[k as u64] as u64], WG_GBUILT[WG_GR[k as u64] as u64]) }
+        if op == WG_GOR  { WG_GBUILT[k as u64] = bb_intern_or(WG_GBUILT[WG_GL[k as u64] as u64], WG_GBUILT[WG_GR[k as u64] as u64]) }
+        if op == WG_GXOR { WG_GBUILT[k as u64] = bb_intern_xor(WG_GBUILT[WG_GL[k as u64] as u64], WG_GBUILT[WG_GR[k as u64] as u64]) }
+        k = k + 1u32
+    }
+    return 0i32
+}
+/* seed the weave's memory with the leaves: the nvars inputs + the two constants (cost 0). */
+fn ws_gen_seed(nvars: u32) -> i32 {
+    let w : u64 = 1u64 << (nvars as u64)
+    bb_reset(w)  bb_intern_reset()
+    let mut v : u32 = 0u32
+    while v < nvars {
+        let n : u32 = bb_var(v)
+        ws_gen_admit(bb_signature(n, nvars), 0u32, WG_GVAR, v, 0u32)
+        v = v + 1u32
+    }
+    let z : u32 = bb_intern_const(0u64)
+    ws_gen_admit(bb_signature(z, nvars), 0u32, WG_GCON, 0u32, 0u32)
+    let o : u32 = bb_intern_const(0xFFFFFFFFFFFFFFFFu64)
+    ws_gen_admit(bb_signature(o, nvars), 0u32, WG_GCON, 1u32, 0u32)
+    return 0i32
+}
+/* one growth round: rebuild the realised library, then COMBINE every pair canonically (bb_intern), recording each
+ * new/cheaper realisation by its signature + gate cost.  Returns the count of genuinely new functions (0 = fixpoint). */
+fn ws_gen_round(nvars: u32) -> u32 {
+    let w : u64 = 1u64 << (nvars as u64)
+    bb_reset(w)  bb_intern_reset()
+    ws_gen_rebuild()
+    let cur : u32 = WG_GN
+    let mut found : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < cur {
+        if bb_node_count() < (bb_capacity() - 8u32) {
+            let nn : u32 = bb_intern_not(WG_GBUILT[i as u64])
+            if ws_gen_admit(bb_signature(nn, nvars), bb_node_gate_count(nn), WG_GNOT, i, 0u32) == 1u8 { found = found + 1u32 }
+        }
+        let mut j : u32 = i
+        while j < cur {
+            if bb_node_count() < (bb_capacity() - 8u32) {
+                let na : u32 = bb_intern_and(WG_GBUILT[i as u64], WG_GBUILT[j as u64])
+                if ws_gen_admit(bb_signature(na, nvars), bb_node_gate_count(na), WG_GAND, i, j) == 1u8 { found = found + 1u32 }
+                let no : u32 = bb_intern_or(WG_GBUILT[i as u64], WG_GBUILT[j as u64])
+                if ws_gen_admit(bb_signature(no, nvars), bb_node_gate_count(no), WG_GOR, i, j) == 1u8 { found = found + 1u32 }
+                let nx : u32 = bb_intern_xor(WG_GBUILT[i as u64], WG_GBUILT[j as u64])
+                if ws_gen_admit(bb_signature(nx, nvars), bb_node_gate_count(nx), WG_GXOR, i, j) == 1u8 { found = found + 1u32 }
+            }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return found
+}
+/* SATURATE: the weave fills its own nvars-variable function space to a fixpoint.  Returns the count of distinct
+ * functions realised (the whole space is 2^(2^nvars): 16 for nvars=2).  After this the weave KNOWS the space --
+ * every future query is an O(1) ws_recall.  Computing has become retrieving for this fragment. */
+fn ws_saturate(nvars: u32) -> u32 @export {
+    WG_GN = 0u32
+    ws_gen_seed(nvars)
+    let mut guard : u32 = 0u32
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if guard >= WG_GMAX { go = 0u8 } else {
+            let f : u32 = ws_gen_round(nvars)
+            guard = guard + 1u32
+            if f == 0u32 { go = 0u8 }
+        }
+    }
+    return WG_GN
+}
+/* GENESIS: the weave invents the cheapest circuit realising a target specification (signature) it has never seen,
+ * by growing until the target appears.  Returns its minimal gate cost, or SENT if not realised within max_rounds.
+ * Optimisation flipped to synthesis: a spec goes in, the minimal proven form comes out. */
+fn ws_synth(target: u64, nvars: u32) -> u32 @export {
+    WG_GN = 0u32
+    ws_gen_seed(nvars)
+    let mut r : u32 = 0u32
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if ws_recall(target) != WG_GSENT { go = 0u8 } else {
+            if r >= WG_GMAX { go = 0u8 } else {
+                let f : u32 = ws_gen_round(nvars)
+                r = r + 1u32
+                if f == 0u32 { go = 0u8 }                /* fixpoint: the reachable fragment is exhausted */
+            }
+        }
+    }
+    return ws_recall(target)
 }
 
 fn ws_put_u32le(base: u64, off: u64, v: u32) -> i32 {

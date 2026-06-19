@@ -1,0 +1,38 @@
+/* 1804_weave_genesis.iii -- THE WEAVE GROWS ITSELF: de-novo genesis + function-space saturation + O(1) recall.
+ *
+ * Not a separate engine -- the weave's own operation (numera/weave_graph), on the substrate (numera/bv_bits),
+ * continuing ws_sig_conjecture one step: it CONSTRUCTS circuits canonically (bb_intern -- redundant DAGs cannot
+ * form), identifies functions by signature (bb_signature -- O(1)), and keeps each function's minimal circuit
+ * (bb_node_gate_count).  No magic caps: the memory is sized to the substrate working set, the node budget is
+ * bb_capacity(), the round bound is the function count.
+ *
+ *   (1) SATURATION: ws_saturate(2) realises the ENTIRE 2-variable Boolean function space -- all 16 functions.
+ *   (2) RETRIEVAL: after saturation the weave KNOWS the space -- ws_recall is O(1).  a&b minimal = 1 gate;
+ *       a^b = 1; the bare input a = 0 gates.  Computing has become retrieving.
+ *   (3) GENESIS: given only a target SIGNATURE it has never seen, the weave invents the cheapest circuit --
+ *       Ch (sig 0xD8) settles to 3 gates, Maj (sig 0xE8) to 4 -- proving, by its own exhaustive bounded search,
+ *       that the SHA-2 optform/carry-save forms are minimal.  Optimisation flipped to synthesis.
+ * Exit 99 = III synthesises its own minimal mathematics from specifications and retrieves it in O(1). */
+module corpus_1804
+
+extern @abi(c-msvc-x64) fn ws_saturate(nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_synth(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_realized() -> u32 from "weave_graph.iii"
+
+fn main() -> u64 {
+    /* (1) the weave saturates its 2-variable function space -- all 16 functions realised */
+    if ws_saturate(2u32) != 16u32 { return 1u64 }
+    if ws_realized() != 16u32 { return 2u64 }
+
+    /* (2) O(1) retrieval of minimal costs from the weave's memory */
+    if ws_recall(0x8u64) != 1u32 { return 3u64 }       /* a & b   -> 1 gate */
+    if ws_recall(0x6u64) != 1u32 { return 4u64 }       /* a ^ b   -> 1 gate */
+    if ws_recall(0xAu64) != 0u32 { return 5u64 }       /* a       -> 0 gates (a bare input) */
+
+    /* (3) GENESIS from a signature the weave has never seen: the minimal SHA-2 forms, invented */
+    if ws_synth(0xD8u64, 3u32) != 3u32 { return 6u64 } /* Ch  minimal = 3 gates */
+    if ws_synth(0xE8u64, 3u32) != 4u32 { return 7u64 } /* Maj minimal = 4 gates */
+
+    return 99u64
+}

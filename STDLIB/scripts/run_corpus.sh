@@ -1487,6 +1487,8 @@ declare -A EXPECTED=(
     [1800_bb_intern]=99
     # THE TOPOLOGICAL PASS (bb_struct_equal): width-agnostic STRUCTURAL equality (spine walk, no BB_W/eval/SAT); sound + incomplete. bb_struct_all_widths lifts it to an all-width truth ONLY for the bitwise fragment (no coupling/consts) -- deletes the rotation-duality BOTH artifact for bitwise, keeps rotation width-local.
     [1801_bb_struct_equal]=99
+    # THE WEAVE GROWS ITSELF (genesis + saturation): ws_saturate fills a function space (2-var -> 16); ws_recall is O(1) retrieval (computing->retrieving); ws_synth INVENTS the minimal circuit for a target signature (Ch->3 gates, Maj->4). In the weave, on the substrate, no magic caps. Substrate working set raised 128->2048.
+    [1804_weave_genesis]=99
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

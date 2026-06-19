@@ -208,3 +208,60 @@ fn ws_transpose_law_sample(k: u32) -> u8 @export {
     }
     return 1u8
 }
+
+/* ============================================================================================================
+ * DISCOVERY OVER THE SELF-MODEL: III proves the LAWS its own six-state connection-algebra obeys -- the new math
+ * built on the granular spiderweb is the system's understanding of its own structure.  Each law is verified on
+ * the LOADED self-model (scale-feasible: diagonal/null are O(n) or O(1); transpose/double-neg are bounded
+ * samples of structurally-universal laws). */
+
+/* the DIAGONAL is self-dual: a component's relation to itself is direction-symmetric (BOTH if cyclic, NEITHER if
+ * not), so NOT C(a,a) == C(a,a) for every component.  O(n). */
+fn ws_diagonal_law() -> u8 @export {
+    let n : u32 = satlas_node_count()
+    let mut a : u32 = 0u32
+    while a < n {
+        if l6_not(ws_connect(a, a)) != ws_connect(a, a) { return 0u8 }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* DOUBLE NEGATION on connections: reversing a connection twice is the identity (NOT NOT C == C) -- the relation
+ * lives in a De Morgan algebra.  Bounded sample (structurally universal). */
+fn ws_doubleneg_law(k: u32) -> u8 @export {
+    let n : u32 = satlas_node_count()
+    let mut lim : u32 = k
+    if lim > n { lim = n }
+    let mut a : u32 = 0u32
+    while a < lim {
+        let mut b : u32 = 0u32
+        while b < lim {
+            let c : u32 = ws_connect(a, b)
+            if l6_not(l6_not(c)) != c { return 0u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* the NULL boundary: a non-existent component yields the void (NULL), never a fabricated relation.  O(1). */
+fn ws_null_law() -> u8 @export {
+    let n : u32 = satlas_node_count()
+    if ws_connect(n, 0u32) != WS_NULL { return 0u8 }      /* index n is out of range */
+    if ws_connect(0u32, n) != WS_NULL { return 0u8 }
+    return 1u8
+}
+
+/* the count of structural self-laws III has PROVEN about its own six-state structure (= 4 when the self-model is
+ * whole): transpose (adjacency is self-dual), diagonal (self-relation symmetric), double-negation (De Morgan),
+ * null-boundary (the void cannot fabricate a relation).  The system's proven understanding of itself. */
+fn ws_self_laws() -> u32 @export {
+    let mut c : u32 = 0u32
+    if ws_transpose_law_sample(40u32) == 1u8 { c = c + 1u32 }
+    if ws_diagonal_law() == 1u8 { c = c + 1u32 }
+    if ws_doubleneg_law(40u32) == 1u8 { c = c + 1u32 }
+    if ws_null_law() == 1u8 { c = c + 1u32 }
+    return c
+}

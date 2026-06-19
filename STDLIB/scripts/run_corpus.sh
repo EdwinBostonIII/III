@@ -1459,6 +1459,8 @@ declare -A EXPECTED=(
     [1786_weave_self]=99
     # SIX-STATE SELF-WEAVE, SYSTEMWIDE: runs over III's REAL self-model (self_atlas_data); the weave's cyclic BOTH-core == the lens's cycle-node count (two organs, one fact); transpose law holds on real connections.
     [1787_weave_self_systemwide]=99
+    # THE UNIFICATION: III proves the 4 laws of its OWN six-state structure (transpose/diagonal/double-neg/null) and ACCUMULATES them into the same persistent commons as the weave's invented math -- discovery + self-population + the math it understands itself in, one body.
+    [1788_weave_self_commons]=99
 )
 
 PASS=0

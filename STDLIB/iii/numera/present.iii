@@ -33,6 +33,10 @@ extern @abi(c-msvc-x64) fn gild3_conjecture_count() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gild3_disc_count() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gild3_disc_i(k: u64) -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gild3_disc_j(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn ws_transpose_law_sample(k: u32) -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_diagonal_law() -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_doubleneg_law(k: u32) -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_null_law() -> u8 from "weave_self.iii"
 
 var PRES_BUF   : [u8; 128]
 var PRES_LEN   : [u64; 1]
@@ -272,6 +276,18 @@ fn present_conjecture3() -> u64 @export {
 fn present_weave_complete() -> u64 @export {
     present_weave_full()          /* 13 named-family laws */
     present_conjecture3()         /* + the self-conjectured 3-var identities */
+    return PRES_NLAW[0u64]
+}
+
+/* SELF-POPULATION OF THE SELF-UNDERSTANDING: the laws III has PROVEN about its OWN six-state structure (from
+ * numera/weave_self, run over the loaded self-model) are admitted into the same content-addressed commons as the
+ * weave's mathematical laws.  So the one persistent body holds BOTH the math III invents AND the math by which it
+ * understands itself.  Requires the self-model to be loaded (satlas_data_load).  Returns the commons size. */
+fn present_self() -> u64 @export {
+    if ws_transpose_law_sample(40u32) == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:transpose" as u64), 14u64) ; pres_seal() }
+    if ws_diagonal_law() == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:diagonal" as u64), 13u64) ; pres_seal() }
+    if ws_doubleneg_law(40u32) == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:doubleneg" as u64), 14u64) ; pres_seal() }
+    if ws_null_law() == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:null" as u64), 9u64) ; pres_seal() }
     return PRES_NLAW[0u64]
 }
 

@@ -1,0 +1,64 @@
+/* 1788_weave_self_commons.iii -- THE UNIFICATION: the math III INVENTS and the math it UNDERSTANDS ITSELF IN,
+ * in ONE persistent commons.
+ *
+ * The weave's three pillars meet here.  III loads its REAL self-model, PROVES the structural laws of its own
+ * six-state connection-algebra (DISCOVERY over itself), and ACCUMULATES them -- content-addressed -- into the
+ * same commons that holds the weave's invented mathematics (SELF-POPULATION).  One body: the laws III invents
+ * (Ch) and the laws by which it understands its own structure (transpose, diagonal, double-negation, null).
+ *
+ *   (1) the weave's invented math seeds the commons (present_weave Ch) -> 1
+ *   (2) present_self admits the 4 PROVEN self-structural laws beside it -> 5
+ *   (3) III has proven exactly 4 laws about its own six-state structure (ws_self_laws == 4)
+ *   (4) the unified body persists -> wipe -> reloads byte-identical (5 laws, root intact)
+ * Exit 99 = the invented math and the self-understanding math are one persistent, content-addressed body. */
+module corpus_1788
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn satlas_data_load() -> i32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn ws_self_laws() -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn present_weave(kind: u32) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_self() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_nlaw() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_root_byte(i: u64) -> u32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_persist(cap: u64, path: u64) -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reset() -> i32 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_commons_reload(cap: u64, path: u64) -> i32 from "present.iii"
+
+var ROOTSNAP : [u32; 32]
+
+fn main() -> u64 {
+    satlas_data_load()                                     /* III's real self-model */
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    let path : *u8 = malloc(16u64)                         /* "./iii_self.tmp" */
+    path[0u64] = 46u8   path[1u64] = 47u8   path[2u64] = 105u8  path[3u64] = 105u8
+    path[4u64] = 105u8  path[5u64] = 95u8   path[6u64] = 115u8  path[7u64] = 101u8
+    path[8u64] = 108u8  path[9u64] = 102u8  path[10u64] = 46u8  path[11u64] = 116u8
+    path[12u64] = 109u8 path[13u64] = 112u8 path[14u64] = 0u8
+
+    /* (1) the invented math seeds the commons (present_weave returns the rendered length; the commons size is pres_nlaw) */
+    present_weave(1u32)
+    if pres_nlaw() != 1u64 { return 1u64 }
+
+    /* (2) the proven self-structural laws join it */
+    if present_self() != 5u64 { return 2u64 }
+
+    /* (3) III has proven exactly 4 laws about its own structure */
+    if ws_self_laws() != 4u32 { return 3u64 }
+
+    /* (4) the unified body persists + reloads byte-identical */
+    let mut i : u64 = 0u64
+    while i < 32u64 { ROOTSNAP[i] = pres_root_byte(i)  i = i + 1u64 }
+    if pres_commons_persist(cap, path as u64) != 0i32 { return 4u64 }
+    pres_commons_reset()
+    if pres_nlaw() != 0u64 { return 5u64 }
+    if pres_commons_reload(cap, path as u64) != 5i32 { return 6u64 }
+    i = 0u64
+    while i < 32u64 { if pres_root_byte(i) != ROOTSNAP[i] { return 7u64 }  i = i + 1u64 }
+
+    fs_delete(cap, path as u64)
+    return 99u64
+}

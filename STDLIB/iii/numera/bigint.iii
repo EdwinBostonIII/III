@@ -606,6 +606,11 @@ fn _big_mul8() -> i32 {
 
 fn bigint_force_path(p: u32) -> i32 @export { BIG_VEC_FORCE = p ; return 0i32 }
 
+/* THE UNIFIED WEAVE: the 64x64->128 schoolbook lives ONCE in numera/weave_blocks. */
+extern @abi(c-msvc-x64) fn wvb_mul64(a: u64, b: u64) -> i32 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_lo() -> u64 from "weave_blocks.iii"
+extern @abi(c-msvc-x64) fn wvb_mul64_hi() -> u64 from "weave_blocks.iii"
+
 fn bigint_mul_u64(arena_id: u64, a: u64, scalar: u64) -> u64 @export {
     let sa : u32 = big_slot_of(a)
     if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
@@ -641,17 +646,11 @@ fn bigint_mul_u64(arena_id: u64, a: u64, scalar: u64) -> u64 @export {
     /* Scalar remainder (< 8 limbs). */
     while g < la {
         let limb : u64 = big_load_u64_le(abase, g)
-        let llo : u64 = limb & 0xFFFFFFFFu64
-        let lhi : u64 = (limb >> 32u64) & 0xFFFFFFFFu64
-        let slo : u64 = scalar & 0xFFFFFFFFu64
-        let shi : u64 = (scalar >> 32u64) & 0xFFFFFFFFu64
-        let p_ll : u64 = llo * slo
-        let p_lh : u64 = llo * shi
-        let p_hl : u64 = lhi * slo
-        let p_hh : u64 = lhi * shi
-        let mid : u64 = (p_ll >> 32u64) + (p_lh & 0xFFFFFFFFu64) + (p_hl & 0xFFFFFFFFu64)
-        let prod_hi : u64 = p_hh + (p_lh >> 32u64) + (p_hl >> 32u64) + (mid >> 32u64)
-        let prod_lo : u64 = limb * scalar
+        /* THE UNIFIED WEAVE: the per-limb 64x64->128 schoolbook IS wvb_mul64 (numera/weave_blocks) -- byte-
+         * identical (its hi half == the old prod_hi assembly, its lo half == limb*scalar). */
+        wvb_mul64(limb, scalar)
+        let prod_hi : u64 = wvb_mul64_hi()
+        let prod_lo : u64 = wvb_mul64_lo()
         let lo_with_carry : u64 = prod_lo + carry
         let mut new_carry : u64 = prod_hi
         if lo_with_carry < prod_lo { new_carry = new_carry + 1u64 }

@@ -27,6 +27,7 @@ extern @abi(c-msvc-x64) fn ws_emit(target: u64, nvars: u32) -> u32 from "weave_g
 extern @abi(c-msvc-x64) fn ws_realized() -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_forget() -> i32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_serialize(base: u64) -> u64 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_serialize_len() -> u64 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_deserialize(base: u64) -> u32 from "weave_graph.iii"
 
 const WG_GSENT : u32 = 0xFFFFFFFFu32
@@ -53,6 +54,7 @@ fn main() -> u64 {
     /* (2) serialise, then WIPE -- prove it is really gone */
     let len : u64 = ws_serialize(&SERBUF as u64)
     if len != (4u64 + (n0 as u64) * 24u64) { return 14u64 }
+    if ws_serialize_len() != len { return 24u64 }                 /* the predicted length matches what was written */
     ws_forget()
     if ws_realized() != 0u32 { return 15u64 }
     if ws_recall(sig_ch) != WG_GSENT { return 16u64 }

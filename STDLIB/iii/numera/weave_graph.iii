@@ -647,7 +647,10 @@ fn ws_synth(target: u64, nvars: u32) -> u32 @export {
  * cost <= max_cost.  Returns the MINIMAL cost of the target (provably minimal among all realisations of cost
  * <= max_cost -- every cheaper form is explored), or WG_GSENT if the target needs more than max_cost.  This is what
  * makes synthesis tractable beyond the fully-saturable n<=3: a shallow target at larger nvars is found WITHOUT
- * saturating the whole (exponential) space, because the ceiling keeps the explored set to the low-cost fragment. */
+ * saturating the whole (exponential) space, because the ceiling keeps the explored set to the low-cost fragment.
+ * Minimal over the ORDER-RESPECTING binary-decomposition closure within cost <= max_cost (the acyclicity guard in
+ * ws_gen_admit blocks relaxations through later-discovered operands) -- a sound upper bound, exact for shallow
+ * targets found on first discovery (e.g. 4-input XOR = 3). */
 fn ws_synth_bounded(target: u64, nvars: u32, max_cost: u32) -> u32 @export {
     WG_MAXCOST = max_cost
     WG_GN = 0u32
@@ -679,7 +682,9 @@ fn ws_emit(target: u64, nvars: u32) -> u32 @export {
  * generalised circuit -> get its proven-minimal equivalent -- contextual bloat annihilation BY BEHAVIOUR (the
  * strongest form: structure-blind, so dead branches and redundancy cannot survive).  Respects the active cost metric.
  * The argument `root` must be built in the current arena; the returned minimal root lives in a FRESH arena (read it
- * before any further bb_reset).  Returns WG_GSENT if the behaviour is unrealisable in the reachable fragment. */
+ * before any further bb_reset).  Returns WG_GSENT if the behaviour is unrealisable in the reachable fragment.
+ * Calls the UNBOUNDED ws_synth (full saturation), so it is for the saturable fragment (nvars <= 3); for larger nvars
+ * use ws_synth_bounded + ws_emit with a cost ceiling. */
 fn ws_minimize(root: u32, nvars: u32) -> u32 @export {
     let sig : u64 = bb_signature(root, nvars)
     ws_synth(sig, nvars)
@@ -689,7 +694,8 @@ fn ws_minimize(root: u32, nvars: u32) -> u32 @export {
 /* THE OUROBOROS GATE: III judges the minimality of a form it ALREADY ships.  Given a shipped circuit and the cost it
  * is CLAIMED to be minimal at, genesis independently re-derives the true minimum (under the active metric) and
  * returns a verdict.  This closes the loop -- III certifies its own math, and where genesis is cheaper it can adopt
- * the better form (available via ws_emit on the same signature).  A decision/gate, not a live mutation. */
+ * the better form (available via ws_emit on the same signature).  A decision/gate, not a live mutation.  Calls the
+ * UNBOUNDED ws_synth, so it is for the saturable fragment (nvars <= 3). */
 const WS_CERT_OK         : u32 = 0u32    /* CERTIFIED minimal: the claim equals genesis's minimum */
 const WS_CERT_IMPROVABLE : u32 = 1u32    /* genesis found a strictly cheaper form -- adopt it */
 const WS_CERT_INVALID    : u32 = 2u32    /* the claim is below the true minimum (a wrong claim) or unrealisable */

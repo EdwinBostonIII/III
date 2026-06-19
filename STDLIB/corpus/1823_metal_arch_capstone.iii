@@ -1,0 +1,73 @@
+/* 1823_metal_arch_capstone.iii -- THE SOVEREIGN-ORGANISM PIPELINE: all 8 metal-architecture mechanisms composed.
+ *
+ * Proves the CUMULATIVE architecture end-to-end on this metal:
+ *   1. behavioral_seed  -> the substrate computes III's logic+arithmetic faithfully (the floor anchor; else refuse).
+ *   2. behavioral_fp    -> derive the live behavioral crystal identity.
+ *   3. stage (+quine6)  -> bind the weave (Ousia) to the crystal -> a content-addressed Hypostasis (cacheable).
+ *   4. crystal_cap+voice-> a bare-metal crystal mints CAP_METAL so an ACTIVE metal write REALIZES; a hypervisor
+ *                          crystal WITHHOLDS it so the SAME write EVAPORATES -- UNBRICKABLE BY CONSTRUCTION, e2e.
+ *   5. stage            -> only the Hypostasis executes (Energeia), at the proven-safe depth.
+ *   6. tense            -> the crystal is PERFECT: immutable after bind.
+ *   7. descent_proof    -> the rung is proof-carrying (forged proof rejected).
+ *   8. behavioral_fp    -> drift-stable.
+ * Exit 99 = the eight compose into the self-proving, hardware-adaptive, security-by-construction organism. */
+module corpus_1823
+
+extern @abi(c-msvc-x64) fn bseed_attest() -> u8 from "behavioral_seed.iii"
+extern @abi(c-msvc-x64) fn bfp_compute() -> u32 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn bfp_drift(sealed_expected: u32) -> u8 from "behavioral_fp.iii"
+extern @abi(c-msvc-x64) fn ccap_for(hv_present: u64) -> u32 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn ccap_grants(caps: u32, bit: u32) -> u8 from "crystal_cap.iii"
+extern @abi(c-msvc-x64) fn stage_bind(ousia_term: u32, crystal_addr: u32) -> u32 from "stage.iii"
+extern @abi(c-msvc-x64) fn stage_execute(hypostasis_addr: u32, stage_tag: u32, depth_ok: u8) -> u32 from "stage.iii"
+extern @abi(c-msvc-x64) fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn tense_step(tense: u32, state: u32, op: u32) -> u32 from "tense.iii"
+extern @abi(c-msvc-x64) fn dp_proof(action: u32, precond: u32, prior_proof: u32) -> u32 from "descent_proof.iii"
+extern @abi(c-msvc-x64) fn dp_admit(action: u32, precond: u32, prior_proof: u32, claimed_proof: u32) -> u8 from "descent_proof.iii"
+
+const CAP_METAL : u32 = 8u32
+const VOICE_ACTIVE : u32 = 2u32
+const VK_NULL : u32 = 0xFFFFFFFFu32
+const STAGE_OUSIA : u32 = 0u32
+const STAGE_HYPOSTASIS : u32 = 1u32
+const ST_REJECT : u32 = 0xFFFFFFFFu32
+const TENSE_PERFECT : u32 = 1u32
+const TOP_WRITE : u32 = 0u32
+const TOP_BIND : u32 = 2u32
+const T_REJECT : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* 1. FLOOR ANCHOR: the substrate is faithful (gates the whole pipeline) */
+    if bseed_attest() != 1u8 { return 11u64 }
+
+    /* 2-3. derive the live crystal identity + bind the Ousia term -> a content-addressed Hypostasis */
+    let crystal_addr : u32 = bfp_compute()
+    let ousia : u32 = 0x1234u32
+    let hyp : u32 = stage_bind(ousia, crystal_addr)
+    if hyp == ST_REJECT { return 12u64 }
+    if hyp != stage_bind(ousia, crystal_addr) { return 13u64 }          /* cacheable */
+
+    /* 4. CAPABILITY-TYPED EFFECT -- the unbrickable property, end to end */
+    let active_bare : u32 = voice_admit(VOICE_ACTIVE, hyp, ccap_grants(ccap_for(0u64), CAP_METAL), 0u8)
+    if active_bare == VK_NULL { return 14u64 }                          /* bare metal: the write REALIZES */
+    let active_hv : u32 = voice_admit(VOICE_ACTIVE, hyp, ccap_grants(ccap_for(1u64), CAP_METAL), 0u8)
+    if active_hv != VK_NULL { return 15u64 }                            /* NEGATIVE: under hv the write EVAPORATES */
+
+    /* 5. ENERGEIA: only the Hypostasis executes, at the proven-safe depth */
+    if stage_execute(hyp, STAGE_HYPOSTASIS, 1u8) != hyp { return 16u64 }
+    if stage_execute(hyp, STAGE_OUSIA, 1u8) != ST_REJECT { return 17u64 }   /* NEGATIVE: unbound can't run */
+
+    /* 6. TENSE: the crystal is PERFECT -- immutable after bind */
+    let bound : u32 = tense_step(TENSE_PERFECT, 0u32, TOP_BIND)
+    if tense_step(TENSE_PERFECT, bound, TOP_WRITE) != T_REJECT { return 18u64 }   /* NEGATIVE */
+
+    /* 7. PROOF-CARRYING rung */
+    let proof : u32 = dp_proof(ousia, crystal_addr, 0u32)
+    if dp_admit(ousia, crystal_addr, 0u32, proof) != 1u8 { return 19u64 }
+    if dp_admit(ousia, crystal_addr, 0u32, proof ^ 1u32) != 0u8 { return 20u64 }   /* NEGATIVE: forged */
+
+    /* 8. behavioral drift-stable on the live machine */
+    if bfp_drift(bfp_compute()) != 0u8 { return 21u64 }
+
+    return 99u64
+}

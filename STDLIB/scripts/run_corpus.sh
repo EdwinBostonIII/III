@@ -1518,6 +1518,7 @@ declare -A EXPECTED=(
     [1820_behavioral_fp]=99    # behavioral fingerprint deterministic + non-degenerate; a divergent (forged) claim detected as drift
     [1821_descent_proof]=99    # proof-carrying descent: valid rung admitted; forged proof rejected; proof BOUND to the precondition
     [1822_tense]=99            # Tense lifetimes: Perfect immutable-after-bind; Aorist use-once; Present always
+    [1823_metal_arch_capstone]=99  # THE SOVEREIGN-ORGANISM PIPELINE: all 8 mechanisms composed e2e -- substrate-faithful seed -> live crystal -> content-addressed Hypostasis -> capability-typed effect (metal write REALIZES bare-metal / EVAPORATES under hypervisor = unbrickable by construction) -> Energeia at proven depth -> Perfect-immutable crystal -> proof-carrying rung -> drift-stable
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

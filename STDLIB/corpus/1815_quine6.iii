@@ -6,6 +6,7 @@
 module corpus_1815
 
 extern @abi(c-msvc-x64) fn q6_addr24(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
+extern @abi(c-msvc-x64) fn q6_addr(input_ptr: u64, n: u32) -> u32 from "quine6.iii"
 extern @abi(c-msvc-x64) fn q6_addr48(input_ptr: u64, n: u32) -> u64 from "quine6.iii"
 extern @abi(c-msvc-x64) fn q6_pack9(symbols_ptr: u64, n: u32) -> u32 from "quine6.iii"
 extern @abi(c-msvc-x64) fn q6_unpack9(packed: u32, n: u32, out_ptr: u64) -> i32 from "quine6.iii"
@@ -26,6 +27,7 @@ fn main() -> u64 {
     while i < 12u32 { let p : *u8 = (&SYMS as u64 + (i as u64)) as *u8  p[0u64] = ((i * 5u32 + 1u32) % 6u32) as u8  i = i + 1u32 }
     let a0 : u32 = q6_addr24(&SYMS as u64, 12u32)
     if a0 != q6_addr24(&SYMS as u64, 12u32) { return 11u64 }
+    if q6_addr(&SYMS as u64, 12u32) != a0 { return 10u64 }       /* the back-compat alias == the 24-bit address */
     if a0 > 0xFFFFFFu32 { return 12u64 }
     let w0 : u64 = q6_addr48(&SYMS as u64, 12u32)
     if w0 != q6_addr48(&SYMS as u64, 12u32) { return 13u64 }

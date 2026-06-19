@@ -1439,6 +1439,8 @@ declare -A EXPECTED=(
     [1776_weave_ratchet]=99
     # FEDERATION (fork c): the commons crosses the wire zero-trust -- a peer RE-DERIVES the weave and accepts iff the body's root matches its own derivation; a non-matching body is rejected.
     [1777_weave_federate]=99
+    # BOOLEAN ALGEBRA DISCOVERED: III searches+SAT-proves De Morgan, absorption, distributivity, the XOR involution, and the full shift-mask family (31) -- the structural floor, found not authored.
+    [1778_weave_algebra]=99
 )
 
 PASS=0

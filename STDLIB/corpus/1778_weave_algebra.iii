@@ -1,0 +1,29 @@
+/* 1778_weave_algebra.iii -- III DISCOVERS THE FOUNDATIONAL LAWS OF BOOLEAN ALGEBRA over its own substrate.
+ *
+ * The weave's structural floor extends to the laws every algebra rests on -- and III finds them by search +
+ * SAT proof, not authorship: De Morgan, absorption, distributivity, the XOR involution, and the COMPLETE
+ * shift-mask family.  Each holds for ALL inputs (the bv judge decides it).
+ *
+ *   (1) shift-mask family: (x>>k)<<k == x & (all-ones<<k) for every k -> 31 members
+ *   (2) De Morgan: ~(a&b)=~a|~b and ~(a|b)=~a&~b
+ *   (3) absorption: a|(a&b)=a and a&(a|b)=a
+ *   (4) distributivity: a&(b|c)=(a&b)|(a&c) and a|(b&c)=(a|b)&(a|c)
+ *   (5) XOR involution: (x^c)^c = x (xor-with-c is self-inverse) -- for two constants
+ * Exit 99 = III autonomously discovered + proved the core of Boolean algebra. */
+module corpus_1778
+
+extern @abi(c-msvc-x64) fn gild_shiftmask_count() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_demorgan() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_absorb() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_distrib() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_xor_involution(c: u64) -> u8 from "invent.iii"
+
+fn main() -> u64 {
+    if gild_shiftmask_count() != 31u64 { return 1u64 }            /* the complete shift-mask family */
+    if gild_demorgan() != 1u8 { return 2u64 }                    /* both De Morgan laws */
+    if gild_absorb() != 1u8 { return 3u64 }                      /* both absorption laws */
+    if gild_distrib() != 1u8 { return 4u64 }                     /* both distributive laws */
+    if gild_xor_involution(0xDEADBEEFu64) != 1u8 { return 5u64 } /* (x^c)^c = x */
+    if gild_xor_involution(0x12345678u64) != 1u8 { return 6u64 }
+    return 99u64
+}

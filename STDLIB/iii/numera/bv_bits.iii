@@ -87,6 +87,8 @@ const EK_SHR   : u32 = 7u32
 const EK_ADD   : u32 = 8u32
 const EK_SUB   : u32 = 9u32
 const EK_MUL   : u32 = 10u32
+const EK_NULL  : u32 = 11u32       /* logic6 bottom: the VOID / impossible -- meet-annihilator, join-identity */
+const EK_ALL   : u32 = 12u32       /* logic6 top: the total DON'T-CARE -- join-annihilator, meet-identity */
 
 var BB_NKIND  : [u32; 128]             /* per-node operation kind (EK_*) */
 var BB_NA     : [u32; 128]             /* operand a node-id  (or VAR index for EK_VAR) */
@@ -622,8 +624,33 @@ var BB_HC_B    : [u32; 256]
 var BB_HC_ID   : [u32; 256]
 var BB_HC_N    : u32 = 0u32
 
-fn bb_intern_reset() -> i32 @export { BB_HC_N = 0u32  return 0i32 }
+var BB_NULL_NODE : u32 = 0xFFFFFFFFu32
+var BB_ALL_NODE  : u32 = 0xFFFFFFFFu32
+fn bb_intern_reset() -> i32 @export { BB_HC_N = 0u32  BB_NULL_NODE = 0xFFFFFFFFu32  BB_ALL_NODE = 0xFFFFFFFFu32  return 0i32 }
 fn bb_node_count() -> u32 @export { return BB_NN }
+
+/* THE LOGIC6 LEAVES: six-state as the SUBSTANCE of the node, not a label.  EK_NULL (the void / impossible) and
+ * EK_ALL (the total don't-care) are native leaf kinds.  They carry NO 2-state bit encoding -- they are
+ * construction-time lattice markers that DRIVE the bb_intern reductions (below), so a don't-care or an impossible
+ * input PROPAGATES through the build and entire redundant subtrees EVAPORATE into a single leaf before the
+ * builder returns.  They never enter bb_eval/bb_equal (those stay 2-state / boolean -- the honest boundary); a
+ * form that reduces to a concrete circuit (no NULL/ALL left) is then evaluable.  Cached one-per-session. */
+fn bb_null() -> u32 @export {
+    if BB_NULL_NODE < BB_NN { if BB_NKIND[BB_NULL_NODE as u64] == EK_NULL { return BB_NULL_NODE } }
+    let n : u32 = bb_node_alloc()
+    bb_struct(n, EK_NULL, 0u32, 0u32, 0u64)
+    BB_NULL_NODE = n
+    return n
+}
+fn bb_all() -> u32 @export {
+    if BB_ALL_NODE < BB_NN { if BB_NKIND[BB_ALL_NODE as u64] == EK_ALL { return BB_ALL_NODE } }
+    let n : u32 = bb_node_alloc()
+    bb_struct(n, EK_ALL, 0u32, 0u32, 0u64)
+    BB_ALL_NODE = n
+    return n
+}
+fn bb_is_null(n: u32) -> u8 @export { if n >= BB_NN { return 0u8 }  if BB_NKIND[n as u64] == EK_NULL { return 1u8 }  return 0u8 }
+fn bb_is_all(n: u32) -> u8 @export { if n >= BB_NN { return 0u8 }  if BB_NKIND[n as u64] == EK_ALL { return 1u8 }  return 0u8 }
 
 fn bb_is_const(n: u32) -> u8 { if n >= BB_NN { return 0u8 }  if BB_NKIND[n as u64] == EK_CONST { return 1u8 }  return 0u8 }
 fn bb_const_val(n: u32) -> u64 { if n >= BB_NN { return 0u64 }  return BB_NCONST[n as u64] & bb_wmask() }
@@ -665,6 +692,10 @@ fn bb_intern_const(c: u64) -> u32 @export {
 }
 
 fn bb_intern_and(a: u32, b: u32) -> u32 @export {
+    if bb_is_null(a) == 1u8 { return bb_null() }                     /* NULL & x = NULL (void annihilates meet) */
+    if bb_is_null(b) == 1u8 { return bb_null() }
+    if bb_is_all(a) == 1u8 { return b }                              /* ALL & x = x  (don't-care is meet-identity) */
+    if bb_is_all(b) == 1u8 { return a }
     if a == b { return a }                                           /* x & x = x */
     if bb_is_const(a) == 1u8 { if bb_is_const(b) == 1u8 { return bb_intern_const(bb_const_val(a) & bb_const_val(b)) } }
     if bb_is_const0(a) == 1u8 { return a }                           /* 0 & x = 0 */
@@ -680,6 +711,10 @@ fn bb_intern_and(a: u32, b: u32) -> u32 @export {
     return id
 }
 fn bb_intern_or(a: u32, b: u32) -> u32 @export {
+    if bb_is_all(a) == 1u8 { return bb_all() }                       /* ALL | x = ALL (don't-care annihilates join) */
+    if bb_is_all(b) == 1u8 { return bb_all() }
+    if bb_is_null(a) == 1u8 { return b }                             /* NULL | x = x (void is join-identity) */
+    if bb_is_null(b) == 1u8 { return a }
     if a == b { return a }                                           /* x | x = x */
     if bb_is_const(a) == 1u8 { if bb_is_const(b) == 1u8 { return bb_intern_const(bb_const_val(a) | bb_const_val(b)) } }
     if bb_is_ones(a) == 1u8 { return a }                             /* 1 | x = 1 */
@@ -695,6 +730,10 @@ fn bb_intern_or(a: u32, b: u32) -> u32 @export {
     return id
 }
 fn bb_intern_xor(a: u32, b: u32) -> u32 @export {
+    if bb_is_null(a) == 1u8 { return bb_null() }                     /* impossibility is absorbing */
+    if bb_is_null(b) == 1u8 { return bb_null() }
+    if bb_is_all(a) == 1u8 { return bb_all() }                       /* a don't-care input -> a don't-care output */
+    if bb_is_all(b) == 1u8 { return bb_all() }
     if a == b { return bb_intern_const(0u64) }                       /* x ^ x = 0 */
     if bb_is_const(a) == 1u8 { if bb_is_const(b) == 1u8 { return bb_intern_const(bb_const_val(a) ^ bb_const_val(b)) } }
     if bb_is_const0(a) == 1u8 { return b }                           /* 0 ^ x = x */
@@ -708,6 +747,8 @@ fn bb_intern_xor(a: u32, b: u32) -> u32 @export {
     return id
 }
 fn bb_intern_not(a: u32) -> u32 @export {
+    if bb_is_null(a) == 1u8 { return bb_all() }                                           /* NOT void = total (involution) */
+    if bb_is_all(a) == 1u8 { return bb_null() }                                           /* NOT total = void */
     if bb_is_const(a) == 1u8 { return bb_intern_const((~bb_const_val(a)) & bb_wmask()) }   /* const-fold */
     if a < BB_NN { if BB_NKIND[a as u64] == EK_NOT { return BB_NA[a as u64] } }            /* ~~x = x */
     let hit : u32 = bb_hc_find(EK_NOT, a, 0u32)

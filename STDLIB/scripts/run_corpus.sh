@@ -1487,6 +1487,8 @@ declare -A EXPECTED=(
     [1800_bb_intern]=99
     # THE TOPOLOGICAL PASS (bb_struct_equal): width-agnostic STRUCTURAL equality (spine walk, no BB_W/eval/SAT); sound + incomplete. bb_struct_all_widths lifts it to an all-width truth ONLY for the bitwise fragment (no coupling/consts) -- deletes the rotation-duality BOTH artifact for bitwise, keeps rotation width-local.
     [1801_bb_struct_equal]=99
+    # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
+    [1802_logic6_leaves]=99
 )
 
 PASS=0

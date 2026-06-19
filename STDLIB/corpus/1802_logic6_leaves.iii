@@ -1,0 +1,64 @@
+/* 1802_logic6_leaves.iii -- SIX-STATE AS THE SUBSTANCE: EK_NULL / EK_ALL leaves evaporate redundant logic.
+ *
+ * Six-state stops being a typing label on the edges and becomes the SUBSTANCE of the nodes.  EK_NULL (the void /
+ * impossible) and EK_ALL (the total don't-care) are native leaf kinds, and the bb_intern reductions propagate
+ * them per logic6: NULL annihilates the meet, ALL annihilates the join, both are absorbing in xor, NOT is the
+ * involution.  So a don't-care or an impossible input PHYSICALLY PROPAGATES up the DAG during construction and
+ * entire redundant subtrees EVAPORATE into a single leaf -- the i-bridge made intrinsic, no meta-solver asked.
+ *
+ *   (1) NULL annihilates meet: x & NULL = NULL ;  ALL is meet-identity: x & ALL = x
+ *   (2) ALL annihilates join: x | ALL = ALL ;     NULL is join-identity: x | NULL = x
+ *   (3) NOT is the involution: NOT NULL = ALL, NOT ALL = NULL
+ *   (4) xor is absorbing: x ^ NULL = NULL, x ^ ALL = ALL
+ *   (5) EVAPORATION: an OR-chain accumulating onto ALL collapses to ALL with ZERO new gate nodes -- the
+ *       redundant combining logic literally evaporates during construction (the don't-care carries zero weight)
+ * Exit 99 = six-state is the substance; don't-cares and impossibilities evaporate redundant logic at build time. */
+module corpus_1802
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_null() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_all() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_null(n: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_all(n: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+
+fn main() -> u64 {
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)  let b : u32 = bb_var(1u32)  let c : u32 = bb_var(2u32)
+    let nul : u32 = bb_null()
+    let alv : u32 = bb_all()
+
+    /* (1) meet: NULL annihilates, ALL is identity */
+    if bb_is_null(bb_intern_and(a, nul)) != 1u8 { return 1u64 }
+    if bb_intern_and(a, alv) != a { return 2u64 }
+
+    /* (2) join: ALL annihilates, NULL is identity */
+    if bb_is_all(bb_intern_or(a, alv)) != 1u8 { return 3u64 }
+    if bb_intern_or(a, nul) != a { return 4u64 }
+
+    /* (3) NOT involution */
+    if bb_is_all(bb_intern_not(nul)) != 1u8 { return 5u64 }
+    if bb_is_null(bb_intern_not(alv)) != 1u8 { return 6u64 }
+
+    /* (4) xor absorbing */
+    if bb_is_null(bb_intern_xor(a, nul)) != 1u8 { return 7u64 }
+    if bb_is_all(bb_intern_xor(a, alv)) != 1u8 { return 8u64 }
+
+    /* (5) EVAPORATION: an OR-chain onto ALL collapses to ALL with ZERO new gate nodes */
+    let base : u32 = bb_node_count()
+    let r : u32 = bb_intern_or(bb_intern_or(bb_intern_or(alv, a), b), c)
+    if bb_is_all(r) != 1u8 { return 9u64 }
+    if bb_node_count() != base { return 10u64 }                 /* the combining logic evaporated -- no new nodes */
+
+    /* NULL propagates up a built subtree */
+    let r2 : u32 = bb_intern_and(bb_intern_and(a, b), nul)
+    if bb_is_null(r2) != 1u8 { return 11u64 }
+
+    return 99u64
+}

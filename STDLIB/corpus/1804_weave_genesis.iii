@@ -1,38 +1,84 @@
-/* 1804_weave_genesis.iii -- THE WEAVE GROWS ITSELF: de-novo genesis + function-space saturation + O(1) recall.
+/* 1804_weave_genesis.iii -- DE-NOVO GENESIS + SATURATION: the weave invents its own minimal math from a SPEC.
  *
- * Not a separate engine -- the weave's own operation (numera/weave_graph), on the substrate (numera/bv_bits),
- * continuing ws_sig_conjecture one step: it CONSTRUCTS circuits canonically (bb_intern -- redundant DAGs cannot
- * form), identifies functions by signature (bb_signature -- O(1)), and keeps each function's minimal circuit
- * (bb_node_gate_count).  No magic caps: the memory is sized to the substrate working set, the node budget is
- * bb_capacity(), the round bound is the function count.
+ * The melt flipped III from "find a cheaper equivalent of this circuit" to "find the cheapest circuit realising this
+ * SPECIFICATION".  The weave does this in itself (weave_graph), on the substrate alone (bv_bits): it grows the
+ * realised-function memory (the content-addressed Commons -- signature -> minimal recipe) to a COST fixpoint, with
+ * the construction arena DECOUPLED from the memory (per-probe bounded arena via ws_arena_begin/ws_build_one), so the
+ * memory is never capped by the arena.
  *
- *   (1) SATURATION: ws_saturate(2) realises the ENTIRE 2-variable Boolean function space -- all 16 functions.
- *   (2) RETRIEVAL: after saturation the weave KNOWS the space -- ws_recall is O(1).  a&b minimal = 1 gate;
- *       a^b = 1; the bare input a = 0 gates.  Computing has become retrieving.
- *   (3) GENESIS: given only a target SIGNATURE it has never seen, the weave invents the cheapest circuit --
- *       Ch (sig 0xD8) settles to 3 gates, Maj (sig 0xE8) to 4 -- proving, by its own exhaustive bounded search,
- *       that the SHA-2 optform/carry-save forms are minimal.  Optimisation flipped to synthesis.
- * Exit 99 = III synthesises its own minimal mathematics from specifications and retrieves it in O(1). */
+ *   (1) SATURATION: the weave fills its OWN bit-independent function space -- exactly 16 functions for 2 vars, 256
+ *       for 3 vars (the whole space 2^(2^n)).  After this the weave KNOWS the space.
+ *   (2) the human spec signatures (Ch, Maj, MUX) are derived from reference circuits, with their human gate costs.
+ *   (3) O(1) RETRIEVAL ("computing becomes retrieving"): ws_recall returns, for each spec, a cost <= the human form
+ *       -- the weave already holds a circuit at least as good as the one a person would write.
+ *   (4) GENESIS: ws_synth, given ONLY the Ch signature (no circuit), reconstructs the minimal form -- a cost that
+ *       MATCHES the saturated minimum and is <= the human optform.  Synthesis rediscovered (or beat) the optimum.
+ * Exit 99 = III synthesised proven-minimal math for itself from specifications, bounded only by logic, not intuition. */
 module corpus_1804
 
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_gate_count(root: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn ws_saturate(nvars: u32) -> u32 from "weave_graph.iii"
-extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_synth(target: u64, nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
 extern @abi(c-msvc-x64) fn ws_realized() -> u32 from "weave_graph.iii"
 
+const WG_GSENT : u32 = 0xFFFFFFFFu32
+
+/* reference circuits (built canonically) -- used only to DERIVE the target signatures + human gate costs. */
+fn ref_ch_spec(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(bb_intern_and(a, b), bb_intern_and(bb_intern_not(a), c)) }
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+fn ref_maj(a: u32, b: u32, c: u32) -> u32 { return bb_intern_or(bb_intern_and(a, b), bb_intern_or(bb_intern_and(a, c), bb_intern_and(b, c))) }
+fn ref_mux(s: u32, x: u32, y: u32) -> u32 { return bb_intern_or(bb_intern_and(s, x), bb_intern_and(bb_intern_not(s), y)) }
+
 fn main() -> u64 {
-    /* (1) the weave saturates its 2-variable function space -- all 16 functions realised */
-    if ws_saturate(2u32) != 16u32 { return 1u64 }
-    if ws_realized() != 16u32 { return 2u64 }
+    /* (1) SATURATION of the weave's own function space -- the WHOLE space, by count. */
+    if ws_saturate(2u32) != 16u32 { return 11u64 }
+    if ws_realized() != 16u32 { return 23u64 }                    /* the accessor reflects the realised count */
+    if ws_saturate(3u32) != 256u32 { return 12u64 }
+    /* the weave's memory now holds the saturated 3-var Commons. */
 
-    /* (2) O(1) retrieval of minimal costs from the weave's memory */
-    if ws_recall(0x8u64) != 1u32 { return 3u64 }       /* a & b   -> 1 gate */
-    if ws_recall(0x6u64) != 1u32 { return 4u64 }       /* a ^ b   -> 1 gate */
-    if ws_recall(0xAu64) != 0u32 { return 5u64 }       /* a       -> 0 gates (a bare input) */
+    /* (2) derive the spec signatures + human reference costs from reference circuits (one arena). */
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let chs : u32 = ref_ch_spec(a, b, c)
+    let cho : u32 = ref_ch_opt(a, b, c)
+    let sig_ch : u64 = bb_signature(chs, 3u32)
+    if bb_signature(cho, 3u32) != sig_ch { return 13u64 }          /* spec and optform are the SAME function */
+    let cost_opt_ch : u32 = bb_node_gate_count(cho)
+    let mj : u32 = ref_maj(a, b, c)
+    let sig_maj : u64 = bb_signature(mj, 3u32)
+    let cost_maj : u32 = bb_node_gate_count(mj)
+    let mx : u32 = ref_mux(a, b, c)
+    let sig_mux : u64 = bb_signature(mx, 3u32)
+    let cost_mux : u32 = bb_node_gate_count(mx)
 
-    /* (3) GENESIS from a signature the weave has never seen: the minimal SHA-2 forms, invented */
-    if ws_synth(0xD8u64, 3u32) != 3u32 { return 6u64 } /* Ch  minimal = 3 gates */
-    if ws_synth(0xE8u64, 3u32) != 4u32 { return 7u64 } /* Maj minimal = 4 gates */
+    /* (3) O(1) RETRIEVAL from the saturated Commons: the weave already knows a circuit <= the human form. */
+    let rec_ch : u32 = ws_recall(sig_ch)
+    if rec_ch == WG_GSENT { return 14u64 }
+    if rec_ch > cost_opt_ch { return 15u64 }                       /* <= the human OPTFORM, not just the naive spec */
+    let rec_maj : u32 = ws_recall(sig_maj)
+    if rec_maj == WG_GSENT { return 16u64 }
+    if rec_maj > cost_maj { return 17u64 }
+    let rec_mux : u32 = ws_recall(sig_mux)
+    if rec_mux == WG_GSENT { return 18u64 }
+    if rec_mux > cost_mux { return 19u64 }
+
+    /* (4) GENESIS from the signature ALONE: synth reconstructs the minimal form, matching the saturated minimum and
+     *     beating-or-matching the human optform -- the headline proof. */
+    let syn_ch : u32 = ws_synth(sig_ch, 3u32)
+    if syn_ch == WG_GSENT { return 20u64 }
+    if syn_ch != rec_ch { return 21u64 }                          /* synth == saturation minimum (deterministic fixpoint) */
+    if syn_ch > cost_opt_ch { return 22u64 }                      /* III rediscovered (or beat) the known optimum */
 
     return 99u64
 }

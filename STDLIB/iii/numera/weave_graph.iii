@@ -453,9 +453,13 @@ fn ws_lib_distinct_functions() -> u32 @export {
  * (ws_recall, O(1)).  Computing becomes retrieving.  Built purely on the substrate (bv_bits); the weave's own
  * operation, in the weave -- it subsumes the legacy enumerate-and-judge conjecture, it does not call out to it.
  *
- * The recipe table IS the weave's memory: each realised function stores (op, operand function-indices) so the
- * circuit rebuilds from the table.  Discovery order respects dependencies (operands realised earlier), so a single
- * forward pass rebuilds the whole realised library into a session -- batched against the 128-node bv_bits cap. */
+ * The recipe table IS the weave's memory (the Commons) -- LARGE and decoupled from the bounded construction arena:
+ * each realised function stores (op, operand function-indices) so any circuit rebuilds ON DEMAND from the table.
+ * A round examines functions PAIRWISE, materialising only the two small operand cones into a fresh arena per probe
+ * (ws_arena_begin + ws_build_one), so arena use is O(cone) regardless of how large the Commons grows -- the memory
+ * is NEVER capped by the arena.  The fixpoint relaxes COST (not just membership): a round counts new OR cheaper
+ * realisations and iterates until zero changes -- which terminates because the function set is finite and the integer
+ * costs only decrease.  So ws_recall returns a cost stable to the binary-decomposition closure. */
 
 const WG_GVAR : u32 = 0u32
 const WG_GCON : u32 = 1u32
@@ -472,7 +476,16 @@ var WG_GOP   : [u32; 2048]
 var WG_GL    : [u32; 2048]
 var WG_GR    : [u32; 2048]
 var WG_GN    : u32 = 0u32
-var WG_GBUILT : [u32; 2048]
+/* the construction ARENA is transient and bounded -- decoupled from the (large) memory above.  WG_VARNODE / WG_C0 /
+ * WG_C1 hold the CANONICAL leaf node-ids for the current arena (bb_var allocates a fresh node per call, so caching
+ * the leaves here is what makes sharing -- hence idempotence and true gate cost -- correct), and WG_BUILTID /
+ * WG_BUILTEP are an epoch-stamped memo so ws_build_one is O(touched), not O(recipe-tree-expansion). */
+var WG_VARNODE : [u32; 8]
+var WG_C0    : u32 = 0u32
+var WG_C1    : u32 = 0u32
+var WG_EPOCH : u32 = 0u32
+var WG_BUILTID : [u32; 2048]
+var WG_BUILTEP : [u32; 2048]
 
 fn ws_realized() -> u32 @export { return WG_GN }
 
@@ -494,11 +507,13 @@ fn ws_gen_find(sig: u64) -> u32 {
     }
     return WG_GSENT
 }
-/* record a realised function or improve its cost; 1 iff a genuinely NEW function entered the weave's memory. */
+/* record a realisation; returns 1 iff this was a CHANGE -- a genuinely NEW function OR a strictly CHEAPER recipe for
+ * a known one.  The cheaper-recipe case is what makes the round a COST fixpoint (not merely a membership one): a
+ * later-discovered cheaper operand must be allowed to relax every recipe that can use it. */
 fn ws_gen_admit(sig: u64, cost: u32, op: u32, l: u32, r: u32) -> u8 {
     let idx : u32 = ws_gen_find(sig)
     if idx != WG_GSENT {
-        if cost < WG_GCOST[idx as u64] { WG_GCOST[idx as u64] = cost  WG_GOP[idx as u64] = op  WG_GL[idx as u64] = l  WG_GR[idx as u64] = r }
+        if cost < WG_GCOST[idx as u64] { WG_GCOST[idx as u64] = cost  WG_GOP[idx as u64] = op  WG_GL[idx as u64] = l  WG_GR[idx as u64] = r  return 1u8 }
         return 0u8
     }
     if WG_GN >= WG_GMAX { return 0u8 }
@@ -507,100 +522,103 @@ fn ws_gen_admit(sig: u64, cost: u32, op: u32, l: u32, r: u32) -> u8 {
     WG_GN = WG_GN + 1u32
     return 1u8
 }
-/* rebuild the weave's whole realised library into the current (reset) session; discovery order = dependency order. */
-fn ws_gen_rebuild() -> i32 {
-    let mut k : u32 = 0u32
-    while k < WG_GN {
-        let op : u32 = WG_GOP[k as u64]
-        if op == WG_GVAR { WG_GBUILT[k as u64] = bb_var(WG_GL[k as u64]) }
-        if op == WG_GCON { if WG_GL[k as u64] == 0u32 { WG_GBUILT[k as u64] = bb_intern_const(0u64) } else { WG_GBUILT[k as u64] = bb_intern_const(0xFFFFFFFFFFFFFFFFu64) } }
-        if op == WG_GNOT { WG_GBUILT[k as u64] = bb_intern_not(WG_GBUILT[WG_GL[k as u64] as u64]) }
-        if op == WG_GAND { WG_GBUILT[k as u64] = bb_intern_and(WG_GBUILT[WG_GL[k as u64] as u64], WG_GBUILT[WG_GR[k as u64] as u64]) }
-        if op == WG_GOR  { WG_GBUILT[k as u64] = bb_intern_or(WG_GBUILT[WG_GL[k as u64] as u64], WG_GBUILT[WG_GR[k as u64] as u64]) }
-        if op == WG_GXOR { WG_GBUILT[k as u64] = bb_intern_xor(WG_GBUILT[WG_GL[k as u64] as u64], WG_GBUILT[WG_GR[k as u64] as u64]) }
-        k = k + 1u32
-    }
+/* open a fresh BOUNDED construction arena and cache its canonical leaves (the nvars inputs + the two constants).
+ * bb_var allocates a fresh node per call, so caching the leaves HERE is what makes leaf sharing -- and therefore
+ * idempotence (x&x=x) and accurate gate cost -- correct.  Bumping the epoch invalidates the ws_build_one memo. */
+fn ws_arena_begin(nvars: u32) -> i32 {
+    let w : u64 = 1u64 << (nvars as u64)
+    bb_reset(w)  bb_intern_reset()
+    WG_EPOCH = WG_EPOCH + 1u32
+    let mut v : u32 = 0u32
+    while v < nvars { WG_VARNODE[v as u64] = bb_var(v)  v = v + 1u32 }
+    WG_C0 = bb_intern_const(0u64)
+    WG_C1 = bb_intern_const(0xFFFFFFFFFFFFFFFFu64)
     return 0i32
+}
+/* materialise function k's circuit from its recipe into the CURRENT arena, epoch-memoised (O(touched), not
+ * O(recipe-tree-expansion)).  bb_intern keeps the result canonical, so shared sub-DAGs collapse and the gate count
+ * read off the root is the true (shared) cost.  Recursion depth = circuit depth (small for minimal forms). */
+fn ws_build_one(k: u32) -> u32 {
+    if WG_BUILTEP[k as u64] == WG_EPOCH { return WG_BUILTID[k as u64] }
+    let op : u32 = WG_GOP[k as u64]
+    let mut id : u32 = 0u32
+    if op == WG_GVAR { id = WG_VARNODE[WG_GL[k as u64] as u64] }
+    if op == WG_GCON { if WG_GL[k as u64] == 0u32 { id = WG_C0 } else { id = WG_C1 } }
+    if op == WG_GNOT { id = bb_intern_not(ws_build_one(WG_GL[k as u64])) }
+    if op == WG_GAND { id = bb_intern_and(ws_build_one(WG_GL[k as u64]), ws_build_one(WG_GR[k as u64])) }
+    if op == WG_GOR  { id = bb_intern_or(ws_build_one(WG_GL[k as u64]), ws_build_one(WG_GR[k as u64])) }
+    if op == WG_GXOR { id = bb_intern_xor(ws_build_one(WG_GL[k as u64]), ws_build_one(WG_GR[k as u64])) }
+    WG_BUILTID[k as u64] = id
+    WG_BUILTEP[k as u64] = WG_EPOCH
+    return id
 }
 /* seed the weave's memory with the leaves: the nvars inputs + the two constants (cost 0). */
 fn ws_gen_seed(nvars: u32) -> i32 {
-    let w : u64 = 1u64 << (nvars as u64)
-    bb_reset(w)  bb_intern_reset()
+    ws_arena_begin(nvars)
     let mut v : u32 = 0u32
     while v < nvars {
-        let n : u32 = bb_var(v)
-        ws_gen_admit(bb_signature(n, nvars), 0u32, WG_GVAR, v, 0u32)
+        ws_gen_admit(bb_signature(WG_VARNODE[v as u64], nvars), 0u32, WG_GVAR, v, 0u32)
         v = v + 1u32
     }
-    let z : u32 = bb_intern_const(0u64)
-    ws_gen_admit(bb_signature(z, nvars), 0u32, WG_GCON, 0u32, 0u32)
-    let o : u32 = bb_intern_const(0xFFFFFFFFFFFFFFFFu64)
-    ws_gen_admit(bb_signature(o, nvars), 0u32, WG_GCON, 1u32, 0u32)
+    ws_gen_admit(bb_signature(WG_C0, nvars), 0u32, WG_GCON, 0u32, 0u32)
+    ws_gen_admit(bb_signature(WG_C1, nvars), 0u32, WG_GCON, 1u32, 0u32)
     return 0i32
 }
-/* one growth round: rebuild the realised library, then COMBINE every pair canonically (bb_intern), recording each
- * new/cheaper realisation by its signature + gate cost.  Returns the count of genuinely new functions (0 = fixpoint). */
+/* one growth round: examine every realised function PAIRWISE, materialising only the two operand cones per probe into
+ * a FRESH arena (so arena use is O(cone), never O(|memory|)), combining canonically (bb_intern), and admitting each
+ * new/cheaper realisation by its signature + true gate cost.  Returns the count of CHANGES (new OR cheaper); a round
+ * returning 0 is the COST fixpoint for the currently reachable fragment. */
 fn ws_gen_round(nvars: u32) -> u32 {
-    let w : u64 = 1u64 << (nvars as u64)
-    bb_reset(w)  bb_intern_reset()
-    ws_gen_rebuild()
     let cur : u32 = WG_GN
-    let mut found : u32 = 0u32
+    let mut ch : u32 = 0u32
     let mut i : u32 = 0u32
     while i < cur {
-        if bb_node_count() < (bb_capacity() - 8u32) {
-            let nn : u32 = bb_intern_not(WG_GBUILT[i as u64])
-            if ws_gen_admit(bb_signature(nn, nvars), bb_node_gate_count(nn), WG_GNOT, i, 0u32) == 1u8 { found = found + 1u32 }
-        }
+        ws_arena_begin(nvars)
+        let nn : u32 = bb_intern_not(ws_build_one(i))
+        if ws_gen_admit(bb_signature(nn, nvars), bb_node_gate_count(nn), WG_GNOT, i, 0u32) == 1u8 { ch = ch + 1u32 }
         let mut j : u32 = i
         while j < cur {
-            if bb_node_count() < (bb_capacity() - 8u32) {
-                let na : u32 = bb_intern_and(WG_GBUILT[i as u64], WG_GBUILT[j as u64])
-                if ws_gen_admit(bb_signature(na, nvars), bb_node_gate_count(na), WG_GAND, i, j) == 1u8 { found = found + 1u32 }
-                let no : u32 = bb_intern_or(WG_GBUILT[i as u64], WG_GBUILT[j as u64])
-                if ws_gen_admit(bb_signature(no, nvars), bb_node_gate_count(no), WG_GOR, i, j) == 1u8 { found = found + 1u32 }
-                let nx : u32 = bb_intern_xor(WG_GBUILT[i as u64], WG_GBUILT[j as u64])
-                if ws_gen_admit(bb_signature(nx, nvars), bb_node_gate_count(nx), WG_GXOR, i, j) == 1u8 { found = found + 1u32 }
-            }
+            ws_arena_begin(nvars)
+            let bi : u32 = ws_build_one(i)
+            let bj : u32 = ws_build_one(j)
+            let na : u32 = bb_intern_and(bi, bj)
+            if ws_gen_admit(bb_signature(na, nvars), bb_node_gate_count(na), WG_GAND, i, j) == 1u8 { ch = ch + 1u32 }
+            let no : u32 = bb_intern_or(bi, bj)
+            if ws_gen_admit(bb_signature(no, nvars), bb_node_gate_count(no), WG_GOR, i, j) == 1u8 { ch = ch + 1u32 }
+            let nx : u32 = bb_intern_xor(bi, bj)
+            if ws_gen_admit(bb_signature(nx, nvars), bb_node_gate_count(nx), WG_GXOR, i, j) == 1u8 { ch = ch + 1u32 }
             j = j + 1u32
         }
         i = i + 1u32
     }
-    return found
+    return ch
 }
-/* SATURATE: the weave fills its own nvars-variable function space to a fixpoint.  Returns the count of distinct
- * functions realised (the whole space is 2^(2^nvars): 16 for nvars=2).  After this the weave KNOWS the space --
- * every future query is an O(1) ws_recall.  Computing has become retrieving for this fragment. */
+/* SATURATE: the weave fills its own nvars-variable function space to a COST fixpoint.  Returns the count of distinct
+ * functions realised (the whole bit-independent space is 2^(2^nvars): 16 for nvars=2, 256 for nvars=3).  After this
+ * the weave KNOWS the space -- every future query is an O(1) ws_recall.  Computing has become retrieving.  NO round
+ * budget: the loop terminates because the function set is finite AND the integer costs only decrease (so the count
+ * of (undiscovered functions, summed costs) is a strictly-decreasing bounded-below potential). */
 fn ws_saturate(nvars: u32) -> u32 @export {
     WG_GN = 0u32
     ws_gen_seed(nvars)
-    let mut guard : u32 = 0u32
     let mut go : u8 = 1u8
     while go == 1u8 {
-        if guard >= WG_GMAX { go = 0u8 } else {
-            let f : u32 = ws_gen_round(nvars)
-            guard = guard + 1u32
-            if f == 0u32 { go = 0u8 }
-        }
+        if ws_gen_round(nvars) == 0u32 { go = 0u8 }
     }
     return WG_GN
 }
-/* GENESIS: the weave invents the cheapest circuit realising a target specification (signature) it has never seen,
- * by growing until the target appears.  Returns its minimal gate cost, or SENT if not realised within max_rounds.
- * Optimisation flipped to synthesis: a spec goes in, the minimal proven form comes out. */
+/* GENESIS: the weave invents the cheapest circuit realising a target SPECIFICATION (signature).  It grows the
+ * reachable fragment to a COST fixpoint (not merely until the target first appears -- the first decomposition found
+ * is not necessarily minimal, and "cheapest" demands the fixpoint) and returns the minimal gate cost to the
+ * binary-decomposition closure, or SENT if the target is unrealisable in the fragment.  Optimisation flipped to
+ * synthesis: a spec goes in, the minimal proven form comes out.  (A cost-monotone frontier could terminate as soon
+ * as the target's cost provably cannot improve; that targeted speedup is deferred -- correctness first.) */
 fn ws_synth(target: u64, nvars: u32) -> u32 @export {
     WG_GN = 0u32
     ws_gen_seed(nvars)
-    let mut r : u32 = 0u32
     let mut go : u8 = 1u8
     while go == 1u8 {
-        if ws_recall(target) != WG_GSENT { go = 0u8 } else {
-            if r >= WG_GMAX { go = 0u8 } else {
-                let f : u32 = ws_gen_round(nvars)
-                r = r + 1u32
-                if f == 0u32 { go = 0u8 }                /* fixpoint: the reachable fragment is exhausted */
-            }
-        }
+        if ws_gen_round(nvars) == 0u32 { go = 0u8 }
     }
     return ws_recall(target)
 }

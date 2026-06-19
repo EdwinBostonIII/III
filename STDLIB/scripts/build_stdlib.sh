@@ -1344,6 +1344,11 @@ MODULES=(
     # gift).  Composes weave_graph (bifurcator+signature) + bv_bits (judge+cost) + forked_walk (reversible search)
     # -- the composition-driver pattern (cf. nous/beam_search), no island; LIBNATIVE; appended last.
     "forcefield/invent_loop"
+    # numera/gx_bridge -- THE GENESIS->COMPILER BRIDGE: a DEPENDENCY-FREE (no bv_bits/weave/SAT) pure-byte reader of
+    # genesis's serialized Commons ([count][sig,cost,op,l,r]*), so the compiler (cg_r3) can EMBED the table bytes and
+    # look up + walk genesis's minimal recipes at codegen with zero engine ("computing becomes retrieving" in the
+    # compiler).  Standalone; LIBNATIVE; appended last.
+    "numera/gx_bridge"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1503,6 +1503,8 @@ declare -A EXPECTED=(
     [1810_weave_synth_n4]=99
     # THE OUROBOROS GATE (ws_certify_minimal): III judges the minimality of forms it ALREADY ships -- genesis re-derives the true minimum and verdicts CERTIFIED (claim==min) / IMPROVABLE (genesis cheaper -> adopt via ws_emit) / INVALID (claim below true min). The loop closes: III certifies/improves its own math, a decision not a live mutation. Ch optform (3) CERTIFIED, Ch spec (4) IMPROVABLE, a false claim (2) INVALID.
     [1811_weave_certify]=99
+    # THE GENESIS->COMPILER BRIDGE (gx_bridge): the compiler can't run the SAT engine, but genesis's saturated Commons serializes to a self-describing byte table; gx_recall/gx_find + recipe accessors read it with PURE memory access (no bv_bits/weave/SAT), so cg_r3 can embed the bytes and look up + walk genesis's minimal recipes at codegen. The pure bridge matches live ws_recall (and/Ch) and the a&b recipe walks down to VAR leaves; absent sig -> sentinel. The dependency-free component cg_r3 will call (emit-path activation = dual-lang cg_r3.iii/.c + reseal, verified green+fast here).
+    [1812_gx_bridge]=99
     # SIX-STATE AS SUBSTANCE (logic6 leaves EK_NULL/EK_ALL): native leaf kinds; bb_intern propagates them per logic6 (NULL annihilates meet, ALL annihilates join, NOT is the involution) so don't-cares/impossibilities EVAPORATE redundant logic at build time -- the i-bridge intrinsic. Never enter bb_eval/bb_equal (2-state boundary).
     [1802_logic6_leaves]=99
     # THE COUP DE GRACE: route the invent_loop generator through bb_intern -- it PHYSICALLY CANNOT construct a redundant DAG (x&x->x, (a&b)|(a&b)->a&b during construction). A junk candidate adds 1 node not 6; the search space shrinks to canonical representatives before any judging.

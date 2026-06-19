@@ -1,0 +1,67 @@
+/* 1812_gx_bridge.iii -- THE GENESIS->COMPILER BRIDGE: retrieve genesis's minima with NO engine, from bytes alone.
+ *
+ * The compiler can't run genesis (no SAT engine in cg_r3), but genesis's saturated Commons SERIALISES to a
+ * self-describing byte table, and gx_* reads it with pure memory access -- no bv_bits, no weave, no SAT.  So cg_r3
+ * can embed the table bytes and, at codegen, look up a bitwise sub-expression's minimal cost AND walk its minimal
+ * recipe to emit -- "computing becomes retrieving," inside the compiler.
+ *
+ *   (1) the PURE bridge (gx_recall, byte scan) matches the LIVE genesis recall (ws_recall) for and / Ch.
+ *   (2) the recipe is WALKABLE for emission: a&b's stored recipe is an AND of two VAR leaves (walk down to inputs).
+ *   (3) a signature absent from the table yields the sentinel.
+ * Exit 99 = the compiler can consult genesis's invented minima -- and reconstruct the circuits -- with zero engine. */
+module corpus_1812
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn ws_saturate(nvars: u32) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_serialize(base: u64) -> u64 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_recall(sig: u64) -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn gx_recall(table_base: u64, sig: u64) -> u32 from "gx_bridge.iii"
+extern @abi(c-msvc-x64) fn gx_find(table_base: u64, sig: u64) -> u32 from "gx_bridge.iii"
+extern @abi(c-msvc-x64) fn gx_entry_cost(table_base: u64, idx: u32) -> u32 from "gx_bridge.iii"
+extern @abi(c-msvc-x64) fn gx_entry_op(table_base: u64, idx: u32) -> u32 from "gx_bridge.iii"
+extern @abi(c-msvc-x64) fn gx_entry_l(table_base: u64, idx: u32) -> u32 from "gx_bridge.iii"
+
+const GX_SENT  : u32 = 0xFFFFFFFFu32
+const WG_GVAR  : u32 = 0u32
+const WG_GAND  : u32 = 2u32
+var BUF : [u8; 8192]
+
+fn ref_ch_opt(a: u32, b: u32, c: u32) -> u32 { return bb_intern_xor(c, bb_intern_and(a, bb_intern_xor(b, c))) }
+
+fn main() -> u64 {
+    /* genesis fills the n=3 Commons and serialises it -- this byte buffer is what cg_r3 would EMBED */
+    if ws_saturate(3u32) != 256u32 { return 11u64 }
+    let len : u64 = ws_serialize(&BUF as u64)
+    if len == 0u64 { return 12u64 }
+
+    /* derive a couple of signatures the way cg_r3 would (truth tables of bitwise sub-expressions) */
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+    let sig_and : u64 = bb_signature(bb_intern_and(a, b), 3u32)
+    let sig_ch  : u64 = bb_signature(ref_ch_opt(a, b, c), 3u32)
+
+    /* (1) the PURE bridge matches the LIVE genesis recall */
+    if gx_recall(&BUF as u64, sig_and) != ws_recall(sig_and) { return 13u64 }
+    if gx_recall(&BUF as u64, sig_ch)  != ws_recall(sig_ch)  { return 14u64 }
+    if gx_recall(&BUF as u64, sig_ch) == GX_SENT { return 15u64 }
+
+    /* (2) the recipe is WALKABLE for emission: a&b is an AND of two VAR leaves */
+    let idx : u32 = gx_find(&BUF as u64, sig_and)
+    if idx == GX_SENT { return 16u64 }
+    if gx_entry_op(&BUF as u64, idx) != WG_GAND { return 17u64 }
+    let l : u32 = gx_entry_l(&BUF as u64, idx)
+    if gx_entry_op(&BUF as u64, l) != WG_GVAR { return 18u64 }
+    if gx_entry_cost(&BUF as u64, idx) != 1u32 { return 19u64 }     /* a&b minimal = 1 gate */
+
+    /* (3) a signature outside the table (>8 bits for 3 vars) -> sentinel */
+    if gx_recall(&BUF as u64, 0x1FFu64) != GX_SENT { return 20u64 }
+
+    return 99u64
+}

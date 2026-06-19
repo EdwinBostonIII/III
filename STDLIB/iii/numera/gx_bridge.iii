@@ -1,0 +1,65 @@
+/* STDLIB/iii/numera/gx_bridge.iii -- THE GENESIS->COMPILER BRIDGE: consult genesis's minima with NO engine.
+ *
+ * The compiler binary (cg_r3) cannot link the stdlib SAT/eval engine, so it cannot run genesis (ws_synth) at
+ * codegen time.  But genesis's results PERSIST as a serialized Commons (ws_serialize): the table
+ *     [u32 count][ per function: u64 signature, u32 cost, u32 op, u32 operand-l, u32 operand-r ]*count
+ * is self-describing.  This module reads that table with PURE memory access -- NO bv_bits, NO weave_graph, NO SAT --
+ * so the compiler can EMBED the bytes (a const array) and, at codegen, compute a small bitwise sub-expression's truth
+ * table (plain integer eval over 2^k assignments) and LOOK UP its minimal cost + recipe here, then walk the recipe to
+ * emit the minimal form.  "Computing becomes retrieving," carried into the compiler.  Genesis-derived (the table IS
+ * genesis's saturated output), general (any function in the table), and dependency-free (compiler-embeddable).
+ *
+ * op codes mirror weave_graph's recipe encoding: 0=VAR (operand-l = input index), 1=CONST (operand-l = 0 -> all-0,
+ * 1 -> all-1), 2=AND, 3=OR, 4=XOR, 5=NOT -- for the binary/unary ops operand-l/-r are FUNCTION indices into the
+ * table itself (walk recursively, exactly as ws_build_one does, to materialise the circuit). */
+module numera_gx_bridge
+
+const GX_SENT : u32 = 0xFFFFFFFFu32
+const GX_HDR  : u64 = 4u64
+const GX_ENT  : u64 = 24u64
+
+fn gx_rd_u32(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    let b0 : u32 = p[0u64] as u32
+    let b1 : u32 = p[1u64] as u32
+    let b2 : u32 = p[2u64] as u32
+    let b3 : u32 = p[3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+fn gx_rd_u64(base: u64, off: u64) -> u64 {
+    let lo : u64 = gx_rd_u32(base, off) as u64
+    let hi : u64 = gx_rd_u32(base, off + 4u64) as u64
+    return lo | (hi << 32u64)
+}
+
+/* the number of functions in the embedded Commons. */
+fn gx_count(table_base: u64) -> u32 @export { return gx_rd_u32(table_base, 0u64) }
+
+/* the table index of the function with this signature, or GX_SENT.  Pure linear scan -- the compiler embeds a small
+ * table (256 entries for the 3-var space), so this is O(table) with no engine. */
+fn gx_find(table_base: u64, sig: u64) -> u32 @export {
+    let n : u32 = gx_rd_u32(table_base, 0u64)
+    let mut i : u32 = 0u32
+    let mut off : u64 = GX_HDR
+    while i < n {
+        if gx_rd_u64(table_base, off) == sig { return i }
+        off = off + GX_ENT
+        i = i + 1u32
+    }
+    return GX_SENT
+}
+
+/* per-entry recipe accessors (idx from gx_find) -- so a consumer can WALK the minimal recipe to emit it. */
+fn gx_entry_sig(table_base: u64, idx: u32)  -> u64 { return gx_rd_u64(table_base, GX_HDR + (idx as u64) * GX_ENT) }
+fn gx_entry_cost(table_base: u64, idx: u32) -> u32 @export { return gx_rd_u32(table_base, GX_HDR + (idx as u64) * GX_ENT + 8u64) }
+fn gx_entry_op(table_base: u64, idx: u32)   -> u32 @export { return gx_rd_u32(table_base, GX_HDR + (idx as u64) * GX_ENT + 12u64) }
+fn gx_entry_l(table_base: u64, idx: u32)    -> u32 @export { return gx_rd_u32(table_base, GX_HDR + (idx as u64) * GX_ENT + 16u64) }
+fn gx_entry_r(table_base: u64, idx: u32)    -> u32 @export { return gx_rd_u32(table_base, GX_HDR + (idx as u64) * GX_ENT + 20u64) }
+
+/* O(table) RETRIEVAL of a function's minimal cost from the embedded Commons -- the compiler's "computing becomes
+ * retrieving".  GX_SENT if the function is not in the table. */
+fn gx_recall(table_base: u64, sig: u64) -> u32 @export {
+    let idx : u32 = gx_find(table_base, sig)
+    if idx == GX_SENT { return GX_SENT }
+    return gx_entry_cost(table_base, idx)
+}

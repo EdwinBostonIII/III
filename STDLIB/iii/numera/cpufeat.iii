@@ -151,3 +151,24 @@ fn cpufeat_has_bmi2() -> u8 @export    { return cf_has(CPUFEAT_BIT_BMI2) }
 fn cpufeat_has_sha() -> u8 @export     { return cf_has(CPUFEAT_BIT_SHA) }
 fn cpufeat_has_rdrand() -> u8 @export  { return cf_has(CPUFEAT_BIT_RDRAND) }
 fn cpufeat_has_rdseed() -> u8 @export  { return cf_has(CPUFEAT_BIT_RDSEED) }
+
+/* ============================================================================================================
+ * CPU SELF-IDENTITY via native CPUID -- the UNIVERSAL, UNPRIVILEGED, side-effect-free, VIRTUALIZATION-TRANSPARENT
+ * oracle present on every x86-64 machine.  These DERIVE the host's identity from the silicon, with NO hardcoded
+ * facts: leaf 0 = vendor string (EBX/EDX/ECX); leaf 1 EAX = family/model/stepping, EBX[23:16] = logical-processor
+ * count, ECX[31] = hypervisor-present; leaf 0x40000000 EBX = hypervisor vendor (when virtualized -- a hypervisor
+ * MUST answer here or stay invisible, so III reads the truth either way).  This is the safe, stable LATCH from which
+ * III reads its host's DNA on ANY machine without privilege and without risk -- the dual of the bootstrap's trust
+ * seed: the bottom anchor of the descent. */
+fn cf_cpuid_word(leaf: u32, off: u64) -> u32 {
+    let buf : *u8 = (&CPUFEAT_OUT) as u64 as *u8
+    iii_cpuid(leaf, 0u32, buf)
+    return cf_ld_u32(buf, off)
+}
+fn cpufeat_vendor_ebx() -> u32 @export { return cf_cpuid_word(0u32, 4u64) }
+fn cpufeat_vendor_edx() -> u32 @export { return cf_cpuid_word(0u32, 12u64) }
+fn cpufeat_vendor_ecx() -> u32 @export { return cf_cpuid_word(0u32, 8u64) }
+fn cpufeat_fms() -> u32 @export { return cf_cpuid_word(1u32, 0u64) }
+fn cpufeat_logical_count() -> u32 @export { let ebx : u32 = cf_cpuid_word(1u32, 4u64)  return (ebx >> 16u32) & 0xFFu32 }
+fn cpufeat_hypervisor_present() -> u8 @export { let ecx : u32 = cf_cpuid_word(1u32, 8u64)  if cf_bit(ecx, 31u32) == 1u32 { return 1u8 }  return 0u8 }
+fn cpufeat_hv_ebx() -> u32 @export { return cf_cpuid_word(0x40000000u32, 4u64) }

@@ -1,0 +1,69 @@
+/* STDLIB/iii/katabasis/cpu_census.iii
+ *
+ * THE UNIVERSAL SELF-IDENTITY CRYSTAL -- the CPUID-derived counterpart to katabasis/census.iii.
+ *
+ * census.iii holds GPU/platform facts (PCI VEN/DEV, BARs, MMIO offsets, VBIOS, runlist, SMU) that are SPECIFIC to
+ * one machine's silicon and are discovered at Ring-0 via PCI enumeration + MMIO -- they are NOT derivable from
+ * CPUID (CPUID describes the CPU, not the GPU).  THIS crystal is the opposite: it is built PURELY from the CPUID
+ * self-description oracle (numera/cpufeat) -- vendor, family/model/stepping, logical-processor count, hypervisor
+ * presence/vendor, feature summary -- so it is:
+ *   - UNIVERSAL: every x86-64 machine answers CPUID; the protocol is invariant, only the values vary.
+ *   - SAFE: CPUID is unprivileged (ring 3), side-effect-free, a pure read -- it cannot brick anything.
+ *   - VIRTUALIZATION-TRANSPARENT: a hypervisor must answer CPUID faithfully or reveal itself (leaf 0x40000000).
+ *   - DERIVED, not hardcoded: there are NO machine constants here -- the facts come from the live silicon.
+ *   - CONTENT-ADDRESSED + REPRODUCIBLE: sha256 over the derived fact vector; two runs are byte-identical (FR-2).
+ *
+ * This is the latch the descent stands on: drop III onto ANY machine, read its CPU DNA via CPUID, content-address
+ * it, and fit -- the bottom anchor, dual to the bootstrap's top trust seed.  Ring R0.  KAT: corpus 1813.
+ */
+module katabasis_cpu_census
+
+extern @abi(c-msvc-x64) fn sha256_oneshot_packed(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn cpufeat_vendor_ebx() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_vendor_edx() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_vendor_ecx() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_fms() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_logical_count() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_hypervisor_present() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_hv_ebx() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_summary() -> u32 from "cpufeat.iii"
+
+/* 8 facts, all DERIVED from CPUID (no machine constants):
+ *   0 vendor EBX  1 vendor EDX  2 vendor ECX  3 family/model/stepping  4 logical count
+ *   5 hypervisor-present  6 hypervisor vendor EBX  7 feature summary */
+var KCPU_FACTS : [u64; 8]
+var KCPU_INIT  : u8 = 0u8
+
+/* Derive the fact vector from the live CPUID oracle (idempotent -- CPUID is deterministic, so a re-derive yields
+ * byte-identical facts; reset forces a fresh read to prove reproducibility). */
+fn katabasis_cpu_census_build() -> i32 @export {
+    if KCPU_INIT == 1u8 { return 0i32 }
+    KCPU_FACTS[0u64] = cpufeat_vendor_ebx() as u64
+    KCPU_FACTS[1u64] = cpufeat_vendor_edx() as u64
+    KCPU_FACTS[2u64] = cpufeat_vendor_ecx() as u64
+    KCPU_FACTS[3u64] = cpufeat_fms() as u64
+    KCPU_FACTS[4u64] = cpufeat_logical_count() as u64
+    KCPU_FACTS[5u64] = cpufeat_hypervisor_present() as u64
+    KCPU_FACTS[6u64] = cpufeat_hv_ebx() as u64
+    KCPU_FACTS[7u64] = cpufeat_summary() as u64
+    KCPU_INIT = 1u8
+    return 0i32
+}
+fn katabasis_cpu_census_reset() -> i32 @export { KCPU_INIT = 0u8  return 0i32 }
+fn katabasis_cpu_census_count() -> u64 @export { return 8u64 }
+
+/* Fact `idx` (derived from CPUID), or 0 if out of range. */
+fn katabasis_cpu_census_fact(idx: u64) -> u64 @export {
+    katabasis_cpu_census_build()
+    if idx < 8u64 { return KCPU_FACTS[idx] }
+    return 0u64
+}
+
+/* The self-identity crystal: sha256 over the 8-fact (64-byte) DERIVED vector, into the 32-byte buffer at out_addr.
+ * Content-addressed and reproducible -- a different machine yields a different crystal; the same machine, the same. */
+fn katabasis_cpu_census_hash(out_addr: u64) -> i32 @export {
+    katabasis_cpu_census_build()
+    let o : u64 = out_addr
+    sha256_oneshot_packed(&KCPU_FACTS as *u8, 64u64, o as *u8)
+    return 0i32
+}

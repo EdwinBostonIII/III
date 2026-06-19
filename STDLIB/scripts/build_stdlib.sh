@@ -690,6 +690,11 @@ MODULES=(
     "katabasis/ring_lattice"
     "katabasis/gate_verdict"
     "katabasis/census"
+    # katabasis/cpu_census -- THE UNIVERSAL SELF-IDENTITY CRYSTAL: the CPUID-derived counterpart to census (which is
+    # GPU/PCI-specific, not CPUID-derivable).  Built PURELY from the live CPUID oracle (numera/cpufeat) -- vendor /
+    # family-model-stepping / logical-count / hypervisor / feature-summary -- content-addressed (sha256).  Universal
+    # (any x86-64 machine), safe (unprivileged CPUID), virtualization-transparent, no hardcoded facts.  KAT 1813.
+    "katabasis/cpu_census"
     "katabasis/bricking"
     "katabasis/cycle_term"
     "katabasis/gate"

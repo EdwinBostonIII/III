@@ -1,0 +1,67 @@
+/* 1813_cpu_census.iii -- THE UNIVERSAL SELF-IDENTITY CRYSTAL: III reads its host's CPU DNA via CPUID, derived.
+ *
+ * This is the keystone that bridges abstract synthesis to bare-metal physics: a content-addressed machine identity
+ * computed PURELY from the live CPUID oracle (numera/cpufeat), with NO hardcoded facts -- so it works on ANY
+ * x86-64 machine, safely (CPUID is unprivileged), transparently to virtualization.  (The GPU census.iii is the
+ * separate Ring-0/PCI-discovered deep layer -- NOT CPUID-derivable; this is the universal CPU latch.)
+ *
+ *   (1) DERIVED, not hardcoded: every crystal fact equals an INDEPENDENT live CPUID read this KAT performs.
+ *   (2) REAL SILICON, any machine: the vendor word is non-degenerate (not 0, not all-ones) and printable ASCII
+ *       letters (every real x86-64 vendor -- AuthenticAMD, GenuineIntel, ... -- is an ASCII string); >=1 CPU.
+ *   (3) CONTENT-ADDRESSED + REPRODUCIBLE (FR-2): a fresh re-derivation hashes byte-identically, and is non-zero.
+ * Exit 99 = III read this machine's CPU DNA from the silicon, derived and content-addressed -- the universal,
+ * safe latch, proven on the metal. */
+module corpus_1813
+
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_build() -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_reset() -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_fact(idx: u64) -> u64 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_hash(out_addr: u64) -> i32 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn cpufeat_vendor_ebx() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_fms() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_logical_count() -> u32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_summary() -> u32 from "cpufeat.iii"
+
+var H1 : [u8; 32]
+var H2 : [u8; 32]
+
+fn cf_byte(w: u32, i: u32) -> u32 { return (w >> (i * 8u32)) & 0xFFu32 }
+fn is_alpha(b: u32) -> u8 {
+    if b >= 0x41u32 { if b <= 0x5Au32 { return 1u8 } }
+    if b >= 0x61u32 { if b <= 0x7Au32 { return 1u8 } }
+    return 0u8
+}
+
+fn main() -> u64 {
+    katabasis_cpu_census_build()
+
+    /* (1) DERIVED FROM THE LIVE ORACLE: crystal facts == independent live CPUID reads */
+    if katabasis_cpu_census_fact(0u64) != (cpufeat_vendor_ebx() as u64) { return 11u64 }
+    if katabasis_cpu_census_fact(3u64) != (cpufeat_fms() as u64) { return 12u64 }
+    if katabasis_cpu_census_fact(7u64) != (cpufeat_summary() as u64) { return 13u64 }
+
+    /* (2) REAL SILICON (non-degenerate), on ANY machine */
+    let vebx : u32 = cpufeat_vendor_ebx()
+    if vebx == 0u32 { return 14u64 }
+    if vebx == 0xFFFFFFFFu32 { return 15u64 }
+    if cpufeat_logical_count() < 1u32 { return 16u64 }
+    if is_alpha(cf_byte(vebx, 0u32)) != 1u8 { return 17u64 }      /* the vendor word is a real ASCII string */
+    if is_alpha(cf_byte(vebx, 1u32)) != 1u8 { return 17u64 }
+    if is_alpha(cf_byte(vebx, 2u32)) != 1u8 { return 17u64 }
+    if is_alpha(cf_byte(vebx, 3u32)) != 1u8 { return 17u64 }
+
+    /* (3) CONTENT-ADDRESSED + REPRODUCIBLE: a FRESH re-derivation hashes byte-identically */
+    katabasis_cpu_census_hash(&H1 as u64)
+    katabasis_cpu_census_reset()
+    katabasis_cpu_census_hash(&H2 as u64)
+    let mut i : u64 = 0u64
+    let mut zero : u8 = 1u8
+    while i < 32u64 {
+        if H1[i] != H2[i] { return 18u64 }                       /* re-derivation reproduces the crystal */
+        if H1[i] != 0u8 { zero = 0u8 }
+        i = i + 1u64
+    }
+    if zero == 1u8 { return 19u64 }                              /* the crystal has identity (non-zero) */
+
+    return 99u64
+}

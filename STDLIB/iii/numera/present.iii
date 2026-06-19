@@ -37,6 +37,8 @@ extern @abi(c-msvc-x64) fn ws_transpose_law_sample(k: u32) -> u8 from "weave_sel
 extern @abi(c-msvc-x64) fn ws_diagonal_law() -> u8 from "weave_self.iii"
 extern @abi(c-msvc-x64) fn ws_doubleneg_law(k: u32) -> u8 from "weave_self.iii"
 extern @abi(c-msvc-x64) fn ws_null_law() -> u8 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_node_count() -> u32 from "weave_graph.iii"
+extern @abi(c-msvc-x64) fn ws_edge_status(i: u32, j: u32) -> u32 from "weave_graph.iii"
 
 var PRES_BUF   : [u8; 128]
 var PRES_LEN   : [u64; 1]
@@ -288,6 +290,34 @@ fn present_self() -> u64 @export {
     if ws_diagonal_law() == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:diagonal" as u64), 13u64) ; pres_seal() }
     if ws_doubleneg_law(40u32) == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:doubleneg" as u64), 14u64) ; pres_seal() }
     if ws_null_law() == 1u8 { PRES_LEN[0u64] = 0u64 ; pres_str(("self:null" as u64), 9u64) ; pres_seal() }
+    return PRES_NLAW[0u64]
+}
+
+/* III FILLS ITS OWN SPIDERWEB: enumerate every strand of the weave (numera/weave_graph), let bb_equal TYPE each
+ * by its six-state proof-status, and ADMIT the proven strands -- universal (ALL) and conditional (BOTH) -- into
+ * the content-addressed commons, each tagged with its status code and endpoints ("wg:<s>:<i>-<j>").  The proof-
+ * graph of III's primitives becomes a persistent named body; refuted strands (FALSE) are NOT admitted (the web
+ * holds only what is proven).  Returns the commons size.  This is the weave following its own logic to fill out
+ * its spiderweb -- discovery (enumerate+judge), self-population (admit), one organ. */
+fn present_weave_graph() -> u64 @export {
+    let n : u32 = ws_node_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32
+        while j < n {
+            let s : u32 = ws_edge_status(i, j)
+            if s == 5u32 {
+                PRES_LEN[0u64] = 0u64 ; pres_str(("wg:" as u64), 3u64) ; pres_u64(5u64) ; pres_ch(0x3Au8)
+                pres_u64(i as u64) ; pres_ch(0x2Du8) ; pres_u64(j as u64) ; pres_seal()      /* ALL: universal strand */
+            }
+            if s == 3u32 {
+                PRES_LEN[0u64] = 0u64 ; pres_str(("wg:" as u64), 3u64) ; pres_u64(3u64) ; pres_ch(0x3Au8)
+                pres_u64(i as u64) ; pres_ch(0x2Du8) ; pres_u64(j as u64) ; pres_seal()      /* BOTH: conditional strand */
+            }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
     return PRES_NLAW[0u64]
 }
 

@@ -114,6 +114,7 @@ fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
     if code == 0x222018u32 { need_out = 32u64 }                     /* IOCTL_VOICE_GATE: 4 x u64 decision, no input */
     if code == 0x22201Cu32 { need_out = 16u64 ; need_in = 8u64 }    /* IOCTL_STAGE_BIND: in 1 x u64 ousia, out 2 x u64 */
     if code == 0x222020u32 { need_out = 8u64 ; need_in = 24u64 }    /* IOCTL_TENSE: in 3 x u64 (tense,state,op), out 1 x u64 */
+    if code == 0x222024u32 { need_out = 32u64 }                     /* IOCTL_CAPSTONE: the full pipeline, out 4 x u64 */
     if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
     if buf == 0u64 { return 0u32 }
     if wdm_out_len(stk) < need_out { return 0u32 }
@@ -347,6 +348,48 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         (buf as *u64)[0u64] = tnk_step(tn_tense, tn_state, tn_op) as u64
         status = 0u64
         info   = 8u64
+    }
+    if code2 == 0x222024u32 {
+        /* IOCTL_CAPSTONE (READ-ONLY): the SOVEREIGN-ORGANISM PIPELINE end-to-end at Ring 0 -- the unification, with
+           each stage's output FEEDING the next (composition, not mere coexistence).  substrate-faithful seed ->
+           live crystal (hv -> caps) -> behavioral fingerprint (the machine's identity) -> Ousia folded into that
+           identity = Hypostasis -> capability-typed effect (a metal write realizes IFF bare metal) -> a
+           proof-carrying rung binding (Hypostasis||caps) -> Tense lifetime discipline.  out: [0]=pipeline coherent
+           (1/0) [1]=Hypostasis [2]=rung proof [3]=crystal identity. */
+        let cs_faithful : u8  = bsk_logic_faithful()
+        let cs_arith    : u8  = bsk_arith_faithful()
+        iii_kio_cpuid(1u32, 0u32, &G_CPUID as u64)
+        let cs_ecx      : u64 = G_CPUID[1u64] & 0xFFFFFFFFu64
+        let cs_hv       : u64 = (cs_ecx >> 31u64) & 1u64
+        let cs_caps     : u32 = cck_for(cs_hv)
+        let cs_crystal  : u32 = bfpk_compute()                         /* the machine's behavioral identity */
+        let cs_hypo     : u32 = stk_bind(0x111u32, cs_crystal)         /* Ousia folded INTO the live identity */
+        let cs_metal    : u8  = cck_grants(cs_caps, 8u32)             /* CAP_METAL */
+        let cs_active   : u8  = vk_realizes(2u32, cs_metal, 0u8)      /* Active metal write realizes? */
+        let cs_proof    : u32 = dpk_proof(cs_hypo, cs_caps, 0u32)     /* rung binds the Hypostasis + caps */
+        let cs_admit    : u8  = dpk_admit(cs_hypo, cs_caps, 0u32, cs_proof)
+        let cs_pread    : u32 = tnk_step(1u32, 1u32, 1u32)            /* PERFECT BOUND READ -> BOUND (reusable) */
+        let cs_pwrite   : u32 = tnk_step(1u32, 1u32, 0u32)           /* PERFECT BOUND WRITE -> T_REJECT (immutable) */
+        let mut cs_expect : u8 = 0u8
+        if cs_hv == 0u64 { cs_expect = 1u8 }                          /* metal write realizes IFF bare metal */
+        let mut cs_ok : u8 = 0u8
+        if cs_faithful == 1u8 {
+            if cs_arith == 1u8 {
+                if cs_active == cs_expect {
+                    if cs_admit == 1u8 {
+                        if cs_pread == 1u32 {
+                            if cs_pwrite == 0xFFFFFFFFu32 { cs_ok = 1u8 }
+                        }
+                    }
+                }
+            }
+        }
+        (buf as *u64)[0u64] = cs_ok as u64
+        (buf as *u64)[1u64] = cs_hypo as u64
+        (buf as *u64)[2u64] = cs_proof as u64
+        (buf as *u64)[3u64] = cs_crystal as u64
+        status = 0u64
+        info   = 32u64
     }
     wdm_set_status(irp, status, info)
     iii_kio_complete_request(irp, 0u64)

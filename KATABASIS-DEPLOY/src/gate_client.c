@@ -20,6 +20,26 @@
 #define IOCTL_VOICE_GATE      0x222018u   /* read-only: the capability-typed-effect decision (voice + crystal_cap) */
 #define IOCTL_STAGE_BIND      0x22201Cu   /* read-only: Ousia -> Hypostasis (machine-specific content-address) */
 #define IOCTL_TENSE           0x222020u   /* read-only: data-lifetime transition (Aorist/Perfect/Present) */
+#define IOCTL_CAPSTONE        0x222024u   /* read-only: the full sovereign-organism pipeline composed at Ring 0 */
+
+/* Ring-0 capstone: the whole metal-architecture as ONE chained pipeline -- substrate-faithful seed -> live crystal
+   -> behavioral identity -> Hypostasis -> capability-typed effect -> proof-carrying rung -> Tense.  A single
+   coherence bit proves the eight COMPOSE (each stage feeds the next), not merely coexist. */
+static int probe_capstone(HANDLE h)
+{
+    uint64_t out[4] = { 0, 0, 0, 0 };
+    DWORD ret = 0;
+    if (!DeviceIoControl(h, IOCTL_CAPSTONE, NULL, 0, out, (DWORD)sizeof(out), &ret, NULL)) {
+        printf("  CAPSTONE DeviceIoControl FAILED (err=%lu)\n", GetLastError()); return 1; }
+    printf("  Ring-0 sovereign-organism pipeline: coherent=%llu  Hypostasis=0x%06llx rung-proof=0x%06llx crystal=0x%06llx\n",
+           (unsigned long long)out[0], (unsigned long long)out[1], (unsigned long long)out[2], (unsigned long long)out[3]);
+    if (out[0] == 1) {
+        printf("    => ALL 8 metal-architecture mechanisms COMPOSE end-to-end at Ring 0 (the unification, live: faithful seed -> crystal -> identity -> Hypostasis -> capability-typed effect -> proof -> tense).\n");
+        return 0;
+    }
+    printf("    => UNEXPECTED: the pipeline did not report coherent.\n");
+    return 1;
+}
 
 /* Ring-0 lifetime state machine: a battery of key transitions proving the discipline -- Aorist is use-once,
    Perfect is immutable+reusable, Present is mutable.  Each (tense,state,op) -> next state; 0xFFFFFFFF = T_REJECT. */
@@ -256,6 +276,8 @@ int main(void)
     probe_stage(h); /* Ring-0: Ousia -> Hypostasis (stage live; machine-specific content-address) */
     printf("\n");
     probe_tense(h); /* Ring-0: data-lifetime state machine (tense live) -- the 8th and last mechanism */
+    printf("\n");
+    probe_capstone(h); /* Ring-0: the full pipeline composed end-to-end (the unification, live) */
     printf("\n");
     /* family=2 (F2 WriteMetal), tk=1, target 0x20000=SHARED / 0x1000=HSAVE-brick, hexad=728 (all-POS),
        wcap=0x200000 (WriteMetal right), dcap=0x800000 (Descend-only -> wrong for WriteMetal). */

@@ -45,7 +45,7 @@ $SignedSys   = Join-Path $ScriptDir 'build\gate_ioctl.signed.sys'
 $Client      = Join-Path $ScriptDir 'build\gate_client.exe'
 $SvcName     = 'IIIKatabasisGate'
 $CertSubject = 'CN=III KATABASIS Test Cert'
-$ExpectedHash = 'F91B86235840BF453FCDF7B56E60DB3954ABF6682B87882460317BB907F43872'
+$ExpectedHash = '80AF482F4E8AA4C1BEBAC3E90A581B3FB2FD1642072374A7CA70DA3E4A2DFEC3'
 
 function Write-Section($t){ Write-Host "`n==== $t ====" -ForegroundColor Cyan }
 function Repair-PeChecksum([string]$Path){

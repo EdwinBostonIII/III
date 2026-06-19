@@ -1,0 +1,60 @@
+/* 1789_weave_ripple.iii -- EDGES/RIPPLES SYSTEMWIDE AS SIX-STATE MATH, cross-validated against the boolean blast.
+ *
+ * A change to a component ripples to everything that depends on it.  In the six-state weave that ripple is not a
+ * separate mechanism -- it IS the component's COLUMN in the connection-relation (C(a,x) for every a).  This runs
+ * the ripple field over III's REAL self-model and proves it agrees with the system's existing blast analysis.
+ *
+ *   (1) CROSS-VALIDATION: ws_ripple_affected(x) (the six-state blast: components with C(a,x) in {TRUE,BOTH})
+ *       EQUALS satlas_impact_count(x) (the boolean reverse-reachability blast) -- two independent code paths,
+ *       the same propagation, on the steepest hub and two more real components.
+ *   (2) the hub genuinely ripples (non-vacuous blast)
+ *   (3) RIPPLE-ALGEBRA: the joint ripple of x with itself is x (meet idempotent); the joint ripple of two
+ *       components is bounded above by each one's blast (the shared cannot exceed either part) -- logic6 meet laws.
+ *   (4) the six-state ripple PROFILE is exact: downstream (TRUE) + cyclic (BOTH) == the affected blast.
+ * Exit 99 = III's ripples are the columns of its six-state self-relation, systemwide, agreeing with its own blast. */
+module corpus_1789
+
+extern @abi(c-msvc-x64) fn satlas_data_load() -> i32 from "self_atlas_data.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_steepest_hub() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_impact_count(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn ws_ripple_affected(x: u32) -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_ripple_meet(x: u32, y: u32) -> u32 from "weave_self.iii"
+extern @abi(c-msvc-x64) fn ws_ripple_profile(x: u32, out4: u64) -> i32 from "weave_self.iii"
+
+var PROF : [u32; 4]
+
+/* 1 iff the six-state ripple blast equals the boolean blast radius for x. */
+fn ripple_matches_blast(x: u32) -> u8 {
+    if ws_ripple_affected(x) == satlas_impact_count(x) { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    satlas_data_load()
+    let n : u32 = satlas_node_count()
+    if n < 2u32 { return 1u64 }
+    let hub : u32 = satlas_steepest_hub()
+    if hub >= n { return 2u64 }
+
+    /* (1) six-state ripple blast == boolean blast radius (hub + two more real components) */
+    if ripple_matches_blast(hub) != 1u8 { return 3u64 }
+    if ripple_matches_blast(0u32) != 1u8 { return 4u64 }
+    if ripple_matches_blast(1u32) != 1u8 { return 5u64 }
+
+    /* (2) the hub genuinely ripples */
+    let blast : u32 = ws_ripple_affected(hub)
+    if blast == 0u32 { return 6u64 }
+
+    /* (3) ripple-algebra: meet idempotent, and joint ripple bounded by each blast */
+    if ws_ripple_meet(hub, hub) != blast { return 7u64 }
+    let m : u32 = ws_ripple_meet(hub, 1u32)
+    if m > blast { return 8u64 }
+    if m > ws_ripple_affected(1u32) { return 9u64 }
+
+    /* (4) the six-state ripple profile is exact: downstream (TRUE) + cyclic (BOTH) == the blast */
+    ws_ripple_profile(hub, (&PROF as u64))
+    if (PROF[1u64] + PROF[3u64]) != blast { return 10u64 }
+
+    return 99u64
+}

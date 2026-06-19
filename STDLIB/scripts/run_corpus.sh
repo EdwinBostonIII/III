@@ -1461,6 +1461,8 @@ declare -A EXPECTED=(
     [1787_weave_self_systemwide]=99
     # THE UNIFICATION: III proves the 4 laws of its OWN six-state structure (transpose/diagonal/double-neg/null) and ACCUMULATES them into the same persistent commons as the weave's invented math -- discovery + self-population + the math it understands itself in, one body.
     [1788_weave_self_commons]=99
+    # EDGES/RIPPLES SYSTEMWIDE: a change to component x ripples through x's COLUMN of the six-state self-relation; ws_ripple_affected(x) == satlas_impact_count(x) (boolean blast), cross-validated on the real model; ripple-meet algebra holds.
+    [1789_weave_ripple]=99
 )
 
 PASS=0

@@ -1,0 +1,78 @@
+/* 1800_bb_intern.iii -- CANONICAL CONSTRUCTION: the optimization IS the build.
+ *
+ * bb_intern_* is a purely ADDITIVE layer over the untouched bv_bits builders: it applies sound LOCAL REWRITES
+ * (idempotence, self-inverse, const identity/annihilation, const-fold, double-negation), COMMUTATIVE ordering,
+ * and HASH-CONS over the canonical tuple -- so equal-by-local-rewrite forms reach the SAME node id and are
+ * proven equal by id-identity (ZERO SAT clauses), and the DAG shrinks under sharing.  The residual SAT judge
+ * (bb_equal) handles only what local rewrites cannot canonicalise.
+ *
+ *   (1) local rewrites: x&x=x, x|x=x, x^x=0, 0&x=0, 1&x=x, 0|x=x, 0^x=x, ~~x=x  -- all by construction
+ *   (2) commutative + hash-cons: bb_intern_and(a,b) == bb_intern_and(b,a) (one node)
+ *   (3) THE PAYOFF: two forms differing only by commutativity intern to the SAME id -> equal by construction,
+ *       NO SAT (bb_intern_equal short-circuits a==b)
+ *   (4) SOUNDNESS: the interned form equals the naive form under the SAT judge (semantics preserved)
+ *   (5) the canonical build SHRINKS the DAG: a duplicated-subexpression form builds FEWER nodes interned than naive
+ * Exit 99 = building the canonical form IS the optimization; the existing bv_bits core stays byte-identical. */
+module corpus_1800
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_node_count() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_reset() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_is_const0(n: u32) -> u8 from "bv_bits.iii"
+
+fn main() -> u64 {
+    bb_reset(8u64)  bb_intern_reset()
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let c : u32 = bb_var(2u32)
+
+    /* (1) local rewrites by construction */
+    if bb_intern_and(a, a) != a { return 1u64 }
+    if bb_intern_or(a, a) != a { return 2u64 }
+    if bb_is_const0(bb_intern_xor(a, a)) != 1u8 { return 3u64 }
+    let zero : u32 = bb_intern_const(0u64)
+    let ones : u32 = bb_intern_const(0xFFu64)
+    if bb_intern_and(a, zero) != zero { return 4u64 }
+    if bb_intern_and(a, ones) != a { return 5u64 }
+    if bb_intern_or(a, zero) != a { return 6u64 }
+    if bb_intern_xor(a, zero) != a { return 7u64 }
+    if bb_intern_not(bb_intern_not(a)) != a { return 8u64 }
+
+    /* (2) commutative + hash-cons -> one node */
+    if bb_intern_and(a, b) != bb_intern_and(b, a) { return 9u64 }
+
+    /* (3) THE PAYOFF: equal by construction, zero SAT */
+    let f1 : u32 = bb_intern_xor(bb_intern_and(a, b), bb_intern_and(a, c))
+    let f2 : u32 = bb_intern_xor(bb_intern_and(c, a), bb_intern_and(b, a))
+    if f1 != f2 { return 10u64 }
+    if bb_intern_equal(f1, f2) != 1u8 { return 11u64 }
+
+    /* (4) SOUNDNESS: the interned form == the naive form under the SAT judge */
+    let g : u32 = bb_xor(bb_and(a, b), bb_and(a, c))
+    if bb_equal(f1, g) != 1u8 { return 12u64 }
+
+    /* (5) the canonical build shrinks the DAG: duplicated subexpressions share + reduce */
+    bb_reset(8u64)
+    let a1 : u32 = bb_var(0u32)  let b1 : u32 = bb_var(1u32)  let c1 : u32 = bb_var(2u32)
+    let base_n : u32 = bb_node_count()
+    bb_xor(bb_xor(bb_and(a1, b1), bb_and(a1, c1)), bb_xor(bb_and(a1, b1), bb_and(a1, c1)))   /* naive: rebuilds all */
+    let naive_n : u32 = bb_node_count() - base_n
+    bb_reset(8u64)  bb_intern_reset()
+    let a2 : u32 = bb_var(0u32)  let b2 : u32 = bb_var(1u32)  let c2 : u32 = bb_var(2u32)
+    let base_i : u32 = bb_node_count()
+    bb_intern_xor(bb_intern_xor(bb_intern_and(a2, b2), bb_intern_and(a2, c2)), bb_intern_xor(bb_intern_and(a2, b2), bb_intern_and(a2, c2)))
+    let intern_n : u32 = bb_node_count() - base_i
+    if intern_n >= naive_n { return 13u64 }                  /* interning built strictly fewer nodes */
+
+    return 99u64
+}

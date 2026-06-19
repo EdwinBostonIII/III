@@ -1483,6 +1483,8 @@ declare -A EXPECTED=(
     [1798_weave_explosion]=99
     # THE REVERSIBLE SIGNATURE-GUIDED INVENTION LOOP: one driver routes by topology -- bit-independent -> O(1) signature lookup (no SAT); bit-coupling -> bounded-space reversible walk (forked_walk, SAT-judged, rollback rejects, commit cheapest). The fused explosion-defeater.
     [1799_invent_loop]=99
+    # CANONICAL CONSTRUCTION (bb_intern): a purely additive layer over the untouched bv_bits builders -- local rewrites + commutative ordering + stale-safe hash-cons, so equal-by-rewrite forms reach the SAME id (equal by construction, ZERO SAT) and the DAG shrinks. The build IS the optimization.
+    [1800_bb_intern]=99
 )
 
 PASS=0

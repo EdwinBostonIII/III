@@ -1,0 +1,72 @@
+/* 1856_grail_positional_is_parity_specific.iii -- FORMAL WALL, theorem T1' (positional determinacy is PARITY-SPECIFIC).
+ *
+ * THEOREM.  Positional (memoryless) determinacy is NOT a generic property of omega-regular games -- it is special to
+ * PARITY (and a few cousins).  Witness: a one-player generalized-Buchi objective on which the player WINS but NO
+ * positional strategy wins; a memory strategy is required.
+ *
+ * WITNESS.  Graph: c (the chooser), a, b.  Edges: c -> {a, b}, a -> c, b -> c.  Objective: GF(a) AND GF(b)
+ * (visit a infinitely often AND visit b infinitely often) -- a generalized-Buchi (Muller) condition, NOT a parity
+ * condition on this graph.
+ *   - Every POSITIONAL strategy sigma fixes sigma(c) in {a,b}.  The play c, sigma(c), c, sigma(c), ... has
+ *     infinitely-often set {c, sigma(c)} -- which contains a XOR b, never BOTH.  So every positional strategy LOSES.
+ *   - The MEMORY (alternating) strategy c->a, c->b, c->a, ... has infinitely-often set {c, a, b} -- contains BOTH.
+ *     So the player WINS, but only WITH memory.
+ *
+ * SIGNIFICANCE.  This is the justification UNDER the whole constructive side of the wall.  T1 (KAT 1849, positional
+ * determinacy of parity) is precisely what makes strategy improvement (1841/1842) search a FINITE positional space
+ * and what makes the Groebner encoding "Even wins r <=> EXISTS positional sigma" (1847) valid.  T1' shows that
+ * privilege is NOT free: it is a special structural gift of the PARITY objective.  Change the objective slightly
+ * (generalized Buchi) and positional strategies no longer suffice -- the finite-strategy-space premise of every
+ * constructive attack evaporates.  So the constructive side of the wall rests specifically on parity's positional
+ * determinacy, not on a generic property of games.
+ * exit 99 = both positional strategies lose the generalized-Buchi game while the memory strategy wins (T1' holds). */
+module mpps
+var SUC0 : [u32; 8]
+var NV : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+/* objective GF(a) AND GF(b): the infinitely-often vertex set must contain both a (vertex 1) and b (vertex 2) */
+fn objective_met(infset: u32) -> u8 { if (infset & ((1u32 << 1u32) | (1u32 << 2u32))) == ((1u32 << 1u32) | (1u32 << 2u32)) { return 1u8 } return 0u8 }
+/* infinitely-often set of a POSITIONAL play from c: c -> choice -> c -> choice -> ...  cycle = {c, choice} */
+fn positional_inf(choice: u32) -> u32 { return (1u32 << 0u32) | (1u32 << choice) }
+/* infinitely-often set of the alternating MEMORY play: c,a,c,b,c,a,...  simulate to its (vertex,mem) cycle */
+var SEENVM : [u8; 64]   /* (vertex*2 + mem) visited-in-this-walk stamp */
+fn memory_inf() -> u32 {
+    let mut i : u32 = 0u32  while i < 64u32 { SEENVM[i as u64] = 0u8  i = i + 1u32 }
+    /* state = (vertex v, mem bit m).  at c (v=0): go to a if m==0 else b, flip m.  at a/b: go to c.  */
+    let mut v : u32 = 0u32  let mut m : u32 = 0u32
+    let mut infset : u32 = 0u32  let mut seen_cycle : u8 = 0u8
+    let mut steps : u32 = 0u32
+    while steps < 100u32 {
+        let key : u32 = v * 2u32 + m
+        if SEENVM[key as u64] == 1u8 { seen_cycle = 1u8 } else { SEENVM[key as u64] = 1u8 }
+        if seen_cycle == 1u8 { infset = infset | (1u32 << v) }    /* once we re-enter a state, we are on the cycle: record vertices */
+        /* transition */
+        if v == 0u32 {
+            if m == 0u32 { v = 1u32  m = 1u32 } else { v = 2u32  m = 0u32 }   /* c -> a (mem 0) / b (mem 1), flip */
+        } else { v = 0u32 }                                                    /* a/b -> c */
+        steps = steps + 1u32
+    }
+    return infset
+}
+
+fn main() -> u64 {
+    /* the witness graph (recorded for completeness; the analysis is exact) */
+    NV[0u64] = 3u32
+    SUC0[0u64] = (1u32 << 1u32) | (1u32 << 2u32)   /* c -> {a,b} */
+    SUC0[1u64] = 1u32 << 0u32                       /* a -> c */
+    SUC0[2u64] = 1u32 << 0u32                       /* b -> c */
+
+    /* (1) EVERY positional strategy loses: sigma(c) = a (1) and sigma(c) = b (2) */
+    if objective_met(positional_inf(1u32)) != 0u8 { return 10u64 }   /* c->a : inf-set {c,a}, lacks b -> must LOSE */
+    if objective_met(positional_inf(2u32)) != 0u8 { return 11u64 }   /* c->b : inf-set {c,b}, lacks a -> must LOSE */
+
+    /* (2) the MEMORY (alternating) strategy WINS */
+    let mi : u32 = memory_inf()
+    if objective_met(mi) != 1u8 { return 12u64 }                     /* alternating inf-set {c,a,b} contains both -> WIN */
+    /* and its inf-set is exactly {c,a,b} */
+    if mi != ((1u32 << 0u32) | (1u32 << 1u32) | (1u32 << 2u32)) { return 13u64 }
+
+    /* T1' holds: player wins (with memory) yet no positional strategy wins -> positional determinacy is parity-SPECIFIC */
+    return 99u64
+}

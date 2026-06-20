@@ -40,6 +40,14 @@ for Odd). — **VERIFIED (III)**, KAT `1849` (some `σ` over all `2^k` achieves 
 finite positional space *because* of T1, and the Gröbner encoding (`1847`) is literally "Even wins r ⟺ ∃ positional σ
 winning from r." Remove T1 and those are invalid.
 
+**T1′ — Positional determinacy is PARITY-SPECIFIC.** *Positional determinacy is not a generic property of ω-regular
+games; it is special to parity.* — **PROVEN (III)**, KAT `1856`. Witness: a one-player generalized-Büchi objective
+`GF(a) ∧ GF(b)` on `c→{a,b}, a→c, b→c` — every *positional* strategy fixes `σ(c)`, so its play visits only one of
+`a,b` infinitely often and **loses**; the *alternating memory* strategy visits both and **wins**. *Significance:* T1
+is a structural *gift* of parity, not a free lunch — change the objective slightly and the finite-strategy-space
+premise of every constructive attack evaporates. The constructive side of the wall rests specifically on parity's
+positional determinacy.
+
 **T2 — Control-Blindness Barrier (the keystone).** *No function of the priority-graph `(V,E,pr)` alone equals the
 winning region.* — **PROVEN (III)**, KAT `1848`.
 > *Witness.* `V={v,x,y}`, `pr=(0,1,2)`, `E={v→x, x→v, v→y, y→v}`. With `v∈V₀`: Even forces `v↔y` (max prio 2, even) ⇒
@@ -153,6 +161,7 @@ universal-tree family **provably** unable to reach P (B1).
 | F | Order-theoretic foundation: cpre monotone, attractor = lfp (Knaster–Tarski) | **VERIFIED (III)** | `1854` |
 | T0 | Determinacy (W₀,W₁ partition V) | **VERIFIED (III)** + CITED | `1849` |
 | T1 | Positional determinacy (single σ wins W₀) | **VERIFIED (III)** + CITED | `1849` |
+| T1′ | Positional determinacy is parity-SPECIFIC (gen-Büchi needs memory) | **PROVEN (III)** | `1856` |
 | T2 | Control-blindness barrier (no graph invariant decides parity) | **PROVEN (III)** | `1848` |
 | T2′ | Control-blindness, quantitative (graph-invariant accuracy decreases with size, this sample) | **EMPIRICAL (III)** | `1852` |
 | T3 | One-player parity ∈ P, exactly (reach-to-α-cycle) — the wall = the 1→2-player step | **VERIFIED (III)** | `1850` |

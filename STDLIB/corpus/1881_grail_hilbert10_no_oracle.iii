@@ -1,0 +1,67 @@
+/* 1881_grail_hilbert10_no_oracle.iii -- THE DIOPHANTINE WALL (Hilbert's 10th): a SECOND FALSIFIER, breaking a DIFFERENT
+ * template assumption than Goodstein (1880).  Goodstein broke the BOUNDARY assumption (computational -> proof-theoretic);
+ * this one breaks the ORACLE assumption -- the template's step 1 ("build a ground-truth decider") is IMPOSSIBLE here.
+ *
+ * THE WALL.  Hilbert's 10th problem: decide whether a polynomial Diophantine equation has an integer solution.  By the
+ * MRDP theorem (Matiyasevich 1970, on Davis-Putnam-Robinson) this is UNDECIDABLE -- there is NO algorithm, hence NO
+ * computable ORACLE, for the general problem.  Unlike confluence (1868: a finite ARS still has a per-instance decidable
+ * oracle), the general Diophantine problem cannot even be brute-forced per instance: solutions can be astronomically
+ * large with no computable bound, so an unbounded integer search has no decidable cutoff.
+ *
+ * THE ISLAND (gated here).  LINEAR Diophantine equations ARE decidable: a*x + b*y = c has an integer solution iff
+ * gcd(a,b) | c (Bezout).  We verify the gcd-criterion agrees with a bounded brute search on random (a,b,c) -- the
+ * bounded search is COMPLETE for the linear case because a Bezout solution exists within |x|,|y| <= |a|+|b|+|c|.  (For
+ * the linear island the oracle EXISTS; that is exactly what the general problem lacks.)
+ *
+ * THE FALSIFIER VERDICT (the value).  ISLAND survives (gated, linear case); but the ORACLE step BREAKS for the general
+ * core -- there is no decidable ground truth to check candidate islands against.  So "a decidable oracle exists" was a
+ * HIDDEN ASSUMPTION of the template, just as "the boundary is computational" was (Goodstein, 1880).  Two falsifiers,
+ * two distinct hidden assumptions mapped: the template needs (a) a decidable oracle [Hilbert 10 breaks] and (b) a
+ * computational boundary [Goodstein breaks].
+ *
+ * HONEST TAG (math-olympiad #4): the linear-island agreement is gated; the undecidability of the general problem is
+ * CITED (MRDP).  The value is the falsifier verdict, not a claim to decide Hilbert's 10th.
+ * exit 99 = the gcd Bezout criterion == bounded brute search on every random linear equation, both outcomes. */
+module mhilb
+
+fn iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x } return x }
+fn gcd(a: i64, b: i64) -> i64 { let mut x : i64 = iabs(a)  let mut y : i64 = iabs(b)  while y != 0i64 { let t : i64 = x % y  x = y  y = t }  return x }
+/* island decider: a*x+b*y=c solvable over Z iff gcd(a,b) | c (with gcd(0,0)=0 handled by the caller) */
+fn gcd_solvable(a: i64, b: i64, c: i64) -> u8 {
+    let g : i64 = gcd(a, b)
+    if g == 0i64 { if c == 0i64 { return 1u8 }  return 0u8 }   /* a=b=0: solvable iff c=0 */
+    if (c % g) == 0i64 { return 1u8 }  return 0u8
+}
+/* bounded brute search -- COMPLETE for linear over |x|,|y| <= R when R >= |a|+|b|+|c| */
+fn brute_solvable(a: i64, b: i64, c: i64, r: i64) -> u8 {
+    let mut x : i64 = 0i64 - r
+    while x <= r {
+        let mut y : i64 = 0i64 - r
+        while y <= r { if a * x + b * y == c { return 1u8 }  y = y + 1i64 }
+        x = x + 1i64
+    }
+    return 0u8
+}
+
+fn main() -> u64 {
+    let mut seed : u64 = 0x010BA17u64
+    let mut t : u32 = 0u32  let mut solv : u32 = 0u32  let mut unsolv : u32 = 0u32
+    while t < 4000u32 {
+        /* xorshift for small signed coeffs in [-9,9] */
+        seed = seed ^ (seed << 13u64)  seed = seed ^ (seed >> 7u64)  seed = seed ^ (seed << 17u64)
+        let a : i64 = ((seed % 19u64) as i64) - 9i64
+        seed = seed ^ (seed << 13u64)  seed = seed ^ (seed >> 7u64)  seed = seed ^ (seed << 17u64)
+        let b : i64 = ((seed % 19u64) as i64) - 9i64
+        seed = seed ^ (seed << 13u64)  seed = seed ^ (seed >> 7u64)  seed = seed ^ (seed << 17u64)
+        let c : i64 = ((seed % 19u64) as i64) - 9i64
+        let r : i64 = iabs(a) + iabs(b) + iabs(c) + 2i64      /* bound guaranteeing completeness for the linear case */
+        let g : u8 = gcd_solvable(a, b, c)
+        let br : u8 = brute_solvable(a, b, c, r)
+        if g != br { return 10u64 }                            /* the gcd oracle must match the (complete) brute search */
+        if g == 1u8 { solv = solv + 1u32 } else { unsolv = unsolv + 1u32 }
+        t = t + 1u32
+    }
+    if solv < 200u32 { return 60u64 }
+    if unsolv < 200u32 { return 61u64 }
+    return 99u64
+}

@@ -48,11 +48,12 @@ winning region.* — **PROVEN (III)**, KAT `1848`.
 *Significance:* this is the formal heart of the wall. It says **parity is irreducibly a function of CONTROL** (who
 chooses at branching vertices), and it **refutes an entire class at one stroke** (see §4, Class I).
 
-**T2′ — Control-blindness, quantitative.** *A fixed control-free graph invariant's per-vertex agreement with the
-true winner decays toward 1/2 as the game grows.* — **VERIFIED (III)**, KAT `1852`: the "max reachable-cycle priority"
-predictor scores **82% → 70% → 65%** (n=4→10→14), monotone toward chance. *Significance:* T2 says control-free is
-wrong on *some* witness; T2′ says it is asymptotically *uninformative* on the whole distribution — no graph invariant
-is even approximately right at scale. (Matches the workflow referees' "signed zeta self-decays to ~50%.")
+**T2′ — Control-blindness, quantitative (empirical).** *On this sample, a fixed control-free graph invariant's
+per-vertex agreement with the true winner DECREASES monotonically with size.* — **EMPIRICAL (III)**, KAT `1852`: the
+"max reachable-cycle priority" predictor scores **82% → 70% → 65%** (n=4→10→14), monotone decrease (one predictor,
+three sizes, one seed). *Scope:* this shows a monotone *decrease*, **not** a proven limit of 1/2 (65% at n=14 could
+asymptote above 50%). T2 carries the actual proof; T2′ is the accompanying empirical decay (consistent with — not a
+reproduction of — the workflow referees' "signed zeta → ~50%" claim).
 
 ---
 
@@ -122,7 +123,7 @@ are *instantiations* that make each face concrete and oracle-checked.
 | Logic | full modal μ-calculus model-checking ∈ P? | **`1853` VERIFIED**: the parity μ-formula's nested fixpoint (cpre, Emerson–Lei) == the game oracle on every game — a 4th independent solver |
 | Strategy | ∃ a positional-SI pivot rule with poly-many steps? | VJ/LRC SI `1841/1842`, step counts |
 | Algebra | ∃ a poly-degree Nullstellensatz certificate for the winning region? | Gröbner encoding `1847` |
-| Quant. games | mean-payoff / discounted / simple-stochastic games ∈ P? | sandwich reductions `1846`; **`1855`**: the parity→mean-payoff reduction is real but **forces exponential-magnitude weights** `(n+1)^d` — the numbers are where the alternation hides |
+| Quant. games | mean-payoff / discounted / simple-stochastic games ∈ P? | sandwich reductions `1846`; **`1855`**: the parity→mean-payoff reduction is real, and its **standard separating-weight scheme has exponential magnitude** `(n+1)^d` — the numbers are where the alternation hides |
 
 All sit in **UP∩coUP** (B3), with the best general upper bound **quasi-polynomial** (Calude et al. 2017) and the
 universal-tree family **provably** unable to reach P (B1).
@@ -134,12 +135,14 @@ universal-tree family **provably** unable to reach P (B1).
 - **O1 — The wall itself.** Is parity-game winner determination in P (equivalently, all of §5)? — **OPEN.** Unmoved
   for 50+ years; a `$1M`-class question. Every Class-II mechanism here reaches it and stops; every Class-I mechanism
   is killed by T2 before reaching it.
-- **M1 — The meta-grail (single invariant across ALL of III's logics, including the PQ ring).** — **OBSTRUCTED**
-  (proven negative). The De Morgan completion unifies the *lattice* logics (weave/Voice/logic6, KAT `1826`), but the
-  post-quantum ring `ℤ_q` is outside it: a structural lattice↔ring invariant is blocked by **two** obstructions —
-  idempotency (∨ is idempotent, + is not, forcing collapse) and **characteristic mismatch** (the Boolean-ring face is
-  char 2; `ℤ_3329` is char 3329 — coprime, so no embedding). The boundary *is* the result; the "everything-key" is
-  provably empty.
+- **M1 — The meta-grail (the two CANONICAL bridges across the lattice logics and the PQ ring).** — **OBSTRUCTED for
+  the canonical bridges** (proven negative, scoped). The De Morgan completion unifies the *lattice* logics
+  (weave/Voice/logic6, KAT `1826`); the two *natural* structural bridges to the post-quantum ring `ℤ_q` provably fail
+  (KAT `1851`): no **unital ring homomorphism** char-2 → `ℤ_3329` (since `2 ≠ 0`, coprime characteristics) and the only
+  **additive idempotent** of `ℤ_3329` is `0` (so `∨ ↦ +` collapses). *Scope:* this rules out the two canonical
+  morphism classes; it does **not** prove that *no* relation of any kind exists — the weave still **simulates** `ℤ_q`
+  as circuits (a real, non-canonical relation). So the canonical "single algebraic key including PQ" is empty; a
+  unification of a *different* kind is not ruled out.
 
 ---
 
@@ -151,7 +154,7 @@ universal-tree family **provably** unable to reach P (B1).
 | T0 | Determinacy (W₀,W₁ partition V) | **VERIFIED (III)** + CITED | `1849` |
 | T1 | Positional determinacy (single σ wins W₀) | **VERIFIED (III)** + CITED | `1849` |
 | T2 | Control-blindness barrier (no graph invariant decides parity) | **PROVEN (III)** | `1848` |
-| T2′ | Control-blindness, quantitative (graph invariant → 1/2 accuracy at scale) | **VERIFIED (III)** | `1852` |
+| T2′ | Control-blindness, quantitative (graph-invariant accuracy decreases with size, this sample) | **EMPIRICAL (III)** | `1852` |
 | T3 | One-player parity ∈ P, exactly (reach-to-α-cycle) — the wall = the 1→2-player step | **VERIFIED (III)** | `1850` |
 | C0 | Games ⟺ Logic: μ-formula nested fixpoint == game winner | **VERIFIED (III)** | `1853` |
 | C1 | Three solver families agree | **VERIFIED (III)** | `1845` |
@@ -160,13 +163,14 @@ universal-tree family **provably** unable to reach P (B1).
 | B1 | Universal-tree quasi-poly lower bound | CITED (instantiated `1843`) | CDFJLP 2019 |
 | B2 | SI exponential lower bound | CITED (consistent `1840`) | Friedmann 2011 |
 | B3 | parity ∈ UP∩coUP | CITED | Jurdziński 1998 |
-| Q | parity→mean-payoff reduction forces exponential weights `(n+1)^d` | **PROVEN (III)** | `1855` |
+| Q | the standard parity→mean-payoff separating-weight *scheme* is exponential `(n+1)^d` | **PROVEN (III)** | `1855` |
 | D | Class I / Class II dichotomy | **PROVEN-NEGATIVE for Class I** (T2) | §4 |
 | O1 | parity games in P? | **OPEN** | the wall |
-| M1 | single invariant incl. PQ ring (char 2 vs 3329, idempotency) | **OBSTRUCTED** | `1851`, `1826` |
+| M1 | the two *canonical* bridges to the PQ ring fail (char 2 vs 3329, idempotency) | **OBSTRUCTED (canonical bridges)** | `1851`, `1826` |
 
 **The honest one-line summary.** The "door" the field sees is one **wall** with many equivalent faces (§5); its
 two known faces are *proven* unclimbable for whole method families (B1, B2); its shape is the **control/alternation**
 dichotomy (§4), whose Class-I half is *proven* dead in III (T2); and its interior — whether the wall has a door at
-all (O1) — is **open**, untouched, and was never faked. The meta-grail above it (M1) is *proven* empty. We mapped the
-roof; we did not pretend to fly through it.
+all (O1) — is **open**, untouched, and was never faked. The meta-grail above it (M1): its two *canonical* algebraic
+bridges are *proven* to fail (a unification of a different kind is not ruled out). We mapped the roof; we did not
+pretend to fly through it.

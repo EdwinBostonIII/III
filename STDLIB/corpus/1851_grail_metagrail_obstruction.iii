@@ -1,10 +1,13 @@
-/* 1851_grail_metagrail_obstruction.iii -- FORMALLY DEFINING THE WALL, theorem M1 (the proven-NEGATIVE summit).
+/* 1851_grail_metagrail_obstruction.iii -- FORMALLY DEFINING THE WALL, theorem M1 (a proven-NEGATIVE boundary).
  *
- * THEOREM (Meta-Grail Obstruction).  There is NO structure-preserving unifying invariant across III's lattice logics
- * (whose 2-valued/Boolean face is a ring of CHARACTERISTIC 2 -- the Stone "Boolean ring", x+x=0) and the post-quantum
- * ring Z_q with q = 3329 (ML-KEM's modulus, a prime field of CHARACTERISTIC 3329).  The "single key across ALL of
- * III's logics including PQ" is provably EMPTY.  Two independent obstructions, both verified here by direct
- * computation in Z_3329:
+ * THEOREM (Meta-Grail Obstruction -- the TWO CANONICAL bridges fail).  The two NATURAL structure-preserving bridges
+ * between III's lattice logics (whose 2-valued/Boolean face is a ring of CHARACTERISTIC 2 -- the Stone "Boolean ring",
+ * x+x=0) and the post-quantum ring Z_q with q = 3329 (ML-KEM's modulus, a prime field of CHARACTERISTIC 3329)
+ * PROVABLY FAIL.  SCOPE (important, per honest tagging): this rules out the two canonical morphism classes below; it
+ * does NOT claim that EVERY conceivable unifying invariant is impossible -- e.g. the weave still SIMULATES Z_q as
+ * circuits (a real relationship that is neither a ring hom nor an OR-map).  So: the canonical "single algebraic key
+ * across the lattice logics and PQ" is empty; a unification of a DIFFERENT kind is not ruled out by this KAT.
+ * Two independent obstructions, both verified here by direct computation in Z_3329:
  *
  *  (A) CHARACTERISTIC obstruction.  Any unital ring homomorphism phi : R -> Z_3329 from a char-2 ring R forces
  *      0 = phi(1+1) = phi(1)+phi(1) = 1+1 = 2 in Z_3329.  But 2 != 0 in Z_3329 (and gcd(2,3329)=1: the characteristics
@@ -14,10 +17,10 @@
  *      OR |-> + would need a+a = a for every a; in Z_3329 the additive idempotents {a : 2a = a} = {a : a = 0} = {0}
  *      ALONE.  So the join's universal idempotency collapses under any (+)-map -- no lattice->ring hom on (OR,+).
  *
- * SIGNIFICANCE.  This is the summit of the whole edifice and it is a PROVEN BOUNDARY, not an open question: the De
- * Morgan completion genuinely unifies the LATTICE logics (weave/Voice/logic6, KAT 1826), but PQ sits structurally
- * OUTSIDE that unification.  The boundary IS the result.  (The weave still SIMULATES Z_q as circuits -- simulation,
- * not a unifying invariant.)
+ * SIGNIFICANCE.  The De Morgan completion genuinely unifies the LATTICE logics (weave/Voice/logic6, KAT 1826); this
+ * theorem shows the two canonical algebraic bridges to PQ provably fail, so the "single canonical key" picture sits
+ * structurally OUTSIDE that unification.  A PROVEN boundary for the canonical bridges -- not a claim that no relation
+ * of any kind exists (the weave-simulates-Z_q circuit relation is exactly such a non-canonical relation).
  * exit 99 = both obstructions verified by computation in Z_3329 (q=3329 prime; 2 != 0; coprime; sole additive idempotent 0). */
 module mmgo
 const Q : u32 = 3329u32

@@ -1,10 +1,13 @@
-/* 1855_grail_meanpayoff_weight_obstruction.iii -- FORMAL WALL, the QUANT-GAMES face's precise obstruction (PROVEN).
+/* 1855_grail_meanpayoff_weight_obstruction.iii -- FORMAL WALL, the QUANT-GAMES face obstruction (PROVEN, scoped).
  *
- * THEOREM (Mean-Payoff Reduction forces EXPONENTIAL weights).  The standard reduction parity -> mean-payoff /
- * energy / discounted game assigns each vertex a weight by priority so that, on ANY cycle (length <= n), a SINGLE
- * occurrence of the highest priority p outweighs every lower priority combined (this "priority-separating" property
- * is exactly what makes sign(cycle-sum) = parity(max priority), i.e. what makes the reduction correct).  The MINIMAL
- * such magnitudes grow GEOMETRICALLY:
+ * THEOREM (the standard priority-SEPARATING weight SCHEME is exponential).  The STANDARD reduction parity ->
+ * mean-payoff / energy / discounted game assigns each vertex a weight by priority so that, on ANY cycle (length <= n),
+ * a SINGLE occurrence of the highest priority p outweighs every lower priority combined (this "priority-separating"
+ * property is exactly what makes sign(cycle-sum) = parity(max priority), i.e. what makes THIS reduction correct).
+ * The MINIMAL such magnitudes grow GEOMETRICALLY:
+ * SCOPE (honest tagging): this proves the magnitude of the standard SEPARATING-WEIGHT SCHEME, not a necessity claim
+ * over ALL conceivable parity->mean-payoff reductions.  It is the precise cost of the textbook reduction, which is the
+ * one the energy/LP survivors use.
  *     w(0) = 1,   w(p) = 1 + n * sum_{q<p} w(q)   =>   w(p) = (n+1) * w(p-1)   =>   w(p) = (n+1)^p.
  * Hence the top weight w(d) = (n+1)^d is EXPONENTIAL in the number of priorities d, the induced mean-payoff/energy
  * values need Theta(d log n) bits, and value iteration over them is only PSEUDO-polynomial (polynomial in the value

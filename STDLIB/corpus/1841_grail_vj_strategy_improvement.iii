@@ -1,46 +1,54 @@
 /* 1841_grail_vj_strategy_improvement.iii -- GRAIL L8: the COMPLETE strategy-improvement solver.
- * The greedy region-size SI (1840) was INCOMPLETE: 77/80 vs the Zielonka oracle, stuck in LOCAL OPTIMA -- because
- * region size throws away the quantitative play profile.  This is the fix the literature prescribes: the
- * VOGE-JURDZINSKI discrete play-profile VALUATION.  Each vertex, under Even's strategy sigma and Odd's BEST RESPONSE
- * tau, gets a valuation (anchor, set, len):
- *   anchor = the highest priority on the loop the play reaches (its parity decides the winner),
- *   set    = the priorities > anchor seen on the path to the anchor vertex (the "more significant" detours),
- *   len    = steps to the anchor vertex.
- * Reward order (Even maximises): even anchors beat odd; among even higher is better, among odd lower is better;
- * ties broken by the symmetric-difference of sets (most significant differing priority: even -> the side that HAS it
- * wins, odd -> the side that LACKS it), then by length (even anchor: shorter better; odd: longer better).
- * SI: improve sigma against Odd's best response to a fixpoint -- PROVABLY no local optima (Voge-Jurdzinski 2000).
- * Run on the SAME 80 random games as 1840 (same seed) and validated against the verified Zielonka oracle (1839).
- * exit 99 = COMPLETE: VJ SI matches the oracle on ALL 80 games (the local optima of greedy SI are removed).
- * Otherwise exit = number matched (honest).  Open question deferred to a follow-up probe: improvement-step counts. */
+ * The greedy region-size SI (1840) was INCOMPLETE (77/80, LOCAL OPTIMA) -- region size discards the play profile.
+ * This is the literature's fix: the VOGE-JURDZINSKI discrete play-profile VALUATION, done at VERTEX granularity.
+ *
+ * BUG FOUND + FIXED (honest, via the step-count probe): a first cut collapsed the VJ *vertex* set into a *priority*
+ * set.  Random games (PRI = rnd()%n) have many REPEATED priorities, so distinct plays compared EQUAL -> the strict
+ * monotonicity that guarantees SI termination broke -> the solver INFINITE-LOOPED on some games (n>=6).  The 80
+ * validation games happened to avoid it; broad seed/size sampling exposed it (timeout, not convergence).  Fix: the
+ * valuation is at VERTEX granularity with a relevance total order (priority, ties by index), as VJ requires.
+ *
+ *   valuation(v) under sigma + Odd's BEST RESPONSE = (anchor VERTEX l, set B of VERTICES, length k)
+ *     l = the MOST RELEVANT vertex on the loop the play reaches (its priority parity = the winner),
+ *     B = the vertices on the path to l that are MORE RELEVANT than l,
+ *     k = steps to l.
+ *   reward order (Even maximises): the more-relevant anchor decides by its parity (even good, odd bad); ties by the
+ *   most-relevant vertex of the set symmetric-difference (even -> the side HAVING it; odd -> the side LACKING it);
+ *   then by length (even anchor: shorter; odd anchor: longer).
+ *   SI improves sigma against Odd's best response to a fixpoint -- PROVABLY no local optima (Voge-Jurdzinski 2000).
+ *
+ * Validated against the verified Zielonka oracle (1839) on the SAME 80 games as 1840 (same seed) AND broadly: a
+ * defensive iteration cap (4096) turns any residual non-termination into a DETECTED failure, never a hang.
+ * exit 99 = COMPLETE: VJ SI matches the oracle 80/80 (greedy was 77/80) with ZERO games hitting the cap. */
 module mvj
 var OWN : [u8; 16]
 var PRI : [u32; 16]
-var SUC0 : [u32; 16]   /* original successors (bitmask) */
-var SUC : [u32; 16]    /* working bitmask for the oracle */
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
 var NV : [u32; 1]
 var RNG : [u32; 1]
-var STRAT : [u32; 16]  /* current deterministic profile: chosen successor INDEX per vertex */
-var CHOICE : [u32; 16] /* sigma (Even) */
-var TAU : [u32; 16]    /* tau (Odd, best response) */
+var STRAT : [u32; 16]
+var CHOICE : [u32; 16]
+var TAU : [u32; 16]
 var NEWCH : [u32; 16]
 var NEWTAU : [u32; 16]
-var VAL_A : [u32; 16]  /* anchor */
-var VAL_S : [u32; 16]  /* set bitmask over priorities */
-var VAL_L : [u32; 16]  /* length */
+var VAL_A : [u32; 16]   /* anchor VERTEX */
+var VAL_S : [u32; 16]   /* set bitmask over VERTICES */
+var VAL_L : [u32; 16]
 var VOUT_A : [u32; 1]
 var VOUT_S : [u32; 1]
 var VOUT_L : [u32; 1]
 var SEEN : [u32; 16]
 var WALK : [u32; 16]
 var ROUNDS : [u32; 1]
+var STUCK : [u32; 1]    /* set to 1 if any SI loop hit the defensive cap (residual non-termination) */
 
 fn nv() -> u32 { return NV[0u64] }
 fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
 fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
 fn low_succ(v: u32) -> u32 { let mut w : u32 = 0u32  let n : u32 = nv()  while w < n { if (SUC0[v as u64] & (1u32 << w)) != 0u32 { return w }  w = w + 1u32 }  return 0u32 }
 
-/* ---- the verified Zielonka oracle (copied byte-for-byte from 1839, the GROUND TRUTH) ---- */
+/* ---- the verified Zielonka oracle (byte-for-byte from 1839, GROUND TRUTH) ---- */
 fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
 fn attractor(region: u32, player: u32, target: u32) -> u32 {
     let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
@@ -76,74 +84,89 @@ fn gen_game(n: u32) -> i32 {
     return 0i32
 }
 
-/* ---- the VJ valuation ---- */
-/* valuate(start): follow the deterministic profile STRAT from start to its loop; write (anchor,set,len) to VOUT_*. */
+/* ---- VJ valuation at VERTEX granularity ---- */
+/* more_relevant(a,b): 1 if a is strictly more relevant than b -- by priority, ties broken by higher index. */
+fn more_relevant(a: u32, b: u32) -> u8 {
+    if PRI[a as u64] > PRI[b as u64] { return 1u8 }
+    if PRI[a as u64] < PRI[b as u64] { return 0u8 }
+    if a > b { return 1u8 }
+    return 0u8
+}
+fn most_relevant_in_mask(mask: u32) -> u32 {
+    let n : u32 = nv()  let mut best : u32 = 0u32  let mut have : u8 = 0u8  let mut v : u32 = 0u32
+    while v < n { if (mask & (1u32 << v)) != 0u32 { if have == 0u8 { best = v  have = 1u8 } else { if more_relevant(v, best) == 1u8 { best = v } } }  v = v + 1u32 }
+    return best
+}
+/* valuate(start): follow the deterministic profile STRAT to its loop; write (anchor vertex, vertex-set, len). */
 fn valuate(start: u32) -> i32 {
     let n : u32 = nv()  let mut i : u32 = 0u32
     while i < n { SEEN[i as u64] = 254u32  i = i + 1u32 }
     let mut cur : u32 = start  let mut step : u32 = 0u32
     while SEEN[cur as u64] == 254u32 { SEEN[cur as u64] = step  WALK[step as u64] = cur  cur = STRAT[cur as u64]  step = step + 1u32 }
-    let cs : u32 = SEEN[cur as u64]            /* cycle starts here in WALK */
+    let cs : u32 = SEEN[cur as u64]
     let mut l : u32 = WALK[cs as u64]  let mut j : u32 = cs
-    while j < step { let vtx : u32 = WALK[j as u64]  if PRI[vtx as u64] > PRI[l as u64] { l = vtx }  j = j + 1u32 }
-    let anchor : u32 = PRI[l as u64]
+    while j < step { let vtx : u32 = WALK[j as u64]  if more_relevant(vtx, l) == 1u8 { l = vtx }  j = j + 1u32 }
     let mut c2 : u32 = start  let mut len : u32 = 0u32  let mut set : u32 = 0u32
-    while c2 != l { if PRI[c2 as u64] > anchor { set = set | (1u32 << PRI[c2 as u64]) }  c2 = STRAT[c2 as u64]  len = len + 1u32 }
-    VOUT_A[0u64] = anchor  VOUT_S[0u64] = set  VOUT_L[0u64] = len
+    while c2 != l { if more_relevant(c2, l) == 1u8 { set = set | (1u32 << c2) }  c2 = STRAT[c2 as u64]  len = len + 1u32 }
+    VOUT_A[0u64] = l  VOUT_S[0u64] = set  VOUT_L[0u64] = len
     return 0i32
 }
-fn rrank(p: u32) -> u32 { if (p & 1u32) == 0u32 { return 100u32 + p }  return 100u32 - p }
-fn hibit(x: u32) -> i32 { let mut i : i32 = 31i32  while i >= 0i32 { if (x & (1u32 << (i as u32))) != 0u32 { return i }  i = i - 1i32 }  return -1i32 }
-/* cmp_even: +1 if valuation a is strictly BETTER for Even than b, -1 if worse, 0 equal. */
-fn cmp_even(aA: u32, aS: u32, aL: u32, bA: u32, bS: u32, bL: u32) -> i32 {
-    let ra : u32 = rrank(aA)  let rb : u32 = rrank(bA)
-    if ra > rb { return 1i32 }
-    if ra < rb { return -1i32 }
+/* cmp_even: +1 if valuation a is strictly BETTER for Even than b, -1 if worse, 0 equal. (aL,bL are anchor VERTICES) */
+fn cmp_even(aL: u32, aS: u32, aLen: u32, bL: u32, bS: u32, bLen: u32) -> i32 {
+    if aL != bL {
+        let mut m : u32 = bL  let mut m_is_a : u8 = 0u8
+        if more_relevant(aL, bL) == 1u8 { m = aL  m_is_a = 1u8 }
+        if (PRI[m as u64] & 1u32) == 0u32 { if m_is_a == 1u8 { return 1i32 }  return -1i32 }
+        if m_is_a == 1u8 { return -1i32 }
+        return 1i32
+    }
     let dif : u32 = aS ^ bS
     if dif != 0u32 {
-        let d : i32 = hibit(dif)  let dp : u32 = d as u32
-        let mut inA : u8 = 0u8  if (aS & (1u32 << dp)) != 0u32 { inA = 1u8 }
-        if (dp & 1u32) == 0u32 { if inA == 1u8 { return 1i32 }  return -1i32 }
+        let d : u32 = most_relevant_in_mask(dif)
+        let mut inA : u8 = 0u8  if (aS & (1u32 << d)) != 0u32 { inA = 1u8 }
+        if (PRI[d as u64] & 1u32) == 0u32 { if inA == 1u8 { return 1i32 }  return -1i32 }
         if inA == 1u8 { return -1i32 }
         return 1i32
     }
-    if (aA & 1u32) == 0u32 { if aL < bL { return 1i32 }  if aL > bL { return -1i32 }  return 0i32 }
-    if aL > bL { return 1i32 }  if aL < bL { return -1i32 }  return 0i32
+    if (PRI[aL as u64] & 1u32) == 0u32 { if aLen < bLen { return 1i32 }  if aLen > bLen { return -1i32 }  return 0i32 }
+    if aLen > bLen { return 1i32 }  if aLen < bLen { return -1i32 }  return 0i32
 }
 fn set_profile() -> i32 { let n : u32 = nv()  let mut v : u32 = 0u32
     while v < n { if OWN[v as u64] == 0u8 { STRAT[v as u64] = CHOICE[v as u64] } else { STRAT[v as u64] = TAU[v as u64] }  v = v + 1u32 }  return 0i32 }
 
-/* evaluate_sigma: compute Odd's BEST RESPONSE tau to the current sigma (CHOICE), filling VAL_* with the
- * play-profile valuation of every vertex under (sigma, best-response tau). */
+/* evaluate_sigma: Odd's BEST RESPONSE tau to the current sigma; fills VAL_* with the play-profile valuations. */
 fn evaluate_sigma() -> i32 {
     let n : u32 = nv()  let mut v : u32 = 0u32
     while v < n { if OWN[v as u64] == 1u8 { TAU[v as u64] = low_succ(v) }  v = v + 1u32 }
-    let mut improving : u8 = 1u8
+    let mut improving : u8 = 1u8  let mut guard : u32 = 0u32
     while improving == 1u8 {
-        set_profile()
-        let mut a : u32 = 0u32
-        while a < n { valuate(a)  VAL_A[a as u64] = VOUT_A[0u64]  VAL_S[a as u64] = VOUT_S[0u64]  VAL_L[a as u64] = VOUT_L[0u64]  a = a + 1u32 }
-        improving = 0u8
-        let mut u : u32 = 0u32
-        while u < n {
-            if OWN[u as u64] == 1u8 {
-                let base : u32 = TAU[u as u64]
-                let mut bw : u32 = base  let mut bA : u32 = VAL_A[u as u64]  let mut bS : u32 = VAL_S[u as u64]  let mut bL : u32 = VAL_L[u as u64]
-                let mut w : u32 = 0u32
-                while w < n {
-                    if (SUC0[u as u64] & (1u32 << w)) != 0u32 {
-                        STRAT[u as u64] = w  valuate(u)
-                        if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) < 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+        guard = guard + 1u32  if guard > 4096u32 { STUCK[0u64] = 1u32  improving = 0u8 }
+        if improving == 1u8 {
+            set_profile()
+            let mut a : u32 = 0u32
+            while a < n { valuate(a)  VAL_A[a as u64] = VOUT_A[0u64]  VAL_S[a as u64] = VOUT_S[0u64]  VAL_L[a as u64] = VOUT_L[0u64]  a = a + 1u32 }
+            improving = 0u8
+            let mut u : u32 = 0u32
+            while u < n {
+                if OWN[u as u64] == 1u8 {
+                    let base : u32 = TAU[u as u64]
+                    let mut bw : u32 = base  let mut bA : u32 = VAL_A[u as u64]  let mut bS : u32 = VAL_S[u as u64]  let mut bL : u32 = VAL_L[u as u64]
+                    let mut w : u32 = 0u32
+                    while w < n {
+                        if (SUC0[u as u64] & (1u32 << w)) != 0u32 {
+                            STRAT[u as u64] = w  valuate(u)
+                            if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) < 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+                        }
+                        w = w + 1u32
                     }
-                    w = w + 1u32
+                    STRAT[u as u64] = base
+                    NEWTAU[u as u64] = bw
                 }
-                STRAT[u as u64] = base
-                NEWTAU[u as u64] = bw
+                u = u + 1u32
             }
-            u = u + 1u32
+            let mut k : u32 = 0u32
+            while k < n { if OWN[k as u64] == 1u8 { if NEWTAU[k as u64] != TAU[k as u64] { TAU[k as u64] = NEWTAU[k as u64]  improving = 1u8 } }  k = k + 1u32 }
         }
-        let mut k : u32 = 0u32
-        while k < n { if OWN[k as u64] == 1u8 { if NEWTAU[k as u64] != TAU[k as u64] { TAU[k as u64] = NEWTAU[k as u64]  improving = 1u8 } }  k = k + 1u32 }
     }
     set_profile()
     let mut b2 : u32 = 0u32
@@ -151,50 +174,52 @@ fn evaluate_sigma() -> i32 {
     return 0i32
 }
 
-/* improve_sigma: VJ outer loop -- improve Even's sigma against Odd's best response until no Even switch helps.
- * returns Even's winning region (vertices whose final valuation anchor is EVEN). */
+/* improve_sigma: VJ outer loop; returns Even's winning region (vertices whose final anchor priority is EVEN). */
 fn improve_sigma() -> u32 {
     let n : u32 = nv()  let mut v : u32 = 0u32
     while v < n { if OWN[v as u64] == 0u8 { CHOICE[v as u64] = low_succ(v) }  v = v + 1u32 }
     ROUNDS[0u64] = 0u32
     let mut improving : u8 = 1u8
     while improving == 1u8 {
-        evaluate_sigma()
-        improving = 0u8
-        let mut x : u32 = 0u32
-        while x < n {
-            if OWN[x as u64] == 0u8 {
-                let base : u32 = CHOICE[x as u64]
-                let mut bw : u32 = base  let mut bA : u32 = VAL_A[x as u64]  let mut bS : u32 = VAL_S[x as u64]  let mut bL : u32 = VAL_L[x as u64]
-                let mut w : u32 = 0u32
-                while w < n {
-                    if (SUC0[x as u64] & (1u32 << w)) != 0u32 {
-                        STRAT[x as u64] = w  valuate(x)
-                        if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) > 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+        if ROUNDS[0u64] > 4096u32 { STUCK[0u64] = 1u32  improving = 0u8 }
+        if improving == 1u8 {
+            evaluate_sigma()
+            improving = 0u8
+            let mut x : u32 = 0u32
+            while x < n {
+                if OWN[x as u64] == 0u8 {
+                    let base : u32 = CHOICE[x as u64]
+                    let mut bw : u32 = base  let mut bA : u32 = VAL_A[x as u64]  let mut bS : u32 = VAL_S[x as u64]  let mut bL : u32 = VAL_L[x as u64]
+                    let mut w : u32 = 0u32
+                    while w < n {
+                        if (SUC0[x as u64] & (1u32 << w)) != 0u32 {
+                            STRAT[x as u64] = w  valuate(x)
+                            if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) > 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+                        }
+                        w = w + 1u32
                     }
-                    w = w + 1u32
+                    STRAT[x as u64] = base
+                    NEWCH[x as u64] = bw
                 }
-                STRAT[x as u64] = base
-                NEWCH[x as u64] = bw
+                x = x + 1u32
             }
-            x = x + 1u32
+            let mut k : u32 = 0u32
+            while k < n { if OWN[k as u64] == 0u8 { if NEWCH[k as u64] != CHOICE[k as u64] { CHOICE[k as u64] = NEWCH[k as u64]  improving = 1u8 } }  k = k + 1u32 }
+            ROUNDS[0u64] = ROUNDS[0u64] + 1u32
         }
-        let mut k : u32 = 0u32
-        while k < n { if OWN[k as u64] == 0u8 { if NEWCH[k as u64] != CHOICE[k as u64] { CHOICE[k as u64] = NEWCH[k as u64]  improving = 1u8 } }  k = k + 1u32 }
-        ROUNDS[0u64] = ROUNDS[0u64] + 1u32
     }
     evaluate_sigma()
     let mut reg : u32 = 0u32  let mut v2 : u32 = 0u32
-    while v2 < n { if (VAL_A[v2 as u64] & 1u32) == 0u32 { reg = reg | (1u32 << v2) }  v2 = v2 + 1u32 }
+    while v2 < n { if (PRI[VAL_A[v2 as u64] as u64] & 1u32) == 0u32 { reg = reg | (1u32 << v2) }  v2 = v2 + 1u32 }
     return reg
 }
 
 fn main() -> u64 {
     RNG[0u64] = 0x12345678u32
+    STUCK[0u64] = 0u32
     let n : u32 = 8u32
     let mut trials : u32 = 0u32
     let mut matched : u32 = 0u32
-    let mut maxr : u32 = 0u32
     while trials < 80u32 {
         gen_game(n)
         let mut v : u32 = 0u32
@@ -203,9 +228,9 @@ fn main() -> u64 {
         let truth : u32 = (r & 0xFFFFFFFFu64) as u32
         let got : u32 = improve_sigma()
         if got == truth { matched = matched + 1u32 }
-        if ROUNDS[0u64] > maxr { maxr = ROUNDS[0u64] }
         trials = trials + 1u32
     }
-    if matched == 80u32 { return 99u64 }   /* VJ SI is COMPLETE -- the local optima of greedy SI (1840) are gone */
+    if STUCK[0u64] != 0u32 { return 200u64 }   /* a game failed to converge within the cap -- a real defect, surfaced not hidden */
+    if matched == 80u32 { return 99u64 }       /* COMPLETE: VJ SI matches the oracle on all 80, no cap hit */
     return matched as u64
 }

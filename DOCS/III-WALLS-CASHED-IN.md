@@ -42,7 +42,35 @@ reasoned mapping — an engineering reading, not a theorem).
 
 ---
 
-## 3. Bottom line
+## 3. Production faculties built from the walls (BUILT + GATED)
+
+The cash-in made concrete: ten new `STDLIB/iii/numera/` faculties, each an island of a wall turned into a production,
+system-aware, independently-usable III capability — `@export` API, rich header (role / use-cases / invocation / impacts /
+limitations), registered in `build_stdlib`, archived in `libiii_native.a`, and gated by a corpus KAT that cross-checks
+it against an **independent** oracle (a different algorithm, or brute force). All ten gates green (corpus `1882`–`1891`).
+No duplication — built only where III lacked the capability; primality was left to `rsa.iii`.
+
+| Wall | Faculty | Core `@export` | Gate (independent cross-check) |
+|---|---|---|---|
+| Parity / μ-calc | `numera::parity_game` | `pg_solve_even`, `pg_winner` (Zielonka) | `1882` vs all-positional-strategy enumeration |
+| SAT | `numera::sat_tractable` | `st_decide` (Schaefer classes), `stx_decide` (XOR) | `1883` vs brute `2ⁿ` per class |
+| Confluence | `numera::confluence` | `cf_confluent`, `cf_unique_nf` (Newman) | `1884` vs Newman 3-way equivalence |
+| Graph iso | `numera::graph_refine` | `gr_iso`, `gr_fingerprint_a` (1-WL + backtracking) | `1885` vs brute permutation iso |
+| Diophantine / Hilbert-10 | `numera::diophantine` | `dio_solve`, `dio_mod_inverse` (ext. Euclid) | `1886` vs bounded brute + identities |
+| Lattice / FLRP | `numera::con_lattice` | `cl_num_congruences`, `cl_is_distributive` | `1887` vs independent congruence enumeration |
+| Constructibility | `numera::constructible` | `ctr_cubic_irreducible`, `ctr_ngon_constructible` | `1888` vs brute root-search + Gauss–Wantzel |
+| Ramsey | `numera::ramsey` | `ram_has_mono_clique`, `ram_ramsey_33` | `1889` vs independent subset check |
+| Comm. complexity | `numera::comm_lb` | `cml_rank_gf2`, `cml_lb` (rank lower bound) | `1890` vs independent GF(2) rank |
+| Independence / Goodstein | `numera::goodstein` | `gst_terminates`, `gst_step_count` | `1891` vs G(1..3)/G(16) reference |
+
+*Engineering note (harmony):* every faculty owns a tree-unique symbol prefix (module vars and non-`@export` fns become
+global symbols); the `rm_` prefix collided with `forcefield/ripple_metric` and was renamed `ram_`. Each is sound +
+complete on a *documented bounded domain* (e.g. ≤64-vertex arenas, ≤32-var CNF) — honest limits, not correctness gaps,
+matching each wall's open/obstructed core.
+
+---
+
+## 4. Bottom line
 
 Each wall, pushed to its limit and gated, is an asset III spends: the confluence wall is the theory under XII's
 guarantees, the characteristic firewall bounds III's logic↔crypto ambitions, the control-blindness barrier *justifies*

@@ -88,15 +88,17 @@ relations (simulation, compilation) are unaffected and routinely exist.** The "c
 - **THEOREM (III), `1855`.** The mean-payoff reduction's standard weight scheme is `(n+1)^d` — the hardness migrates
   into *exponential-magnitude numbers*; it does not vanish.
 - **THEOREM (III), `1860`.** Parity is NP∩coNP (poly-checkable strategy witnesses both ways) — so the hardness is
-  **not** NP-hardness; it is the rare *intermediate* status.
+  **not** NP-hardness: it is *not* NP-complete unless NP=coNP. (Where it actually sits — in P, or Ladner-intermediate —
+  is itself **OPEN**; the NP∩coNP+quasi-poly profile is shared by the still-open factoring/discrete-log *and* by
+  primality/LP, which *fell to P*.)
 - **CITED.** The dichotomy is exhaustive (formal map §4): every mechanism either discards control (provably wrong) or
   re-encodes it (inherits the open cost).
 
 **What this licenses (THEOREM-level).** For parity *specifically*, we have a *structural* account of hardness, not a
 "supercomputers choke" empirical one: we can name *what* makes it hard (control/alternation, `1848`), *where* the cost
 hides in each reformulation (the numbers, `1855`; the certificate degree, `1847`; the universal-tree size, B1), and
-*what class* it sits in (NP∩coNP-intermediate, `1860`). This is a worked, gated example of *isolating the source* of a
-hardness rather than observing it.
+*what bound* it sits under (∈ NP∩coNP — not NP-complete unless NP=coNP, `1860`). This is a worked, gated example of
+*isolating the source* of a hardness rather than observing it.
 
 **Where the reach stops (correcting the over-statement).** It is INTERPRETATION, *not* theorem, to call these "the
 exact mathematical laws of why things are hard in our universe." The results are about *parity* (and its poly-time

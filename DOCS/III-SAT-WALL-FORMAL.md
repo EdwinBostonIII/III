@@ -35,10 +35,13 @@ NP-complete cliff. All six islands are grounded in III:
 | **0-valid** (all-false satisfies) | trivial (every clause has a negative literal) | **VERIFIED (III)** | `1867` |
 | **1-valid** (all-true satisfies) | trivial (every clause has a positive literal) | **VERIFIED (III)** | `1867` |
 
-**The boundary (PROVEN-illustrated, `1867`).** The 3-CNF `{(x₁∨x₂∨x₃), (¬x₁∨¬x₂∨¬x₃)}` is in **none** of the six classes
-(≥2 positive ⇒ not Horn; ≥2 negative ⇒ not dual-Horn; a clause with no negative ⇒ not 0-valid; no positive ⇒ not
-1-valid; 3 literals ⇒ not bijunctive; not linear ⇒ not affine). It is the germ of NP-completeness and is decided only by
-search. This is the SAT wall's *sharp edge*: one step outside the six islands and the problem is NP-complete.
+**The boundary (PROVEN-illustrated, `1867`).** The 3-CNF `{(x₁∨x₂∨x₃), (¬x₁∨¬x₂∨¬x₃)}` (a not-all-equal constraint on
+three variables) is in **none** of the six classes (≥2 positive ⇒ not Horn; ≥2 negative ⇒ not dual-Horn; a clause with no
+negative ⇒ not 0-valid; no positive ⇒ not 1-valid; 3 literals ⇒ not bijunctive). *Not affine either, by a counting
+argument:* it has exactly **6** satisfying assignments (all of `{0,1}³` except `000` and `111`), and `6` is not a power of
+`2`, so its solution set cannot be an affine subspace of `𝔽₂³`. The KAT (`1867`) checks the five CNF-syntactic classes
+mechanically; affine is closed by this one-line argument. It is the germ of NP-completeness (NAE-3SAT-shaped), decided
+only by search — the SAT wall's *sharp edge*: one step outside the six islands and the problem is NP-complete.
 
 ---
 
@@ -89,19 +92,29 @@ This is where two mapped walls become *more* than the sum:
 | | **SAT wall** | **Parity wall** |
 |---|---|---|
 | open core | **P vs NP** | parity ∈ P? (`O1`) |
-| complexity status | **NP-complete** (the top of NP) | **NP∩coNP-intermediate** (`1860`) |
+| complexity status | **NP-complete** (the top of NP) | **∈ NP∩coNP** (`1860`) — *not* NP-complete unless NP=coNP; placement in-P-vs-intermediate is **OPEN** |
 | witness symmetry | asymmetric (YES short, NO not known) | symmetric (both short — UP∩coUP) |
 | tractable boundary | **sharp cliff** (Schaefer: P or NP-complete) | a *slope* of islands + open core |
-| best general algorithm | exponential (no sub-exp known under ETH) | **quasi-polynomial** (Calude 2017) |
+| best general algorithm | exponential (none sub-exp known; ETH *conjectures* none exists) | **quasi-polynomial** (Calude 2017) |
 
-**The profound extrapolation (CITED + structural).** Ladner's theorem (1975) proves that **if P ≠ NP, then NP-intermediate
-problems exist** — problems neither in P nor NP-complete. Parity (NP∩coNP, not known complete for anything) is a *natural
-candidate* for exactly this intermediate band; SAT is the NP-complete ceiling. So the two walls are not the same wall at
-different angles — they are **structurally distinct strata** of the same landscape: SAT is the *complete* top, parity is
-a *hemmed-in middle*. Boolean CSP has *no* intermediate problems (Schaefer's cliff), yet the *full* landscape provably
-does (Ladner) — and parity is where one of those intermediate problems plausibly lives. Mapping both walls reveals the
-landscape has *both* sharp cliffs (within Boolean CSP) *and* a populated middle (across all of NP) — a far richer,
-provably-grounded structure than either wall alone shows.
+**The extrapolation — stated honestly (the proven core is narrow; two reads sit on it).** What is **PROVEN (III)**: parity
+∈ NP∩coNP (`1860`), hence *not* NP-complete unless NP=coNP — it cannot be the SAT-style complete top. What is **OPEN**:
+*where* parity actually sits. Two defensible reads, and the honest map carries both:
+- **(intermediate read)** Ladner's theorem (CITED, 1975) — *if* P≠NP, NP-intermediate problems exist (neither in P nor
+  NP-complete). Parity is a *candidate*, alongside the still-open NP∩coNP problems **integer factoring** and **discrete
+  log**.
+- **(eventual-P read, arguably stronger)** Problems that were in NP∩coNP *with a good upper bound* have a strong track
+  record of **falling to P**: **primality** (NP∩coNP via Pratt; → AKS 2002, in P) and **linear programming** (NP∩coNP via
+  duality; → ellipsoid 1979, in P). Parity's exact profile — **NP∩coNP *and* quasi-polynomial** — is the profile of those
+  problems the moment before they fell. By this precedent, "parity is secretly in P" is at least as defensible as
+  "intermediate."
+
+So the cross-wall asset is not "parity is the intermediate archetype" (that overstates an open placement). It is sharper:
+**SAT is provably the complete top; parity is provably *not* there (NP∩coNP); and parity sits at exactly the coordinates —
+NP∩coNP + quasi-poly — where the dominoes (primality, LP) have historically fallen to P.** That makes the parity wall the
+*more* interesting of the two: it is where the landscape's intermediate band either gets populated (Ladner) or gets one
+fewer member (the primality/LP precedent), and which one is O1 itself. Two walls mapped, one open question made precise —
+every claim tagged, both open cores untouched.
 
 ---
 
@@ -121,11 +134,12 @@ provably-grounded structure than either wall alone shows.
 | NC | SAT NP-complete | CITED | Cook–Levin 1971 |
 | B-SAT1 | proof-complexity exponential lower bounds | CITED | Haken 1985 |
 | B-SAT2 | natural-proofs / relativization / algebrization barriers | CITED | RR/BGS/AW |
-| X | SAT NP-complete vs parity NP∩coNP-intermediate; Ladner middle | **VERIFIED contrast** (`1860`,`1866`) + CITED | — |
+| X | SAT NP-complete vs parity ∈ NP∩coNP (PROVEN, so not NP-complete unless NP=coNP); parity's placement (in-P vs Ladner-intermediate) is OPEN — primality/LP precedent points as much to eventual-P | PROVEN core + **OPEN** placement | `1860`,`1866` |
 | O | **P vs NP?** | **OPEN** | the wall |
 
 **Bottom line.** The SAT wall is the *complete* wall — its open core is P vs NP, its boundary is a sharp Schaefer cliff,
-its hardness is NP-completeness (the top of NP). Set beside the parity wall (an NP∩coNP-intermediate, quasi-poly,
-witness-symmetric *middle*), it reveals the landscape's true shape: cliffs within Boolean CSP, a populated intermediate
-band across NP (Ladner), and parity sitting in that band. Two walls mapped, one larger structure grounded — every claim
-tagged, the open cores untouched.
+its hardness is NP-completeness (the top of NP). Set beside the parity wall (∈ NP∩coNP — proven *not* the complete top —
+quasi-poly, witness-symmetric, with placement *open*), it reveals the landscape's true shape: a sharp P/NP-complete cliff
+within Boolean CSP, and — across all of NP — a band that Ladner proves is populated iff P≠NP, where parity sits at the
+exact NP∩coNP+quasi-poly coordinates from which primality and LP fell to P. Two walls mapped, the open question between
+them made precise — every claim tagged, both open cores untouched.

@@ -53,7 +53,7 @@ games (`1845`). Every theorem below is checked against it.
 | **I-E** | 0-player ∈ P (deterministic walk) — the player ladder base | **VERIFIED (III)** | `1857` |
 | **R-B** | the bounded-width **dominion family** is `Ω(n)`-incomplete (cannot be pushed to completeness) | **PROVEN (III)** | `1859` |
 | **R-C** | priority **compression** to bounded-`d` flips the winner (naive collapse) — a winner-preserving one = O1 | **PROVEN (III)** | `1858` |
-| **R-M** | parity ∈ **NP∩coNP**: a positional strategy is a poly-checkable witness *both ways* — intermediate, **not** NP-hard | **PROVEN (III)** | `1860` |
+| **R-M** | parity ∈ **NP∩coNP**: a positional strategy is a poly-checkable witness *both ways* — **not** NP-complete unless NP=coNP (placement in-P-vs-intermediate is OPEN) | **PROVEN (III)** | `1860` |
 | **D** | Class I (control-discarding) / Class II (control-preserving) dichotomy is exhaustive | **PROVEN-NEGATIVE for Class I** (T2) | §4 |
 | **O1** | **parity games ∈ P?** | **OPEN** | the wall |
 | **M1** | the canonical algebraic bridge to the PQ ring fails on **characteristic** (char 2 vs odd `ℤ_q`) | **OBSTRUCTED (canonical)** | `1851`,`1862` |
@@ -133,7 +133,7 @@ Full analysis in `III-PARITY-BROADER-REACH.md`, every claim tagged. The core:
   characteristic is load-bearing.)
 - **Structural hardness anatomy (THEOREM).** We can name *why* parity is hard (control/alternation, T2), *where* the
   cost hides in each reformulation (the numbers `1855`; the certificate degree `1847`; the tree size B1), and *what
-  class* it occupies (NP∩coNP-intermediate, `1860`).
+  bound* it sits under (∈ NP∩coNP — not NP-complete unless NP=coNP, `1860`).
 - The grand framings — "universal speed limit," "impassable canyon," "laws of hardness," "math is jagged" — are tagged
   **INTERPRETATION / SPECULATION**, sitting *on* the theorems, never *as* theorems.
 
@@ -141,11 +141,15 @@ Full analysis in `III-PARITY-BROADER-REACH.md`, every claim tagged. The core:
 
 ## 8. Cross-wall position — what this asset is, and how it extrapolates
 
-The parity wall is the **NP∩coNP-intermediate** archetype: positionally determined, control-essential,
-alternation-bounded, the canonical hard core of infinite games and of μ-calculus verification, sitting in the
-quasi-poly↔poly gap. It is *not* NP-complete (`1860`) — it is in the company of integer factoring and discrete log, the
-"low" intermediate band. This is precisely why it is a *better-understood* wall than P-vs-NP: it is hemmed in from both
-sides.
+The parity wall is **provably in NP∩coNP** (`1860`) — positionally determined, control-essential, alternation-bounded,
+the canonical hard core of infinite games and of μ-calculus verification, sitting in the quasi-poly↔poly gap. What this
+*proves* is narrow and exact: parity is *not* NP-complete unless NP=coNP — it cannot be the SAT-style complete top. What
+it does **not** settle is *where* parity sits — that placement is itself **OPEN** (advisor-audited: NP∩coNP membership
+does not establish Ladner-intermediacy; parity could be in P). Its NP∩coNP + quasi-poly profile matches *both* the
+still-open intermediates (integer factoring, discrete log) *and* the problems that **fell to P** from exactly this
+profile (primality → AKS 2002; linear programming → ellipsoid 1979) — a precedent that arguably favors eventual-P. This
+is precisely why parity is a *better-understood* wall than P-vs-NP, and a more interesting one: it is hemmed in from both
+sides, sitting at the coordinates where the dominoes have historically fallen.
 
 **The reusable method (the template every other wall inherits):** *(i)* build an oracle (a ground-truth decision
 procedure); *(ii)* prove the **islands** — the restricted regimes that are in P — as gated KATs == oracle; *(iii)* cite

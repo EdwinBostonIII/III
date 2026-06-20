@@ -1,8 +1,11 @@
 /* 1860_grail_np_conp_intermediacy.iii -- RESIDUAL-HOPE CLOSURE / REFRAME (avenue M): "maybe the wall is that parity is
  * secretly NP-hard / intractable."  NO -- it is the OPPOSITE situation, and that is the whole point.  Parity-game
  * winner determination is in NP intersect coNP (indeed UP intersect coUP, Jurdzinski 1998): a positional strategy is a
- * POLY-CHECKABLE witness for BOTH players.  So the problem is NOT NP-hard unless NP = coNP -- it sits in the rare
- * INTERMEDIATE band (like integer factoring and discrete log): not known in P, but very unlikely NP-complete.
+ * POLY-CHECKABLE witness for BOTH players.  So the problem is NOT NP-complete unless NP = coNP -- it cannot be the
+ * complete top.  WHERE it sits is itself OPEN (advisor-audited: NP-cap-coNP membership does NOT establish Ladner-
+ * intermediacy -- parity could be in P): its NP-cap-coNP + quasi-poly profile matches BOTH the still-open intermediates
+ * (factoring, discrete log) AND the problems that FELL to P from exactly this profile (primality -> AKS 2002; linear
+ * programming -> ellipsoid 1979) -- the precedent arguably favoring eventual-P.
  *
  * WHAT IS VERIFIED HERE (the witness is poly-checkable, via the verified one-player solver of 1850):
  *  - NP witness for W_even: a positional EVEN strategy sigma.  Fix Even to sigma; the restricted game has Even
@@ -14,9 +17,10 @@
  * in NP (sigma) AND in coNP (tau).
  *
  * WHAT THIS CLOSES (honest tag).  It refutes "the wall is NP-hardness": an NP-hardness explanation would put parity
- * ABOVE NP-intersect-coNP, contradicting the poly-checkable strategy witnesses verified here.  The wall is the
- * INTERMEDIATE status, not intractability.  (math-olympiad #4: NP-intersect-coNP membership says nothing about P vs the
- * problem -- it does NOT put parity in P; it only locates it in the complexity landscape.)
+ * ABOVE NP-intersect-coNP, contradicting the poly-checkable strategy witnesses verified here.  So the wall is NOT
+ * intractability -- it is NOT NP-complete (unless NP=coNP); whether parity is in P or Ladner-intermediate stays open.
+ * (math-olympiad #4: NP-intersect-coNP membership says nothing about P vs the problem -- it does NOT put parity in P;
+ * it only bounds it from ABOVE, ruling out the NP-complete top.)
  * exit 99 = for every sampled game, BOTH a poly-checkable Even-witness for W_even and Odd-witness for W_odd are found. */
 module mnpc
 var OWN : [u8; 16]

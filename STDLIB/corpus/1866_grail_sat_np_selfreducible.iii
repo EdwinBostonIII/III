@@ -12,9 +12,12 @@
  * it in poly time.  So its YES instances have short witnesses (assignments), but its NO instances (UNSAT) have NO known
  * short witness -- a poly UNSAT certificate would put SAT in coNP, hence NP = coNP.  This is ASYMMETRIC.  Parity, by
  * contrast, is in NP intersect coNP (1860): BOTH a YES and a NO instance carry a poly-checkable positional-strategy
- * witness.  Therefore parity sits STRICTLY LOWER in the landscape than SAT -- it is the intermediate band, not the
- * complete top.  This is the precise, structural reason the parity wall is more hemmed-in (and plausibly easier) than
- * the SAT / P-vs-NP wall: SAT is the hardest problem in NP; parity is not known to be hard for anything.
+ * witness.  Therefore parity is provably NOT the complete top (not NP-complete unless NP=coNP).  WHERE it sits, though,
+ * is itself OPEN (advisor-audited -- NP-cap-coNP membership does NOT establish Ladner-intermediacy; parity could be in
+ * P): its NP-cap-coNP + quasi-poly profile matches BOTH the still-open intermediates (factoring, discrete log) AND the
+ * problems that FELL to P from exactly this profile (primality -> AKS 2002; linear programming -> ellipsoid 1979) -- the
+ * precedent arguably favors eventual-P.  Either way SAT is the hardest problem in NP and parity is not known to be hard
+ * for anything: the structural reason the parity wall is more hemmed-in than the SAT / P-vs-NP wall.
  *
  * HONEST TAG (math-olympiad #4): self-reducibility and NP membership are classical facts; verifying them grounds the
  * SAT wall's structure.  They say NOTHING about P vs NP (NP membership + self-reducibility hold whether or not P=NP).

@@ -139,3 +139,52 @@ modules, `c53394df`). Zero regression from the 4 cuts + the 8,099-artifact untra
   collisions.
 Both characterized rather than hand-waved; fixing the MSYS2 env or the sibling-tool allowlist is out of the
 III source tree and awaits your direction.
+
+---
+
+## 8. The 0-consumer gray-zone — DECIDED & documented (advisor-directed; not default-KEEP)
+
+The advisor's correction (banked): for a 0-importer module, "it's correct / sophisticated / corpus-tested"
+is **information-free** — III's coverage ratchet *forces* a KAT to exist for every export, so "has a KAT"
+says nothing about whether it has a *role*. Undocumented default-KEEP is the dodge. So every 0-consumer
+candidate is forced to a decided bucket, by this rule: **CUT** = unwired one-off / superseded alternative,
+taken as a *matched* cut (module + its dedicated KATs) so no survivor loses coverage; **WITNESSED-KEEP** =
+a genuine reserve primitive a future caller reaches for, *role written*; **KEEP** = real current consumer or
+user-mandated. Torn → WITNESSED-KEEP *with the reason*. Entangled with a multi-purpose coverage KAT →
+WITNESSED-KEEP (cutting would shrink a *survivor's* coverage; not a clean cut).
+
+**CUT (executed, gated, reversible).**
+- `verba/intent_form` + `pattern_form` + `transform_form` (+ KATs 899/900/901/1031/1033), commit `e078f9a8` —
+  runtime surface-syntax parsers; headers self-describe as the pre-self-hosting workaround "instead of
+  extending the parser"; 0 consumers; superseded by the mature lex/parse/ast (+ babel/hip for structured
+  input). Matched cut; the shared two-stage / `>>60` overflow-guard *pattern* stays covered by http
+  Content-Length. Verified =99 (http/intent/hip/babel/charter); base intent/pattern/transform untouched.
+- Prior: the 10 wall-faculties + 10 gates (`65783306`); 4 speculative orphans `cost_lattice_unified`,
+  `hotstuff_heal`, `hotstuff_predict_opt`, `proof_ripple` (`ba98a74a`).
+
+**WITNESSED-KEEP (reserve, role written — kept *with intent*, not by default).**
+- Deployable crypto/coding, no current caller: `aes_gcm`/`aes_siv`, `ecdsa_p384`, `rsa`, `hkdf`, `pbkdf2`,
+  `keccak_sponge`, `zk_stark`/`zk_snark`/`zk_field`/`zk_stark_seal`, `rscode_ec`, `pq_quorum` — the
+  deployable-crypto reserve, wired the moment a protocol needs them.
+- Algorithm reserves: `beam_search`; the 10 numera wall-faculties (`parity_game` = III's only μ-calculus
+  solver; the others = wall-island reference implementations) — capability library, new-capability-on-demand.
+- `glyph_{i64,f64,set,vec,bytes,str}` — glyph-v3 per-type serialization family (the wired `glyph_u64`
+  anchors it); a complete-type-coverage serialization reserve, not redundant (each type differs).
+- Entangled (cutting reduces a *survivor's* gate/guard coverage): `cost_lattice_synth` (KAT 1433's `cls_admit`
+  arm), `hotstuff_predict` (KAT 1604's `hsp_init` underflow arm), `unified_cost_manifold`, `zk_prune`,
+  `tp_morphism`.
+- Verification/governance reserves: `duration_cert` (kernel-cert of duration's saturation constants),
+  `math_library_curation` (operator admission gate), `arena_slot_witness` (container-honesty proof).
+
+**KEEP (real consumer, or user-mandated).**
+- Wired: `proof_jit`→`typecheck`, `combinator`→`typecheck`, `onelang`→`h13_charter`,
+  `seal_resolver`→`resolution_init`, `proof_ripple_unified`→`ripple_loop`, `hotstuff_unified`→`hotstuff`,
+  plus `constitution_preserver`/`gate_verdict`/`witness_compactor` (governance/witness infra).
+- User-mandated KEEP: `aeu_kernel`, `egraph_hw_ematch` (PHASE3-WALLS silicon-lowering organs — the
+  KATABASIS/silicon frontier the user explicitly retains).
+- Entry points (0-importer by nature): `sovereign_optimizer`, `pq_dispatch`, the `*_cli` surfaces.
+
+**Net for this arc:** 17 source modules cut (10 faculties + 4 orphans + 3 `_form`) + their KATs; 8,099
+build artifacts untracked; self-model refreshed to **663** modules; reseal deterministic at each step. The
+gray zone is now *decided* — one more matched CUT executed, the reserves kept *with written intent*, the
+wired/silicon kept — rather than left as undocumented default-KEEP.

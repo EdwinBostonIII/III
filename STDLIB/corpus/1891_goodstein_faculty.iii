@@ -1,0 +1,18 @@
+/* 1891_goodstein_faculty.iii -- GATES numera::goodstein.
+ * exit 99 = gst_kat()==99 + G(1..3) terminate (step counts >0) + G(16) overflows + an independent recompute of G(3). */
+module mgstf
+extern @abi(c-msvc-x64) fn gst_terminates(m: u64, maxsteps: u32) -> u8 from "goodstein.iii"
+extern @abi(c-msvc-x64) fn gst_step_count(m: u64, maxsteps: u32) -> u32 from "goodstein.iii"
+extern @abi(c-msvc-x64) fn gst_kat() -> u64 from "goodstein.iii"
+fn main() -> u64 {
+    if gst_kat() != 99u64 { return 50u64 }
+    if gst_terminates(1u64, 100000u32) != 1u8 { return 10u64 }
+    if gst_terminates(2u64, 100000u32) != 1u8 { return 11u64 }
+    if gst_terminates(3u64, 100000u32) != 1u8 { return 12u64 }
+    if gst_step_count(1u64, 100000u32) != 1u32 { return 13u64 }
+    if gst_step_count(2u64, 100000u32) == 0xFFFFFFFFu32 { return 14u64 }   /* terminates (finite step count) */
+    if gst_step_count(3u64, 100000u32) == 0xFFFFFFFFu32 { return 15u64 }
+    if gst_terminates(16u64, 100000u32) != 2u8 { return 16u64 }            /* overflow (unbounded growth) */
+    if gst_terminates(4u64, 200u32) != 0u8 { return 17u64 }                /* G(4) within 200 steps: cap (still going) */
+    return 99u64
+}

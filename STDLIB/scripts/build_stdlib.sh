@@ -813,6 +813,7 @@ MODULES=(
     "numera/constructible"
     "numera/ramsey"
     "numera/comm_lb"
+    "numera/goodstein"
     "numera/bv_bits"
     # numera/invent -- the Generative Invention Loop: de-novo cost-directed law synthesis (value-sieve + SAT judge).
     "numera/invent"

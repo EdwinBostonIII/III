@@ -1,0 +1,101 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\goodstein.iii
+ *
+ * III STDLIB - numera::goodstein
+ *
+ * GOODSTEIN SEQUENCES (hereditary base-bump-and-subtract) with bounded termination.
+ *
+ * ROLE.  Compute the Goodstein sequence of m: start v=m at base b=2; each step rewrite v in HEREDITARY base b (every
+ * exponent also in hereditary base b), replace every b by b+1, then subtract 1; increment b.  Goodstein's theorem
+ * (1944): every such sequence reaches 0 -- but this is TRUE-yet-INDEPENDENT-of-Peano-Arithmetic (Kirby-Paris 1982), the
+ * earned INDEPENDENT core of the Goodstein wall (DOCS/III-INDEPENDENCE-WALL-FORMAL.md).  The values grow without bound
+ * (no fixed-width exhaustion settles the universal statement), so this faculty reports termination only within an
+ * explicit step budget and a u64 magnitude bound -- it makes the independence TANGIBLE: small starts terminate; a
+ * taller-tower start overflows u64 within a couple of steps.
+ *
+ * USE CASES.  Demonstrate / teach the hereditary-base representation and proof-theoretic independence; a reference
+ * ordinal-descent example.  (This is the wall's illustrative island, not a hot path.)
+ *
+ * INVOCATION.  gst_terminates(m, maxsteps) -> GST_REACHED (1) if it reaches 0 within maxsteps and u64, GST_OVERFLOW (2)
+ * if a value exceeds u64, GST_CAP (0) if maxsteps is hit first.  gst_step_count(m, maxsteps) -> the step index at which
+ * it reaches 0 (or 0xFFFFFFFF if it overflowed / hit the cap).
+ *
+ * IMPACTS / LIMITATIONS (honest).
+ *   - EXACT while values fit u64.  By design Goodstein values are UNBOUNDED -- G(4) stays within u64 for ~3e9 steps
+ *     (slow, quadratic in base), while G(16)=G(2^(2^2)) overflows in ~2 steps.  GST_OVERFLOW is not an error; it is the
+ *     computational shadow of the independence (the universal statement is unprovable in PA, uncheckable by exhaustion).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W1, W2, W14, W15.  (bump recursion: depth bounded by the hereditary-exponent chain, strictly decreasing.)
+ * Self-test: gst_kat() -> u64 returns 99 on full KAT pass.
+ */
+module goodstein
+
+const GST_REACHED : u8 = 1u8
+const GST_OVERFLOW : u8 = 2u8
+const GST_CAP : u8 = 0u8
+
+var GST_OVF : [u8; 1]
+
+fn gst_ipow_safe(base: u64, e: u64) -> u64 {
+    let mut r : u64 = 1u64  let mut i : u64 = 0u64  let max : u64 = 0xFFFFFFFFFFFFFFFFu64
+    while i < e {
+        if base != 0u64 { if r > max / base { GST_OVF[0u64] = 1u8  return 0u64 } }
+        r = r * base  i = i + 1u64
+    }
+    return r
+}
+/* bump(v,b): value of v in hereditary base b with b replaced by b+1 */
+fn gst_bump(v: u64, b: u64) -> u64 {
+    if v == 0u64 { return 0u64 }
+    let max : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut result : u64 = 0u64  let mut x : u64 = v  let mut i : u64 = 0u64
+    while x > 0u64 {
+        let c : u64 = x % b
+        if c > 0u64 {
+            let e : u64 = gst_bump(i, b)
+            if GST_OVF[0u64] == 1u8 { return 0u64 }
+            let p : u64 = gst_ipow_safe(b + 1u64, e)
+            if GST_OVF[0u64] == 1u8 { return 0u64 }
+            if p != 0u64 { if c > max / p { GST_OVF[0u64] = 1u8  return 0u64 } }
+            let term : u64 = c * p
+            if result > max - term { GST_OVF[0u64] = 1u8  return 0u64 }
+            result = result + term
+        }
+        x = x / b  i = i + 1u64
+    }
+    return result
+}
+fn gst_terminates(m: u64, maxsteps: u32) -> u8 @export {
+    let mut v : u64 = m  let mut b : u64 = 2u64  let mut steps : u32 = 0u32
+    while v != 0u64 {
+        if steps >= maxsteps { return GST_CAP }
+        GST_OVF[0u64] = 0u8
+        let nb : u64 = gst_bump(v, b)
+        if GST_OVF[0u64] == 1u8 { return GST_OVERFLOW }
+        v = nb - 1u64  b = b + 1u64  steps = steps + 1u32
+    }
+    return GST_REACHED
+}
+fn gst_step_count(m: u64, maxsteps: u32) -> u32 @export {
+    let mut v : u64 = m  let mut b : u64 = 2u64  let mut steps : u32 = 0u32
+    while v != 0u64 {
+        if steps >= maxsteps { return 0xFFFFFFFFu32 }
+        GST_OVF[0u64] = 0u8
+        let nb : u64 = gst_bump(v, b)
+        if GST_OVF[0u64] == 1u8 { return 0xFFFFFFFFu32 }
+        v = nb - 1u64  b = b + 1u64  steps = steps + 1u32
+    }
+    return steps
+}
+
+fn gst_kat() -> u64 @export {
+    /* small Goodstein sequences terminate */
+    if gst_terminates(1u64, 100000u32) != GST_REACHED { return 10u64 }
+    if gst_terminates(2u64, 100000u32) != GST_REACHED { return 11u64 }
+    if gst_terminates(3u64, 100000u32) != GST_REACHED { return 12u64 }
+    /* G(1) = 1 step (1 -> 0) */
+    if gst_step_count(1u64, 100000u32) != 1u32 { return 13u64 }
+    /* a taller-tower start, 16 = 2^(2^2), grows past u64 within a couple of steps (unbounded -> independence) */
+    if gst_terminates(16u64, 100000u32) != GST_OVERFLOW { return 14u64 }
+    return 99u64
+}

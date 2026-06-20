@@ -1,0 +1,97 @@
+/* 1902_event_substrate_parity.iii  --  the GENUINE wiring: omnia::event_substrate folds the plays of the
+ * real omnia::parity_game (Zielonka) solver and pronounces the parity ACCEPTANCE condition.
+ *
+ * Two organs, mutually consuming.  The solver (lifted verbatim from the proven grail 1839) computes the
+ * winning regions; the substrate folds the play those regions induce and folds its infinitary winner.
+ * The relationship is DETERMINACY, with its honest boundary:
+ *   - a play that STAYS in the winner's region  => substrate verdict == solver verdict   (agreement)
+ *   - a play that LEAVES the winning region      => substrate verdict can DIFFER          (control-blind)
+ * The second case is the grail finding made executable: cycle-priority-parity is not a game solver
+ * because it cannot see CONTROL.  The substrate reads a PLAY; the solver reads the GAME.
+ *
+ * Codes: 10-15 game A (the verified 1839 game + control-blindness); 20-23 game B (a 3-vertex cycle).
+ * exit 99 = the wiring holds.
+ */
+module m1902
+
+extern @abi(c-msvc-x64) fn pg_reset() -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_set_nv(n: u32) -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_set_vertex(v: u32, owner: u8, prio: u32, succ_mask: u32) -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_nv() -> u32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_pri(v: u32) -> u32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_own(v: u32) -> u8 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_full() -> u32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_zielonka(region: u32) -> u64 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_winner_at(v: u32) -> u32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_succ_in_region(v: u32, region: u32) -> u32 from "parity_game.iii"
+
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_detect_cycle() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_inf_winner() -> u64 from "event_substrate.iii"
+
+const MOVE : u64 = 0u64
+const PG_NULL : u32 = 0xFFFFFFFFu32
+
+/* fold the play that follows the winning-region strategy from `start`, return its infinitary winner.
+ * pg_succ_in_region keeps the play inside `region`; >n perceptions guarantee a lasso (pigeonhole). */
+fn fold_play(start: u32, region: u32) -> u32 {
+    evt_reset()
+    let n : u32 = pg_nv()
+    let mut v : u32 = start
+    let mut i : u32 = 0u32
+    while i <= n {
+        evt_perceive(pg_own(v) as u64, MOVE, pg_pri(v) as u64, v as u64)
+        let nxt : u32 = pg_succ_in_region(v, region)
+        if nxt == PG_NULL { i = n + 2u32 }
+        else { v = nxt  i = i + 1u32 }
+    }
+    evt_detect_cycle()
+    let w : u64 = evt_inf_winner()
+    return w as u32
+}
+
+fn main() -> u64 {
+    /* ===== GAME A: the verified 1839 game.  v0 Even prio2 ->{0,1}; v1 Odd prio1 ->{0,1}. ===== */
+    pg_reset()
+    pg_set_nv(2u32)
+    pg_set_vertex(0u32, 0u8, 2u32, 3u32)   /* v0: Even, prio 2, succ {v0,v1} */
+    pg_set_vertex(1u32, 1u8, 1u32, 3u32)   /* v1: Odd,  prio 1, succ {v0,v1} */
+    let r : u64 = pg_zielonka(pg_full())
+    if r != (1u64 | (2u64 << 32u64)) { return 10u64 }   /* Weven={v0}, Wodd={v1} -- solver is the real oracle */
+
+    /* DETERMINACY: the in-winning-region play's acceptance == the solver's verdict, for every vertex. */
+    let wev : u32 = (r & 0xFFFFFFFFu64) as u32          /* Weven region */
+    let wod : u32 = (r >> 32u64) as u32                 /* Wodd region  */
+    if fold_play(0u32, wev) != pg_winner_at(0u32) { return 11u64 }   /* from v0: play in Weven -> Even */
+    if fold_play(1u32, wod) != pg_winner_at(1u32) { return 12u64 }   /* from v1: play in Wodd  -> Odd  */
+
+    /* CONTROL-BLINDNESS: a LEGAL but suboptimal play from v1 that leaves Wodd (v1->v0->v0...) is read by
+     * the substrate as EVEN-accepting -- disagreeing with the game value (Odd) at v1.  The substrate sees
+     * the play; only the solver's recursion sees the control that makes v1 Odd's. */
+    evt_reset()
+    evt_perceive(1u64, MOVE, 1u64, 1u64)   /* v1 (the deviation: Odd leaves its region) */
+    evt_perceive(0u64, MOVE, 2u64, 0u64)   /* v0 */
+    evt_perceive(0u64, MOVE, 2u64, 0u64)   /* v0 -> closes the cycle [v0] */
+    evt_detect_cycle()
+    let wbad : u64 = evt_inf_winner()
+    if wbad != 0u64 { return 13u64 }                    /* the play's acceptance is Even */
+    if pg_winner_at(1u32) != 1u32 { return 14u64 }      /* but the game VALUE at v1 is Odd */
+    if (wbad as u32) == pg_winner_at(1u32) { return 15u64 }  /* they DIFFER: control-blindness, executed */
+
+    /* ===== GAME B: a 3-vertex forced cycle (a multi-vertex lasso).  All Even-owned. ===== */
+    pg_reset()
+    pg_set_nv(3u32)
+    pg_set_vertex(0u32, 0u8, 2u32, 2u32)   /* v0 prio2 -> {v1} */
+    pg_set_vertex(1u32, 0u8, 3u32, 4u32)   /* v1 prio3 -> {v2} */
+    pg_set_vertex(2u32, 0u8, 4u32, 1u32)   /* v2 prio4 -> {v0} */
+    let rb : u64 = pg_zielonka(pg_full())
+    if rb != (7u64 | (0u64 << 32u64)) { return 20u64 }  /* Weven = {v0,v1,v2}, Wodd = {} */
+    let wevb : u32 = (rb & 0xFFFFFFFFu64) as u32
+    /* the play cycles v0->v1->v2->v0; the recurring priorities are {2,3,4}, max 4 -> EVEN */
+    if fold_play(0u32, wevb) != 0u32 { return 21u64 }
+    if fold_play(0u32, wevb) != pg_winner_at(0u32) { return 22u64 }
+    if pg_winner_at(2u32) != 0u32 { return 23u64 }      /* every vertex is Even's */
+
+    return 99u64
+}

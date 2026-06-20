@@ -998,6 +998,12 @@ MODULES=(
     # magnitude x xii_hj dominance sign).  Appended last (BSS-neutral); externs
     # only the already-sealed xii_savings + xii_hj built above.
     "omnia/ripple_field"
+    # event_substrate: the TEMPORAL dual of ripple_field -- the EVENT is primary, STATE is a fold over the
+    # perceived-event history; finite + infinitary (parity-acceptance) folds.  parity_game: the proven
+    # recursive Zielonka solver (lifted from grail 1839) it cross-checks against (corpus 1902).  Both
+    # zero-extern, BSS-neutral, compiler-unreferenced (consumed by corpus 1900/1901/1902).
+    "omnia/event_substrate"
+    "omnia/parity_game"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

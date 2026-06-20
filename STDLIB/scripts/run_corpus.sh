@@ -43,6 +43,9 @@ fi
 echo "[run_corpus] iiis = $IIIS"
 
 declare -A EXPECTED=(
+    [1900_event_substrate_poc]=99
+    [1901_event_substrate_infinitary]=99
+    [1902_event_substrate_parity]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

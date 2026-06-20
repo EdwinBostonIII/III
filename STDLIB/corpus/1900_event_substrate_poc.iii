@@ -1,0 +1,192 @@
+/* 1900_event_substrate_poc.iii  --  PROOF OF CONCEPT: the inverted substrate.
+ *
+ * THE THESIS (from the Parity wall): what survived the assault on Parity was not a number and not a
+ * theorem -- it was a RELATIONSHIP IN VERB FORM.  A parity game's winner is decided by what RECURS in
+ * the OBSERVED history (the highest priority seen), never by any instantaneous value.  The act of
+ * perceiving one's own participation moves the outcome more than any theorem.
+ *
+ * So this POC INVERTS III's ripple.  In ripple_field.iii state is primary and the field is a derived
+ * side effect.  Here the EVENT is primary -- a (tick, observer, kind, priority) PERCEPTION appended to
+ * an immutable, monotonic history -- and STATE IS THE SIDE EFFECT: every "state" is a deterministic
+ * FOLD over a prefix of that history, never a stored cell.  Numbers are derivative; the verb-relation
+ * over the observed history is the substrate.
+ *
+ * NOT observational learning (Mandate 7): the folds are FIXED pure functions; there is no counting-to-
+ * adapt, no threshold, no policy.  "Observation changes the outcome" only because the observation
+ * BECOMES a recorded event that the fold replays -- deterministic, witnessed, reversible.  The logical
+ * tick is a monotonic counter (a wall clock would break determinism).
+ *
+ * Ring R0.  K 1.00 (pure functions of one append-only log).  NIH: libc only, zero externs -- a
+ * self-contained POC that compiles and RUNS standalone.  exit 99 = the thesis executed and asserted.
+ *
+ * Scenes (each a hard assertion with a distinct failure code):
+ *   1 (11-13) state is a pure re-derivable projection, and many states fold from one history
+ *   2 (21-23) time-travel: the winner is a function of observed-history-LENGTH, not a number (it flips)
+ *   3 (31-34) THE OBSERVANCE EFFECT: an OBSERVE with no MOVE flips the winner; moves-only is unchanged
+ *   4 (41-44) witnessed + reversible: same history => same root; a prefix re-derives the past exactly
+ */
+module m1900
+
+const EVT_CAP   : u32 = 256u32
+const K_MOVE    : u64 = 0u64   /* a play -- a behavioral act */
+const K_OBSERVE : u64 = 1u64   /* a perception of one's own participation -- NO behavioral act */
+
+/* The append-only history.  Module-scope arrays (W4: no fn-local var arrays). */
+var EVT_TICK     : [u64; 256]
+var EVT_OBSERVER : [u64; 256]
+var EVT_KIND     : [u64; 256]
+var EVT_PRIORITY : [u64; 256]
+var EVT_COUNT    : u32 = 0u32   /* length of history */
+var EVT_CLOCK    : u64 = 0u64   /* monotonic logical clock */
+
+/* ── the ONLY mutator: the world grows only by perceiving ───────────────
+ * There is NO set_state / set_winner anywhere.  perceive appends one event
+ * at the next monotonic tick and returns that tick (0 = log saturated). */
+fn ev_reset() -> i32 {
+    EVT_COUNT = 0u32
+    EVT_CLOCK = 0u64
+    return 0i32
+}
+
+fn perceive(observer: u64, kind: u64, priority: u64) -> u64 {
+    if EVT_COUNT >= EVT_CAP { return 0u64 }
+    let i : u32 = EVT_COUNT
+    let t : u64 = EVT_CLOCK + 1u64
+    EVT_TICK[i]     = t
+    EVT_OBSERVER[i] = observer
+    EVT_KIND[i]     = kind
+    EVT_PRIORITY[i] = priority
+    EVT_COUNT = i + 1u32
+    EVT_CLOCK = t
+    return t
+}
+
+/* ── PROJECTIONS: state as a fold over the first `upto` events ───────────
+ * proj_maxprio: the highest priority PERCEIVED so far (the parity carrier). */
+fn proj_maxprio(upto: u32) -> u64 {
+    let mut m : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            let p : u64 = EVT_PRIORITY[i]
+            if p > m { m = p }
+        }
+        i = i + 1u32
+    }
+    return m
+}
+
+/* the winner = parity of the max priority perceived.  0 = EVEN (player 0),
+ * 1 = ODD (player 1).  A FOLD over observed history -- not a stored value. */
+fn proj_winner(upto: u32) -> u64 {
+    let m : u64 = proj_maxprio(upto)
+    return m & 1u64
+}
+
+/* the SAME history, a DIFFERENT fold: highest priority among MOVE events only
+ * -- i.e. the outcome the actual PLAYS (behavior) would dictate, blind to any
+ * act of observance. */
+fn proj_maxprio_moves(upto: u32) -> u64 {
+    let mut m : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            if EVT_KIND[i] == K_MOVE {
+                let p : u64 = EVT_PRIORITY[i]
+                if p > m { m = p }
+            }
+        }
+        i = i + 1u32
+    }
+    return m
+}
+
+fn proj_winner_moves(upto: u32) -> u64 {
+    let m : u64 = proj_maxprio_moves(upto)
+    return m & 1u64
+}
+
+/* another fold over the same substrate: how many acts of observance occurred. */
+fn proj_observe_count(upto: u32) -> u64 {
+    let mut c : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            if EVT_KIND[i] == K_OBSERVE { c = c + 1u64 }
+        }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* ── the WITNESS: a content-addressed rolling hash over the prefix.  Same
+ * history => same root (replayable); a changed history => a changed root
+ * (observance leaves an indelible trace).  Multiply-add poly hash: pure
+ * `*` and `+`, both confirmed III operators, u64 wraps mod 2^64. */
+fn ev_mix(h: u64, x: u64) -> u64 {
+    let r : u64 = h * 1099511628211u64 + x
+    return r
+}
+
+fn proj_witness(upto: u32) -> u64 {
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            h = ev_mix(h, EVT_TICK[i])
+            h = ev_mix(h, EVT_OBSERVER[i])
+            h = ev_mix(h, EVT_KIND[i])
+            h = ev_mix(h, EVT_PRIORITY[i])
+        }
+        i = i + 1u32
+    }
+    return h
+}
+
+fn main() -> u64 {
+    /* ===== SCENE 1: state is a pure, re-derivable projection; many states, one history ===== */
+    ev_reset()
+    perceive(0u64, K_MOVE, 2u64)   /* t1: player 0 plays priority 2 */
+    perceive(1u64, K_MOVE, 3u64)   /* t2: player 1 plays priority 3 */
+    perceive(0u64, K_MOVE, 4u64)   /* t3: player 0 plays priority 4 */
+    if EVT_COUNT != 3u32 { return 11u64 }
+    if proj_maxprio(3u32) != 4u64 { return 12u64 }
+    /* re-derive twice: there is no stored winner -- it is folded fresh each call, identically */
+    let w_a : u64 = proj_winner(3u32)
+    let w_b : u64 = proj_winner(3u32)
+    if w_a != w_b { return 13u64 }
+    if w_a != 0u64 { return 13u64 }              /* max-seen 4 is even -> player 0 */
+    if proj_observe_count(3u32) != 0u64 { return 13u64 }  /* a different fold, same substrate */
+
+    /* ===== SCENE 2: time-travel -- the winner is a verb over history-LENGTH, not a number ===== */
+    if proj_winner(1u32) != 0u64 { return 21u64 }  /* max{2}=2 even  -> 0 */
+    if proj_winner(2u32) != 1u64 { return 22u64 }  /* max{2,3}=3 odd -> 1  (flip) */
+    if proj_winner(3u32) != 0u64 { return 23u64 }  /* max{2,3,4}=4 ev-> 0  (flip back) */
+
+    /* ===== SCENE 3: THE OBSERVANCE EFFECT -- perceive participation, do NOT move, win ===== */
+    /* player 1 makes NO play.  it merely PERCEIVES its own participation, and that perception
+     * carries an odd priority that becomes the new max-seen. */
+    perceive(1u64, K_OBSERVE, 5u64)   /* t4: an act of observance, not a move */
+    if proj_maxprio(4u32) != 5u64 { return 31u64 }
+    if proj_winner(4u32) != 1u64 { return 32u64 }            /* the full history now elects player 1 */
+    /* behavior (the moves) is UNCHANGED: folding moves-only still elects player 0 */
+    if proj_winner_moves(4u32) != 0u64 { return 33u64 }      /* moves say 0; observance made it 1 */
+    if proj_observe_count(4u32) != 1u64 { return 34u64 }     /* exactly one act of observance, recorded */
+
+    /* ===== SCENE 4: witnessed + reversible -- replay reproduces; a prefix re-derives the past ===== */
+    let w_full : u64 = proj_witness(4u32)
+    let w_pre  : u64 = proj_witness(3u32)
+    if w_full == w_pre { return 41u64 }          /* the act of observance changed the witnessed root */
+    /* replay the EXACT same 4 perceptions into a fresh log */
+    ev_reset()
+    perceive(0u64, K_MOVE, 2u64)
+    perceive(1u64, K_MOVE, 3u64)
+    perceive(0u64, K_MOVE, 4u64)
+    perceive(1u64, K_OBSERVE, 5u64)
+    if proj_witness(4u32) != w_full { return 42u64 }  /* same history => same witnessed root */
+    if proj_winner(4u32) != 1u64 { return 43u64 }     /* and the same elected outcome */
+    /* fold a PREFIX -> reconstruct the past state exactly (reversible time-travel) */
+    if proj_winner(3u32) != 0u64 { return 44u64 }
+
+    return 99u64
+}

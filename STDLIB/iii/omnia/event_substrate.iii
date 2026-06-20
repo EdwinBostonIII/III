@@ -1,0 +1,206 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\event_substrate.iii
+ *
+ * III STDLIB - omnia::event_substrate  --  the INVERTED substrate.
+ *
+ * Where ripple_field.iii is the SPATIAL dual (state primary, field a derived side effect over a graph),
+ * this is the TEMPORAL dual: the EVENT is primary -- a perceived (tick, observer, kind, priority,
+ * payload) appended to an immutable, monotonic history -- and STATE IS THE SIDE EFFECT: every state is a
+ * deterministic FOLD over a prefix of that history, never a stored cell.  The thesis from the Parity
+ * wall: the winner is a RELATIONSHIP IN VERB FORM over the observed history (what recurs), not a number.
+ *
+ * TWO regimes of fold:
+ *   FINITE   -- a fold over the first `upto` events (a finite prefix).  evt_maxprio / evt_winner.
+ *   INFINITARY -- the parity acceptance condition over an eventually-periodic stream (a LASSO = stem
+ *                 followed by an infinitely-repeated cycle).  Only the CYCLE recurs i.o., so the
+ *                 infinitary winner = parity of the highest priority IN THE CYCLE.  The stem (transients)
+ *                 drops out.  evt_inf_maxprio / evt_inf_winner over [cycle_start, count).
+ *
+ * The lasso is found, not assumed: evt_detect_cycle scans for the first PAYLOAD that recurs (a repeated
+ * game-position / a repeated rewrite-term) and sets the cycle to [first_occurrence, here).  One
+ * mechanism, two consumers: a parity-game PLAY (payload = position id -> the i.o. winner IS the parity
+ * acceptance condition) and a XII rewrite TRACE (payload = term hash -> a recurrence is a rewrite loop,
+ * its absence a termination witness).
+ *
+ * NOT observational learning (Mandate 7): every fold is a FIXED pure function of the log; no counting-to-
+ * adapt, no threshold, no policy.  "Observation changes the outcome" only because the observation BECOMES
+ * a recorded event the fold replays -- deterministic, witnessed (evt_witness), reversible (fold a prefix).
+ * The tick is a monotonic logical counter; a wall clock would break determinism.
+ *
+ * Hexad: kind_mobius (directional coherence over a temporal order, like ripple).  Ring R0.  K 1.00 (pure
+ * functions of one append-only log).  NIH: libc only, zero externs.
+ */
+module omnia_event_substrate
+
+const EVT_CAP      : u32 = 256u32
+const EVT_NOTFOUND : u32 = 0xFFFFFFFFu32
+const EVT_K_MOVE   : u64 = 0u64   /* a play / a behavioral act / a rewrite step */
+const EVT_K_OBSERVE: u64 = 1u64   /* a perception of participation -- NO behavioral act */
+
+/* The append-only history (module scope: W4 -- no fn-local var arrays). */
+var EVT_TICK     : [u64; 256]
+var EVT_OBSERVER : [u64; 256]
+var EVT_KIND     : [u64; 256]
+var EVT_PRIORITY : [u64; 256]
+var EVT_PAYLOAD  : [u64; 256]   /* general slot: position id (parity play) or term hash (XII trace) */
+var EVT_COUNT    : u32 = 0u32   /* history length */
+var EVT_CLOCK    : u64 = 0u64   /* monotonic logical clock */
+var EVT_CYCLE    : u32 = 0u32   /* cycle_start index: events [EVT_CYCLE, EVT_COUNT) recur infinitely */
+
+/* ── the ONLY mutator: the world grows only by perceiving ─────────────── */
+fn evt_reset() -> i32 @export {
+    EVT_COUNT = 0u32
+    EVT_CLOCK = 0u64
+    EVT_CYCLE = 0u32
+    return 0i32
+}
+
+fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 @export {
+    if EVT_COUNT >= EVT_CAP { return 0u64 }
+    let i : u32 = EVT_COUNT
+    let t : u64 = EVT_CLOCK + 1u64
+    EVT_TICK[i]     = t
+    EVT_OBSERVER[i] = observer
+    EVT_KIND[i]     = kind
+    EVT_PRIORITY[i] = priority
+    EVT_PAYLOAD[i]  = payload
+    EVT_COUNT = i + 1u32
+    EVT_CLOCK = t
+    return t
+}
+
+fn evt_count() -> u32 @export { return EVT_COUNT }
+
+/* ── FINITE folds over the first `upto` events ────────────────────────── */
+fn evt_maxprio(upto: u32) -> u64 @export {
+    let mut m : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            let p : u64 = EVT_PRIORITY[i]
+            if p > m { m = p }
+        }
+        i = i + 1u32
+    }
+    return m
+}
+
+fn evt_winner(upto: u32) -> u64 @export {
+    let m : u64 = evt_maxprio(upto)
+    return m & 1u64
+}
+
+/* the moves-only fold: the outcome the behavioral PLAYS dictate, blind to observance. */
+fn evt_maxprio_moves(upto: u32) -> u64 @export {
+    let mut m : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            if EVT_KIND[i] == EVT_K_MOVE {
+                let p : u64 = EVT_PRIORITY[i]
+                if p > m { m = p }
+            }
+        }
+        i = i + 1u32
+    }
+    return m
+}
+
+fn evt_winner_moves(upto: u32) -> u64 @export {
+    let m : u64 = evt_maxprio_moves(upto)
+    return m & 1u64
+}
+
+fn evt_observe_count(upto: u32) -> u64 @export {
+    let mut c : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            if EVT_KIND[i] == EVT_K_OBSERVE { c = c + 1u64 }
+        }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* ── the WITNESS: content-addressed multiply-add rolling hash over a prefix.
+ * Same history => same root (replayable); a changed history => a changed root
+ * (observance leaves an indelible trace). */
+fn evt_mix(h: u64, x: u64) -> u64 @export {
+    let r : u64 = h * 1099511628211u64 + x
+    return r
+}
+
+fn evt_witness(upto: u32) -> u64 @export {
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            h = evt_mix(h, EVT_TICK[i])
+            h = evt_mix(h, EVT_OBSERVER[i])
+            h = evt_mix(h, EVT_KIND[i])
+            h = evt_mix(h, EVT_PRIORITY[i])
+            h = evt_mix(h, EVT_PAYLOAD[i])
+        }
+        i = i + 1u32
+    }
+    return h
+}
+
+/* ── LASSO / INFINITARY: the parity acceptance condition over a recurring stream ──
+ * evt_find_payload: first index in [0, upto) whose payload == value, else EVT_NOTFOUND. */
+fn evt_find_payload(value: u64, upto: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < upto {
+        if i < EVT_COUNT {
+            if EVT_PAYLOAD[i] == value { return i }
+        }
+        i = i + 1u32
+    }
+    return EVT_NOTFOUND
+}
+
+/* evt_detect_cycle: find the FIRST payload that recurs -- a repeated position/term -- and set the cycle to
+ * [first_occurrence, here).  Returns the cycle LENGTH (here - first_occurrence), or 0 if no payload
+ * recurs in the whole history (a finite/terminating stream -- the honest negative).  This is the lasso
+ * detector: the stream is stem . cycle^omega. */
+fn evt_detect_cycle() -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < EVT_COUNT {
+        let pv : u64 = EVT_PAYLOAD[i]
+        let j : u32 = evt_find_payload(pv, i)
+        if j != EVT_NOTFOUND {
+            EVT_CYCLE = j
+            return i - j
+        }
+        i = i + 1u32
+    }
+    EVT_CYCLE = EVT_COUNT
+    return 0u32
+}
+
+/* evt_mark_cycle: set the cycle_start explicitly (for a producer that already KNOWS the periodicity). */
+fn evt_mark_cycle(idx: u32) -> i32 @export {
+    EVT_CYCLE = idx
+    return 0i32
+}
+
+fn evt_cycle_start() -> u32 @export { return EVT_CYCLE }
+
+/* the highest priority that recurs INFINITELY OFTEN = max over the cycle [EVT_CYCLE, EVT_COUNT). */
+fn evt_inf_maxprio() -> u64 @export {
+    let mut m : u64 = 0u64
+    let mut i : u32 = EVT_CYCLE
+    while i < EVT_COUNT {
+        let p : u64 = EVT_PRIORITY[i]
+        if p > m { m = p }
+        i = i + 1u32
+    }
+    return m
+}
+
+/* the infinitary winner = the PARITY of the highest priority seen infinitely often.
+ * 0 = EVEN (player 0), 1 = ODD (player 1).  This IS the parity-game acceptance condition. */
+fn evt_inf_winner() -> u64 @export {
+    let m : u64 = evt_inf_maxprio()
+    return m & 1u64
+}

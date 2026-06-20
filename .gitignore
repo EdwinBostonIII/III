@@ -9,6 +9,8 @@ __pycache__/
 STDLIB/build/**/*.log
 STDLIB/build/**/*.exe
 STDLIB/build/**/*.iii.o.s
+STDLIB/build/**/*.o.s
+STDLIB/build/**/*.clog
 STDLIB/build/**/*.lerr
 STDLIB/build/**/*.lderr
 STDLIB/build/**/*.err

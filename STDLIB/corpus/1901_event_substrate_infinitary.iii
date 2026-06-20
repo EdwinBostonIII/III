@@ -1,0 +1,99 @@
+/* 1901_event_substrate_infinitary.iii  --  omnia::event_substrate, the INFINITARY fold.
+ *
+ * Deepens the 1900 POC from "max seen SO FAR" (finite) to the true parity acceptance condition over an
+ * eventually-periodic stream (a LASSO = stem . cycle^omega): the winner = parity of the highest priority
+ * that recurs INFINITELY OFTEN = max over the CYCLE only.  The stem (transients) drops out.
+ *
+ * Scenes (distinct failure codes; exit 99 = all hold):
+ *   A (11-13) TRANSIENT-DROP: stem [6] cycle [5,4] -> finite winner EVEN(0), infinitary winner ODD(1).
+ *             They MUST differ -- this is the proof the infinitary fold is not the finite fold relabeled.
+ *   B (21-24) OBSERVANCE POSITION DECIDES: the same odd OBSERVE flips inf_winner when it lands IN the
+ *             cycle, and does NOT when it lands in the stem.  Recurrence, not mere observance.
+ *   C (31-34) THE PARITY ACCEPTANCE CONDITION: a witnessed play that revisits a position is a lasso;
+ *             evt_detect_cycle finds it and inf_winner IS the game's winner.
+ *   D (41-43) witnessed + reversible: the revisit changes the root; replay reproduces; re-detect re-derives.
+ */
+module m1901
+
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_maxprio(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_winner(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_observe_count(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_detect_cycle() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_mark_cycle(idx: u32) -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_cycle_start() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_inf_maxprio() -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_inf_winner() -> u64 from "event_substrate.iii"
+
+const MOVE    : u64 = 0u64
+const OBSERVE : u64 = 1u64
+
+fn main() -> u64 {
+    /* ===== SCENE A: TRANSIENT-DROP -- infinitary is NOT finite relabeled ===== */
+    evt_reset()
+    evt_perceive(0u64, MOVE, 6u64, 0u64)   /* stem: priority 6 (even) -- a one-time transient */
+    evt_perceive(0u64, MOVE, 5u64, 0u64)   /* cycle e1: 5 (odd) */
+    evt_perceive(0u64, MOVE, 4u64, 0u64)   /* cycle e2: 4 (even) */
+    evt_mark_cycle(1u32)                    /* the cycle is events [1,3) = {5,4} */
+    if evt_count() != 3u32 { return 11u64 }
+    /* finite fold sees the transient 6 -> max 6 -> EVEN -> player 0 */
+    if evt_maxprio(3u32) != 6u64 { return 12u64 }
+    let wf : u64 = evt_winner(3u32)
+    if wf != 0u64 { return 12u64 }
+    /* infinitary fold sees only the recurring cycle -> max 5 -> ODD -> player 1 */
+    if evt_inf_maxprio() != 5u64 { return 13u64 }
+    let wi : u64 = evt_inf_winner()
+    if wi != 1u64 { return 13u64 }
+    if wf == wi { return 13u64 }           /* THE TEETH: finite and infinitary MUST differ here */
+
+    /* ===== SCENE B: OBSERVANCE POSITION DECIDES ===== */
+    /* positive arm: an odd OBSERVE placed INTO the cycle flips the infinitary winner */
+    evt_reset()
+    evt_perceive(0u64, MOVE, 2u64, 0u64)    /* cycle e0: 2 even */
+    evt_perceive(0u64, MOVE, 4u64, 0u64)    /* cycle e1: 4 even */
+    evt_mark_cycle(0u32)                     /* the whole stream is the cycle */
+    if evt_inf_winner() != 0u64 { return 21u64 }   /* base: max{2,4}=4 even -> 0 */
+    evt_perceive(1u64, OBSERVE, 5u64, 0u64) /* cycle e2: an act of observance, odd 5 -- recurs forever */
+    if evt_inf_maxprio() != 5u64 { return 22u64 }
+    if evt_inf_winner() != 1u64 { return 22u64 }   /* FLIP: observance inside the recurrence decided it */
+    /* negative arm: the SAME odd OBSERVE placed in the STEM does NOT flip it */
+    evt_reset()
+    evt_perceive(1u64, OBSERVE, 5u64, 0u64) /* STEM e0: the same odd-5 observance, but transient */
+    evt_perceive(0u64, MOVE, 2u64, 0u64)    /* cycle e1: 2 even */
+    evt_perceive(0u64, MOVE, 4u64, 0u64)    /* cycle e2: 4 even */
+    evt_mark_cycle(1u32)                     /* cycle = [1,3) = {2,4} */
+    if evt_maxprio(3u32) != 5u64 { return 23u64 }  /* the observance IS in the history (finite sees 5) */
+    if evt_inf_winner() != 0u64 { return 24u64 }   /* but it does NOT recur -> inf winner unmoved (even) */
+    if evt_observe_count(3u32) != 1u64 { return 24u64 }
+
+    /* ===== SCENE C: a witnessed PLAY is a lasso; inf_winner IS the parity acceptance condition ===== */
+    evt_reset()
+    evt_perceive(0u64, MOVE, 2u64, 100u64)  /* e0: position 100, priority 2 */
+    evt_perceive(0u64, MOVE, 3u64, 200u64)  /* e1: position 200, priority 3 */
+    evt_perceive(1u64, MOVE, 4u64, 300u64)  /* e2: position 300, priority 4 */
+    evt_perceive(0u64, MOVE, 3u64, 200u64)  /* e3: REVISITS position 200 -> the play closes a loop */
+    let clen : u32 = evt_detect_cycle()
+    if clen != 2u32 { return 31u64 }              /* cycle = [1,3): positions 200,300 */
+    if evt_cycle_start() != 1u32 { return 32u64 }
+    if evt_inf_maxprio() != 4u64 { return 33u64 }  /* priorities recurring i.o. = {3,4}, max 4 */
+    if evt_inf_winner() != 0u64 { return 34u64 }   /* even -> player 0 wins the play */
+
+    /* ===== SCENE D: witnessed + reversible ===== */
+    let w4 : u64 = evt_witness(4u32)
+    let w3 : u64 = evt_witness(3u32)
+    if w4 == w3 { return 41u64 }                   /* the revisit changed the witnessed root */
+    evt_reset()
+    evt_perceive(0u64, MOVE, 2u64, 100u64)
+    evt_perceive(0u64, MOVE, 3u64, 200u64)
+    evt_perceive(1u64, MOVE, 4u64, 300u64)
+    evt_perceive(0u64, MOVE, 3u64, 200u64)
+    if evt_witness(4u32) != w4 { return 42u64 }     /* same history => same root */
+    let clen2 : u32 = evt_detect_cycle()
+    if clen2 != 2u32 { return 43u64 }              /* re-detect the same lasso from the replay */
+    if evt_inf_winner() != 0u64 { return 43u64 }
+
+    return 99u64
+}

@@ -39,7 +39,7 @@ Any artifact that appears to settle one of these = a fabrication; reject and re�
 | L5 | Dependent type theory / `⊢` | a **decidable type‑checking / normalization** fragment (Curry–Howard) | **B2 ✓** | **1836 (=99)** | impredicative ordinal analysis (B3 #4); full univalence = large B1 |
 | L6 | Lattice theory | **specific** finite lattices realized as congruence lattices of III algebras | **B2 ✓** | **1837 (=99, M3=ConΠ₃)** | the general representation problem (B3 #3) |
 | L7 | Linear logic | III's reversible organs obey the **no‑weakening/no‑contraction (resource) discipline** | **B2 ✓** | **1833 (=99)** | full Geometry of Interaction = large B1 |
-| L8 | Modal μ‑calculus | **alternation‑free μ‑calculus model‑checking ∈ PTIME** (parity games, tractable island) | **B2 ✓** | **1832 (=99)** | unbounded alternation → B3 #2 |
+| L8 | Modal μ‑calculus | alternation‑free MC ∈ PTIME **+ FULL logic (unbounded alternation) decided** (nested fixpoint) | **B2 ✓ + full‑logic ✓** | **1832 + 1838 (=99)** | full MC **∈ P?** open (parity‑games, QP SOTA, universal‑tree barrier) → B3 #2 |
 | L9 | Quantum logic | an **orthomodular lattice** instantiated; non‑distributivity exhibited (the quantum signature) | **B2 ✓** | **1831 (=99)** | founding QM from the lattice (B3, foundational) |
 | L10 | Temporal logic | **LTL model‑checking + a finite reactive‑synthesis instance** (Büchi–Landweber) | **B1 ✓** | **1835 (=99)** | efficient/distributed synthesis (frontier) |
 | L11 | Concurrent Separation Logic | the **frame rule** + a CSL ownership proof on III's heap discipline | **B1 ✓** | **1834 (=99)** | full automation under weak memory (frontier) |

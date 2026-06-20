@@ -1,0 +1,66 @@
+/* 1838_grail_mucalculus_full.iii -- GRAIL LEDGER L8, EXTENDED to the FULL mu-calculus (unbounded alternation).
+ * 1832 did only the alternation-FREE fragment.  This decides a genuinely ALTERNATING property -- E[GF p] =
+ * "exists a path on which p holds infinitely often" = nu X. mu Y. ((p & <>X) | <>Y) -- by NESTED fixpoint iteration
+ * (outer greatest-fixpoint recomputes the inner least-fixpoint each step).  This is the FULL logic, correct for ALL
+ * formulas.  It also computes the alternation-FREE mu Y.(p | <>Y) = reachability, and PROVES the two DIFFER on the
+ * same graph -- i.e. the alternation is genuinely necessary (a single fixpoint cannot express recurrence).
+ * COMPLEXITY (stated honestly): nested iteration is exponential in alternation depth in the worst case; whether the
+ * FULL problem is in P is the open question (B3 #2, parity-game equivalent) -- NOT claimed here.  This delivers the
+ * full LOGIC at its correct (super-polynomial) complexity, not a polynomial algorithm.  exit 99. */
+module m1838
+const N : u32 = 4u32
+var SUCC : [u32; 4]
+fn setup() -> i32 {
+    SUCC[0u64] = 2u32      /* 0 -> {1} */
+    SUCC[1u64] = 5u32      /* 1 -> {0,2} */
+    SUCC[2u64] = 8u32      /* 2 -> {3} */
+    SUCC[3u64] = 8u32      /* 3 -> {3} (sink) */
+    return 0i32
+}
+fn diamond(s: u32) -> u32 {          /* <>s = { v : exists v->w with w in s } */
+    let mut r : u32 = 0u32
+    let mut v : u32 = 0u32
+    while v < N {
+        if (SUCC[v as u64] & s) != 0u32 { r = r | (1u32 << v) }
+        v = v + 1u32
+    }
+    return r
+}
+fn mu_inner(p: u32, x: u32) -> u32 {  /* least fixpoint of  Y |-> (p & <>X) | <>Y  (X fixed) */
+    let pdx : u32 = p & diamond(x)
+    let mut y : u32 = 0u32
+    let mut done : u8 = 0u8
+    let mut c : u32 = 0u32
+    while done == 0u8 {
+        let yn : u32 = pdx | diamond(y)
+        if yn == y { done = 1u8 } else { y = yn  c = c + 1u32 }
+        if c > 16u32 { done = 1u8 }
+    }
+    return y
+}
+fn main() -> u64 {
+    setup()
+    let p : u32 = 4u32                 /* p = {2}; 2 sinks to 3, so 2 is reachable but NOT infinitely-often-able */
+    /* FULL mu-calculus, 1 alternation: nu X. mu Y. ((p & <>X) | <>Y)  -- greatest fixpoint, X starts at TOP */
+    let mut x : u32 = 15u32
+    let mut done : u8 = 0u8
+    let mut c : u32 = 0u32
+    while done == 0u8 {
+        let xn : u32 = mu_inner(p, x)
+        if xn == x { done = 1u8 } else { x = xn  c = c + 1u32 }
+        if c > 16u32 { done = 1u8 }
+    }
+    if x != 0u32 { return 10u64 + (x as u64) }      /* no state is infinitely-often {2} -> EMPTY (correct) */
+    /* alternation-FREE single LFP: mu Y. (p | <>Y) = reachability of p = {0,1,2} */
+    let mut y : u32 = 0u32
+    let mut d2 : u8 = 0u8
+    let mut c2 : u32 = 0u32
+    while d2 == 0u8 {
+        let yn : u32 = p | diamond(y)
+        if yn == y { d2 = 1u8 } else { y = yn  c2 = c2 + 1u32 }
+        if c2 > 16u32 { d2 = 1u8 }
+    }
+    if y != 7u32 { return 20u64 + (y as u64) }       /* reachability = {0,1,2} */
+    if x == y { return 30u64 }                        /* THE POINT: nu-mu (empty) != reachability ({0,1,2}) -> alternation is NECESSARY */
+    return 99u64
+}

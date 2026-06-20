@@ -1,0 +1,56 @@
+/* 1851_grail_metagrail_obstruction.iii -- FORMALLY DEFINING THE WALL, theorem M1 (the proven-NEGATIVE summit).
+ *
+ * THEOREM (Meta-Grail Obstruction).  There is NO structure-preserving unifying invariant across III's lattice logics
+ * (whose 2-valued/Boolean face is a ring of CHARACTERISTIC 2 -- the Stone "Boolean ring", x+x=0) and the post-quantum
+ * ring Z_q with q = 3329 (ML-KEM's modulus, a prime field of CHARACTERISTIC 3329).  The "single key across ALL of
+ * III's logics including PQ" is provably EMPTY.  Two independent obstructions, both verified here by direct
+ * computation in Z_3329:
+ *
+ *  (A) CHARACTERISTIC obstruction.  Any unital ring homomorphism phi : R -> Z_3329 from a char-2 ring R forces
+ *      0 = phi(1+1) = phi(1)+phi(1) = 1+1 = 2 in Z_3329.  But 2 != 0 in Z_3329 (and gcd(2,3329)=1: the characteristics
+ *      are coprime, 3329 prime).  Contradiction => NO such phi.  The Boolean-ring face does not embed in / map to Z_q.
+ *
+ *  (B) IDEMPOTENCY obstruction.  A lattice's join is idempotent: a OR a = a for EVERY a.  A semiring/ring map sending
+ *      OR |-> + would need a+a = a for every a; in Z_3329 the additive idempotents {a : 2a = a} = {a : a = 0} = {0}
+ *      ALONE.  So the join's universal idempotency collapses under any (+)-map -- no lattice->ring hom on (OR,+).
+ *
+ * SIGNIFICANCE.  This is the summit of the whole edifice and it is a PROVEN BOUNDARY, not an open question: the De
+ * Morgan completion genuinely unifies the LATTICE logics (weave/Voice/logic6, KAT 1826), but PQ sits structurally
+ * OUTSIDE that unification.  The boundary IS the result.  (The weave still SIMULATES Z_q as circuits -- simulation,
+ * not a unifying invariant.)
+ * exit 99 = both obstructions verified by computation in Z_3329 (q=3329 prime; 2 != 0; coprime; sole additive idempotent 0). */
+module mmgo
+const Q : u32 = 3329u32
+
+fn gcd(a: u32, b: u32) -> u32 { let mut x : u32 = a  let mut y : u32 = b
+    while y != 0u32 { let t : u32 = x % y  x = y  y = t }  return x }
+fn is_prime(n: u32) -> u8 {
+    if n < 2u32 { return 0u8 }
+    let mut d : u32 = 2u32
+    while d * d <= n { if (n % d) == 0u32 { return 0u8 }  d = d + 1u32 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* q = 3329 is a prime field (characteristic 3329) */
+    if is_prime(Q) != 1u8 { return 10u64 }
+
+    /* (A) CHARACTERISTIC obstruction: 1+1 = 2 in Z_q, and 2 != 0 -> no char-2 -> Z_q unital ring hom */
+    let two : u32 = (1u32 + 1u32) % Q
+    if two == 0u32 { return 11u64 }                 /* if 2 were 0 in Z_q a char-2 hom could exist; it is not */
+    if gcd(2u32, Q) != 1u32 { return 12u64 }        /* characteristics are coprime (2 vs 3329) */
+
+    /* (B) IDEMPOTENCY obstruction: additive idempotents of Z_q (2a = a) are exactly {0} */
+    let mut idem : u32 = 0u32  let mut a : u32 = 0u32
+    while a < Q {
+        if ((2u32 * a) % Q) == a { idem = idem + 1u32 }
+        a = a + 1u32
+    }
+    if idem != 1u32 { return 13u64 }                /* only a=0 is an additive idempotent -> OR's universal a OR a = a collapses */
+
+    /* sanity that the join IS idempotent on the Boolean side (the structure we cannot preserve): a|a == a for a in {0,1} */
+    if (0u32 | 0u32) != 0u32 { return 14u64 }
+    if (1u32 | 1u32) != 1u32 { return 15u64 }
+
+    return 99u64
+}

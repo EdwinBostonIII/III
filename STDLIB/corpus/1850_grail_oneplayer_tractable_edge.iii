@@ -1,0 +1,117 @@
+/* 1850_grail_oneplayer_tractable_edge.iii -- FORMALLY DEFINING THE WALL, theorem 3 (the tractable EDGE, VERIFIED).
+ *
+ * THEOREM (One-Player Tractability -- locating the wall precisely).  A ONE-PLAYER parity game (every vertex owned by
+ * the same player alpha) is solved in POLYNOMIAL time, EXACTLY, by reachability:
+ *     alpha wins v  <=>  v can reach a cycle whose maximum priority has parity alpha.
+ * (Compute: REACH-to-an-alpha-cycle = backward-reachability of {vertices on a cycle whose max priority is alpha}.)
+ * Hence the boundary between EASY and OPEN is exactly the step from ONE to TWO players: the wall IS the alternation.
+ *
+ * SIGNIFICANCE.  This pins the wall's location.  One player (solitaire) is trivially polynomial and we verify the
+ * exact formula here; with TWO alternating players the same "reach an alpha-cycle" question becomes "EXISTS a strategy
+ * forcing it", which is the open problem (O1).  The one-player solver is also the R_E / R_A of the sound sandwich
+ * (1846): the wall is the gap between the two one-player relaxations.
+ *
+ * VERIFICATION.  Over many random games made ALL-EVEN (one player = Even) and ALL-ODD (one player = Odd), with the
+ * verified Zielonka oracle (1839): assert the reach-to-alpha-cycle region equals the oracle's winning region EXACTLY.
+ * exit 99 = the one-player formula is exact on every all-Even and all-Odd game sampled. */
+module mope
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
+var NV : [u32; 1]
+var RNG : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+
+/* ---- Zielonka oracle (1839) ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+/* ---- the polynomial one-player solver: reach an alpha-cycle ---- */
+fn reach_from(start: u32, within: u32) -> u32 {
+    let n : u32 = nv()  let mut R : u32 = start & within  let mut done : u8 = 0u8
+    while done == 0u8 { let mut add : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if (R & (1u32 << v)) != 0u32 { add = add | (SUC0[v as u64] & within) }  v = v + 1u32 }
+        let nr : u32 = R | add  if nr == R { done = 1u8 } else { R = nr } }
+    return R
+}
+fn backreach(target: u32) -> u32 {
+    let n : u32 = nv()  let mut B : u32 = target  let mut done : u8 = 0u8
+    while done == 0u8 { let mut add : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if (B & (1u32 << v)) == 0u32 { if (SUC0[v as u64] & B) != 0u32 { add = add | (1u32 << v) } }  v = v + 1u32 }
+        let nb : u32 = B | add  if nb == B { done = 1u8 } else { B = nb } }
+    return B
+}
+fn reach_alpha_cycle(alpha: u32) -> u32 {
+    let n : u32 = nv()  let d : u32 = max_prio(fullmask())  let mut res : u32 = 0u32
+    let mut p : u32 = d  let mut going : u8 = 1u8
+    while going == 1u8 {
+        if (p & 1u32) == alpha {
+            let mut s : u32 = 0u32  let mut v : u32 = 0u32
+            while v < n { if PRI[v as u64] <= p { s = s | (1u32 << v) }  v = v + 1u32 }   /* subgraph of priorities <= p */
+            let mut u : u32 = 0u32
+            while u < n { if PRI[u as u64] == p { let rr : u32 = reach_from(SUC0[u as u64] & s, s)  if (rr & (1u32 << u)) != 0u32 { res = res | (1u32 << u) } }  u = u + 1u32 } }   /* u on a cycle within {<=p} => an alpha-max cycle */
+        if p == 0u32 { going = 0u8 } else { p = p - 1u32 } }
+    return backreach(res)
+}
+fn gen_oneplayer(n: u32, owner: u8) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = owner  PRI[v as u64] = rnd() % n
+        let mut s : u32 = 0u32  let kk : u32 = 1u32 + (rnd() % 3u32)  let mut j : u32 = 0u32
+        while j < kk { s = s | (1u32 << (rnd() % n))  j = j + 1u32 }
+        if s == 0u32 { s = 1u32 << ((v + 1u32) % n) }
+        SUC0[v as u64] = s  v = v + 1u32 }
+    return 0i32
+}
+fn oracle_even() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())
+    return (r & 0xFFFFFFFFu64) as u32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x1ED6Eu32
+    let mut t : u32 = 0u32
+    while t < 3000u32 {
+        let n : u32 = 4u32 + (rnd() % 5u32)            /* n in 4..8 */
+        /* ALL-EVEN one-player game: Even wins exactly reach-to-even-cycle */
+        gen_oneplayer(n, 0u8)
+        let we : u32 = oracle_even()
+        let pred_e : u32 = reach_alpha_cycle(0u32)
+        if we != pred_e { return 10u64 }
+        /* ALL-ODD one-player game: Odd wins exactly reach-to-odd-cycle; Even wins the complement */
+        gen_oneplayer(n, 1u8)
+        let we2 : u32 = oracle_even()
+        let odd_pred : u32 = reach_alpha_cycle(1u32)
+        let even_pred : u32 = fullmask() & (odd_pred ^ 0xFFFFFFFFu32)
+        if we2 != even_pred { return 11u64 }
+        t = t + 1u32
+    }
+    return 99u64
+}

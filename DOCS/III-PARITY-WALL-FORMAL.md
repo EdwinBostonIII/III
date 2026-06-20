@@ -144,6 +144,7 @@ universal-tree family **provably** unable to reach P (B1).
 | T0 | Determinacy (W₀,W₁ partition V) | **VERIFIED (III)** + CITED | `1849` |
 | T1 | Positional determinacy (single σ wins W₀) | **VERIFIED (III)** + CITED | `1849` |
 | T2 | Control-blindness barrier (no graph invariant decides parity) | **PROVEN (III)** | `1848` |
+| T3 | One-player parity ∈ P, exactly (reach-to-α-cycle) — the wall = the 1→2-player step | **VERIFIED (III)** | `1850` |
 | C1 | Three solver families agree | **VERIFIED (III)** | `1845` |
 | C2 | Relaxation-sandwich soundness | **VERIFIED (III)** | `1846` |
 | C3 | Algebraic (Nullstellensatz/GF(3)) encoding correct | **VERIFIED (III)** | `1847` |
@@ -152,7 +153,7 @@ universal-tree family **provably** unable to reach P (B1).
 | B3 | parity ∈ UP∩coUP | CITED | Jurdziński 1998 |
 | D | Class I / Class II dichotomy | **PROVEN-NEGATIVE for Class I** (T2) | §4 |
 | O1 | parity games in P? | **OPEN** | the wall |
-| M1 | single invariant incl. PQ ring | **OBSTRUCTED** | `1826`, §6 |
+| M1 | single invariant incl. PQ ring (char 2 vs 3329, idempotency) | **OBSTRUCTED** | `1851`, `1826` |
 
 **The honest one-line summary.** The "door" the field sees is one **wall** with many equivalent faces (§5); its
 two known faces are *proven* unclimbable for whole method families (B1, B2); its shape is the **control/alternation**

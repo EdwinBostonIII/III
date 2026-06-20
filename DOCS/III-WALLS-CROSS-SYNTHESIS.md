@@ -15,6 +15,7 @@ The five walls and their canonical documents:
 - **Primality / factoring** — `III-PRIMALITY-FACTORING-WALL-FORMAL.md` (KATs 1875–1876)
 - **Communication complexity** — `III-COMMCOMPLEXITY-WALL-FORMAL.md` (KAT 1877)
 - **Ramsey theory** — `III-RAMSEY-WALL-FORMAL.md` (KAT 1878)
+- **Constructibility (Galois)** — `III-CONSTRUCTIBILITY-WALL-FORMAL.md` (KAT 1879)
 
 ---
 
@@ -106,9 +107,18 @@ Some walls *rhyme*. These are analogies across tagged complexity-profile facts; 
 - **The graph-invariant blind-spot motif.** Parity's control-blindness (`1848`, no `(V,E,pr)`-invariant decides parity)
   and GI's 1-WL incompleteness (`1871`, no color histogram decides GI) are the *same shape of obstruction* — an
   invariant collapsing exactly the distinction that matters — in two different theories. Analogy, gated on both ends.
-- **OPEN vs OBSTRUCTED is a real divide.** Confluence's core is *proven* undecidable; the other four are *open*. The
+- **OPEN vs OBSTRUCTED is a real divide.** Confluence's core is *proven* undecidable; the others' cores split (§2). The
   lesson a problem-mapper takes: first ask which kind of core you face — it changes whether "residual hopes" can be
   *closed* (OPEN-core: maybe; OBSTRUCTED-core: the impossibility is the closure).
+- **Resolution IS finding the right invariant (the program's deepest cross-wall reading — observation, tagged).** The
+  constructibility wall (`1879`) *fell* the moment Wantzel found the invariant — field degree `=2^k` — that exactly
+  captures constructibility; one-player parity *fell* to the sign-of-cycle-mean invariant (`1850`). The OPEN walls stay
+  open partly because their *cheap* invariants are **proven not to** capture the essential quantity: parity's
+  control-blindness (`1848`) and GI's 1-WL incompleteness (`1871`) are exactly such *negative* results. So those
+  negative results are not merely obstacles — read against a *resolved* wall they **measure how far each open wall's
+  resolving invariant must reach**: the cheap analogue that closed geometry has no counterpart that works (yet) for
+  control or for higher-order structure. The program's many negative results become one positive map: of the distance
+  between the invariants we have and the invariants each open wall needs.
 
 ---
 
@@ -136,6 +146,7 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 | Primality/factoring | factoring ∈ classical P? | OPEN — local placement, **quantum-cracked** (Shor) | sub-exp (NFS) | primality ∈ P (fell); factoring NP/self-reducible | 1875–1876 |
 | Communication complexity | log-rank conjecture | **CLIMBED** (D(EQ)=n+1 proven) + open face | — | EQ fooling-set proven lower bound | 1877 |
 | Ramsey theory | R(5,5), … | OPEN — open-by-explosion (combinatorics) | — | `R(3,3)=6` by exhaustion | 1878 |
+| Constructibility | classical constructions | **SETTLED** — resolved-negative (Wantzel) | — | cube/trisection impossible (deg 3≠2^k) | 1879 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

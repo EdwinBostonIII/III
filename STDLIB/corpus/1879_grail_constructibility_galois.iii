@@ -1,0 +1,59 @@
+/* 1879_grail_constructibility_galois.iii -- THE CONSTRUCTIBILITY WALL (classical geometry / Galois theory): two
+ * millennia-old problems RESOLVED-NEGATIVE by an algebraic invariant.  (Ninth wall; a new intellectual tradition --
+ * impossibility proved not by undecidability or a lower bound, but by a FIELD-DEGREE invariant.)
+ *
+ * THE INVARIANT (CITED: Wantzel 1837).  A real number constructible by straightedge and compass lies in a tower of
+ * quadratic extensions of Q, so its degree [Q(alpha):Q] over the rationals is a POWER OF 2.  Contrapositive: if a
+ * number's minimal polynomial over Q has degree NOT a power of 2, it is NOT constructible.  This single invariant
+ * settled problems open since antiquity.
+ *
+ * TWO PROVEN IMPOSSIBILITIES (verified here by exact integer arithmetic):
+ *  - DOUBLING THE CUBE needs 2^(1/3), a root of x^3 - 2.  By the rational-root theorem the only candidates are
+ *    p/q with p | 2, q | 1; none is a root (1,-1,8,-8 are never 2), so x^3-2 is irreducible over Q and
+ *    [Q(2^(1/3)):Q] = 3.  Since 3 is not a power of 2, 2^(1/3) is NOT constructible -- the cube cannot be doubled.
+ *  - TRISECTING 60 degrees needs cos(20 deg), a root of 8x^3 - 6x - 1 (from cos(3t)=4cos^3 t-3cos t with cos60=1/2).
+ *    Candidates p/q have p | 1, q | 8; testing 8p^3 - 6p q^2 - q^3 for all shows none is a root, so the cubic is
+ *    irreducible and [Q(cos20):Q] = 3 -- not a power of 2 -- so 20 degrees is NOT constructible: 60 cannot be trisected.
+ * (Squaring the circle is also impossible -- pi is transcendental, Lindemann 1882, CITED; and Gauss-Wantzel: a regular
+ *  n-gon is constructible iff the odd part of n is a product of distinct Fermat primes.)
+ *
+ * HONEST TAG (math-olympiad #4): these impossibilities are THEOREMS (Wantzel); verifying the degree-3 irreducibility by
+ * exact rational-root tests grounds the algebraic invariant that resolves the classical questions.
+ * exit 99 = both cubics have no rational root (=> degree 3, irreducible) and 3 is not a power of 2 (=> not constructible). */
+module mconstr
+
+fn is_pow2(d: u64) -> u8 { if d == 0u64 { return 0u8 }  if (d & (d - 1u64)) == 0u64 { return 1u8 }  return 0u8 }
+
+fn main() -> u64 {
+    /* (1) x^3 - 2 : rational roots p/q in lowest terms need p|2, q|1, so q=1, p in {1,-1,2,-2}.  Test p^3 == 2. */
+    /* use signed evaluation via i64 */
+    let mut found1 : u8 = 0u8
+    /* p = 1,2 and their negatives; evaluate p^3 - 2 (q=1) */
+    if (1i64 * 1i64 * 1i64 - 2i64) == 0i64 { found1 = 1u8 }
+    if ((0i64 - 1i64) * (0i64 - 1i64) * (0i64 - 1i64) - 2i64) == 0i64 { found1 = 1u8 }
+    if (2i64 * 2i64 * 2i64 - 2i64) == 0i64 { found1 = 1u8 }
+    if ((0i64 - 2i64) * (0i64 - 2i64) * (0i64 - 2i64) - 2i64) == 0i64 { found1 = 1u8 }
+    if found1 != 0u8 { return 10u64 }                  /* x^3-2 must have NO rational root */
+
+    /* (2) 8x^3 - 6x - 1 : x=p/q, p|1, q|8.  Homogenize: 8 p^3 - 6 p q^2 - q^3 == 0 ?  p in {1,-1}, q in {1,2,4,8}. */
+    let mut found2 : u8 = 0u8
+    let mut qi : u32 = 0u32
+    while qi < 4u32 {
+        let mut q : i64 = 1i64
+        if qi == 1u32 { q = 2i64 }  if qi == 2u32 { q = 4i64 }  if qi == 3u32 { q = 8i64 }
+        let pp : i64 = 1i64
+        let v1 : i64 = 8i64 * pp * pp * pp - 6i64 * pp * q * q - q * q * q
+        if v1 == 0i64 { found2 = 1u8 }
+        let pm : i64 = 0i64 - 1i64
+        let v2 : i64 = 8i64 * pm * pm * pm - 6i64 * pm * q * q - q * q * q
+        if v2 == 0i64 { found2 = 1u8 }
+        qi = qi + 1u32
+    }
+    if found2 != 0u8 { return 11u64 }                  /* 8x^3-6x-1 must have NO rational root */
+
+    /* both irreducible cubics => degree 3 over Q; 3 is not a power of 2 => not constructible */
+    if is_pow2(3u64) != 0u8 { return 12u64 }           /* sanity: 3 is NOT a power of 2 */
+    if is_pow2(2u64) != 1u8 { return 13u64 }           /* sanity: 2 IS (a bisection / sqrt is constructible) */
+    if is_pow2(4u64) != 1u8 { return 14u64 }
+    return 99u64
+}

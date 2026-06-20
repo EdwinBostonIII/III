@@ -808,6 +808,7 @@ MODULES=(
     "numera/sat_tractable"
     "numera/confluence"
     "numera/graph_refine"
+    "numera/diophantine"
     "numera/bv_bits"
     # numera/invent -- the Generative Invention Loop: de-novo cost-directed law synthesis (value-sieve + SAT judge).
     "numera/invent"

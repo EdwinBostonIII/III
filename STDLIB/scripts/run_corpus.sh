@@ -715,7 +715,6 @@ declare -A EXPECTED=(
     [1009_proof_ripple_unified]=99
     [1010_pareto_frontier]=99
     [1011_hotstuff_pacemaker]=99
-    [1013_cost_manifold]=99
     [1014_hdl_gate_identities]=99
     [1016_proof_resolve]=99
     [1017_hdl_optimize]=99

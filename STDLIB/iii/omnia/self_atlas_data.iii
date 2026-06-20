@@ -7,7 +7,7 @@
  * the lens signals computed at generation time as satlas_data_expect_*(); corpus 1669
  * asserts the in-III lens reproduces them exactly (renderer pinned to the authority).
  *
- * 660 nodes, 1323 edges.  Regenerate: python STDLIB/scripts/gen_self_atlas.py
+ * 659 nodes, 1323 edges.  Regenerate: python STDLIB/scripts/gen_self_atlas.py
  *
  * Hexad: kind_essence (a faithful self-image).  Ring: R0.  K: 1.00.  NIH: self_atlas only.
  * Discipline: W2 (<=4 params), W13 (0 locals), W14/W15 (straight-line calls, no loops). */
@@ -603,7 +603,6 @@ fn satlas_data_nodes_2() -> i32 {
     satlas_intern("typecheck", 9u64)
     satlas_intern("ulid", 4u64)
     satlas_intern("uncertainty", 11u64)
-    satlas_intern("unified_cost_manifold", 21u64)
     satlas_intern("unify", 5u64)
     satlas_intern("uri", 3u64)
     satlas_intern("uuid", 4u64)
@@ -2052,14 +2051,14 @@ fn satlas_data_load() -> i32 @export {
     return 0i32
 }
 
-fn satlas_data_node_count() -> u32 @export { return 660u32 }
+fn satlas_data_node_count() -> u32 @export { return 659u32 }
 fn satlas_data_edge_count() -> u32 @export { return 1323u32 }
 
 /* Lens signals computed at generation time -- corpus 1669 pins the in-III lens to these. */
-fn satlas_data_expect_coupling()      -> u32 @export { return 2004u32 }
-fn satlas_data_expect_orphans()       -> u32 @export { return 79u32 }
-fn satlas_data_expect_roots()         -> u32 @export { return 285u32 }
-fn satlas_data_expect_leaves()        -> u32 @export { return 169u32 }
+fn satlas_data_expect_coupling()      -> u32 @export { return 2007u32 }
+fn satlas_data_expect_orphans()       -> u32 @export { return 78u32 }
+fn satlas_data_expect_roots()         -> u32 @export { return 284u32 }
+fn satlas_data_expect_leaves()        -> u32 @export { return 168u32 }
 fn satlas_data_expect_cycle_nodes()   -> u32 @export { return 7u32 }
 fn satlas_data_expect_redundant()     -> u32 @export { return 461u32 }
 fn satlas_data_expect_max_fanin()     -> u32 @export { return 68u32 }

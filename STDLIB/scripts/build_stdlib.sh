@@ -862,7 +862,6 @@ MODULES=(
     # APOTHEOSIS C.8: the closed-form cost manifold -- uc_formula_latency = critical-path DP (latency
     # queryable DURING e-graph saturation, not just at extraction) + the 6-D vector assembly the
     # pareto frontier + ripple J consult. Compiler-unreferenced -> LIBNATIVE.
-    "numera/unified_cost_manifold"
     # APOTHEOSIS C.14: the mechanistic provable cycle bound -- derives a fast path's bound from the
     # C.8 cost manifold (critical path = analytic lower bound); a path slower than bound+margin is a
     # PROVABLE regression, not advisory. Composes unified_cost_manifold. Compiler-unreferenced -> LIBNATIVE.

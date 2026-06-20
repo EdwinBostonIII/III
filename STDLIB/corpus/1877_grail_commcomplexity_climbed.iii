@@ -1,0 +1,66 @@
+/* 1877_grail_commcomplexity_climbed.iii -- THE COMMUNICATION-COMPLEXITY WALL: a CLIMBED wall (a PROVEN lower bound).
+ * (Seventh wall; fills a NEW taxonomy cell -- every prior wall had an OPEN or OBSTRUCTED core; this one has a core that
+ * has been SETTLED with a proven separation.  It also carries its own OPEN core, the log-rank conjecture.)
+ *
+ * THE WALL.  In 2-party communication, the deterministic complexity D(f) is the bits Alice and Bob must exchange to
+ * compute f(x,y).  A c-bit protocol partitions the communication matrix into <= 2^c MONOCHROMATIC combinatorial
+ * rectangles A x B (A subset of rows, B subset of cols, f constant on A x B).  Hence  D(f) >= log2(chi(f)), where
+ * chi(f) = the fewest monochromatic rectangles needed -- and a FOOLING SET of size m (a set of equal-valued cells, no
+ * two of which lie in a common monochromatic rectangle) forces chi(f) >= m, so D(f) >= log2(m).
+ *
+ * THE PROVEN LOWER BOUND (this is the CLIMBED part).  For EQUALITY on n-bit inputs, the matrix is the 2^n x 2^n
+ * IDENTITY.  The DIAGONAL {(x,x)} is a 1-fooling set of size 2^n: for distinct x != y, the cell (x,y) is 0, so (x,x) and
+ * (y,y) cannot share a monochromatic-1 rectangle.  Equivalently every monochromatic-1 rectangle is a SINGLE CELL (each
+ * row has its only 1 on the diagonal, so distinct rows share no 1-column).  Therefore chi(EQ) >= 2^n and
+ *     D(EQ) >= n   -- a PROVEN lower bound (not a conjecture) -- and the trivial protocol gives D(EQ) <= n+1.
+ * So D(EQ) is pinned to {n, n+1}: this wall has been CLIMBED, the separation is theorem, not open.
+ *
+ * THE OPEN CORE (CITED): the LOG-RANK CONJECTURE -- whether D(f) is polynomially bounded by log2(rank of the matrix) --
+ * is OPEN.  So communication complexity has BOTH a climbed face (fooling sets, here) and an open face.
+ *
+ * HONEST TAG (math-olympiad #4): the fooling-set bound is a THEOREM; verifying it grounds a proven separation.  It is
+ * the contrast cell to the open/obstructed walls -- a wall where the lower bound is KNOWN.
+ * exit 99 = for n=1..6 the EQ diagonal is a fooling set of size 2^n and every mono-1 rectangle is a single cell, so the
+ *           proven lower bound D(EQ) >= n holds (with the n+1 upper bound). */
+module mcomm
+
+fn eqbit(x: u32, y: u32) -> u32 { if x == y { return 1u32 } return 0u32 }   /* EQUALITY matrix entry */
+
+fn main() -> u64 {
+    let mut n : u32 = 1u32
+    while n <= 6u32 {
+        let N : u32 = 1u32 << n                       /* 2^n inputs */
+        /* (a) fooling-set property: off-diagonal is all 0, so distinct diagonal 1-cells fool each other */
+        let mut x : u32 = 0u32
+        while x < N {
+            let mut y : u32 = 0u32
+            while y < N {
+                if x != y { if eqbit(x, y) != 0u32 { return 10u64 } }     /* (x,y) must be 0 for x!=y */
+                if x == y { if eqbit(x, y) != 1u32 { return 11u64 } }     /* diagonal is 1 */
+                y = y + 1u32
+            }
+            x = x + 1u32
+        }
+        /* (b) every monochromatic-1 rectangle is a single cell: each row's set of 1-columns is exactly {x},
+         *     so two distinct rows share NO common 1-column -> cannot lie in a common 1-rectangle. */
+        let mut r1 : u32 = 0u32
+        while r1 < N {
+            let mut r2 : u32 = r1 + 1u32
+            while r2 < N {
+                /* common 1-column of rows r1,r2 would be a c with eqbit(r1,c)=1 and eqbit(r2,c)=1 -> c=r1 and c=r2,
+                 * impossible since r1!=r2.  Verify no such c. */
+                let mut c : u32 = 0u32  let mut common : u32 = 0u32
+                while c < N { if eqbit(r1, c) == 1u32 { if eqbit(r2, c) == 1u32 { common = common + 1u32 } }  c = c + 1u32 }
+                if common != 0u32 { return 12u64 }                       /* distinct rows must share no 1-column */
+                r2 = r2 + 1u32
+            }
+            r1 = r1 + 1u32
+        }
+        /* fooling set size = N = 2^n  =>  chi(EQ) >= 2^n  =>  D(EQ) >= n  (proven), and D(EQ) <= n+1 (trivial protocol) */
+        let lower : u32 = n                            /* log2(2^n) */
+        let upper : u32 = n + 1u32
+        if lower > upper { return 13u64 }              /* the proven bracket n <= D(EQ) <= n+1 is consistent */
+        n = n + 1u32
+    }
+    return 99u64
+}

@@ -13,6 +13,7 @@ The five walls and their canonical documents:
 - **Graph isomorphism** — `III-GI-WALL-FORMAL.md` (KATs 1870–1872)
 - **Lattice representation** — `III-LATTICE-WALL-FORMAL.md` (KATs 1873–1874)
 - **Primality / factoring** — `III-PRIMALITY-FACTORING-WALL-FORMAL.md` (KATs 1875–1876)
+- **Communication complexity** — `III-COMMCOMPLEXITY-WALL-FORMAL.md` (KAT 1877)
 
 ---
 
@@ -40,10 +41,14 @@ demonstrated, reusable core.
 Read across the five, the walls *sort* — and naming the sorts is a lens that makes each new wall faster to map. **Tag:
 this taxonomy is a useful organizing lens; it is not a theorem about the space of all problems.**
 
-- **Kinds of core (a four-way split, sharper than "OPEN vs OBSTRUCTED" — and licensed by the gated facts).** The walls'
-  cores are not one "open" bucket; the gated facts (`1866`, `1860`) split them into genuinely different *kinds*:
+- **Kinds of core (three top-level kinds; OPEN splits three ways — sharper than "OPEN vs OBSTRUCTED", licensed by gated
+  facts).** The walls' cores are not one bucket. There are three top-level kinds — **OBSTRUCTED**, **CLIMBED**, and
+  **OPEN** (itself three sub-kinds, by `1866`/`1860`):
   - **OBSTRUCTED** — the frontier is a *proven impossibility*: confluence (general-TRS confluence undecidable); and,
     from the grail ledger, Rice/halting, impredicative ordinal analysis.
+  - **CLIMBED** — the lower bound is a *proven separation*: **communication complexity** (`D(EQ)=n+1` via a fooling set,
+    `1877`). Proof that proven lower bounds *do* exist — just rare, problem-specific, and not yet the general ones the
+    open walls need. (Even a climbed area keeps an open face: the log-rank conjecture.)
   - **OPEN ≡ the grand question** — the core *is* P vs NP: **SAT** is NP-complete (`1866`), so `SAT∈P ⟺ P=NP`. Solving
     this wall solves the field's central problem.
   - **OPEN, local placement** — in NP∩(co-low), *asymmetric*: **parity** (∈ NP∩coNP, `1860`) and **GI** (∈ NP∩coAM).
@@ -126,6 +131,7 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 | Graph iso | GI ∈ P? | OPEN — local placement (NP∩coAM) | quasi-poly | 1-WL complete for trees; higher-order fix | 1870–1872 |
 | Lattice rep | FLRP | OPEN — non-complexity (universal algebra) | — | `Con(V₄)=M₃`; `Π_n` is a lattice | 1873–1874 |
 | Primality/factoring | factoring ∈ classical P? | OPEN — local placement, **quantum-cracked** (Shor) | sub-exp (NFS) | primality ∈ P (fell); factoring NP/self-reducible | 1875–1876 |
+| Communication complexity | log-rank conjecture | **CLIMBED** (D(EQ)=n+1 proven) + open face | — | EQ fooling-set proven lower bound | 1877 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

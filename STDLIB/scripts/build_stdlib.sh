@@ -1004,6 +1004,11 @@ MODULES=(
     # zero-extern, BSS-neutral, compiler-unreferenced (consumed by corpus 1900/1901/1902).
     "omnia/event_substrate"
     "omnia/parity_game"
+    # exec_cert: the witnessed EXECUTION CERTIFICATE -- fold a real III transform into a reproducible,
+    # tamper-evident cad-sha256 certificate, INCREMENTALLY (streaming, O(1)/event, frozen prefix in the
+    # hash state -- the bounded-regard fold).  Consumed by corpus 1908 (real xii_canonicalise cert) +
+    # 1910 (the grail/wall verb-geometry web).  Zero-extern beyond sha256; BSS-neutral.
+    "omnia/exec_cert"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

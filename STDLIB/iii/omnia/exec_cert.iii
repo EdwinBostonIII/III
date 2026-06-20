@@ -1,0 +1,59 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\exec_cert.iii
+ *
+ * III STDLIB - omnia::exec_cert  --  the witnessed EXECUTION CERTIFICATE: fold a real III transformation
+ * into a reproducible, tamper-evident cryptographic certificate, INCREMENTALLY.
+ *
+ * This is the production form of the inverse-substrate fold, with two honest gaps from the dome demos
+ * closed:
+ *   - REAL crypto: the witness is III's streaming sha256 (numera/sha256), not an FNV multiply-add.
+ *   - BOUNDED REGARD (the P3 gap): the fold is INCREMENTAL.  Each event is one sha256_update_byte --
+ *     O(1) amortised; the frozen prefix lives in the 256-bit hash STATE and is never rescanned.  Building
+ *     a certificate over N events is O(N) total, O(1) per event, with O(32) memo.  No soc_active_max-style
+ *     whole-log rescan.  "Stubborn determinism at bounded fluid cost" is true here BY CONSTRUCTION.
+ *
+ * A certificate over the SAME byte stream is bit-identical (determinism); any single perturbed event
+ * changes the digest (real collision-resistant assurance).  The caller folds a real execution by emitting
+ * its events (xc_event_*) -- e.g. a real xii_canonicalise or a real egraph saturation (corpus 1908/1909).
+ *
+ * Single in-flight certificate (the sha256 context is global).  Ring R0.  K 1.00.  NIH: libc + sha256.
+ */
+module omnia_exec_cert
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
+
+var XC_LEN : u64 = 0u64        /* events folded so far (the only memo beyond the 32-byte hash state) */
+
+/* begin a certificate: reset the streaming hash. */
+fn xc_begin() -> i32 @export {
+    sha256_init()
+    XC_LEN = 0u64
+    return 0i32
+}
+
+/* fold one byte-event -- O(1) amortised; the frozen prefix stays in the hash state. */
+fn xc_event_byte(b: u32) -> i32 @export {
+    sha256_update_byte(b & 0xFFu32)
+    XC_LEN = XC_LEN + 1u64
+    return 0i32
+}
+
+/* fold one u32 event (little-endian) -- four O(1) updates. */
+fn xc_event_u32(v: u32) -> i32 @export {
+    sha256_update_byte(v & 0xFFu32)
+    sha256_update_byte((v >> 8u32) & 0xFFu32)
+    sha256_update_byte((v >> 16u32) & 0xFFu32)
+    sha256_update_byte((v >> 24u32) & 0xFFu32)
+    XC_LEN = XC_LEN + 4u64
+    return 0i32
+}
+
+/* how many bytes the certificate has folded. */
+fn xc_len() -> u64 @export { return XC_LEN }
+
+/* seal: finalise the streaming hash into a 32-byte certificate digest. */
+fn xc_seal(out32: *u8) -> i32 @export {
+    sha256_final(out32)
+    return 0i32
+}

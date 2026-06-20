@@ -1,0 +1,135 @@
+/* 1910_grail_logic_web.iii  --  PATH-FORWARD step 2 (expanded): the inverse substrate run through the
+ * GRAIL/WALL architecture, uniting the eleven walls into ONE witnessed verb-geometry web -- expressed in
+ * VERBS (what blocks/rhymes/falsifies) and GEOMETRY (the OPEN/OBSTRUCTED/CLOSED/INDEPENDENT taxonomy),
+ * NOT in numerical complexity values.  Grounded in DOCS/III-WALLS-CROSS-SYNTHESIS.md §6 (the cross-wall
+ * ledger) -- this ENCODES the unification the grail program proved, re-expresses it in verb-geometry, and
+ * WITNESSES it cryptographically.  It does not re-prove the walls; it folds their documented structure.
+ *
+ * The web is folded through the REAL omnia::exec_cert (streaming sha256) -> a reproducible, tamper-evident
+ * certificate of the unified architecture.  Calibrated (per the doc): the taxonomy is a LENS, the parallels
+ * are ANALOGIES -- the certificate commits to that structure, it does not assert it is a theorem.
+ *
+ * Invariants checked (the unification, made cogent):
+ *   - UNIVERSAL SHAPE: every wall has a boundary (precondition != 0) -- the repetition IS the result (§2).
+ *   - GEOMETRY: the eleven cores partition OPEN=6 / OBSTRUCTED=2 / CLOSED=2 / INDEPENDENT=1 (§6 table).
+ *   - WITNESS: the web certificate is deterministic (re-fold identical) and tamper-evident (real sha256).
+ * codes 11 shape / 12-15 taxonomy counts / 16 determinism / 17 tamper.  exit 99 = the web is cogent + sealed.
+ */
+module m1910
+
+extern @abi(c-msvc-x64) fn xc_begin() -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_event_u32(v: u32) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_seal(out32: *u8) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+/* core-kind = the GEOMETRY (vertical placement) */
+const K_OPEN        : u32 = 0u32
+const K_OBSTRUCTED  : u32 = 1u32
+const K_CLOSED      : u32 = 2u32
+const K_INDEPENDENT : u32 = 3u32
+
+/* precondition = the wall-specific boundary VERB-NOUN (the essential quantity, §3) */
+const P_CONTROL : u32 = 1u32   /* parity */
+const P_CLAUSE  : u32 = 2u32   /* SAT */
+const P_TERM    : u32 = 3u32   /* confluence */
+const P_DEPTH   : u32 = 4u32   /* GI */
+const P_FINITE  : u32 = 5u32   /* lattice */
+const P_PERIOD  : u32 = 6u32   /* factoring (quantum) */
+const P_PROOF   : u32 = 7u32   /* comm complexity */
+const P_CONSTR  : u32 = 8u32   /* ramsey */
+const P_DEGREE  : u32 = 9u32   /* constructibility */
+const P_ORDINAL : u32 = 10u32  /* goodstein */
+const P_DECIDE  : u32 = 11u32  /* diophantine */
+
+/* cross-wall VERBS (the analogy edges, §4) */
+const V_RHYMES         : u32 = 100u32
+const V_SHARES_BLIND   : u32 = 101u32
+const V_FALSIFIES_BND  : u32 = 102u32
+const V_FALSIFIES_ORC  : u32 = 103u32
+
+const NW : u32 = 11u32
+var WALL_CORE : [u32; 11]
+var WALL_PRE  : [u32; 11]
+
+fn set_wall(i: u32, core: u32, pre: u32) -> i32 {
+    WALL_CORE[i] = core
+    WALL_PRE[i]  = pre
+    return 0i32
+}
+
+/* fold the whole web (nodes + verb-edges) into a certificate; tamper one wall's core if tw < NW. */
+fn fold_web(tw: u32, out: *u8) -> i32 {
+    xc_begin()
+    let mut i : u32 = 0u32
+    while i < NW {
+        let mut core : u32 = WALL_CORE[i]
+        if i == tw { core = core + 1u32 }          /* the perturbation */
+        xc_event_u32(i)                            /* node id */
+        xc_event_u32(core)                         /* geometry */
+        xc_event_u32(WALL_PRE[i])                  /* boundary verb */
+        i = i + 1u32
+    }
+    /* the cross-wall verb-edges (§4 analogies) -- src, verb, dst */
+    xc_event_u32(0u32)  xc_event_u32(V_RHYMES)        xc_event_u32(3u32)   /* parity rhymes-with GI */
+    xc_event_u32(0u32)  xc_event_u32(V_SHARES_BLIND)  xc_event_u32(3u32)   /* parity blind-spot ∥ GI 1-WL */
+    xc_event_u32(9u32)  xc_event_u32(V_FALSIFIES_BND) xc_event_u32(99u32)  /* goodstein falsifies BOUNDARY */
+    xc_event_u32(10u32) xc_event_u32(V_FALSIFIES_ORC) xc_event_u32(99u32)  /* diophantine falsifies ORACLE */
+    xc_seal(out)
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* the eleven walls, from III-WALLS-CROSS-SYNTHESIS.md §6 (grounded, not invented) */
+    set_wall(0u32,  K_OPEN,        P_CONTROL)   /* parity / mu-calculus */
+    set_wall(1u32,  K_OPEN,        P_CLAUSE)    /* SAT / P-vs-NP */
+    set_wall(2u32,  K_OBSTRUCTED,  P_TERM)      /* confluence */
+    set_wall(3u32,  K_OPEN,        P_DEPTH)     /* graph isomorphism */
+    set_wall(4u32,  K_OPEN,        P_FINITE)    /* lattice representation */
+    set_wall(5u32,  K_OPEN,        P_PERIOD)    /* primality / factoring */
+    set_wall(6u32,  K_CLOSED,      P_PROOF)     /* communication complexity */
+    set_wall(7u32,  K_OPEN,        P_CONSTR)    /* ramsey */
+    set_wall(8u32,  K_CLOSED,      P_DEGREE)    /* constructibility */
+    set_wall(9u32,  K_INDEPENDENT, P_ORDINAL)   /* goodstein */
+    set_wall(10u32, K_OBSTRUCTED,  P_DECIDE)    /* diophantine */
+
+    /* UNIVERSAL SHAPE: every wall carries a boundary (the repetition that IS the unification) */
+    let mut i : u32 = 0u32
+    while i < NW {
+        if WALL_PRE[i] == 0u32 { return 11u64 }
+        i = i + 1u32
+    }
+
+    /* GEOMETRY: the cores partition into the documented taxonomy counts */
+    let mut nopen : u32 = 0u32
+    let mut nobs  : u32 = 0u32
+    let mut nclo  : u32 = 0u32
+    let mut nind  : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < NW {
+        let k : u32 = WALL_CORE[j]
+        if k == K_OPEN { nopen = nopen + 1u32 }
+        if k == K_OBSTRUCTED { nobs = nobs + 1u32 }
+        if k == K_CLOSED { nclo = nclo + 1u32 }
+        if k == K_INDEPENDENT { nind = nind + 1u32 }
+        j = j + 1u32
+    }
+    if nopen != 6u32 { return 12u64 }
+    if nobs  != 2u32 { return 13u64 }
+    if nclo  != 2u32 { return 14u64 }
+    if nind  != 1u32 { return 15u64 }
+
+    /* WITNESS: the web certificate is deterministic and tamper-evident (real exec_cert sha256) */
+    let d1 : *u8 = malloc(32u64)
+    let d2 : *u8 = malloc(32u64)
+    let d3 : *u8 = malloc(32u64)
+    fold_web(NW, d1)               /* NW = no tamper */
+    fold_web(NW, d2)
+    if cad_eq(d1, d2) != 1u8 { return 16u64 }   /* the web is stubbornly deterministic */
+    fold_web(0u32, d3)             /* perturb parity's core-kind */
+    if cad_eq(d1, d3) == 1u8 { return 17u64 }   /* any change to the web moves the witness */
+
+    free(d1)  free(d2)  free(d3)
+    return 99u64
+}

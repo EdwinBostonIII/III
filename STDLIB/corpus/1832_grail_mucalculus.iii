@@ -1,0 +1,42 @@
+/* 1832_grail_mucalculus.iii -- GRAIL LEDGER L8 (modal mu-calculus).  Grail = "is mu-calculus model-checking in P?"
+ * PRE-REGISTERED B3 (famous open).  Legitimate B2: the ALTERNATION-FREE fragment IS in PTIME -- a single fixpoint
+ * computed by bounded iteration (<= |states| steps).  Here: the least fixpoint  mu X. target \/ <>X  = the set of
+ * states that can REACH target, on a finite transition system, converging in <= N iterations (PTIME).  Boundary:
+ * nested mu/nu ALTERNATION is exactly the fragment whose PTIME status is open (B3) -- not attempted.  exit 99. */
+module m1832
+const N : u32 = 4u32
+var SUCC : [u32; 4]      /* SUCC[s] = bitset of successors of s */
+fn setup() -> i32 {
+    SUCC[0u64] = 2u32    /* 0 -> {1} */
+    SUCC[1u64] = 4u32    /* 1 -> {2} */
+    SUCC[2u64] = 8u32    /* 2 -> {3} */
+    SUCC[3u64] = 0u32    /* 3 -> {}  (sink = target) */
+    return 0i32
+}
+/* one Knaster-Tarski step of  mu X. target \/ <>X : add any state with a successor already in X */
+fn lfp_step(x: u32) -> u32 {
+    let mut nx : u32 = x
+    let mut s : u32 = 0u32
+    while s < N {
+        let succ : u32 = SUCC[s as u64]
+        if (succ & x) != 0u32 { nx = nx | (1u32 << s) }   /* <>X: exists successor in X */
+        s = s + 1u32
+    }
+    return nx
+}
+fn main() -> u64 {
+    setup()
+    let target : u32 = 1u32 << 3u32          /* target = {state 3} */
+    let mut x : u32 = target
+    let mut iters : u32 = 0u32
+    let mut s2 : u32 = 0u32
+    while s2 < N {                            /* at most N iterations (the PTIME bound for one fixpoint) */
+        let nx : u32 = lfp_step(x)
+        if nx == x { s2 = N } else { x = nx  iters = iters + 1u32  s2 = s2 + 1u32 }
+    }
+    /* the least fixpoint = states that reach state 3 = ALL of {0,1,2,3} on this chain */
+    if x != 15u32 { return 10u64 + (x as u64) }                 /* {0,1,2,3} */
+    if lfp_step(x) != x { return 20u64 }                        /* genuine fixpoint: one more step changes nothing */
+    if iters > N { return 30u64 }                              /* converged within |states| -> PTIME */
+    return 99u64
+}

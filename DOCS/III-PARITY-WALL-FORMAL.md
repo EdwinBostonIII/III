@@ -48,6 +48,12 @@ winning region.* — **PROVEN (III)**, KAT `1848`.
 *Significance:* this is the formal heart of the wall. It says **parity is irreducibly a function of CONTROL** (who
 chooses at branching vertices), and it **refutes an entire class at one stroke** (see §4, Class I).
 
+**T2′ — Control-blindness, quantitative.** *A fixed control-free graph invariant's per-vertex agreement with the
+true winner decays toward 1/2 as the game grows.* — **VERIFIED (III)**, KAT `1852`: the "max reachable-cycle priority"
+predictor scores **82% → 70% → 65%** (n=4→10→14), monotone toward chance. *Significance:* T2 says control-free is
+wrong on *some* witness; T2′ says it is asymptotically *uninformative* on the whole distribution — no graph invariant
+is even approximately right at scale. (Matches the workflow referees' "signed zeta self-decays to ~50%.")
+
 ---
 
 ## §2. The constructive side (what III's solvers establish, VERIFIED in III)
@@ -144,6 +150,7 @@ universal-tree family **provably** unable to reach P (B1).
 | T0 | Determinacy (W₀,W₁ partition V) | **VERIFIED (III)** + CITED | `1849` |
 | T1 | Positional determinacy (single σ wins W₀) | **VERIFIED (III)** + CITED | `1849` |
 | T2 | Control-blindness barrier (no graph invariant decides parity) | **PROVEN (III)** | `1848` |
+| T2′ | Control-blindness, quantitative (graph invariant → 1/2 accuracy at scale) | **VERIFIED (III)** | `1852` |
 | T3 | One-player parity ∈ P, exactly (reach-to-α-cycle) — the wall = the 1→2-player step | **VERIFIED (III)** | `1850` |
 | C1 | Three solver families agree | **VERIFIED (III)** | `1845` |
 | C2 | Relaxation-sandwich soundness | **VERIFIED (III)** | `1846` |

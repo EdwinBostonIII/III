@@ -52,20 +52,20 @@ const ST_CLS_HORN : u32 = 4u32
 const ST_CLS_DUALHORN : u32 = 8u32
 const ST_CLS_2SAT : u32 = 16u32
 
-var CPOS : [u32; 128]   /* clause positive-var mask */
-var CNEG : [u32; 128]   /* clause negative-var mask */
+var ST_CPOS : [u32; 128]   /* clause positive-var mask */
+var ST_CNEG : [u32; 128]   /* clause negative-var mask */
 var ST_NC : [u32; 1]
 var ST_NV : [u32; 1]
 /* 2-SAT implication graph (literals: var v -> pos 2v, neg 2v+1) */
-var ADJ : [u64; 64]
-var REACH : [u64; 64]
+var ST_ADJ : [u64; 64]
+var ST_REACH : [u64; 64]
 /* XOR working rows */
-var XV : [u32; 128]
-var XR : [u8; 128]
-var XNC : [u32; 1]
-var XNV : [u32; 1]
+var ST_XV : [u32; 128]
+var ST_XR : [u8; 128]
+var ST_XNC : [u32; 1]
+var ST_XNV : [u32; 1]
 
-fn popc32(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 32u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+fn st_popc32(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 32u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
 
 /* ---- CNF construction ---- */
 fn st_reset(nvars: u32) -> i32 @export {
@@ -75,8 +75,8 @@ fn st_reset(nvars: u32) -> i32 @export {
 }
 fn st_clause(posmask: u32, negmask: u32) -> i32 @export {
     let c : u32 = ST_NC[0u64]
-    if c >= ST_MAXC { return 0i32 - 1i32 }           /* [OOB] @export: c indexes CPOS/CNEG[128] */
-    CPOS[c as u64] = posmask  CNEG[c as u64] = negmask  ST_NC[0u64] = c + 1u32
+    if c >= ST_MAXC { return 0i32 - 1i32 }           /* [OOB] @export: c indexes ST_CPOS/ST_CNEG[128] */
+    ST_CPOS[c as u64] = posmask  ST_CNEG[c as u64] = negmask  ST_NC[0u64] = c + 1u32
     return 0i32
 }
 
@@ -86,11 +86,11 @@ fn st_classify() -> u32 @export {
     let mut is0 : u8 = 1u8  let mut is1 : u8 = 1u8  let mut ish : u8 = 1u8  let mut isd : u8 = 1u8  let mut is2 : u8 = 1u8
     let mut c : u32 = 0u32
     while c < nc {
-        if CNEG[c as u64] == 0u32 { is0 = 0u8 }                                  /* 0-valid needs a neg literal */
-        if CPOS[c as u64] == 0u32 { is1 = 0u8 }                                  /* 1-valid needs a pos literal */
-        if popc32(CPOS[c as u64]) > 1u32 { ish = 0u8 }                           /* Horn: <=1 positive */
-        if popc32(CNEG[c as u64]) > 1u32 { isd = 0u8 }                           /* dual-Horn: <=1 negative */
-        if (popc32(CPOS[c as u64]) + popc32(CNEG[c as u64])) > 2u32 { is2 = 0u8 } /* 2-SAT: <=2 literals */
+        if ST_CNEG[c as u64] == 0u32 { is0 = 0u8 }                                  /* 0-valid needs a neg literal */
+        if ST_CPOS[c as u64] == 0u32 { is1 = 0u8 }                                  /* 1-valid needs a pos literal */
+        if st_popc32(ST_CPOS[c as u64]) > 1u32 { ish = 0u8 }                           /* Horn: <=1 positive */
+        if st_popc32(ST_CNEG[c as u64]) > 1u32 { isd = 0u8 }                           /* dual-Horn: <=1 negative */
+        if (st_popc32(ST_CPOS[c as u64]) + st_popc32(ST_CNEG[c as u64])) > 2u32 { is2 = 0u8 } /* 2-SAT: <=2 literals */
         c = c + 1u32
     }
     let mut r : u32 = 0u32
@@ -103,14 +103,14 @@ fn st_classify() -> u32 @export {
 }
 
 /* ---- Horn least-model decider (1864), parameterised by a polarity flip for dual-Horn ---- */
-fn horn_sat(flip: u8) -> u32 {     /* flip=0: clauses as-is (Horn); flip=1: swap pos/neg (dual-Horn -> Horn) */
+fn st_horn_sat(flip: u8) -> u32 {     /* flip=0: clauses as-is (Horn); flip=1: swap pos/neg (dual-Horn -> Horn) */
     let nc : u32 = ST_NC[0u64]  let mut m : u32 = 0u32  let mut done : u8 = 0u8
     while done == 0u8 {
         let mut changed : u8 = 0u8  let mut c : u32 = 0u32
         while c < nc {
-            let mut pos : u32 = CPOS[c as u64]  let mut neg : u32 = CNEG[c as u64]
+            let mut pos : u32 = ST_CPOS[c as u64]  let mut neg : u32 = ST_CNEG[c as u64]
             if flip == 1u8 { let t : u32 = pos  pos = neg  neg = t }
-            if popc32(pos) == 1u32 {                                /* definite: head = the single pos bit, body = neg */
+            if st_popc32(pos) == 1u32 {                                /* definite: head = the single pos bit, body = neg */
                 if (m & neg) == neg {                               /* body all true */
                     if (m & pos) == 0u32 { m = m | pos  changed = 1u8 }
                 }
@@ -122,7 +122,7 @@ fn horn_sat(flip: u8) -> u32 {     /* flip=0: clauses as-is (Horn); flip=1: swap
     /* goal clauses (no head): UNSAT if body all true */
     let mut c2 : u32 = 0u32
     while c2 < nc {
-        let mut pos : u32 = CPOS[c2 as u64]  let mut neg : u32 = CNEG[c2 as u64]
+        let mut pos : u32 = ST_CPOS[c2 as u64]  let mut neg : u32 = ST_CNEG[c2 as u64]
         if flip == 1u8 { let t : u32 = pos  pos = neg  neg = t }
         if pos == 0u32 { if (m & neg) == neg { return ST_UNSAT } }
         c2 = c2 + 1u32
@@ -131,10 +131,10 @@ fn horn_sat(flip: u8) -> u32 {     /* flip=0: clauses as-is (Horn); flip=1: swap
 }
 
 /* ---- 2-SAT decider (1863): implication graph reachability ---- */
-fn neg_lit(l: u32) -> u32 { return l ^ 1u32 }
-fn twosat() -> u32 {
+fn st_neg_lit(l: u32) -> u32 { return l ^ 1u32 }
+fn st_twosat() -> u32 {
     let nv : u32 = ST_NV[0u64]  let nlit : u32 = 2u32 * nv  let nc : u32 = ST_NC[0u64]
-    let mut i : u32 = 0u32  while i < nlit { ADJ[i as u64] = 0u64  i = i + 1u32 }
+    let mut i : u32 = 0u32  while i < nlit { ST_ADJ[i as u64] = 0u64  i = i + 1u32 }
     /* extract the <=2 literals of each clause and add implication edges */
     let mut c : u32 = 0u32
     while c < nc {
@@ -142,27 +142,27 @@ fn twosat() -> u32 {
         let mut l0 : u32 = 0xFFFFFFFFu32  let mut l1 : u32 = 0xFFFFFFFFu32
         let mut v : u32 = 0u32
         while v < nv {
-            if (CPOS[c as u64] & (1u32 << v)) != 0u32 { if l0 == 0xFFFFFFFFu32 { l0 = 2u32 * v } else { l1 = 2u32 * v } }
-            if (CNEG[c as u64] & (1u32 << v)) != 0u32 { if l0 == 0xFFFFFFFFu32 { l0 = 2u32 * v + 1u32 } else { l1 = 2u32 * v + 1u32 } }
+            if (ST_CPOS[c as u64] & (1u32 << v)) != 0u32 { if l0 == 0xFFFFFFFFu32 { l0 = 2u32 * v } else { l1 = 2u32 * v } }
+            if (ST_CNEG[c as u64] & (1u32 << v)) != 0u32 { if l0 == 0xFFFFFFFFu32 { l0 = 2u32 * v + 1u32 } else { l1 = 2u32 * v + 1u32 } }
             v = v + 1u32
         }
         if l1 == 0xFFFFFFFFu32 { l1 = l0 }                          /* unit clause (l): treat as (l or l) */
         if l0 != 0xFFFFFFFFu32 {
-            ADJ[neg_lit(l0) as u64] = ADJ[neg_lit(l0) as u64] | (1u64 << (l1 as u64))   /* ~l0 -> l1 */
-            ADJ[neg_lit(l1) as u64] = ADJ[neg_lit(l1) as u64] | (1u64 << (l0 as u64))   /* ~l1 -> l0 */
+            ST_ADJ[st_neg_lit(l0) as u64] = ST_ADJ[st_neg_lit(l0) as u64] | (1u64 << (l1 as u64))   /* ~l0 -> l1 */
+            ST_ADJ[st_neg_lit(l1) as u64] = ST_ADJ[st_neg_lit(l1) as u64] | (1u64 << (l0 as u64))   /* ~l1 -> l0 */
         }
         c = c + 1u32
     }
     /* reflexive-transitive closure */
-    let mut l : u32 = 0u32  while l < nlit { REACH[l as u64] = ADJ[l as u64] | (1u64 << (l as u64))  l = l + 1u32 }
+    let mut l : u32 = 0u32  while l < nlit { ST_REACH[l as u64] = ST_ADJ[l as u64] | (1u64 << (l as u64))  l = l + 1u32 }
     let mut done : u8 = 0u8
     while done == 0u8 {
         let mut changed : u8 = 0u8  let mut x : u32 = 0u32
         while x < nlit {
             let mut add : u64 = 0u64  let mut y : u32 = 0u32
-            while y < nlit { if (REACH[x as u64] & (1u64 << (y as u64))) != 0u64 { add = add | REACH[y as u64] }  y = y + 1u32 }
-            let nr : u64 = REACH[x as u64] | add
-            if nr != REACH[x as u64] { REACH[x as u64] = nr  changed = 1u8 }
+            while y < nlit { if (ST_REACH[x as u64] & (1u64 << (y as u64))) != 0u64 { add = add | ST_REACH[y as u64] }  y = y + 1u32 }
+            let nr : u64 = ST_REACH[x as u64] | add
+            if nr != ST_REACH[x as u64] { ST_REACH[x as u64] = nr  changed = 1u8 }
             x = x + 1u32
         }
         if changed == 0u8 { done = 1u8 }
@@ -171,7 +171,7 @@ fn twosat() -> u32 {
     let mut v2 : u32 = 0u32
     while v2 < nv {
         let xp : u32 = 2u32 * v2  let xn : u32 = 2u32 * v2 + 1u32
-        if (REACH[xp as u64] & (1u64 << (xn as u64))) != 0u64 { if (REACH[xn as u64] & (1u64 << (xp as u64))) != 0u64 { return ST_UNSAT } }
+        if (ST_REACH[xp as u64] & (1u64 << (xn as u64))) != 0u64 { if (ST_REACH[xn as u64] & (1u64 << (xp as u64))) != 0u64 { return ST_UNSAT } }
         v2 = v2 + 1u32
     }
     return ST_SAT
@@ -182,39 +182,39 @@ fn st_decide() -> u32 @export {
     let cls : u32 = st_classify()
     if (cls & ST_CLS_0VALID) != 0u32 { return ST_SAT }             /* all-false satisfies */
     if (cls & ST_CLS_1VALID) != 0u32 { return ST_SAT }             /* all-true satisfies */
-    if (cls & ST_CLS_HORN) != 0u32 { return horn_sat(0u8) }
-    if (cls & ST_CLS_DUALHORN) != 0u32 { return horn_sat(1u8) }
-    if (cls & ST_CLS_2SAT) != 0u32 { return twosat() }
+    if (cls & ST_CLS_HORN) != 0u32 { return st_horn_sat(0u8) }
+    if (cls & ST_CLS_DUALHORN) != 0u32 { return st_horn_sat(1u8) }
+    if (cls & ST_CLS_2SAT) != 0u32 { return st_twosat() }
     return ST_NOT_TRACTABLE
 }
 
 /* ---- XOR / affine decider (1865): Gaussian elimination over GF(2) ---- */
 fn stx_reset(nvars: u32) -> i32 @export {
     if nvars > ST_MAXV { return 0i32 - 1i32 }       /* [OOB] @export */
-    XNV[0u64] = nvars  XNC[0u64] = 0u32
+    ST_XNV[0u64] = nvars  ST_XNC[0u64] = 0u32
     return 0i32
 }
 fn stx_eq(varmask: u32, rhs: u8) -> i32 @export {
-    let c : u32 = XNC[0u64]
-    if c >= ST_MAXC { return 0i32 - 1i32 }           /* [OOB] @export: c indexes XV/XR[128] */
-    XV[c as u64] = varmask  if rhs == 0u8 { XR[c as u64] = 0u8 } else { XR[c as u64] = 1u8 }
-    XNC[0u64] = c + 1u32
+    let c : u32 = ST_XNC[0u64]
+    if c >= ST_MAXC { return 0i32 - 1i32 }           /* [OOB] @export: c indexes ST_XV/ST_XR[128] */
+    ST_XV[c as u64] = varmask  if rhs == 0u8 { ST_XR[c as u64] = 0u8 } else { ST_XR[c as u64] = 1u8 }
+    ST_XNC[0u64] = c + 1u32
     return 0i32
 }
 fn stx_decide() -> u32 @export {
-    let nv : u32 = XNV[0u64]  let m : u32 = XNC[0u64]
+    let nv : u32 = ST_XNV[0u64]  let m : u32 = ST_XNC[0u64]
     let mut rank : u32 = 0u32  let mut col : u32 = 0u32
     while col < nv {
         let mut piv : u32 = m  let mut r : u32 = rank
-        while r < m { if (XV[r as u64] & (1u32 << col)) != 0u32 { piv = r  r = m } else { r = r + 1u32 } }
+        while r < m { if (ST_XV[r as u64] & (1u32 << col)) != 0u32 { piv = r  r = m } else { r = r + 1u32 } }
         if piv < m {
-            let tv : u32 = XV[rank as u64]  XV[rank as u64] = XV[piv as u64]  XV[piv as u64] = tv
-            let th : u8 = XR[rank as u64]  XR[rank as u64] = XR[piv as u64]  XR[piv as u64] = th
+            let tv : u32 = ST_XV[rank as u64]  ST_XV[rank as u64] = ST_XV[piv as u64]  ST_XV[piv as u64] = tv
+            let th : u8 = ST_XR[rank as u64]  ST_XR[rank as u64] = ST_XR[piv as u64]  ST_XR[piv as u64] = th
             let mut j : u32 = 0u32
             while j < m {
-                if j != rank { if (XV[j as u64] & (1u32 << col)) != 0u32 {
-                    XV[j as u64] = XV[j as u64] ^ XV[rank as u64]
-                    XR[j as u64] = XR[j as u64] ^ XR[rank as u64]
+                if j != rank { if (ST_XV[j as u64] & (1u32 << col)) != 0u32 {
+                    ST_XV[j as u64] = ST_XV[j as u64] ^ ST_XV[rank as u64]
+                    ST_XR[j as u64] = ST_XR[j as u64] ^ ST_XR[rank as u64]
                 } }
                 j = j + 1u32
             }
@@ -223,7 +223,7 @@ fn stx_decide() -> u32 @export {
         col = col + 1u32
     }
     let mut k : u32 = 0u32
-    while k < m { if XV[k as u64] == 0u32 { if XR[k as u64] == 1u8 { return ST_UNSAT } }  k = k + 1u32 }   /* 0 = 1 */
+    while k < m { if ST_XV[k as u64] == 0u32 { if ST_XR[k as u64] == 1u8 { return ST_UNSAT } }  k = k + 1u32 }   /* 0 = 1 */
     return ST_SAT
 }
 

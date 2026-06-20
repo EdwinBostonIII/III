@@ -1,6 +1,10 @@
-/* 1859_grail_partial_solver_residue.iii -- RESIDUAL-HOPE CLOSURE (avenue B): "combine SOUND poly partial solvers
- * (the sandwich + bounded-width dominions -- our 1844/1846 survivors) until they decide 100% of every game."
- * This hope dies on a clean Omega(n) LOWER BOUND, verified against the Zielonka oracle (1839):
+/* 1859_grail_partial_solver_residue.iii -- RESIDUAL-HOPE sub-result (avenue B): the BOUNDED-WIDTH DOMINION FAMILY
+ * (our 1844/1846 dominion survivor) is Omega(n)-INCOMPLETE.  SCOPE (advisor-audited): this is NOT a closure of the
+ * full avenue B -- "a sound poly partial solver COMPLETE on every game IS a poly algorithm for parity," so completeness
+ * itself = the open core O1, and B is therefore an OPEN-SLIVER (= O1), not CLOSED.  Nor is this cycle a witness against
+ * the SANDWICH: on the n-cycle the two one-player relaxations coincide (R_A = R_E = V = W_even), so the sandwich solves
+ * it EXACTLY; the cycle witnesses only the DOMINION family's gap.  What is proven here, against the Zielonka oracle
+ * (1839), is the clean Omega(n) lower bound for the dominion/local-window method:
  *
  *  FAMILY: the simple directed n-cycle  v -> (v+1) mod n,  with priorities  pr = 2 at ONE vertex, 1 elsewhere.
  *  - The winner is a GLOBAL property: max-inf priority = 2 (even) everywhere, so Even wins ALL n vertices -- but ONLY
@@ -12,12 +16,12 @@
  *  - Therefore any width-w (w < n) dominion solver decides 0 of n vertices, while the oracle decides all n:
  *    the irreducible RESIDUE is exactly n = Omega(n), and it GROWS with the game.
  *
- * WHAT THIS CLOSES (math-olympiad #40 + #4, honest scope).  It refutes "push bounded-width sound partial solvers to
- * completeness" for the dominion/local-window class (the survivor class): completing requires UNBOUNDED width = the
- * full recursion = the open-complexity object itself.  It does NOT claim partial solvers are useless (they are sound
- * and useful), nor that the cycle is hard for ALL methods (it is 0-player, solved by 1857); it claims, precisely, that
- * LOCAL certification cannot see a GLOBAL cycle-max, so locality cannot complete.  A lower bound cannot, and does not,
- * put parity in P.
+ * WHAT THIS SHOWS (math-olympiad #40 + #4, honest scope).  It refutes completeness for the DOMINION/local-window class
+ * specifically: completing it requires UNBOUNDED width = the full recursion = the open-complexity object itself.  It
+ * does NOT close avenue B as a whole (completeness of ANY sound poly partial solver = O1), does NOT claim partial
+ * solvers are useless (they are sound and useful), does NOT witness against the sandwich (which solves this cycle), and
+ * does NOT claim the cycle is hard for all methods (it is 0-player, solved by 1857).  It claims, precisely, that LOCAL
+ * (bounded-width) certification cannot see a GLOBAL cycle-max.  A lower bound cannot, and does not, put parity in P.
  * exit 99 = for n=4..9: no proper nonempty closed subset exists (residue = n, growing), and the oracle decides all n. */
 module mpsr
 var OWN : [u8; 16]

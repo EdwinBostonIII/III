@@ -25,13 +25,17 @@ ownership-swap pair — one vertex's *owner* flips the winner with the graph fix
 21× (homology, Bass–Ihara zeta, sheaf cohomology, Euler characteristic, Oseledets cocycle, …). T2′: such a predictor's
 accuracy *decreases* toward chance as games grow. *Leaves O1 untouched:* a negative result.
 
-### B. Combine sound poly **partial solvers** (sandwich + bounded-width dominions) until 100% coverage
-**CLOSED-III** (`1859`). On the n-cycle the winner is a *global* property (the single highest priority anywhere on the
-cycle); there is **no** proper closed subset, hence no bounded-width dominion, so a width-`<n` dominion solver decides
-**0** of `n` vertices while the oracle decides all — an irreducible residue of `Ω(n)` that *grows* with the game.
-Completing requires unbounded width = the full recursion = the open object. *Scope:* refutes the *dominion/local-window*
-class (our survivor class); the cycle is solvable by other means (it is 0-player, §D). *Leaves O1 untouched:* a lower
-bound.
+### B. Combine sound poly **partial solvers** until 100% coverage
+**OPEN-SLIVER (reduces to O1)** + sub-result `1859`. The *general* hope is self-defeating as a shortcut: **a sound poly
+partial solver that is *complete* on every game IS a polynomial algorithm for parity** — so completeness of any
+partial-solver combination is *exactly* O1, not a way around it. No complete sound poly partial solver is known. What
+*is* provable in III is the **incompleteness of the specific known families**: (i) the **bounded-width dominion** family
+is `Ω(n)`-incomplete — on the n-cycle the winner is a *global* property (the single highest priority anywhere) and there
+is no proper closed subset, so a width-`<n` dominion solver decides **0** of `n` vertices while the oracle decides all
+(`1859`); (ii) the **sandwich** is incomplete in general — its coverage shrinks with n (`1846`). *Honest caveat (the
+n-cycle is not a witness against the sandwich):* on this particular cycle the two one-player relaxations coincide
+(`R_A = R_E = V = W_even`), so the sandwich solves it exactly; the cycle witnesses only the *dominion* family's gap, not
+the sandwich's. Neither *known* family completes, and **completeness itself = O1**. *Leaves O1 untouched:* it **is** O1.
 
 ### C. **Compress the priorities** to a bounded number (then bounded-`d` is in P)
 **CLOSED-III** (`1858`). The natural parity-preserving collapse to `{1,2}` (`even↦2, odd↦1`) *flips the winner*: it
@@ -110,8 +114,8 @@ untouched:* NP∩coNP membership says nothing about P.
 | Avenue | Disposition | Anchor |
 |---|---|---|
 | A invariant read-off | CLOSED-III (negative) | `1848`,`1852` |
-| B partial-solver completion | CLOSED-III (Ω(n) residue) | `1859` |
-| C priority compression | CLOSED-III (flips winner) | `1858` |
+| B partial-solver completion | OPEN-SLIVER (= O1; dominion family Ω(n)-incomplete) | `1859`,`1846` |
+| C priority compression | CLOSED-III (flips winner; general = O1) | `1858` |
 | D bounded priorities | ISLAND-III (in P; wall=d=Θ(n)) | `1857` |
 | E two→one player | CLOSED-III (ladder; ≠ reducible) | `1850`,`1857` |
 | F SI pivot rule | OPEN-SLIVER / CITED (B2) | `1840` |
@@ -125,8 +129,15 @@ untouched:* NP∩coNP membership says nothing about P.
 | width islands | ISLAND-III / CITED | — |
 
 **Every avenue is accounted for.** Three classes remain after the walk: (1) **closed** shortcuts and **islands** —
-provably not a route (A, B, C, D, E, I, M, width); (2) **cited** ceilings and family lower bounds — provably not
-polynomial for whole method families (G, J, K) or worst-case exponential (B2/F); (3) **open slivers** — F, H, L — each
-of which, if it yielded a poly algorithm, would *be* a solution to O1 itself, and none has. There is no door we have
-not tried; the open core O1 (parity ∈ P?) is reached by every honest route and passed by none. That is what it means,
-proven, for this to be a **wall**.
+provably not a route (A, C, D, E, I, M, width); (2) **cited** ceilings and family lower bounds — provably not
+polynomial for whole method families (G, J, K) or worst-case exponential (B2/F); (3) **open slivers** — B, F, H, L —
+each of which, if it yielded a *complete* poly procedure, would *be* a solution to O1 itself, and none has. There is no
+door we have not tried; the open core O1 (parity ∈ P?) is reached by every honest route and passed by none. That is what
+it means, proven, for this to be a **wall**.
+
+### (extra) Average-case is easy — the wall is strictly worst-case
+**Observed in III.** On *random* instances the problem is poly in practice: strategy improvement plateaus at ≤~12–18
+switches/rounds independent of size (`1841/1842`), and the sound partial solvers cover most of a random game. So "most
+instances are fine" is *true* — and irrelevant to O1, which is a **worst-case** question. The wall is not "typical
+games are hard"; it is "the *worst* game, at `d=Θ(n)`, is not known to be poly." This is why empirical ease can never
+upgrade to a poly *proof* (a null result on random or hand-built families is permanently inconclusive).

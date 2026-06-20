@@ -1,0 +1,67 @@
+/* 1862_grail_characteristic_firewall.iii -- BROADER REACH (generalizing M1, the logic<->crypto obstruction).
+ * M1 (1851) proved the two CANONICAL algebraic bridges from the lattice-logic Boolean-ring face (characteristic 2) to
+ * ML-KEM's ring Z_3329 (characteristic 3329) fail.  Here we show it is NOT a 3329 coincidence: the SAME two
+ * obstructions hold across EVERY real-world post-quantum / zero-knowledge / classical crypto modulus -- a GENERIC
+ * "characteristic firewall" between char-2 logic and odd-characteristic cryptography.
+ *
+ * For each modulus m (the ring Z_m underlying a deployed scheme):
+ *  (A) CHARACTERISTIC obstruction: m is odd and > 2, so 2 != 0 in Z_m and gcd(2, m) = 1 -> NO unital ring
+ *      homomorphism from a char-2 ring to Z_m (it would force 2 = 0).  The Boolean-ring face does not embed.
+ *  (B) IDEMPOTENCY obstruction: the only additive idempotent of Z_m (2a = a) is a = 0 -> the lattice join's universal
+ *      a OR a = a cannot be carried by + .  (Verified by full enumeration for the small moduli; by the algebraic
+ *      identity 2a=a <=> a=0, spot-checked, for the large ones.)
+ *
+ * MODULI (all deployed): 3329 (ML-KEM/Kyber), 12289 (Falcon/NTRU), 8380417 (ML-DSA/Dilithium, 2^23-2^13+1),
+ *   2147483647 (M31 = 2^31-1), 2305843009213693951 (M61 = 2^61-1), 18446744069414584321 (Goldilocks = 2^64-2^32+1,
+ *   used by modern STARK/zk systems), and 3233 = 61*53 (the textbook RSA modulus -- an odd COMPOSITE, to show the
+ *   firewall is about characteristic/parity, not primality).
+ *
+ * HONEST SCOPE (same as M1): this rules out the two CANONICAL morphism classes (unital ring hom; OR|->+) -- it does
+ * NOT claim NO relation of any kind exists (the weave still SIMULATES Z_q as circuits, a non-canonical relation).  The
+ * generalization is: whatever narrow algebraic-key hope M1 closes for ML-KEM, it closes IDENTICALLY for the entire
+ * deployed crypto stack -- the firewall is structural (the characteristic), not modulus-specific.
+ * exit 99 = both obstructions hold for every listed modulus. */
+module mcfw
+var MOD : [u64; 8]
+var SMALL : [u8; 8]   /* 1 = small enough to fully enumerate idempotents */
+
+fn gcd(a: u64, b: u64) -> u64 { let mut x : u64 = a  let mut y : u64 = b  while y != 0u64 { let t : u64 = x % y  x = y  y = t }  return x }
+fn addmod(a: u64, b: u64, m: u64) -> u64 {   /* (a+b) mod m for a,b < m, overflow-safe */
+    if a >= m - b { return a - (m - b) }  return a + b
+}
+
+fn main() -> u64 {
+    MOD[0u64] = 3329u64                  SMALL[0u64] = 1u8   /* ML-KEM / Kyber */
+    MOD[1u64] = 12289u64                 SMALL[1u64] = 1u8   /* Falcon / NTRU */
+    MOD[2u64] = 8380417u64               SMALL[2u64] = 0u8   /* ML-DSA / Dilithium */
+    MOD[3u64] = 2147483647u64            SMALL[3u64] = 0u8   /* M31 */
+    MOD[4u64] = 2305843009213693951u64   SMALL[4u64] = 0u8   /* M61 */
+    MOD[5u64] = 18446744069414584321u64  SMALL[5u64] = 0u8   /* Goldilocks 2^64-2^32+1 */
+    MOD[6u64] = 3233u64                  SMALL[6u64] = 1u8   /* RSA 61*53 (odd composite) */
+
+    let mut i : u32 = 0u32
+    while i < 7u32 {
+        let m : u64 = MOD[i as u64]
+        /* (A) characteristic obstruction: m odd and > 2 => 2 != 0 in Z_m, gcd(2,m)=1 */
+        if m <= 2u64 { return (10u64 + i as u64) }
+        if (m & 1u64) != 1u64 { return (20u64 + i as u64) }      /* must be odd */
+        if (2u64 % m) == 0u64 { return (30u64 + i as u64) }      /* 2 != 0 in Z_m */
+        if gcd(2u64, m) != 1u64 { return (40u64 + i as u64) }    /* coprime characteristics */
+        /* (B) idempotency obstruction: only additive idempotent (2a = a) is 0 */
+        if SMALL[i as u64] == 1u8 {
+            let mut idem : u64 = 0u64  let mut a : u64 = 0u64
+            while a < m { if addmod(a, a, m) == a { idem = idem + 1u64 }  a = a + 1u64 }
+            if idem != 1u64 { return (50u64 + i as u64) }         /* exactly one: a=0 */
+        } else {
+            /* large modulus: spot-check that 2a != a for several nonzero a (algebraically: 2a=a <=> a=0) */
+            if addmod(1u64, 1u64, m) == 1u64 { return (60u64 + i as u64) }
+            if addmod(m - 1u64, m - 1u64, m) == (m - 1u64) { return (61u64 + i as u64) }
+            let h : u64 = m / 2u64
+            if addmod(h, h, m) == h { return (62u64 + i as u64) }
+            let r : u64 = 123456789u64 % m
+            if addmod(r, r, m) == r { return (63u64 + i as u64) }
+        }
+        i = i + 1u32
+    }
+    return 99u64
+}

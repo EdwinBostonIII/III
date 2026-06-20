@@ -14,6 +14,17 @@ Fijalkow–Jurdziński–Lazić–Parys, SODA 2019) blocks the entire universal-
 | full μ-calculus | nested-fixpoint νX.μY.(…) decided; alternation proven necessary | 1838 | complete |
 | greedy SI | region-size strategy improvement | 1840 | **incomplete** 77/80 (local optima) |
 | **VJ SI** | Vöge–Jurdziński play-profile SI at vertex granularity + Odd best response | 1841 | **complete 80/80**, terminating (50k-game stress), ≤9 rounds random / ≤12 hill-climb-hard |
+| **LRC-VJ** | single-switch SI, Cunningham least-recently-considered pivot (reuses 1841 valuation) | 1842 | complete 80/80, ≤18 single-switches (~21k games) |
+| **SPM** | Jurdziński Small Progress Measures (lifting fixpoint; mixed-radix integer encoding) | 1843 | complete; **ZERO mismatches over ~28.8k games** vs oracle |
+
+**Four solver families now in III, mutually cross-validated:** attractor-decomposition (Zielonka 1839), nested-fixpoint/μ-calculus (1838), strategy-improvement (VJ 1841 / LRC 1842), progress-measures (SPM 1843). Three independent algorithms agreeing on ~29k games is strong evidence the oracle and all three are correct.
+
+**Cross-family complexity contrast (empirical, III's own random games):**
+- SI iteration stays **flat**: VJ ≤12 rounds (n≤20), LRC ≤18 single-switches (n≤16).
+- SPM lift count grows **super-linearly**: 26→82→213 (n=4→8), then ~208→432→672→992→**3552** (n=8→16) — ~17× while n doubles.
+- So the progress-measure family *reaches* its high cost on ordinary instances (consistent with its n^{d/2} / universal-tree-barrier character), while strategy-improvement does **not** — empirical evidence (on III's games) that SI sits outside the barrier'd regime, exactly the workflow's intuition. Neither bears on P: SI is flat because random instances are easy; SPM's blowup is the *known* lower-bound family being reachable.
+- **Decision stabilizes faster than strategy:** VJ-SI winner-region accuracy vs round cap = 58% (0 rounds) → 87% (1) → 98% (2) → 99.6% (3) → 100% (full) — the winner is decided in a handful of rounds though full strategy convergence takes longer.
+- **Apparatus validated:** a CHAIN(k) family forces LRC to ~k switches (11 at k=12, monotone) — so the flat plateaus are random-instance easiness, not a blind counter.
 
 Honest negative results en route (each genuine, each a ruled-out approach):
 - two poly winner-predictors **refuted** by the oracle: max-reachable-priority 223/400 wrong, recurrent-cycle-priority 168/400 wrong — both ignore CONTROL (who picks the cycle).

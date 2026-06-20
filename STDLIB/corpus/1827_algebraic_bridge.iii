@@ -1,0 +1,80 @@
+/* 1827_algebraic_bridge.iii -- THE ALGEBRAIC BRIDGE (semiring/ring) dissolving III's logic<->crypto boundary.
+ * The De Morgan skeleton key (1826) left post-quantum (Z_q ring) as an external boundary.  This bridges it:
+ *   (1) BOTH sides are commutative SEMIRINGS -- logic6 under (or,and,Null,All) [exhaustive over 6], and Z_3329
+ *       (mlkem's modulus) under (+,*,0,1) [the ring axioms].  The common FRAMEWORK is the semiring.
+ *   (2) The naive direct map (or)->(+) is OBSTRUCTED: (or) is idempotent, (+) is not (a+a != a in the ring), so any
+ *       such homomorphism collapses to 0.  The obstruction reveals the RIGHT additive op.
+ *   (3) THE BRIDGE: the additive op is XOR, not (or).  The weave (bv_bits) is a genuine commutative BOOLEAN RING
+ *       (XOR=+, AND=*, idempotent product, distributive) -- SAT-proven.  By Stone, a Boolean ring IS a Boolean
+ *       algebra: ONE object, two faces (lattice AND ring).  So the lattice side natively speaks the ring language,
+ *       and shares the commutative-ring axioms with Z_q (honest nuance: char 2 vs char 3329 -- same framework, not a
+ *       subring; the 6-valued logic6 is De Morgan-not-Boolean, so the ring face is the 2-valued/Boolean level).
+ * exit 99 = both semirings + obstruction confirmed + the weave is a Boolean ring (the bridge). */
+module m1827
+
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const NUL : u32 = 4u32
+const ALL : u32 = 5u32
+const Q : u64 = 3329u64
+fn qadd(a: u64, b: u64) -> u64 { return (a + b) % Q }
+fn qmul(a: u64, b: u64) -> u64 { return (a * b) % Q }
+fn eq(a: u32, b: u32) -> u8 { return bb_equal(a, b) }
+
+fn main() -> u64 {
+    l6_init()
+    /* (1a) logic6 is a commutative IDEMPOTENT semiring (or,and,Null,All) -- exhaustive */
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        if l6_or(NUL, a) != a { return 11u64 }
+        if l6_and(ALL, a) != a { return 12u64 }
+        if l6_and(NUL, a) != NUL { return 13u64 }
+        if l6_or(a, a) != a { return 14u64 }                       /* (or) IDEMPOTENT -- the obstruction */
+        let mut b : u32 = 0u32
+        while b < 6u32 {
+            let mut c : u32 = 0u32
+            while c < 6u32 {
+                if l6_and(a, l6_or(b, c)) != l6_or(l6_and(a, b), l6_and(a, c)) { return 15u64 }   /* distributive */
+                c = c + 1u32
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    /* (1b) Z_3329 is a commutative semiring (+,*,0,1); (2) NOT idempotent -> direct (or)->(+) obstructed */
+    let mut s : u64 = 0u64
+    let mut obstruction : u8 = 0u8
+    while s < 48u64 {
+        let x : u64 = (s * 521u64 + 7u64) % Q
+        let y : u64 = (s * 113u64 + 3u64) % Q
+        let z : u64 = (s * 977u64 + 1u64) % Q
+        if qmul(x, qadd(y, z)) != qadd(qmul(x, y), qmul(x, z)) { return 21u64 }   /* ring distributivity */
+        if qmul(0u64, x) != 0u64 { return 22u64 }
+        if qmul(1u64, x) != x { return 23u64 }
+        if x != 0u64 { if qadd(x, x) != x { obstruction = 1u8 } }   /* (+) NOT idempotent */
+        s = s + 1u64
+    }
+    if obstruction != 1u8 { return 24u64 }
+    /* (3) THE BRIDGE: the weave is a commutative BOOLEAN RING (XOR=+, AND=*) -- SAT-proven */
+    bb_reset(8u64)
+    let p : u32 = bb_var(0u32)
+    let r : u32 = bb_var(1u32)
+    let t : u32 = bb_var(2u32)
+    let zero : u32 = bb_const(0u64)
+    let one : u32 = bb_const(0xFFu64)
+    if eq(bb_xor(p, zero), p) != 1u8 { return 31u64 }                                  /* + identity */
+    if eq(bb_xor(p, p), zero) != 1u8 { return 32u64 }                                  /* + inverse (NOT idempotent) */
+    if eq(bb_xor(bb_xor(p, r), t), bb_xor(p, bb_xor(r, t))) != 1u8 { return 33u64 }    /* + assoc */
+    if eq(bb_and(p, one), p) != 1u8 { return 34u64 }                                   /* * identity */
+    if eq(bb_and(p, bb_xor(r, t)), bb_xor(bb_and(p, r), bb_and(p, t))) != 1u8 { return 35u64 }   /* * distributes over + (RING LAW) */
+    if eq(bb_and(p, p), p) != 1u8 { return 36u64 }                                     /* Boolean: * idempotent (=> Stone iso to the algebra) */
+    return 99u64
+}

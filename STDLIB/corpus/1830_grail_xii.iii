@@ -1,0 +1,15 @@
+/* 1830_grail_xii.iii -- GRAIL LEDGER L4 (equational logic / rewriting).  Grail = decidable confluence for GENERAL
+ * TRS, which is PRE-REGISTERED B3 (proven undecidable in general).  Legitimate B2: XII is TERMINATING on its
+ * fragment -- every rewrite rule is max-weight-decreasing (xtm classifier: zero non-terminating/stuck rules) -- and
+ * (with joinability, KAT 1461 + cost-monotone 1349) is therefore a CONFLUENT terminating decision procedure for
+ * effect-term equivalence THERE.  Boundary: nothing here decides confluence for an arbitrary TRS.  exit 99. */
+module m1830
+extern @abi(c-msvc-x64) fn xtm_classify_all() -> u32 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn xtm_anomaly_count() -> u64 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn xtm_fired_count() -> u64 from "xii_termination.iii"
+fn main() -> u64 {
+    xtm_classify_all()
+    if xtm_fired_count() == 0u64 { return 11u64 }                /* rules fire (non-vacuous) */
+    if xtm_anomaly_count() != 0u64 { return 20u64 }              /* any non-terminating/stuck rule -> fail */
+    return 99u64                                                 /* all XII rules terminate -> termination on the fragment */
+}

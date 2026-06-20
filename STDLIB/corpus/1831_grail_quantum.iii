@@ -1,0 +1,57 @@
+/* 1831_grail_quantum.iii -- GRAIL LEDGER L9 (quantum logic).  Grail = founding QM from the lattice (B3,
+ * foundational).  Legitimate B2: instantiate a genuine ORTHOMODULAR LATTICE in III and exhibit the quantum
+ * signature -- NON-DISTRIBUTIVITY -- which classical (De Morgan/Boolean) logic can never show.  Model: MO2, the
+ * length-2 modular ortholattice with four atoms {a,a',b,b'} (0<atoms<1), orthocomplement a<->a', b<->b'.
+ * Verifies: orthocomplement is an order-reversing INVOLUTION; a^a'=0, a v a'=1; the ORTHOMODULAR law
+ * (x<=y => y = x v (y ^ x')); and a ^ (b v b') != (a^b) v (a^b') -- NON-distributive.  exit 99. */
+module m1831
+const O : u32 = 0u32   /* bottom */
+const A : u32 = 1u32
+const A2: u32 = 2u32   /* a' */
+const B : u32 = 3u32
+const B2: u32 = 4u32   /* b' */
+const T : u32 = 5u32   /* top */
+fn is_atom(x: u32) -> u8 { if x >= A { if x <= B2 { return 1u8 } }  return 0u8 }
+fn meet(x: u32, y: u32) -> u32 {
+    if x == y { return x }
+    if x == O { return O }   if y == O { return O }
+    if x == T { return y }   if y == T { return x }
+    return O                 /* two distinct atoms meet at bottom */
+}
+fn join(x: u32, y: u32) -> u32 {
+    if x == y { return x }
+    if x == T { return T }   if y == T { return T }
+    if x == O { return y }   if y == O { return x }
+    return T                 /* two distinct atoms join at top */
+}
+fn ortho(x: u32) -> u32 {
+    if x == O { return T }   if x == T { return O }
+    if x == A { return A2 }  if x == A2 { return A }
+    if x == B { return B2 }  if x == B2 { return B }
+    return x
+}
+fn leq(x: u32, y: u32) -> u8 { if meet(x, y) == x { return 1u8 }  return 0u8 }   /* x<=y iff x^y=x */
+fn main() -> u64 {
+    let mut x : u32 = 0u32
+    while x < 6u32 {
+        if ortho(ortho(x)) != x { return 11u64 }                         /* involution */
+        if meet(x, ortho(x)) != O { return 12u64 }                       /* x ^ x' = 0 */
+        if join(x, ortho(x)) != T { return 13u64 }                       /* x v x' = 1 */
+        let mut y : u32 = 0u32
+        while y < 6u32 {
+            if ortho(meet(x, y)) != join(ortho(x), ortho(y)) { return 14u64 }   /* ortho order-reversing (De Morgan) */
+            if leq(x, y) == 1u8 {
+                if join(x, meet(y, ortho(x))) != y { return 15u64 }      /* ORTHOMODULAR law */
+            }
+            y = y + 1u32
+        }
+        x = x + 1u32
+    }
+    /* THE QUANTUM SIGNATURE: non-distributivity (impossible in any De Morgan/Boolean lattice) */
+    let lhs : u32 = meet(A, join(B, B2))                                  /* a ^ (b v b') = a ^ 1 = a */
+    let rhs : u32 = join(meet(A, B), meet(A, B2))                         /* (a^b) v (a^b') = 0 v 0 = 0 */
+    if lhs == rhs { return 20u64 }                                        /* if equal, it'd be distributive -> NOT quantum */
+    if lhs != A { return 21u64 }
+    if rhs != O { return 22u64 }
+    return 99u64   /* a genuine orthomodular lattice in III; non-distributivity (quantum) exhibited */
+}

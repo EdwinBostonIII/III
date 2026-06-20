@@ -35,12 +35,12 @@ Any artifact that appears to settle one of these = a fabrication; reject and re�
 | L1 | Boolean / weave | `bb_intern` + signature **decides the bit‑INDEPENDENT fragment in PTIME** (no SAT) | **B2 ✓** | **1829 (=99)** | bit‑COUPLING routes to SAT (NP‑hard) — the P‑vs‑NP boundary, exhibited |
 | L2 | Kleene 3‑valued / Voice | Voice **is** a faithful strong‑Kleene/De Morgan algebra; 3rd value first‑class | **B1 ✓** | **1816/1826/1828 (=99)** | not a foundational settlement of all 3‑valued logic |
 | L3 | Belnap/De Morgan 6 / logic6 | **paraconsistent CORE**: contradiction tolerated, ex‑falso fails, null‑safe | **B2 ✓** | **1825/1826 (=99)** | full paraconsistent set theory (B3 #5) not attempted |
-| L4 | Equational / XII | XII **is confluent+terminating on its fragment** → decides effect‑equiv THERE | B2 | _pending_ | general TRS confluence undecidable (B3 #6) |
+| L4 | Equational / XII | XII **is confluent+terminating on its fragment** → decides effect‑equiv THERE | **B2 ✓** | **1830 + 1461/1349 (=99)** | general TRS confluence undecidable (B3 #6) |
 | L5 | Dependent type theory / `⊢` | a **decidable type‑checking / normalization** fragment (Curry–Howard) | B2 | _pending_ | impredicative ordinal analysis (B3 #4); full univalence = large B1 |
 | L6 | Lattice theory | **specific** finite lattices realized as congruence lattices of III algebras | B2 | _pending_ | the general representation problem (B3 #3) |
 | L7 | Linear logic | III's reversible organs obey the **no‑weakening/no‑contraction (resource) discipline** | B2 | _pending_ | full Geometry of Interaction = large B1 |
 | L8 | Modal μ‑calculus | **alternation‑free μ‑calculus model‑checking ∈ PTIME** (parity games, tractable island) | B2 | _pending_ | unbounded alternation → B3 #2 |
-| L9 | Quantum logic | an **orthomodular lattice** instantiated; non‑distributivity exhibited (the quantum signature) | B2 | _pending_ | founding QM from the lattice (B3, foundational) |
+| L9 | Quantum logic | an **orthomodular lattice** instantiated; non‑distributivity exhibited (the quantum signature) | **B2 ✓** | **1831 (=99)** | founding QM from the lattice (B3, foundational) |
 | L10 | Temporal logic | **LTL model‑checking + a finite reactive‑synthesis instance** (Büchi–Landweber) | B1 | _pending_ | efficient/distributed synthesis (frontier) |
 | L11 | Concurrent Separation Logic | the **frame rule** + a CSL ownership proof on III's heap discipline | B1 | _pending_ | full automation under weak memory (frontier) |
 

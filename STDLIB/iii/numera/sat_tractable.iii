@@ -8,7 +8,8 @@
  * dichotomy (1978) the Boolean satisfiability instances that are POLYNOMIAL-time decidable are exactly those whose
  * every clause lies in one of six tractable classes -- 0-valid, 1-valid, Horn, dual-Horn, affine (XOR), bijunctive
  * (2-SAT).  This faculty RECOGNISES those classes and decides them in GUARANTEED polynomial time, each by the standard
- * exact algorithm.  It is the fast-path a general solver dispatches to: if an instance is tractable, never enter search.
+ * exact algorithm.  It is INTENDED as the fast-path a general solver can dispatch to (if an instance is tractable, never
+ * enter search) -- AVAILABLE for numera::sat to call, but NOT yet wired into it; today this module is a callable library.
  *
  * Each decider is ported from a corpus KAT proven == brute-force over all 2^n assignments:
  *   - 2-SAT  (implication graph + reachability/SCC, Aspvall-Plass-Tarjan) -- corpus 1863

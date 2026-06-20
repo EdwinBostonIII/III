@@ -68,6 +68,14 @@ global symbols); the `rm_` prefix collided with `forcefield/ripple_metric` and w
 complete on a *documented bounded domain* (e.g. ≤64-vertex arenas, ≤32-var CNF) — honest limits, not correctness gaps,
 matching each wall's open/obstructed core.
 
+**INTEGRATION STATUS (honest — advisor-audited).** All ten are **callable libraries**: any III module may `extern` and
+call them, and the corpus gates do. **None is yet wired into an existing caller** — there is no dispatch from
+`numera::sat` to `sat_tractable`, no migration of the modular-inverse sites to `diophantine`. Wiring them into live
+paths is the explicit *next* step, and it is deferred here on purpose: the natural call sites are the 805-line CDCL
+solver, the crypto modular-arithmetic path (`crt`/`modular`/`modular_mont`), and self-host code — all of which, per III's
+triage discipline (`feedback_triage_selfhost_latent_separate`), require explicit sign-off before modification rather than
+unilateral surgery. So the present, verified impact is *an available, gated library*; deeper wiring awaits that decision.
+
 ---
 
 ## 4. Bottom line

@@ -12,7 +12,8 @@
  * Diophantine wall; this is exactly its decidable linear island, DOCS/III-DIOPHANTINE-WALL-FORMAL.md.)
  *
  * USE CASES.  Modular inverses (RSA/EC scalar ops, CRT recomposition, Barrett/Montgomery setup), solving congruences,
- * lattice/Bezout computations -- any client that today re-derives extended Euclid inline now calls one verified faculty.
+ * lattice/Bezout computations -- AVAILABLE for any client that re-derives extended Euclid inline to call instead; the
+ * existing call sites are NOT yet migrated (today this module is a callable library, not wired into them).
  *
  * INVOCATION.
  *   dio_gcd(a, b) -> i64 (>=0).

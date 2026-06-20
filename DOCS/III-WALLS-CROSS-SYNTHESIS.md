@@ -39,10 +39,19 @@ demonstrated, reusable core.
 Read across the five, the walls *sort* — and naming the sorts is a lens that makes each new wall faster to map. **Tag:
 this taxonomy is a useful organizing lens; it is not a theorem about the space of all problems.**
 
-- **Two kinds of core.**
-  - **OPEN-core** — the frontier is *unknown*: parity (parity∈P?), SAT (P vs NP), GI (GI∈P?), lattice (FLRP).
-  - **OBSTRUCTED-core** — the frontier is a *proven impossibility*: confluence (general-TRS confluence undecidable);
-    and, from the grail ledger, Rice/halting, impredicative ordinal analysis.
+- **Kinds of core (a four-way split, sharper than "OPEN vs OBSTRUCTED" — and licensed by the gated facts).** The walls'
+  cores are not one "open" bucket; the gated facts (`1866`, `1860`) split them into genuinely different *kinds*:
+  - **OBSTRUCTED** — the frontier is a *proven impossibility*: confluence (general-TRS confluence undecidable); and,
+    from the grail ledger, Rice/halting, impredicative ordinal analysis.
+  - **OPEN ≡ the grand question** — the core *is* P vs NP: **SAT** is NP-complete (`1866`), so `SAT∈P ⟺ P=NP`. Solving
+    this wall solves the field's central problem.
+  - **OPEN, local placement** — in NP∩(co-low), *asymmetric*: **parity** (∈ NP∩coNP, `1860`) and **GI** (∈ NP∩coAM).
+    *Not*-in-P would give P≠NP, but *in*-P collapses nothing (neither is NP-complete) — a placement question, strictly
+    weaker than the grand one.
+  - **OPEN, non-complexity** — not a complexity-class question at all: **FLRP** (lattice representability in universal
+    algebra, independent of P vs NP).
+  This four-way split is still a *lens*, not a theorem — but it is a sharper lens than a single OPEN bucket, and each
+  assignment is anchored to a gated fact or citation.
 - **One internal shape, every wall.** A **tractable island**, a **sharp boundary** naming the island's essential
   precondition, and a **core** past it. Verified to hold on all five (the island and boundary are gated KATs in each).
 - **The essential precondition is wall-specific** (§3) — the *template* is invariant, the *boundary* is not.
@@ -102,13 +111,13 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 
 ## 6. The complete cross-wall ledger
 
-| Wall | Core | Core status | Best general bound | Island (VERIFIED/PROVEN III) | KATs |
+| Wall | Core | Core *kind* | Best general bound | Island (VERIFIED/PROVEN III) | KATs |
 |---|---|---|---|---|---|
-| Parity / μ-calc | parity ∈ P? | OPEN | quasi-poly | bounded-`d`/1-player; games=logic; control-blindness | 1848–1862 |
-| SAT | P vs NP | OPEN | exponential (ETH conj.) | Schaefer six classes; NP/self-reducible | 1863–1867 |
+| Parity / μ-calc | parity ∈ P? | OPEN — local placement (NP∩coNP) | quasi-poly | bounded-`d`/1-player; games=logic; control-blindness | 1848–1862 |
+| SAT | P vs NP | OPEN — *is* the grand question (NP-complete) | exponential (ETH conj.) | Schaefer six classes; NP/self-reducible | 1863–1867 |
 | Confluence | decide confluence | OBSTRUCTED (undecidable) | — (decidable on island) | Newman (terminating ⇒ decidable) | 1868–1869 |
-| Graph iso | GI ∈ P? | OPEN | quasi-poly | 1-WL complete for trees; higher-order fix | 1870–1872 |
-| Lattice rep | FLRP | OPEN | — | `Con(V₄)=M₃`; `Π_n` is a lattice | 1873–1874 |
+| Graph iso | GI ∈ P? | OPEN — local placement (NP∩coAM) | quasi-poly | 1-WL complete for trees; higher-order fix | 1870–1872 |
+| Lattice rep | FLRP | OPEN — non-complexity (universal algebra) | — | `Con(V₄)=M₃`; `Π_n` is a lattice | 1873–1874 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

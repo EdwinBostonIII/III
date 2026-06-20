@@ -119,7 +119,7 @@ are *instantiations* that make each face concrete and oracle-checked.
 | Face | Statement | III instantiation |
 |---|---|---|
 | Games | parity-game winner determination ∈ P? | Zielonka oracle `1839` |
-| Logic | full modal μ-calculus model-checking ∈ P? | nested-fixpoint MC `1838` |
+| Logic | full modal μ-calculus model-checking ∈ P? | **`1853` VERIFIED**: the parity μ-formula's nested fixpoint (cpre, Emerson–Lei) == the game oracle on every game — a 4th independent solver |
 | Strategy | ∃ a positional-SI pivot rule with poly-many steps? | VJ/LRC SI `1841/1842`, step counts |
 | Algebra | ∃ a poly-degree Nullstellensatz certificate for the winning region? | Gröbner encoding `1847` |
 | Quant. games | mean-payoff / discounted / simple-stochastic games ∈ P? | the sandwich's one-player reductions `1846` |
@@ -152,6 +152,7 @@ universal-tree family **provably** unable to reach P (B1).
 | T2 | Control-blindness barrier (no graph invariant decides parity) | **PROVEN (III)** | `1848` |
 | T2′ | Control-blindness, quantitative (graph invariant → 1/2 accuracy at scale) | **VERIFIED (III)** | `1852` |
 | T3 | One-player parity ∈ P, exactly (reach-to-α-cycle) — the wall = the 1→2-player step | **VERIFIED (III)** | `1850` |
+| C0 | Games ⟺ Logic: μ-formula nested fixpoint == game winner | **VERIFIED (III)** | `1853` |
 | C1 | Three solver families agree | **VERIFIED (III)** | `1845` |
 | C2 | Relaxation-sandwich soundness | **VERIFIED (III)** | `1846` |
 | C3 | Algebraic (Nullstellensatz/GF(3)) encoding correct | **VERIFIED (III)** | `1847` |

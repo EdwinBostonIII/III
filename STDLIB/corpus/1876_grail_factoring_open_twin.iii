@@ -1,0 +1,65 @@
+/* 1876_grail_factoring_open_twin.iii -- THE PRIMALITY / FACTORING WALL, the OPEN twin: FACTORING.
+ * Within one number-theoretic wall we now have BOTH outcomes the cross-wall precedent invokes: primality FELL to P
+ * (1875), and factoring has NOT -- it is the still-open NP-cap-coNP problem RSA rests on.
+ *
+ * VERIFIED HERE:
+ *  (1) Factoring is in NP: a nontrivial factor is a POLY-checkable witness for "n is composite" (1 < p < n, p | n).
+ *  (2) Factoring is SELF-REDUCIBLE (search <= decision): using only the DECISION oracle "does n have a factor in
+ *      [2,k]?", a BINARY SEARCH over k recovers the smallest prime factor in O(log n) oracle calls -- the threshold k
+ *      where the decision flips from no to yes IS the smallest factor.  We confirm the recovered factor equals the
+ *      brute smallest factor and divides n, on every composite in a range.
+ *
+ * THE STRUCTURAL PLACEMENT (CITED) -- and why it is the perfect open twin.  The decision form ("has a factor <= k?") is
+ * in NP-cap-coNP (NP: exhibit a factor; coNP: exhibit the full prime factorization -- checkable since primality is in P,
+ * 1875).  Factoring is NOT known in P (RSA security rests on its classical hardness), and NOT NP-complete unless
+ * NP=coNP.  Yet it IS in BQP (Shor 1994) -- a quantum polynomial algorithm.  So factoring is an NP-cap-coNP intermediate
+ * candidate that quantum CRACKS but classical has not -- unlike parity/GI, which have no known quantum advantage.  The
+ * wall thus instantiates, side by side: a domino that fell to classical P (primality), and one that has fallen only to
+ * QUANTUM P (factoring) while its classical core stays open.
+ *
+ * HONEST TAG (math-olympiad #4): NP membership and self-reducibility are facts about witnesses; they do NOT put
+ * factoring in classical P (the open question) and make no claim about it.
+ * exit 99 = on every composite in the range, the decision-only binary-search recovers the smallest factor (== brute),
+ *           and it poly-checks as a valid factor. */
+module mfact
+
+fn brute_smallest_factor(n: u64) -> u64 {
+    let mut d : u64 = 2u64
+    while d * d <= n { if (n % d) == 0u64 { return d }  d = d + 1u64 }
+    return n                                    /* n prime: smallest factor is n itself */
+}
+fn is_composite(n: u64) -> u8 { if n < 4u64 { return 0u8 }  if brute_smallest_factor(n) == n { return 0u8 }  return 1u8 }
+/* DECISION oracle: does n have a factor in [2,k]? */
+fn has_factor_le(n: u64, k: u64) -> u8 {
+    let mut d : u64 = 2u64
+    while d <= k { if (n % d) == 0u64 { return 1u8 }  d = d + 1u64 }
+    return 0u8
+}
+/* SELF-REDUCTION: smallest factor via binary search on the (monotone) decision oracle */
+fn smallest_factor_by_decision(n: u64) -> u64 {
+    let mut lo : u64 = 2u64  let mut hi : u64 = n
+    while lo < hi {
+        let mid : u64 = (lo + hi) / 2u64
+        if has_factor_le(n, mid) == 1u8 { hi = mid } else { lo = mid + 1u64 }
+    }
+    return lo
+}
+
+fn main() -> u64 {
+    let mut n : u64 = 4u64  let mut checked : u32 = 0u32
+    while n < 6000u64 {
+        if is_composite(n) == 1u8 {
+            let p : u64 = smallest_factor_by_decision(n)
+            /* (2) self-reduction recovers the smallest factor */
+            if p != brute_smallest_factor(n) { return 10u64 }
+            /* (1) NP witness: p poly-checks as a nontrivial factor */
+            if p <= 1u64 { return 11u64 }
+            if p >= n { return 12u64 }
+            if (n % p) != 0u64 { return 13u64 }
+            checked = checked + 1u32
+        }
+        n = n + 1u64
+    }
+    if checked < 1000u32 { return 60u64 }
+    return 99u64
+}

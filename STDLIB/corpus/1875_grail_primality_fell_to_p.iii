@@ -1,0 +1,71 @@
+/* 1875_grail_primality_fell_to_p.iii -- THE PRIMALITY / FACTORING WALL, the island that FELL TO P: PRIMALITY is in P.
+ * (Sixth wall; the one that grounds the load-bearing "NP-cap-coNP problems with a good upper bound fall to P" precedent
+ * cited across the parity/SAT/GI/lattice docs -- here it is a gated asset, with BOTH outcomes (fell / still-open) in one
+ * wall: primality fell (this KAT), factoring has not (1876).)
+ *
+ * THE ISLAND (VERIFIED here; CITED: AKS 2002 for unconditional deterministic poly).  Primality testing is in P.  We
+ * verify a deterministic MILLER-RABIN: write n-1 = d * 2^s (d odd); n passes base a iff a^d == 1 (mod n) or some
+ * a^(d*2^r) == n-1 (mod n).  Testing the fixed bases {2,3,5,7} is DETERMINISTIC for all n < 3,215,031,751 (a known
+ * result), so below that bound Miller-Rabin is an exact poly primality test.  We confirm it agrees with brute trial
+ * division (n prime iff no divisor in 2..sqrt(n)) on every n in a range -- both primes and composites occur.
+ *
+ * THE PRECEDENT IT GROUNDS (honest, tempered).  Primality was long in NP-cap-coNP (Pratt certificates for "prime";
+ * trial-division / a factor for "composite") with a good upper bound (randomized-poly via Miller-Rabin/Solovay-Strassen
+ * from the 1970s), and it FELL to P (AKS 2002).  This is exactly the "domino" the parity/GI cross-wall narrative cites
+ * -- now grounded as a gated island rather than a bare citation.  TEMPER: it fell from a RANDOMIZED-poly upper bound;
+ * parity/GI sit at quasi-poly, weaker -- so the precedent is suggestive, not decisive (as the docs already note).
+ *
+ * HONEST TAG (math-olympiad #4): primality in P is a THEOREM (AKS); grounding Miller-Rabin == brute confirms the island.
+ * It says nothing about factoring (the open twin, 1876) or about P vs NP.
+ * exit 99 = deterministic Miller-Rabin {2,3,5,7} == brute trial division on every n in the tested range, both outcomes. */
+module mprim
+var RNG : [u32; 1]
+
+fn modmul(a: u64, b: u64, m: u64) -> u64 { return (a * b) % m }   /* m < ~1e5 here, so a*b < 1e10 fits u64 */
+fn modpow(base: u64, exp: u64, m: u64) -> u64 {
+    let mut r : u64 = 1u64  let mut b : u64 = base % m  let mut e : u64 = exp
+    while e > 0u64 { if (e & 1u64) == 1u64 { r = modmul(r, b, m) }  b = modmul(b, b, m)  e = e >> 1u64 }
+    return r
+}
+fn brute_prime(n: u64) -> u8 {
+    if n < 2u64 { return 0u8 }
+    let mut d : u64 = 2u64
+    while d * d <= n { if (n % d) == 0u64 { return 0u8 }  d = d + 1u64 }
+    return 1u8
+}
+fn mr_witness(a: u64, n: u64, d: u64, s: u32) -> u8 {   /* returns 1 if n passes base a (probably prime), 0 if composite */
+    let mut x : u64 = modpow(a, d, n)
+    if x == 1u64 { return 1u8 }
+    if x == n - 1u64 { return 1u8 }
+    let mut r : u32 = 1u32
+    while r < s { x = modmul(x, x, n)  if x == n - 1u64 { return 1u8 }  r = r + 1u32 }
+    return 0u8
+}
+fn mr_prime(n: u64) -> u8 {
+    if n < 2u64 { return 0u8 }
+    if n < 4u64 { return 1u8 }                 /* 2,3 prime */
+    if (n & 1u64) == 0u64 { return 0u8 }       /* even */
+    /* n-1 = d * 2^s, d odd */
+    let mut d : u64 = n - 1u64  let mut s : u32 = 0u32
+    while (d & 1u64) == 0u64 { d = d >> 1u64  s = s + 1u32 }
+    /* deterministic bases {2,3,5,7} for n < 3.2e9 */
+    if n > 2u64 { if mr_witness(2u64, n, d, s) == 0u8 { return 0u8 } }
+    if n > 3u64 { if mr_witness(3u64, n, d, s) == 0u8 { return 0u8 } }
+    if n > 5u64 { if mr_witness(5u64, n, d, s) == 0u8 { return 0u8 } }
+    if n > 7u64 { if mr_witness(7u64, n, d, s) == 0u8 { return 0u8 } }
+    return 1u8
+}
+
+fn main() -> u64 {
+    let mut n : u64 = 2u64  let mut primes : u32 = 0u32  let mut comps : u32 = 0u32
+    while n < 60000u64 {
+        let b : u8 = brute_prime(n)
+        let m : u8 = mr_prime(n)
+        if b != m { return 10u64 }                       /* deterministic Miller-Rabin must == brute */
+        if b == 1u8 { primes = primes + 1u32 } else { comps = comps + 1u32 }
+        n = n + 1u64
+    }
+    if primes < 1000u32 { return 60u64 }
+    if comps < 1000u32 { return 61u64 }
+    return 99u64
+}

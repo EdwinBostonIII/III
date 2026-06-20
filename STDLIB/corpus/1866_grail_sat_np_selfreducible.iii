@@ -1,0 +1,92 @@
+/* 1866_grail_sat_np_selfreducible.iii -- THE SAT / P-vs-NP WALL, the structural core (NP membership + self-reducibility),
+ * and the cross-wall contrast with parity that makes SAT a HIGHER wall.
+ *
+ * VERIFIED HERE:
+ *  (1) SAT in NP: a satisfying assignment is a POLY-checkable YES-witness (checking = one pass over the clauses).  We
+ *      confirm every assignment our search returns actually satisfies the formula.
+ *  (2) SAT is SELF-REDUCIBLE (search <= decision): using only a SAT *decision* oracle, we recover a full satisfying
+ *      assignment by fixing variables one at a time (n decision queries) -- "does a satisfying assignment exist
+ *      extending this prefix?"  This is the structural reason the YES-witness is meaningful and findable.
+ *
+ * THE CROSS-WALL ASSET (CITED + contrast to 1860).  SAT is NP-COMPLETE (Cook-Levin 1971): every NP problem reduces to
+ * it in poly time.  So its YES instances have short witnesses (assignments), but its NO instances (UNSAT) have NO known
+ * short witness -- a poly UNSAT certificate would put SAT in coNP, hence NP = coNP.  This is ASYMMETRIC.  Parity, by
+ * contrast, is in NP intersect coNP (1860): BOTH a YES and a NO instance carry a poly-checkable positional-strategy
+ * witness.  Therefore parity sits STRICTLY LOWER in the landscape than SAT -- it is the intermediate band, not the
+ * complete top.  This is the precise, structural reason the parity wall is more hemmed-in (and plausibly easier) than
+ * the SAT / P-vs-NP wall: SAT is the hardest problem in NP; parity is not known to be hard for anything.
+ *
+ * HONEST TAG (math-olympiad #4): self-reducibility and NP membership are classical facts; verifying them grounds the
+ * SAT wall's structure.  They say NOTHING about P vs NP (NP membership + self-reducibility hold whether or not P=NP).
+ * exit 99 = on every SAT instance, the decision-only self-reduction returns an assignment that the formula confirms. */
+module msatnp
+var CPOS : [u32; 96]    /* clause positive-literal var mask */
+var CNEG : [u32; 96]    /* clause negative-literal var mask */
+var NC : [u32; 1]
+var NVAR : [u32; 1]
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn varmask() -> u32 { return (1u32 << NVAR[0u64]) - 1u32 }
+/* does assignment A satisfy every clause?  clause sat iff (A & pos)!=0 or (~A & neg)!=0 */
+fn satisfies(a: u32) -> u8 {
+    let nc : u32 = NC[0u64]  let vm : u32 = varmask()  let mut c : u32 = 0u32
+    while c < nc {
+        if (a & CPOS[c as u64]) == 0u32 { if (CNEG[c as u64] & (a ^ 0xFFFFFFFFu32) & vm) == 0u32 { return 0u8 } }
+        c = c + 1u32
+    }
+    return 1u8
+}
+/* decision oracle: does a satisfying assignment exist whose bits on `fmask` equal `fval`? */
+fn sat_extends(fmask: u32, fval: u32) -> u8 {
+    let nv : u32 = NVAR[0u64]  let lim : u32 = 1u32 << nv  let mut a : u32 = 0u32
+    while a < lim {
+        if (a & fmask) == (fval & fmask) { if satisfies(a) == 1u8 { return 1u8 } }
+        a = a + 1u32
+    }
+    return 0u8
+}
+/* SELF-REDUCTION: build an assignment using only the decision oracle (n queries) */
+fn find_assignment() -> u32 {
+    let nv : u32 = NVAR[0u64]  let mut fixed : u32 = 0u32  let mut val : u32 = 0u32  let mut i : u32 = 0u32
+    while i < nv {
+        let nf : u32 = fixed | (1u32 << i)
+        /* try x_i = 0 first (val keeps bit i = 0) */
+        if sat_extends(nf, val) == 1u8 { fixed = nf } else { val = val | (1u32 << i)  fixed = nf }
+        i = i + 1u32
+    }
+    return val
+}
+fn gen_cnf(nv: u32, nc: u32) -> i32 {
+    NVAR[0u64] = nv  NC[0u64] = nc  let mut c : u32 = 0u32
+    while c < nc {
+        /* a random 3-literal clause (genuine 3-SAT shape: up to 3 distinct vars, random polarity) */
+        let mut pos : u32 = 0u32  let mut neg : u32 = 0u32  let mut j : u32 = 0u32
+        while j < 3u32 {
+            let v : u32 = rnd() % nv
+            if (rnd() & 1u32) == 0u32 { pos = pos | (1u32 << v) } else { neg = neg | (1u32 << v) }
+            j = j + 1u32
+        }
+        CPOS[c as u64] = pos  CNEG[c as u64] = neg
+        c = c + 1u32
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x4E9A71u32
+    let mut t : u32 = 0u32  let mut sat_cases : u32 = 0u32
+    while t < 3000u32 {
+        let nv : u32 = 4u32 + (rnd() % 6u32)             /* 4..9 vars */
+        let nc : u32 = 2u32 + (rnd() % (2u32 * nv))
+        gen_cnf(nv, nc)
+        if sat_extends(0u32, 0u32) == 1u8 {              /* formula is SAT */
+            let a : u32 = find_assignment()              /* decision-only self-reduction */
+            if satisfies(a) != 1u8 { return 10u64 }      /* the recovered witness MUST satisfy (NP membership + self-red) */
+            sat_cases = sat_cases + 1u32
+        }
+        t = t + 1u32
+    }
+    if sat_cases < 200u32 { return 60u64 }               /* enough SAT instances exercised */
+    return 99u64
+}

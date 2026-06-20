@@ -1,0 +1,105 @@
+/* 1864_grail_sat_horn_island.iii -- THE SAT / P-vs-NP WALL, island (2): Horn-SAT is in P, EXACTLY.
+ *
+ * ISLAND (CITED: Dowling-Gallier 1984).  A CNF in which every clause has AT MOST ONE positive literal (a Horn formula)
+ * is decided in linear time by UNIT PROPAGATION (the least model).  A Horn clause is either DEFINITE -- (~x1 or .. or
+ * ~xk or h), read as "body {x1..xk} implies head h" -- or a GOAL clause (~x1 or .. or ~xk), no head.  Compute the least
+ * model M (all-false, then repeatedly: if a definite clause's body is all-true in M, force its head true).  The formula
+ * is SAT iff M satisfies every GOAL clause (some body var is false); else UNSAT.  Poly -- no 2^n search.
+ *
+ * VERIFICATION: on random Horn formulas, the least-model solver agrees with the brute-force oracle every time.
+ *
+ * WHERE THIS SITS (honest tag).  Horn-SAT in P is one of Schaefer's six tractable islands; like 2-SAT it does NOT touch
+ * P vs NP -- general 3-SAT (with >=2 positive literals per clause allowed) is NP-complete.  It GROUNDS another edge of
+ * the SAT wall's tractable boundary.
+ * exit 99 = the poly least-model Horn solver == the brute-force oracle on every sampled Horn formula. */
+module mhorn
+var BODY : [u32; 64]    /* negative-literal vars (the body) */
+var HEAD : [u32; 64]    /* positive-literal var (if any) */
+var HASH : [u8; 64]     /* 1 = clause has a head (definite); 0 = goal clause */
+var NC : [u32; 1]
+var NVAR : [u32; 1]
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn varmask() -> u32 { return (1u32 << NVAR[0u64]) - 1u32 }
+
+fn brute_sat() -> u8 {
+    let nv : u32 = NVAR[0u64]  let nc : u32 = NC[0u64]  let lim : u32 = 1u32 << nv
+    let mut a : u32 = 0u32
+    while a < lim {
+        let mut ok : u8 = 1u8  let mut c : u32 = 0u32
+        while c < nc {
+            let mut sat : u8 = 0u8
+            if HASH[c as u64] == 1u8 { if (a & (1u32 << HEAD[c as u64])) != 0u32 { sat = 1u8 } }   /* head true */
+            if sat == 0u8 { if (BODY[c as u64] & (a ^ 0xFFFFFFFFu32) & varmask()) != 0u32 { sat = 1u8 } } /* some body var false */
+            if sat == 0u8 { ok = 0u8  c = nc }
+            c = c + 1u32
+        }
+        if ok == 1u8 { return 1u8 }
+        a = a + 1u32
+    }
+    return 0u8
+}
+fn least_model() -> u32 {
+    let nc : u32 = NC[0u64]  let mut m : u32 = 0u32  let mut done : u8 = 0u8
+    while done == 0u8 {
+        let mut changed : u8 = 0u8  let mut c : u32 = 0u32
+        while c < nc {
+            if HASH[c as u64] == 1u8 {
+                if (m & BODY[c as u64]) == BODY[c as u64] {            /* body all true */
+                    if (m & (1u32 << HEAD[c as u64])) == 0u32 { m = m | (1u32 << HEAD[c as u64])  changed = 1u8 }
+                }
+            }
+            c = c + 1u32
+        }
+        if changed == 0u8 { done = 1u8 }
+    }
+    return m
+}
+fn horn_sat() -> u8 {
+    let m : u32 = least_model()  let nc : u32 = NC[0u64]  let mut c : u32 = 0u32
+    while c < nc {
+        if HASH[c as u64] == 0u8 {                                    /* goal clause: UNSAT if all body vars true */
+            if (m & BODY[c as u64]) == BODY[c as u64] { return 0u8 }
+        }
+        c = c + 1u32
+    }
+    return 1u8
+}
+fn gen_horn(nv: u32, nc: u32) -> i32 {
+    NVAR[0u64] = nv  NC[0u64] = nc  let vm : u32 = (1u32 << nv) - 1u32
+    let mut c : u32 = 0u32
+    while c < nc {
+        /* random body (each var in body with ~1/3 prob) */
+        let mut b : u32 = 0u32  let mut v : u32 = 0u32
+        while v < nv { if (rnd() % 3u32) == 0u32 { b = b | (1u32 << v) }  v = v + 1u32 }
+        if (rnd() % 10u32) < 7u32 {                                   /* 70% definite (has a head) */
+            let h : u32 = rnd() % nv
+            b = b & (vm ^ (1u32 << h))                                /* head not in body */
+            HEAD[c as u64] = h  HASH[c as u64] = 1u8  BODY[c as u64] = b
+        } else {
+            if b == 0u32 { b = 1u32 << (rnd() % nv) }                 /* nonempty goal clause */
+            HASH[c as u64] = 0u8  BODY[c as u64] = b  HEAD[c as u64] = 0u32
+        }
+        c = c + 1u32
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x40C1A7u32
+    let mut t : u32 = 0u32  let mut sat_seen : u32 = 0u32  let mut unsat_seen : u32 = 0u32
+    while t < 4000u32 {
+        let nv : u32 = 4u32 + (rnd() % 7u32)
+        let nc : u32 = nv + (rnd() % (3u32 * nv))
+        gen_horn(nv, nc)
+        let o : u8 = brute_sat()
+        let s : u8 = horn_sat()
+        if o != s { return 10u64 }
+        if o == 1u8 { sat_seen = sat_seen + 1u32 } else { unsat_seen = unsat_seen + 1u32 }
+        t = t + 1u32
+    }
+    if sat_seen < 100u32 { return 60u64 }
+    if unsat_seen < 100u32 { return 61u64 }
+    return 99u64
+}

@@ -1,0 +1,132 @@
+/* 1867_grail_sat_schaefer_census.iii -- THE SAT / P-vs-NP WALL, the Schaefer dichotomy boundary (the SAT analog of
+ * parity's "four axes": the EXACT classification of the tractable islands).
+ *
+ * SCHAEFER'S DICHOTOMY (CITED, 1978).  Boolean constraint satisfaction is in P iff every constraint is in one of SIX
+ * classes -- 0-valid, 1-valid, Horn, dual-Horn, affine (XOR), bijunctive (2-SAT) -- and NP-complete otherwise.  There
+ * is NO intermediate complexity for Boolean CSP (a perfect P / NP-complete cliff).  KATs 1863 (2-SAT), 1864 (Horn),
+ * 1865 (XOR/affine) ground three classes against the brute oracle; this KAT grounds the other three and exhibits the
+ * boundary:
+ *   - 0-VALID: every clause has a negative literal => the all-false assignment satisfies => trivially SAT.
+ *   - 1-VALID: every clause has a positive literal => the all-true assignment satisfies => trivially SAT.
+ *   - DUAL-HORN: every clause has <= 1 NEGATIVE literal => flip every variable's polarity to get a HORN formula and
+ *     solve by the (dual) least model -- poly.  (SAT is invariant under flipping all variables.)
+ * Each verified == the brute-force oracle (all 2^n assignments).
+ *
+ * THE BOUNDARY (a non-Schaefer witness).  The 3-CNF { (x1 v x2 v x3), (~x1 v ~x2 v ~x3) } is in NONE of the six classes
+ * (>=2 positive literals -> not Horn; >=2 negative -> not dual-Horn; a clause with no negative -> not 0-valid; a clause
+ * with no positive -> not 1-valid; 3 literals -> not bijunctive; not a linear system -> not affine).  It is decided
+ * only by search, and it is the germ of NP-completeness (it is NAE-3SAT-shaped).  We confirm it falls outside all five
+ * CNF-detectable classes and that the oracle still decides it.
+ *
+ * HONEST TAG (math-olympiad #4).  Schaefer's theorem is a CLASSIFICATION of restricted classes; it does NOT bear on
+ * P vs NP for general SAT (which is exactly the NP-complete side).  Grounding the islands maps the SAT wall's tractable
+ * boundary; the open core (P vs NP) is untouched.
+ * exit 99 = the three remaining tractable classes are decided == the oracle, and the non-Schaefer witness is outside
+ *           all five CNF-detectable classes while the oracle decides it. */
+module mschaef
+var CPOS : [u32; 96]
+var CNEG : [u32; 96]
+var NC : [u32; 1]
+var NVAR : [u32; 1]
+var RNG : [u32; 1]
+/* Horn working arrays for the dual-Horn (flip->Horn) solve */
+var HBODY : [u32; 96]
+var HHEAD : [u32; 96]
+var HHAS : [u8; 96]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn varmask() -> u32 { return (1u32 << NVAR[0u64]) - 1u32 }
+fn popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+fn satisfies(a: u32) -> u8 {
+    let nc : u32 = NC[0u64]  let vm : u32 = varmask()  let mut c : u32 = 0u32
+    while c < nc { if (a & CPOS[c as u64]) == 0u32 { if (CNEG[c as u64] & (a ^ 0xFFFFFFFFu32) & vm) == 0u32 { return 0u8 } }  c = c + 1u32 }
+    return 1u8
+}
+fn brute_sat() -> u8 {
+    let lim : u32 = 1u32 << NVAR[0u64]  let mut a : u32 = 0u32
+    while a < lim { if satisfies(a) == 1u8 { return 1u8 }  a = a + 1u32 }
+    return 0u8
+}
+/* class membership tests (poly) */
+fn is_0valid() -> u8 { let nc : u32 = NC[0u64]  let mut c : u32 = 0u32  while c < nc { if CNEG[c as u64] == 0u32 { return 0u8 }  c = c + 1u32 }  return 1u8 }
+fn is_1valid() -> u8 { let nc : u32 = NC[0u64]  let mut c : u32 = 0u32  while c < nc { if CPOS[c as u64] == 0u32 { return 0u8 }  c = c + 1u32 }  return 1u8 }
+fn is_horn() -> u8 { let nc : u32 = NC[0u64]  let mut c : u32 = 0u32  while c < nc { if popc(CPOS[c as u64]) > 1u32 { return 0u8 }  c = c + 1u32 }  return 1u8 }
+fn is_dualhorn() -> u8 { let nc : u32 = NC[0u64]  let mut c : u32 = 0u32  while c < nc { if popc(CNEG[c as u64]) > 1u32 { return 0u8 }  c = c + 1u32 }  return 1u8 }
+fn is_bijunctive() -> u8 { let nc : u32 = NC[0u64]  let mut c : u32 = 0u32  while c < nc { if (popc(CPOS[c as u64]) + popc(CNEG[c as u64])) > 2u32 { return 0u8 }  c = c + 1u32 }  return 1u8 }
+
+/* dual-Horn solver: flip all variable polarities -> Horn formula, solve by least model; SAT invariant under flip */
+fn dualhorn_sat() -> u8 {
+    let nc : u32 = NC[0u64]  let mut c : u32 = 0u32
+    while c < nc {
+        /* flipped clause: positive<->negative.  flipped is Horn (<=1 positive = original <=1 negative). */
+        let fp : u32 = CNEG[c as u64]   /* flipped positives = original negatives (<=1) */
+        let fn_ : u32 = CPOS[c as u64]  /* flipped negatives (the body) */
+        HBODY[c as u64] = fn_
+        if fp == 0u32 { HHAS[c as u64] = 0u8  HHEAD[c as u64] = 0u32 }
+        else { HHAS[c as u64] = 1u8  let mut h : u32 = 0u32  let mut v : u32 = 0u32  while v < NVAR[0u64] { if (fp & (1u32 << v)) != 0u32 { h = v  v = NVAR[0u64] } else { v = v + 1u32 } }  HHEAD[c as u64] = h }
+        c = c + 1u32
+    }
+    /* least model on the flipped Horn formula */
+    let mut m : u32 = 0u32  let mut done : u8 = 0u8
+    while done == 0u8 {
+        let mut changed : u8 = 0u8  let mut k : u32 = 0u32
+        while k < nc { if HHAS[k as u64] == 1u8 { if (m & HBODY[k as u64]) == HBODY[k as u64] { if (m & (1u32 << HHEAD[k as u64])) == 0u32 { m = m | (1u32 << HHEAD[k as u64])  changed = 1u8 } } }  k = k + 1u32 }
+        if changed == 0u8 { done = 1u8 }
+    }
+    let mut g : u32 = 0u32
+    while g < nc { if HHAS[g as u64] == 0u8 { if (m & HBODY[g as u64]) == HBODY[g as u64] { return 0u8 } }  g = g + 1u32 }
+    return 1u8
+}
+fn gen_class(nv: u32, nc: u32, cls: u32) -> i32 {   /* cls: 0=0valid,1=1valid,2=dualhorn */
+    NVAR[0u64] = nv  NC[0u64] = nc  let mut c : u32 = 0u32
+    while c < nc {
+        let mut pos : u32 = 0u32  let mut neg : u32 = 0u32  let mut j : u32 = 0u32
+        while j < 3u32 { let v : u32 = rnd() % nv  if (rnd() & 1u32) == 0u32 { pos = pos | (1u32 << v) } else { neg = neg | (1u32 << v) }  j = j + 1u32 }
+        if cls == 0u32 { if neg == 0u32 { neg = 1u32 << (rnd() % nv) } }                 /* 0-valid: ensure a negative literal */
+        if cls == 1u32 { if pos == 0u32 { pos = 1u32 << (rnd() % nv) } }                 /* 1-valid: ensure a positive literal */
+        if cls == 2u32 { while popc(neg) > 1u32 { let v : u32 = rnd() % nv  neg = neg & ((1u32 << v) ^ 0xFFFFFFFFu32) } } /* dual-Horn: <=1 negative */
+        CPOS[c as u64] = pos  CNEG[c as u64] = neg
+        c = c + 1u32
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x5C4AEFu32
+    /* 0-valid and 1-valid: trivially SAT, and == brute */
+    let mut t : u32 = 0u32
+    while t < 1500u32 {
+        let nv : u32 = 4u32 + (rnd() % 6u32)  let nc : u32 = 2u32 + (rnd() % (2u32 * nv))
+        gen_class(nv, nc, 0u32)
+        if is_0valid() != 1u8 { return 20u64 }
+        if brute_sat() != 1u8 { return 21u64 }                  /* 0-valid => SAT (all-false) */
+        gen_class(nv, nc, 1u32)
+        if is_1valid() != 1u8 { return 22u64 }
+        if brute_sat() != 1u8 { return 23u64 }                  /* 1-valid => SAT (all-true) */
+        t = t + 1u32
+    }
+    /* dual-Horn: flip->Horn least model == brute (both SAT and UNSAT must occur) */
+    let mut t2 : u32 = 0u32  let mut ds : u32 = 0u32  let mut du : u32 = 0u32
+    while t2 < 2500u32 {
+        let nv : u32 = 4u32 + (rnd() % 6u32)  let nc : u32 = nv + (rnd() % (3u32 * nv))
+        gen_class(nv, nc, 2u32)
+        if is_dualhorn() != 1u8 { return 30u64 }
+        let o : u8 = brute_sat()
+        if dualhorn_sat() != o { return 31u64 }
+        if o == 1u8 { ds = ds + 1u32 } else { du = du + 1u32 }
+        t2 = t2 + 1u32
+    }
+    if ds < 100u32 { return 32u64 }
+    if du < 100u32 { return 33u64 }
+    /* the non-Schaefer witness: { (x1 v x2 v x3), (~x1 v ~x2 v ~x3) } -- outside all five CNF-detectable classes */
+    NVAR[0u64] = 3u32  NC[0u64] = 2u32
+    CPOS[0u64] = (1u32 << 0u32) | (1u32 << 1u32) | (1u32 << 2u32)  CNEG[0u64] = 0u32
+    CPOS[1u64] = 0u32  CNEG[1u64] = (1u32 << 0u32) | (1u32 << 1u32) | (1u32 << 2u32)
+    if is_0valid()     == 1u8 { return 40u64 }
+    if is_1valid()     == 1u8 { return 41u64 }
+    if is_horn()       == 1u8 { return 42u64 }
+    if is_dualhorn()   == 1u8 { return 43u64 }
+    if is_bijunctive() == 1u8 { return 44u64 }
+    if brute_sat()     != 1u8 { return 45u64 }                  /* the oracle still decides it (SAT: e.g. 100) */
+    return 99u64
+}

@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "drbg.iiidrbg.iii\0"
+    .ascii "drbg.iii\0"
 L_str_1:
     .ascii "drbg.iii\0"
     .section .bss

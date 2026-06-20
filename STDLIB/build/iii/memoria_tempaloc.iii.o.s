@@ -401,32 +401,20 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
-    movl -48(%rbp), %eax
-    pushq %rax
-    movl L_TEMPALOC_BAD(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_else_20
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_21:
+    jmp L_if_end_21
+L_if_else_20:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -438,6 +426,10 @@ L_if_end_21:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -455,7 +447,7 @@ L_loop_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_23
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -465,7 +457,7 @@ L_loop_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_23:
     leaq L_TEMPALOC_TYPE(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -595,7 +587,7 @@ tempaloc_slot_of:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_25
     movl L_TEMPALOC_BAD(%rip), %eax
     pushq %rax
     popq %rax
@@ -605,7 +597,7 @@ tempaloc_slot_of:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_25:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0xffffffffffffff, %rax
@@ -628,7 +620,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_27
     movl L_TEMPALOC_BAD(%rip), %eax
     pushq %rax
     popq %rax
@@ -638,7 +630,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_27:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -663,7 +655,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_29
     movl L_TEMPALOC_BAD(%rip), %eax
     pushq %rax
     popq %rax
@@ -673,7 +665,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_29:
     movq -48(%rbp), %rax
     pushq %rax
     popq %rax
@@ -699,7 +691,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_31
     movl L_TEMPALOC_BAD(%rip), %eax
     pushq %rax
     popq %rax
@@ -709,7 +701,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_31:
     leaq L_TEMPALOC_TYPE(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -728,7 +720,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_33
     movl L_TEMPALOC_BAD(%rip), %eax
     pushq %rax
     popq %rax
@@ -738,7 +730,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_33:
     leaq L_TEMPALOC_SLOT(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -798,7 +790,7 @@ tempaloc_free:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_35
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -811,7 +803,7 @@ tempaloc_free:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_35:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0xffffffffffffff, %rax
@@ -927,7 +919,7 @@ tempaloc_count_live:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_37
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -937,7 +929,7 @@ tempaloc_count_live:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_37:
     movzbq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -956,7 +948,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_40:
+L_loop_top_38:
     movl -40(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -969,7 +961,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_39
     movl -24(%rbp), %eax
     pushq %rax
     movl -40(%rbp), %eax
@@ -999,7 +991,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_41
     leaq L_TEMPALOC_TYPE(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -1018,7 +1010,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_43
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1033,11 +1025,11 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_41:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1052,8 +1044,8 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_38
+L_loop_end_39:
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax

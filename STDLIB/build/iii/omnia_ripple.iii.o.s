@@ -4,7 +4,7 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iii\0"
+    .ascii "crystal.iii\0"
 L_str_1:
     .ascii "crystal.iii\0"
 L_str_2:
@@ -22,7 +22,7 @@ L_str_7:
 L_str_8:
     .ascii "crystal.iii\0"
 L_str_9:
-    .ascii "crystal.iii\0"
+    .ascii "vec.iii\0"
 L_str_10:
     .ascii "vec.iii\0"
 L_str_11:
@@ -32,9 +32,9 @@ L_str_12:
 L_str_13:
     .ascii "vec.iii\0"
 L_str_14:
-    .ascii "vec.iii\0"
-L_str_15:
     .ascii "crystal_deps.iii\0"
+L_str_15:
+    .ascii "mhash.iii\0"
 L_str_16:
     .ascii "mhash.iii\0"
 L_str_17:
@@ -42,7 +42,7 @@ L_str_17:
 L_str_18:
     .ascii "mhash.iii\0"
 L_str_19:
-    .ascii "mhash.iii\0"
+    .ascii "witness.iii\0"
 L_str_20:
     .ascii "witness.iii\0"
 L_str_21:
@@ -50,18 +50,16 @@ L_str_21:
 L_str_22:
     .ascii "witness.iii\0"
 L_str_23:
-    .ascii "witness.iii\0"
+    .ascii "kchain.iii\0"
 L_str_24:
     .ascii "kchain.iii\0"
 L_str_25:
     .ascii "kchain.iii\0"
 L_str_26:
-    .ascii "kchain.iii\0"
+    .ascii "closure.iii\0"
 L_str_27:
     .ascii "closure.iii\0"
 L_str_28:
-    .ascii "closure.iii\0"
-L_str_29:
     .ascii "closure.iii\0"
     .section .rodata
 L_RIPPLE_INVALID:
@@ -2327,6 +2325,198 @@ ripple_last_error:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "ripple_native_process"
+    .text
+    .global ripple_native_process
+    .seh_proc ripple_native_process
+ripple_native_process:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_49
+    movq L_RIPPLE_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl L_RIPPLE_NATIVE_USED(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
+    movq L_RIPPLE_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_51:
+    leaq L_RIPPLE_NATIVE_CRYSTAL_ID(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_53
+    movq L_RIPPLE_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_53:
+    leaq L_RIPPLE_NATIVE_MODE(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl L_RIPPLE_MODE_FAST(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_RIPPLE_MODE_STRICT(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movl L_RIPPLE_MODE_STRICT(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq ripple_analyze
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_57
+    movq L_RIPPLE_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_57:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq ripple_execute
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "ripple_verify"
     .text
     .global ripple_verify
@@ -2352,7 +2542,7 @@ ripple_verify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_59
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2362,7 +2552,7 @@ ripple_verify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_59:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2381,7 +2571,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_61
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2391,7 +2581,7 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_61:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2410,7 +2600,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_52:
+L_loop_top_62:
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -2423,7 +2613,7 @@ L_loop_top_52:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_53
+    jz L_loop_end_63
     movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2436,7 +2626,7 @@ L_loop_top_52:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_65
     movl -24(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2467,7 +2657,7 @@ L_loop_top_52:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_67
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2475,11 +2665,11 @@ L_loop_top_52:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_67:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_65:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2494,8 +2684,8 @@ L_if_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_52
-L_loop_end_53:
+    jmp L_loop_top_62
+L_loop_end_63:
     movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -2508,7 +2698,7 @@ L_loop_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_69
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2518,7 +2708,7 @@ L_loop_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_69:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2536,7 +2726,7 @@ L_if_end_59:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_71
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2546,7 +2736,7 @@ L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_71:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2587,12 +2777,12 @@ L_ripple_load_prior_root:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_73
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_64:
+L_loop_top_74:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -2605,7 +2795,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_65
+    jz L_loop_end_75
     leaq L_RIPPLE_PRIOR_ROOT(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2629,8 +2819,8 @@ L_loop_top_64:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_64
-L_loop_end_65:
+    jmp L_loop_top_74
+L_loop_end_75:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2640,12 +2830,12 @@ L_loop_end_65:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_73:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_66:
+L_loop_top_76:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -2658,7 +2848,7 @@ L_loop_top_66:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_67
+    jz L_loop_end_77
     leaq L_RIPPLE_PRIOR_ROOT(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2700,8 +2890,8 @@ L_loop_top_66:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_66
-L_loop_end_67:
+    jmp L_loop_top_76
+L_loop_end_77:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2741,7 +2931,7 @@ ripple_commit:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_79
     movq L_RIPPLE_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -2751,7 +2941,7 @@ ripple_commit:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_79:
     subq $32, %rsp
     callq L_ripple_init_domains
     addq $32, %rsp

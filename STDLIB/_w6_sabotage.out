@@ -1,0 +1,61 @@
+[iiis-2 build] [PHASE] compile-c  t=0s
+[iiis-2 build] skip acc.c (ported to .iii)
+[iiis-2 build] skip ast.c (ported to .iii)
+[iiis-2 build] skip ceiling.c (ported to .iii)
+[iiis-2 build] skip cg_r0.c (ported to .iii)
+[iiis-2 build] skip cg_r3.c (ported to .iii)
+[iiis-2 build] skip cg_rm1.c (ported to .iii)
+[iiis-2 build] skip cg_rm2.c (ported to .iii)
+[iiis-2 build] skip emit.c (ported to .iii)
+[iiis-2 build] skip hexad_check.c (ported to .iii)
+[iiis-2 build] skip iii_cg_pe_iiis1.c (ported to .iii)
+[iiis-2 build] skip jit_emit.c (ported to .iii)
+[iiis-2 build] skip lex.c (ported to .iii)
+[iiis-2 build] skip link.c (ported to .iii)
+[iiis-2 build] skip main.c (ported to .iii)
+[iiis-2 build] skip parse.c (ported to .iii)
+[iiis-2 build] skip proof.c (ported to .iii)
+[iiis-2 build] skip sema.c (ported to .iii)
+[iiis-2 build] skip sid.c (ported to .iii)
+[iiis-2 build] skip witness_alloc.c (ported to .iii)
+[iiis-2 build] [PHASE] compile-iii  t=0s
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/acc.iii -> /tmp/iiis1-build.59uWUn/obj/acc.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/affine_audit.iii -> /tmp/iiis1-build.59uWUn/obj/affine_audit.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/ast.iii -> /tmp/iiis1-build.59uWUn/obj/ast.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/ceiling.iii -> /tmp/iiis1-build.59uWUn/obj/ceiling.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_r0.iii -> /tmp/iiis1-build.59uWUn/obj/cg_r0.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_r3.iii -> /tmp/iiis1-build.59uWUn/obj/cg_r3.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_r3_xii.iii -> /tmp/iiis1-build.59uWUn/obj/cg_r3_xii.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_r3_xii_adapter.iii -> /tmp/iiis1-build.59uWUn/obj/cg_r3_xii_adapter.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_rm1.iii -> /tmp/iiis1-build.59uWUn/obj/cg_rm1.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_rm2.iii -> /tmp/iiis1-build.59uWUn/obj/cg_rm2.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_sha.iii -> /tmp/iiis1-build.59uWUn/obj/cg_sha.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_typeclass.iii -> /tmp/iiis1-build.59uWUn/obj/cg_typeclass.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/emit.iii -> /tmp/iiis1-build.59uWUn/obj/emit.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/emit_sanctum.iii -> /tmp/iiis1-build.59uWUn/obj/emit_sanctum.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/hexad_check.iii -> /tmp/iiis1-build.59uWUn/obj/hexad_check.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/iii_cg_pe_iiis1.iii -> /tmp/iiis1-build.59uWUn/obj/iii_cg_pe_iiis1.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/jit_emit.iii -> /tmp/iiis1-build.59uWUn/obj/jit_emit.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/lex.iii -> /tmp/iiis1-build.59uWUn/obj/lex.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/lex_rt.iii -> /tmp/iiis1-build.59uWUn/obj/lex_rt.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/link.iii -> /tmp/iiis1-build.59uWUn/obj/link.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/main.iii -> /tmp/iiis1-build.59uWUn/obj/main.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/parse.iii -> /tmp/iiis1-build.59uWUn/obj/parse.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/proof.iii -> /tmp/iiis1-build.59uWUn/obj/proof.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/sema.iii -> /tmp/iiis1-build.59uWUn/obj/sema.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/sema_xii_adapter.iii -> /tmp/iiis1-build.59uWUn/obj/sema_xii_adapter.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/sid.iii -> /tmp/iiis1-build.59uWUn/obj/sid.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/witness_alloc.iii -> /tmp/iiis1-build.59uWUn/obj/witness_alloc.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/xii_ldil.iii -> /tmp/iiis1-build.59uWUn/obj/xii_ldil.iii.o
+[iiis-2 build] [PHASE] link  t=8s
+[iiis-2 build] link -> /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+[iiis-2 build] linking with stdlib (XII enabled): /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+[iiis-2 build] [PHASE] verify  t=8s
+[iiis-2 build] mhash: 4ccad69e3dfb6b798517ef4430da20fa97e47a7f5ead23fdf1784498eb986812
+[iiis-2 build] witness: /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe.witness.json
+[iiis-2 build] OK: /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+[iiis-2 build] [PHASE] check-corpus  t=8s
+[iiis-2 build] corpus equivalence: 0 passed, 59 failed
+[iiis-2 build] failed: 01_return_const(diff) 02_arithmetic(diff) 03_let_local(diff) 04_call_other(diff) 05_param(diff) 06_bitwise(diff) 07_compare(diff) 08_match(diff) 09_unary(diff) 10_extern(diff) 11_assign(diff) 12_const_decl(diff) 13_for_loop(diff) 14_modifier_cycle(diff) 15_string_literal(diff) 16_if_else(diff) 17_while(diff) 18_else_if(diff) 19_cast(diff) 20_sizeof(diff) 21_pointer(diff) 22_array_via_ptr(diff) 23_struct_decl(diff) 24_var_global(diff) 25_array_init(diff) 26_fnptr(diff) 27_string_index(diff) 28_extern_msvc(diff) 29_struct_instance(diff) 30_byte_index(diff) 31_sat_arith(diff) 32_intent_seal(diff) 33_unify_basic(diff) 34_unify_occurs(diff) 35_unify_arity(diff) 36_unify_depth(diff) 37_pattern_register_after_seal(diff) 38_score_table(diff) 39_resolve_simple(diff) 40_resolve_tiebreak(diff) 41_resolve_ambiguous(diff) 42_resolve_nomatch(diff) 43_resolve_no_recompute_observable(diff) 44_metapattern_set(diff) 45_replay_witness(diff) 46_q7_gate_pos(diff) 47_q7_gate_neg(diff) 48_m22_audit(diff) 49_proof_ripple_pattern(diff) 50_sid_inverse(diff) 51_resolve_syntax(diff) 52_call_via_resolver(diff) 53_resolve_no_self_recursion(diff) 54_transform_iii_to_asm(diff) 55_intent_form_runtime(diff) 56_transform_form_runtime(diff) 57_pattern_form_runtime(diff) pe_narrow_caseA(diff) pe_narrow_caseB(diff)
+[iiis-2 build] ERROR: corpus equivalence FAILED
+SABOTAGE_EXIT=5

@@ -13,6 +13,18 @@ L_str_3:
     .ascii "cad.iii\0"
 L_str_4:
     .ascii "cad.iii\0"
+L_str_5:
+    .ascii "capability.iii\0"
+L_str_6:
+    .ascii "capability.iii\0"
+L_str_7:
+    .ascii "capability.iii\0"
+L_str_8:
+    .ascii "capability.iii\0"
+L_str_9:
+    .ascii "nous_synth.iii\0"
+L_str_10:
+    .ascii "nous_synth.iii\0"
     .section .rodata
 L_NOUS_CH_OK:
     .quad 0x0
@@ -24,6 +36,14 @@ L_NOUS_CH_KIND_AMEND:
     .quad 0x0
 L_NOUS_CH_KIND_CANARY:
     .quad 0x1
+L_NOUS_CH_KIND_AUTOGEN:
+    .quad 0x2
+L_NOUS_CH_KIND_PERCEIVE:
+    .quad 0x3
+L_NOUS_CH_AG_RUN:
+    .quad 0x80000
+L_NOUS_CH_AG_COMMIT:
+    .quad 0x100000
 L_NOUS_CH_VERDICT_GREEN:
     .quad 0x63
 L_NOUS_CH_U32MASK:
@@ -404,6 +424,304 @@ L_if_end_13:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "nous_ch_ag_verify"
+    .text
+    .seh_proc L_nous_ch_ag_verify
+L_nous_ch_ag_verify:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    subq $32, %rsp
+    callq cap_env_init
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    movq L_NOUS_CH_AG_COMMIT(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq cap_attenuate
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq L_NOUS_CH_AG_COMMIT(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq cap_verify_rights
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    movq L_NOUS_CH_AG_RUN(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq cap_attenuate
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq L_NOUS_CH_AG_COMMIT(%rip), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq cap_verify_rights
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq cap_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq cap_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movzbq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "nous_ch_perceive_verify"
+    .text
+    .seh_proc L_nous_ch_perceive_verify
+L_nous_ch_perceive_verify:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq nous_synth_canonical_ok
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq nous_synth_canonical_ok
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq nous_synth_provisional_usable
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq nous_synth_provisional_usable
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "nous_ch_clause_eval"
     .text
     .seh_proc L_nous_ch_clause_eval
@@ -446,7 +764,7 @@ L_nous_ch_clause_eval:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_27
     subq $32, %rsp
     callq nous_ch_verify
     addq $32, %rsp
@@ -462,7 +780,7 @@ L_nous_ch_clause_eval:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_29
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -472,7 +790,7 @@ L_nous_ch_clause_eval:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_29:
     subq $32, %rsp
     callq nous_ch_falsify
     addq $32, %rsp
@@ -488,7 +806,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_31
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -498,7 +816,7 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_31:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -508,7 +826,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_27:
     movzbq -16(%rbp), %rax
     pushq %rax
     movzbq L_NOUS_CH_KIND_CANARY(%rip), %rax
@@ -521,7 +839,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_33
     subq $32, %rsp
     callq L_nous_ch_canary_holds
     addq $32, %rsp
@@ -534,7 +852,59 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_33:
+    movzbq -16(%rbp), %rax
+    pushq %rax
+    movzbq L_NOUS_CH_KIND_AUTOGEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    subq $32, %rsp
+    callq L_nous_ch_ag_verify
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    movzbq -16(%rbp), %rax
+    pushq %rax
+    movzbq L_NOUS_CH_KIND_PERCEIVE(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    subq $32, %rsp
+    callq L_nous_ch_perceive_verify
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -577,7 +947,7 @@ L_nous_ch_register:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_39
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -590,7 +960,7 @@ L_nous_ch_register:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_39:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -806,7 +1176,7 @@ L_nous_ch_seal_verdict:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_24:
+L_loop_top_40:
     movq -32(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -819,7 +1189,7 @@ L_loop_top_24:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_25
+    jz L_loop_end_41
     leaq L_NOUS_CH_SEAL_BUF(%rip), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -855,8 +1225,8 @@ L_loop_top_24:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_24
-L_loop_end_25:
+    jmp L_loop_top_40
+L_loop_end_41:
     leaq L_NOUS_CH_VERDICT(%rip), %rax
     pushq %rax
     popq %rax
@@ -923,7 +1293,7 @@ nous_ch_run_charter:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_26:
+L_loop_top_42:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -936,7 +1306,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_27
+    jz L_loop_end_43
     movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -955,7 +1325,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_45
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -979,7 +1349,7 @@ L_loop_top_26:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_45:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -994,8 +1364,8 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_26
-L_loop_end_27:
+    jmp L_loop_top_42
+L_loop_end_43:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -1046,7 +1416,7 @@ nous_ch_verdict:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_47
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1059,12 +1429,12 @@ nous_ch_verdict:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_47:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_32:
+L_loop_top_48:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -1077,7 +1447,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_33
+    jz L_loop_end_49
     movq -8(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1107,8 +1477,8 @@ L_loop_top_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_32
-L_loop_end_33:
+    jmp L_loop_top_48
+L_loop_end_49:
     movslq L_NOUS_CH_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1156,7 +1526,7 @@ nous_charter_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_51
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1166,7 +1536,7 @@ nous_charter_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_51:
     subq $32, %rsp
     callq nous_ch_falsify
     addq $32, %rsp
@@ -1182,7 +1552,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_53
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -1192,7 +1562,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_53:
     subq $32, %rsp
     callq L_nous_ch_canary_holds
     addq $32, %rsp
@@ -1208,7 +1578,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_55
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -1218,7 +1588,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_55:
     movzbq L_NOUS_CH_KIND_AMEND(%rip), %rax
     pushq %rax
     popq %rcx
@@ -1237,7 +1607,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_57
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -1247,7 +1617,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_57:
     subq $32, %rsp
     callq nous_ch_run_charter
     addq $32, %rsp
@@ -1262,7 +1632,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_59
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -1272,7 +1642,7 @@ L_if_end_41:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_59:
     leaq L_NOUS_CH_VERDICT(%rip), %rax
     pushq %rax
     popq %rax
@@ -1295,7 +1665,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_61
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -1305,12 +1675,12 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_61:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_46:
+L_loop_top_62:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -1323,7 +1693,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_47
+    jz L_loop_end_63
     leaq L_NOUS_CH_SAVED(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1353,8 +1723,8 @@ L_loop_top_46:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
+    jmp L_loop_top_62
+L_loop_end_63:
     subq $32, %rsp
     callq nous_ch_run_charter
     addq $32, %rsp
@@ -1369,7 +1739,7 @@ L_loop_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_65
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -1379,7 +1749,7 @@ L_loop_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_65:
     leaq L_NOUS_CH_SAVED(%rip), %rax
     pushq %rax
     popq %rax
@@ -1409,7 +1779,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_67
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -1419,8 +1789,8 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
-    movzbq L_NOUS_CH_KIND_CANARY(%rip), %rax
+L_if_end_67:
+    movzbq L_NOUS_CH_KIND_AUTOGEN(%rip), %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1438,7 +1808,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_69
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -1448,10 +1818,65 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_69:
     subq $32, %rsp
     callq nous_ch_run_charter
     addq $32, %rsp
+    pushq %rax
+    movq L_NOUS_CH_VERDICT_GREEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_71:
+    subq $32, %rsp
+    callq L_nous_ch_perceive_verify
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movabsq $0xb, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    movzbq L_NOUS_CH_KIND_PERCEIVE(%rip), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_nous_ch_register
+    addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -1463,8 +1888,8 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
-    movabsq $0xa, %rax
+    jz L_if_end_75
+    movabsq $0xc, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1473,7 +1898,86 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_75:
+    subq $32, %rsp
+    callq nous_ch_run_charter
+    addq $32, %rsp
+    pushq %rax
+    movq L_NOUS_CH_VERDICT_GREEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movabsq $0xd, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
+    movzbq L_NOUS_CH_KIND_CANARY(%rip), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_nous_ch_register
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_79
+    movabsq $0xe, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_79:
+    subq $32, %rsp
+    callq nous_ch_run_charter
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_81
+    movabsq $0xf, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_81:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

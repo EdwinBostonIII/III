@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_emit_gen.iiixii_emit_gen.iiixii_emit_gen.iiixii_horizon.iii\0"
+    .ascii "xii_emit_gen.iii\0"
 L_str_1:
-    .ascii "xii_emit_gen.iiixii_emit_gen.iiixii_horizon.iii\0"
+    .ascii "xii_emit_gen.iii\0"
 L_str_2:
-    .ascii "xii_emit_gen.iiixii_horizon.iii\0"
+    .ascii "xii_emit_gen.iii\0"
 L_str_3:
     .ascii "xii_horizon.iii\0"
     .section .bss
@@ -24,7 +24,6 @@ L_XEG_CURATED:
     .section .iii.ring3,"n"
     .asciz "xeg_snap"
     .text
-    .global L_xeg_snap
     .seh_proc L_xeg_snap
 L_xeg_snap:
     pushq %rbp
@@ -101,7 +100,6 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "xeg_out_eq_snap"
     .text
-    .global L_xeg_out_eq_snap
     .seh_proc L_xeg_out_eq_snap
 L_xeg_out_eq_snap:
     pushq %rbp

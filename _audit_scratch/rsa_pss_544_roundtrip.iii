@@ -1,0 +1,49 @@
+/* 1113 -- numera::rsa byte-ABI wrapper FULL ROUNDTRIP at modBits=544 (sLen=32).
+ *
+ * Closes the DOCS/III-PRODUCTION-READINESS-COMPLETION.md sec.5 #2 "honest blocked-frontier"
+ * caveat by DEMONSTRATION (not abstention): iii_rsa_pss_sign_det / iii_rsa_pss_verify_x hardcode
+ * sLen=32, which needs emLen >= 2*32+2 = 66, i.e. modBits >= ~522.  This proves the exact >=522-bit
+ * accept-roundtrip the caveat names -- keygen (Miller-Rabin + bit-serial modpow over ~272-bit
+ * primes) -> sign_det -> verify_x(accept) -> tamper -> verify_x(reject) -- using III ALONE.
+ *
+ * modBits=544 => k=68, emBits=543, emLen=(543+7)/8=68 >= 66.  Performance-bound at keygen
+ * (minutes), NOT a correctness gap; run on demand, not in the always-fast loop.  99 = pass.
+ *   1 = keygen failed (prime gen budget), 2 = sign failed, 3 = accept-verify failed (REAL gap),
+ *   4 = tamper not rejected (REAL gap).
+ */
+module rsa_pss_544
+
+extern @abi(c-msvc-x64) fn iii_rsa_keygen_seed(modBits: u64, seed: u64, slen: u64, pk_out: u64, sk_out: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn iii_rsa_pss_sign_det(modBits: u64, sk: u64, mHash: u64, sig_out: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn iii_rsa_pss_verify_x(modBits: u64, pk: u64, mHash: u64, sig: u64, sigLen: u64) -> u8 from "rsa.iii"
+
+var SEED : [u8; 48]
+var PK   : [u8; 68]
+var SK   : [u8; 136]
+var MH   : [u8; 32]
+var SIG  : [u8; 68]
+
+fn main() -> u64 {
+    /* deterministic keygen seed */
+    let mut i : u64 = 0u64
+    while i < 48u64 { SEED[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    /* keygen at 544-bit: pk = n (68), sk = n||d (136) */
+    if iii_rsa_keygen_seed(544u64, (&SEED) as u64, 48u64, (&PK) as u64, (&SK) as u64) != 0i32 { return 1u64 }
+
+    /* deterministic message hash */
+    i = 0u64
+    while i < 32u64 { MH[i] = (i & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    /* sign_det: sig = 68 bytes, salt=zeros, sLen=32 */
+    if iii_rsa_pss_sign_det(544u64, (&SK) as u64, (&MH) as u64, (&SIG) as u64) != 0i32 { return 2u64 }
+
+    /* verify_x accept */
+    if iii_rsa_pss_verify_x(544u64, (&PK) as u64, (&MH) as u64, (&SIG) as u64, 68u64) != 1u8 { return 3u64 }
+
+    /* tamper one signature byte -> must reject */
+    SIG[7] = ((SIG[7] as u64) ^ 0x01u64) as u8
+    if iii_rsa_pss_verify_x(544u64, (&PK) as u64, (&MH) as u64, (&SIG) as u64, 68u64) != 0u8 { return 4u64 }
+
+    return 99u64
+}

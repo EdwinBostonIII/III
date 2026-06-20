@@ -1,0 +1,560 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\self_atlas.iii
+ *
+ * III STDLIB - omnia::self_atlas  --  III's NATIVE SELF-MODEL of its own module graph.
+ *
+ * THE SELF-AWARENESS SEAM.  III-CARTOGRAPHER (the sibling tool) computes III's module
+ * dependency graph from the OUTSIDE -- which .iii module depends on which (extern...from
+ * + #include edges), the cycles, the hubs.  That map was a JUDGE: consumed only by the
+ * build's architectural gate and the dup cert.  It was never a thing III's own GENERATIVE
+ * organs could ask questions of.  So self_reformatter (the R&D arm) proposes abstractions,
+ * the ripple optimizer rewrites, self_engine shifts kernels -- all without knowing what a
+ * change RIPPLES INTO at the module level: what depends on the module being touched, what
+ * cycle it sits in, whether a new dependency would close a loop.
+ *
+ * self_atlas closes that gap.  It is the cartographer's machine brought INSIDE III: a
+ * directed module-dependency graph (nodes = modules by name, edges = "depends on") that the
+ * generative organs query BEFORE they act:
+ *
+ *   - satlas_impact_count(m)   the BLAST RADIUS: how many modules transitively depend on m
+ *                              (reverse reachability) -- "what ripples if I touch m".
+ *   - satlas_would_cycle(a,b)  REFACTOR SAFETY: would adding the dependency a->b create a
+ *                              directed cycle?  (== does b already reach a).
+ *   - satlas_remove_safe(a,b)  is the direct dependency a->b REDUNDANT (a still reaches b by
+ *                              another path) and therefore safe to cut?
+ *   - satlas_in_cycle / satlas_same_cycle   structural-cycle (SCC) membership.
+ *   - satlas_steepest_hub()    the module whose change ripples FURTHEST -- the module-graph
+ *                              analog of ripple_field::rf_steepest ("where the substrate is
+ *                              most load-bearing"), the signal the R&D arm can be directed by.
+ *   - satlas_commit(out32)     a reproducible 32-byte content address of the whole self-model,
+ *                              so a change to III's structure is itself addressable / diffable.
+ *
+ * The graph is POPULATED from the honest cartographer via the generated companion data organ
+ * omnia/self_atlas_data.iii (satlas_reset + satlas_intern + satlas_link), so the self-model
+ * reflects III's ACTUAL structure, regenerated each emergence cycle.
+ *
+ * Hexad: kind_essence (a faithful self-image) + kind_compose (pure graph traversals).
+ * Ring: R0.  K: 1.00 (pure functions of the loaded graph; no IO, no clock, no learning).
+ * NIH: sanctus/mhash.iii only (the content commitment), matching crystal_deps' leanness.
+ * Discipline: W2 (<=4 params; the BFS edge-exclusion is carried in module scope, not params),
+ *             W4 (module-scope arrays; no function-local var arrays), W8 (static bounds),
+ *             W13 (<=20 locals), W14 (sentinel-flag / index loops, no break/continue),
+ *             W15 (no recursion; reachability is an explicit module-scope BFS queue).
+ *             All comments ASCII (Trap 9).  Single-threaded / non-reentrant: BFS and commit
+ *             use module-scope scratch -- callers serialize self-model queries.
+ */
+
+module omnia_self_atlas
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const SATLAS_OK        : i32 =  0i32
+const SATLAS_E_BAD     : i32 = -1i32
+const SATLAS_E_FULL    : i32 = -2i32
+
+const SATLAS_MAX_NODES : u32 = 2048u32
+const SATLAS_MAX_EDGES : u32 = 4096u32
+const SATLAS_NAME_STR  : u64 = 48u64           /* fixed name stride (bytes/node) */
+const SATLAS_QCAP      : u32 = 4096u32          /* BFS queue capacity (>= MAX_NODES+2) */
+const SATLAS_SENT      : u32 = 0xFFFFFFFFu32
+const SATLAS_MASK64    : u64 = 0xFFFFFFFFu64
+
+/* Graph state (module scope -- W4). */
+var SATLAS_NAME   : [u8;  98304]                /* 2048 * 48 name bytes              */
+var SATLAS_NLEN   : [u8;  2048]                 /* per-node name length (<= 48)      */
+var SATLAS_NCOUNT : u32 = 0u32
+var SATLAS_EFROM  : [u32; 4096]
+var SATLAS_ETO    : [u32; 4096]
+var SATLAS_ECOUNT : u32 = 0u32
+
+/* Traversal scratch (single-threaded). */
+var SATLAS_SEEN   : [u8;  2048]
+var SATLAS_QUEUE  : [u32; 4096]
+var SATLAS_EXF    : u32 = 0xFFFFFFFFu32         /* BFS edge-exclusion: from (SENT = disabled) */
+var SATLAS_EXT    : u32 = 0xFFFFFFFFu32         /* BFS edge-exclusion: to                     */
+
+/* Architectural strata: SATLAS_LEVEL[n] = longest dependency chain from n to a leaf (its depth
+ * in III's lattice).  Cyclic nodes saturate to NCOUNT (the sentinel "unbounded / in a cycle").
+ * Lazily recomputed (a single fixpoint relaxation) on first query after the graph changes. */
+var SATLAS_LEVEL  : [u32; 2048]
+var SATLAS_LVL_DIRTY : u8 = 1u8
+
+/* Per-node external-reference mark: set by the cartographer when a module is referenced from
+ * OUTSIDE the mapped production tree (e.g. by a corpus test).  A node with no production
+ * importer AND no external reference is TRULY dormant -- the accurate "dead module" signal. */
+var SATLAS_MARK   : [u8; 2048]
+
+/* Commit scratch. */
+var SATLAS_CBUF   : [u8; 8]
+var SATLAS_DOM    : [u8; 16]                    /* "omnia/self_atlas" */
+
+/* ---- byte helpers ---------------------------------------------------- */
+
+fn satlas_name_ptr(slot: u32) -> u64 {
+    return (&SATLAS_NAME as u64) + (((slot as u64) & SATLAS_MASK64) * SATLAS_NAME_STR)
+}
+
+/* Exact byte equality of two spans (W2: 4 params). */
+fn satlas_bytes_eq(a: u64, alen: u64, b: u64, blen: u64) -> u8 {
+    if alen != blen { return 0u8 }
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while i < alen {
+        if pa[i] != pb[i] { eq = 0u8 }
+        i = i + 1u64
+    }
+    return eq
+}
+
+/* Store v as 4 little-endian bytes at base+off (dodges the u32-pointer-store trap). */
+fn satlas_put_u32le(base: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    let vv : u32 = v
+    p[0u64] = (vv & 0xFFu32) as u8
+    p[1u64] = ((vv >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((vv >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((vv >> 24u32) & 0xFFu32) as u8
+    return SATLAS_OK
+}
+
+/* ---- construction ---------------------------------------------------- */
+
+fn satlas_reset() -> i32 @export {
+    SATLAS_NCOUNT = 0u32
+    SATLAS_ECOUNT = 0u32
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    SATLAS_LVL_DIRTY = 1u8
+    let mut i : u32 = 0u32
+    while i < SATLAS_MAX_NODES {
+        SATLAS_MARK[(i as u64) & SATLAS_MASK64] = 0u8
+        i = i + 1u32
+    }
+    return SATLAS_OK
+}
+
+/* Find a node by exact name, or SENT if absent. */
+fn satlas_find(name_ptr: u64, len: u64) -> u32 @export {
+    let np : u64 = name_ptr
+    let mut ln : u64 = len
+    if ln > SATLAS_NAME_STR { ln = SATLAS_NAME_STR }
+    let mut i : u32 = 0u32
+    let mut hit : u32 = SATLAS_SENT
+    while i < SATLAS_NCOUNT {
+        let ib : u64 = (i as u64) & SATLAS_MASK64
+        if (SATLAS_NLEN[ib] as u64) == ln {
+            if satlas_bytes_eq(np, ln, satlas_name_ptr(i), ln) == 1u8 { hit = i }
+        }
+        i = i + 1u32
+    }
+    return hit
+}
+
+/* Find-or-add a node by exact name; returns its index (SENT if the table is full). */
+fn satlas_intern(name_ptr: u64, len: u64) -> u32 @export {
+    let np : u64 = name_ptr
+    let mut ln : u64 = len
+    if ln > SATLAS_NAME_STR { ln = SATLAS_NAME_STR }
+    let found : u32 = satlas_find(np, ln)
+    if found != SATLAS_SENT { return found }
+    if SATLAS_NCOUNT >= SATLAS_MAX_NODES { return SATLAS_SENT }
+    let slot : u32 = SATLAS_NCOUNT
+    let dst : u64 = satlas_name_ptr(slot)
+    let s : *u8 = np as *u8
+    let d : *u8 = dst as *u8
+    let mut k : u64 = 0u64
+    while k < ln { d[k] = s[k]  k = k + 1u64 }
+    SATLAS_NLEN[(slot as u64) & SATLAS_MASK64] = ln as u8
+    SATLAS_NCOUNT = SATLAS_NCOUNT + 1u32
+    return slot
+}
+
+/* Record a directed dependency from -> to (deduped; self-edges rejected). */
+fn satlas_add_edge(src: u32, tgt: u32) -> i32 @export {
+    let a : u32 = src
+    let b : u32 = tgt
+    if a >= SATLAS_NCOUNT { return SATLAS_E_BAD }
+    if b >= SATLAS_NCOUNT { return SATLAS_E_BAD }
+    if a == b { return SATLAS_E_BAD }
+    let mut e : u32 = 0u32
+    let mut dup : u8 = 0u8
+    while e < SATLAS_ECOUNT {
+        let eb : u64 = (e as u64) & SATLAS_MASK64
+        if SATLAS_EFROM[eb] == a {
+            if SATLAS_ETO[eb] == b { dup = 1u8 }
+        }
+        e = e + 1u32
+    }
+    if dup == 1u8 { return SATLAS_OK }
+    if SATLAS_ECOUNT >= SATLAS_MAX_EDGES { return SATLAS_E_FULL }
+    let nb : u64 = (SATLAS_ECOUNT as u64) & SATLAS_MASK64
+    SATLAS_EFROM[nb] = a
+    SATLAS_ETO[nb] = b
+    SATLAS_ECOUNT = SATLAS_ECOUNT + 1u32
+    SATLAS_LVL_DIRTY = 1u8
+    return SATLAS_OK
+}
+
+/* Convenience: intern both endpoints by name and record from->to (W2: 4 params).
+ * This is the primitive the generated self_atlas_data.iii uses per edge. */
+fn satlas_link(fp: u64, fl: u64, tp: u64, tl: u64) -> i32 @export {
+    let a : u32 = satlas_intern(fp, fl)
+    let b : u32 = satlas_intern(tp, tl)
+    if a == SATLAS_SENT { return SATLAS_E_FULL }
+    if b == SATLAS_SENT { return SATLAS_E_FULL }
+    return satlas_add_edge(a, b)
+}
+
+fn satlas_node_count() -> u32 @export { return SATLAS_NCOUNT }
+fn satlas_edge_count() -> u32 @export { return SATLAS_ECOUNT }
+
+/* Edge endpoint accessors (for analysis passes that scan the edge set). */
+fn satlas_edge_from(i: u32) -> u32 @export {
+    if i >= SATLAS_ECOUNT { return SATLAS_SENT }
+    return SATLAS_EFROM[(i as u64) & SATLAS_MASK64]
+}
+fn satlas_edge_to(i: u32) -> u32 @export {
+    if i >= SATLAS_ECOUNT { return SATLAS_SENT }
+    return SATLAS_ETO[(i as u64) & SATLAS_MASK64]
+}
+
+/* ---- direct-degree queries ------------------------------------------- */
+
+fn satlas_fanout(n: u32) -> u32 @export {
+    let nn : u32 = n
+    let mut e : u32 = 0u32
+    let mut c : u32 = 0u32
+    while e < SATLAS_ECOUNT {
+        if SATLAS_EFROM[(e as u64) & SATLAS_MASK64] == nn { c = c + 1u32 }
+        e = e + 1u32
+    }
+    return c
+}
+
+fn satlas_fanin(n: u32) -> u32 @export {
+    let nn : u32 = n
+    let mut e : u32 = 0u32
+    let mut c : u32 = 0u32
+    while e < SATLAS_ECOUNT {
+        if SATLAS_ETO[(e as u64) & SATLAS_MASK64] == nn { c = c + 1u32 }
+        e = e + 1u32
+    }
+    return c
+}
+
+fn satlas_depends_direct(src: u32, tgt: u32) -> u8 @export {
+    let a : u32 = src
+    let b : u32 = tgt
+    let mut e : u32 = 0u32
+    let mut hit : u8 = 0u8
+    while e < SATLAS_ECOUNT {
+        let eb : u64 = (e as u64) & SATLAS_MASK64
+        if SATLAS_EFROM[eb] == a {
+            if SATLAS_ETO[eb] == b { hit = 1u8 }
+        }
+        e = e + 1u32
+    }
+    return hit
+}
+
+/* ---- reachability (explicit BFS; no recursion -- W15) ----------------- */
+
+/* The traversal neighbor of cur across edge e, honoring direction and the module-scope
+ * edge exclusion (SATLAS_EXF->SATLAS_EXT, SENT = disabled).  forward(reverse==0): follow
+ * from==cur to its target.  backward(reverse==1): follow to==cur to its source. */
+fn satlas_neighbor(e: u32, cur: u32, reverse: u8) -> u32 {
+    let eb : u64 = (e as u64) & SATLAS_MASK64
+    let ef : u32 = SATLAS_EFROM[eb]
+    let et : u32 = SATLAS_ETO[eb]
+    if ef == SATLAS_EXF {
+        if et == SATLAS_EXT { return SATLAS_SENT }
+    }
+    if reverse == 0u8 {
+        if ef == cur { return et }
+        return SATLAS_SENT
+    }
+    if et == cur { return ef }
+    return SATLAS_SENT
+}
+
+/* BFS from start; populates SATLAS_SEEN so SEEN[x]==1 iff x is reachable via a path of
+ * LENGTH >= 1 (start is left unmarked unless a cycle returns to it).  Returns the count of
+ * marked nodes.  reverse selects forward (depends-on) vs backward (depended-by) closure. */
+fn satlas_bfs(start: u32, reverse: u8) -> u32 {
+    let mut z : u32 = 0u32
+    while z < SATLAS_NCOUNT {
+        SATLAS_SEEN[(z as u64) & SATLAS_MASK64] = 0u8
+        z = z + 1u32
+    }
+    let mut head : u32 = 0u32
+    let mut tail : u32 = 0u32
+    SATLAS_QUEUE[0u64] = start
+    tail = 1u32
+    while head < tail {
+        let cur : u32 = SATLAS_QUEUE[(head as u64) & SATLAS_MASK64]
+        head = head + 1u32
+        let mut e : u32 = 0u32
+        while e < SATLAS_ECOUNT {
+            let nb : u32 = satlas_neighbor(e, cur, reverse)
+            if nb != SATLAS_SENT {
+                if SATLAS_SEEN[(nb as u64) & SATLAS_MASK64] == 0u8 {
+                    SATLAS_SEEN[(nb as u64) & SATLAS_MASK64] = 1u8
+                    if tail < SATLAS_QCAP {
+                        SATLAS_QUEUE[(tail as u64) & SATLAS_MASK64] = nb
+                        tail = tail + 1u32
+                    }
+                }
+            }
+            e = e + 1u32
+        }
+    }
+    let mut cnt : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < SATLAS_NCOUNT {
+        if SATLAS_SEEN[(j as u64) & SATLAS_MASK64] == 1u8 { cnt = cnt + 1u32 }
+        j = j + 1u32
+    }
+    return cnt
+}
+
+/* Does `from` transitively depend on `to`? (directed path of length >= 1). */
+fn satlas_reaches(src: u32, tgt: u32) -> u8 @export {
+    let a : u32 = src
+    let b : u32 = tgt
+    if a >= SATLAS_NCOUNT { return 0u8 }
+    if b >= SATLAS_NCOUNT { return 0u8 }
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    satlas_bfs(a, 0u8)
+    return SATLAS_SEEN[(b as u64) & SATLAS_MASK64]
+}
+
+/* Is n on a directed cycle? (n reaches itself via a path of length >= 1). */
+fn satlas_in_cycle(n: u32) -> u8 @export {
+    let nn : u32 = n
+    if nn >= SATLAS_NCOUNT { return 0u8 }
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    satlas_bfs(nn, 0u8)
+    return SATLAS_SEEN[(nn as u64) & SATLAS_MASK64]
+}
+
+/* Blast radius: how many DISTINCT other modules transitively depend on n. */
+fn satlas_impact_count(n: u32) -> u32 @export {
+    let nn : u32 = n
+    if nn >= SATLAS_NCOUNT { return 0u32 }
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    let c : u32 = satlas_bfs(nn, 1u8)
+    if SATLAS_SEEN[(nn as u64) & SATLAS_MASK64] == 1u8 { return c - 1u32 }
+    return c
+}
+
+/* Materialize the impact set (the dependents of n) into a caller u32 buffer (LE), excluding
+ * n itself; returns the count written (capped at max).  W2: 3 params. */
+fn satlas_impact_into(n: u32, out_ptr: u64, max: u32) -> u32 @export {
+    let nn : u32 = n
+    if nn >= SATLAS_NCOUNT { return 0u32 }
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    satlas_bfs(nn, 1u8)
+    let op : u64 = out_ptr
+    let mx : u32 = max
+    let mut cnt : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < SATLAS_NCOUNT {
+        if SATLAS_SEEN[(j as u64) & SATLAS_MASK64] == 1u8 {
+            if j != nn {
+                if cnt < mx {
+                    satlas_put_u32le(op, (cnt as u64) * 4u64, j)
+                    cnt = cnt + 1u32
+                }
+            }
+        }
+        j = j + 1u32
+    }
+    return cnt
+}
+
+/* Foundation breadth: how many DISTINCT modules n transitively depends ON (the dual of the
+ * blast radius -- what n is built upon, vs what is built upon n).  A large value marks an
+ * INTEGRATOR: a module that draws on much of III, where emergent behavior concentrates. */
+fn satlas_depends_count(n: u32) -> u32 @export {
+    let nn : u32 = n
+    if nn >= SATLAS_NCOUNT { return 0u32 }
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    let c : u32 = satlas_bfs(nn, 0u8)
+    if SATLAS_SEEN[(nn as u64) & SATLAS_MASK64] == 1u8 { return c - 1u32 }
+    return c
+}
+
+/* Recompute the architectural strata by fixpoint relaxation: level[a] = max(level[a],
+ * level[b]+1) over every edge a->b, clamped to NCOUNT.  A DAG converges in <= longest-chain
+ * rounds; cyclic nodes never converge and are stopped + clamped at NCOUNT after NCOUNT rounds
+ * (the "unbounded / in a cycle" sentinel).  No recursion (W15); O(rounds * E). */
+fn satlas_ensure_levels() -> i32 {
+    if SATLAS_LVL_DIRTY == 0u8 { return SATLAS_OK }
+    let n : u32 = SATLAS_NCOUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        SATLAS_LEVEL[(i as u64) & SATLAS_MASK64] = 0u32
+        i = i + 1u32
+    }
+    let mut round : u32 = 0u32
+    let mut changed : u8 = 1u8
+    while changed == 1u8 {
+        changed = 0u8
+        if round < n {
+            let mut e : u32 = 0u32
+            while e < SATLAS_ECOUNT {
+                let eb : u64 = (e as u64) & SATLAS_MASK64
+                let a : u32 = SATLAS_EFROM[eb]
+                let b : u32 = SATLAS_ETO[eb]
+                let mut nv : u32 = SATLAS_LEVEL[(b as u64) & SATLAS_MASK64] + 1u32
+                if nv > n { nv = n }
+                if SATLAS_LEVEL[(a as u64) & SATLAS_MASK64] < nv {
+                    SATLAS_LEVEL[(a as u64) & SATLAS_MASK64] = nv
+                    changed = 1u8
+                }
+                e = e + 1u32
+            }
+            round = round + 1u32
+        }
+    }
+    SATLAS_LVL_DIRTY = 0u8
+    return SATLAS_OK
+}
+
+/* Architectural stratum of n: the longest dependency chain from n down to a leaf (depth in
+ * III's lattice).  A leaf is 0; a node returning NCOUNT is cyclic (unbounded depth). */
+fn satlas_level(n: u32) -> u32 @export {
+    let nn : u32 = n
+    if nn >= SATLAS_NCOUNT { return 0u32 }
+    satlas_ensure_levels()
+    return SATLAS_LEVEL[(nn as u64) & SATLAS_MASK64]
+}
+
+/* Mark node n as externally referenced (e.g. by a corpus test). */
+fn satlas_mark(n: u32) -> i32 @export {
+    if n < SATLAS_NCOUNT { SATLAS_MARK[(n as u64) & SATLAS_MASK64] = 1u8 }
+    return SATLAS_OK
+}
+
+fn satlas_is_marked(n: u32) -> u8 @export {
+    if n >= SATLAS_NCOUNT { return 0u8 }
+    return SATLAS_MARK[(n as u64) & SATLAS_MASK64]
+}
+
+/* Copy node n's name into out_ptr (capped at max); return the byte count written. */
+fn satlas_name_into(n: u32, out_ptr: u64, max: u64) -> u64 @export {
+    if n >= SATLAS_NCOUNT { return 0u64 }
+    let ln : u64 = SATLAS_NLEN[(n as u64) & SATLAS_MASK64] as u64
+    let mut k : u64 = ln
+    if k > max { k = max }
+    let s : *u8 = satlas_name_ptr(n) as *u8
+    let d : *u8 = out_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < k { d[i] = s[i]  i = i + 1u64 }
+    return k
+}
+
+/* Would adding the dependency a->b create a directed cycle? (== b already reaches a). */
+fn satlas_would_cycle(a: u32, b: u32) -> u8 @export {
+    let x : u32 = a
+    let y : u32 = b
+    if x >= SATLAS_NCOUNT { return 0u8 }
+    if y >= SATLAS_NCOUNT { return 0u8 }
+    if x == y { return 1u8 }
+    return satlas_reaches(y, x)
+}
+
+/* Are a and b in the same strongly-connected component (mutually reachable)? */
+fn satlas_same_cycle(a: u32, b: u32) -> u8 @export {
+    let x : u32 = a
+    let y : u32 = b
+    if x == y { return satlas_in_cycle(x) }
+    if satlas_reaches(x, y) == 0u8 { return 0u8 }
+    return satlas_reaches(y, x)
+}
+
+/* Is the direct dependency from->to REDUNDANT (from still reaches to without it), and thus
+ * safe to cut?  1 = redundant (another path exists); 0 = load-bearing or no such edge. */
+fn satlas_remove_safe(src: u32, tgt: u32) -> u8 @export {
+    let a : u32 = src
+    let b : u32 = tgt
+    if a >= SATLAS_NCOUNT { return 0u8 }
+    if b >= SATLAS_NCOUNT { return 0u8 }
+    if satlas_depends_direct(a, b) == 0u8 { return 0u8 }
+    SATLAS_EXF = a
+    SATLAS_EXT = b
+    satlas_bfs(a, 0u8)
+    SATLAS_EXF = SATLAS_SENT
+    SATLAS_EXT = SATLAS_SENT
+    return SATLAS_SEEN[(b as u64) & SATLAS_MASK64]
+}
+
+/* The module whose change ripples FURTHEST (largest blast radius): the module-graph analog
+ * of ripple_field::rf_steepest -- "where the substrate is most load-bearing".  SENT if empty. */
+fn satlas_steepest_hub() -> u32 @export {
+    let mut best : u32 = SATLAS_SENT
+    let mut bestv : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < SATLAS_NCOUNT {
+        let v : u32 = satlas_impact_count(i)
+        if v > bestv {
+            bestv = v
+            best = i
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+/* ---- content commitment ---------------------------------------------- */
+
+fn satlas_dom_fill() -> i32 {
+    let p : *u8 = (&SATLAS_DOM as u64) as *u8
+    p[0u64]  = 111u8 p[1u64]  = 109u8 p[2u64]  = 110u8 p[3u64]  = 105u8   /* omni */
+    p[4u64]  = 97u8  p[5u64]  = 47u8  p[6u64]  = 115u8 p[7u64]  = 101u8   /* a/se */
+    p[8u64]  = 108u8 p[9u64]  = 102u8 p[10u64] = 95u8  p[11u64] = 97u8    /* lf_a */
+    p[12u64] = 116u8 p[13u64] = 108u8 p[14u64] = 97u8  p[15u64] = 115u8   /* tlas */
+    return SATLAS_OK
+}
+
+/* A reproducible 32-byte content address of the entire self-model: node count, every node's
+ * (length,name), edge count, every (from,to).  Canonical when the graph is loaded in the
+ * generator's deterministic order; out32 must point at 32 writable bytes. */
+fn satlas_commit(out32: u64) -> i32 @export {
+    satlas_dom_fill()
+    mhash_begin()
+    mhash_domain((&SATLAS_DOM as u64), 16u64)
+    satlas_put_u32le((&SATLAS_CBUF as u64), 0u64, SATLAS_NCOUNT)
+    mhash_payload((&SATLAS_CBUF as u64), 4u64)
+    let mut i : u32 = 0u32
+    while i < SATLAS_NCOUNT {
+        let ib : u64 = (i as u64) & SATLAS_MASK64
+        let ln : u8 = SATLAS_NLEN[ib]
+        let cb : *u8 = (&SATLAS_CBUF as u64) as *u8
+        cb[0u64] = ln
+        mhash_payload((&SATLAS_CBUF as u64), 1u64)
+        mhash_payload(satlas_name_ptr(i), ln as u64)
+        i = i + 1u32
+    }
+    satlas_put_u32le((&SATLAS_CBUF as u64), 0u64, SATLAS_ECOUNT)
+    mhash_payload((&SATLAS_CBUF as u64), 4u64)
+    let mut e : u32 = 0u32
+    while e < SATLAS_ECOUNT {
+        let eb : u64 = (e as u64) & SATLAS_MASK64
+        satlas_put_u32le((&SATLAS_CBUF as u64), 0u64, SATLAS_EFROM[eb])
+        satlas_put_u32le((&SATLAS_CBUF as u64), 4u64, SATLAS_ETO[eb])
+        mhash_payload((&SATLAS_CBUF as u64), 8u64)
+        e = e + 1u32
+    }
+    mhash_final(out32)
+    return SATLAS_OK
+}

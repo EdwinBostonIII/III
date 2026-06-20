@@ -29,6 +29,8 @@ L_str_11:
     .ascii "babel_wire.iii\0"
 L_str_12:
     .ascii "babel_wire.iii\0"
+L_str_13:
+    .ascii "babel_wire.iii\0"
     .section .rodata
 L_IDOC_FACET_RENDER_DOM:
     .quad 0x1
@@ -1677,6 +1679,38 @@ L_if_end_51:
     pushq %rax
     popq %rax
 L_if_end_53:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq babel_wire_verify_len
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1708,7 +1742,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_54:
+L_loop_top_56:
     movl -48(%rbp), %eax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1721,7 +1755,7 @@ L_loop_top_54:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_55
+    jz L_loop_end_57
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1744,7 +1778,7 @@ L_loop_top_54:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_59
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1754,7 +1788,7 @@ L_loop_top_54:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_59:
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1810,7 +1844,7 @@ L_if_end_57:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_61
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1820,7 +1854,7 @@ L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_61:
     movq -72(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1831,8 +1865,8 @@ L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_54
-L_loop_end_55:
+    jmp L_loop_top_56
+L_loop_end_57:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax

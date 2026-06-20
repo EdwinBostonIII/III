@@ -134,21 +134,9 @@ scalar_u32_add_did_overflow:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -160,12 +148,6 @@ scalar_u32_add_did_overflow:
     popq %rax
     addq %rcx, %rax
     movl %eax, %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -222,21 +204,9 @@ scalar_u32_sub_did_underflow:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -293,21 +263,9 @@ scalar_u32_mul_did_overflow:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -342,12 +300,6 @@ L_if_end_5:
     popq %rax
     imulq %rcx, %rax
     movl %eax, %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -415,21 +367,9 @@ scalar_u32_add_sat:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -441,12 +381,6 @@ scalar_u32_add_sat:
     popq %rax
     addq %rcx, %rax
     movl %eax, %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -503,21 +437,9 @@ scalar_u32_sub_sat:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -553,12 +475,6 @@ L_if_end_11:
     subq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rbp, %rsp
     popq %rbp
@@ -587,21 +503,9 @@ scalar_u32_mul_sat:
     movq %rdx, -16(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -659,12 +563,6 @@ L_if_end_15:
     popq %rax
     imulq %rcx, %rax
     movl %eax, %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)

@@ -1,0 +1,38 @@
+module gbprobe3
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn gb_init(nvars: u32) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_begin(arena: u64, p: u64) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_new_poly() -> u32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_append_term(slot: u32, coeff_bid: u64, exps: *u32) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_normalize(slot: u32) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_buchberger(generators: *u32, gen_n: u32, out_basis: *u32, out_n: *u32) -> i32 from "groebner.iii"
+extern @abi(c-msvc-x64) fn gb_c2_pruned() -> u64 from "groebner.iii"
+
+var GP_EXPS : [u32; 4]
+var GP_GENS : [u32; 8]
+var GP_OUTB : [u32; 8]
+var GP_OUTN : [u32; 4]
+
+fn gp_gen(arena: u64, l0: u32, l1: u32) -> u32 {
+    let s : u32 = gb_new_poly()
+    GP_EXPS[0u64] = l0  GP_EXPS[1u64] = l1
+    gb_append_term(s, bigint_from_u64(arena, 1u64), (&GP_EXPS as u64) as *u32)
+    GP_EXPS[0u64] = 0u32  GP_EXPS[1u64] = 0u32
+    gb_append_term(s, bigint_from_u64(arena, 1u64), (&GP_EXPS as u64) as *u32)
+    gb_normalize(s)
+    return s
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 22u64)
+    gb_init(2u32)
+    gb_begin(arena, 7u64)
+    GP_GENS[0u64] = gp_gen(arena, 1u32, 1u32)
+    GP_GENS[1u64] = gp_gen(arena, 2u32, 1u32)
+    GP_GENS[2u64] = gp_gen(arena, 1u32, 2u32)
+    let r : i32 = gb_buchberger((&GP_GENS as u64) as *u32, 3u32, (&GP_OUTB as u64) as *u32, (&GP_OUTN as u64) as *u32)
+    if r != 0i32 { return (0i64 - (r as i64)) as u64 }
+    if gb_c2_pruned() == 0u64 { return 90u64 }
+    return 99u64
+}

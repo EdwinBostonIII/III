@@ -1108,14 +1108,17 @@ L_if_end_29:
     popq %rax
     jmp L_loop_top_24
 L_loop_end_25:
+    movq -56(%rbp), %rax
+    pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
+    popq %r8
     subq $32, %rsp
-    callq mont_from_form
+    callq mont_redc
     addq $32, %rsp
     pushq %rax
     popq %rax

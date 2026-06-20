@@ -4,15 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "ripple.iiiripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_1:
-    .ascii "ripple.iiiripple.iii\0"
+    .ascii "ripple.iii\0"
 L_str_2:
     .ascii "ripple.iii\0"
     .section .iii.ring3,"n"
     .asciz "answer_plain"
     .text
-    .global L_answer_plain
     .seh_proc L_answer_plain
 L_answer_plain:
     pushq %rbp
@@ -38,7 +37,6 @@ L_answer_plain:
     .section .iii.ring3,"n"
     .asciz "answer_dynamic_auto"
     .text
-    .global L_answer_dynamic_auto
     .seh_proc L_answer_dynamic_auto
 L_answer_dynamic_auto:
     pushq %rbp
@@ -68,7 +66,6 @@ L_answer_dynamic_auto:
     .section .iii.ring3,"n"
     .asciz "answer_dynamic_manual"
     .text
-    .global L_answer_dynamic_manual
     .seh_proc L_answer_dynamic_manual
 L_answer_dynamic_manual:
     pushq %rbp
@@ -98,7 +95,6 @@ L_answer_dynamic_manual:
     .section .iii.ring3,"n"
     .asciz "answer_dynamic_off"
     .text
-    .global L_answer_dynamic_off
     .seh_proc L_answer_dynamic_off
 L_answer_dynamic_off:
     pushq %rbp

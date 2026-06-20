@@ -5091,6 +5091,202 @@ L_if_end_169:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "cga_shift_get_a"
+    .text
+    .global cga_shift_get_a
+    .seh_proc cga_shift_get_a
+cga_shift_get_a:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    leaq L_CGA_SH_N(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_171
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_171:
+    leaq L_CGA_SH_A(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cga_shift_get_b"
+    .text
+    .global cga_shift_get_b
+    .seh_proc cga_shift_get_b
+cga_shift_get_b:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    leaq L_CGA_SH_N(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_173
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_173:
+    leaq L_CGA_SH_B(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cga_shift_certifies"
+    .text
+    .global cga_shift_certifies
+    .seh_proc cga_shift_certifies
+cga_shift_certifies:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    leaq L_CGA_SH_N(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq cga_dispose_shift
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    leaq L_CGA_SH_N(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movzbq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "cga_mixed_verify_all"
     .text
     .global cga_mixed_verify_all
@@ -5117,7 +5313,7 @@ cga_mixed_verify_all:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_170:
+L_loop_top_174:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -5130,7 +5326,7 @@ L_loop_top_170:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_171
+    jz L_loop_end_175
     leaq L_CGA_MX_N(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5170,7 +5366,7 @@ L_loop_top_170:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_173
+    jz L_if_end_177
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5180,7 +5376,7 @@ L_loop_top_170:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_173:
+L_if_end_177:
     leaq L_CGA_MX_N(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5205,8 +5401,8 @@ L_if_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_170
-L_loop_end_171:
+    jmp L_loop_top_174
+L_loop_end_175:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5247,7 +5443,7 @@ cga_shift_verify_all:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_174:
+L_loop_top_178:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -5260,7 +5456,7 @@ L_loop_top_174:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_175
+    jz L_loop_end_179
     leaq L_CGA_SH_N(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5322,7 +5518,7 @@ L_loop_top_174:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_177
+    jz L_if_end_181
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5332,7 +5528,7 @@ L_loop_top_174:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_177:
+L_if_end_181:
     leaq L_CGA_SH_N(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5357,8 +5553,8 @@ L_if_end_177:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_174
-L_loop_end_175:
+    jmp L_loop_top_178
+L_loop_end_179:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5404,7 +5600,7 @@ cga_bv_get_a:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_179
+    jz L_if_end_183
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -5414,7 +5610,7 @@ cga_bv_get_a:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_179:
+L_if_end_183:
     leaq L_CGA_BV_A(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -5468,7 +5664,7 @@ cga_bv_get_b:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_181
+    jz L_if_end_185
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -5478,7 +5674,7 @@ cga_bv_get_b:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
+L_if_end_185:
     leaq L_CGA_BV_B(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax

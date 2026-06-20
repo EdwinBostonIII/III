@@ -145,11 +145,12 @@ The parity wall is **provably in NP∩coNP** (`1860`) — positionally determine
 the canonical hard core of infinite games and of μ-calculus verification, sitting in the quasi-poly↔poly gap. What this
 *proves* is narrow and exact: parity is *not* NP-complete unless NP=coNP — it cannot be the SAT-style complete top. What
 it does **not** settle is *where* parity sits — that placement is itself **OPEN** (advisor-audited: NP∩coNP membership
-does not establish Ladner-intermediacy; parity could be in P). Its NP∩coNP + quasi-poly profile matches *both* the
-still-open intermediates (integer factoring, discrete log) *and* the problems that **fell to P** from exactly this
-profile (primality → AKS 2002; linear programming → ellipsoid 1979) — a precedent that arguably favors eventual-P. This
-is precisely why parity is a *better-understood* wall than P-vs-NP, and a more interesting one: it is hemmed in from both
-sides, sitting at the coordinates where the dominoes have historically fallen.
+does not establish Ladner-intermediacy; parity could be in P). Its NP∩coNP + quasi-poly profile is *near* both the
+still-open intermediates (integer factoring, discrete log) *and* the problems that **fell to P** (primality, from
+*randomized*-poly → AKS 2002; linear programming, from poly → ellipsoid 1979) — but parity's quasi-poly upper bound is
+**weaker** than either of those had, so the eventual-P precedent is *suggestive, not favored*. This is precisely why
+parity is a *better-understood* wall than P-vs-NP, and a more interesting one: it is hemmed in from both sides, sitting
+*near* (at a weaker upper bound than) the coordinates where the dominoes have historically fallen.
 
 **The reusable method (the template every other wall inherits):** *(i)* build an oracle (a ground-truth decision
 procedure); *(ii)* prove the **islands** — the restricted regimes that are in P — as gated KATs == oracle; *(iii)* cite

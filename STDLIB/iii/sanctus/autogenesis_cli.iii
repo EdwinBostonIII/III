@@ -1,0 +1,218 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\autogenesis_cli.iii
+ *
+ * III STDLIB - sanctus::autogenesis_cli  --  the context-aware native command surface for the loop.
+ *
+ * A lean front-end, NOT an island: agc_run parses a text command line and DISPATCHES to the organs
+ * that already exist (self_model, theorem_grow, autogenesis), rendering a human-readable ASCII reply
+ * into the caller's buffer.  It is context-aware -- every reply reflects the LIVE state of the loop
+ * (in-flight cycle, candidate count, validation verdict, self-model gap, theorem floor, ledger and
+ * state roots).  A host launcher need only feed argv/stdin and print the buffer; the whole command
+ * surface, dispatch, and rendering live here in III.  Commands:
+ *   help | status | gap | theorems | cycle | commit | rollback | ledger | state
+ *
+ * Hexad: kind_compose.  Composes self_model + theorem_grow + autogenesis only (drives them; adds no
+ * new authority -- cycle/commit run under the session capability set by agc_attach, so the apprentice
+ * commit gate still bites).  Determinism: integer-only, content-derived.  Discipline: W2 (<=4
+ * params), W4 (module scratch), W13 (<=20 locals), W14/W15 (sentinel loops, no recursion).  ASCII. */
+
+module sanctus_autogenesis_cli
+
+extern @abi(c-msvc-x64) fn sm_next_gap() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn sm_n_nodes() -> u64 from "self_model.iii"
+extern @abi(c-msvc-x64) fn tg_count() -> u64 from "theorem_grow.iii"
+extern @abi(c-msvc-x64) fn ag_cycle(cap: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_commit(cap: u64, sig: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_rollback() -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_ledger_root(out_32: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_state_root(out_32: u64) -> i32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_inflight() -> u32 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_ncand() -> u64 from "autogenesis.iii"
+extern @abi(c-msvc-x64) fn ag_valid() -> u32 from "autogenesis.iii"
+
+var AGC_CAP : u64 = 0u64
+var AGC_DEC : [u8; 24]
+var AGC_R32 : [u8; 32]
+
+/* ---- session ---- */
+fn agc_attach(cap: u64) -> i32 @export { AGC_CAP = cap  return 0i32 }
+
+/* ---- render helpers ---- */
+fn agc_put_str(base: u64, off: u64, s: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        let src : *u8 = (s + k) as *u8
+        let dst : *u8 = (base + off + k) as *u8
+        dst[0u64] = src[0u64]
+        k = k + 1u64
+    }
+    return off + n
+}
+
+fn agc_put_nl(base: u64, off: u64) -> u64 {
+    let d : *u8 = (base + off) as *u8
+    d[0u64] = 10u8
+    return off + 1u64
+}
+
+fn agc_put_dec(base: u64, off: u64, v: u64) -> u64 {
+    if v == 0u64 {
+        let z : *u8 = (base + off) as *u8
+        z[0u64] = 48u8
+        return off + 1u64
+    }
+    let mut n : u64 = v
+    let mut i : u64 = 0u64
+    while n > 0u64 {
+        AGC_DEC[i] = (48u64 + (n % 10u64)) as u8
+        n = n / 10u64
+        i = i + 1u64
+    }
+    let mut o : u64 = off
+    let mut j : u64 = i
+    while j > 0u64 {
+        j = j - 1u64
+        let d : *u8 = (base + o) as *u8
+        d[0u64] = AGC_DEC[j]
+        o = o + 1u64
+    }
+    return o
+}
+
+/* sign-safe integer printer (high-bit test, NOT signed `<` -- the documented unsigned-ordering trap) */
+fn agc_put_int(base: u64, off: u64, v: i64) -> u64 {
+    let u : u64 = v as u64
+    if (u >> 63u64) == 1u64 {
+        let m : *u8 = (base + off) as *u8
+        m[0u64] = 45u8
+        return agc_put_dec(base, off + 1u64, 0u64 - u)
+    }
+    return agc_put_dec(base, off, u)
+}
+
+fn agc_hexdig(v: u32) -> u8 {
+    if v < 10u32 { return (48u32 + v) as u8 }
+    return (87u32 + v) as u8
+}
+
+fn agc_put_hex32(base: u64, off: u64, src: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut o : u64 = off
+    while i < 32u64 {
+        let b : *u8 = (src + i) as *u8
+        let hi : u32 = (b[0u64] as u32) >> 4u32
+        let lo : u32 = (b[0u64] as u32) & 0x0Fu32
+        let d1 : *u8 = (base + o) as *u8
+        d1[0u64] = agc_hexdig(hi)
+        let d2 : *u8 = (base + o + 1u64) as *u8
+        d2[0u64] = agc_hexdig(lo)
+        o = o + 2u64
+        i = i + 1u64
+    }
+    return o
+}
+
+/* ---- parsing ---- */
+fn agc_first_token_len(cmd: u64, len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : *u8 = (cmd + i) as *u8
+        let ch : u8 = c[0u64]
+        if ch == 32u8 { return i }
+        if ch == 10u8 { return i }
+        i = i + 1u64
+    }
+    return len
+}
+
+fn agc_verb_is(cmd: u64, len: u64, lit: u64, litlen: u64) -> u8 {
+    if agc_first_token_len(cmd, len) != litlen { return 0u8 }
+    let mut i : u64 = 0u64
+    while i < litlen {
+        let a : *u8 = (cmd + i) as *u8
+        let b : *u8 = (lit + i) as *u8
+        if a[0u64] != b[0u64] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* ---- the dispatcher: text command in, rendered reply into out, returns reply length ---- */
+fn agc_run(cmd: u64, len: u64, out: u64) -> i64 {
+    let mut o : u64 = 0u64
+    if agc_verb_is(cmd, len, ("help" as u64), 4u64) == 1u8 {
+        o = agc_put_str(out, o, ("help status gap theorems cycle commit rollback ledger state" as u64), 59u64)
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("status" as u64), 6u64) == 1u8 {
+        o = agc_put_str(out, o, ("status inflight=" as u64), 16u64)
+        o = agc_put_dec(out, o, ag_inflight() as u64)
+        o = agc_put_str(out, o, (" ncand=" as u64), 7u64)
+        o = agc_put_dec(out, o, ag_ncand())
+        o = agc_put_str(out, o, (" valid=" as u64), 7u64)
+        o = agc_put_dec(out, o, ag_valid() as u64)
+        o = agc_put_str(out, o, (" thm=" as u64), 5u64)
+        o = agc_put_dec(out, o, tg_count())
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("gap" as u64), 3u64) == 1u8 {
+        o = agc_put_str(out, o, ("gap next=" as u64), 9u64)
+        o = agc_put_dec(out, o, sm_next_gap())
+        o = agc_put_str(out, o, (" nodes=" as u64), 7u64)
+        o = agc_put_dec(out, o, sm_n_nodes())
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("theorems" as u64), 8u64) == 1u8 {
+        o = agc_put_str(out, o, ("thm=" as u64), 4u64)
+        o = agc_put_dec(out, o, tg_count())
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("cycle" as u64), 5u64) == 1u8 {
+        let rc : i32 = ag_cycle(AGC_CAP)
+        o = agc_put_str(out, o, ("cycle rc=" as u64), 9u64)
+        o = agc_put_int(out, o, rc as i64)
+        o = agc_put_str(out, o, (" ncand=" as u64), 7u64)
+        o = agc_put_dec(out, o, ag_ncand())
+        o = agc_put_str(out, o, (" valid=" as u64), 7u64)
+        o = agc_put_dec(out, o, ag_valid() as u64)
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("commit" as u64), 6u64) == 1u8 {
+        let rc2 : i32 = ag_commit(AGC_CAP, 0u64)
+        o = agc_put_str(out, o, ("commit rc=" as u64), 10u64)
+        o = agc_put_int(out, o, rc2 as i64)
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("rollback" as u64), 8u64) == 1u8 {
+        let rc3 : i32 = ag_rollback()
+        o = agc_put_str(out, o, ("rollback rc=" as u64), 12u64)
+        o = agc_put_int(out, o, rc3 as i64)
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("ledger" as u64), 6u64) == 1u8 {
+        ag_ledger_root((&AGC_R32 as u64))
+        o = agc_put_str(out, o, ("ledger " as u64), 7u64)
+        o = agc_put_hex32(out, o, (&AGC_R32 as u64))
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    if agc_verb_is(cmd, len, ("state" as u64), 5u64) == 1u8 {
+        ag_state_root((&AGC_R32 as u64))
+        o = agc_put_str(out, o, ("state " as u64), 6u64)
+        o = agc_put_hex32(out, o, (&AGC_R32 as u64))
+        o = agc_put_nl(out, o)
+        return o as i64
+    }
+    o = agc_put_str(out, o, ("unknown; try help" as u64), 17u64)
+    o = agc_put_nl(out, o)
+    return o as i64
+}
+
+/* The exported entry: render the reply to `cmd`[0..len) into out (>= 256 bytes); returns length. */
+fn agc_exec(cmd: u64, len: u64, out: u64) -> i64 @export { return agc_run(cmd, len, out) }

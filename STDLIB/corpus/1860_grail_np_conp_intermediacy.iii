@@ -3,9 +3,10 @@
  * winner determination is in NP intersect coNP (indeed UP intersect coUP, Jurdzinski 1998): a positional strategy is a
  * POLY-CHECKABLE witness for BOTH players.  So the problem is NOT NP-complete unless NP = coNP -- it cannot be the
  * complete top.  WHERE it sits is itself OPEN (advisor-audited: NP-cap-coNP membership does NOT establish Ladner-
- * intermediacy -- parity could be in P): its NP-cap-coNP + quasi-poly profile matches BOTH the still-open intermediates
- * (factoring, discrete log) AND the problems that FELL to P from exactly this profile (primality -> AKS 2002; linear
- * programming -> ellipsoid 1979) -- the precedent arguably favoring eventual-P.
+ * intermediacy -- parity could be in P): its NP-cap-coNP + quasi-poly profile is NEAR BOTH the still-open intermediates
+ * (factoring, discrete log) AND the problems that FELL to P (primality, from randomized-poly -> AKS 2002; linear
+ * programming, from poly -> ellipsoid 1979) -- but parity's quasi-poly upper bound is WEAKER than either of those had,
+ * so the eventual-P precedent is suggestive but TEMPERED, not favored.
  *
  * WHAT IS VERIFIED HERE (the witness is poly-checkable, via the verified one-player solver of 1850):
  *  - NP witness for W_even: a positional EVEN strategy sigma.  Fix Even to sigma; the restricted game has Even

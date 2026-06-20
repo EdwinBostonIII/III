@@ -1,0 +1,125 @@
+/* 1340_memo_equiv.iii -- DISCHARGE THE MEMOIZATION OPTIMIZATION (harmony item 13).
+ *
+ * A served memo hit was TRUSTED to equal recomputation; nothing discharged that obligation.
+ * mq_attest_equiv is the differential: present a freshly recomputed result-commit against the
+ * stored (chain-verified, confidence-cleared, non-stale) entry.  EQUAL -> MQ_OK + an EQUIV witness
+ * fragment.  DIVERGED -> ml_mark_stale EVICTS the entry (the W50 lookup gate refuses stale, so the
+ * provably-wrong value can NEVER be served again) + a DIVERGENCE fragment + MQ_E_DIVERGED.  Arms:
+ *  (1) stand up the full lattice vertical (clause ratified, fragment registered, entry admitted)
+ *      exactly as the in-module integration KAT does;
+ *  (2) POSITIVE -- attest with the TRUE recomputed commit: MQ_OK, and the entry STAYS servable;
+ *  (3) the witness spine grew (the equivalence is ON RECORD, replayable);
+ *  (4) NEGATIVE/EVICTION -- attest with a diverging commit: MQ_E_DIVERGED, and the entry is NOW
+ *      STALE (lookup returns MQ_E_STALE): one spot-check converted a wrong cache line into a
+ *      permanent eviction;
+ *  (5) attesting an absent key reports ABSENT (no false discharge);
+ *  (6) null guards hold.
+ * Exit 99 = memoization is no longer trusted -- it is DISCHARGED or EVICTED, witnessed either way. */
+module corpus_1340
+
+extern @abi(c-msvc-x64) fn mq_init() -> i32 from "memo_query.iii"
+extern @abi(c-msvc-x64) fn mq_lookup_verified(key: *u8, out_commit: *u8, out_chain_id: *u8) -> i32 from "memo_query.iii"
+extern @abi(c-msvc-x64) fn mq_attest_equiv(key: *u8, recomputed_commit: *u8) -> i32 from "memo_query.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+
+const MQ_OK         : i32 =  0i32
+const MQ_E_NULL     : i32 = -1i32
+const MQ_E_ABSENT   : i32 = -2i32
+const MQ_E_STALE    : i32 = -5i32
+const MQ_E_DIVERGED : i32 = -9i32
+
+var LABEL : [u8; 13]          /* "cp_memo_admit" */
+var RATBUF : [u64; 16]
+var ZID    : [u8; 32]
+var PAY    : [u8; 72]
+var CHAIN  : [u8; 32]
+var KEY    : [u8; 32]
+var COMMIT : [u8; 32]
+var WRONG  : [u8; 32]
+var OUTC   : [u8; 32]
+var OUTCH  : [u8; 32]
+var BOGUS  : [u8; 32]
+
+fn set_label() -> u64 {
+    LABEL[0u64]  = 0x63u8
+    LABEL[1u64]  = 0x70u8
+    LABEL[2u64]  = 0x5Fu8
+    LABEL[3u64]  = 0x6Du8
+    LABEL[4u64]  = 0x65u8
+    LABEL[5u64]  = 0x6Du8
+    LABEL[6u64]  = 0x6Fu8
+    LABEL[7u64]  = 0x5Fu8
+    LABEL[8u64]  = 0x61u8
+    LABEL[9u64]  = 0x64u8
+    LABEL[10u64] = 0x6Du8
+    LABEL[11u64] = 0x69u8
+    LABEL[12u64] = 0x74u8
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* (1) the full lattice vertical (mirrors mq_kat_lattice) */
+    wh_init(0u64)
+    ws_init()
+    ml_init()
+    cons_init()
+    mq_init()
+    set_label()
+    let reqbase : u64 = &RATBUF as u64
+    let labaddr : u64 = &LABEL as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = labaddr
+    rqp[2u64] = 13u64
+    rqp[3u64] = labaddr
+    rqp[4u64] = 0u64
+    rqp[5u64] = labaddr
+    rqp[6u64] = 0u64
+    if cons_ratify(reqbase as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    ident_zero((&ZID as u64) as *u8)
+    let zp : *u8 = (&ZID as u64) as *u8
+    let idxc : u64 = wh_publish(zp, zp, zp, zp, 0u8, 0u8, 1u16, zp, 0u32, (&PAY as u64) as *u8, 72u32, (&CHAIN as u64) as *u8)
+    if idxc == 0xFFFFFFFFFFFFFFFFu64 { return 2u64 }
+    ws_register(idxc)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        KEY[i] = 0x55u8
+        COMMIT[i] = 0x66u8
+        WRONG[i] = 0x66u8
+        BOGUS[i] = 0x21u8
+        i = i + 1u64
+    }
+    WRONG[7u64] = 0x67u8                                   /* one diverging byte */
+    if ml_admit((&KEY as u64) as *u8, (&COMMIT as u64) as *u8, (&CHAIN as u64) as *u8) != 0i32 { return 3u64 }
+    if mq_lookup_verified((&KEY as u64) as *u8, (&OUTC as u64) as *u8, (&OUTCH as u64) as *u8) != MQ_OK { return 4u64 }
+
+    /* (2) POSITIVE: the true recomputed commit discharges the optimization; entry stays servable */
+    let pre : u64 = wh_next_idx()
+    if mq_attest_equiv((&KEY as u64) as *u8, (&COMMIT as u64) as *u8) != MQ_OK { return 5u64 }
+    if mq_lookup_verified((&KEY as u64) as *u8, (&OUTC as u64) as *u8, (&OUTCH as u64) as *u8) != MQ_OK { return 6u64 }
+
+    /* (3) the equivalence is ON RECORD (spine grew across the attest + its inner lookup) */
+    if wh_next_idx() <= pre { return 7u64 }
+
+    /* (4) NEGATIVE/EVICTION: a diverging commit evicts the entry permanently */
+    if mq_attest_equiv((&KEY as u64) as *u8, (&WRONG as u64) as *u8) != MQ_E_DIVERGED { return 8u64 }
+    if mq_lookup_verified((&KEY as u64) as *u8, (&OUTC as u64) as *u8, (&OUTCH as u64) as *u8) != MQ_E_STALE { return 9u64 }
+
+    /* (5) absent key -> ABSENT (no false discharge) */
+    if mq_attest_equiv((&BOGUS as u64) as *u8, (&COMMIT as u64) as *u8) != MQ_E_ABSENT { return 10u64 }
+
+    /* (6) null guards */
+    if mq_attest_equiv(0u64 as *u8, (&COMMIT as u64) as *u8) != MQ_E_NULL { return 11u64 }
+    if mq_attest_equiv((&KEY as u64) as *u8, 0u64 as *u8) != MQ_E_NULL { return 12u64 }
+
+    return 99u64
+}

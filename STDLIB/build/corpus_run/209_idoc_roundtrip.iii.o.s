@@ -4,29 +4,29 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtbabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtbabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_3:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_4:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_5:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_6:
-    .ascii "babel_wire.iiibabel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_7:
-    .ascii "babel_wire.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_8:
-    .ascii "idoc.iiiidoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_9:
-    .ascii "idoc.iiiidoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_10:
-    .ascii "idoc.iiiidoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_11:
-    .ascii "idoc.iiiidoc.iii\0"
+    .ascii "idoc.iii\0"
 L_str_12:
     .ascii "idoc.iii\0"
     .section .iii.ring3,"n"
@@ -797,6 +797,15 @@ L_loop_end_5:
     pushq %rax
     popq %rax
     movq %rax, -192(%rbp)
+    subq $8, %rsp
+    movabsq $0x200, %rax
+    pushq %rax
+    movl -184(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
     movq -192(%rbp), %rax
     pushq %rax
     movq -96(%rbp), %rax
@@ -818,6 +827,8 @@ L_loop_end_5:
     subq $32, %rsp
     callq idoc_pack_payload
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax

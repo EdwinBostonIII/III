@@ -1,0 +1,57 @@
+/* RSASSA-PSS end-to-end regression (FORWARD_REFERENCES #1).
+ *
+ * (1) PSS encode/verify_em + tamper detection (no key, RSA-3072 via
+ *     rsa_pss_selftest).
+ * (2) Real keygen -> sign -> verify (accept) -> tamper -> verify (reject)
+ *     at RSA-320, sLen=0 (smallest PSS-SHA256-valid emLen=40 >= 34).
+ *
+ * Exercises BOTH crypto paths: rm_* u32-limb Montgomery CIOS (sign/verify)
+ * and bigint_modpow bit-serial (keygen Miller-Rabin).  Root-cause +
+ * proof recorded in DOCS/CRASH-AUDIT.md sec.6 (#1/#2: bigint fault was
+ * stale; rsa_pss_verify gained an sLen parameter, RFC-8017-symmetric).
+ *
+ * Exit 99 = full success.  22/23/24/25 localise the failing stage.
+ */
+module corpus_373
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_selftest() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_keygen(arena: u64, modBits: u64, seed: u64, slen: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_n() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_e() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_d() -> u64 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_sign(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64, sig_out: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_verify(arena: u64, n: u64, e: u64, modBits: u64, mHash: u64, sig: u64, sigLen: u64, sLen: u64) -> u8 from "rsa.iii"
+
+var SEED : [u8; 48]
+var MH   : [u8; 32]
+var SIG  : [u8; 64]
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(268435456u64)
+
+    /* (1) PSS layer + tamper, no key. */
+    if rsa_pss_selftest() != 99u64 { return 22u64 }
+
+    /* (2) keygen -> sign -> verify -> tamper. */
+    let sp : *u8 = &SEED as *u8
+    let mut i : u64 = 0u64
+    while i < 48u64 { sp[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    rsa_keygen(ar, 320u64, &SEED as u64, 48u64)
+    let n : u64 = rsa_gen_n()
+    let e : u64 = rsa_gen_e()
+    let d : u64 = rsa_gen_d()
+    let mh : *u8 = &MH as *u8
+    i = 0u64
+    while i < 32u64 { mh[i] = (i & 0xFFu64) as u8 ; i = i + 1u64 }
+    let rc : i32 = rsa_pss_sign(ar, n, d, 320u64, &MH as u64, &MH as u64, 0u64, &SIG as u64)
+    if rc != 0i32 { return 23u64 }
+    let v1 : u8 = rsa_pss_verify(ar, n, e, 320u64, &MH as u64, &SIG as u64, 40u64, 0u64)
+    if v1 != 1u8 { return 24u64 }
+    let sg : *u8 = &SIG as *u8
+    sg[7] = ((sg[7] as u64) ^ 0x01u64) as u8
+    let v2 : u8 = rsa_pss_verify(ar, n, e, 320u64, &MH as u64, &SIG as u64, 40u64, 0u64)
+    if v2 != 0u8 { return 25u64 }
+
+    return 99u64
+}

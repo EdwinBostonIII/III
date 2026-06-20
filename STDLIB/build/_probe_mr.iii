@@ -1,0 +1,105 @@
+/* Fragment-dump probe for MODAL + REASON sub-clause sentences.
+ * exit = modal_q*256 + reason_pred_word_id.
+ *   modal_q: NLP_ROLE_MODAL(13) fragment's quantifier for
+ *            "the buffer should encrypt the message" (expect NLP_MOD_STRONG).
+ *   reason_pred: NLP_ROLE_REASON(11) fragment's predicate head word_id for
+ *            "send the packet because you close the queue" (expect close=15).
+ *   either 0 => that fragment did not form.
+ */
+module probe_mr
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn nl_lex_init_all() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(src_ptr: u64, packed_lens: u64, out_tokens_ptr: u64, out_count_ptr: u64) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_pack_lens(src_len: u32, max_tokens: u32) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_meta_ptr: u64) -> i32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_quantifier(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+/* "the buffer should encrypt the message" */
+fn _modal_phrase(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,98u8);o=_put(buf,o,117u8);o=_put(buf,o,102u8);o=_put(buf,o,102u8);o=_put(buf,o,101u8);o=_put(buf,o,114u8);o=_put(buf,o,32u8)   /* buffer */
+    o=_put(buf,o,115u8);o=_put(buf,o,104u8);o=_put(buf,o,111u8);o=_put(buf,o,117u8);o=_put(buf,o,108u8);o=_put(buf,o,100u8);o=_put(buf,o,32u8)   /* should */
+    o=_put(buf,o,101u8);o=_put(buf,o,110u8);o=_put(buf,o,99u8);o=_put(buf,o,114u8);o=_put(buf,o,121u8);o=_put(buf,o,112u8);o=_put(buf,o,116u8);o=_put(buf,o,32u8)   /* encrypt */
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,109u8);o=_put(buf,o,101u8);o=_put(buf,o,115u8);o=_put(buf,o,115u8);o=_put(buf,o,97u8);o=_put(buf,o,103u8);o=_put(buf,o,101u8)   /* message */
+    return o as u32
+}
+
+/* "send the packet because you close the queue" */
+fn _reason_phrase(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o=_put(buf,o,115u8);o=_put(buf,o,101u8);o=_put(buf,o,110u8);o=_put(buf,o,100u8);o=_put(buf,o,32u8)   /* send */
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,112u8);o=_put(buf,o,97u8);o=_put(buf,o,99u8);o=_put(buf,o,107u8);o=_put(buf,o,101u8);o=_put(buf,o,116u8);o=_put(buf,o,32u8)   /* packet */
+    o=_put(buf,o,98u8);o=_put(buf,o,101u8);o=_put(buf,o,99u8);o=_put(buf,o,97u8);o=_put(buf,o,117u8);o=_put(buf,o,115u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* because */
+    o=_put(buf,o,121u8);o=_put(buf,o,111u8);o=_put(buf,o,117u8);o=_put(buf,o,32u8)   /* you */
+    o=_put(buf,o,99u8);o=_put(buf,o,108u8);o=_put(buf,o,111u8);o=_put(buf,o,115u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* close */
+    o=_put(buf,o,116u8);o=_put(buf,o,104u8);o=_put(buf,o,101u8);o=_put(buf,o,32u8)   /* the */
+    o=_put(buf,o,113u8);o=_put(buf,o,117u8);o=_put(buf,o,101u8);o=_put(buf,o,117u8);o=_put(buf,o,101u8)   /* queue */
+    return o as u32
+}
+
+fn _frag_q_for_role(toks: u64, frags: u64, fc: u32, role: u32, want_head: u32) -> u32 {
+    let mut i : u32 = 0u32
+    let mut r : u32 = 0u32
+    while i < fc {
+        if nl_parse_frag_role(frags, i) == role {
+            if r == 0u32 {
+                if want_head == 1u32 {
+                    let ht : u32 = nl_parse_frag_head(frags, i)
+                    let pp : *u64 = (toks + ((ht as u64) * 8u64)) as *u64
+                    r = nl_token_word_id(pp[0u64])
+                } else {
+                    r = nl_parse_frag_quantifier(frags, i)
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return r
+}
+
+fn main() -> u64 {
+    let text : *u8 = malloc(256u64)
+    let toks : *u8 = malloc(2048u64)
+    let frags: *u8 = malloc(1024u64)
+    let cnt  : *u8 = malloc(8u64)
+    let meta : *u8 = malloc(8u64)
+    nl_lex_init_all()
+
+    /* MODAL */
+    let n1 : u32 = _modal_phrase(text)
+    cnt[0u64]=0u8;cnt[1u64]=0u8;cnt[2u64]=0u8;cnt[3u64]=0u8
+    nl_lex_tokenize(text as u64, nl_lex_pack_lens(n1, 256u32), toks as u64, cnt as u64)
+    let tc1 : u32 = _read_u32(cnt, 0u64)
+    meta[0u64]=0u8;meta[1u64]=0u8;meta[2u64]=0u8;meta[3u64]=0u8
+    nl_parse_recognize(toks as u64, tc1, frags as u64, meta as u64)
+    let fc1 : u32 = _read_u32(meta, 0u64)
+    let modal_q : u32 = _frag_q_for_role(toks as u64, frags as u64, fc1, 13u32, 0u32)
+
+    /* REASON */
+    let n2 : u32 = _reason_phrase(text)
+    cnt[0u64]=0u8;cnt[1u64]=0u8;cnt[2u64]=0u8;cnt[3u64]=0u8
+    nl_lex_tokenize(text as u64, nl_lex_pack_lens(n2, 256u32), toks as u64, cnt as u64)
+    let tc2 : u32 = _read_u32(cnt, 0u64)
+    meta[0u64]=0u8;meta[1u64]=0u8;meta[2u64]=0u8;meta[3u64]=0u8
+    nl_parse_recognize(toks as u64, tc2, frags as u64, meta as u64)
+    let fc2 : u32 = _read_u32(meta, 0u64)
+    let reason_pred : u32 = _frag_q_for_role(toks as u64, frags as u64, fc2, 11u32, 1u32)
+
+    return ((modal_q as u64) * 256u64) | (reason_pred as u64)
+}

@@ -4,99 +4,99 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtglyph_core.iiiglyph_core.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtglyph_core.iiiglyph_core.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_3:
-    .ascii "glyph_core.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_4:
-    .ascii "glyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_vec.iii\0"
 L_str_5:
-    .ascii "glyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_vec.iii\0"
 L_str_6:
-    .ascii "glyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_vec.iii\0"
 L_str_7:
-    .ascii "glyph_vec.iiiglyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_vec.iii\0"
 L_str_8:
-    .ascii "glyph_vec.iiiglyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_vec.iii\0"
 L_str_9:
-    .ascii "glyph_vec.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_vec.iii\0"
 L_str_10:
-    .ascii "glyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_map.iii\0"
 L_str_11:
-    .ascii "glyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_map.iii\0"
 L_str_12:
-    .ascii "glyph_map.iiiglyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_map.iii\0"
 L_str_13:
-    .ascii "glyph_map.iiiglyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_map.iii\0"
 L_str_14:
-    .ascii "glyph_map.iiiglyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_map.iii\0"
 L_str_15:
-    .ascii "glyph_set.iiiglyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_set.iii\0"
 L_str_16:
-    .ascii "glyph_set.iiiglyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_set.iii\0"
 L_str_17:
-    .ascii "glyph_set.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_set.iii\0"
 L_str_18:
-    .ascii "glyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_enum.iii\0"
 L_str_19:
-    .ascii "glyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_enum.iii\0"
 L_str_20:
-    .ascii "glyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_enum.iii\0"
 L_str_21:
-    .ascii "glyph_enum.iiiglyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_enum.iii\0"
 L_str_22:
-    .ascii "glyph_enum.iiiglyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_enum.iii\0"
 L_str_23:
-    .ascii "glyph_enum.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_enum.iii\0"
 L_str_24:
-    .ascii "glyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_record.iii\0"
 L_str_25:
-    .ascii "glyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_record.iii\0"
 L_str_26:
-    .ascii "glyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_record.iii\0"
 L_str_27:
-    .ascii "glyph_record.iiiglyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_record.iii\0"
 L_str_28:
-    .ascii "glyph_record.iiiglyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_record.iii\0"
 L_str_29:
-    .ascii "glyph_record.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_record.iii\0"
 L_str_30:
-    .ascii "glyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_witness.iii\0"
 L_str_31:
-    .ascii "glyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_witness.iii\0"
 L_str_32:
-    .ascii "glyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_witness.iii\0"
 L_str_33:
-    .ascii "glyph_witness.iiiglyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_witness.iii\0"
 L_str_34:
-    .ascii "glyph_witness.iiiglyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_witness.iii\0"
 L_str_35:
-    .ascii "glyph_witness.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_witness.iii\0"
 L_str_36:
-    .ascii "glyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_proof.iii\0"
 L_str_37:
-    .ascii "glyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_proof.iii\0"
 L_str_38:
-    .ascii "glyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_proof.iii\0"
 L_str_39:
-    .ascii "glyph_proof.iiiglyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_proof.iii\0"
 L_str_40:
-    .ascii "glyph_proof.iiiglyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_proof.iii\0"
 L_str_41:
-    .ascii "glyph_proof.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_proof.iii\0"
 L_str_42:
-    .ascii "glyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_recursive.iii\0"
 L_str_43:
-    .ascii "glyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_recursive.iii\0"
 L_str_44:
-    .ascii "glyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_recursive.iii\0"
 L_str_45:
-    .ascii "glyph_recursive.iiiglyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_recursive.iii\0"
 L_str_46:
-    .ascii "glyph_recursive.iiiglyph_recursive.iii\0"
+    .ascii "glyph_recursive.iii\0"
 L_str_47:
     .ascii "glyph_recursive.iii\0"
     .section .iii.ring3,"n"

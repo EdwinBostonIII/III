@@ -1,0 +1,9 @@
+module njold_probe
+
+extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_nj_unexpected() -> u64 from "xii_joinability.iii"
+
+fn main() -> u64 {
+    xjn_gate()
+    return xjn_nj_unexpected()
+}

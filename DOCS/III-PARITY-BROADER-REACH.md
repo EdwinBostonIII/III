@@ -89,8 +89,9 @@ relations (simulation, compilation) are unaffected and routinely exist.** The "c
   into *exponential-magnitude numbers*; it does not vanish.
 - **THEOREM (III), `1860`.** Parity is NP∩coNP (poly-checkable strategy witnesses both ways) — so the hardness is
   **not** NP-hardness: it is *not* NP-complete unless NP=coNP. (Where it actually sits — in P, or Ladner-intermediate —
-  is itself **OPEN**; the NP∩coNP+quasi-poly profile is shared by the still-open factoring/discrete-log *and* by
-  primality/LP, which *fell to P*.)
+  is itself **OPEN**; the NP∩coNP+quasi-poly profile is *near* both the still-open factoring/discrete-log *and*
+  primality/LP, which *fell to P* — though from stronger upper bounds (randomized-poly/poly) than parity's quasi-poly,
+  so the eventual-P precedent is tempered, not favored.)
 - **CITED.** The dichotomy is exhaustive (formal map §4): every mechanism either discards control (provably wrong) or
   re-encodes it (inherits the open cost).
 

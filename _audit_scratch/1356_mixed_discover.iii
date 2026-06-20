@@ -1,0 +1,78 @@
+/* 1356_mixed_discover.iii -- THE MIXED-FRAGMENT REGISTRY TIER (harmony wave-4 M1).
+ *
+ * The third autocatalyst tier (domain 0xB6): identities in the MIXED arithmetic+bitwise fragment,
+ * where bv_ring is structurally blind (no &,|,^,~) and the kernel's BV iota carries no laws.  The
+ * authority is UNSAT -- numera/bv_bits blasts the lhs==rhs miter into III's own CDCL solver and
+ * refutes "some bit differs" at EVERY probe width (8/16/32/64; fail-closed at each).  Arms:
+ *  (1) the six-shape catalog discovers in full: cga_mixed_discover == 6, registered in order;
+ *  (2) seals are present and pairwise distinct (shape 1 vs shape 2);
+ *  (3) out-of-catalog ids refuse (0, 7, huge) -- the registry never grows on refusal;
+ *  (4) zero budget discovers nothing;
+ *  (5) THE AUTHORITY DISCRIMINATES: a false mixed miter ((x&y)+(x|y) vs (x+y)^1) is rejected by
+ *      a solver COUNTERMODEL at w=8 -- the admission wall is the proof, not the catalog bound;
+ *  (6) volatile re-derivation: a second sweep re-proves and re-appends (the 0xB5-family
+ *      by-design contract: seals are re-derived, never trusted stale).
+ * Exit 99 = III autonomously certifies mixed strength laws by exhaustive refutation -- a fragment
+ * NO polynomial method can phrase, decided by its own solver. */
+module corpus_1356
+
+extern @abi(c-msvc-x64) fn cga_dispose_mixed(shape: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_discover(budget: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_get(i: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_seal_byte(i: u32, j: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+fn main() -> u64 {
+    /* (4) zero budget first (registry must stay empty) */
+    if cga_mixed_discover(0u32) != 0u32 { return 1u64 }
+    if cga_mixed_count() != 0u32 { return 2u64 }
+
+    /* (1) the full catalog discovers */
+    if cga_mixed_discover(1u32) != 6u32 { return 3u64 }
+    if cga_mixed_count() != 6u32 { return 4u64 }
+    let mut i : u32 = 0u32
+    while i < 6u32 {
+        if cga_mixed_get(i) != i + 1u32 { return 5u64 }
+        i = i + 1u32
+    }
+
+    /* (2) seals present + pairwise distinct */
+    let mut any1 : u32 = 0u32
+    let mut diff : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        if cga_mixed_seal_byte(0u32, j) != 0u8 { any1 = 1u32 }
+        if cga_mixed_seal_byte(0u32, j) != cga_mixed_seal_byte(1u32, j) { diff = 1u32 }
+        j = j + 1u32
+    }
+    if any1 != 1u32 { return 6u64 }
+    if diff != 1u32 { return 7u64 }
+
+    /* (3) out-of-catalog refusals; registry unchanged */
+    if cga_dispose_mixed(0u32, 1u32) != 0u8 { return 8u64 }
+    if cga_dispose_mixed(7u32, 1u32) != 0u8 { return 9u64 }
+    if cga_dispose_mixed(0xFFFFFFFFu32, 1u32) != 0u8 { return 10u64 }
+    if cga_mixed_count() != 6u32 { return 11u64 }
+
+    /* (5) the authority discriminates: a FALSE mixed miter is refuted by countermodel */
+    bb_reset(8u64)
+    let x : u32 = bb_var(0u32)
+    let y : u32 = bb_var(1u32)
+    let lhs : u32 = bb_add(bb_and(x, y), bb_or(x, y))
+    let rhs_false : u32 = bb_xor(bb_add(x, y), bb_const(1u64))
+    if bb_equal(lhs, rhs_false) != 0u8 { return 12u64 }
+
+    /* (6) volatile re-derivation: the second sweep re-proves and appends */
+    if cga_mixed_discover(1u32) != 6u32 { return 13u64 }
+    if cga_mixed_count() != 12u32 { return 14u64 }
+
+    return 99u64
+}

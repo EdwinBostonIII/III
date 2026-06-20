@@ -1,0 +1,89 @@
+/* Empirical fragment-dump probe for the CONDITION sub-clause.
+ * Tokenizes + parses a candidate conditional sentence and reports, via
+ * exit code, whether a CONDITION (role 12) fragment forms and what its
+ * predicate head word_id is.
+ *   exit 0           : parse error
+ *   exit 100+fc      : parsed, NO condition fragment (fc = frag_count)
+ *   exit <word_id>   : CONDITION fragment present; predicate head word_id
+ *                      (e.g. 15 = "close"); +0x4000 if a sub-subject token
+ *                      was scanned into a later fragment (diagnostic).
+ */
+module probe_cond
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn nl_lex_init_all() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(src_ptr: u64, packed_lens: u64, out_tokens_ptr: u64, out_count_ptr: u64) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_pack_lens(src_len: u32, max_tokens: u32) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_meta_ptr: u64) -> i32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_quantifier(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 { buf[off] = b; return off + 1u64 }
+
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+/* "lock the mutex if you close the queue" */
+fn _phrase(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf,o,108u8);o = _put(buf,o,111u8);o = _put(buf,o,99u8);o = _put(buf,o,107u8)   /* lock */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,116u8);o = _put(buf,o,104u8);o = _put(buf,o,101u8)   /* the */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,109u8);o = _put(buf,o,117u8);o = _put(buf,o,116u8);o = _put(buf,o,101u8);o = _put(buf,o,120u8)   /* mutex */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,105u8);o = _put(buf,o,102u8)   /* if */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,121u8);o = _put(buf,o,111u8);o = _put(buf,o,117u8)   /* you */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,99u8);o = _put(buf,o,108u8);o = _put(buf,o,111u8);o = _put(buf,o,115u8);o = _put(buf,o,101u8)   /* close */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,116u8);o = _put(buf,o,104u8);o = _put(buf,o,101u8)   /* the */
+    o = _put(buf,o,32u8)
+    o = _put(buf,o,113u8);o = _put(buf,o,117u8);o = _put(buf,o,101u8);o = _put(buf,o,117u8);o = _put(buf,o,101u8)   /* queue */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let text : *u8 = malloc(256u64)
+    let toks : *u8 = malloc(2048u64)
+    let frags: *u8 = malloc(1024u64)
+    let cnt  : *u8 = malloc(8u64)
+    let meta : *u8 = malloc(8u64)
+    nl_lex_init_all()
+    let n : u32 = _phrase(text)
+    let lp : u64 = nl_lex_pack_lens(n, 256u32)
+    cnt[0u64] = 0u8; cnt[1u64] = 0u8; cnt[2u64] = 0u8; cnt[3u64] = 0u8
+    let lrc : i32 = nl_lex_tokenize(text as u64, lp, toks as u64, cnt as u64)
+    if lrc != 0i32 { return 250u64 }
+    let tc : u32 = _read_u32(cnt, 0u64)
+    meta[0u64]=0u8;meta[1u64]=0u8;meta[2u64]=0u8;meta[3u64]=0u8
+    let prc : i32 = nl_parse_recognize(toks as u64, tc, frags as u64, meta as u64)
+    if prc != 0i32 { return 0u64 }
+    let fc : u32 = _read_u32(meta, 0u64)
+    /* scan for a CONDITION (role 12) fragment */
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while i < fc {
+        if found == 0xFFFFFFFFu32 {
+            if nl_parse_frag_role(frags as u64, i) == 12u32 { found = i }
+        }
+        i = i + 1u32
+    }
+    if found == 0xFFFFFFFFu32 { return (100u64 + (fc as u64)) }
+    let head_tok : u32 = nl_parse_frag_head(frags as u64, found)
+    let pp : *u64 = ((toks as u64) + ((head_tok as u64) * 8u64)) as *u64
+    let pred_w : u32 = nl_token_word_id(pp[0u64])
+    let quant : u32 = nl_parse_frag_quantifier(frags as u64, found)
+    /* encode: pred_w in low byte-ish; +0x4000 if quant (sub-subj tok) nonzero/set */
+    let mut r : u64 = (pred_w as u64) & 0xFFFFu64
+    if quant != 0u32 { r = r | 0x4000u64 }
+    return r
+}

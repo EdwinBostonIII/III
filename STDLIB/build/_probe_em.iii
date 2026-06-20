@@ -1,0 +1,35 @@
+/* manual-link probe: entropy_baseline_matches exact-match oracle (D2 sentinel fix core).
+ * 99 = exact-same spectrum matches (1) AND a one-element-different spectrum does NOT (0). */
+module probe_em
+
+extern @abi(c-msvc-x64) fn entropy_init() -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_register_path(path_id: *u8) -> u32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_sample(path_slot: u32, time_value: u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_set_baseline(path_slot: u32, spectrum: *u64, cap: u64) -> i32 from "entropy_monitor.iii"
+extern @abi(c-msvc-x64) fn entropy_baseline_matches(path_slot: u32, spectrum: *u64) -> u8 from "entropy_monitor.iii"
+
+var P_ID   : [u8; 32]
+var P_SPEC : [u64; 64]
+
+fn main() -> u64 {
+    entropy_init()
+    let mut i : u64 = 0u64
+    while i < 32u64 { P_ID[i] = (i + 1u64) as u8  i = i + 1u64 }
+    let slot : u32 = entropy_register_path((&P_ID as u64) as *u8)
+    if slot == 0xFFFFFFFFu32 { return 1u64 }
+    /* a non-trivial benign cadence window */
+    i = 0u64
+    while i < 64u64 { entropy_sample(slot, (i * 3u64 + 7u64) & 0xFFu64)  i = i + 1u64 }
+    if entropy_spectrum(slot, (&P_SPEC as u64) as *u64) != 0i32 { return 2u64 }
+    if entropy_set_baseline(slot, (&P_SPEC as u64) as *u64, 64u64) != 0i32 { return 3u64 }
+    /* exact same spectrum -> match */
+    if entropy_baseline_matches(slot, (&P_SPEC as u64) as *u64) != 1u8 { return 4u64 }
+    /* perturb ONE element -> not a match (the elementwise oracle catches it; a mod-p distance could collide) */
+    P_SPEC[0u64] = P_SPEC[0u64] + 1u64
+    if entropy_baseline_matches(slot, (&P_SPEC as u64) as *u64) != 0u8 { return 5u64 }
+    /* restore + re-match to prove it is the perturbation, not a one-way latch */
+    P_SPEC[0u64] = P_SPEC[0u64] - 1u64
+    if entropy_baseline_matches(slot, (&P_SPEC as u64) as *u64) != 1u8 { return 6u64 }
+    return 99u64
+}

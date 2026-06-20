@@ -103,18 +103,18 @@ This is where two mapped walls become *more* than the sum:
 - **(intermediate read)** Ladner's theorem (CITED, 1975) — *if* P≠NP, NP-intermediate problems exist (neither in P nor
   NP-complete). Parity is a *candidate*, alongside the still-open NP∩coNP problems **integer factoring** and **discrete
   log**.
-- **(eventual-P read, arguably stronger)** Problems that were in NP∩coNP *with a good upper bound* have a strong track
-  record of **falling to P**: **primality** (NP∩coNP via Pratt; → AKS 2002, in P) and **linear programming** (NP∩coNP via
-  duality; → ellipsoid 1979, in P). Parity's exact profile — **NP∩coNP *and* quasi-polynomial** — is the profile of those
-  problems the moment before they fell. By this precedent, "parity is secretly in P" is at least as defensible as
-  "intermediate."
+- **(eventual-P read — suggestive but tempered)** Problems that were in NP∩coNP *with a good upper bound* have a track
+  record of **falling to P**: **primality** (NP∩coNP via Pratt, *randomized*-poly via Miller–Rabin; → AKS 2002, in P) and
+  **linear programming** (NP∩coNP via duality; → ellipsoid 1979, in P). Parity is NP∩coNP and quasi-polynomial — *near*
+  this profile, but its upper bound (quasi-poly) is **weaker** than primality's (randomized-poly) or LP's (poly) ever was.
+  So the precedent is real but **does not** make eventual-P the favored bet — only as defensible as "intermediate."
 
 So the cross-wall asset is not "parity is the intermediate archetype" (that overstates an open placement). It is sharper:
-**SAT is provably the complete top; parity is provably *not* there (NP∩coNP); and parity sits at exactly the coordinates —
-NP∩coNP + quasi-poly — where the dominoes (primality, LP) have historically fallen to P.** That makes the parity wall the
-*more* interesting of the two: it is where the landscape's intermediate band either gets populated (Ladner) or gets one
-fewer member (the primality/LP precedent), and which one is O1 itself. Two walls mapped, one open question made precise —
-every claim tagged, both open cores untouched.
+**SAT is provably the complete top; parity is provably *not* there (NP∩coNP); and parity sits *near* — at a weaker
+upper bound (quasi-poly) than — the coordinates (NP∩coNP + randomized-poly/poly) from which the dominoes (primality, LP)
+fell to P.** That makes the parity wall the *more* interesting of the two: it is where the landscape's intermediate band
+either gets populated (Ladner) or gets one fewer member, and which one is O1 itself. Two walls mapped, one open question
+made precise — every claim tagged, both open cores untouched.
 
 ---
 
@@ -140,6 +140,6 @@ every claim tagged, both open cores untouched.
 **Bottom line.** The SAT wall is the *complete* wall — its open core is P vs NP, its boundary is a sharp Schaefer cliff,
 its hardness is NP-completeness (the top of NP). Set beside the parity wall (∈ NP∩coNP — proven *not* the complete top —
 quasi-poly, witness-symmetric, with placement *open*), it reveals the landscape's true shape: a sharp P/NP-complete cliff
-within Boolean CSP, and — across all of NP — a band that Ladner proves is populated iff P≠NP, where parity sits at the
-exact NP∩coNP+quasi-poly coordinates from which primality and LP fell to P. Two walls mapped, the open question between
-them made precise — every claim tagged, both open cores untouched.
+within Boolean CSP, and — across all of NP — a band that Ladner proves is populated iff P≠NP, where parity sits *near*
+(at a weaker, quasi-poly upper bound than) the coordinates from which primality and LP fell to P. Two walls mapped, the
+open question between them made precise — every claim tagged, both open cores untouched.

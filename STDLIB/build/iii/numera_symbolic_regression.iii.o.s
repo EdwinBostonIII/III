@@ -34,10 +34,8 @@ L_str_13:
 L_str_14:
     .ascii "capability.iii\0"
 L_str_15:
-    .ascii "algebraic_time.iii\0"
-L_str_16:
     .ascii "aether/witness_hook.iii\0"
-L_str_17:
+L_str_16:
     .ascii "aether/witness_hook.iii\0"
     .section .rodata
 L_SYMREG_OK:

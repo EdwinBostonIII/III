@@ -97,12 +97,6 @@ L_if_end_3:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
     movq $0, %rax
@@ -214,12 +208,6 @@ L_if_end_9:
     popq %rcx
     popq %rax
     xorq %rcx, %rax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -732,12 +720,6 @@ L_if_end_39:
     popq %rax
     callq *%rax
     addq $32, %rsp
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)

@@ -43,9 +43,11 @@ solver (color refinement) is checked against it.
 
 ---
 
-## 4. The structural isomorphism between the GI wall and the parity wall
+## 4. The structural parallel between the GI wall and the parity wall (an analogy, not a reduction)
 
-This is the asset that two mapped walls give that one cannot:
+This is the asset that two mapped walls give that one cannot — a *correspondence of complexity profiles*. It is an
+**analogy across tagged facts**, not a reduction: parity ∈ NP∩coNP, GI ∈ NP∩coAM (not even the same closure), and
+neither is known to reduce to the other. Each row is a gated/cited fact; the parallel is the pattern they suggest.
 
 | Feature | **Parity** | **Graph Isomorphism** |
 |---|---|---|
@@ -58,12 +60,14 @@ This is the asset that two mapped walls give that one cannot:
 | the fix, at cost | control-preservation (Class II) | `k`-WL, `k>1` (`1872`) |
 | placement | in-P-vs-intermediate **OPEN** | in-P-vs-intermediate **OPEN** |
 
-The two walls are **the same shape**: a quasi-poly intermediate candidate whose cheap invariant collapses the essential
-distinction, escapable only by a costlier higher-dimensional method, with the open core being whether that cost can be
-brought down to P. This is not analogy — it is a structural correspondence, each row a tagged fact. Two *independent*
-quasi-poly intermediate candidates (parity, GI) materially strengthen the picture of a **populated NP middle** (Ladner,
-CITED: the band is non-empty iff P≠NP), and both sit at the **NP∩(low)-with-quasi-poly** coordinates from which the
-dominoes (primality → AKS; LP → ellipsoid) historically fell to P. Whether parity and GI follow them, or anchor the
+The two walls share **the same complexity-profile shape**: a quasi-poly intermediate candidate whose cheap invariant
+collapses the essential distinction, escapable only by a costlier higher-dimensional method, with the open core being
+whether that cost can be brought down to P. This is a structural **analogy** (each row a tagged fact), **not** a
+reduction — there is no known map either way. Two *independent* quasi-poly intermediate candidates (parity, GI)
+materially strengthen the picture of a **populated NP middle** (Ladner, CITED: the band is non-empty iff P≠NP). They sit
+**near** — but at a *weaker* "good upper bound" (quasi-polynomial) than — the dominoes that fell to P (primality fell
+from *randomized*-poly → AKS; LP from poly → ellipsoid). So the eventual-P precedent is *suggestive but tempered*:
+parity and GI have weaker upper bounds than primality/LP ever did. Whether they follow the dominoes to P, or anchor the
 intermediate band, is exactly their open cores.
 
 ---
@@ -78,11 +82,12 @@ intermediate band, is exactly their open cores.
 | N | GI ∈ NP (poly-checkable isomorphism witness) | **VERIFIED (III)** | `1872` |
 | AM | GI ∈ coAM ⇒ not NP-complete unless PH collapses | CITED | Goldwasser–Sipser; BHZ |
 | QP | GI ∈ quasi-polynomial | CITED | Babai 2016 |
-| ≅ | structural isomorphism: GI wall ≅ parity wall (quasi-poly intermediate, cheap-invariant-fails, costly-fix) | **VERIFIED contrast** | `1848`,`1860`,`1871`,`1872` |
+| ∥ | structural **parallel** (analogy, not a reduction): GI wall parallels parity wall (quasi-poly intermediate, cheap-invariant-fails, costly-fix) | tagged correspondence (analogy) | `1848`,`1860`,`1871`,`1872` |
 | O | **GI ∈ P?** | **OPEN** | the wall |
 
-**Bottom line.** GI is the parity wall's structural twin: an OPEN-core, quasi-polynomial, intermediate-candidate wall
-whose tractable island (trees, 1-WL) is bounded by a sharp boundary (1-WL fails on regular graphs) that *is* a graph
-invariant's blind spot — the same shape as parity's control-blindness. Four walls mapped, and the third and fourth
-(confluence, GI) reveal the cross-wall structure most sharply: walls come in *kinds* (OPEN-core vs OBSTRUCTED-core), and
-walls of the same kind can be *structurally isomorphic* (parity ≅ GI). The template compounds.
+**Bottom line.** GI is the parity wall's structural twin (by *analogy*): an OPEN-core, quasi-polynomial,
+intermediate-candidate wall whose tractable island (trees, 1-WL) is bounded by a sharp boundary (1-WL fails on regular
+graphs) that *is* a graph invariant's blind spot — the same shape as parity's control-blindness. Four walls mapped, and
+the third and fourth (confluence, GI) reveal the cross-wall structure most sharply: walls come in *kinds* (OPEN-core vs
+OBSTRUCTED-core — an organizing lens, not proven structure), and walls of the same kind can be *structurally parallel*
+(parity ∥ GI — an analogy across tagged complexity-profile facts, not a reduction). The template compounds.

@@ -2882,6 +2882,64 @@ merkle_tree_build_u32:
     movq %r9, -32(%rbp)
     movq 48(%rbp), %rax
     movq %rax, -40(%rbp)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_97
+    movslq L_MK_E_BADLEN(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_97:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_99
+    movslq L_MK_E_BADLEN(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_99:
     movl L_MK_SUITE_SHA256(%rip), %eax
     pushq %rax
     popq %rax
@@ -2906,7 +2964,7 @@ merkle_tree_build_u32:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_96:
+L_loop_top_100:
     movq -80(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -2919,7 +2977,7 @@ L_loop_top_96:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_97
+    jz L_loop_end_101
     movq -48(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -2993,13 +3051,13 @@ L_loop_top_96:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_96
-L_loop_end_97:
+    jmp L_loop_top_100
+L_loop_end_101:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_98:
+L_loop_top_102:
     movq -88(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3012,7 +3070,7 @@ L_loop_top_98:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_99
+    jz L_loop_end_103
     movq -88(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3104,8 +3162,8 @@ L_loop_top_98:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_98
-L_loop_end_99:
+    jmp L_loop_top_102
+L_loop_end_103:
     movslq L_MK_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -3200,7 +3258,7 @@ merkle_tree_open:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_100:
+L_loop_top_104:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3213,7 +3271,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_101
+    jz L_loop_end_105
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3264,7 +3322,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
-L_loop_top_102:
+L_loop_top_106:
     movq -104(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -3277,7 +3335,7 @@ L_loop_top_102:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_103
+    jz L_loop_end_107
     movq -96(%rbp), %rax
     pushq %rax
     movq -104(%rbp), %rax
@@ -3307,8 +3365,8 @@ L_loop_top_102:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_102
-L_loop_end_103:
+    jmp L_loop_top_106
+L_loop_end_107:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -3329,8 +3387,8 @@ L_loop_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_100
-L_loop_end_101:
+    jmp L_loop_top_104
+L_loop_end_105:
     movq -72(%rbp), %rax
     pushq %rax
     popq %rax
@@ -3401,7 +3459,7 @@ merkle_tree_verify_u32:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_104:
+L_loop_top_108:
     movq -72(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -3414,7 +3472,7 @@ L_loop_top_104:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_105
+    jz L_loop_end_109
     movq -40(%rbp), %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -3446,7 +3504,7 @@ L_loop_top_104:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_106
+    jz L_if_else_110
     movq -56(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -3465,8 +3523,8 @@ L_loop_top_104:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_107
-L_if_else_106:
+    jmp L_if_end_111
+L_if_else_110:
     movq -56(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -3485,7 +3543,7 @@ L_if_else_106:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_107:
+L_if_end_111:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -3506,8 +3564,8 @@ L_if_end_107:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_104
-L_loop_end_105:
+    jmp L_loop_top_108
+L_loop_end_109:
     movq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -3524,7 +3582,7 @@ L_loop_end_105:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-L_loop_top_108:
+L_loop_top_112:
     movq -96(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -3537,7 +3595,7 @@ L_loop_top_108:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_109
+    jz L_loop_end_113
     movq -80(%rbp), %rax
     pushq %rax
     movq -96(%rbp), %rax
@@ -3562,7 +3620,7 @@ L_loop_top_108:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_111
+    jz L_if_end_115
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3572,7 +3630,7 @@ L_loop_top_108:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_111:
+L_if_end_115:
     movq -96(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3586,8 +3644,8 @@ L_if_end_111:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_108
-L_loop_end_109:
+    jmp L_loop_top_112
+L_loop_end_113:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax

@@ -3,14 +3,6 @@
     .att_syntax
     .file 1 "<iii-source>"
     .section .rodata
-L_str_0:
-    .ascii "sha256.iii\0"
-L_str_1:
-    .ascii "sha256.iii\0"
-L_str_2:
-    .ascii "sha256.iii\0"
-L_str_3:
-    .ascii "sha256.iii\0"
     .section .rodata
 L_MEMO_CAP:
     .quad 0x1000
@@ -963,16 +955,6 @@ memo_insert:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movq L_MEMO_CURRENT_SEQ(%rip), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, L_MEMO_CURRENT_SEQ(%rip)
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1037,6 +1019,16 @@ L_loop_top_20:
     popq %rax
     testq %rax, %rax
     jz L_if_end_23
+    movq L_MEMO_CURRENT_SEQ(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, L_MEMO_CURRENT_SEQ(%rip)
     leaq L_MEMO_KEY_HASH(%rip), %rax
     pushq %rax
     movl -72(%rbp), %eax
@@ -1164,16 +1156,6 @@ L_if_end_23:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
-    leaq L_MEMO_SEQ(%rip), %rax
-    pushq %rax
-    movl -72(%rbp), %eax
-    pushq %rax
-    movq L_MEMO_CURRENT_SEQ(%rip), %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movq %rdx, (%rax,%rcx,8)
     movl -72(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1285,6 +1267,16 @@ L_if_end_31:
     popq %rax
     jmp L_loop_top_28
 L_loop_end_29:
+    movq L_MEMO_CURRENT_SEQ(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, L_MEMO_CURRENT_SEQ(%rip)
     leaq L_MEMO_KEY_HASH(%rip), %rax
     pushq %rax
     movl -72(%rbp), %eax

@@ -1,0 +1,76 @@
+/* Real III program: parse a JSON object with III's own verba::json stdlib,
+ * iterate the nested array summing its parsed integers, extract the nested
+ * string, and print the result.  No rigging: the sum (10+20+30=60) and the
+ * string ("world") are READ BACK from the parse tree, not hardcoded.
+ *   expected stdout: sum=60 str=world
+ *   expected exit  : 60 */
+module iii_json_proof
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, base: u64, len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_at(id: u64, i: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_get(id: u64, key: u64, klen: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_base(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn _write(fd: i32, buf: u64, n: u32) -> i32 from "msvcrt"
+
+var INP  : [u8; 64]
+var OUT  : [u8; 64]
+var KEYA : [u8; 2]
+var KEYB : [u8; 2]
+
+fn main() -> u64 {
+    /* {"a":[10,20,30],"b":"world"}  -- 28 bytes, built explicitly */
+    INP[0]=123u8  INP[1]=34u8   INP[2]=97u8   INP[3]=34u8   INP[4]=58u8   INP[5]=91u8
+    INP[6]=49u8   INP[7]=48u8   INP[8]=44u8   INP[9]=50u8   INP[10]=48u8  INP[11]=44u8
+    INP[12]=51u8  INP[13]=48u8  INP[14]=93u8  INP[15]=44u8  INP[16]=34u8  INP[17]=98u8
+    INP[18]=34u8  INP[19]=58u8  INP[20]=34u8  INP[21]=119u8 INP[22]=111u8 INP[23]=114u8
+    INP[24]=108u8 INP[25]=100u8 INP[26]=34u8  INP[27]=125u8
+
+    let a : u64 = arena_new(1u64 << 16u64)
+    let root : u64 = json_parse(a, &INP as u64, 28u64)
+    if root == 0u64 { return 1u64 }
+
+    /* "a" -> the array; sum its parsed elements */
+    KEYA[0] = 97u8
+    let val_a : u64 = json_object_get(root, &KEYA as u64, 1u64)
+    if val_a == 0u64 { return 2u64 }
+    let n : u64 = json_array_len(val_a)
+    let mut sum : i64 = 0i64
+    let mut i : u64 = 0u64
+    while i < n {
+        let e : u64 = json_array_at(val_a, i)
+        sum = sum + json_int(e)
+        i = i + 1u64
+    }
+
+    /* "b" -> the nested string */
+    KEYB[0] = 98u8
+    let val_b : u64 = json_object_get(root, &KEYB as u64, 1u64)
+    if val_b == 0u64 { return 3u64 }
+    let sbase : u64 = json_string_base(val_b)
+    let slen  : u64 = json_string_len(val_b)
+
+    /* "sum=" <2-digit decimal> " str=" <string> "\n"  (no % -- avoids the call-spill modulo trap) */
+    OUT[0]=115u8 OUT[1]=117u8 OUT[2]=109u8 OUT[3]=61u8        /* sum= */
+    let su   : u64 = sum as u64
+    let tens : u64 = su / 10u64
+    let ones : u64 = su - tens * 10u64
+    OUT[4] = (48u64 + tens) as u8
+    OUT[5] = (48u64 + ones) as u8
+    OUT[6]=32u8 OUT[7]=115u8 OUT[8]=116u8 OUT[9]=114u8 OUT[10]=61u8   /* " str=" */
+    let mut k : u64 = 0u64
+    while k < slen {
+        let cp : *u8 = (sbase + k) as *u8
+        OUT[11u64 + k] = cp[0u64]
+        k = k + 1u64
+    }
+    OUT[11u64 + slen] = 10u8                                   /* \n */
+
+    _write(1i32, &OUT as u64, (12u64 + slen) as u32)
+    arena_drop(a)
+    return su                                                  /* exit = 60 */
+}

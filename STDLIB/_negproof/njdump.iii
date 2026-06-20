@@ -1,0 +1,52 @@
+/* njdump.iii -- B-JN-1 probe: run the full joinability gate and dump the recorded
+ * non-join (rewriter, rewritten, pos) triples as raw LE u64s to njdump.bin.
+ * Exit = nonjoin count (expected 20).  NOT a corpus citizen -- a one-shot probe. */
+module njdump_probe
+
+extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_nonjoin_count() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_i(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_j(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_p(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+
+var NJD_NAME : [u8; 16]
+var NJD_BUF  : [u8; 512]
+var NJD_NW   : [u64; 1]
+
+fn main() -> u64 {
+    xjn_gate()
+    let mut n : u64 = xjn_nonjoin_count()
+    if n > 20u64 { n = 20u64 }
+
+    /* "njdump.bin\0" built byte-wise (string literals carry no NUL) */
+    NJD_NAME[0u64] = 110u8  NJD_NAME[1u64] = 106u8  NJD_NAME[2u64] = 100u8  NJD_NAME[3u64] = 117u8
+    NJD_NAME[4u64] = 109u8  NJD_NAME[5u64] = 112u8  NJD_NAME[6u64] = 46u8   NJD_NAME[7u64] = 98u8
+    NJD_NAME[8u64] = 105u8  NJD_NAME[9u64] = 110u8  NJD_NAME[10u64] = 0u8
+
+    /* pack (I, J, P) LE u64 triples */
+    let mut k : u64 = 0u64
+    while k < n {
+        let iv : u64 = xjn_njtab_i(k as u32)
+        let jv : u64 = xjn_njtab_j(k as u32)
+        let pv : u64 = xjn_njtab_p(k as u32)
+        let base : u64 = k * 24u64
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            NJD_BUF[base + b]         = ((iv >> (b * 8u64)) & 0xFFu64) as u8
+            NJD_BUF[base + 8u64 + b]  = ((jv >> (b * 8u64)) & 0xFFu64) as u8
+            NJD_BUF[base + 16u64 + b] = ((pv >> (b * 8u64)) & 0xFFu64) as u8
+            b = b + 1u64
+        }
+        k = k + 1u64
+    }
+
+    /* GENERIC_WRITE = 0x40000000, CREATE_ALWAYS = 2, FILE_ATTRIBUTE_NORMAL = 0x80 */
+    let h : u64 = CreateFileA((&NJD_NAME as u64) as *u8, 0x40000000u32, 0u32, 0u64, 2u32, 0x80u32, 0u64)
+    if h == 0xFFFFFFFFFFFFFFFFu64 { return 250u64 }
+    WriteFile(h, (&NJD_BUF as u64) as *u8, (n * 24u64) as u32, (&NJD_NW as u64), 0u64)
+    CloseHandle(h)
+    return xjn_nonjoin_count()
+}

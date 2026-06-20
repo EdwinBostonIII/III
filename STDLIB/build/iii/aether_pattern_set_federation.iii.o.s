@@ -4,18 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_table.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_1:
-    .ascii "pattern_table.iii\0"
+    .ascii "fed_seal.iii\0"
 L_str_2:
-    .ascii "fed_seal.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_3:
-    .ascii "fed_seal.iii\0"
+    .ascii "sealed_channel.iii\0"
 L_str_4:
-    .ascii "sealed_channel.iii\0"
-L_str_5:
-    .ascii "sealed_channel.iii\0"
-L_str_6:
     .ascii "sha256.iii\0"
     .section .rodata
 L_PSF_OK:

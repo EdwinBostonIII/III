@@ -133,12 +133,6 @@ sha256_dispatch_force_path:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
     movl -16(%rbp), %eax

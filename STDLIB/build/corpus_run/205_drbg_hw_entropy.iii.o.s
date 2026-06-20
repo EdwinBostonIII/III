@@ -4,15 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtcpufeat.iiicpufeat.iiidrbg.iiidrbg.iiidrbg.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "cpufeat.iiicpufeat.iiidrbg.iiidrbg.iiidrbg.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_2:
-    .ascii "cpufeat.iiidrbg.iiidrbg.iiidrbg.iii\0"
+    .ascii "cpufeat.iii\0"
 L_str_3:
-    .ascii "drbg.iiidrbg.iiidrbg.iii\0"
+    .ascii "drbg.iii\0"
 L_str_4:
-    .ascii "drbg.iiidrbg.iii\0"
+    .ascii "drbg.iii\0"
 L_str_5:
     .ascii "drbg.iii\0"
     .section .iii.ring3,"n"

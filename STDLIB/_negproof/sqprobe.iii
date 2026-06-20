@@ -1,0 +1,42 @@
+module sqprobe
+extern @abi(c-msvc-x64) fn fz_mul(a: u64, b: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_sq(a: u64, r: u64) -> i32 from "fe25519.iii"
+
+var SA : [u64; 8]
+var SR1 : [u64; 8]
+var SR2 : [u64; 8]
+
+fn sq_diff() -> u64 {
+    fz_sq(&SA as u64, &SR1 as u64)
+    fz_mul(&SA as u64, &SA as u64, &SR2 as u64)
+    let mut i : u64 = 0u64
+    while i < 8u64 { if SR1[i] != SR2[i] { return 1u64 }  i = i + 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* all limbs at the 32-bit extreme (unfrozen fold-output domain) */
+    let mut i : u64 = 0u64
+    while i < 8u64 { SA[i] = 0xFFFFFFFFu64  i = i + 1u64 }
+    if sq_diff() != 0u64 { return 1u64 }
+    /* alternating extremes */
+    i = 0u64
+    while i < 8u64 { SA[i] = 0xFFFFFFFFu64  i = i + 2u64 }
+    i = 1u64
+    while i < 8u64 { SA[i] = 0x80000000u64  i = i + 2u64 }
+    if sq_diff() != 0u64 { return 2u64 }
+    /* LCG over the FULL 32-bit limb domain */
+    let mut x : u64 = 0xDEAD1234u64
+    let mut t : u64 = 0u64
+    while t < 256u64 {
+        i = 0u64
+        while i < 8u64 {
+            x = x * 6364136223846793005u64 + 1442695040888963407u64
+            SA[i] = (x >> 16u64) & 0xFFFFFFFFu64
+            i = i + 1u64
+        }
+        if sq_diff() != 0u64 { return 100u64 + t }
+        t = t + 1u64
+    }
+    return 99u64
+}

@@ -1,0 +1,82 @@
+/* 1350_cal_month_exact.iii -- MONTH-EXACT CIVIL-DATE VALIDITY (harmony item 28).
+ *
+ * The old accept-domain was day <= 31 for every month: 2026-02-31 was ACCEPTED and silently
+ * normalized to 2026-03-03 -- two civil names for one instant (a non-injective calendar).
+ * cal_days_in_month / cal_civil_valid make the domain exact; cal_civil_to_unix refuses
+ * everything outside it.  Arms:
+ *  (1) THE BITE -- 2026-02-31 used to alias 2026-03-03; now it REFUSES while 2026-03-03 maps
+ *      and round-trips to itself (injectivity restored at the witnessed collision point);
+ *  (2) leap law -- 2024-02-29 accepted + round-trips; 2023-02-29 refused; 2100-02-29 refused
+ *      (century rule); 2000-02-29 accepted (400-year rule);
+ *  (3) 30-day months -- 2026-04-31, 2026-06-31, 2026-09-31, 2026-11-31 all refused;
+ *  (4) the month-length table is exact for all 12 months (non-leap and leap February);
+ *  (5) degenerate refusals -- month 0/13, day 0, pre-epoch year;
+ *  (6) round-trip stability across a spread of valid dates (the domain is exactly the image
+ *      of cal_decompose_unix).
+ * Exit 99 = accepted civil names are a bijection with instants: the calendar refuses lies. */
+module corpus_1350
+
+extern @abi(c-msvc-x64) fn cal_civil_to_unix(year: u32, month: u32, day: u32) -> u64 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_civil_valid(year: u32, month: u32, day: u32) -> u8 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_days_in_month(year: u32, month: u32) -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_decompose_unix(unix_seconds: u64) -> i32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_year() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_month() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_day() -> u32 from "calendar.iii"
+
+const REFUSE : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* 1 iff (y,m,d) maps and decomposes back to itself */
+fn roundtrip(y: u32, m: u32, d: u32) -> u8 {
+    let s : u64 = cal_civil_to_unix(y, m, d)
+    if s == REFUSE { return 0u8 }
+    cal_decompose_unix(s)
+    if cal_last_year() != y { return 0u8 }
+    if cal_last_month() != m { return 0u8 }
+    if cal_last_day() != d { return 0u8 }
+    return 1u8
+}
+
+var MLEN : [u32; 12] = [31u32, 28u32, 31u32, 30u32, 31u32, 30u32, 31u32, 31u32, 30u32, 31u32, 30u32, 31u32]
+
+fn main() -> u64 {
+    /* (1) THE BITE: the old alias pair */
+    if cal_civil_to_unix(2026u32, 2u32, 31u32) != REFUSE { return 1u64 }
+    if roundtrip(2026u32, 3u32, 3u32) != 1u8 { return 2u64 }
+
+    /* (2) the leap law */
+    if roundtrip(2024u32, 2u32, 29u32) != 1u8 { return 3u64 }
+    if cal_civil_to_unix(2023u32, 2u32, 29u32) != REFUSE { return 4u64 }
+    if cal_civil_to_unix(2100u32, 2u32, 29u32) != REFUSE { return 5u64 }
+    if roundtrip(2000u32, 2u32, 29u32) != 1u8 { return 6u64 }
+
+    /* (3) 30-day months refuse the 31st */
+    if cal_civil_to_unix(2026u32, 4u32, 31u32) != REFUSE { return 7u64 }
+    if cal_civil_to_unix(2026u32, 6u32, 31u32) != REFUSE { return 8u64 }
+    if cal_civil_to_unix(2026u32, 9u32, 31u32) != REFUSE { return 9u64 }
+    if cal_civil_to_unix(2026u32, 11u32, 31u32) != REFUSE { return 10u64 }
+
+    /* (4) the month-length table is exact */
+    let mut m : u32 = 1u32
+    while m <= 12u32 {
+        if cal_days_in_month(2023u32, m) != MLEN[(m - 1u32) as u64] { return 11u64 }
+        m = m + 1u32
+    }
+    if cal_days_in_month(2024u32, 2u32) != 29u32 { return 12u64 }
+
+    /* (5) degenerate refusals */
+    if cal_civil_valid(2026u32, 0u32, 1u32) != 0u8 { return 13u64 }
+    if cal_civil_valid(2026u32, 13u32, 1u32) != 0u8 { return 14u64 }
+    if cal_civil_valid(2026u32, 1u32, 0u32) != 0u8 { return 15u64 }
+    if cal_civil_valid(1969u32, 12u32, 31u32) != 0u8 { return 16u64 }
+
+    /* (6) round-trip spread: epoch, month ends, year boundaries, deep future */
+    if roundtrip(1970u32, 1u32, 1u32) != 1u8 { return 17u64 }
+    if roundtrip(1999u32, 12u32, 31u32) != 1u8 { return 18u64 }
+    if roundtrip(2026u32, 1u32, 31u32) != 1u8 { return 19u64 }
+    if roundtrip(2026u32, 2u32, 28u32) != 1u8 { return 20u64 }
+    if roundtrip(2026u32, 12u32, 31u32) != 1u8 { return 21u64 }
+    if roundtrip(2400u32, 2u32, 29u32) != 1u8 { return 22u64 }
+
+    return 99u64
+}

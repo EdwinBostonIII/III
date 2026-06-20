@@ -4,59 +4,59 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_3:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_4:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_5:
-    .ascii "glyph_core.iiiglyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_6:
-    .ascii "glyph_core.iiiglyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_core.iii\0"
 L_str_7:
-    .ascii "glyph_u8.iiiglyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u8.iii\0"
 L_str_8:
-    .ascii "glyph_u8.iiiglyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u8.iii\0"
 L_str_9:
-    .ascii "glyph_u8.iiiglyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u8.iii\0"
 L_str_10:
-    .ascii "glyph_u32.iiiglyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u32.iii\0"
 L_str_11:
-    .ascii "glyph_u32.iiiglyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u32.iii\0"
 L_str_12:
-    .ascii "glyph_u64.iiiglyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u64.iii\0"
 L_str_13:
-    .ascii "glyph_u64.iiiglyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_u64.iii\0"
 L_str_14:
-    .ascii "glyph_i64.iiiglyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_i64.iii\0"
 L_str_15:
-    .ascii "glyph_i64.iiiglyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_i64.iii\0"
 L_str_16:
-    .ascii "glyph_f64.iiiglyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_f64.iii\0"
 L_str_17:
-    .ascii "glyph_f64.iiiglyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_f64.iii\0"
 L_str_18:
-    .ascii "glyph_str.iiiglyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_str.iii\0"
 L_str_19:
-    .ascii "glyph_str.iiiglyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_str.iii\0"
 L_str_20:
-    .ascii "glyph_bytes.iiiglyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_bytes.iii\0"
 L_str_21:
-    .ascii "glyph_bytes.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_bytes.iii\0"
 L_str_22:
-    .ascii "glyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_crystal.iii\0"
 L_str_23:
-    .ascii "glyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_crystal.iii\0"
 L_str_24:
-    .ascii "glyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_crystal.iii\0"
 L_str_25:
-    .ascii "glyph_crystal.iiiglyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_crystal.iii\0"
 L_str_26:
-    .ascii "glyph_crystal.iiiglyph_crystal.iii\0"
+    .ascii "glyph_crystal.iii\0"
 L_str_27:
     .ascii "glyph_crystal.iii\0"
     .section .iii.ring3,"n"

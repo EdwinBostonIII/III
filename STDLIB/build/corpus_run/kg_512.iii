@@ -1,0 +1,14 @@
+module corpus_kg_512
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn rsa_keygen(arena: u64, modBits: u64, seed: u64, slen: u64) -> i32 from "rsa.iii"
+extern @abi(c-msvc-x64) fn rsa_gen_n() -> u64 from "rsa.iii"
+var SEED : [u8; 48]
+fn main() -> u64 {
+    let ar : u64 = arena_new(268435456u64)
+    let sp : *u8 = &SEED as *u8
+    let mut i : u64 = 0u64
+    while i < 48u64 { sp[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+    rsa_keygen(ar, 512u64, &SEED as u64, 48u64)
+    if rsa_gen_n() == 0u64 { return 1u64 }
+    return 99u64
+}

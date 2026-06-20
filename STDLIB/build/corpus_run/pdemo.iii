@@ -1,0 +1,25 @@
+module corpus_pdemo
+extern @abi(c-msvc-x64) fn printf(fmt: u64, a: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn present_strength(k: u64) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn present_fold(k: u64, c: u64) -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_buf_ptr() -> u64 from "present.iii"
+extern @abi(c-msvc-x64) fn pres_len() -> u64 from "present.iii"
+var FMT : [u8; 16]
+fn show() -> i32 {
+    /* "  III discovered: %s\n" but %s needs NUL; the presenter buffer is not NUL-term, so append one */
+    let bp : u64 = pres_buf_ptr()
+    let p : *u8 = bp as *u8
+    p[pres_len()] = 0u8
+    FMT[0u64]=0x20u8 FMT[1u64]=0x20u8 FMT[2u64]=0x25u8 FMT[3u64]=0x73u8 FMT[4u64]=0x0Au8 FMT[5u64]=0u8  /* "  %s\n" */
+    printf((&FMT as u64), bp)
+    return 0i32
+}
+fn main() -> u64 {
+    present_strength(7u64)   show()
+    present_strength(15u64)  show()
+    present_strength(9u64)   show()
+    present_strength(10u64)  show()
+    present_fold(32u64, 1u64)  show()
+    present_fold(32u64, 5u64)  show()
+    return 0u64
+}

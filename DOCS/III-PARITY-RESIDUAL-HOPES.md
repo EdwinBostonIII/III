@@ -100,7 +100,8 @@ strategy is a **poly-checkable witness for both players** — verified on every 
 resulting *one-player* game in P (`1850`): an Even-strategy witness certifies `W_even` (NP) and an Odd-strategy witness
 certifies `W_odd` (coNP). So an NP-hardness explanation is *excluded* (it would place parity above NP∩coNP). The wall is
 **not** NP-complete unless NP=coNP — not intractability (its placement in-P-vs-Ladner-intermediate is itself *open*: the
-NP∩coNP+quasi-poly profile fits both the still-open factoring/discrete-log *and* primality/LP, which fell to P). *Leaves O1
+NP∩coNP+quasi-poly profile is near both the still-open factoring/discrete-log *and* primality/LP — which fell to P, but
+from stronger upper bounds (randomized-poly/poly) than parity's quasi-poly, so the eventual-P precedent is tempered). *Leaves O1
 untouched:* NP∩coNP membership says nothing about P.
 
 ### (extra) Structural-width islands

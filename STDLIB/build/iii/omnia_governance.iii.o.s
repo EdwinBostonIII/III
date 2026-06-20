@@ -1446,6 +1446,35 @@ governance_vote:
     pushq %rax
     popq %rax
 L_if_end_43:
+    leaq L_GOV_STATUS(%rip), %rax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movzbq L_GOV_PROVEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_45
+    movslq L_GOV_E_BAD_STATE(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_45:
     movzbq -48(%rbp), %rax
     pushq %rax
     movzbq L_GOV_VOTE_YES_CODE(%rip), %rax
@@ -1458,57 +1487,12 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
-    leaq L_GOV_VOTE_YES(%rip), %rax
-    pushq %rax
-    movl -56(%rbp), %eax
-    pushq %rax
-    leaq L_GOV_VOTE_YES(%rip), %rax
-    pushq %rax
-    movl -56(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movl (%rax,%rcx,4), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movl %edx, (%rax,%rcx,4)
-    movslq L_GOV_OK(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_45:
-    movzbq -48(%rbp), %rax
-    pushq %rax
-    movzbq L_GOV_VOTE_NO_CODE(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_47
-    leaq L_GOV_VOTE_NO(%rip), %rax
+    leaq L_GOV_VOTE_YES(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
-    leaq L_GOV_VOTE_NO(%rip), %rax
+    leaq L_GOV_VOTE_YES(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
@@ -1538,7 +1522,7 @@ L_if_end_45:
 L_if_end_47:
     movzbq -48(%rbp), %rax
     pushq %rax
-    movzbq L_GOV_VOTE_ABSTAIN_CODE(%rip), %rax
+    movzbq L_GOV_VOTE_NO_CODE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1549,6 +1533,51 @@ L_if_end_47:
     popq %rax
     testq %rax, %rax
     jz L_if_end_49
+    leaq L_GOV_VOTE_NO(%rip), %rax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    leaq L_GOV_VOTE_NO(%rip), %rax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movslq L_GOV_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
+    movzbq -48(%rbp), %rax
+    pushq %rax
+    movzbq L_GOV_VOTE_ABSTAIN_CODE(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
     leaq L_GOV_VOTE_ABSTAIN(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -1580,7 +1609,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_51:
     movslq L_GOV_E_BAD_VOTE(%rip), %rax
     pushq %rax
     popq %rax
@@ -1634,7 +1663,7 @@ governance_tally:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_53
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1644,7 +1673,7 @@ governance_tally:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_53:
     leaq L_GOV_VOTE_YES(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1782,7 +1811,7 @@ governance_threshold_met:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_55
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1792,7 +1821,7 @@ governance_threshold_met:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_55:
     leaq L_GOV_VOTE_YES(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1825,7 +1854,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_57
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -1838,7 +1867,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_59
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1848,11 +1877,11 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_57:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1919,7 +1948,7 @@ L_if_end_55:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_61
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1929,7 +1958,7 @@ L_if_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_61:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1983,7 +2012,7 @@ governance_promote:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_63
     movslq L_GOV_E_BAD_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1993,7 +2022,7 @@ governance_promote:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_63:
     leaq L_GOV_STATUS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2012,7 +2041,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_65
     movslq L_GOV_E_NOT_PROVEN(%rip), %rax
     pushq %rax
     popq %rax
@@ -2022,7 +2051,7 @@ L_if_end_61:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_65:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2041,7 +2070,7 @@ L_if_end_63:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_65
+    jz L_if_end_67
     leaq L_GOV_STATUS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2061,7 +2090,7 @@ L_if_end_63:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_65:
+L_if_end_67:
     leaq L_GOV_STATUS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2125,7 +2154,7 @@ governance_seal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_69
     movslq L_GOV_E_BAD_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -2135,7 +2164,7 @@ governance_seal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_69:
     leaq L_GOV_STATUS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2154,7 +2183,7 @@ L_if_end_67:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_71
     movslq L_GOV_E_BAD_STATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -2164,7 +2193,7 @@ L_if_end_67:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_71:
     subq $32, %rsp
     callq mhash_begin
     addq $32, %rsp
@@ -2189,7 +2218,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_70:
+L_loop_top_72:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -2202,7 +2231,7 @@ L_loop_top_70:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_71
+    jz L_loop_end_73
     leaq L_GOV_TMP_BUF8(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2252,8 +2281,8 @@ L_loop_top_70:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_70
-L_loop_end_71:
+    jmp L_loop_top_72
+L_loop_end_73:
     movabsq $0x8, %rax
     pushq %rax
     leaq L_GOV_TMP_BUF8(%rip), %rax
@@ -2282,7 +2311,7 @@ L_loop_end_71:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_72:
+L_loop_top_74:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -2295,7 +2324,7 @@ L_loop_top_72:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_73
+    jz L_loop_end_75
     leaq L_GOV_TMP_BUF8(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2345,8 +2374,8 @@ L_loop_top_72:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_72
-L_loop_end_73:
+    jmp L_loop_top_74
+L_loop_end_75:
     movabsq $0x8, %rax
     pushq %rax
     leaq L_GOV_TMP_BUF8(%rip), %rax
@@ -2637,7 +2666,7 @@ governance_status:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_77
     movabsq $0xff, %rax
     pushq %rax
     popq %rax
@@ -2647,7 +2676,7 @@ governance_status:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_77:
     leaq L_GOV_STATUS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2707,7 +2736,7 @@ governance_cert:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_79
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2717,7 +2746,7 @@ governance_cert:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_79:
     leaq L_GOV_PROOF_CERT(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2777,7 +2806,7 @@ governance_intent:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_79
+    jz L_if_end_81
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2787,7 +2816,7 @@ governance_intent:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_79:
+L_if_end_81:
     leaq L_GOV_INTENT(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2847,7 +2876,7 @@ governance_new_pid:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_83
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2857,7 +2886,7 @@ governance_new_pid:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_83:
     leaq L_GOV_NEW_PID(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2917,7 +2946,7 @@ governance_proposer_cap:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_83
+    jz L_if_end_85
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2927,7 +2956,7 @@ governance_proposer_cap:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_83:
+L_if_end_85:
     leaq L_GOV_PROPOSER_CAP(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2992,7 +3021,7 @@ governance_rationale_hash_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_85
+    jz L_if_end_87
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -3002,7 +3031,7 @@ governance_rationale_hash_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_85:
+L_if_end_87:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -3015,7 +3044,7 @@ L_if_end_85:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_87
+    jz L_if_end_89
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -3025,7 +3054,7 @@ L_if_end_85:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_87:
+L_if_end_89:
     movl -40(%rbp), %eax
     pushq %rax
     popq %rax
@@ -3155,7 +3184,7 @@ governance_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_89
+    jz L_if_end_91
     movslq L_GOV_E_BAD_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -3165,7 +3194,36 @@ governance_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_89:
+L_if_end_91:
+    leaq L_GOV_STATUS(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movzbq L_GOV_ACCEPTED(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_93
+    movslq L_GOV_E_BAD_STATE(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_93:
     leaq L_GOV_INTENT(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3268,7 +3326,7 @@ L_if_end_89:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_90:
+L_loop_top_94:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -3281,7 +3339,7 @@ L_loop_top_90:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_91
+    jz L_loop_end_95
     leaq L_GOV_RATIONALE_HASH(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3313,8 +3371,8 @@ L_loop_top_90:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_90
-L_loop_end_91:
+    jmp L_loop_top_94
+L_loop_end_95:
     movl L_GOV_USED(%rip), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -3327,7 +3385,7 @@ L_loop_end_91:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_93
+    jz L_if_end_97
     movl L_GOV_USED(%rip), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3342,7 +3400,7 @@ L_loop_end_91:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_93:
+L_if_end_97:
     movslq L_GOV_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -3373,7 +3431,7 @@ governance_reset:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_94:
+L_loop_top_98:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_GOV_PROPOSAL_CAP(%rip), %eax
@@ -3386,7 +3444,7 @@ L_loop_top_94:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_95
+    jz L_loop_end_99
     leaq L_GOV_INTENT(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -3491,13 +3549,13 @@ L_loop_top_94:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_94
-L_loop_end_95:
+    jmp L_loop_top_98
+L_loop_end_99:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_96:
+L_loop_top_100:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_GOV_PROPOSAL_CAP(%rip), %eax
@@ -3514,7 +3572,7 @@ L_loop_top_96:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_97
+    jz L_loop_end_101
     leaq L_GOV_RATIONALE_HASH(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3539,8 +3597,8 @@ L_loop_top_96:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_96
-L_loop_end_97:
+    jmp L_loop_top_100
+L_loop_end_101:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3549,7 +3607,7 @@ L_loop_end_97:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_98:
+L_loop_top_102:
     movl -24(%rbp), %eax
     pushq %rax
     movl L_OBSERVE_HISTORY_CAP(%rip), %eax
@@ -3562,7 +3620,7 @@ L_loop_top_98:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_99
+    jz L_loop_end_103
     leaq L_OBSERVE_HISTORY_PID(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3587,8 +3645,8 @@ L_loop_top_98:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_98
-L_loop_end_99:
+    jmp L_loop_top_102
+L_loop_end_103:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3632,7 +3690,7 @@ governance_observe_and_propose:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_100:
+L_loop_top_104:
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3645,7 +3703,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_101
+    jz L_loop_end_105
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
@@ -3667,7 +3725,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_107
     movl L_OBSERVE_HISTORY_LEN(%rip), %eax
     pushq %rax
     movl L_OBSERVE_HISTORY_CAP(%rip), %eax
@@ -3680,7 +3738,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_104
+    jz L_if_else_108
     leaq L_OBSERVE_HISTORY_PID(%rip), %rax
     pushq %rax
     movl L_OBSERVE_HISTORY_LEN(%rip), %eax
@@ -3705,8 +3763,8 @@ L_loop_top_100:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_105
-L_if_else_104:
+    jmp L_if_end_109
+L_if_else_108:
     leaq L_OBSERVE_HISTORY_PID(%rip), %rax
     pushq %rax
     movl L_OBSERVE_HISTORY_NEXT(%rip), %eax
@@ -3737,11 +3795,11 @@ L_if_else_104:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_105:
+L_if_end_109:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_107:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3756,8 +3814,8 @@ L_if_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_100
-L_loop_end_101:
+    jmp L_loop_top_104
+L_loop_end_105:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3801,7 +3859,7 @@ governance_observe_history_pid:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_107
+    jz L_if_end_111
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3811,7 +3869,7 @@ governance_observe_history_pid:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_107:
+L_if_end_111:
     leaq L_OBSERVE_HISTORY_PID(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3874,7 +3932,7 @@ governance_observe_reset:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_108:
+L_loop_top_112:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_OBSERVE_HISTORY_CAP(%rip), %eax
@@ -3887,7 +3945,7 @@ L_loop_top_108:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_109
+    jz L_loop_end_113
     leaq L_OBSERVE_HISTORY_PID(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -3912,8 +3970,8 @@ L_loop_top_108:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_108
-L_loop_end_109:
+    jmp L_loop_top_112
+L_loop_end_113:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

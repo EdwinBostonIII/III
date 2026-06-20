@@ -1,0 +1,19 @@
+### BUILD_STDLIB(in-mem) Sun, Jun  7, 2026 12:30:40 AM ###
+bash: line 17: BASH_SOURCE[0]: unbound variable
+bash: line 17: cd: null directory
+BUILD_EXIT=1
+### RUN_ALL_CORPORA Sun, Jun  7, 2026 12:30:40 AM ###
+bash: line 38: BASH_SOURCE[0]: unbound variable
+bash: line 38: cd: null directory
+[run_all_corpora] WARN: runner not found: /STDLIB/scripts/run_corpus.sh — skipping STDLIB Conformance Corpus (254 correctness tests; XII + perf benchmarks delegated)
+[run_all_corpora] STDLIB corpus PASS
+[run_all_corpora] WARN: runner not found: /STDLIB/scripts/run_bench_corpus.sh — skipping STDLIB Performance Benchmark Corpus (4 benchmarks; timing advisory)
+[run_all_corpora] Bench corpus PASS (correctness; timing advisories may print)
+[run_all_corpora] WARN: runner not found: /COMPILER/BOOT/stage1_corpus/run_corpus.sh — skipping Stage-1 Verification Corpus (57 tests)
+[run_all_corpora] Stage-1 corpus PASS
+
+============================================================
+  Overall: ALL CORPORA PASSED
+============================================================
+CORPUS_EXIT=0
+### DONE Sun, Jun  7, 2026 12:30:41 AM ###

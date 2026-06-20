@@ -68,11 +68,12 @@ now on three structurally different walls.
 ## 5. Apply-to-real-III — XII lives on the island
 
 III's own canonicaliser **XII** is a term-rewriting system (40 rules, `DOCS/III-XII.md`). It is engineered to be
-**terminating** (a well-founded weight order) *and* **confluent** (critical pairs all join), so by Newman's Lemma (§2)
-its confluence is *decidable* and *decided* — it sits squarely on the tractable island, by construction. This is not a
-coincidence but the design discipline the island licenses: build your rewriting on the decidable side of the boundary
-(`1869`), and confluence becomes a checkable property rather than an undecidable hope. The confluence wall is therefore
-not abstract to III — it is the theory under III's own canonical-form guarantees.
+**terminating** (a well-founded weight order) *and* **confluent** (critical pairs all join) — this is **DOCUMENTED** in
+III-XII.md (Thm 9.4), *not re-verified in this session's KATs* — so by Newman's Lemma (§2) its confluence is *decidable*
+and *decided*: it sits squarely on the tractable island, by construction. This is not a coincidence but the design
+discipline the island licenses: build your rewriting on the decidable side of the boundary (`1869`), and confluence
+becomes a checkable property rather than an undecidable hope. The confluence wall is therefore not abstract to III — it
+is the theory under III's own canonical-form guarantees.
 
 ---
 
@@ -86,7 +87,7 @@ not abstract to III — it is the theory under III's own canonical-form guarante
 | Gr | ground-TRS confluence decidable | CITED | Dauchet–Tison |
 | U1 | general-TRS confluence **undecidable** | **OBSTRUCTED** / CITED | classical |
 | U2 | termination **undecidable** | **OBSTRUCTED** / CITED | classical |
-| X | XII (III's rewriting) is terminating+confluent — lives on the island | **VERIFIED (III)** (`DOCS/III-XII.md`) | — |
+| X | XII (III's rewriting) is terminating+confluent — lives on the island | **DOCUMENTED** (III-XII.md Thm 9.4; not re-verified here) | — |
 
 **Bottom line.** The confluence wall is an **OBSTRUCTED-core** wall: deciding confluence of arbitrary rewriting is a
 *proven* impossibility, not an open question. Its decidable island is exactly the terminating systems (Newman, `1868`),

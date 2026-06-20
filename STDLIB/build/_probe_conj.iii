@@ -1,0 +1,45 @@
+module probe_conj
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn nl_lex_init_all() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(s: u64, pl: u64, ot: u64, oc: u64) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_pack_lens(sl: u32, mt: u32) -> u64 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_parse_recognize(t: u64, c: u32, of: u64, om: u64) -> i32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_role(f: u64, i: u32) -> u32 from "nl_parse.iii"
+fn _put(b: *u8, o: u64, x: u8) -> u64 { b[o] = x  return o + 1u64 }
+fn _r32(b: *u8, o: u64) -> u32 {
+    let a:u32=(b[o] as u32)&0xFFu32
+    let c:u32=((b[o+1u64] as u32)&0xFFu32)<<8u32
+    return a|c
+}
+fn main() -> u64 {
+    let t: *u8 = malloc(256u64)
+    let tk: *u8 = malloc(2048u64)
+    let fr: *u8 = malloc(1024u64)
+    let cn: *u8 = malloc(8u64)
+    let mt: *u8 = malloc(8u64)
+    nl_lex_init_all()
+    let mut o:u64=0u64
+    o=_put(t,o,115u8);o=_put(t,o,101u8);o=_put(t,o,110u8);o=_put(t,o,100u8);o=_put(t,o,32u8)
+    o=_put(t,o,116u8);o=_put(t,o,104u8);o=_put(t,o,101u8);o=_put(t,o,32u8)
+    o=_put(t,o,112u8);o=_put(t,o,97u8);o=_put(t,o,99u8);o=_put(t,o,107u8);o=_put(t,o,101u8);o=_put(t,o,116u8);o=_put(t,o,32u8)
+    o=_put(t,o,97u8);o=_put(t,o,110u8);o=_put(t,o,100u8);o=_put(t,o,32u8)
+    o=_put(t,o,99u8);o=_put(t,o,108u8);o=_put(t,o,111u8);o=_put(t,o,115u8);o=_put(t,o,101u8);o=_put(t,o,32u8)
+    o=_put(t,o,116u8);o=_put(t,o,104u8);o=_put(t,o,101u8);o=_put(t,o,32u8)
+    o=_put(t,o,115u8);o=_put(t,o,111u8);o=_put(t,o,99u8);o=_put(t,o,107u8);o=_put(t,o,101u8);o=_put(t,o,116u8)
+    cn[0u64]=0u8;cn[1u64]=0u8;cn[2u64]=0u8;cn[3u64]=0u8
+    nl_lex_tokenize(t as u64, nl_lex_pack_lens(o as u32, 256u32), tk as u64, cn as u64)
+    let tc:u32=_r32(cn,0u64)
+    mt[0u64]=0u8;mt[1u64]=0u8;mt[2u64]=0u8;mt[3u64]=0u8
+    nl_parse_recognize(tk as u64, tc, fr as u64, mt as u64)
+    let fc:u32=_r32(mt,0u64)
+    let mut i:u32=0u32
+    let mut nv:u64=0u64
+    let mut hc:u64=0u64
+    while i < fc {
+        let rr:u32=nl_parse_frag_role(fr as u64, i)
+        if rr == 1u32 { nv = nv + 1u64 }
+        if rr == 14u32 { hc = 1u64 }
+        i = i + 1u32
+    }
+    return (nv * 16u64) | hc
+}

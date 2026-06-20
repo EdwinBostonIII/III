@@ -14,9 +14,10 @@
  * contrast, is in NP intersect coNP (1860): BOTH a YES and a NO instance carry a poly-checkable positional-strategy
  * witness.  Therefore parity is provably NOT the complete top (not NP-complete unless NP=coNP).  WHERE it sits, though,
  * is itself OPEN (advisor-audited -- NP-cap-coNP membership does NOT establish Ladner-intermediacy; parity could be in
- * P): its NP-cap-coNP + quasi-poly profile matches BOTH the still-open intermediates (factoring, discrete log) AND the
- * problems that FELL to P from exactly this profile (primality -> AKS 2002; linear programming -> ellipsoid 1979) -- the
- * precedent arguably favors eventual-P.  Either way SAT is the hardest problem in NP and parity is not known to be hard
+ * P): its NP-cap-coNP + quasi-poly profile is NEAR BOTH the still-open intermediates (factoring, discrete log) AND the
+ * problems that FELL to P (primality, from randomized-poly -> AKS 2002; linear programming, from poly -> ellipsoid 1979)
+ * -- but at a WEAKER upper bound (quasi-poly) than those had, so the eventual-P precedent is TEMPERED, not favored.
+ * Either way SAT is the hardest problem in NP and parity is not known to be hard
  * for anything: the structural reason the parity wall is more hemmed-in than the SAT / P-vs-NP wall.
  *
  * HONEST TAG (math-olympiad #4): self-reducibility and NP membership are classical facts; verifying them grounds the

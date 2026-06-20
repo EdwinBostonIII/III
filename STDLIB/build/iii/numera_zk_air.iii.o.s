@@ -5382,8 +5382,9 @@ L_loop_end_119:
     .section .iii.ring3,"n"
     .asciz "air_stark_prove"
     .text
-    .seh_proc L_air_stark_prove
-L_air_stark_prove:
+    .global air_stark_prove
+    .seh_proc air_stark_prove
+air_stark_prove:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -6975,8 +6976,9 @@ L_loop_end_135:
     .section .iii.ring3,"n"
     .asciz "air_stark_verify"
     .text
-    .seh_proc L_air_stark_verify
-L_air_stark_verify:
+    .global air_stark_verify
+    .seh_proc air_stark_verify
+air_stark_verify:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -8753,13 +8755,13 @@ L_loop_top_172:
     jmp L_loop_top_172
 L_loop_end_173:
     subq $32, %rsp
-    callq L_air_stark_prove
+    callq air_stark_prove
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
     popq %rax
     subq $32, %rsp
-    callq L_air_stark_verify
+    callq air_stark_verify
     addq $32, %rsp
     pushq %rax
     movabsq $0x0, %rax
@@ -8810,7 +8812,7 @@ L_if_end_175:
     popq %rax
     movl %edx, (%rax,%rcx,4)
     subq $32, %rsp
-    callq L_air_stark_verify
+    callq air_stark_verify
     addq $32, %rsp
     pushq %rax
     movabsq $0x0, %rax
@@ -8871,7 +8873,7 @@ L_if_end_177:
     popq %rax
     movl %edx, (%rax,%rcx,4)
     subq $32, %rsp
-    callq L_air_stark_verify
+    callq air_stark_verify
     addq $32, %rsp
     pushq %rax
     movabsq $0x0, %rax
@@ -8932,7 +8934,7 @@ L_if_end_179:
     popq %rax
     movl %edx, (%rax,%rcx,4)
     subq $32, %rsp
-    callq L_air_stark_verify
+    callq air_stark_verify
     addq $32, %rsp
     pushq %rax
     movabsq $0x0, %rax
@@ -8993,7 +8995,7 @@ L_if_end_181:
     popq %rax
     movl %edx, (%rax,%rcx,4)
     subq $32, %rsp
-    callq L_air_stark_verify
+    callq air_stark_verify
     addq $32, %rsp
     pushq %rax
     movabsq $0x0, %rax
@@ -9531,7 +9533,7 @@ L_loop_top_184:
     jmp L_loop_top_184
 L_loop_end_185:
     subq $32, %rsp
-    callq L_air_stark_prove
+    callq air_stark_prove
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax

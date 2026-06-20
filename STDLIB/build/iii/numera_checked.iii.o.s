@@ -15,16 +15,12 @@ L_str_4:
     .ascii "scalar.iii\0"
 L_str_5:
     .ascii "scalar.iii\0"
-    .section .rodata
-L_CHK_U64_SLOTS:
-    .quad 0x40
-    .section .bss
-    .global L_CHK_U64_VAL
-L_CHK_U64_VAL:
-    .zero 512
-    .global L_CHK_U64_LIVE
-L_CHK_U64_LIVE:
-    .zero 512
+L_str_6:
+    .ascii "option.iii\0"
+L_str_7:
+    .ascii "option.iii\0"
+L_str_8:
+    .ascii "option.iii\0"
     .section .iii.ring3,"n"
     .asciz "checked_u32_add"
     .text
@@ -80,12 +76,6 @@ L_if_end_1:
     popq %rax
     addq %rcx, %rax
     movl %eax, %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -169,12 +159,6 @@ L_if_end_3:
     subq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
     movl -24(%rbp), %eax
@@ -256,12 +240,6 @@ L_if_end_5:
     popq %rax
     imulq %rcx, %rax
     movl %eax, %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -363,10 +341,10 @@ L_if_end_7:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "chk_alloc_u64"
+    .asciz "checked_u64_wrap"
     .text
-    .seh_proc L_chk_alloc_u64
-L_chk_alloc_u64:
+    .seh_proc L_checked_u64_wrap
+L_checked_u64_wrap:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -375,33 +353,18 @@ L_chk_alloc_u64:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
-    movabsq $0x0, %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq option_u64_some
+    addq $32, %rsp
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_8:
-    movl -16(%rbp), %eax
+    movq -16(%rbp), %rax
     pushq %rax
-    movl L_CHK_U64_SLOTS(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_9
-    leaq L_CHK_U64_LIVE(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
+    movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -411,36 +374,8 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
-    leaq L_CHK_U64_VAL(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movq %rdx, (%rax,%rcx,8)
-    leaq L_CHK_U64_LIVE(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    jz L_if_end_9
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -449,24 +384,8 @@ L_loop_top_8:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
-    movabsq $0x0, %rax
+L_if_end_9:
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -515,7 +434,7 @@ checked_u64_add:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -525,7 +444,7 @@ checked_u64_add:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_11:
     movq -8(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -536,7 +455,7 @@ L_if_end_13:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_chk_alloc_u64
+    callq L_checked_u64_wrap
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -586,7 +505,7 @@ checked_u64_sub:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -596,7 +515,7 @@ checked_u64_sub:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_13:
     movq -8(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -607,7 +526,7 @@ L_if_end_15:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_chk_alloc_u64
+    callq L_checked_u64_wrap
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -657,7 +576,7 @@ checked_u64_mul:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -667,7 +586,7 @@ checked_u64_mul:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_15:
     movq -8(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -678,7 +597,7 @@ L_if_end_17:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_chk_alloc_u64
+    callq L_checked_u64_wrap
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -719,7 +638,7 @@ checked_u64_div:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -729,7 +648,7 @@ checked_u64_div:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_17:
     movq -8(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -741,7 +660,7 @@ L_if_end_19:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_chk_alloc_u64
+    callq L_checked_u64_wrap
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -770,107 +689,15 @@ checked_u64_unwrap_or:
     .seh_endprologue
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_21
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_21:
-    movq -8(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
-    pushq %rax
-    movl L_CHK_U64_SLOTS(%rip), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_23
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_23:
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    leaq L_CHK_U64_LIVE(%rip), %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_25
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_25:
-    leaq L_CHK_U64_VAL(%rip), %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movq (%rax,%rcx,8), %rax
+    popq %rdx
+    subq $32, %rsp
+    callq option_u64_unwrap_or
+    addq $32, %rsp
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -899,90 +726,11 @@ checked_u64_drop:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
+    subq $32, %rsp
+    callq option_u64_drop
+    addq $32, %rsp
     movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_27
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_27:
-    movq -8(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    movl L_CHK_U64_SLOTS(%rip), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_29
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_29:
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    leaq L_CHK_U64_LIVE(%rip), %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_CHK_U64_VAL(%rip), %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movq %rdx, (%rax,%rcx,8)
-    movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

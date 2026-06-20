@@ -32,12 +32,12 @@ L_SRC_P1:
     .byte 0x57
     .byte 0x36
     .byte 0x59
-    .byte 0x54
+    .byte 0x51
     .byte 0x3d
     .global L_SRC_P6
 L_SRC_P6:
     .byte 0x4d
-    .byte 0x5a
+    .byte 0x59
     .byte 0x3d
     .byte 0x3d
     .byte 0x3d

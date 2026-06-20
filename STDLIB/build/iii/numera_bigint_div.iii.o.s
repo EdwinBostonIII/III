@@ -9270,6 +9270,15 @@ L_if_end_247:
     popq %rax
     testq %rax, %rax
     jz L_if_end_249
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq modctx_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq L_BIGINT_DIV_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -9320,6 +9329,15 @@ L_if_end_249:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq modctx_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq L_BIGINT_DIV_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -9364,6 +9382,24 @@ L_if_end_251:
     popq %rax
     testq %rax, %rax
     jz L_if_end_253
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq modctx_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq L_BIGINT_DIV_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -9405,6 +9441,33 @@ L_if_end_253:
     popq %rax
     testq %rax, %rax
     jz L_if_end_255
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq modctx_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq L_BIGINT_DIV_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -9518,6 +9581,65 @@ L_loop_top_256:
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
+    movq -136(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_261
+    movq -80(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq modctx_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_261:
     movq -80(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -9550,6 +9672,65 @@ L_if_end_259:
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
+    movq -136(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_263
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -80(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq modctx_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_263:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -9680,7 +9861,7 @@ bigint_modpow:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_261
+    jz L_if_end_265
     movq L_BIGINT_DIV_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -9690,7 +9871,7 @@ bigint_modpow:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_261:
+L_if_end_265:
     movabsq $0x1, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -9703,6 +9884,29 @@ L_if_end_261:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_267
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_267:
     movq -40(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -9724,7 +9928,7 @@ L_if_end_261:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_263
+    jz L_if_end_269
     movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -9751,7 +9955,7 @@ L_if_end_261:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_263:
+L_if_end_269:
     movabsq $0x0, %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -9782,7 +9986,7 @@ L_if_end_263:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_265
+    jz L_if_end_271
     movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -9815,7 +10019,7 @@ L_if_end_263:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_265:
+L_if_end_271:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -9835,6 +10039,38 @@ L_if_end_265:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_273
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_273:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -9848,7 +10084,7 @@ L_if_end_265:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_266:
+L_loop_top_274:
     movq -80(%rbp), %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -9861,7 +10097,7 @@ L_loop_top_266:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_267
+    jz L_loop_end_275
     movq -80(%rbp), %rax
     pushq %rax
     movabsq $0x40, %rax
@@ -9929,7 +10165,7 @@ L_loop_top_266:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_269
+    jz L_if_end_277
     movq -64(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -9945,6 +10181,47 @@ L_loop_top_266:
     pushq %rax
     popq %rax
     movq %rax, -128(%rbp)
+    movq -128(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_279
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_279:
     movq -32(%rbp), %rax
     pushq %rax
     movq -128(%rbp), %rax
@@ -9960,6 +10237,56 @@ L_loop_top_266:
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
+    movq -136(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_281
+    movq -128(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_281:
     movq -128(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -9985,7 +10312,7 @@ L_loop_top_266:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_269:
+L_if_end_277:
     movq -64(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -10001,6 +10328,47 @@ L_if_end_269:
     pushq %rax
     popq %rax
     movq %rax, -128(%rbp)
+    movq -128(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_283
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_283:
     movq -32(%rbp), %rax
     pushq %rax
     movq -128(%rbp), %rax
@@ -10016,6 +10384,56 @@ L_if_end_269:
     pushq %rax
     popq %rax
     movq %rax, -136(%rbp)
+    movq -136(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_285
+    movq -128(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq L_BIGINT_DIV_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_285:
     movq -128(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -10051,8 +10469,8 @@ L_if_end_269:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_266
-L_loop_end_267:
+    jmp L_loop_top_274
+L_loop_end_275:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rcx

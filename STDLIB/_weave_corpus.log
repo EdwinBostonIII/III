@@ -1,0 +1,4 @@
+[run_corpus] iiis = /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+[run_corpus] FATAL: no EXPECTED entry for conformance test '1410_autogenesis_cli'
+             -> add it to the EXPECTED table, or move the test to the XII corpus (>=280)
+corpus_exit=3

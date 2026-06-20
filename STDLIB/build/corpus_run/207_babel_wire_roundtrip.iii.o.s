@@ -4,43 +4,43 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtbabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtbabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_3:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_4:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_5:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_6:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_7:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_8:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_9:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_10:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_11:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_12:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_13:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_14:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_15:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_16:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_17:
-    .ascii "babel_wire.iiibabel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_18:
-    .ascii "babel_wire.iiibabel_wire.iii\0"
+    .ascii "babel_wire.iii\0"
 L_str_19:
     .ascii "babel_wire.iii\0"
     .section .iii.ring3,"n"

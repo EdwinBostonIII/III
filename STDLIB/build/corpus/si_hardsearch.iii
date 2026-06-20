@@ -1,0 +1,184 @@
+/* si_hardsearch.iii -- hill-climb over parity-game space to MAXIMISE VJ-SI improvement rounds (worst-case probe).
+ * Reuses the verified VJ valuation (1841). For each restart: random game, then mutate one vertex (owner/priority/
+ * successor) and keep the mutation iff it INCREASES the round count -> climbs toward hard instances. Reports the
+ * worst (max) rounds found for the hardcoded size __N__. STUCK (cap hit) -> exit 200. */
+module mhs
+var OWN : [u8; 20]
+var PRI : [u32; 20]
+var SUC0 : [u32; 20]
+var NV : [u32; 1]
+var RNG : [u32; 1]
+var STRAT : [u32; 20]
+var CHOICE : [u32; 20]
+var TAU : [u32; 20]
+var NEWCH : [u32; 20]
+var NEWTAU : [u32; 20]
+var VAL_A : [u32; 20]
+var VAL_S : [u32; 20]
+var VAL_L : [u32; 20]
+var VOUT_A : [u32; 1]
+var VOUT_S : [u32; 1]
+var VOUT_L : [u32; 1]
+var SEEN : [u32; 20]
+var WALK : [u32; 20]
+var ROUNDS : [u32; 1]
+var STUCK : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn low_succ(v: u32) -> u32 { let mut w : u32 = 0u32  let n : u32 = nv()  while w < n { if (SUC0[v as u64] & (1u32 << w)) != 0u32 { return w }  w = w + 1u32 }  return 0u32 }
+fn more_relevant(a: u32, b: u32) -> u8 {
+    if PRI[a as u64] > PRI[b as u64] { return 1u8 }
+    if PRI[a as u64] < PRI[b as u64] { return 0u8 }
+    if a > b { return 1u8 }
+    return 0u8
+}
+fn most_relevant_in_mask(mask: u32) -> u32 {
+    let n : u32 = nv()  let mut best : u32 = 0u32  let mut have : u8 = 0u8  let mut v : u32 = 0u32
+    while v < n { if (mask & (1u32 << v)) != 0u32 { if have == 0u8 { best = v  have = 1u8 } else { if more_relevant(v, best) == 1u8 { best = v } } }  v = v + 1u32 }
+    return best
+}
+fn valuate(start: u32) -> i32 {
+    let n : u32 = nv()  let mut i : u32 = 0u32
+    while i < n { SEEN[i as u64] = 254u32  i = i + 1u32 }
+    let mut cur : u32 = start  let mut step : u32 = 0u32
+    while SEEN[cur as u64] == 254u32 { SEEN[cur as u64] = step  WALK[step as u64] = cur  cur = STRAT[cur as u64]  step = step + 1u32 }
+    let cs : u32 = SEEN[cur as u64]
+    let mut l : u32 = WALK[cs as u64]  let mut j : u32 = cs
+    while j < step { let vtx : u32 = WALK[j as u64]  if more_relevant(vtx, l) == 1u8 { l = vtx }  j = j + 1u32 }
+    let mut c2 : u32 = start  let mut len : u32 = 0u32  let mut set : u32 = 0u32
+    while c2 != l { if more_relevant(c2, l) == 1u8 { set = set | (1u32 << c2) }  c2 = STRAT[c2 as u64]  len = len + 1u32 }
+    VOUT_A[0u64] = l  VOUT_S[0u64] = set  VOUT_L[0u64] = len
+    return 0i32
+}
+fn cmp_even(aL: u32, aS: u32, aLen: u32, bL: u32, bS: u32, bLen: u32) -> i32 {
+    if aL != bL {
+        let mut m : u32 = bL  let mut m_is_a : u8 = 0u8
+        if more_relevant(aL, bL) == 1u8 { m = aL  m_is_a = 1u8 }
+        if (PRI[m as u64] & 1u32) == 0u32 { if m_is_a == 1u8 { return 1i32 }  return -1i32 }
+        if m_is_a == 1u8 { return -1i32 }
+        return 1i32
+    }
+    let dif : u32 = aS ^ bS
+    if dif != 0u32 {
+        let d : u32 = most_relevant_in_mask(dif)
+        let mut inA : u8 = 0u8  if (aS & (1u32 << d)) != 0u32 { inA = 1u8 }
+        if (PRI[d as u64] & 1u32) == 0u32 { if inA == 1u8 { return 1i32 }  return -1i32 }
+        if inA == 1u8 { return -1i32 }
+        return 1i32
+    }
+    if (PRI[aL as u64] & 1u32) == 0u32 { if aLen < bLen { return 1i32 }  if aLen > bLen { return -1i32 }  return 0i32 }
+    if aLen > bLen { return 1i32 }  if aLen < bLen { return -1i32 }  return 0i32
+}
+fn set_profile() -> i32 { let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if OWN[v as u64] == 0u8 { STRAT[v as u64] = CHOICE[v as u64] } else { STRAT[v as u64] = TAU[v as u64] }  v = v + 1u32 }  return 0i32 }
+fn evaluate_sigma() -> i32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if OWN[v as u64] == 1u8 { TAU[v as u64] = low_succ(v) }  v = v + 1u32 }
+    let mut improving : u8 = 1u8  let mut guard : u32 = 0u32
+    while improving == 1u8 {
+        guard = guard + 1u32  if guard > 4096u32 { STUCK[0u64] = 1u32  improving = 0u8 }
+        if improving == 1u8 {
+            set_profile()
+            let mut a : u32 = 0u32
+            while a < n { valuate(a)  VAL_A[a as u64] = VOUT_A[0u64]  VAL_S[a as u64] = VOUT_S[0u64]  VAL_L[a as u64] = VOUT_L[0u64]  a = a + 1u32 }
+            improving = 0u8
+            let mut u : u32 = 0u32
+            while u < n {
+                if OWN[u as u64] == 1u8 {
+                    let base : u32 = TAU[u as u64]
+                    let mut bw : u32 = base  let mut bA : u32 = VAL_A[u as u64]  let mut bS : u32 = VAL_S[u as u64]  let mut bL : u32 = VAL_L[u as u64]
+                    let mut w : u32 = 0u32
+                    while w < n {
+                        if (SUC0[u as u64] & (1u32 << w)) != 0u32 {
+                            STRAT[u as u64] = w  valuate(u)
+                            if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) < 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+                        }
+                        w = w + 1u32
+                    }
+                    STRAT[u as u64] = base
+                    NEWTAU[u as u64] = bw
+                }
+                u = u + 1u32
+            }
+            let mut k : u32 = 0u32
+            while k < n { if OWN[k as u64] == 1u8 { if NEWTAU[k as u64] != TAU[k as u64] { TAU[k as u64] = NEWTAU[k as u64]  improving = 1u8 } }  k = k + 1u32 }
+        }
+    }
+    set_profile()
+    let mut b2 : u32 = 0u32
+    while b2 < n { valuate(b2)  VAL_A[b2 as u64] = VOUT_A[0u64]  VAL_S[b2 as u64] = VOUT_S[0u64]  VAL_L[b2 as u64] = VOUT_L[0u64]  b2 = b2 + 1u32 }
+    return 0i32
+}
+fn improve_sigma() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if OWN[v as u64] == 0u8 { CHOICE[v as u64] = low_succ(v) }  v = v + 1u32 }
+    ROUNDS[0u64] = 0u32
+    let mut improving : u8 = 1u8
+    while improving == 1u8 {
+        if ROUNDS[0u64] > 4096u32 { STUCK[0u64] = 1u32  improving = 0u8 }
+        if improving == 1u8 {
+            evaluate_sigma()
+            improving = 0u8
+            let mut x : u32 = 0u32
+            while x < n {
+                if OWN[x as u64] == 0u8 {
+                    let base : u32 = CHOICE[x as u64]
+                    let mut bw : u32 = base  let mut bA : u32 = VAL_A[x as u64]  let mut bS : u32 = VAL_S[x as u64]  let mut bL : u32 = VAL_L[x as u64]
+                    let mut w : u32 = 0u32
+                    while w < n {
+                        if (SUC0[x as u64] & (1u32 << w)) != 0u32 {
+                            STRAT[x as u64] = w  valuate(x)
+                            if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) > 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+                        }
+                        w = w + 1u32
+                    }
+                    STRAT[x as u64] = base
+                    NEWCH[x as u64] = bw
+                }
+                x = x + 1u32
+            }
+            let mut k : u32 = 0u32
+            while k < n { if OWN[k as u64] == 0u8 { if NEWCH[k as u64] != CHOICE[k as u64] { CHOICE[k as u64] = NEWCH[k as u64]  improving = 1u8 } }  k = k + 1u32 }
+            ROUNDS[0u64] = ROUNDS[0u64] + 1u32
+        }
+    }
+    return 0u32
+}
+fn gen_game(n: u32) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = (rnd() & 1u32) as u8  PRI[v as u64] = rnd() % n
+        let full : u32 = (1u32 << n) - 1u32  let mut s : u32 = rnd() & full
+        if s == 0u32 { s = 1u32 << (rnd() % n) }
+        SUC0[v as u64] = s  v = v + 1u32 }
+    return 0i32
+}
+fn run_rounds() -> u32 { improve_sigma()  return ROUNDS[0u64] }
+fn main() -> u64 {
+    RNG[0u64] = 0x243F6A88u32
+    STUCK[0u64] = 0u32
+    let n : u32 = __N__u32
+    let full : u32 = (1u32 << n) - 1u32
+    let mut best : u32 = 0u32
+    let mut restart : u32 = 0u32
+    while restart < 120u32 {
+        gen_game(n)
+        let mut cur : u32 = run_rounds()
+        if cur > best { best = cur }
+        let mut it : u32 = 0u32
+        while it < 260u32 {
+            let v : u32 = rnd() % n
+            let ty : u32 = rnd() % 3u32
+            let oOWN : u8 = OWN[v as u64]  let oPRI : u32 = PRI[v as u64]  let oSUC : u32 = SUC0[v as u64]
+            if ty == 0u32 { if OWN[v as u64] == 0u8 { OWN[v as u64] = 1u8 } else { OWN[v as u64] = 0u8 } }
+            else { if ty == 1u32 { PRI[v as u64] = rnd() % n } else { let mut s : u32 = rnd() & full  if s == 0u32 { s = 1u32 << (rnd() % n) }  SUC0[v as u64] = s } }
+            let r : u32 = run_rounds()
+            if r > cur { cur = r  if r > best { best = r } }
+            else { OWN[v as u64] = oOWN  PRI[v as u64] = oPRI  SUC0[v as u64] = oSUC }
+            it = it + 1u32
+        }
+        restart = restart + 1u32
+    }
+    if STUCK[0u64] != 0u32 { return 200u64 }
+    return best as u64
+}

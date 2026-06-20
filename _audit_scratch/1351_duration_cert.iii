@@ -1,0 +1,9 @@
+/* 1351_duration_cert.iii -- KERNEL-CERTIFIED SATURATING DURATION ALGEBRA (harmony item 25).
+ * The five precomputed DUR_LIMIT_* constants (hand-derived around the W11 division quirk) and the
+ * add/mul saturation behavior are certified against the CIC kernel's BV64 overflow predicates
+ * (TC_BVADDOVF / TC_BVMULOVF).  99 = every constant IS the kernel's exact saturation boundary,
+ * the algebra agrees with the kernel verdict at every boundary witness, and a false limit claim
+ * is refused. */
+module corpus_1351
+extern @abi(c-msvc-x64) fn dc_selftest() -> u64 from "duration_cert.iii"
+fn main() -> u64 { return dc_selftest() }

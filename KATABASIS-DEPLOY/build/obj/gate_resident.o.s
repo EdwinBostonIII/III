@@ -3,21 +3,21 @@
     .att_syntax
     .section .rdata,"dr"
 L_str_0:
-    .ascii "xii_term.iiicapability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iii\0"
+    .ascii "xii_term.iii\0"
 L_str_1:
-    .ascii "capability.iiicapability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iii\0"
+    .ascii "capability.iii\0"
 L_str_2:
-    .ascii "capability.iiicycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iii\0"
+    .ascii "capability.iii\0"
 L_str_3:
-    .ascii "cycle_term.iiicycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_4:
-    .ascii "cycle_term.iiiseal.iiiadmit.iiisha256.iiikeccak.iii\0"
+    .ascii "cycle_term.iii\0"
 L_str_5:
-    .ascii "seal.iiiadmit.iiisha256.iiikeccak.iii\0"
+    .ascii "seal.iii\0"
 L_str_6:
-    .ascii "admit.iiisha256.iiikeccak.iii\0"
+    .ascii "admit.iii\0"
 L_str_7:
-    .ascii "sha256.iiikeccak.iii\0"
+    .ascii "sha256.iii\0"
 L_str_8:
     .ascii "keccak.iii\0"
     .section .bss
@@ -122,9 +122,12 @@ DriverEntry:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
     pushq %rax
     movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -134,7 +137,7 @@ DriverEntry:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax
@@ -147,7 +150,7 @@ DriverEntry:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax
@@ -203,9 +206,12 @@ L_if_end_1:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq -64(%rbp), %rax
+    movl -64(%rbp), %eax
     pushq %rax
     movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -215,7 +221,7 @@ L_if_end_1:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-    movq -72(%rbp), %rax
+    movl -72(%rbp), %eax
     pushq %rax
     leaq L_p_G_WRONG(%rip), %rax
     pushq %rax
@@ -228,7 +234,7 @@ L_if_end_1:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -56(%rbp), %rax
+    movl -56(%rbp), %eax
     pushq %rax
     leaq L_p_G_WRONG(%rip), %rax
     pushq %rax
@@ -284,9 +290,12 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-    movq -80(%rbp), %rax
+    movl -80(%rbp), %eax
     pushq %rax
     movq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -296,7 +305,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-    movq -88(%rbp), %rax
+    movl -88(%rbp), %eax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax
@@ -309,7 +318,7 @@ L_if_end_3:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -88(%rbp), %rax
+    movl -88(%rbp), %eax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax
@@ -365,9 +374,12 @@ L_if_end_5:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-    movq -96(%rbp), %rax
+    movl -96(%rbp), %eax
     pushq %rax
     movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -377,7 +389,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
-    movq -104(%rbp), %rax
+    movl -104(%rbp), %eax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax
@@ -390,7 +402,7 @@ L_if_end_5:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq -104(%rbp), %rax
+    movl -104(%rbp), %eax
     pushq %rax
     leaq L_p_G_SEAL(%rip), %rax
     pushq %rax

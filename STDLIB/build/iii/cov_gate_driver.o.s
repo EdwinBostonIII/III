@@ -26,17 +26,23 @@ L_str_9:
 L_str_10:
     .ascii "corpus_coverage.iii\0"
 L_str_11:
-    .ascii "capability.iii\0"
+    .ascii "corpus_coverage.iii\0"
 L_str_12:
-    .ascii "capability.iii\0"
+    .ascii "corpus_coverage.iii\0"
 L_str_13:
-    .ascii "STDLIB/iii\0"
+    .ascii "capability.iii\0"
 L_str_14:
-    .ascii "STDLIB/corpus\0"
+    .ascii "capability.iii\0"
 L_str_15:
-    .ascii "./_cov_report.txt\0"
+    .ascii "STDLIB/iii\0"
 L_str_16:
+    .ascii "STDLIB/corpus\0"
+L_str_17:
+    .ascii "./_cov_report.txt\0"
+L_str_18:
     .ascii "./_cov_gate_report.txt\0"
+L_str_19:
+    .ascii "./_cov_reach_report.txt\0"
     .section .bss
     .global L_MODS
 L_MODS:
@@ -49,6 +55,9 @@ L_REPT:
     .zero 256
     .global L_GREP
 L_GREP:
+    .zero 256
+    .global L_RREP
+L_RREP:
     .zero 256
     .section .iii.ring3,"n"
     .asciz "setl"
@@ -179,7 +188,7 @@ main:
     movq %rax, -16(%rbp)
     movabsq $0xa, %rax
     pushq %rax
-    leaq L_str_13(%rip), %rax
+    leaq L_str_15(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -197,7 +206,7 @@ main:
     popq %rax
     movabsq $0xd, %rax
     pushq %rax
-    leaq L_str_14(%rip), %rax
+    leaq L_str_16(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -215,7 +224,7 @@ main:
     popq %rax
     movabsq $0x11, %rax
     pushq %rax
-    leaq L_str_15(%rip), %rax
+    leaq L_str_17(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -233,11 +242,29 @@ main:
     popq %rax
     movabsq $0x16, %rax
     pushq %rax
-    leaq L_str_16(%rip), %rax
+    leaq L_str_18(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
     leaq L_GREP(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_setl
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x17, %rax
+    pushq %rax
+    leaq L_str_19(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_RREP(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -343,6 +370,20 @@ L_if_end_5:
     popq %rdx
     subq $32, %rsp
     callq cov_gate_report_write
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    leaq L_RREP(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq cov_reach_report_write
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax

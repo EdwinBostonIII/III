@@ -1,0 +1,32 @@
+/* W61 probe: is i32 signed ORDERING still unsigned in the current iiis-2?
+ * If signed-correct: -1i32 < 0i32 is TRUE, and a runtime-negative i32 compares < 0.
+ * Exit 99 = compiler treats i32 ordering as SIGNED (correct).  Other = a live trap. */
+module w61_signprobe
+
+fn neg_runtime(x: i32) -> i32 {
+    /* force a runtime value the optimizer can't fold to a constant */
+    let mut y : i32 = x
+    y = y - 100i32
+    return y
+}
+
+fn main() -> u64 {
+    /* (1) constant-fold path */
+    let a : i32 = -1i32
+    if a >= 0i32 { return 1u64 }      /* unsigned would make -1 huge -> >= 0 TRUE -> wrong */
+    if a < 0i32 { } else { return 2u64 }
+
+    /* (2) runtime path (neg_runtime(50) = -50) */
+    let r : i32 = neg_runtime(50i32)
+    if r >= 0i32 { return 3u64 }      /* -50 unsigned-as-u32 is huge -> >= 0 -> wrong */
+    if r < 0i32 { } else { return 4u64 }
+
+    /* (3) ordering of two runtime signed values: -50 < 7 must be TRUE */
+    let s : i32 = neg_runtime(57i32)  /* -43 */
+    let t : i32 = 7i32
+    if s < t { } else { return 5u64 } /* signed: -43 < 7 TRUE; unsigned: huge < 7 FALSE -> wrong */
+    if s <= t { } else { return 6u64 }
+    if t > s { } else { return 7u64 }
+
+    return 99u64
+}

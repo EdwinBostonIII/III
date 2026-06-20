@@ -4,39 +4,39 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtresolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtresolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "resolution_init.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "resolution_init.iii\0"
 L_str_3:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_4:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_5:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_6:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_7:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_8:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_9:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_10:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_11:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_12:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_13:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_14:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_15:
-    .ascii "governance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_16:
-    .ascii "governance.iiigovernance.iii\0"
+    .ascii "governance.iii\0"
 L_str_17:
     .ascii "governance.iii\0"
     .section .iii.ring3,"n"
@@ -341,10 +341,14 @@ L_if_end_13:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq governance_intent
+    callq governance_seal
     addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -363,7 +367,7 @@ L_if_end_13:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0x7, %rax
+    movabsq $0x46, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -377,10 +381,11 @@ L_if_end_15:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq governance_proposer_cap
+    callq governance_status
     addq $32, %rsp
+    movzbq %al, %rax
     pushq %rax
-    movq -8(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -399,7 +404,7 @@ L_if_end_15:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0x8, %rax
+    movabsq $0x47, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -413,11 +418,10 @@ L_if_end_17:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq governance_sandbox
+    callq governance_intent
     addq $32, %rsp
-    movslq %eax, %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -436,7 +440,7 @@ L_if_end_17:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0x9, %rax
+    movabsq $0x7, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -450,11 +454,10 @@ L_if_end_19:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq governance_status
+    callq governance_proposer_cap
     addq $32, %rsp
-    movzbq %al, %rax
     pushq %rax
-    movabsq $0x1, %rax
+    movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -473,7 +476,7 @@ L_if_end_19:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0xa, %rax
+    movabsq $0x8, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -496,12 +499,163 @@ L_if_end_21:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    sete %al
+    setne %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
     testq %rax, %rax
     jz L_if_end_23
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x9, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_status
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_seal
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_27
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x48, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_27:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_status
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x49, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_sandbox
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_31
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -519,7 +673,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_31:
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -554,7 +708,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_33
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -572,7 +726,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_33:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -591,7 +745,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_35
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -609,7 +763,84 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_35:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_seal
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x4a, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_status
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x4b, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -627,7 +858,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_41
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -645,7 +876,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_41:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -664,7 +895,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_43
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -682,7 +913,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_43:
     movabsq $0x1, %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -784,241 +1015,10 @@ L_if_end_31:
     movq %rax, -64(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    shrq %cl, %rax
+    shrq $32, %rax
     pushq %rax
     movabsq $0x4, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_33
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq free
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x14, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_33:
-    movq -64(%rbp), %rax
-    pushq %rax
-    movabsq $0x10, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shrq %cl, %rax
-    pushq %rax
-    movabsq $0xffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_35
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq free
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x15, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_35:
-    movq -64(%rbp), %rax
-    pushq %rax
-    movabsq $0xffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_37
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq free
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x16, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_37:
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq governance_threshold_met
-    addq $32, %rsp
-    movzbq %al, %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_39
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq free
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x17, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_39:
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq governance_promote
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_41
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq free
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x1e, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_41:
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq governance_status
-    addq $32, %rsp
-    movzbq %al, %rax
-    pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_43
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq free
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movabsq $0x1f, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_43:
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq governance_seal
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1037,7 +1037,7 @@ L_if_end_43:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0x28, %rax
+    movabsq $0x14, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1047,15 +1047,18 @@ L_if_end_43:
     pushq %rax
     popq %rax
 L_if_end_45:
-    movq -40(%rbp), %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rax
+    shrq $16, %rax
+    pushq %rax
+    movabsq $0xffff, %rax
     pushq %rax
     popq %rcx
-    subq $32, %rsp
-    callq governance_status
-    addq $32, %rsp
-    movzbq %al, %rax
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
-    movabsq $0x5, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1074,7 +1077,7 @@ L_if_end_45:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movabsq $0x29, %rax
+    movabsq $0x15, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1084,6 +1087,154 @@ L_if_end_45:
     pushq %rax
     popq %rax
 L_if_end_47:
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0xffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_49
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x16, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_threshold_met
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x17, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_51:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_promote
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_53
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x1e, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_53:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_status
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x1f, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1097,12 +1248,89 @@ L_if_end_47:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    sete %al
+    setne %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_57
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x28, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_57:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_status
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_59
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x29, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_59:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_seal
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_61
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1120,7 +1348,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_61:
     movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1151,7 +1379,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_63
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1169,7 +1397,7 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_63:
     movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1209,7 +1437,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_65
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1227,7 +1455,7 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_65:
     movabsq $0x1, %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -1336,7 +1564,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_67
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1354,7 +1582,7 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_67:
     movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1373,7 +1601,7 @@ L_if_end_55:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_69
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1391,7 +1619,7 @@ L_if_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_69:
     movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1410,7 +1638,7 @@ L_if_end_57:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_71
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1428,7 +1656,84 @@ L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_71:
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_seal
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x4c, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq governance_status
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq free
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movabsq $0x4d, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
     movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1455,7 +1760,7 @@ L_if_end_59:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_77
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1473,7 +1778,7 @@ L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_77:
     movabsq $0x63, %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1498,7 +1803,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_79
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1516,7 +1821,7 @@ L_if_end_61:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_79:
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
@@ -1535,7 +1840,7 @@ L_if_end_63:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_65
+    jz L_if_end_81
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1553,7 +1858,7 @@ L_if_end_63:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_65:
+L_if_end_81:
     movabsq $0x270f, %rax
     pushq %rax
     popq %rcx
@@ -1572,7 +1877,7 @@ L_if_end_65:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_83
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1590,7 +1895,7 @@ L_if_end_65:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_83:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx

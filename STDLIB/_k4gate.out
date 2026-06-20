@@ -1,0 +1,23 @@
+=== K4 RESEAL GATE (sign-aware cast-extend; seed re-root) ===
+i0 rc=5 -> 2d0d561e1d96777a07235c6a1f005c10ebeb014cb761296763cbe5c2e39e262c
+i1 rc=5 -> b101c1a4c4c623621141e56888b3e16a4d2a1894705f3485acbe795da3393914
+i2 rc=0 -> 1e92903ad13300acf1a6aaf010bac52cc4073fba269fc413505013fe74c743dc
+[iiis-2 build] corpus equivalence: 59 passed, 0 failed
+[check-rm2] OK: Ring -2 sanctum do_thing(7)=21 + u64-ordering(0x4..<0x8..)=1 (unsigned) + i64-ordering(-7<5)=1 (signed) + R2 typed-binary u64-ordering=1 (lhs-else-rhs shared resolver)
+[cg_r0-gate] PASS=5 FAIL=0
+[cg_r0-wgate] PASS=10 FAIL=0
+i3 rc=0 -> 1e92903ad13300acf1a6aaf010bac52cc4073fba269fc413505013fe74c743dc
+stdlib rc=0 FAIL = 0
+corpus rc=0   PASS=815  FAIL=0  SKIP=100  TOTAL=815
+--- reddened (if any) ---
+--- key KATs ---
+  PASS  1113_sr_schema_foundation : exit=99
+  PASS  1114_sr_schema_distrib : exit=99
+  PASS  1207_shift_fold_certified : exit=99
+  PASS  1210_commons_feed : exit=99
+  PASS  1211_commons_cite_reuse : exit=99
+  PASS  1212_commons_root : exit=99
+xii rc=0 [xii-corpus] PASS=92 FAIL=0
+nous rc=0 RUN_NOUS_CORPUS: GREEN -- 10 KATs (=99) + differential gate + propose-only gate.
+seam rc=1 [cg-seam] PASS=11 FAIL=1
+=== K4 DONE === i0=8d31f9fc3575b232964d481f93cd8d7b33a819ad4397afa52b1f8f9b66e57dc6 i1=b101c1a4c4c623621141e56888b3e16a4d2a1894705f3485acbe795da3393914 i2=1e92903ad13300acf1a6aaf010bac52cc4073fba269fc413505013fe74c743dc i3=1e92903ad13300acf1a6aaf010bac52cc4073fba269fc413505013fe74c743dc

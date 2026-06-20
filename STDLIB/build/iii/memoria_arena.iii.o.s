@@ -30,8 +30,6 @@ L_str_11:
     .section .rodata
 L_ARENA_OK:
     .quad 0x0
-L_ARENA_E_BADID:
-    .quad 0xfffffffffffffffe
 L_ARENA_E_WITNESS:
     .quad 0xfffffffffffffff9
     .section .iii.ring3,"n"

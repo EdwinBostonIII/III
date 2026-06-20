@@ -1,0 +1,169 @@
+/* 1347_barrett_general.iii -- THE GENERAL BARRETT REDUCTION ORGAN (harmony item 20).
+ *
+ * Barrett existed once, hardcoded to Ed25519's L.  numera/barrett generalises it to ANY modulus
+ * m >= 2 -- odd or EVEN (no Montgomery parity precondition): mu computed ONCE, every reduction
+ * two multiplies + a 3-subtraction belt, exact for a < b^(2k), Knuth fallback above (totality).
+ * Arms:
+ *  (1) DIFFERENTIAL SWEEP -- LCG-driven moduli of widths 1..4 limbs, ODD AND EVEN, inputs up to
+ *      the full b^(2k) product domain: bar_reduce == bigint_mod, limb-for-limb (24 vectors);
+ *  (2) BOUNDARIES -- a = 0, a < m, a = m, a = m^2-1 (the product-domain edge) all agree;
+ *  (3) TOTALITY -- a WIDER than b^(2k) falls back to Knuth and still agrees (never truncates);
+ *  (4) THE UNIFICATION -- on the Ed25519 group order L, the general organ, the specialised
+ *      ed_mod_l, and Knuth bigint_mod agree on a 512-bit input: the hardcoded organ is now a
+ *      differentially-pinned INSTANCE of the general law;
+ *  (5) REFUSALS -- m = 1 and m = 0 refuse to build; a dead/invalid ctx refuses to reduce;
+ *  (6) ctx lifecycle -- build/drop/rebuild reuses the slot cleanly.
+ * Exit 99 = every repeated-reduction consumer now has a general, exact, total Barrett organ. */
+module corpus_1347
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bar_ctx_build(arena: u64, m: u64) -> u64 from "barrett.iii"
+extern @abi(c-msvc-x64) fn bar_reduce(arena: u64, a: u64, id: u64) -> u64 from "barrett.iii"
+extern @abi(c-msvc-x64) fn bar_drop(id: u64) -> i32 from "barrett.iii"
+extern @abi(c-msvc-x64) fn ed_mod_l(arena: u64, a: u64, lid: u64) -> u64 from "ed_scalar_modl.iii"
+
+var LCG : u64 = 0x1234567890ABCDEFu64
+fn lcg() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* build a w-limb bigint of LCG limbs; force NONZERO top limb; even=1 forces limb0 even */
+fn mkrand(arena: u64, w: u64, even: u64) -> u64 {
+    let id : u64 = bigint_new(arena, w)
+    let mut i : u64 = 0u64
+    while i < w {
+        let mut v : u64 = lcg()
+        if i == 0u64 { if even == 1u64 { v = v & 0xFFFFFFFFFFFFFFFEu64 } }
+        if i == w - 1u64 { if v == 0u64 { v = 1u64 } }
+        bigint_set_limb(id, i, v)
+        i = i + 1u64
+    }
+    bigint_set_len(id, w)
+    bigint_normalize(id)
+    return id
+}
+
+/* 1 iff bar_reduce(a, ctx(m)) == bigint_mod(a, m); drops everything it makes */
+fn agree(arena: u64, a: u64, m: u64) -> u8 {
+    let ctx : u64 = bar_ctx_build(arena, m)
+    if ctx == 0u64 { return 0u8 }
+    let got : u64 = bar_reduce(arena, a, ctx)
+    let want : u64 = bigint_mod(arena, a, m)
+    let mut ok : u8 = 0u8
+    if got != 0u64 { if want != 0u64 { ok = bigint_eq(got, want) } }
+    if got != 0u64 { bigint_drop(got) }
+    if want != 0u64 { bigint_drop(want) }
+    bar_drop(ctx)
+    return ok
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1048576u64)
+    if arena == 0u64 { return 90u64 }
+
+    /* (1) differential sweep: widths 1..4, odd and even moduli, inputs of width 1..2k */
+    let mut w : u64 = 1u64
+    while w < 5u64 {
+        let mut par : u64 = 0u64
+        while par < 2u64 {
+            let m : u64 = mkrand(arena, w, par)
+            let mut aw : u64 = 1u64
+            while aw <= 2u64 * w {
+                let a : u64 = mkrand(arena, aw, 0u64)
+                if agree(arena, a, m) != 1u8 { return 1u64 }
+                bigint_drop(a)
+                aw = aw + 1u64
+            }
+            bigint_drop(m)
+            par = par + 1u64
+        }
+        w = w + 1u64
+    }
+
+    /* (2) boundaries on a fixed 2-limb modulus */
+    let m2 : u64 = mkrand(arena, 2u64, 0u64)
+    let z : u64 = bigint_from_u64(arena, 0u64)
+    if agree(arena, z, m2) != 1u8 { return 2u64 }
+    bigint_drop(z)
+    let small : u64 = bigint_from_u64(arena, 7u64)
+    if agree(arena, small, m2) != 1u8 { return 3u64 }
+    bigint_drop(small)
+    if agree(arena, m2, m2) != 1u8 { return 4u64 }
+    let msq : u64 = bigint_mul(arena, m2, m2)
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let edge : u64 = bigint_sub(arena, msq, one)
+    bigint_drop(msq)
+    bigint_drop(one)
+    if agree(arena, edge, m2) != 1u8 { return 5u64 }
+    bigint_drop(edge)
+
+    /* (3) totality: a 6-limb input vs the 2-limb modulus (wider than b^(2k)) */
+    let wide : u64 = mkrand(arena, 6u64, 0u64)
+    if agree(arena, wide, m2) != 1u8 { return 6u64 }
+    bigint_drop(wide)
+    bigint_drop(m2)
+
+    /* (4) THE UNIFICATION: general organ == ed_mod_l == Knuth on the Ed25519 L, 512-bit input */
+    let lid : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(lid, 0u64, 0x5812631A5CF5D3EDu64)
+    bigint_set_limb(lid, 1u64, 0x14DEF9DEA2F79CD6u64)
+    bigint_set_limb(lid, 2u64, 0u64)
+    bigint_set_limb(lid, 3u64, 0x1000000000000000u64)
+    bigint_set_len(lid, 4u64)
+    let h : u64 = mkrand(arena, 8u64, 0u64)               /* a 512-bit SHA-like value */
+    let ctxl : u64 = bar_ctx_build(arena, lid)
+    if ctxl == 0u64 { return 7u64 }
+    let g1 : u64 = bar_reduce(arena, h, ctxl)
+    let g2 : u64 = ed_mod_l(arena, h, lid)
+    let g3 : u64 = bigint_mod(arena, h, lid)
+    if g1 == 0u64 { return 8u64 }
+    if g2 == 0u64 { return 8u64 }
+    if g3 == 0u64 { return 8u64 }
+    if bigint_eq(g1, g2) != 1u8 { return 9u64 }
+    if bigint_eq(g2, g3) != 1u8 { return 10u64 }
+    bigint_drop(g1)
+    bigint_drop(g2)
+    bigint_drop(g3)
+    bigint_drop(h)
+    bar_drop(ctxl)
+
+    /* (5) refusals: m = 1, m = 0 refuse to build; a dead ctx refuses to reduce */
+    let bad1 : u64 = bigint_from_u64(arena, 1u64)
+    if bar_ctx_build(arena, bad1) != 0u64 { return 11u64 }
+    let bad0 : u64 = bigint_from_u64(arena, 0u64)
+    if bar_ctx_build(arena, bad0) != 0u64 { return 12u64 }
+    bigint_drop(bad1)
+    bigint_drop(bad0)
+    let probe : u64 = bigint_from_u64(arena, 5u64)
+    if bar_reduce(arena, probe, 3u64) != 0u64 { return 13u64 }
+
+    /* (6) lifecycle: build/drop/rebuild reuses the slot */
+    let m6 : u64 = bigint_from_u64(arena, 1000003u64)
+    let c1 : u64 = bar_ctx_build(arena, m6)
+    if c1 == 0u64 { return 14u64 }
+    bar_drop(c1)
+    let c2 : u64 = bar_ctx_build(arena, m6)
+    if c2 != c1 { return 15u64 }
+    if agree(arena, probe, m6) != 1u8 { return 16u64 }
+    bar_drop(c2)
+    bigint_drop(probe)
+    bigint_drop(m6)
+    bigint_drop(lid)
+
+    bigint_drop_arena(arena)
+    arena_drop(arena)
+    return 99u64
+}

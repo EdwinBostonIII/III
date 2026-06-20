@@ -4,39 +4,38 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcall_context.iiicall_context.iiicall_context.iiicall_context.iiicall_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "msvcrt\0"
 L_str_1:
-    .ascii "msvcrtcall_context.iiicall_context.iiicall_context.iiicall_context.iiicall_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "msvcrt\0"
 L_str_2:
-    .ascii "call_context.iiicall_context.iiicall_context.iiicall_context.iiicall_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "call_context.iii\0"
 L_str_3:
-    .ascii "call_context.iiicall_context.iiicall_context.iiicall_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "call_context.iii\0"
 L_str_4:
-    .ascii "call_context.iiicall_context.iiicall_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "call_context.iii\0"
 L_str_5:
-    .ascii "call_context.iiicall_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "call_context.iii\0"
 L_str_6:
-    .ascii "call_context.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "call_context.iii\0"
 L_str_7:
-    .ascii "mini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "mini_crystal.iii\0"
 L_str_8:
-    .ascii "mini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "mini_crystal.iii\0"
 L_str_9:
-    .ascii "mini_crystal.iiimini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "mini_crystal.iii\0"
 L_str_10:
-    .ascii "mini_crystal.iiimini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "mini_crystal.iii\0"
 L_str_11:
-    .ascii "mini_crystal.iiimini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "mini_crystal.iii\0"
 L_str_12:
-    .ascii "mini_crystal.iiicrystal.iiiresolver.iii\0"
+    .ascii "mini_crystal.iii\0"
 L_str_13:
-    .ascii "crystal.iiiresolver.iii\0"
+    .ascii "crystal.iii\0"
 L_str_14:
     .ascii "resolver.iii\0"
     .section .iii.ring3,"n"
     .asciz "read_u64_le"
     .text
-    .global L_read_u64_le
     .seh_proc L_read_u64_le
 L_read_u64_le:
     pushq %rbp
@@ -112,11 +111,8 @@ L_loop_top_0:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1061,21 +1057,15 @@ L_if_end_47:
     movq %rax, -136(%rbp)
     movq -120(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -144(%rbp)
     movq -120(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rax
     movq %rax, -152(%rbp)
@@ -1125,11 +1115,8 @@ L_loop_top_48:
     pushq %rax
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1176,11 +1163,8 @@ L_loop_top_48:
     pushq %rax
     movq -160(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1249,11 +1233,8 @@ L_loop_top_50:
     jz L_loop_end_51
     movq -128(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
@@ -1293,11 +1274,8 @@ L_loop_top_52:
     jz L_loop_end_53
     movq -144(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
@@ -1400,11 +1378,8 @@ L_loop_top_56:
     jz L_loop_end_57
     movq -136(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    imulq %rcx, %rax
+    shlq $3, %rax
     pushq %rax
     movq -112(%rbp), %rax
     pushq %rax

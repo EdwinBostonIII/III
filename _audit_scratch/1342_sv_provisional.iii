@@ -1,0 +1,141 @@
+/* 1342_sv_provisional.iii -- FIRST-CLASS CONTAGIOUS PROVISIONAL STATUS (harmony item 15).
+ *
+ * reach_oracle typed oracle-dependence at the reach boundary only; the moment a provisional value
+ * entered the SovVal currency the taint was lost.  Now SV_STATUS carries it: the lattice is
+ * REFUSED > PROVISIONAL > OK by authority, composition takes the most restrictive, and the witness
+ * commitment includes the status.  Arms:
+ *  (1) canonical make is OK (unchanged);
+ *  (2) provisional make: rc SV_PROVISIONAL(2), sv_is_provisional, gates still refuse first
+ *      (an unreachable hexad beats provisionality);
+ *  (3) CONTAGION: provisional o canonical -> PROVISIONAL out, with the payload still computed
+ *      correctly (7+5=12: the math flows, the taint persists);
+ *  (4) provisional o provisional -> provisional; and the taint survives a SECOND composition
+ *      with a canonical value (the firewall holds at every later boundary);
+ *  (5) REFUSED outranks PROVISIONAL: a gate refusal on provisional inputs is REFUSED, not prov;
+ *  (6) REFUSED-input contagion: composing with a refused value is REFUSED (no data laundering);
+ *  (7) WITNESS FIREWALL: canonical(7) and provisional(7) -- identical payload/hexad/cost --
+ *      carry DIFFERENT witnesses; two provisional(7) carry the SAME witness (determinism);
+ *  (8) the reach_oracle fold: tier CANONICAL -> OK SovVal, tier PROVISIONAL -> provisional
+ *      SovVal, an unknown tier -> default-deny REFUSED SovVal; admit_canonical still refuses
+ *      the raw PROVISIONAL tier.
+ * Exit 99 = oracle taint is structural: typed at entry, contagious forever, committed in the witness. */
+module corpus_1342
+
+extern @abi(c-msvc-x64) fn sv_init() -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_make(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_make_provisional(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_op(op: u32, a: *u8, b: *u8, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_status(sv: *u8) -> u64 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_is_refused(sv: *u8) -> u8 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_is_provisional(sv: *u8) -> u8 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_witness_ptr(sv: *u8) -> *u8 from "sovval.iii"
+extern @abi(c-msvc-x64) fn unc_set_known(cell: *u8, v: i64) -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_known_val(cell: *u8) -> i64 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_make_sovval(tier: u32, payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+
+const SV_OK          : i32 = 0i32
+const SV_REFUSED     : i32 = 1i32
+const SV_PROVISIONAL : i32 = 2i32
+const SV_ADD : u32 = 0u32
+
+var A  : [u8; 112]
+var B  : [u8; 112]
+var C  : [u8; 112]
+var O  : [u8; 112]
+var O2 : [u8; 112]
+var PC : [u8; 16]
+var COST : [u64; 6]
+var W1 : [u8; 32]
+var W2 : [u8; 32]
+
+fn wsave(sv: *u8, dst: *u8) -> u64 {
+    let w : *u8 = sv_witness_ptr(sv)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dst[i] = w[i]
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn wdiff(x: *u8, y: *u8) -> u32 {
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        acc = acc | ((x[i] as u32) ^ (y[i] as u32))
+        i = i + 1u64
+    }
+    return acc
+}
+
+fn main() -> u64 {
+    sv_init()
+    let pa : *u8 = (&A as u64) as *u8
+    let pb : *u8 = (&B as u64) as *u8
+    let pcv : *u8 = (&C as u64) as *u8
+    let po : *u8 = (&O as u64) as *u8
+    let po2 : *u8 = (&O2 as u64) as *u8
+    let pc : *u8 = (&PC as u64) as *u8
+    let cost : *u64 = (&COST as u64) as *u64
+    let mut i : u64 = 0u64
+    while i < 6u64 { COST[i] = 1u64  i = i + 1u64 }
+
+    /* (1) canonical make */
+    unc_set_known(pc, 7i64)
+    if sv_make(pc, 728u64, cost, pa) != SV_OK { return 1u64 }
+    if sv_status(pa) != 0u64 { return 2u64 }
+
+    /* (2) provisional make + refusal-first */
+    if sv_make_provisional(pc, 728u64, cost, pb) != SV_PROVISIONAL { return 3u64 }
+    if sv_is_provisional(pb) != 1u8 { return 4u64 }
+    if sv_make_provisional(pc, 0u64, cost, po) != SV_REFUSED { return 5u64 }   /* unreachable hexad wins */
+
+    /* (3) CONTAGION: provisional(7) + canonical(5) -> provisional 12 */
+    unc_set_known(pc, 5i64)
+    if sv_make(pc, 728u64, cost, pcv) != SV_OK { return 6u64 }
+    if sv_op(SV_ADD, pb, pcv, po) != SV_PROVISIONAL { return 7u64 }
+    if sv_is_provisional(po) != 1u8 { return 8u64 }
+    if unc_known_val(po) != 12i64 { return 9u64 }
+
+    /* (4) prov o prov -> prov; and the taint survives a SECOND composition with canonical */
+    if sv_op(SV_ADD, pb, pb, po2) != SV_PROVISIONAL { return 10u64 }
+    if sv_op(SV_ADD, po, pcv, po2) != SV_PROVISIONAL { return 11u64 }
+    if sv_is_provisional(po2) != 1u8 { return 12u64 }
+
+    /* (5) REFUSED outranks PROVISIONAL at the compose gates: inject an over-budget cost */
+    let bcp : *u64 = ((pb as u64) + 64u64) as *u64
+    let saved : u64 = bcp[0u64]
+    bcp[0u64] = 2000000u64
+    if sv_op(SV_ADD, pb, pcv, po2) != SV_REFUSED { return 13u64 }
+    if sv_is_refused(po2) != 1u8 { return 14u64 }
+    bcp[0u64] = saved
+
+    /* (6) REFUSED-input contagion: no data laundering through composition */
+    unc_set_known(pc, 1i64)
+    sv_make(pc, 0u64, cost, po2)                       /* a refused value */
+    if sv_op(SV_ADD, po2, pcv, po) != SV_REFUSED { return 15u64 }
+    if sv_is_refused(po) != 1u8 { return 16u64 }
+
+    /* (7) WITNESS FIREWALL: canonical(7) vs provisional(7) differ; provisional twins agree */
+    unc_set_known(pc, 7i64)
+    sv_make(pc, 728u64, cost, pa)
+    sv_make_provisional(pc, 728u64, cost, pb)
+    wsave(pa, (&W1 as u64) as *u8)
+    wsave(pb, (&W2 as u64) as *u8)
+    if wdiff((&W1 as u64) as *u8, (&W2 as u64) as *u8) == 0u32 { return 17u64 }
+    sv_make_provisional(pc, 728u64, cost, pcv)
+    wsave(pcv, (&W1 as u64) as *u8)
+    if wdiff((&W1 as u64) as *u8, (&W2 as u64) as *u8) != 0u32 { return 18u64 }
+
+    /* (8) the reach_oracle fold + the raw-tier firewall */
+    if reach_oracle_make_sovval(0u32, pc, 728u64, cost, po) != SV_OK { return 19u64 }
+    if sv_status(po) != 0u64 { return 20u64 }
+    if reach_oracle_make_sovval(1u32, pc, 728u64, cost, po) != SV_PROVISIONAL { return 21u64 }
+    if sv_is_provisional(po) != 1u8 { return 22u64 }
+    if reach_oracle_make_sovval(7u32, pc, 728u64, cost, po) != SV_REFUSED { return 23u64 }
+    if sv_is_refused(po) != 1u8 { return 24u64 }
+    if reach_oracle_admit_canonical(1u32) != 1i32 { return 25u64 }
+    if reach_oracle_admit_canonical(0u32) != 0i32 { return 26u64 }
+
+    return 99u64
+}

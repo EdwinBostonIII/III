@@ -150,7 +150,30 @@ elias_gamma_put:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -165,9 +188,6 @@ L_if_end_3:
     callq bitw_put
     addq $32, %rsp
     movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -197,7 +217,7 @@ elias_gamma_get:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_4:
+L_loop_top_6:
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
@@ -215,7 +235,7 @@ L_loop_top_4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_5
+    jz L_loop_end_7
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -230,8 +250,8 @@ L_loop_top_4:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_4
-L_loop_end_5:
+    jmp L_loop_top_6
+L_loop_end_7:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -240,7 +260,7 @@ L_loop_end_5:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_6:
+L_loop_top_8:
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -253,7 +273,7 @@ L_loop_top_6:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_7
+    jz L_loop_end_9
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -288,8 +308,8 @@ L_loop_top_6:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_6
-L_loop_end_7:
+    jmp L_loop_top_8
+L_loop_end_9:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -337,7 +357,30 @@ elias_delta_put:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -350,7 +393,7 @@ elias_delta_put:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_13
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -370,10 +413,13 @@ elias_delta_put:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_13:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -417,7 +463,7 @@ elias_delta_get:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_10:
+L_loop_top_14:
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -437,7 +483,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_15
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -472,8 +518,8 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_14
+L_loop_end_15:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -602,7 +648,7 @@ elias_kat:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_12:
+L_loop_top_16:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -615,7 +661,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_17
     subq $32, %rsp
     callq L_el_rng
     addq $32, %rsp
@@ -660,8 +706,8 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_16
+L_loop_end_17:
     movabsq $0x800, %rax
     pushq %rax
     leaq L_EL_BUF(%rip), %rax
@@ -680,7 +726,7 @@ L_loop_end_13:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_14:
+L_loop_top_18:
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -693,7 +739,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_19
     leaq L_EL_VALS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -723,8 +769,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_18
+L_loop_end_19:
     subq $32, %rsp
     callq bitw_bytelen
     addq $32, %rsp
@@ -750,7 +796,7 @@ L_loop_end_15:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_16:
+L_loop_top_20:
     movl -40(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -763,7 +809,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_21
     subq $32, %rsp
     callq elias_gamma_get
     addq $32, %rsp
@@ -784,7 +830,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_23
     movabsq $0x3e8, %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -802,7 +848,7 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_23:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -817,8 +863,8 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_20
+L_loop_end_21:
     movabsq $0x800, %rax
     pushq %rax
     leaq L_EL_BUF(%rip), %rax
@@ -837,7 +883,7 @@ L_loop_end_17:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_20:
+L_loop_top_24:
     movl -48(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -850,7 +896,7 @@ L_loop_top_20:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_21
+    jz L_loop_end_25
     leaq L_EL_VALS(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -880,8 +926,8 @@ L_loop_top_20:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_20
-L_loop_end_21:
+    jmp L_loop_top_24
+L_loop_end_25:
     subq $32, %rsp
     callq bitw_bytelen
     addq $32, %rsp
@@ -907,7 +953,7 @@ L_loop_end_21:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_22:
+L_loop_top_26:
     movl -64(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -920,7 +966,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_23
+    jz L_loop_end_27
     subq $32, %rsp
     callq elias_delta_get
     addq $32, %rsp
@@ -941,7 +987,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_29
     movabsq $0x7d0, %rax
     pushq %rax
     movl -64(%rbp), %eax
@@ -959,7 +1005,7 @@ L_loop_top_22:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_29:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -974,8 +1020,8 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_22
-L_loop_end_23:
+    jmp L_loop_top_26
+L_loop_end_27:
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
@@ -994,7 +1040,7 @@ L_loop_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_31
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -1004,7 +1050,7 @@ L_loop_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_31:
     movabsq $0x2, %rax
     pushq %rax
     popq %rcx
@@ -1023,7 +1069,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_33
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -1033,7 +1079,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_33:
     movabsq $0x100000, %rax
     pushq %rax
     popq %rcx
@@ -1052,7 +1098,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_35
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -1062,7 +1108,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_35:
     movabsq $0x800, %rax
     pushq %rax
     leaq L_EL_BUF(%rip), %rax
@@ -1148,7 +1194,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_37
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -1158,7 +1204,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_37:
     subq $32, %rsp
     callq elias_delta_get
     addq $32, %rsp
@@ -1173,7 +1219,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_39
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -1183,7 +1229,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_39:
     subq $32, %rsp
     callq elias_gamma_get
     addq $32, %rsp
@@ -1198,7 +1244,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_41
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -1208,7 +1254,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_41:
     subq $32, %rsp
     callq elias_delta_get
     addq $32, %rsp
@@ -1223,7 +1269,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_43
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -1233,7 +1279,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_43:
     movl -56(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1246,7 +1292,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_45
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -1256,7 +1302,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_45:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

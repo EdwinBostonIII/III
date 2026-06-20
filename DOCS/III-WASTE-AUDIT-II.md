@@ -166,8 +166,10 @@ WITNESSED-KEEP (cutting would shrink a *survivor's* coverage; not a clean cut).
 - Deployable crypto/coding, no current caller: `aes_gcm`/`aes_siv`, `ecdsa_p384`, `rsa`, `hkdf`, `pbkdf2`,
   `keccak_sponge`, `zk_stark`/`zk_snark`/`zk_field`/`zk_stark_seal`, `rscode_ec`, `pq_quorum` — the
   deployable-crypto reserve, wired the moment a protocol needs them.
-- Algorithm reserves: `beam_search`; the 10 numera wall-faculties (`parity_game` = III's only μ-calculus
-  solver; the others = wall-island reference implementations) — capability library, new-capability-on-demand.
+- Algorithm reserve: `beam_search` (search; 0 callers, a deployable reserve). *(Correction: the 10 numera
+  wall-faculties — `parity_game`/`sat_tractable`/`diophantine`/… — are NOT present to keep; they were CUT in
+  `65783306` and are listed in the CUT bucket above. Any prior doc, incl. `III-WALLS-CASHED-IN.md §3`,
+  describing them as live predates that cut. Verified 0/10 present in the tree.)*
 - `glyph_{i64,f64,set,vec,bytes,str}` — glyph-v3 per-type serialization family (the wired `glyph_u64`
   anchors it); a complete-type-coverage serialization reserve, not redundant (each type differs).
 - Entangled (cutting reduces a *survivor's* gate/guard coverage): `cost_lattice_synth` (KAT 1433's `cls_admit`

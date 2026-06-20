@@ -42,7 +42,12 @@ reasoned mapping — an engineering reading, not a theorem).
 
 ---
 
-## 3. Production faculties built from the walls (BUILT + GATED)
+## 3. Production faculties built from the walls (BUILT + GATED — then CUT; read the banner)
+
+> **SUPERSEDED — do not read this section as current state.** These 10 faculties were **CUT** in commit
+> `65783306` as unused cash-in bloat (0 non-corpus consumers; the `crt` head-to-head proved wiring one
+> *regressed* good code). They are **not present** in the tree (verified 0/10). This section records what was
+> once *built*, not what *exists*. Current disposition: `III-WASTE-AUDIT-II.md` §1 (cut) / §8 (gray-zone).
 
 The cash-in made concrete: ten new `STDLIB/iii/numera/` faculties, each an island of a wall turned into a production,
 system-aware, independently-usable III capability — `@export` API, rich header (role / use-cases / invocation / impacts /

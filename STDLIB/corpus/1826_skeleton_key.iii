@@ -1,0 +1,86 @@
+/* 1826_skeleton_key.iii -- III's *i*, MANIFEST: the De Morgan completion (bottom, top, order-reversing involution)
+ * is the ONE structure every lattice mode of III is forced to carry -- at 2 values (the weave / bv_bits, Boolean),
+ * 3 values (Voice, via the now-explicit active/passive involution = a Kleene algebra), and 6 values (logic6, the
+ * complete Belnap+Null+All instance).  Each mode satisfies BOTH De Morgan laws + involution + the forced bottom/top.
+ * This is the skeleton key found by the warmer/cooler search: mode-forced-UNIQUE (not a self-address coincidence),
+ * brutally reliable (paraconsistent + null-safe in logic6), grounded at Null, with a PQ-secure anchor as the
+ * foundation.  THE BOUNDARY, stated honestly: post-quantum (mlkem/ntt) is a RING (Z_q), not a De Morgan lattice --
+ * it carries no native (bottom,top,involution) closure, only the key's circuit image; PQ's role is the quantum-hard
+ * GROUND, not a closure-mode.  exit 99 = the one key holds across 2/3/6-valued modes. */
+module m1826
+
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_intern_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn voice_join(v1: u32, v2: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_meet(v1: u32, v2: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_not(v: u32) -> u32 from "voice.iii"
+
+const NUL : u32 = 4u32
+const ALL : u32 = 5u32
+
+/* MODE 1 -- the weave (2-valued Boolean), De Morgan proven by the SAT judge over two free variables. */
+fn weave_demorgan() -> u8 {
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let lhs : u32 = bb_intern_not(bb_intern_and(a, b))                        /* ~(a & b) */
+    let rhs : u32 = bb_intern_or(bb_intern_not(a), bb_intern_not(b))          /* ~a | ~b */
+    if bb_equal(lhs, rhs) != 1u8 { return 0u8 }                              /* De Morgan 1 */
+    let lhs2 : u32 = bb_intern_not(bb_intern_or(a, b))                        /* ~(a | b) */
+    let rhs2 : u32 = bb_intern_and(bb_intern_not(a), bb_intern_not(b))        /* ~a & ~b */
+    if bb_equal(lhs2, rhs2) != 1u8 { return 0u8 }                            /* De Morgan 2 */
+    if bb_equal(bb_intern_not(bb_intern_not(a)), a) != 1u8 { return 0u8 }    /* involution */
+    return 1u8
+}
+
+/* MODE 2 -- Voice (3-valued Kleene), De Morgan over the now-explicit involution + meet/join. */
+fn voice_demorgan() -> u8 {
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let mut b : u32 = 0u32
+        while b < 3u32 {
+            if voice_not(voice_join(a, b)) != voice_meet(voice_not(a), voice_not(b)) { return 0u8 }   /* DM 1 */
+            if voice_not(voice_meet(a, b)) != voice_join(voice_not(a), voice_not(b)) { return 0u8 }   /* DM 2 */
+            b = b + 1u32
+        }
+        if voice_not(voice_not(a)) != a { return 0u8 }                       /* involution */
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* MODE 3 -- logic6 (6-valued, the COMPLETE instance), De Morgan + involution + forced bottom/top. */
+fn logic6_demorgan() -> u8 {
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        let mut b : u32 = 0u32
+        while b < 6u32 {
+            if l6_not(l6_or(a, b)) != l6_and(l6_not(a), l6_not(b)) { return 0u8 }   /* DM 1 */
+            if l6_not(l6_and(a, b)) != l6_or(l6_not(a), l6_not(b)) { return 0u8 }   /* DM 2 */
+            b = b + 1u32
+        }
+        if l6_not(l6_not(a)) != a { return 0u8 }                            /* involution */
+        if l6_and(NUL, a) != NUL { return 0u8 }                             /* Null = forced bottom (annihilates meet) */
+        if l6_or(ALL, a) != ALL { return 0u8 }                              /* All  = forced top (annihilates join) */
+        a = a + 1u32
+    }
+    if l6_not(NUL) != ALL { return 0u8 }                                    /* bottom <-> top under the involution */
+    if l6_not(ALL) != NUL { return 0u8 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    l6_init()
+    if weave_demorgan()  != 1u8 { return 10u64 }   /* the key fails at 2 values */
+    if voice_demorgan()  != 1u8 { return 20u64 }   /* the key fails at 3 values */
+    if logic6_demorgan() != 1u8 { return 30u64 }   /* the key fails at 6 values */
+    return 99u64                                    /* ONE key -- the De Morgan completion -- across 2/3/6-valued modes */
+}

@@ -44,6 +44,23 @@ fn voice_join(v1: u32, v2: u32) -> u32 @export {
     return v2
 }
 
+/* the voice lattice meet (min): the DUAL of join -- the least-dangerous voice. */
+fn voice_meet(v1: u32, v2: u32) -> u32 @export {
+    if v1 <= v2 { return v1 }
+    return v2
+}
+
+/* THE LATENT INVOLUTION made explicit: the grammatical active/passive DUALITY.  Active (acts upon the environment)
+ * and Passive (acted upon by the environment) are genuine duals; Middle (acts upon itself) is self-dual.  The map
+ * Passive(0) <-> Active(2), Middle(1) fixed is order-REVERSING on the chain Passive<Middle<Active and INVOLUTIVE --
+ * exactly a De Morgan negation.  With voice_join/voice_meet it makes Voice a 3-valued De Morgan (Kleene) algebra:
+ * voice_not(voice_join(a,b)) == voice_meet(voice_not(a),voice_not(b)) and dually (corpus 1826).  This is the SAME
+ * (bottom,top,involution) closure logic6 carries at six values and bv_bits at two -- III's i, manifest in Voice. */
+fn voice_not(v: u32) -> u32 @export {
+    if v > VOICE_ACTIVE { return v }          /* out of {0,1,2}: identity guard */
+    return VOICE_ACTIVE - v                    /* 0<->2, 1 fixed */
+}
+
 /* admit one op: its realized token, or VK_NULL if its obligation is unmet (it evaporates). */
 fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 @export {
     if voice == VOICE_PASSIVE { return op_token }

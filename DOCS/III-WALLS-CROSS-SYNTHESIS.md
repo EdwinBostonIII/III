@@ -110,15 +110,17 @@ Some walls *rhyme*. These are analogies across tagged complexity-profile facts; 
 - **OPEN vs OBSTRUCTED is a real divide.** Confluence's core is *proven* undecidable; the others' cores split (§2). The
   lesson a problem-mapper takes: first ask which kind of core you face — it changes whether "residual hopes" can be
   *closed* (OPEN-core: maybe; OBSTRUCTED-core: the impossibility is the closure).
-- **Resolution IS finding the right invariant (the program's deepest cross-wall reading — observation, tagged).** The
-  constructibility wall (`1879`) *fell* the moment Wantzel found the invariant — field degree `=2^k` — that exactly
-  captures constructibility; one-player parity *fell* to the sign-of-cycle-mean invariant (`1850`). The OPEN walls stay
-  open partly because their *cheap* invariants are **proven not to** capture the essential quantity: parity's
-  control-blindness (`1848`) and GI's 1-WL incompleteness (`1871`) are exactly such *negative* results. So those
-  negative results are not merely obstacles — read against a *resolved* wall they **measure how far each open wall's
-  resolving invariant must reach**: the cheap analogue that closed geometry has no counterpart that works (yet) for
-  control or for higher-order structure. The program's many negative results become one positive map: of the distance
-  between the invariants we have and the invariants each open wall needs.
+- **One recurring route to resolution is finding the right invariant (observation, tagged — *a* route, not *the* route).**
+  Some walls fall to a new **algorithm** (primality → AKS; LP → ellipsoid) and some to the **right invariant**: the
+  constructibility wall (`1879`) *fell* the moment Wantzel found that field degree `=2^k` exactly captures
+  constructibility; one-player parity *fell* to the sign-of-cycle-mean invariant (`1850`). The invariant route is the
+  one this program's *negative* results illuminate: the OPEN walls stay open partly because their *cheap* invariants are
+  **proven not to** capture the essential quantity — parity's control-blindness (`1848`), GI's 1-WL incompleteness
+  (`1871`). So read against a *resolved-by-invariant* wall, those negative results are not merely obstacles — they
+  **measure how far an open wall's resolving invariant must reach** (the cheap analogue that closed geometry has no
+  counterpart that works *yet* for control or higher-order structure). Many negative results become one positive map —
+  of the gap between the invariants we have and those each open wall needs — *for the walls where an invariant, not an
+  algorithm, is the likely key.*
 
 ---
 

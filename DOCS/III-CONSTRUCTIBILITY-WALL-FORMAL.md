@@ -45,10 +45,11 @@ This is the wall that explains the others. Set it beside the OPEN walls:
 | Graph iso | higher-order structure | 1-WL **provably fails** on regular graphs (`1871`) ⇒ **open** |
 | SAT | — | no invariant separates P from NP-complete (the grand question) ⇒ **open** |
 
-The pattern (an **analogy/observation**, tagged — not a theorem): a wall *falls* when the right invariant is found that
-exactly captures its essential quantity (Wantzel's degree for constructibility; sign of cycle-mean for one-player
-parity, `1850`). A wall *stays open* when the natural cheap invariants are *proven not to* capture it — which is
-precisely what the parity control-blindness barrier (`1848`) and the GI 1-WL boundary (`1871`) establish. So the
+The pattern (an **analogy/observation**, tagged — not a theorem; and *one* route, not the only one — some walls fall to
+a new *algorithm*, e.g. primality→AKS, LP→ellipsoid): a wall can *fall* when the right invariant is found that exactly
+captures its essential quantity (Wantzel's degree for constructibility; sign of cycle-mean for one-player parity,
+`1850`). A wall *stays open* — to the invariant route — when the natural cheap invariants are *proven not to* capture it,
+which is precisely what the parity control-blindness barrier (`1848`) and the GI 1-WL boundary (`1871`) establish. So the
 control-blindness and 1-WL **negative** results are not just obstacles; read against constructibility they are evidence
 about *why* those walls resist: the cheap invariant that resolved geometry has no analogue that works there (yet). This
 reframes the whole program's negative results as **measurements of how far the resolving invariant must reach.**

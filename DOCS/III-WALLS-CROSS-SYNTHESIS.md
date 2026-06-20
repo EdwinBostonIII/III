@@ -12,6 +12,7 @@ The five walls and their canonical documents:
 - **Confluence / rewriting** — `III-CONFLUENCE-WALL-FORMAL.md` (KATs 1868–1869)
 - **Graph isomorphism** — `III-GI-WALL-FORMAL.md` (KATs 1870–1872)
 - **Lattice representation** — `III-LATTICE-WALL-FORMAL.md` (KATs 1873–1874)
+- **Primality / factoring** — `III-PRIMALITY-FACTORING-WALL-FORMAL.md` (KATs 1875–1876)
 
 ---
 
@@ -87,7 +88,13 @@ Some walls *rhyme*. These are analogies across tagged complexity-profile facts; 
   invariant (`1848`), GI's 1-WL (`1871`) — escapable only by paying for more structure (control-preservation / `k`-WL).
   Two *independent* such problems strengthen the picture of a populated NP middle (Ladner, CITED). *Tempered note:* both
   sit at a **weaker** good-upper-bound (quasi-poly) than the NP∩coNP problems that *fell to P* (primality from
-  randomized-poly; LP from poly), so the eventual-P precedent is suggestive, not favored.
+  randomized-poly; LP from poly), so the eventual-P precedent is suggestive, not favored. **This precedent is now
+  grounded**, not merely cited: the primality/factoring wall instantiates *both* outcomes as gated KATs — primality fell
+  to P (`1875`), factoring its self-reducible NP∩coNP twin stays open (`1876`).
+- **The intermediate band splits by quantum status (CITED, analogy).** Within the classically-open NP∩coNP candidates,
+  factoring and discrete log are **quantum-cracked** (BQP, Shor — period-finding structure), while parity and GI have
+  **no known quantum advantage** (`III-PARITY-RESIDUAL-HOPES.md` avenue N). So "intermediate candidate" is not one cell:
+  quantum-easy (factoring) vs quantum-hard (parity, GI) — a distinction the primality/factoring wall makes concrete.
 - **The graph-invariant blind-spot motif.** Parity's control-blindness (`1848`, no `(V,E,pr)`-invariant decides parity)
   and GI's 1-WL incompleteness (`1871`, no color histogram decides GI) are the *same shape of obstruction* — an
   invariant collapsing exactly the distinction that matters — in two different theories. Analogy, gated on both ends.
@@ -118,6 +125,7 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 | Confluence | decide confluence | OBSTRUCTED (undecidable) | — (decidable on island) | Newman (terminating ⇒ decidable) | 1868–1869 |
 | Graph iso | GI ∈ P? | OPEN — local placement (NP∩coAM) | quasi-poly | 1-WL complete for trees; higher-order fix | 1870–1872 |
 | Lattice rep | FLRP | OPEN — non-complexity (universal algebra) | — | `Con(V₄)=M₃`; `Π_n` is a lattice | 1873–1874 |
+| Primality/factoring | factoring ∈ classical P? | OPEN — local placement, **quantum-cracked** (Shor) | sub-exp (NFS) | primality ∈ P (fell); factoring NP/self-reducible | 1875–1876 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

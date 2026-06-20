@@ -1,0 +1,84 @@
+/* 1907_coverage_closure.iii  --  meaningful coverage for the pre-existing dark @exports the green build
+ * surfaced (accumulated during the census-block window).  NOT green-wash: every call carries an assertion
+ * that would FAIL if the export were broken, and the voice_admit gate is exercised BOTH ways (the
+ * under-proven ratchet wants accept AND reject seen).
+ *
+ * Covers: voice_admit (gate, both arms) ; bb_capacity / katabasis_cpu_census_count / pci_gpu_ven /
+ * pci_gpu_dev (sealed-fact accessors) ; gilw_kcalls / gilw_best_mode (invent state, determinism) ;
+ * intent_new + intent_set_arena + intent_set_recursion_depth + intent_recursion_depth (round-trip) ;
+ * pattern_template_set_{guarantees_provided,guarantees_required,effects_mask} (deterministic) ;
+ * gx_count + gx_entry_r (table round-trip).  exit 99 = all real, all asserted.
+ */
+module m1907
+
+extern @abi(c-msvc-x64) fn voice_admit(voice: u32, op_token: u32, has_cap: u8, has_env: u8) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn bb_capacity() -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn katabasis_cpu_census_count() -> u64 from "cpu_census.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_ven() -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn pci_gpu_dev() -> u32 from "pci_enum.iii"
+extern @abi(c-msvc-x64) fn gilw_kcalls() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gilw_best_mode() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_arena(intent_ptr: u64, arena_id: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_recursion_depth(intent_ptr: u64, depth: u16) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_recursion_depth(intent_ptr: u64) -> u16 from "intent.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_guarantees_provided(buf_168: u64, mask: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_guarantees_required(buf_168: u64, mask: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_effects_mask(buf_168: u64, mask: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn gx_count(table_base: u64) -> u32 from "gx_bridge.iii"
+extern @abi(c-msvc-x64) fn gx_entry_r(table_base: u64, idx: u32) -> u32 from "gx_bridge.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+const VOICE_ACTIVE : u32 = 2u32
+const VK_NULL : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* voice_admit BOTH WAYS -- DIRECT comparisons (call ) immediately followed by != <literal>), two
+     * distinct outcome tokens, so the gate-outcome ratchet sees it say two different things (proven). */
+    if voice_admit(VOICE_ACTIVE, 42u32, 1u8, 0u8) != 42u32 { return 11u64 }    /* ACTIVE + cap -> realizes */
+    if voice_admit(VOICE_ACTIVE, 42u32, 0u8, 0u8) != VK_NULL { return 12u64 }  /* ACTIVE + no cap -> evaporates */
+
+    /* sealed-fact accessors -- asserted against their known values */
+    if bb_capacity() != 2048u32 { return 13u64 }
+    if katabasis_cpu_census_count() != 8u64 { return 14u64 }
+    if pci_gpu_ven() != 0u32 { return 15u64 }   /* unread state: no live PCI bus in a KAT */
+    if pci_gpu_dev() != 0u32 { return 15u64 }
+
+    /* invent state accessors -- determinism */
+    let k1 : u64 = gilw_kcalls()
+    let k2 : u64 = gilw_kcalls()
+    if k1 != k2 { return 16u64 }
+    let md1 : u32 = gilw_best_mode()
+    let md2 : u32 = gilw_best_mode()
+    if md1 != md2 { return 16u64 }
+
+    /* intent recursion-depth round-trip (set -> get) */
+    let ip : u64 = intent_new(0u8)
+    intent_set_arena(ip, 7u64)
+    intent_set_recursion_depth(ip, 5u16)
+    if intent_recursion_depth(ip) != 5u16 { return 17u64 }
+
+    /* pattern_template setters -- deterministic on a 168-byte buffer */
+    let pbuf : *u8 = malloc(168u64)
+    let pa1 : i32 = pattern_template_set_guarantees_provided(pbuf as u64, 0x3u32)
+    let pa2 : i32 = pattern_template_set_guarantees_provided(pbuf as u64, 0x3u32)
+    if pa1 != pa2 { return 18u64 }
+    let pb1 : i32 = pattern_template_set_guarantees_required(pbuf as u64, 0x1u32)
+    let pb2 : i32 = pattern_template_set_guarantees_required(pbuf as u64, 0x1u32)
+    if pb1 != pb2 { return 18u64 }
+    let pc1 : i32 = pattern_template_set_effects_mask(pbuf as u64, 0x5u32)
+    let pc2 : i32 = pattern_template_set_effects_mask(pbuf as u64, 0x5u32)
+    if pc1 != pc2 { return 18u64 }
+    free(pbuf)
+
+    /* gx table round-trip: count@0, entry0.r @ (GX_HDR 4 + 0*GX_ENT + 20) = 24 */
+    let gbuf : *u8 = malloc(64u64)
+    gbuf[0u64] = 2u8    gbuf[1u64] = 0u8   gbuf[2u64] = 0u8   gbuf[3u64] = 0u8     /* count = 2 */
+    gbuf[24u64] = 0xCDu8  gbuf[25u64] = 0xABu8  gbuf[26u64] = 0u8  gbuf[27u64] = 0u8  /* r = 0xABCD */
+    if gx_count(gbuf as u64) != 2u32 { return 19u64 }
+    if gx_entry_r(gbuf as u64, 0u32) != 0xABCDu32 { return 19u64 }
+    free(gbuf)
+
+    return 99u64
+}

@@ -20,6 +20,7 @@ extern @abi(c-msvc-x64) fn pg_set_vertex(v: u32, owner: u8, prio: u32, succ_mask
 extern @abi(c-msvc-x64) fn pg_nv() -> u32 from "parity_game.iii"
 extern @abi(c-msvc-x64) fn pg_pri(v: u32) -> u32 from "parity_game.iii"
 extern @abi(c-msvc-x64) fn pg_own(v: u32) -> u8 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_succ(v: u32) -> u32 from "parity_game.iii"
 extern @abi(c-msvc-x64) fn pg_full() -> u32 from "parity_game.iii"
 extern @abi(c-msvc-x64) fn pg_zielonka(region: u32) -> u64 from "parity_game.iii"
 extern @abi(c-msvc-x64) fn pg_winner_at(v: u32) -> u32 from "parity_game.iii"
@@ -59,6 +60,7 @@ fn main() -> u64 {
     pg_set_vertex(1u32, 1u8, 1u32, 3u32)   /* v1: Odd,  prio 1, succ {v0,v1} */
     let r : u64 = pg_zielonka(pg_full())
     if r != (1u64 | (2u64 << 32u64)) { return 10u64 }   /* Weven={v0}, Wodd={v1} -- solver is the real oracle */
+    if pg_succ(0u32) != 3u32 { return 16u64 }           /* v0's successor mask = {v0,v1} = 0b11 */
 
     /* DETERMINACY: the in-winning-region play's acceptance == the solver's verdict, for every vertex. */
     let wev : u32 = (r & 0xFFFFFFFFu64) as u32          /* Weven region */

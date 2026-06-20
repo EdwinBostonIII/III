@@ -21,6 +21,8 @@ extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_maxprio(upto: u32) -> u64 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_winner(upto: u32) -> u64 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_observe_count(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_maxprio_moves(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_winner_moves(upto: u32) -> u64 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_detect_cycle() -> u32 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_mark_cycle(idx: u32) -> i32 from "event_substrate.iii"
@@ -48,6 +50,9 @@ fn main() -> u64 {
     let wi : u64 = evt_inf_winner()
     if wi != 1u64 { return 13u64 }
     if wf == wi { return 13u64 }           /* THE TEETH: finite and infinitary MUST differ here */
+    /* the moves-only fold: here every event is a MOVE, so it equals the full finite fold (max 6, even) */
+    if evt_maxprio_moves(3u32) != 6u64 { return 14u64 }
+    if evt_winner_moves(3u32) != 0u64 { return 14u64 }
 
     /* ===== SCENE B: OBSERVANCE POSITION DECIDES ===== */
     /* positive arm: an odd OBSERVE placed INTO the cycle flips the infinitary winner */

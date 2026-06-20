@@ -1,0 +1,90 @@
+/* 1906_xii_inverse_real.iii  --  the REAL inverse-twin of XII: fold an ACTUAL xii_rewrite normalisation,
+ * witnessed by the REAL cad sha256.  No hand-authored sequence, no typed-in answer -- it drives
+ * xii_rewrite_apply_one on a real term, perceives XII's OWN firings + the real normal form, and commits
+ * to it cryptographically.  This is the honest version the four dome demos were not.
+ *
+ *   Determinism (stubbornness), FOR REAL: replaying the same real normalisation yields a BIT-IDENTICAL
+ *     cad digest -- proven by cad_eq over two independent runs, not by re-hashing a hardcoded buffer.
+ *   Assurance (tamper-evidence), FOR REAL: flipping one byte of the trace changes the sha256 digest --
+ *     real collision-resistant cad, closing the FNV gap the adversarial pass found.
+ *   It IS XII's inverse: the bytes it folds ARE xii_rewrite's firings + xii_term's normal form.
+ *
+ * Codes 11 determinism / 12 length / 13 tamper-evidence / 14 trivial-digest.  exit 99 = real + assured.
+ */
+module m1906
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+/* build the SAME real term, normalise via REAL xii_rewrite_apply_one, serialise the REAL firing-trace +
+ * normal form into `trace`, optionally tamper one byte, and witness with REAL cad sha256 into out_digest.
+ * Returns the number of bytes folded (trace length). */
+fn build_and_fold(tamper: u32, out_digest: *u8) -> u64 {
+    xii_term_arena_reset()
+    let a : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let b : u32 = xii_term_make_basis(1u8, 0x200u32)
+    let c : u32 = xii_term_make_basis(1u8, 0x300u32)
+    let d : u32 = xii_term_make_basis(1u8, 0x400u32)
+    let inner : u32 = xii_term_make_fusion2(18u8, a, b)
+    let inner2 : u32 = xii_term_make_fusion2(18u8, inner, c)
+    let t : u32 = xii_term_make_fusion2(18u8, inner2, d)
+    let trace : *u8 = malloc(256u64)
+    let mut tn : u64 = 0u64
+    /* drive REAL normalisation to fixpoint, recording each REAL rule firing */
+    let mut cur : u32 = t
+    let mut steps : u32 = 0u32
+    while steps < 64u32 {
+        let nxt : u32 = xii_rewrite_apply_one(cur)
+        let fired : u32 = xii_rewrite_last_rule_fired()
+        if fired == 0u32 { steps = 64u32 }
+        else {
+            trace[tn] = (fired & 0xFFu32) as u8
+            tn = tn + 1u64
+            cur = nxt
+            steps = steps + 1u32
+        }
+    }
+    /* serialise the REAL normal form (XII's own output, walked) */
+    trace[tn] = xii_term_get_kind(cur)              tn = tn + 1u64
+    let ca : u32 = xii_term_get_child_a(cur)
+    let cb : u32 = xii_term_get_child_b(cur)
+    trace[tn] = xii_term_get_kind(ca)               tn = tn + 1u64
+    trace[tn] = xii_term_get_kind(cb)               tn = tn + 1u64
+    let cbb : u32 = xii_term_get_child_b(cb)
+    trace[tn] = xii_term_get_kind(cbb)              tn = tn + 1u64
+    let cba : u32 = xii_term_get_child_a(cb)
+    trace[tn] = xii_term_get_kind(cba)              tn = tn + 1u64
+    if tamper == 1u32 { trace[0u64] = trace[0u64] + 1u8 }
+    cad_oneshot(0u32, trace, tn, out_digest)        /* REAL sha256 over the REAL execution */
+    free(trace)
+    return tn
+}
+
+fn main() -> u64 {
+    let d1 : *u8 = malloc(32u64)
+    let d2 : *u8 = malloc(32u64)
+    let d3 : *u8 = malloc(32u64)
+    let n1 : u64 = build_and_fold(0u32, d1)         /* real normalisation, witnessed */
+    let n2 : u64 = build_and_fold(0u32, d2)         /* SAME real normalisation again */
+    if cad_eq(d1, d2) != 1u8 { return 11u64 }       /* DETERMINISM: replay is bit-identical (real) */
+    if n1 != n2 { return 12u64 }
+    let n3 : u64 = build_and_fold(1u32, d3)         /* tampered trace */
+    if cad_eq(d1, d3) == 1u8 { return 13u64 }       /* ASSURANCE: real sha256 detects the tamper */
+    /* the digest must be real (non-trivial) -- a folded real execution, not zeros */
+    let z0 : u8 = d1[0u64]
+    let z1 : u8 = d1[1u64]
+    let z2 : u8 = d1[2u64]
+    if z0 == 0u8 { if z1 == 0u8 { if z2 == 0u8 { return 14u64 } } }
+    free(d1)  free(d2)  free(d3)
+    return 99u64
+}

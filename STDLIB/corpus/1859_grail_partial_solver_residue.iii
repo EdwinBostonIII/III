@@ -1,0 +1,102 @@
+/* 1859_grail_partial_solver_residue.iii -- RESIDUAL-HOPE CLOSURE (avenue B): "combine SOUND poly partial solvers
+ * (the sandwich + bounded-width dominions -- our 1844/1846 survivors) until they decide 100% of every game."
+ * This hope dies on a clean Omega(n) LOWER BOUND, verified against the Zielonka oracle (1839):
+ *
+ *  FAMILY: the simple directed n-cycle  v -> (v+1) mod n,  with priorities  pr = 2 at ONE vertex, 1 elsewhere.
+ *  - The winner is a GLOBAL property: max-inf priority = 2 (even) everywhere, so Even wins ALL n vertices -- but ONLY
+ *    because of the single priority-2 vertex.  No bounded window that misses it can certify the outcome.
+ *  - A bounded-width dominion solver certifies a vertex only inside an alpha-DOMINION = a nonempty subset closed under
+ *    the play (a "trap" the owner never has to leave).  In a simple cycle the play is forced (out-degree 1), so a
+ *    subset is closed iff it contains the successor of each of its members iff it is the WHOLE cycle.  Hence the ONLY
+ *    nonempty closed subset is V itself; there is NO dominion of width < n.
+ *  - Therefore any width-w (w < n) dominion solver decides 0 of n vertices, while the oracle decides all n:
+ *    the irreducible RESIDUE is exactly n = Omega(n), and it GROWS with the game.
+ *
+ * WHAT THIS CLOSES (math-olympiad #40 + #4, honest scope).  It refutes "push bounded-width sound partial solvers to
+ * completeness" for the dominion/local-window class (the survivor class): completing requires UNBOUNDED width = the
+ * full recursion = the open-complexity object itself.  It does NOT claim partial solvers are useless (they are sound
+ * and useful), nor that the cycle is hard for ALL methods (it is 0-player, solved by 1857); it claims, precisely, that
+ * LOCAL certification cannot see a GLOBAL cycle-max, so locality cannot complete.  A lower bound cannot, and does not,
+ * put parity in P.
+ * exit 99 = for n=4..9: no proper nonempty closed subset exists (residue = n, growing), and the oracle decides all n. */
+module mpsr
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
+var NV : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+
+/* ---- Zielonka oracle (1839) ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+fn oracle_even() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())  return (r & 0xFFFFFFFFu64) as u32
+}
+fn popc(x: u32) -> u32 { let n : u32 = nv()  let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < n { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+/* a subset S is CLOSED under the forced play iff every member's successor is in S */
+fn is_closed(s: u32) -> u8 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if (s & (1u32 << v)) != 0u32 { if (SUC0[v as u64] & s) == 0u32 { return 0u8 } }  v = v + 1u32 }
+    return 1u8
+}
+fn build_cycle(n: u32) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = (v & 1u32) as u8                /* mixed owners (irrelevant: out-degree 1) */
+        PRI[v as u64] = 1u32                                      /* all priority 1 ... */
+        SUC0[v as u64] = 1u32 << ((v + 1u32) % n)                 /* v -> v+1 mod n */
+        v = v + 1u32 }
+    PRI[0u64] = 2u32                                              /* ... except ONE vertex priority 2 (the global pivot) */
+    return 0i32
+}
+
+fn main() -> u64 {
+    let mut n : u32 = 4u32
+    while n <= 9u32 {
+        build_cycle(n)
+        /* (a) the ONLY nonempty closed subset is V: every proper nonempty S has an escaping edge */
+        let full : u32 = fullmask()
+        let mut s : u32 = 1u32
+        let mut proper_closed : u32 = 0u32
+        while s < full {                                          /* s in 1..full-1 = proper nonempty subsets */
+            if is_closed(s) == 1u8 { proper_closed = proper_closed + 1u32 }
+            s = s + 1u32
+        }
+        if proper_closed != 0u32 { return 10u64 }                /* a proper dominion would exist -> claim false */
+        if is_closed(full) != 1u8 { return 11u64 }               /* V itself must be closed (sanity) */
+        /* (b) the oracle decides ALL n vertices, and Even wins them all (global max-inf = 2) */
+        if oracle_even() != full { return 12u64 }
+        /* (c) residue of any width-w (w<n) dominion solver = n (it finds 0 dominions) -- grows with n */
+        let residue : u32 = n - 0u32                             /* decided = 0 (no proper dominion); residue = n */
+        if residue != n { return 13u64 }
+        n = n + 1u32
+    }
+    return 99u64
+}

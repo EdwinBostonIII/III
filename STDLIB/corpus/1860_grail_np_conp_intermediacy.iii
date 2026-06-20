@@ -1,0 +1,155 @@
+/* 1860_grail_np_conp_intermediacy.iii -- RESIDUAL-HOPE CLOSURE / REFRAME (avenue M): "maybe the wall is that parity is
+ * secretly NP-hard / intractable."  NO -- it is the OPPOSITE situation, and that is the whole point.  Parity-game
+ * winner determination is in NP intersect coNP (indeed UP intersect coUP, Jurdzinski 1998): a positional strategy is a
+ * POLY-CHECKABLE witness for BOTH players.  So the problem is NOT NP-hard unless NP = coNP -- it sits in the rare
+ * INTERMEDIATE band (like integer factoring and discrete log): not known in P, but very unlikely NP-complete.
+ *
+ * WHAT IS VERIFIED HERE (the witness is poly-checkable, via the verified one-player solver of 1850):
+ *  - NP witness for W_even: a positional EVEN strategy sigma.  Fix Even to sigma; the restricted game has Even
+ *    out-degree 1, so ODD is the sole chooser -> a ONE-PLAYER game, solved in P by reach-to-odd-cycle (1850).  We find
+ *    a sigma whose poly-checked Odd-win set == the oracle's W_odd (so Even wins exactly W_even).  Witness verified poly.
+ *  - coNP witness for W_even (= NP witness for W_odd): a positional ODD strategy tau; fix Odd to tau; EVEN is the sole
+ *    chooser -> one-player, solved in P (reach-to-even-cycle); we find tau whose poly-checked Even-win set == W_even.
+ * Both witnesses exist for every game (positional determinacy, T1) and are checked in P -- so deciding "v in W_even" is
+ * in NP (sigma) AND in coNP (tau).
+ *
+ * WHAT THIS CLOSES (honest tag).  It refutes "the wall is NP-hardness": an NP-hardness explanation would put parity
+ * ABOVE NP-intersect-coNP, contradicting the poly-checkable strategy witnesses verified here.  The wall is the
+ * INTERMEDIATE status, not intractability.  (math-olympiad #4: NP-intersect-coNP membership says nothing about P vs the
+ * problem -- it does NOT put parity in P; it only locates it in the complexity landscape.)
+ * exit 99 = for every sampled game, BOTH a poly-checkable Even-witness for W_even and Odd-witness for W_odd are found. */
+module mnpc
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SA : [u32; 16]   /* successor index A (out-degree exactly 2) */
+var SB : [u32; 16]   /* successor index B */
+var SUC0 : [u32; 16] /* = (1<<SA)|(1<<SB) */
+var SUC : [u32; 16]  /* oracle working edges */
+var RSUC : [u32; 16] /* restricted edges for the one-player witness check */
+var NV : [u32; 1]
+var RNG : [u32; 1]
+var EV : [u32; 16]   /* list of Even-owned vertices */
+var OD : [u32; 16]   /* list of Odd-owned vertices */
+
+fn nv() -> u32 { return NV[0u64] }
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+
+/* ---- Zielonka oracle (1839) on SUC ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+fn oracle_even() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())  return (r & 0xFFFFFFFFu64) as u32
+}
+
+/* ---- the POLY one-player solver (1850) on RSUC: the sole player wins v iff v reaches a cycle of its parity ---- */
+fn reach_from_R(start: u32, within: u32) -> u32 {
+    let n : u32 = nv()  let mut R : u32 = start & within  let mut done : u8 = 0u8
+    while done == 0u8 { let mut add : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if (R & (1u32 << v)) != 0u32 { add = add | (RSUC[v as u64] & within) }  v = v + 1u32 }
+        let nr : u32 = R | add  if nr == R { done = 1u8 } else { R = nr } }
+    return R
+}
+fn backreach_R(target: u32) -> u32 {
+    let n : u32 = nv()  let mut B : u32 = target  let mut done : u8 = 0u8
+    while done == 0u8 { let mut add : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if (B & (1u32 << v)) == 0u32 { if (RSUC[v as u64] & B) != 0u32 { add = add | (1u32 << v) } }  v = v + 1u32 }
+        let nb : u32 = B | add  if nb == B { done = 1u8 } else { B = nb } }
+    return B
+}
+fn oneplayer_win_R(alpha: u32) -> u32 {   /* sole-player-alpha win set on RSUC: reach a cycle whose max prio == alpha parity */
+    let n : u32 = nv()  let mut res : u32 = 0u32
+    let d : u32 = max_prio(fullmask())  let mut p : u32 = d  let mut going : u8 = 1u8
+    while going == 1u8 {
+        if (p & 1u32) == alpha {
+            let mut sub : u32 = 0u32  let mut v : u32 = 0u32
+            while v < n { if PRI[v as u64] <= p { sub = sub | (1u32 << v) }  v = v + 1u32 }
+            let mut u : u32 = 0u32
+            while u < n { if PRI[u as u64] == p { let rr : u32 = reach_from_R(RSUC[u as u64] & sub, sub)  if (rr & (1u32 << u)) != 0u32 { res = res | (1u32 << u) } }  u = u + 1u32 } }
+        if p == 0u32 { going = 0u8 } else { p = p - 1u32 } }
+    return backreach_R(res)
+}
+
+fn gen_game(n: u32) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = (rnd() & 1u32) as u8  PRI[v as u64] = rnd() % n
+        let a : u32 = rnd() % n
+        let mut b : u32 = rnd() % n  if b == a { b = (a + 1u32) % n }
+        SA[v as u64] = a  SB[v as u64] = b
+        SUC0[v as u64] = (1u32 << a) | (1u32 << b)
+        v = v + 1u32 }
+    return 0i32
+}
+/* build RSUC: `chooser` (0=Even,1=Odd) plays strategy `mask` over its vertices (listed in EV/OD); other player free */
+fn build_restricted(chooser: u32, mask: u32, list_len: u32, use_ev: u8) -> i32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n {
+        if OWN[v as u64] == (chooser as u8) { RSUC[v as u64] = SUC0[v as u64] }   /* default; overwritten below for chooser */
+        else { RSUC[v as u64] = SUC0[v as u64] }
+        v = v + 1u32 }
+    /* now fix the chooser's choices from mask */
+    let mut i : u32 = 0u32
+    while i < list_len {
+        let mut vtx : u32 = 0u32
+        if use_ev == 1u8 { vtx = EV[i as u64] } else { vtx = OD[i as u64] }
+        let bit : u32 = (mask >> i) & 1u32
+        if bit == 0u32 { RSUC[vtx as u64] = 1u32 << SA[vtx as u64] } else { RSUC[vtx as u64] = 1u32 << SB[vtx as u64] }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x4E0C09Du32
+    let mut trials : u32 = 0u32
+    while trials < 1500u32 {
+        let n : u32 = 4u32 + (rnd() % 3u32)            /* n in 4..6 */
+        gen_game(n)
+        let we : u32 = oracle_even()
+        let wo : u32 = fullmask() & (we ^ 0xFFFFFFFFu32)
+        /* list Even and Odd vertices */
+        let mut ke : u32 = 0u32  let mut ko : u32 = 0u32  let mut v : u32 = 0u32  let nn : u32 = nv()
+        while v < nn { if OWN[v as u64] == 0u8 { EV[ke as u64] = v  ke = ke + 1u32 } else { OD[ko as u64] = v  ko = ko + 1u32 }  v = v + 1u32 }
+        /* NP witness for W_even: an Even strategy sigma whose one-player Odd-win == W_odd */
+        let mut found_e : u8 = 0u8  let lim_e : u32 = 1u32 << ke  let mut m : u32 = 0u32
+        while m < lim_e {
+            build_restricted(0u32, m, ke, 1u8)               /* Even chooses sigma; Odd free */
+            if oneplayer_win_R(1u32) == wo { found_e = 1u8  m = lim_e } else { m = m + 1u32 }
+        }
+        if found_e == 0u8 { return 10u64 }                   /* T1 guarantees one exists; not finding it = bug */
+        /* coNP witness (= NP witness for W_odd): an Odd strategy tau whose one-player Even-win == W_even */
+        let mut found_o : u8 = 0u8  let lim_o : u32 = 1u32 << ko  let mut mo : u32 = 0u32
+        while mo < lim_o {
+            build_restricted(1u32, mo, ko, 0u8)              /* Odd chooses tau; Even free */
+            if oneplayer_win_R(0u32) == we { found_o = 1u8  mo = lim_o } else { mo = mo + 1u32 }
+        }
+        if found_o == 0u8 { return 11u64 }
+        trials = trials + 1u32
+    }
+    return 99u64
+}

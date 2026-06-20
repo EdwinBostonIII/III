@@ -1,0 +1,140 @@
+/* 1857_grail_bounded_priority_island.iii -- RESIDUAL-HOPE CLOSURE (avenue D + ladder base E): the BOUNDED-PRIORITY /
+ * LOW-PLAYER ISLANDS are in P, EXACTLY -- so the wall needs unbounded alternation in BOTH dimensions (players AND
+ * priorities), not just one.  This is an ISLAND result (a genuine tractable regime), NOT a through-route to parity-in-P.
+ *
+ * TWO TRACTABLE ISLANDS, both verified == the Zielonka oracle (1839):
+ *
+ *  (I0  zero players)  A 0-player game (out-degree 1 everywhere) is a deterministic walk into a unique lasso; the
+ *      winner is the parity of the max priority on its cycle -- O(n).  Verified == oracle on every out-deg-1 game.
+ *
+ *  (I2  two priorities = BUCHI)  A parity game with priorities in {1,2} is a Buchi game ("Even wins iff the priority-2
+ *      set B is visited infinitely often").  Solved in P by the classic McNaughton/Buchi fixpoint:
+ *          W_odd = {} ;  repeat:  Sub = V\W_odd ;  A = Attr_Even(Sub, B&Sub) ;  Tr = Sub\A ;
+ *                                 if Tr={} stop ;  W_odd |= Attr_Odd(V, Tr) ;   then W_even = V\W_odd.
+ *      Verified == oracle on every {1,2}-priority game.
+ *
+ * THE GENERALIZATION (CITED -- not reproven here).  For a FIXED number of priorities d, parity games are solvable in
+ * n^{O(d)} time (small progress measures have range <= (n+1)^{ceil(d/2)}; Jurdzinski 1998) -- POLYNOMIAL for fixed d.
+ * Combined with T3 (1850, one-player in P) this LOCATES the wall on TWO axes: it lives only where BOTH the player
+ * alternation (1->2 players) AND the priority count (d = Theta(n)) are unbounded.  "Real instances have few priorities"
+ * is therefore a real tractable regime, NOT a breakthrough -- it does not touch the d=Theta(n) general case.
+ *
+ * HONEST TAG: this CLOSES the residual hope "exploit bounded priorities to solve the general problem" by showing it is
+ * an island, not a route.  It does NOT put general parity in P (math-olympiad #4 check: it would only do so if d were
+ * bounded, which it is not in the general problem).
+ * exit 99 = both islands' poly solvers == the oracle on every sampled game. */
+module mbpi
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
+var NV : [u32; 1]
+var RNG : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+fn lowbit_idx(m: u32) -> u32 { let n : u32 = nv()  let mut v : u32 = 0u32  while v < n { if (m & (1u32 << v)) != 0u32 { return v }  v = v + 1u32 }  return 0u32 }
+
+/* ---- Zielonka oracle (1839) ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+fn oracle_even() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())  return (r & 0xFFFFFFFFu64) as u32
+}
+
+/* ---- island I2: the polynomial BUCHI solver (priorities in {1,2}) ---- */
+fn buchi_even() -> u32 {
+    let n : u32 = nv()  let mut w : u32 = 0u32
+    while w < n { SUC[w as u64] = SUC0[w as u64]  w = w + 1u32 }   /* self-contained: populate the working edge array */
+    let mut B : u32 = 0u32  let mut v : u32 = 0u32
+    while v < n { if PRI[v as u64] == 2u32 { B = B | (1u32 << v) }  v = v + 1u32 }
+    let mut wodd : u32 = 0u32  let mut done : u8 = 0u8
+    while done == 0u8 {
+        let sub : u32 = fullmask() & (wodd ^ 0xFFFFFFFFu32)
+        let a : u32 = attractor(sub, 0u32, B & sub)          /* Even forces reaching B within Sub */
+        let tr : u32 = sub & (a ^ 0xFFFFFFFFu32)              /* cannot reach B at all -> Odd wins */
+        if tr == 0u32 { done = 1u8 } else { wodd = wodd | attractor(sub, 1u32, tr) }   /* Odd attractor WITHIN the current subgame */
+    }
+    return fullmask() & (wodd ^ 0xFFFFFFFFu32)
+}
+
+/* ---- island I0: deterministic 0-player walk winner (out-degree 1) ---- */
+fn det_even(r: u32) -> u8 {
+    let n : u32 = nv()
+    let mut pos : u32 = r  let mut i : u32 = 0u32
+    while i < n { pos = lowbit_idx(SUC0[pos as u64])  i = i + 1u32 }   /* after n steps, pos is on the cycle */
+    let start : u32 = pos  let mut mx : u32 = PRI[pos as u64]  let mut cur : u32 = lowbit_idx(SUC0[pos as u64])
+    while cur != start { if PRI[cur as u64] > mx { mx = PRI[cur as u64] }  cur = lowbit_idx(SUC0[cur as u64]) }
+    if (mx & 1u32) == 0u32 { return 1u8 }  return 0u8
+}
+
+fn gen_buchi(n: u32) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = (rnd() & 1u32) as u8
+        if (rnd() & 1u32) == 0u32 { PRI[v as u64] = 1u32 } else { PRI[v as u64] = 2u32 }    /* priorities in {1,2} */
+        let mut s : u32 = 0u32  let kk : u32 = 1u32 + (rnd() % 3u32)  let mut j : u32 = 0u32
+        while j < kk { s = s | (1u32 << (rnd() % n))  j = j + 1u32 }
+        if s == 0u32 { s = 1u32 << ((v + 1u32) % n) }
+        SUC0[v as u64] = s  v = v + 1u32 }
+    return 0i32
+}
+fn gen_det(n: u32) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = (rnd() & 1u32) as u8  PRI[v as u64] = rnd() % n
+        SUC0[v as u64] = 1u32 << (rnd() % n)                 /* out-degree EXACTLY 1 */
+        v = v + 1u32 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0xB0FF1Eu32
+    let mut t : u32 = 0u32
+    /* island I2 (Buchi): poly solver == oracle on every {1,2}-priority game */
+    while t < 3000u32 {
+        let n : u32 = 4u32 + (rnd() % 5u32)            /* n in 4..8 */
+        gen_buchi(n)
+        if buchi_even() != oracle_even() { return 10u64 }
+        t = t + 1u32
+    }
+    /* island I0 (0-player): deterministic walk == oracle on every out-deg-1 game (per vertex) */
+    let mut t2 : u32 = 0u32
+    while t2 < 3000u32 {
+        let n : u32 = 4u32 + (rnd() % 5u32)
+        gen_det(n)
+        let we : u32 = oracle_even()
+        let mut r : u32 = 0u32  let nn : u32 = nv()
+        while r < nn {
+            let truth : u8 = ((we >> r) & 1u32) as u8
+            if det_even(r) != truth { return 11u64 }
+            r = r + 1u32
+        }
+        t2 = t2 + 1u32
+    }
+    return 99u64
+}

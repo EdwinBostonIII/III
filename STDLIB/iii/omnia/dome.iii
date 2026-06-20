@@ -1,0 +1,191 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\dome.iii
+ *
+ * III STDLIB - omnia::dome  --  the inverse-form ARENA: a sealed event-space where a society of
+ * event-primary twins co-inhabit one append-only, witnessed, REVERSIBLE history.
+ *
+ * Where event_substrate is the single inverted fold, the Dome is the SOCIETY: many participants (the
+ * twins -- EYE/WAVE/ECHO/TIDE) emit into ONE shared log, perceive each other's events (ripples), and
+ * derive their state by folding the shared history filtered to their concern.  The Dome's superpower --
+ * the thing a deterministic decider structurally CANNOT do -- is REVERSIBLE, PROVENANCE-CARRYING
+ * deliberation: choose, LIVE the butterfly-effect, observe the recurrent outcome, and if it is bad,
+ * REWIND and re-choose -- with the abandoned branch RETAINED in the append-only log as provenance, and
+ * the lesson kept LIVE so the next choice is informed.  Nothing is ever erased; a rewind only records the
+ * span it walked away from.  "Living gives you the object AND its context over time" -- so a poor choice
+ * is evadable by replaying it, not by being smarter up front.
+ *
+ * Determinism commits and is blind to its own counterfactuals; the Dome carries them.
+ *
+ * NOT observational learning (Mandate 7): every fold is a FIXED pure function of the log; the only thing
+ * that changes a re-choice is that the lesson is now a RECORDED event the fold replays -- deterministic,
+ * witnessed, reversible.  Logical tick; no wall clock.  Ring R0.  K 1.00.  NIH: libc only, zero externs.
+ */
+module omnia_dome
+
+const DOME_CAP     : u32 = 512u32
+const DOME_NULL    : u32 = 0xFFFFFFFFu32
+const DOME_MAXSPAN : u32 = 32u32
+
+/* the twins (participants) */
+const DM_EYE  : u64 = 0u64   /* perception / content-address + witness */
+const DM_WAVE : u64 = 1u64   /* ripple / the consequence-wave (the butterfly-effect carrier) */
+const DM_ECHO : u64 = 2u64   /* proposer / re-choice from the folded ripple-history */
+const DM_TIDE : u64 = 3u64   /* time-travel / rewind-and-evade */
+
+/* event kinds */
+const DK_MOVE   : u64 = 0u64
+const DK_RIPPLE : u64 = 1u64
+const DK_REWIND : u64 = 2u64
+const DK_LESSON : u64 = 3u64   /* a retained judgment that survives a rewind */
+
+/* the ONE append-only dome history (never erased -- provenance). */
+var DM_TICK    : [u64; 512]
+var DM_PART    : [u64; 512]
+var DM_KIND    : [u64; 512]
+var DM_VALUE   : [u64; 512]
+var DM_PAYLOAD : [u64; 512]
+var DM_COUNT   : u32 = 0u32
+var DM_CLOCK   : u64 = 0u64
+
+/* abandoned spans -- the branches a rewind walked away from, kept as provenance (the debug trail). */
+var DM_SPAN_LO : [u32; 32]
+var DM_SPAN_HI : [u32; 32]
+var DM_NSPAN   : u32 = 0u32
+
+fn dome_reset() -> i32 @export {
+    DM_COUNT = 0u32
+    DM_CLOCK = 0u64
+    DM_NSPAN = 0u32
+    return 0i32
+}
+
+/* the ONLY mutator: a twin perceives/emits one event into the shared history. */
+fn dome_emit(participant: u64, kind: u64, value: u64, payload: u64) -> u64 @export {
+    if DM_COUNT >= DOME_CAP { return 0u64 }
+    let i : u32 = DM_COUNT
+    let t : u64 = DM_CLOCK + 1u64
+    DM_TICK[i]    = t
+    DM_PART[i]    = participant
+    DM_KIND[i]    = kind
+    DM_VALUE[i]   = value
+    DM_PAYLOAD[i] = payload
+    DM_COUNT = i + 1u32
+    DM_CLOCK = t
+    return t
+}
+
+fn dome_count() -> u32 @export { return DM_COUNT }
+
+/* a branch-point: the head index a TIDE rewind can return to. */
+fn dome_mark() -> u32 @export { return DM_COUNT }
+
+/* rewind: record the abandoned span [bp, here) and stamp a REWIND marker.  NOTHING is erased -- the
+ * abandoned branch stays in the log as provenance; only the ACTIVE fold skips it. */
+fn dome_rewind(bp: u32) -> i32 @export {
+    if DM_NSPAN < DOME_MAXSPAN {
+        DM_SPAN_LO[DM_NSPAN] = bp
+        DM_SPAN_HI[DM_NSPAN] = DM_COUNT
+        DM_NSPAN = DM_NSPAN + 1u32
+    }
+    dome_emit(DM_TIDE, DK_REWIND, bp as u64, 0u64)
+    return 0i32
+}
+
+/* is event i inside any abandoned span? (then it is provenance, not live) */
+fn dome_abandoned(i: u32) -> u32 @export {
+    let mut s : u32 = 0u32
+    while s < DM_NSPAN {
+        if i >= DM_SPAN_LO[s] {
+            if i < DM_SPAN_HI[s] { return 1u32 }
+        }
+        s = s + 1u32
+    }
+    return 0u32
+}
+
+/* the ACTIVE fold: max value over a participant's LIVE events (skips abandoned branches + REWIND marks).
+ * This is the "current outcome" -- what the dome would believe after evasion. */
+fn dome_active_max(participant: u64) -> u64 @export {
+    let mut m : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < DM_COUNT {
+        if dome_abandoned(i) == 0u32 {
+            if DM_PART[i] == participant {
+                if DM_KIND[i] != DK_REWIND {
+                    let v : u64 = DM_VALUE[i]
+                    if v > m { m = v }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return m
+}
+
+/* the parity of the active outcome -- 0 EVEN (win), 1 ODD (loss); the inverse form's verdict on the
+ * recurrent (i.o.) value it has LIVED, not a counterfactual it computed. */
+fn dome_active_parity(participant: u64) -> u64 @export {
+    let m : u64 = dome_active_max(participant)
+    return m & 1u64
+}
+
+/* recurrence over a participant's LIVE events: first live prior index with this payload (a lasso = the
+ * butterfly-effect closing on itself; the signal that the consequence is now PERSISTENT). */
+fn dome_recurred(participant: u64, payload: u64, upto: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < upto {
+        if dome_abandoned(i) == 0u32 {
+            if DM_PART[i] == participant {
+                if DM_PAYLOAD[i] == payload { return i }
+            }
+        }
+        i = i + 1u32
+    }
+    return DOME_NULL
+}
+
+/* witness over ALL events (provenance -- INCLUDES the abandoned branches a determinist would have
+ * erased).  Same full history => same root; replayable; the debug trail is in the seal. */
+fn dome_mix(h: u64, x: u64) -> u64 @export {
+    let r : u64 = h * 1099511628211u64 + x
+    return r
+}
+
+fn dome_witness() -> u64 @export {
+    let mut h : u64 = 14695981039346656037u64
+    let mut i : u32 = 0u32
+    while i < DM_COUNT {
+        h = dome_mix(h, DM_TICK[i])
+        h = dome_mix(h, DM_PART[i])
+        h = dome_mix(h, DM_KIND[i])
+        h = dome_mix(h, DM_VALUE[i])
+        h = dome_mix(h, DM_PAYLOAD[i])
+        i = i + 1u32
+    }
+    return h
+}
+
+/* how many events are abandoned provenance -- the size of the debug trail determinism throws away. */
+fn dome_provenance_count() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < DM_COUNT {
+        if dome_abandoned(i) == 1u32 { c = c + 1u32 }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* count a participant's LIVE events of a kind (e.g. retained lessons ECHO can re-choose from). */
+fn dome_live_kind_count(participant: u64, kind: u64) -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < DM_COUNT {
+        if dome_abandoned(i) == 0u32 {
+            if DM_PART[i] == participant {
+                if DM_KIND[i] == kind { c = c + 1u32 }
+            }
+        }
+        i = i + 1u32
+    }
+    return c
+}

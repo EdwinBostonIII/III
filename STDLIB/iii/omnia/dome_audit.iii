@@ -1,0 +1,77 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\dome_audit.iii
+ *
+ * III STDLIB - omnia::dome_audit  --  the TRAJECTORY AUDIT framework: assurance for an inverse-form
+ * society that tests the STRUCTURE OF THE HISTORY, not the destination.
+ *
+ * A KAT verifies the destination (result == 42): for a deterministic theorem, perfect; for an inverse
+ * system whose worth is HOW it survived (its rewinds, provenance, cross-perception), it validates the
+ * shadow, not the object.  A Trajectory Audit (TA) instead asserts the fluid geometry of the execution:
+ *
+ *   A. PROVENANCE       -- the system BLED for the answer (it identified a catastrophe, rewound, and
+ *                          abandoned a branch).  ta_provenance_ok(prov) -- the reflex, not the answer.
+ *   B. SHADOW RACE      -- the same volatile stream fed to the deterministic twin AND the society:
+ *                          the test passes on the ASYMMETRY OF SURVIVAL (twinA FATAL, twinB ALIVE),
+ *                          never on a numeric equality.  ta_shadow_race_ok(a_alive, b_alive).
+ *   C. LASSO RESONANCE  -- the topology of the logic: a consequence closed on itself (a lasso WAS seen)
+ *                          AND the lived outcome differs from the immediate temptation (it saw past the
+ *                          bait).  ta_lasso_resonance_ok(recurred, active, immediate).
+ *
+ * DIVERGENCE SIGNATURE: the dome's witnessed evasion is VALID iff its witness differs from the classical
+ * deterministic witness AND it carries provenance -- a proven evasion the determinist could not find.
+ *
+ * NOTE (assurance grade): the witness fed here must be the substrate's CRYPTOGRAPHIC root (numera/cad
+ * sha256) for tamper-RESISTANCE; a reproducible non-cryptographic root gives determinism + tamper-
+ * DETECTION but not adversarial security.  These TAs are agnostic to the hash; they assert divergence.
+ *
+ * Ring R0.  K 1.00.  NIH: libc only, zero externs.
+ */
+module omnia_dome_audit
+
+/* A. provenance: did the society abandon at least one branch? (the rewind reflex fired) */
+fn ta_provenance_ok(prov: u32) -> u32 @export {
+    if prov > 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* B. shadow race: the deterministic twin must be FATAL (alive==0) and the society ALIVE (alive==1).
+ * passes strictly on the survival asymmetry -- no numeric answer is compared. */
+fn ta_shadow_race_ok(twin_a_alive: u32, twin_b_alive: u32) -> u32 @export {
+    if twin_a_alive == 0u32 {
+        if twin_b_alive == 1u32 { return 1u32 }
+    }
+    return 0u32
+}
+
+/* C. lasso resonance: a recurrence was detected AND the lived (active) outcome differs from the
+ * immediate temptation -- proof the consequence closed on itself and the system saw past the bait. */
+fn ta_lasso_resonance_ok(recurred: u32, active_outcome: u64, immediate_bait: u64) -> u32 @export {
+    if recurred == 1u32 {
+        if active_outcome != immediate_bait { return 1u32 }
+    }
+    return 0u32
+}
+
+/* the Divergence Signature: a content-address of the proven evasion -- the dome witness folded with its
+ * provenance weight.  Distinct from the classical witness exactly when an evasion occurred. */
+fn ta_divergence_sig(dome_witness: u64, prov: u32) -> u64 @export {
+    let r : u64 = (dome_witness * 1099511628211u64) + (prov as u64)
+    return r
+}
+
+/* the signature is VALID iff the dome's witnessed history DIVERGED from the classical deterministic one
+ * AND the divergence is backed by abandoned-branch provenance (a real evasion, not noise). */
+fn ta_divergence_ok(dome_witness: u64, classical_witness: u64, prov: u32) -> u32 @export {
+    if dome_witness != classical_witness {
+        if prov > 0u32 { return 1u32 }
+    }
+    return 0u32
+}
+
+/* the whole Trajectory Audit: all three TAs hold AND the divergence signature is valid. */
+fn ta_audit_pass(prov: u32, a_alive: u32, b_alive: u32, recurred: u32, active: u64, immediate: u64, dome_w: u64, classical_w: u64) -> u32 @export {
+    if ta_provenance_ok(prov) != 1u32 { return 0u32 }
+    if ta_shadow_race_ok(a_alive, b_alive) != 1u32 { return 0u32 }
+    if ta_lasso_resonance_ok(recurred, active, immediate) != 1u32 { return 0u32 }
+    if ta_divergence_ok(dome_w, classical_w, prov) != 1u32 { return 0u32 }
+    return 1u32
+}

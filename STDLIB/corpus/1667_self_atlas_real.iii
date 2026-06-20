@@ -70,7 +70,7 @@ fn main() -> u64 {
 
     let cad : u32 = fid(("cad" as *u8) as u64, 3u64)
     if cad == SENT { return 10u64 }
-    if satlas_fanin(cad) != 58u32 { return 11u64 }
+    if satlas_fanin(cad) != 68u32 { return 11u64 }
     if satlas_impact_count(cad) == 0u32 { return 12u64 }
 
     let hub : u32 = satlas_steepest_hub()

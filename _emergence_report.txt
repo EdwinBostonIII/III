@@ -1,27 +1,27 @@
 ==============================================================================
 III EMERGENCE DASHBOARD  --  self-model of STDLIB/iii (generated, verified)
 ==============================================================================
-nodes ............. 593
-edges ............. 1174
-coupling .......... 1979  (avg out-degree x1000)
-emergence index ... 5041  (sum of blast-radii / edges x1000 -- the C-A-B leftover:
+nodes ............. 663
+edges ............. 1329
+coupling .......... 2004  (avg out-degree x1000)
+emergence index ... 5635  (sum of blast-radii / edges x1000 -- the C-A-B leftover:
                        transitive consequence the wiring carries beyond its edges)
 
 STEEPEST HUB (largest blast radius -- changing it ripples furthest):
-    cpufeat  (impact 354)
+    weave_blocks  (impact 403)
 MOST DEPENDED-UPON (largest direct fan-in):
-    cad  (fan-in 58)
+    cad  (fan-in 68)
 DEEPEST INTEGRATOR (transitively uses the most of III -- emergence concentrates here):
-    charter_terminal  (depends on 86)
-ARCHITECTURAL HEIGHT (deepest acyclic dependency chain): 15 strata
+    autogenesis_cli  (depends on 117)
+ARCHITECTURAL HEIGHT (deepest acyclic dependency chain): 13 strata
 
 CYCLE CORES (7 modules in a feedback cycle):
     bv_commons, ccl, cg_autocatalyst, constitution, sov_isa, temporal_logic, typecheck
 
-ORPHANS (71 isolated modules -- no dependents AND no dependencies):
-    adler32, ast_intent, bench, binary_search, bitops, bmc, catalan, coin_change, collatz, conjecture_refute, contract_gate, crt, csv, dce, dynamic_impact, dynamic_record, either, fixed_extra, gate_verdict, genesis, glob, gray_code, gvn, hamming_secded, hotstuff_heal, hotstuff_predict, ini, isel, jit_fuse, jit_swap, kinduction, kmp, knapsack, lcs, leb128, levenshtein, lis, list_schedule, markup, matrix_ring, mcmc_egraph, mem_rewrite, modular, nous_conjecture, nous_conjecture_gen, nous_costlin, obs_log, obs_metric, obs_observatory, parse, pq_params, prespec, proof_replay, ptr_provenance, regex, result, rewrite_schedule, ring_lattice, ring_opt, ripple_apply, rms, safety_prover, segment_tree, semver, siphash, span, spec_probe, translation_validation, tso, xii_circ, xii_lattice
+ORPHANS (79 isolated modules -- no dependents AND no dependencies):
+    adler32, approx_struct, ast_intent, bench, binary_search, bitops, bmc, catalan, causal_scm, coin_change, collatz, conjecture_refute, contract_gate, crt, csv, dce, dynamic_impact, dynamic_record, either, fixed_extra, gate_verdict, genesis, glob, gray_code, gvn, gx_bridge, hamming_secded, hotstuff_predict, infotheory, ini, isel, jit_fuse, jit_swap, kinduction, kmp, knapsack, lcs, leb128, levenshtein, lis, list_schedule, markov_exact, markup, matrix_ring, mcmc_egraph, mem_rewrite, modular, nous_conjecture, nous_costlin, obs_log, obs_metric, obs_observatory, parse, pci_enum, pctl, pq_params, prespec, proof_replay, ptr_provenance, quantize_sensor, regex, result, rewrite_schedule, ring_lattice, ring_opt, ripple_apply, rms, safety_prover, segment_tree, semver, span, spec_probe, tense, translation_validation, tso, unified_cost_manifold, voice, xii_circ, xii_lattice
 
-REDUNDANT-DEPENDENCY REFACTOR PROPOSALS (427; target still reachable without the edge;
+REDUNDANT-DEPENDENCY REFACTOR PROPOSALS (463; target still reachable without the edge;
 advisory -- a graph-redundant edge may still carry live symbols, so cuts are operator-gated):
     admit                        -X->  cycle_term
     aes_gcm                      -X->  cpufeat
@@ -33,6 +33,15 @@ advisory -- a graph-redundant edge may still carry live symbols, so cuts are ope
     attest_box                   -X->  cad
     attest_box                   -X->  capability
     attest_box                   -X->  crypt_ed25519
+    autogenesis                  -X->  bayes_search
+    autogenesis                  -X->  cad
+    autogenesis                  -X->  capability
+    autogenesis                  -X->  proof_replay_cache
+    autogenesis                  -X->  self_model
+    autogenesis                  -X->  theorem_grow
+    autogenesis                  -X->  vbd
+    autogenesis_cli              -X->  self_model
+    autogenesis_cli              -X->  theorem_grow
     backend_remote               -X->  arena
     bar_layout                   -X->  hexad_algebra
     barrett                      -X->  bigint
@@ -40,6 +49,7 @@ advisory -- a graph-redundant edge may still carry live symbols, so cuts are ope
     basal_probe                  -X->  identifier
     basal_probe                  -X->  witness_hook
     bigint                       -X->  cpufeat
+    bigint                       -X->  weave_blocks
     bigint_karatsuba             -X->  bigint
     bisimulation_witness         -X->  identifier
     bisimulation_witness         -X->  witness_hook
@@ -53,16 +63,6 @@ advisory -- a graph-redundant edge may still carry live symbols, so cuts are ope
     branch_anchor                -X->  witness_spine
     branch_governance            -X->  constitution
     branch_governance            -X->  identifier
-    branch_governance            -X->  witness_hook
-    bricking                     -X->  hexad_algebra
-    bv_commons                   -X->  theorem_commons
-    bv_commons                   -X->  typecheck
-    bv_dispose                   -X->  bv_ring
-    bv_dispose                   -X->  typecheck
-    cad                          -X->  sha256
-    cap_forge                    -X->  cad
-    cap_forge                    -X->  identifier
-    category                     -X->  cad
-    ... and 387 more
+    ... and 423 more
 
 ==============================================================================

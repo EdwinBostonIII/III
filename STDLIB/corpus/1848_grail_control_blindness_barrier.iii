@@ -1,0 +1,117 @@
+/* 1848_grail_control_blindness_barrier.iii -- FORMALLY DEFINING THE WALL, theorem 1 (the keystone, PROVEN in III).
+ *
+ * THEOREM (Control-Blindness Barrier).  Call f a "graph invariant" if it maps the priority-graph (V, E, pr) to a
+ * predicted Even-winning region, INDEPENDENT of the ownership partition (V0, V1).  Then NO graph invariant equals
+ * the parity winning region: there exist games G, G' over the SAME (V, E, pr) with W0(G) != W0(G').  Hence parity
+ * is irreducibly a function of CONTROL (who chooses at branching vertices).
+ *
+ * PROOF (constructive, oracle-verified).  V = {v, x, y}, pr(v)=0, pr(x)=1, pr(y)=2; E = {v->x, x->v, v->y, y->v}.
+ *   In G  : v in V0 (Even) -- Even forces the cycle v<->y (max priority 2, EVEN) => W0(G)  = {v,x,y}.
+ *   In G' : v in V1 (Odd)  -- Odd  forces the cycle v<->x (max priority 1, ODD ) => W0(G') = {}.
+ * Same (V,E,pr); only the OWNER of v differs; W0 differs maximally (all vs none).  QED.
+ *
+ * COROLLARY (the entire control-discarding class is refuted at once).  Any f(V,E,pr) gives f(G)=f(G'), yet the true
+ * winners differ -- so f is wrong on at least one.  Instantiated here by the "max reachable cycle priority" predictor
+ * (the honest poly degenerate of persistent-homology / Bass-Ihara-zeta / Euler-characteristic / Oseledets-cocycle):
+ * it reads 2 (even) at v in BOTH games -> predicts Even -> CORRECT on G, WRONG on G'.  This is exactly the
+ * ownership-swap counterexample the 39-agent parity-novel-invent workflow re-derived to kill 21 candidates.
+ *
+ * exit 99 = the witness verifies: W0(G)=all, W0(G')=none, the graphs are identical, OWN differs only at v, and the
+ * graph-invariant predictor is identical across G,G' yet disagrees with the truth on G'. */
+module mcbb
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
+var NV : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+
+/* ---- Zielonka oracle (1839) ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+fn even_region() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())
+    return (r & 0xFFFFFFFFu64) as u32
+}
+/* the witness graph (V,E,pr); owner_v = OWN[v]; x,y are forced (out-degree 1) so their owner is irrelevant */
+fn build(owner_v: u8) -> i32 {
+    NV[0u64] = 3u32
+    OWN[0u64] = owner_v  PRI[0u64] = 0u32  SUC0[0u64] = (1u32 << 1u32) | (1u32 << 2u32)   /* v -> {x,y} */
+    OWN[1u64] = 1u8      PRI[1u64] = 1u32  SUC0[1u64] = 1u32 << 0u32                       /* x -> v */
+    OWN[2u64] = 1u8      PRI[2u64] = 2u32  SUC0[2u64] = 1u32 << 0u32                       /* y -> v */
+    return 0i32
+}
+/* a CONTROL-FREE graph invariant: max priority over vertices lying on a cycle reachable from r (uses only E, pr). */
+fn reach_from(start: u32) -> u32 {
+    let n : u32 = nv()  let mut R : u32 = start  let mut done : u8 = 0u8
+    while done == 0u8 { let mut add : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if (R & (1u32 << v)) != 0u32 { add = add | SUC0[v as u64] }  v = v + 1u32 }
+        let nr : u32 = R | add  if nr == R { done = 1u8 } else { R = nr } }
+    return R
+}
+fn on_cycle(u: u32) -> u8 { let r : u32 = reach_from(SUC0[u as u64])  if (r & (1u32 << u)) != 0u32 { return 1u8 }  return 0u8 }
+fn max_cycle_prio_from(r: u32) -> u32 {
+    let reach : u32 = reach_from(1u32 << r)  let n : u32 = nv()  let mut m : u32 = 0u32  let mut v : u32 = 0u32
+    while v < n { if (reach & (1u32 << v)) != 0u32 { if on_cycle(v) == 1u8 { if PRI[v as u64] > m { m = PRI[v as u64] } } }  v = v + 1u32 }
+    return m
+}
+/* the predictor's verdict at vertex r: Even iff the max reachable-cycle priority is even.  OWN-INDEPENDENT. */
+fn predict_even(r: u32) -> u8 { if (max_cycle_prio_from(r) & 1u32) == 0u32 { return 1u8 }  return 0u8 }
+
+fn main() -> u64 {
+    let full : u32 = 7u32   /* {v,x,y} */
+    /* G: v owned by Even */
+    build(0u8)
+    let we_G : u32 = even_region()
+    let pred_v_G : u8 = predict_even(0u32)
+    /* G': v owned by Odd -- IDENTICAL graph, only OWN[v] flips */
+    build(1u8)
+    let we_Gp : u32 = even_region()
+    let pred_v_Gp : u8 = predict_even(0u32)
+
+    /* THEOREM: same (V,E,pr), opposite winner */
+    if we_G != full { return 10u64 }          /* Even must win ALL of G  */
+    if we_Gp != 0u32 { return 11u64 }          /* Even must win NONE of G' */
+    /* the graphs are genuinely identical except OWN[v] (PRI/SUC0 are rebuilt identically by build()) */
+    if PRI[0u64] != 0u32 { return 12u64 }
+    if SUC0[0u64] != ((1u32 << 1u32) | (1u32 << 2u32)) { return 13u64 }
+
+    /* COROLLARY: the control-free invariant is identical across G,G' (it cannot see OWN) ... */
+    if pred_v_G != pred_v_Gp { return 20u64 }
+    /* ... it predicts Even at v in both (max reachable-cycle priority = 2, even) ... */
+    if pred_v_G != 1u8 { return 21u64 }
+    /* ... so it is CORRECT on G (Even wins v) but WRONG on G' (Odd wins v).  The whole graph-invariant class dies. */
+    let truth_v_G : u8 = (we_G & 1u32) as u8         /* 1 = Even wins v in G  */
+    let truth_v_Gp : u8 = (we_Gp & 1u32) as u8       /* 0 = Even loses v in G' */
+    if pred_v_G != truth_v_G { return 22u64 }        /* predictor right on G */
+    if pred_v_Gp == truth_v_Gp { return 23u64 }      /* predictor must be WRONG on G' */
+
+    return 99u64
+}

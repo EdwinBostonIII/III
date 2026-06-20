@@ -1,0 +1,134 @@
+/* 1849_grail_positional_determinacy.iii -- FORMALLY DEFINING THE WALL, theorem 2 (foundation, VERIFIED in III).
+ *
+ * THEOREM (Determinacy + Positional Determinacy; Emerson-Jutla 1991 / Mostowski 1991 -- here INSTANTIATED and
+ * machine-verified on every sampled game, not re-proven abstractly).
+ *   (T0 Determinacy)            For every parity game, W0 and W1 PARTITION V: W0 | W1 = V and W0 & W1 = {}.
+ *   (T1 Positional determinacy) There is a SINGLE positional (memoryless) Even strategy sigma* whose sigma*-restricted
+ *                               game (Even forced to sigma*, Odd free) is Even-won on EXACTLY W0: Even(sigma*) = W0.
+ *
+ * WHY THIS IS THE FOUNDATION.  T1 is the hinge of every constructive attack in this corpus:
+ *   - strategy improvement (1840/1841/1842) searches the finite positional-strategy space because of T1;
+ *   - the Groebner/Nullstellensatz encoding (1847) reads "Even wins r <=> EXISTS positional sigma winning from r",
+ *     which is exactly T1; without it that encoding is invalid.
+ * T0 is what makes "the winner" well-defined at all (no draws, no undetermined vertices) -- the precondition for
+ * calling parity a DECISION problem (and hence for asking whether it is in P).
+ *
+ * VERIFICATION.  Over many random games (Even out-degree forced to 2, k = #Even <= 5), with the verified Zielonka
+ * oracle (1839) giving (W0,W1): assert W0|W1 == full and W0&W1 == 0 (T0); and enumerate all 2^k positional Even
+ * strategies sigma, compute Even(sigma) by the oracle on the sigma-restricted game, and assert SOME sigma achieves
+ * Even(sigma) == W0 (T1, the strong single-strategy form).
+ * exit 99 = T0 and T1 hold on every sampled game. */
+module mpd
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
+var NV : [u32; 1]
+var RNG : [u32; 1]
+var EVMAP : [u32; 16]
+
+fn nv() -> u32 { return NV[0u64] }
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+
+/* ---- Zielonka oracle (1839) ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+fn lowbit(m: u32) -> u32 { let mut w : u32 = 0u32  let n : u32 = nv()  while w < n { if (m & (1u32 << w)) != 0u32 { return w }  w = w + 1u32 }  return 0u32 }
+fn highbit(m: u32) -> u32 { let mut w : u32 = nv()  let mut r : u32 = 0u32  let mut going : u8 = 1u8
+    while going == 1u8 { if w == 0u32 { going = 0u8 } else { w = w - 1u32  if (m & (1u32 << w)) != 0u32 { r = w  going = 0u8 } } }  return r }
+fn gen_game(n: u32) -> u32 {
+    NV[0u64] = n  let mut v : u32 = 0u32  let mut k : u32 = 0u32
+    while v < n {
+        OWN[v as u64] = (rnd() & 1u32) as u8  PRI[v as u64] = rnd() % n
+        if OWN[v as u64] == 0u8 {
+            let a : u32 = rnd() % n  let mut b : u32 = rnd() % n  if b == a { b = (a + 1u32) % n }
+            SUC0[v as u64] = (1u32 << a) | (1u32 << b)  EVMAP[k as u64] = v  k = k + 1u32
+        } else {
+            let mut s : u32 = 0u32  let kk : u32 = 1u32 + (rnd() % 3u32)  let mut j : u32 = 0u32
+            while j < kk { s = s | (1u32 << (rnd() % n))  j = j + 1u32 }
+            if s == 0u32 { s = 1u32 << ((v + 1u32) % n) }
+            SUC0[v as u64] = s
+        }
+        v = v + 1u32
+    }
+    return k
+}
+fn full_even() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())
+    return (r & 0xFFFFFFFFu64) as u32
+}
+fn full_odd() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let r : u64 = zielonka(fullmask())
+    return (r >> 32u64) as u32
+}
+/* Even-region under positional Even strategy sigma (one bit per Even vertex; 0=low successor, 1=high) */
+fn even_under(sigma: u32, k: u32) -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+    let mut i : u32 = 0u32
+    while i < k {
+        let ev : u32 = EVMAP[i as u64]  let lo : u32 = lowbit(SUC0[ev as u64])  let hi : u32 = highbit(SUC0[ev as u64])
+        if (sigma & (1u32 << i)) == 0u32 { SUC[ev as u64] = 1u32 << lo } else { SUC[ev as u64] = 1u32 << hi }
+        i = i + 1u32
+    }
+    let r : u64 = zielonka(fullmask())
+    return (r & 0xFFFFFFFFu64) as u32
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x0DDBA11u32
+    let mut trials : u32 = 0u32
+    let mut checked : u32 = 0u32
+    while trials < 4000u32 {
+        let n : u32 = 4u32 + (rnd() % 3u32)            /* n in 4..6 */
+        let k : u32 = gen_game(n)
+        if k <= 5u32 {
+            let fm : u32 = fullmask()
+            let w0 : u32 = full_even()
+            let w1 : u32 = full_odd()
+            /* T0 Determinacy: W0,W1 partition V */
+            if (w0 | w1) != fm { return 10u64 }
+            if (w0 & w1) != 0u32 { return 11u64 }
+            /* T1 Positional determinacy (strong): SOME single sigma achieves Even(sigma) == W0 */
+            let lim : u32 = 1u32 << k
+            let mut s : u32 = 0u32  let mut found : u8 = 0u8
+            while s < lim {
+                if even_under(s, k) == w0 { found = 1u8 }
+                s = s + 1u32
+            }
+            if found == 0u8 { return 12u64 }            /* no single positional strategy wins all of W0 -> would refute T1 */
+            checked = checked + 1u32
+        }
+        trials = trials + 1u32
+    }
+    if checked < 200u32 { return 60u64 }
+    return 99u64
+}

@@ -4,3 +4,11 @@
 .claude/
 __pycache__/
 *.pyc
+
+# Regenerable build artifacts (WASTE-AUDIT-II §6; seal hashes sources, not these)
+STDLIB/build/**/*.log
+STDLIB/build/**/*.exe
+STDLIB/build/**/*.iii.o.s
+STDLIB/build/**/*.lerr
+STDLIB/build/**/*.lderr
+STDLIB/build/**/*.err

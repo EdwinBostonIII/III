@@ -1,3 +1,0 @@
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/_p_1638_http_request_version.o:fake:(.text+0x4dc): undefined reference to `http_request_http_version'
-C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/_p_1638_http_request_version.o:fake:(.text+0x5b7): undefined reference to `http_request_http_version'
-collect2.exe: error: ld returned 1 exit status

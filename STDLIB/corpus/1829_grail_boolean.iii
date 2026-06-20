@@ -1,0 +1,37 @@
+/* 1829_grail_boolean.iii -- GRAIL LEDGER L1 (Boolean/SAT).  The grail (P vs NP) is PRE-REGISTERED B3 (open, not
+ * proven).  This is the legitimate B2 PARTIAL: bb_intern + the truth-table SIGNATURE DECIDE the bit-INDEPENDENT
+ * fragment in PTIME (one bb_eval, zero SAT clauses), AND the BOUNDARY is exhibited -- a bit-COUPLING circuit is
+ * detected (bb_has_coupling) and routed to the SAT judge (the NP-hard edge where P-vs-NP actually lives).  The
+ * partial does NOT claim polynomiality for the coupling fragment.  exit 99 = island + boundary both shown. */
+module m1829
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sig_equal(a: u32, b: u32, nvars: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_has_coupling() -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+fn main() -> u64 {
+    /* (1) THE PTIME ISLAND: bit-independent equivalence decided by SIGNATURE, no SAT */
+    bb_reset(8u64)
+    let a : u32 = bb_var(0u32)
+    let b : u32 = bb_var(1u32)
+    let lhs : u32 = bb_not(bb_and(a, b))
+    let rhs : u32 = bb_or(bb_not(a), bb_not(b))
+    if bb_has_coupling() != 0u8 { return 11u64 }                 /* purely bit-independent -> signature is VALID */
+    if bb_sig_equal(lhs, rhs, 2u32) != 1u8 { return 12u64 }      /* De Morgan DECIDED in PTIME (one eval) */
+    if bb_sig_equal(bb_and(a, b), bb_or(a, b), 2u32) == 1u8 { return 13u64 }  /* a non-equivalence correctly REFUTED */
+    /* (2) THE BOUNDARY: a bit-COUPLING circuit is detected and routed to SAT (the NP-hard edge -- NOT claimed poly) */
+    bb_reset(8u64)
+    let c : u32 = bb_var(0u32)
+    let d : u32 = bb_var(1u32)
+    let _sum : u32 = bb_add(c, d)                                /* ADD couples bits */
+    if bb_has_coupling() != 1u8 { return 21u64 }                 /* coupling DETECTED -> signature route REFUSED */
+    let e : u32 = bb_add(c, bb_const(0u64))
+    if bb_equal(e, c) != 1u8 { return 22u64 }                    /* the coupling case is decided ONLY by SAT (the hard path) */
+    return 99u64
+}

@@ -1,0 +1,57 @@
+/* 1887_con_lattice_faculty.iii -- GATES the production numera::con_lattice faculty against an INDEPENDENT in-KAT
+ * congruence enumeration on random finite binary algebras.
+ * exit 99 = cl_kat()==99 AND cl_num_congruences == the KAT's own independent count on every random algebra. */
+module mclf
+extern @abi(c-msvc-x64) fn cl_reset(n: u32) -> i32 from "con_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_op(a: u32, b: u32, r: u32) -> i32 from "con_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_num_congruences() -> u32 from "con_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_kat() -> u64 from "con_lattice.iii"
+var QOP : [u32; 36]
+var QN : [u32; 1]
+var QBLK : [u32; 8]
+var QCON : [u64; 64]
+var QNC : [u32; 1]
+var RNG : [u32; 1]
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn qop_at(a: u32, b: u32) -> u32 { return QOP[(a * QN[0u64] + b) as u64] }
+fn qsb(rel: u64, i: u32, j: u32) -> u64 { let n : u32 = QN[0u64]  return (rel >> ((i*n+j) as u64)) & 1u64 }
+fn qbuild() -> u64 { let n : u32 = QN[0u64]  let mut sb : u64 = 0u64  let mut i : u32 = 0u32  while i < n { let mut j : u32 = 0u32  while j < n { if QBLK[i as u64]==QBLK[j as u64] { sb = sb | (1u64 << ((i*n+j) as u64)) }  j = j+1u32 }  i = i+1u32 }  return sb }
+fn qcong(sb: u64) -> u8 {
+    let n : u32 = QN[0u64]  let mut a : u32 = 0u32
+    while a < n { let mut a2 : u32 = 0u32
+        while a2 < n { if qsb(sb,a,a2)==1u64 { let mut b : u32 = 0u32
+            while b < n { if qsb(sb, qop_at(a,b), qop_at(a2,b))==0u64 { return 0u8 }  if qsb(sb, qop_at(b,a), qop_at(b,a2))==0u64 { return 0u8 }  b = b+1u32 }
+        }  a2 = a2+1u32 }
+        a = a+1u32 }
+    return 1u8
+}
+fn qcount() -> u32 {
+    let n : u32 = QN[0u64]  QNC[0u64] = 0u32
+    let mut lim : u32 = 1u32  let mut e : u32 = 0u32  while e < n { lim = lim*n  e = e+1u32 }
+    let mut code : u32 = 0u32
+    while code < lim {
+        let mut c : u32 = code  let mut i : u32 = 0u32  while i < n { QBLK[i as u64] = c % n  c = c/n  i = i+1u32 }
+        let sb : u64 = qbuild()
+        if qcong(sb)==1u8 { let mut seen : u8 = 0u8  let mut k : u32 = 0u32  while k < QNC[0u64] { if QCON[k as u64]==sb { seen=1u8  k=QNC[0u64] } else { k=k+1u32 } }  if seen==0u8 { QCON[QNC[0u64]]=sb  QNC[0u64]=QNC[0u64]+1u32 } }
+        code = code + 1u32
+    }
+    return QNC[0u64]
+}
+fn main() -> u64 {
+    if cl_kat() != 99u64 { return 50u64 }
+    RNG[0u64] = 0xC04A77u32
+    let mut t : u32 = 0u32  let mut varied : u32 = 0u32
+    while t < 3000u32 {
+        let n : u32 = 3u32 + (rnd() % 3u32)            /* 3..5 */
+        QN[0u64] = n  cl_reset(n)
+        let mut a : u32 = 0u32
+        while a < n { let mut b : u32 = 0u32 while b < n { let r : u32 = rnd() % n  QOP[(a*n+b) as u64] = r  cl_op(a,b,r)  b = b+1u32 }  a = a+1u32 }
+        let fac : u32 = cl_num_congruences()
+        let ind : u32 = qcount()
+        if fac != ind { return 10u64 }
+        if fac > 2u32 { varied = varied + 1u32 }       /* see some non-trivial congruence lattices */
+        t = t + 1u32
+    }
+    if varied < 50u32 { return 60u64 }
+    return 99u64
+}

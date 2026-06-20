@@ -58,5 +58,25 @@ Empirical worst-case probe: a 120-restart × 260-mutation hill-climb maximizing 
 4. **ENERGY-DISJ** big-M energy LP · **NMRL** credit-bounded non-monotone lift.
 3–2. **ENERGY-VARWEIGHT** per-game weights · **ADAPTIVE-SPM** (= SPM-per-instance, widely believed false) · **DOMINION-PIT** (P_v undefined) · **C5-WIDTH** (bounded-width, known-true theorem).
 
+## Second workflow (parity-novel-invent) + the META-ANALYSIS — what the survivors imply
+
+A second 39-agent workflow demanded GENUINELY NOVEL mechanisms (NOT the known families), drawing on 8 cross-domain lenses (topology, ergodic, coding, algebraic geometry, spectral, category, online-learning, statistical physics). 30 candidates → **21 KILLED, 8 survive**. **Caveat that matters:** the Invent agents had NO III access yet wrote "RAN against the oracle, 0/1500 violations"-style claims — **fabricated**. Every figure below is re-measured in III against the Zielonka oracle.
+
+### The control-blindness barrier (re-discovered 21× independently)
+Nearly every KILLED candidate dies to ONE root cause, stated crispest in the Euler-characteristic kill:
+> *any invariant of the priority-GRAPH alone cannot solve parity games, since ownership-swap on a control vertex flips the winner while fixing the graph.*
+
+Persistent homology, twisted Bass-Ihara zeta, parity-sheaf cohomology, Euler characteristic, Oseledets cocycle — all refuted by an explicit **ownership-swap** or **forced-cycle** counterexample (the "sum→max gap" / "credits Even with an even cycle on a branch Odd controls and would never take"). This is an informal but robust barrier the cross-domain invention re-found 21 times: **a winner-determination that reads a graph/spectral/topological invariant blind to WHO chooses at branching vertices is asymptotically a coin flip** (the control-free signed zeta self-decays to ~50% as n grows).
+
+### The survivors all PRESERVE control — and split into the same two buckets
+Re-tested in III (real numbers):
+- **Exact partial solvers** — two-sided one-player **sandwich** (`R_A⊆TrueEven⊆R_E`, both one-player games poly): SOUND, coverage 44→15% (n=6→16) [agent claimed 18%→1.2%, wrong]. Confluent self-loop+forcing **reduction**: SOUND, 47→33%. Combined with bounded-dominion (KAT 1846): 92/82/77% — novel ones add ~3-4%. All coverages **shrink with n**.
+- **Policy-optimization** — regret-matching / perturbed-leader / confidence-domination: their read-off is "parity of the recurrent class of an averaged policy" = the **already-refuted** recurrent-cycle predictor (168/400 wrong; static-policy read-off ≈58% = capped-SI cap-0). The Freidlin-Wentzell kill nails it: repairing the myopic reward makes each switch a **strategy-improvement step** → reduces to SI, inherits Friedmann.
+- **Smoothed fixpoints** — soft-μ / Banach contraction: exact only in the **zero-temperature limit**, which IS the original game (no speedup).
+- **Exact algebraic** — Nullstellensatz-ladder / Stickelberger / elimination-ideal: control-PRESERVING, SOUND/correct; their cost = the **certificate degree / quotient-ring dimension**, which is exactly "is parity in P?" restated (a poly-degree Nullstellensatz certificate would BE the P proof).
+
+### Forgotten III machinery — the algebraic survivors are NOT capability-blocked
+III already holds: **`numera/groebner.iii`** (a full Buchberger Gröbner engine over GF(p), Criterion 1+2, reduced bases, KAT 638), `galois`/`gf_poly`/`field`/`fp256` (field arithmetic), `matrix_ring`, **`markov_exact`** (exact-RATIONAL Markov chains — no float, no iteration; generalizes via Gaussian elimination over `numera/field`, honoring Ax D3 "no disposer reads a statistic"). So the Nullstellensatz / Stickelberger survivors are **implementable in III** — the blocker is COMPLEXITY (certificate degree), not capability. `markov_exact` could host the recurrent-class read-off exactly. "Master it ourselves?" — a BOUNDED experiment (encode a parity family as a polynomial system, run III's Gröbner, measure the certifying degree vs n) is worth it as a concrete *new-domain confirmation*; but the dichotomy PREDICTS the degree grows (the barrier made algebraic) — not a treasure, so no deep investment is warranted on a breakthrough expectation.
+
 ### The meta-conclusion (honest)
 A single invariant / poly algorithm across all parity games is not in hand and the priors say each survivor will blow up on the right adversarial family. The attack continues: build each survivor, validate correctness against the oracle (mismatch = bug), measure the load-bearing quantity, and — the critical-path instrument — a Friedmann-style hard-family generator to make the complexity probes decisive.

@@ -1,0 +1,124 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ramsey.iii
+ *
+ * III STDLIB - numera::ramsey
+ *
+ * MONOCHROMATIC-CLIQUE DETECTION + SMALL RAMSEY NUMBERS.
+ *
+ * ROLE.  Ramsey-theoretic structure of a 2-edge-coloured complete graph: given a colouring of K_n, find whether a
+ * monochromatic clique K_k exists (all C(k,2) edges one colour).  This is the runnable core of the Ramsey wall
+ * (DOCS/III-RAMSEY-WALL-FORMAL.md): the island fact R(3,3)=6 (every 2-colouring of K6 has a monochromatic triangle, and
+ * K5 has one avoiding it) is computed by exhaustion in ram_ramsey_33().
+ *
+ * USE CASES.  Detect forced structure in any 2-coloured relation on a small vertex set (e.g. an agreement/conflict
+ * graph): is there a clique of k mutually-agreeing or k mutually-conflicting parties?  Compute / confirm small Ramsey
+ * numbers.
+ *
+ * INVOCATION.  ram_reset(n) -> ram_set_color(u,v,c) (c in {0,1}) per edge -> ram_has_mono_clique(k) (1 if a monochromatic
+ * K_k exists).  ram_ramsey_33() returns 6 (the verified value of R(3,3)).
+ *
+ * IMPACTS / LIMITATIONS (honest).
+ *   - ram_has_mono_clique enumerates all C(n,k) subsets; RAM_MAX = 16 vertices (subset masks are u16-range; edge rows
+ *     are u64).  Exact, bounded by 2^n subset enumeration -- the Ramsey wall's boundary is combinatorial explosion
+ *     (DOCS/III-RAMSEY-WALL-FORMAL.md), so larger n is intentionally out of scope.
+ *   - ram_ramsey_33 is exhaustive (2^15 K6 colourings); R(4,4)=18 and beyond are NOT exhaustible here (the wall).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W1, W2, W13, W14, W15 (no recursion).
+ * Self-test: ram_kat() -> u64 returns 99 on full KAT pass.
+ */
+module ramsey
+
+const RAM_MAX : u32 = 16u32
+
+var RAM_COL : [u64; 16]    /* RAM_COL[u] bit w = colour of edge (u,w) in {0,1} */
+var RAM_N : [u32; 1]
+
+fn ram_popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+fn ram_colour(u: u32, w: u32) -> u64 { return (RAM_COL[u as u64] >> (w as u64)) & 1u64 }
+
+fn ram_reset(n: u32) -> i32 @export {
+    if n > RAM_MAX { return 0i32 - 1i32 }            /* [OOB] @export: n caps RAM_COL[16] and subset masks */
+    RAM_N[0u64] = n  let mut i : u32 = 0u32  while i < n { RAM_COL[i as u64] = 0u64  i = i + 1u32 }
+    return 0i32
+}
+fn ram_set_color(u: u32, w: u32, c: u8) -> i32 @export {
+    let n : u32 = RAM_N[0u64]  if u >= n { return 0i32 - 1i32 }  if w >= n { return 0i32 - 1i32 }   /* [OOB] @export */
+    if c == 0u8 {
+        RAM_COL[u as u64] = RAM_COL[u as u64] & ((1u64 << (w as u64)) ^ 0xFFFFFFFFFFFFFFFFu64)
+        RAM_COL[w as u64] = RAM_COL[w as u64] & ((1u64 << (u as u64)) ^ 0xFFFFFFFFFFFFFFFFu64)
+    } else {
+        RAM_COL[u as u64] = RAM_COL[u as u64] | (1u64 << (w as u64))
+        RAM_COL[w as u64] = RAM_COL[w as u64] | (1u64 << (u as u64))
+    }
+    return 0i32
+}
+/* is the vertex subset `mask` a monochromatic clique? */
+fn ram_subset_mono(mask: u32, n: u32) -> u8 {
+    /* find first two vertices in mask -> reference colour, then verify all pairs match */
+    let mut first : i32 = 0i32 - 1i32  let mut second : i32 = 0i32 - 1i32  let mut v : u32 = 0u32
+    while v < n { if (mask & (1u32 << v)) != 0u32 { if first < 0i32 { first = v as i32 } else { if second < 0i32 { second = v as i32 } } }  v = v + 1u32 }
+    if second < 0i32 { return 1u8 }                 /* <=1 vertex: trivially monochromatic */
+    let ref_c : u64 = ram_colour(first as u32, second as u32)
+    let mut a : u32 = 0u32
+    while a < n { if (mask & (1u32 << a)) != 0u32 { let mut b : u32 = a + 1u32
+        while b < n { if (mask & (1u32 << b)) != 0u32 { if ram_colour(a, b) != ref_c { return 0u8 } }  b = b + 1u32 }
+    }  a = a + 1u32 }
+    return 1u8
+}
+fn ram_has_mono_clique(k: u32) -> u8 @export {
+    let n : u32 = RAM_N[0u64]
+    if k < 2u32 { return 1u8 }
+    if k > n { return 0u8 }
+    let lim : u32 = 1u32 << n  let mut mask : u32 = 0u32
+    while mask < lim {
+        if ram_popc(mask) == k { if ram_subset_mono(mask, n) == 1u8 { return 1u8 } }
+        mask = mask + 1u32
+    }
+    return 0u8
+}
+
+/* ---- R(3,3) = 6 by exhaustion (self-contained, independent of the RAM_COL matrix) ---- */
+fn ram_eidx(i: u32, j: u32, m: u32) -> u32 { return i * m - (i * (i + 1u32)) / 2u32 + (j - i - 1u32) }
+fn ram_ecol(cmask: u32, i: u32, j: u32, m: u32) -> u32 {
+    let mut a : u32 = i  let mut b : u32 = j  if a > b { let t : u32 = a  a = b  b = t }
+    return (cmask >> ram_eidx(a, b, m)) & 1u32
+}
+fn ram_has_tri(cmask: u32, m: u32) -> u8 {
+    let mut i : u32 = 0u32
+    while i < m { let mut j : u32 = i + 1u32
+        while j < m { let mut k : u32 = j + 1u32
+            while k < m { if ram_ecol(cmask,i,j,m) == ram_ecol(cmask,j,k,m) { if ram_ecol(cmask,j,k,m) == ram_ecol(cmask,i,k,m) { return 1u8 } }  k = k + 1u32 }
+            j = j + 1u32 }
+        i = i + 1u32 }
+    return 0u8
+}
+fn ram_ramsey_33() -> u32 @export {
+    /* R(3,3) > 5: pentagon(red)+pentagram(blue) on K5 is triangle-free */
+    let mut pent : u32 = 0u32
+    pent = pent | (1u32 << ram_eidx(0u32,1u32,5u32))  pent = pent | (1u32 << ram_eidx(1u32,2u32,5u32))
+    pent = pent | (1u32 << ram_eidx(2u32,3u32,5u32))  pent = pent | (1u32 << ram_eidx(3u32,4u32,5u32))
+    pent = pent | (1u32 << ram_eidx(0u32,4u32,5u32))
+    if ram_has_tri(pent, 5u32) != 0u8 { return 0u32 }
+    /* R(3,3) <= 6: every 2-colouring of K6 (15 edges) has a monochromatic triangle */
+    let lim : u32 = 1u32 << 15u32  let mut cmask : u32 = 0u32
+    while cmask < lim { if ram_has_tri(cmask, 6u32) == 0u8 { return 0u32 }  cmask = cmask + 1u32 }
+    return 6u32
+}
+
+fn ram_kat() -> u64 @export {
+    /* a K3 all colour-1 -> mono triangle exists (k=3) */
+    ram_reset(3u32)
+    ram_set_color(0u32,1u32,1u8)  ram_set_color(1u32,2u32,1u8)  ram_set_color(0u32,2u32,1u8)
+    if ram_has_mono_clique(3u32) != 1u8 { return 10u64 }
+    /* K3 with a mixed colouring -> no mono triangle */
+    ram_set_color(0u32,2u32,0u8)
+    if ram_has_mono_clique(3u32) != 0u8 { return 11u64 }
+    /* the K5 pentagon/pentagram: triangle-free (no mono K3) */
+    ram_reset(5u32)
+    ram_set_color(0u32,1u32,1u8) ram_set_color(1u32,2u32,1u8) ram_set_color(2u32,3u32,1u8) ram_set_color(3u32,4u32,1u8) ram_set_color(0u32,4u32,1u8)
+    ram_set_color(0u32,2u32,0u8) ram_set_color(1u32,3u32,0u8) ram_set_color(2u32,4u32,0u8) ram_set_color(0u32,3u32,0u8) ram_set_color(1u32,4u32,0u8)
+    if ram_has_mono_clique(3u32) != 0u8 { return 12u64 }
+    /* R(3,3) = 6 by exhaustion */
+    if ram_ramsey_33() != 6u32 { return 13u64 }
+    return 99u64
+}

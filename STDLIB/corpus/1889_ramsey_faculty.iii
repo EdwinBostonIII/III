@@ -1,0 +1,51 @@
+/* 1889_ramsey_faculty.iii -- GATES numera::ramsey against an independent in-KAT mono-clique check.
+ * exit 99 = ram_kat()==99, ram_ramsey_33()==6, AND ram_has_mono_clique == independent subset check on random colourings. */
+module mrmf
+extern @abi(c-msvc-x64) fn ram_reset(n: u32) -> i32 from "ramsey.iii"
+extern @abi(c-msvc-x64) fn ram_set_color(u: u32, w: u32, c: u8) -> i32 from "ramsey.iii"
+extern @abi(c-msvc-x64) fn ram_has_mono_clique(k: u32) -> u8 from "ramsey.iii"
+extern @abi(c-msvc-x64) fn ram_ramsey_33() -> u32 from "ramsey.iii"
+extern @abi(c-msvc-x64) fn ram_kat() -> u64 from "ramsey.iii"
+var QC : [u64; 16]
+var QN : [u32; 1]
+var RNG : [u32; 1]
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn qpopc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+fn qcol(u: u32, w: u32) -> u64 { return (QC[u as u64] >> (w as u64)) & 1u64 }
+fn qmono(mask: u32, n: u32) -> u8 {
+    let mut a : u32 = 0u32  let mut fa : i32 = 0i32 - 1i32  let mut fb : i32 = 0i32 - 1i32
+    while a < n { if (mask & (1u32 << a)) != 0u32 { if fa < 0i32 { fa = a as i32 } else { if fb < 0i32 { fb = a as i32 } } }  a = a + 1u32 }
+    if fb < 0i32 { return 1u8 }
+    let rc : u64 = qcol(fa as u32, fb as u32)
+    let mut x : u32 = 0u32
+    while x < n { if (mask & (1u32 << x)) != 0u32 { let mut y : u32 = x + 1u32 while y < n { if (mask & (1u32 << y)) != 0u32 { if qcol(x,y) != rc { return 0u8 } }  y = y + 1u32 } }  x = x + 1u32 }
+    return 1u8
+}
+fn qhas(k: u32, n: u32) -> u8 {
+    if k < 2u32 { return 1u8 }  if k > n { return 0u8 }
+    let lim : u32 = 1u32 << n  let mut mask : u32 = 0u32
+    while mask < lim { if qpopc(mask) == k { if qmono(mask, n) == 1u8 { return 1u8 } }  mask = mask + 1u32 }
+    return 0u8
+}
+fn main() -> u64 {
+    if ram_kat() != 99u64 { return 50u64 }
+    if ram_ramsey_33() != 6u32 { return 51u64 }
+    RNG[0u64] = 0x4A5217u32
+    let mut t : u32 = 0u32  let mut yes : u32 = 0u32  let mut no : u32 = 0u32
+    while t < 3000u32 {
+        let n : u32 = 4u32 + (rnd() % 4u32)            /* 4..7 */
+        QN[0u64] = n  ram_reset(n)
+        let mut i : u32 = 0u32 while i < n { QC[i as u64] = 0u64  i = i + 1u32 }
+        let mut u : u32 = 0u32
+        while u < n { let mut w : u32 = u + 1u32 while w < n { let c : u8 = (rnd() & 1u32) as u8  ram_set_color(u,w,c)  if c == 1u8 { QC[u as u64]=QC[u as u64]|(1u64<<w)  QC[w as u64]=QC[w as u64]|(1u64<<u) }  w = w + 1u32 }  u = u + 1u32 }
+        let k : u32 = 2u32 + (rnd() % 3u32)            /* 2..4 */
+        let fac : u8 = ram_has_mono_clique(k)
+        let ind : u8 = qhas(k, n)
+        if fac != ind { return 10u64 }
+        if fac == 1u8 { yes = yes + 1u32 } else { no = no + 1u32 }
+        t = t + 1u32
+    }
+    if yes < 100u32 { return 60u64 }
+    if no < 100u32 { return 61u64 }
+    return 99u64
+}

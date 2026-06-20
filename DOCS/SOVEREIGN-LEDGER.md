@@ -57,7 +57,7 @@ enforces `consumer == generator(def)`. Full 64-char hashes below (M6: the hash i
 |---|----------|---------------|-----------|-----------|-----------|------|------|--------|
 | K1 | **SVM layout** | `iii_svm_layout.def` ✓ | `gen_svm_layout.sh` ✓ (`--check` ✓) | `katabasis/svm_layout.iii` — region classifier + per-offset hexad (the §4.7 WriteMetal brick defense) | corpus 390 (svm hexad) + 391 (cycle-term dominance) | `4810b9b4640560ae961d038bd4c0660bdf047bdfba1e65e377c551b6f054884d` | K 1.00 | CONFORMANT |
 | K2 | **Cycle family** | `iii_cycle_family.def` ✓ | `gen_cycle_family.sh` ✓ (`--check` ✓) | `katabasis/cycle_family.iii` — the plan-3.0 nine-family taxonomy the Gate dispatch reads | corpus 392 (cycle_family) + byte-identical `.o` `7e162b69…` | `80795a275c9f4836661e6deedbb98ea53d1b5a14e13f53fa9187205dccb35289` | K 1.00 | CONFORMANT |
-| K3 | **Census** | `iii_census.def` ✓ | `gen_census.sh` ✓ (`--check` ✓, +count-coupling guard) | `katabasis/census.iii` — the 16 verified AD103/Ryzen facts (the Census Crystal expectation) | corpus 603 (census, +OOB-index drift negatives W5.1) | `8a50838802051f4d3207745b8273a5cbe1c4cfe9102e4d451f2a0571792e3883` | K 1.00 | CONFORMANT |
+| K3 | **Census** | `iii_census.def` ✓ | `gen_census.sh` ✓ (`--check` ✓, +count-coupling guard) | `katabasis/census.iii` — the 16 verified AD103/Ryzen facts (the Census Crystal expectation) | corpus 603 (census, +OOB-index drift negatives W5.1) | `6515e244edea0ff900982a1a4fce37ae73bdc669abc1ce078d815ec67467bf2b` | K 1.00 | CONFORMANT |
 | K4 | **BAR layout** | `iii_bar_layout.def` ✓ | `gen_bar_layout.sh` ✓ (`--check` ✓) | `katabasis/bar_layout.iii` — the AD103 GPU BAR address map (F9/CoprocDispatch write typing) | corpus 394 (bar typing **+ `katabasis_bar_cycle_admissible` action-parameterized arm, gap #33**) + byte-identical `.o` `c0e7d840…` | `27e6f389e62c9b3d373a8eaf35262e16b46d5ee77d0c95b8afc1fb836c90dd26` | K 1.00 | CONFORMANT |
 | K5 | **VMEXIT set** | `iii_vmexit.def` ✓ | `gen_vmexit.sh` ✓ (`--check` ✓) | `katabasis/vmexit.iii` — the minimal deterministic VMEXIT set (the R-1 Floor's exit taxonomy) | corpus 600 (vmexit) + byte-identical `.o` `2ff4ec9b…` | `75c646c14b735f2dcfd4102b965e544622a852bc22d514ad890e966c13c690d2` | K 1.00 | CONFORMANT |
 | K6 | **Ring lattice** | `iii_ring_lattice.def` ✓ | `gen_ring_lattice.sh` ✓ (`--check` ✓) | `katabasis/ring_lattice.iii` — the legal ring-transition lattice (the lawful src->dst crossings); **re-sealed for the II-RING_LATTICE-1/2 domain guard** (out-of-range/u32-wrapping ids can no longer alias a legal key) | corpus 601 (ring_lattice, +alias/wrap negatives) | `77a631b71f1275bc4a1b4033d04395cf00350cf335375f8a21398efd685b86af` | K 1.00 | CONFORMANT |
@@ -78,7 +78,7 @@ Anchor signature; mismatch is fatal (analogue of the D8 closure-pin `MOD-RES-001
 uncomputed while the broad citizens rows 1–6 are unsealed (scaffold stage F0; the first broad seal
 lands with the SHA-256 citizen, F1). The six KATABASIS descent citizens (K1–K6) are, however,
 individually content-address-sealed with the full-spec seals K1-K6 AND carry a **computed descent
-sub-closure root** `35b5471d82378ac0e229947ef10fed9c88b7faf6768c499fd387411ee29203df`
+sub-closure root** `4cf5b98a12eadecab7b7b130e655cbb5643898de80a42c1c3c92f7da06f02b7e`
 (= `sha256` over the sorted K1-K6 seal-hashes; recomputed and checked by `COMPILER/BOOT/forge_check.sh`),
 and are drift-gated **today** — so the descent's FR-9 mandate ("the
 whole descent is FORGED") holds for all six descent data tables (svm_layout, cycle_family, census, bar_layout, vmexit, ring_lattice): editing any of
@@ -89,7 +89,7 @@ formula above (`Keccak-256( concat( sorted seal-hashes ) )`) is no longer "uncom
 recomputable in toolset": `COMPILER/BOOT/forge_manifest_keccak.sh` recomputes it over the SAME
 sorted K1-K6 seal-hashes that feed the SHA-256 descent root (NIH — hand-rolled over the in-tree
 `numera/keccak.iii` via `forge_keccak_driver.iii`, no third-party Keccak). The descent's Keccak-256
-closure root is **`c5d46fbd52bc6adf99db5b49dc9f3bca8fb8e27f240611afc080651ab4fe1cdc`** (Keccak-256
+closure root is **`eaf25921ac3848ee5392d93b7bf842339f18fd861fb25a43dc36ca9bb91fd0c5`** (Keccak-256
 over `sort(K1..K6 seals)`; recomputed + checked by `subsystem_test_gate.sh`). Editing any descent
 citizen now reddens **all three** closure levels (per-citizen drift, the SHA-256 descent root, AND
 this Keccak-256 root) in one pass — the half-sealed-manifest hazard is structurally impossible. The
@@ -119,3 +119,26 @@ Post-reseal verification: `forge_check.sh` GREEN **and** `forge_manifest_keccak.
 no one-gate-green/other-red split). The not-yet-computed broad-citizen all-rows manifest root (F1+) is
 unaffected. This is a stdlib-gate reseal of a descent data table's KAT binding — the `iiis` compiler
 golden binaries are untouched (no `build_iiisN` reseal).
+
+**2026-06-20 — K3 Census CRLF→LF repair (debloat line-ending damage, binary-neutral).** Commit
+`f2c9e8d5` ("CUT 97 dead extern imports") was run through a Python pass that flipped **54 source files**
+LF→CRLF, including `katabasis/census.iii`. Because `gen_census.sh` emits **LF**, the byte-exact census
+drift gate (`gen_census.sh --check`) had silently failed every `build_stdlib.sh` since that commit
+(census was the only CRLF file among the six drift-gated descent citizens, so it was the one that
+surfaced). Repair: the 54 files were normalized CRLF→LF (`sed 's/\r$//'`), **content byte-identical sans
+`\r`** (verified: each `git show HEAD:f | tr -d '\r'` == working file), and **proven binary-neutral**
+(census/`xii_rewrite`/`xii_term` compile to byte-identical `.o` under CRLF vs LF — the lexer skips `\r`,
+so `libiii_native.a` and its `.mhash` are unchanged). The K3 full-spec seal recipe
+`sha256(iii_census.def ‖ gen_census.sh ‖ katabasis/census.iii ‖ primary-KAT)` includes `census.iii`
+source bytes, so the line-ending repair legitimately moved the K3 seal. The other five descent seals
+(svm_layout, cycle_family, bar_layout, vmexit, ring_lattice) were already LF and match the ledger
+exactly, localizing the change to K3. Soundness verified BEFORE reseal: `gen_census.sh --check` OK
+(.def→.iii consistent); all three new roots **mechanically derived from tool output**, none hand-computed:
+- K3 census seal `8a508388…` → `6515e244…`  (`forge_check.sh --print`)
+- descent SHA-256 sub-closure root `35b5471d…` → `4cf5b98a…`  (`forge_check.sh --print`)
+- descent Keccak-256 closure root `c5d46fbd…` → `eaf25921…`  (`forge_manifest_keccak.sh --print`)
+
+Post-reseal verification: `forge_check.sh` GREEN **and** `forge_manifest_keccak.sh` GREEN. The `iiis`
+compiler golden binaries are untouched (no `build_iiisN` reseal); the binary `libiii_native.a.mhash` is
+unchanged (CRLF→LF is binary-neutral). The other 53 normalized files are non-citizen source hygiene
+(no per-file seal; binary-neutral), restoring the tree to its pre-`f2c9e8d5` LF state.

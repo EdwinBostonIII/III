@@ -20,11 +20,7 @@ module aether_witness_hook
 
 extern @abi(c-msvc-x64) fn at_advance() -> u64 from "algebraic_time.iii"
 extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
-extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
-extern @abi(c-msvc-x64) fn keccak256_init() -> i32 from "keccak256.iii"
-extern @abi(c-msvc-x64) fn keccak256_update(input: *u8, len: u64) -> i32 from "keccak256.iii"
-extern @abi(c-msvc-x64) fn keccak256_final(out: *u8) -> i32 from "keccak256.iii"
 extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
 /* M6: the provenance spine is content-addressed by the ONE primitive (cad/M1).
  * cad_begin(KECCAK)/cad_payload/cad_final are byte-identical to keccak256 init/update/final

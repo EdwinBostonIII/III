@@ -26,7 +26,6 @@ extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core
 extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
 extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
 extern @abi(c-msvc-x64) fn gv3_payload_len(p_192: u64) -> u32 from "glyph_core.iii"
-extern @abi(c-msvc-x64) fn gv3_payload_cap() -> u32 from "glyph_core.iii"
 
 const GV3_FORM_BYTES : u32 = 0x21u32
 

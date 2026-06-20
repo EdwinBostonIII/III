@@ -41,7 +41,6 @@ extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifie
 
 // --- KAT-harness externs (drive the lattice admit vertical) ---
 extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
-extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
 extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
 extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"

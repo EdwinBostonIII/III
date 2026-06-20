@@ -37,8 +37,6 @@
 module omnia_governance
 
 extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv(old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u64 from "proof_ripple_resolution.iii"
-extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_old_pid(cert_id: u64) -> u32 from "proof_ripple_resolution.iii"
-extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_new_pid(cert_id: u64) -> u32 from "proof_ripple_resolution.iii"
 
 extern @abi(c-msvc-x64) fn reflect(scope: u32) -> u64 from "resolver.iii"
 

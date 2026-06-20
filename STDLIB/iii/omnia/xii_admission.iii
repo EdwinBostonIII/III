@@ -40,7 +40,6 @@ extern @abi(c-msvc-x64) fn xjn_gate_root() -> u32 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xjn_nonjoin_count() -> u64 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xtm_gate() -> u32 from "xii_termination.iii"
-extern @abi(c-msvc-x64) fn xtm_anomaly_count() -> u64 from "xii_termination.iii"
 
 const XAD_ADMIT  : u32 = 1u32
 const XAD_REJECT : u32 = 0u32

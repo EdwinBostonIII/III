@@ -41,7 +41,6 @@ extern @abi(c-msvc-x64) fn hl_has(h: u32, a: u32) -> u32 from "heaplet.iii"
 extern @abi(c-msvc-x64) fn hl_get(h: u32, a: u32) -> u32 from "heaplet.iii"
 extern @abi(c-msvc-x64) fn hl_union(h1: u32, h2: u32) -> u32 from "heaplet.iii"
 extern @abi(c-msvc-x64) fn hl_equal(h1: u32, h2: u32) -> u32 from "heaplet.iii"
-extern @abi(c-msvc-x64) fn hl_footprint(h: u32) -> u64 from "heaplet.iii"
 extern @abi(c-msvc-x64) fn hl_size(h: u32) -> u32 from "heaplet.iii"
 
 const SL_EMP  : u32 = 0u32

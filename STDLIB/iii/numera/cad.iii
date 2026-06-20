@@ -25,10 +25,6 @@ module numera_cad
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_oneshot_packed(src: *u8, byte_len: u64, out_32: *u8) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_oneshot_packed_bp(src: *u8, byte_len: u64, out_32: *u8) -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
-extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
 /* SHA-NI fullness (apotheosis M1.D1): cad's SHA-256 ONESHOT path -- the system's highest-fan-in
  * content-address (31 cad_oneshot callers: witness/seal/identifier/...) -- routes through the
  * cpufeat-gated dispatch, so on a SHA-NI CPU the central primitive is hardware-accelerated.  The

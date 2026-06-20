@@ -7,7 +7,7 @@
  * the lens signals computed at generation time as satlas_data_expect_*(); corpus 1669
  * asserts the in-III lens reproduces them exactly (renderer pinned to the authority).
  *
- * 663 nodes, 1329 edges.  Regenerate: python STDLIB/scripts/gen_self_atlas.py
+ * 660 nodes, 1323 edges.  Regenerate: python STDLIB/scripts/gen_self_atlas.py
  *
  * Hexad: kind_essence (a faithful self-image).  Ring: R0.  K: 1.00.  NIH: self_atlas only.
  * Discipline: W2 (<=4 params), W13 (0 locals), W14/W15 (straight-line calls, no loops). */
@@ -293,7 +293,6 @@ fn satlas_data_nodes_1() -> i32 {
     satlas_intern("integrity", 9u64)
     satlas_intern("intent", 6u64)
     satlas_intern("intent_attest", 13u64)
-    satlas_intern("intent_form", 11u64)
     satlas_intern("intent_lex", 10u64)
     satlas_intern("interval_lattice", 16u64)
     satlas_intern("invent", 6u64)
@@ -402,7 +401,6 @@ fn satlas_data_nodes_1() -> i32 {
     satlas_intern("parse", 5u64)
     satlas_intern("path", 4u64)
     satlas_intern("pattern", 7u64)
-    satlas_intern("pattern_form", 12u64)
     satlas_intern("pattern_set_federation", 22u64)
     satlas_intern("pattern_table", 13u64)
     satlas_intern("pbkdf2", 6u64)
@@ -503,12 +501,12 @@ fn satlas_data_nodes_1() -> i32 {
     satlas_intern("sccp", 4u64)
     satlas_intern("scythe_census", 13u64)
     satlas_intern("seal", 4u64)
+    satlas_intern("seal_organ", 10u64)
+    satlas_intern("seal_resolver", 13u64)
     return 0i32
 }
 
 fn satlas_data_nodes_2() -> i32 {
-    satlas_intern("seal_organ", 10u64)
-    satlas_intern("seal_resolver", 13u64)
     satlas_intern("sealed_box", 10u64)
     satlas_intern("sealed_channel", 14u64)
     satlas_intern("search_market", 13u64)
@@ -597,7 +595,6 @@ fn satlas_data_nodes_2() -> i32 {
     satlas_intern("tp_x86_assemble", 15u64)
     satlas_intern("tp_x86_disasm", 13u64)
     satlas_intern("transform", 9u64)
-    satlas_intern("transform_form", 14u64)
     satlas_intern("transform_patterns", 18u64)
     satlas_intern("translation_validation", 22u64)
     satlas_intern("triple_check", 12u64)
@@ -948,7 +945,6 @@ fn satlas_data_edges_1() -> i32 {
     satlas_link("cpu_census", 10u64, "sha256", 6u64)
     satlas_link("crypt_ed25519", 13u64, "arena", 5u64)
     satlas_link("crypt_ed25519", 13u64, "bigint", 6u64)
-    satlas_link("crypt_ed25519", 13u64, "bigint_div", 10u64)
     satlas_link("crypt_ed25519", 13u64, "ed_scalar_modl", 14u64)
     satlas_link("crypt_ed25519", 13u64, "fe25519", 7u64)
     satlas_link("crypt_ed25519", 13u64, "sha512", 6u64)
@@ -1178,11 +1174,11 @@ fn satlas_data_edges_1() -> i32 {
     satlas_link("hexad_dynamic", 13u64, "hexad_algebra", 13u64)
     satlas_link("hexad_dynamic", 13u64, "hexad_reach", 11u64)
     satlas_link("hexad_epistemic", 15u64, "hexad_algebra", 13u64)
+    satlas_link("hexad_mobius", 12u64, "hexad_algebra", 13u64)
     return 0i32
 }
 
 fn satlas_data_edges_2() -> i32 {
-    satlas_link("hexad_mobius", 12u64, "hexad_algebra", 13u64)
     satlas_link("hexad_mobius", 12u64, "trit", 4u64)
     satlas_link("hexad_pfs", 9u64, "hexad_algebra", 13u64)
     satlas_link("hexad_reach", 11u64, "hexad_algebra", 13u64)
@@ -1229,7 +1225,6 @@ fn satlas_data_edges_2() -> i32 {
     satlas_link("integrity", 9u64, "hexad_reach", 11u64)
     satlas_link("intent_attest", 13u64, "cad", 3u64)
     satlas_link("intent_attest", 13u64, "crypt_ed25519", 13u64)
-    satlas_link("intent_form", 11u64, "intent", 6u64)
     satlas_link("intent_lex", 10u64, "lex_ontology", 12u64)
     satlas_link("intent_lex", 10u64, "rune", 4u64)
     satlas_link("invent", 6u64, "bv_bits", 7u64)
@@ -1389,7 +1384,6 @@ fn satlas_data_edges_2() -> i32 {
     satlas_link("pareto_frontier", 15u64, "k0_referee", 10u64)
     satlas_link("path", 4u64, "builder", 7u64)
     satlas_link("pattern", 7u64, "mhash", 5u64)
-    satlas_link("pattern_form", 12u64, "pattern", 7u64)
     satlas_link("pattern_set_federation", 22u64, "fed_seal", 8u64)
     satlas_link("pattern_set_federation", 22u64, "sealed_channel", 14u64)
     satlas_link("pattern_set_federation", 22u64, "sha256", 6u64)
@@ -1422,13 +1416,13 @@ fn satlas_data_edges_2() -> i32 {
     satlas_link("present", 7u64, "weave_graph", 11u64)
     satlas_link("present", 7u64, "weave_self", 10u64)
     satlas_link("primweb", 7u64, "bv_bits", 7u64)
+    satlas_link("promote", 7u64, "catalyst", 8u64)
+    satlas_link("proof_bisimulation", 18u64, "sov_isa", 7u64)
+    satlas_link("proof_bisimulation", 18u64, "typecheck", 9u64)
     return 0i32
 }
 
 fn satlas_data_edges_3() -> i32 {
-    satlas_link("promote", 7u64, "catalyst", 8u64)
-    satlas_link("proof_bisimulation", 18u64, "sov_isa", 7u64)
-    satlas_link("proof_bisimulation", 18u64, "typecheck", 9u64)
     satlas_link("proof_carrying", 14u64, "arena", 5u64)
     satlas_link("proof_carrying", 14u64, "bigint", 6u64)
     satlas_link("proof_carrying", 14u64, "galois", 6u64)
@@ -1561,7 +1555,6 @@ fn satlas_data_edges_3() -> i32 {
     satlas_link("ripple", 6u64, "closure", 7u64)
     satlas_link("ripple", 6u64, "crystal", 7u64)
     satlas_link("ripple", 6u64, "crystal_deps", 12u64)
-    satlas_link("ripple", 6u64, "kchain", 6u64)
     satlas_link("ripple", 6u64, "mhash", 5u64)
     satlas_link("ripple", 6u64, "vec", 3u64)
     satlas_link("ripple", 6u64, "witness", 7u64)
@@ -1666,14 +1659,14 @@ fn satlas_data_edges_3() -> i32 {
     satlas_link("sentinel", 8u64, "entropy_monitor", 15u64)
     satlas_link("sentinel", 8u64, "vbd", 3u64)
     satlas_link("sep_logic", 9u64, "heaplet", 7u64)
-    return 0i32
-}
-
-fn satlas_data_edges_4() -> i32 {
     satlas_link("set", 3u64, "map", 3u64)
     satlas_link("sha256", 6u64, "cpufeat", 7u64)
     satlas_link("sha256", 6u64, "weave_blocks", 12u64)
     satlas_link("sha256_dispatch", 15u64, "cpufeat", 7u64)
+    return 0i32
+}
+
+fn satlas_data_edges_4() -> i32 {
     satlas_link("sha256_dispatch", 15u64, "sha256", 6u64)
     satlas_link("sha256_dispatch", 15u64, "sha256_ni", 9u64)
     satlas_link("sha3_256", 8u64, "keccak", 6u64)
@@ -1799,7 +1792,6 @@ fn satlas_data_edges_4() -> i32 {
     satlas_link("transform", 9u64, "mhash", 5u64)
     satlas_link("transform", 9u64, "pattern_table", 13u64)
     satlas_link("transform", 9u64, "resolver", 8u64)
-    satlas_link("transform_form", 14u64, "transform", 9u64)
     satlas_link("transform_patterns", 18u64, "codegen_dispatch", 16u64)
     satlas_link("transform_patterns", 18u64, "pattern", 7u64)
     satlas_link("transform_patterns", 18u64, "pattern_table", 13u64)
@@ -1835,7 +1827,6 @@ fn satlas_data_edges_4() -> i32 {
     satlas_link("ulid", 4u64, "xoshiro", 7u64)
     satlas_link("uncertainty", 11u64, "cad", 3u64)
     satlas_link("unify", 5u64, "arena", 5u64)
-    satlas_link("uri", 3u64, "arena", 5u64)
     satlas_link("uri", 3u64, "builder", 7u64)
     satlas_link("uuid", 4u64, "xoshiro", 7u64)
     satlas_link("value_range_prover", 18u64, "interval_lattice", 16u64)
@@ -1910,16 +1901,16 @@ fn satlas_data_edges_4() -> i32 {
     satlas_link("xii_critpair_enum", 17u64, "xii_rule_overlap", 16u64)
     satlas_link("xii_critpair_enum", 17u64, "xii_rule_patterns", 17u64)
     satlas_link("xii_curate", 10u64, "sha256", 6u64)
-    return 0i32
-}
-
-fn satlas_data_edges_5() -> i32 {
     satlas_link("xii_curated_embedded", 20u64, "xii_emit_gen", 12u64)
     satlas_link("xii_curated_extended", 20u64, "xii_emit_gen", 12u64)
     satlas_link("xii_curated_payloads", 20u64, "xii_emit_gen", 12u64)
     satlas_link("xii_curated_riscv", 17u64, "xii_emit_gen", 12u64)
     satlas_link("xii_denote", 10u64, "xii_term", 8u64)
     satlas_link("xii_discharge", 13u64, "xii_joinability", 15u64)
+    return 0i32
+}
+
+fn satlas_data_edges_5() -> i32 {
     satlas_link("xii_discharge", 13u64, "xii_strategy_det", 16u64)
     satlas_link("xii_emit_gen", 12u64, "sha256", 6u64)
     satlas_link("xii_emit_gen", 12u64, "xii_horizon", 11u64)
@@ -2061,18 +2052,18 @@ fn satlas_data_load() -> i32 @export {
     return 0i32
 }
 
-fn satlas_data_node_count() -> u32 @export { return 663u32 }
-fn satlas_data_edge_count() -> u32 @export { return 1329u32 }
+fn satlas_data_node_count() -> u32 @export { return 660u32 }
+fn satlas_data_edge_count() -> u32 @export { return 1323u32 }
 
 /* Lens signals computed at generation time -- corpus 1669 pins the in-III lens to these. */
 fn satlas_data_expect_coupling()      -> u32 @export { return 2004u32 }
 fn satlas_data_expect_orphans()       -> u32 @export { return 79u32 }
-fn satlas_data_expect_roots()         -> u32 @export { return 287u32 }
+fn satlas_data_expect_roots()         -> u32 @export { return 285u32 }
 fn satlas_data_expect_leaves()        -> u32 @export { return 169u32 }
 fn satlas_data_expect_cycle_nodes()   -> u32 @export { return 7u32 }
-fn satlas_data_expect_redundant()     -> u32 @export { return 463u32 }
+fn satlas_data_expect_redundant()     -> u32 @export { return 461u32 }
 fn satlas_data_expect_max_fanin()     -> u32 @export { return 68u32 }
-fn satlas_data_expect_top_hub_impact() -> u32 @export { return 403u32 }
-fn satlas_data_expect_emergence()     -> u32 @export { return 5635u32 }
-fn satlas_data_expect_max_depends()   -> u32 @export { return 117u32 }
+fn satlas_data_expect_top_hub_impact() -> u32 @export { return 401u32 }
+fn satlas_data_expect_emergence()     -> u32 @export { return 5610u32 }
+fn satlas_data_expect_max_depends()   -> u32 @export { return 116u32 }
 fn satlas_data_expect_max_level()     -> u32 @export { return 13u32 }

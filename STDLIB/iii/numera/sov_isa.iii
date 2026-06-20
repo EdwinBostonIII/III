@@ -108,7 +108,6 @@ extern @abi(c-msvc-x64) fn tc_bvaddovf(a: u32, b: u32) -> u32 from "typecheck.ii
 extern @abi(c-msvc-x64) fn tc_bvmulovf(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
-extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
 /* Integration C: sound conversion pre-filter (WHNF shape signature + Kleene trit). */
 extern @abi(c-msvc-x64) fn tc_shape_sig(t: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"

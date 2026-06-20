@@ -26,7 +26,6 @@ module omnia_xii_emit_gen
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_k_cost(id: u32) -> u32 from "xii_horizon.iii"
-extern @abi(c-msvc-x64) fn xii_horizon_ct_kind(id: u32) -> u8 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_nop_fill(target: u32, out: *u8, count: u32) -> u32 from "xii_nop_tables.iii"
 extern @abi(c-msvc-x64) fn xii_kernel_emit_fragment(kind: u8, target: u8, out: *u8) -> u32 from "xii_kernel_emit.iii"

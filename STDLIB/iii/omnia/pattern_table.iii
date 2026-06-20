@@ -21,9 +21,7 @@
 module omnia_pattern_table
 
 extern @abi(c-msvc-x64) fn read_u32_le(p: u64) -> u32 from "unify.iii"
-extern @abi(c-msvc-x64) fn write_u32_le(p: u64, v: u32) -> i32 from "unify.iii"
 extern @abi(c-msvc-x64) fn read_u64_le(p: u64) -> u64 from "unify.iii"
-extern @abi(c-msvc-x64) fn write_u64_le(p: u64, v: u64) -> i32 from "unify.iii"
 extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u64, align: u64) -> u64 from "arena.iii"   /* match arena.iii:66 real sig (was u32/u8 -- ABI-safe via zero-extend but a type mismatch) */
 extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"

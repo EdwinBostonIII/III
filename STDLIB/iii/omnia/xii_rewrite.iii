@@ -36,7 +36,6 @@ module omnia_xii_rewrite
 /* ------------------------------------------------------------------ */
 
 extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
-extern @abi(c-msvc-x64) fn xii_term_set_kind(idx: u32, kind: u8) -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_set_subform(idx: u32, sub: u32) -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
@@ -44,7 +43,6 @@ extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from 
 extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
-extern @abi(c-msvc-x64) fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_set_aux(idx: u32, aux: u64) -> i32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"

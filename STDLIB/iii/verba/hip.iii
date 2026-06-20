@@ -37,7 +37,6 @@ extern @abi(c-msvc-x64) fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 f
 extern @abi(c-msvc-x64) fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
 extern @abi(c-msvc-x64) fn nl_parse_frag_quantifier(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
 
-extern @abi(c-msvc-x64) fn nl_token_type(tok: u64) -> u8 from "nl_lex.iii"
 extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
 
 extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"

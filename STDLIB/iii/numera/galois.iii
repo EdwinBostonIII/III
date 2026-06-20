@@ -56,7 +56,6 @@ module numera_galois
 extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
 /* THE UNIFIED WEAVE: the canonical constant-time GF(2^8) multiply (galois's branchy gf8_mul melts onto it). */
 extern @abi(c-msvc-x64) fn wvb_gf8_mul(a: u32, b: u32) -> u32 from "weave_blocks.iii"
-extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"

@@ -38,7 +38,6 @@ extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from
  * L_-prefixed local labels for same-file fn-addresses, which break the
  * linker). */
 extern @abi(c-msvc-x64) fn meta_dispatch_unreachable(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "resolution_meta_dispatch.iii"
-extern @abi(c-msvc-x64) fn mp_default_or_fail_dispatch(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "resolution_meta_dispatch.iii"
 extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn calculus_init() -> i32 from "calculus_v1.iii"
 extern @abi(c-msvc-x64) fn proof_init() -> i32 from "irreducibility_proof.iii"

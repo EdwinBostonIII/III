@@ -36,7 +36,6 @@ extern @abi(c-msvc-x64) fn wh_get_pillar(idx: u64) -> u16 from "witness_hook.iii
 extern @abi(c-msvc-x64) fn wh_is_revoked(idx: u64) -> u8 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_get_ante_count(idx: u64) -> u32 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_get_ante(idx: u64, ante_idx: u32, out_id: *u8) -> i32 from "witness_hook.iii"
-extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn cons_eval_predicate(slot: u32, opv: *u8, ante_ids: *u8, n_ante: u32) -> u8 from "constitution.iii"
 
 const TLOGIC_OK           : i32 =  0i32

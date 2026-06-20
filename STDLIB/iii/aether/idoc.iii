@@ -28,19 +28,11 @@
 
 module aether_idoc
 
-extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_set_cap_ref(out_buf: u64, cap_ref: u64) -> i32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
 
 const IDOC_FACET_RENDER_DOM     : u8 = 0x01u8

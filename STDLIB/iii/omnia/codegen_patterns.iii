@@ -20,7 +20,6 @@ module omnia_codegen_patterns
 
 extern @abi(c-msvc-x64) fn pattern_template_zero(buf: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_id(buf: u64, mod_mh: u64, name: u64, name_len: u32) -> i32 from "pattern.iii"
-extern @abi(c-msvc-x64) fn pattern_template_set_predicate(buf: u64, fp: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_unify(buf: u64, fp: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_dispatch(buf: u64, fp: u64) -> i32 from "pattern.iii"
 extern @abi(c-msvc-x64) fn pattern_template_set_activation_base(buf: u64, b: u64) -> i32 from "pattern.iii"

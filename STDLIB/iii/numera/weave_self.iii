@@ -36,8 +36,6 @@ extern @abi(c-msvc-x64) fn satlas_reaches(src: u32, tgt: u32) -> u8 from "self_a
 extern @abi(c-msvc-x64) fn satlas_in_cycle(n: u32) -> u8 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn satlas_depends_count(n: u32) -> u32 from "self_atlas.iii"
 extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
-extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
-extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
 
 /* the six states (matching numera/logic6's codes exactly). */
 const WS_NEITHER : u32 = 0u32

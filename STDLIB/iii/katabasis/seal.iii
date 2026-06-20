@@ -18,7 +18,6 @@
  */
 module katabasis_seal
 
-extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 extern @abi(c-msvc-x64) fn katabasis_cycle_family(cycle_idx: u32) -> u32 from "cycle_term.iii"

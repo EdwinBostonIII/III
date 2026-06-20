@@ -41,7 +41,6 @@
 
 module numera_synthesis_spec
 
-extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"

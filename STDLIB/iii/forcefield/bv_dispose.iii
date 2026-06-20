@@ -27,7 +27,6 @@ module forcefield_bv_dispose
 /* --- the BV64 CIC kernel: the trusted, width-faithful disposer --- */
 extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
-extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvadd(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvsub(a: u32, b: u32) -> u32 from "typecheck.iii"

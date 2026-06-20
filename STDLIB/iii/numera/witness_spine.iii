@@ -31,7 +31,6 @@ extern @abi(c-msvc-x64) fn wh_get_pillar(idx: u64) -> u16 from "witness_hook.iii
 extern @abi(c-msvc-x64) fn wh_is_revoked(idx: u64) -> u8 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_chain_root(out: *u8) -> i32 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_epoch_close() -> u64 from "witness_hook.iii"
-extern @abi(c-msvc-x64) fn wh_epoch_index() -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"

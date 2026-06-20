@@ -110,7 +110,6 @@ extern @abi(c-msvc-x64) fn pattern_hexad_kind(p: u64) -> u8 from "pattern_table.
 extern @abi(c-msvc-x64) fn pattern_ring(p: u64) -> u8 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_guarantees_provided(p: u64) -> u32 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_k_value(p: u64) -> u64 from "pattern_table.iii"
-extern @abi(c-msvc-x64) fn pattern_predicate_fn(p: u64) -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_unify_fn(p: u64) -> u64 from "pattern_table.iii"
 /* harmony item 29: the Robinson unification engine (Stage-2, now ACTIVATED in resolve()). */
 extern @abi(c-msvc-x64) fn unify_init(buf: u64) -> i32 from "unify.iii"
@@ -124,13 +123,11 @@ extern @abi(c-msvc-x64) fn intent_partial_args_mask(p: u64) -> u32 from "intent.
 extern @abi(c-msvc-x64) fn intent_required_guarantees(p: u64) -> u32 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_arena_id(p: u64) -> u64 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_expected_hexad_kind(p: u64) -> u8 from "intent.iii"
-extern @abi(c-msvc-x64) fn intent_recursion_depth(p: u64) -> u16 from "intent.iii"
 extern @abi(c-msvc-x64) fn intent_partial_arg(p: u64, slot: u32) -> u64 from "intent.iii"
 
 extern @abi(c-msvc-x64) fn memo_key(set: u64, intent: u64, ctx_digest_ptr: u64) -> u64 from "resolver_memo.iii"
 extern @abi(c-msvc-x64) fn memo_lookup(key: u64) -> u32 from "resolver_memo.iii"
 extern @abi(c-msvc-x64) fn memo_pattern_id(slot: u32) -> u32 from "resolver_memo.iii"
-extern @abi(c-msvc-x64) fn memo_dispatch_fp(slot: u32) -> u64 from "resolver_memo.iii"
 extern @abi(c-msvc-x64) fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 from "resolver_memo.iii"
 
 extern @abi(c-msvc-x64) fn call_context_verify(p: u64) -> u8 from "call_context.iii"

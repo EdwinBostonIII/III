@@ -29,8 +29,6 @@
 module aether_cap_forge
 
 extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
-extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
-extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
 extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"

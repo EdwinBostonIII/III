@@ -53,7 +53,6 @@ extern @abi(c-msvc-x64) fn GetLastError() -> u32 from "kernel32"
 
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
-extern @abi(c-msvc-x64) fn handle_close(id: u64) -> i32 from "handle.iii"
 extern @abi(c-msvc-x64) fn handle_drop(id: u64) -> i32 from "handle.iii"
 extern @abi(c-msvc-x64) fn handle_fd(id: u64) -> u64 from "handle.iii"
 extern @abi(c-msvc-x64) fn handle_verify(id: u64, required: u64) -> u8 from "handle.iii"

@@ -39,7 +39,6 @@ extern @abi(c-msvc-x64) fn dij_reset() -> i32 from "dijkstra.iii"
 extern @abi(c-msvc-x64) fn dij_set_edge(u: u32, v: u32, w: u32) -> i32 from "dijkstra.iii"
 extern @abi(c-msvc-x64) fn dij_compute(src: u32) -> i32 from "dijkstra.iii"
 extern @abi(c-msvc-x64) fn dij_dist(node: u32) -> u32 from "dijkstra.iii"
-extern @abi(c-msvc-x64) fn dij_n() -> u32 from "dijkstra.iii"
 
 const TOPOA_OK    : i32 =  0i32
 const TOPOA_E_BAD : i32 = -1i32

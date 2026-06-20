@@ -28,7 +28,6 @@ module omnia_ripple
 
 extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
                                          cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
-extern @abi(c-msvc-x64) fn crystal_set_k(id: u64, k_fixed: u64) -> i32 from "crystal.iii"
 extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
 extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
 extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
@@ -50,14 +49,9 @@ extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
 
-extern @abi(c-msvc-x64) fn witness_init() -> i32 from "witness.iii"
 extern @abi(c-msvc-x64) fn witness_append(mhash_ptr: u64, cap_id: u64, epoch: u64) -> i32 from "witness.iii"
-extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
 extern @abi(c-msvc-x64) fn witness_remaining() -> u32 from "witness.iii"
 
-extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
-extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
-extern @abi(c-msvc-x64) fn kchain_is_underflow(id: u64) -> u8 from "kchain.iii"
 
 extern @abi(c-msvc-x64) fn closure_byte(i: u32) -> u32 from "closure.iii"
 extern @abi(c-msvc-x64) fn closure_set(ptr: u64) -> i32 from "closure.iii"

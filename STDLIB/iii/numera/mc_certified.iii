@@ -24,7 +24,6 @@ module numera_mc_certified
 
 extern @abi(c-msvc-x64) fn bc_seed(cap: u64, s: u64) -> i32 from "sample_beacon.iii"
 extern @abi(c-msvc-x64) fn bc_generate(out: u64, n: u64) -> i32 from "sample_beacon.iii"
-extern @abi(c-msvc-x64) fn ie_set_joint(c00: u64, c01: u64, c10: u64, c11: u64) -> i32 from "infer_exact.iii"
 extern @abi(c-msvc-x64) fn ie_marginal_x(x: u32) -> u64 from "infer_exact.iii"
 extern @abi(c-msvc-x64) fn ie_evidence() -> u64 from "infer_exact.iii"
 extern @abi(c-msvc-x64) fn nous_synth_canonical_ok(status: u8) -> u8 from "nous_synth.iii"

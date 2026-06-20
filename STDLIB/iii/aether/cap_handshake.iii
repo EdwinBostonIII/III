@@ -34,11 +34,9 @@ extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_
 extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_verify_len(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_unpack_seal_id(in_buf: u64) -> u64 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
-extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
 
 extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"

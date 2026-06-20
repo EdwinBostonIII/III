@@ -14,7 +14,6 @@
  */
 module katabasis_census
 
-extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
 /* _packed reader: walks [u64] words feeding their real LE bytes, so the 128 hashed
    bytes of the byte-packed KCEN_FACTS are identical under cg_r0 and cg_r3 (the plain
    sha256_oneshot strides *u8 by 8 under cg_r0 -> over-read + wrong digest). */

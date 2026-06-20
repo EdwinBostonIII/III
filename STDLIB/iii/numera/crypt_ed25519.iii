@@ -33,7 +33,6 @@ extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from 
 extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
-extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
 /* APOTHEOSIS §C.2: sovereign allocation-free Barrett reduction mod L (replaces the
  * generic bigint_mod at the two scalar-mod-L sites); bit-exact vs bigint_mod (KAT
  * corpus 1021) + RFC-8032 conformance (corpus 193-197). */

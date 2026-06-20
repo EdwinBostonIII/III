@@ -40,8 +40,6 @@ module verba_nl_parse
 
 extern @abi(c-msvc-x64) fn nl_token_type(tok: u64) -> u8 from "nl_lex.iii"
 extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
-extern @abi(c-msvc-x64) fn nl_token_span_start(tok: u64) -> u32 from "nl_lex.iii"
-extern @abi(c-msvc-x64) fn nl_token_span_end(tok: u64) -> u32 from "nl_lex.iii"
 
 const NLP_TOK_VOID       : u8 =  0u8
 const NLP_TOK_VERB       : u8 =  1u8

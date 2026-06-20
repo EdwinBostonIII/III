@@ -15,7 +15,6 @@
 module verba_html_escape
 
 extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
-extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
 
 const HTML_OK : i32 = 0i32
 const HTML_E_NULL  : i32 = -1i32   /* null src with nonzero len -- nothing to read */

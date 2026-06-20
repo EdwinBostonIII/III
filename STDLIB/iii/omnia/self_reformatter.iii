@@ -30,11 +30,9 @@
 module omnia_self_reformatter
 
 extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
-extern @abi(c-msvc-x64) fn pattern_id(p: u64) -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_hexad_kind(p: u64) -> u8 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_k_value(p: u64) -> u64 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_dispatch_fn(p: u64) -> u64 from "pattern_table.iii"
-extern @abi(c-msvc-x64) fn pattern_ring(p: u64) -> u8 from "pattern_table.iii"
 extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
 
 extern @abi(c-msvc-x64) fn hexad_adjacent(a: u8, b: u8) -> u8 from "resolver.iii"
@@ -52,7 +50,6 @@ extern @abi(c-msvc-x64) fn governance_sandbox(proposal_id: u64) -> i32 from "gov
 extern @abi(c-msvc-x64) fn governance_prove_equivalence(proposal_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64) -> u64 from "governance.iii"
 extern @abi(c-msvc-x64) fn governance_promote(proposal_id: u64) -> i32 from "governance.iii"
 extern @abi(c-msvc-x64) fn governance_seal(proposal_id: u64) -> i32 from "governance.iii"
-extern @abi(c-msvc-x64) fn governance_status(proposal_id: u64) -> u8 from "governance.iii"
 extern @abi(c-msvc-x64) fn governance_new_pid(proposal_id: u64) -> u32 from "governance.iii"
 
 /* Sealed constants. */

@@ -28,7 +28,6 @@ extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_ho
 extern @abi(c-msvc-x64) fn xii_horizon_cap_class(id: u32) -> u8 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_hexad(id: u32) -> u8 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
-extern @abi(c-msvc-x64) fn xii_horizon_productive_count() -> u32 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_chd_verify_collision_free() -> u32 from "xii_chd.iii"
 extern @abi(c-msvc-x64) fn xii_savings_init() -> i32 from "xii_savings.iii"
 extern @abi(c-msvc-x64) fn xii_savings_positive_check() -> u32 from "xii_savings.iii"

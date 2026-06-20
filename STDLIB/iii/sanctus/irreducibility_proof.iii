@@ -51,7 +51,6 @@ extern @abi(c-msvc-x64) fn calculus_primitive_hexad(p_id: u32) -> u8 from "calcu
 extern @abi(c-msvc-x64) fn calculus_primitive_k_cost(p_id: u32) -> u64 from "calculus_v1.iii"
 extern @abi(c-msvc-x64) fn calculus_primitive_param_schema(p_id: u32) -> u64 from "calculus_v1.iii"
 extern @abi(c-msvc-x64) fn calculus_primitive_ring_min(p_id: u32) -> u8 from "calculus_v1.iii"
-extern @abi(c-msvc-x64) fn calculus_primitive_count() -> u32 from "calculus_v1.iii"
 extern @abi(c-msvc-x64) fn calculus_is_initialised() -> u8 from "calculus_v1.iii"
 
 const PROOF_PRIMITIVE_COUNT : u32 = 19u32

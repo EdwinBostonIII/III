@@ -88,7 +88,6 @@ var ZKST_FS_QMOD    : [u64; 1]     /* st_fs_index_compute modulus source (read A
  * the independence capstone surfaced).  Same residues; now one source. */
 extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
-extern @abi(c-msvc-x64) fn sf_neg(x: u32) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_pow(x: u32, e: u64) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_inv(x: u32) -> u32 from "ntt_fri_organ.iii"

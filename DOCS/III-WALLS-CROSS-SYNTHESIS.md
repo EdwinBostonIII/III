@@ -38,31 +38,31 @@ demonstrated, reusable core.
 
 ---
 
-## 2. The taxonomy (an ORGANIZING LENS, not proven structure)
+## 2. The taxonomy — and the real finding: walls CONVERGE onto a few shared cells
 
-Read across the five, the walls *sort* — and naming the sorts is a lens that makes each new wall faster to map. **Tag:
-this taxonomy is a useful organizing lens; it is not a theorem about the space of all problems.**
+**Tag: this taxonomy is an organizing lens, not a theorem about the space of all problems.** And the honest headline is
+*not* "each wall opened a new cell" — it is the opposite: **the walls converge onto a small number of shared cells, and
+that convergence is the evidence of the template's universality.** Earlier drafts of this synthesis minted a fresh cell
+per wall ("open-by-explosion," a separate "SETTLED" kind); that ran hot (advisor-audited). The honest sorting is small:
 
-- **Kinds of core (three top-level kinds; OPEN splits three ways — sharper than "OPEN vs OBSTRUCTED", licensed by gated
-  facts).** The walls' cores are not one bucket. There are three top-level kinds — **OBSTRUCTED**, **CLIMBED**, and
-  **OPEN** (itself three sub-kinds, by `1866`/`1860`):
+- **One internal shape, every wall (the universal claim).** A **tractable island**, a **boundary** naming the island's
+  essential precondition, and a **core** past it — gated KATs for the island and boundary in *all nine* walls. This
+  repetition *is* the result.
+- **Three kinds of core (most walls share a cell — that is the point):**
+  - **OPEN** — the frontier is unknown. *Five of nine walls* land here (parity, SAT, GI, lattice, factoring, Ramsey).
+    The gated facts (`1866`/`1860`) further distinguish, within OPEN: *≡ the grand question* (**SAT** is NP-complete, so
+    `SAT∈P ⟺ P=NP`); *local placement* (**parity** ∈ NP∩coNP `1860`, **GI** ∈ NP∩coAM — asymmetric, not NP-complete);
+    *non-complexity* (**FLRP**, universal algebra, independent of P vs NP). Ramsey and factoring also land OPEN (Ramsey
+    plainly; factoring local-placement + quantum-cracked). *Most walls are OPEN — the cell is crowded, not unique.*
   - **OBSTRUCTED** — the frontier is a *proven impossibility*: confluence (general-TRS confluence undecidable); and,
     from the grail ledger, Rice/halting, impredicative ordinal analysis.
-  - **CLIMBED** — the lower bound is a *proven separation*: **communication complexity** (`D(EQ)=n+1` via a fooling set,
-    `1877`). Proof that proven lower bounds *do* exist — just rare, problem-specific, and not yet the general ones the
-    open walls need. (Even a climbed area keeps an open face: the log-rank conjecture.)
-  - **OPEN ≡ the grand question** — the core *is* P vs NP: **SAT** is NP-complete (`1866`), so `SAT∈P ⟺ P=NP`. Solving
-    this wall solves the field's central problem.
-  - **OPEN, local placement** — in NP∩(co-low), *asymmetric*: **parity** (∈ NP∩coNP, `1860`) and **GI** (∈ NP∩coAM).
-    *Not*-in-P would give P≠NP, but *in*-P collapses nothing (neither is NP-complete) — a placement question, strictly
-    weaker than the grand one.
-  - **OPEN, non-complexity** — not a complexity-class question at all: **FLRP** (lattice representability in universal
-    algebra, independent of P vs NP).
-  This four-way split is still a *lens*, not a theorem — but it is a sharper lens than a single OPEN bucket, and each
-  assignment is anchored to a gated fact or citation.
-- **One internal shape, every wall.** A **tractable island**, a **sharp boundary** naming the island's essential
-  precondition, and a **core** past it. Verified to hold on all five (the island and boundary are gated KATs in each).
-- **The essential precondition is wall-specific** (§3) — the *template* is invariant, the *boundary* is not.
+  - **CLOSED (settled by a proof)** — the question has been *answered* by a theorem, in two textures: a **proven lower
+    bound** (communication complexity, `D(EQ)=n+1`, `1877`) and a **proven impossibility of a construction**
+    (constructibility — doubling/trisection, `1879`). (Earlier these were two kinds, "CLIMBED" and "SETTLED"; they are
+    one — *closed by proof* — and merging them is the honest call.)
+- **The essential precondition is wall-specific** (§3) — the *template* is invariant, the *boundary* is not. (But not
+  every wall needs a *unique* precondition: Ramsey's was over-claimed as "exhaustion-feasibility" and is really the
+  ordinary OPEN methodological gap; see §3.)
 
 ---
 
@@ -79,7 +79,7 @@ wall's island+boundary KATs:
 | Graph iso | **structural depth** | trees, 1-WL (`1870`) | regular graphs, 1-WL fails (`1871`) |
 | Lattice rep | **finiteness** | `Con(V₄)=M₃`, `Π_n` (`1873`,`1874`) | finite-vs-infinite (Grätzer–Schmidt) |
 | Comm. complexity | **proof-existence** (the LB is provable) | protocols / upper bounds | fooling set / rank (`1877`) |
-| Ramsey | **feasibility of exhaustion** | small cases, `R(3,3)=6` (`1878`) | explosion `2^{C(N,2)}` |
+| Ramsey | *(no unique precondition — the ordinary OPEN construction/counting gap; §3-note)* | small cases, `R(3,3)=6` (`1878`) | methodological, not search-size |
 
 Five walls, five distinct essential preconditions — control, clause-structure, termination, structural-depth,
 finiteness. No two walls are hard "for the same reason," yet all five are mapped by the one template. That tension —
@@ -146,9 +146,9 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 | Graph iso | GI ∈ P? | OPEN — local placement (NP∩coAM) | quasi-poly | 1-WL complete for trees; higher-order fix | 1870–1872 |
 | Lattice rep | FLRP | OPEN — non-complexity (universal algebra) | — | `Con(V₄)=M₃`; `Π_n` is a lattice | 1873–1874 |
 | Primality/factoring | factoring ∈ classical P? | OPEN — local placement, **quantum-cracked** (Shor) | sub-exp (NFS) | primality ∈ P (fell); factoring NP/self-reducible | 1875–1876 |
-| Communication complexity | log-rank conjecture | **CLIMBED** (D(EQ)=n+1 proven) + open face | — | EQ fooling-set proven lower bound | 1877 |
-| Ramsey theory | R(5,5), … | OPEN — open-by-explosion (combinatorics) | — | `R(3,3)=6` by exhaustion | 1878 |
-| Constructibility | classical constructions | **SETTLED** — resolved-negative (Wantzel) | — | cube/trisection impossible (deg 3≠2^k) | 1879 |
+| Communication complexity | log-rank conjecture | **CLOSED** — proven lower bound (D(EQ)=n+1) + open face | — | EQ fooling-set proven lower bound | 1877 |
+| Ramsey theory | R(5,5), … | OPEN (combinatorics) | — | `R(3,3)=6` by exhaustion | 1878 |
+| Constructibility | classical constructions | **CLOSED** — proven impossible (Wantzel) | — | cube/trisection impossible (deg 3≠2^k) | 1879 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

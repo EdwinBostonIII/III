@@ -29,29 +29,33 @@ Two-sided, both gated:
 
 ---
 
-## 3. The boundary and the open core — explosion
+## 3. The boundary and the open core
 
-- **The boundary is COMBINATORIAL EXPLOSION.** Colourings of `K_N` number `2^{C(N,2)}`: `K₆` has `2¹⁵` (exhaustible),
-  `K₁₈` has `2¹⁵³`, `K₄₃` has `2^{903}`. The island ends exactly where exhaustion stops being feasible. The "essential
-  precondition" of this wall is **feasibility of exhaustion** — a boundary unlike any prior wall's (not players, clause
-  structure, termination, depth, finiteness, or a complexity class — pure search-space size).
-- **OPEN core.** `R(5,5)` is **OPEN** — known only to lie in `[43, 48]`; `R(6,6) ∈ [102,160]`; all larger diagonal
-  Ramsey numbers open. Erdős's parable captures the wall: if aliens demanded `R(5,5)` we should marshal all computers to
-  find it, but for `R(6,6)` we should attack the aliens — exhaustion is hopeless and no formula is known.
+- **The boundary is METHODOLOGICAL, not search-size (advisor-corrected).** It is tempting to say the boundary is
+  "feasibility of exhaustion" — but that is *false by the known island itself*: `R(4,4)=18` was **not** found by
+  exhausting `2^{C(18,2)} = 2¹⁵³` colourings; it is Greenwood–Gleason's *counting* argument (upper bound) plus the
+  Paley graph on 17 vertices (lower-bound *construction*). So the island extends **past** exhaustion-feasibility. The
+  real boundary is the absence, at scale, of **both** a good construction (to push the lower bound) **and** a good
+  counting argument (to pull the upper bound) — a methodological gap, not a search-space-size threshold.
+- **OPEN core (the same kind as parity/SAT/GI/lattice).** `R(5,5)` is **OPEN** — known only to lie in `[43, 48]`;
+  `R(6,6) ∈ [102,160]`; all larger diagonal Ramsey numbers open. Erdős's parable captures the difficulty: if aliens
+  demanded `R(5,5)` we should marshal all computers, but for `R(6,6)` we should attack the aliens — neither construction
+  nor counting is good enough at that scale.
 
 ---
 
-## 4. Cross-wall position — a new island flavor and a new boundary
+## 4. Cross-wall position — a shared OPEN cell, one distinctive texture
 
-This wall sharpens two cross-wall axes:
-- **Island flavor.** Prior islands were *algorithms verified == oracle* (2-SAT solver, 1-WL, Miller–Rabin). Ramsey's
-  island is a **complete exhaustive proof** (`R(3,3)=6` by checking *all* `2¹⁵` cases). Same template slot ("the
-  tractable/decidable island"), different texture: the island *is* the finite computation, not an algorithm that beats
-  it.
-- **Boundary kind.** The "essential precondition" catalogue gains a seventh entry — *feasibility of exhaustion* — joining
-  control/alternation, clause-structure, termination, structural-depth, finiteness, and (climbed) proof-existence. The
-  wall is OPEN, but **open-by-explosion**, not open-by-complexity-class: there is no class question, only a number whose
-  search space is astronomical and whose closed form is unknown.
+Ramsey lands in the **same OPEN cell** as parity/SAT/GI/lattice/factoring — and that convergence is the point (it is
+evidence of the template's universality, not a defect to be dressed up as a new cell). Its one genuinely distinctive
+*texture* is the island flavor:
+- **Island flavor (the real novelty).** Prior islands were *algorithms verified == oracle* (2-SAT solver, 1-WL,
+  Miller–Rabin); Ramsey's gated island (`R(3,3)=6`) is a **complete exhaustive proof** — the island *is* the finite
+  computation, not an algorithm that beats it. (Note: the *cited* island `R(4,4)=18` is **not** exhaustive — it is
+  counting + construction — so even within this wall the island method is mixed; see §3.)
+- **Not a new cell.** Earlier drafts called this "open-by-explosion"; that over-mints — the boundary is methodological
+  (§3), and the core is plain OPEN. The honest reading: the template's island/boundary/core shape applies, and Ramsey is
+  the *fifth* wall to land in the OPEN cell — repetition, not novelty, is the finding.
 
 ---
 
@@ -61,11 +65,12 @@ This wall sharpens two cross-wall axes:
 |---|---|---|---|
 | Isl | `R(3,3) = 6` (K₅ good colouring + all `2¹⁵` K₆ colourings have a mono triangle) | **PROVEN (III)** | `1878` |
 | R44 | `R(4,4) = 18` | CITED | classical |
-| Bd | explosion: `2^{C(N,2)}` colourings — exhaustion infeasible past tiny `N` | (structural) | — |
+| Bd | methodological: no good construction *and* no good counting at scale (exhaustion fails even sooner) | (structural) | — |
 | O | **`R(5,5)`, `R(6,6)`, … unknown** | **OPEN** | the wall |
 
-**Bottom line.** The Ramsey wall extends the program into pure combinatorics: its island is the *exhaustive* theorem
-`R(3,3)=6` (`1878`), its boundary the bare combinatorial explosion `2^{C(N,2)}`, its core the famously open `R(5,5)`.
-It adds an exhaustion-island flavor and an open-by-explosion boundary to the taxonomy — the template holds even where
-there is no algorithm to race, only a finite computation that runs out of room. Eight walls, three kinds of core, and a
-boundary catalogue that now spans seven distinct essential preconditions.
+**Bottom line.** The Ramsey wall extends the program into pure combinatorics: its gated island is the *exhaustive*
+theorem `R(3,3)=6` (`1878`); the cited island `R(4,4)=18` is *non*-exhaustive (counting + construction), so the boundary
+is **methodological**, not search-size; its core is the famously open `R(5,5)`. Its one distinctive contribution is the
+*exhaustive*-island flavor for the smallest case; otherwise it lands squarely in the **OPEN** cell shared with
+parity/SAT/GI/lattice/factoring — and that shared landing, not a minted new cell, is what it adds: another confirmation
+of the template's reach, now into a domain with no algorithm to race.

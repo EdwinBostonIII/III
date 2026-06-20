@@ -1,0 +1,223 @@
+/* 1842_grail_lrc_strategy_improvement.iii -- GRAIL L8 attack: LRC-VJ, a DIFFERENT pivot rule.
+ * Reuses the VALIDATED Voge-Jurdzinski vertex-granularity valuation (1841) UNCHANGED, and swaps the pivot from
+ * "switch all profitable edges" to SINGLE-SWITCH with Cunningham's LEAST-RECENTLY-CONSIDERED (anti-cycling) rule:
+ * each step, among all improving single Even switches (vs Odd's best response), take the one whose (vertex,edge)
+ * pair was switched LONGEST ago.  Soundness is INHERITED -- single-switch VJ SI is monotone ascent to the unique
+ * fixpoint, so it cannot return a wrong winner regardless of pivot.  Why it is a genuine OPEN candidate (workflow
+ * parity-poly-hunt, priority 7): LRC is neither greedy/all-switches (Friedmann's exp LB) nor randomized
+ * (Random-Edge/Facet LBs), so no NAMED lower bound transfers; the Avis-Friedmann Cunningham AUSO bound is not known
+ * to be realized as a parity-game SI step-graph.  This KAT establishes correctness; switch-count growth is probed
+ * separately.  Validated against the Zielonka oracle (1839) on the SAME 80 games as 1840/1841.
+ * exit 99 = LRC-VJ matches the oracle 80/80 with no cap hit; 200 = a game failed to converge (surfaced, not hidden). */
+module mlrc
+var OWN : [u8; 16]
+var PRI : [u32; 16]
+var SUC0 : [u32; 16]
+var SUC : [u32; 16]
+var NV : [u32; 1]
+var RNG : [u32; 1]
+var STRAT : [u32; 16]
+var CHOICE : [u32; 16]
+var TAU : [u32; 16]
+var NEWTAU : [u32; 16]
+var VAL_A : [u32; 16]
+var VAL_S : [u32; 16]
+var VAL_L : [u32; 16]
+var VOUT_A : [u32; 1]
+var VOUT_S : [u32; 1]
+var VOUT_L : [u32; 1]
+var SEEN : [u32; 16]
+var WALK : [u32; 16]
+var CLOCK : [u32; 256]   /* last-switched tick per (vertex,edge) pair, index v*n+w */
+var SWITCHES : [u32; 1]
+var STUCK : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn fullmask() -> u32 { return (1u32 << nv()) - 1u32 }
+fn low_succ(v: u32) -> u32 { let mut w : u32 = 0u32  let n : u32 = nv()  while w < n { if (SUC0[v as u64] & (1u32 << w)) != 0u32 { return w }  w = w + 1u32 }  return 0u32 }
+
+/* ---- verified Zielonka oracle (byte-for-byte from 1839) ---- */
+fn max_prio(region: u32) -> u32 { let mut m : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()  while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] > m { m = PRI[v as u64] } }  v = v + 1u32 }  return m }
+fn attractor(region: u32, player: u32, target: u32) -> u32 {
+    let mut a : u32 = target & region  let mut done : u8 = 0u8  let n : u32 = nv()
+    while done == 0u8 { let mut added : u8 = 0u8  let mut v : u32 = 0u32
+        while v < n { let bit : u32 = 1u32 << v
+            if (region & bit) != 0u32 { if (a & bit) == 0u32 {
+                if OWN[v as u64] == (player as u8) { if (SUC[v as u64] & a & region) != 0u32 { a = a | bit  added = 1u8 } }
+                else { let sir : u32 = SUC[v as u64] & region  if sir != 0u32 { if (sir & (a ^ 0xFFFFFFFFu32)) == 0u32 { a = a | bit  added = 1u8 } } } } }
+            v = v + 1u32 }
+        if added == 0u8 { done = 1u8 } }
+    return a
+}
+fn zielonka(region: u32) -> u64 {
+    if region == 0u32 { return 0u64 }
+    let d : u32 = max_prio(region)  let p : u32 = d & 1u32  let mut u : u32 = 0u32  let mut v : u32 = 0u32  let n : u32 = nv()
+    while v < n { if (region & (1u32 << v)) != 0u32 { if PRI[v as u64] == d { u = u | (1u32 << v) } }  v = v + 1u32 }
+    let a : u32 = attractor(region, p, u)  let r1 : u64 = zielonka(region & (a ^ 0xFFFFFFFFu32))
+    let w0a : u32 = (r1 & 0xFFFFFFFFu64) as u32  let w1a : u32 = (r1 >> 32u64) as u32
+    let mut wopp : u32 = w1a  if p != 0u32 { wopp = w0a }
+    if wopp == 0u32 { if p == 0u32 { return region as u64 }  return (region as u64) << 32u64 }
+    let opp : u32 = 1u32 - p  let b : u32 = attractor(region, opp, wopp)  let r2 : u64 = zielonka(region & (b ^ 0xFFFFFFFFu32))
+    let w0b : u32 = (r2 & 0xFFFFFFFFu64) as u32  let w1b : u32 = (r2 >> 32u64) as u32
+    if p == 0u32 { return (w0b as u64) | (((w1b | b) as u64) << 32u64) }
+    return ((w0b | b) as u64) | ((w1b as u64) << 32u64)
+}
+fn gen_game(n: u32) -> i32 {
+    NV[0u64] = n  let mut v : u32 = 0u32
+    while v < n { OWN[v as u64] = (rnd() & 1u32) as u8  PRI[v as u64] = rnd() % n
+        let mut s : u32 = 0u32  let k : u32 = 1u32 + (rnd() % 3u32)  let mut j : u32 = 0u32
+        while j < k { s = s | (1u32 << (rnd() % n))  j = j + 1u32 }
+        if s == 0u32 { s = 1u32 << ((v + 1u32) % n) }
+        SUC0[v as u64] = s  v = v + 1u32 }
+    return 0i32
+}
+
+/* ---- validated VJ valuation (vertex granularity), from 1841 ---- */
+fn more_relevant(a: u32, b: u32) -> u8 {
+    if PRI[a as u64] > PRI[b as u64] { return 1u8 }
+    if PRI[a as u64] < PRI[b as u64] { return 0u8 }
+    if a > b { return 1u8 }
+    return 0u8
+}
+fn most_relevant_in_mask(mask: u32) -> u32 {
+    let n : u32 = nv()  let mut best : u32 = 0u32  let mut have : u8 = 0u8  let mut v : u32 = 0u32
+    while v < n { if (mask & (1u32 << v)) != 0u32 { if have == 0u8 { best = v  have = 1u8 } else { if more_relevant(v, best) == 1u8 { best = v } } }  v = v + 1u32 }
+    return best
+}
+fn valuate(start: u32) -> i32 {
+    let n : u32 = nv()  let mut i : u32 = 0u32
+    while i < n { SEEN[i as u64] = 254u32  i = i + 1u32 }
+    let mut cur : u32 = start  let mut step : u32 = 0u32
+    while SEEN[cur as u64] == 254u32 { SEEN[cur as u64] = step  WALK[step as u64] = cur  cur = STRAT[cur as u64]  step = step + 1u32 }
+    let cs : u32 = SEEN[cur as u64]
+    let mut l : u32 = WALK[cs as u64]  let mut j : u32 = cs
+    while j < step { let vtx : u32 = WALK[j as u64]  if more_relevant(vtx, l) == 1u8 { l = vtx }  j = j + 1u32 }
+    let mut c2 : u32 = start  let mut len : u32 = 0u32  let mut set : u32 = 0u32
+    while c2 != l { if more_relevant(c2, l) == 1u8 { set = set | (1u32 << c2) }  c2 = STRAT[c2 as u64]  len = len + 1u32 }
+    VOUT_A[0u64] = l  VOUT_S[0u64] = set  VOUT_L[0u64] = len
+    return 0i32
+}
+fn cmp_even(aL: u32, aS: u32, aLen: u32, bL: u32, bS: u32, bLen: u32) -> i32 {
+    if aL != bL {
+        let mut m : u32 = bL  let mut m_is_a : u8 = 0u8
+        if more_relevant(aL, bL) == 1u8 { m = aL  m_is_a = 1u8 }
+        if (PRI[m as u64] & 1u32) == 0u32 { if m_is_a == 1u8 { return 1i32 }  return -1i32 }
+        if m_is_a == 1u8 { return -1i32 }
+        return 1i32
+    }
+    let dif : u32 = aS ^ bS
+    if dif != 0u32 {
+        let d : u32 = most_relevant_in_mask(dif)
+        let mut inA : u8 = 0u8  if (aS & (1u32 << d)) != 0u32 { inA = 1u8 }
+        if (PRI[d as u64] & 1u32) == 0u32 { if inA == 1u8 { return 1i32 }  return -1i32 }
+        if inA == 1u8 { return -1i32 }
+        return 1i32
+    }
+    if (PRI[aL as u64] & 1u32) == 0u32 { if aLen < bLen { return 1i32 }  if aLen > bLen { return -1i32 }  return 0i32 }
+    if aLen > bLen { return 1i32 }  if aLen < bLen { return -1i32 }  return 0i32
+}
+fn set_profile() -> i32 { let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if OWN[v as u64] == 0u8 { STRAT[v as u64] = CHOICE[v as u64] } else { STRAT[v as u64] = TAU[v as u64] }  v = v + 1u32 }  return 0i32 }
+fn evaluate_sigma() -> i32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if OWN[v as u64] == 1u8 { TAU[v as u64] = low_succ(v) }  v = v + 1u32 }
+    let mut improving : u8 = 1u8  let mut guard : u32 = 0u32
+    while improving == 1u8 {
+        guard = guard + 1u32  if guard > 4096u32 { STUCK[0u64] = 1u32  improving = 0u8 }
+        if improving == 1u8 {
+            set_profile()
+            let mut a : u32 = 0u32
+            while a < n { valuate(a)  VAL_A[a as u64] = VOUT_A[0u64]  VAL_S[a as u64] = VOUT_S[0u64]  VAL_L[a as u64] = VOUT_L[0u64]  a = a + 1u32 }
+            improving = 0u8
+            let mut u : u32 = 0u32
+            while u < n {
+                if OWN[u as u64] == 1u8 {
+                    let base : u32 = TAU[u as u64]
+                    let mut bw : u32 = base  let mut bA : u32 = VAL_A[u as u64]  let mut bS : u32 = VAL_S[u as u64]  let mut bL : u32 = VAL_L[u as u64]
+                    let mut w : u32 = 0u32
+                    while w < n {
+                        if (SUC0[u as u64] & (1u32 << w)) != 0u32 {
+                            STRAT[u as u64] = w  valuate(u)
+                            if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], bA, bS, bL) < 0i32 { bw = w  bA = VOUT_A[0u64]  bS = VOUT_S[0u64]  bL = VOUT_L[0u64] }
+                        }
+                        w = w + 1u32
+                    }
+                    STRAT[u as u64] = base
+                    NEWTAU[u as u64] = bw
+                }
+                u = u + 1u32
+            }
+            let mut k : u32 = 0u32
+            while k < n { if OWN[k as u64] == 1u8 { if NEWTAU[k as u64] != TAU[k as u64] { TAU[k as u64] = NEWTAU[k as u64]  improving = 1u8 } }  k = k + 1u32 }
+        }
+    }
+    set_profile()
+    let mut b2 : u32 = 0u32
+    while b2 < n { valuate(b2)  VAL_A[b2 as u64] = VOUT_A[0u64]  VAL_S[b2 as u64] = VOUT_S[0u64]  VAL_L[b2 as u64] = VOUT_L[0u64]  b2 = b2 + 1u32 }
+    return 0i32
+}
+
+/* ---- LRC single-switch pivot ---- */
+fn improve_lrc() -> u32 {
+    let n : u32 = nv()  let mut v : u32 = 0u32
+    while v < n { if OWN[v as u64] == 0u8 { CHOICE[v as u64] = low_succ(v) }  v = v + 1u32 }
+    let mut ci : u32 = 0u32  while ci < 256u32 { CLOCK[ci as u64] = 0u32  ci = ci + 1u32 }
+    SWITCHES[0u64] = 0u32
+    let mut tick : u32 = 1u32
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if SWITCHES[0u64] > 200000u32 { STUCK[0u64] = 1u32  go = 0u8 }
+        if go == 1u8 {
+            evaluate_sigma()
+            let mut found : u8 = 0u8  let mut bestclk : u32 = 0u32  let mut cv : u32 = 0u32  let mut cw : u32 = 0u32
+            let mut x : u32 = 0u32
+            while x < n {
+                if OWN[x as u64] == 0u8 {
+                    let base : u32 = CHOICE[x as u64]
+                    let mut w : u32 = 0u32
+                    while w < n {
+                        if w != base { if (SUC0[x as u64] & (1u32 << w)) != 0u32 {
+                            STRAT[x as u64] = w  valuate(x)
+                            if cmp_even(VOUT_A[0u64], VOUT_S[0u64], VOUT_L[0u64], VAL_A[x as u64], VAL_S[x as u64], VAL_L[x as u64]) > 0i32 {
+                                let clk : u32 = CLOCK[(x * n + w) as u64]
+                                if found == 0u8 { found = 1u8  bestclk = clk  cv = x  cw = w } else { if clk < bestclk { bestclk = clk  cv = x  cw = w } }
+                            }
+                        } }
+                        w = w + 1u32
+                    }
+                    STRAT[x as u64] = base
+                }
+                x = x + 1u32
+            }
+            if found == 0u8 { go = 0u8 } else {
+                CHOICE[cv as u64] = cw  CLOCK[(cv * n + cw) as u64] = tick  tick = tick + 1u32  SWITCHES[0u64] = SWITCHES[0u64] + 1u32
+            }
+        }
+    }
+    evaluate_sigma()
+    let mut reg : u32 = 0u32  let mut v2 : u32 = 0u32
+    while v2 < n { if (PRI[VAL_A[v2 as u64] as u64] & 1u32) == 0u32 { reg = reg | (1u32 << v2) }  v2 = v2 + 1u32 }
+    return reg
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x12345678u32
+    STUCK[0u64] = 0u32
+    let n : u32 = 8u32
+    let mut trials : u32 = 0u32
+    let mut matched : u32 = 0u32
+    while trials < 80u32 {
+        gen_game(n)
+        let mut v : u32 = 0u32
+        while v < n { SUC[v as u64] = SUC0[v as u64]  v = v + 1u32 }
+        let r : u64 = zielonka(fullmask())
+        let truth : u32 = (r & 0xFFFFFFFFu64) as u32
+        let got : u32 = improve_lrc()
+        if got == truth { matched = matched + 1u32 }
+        trials = trials + 1u32
+    }
+    if STUCK[0u64] != 0u32 { return 200u64 }
+    if matched == 80u32 { return 99u64 }
+    return matched as u64
+}

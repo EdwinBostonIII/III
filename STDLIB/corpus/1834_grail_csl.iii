@@ -1,0 +1,26 @@
+/* 1834_grail_csl.iii -- GRAIL LEDGER L11 (Concurrent Separation Logic).  Grail = full automation under weak memory
+ * (frontier).  Legitimate B1: the FRAME RULE on a disjoint heap -- {P}C{Q} => {P*R}C{Q*R} when C's footprint is
+ * disjoint from R -- proven sound, AND its DISJOINTNESS side-condition exhibited (an overlapping command breaks it).
+ * exit 99. */
+module m1834
+var HEAP : [u32; 8]
+fn run_C(fp_lo: u32, fp_hi: u32) -> i32 {     /* command C writes its footprint [fp_lo,fp_hi) */
+    let mut i : u32 = fp_lo
+    while i < fp_hi { HEAP[i as u64] = 900u32 + i  i = i + 1u32 }
+    return 0i32
+}
+fn main() -> u64 {
+    let mut i : u32 = 0u32
+    while i < 8u32 { HEAP[i as u64] = (i * 10u32)  i = i + 1u32 }
+    /* frame R owns cells {4,5}; command C's footprint = {0,1} (disjoint) */
+    let r4 : u32 = HEAP[4u64]
+    let r5 : u32 = HEAP[5u64]
+    run_C(0u32, 2u32)
+    if HEAP[4u64] != r4 { return 11u64 }                  /* FRAME RULE: R preserved (disjoint footprint) */
+    if HEAP[5u64] != r5 { return 12u64 }
+    if HEAP[0u64] != 900u32 { return 13u64 }              /* C did its job on its own footprint */
+    /* THE SIDE-CONDITION exhibited: a command overlapping R's footprint WOULD break the frame -> rule needs disjointness */
+    run_C(4u32, 6u32)                                     /* this overlaps {4,5} */
+    if HEAP[4u64] == r4 { return 14u64 }                  /* now R IS changed -> frame rule would be UNSOUND here (boundary) */
+    return 99u64
+}

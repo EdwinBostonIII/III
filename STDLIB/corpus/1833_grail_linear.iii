@@ -1,0 +1,20 @@
+/* 1833_grail_linear.iii -- GRAIL LEDGER L7 (linear logic).  Grail = the full Geometry of Interaction (large B1).
+ * Legitimate B2: exhibit the defining LINEAR discipline -- no-WEAKENING (every resource must be used) + no-
+ * CONTRACTION (no resource used twice) = use EXACTLY once -- enforced, with both violations REFUSED.  This is the
+ * resource/reversibility core III's both-way ripples live in.  exit 99. */
+module m1833
+var USED : [u8; 4]
+fn consume(r: u32) -> u8 { if USED[r as u64] != 0u8 { return 0u8 }  USED[r as u64] = 1u8  return 1u8 }   /* refuses 2nd use */
+fn all_used() -> u8 { let mut i : u32 = 0u32  while i < 4u32 { if USED[i as u64] == 0u8 { return 0u8 }  i = i + 1u32 }  return 1u8 }
+fn main() -> u64 {
+    let mut i : u32 = 0u32
+    while i < 4u32 { USED[i as u64] = 0u8  i = i + 1u32 }
+    if consume(0u32) != 1u8 { return 11u64 }
+    if consume(1u32) != 1u8 { return 12u64 }
+    if consume(0u32) != 0u8 { return 13u64 }              /* NO-CONTRACTION: 2nd use of r0 REFUSED */
+    if all_used() == 1u8 { return 14u64 }                 /* NO-WEAKENING: r2,r3 unused -> proof incomplete (cannot discard) */
+    if consume(2u32) != 1u8 { return 15u64 }
+    if consume(3u32) != 1u8 { return 16u64 }
+    if all_used() != 1u8 { return 17u64 }                 /* now exactly-once over all -> a VALID linear proof */
+    return 99u64
+}

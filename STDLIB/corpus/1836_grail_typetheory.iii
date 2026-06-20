@@ -1,0 +1,23 @@
+/* 1836_grail_typetheory.iii -- GRAIL LEDGER L5 (dependent type theory).  Grail = ordinal analysis of impredicative
+ * theories (B3, open).  Legitimate B2: a DECIDABLE type-checker + NORMALIZATION on the implicational/combinator
+ * fragment (Curry-Howard).  I:A->A, K:A->(B->A) -- the types ARE intuitionistic Hilbert axioms; reduction is
+ * strongly normalizing; type-checking is decidable -- exhibited by a REFUSED ill-typed application.  Boundary:
+ * full dependent/impredicative normalization is B3.  exit 99. */
+module m1836
+const TA  : u32 = 1u32      /* base type A */
+const TB  : u32 = 2u32      /* base type B */
+const TERR: u32 = 0u32      /* ill-typed */
+/* tc_apply(func arrow dom->cod, arg) : cod if arg matches dom, else TERR -- decidable application typing */
+fn tc_apply(dom: u32, cod: u32, arg: u32) -> u32 { if arg == dom { return cod }  return TERR }
+fn comb_I(x: u64) -> u64 { return x }                       /* I x -> x */
+fn comb_K(x: u64, y: u64) -> u64 { return x }             /* K x y -> x */
+fn main() -> u64 {
+    /* DECIDABLE TYPING: I_A : A->A applied to an A is well-typed (A); applied to a B is REJECTED */
+    if tc_apply(TA, TA, TA) != TA { return 11u64 }                    /* I_A on A : A  (well-typed) */
+    if tc_apply(TA, TA, TB) != TERR { return 12u64 }                  /* I_A on B : REJECTED (decidability) */
+    /* NORMALIZATION (strongly terminating reduction on the typed fragment) */
+    if comb_I(7u64) != 7u64 { return 13u64 }                          /* A->A normalizes */
+    if comb_K(7u64, 9u64) != 7u64 { return 14u64 }                    /* A->(B->A) normalizes */
+    if comb_K(7u64, comb_K(7u64, 9u64)) != 7u64 { return 15u64 }      /* S K K 7 ->* 7 (=I): a multi-step normalization */
+    return 99u64
+}

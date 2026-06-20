@@ -1,0 +1,39 @@
+/* 1837_grail_latticerep.iii -- GRAIL LEDGER L6 (lattice theory).  Grail = the Finite Lattice Representation Problem
+ * (which finite lattices are congruence lattices of finite algebras) -- B3, open.  Legitimate B2: realize a SPECIFIC
+ * finite lattice as a congruence lattice.  Con(3-element algebra with no operations) = the partition lattice Pi_3 =
+ * M3 (bottom, 3 atoms, top): every equivalence relation is a congruence, and the three "merge one pair" partitions
+ * are the atoms.  Verified to be M3 -- non-distributive.  Boundary: the GENERAL representation problem stays B3. exit 99. */
+module m1837
+/* lattice codes: 0=bottom (all separate), 1/2/3 = atoms (one pair merged), 4=top (all merged) */
+fn cj(x: u32, y: u32) -> u32 {            /* join = coarsest: transitive closure of the union */
+    if x == 0u32 { return y }   if y == 0u32 { return x }
+    if x == 4u32 { return 4u32 } if y == 4u32 { return 4u32 }
+    if x == y { return x }
+    return 4u32                            /* two distinct atoms force all three together -> top */
+}
+fn cm(x: u32, y: u32) -> u32 {            /* meet = finest: intersection of the partitions */
+    if x == 4u32 { return y }   if y == 4u32 { return x }
+    if x == 0u32 { return 0u32 } if y == 0u32 { return 0u32 }
+    if x == y { return x }
+    return 0u32                            /* two distinct atoms share only the all-separate refinement -> bottom */
+}
+fn main() -> u64 {
+    let mut x : u32 = 0u32
+    while x < 5u32 {
+        if cm(0u32, x) != 0u32 { return 11u64 }            /* bottom */
+        if cj(4u32, x) != 4u32 { return 12u64 }            /* top */
+        if cj(0u32, x) != x { return 13u64 }
+        if cm(4u32, x) != x { return 14u64 }
+        x = x + 1u32
+    }
+    /* the three atoms: pairwise join = top, pairwise meet = bottom (the M3 diamond) */
+    if cj(1u32, 2u32) != 4u32 { return 21u64 }
+    if cj(1u32, 3u32) != 4u32 { return 22u64 }
+    if cj(2u32, 3u32) != 4u32 { return 23u64 }
+    if cm(1u32, 2u32) != 0u32 { return 24u64 }
+    if cm(1u32, 3u32) != 0u32 { return 25u64 }
+    /* NON-DISTRIBUTIVE (M3, not a chain): a ^ (b v c) != (a^b) v (a^c) */
+    if cm(1u32, cj(2u32, 3u32)) != 1u32 { return 31u64 }   /* 1 ^ top = 1 */
+    if cj(cm(1u32, 2u32), cm(1u32, 3u32)) != 0u32 { return 32u64 }   /* bottom v bottom = bottom */
+    return 99u64   /* M3 realized as Con(3-set): a specific finite lattice IS a congruence lattice (the general problem = B3) */
+}

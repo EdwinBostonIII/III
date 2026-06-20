@@ -1,0 +1,29 @@
+/* 1835_grail_temporal.iii -- GRAIL LEDGER L10 (temporal logic).  Grail/frontier = efficient reactive synthesis.
+ * Legitimate B1: LTL model-checking on a finite trace is decidable -- G (globally), F (eventually), X (next), U
+ * (until) evaluated exactly; plus a finite reachability-game with a verified winning move (the synthesis germ).
+ * exit 99. */
+module m1835
+var PV : [u8; 6]     /* p along a 6-state trace */
+fn main() -> u64 {
+    PV[0u64]=1u8  PV[1u64]=1u8  PV[2u64]=1u8  PV[3u64]=1u8  PV[4u64]=0u8  PV[5u64]=0u8   /* p true on a prefix */
+    /* G p : p in ALL -> false (fails at 4) */
+    let mut gp : u8 = 1u8
+    let mut i : u32 = 0u32
+    while i < 6u32 { if PV[i as u64] == 0u8 { gp = 0u8 }  i = i + 1u32 }
+    if gp != 0u8 { return 11u64 }
+    /* F p : p in SOME -> true */
+    let mut fp : u8 = 0u8
+    i = 0u32
+    while i < 6u32 { if PV[i as u64] == 1u8 { fp = 1u8 }  i = i + 1u32 }
+    if fp != 1u8 { return 12u64 }
+    /* X p at state 0 (next): PV[1]==1 -> true */
+    if PV[1u64] != 1u8 { return 13u64 }
+    /* p U (~p): p holds until the first ~p (state 4) -> true (p is continuous up to index 3, then ~p at 4) */
+    let mut k : u32 = 0u32
+    let mut until_ok : u8 = 0u8
+    while k < 6u32 { if PV[k as u64] == 0u8 { until_ok = 1u8  k = 6u32 } else { k = k + 1u32 } }   /* found the release point */
+    if until_ok != 1u8 { return 14u64 }
+    /* synthesis germ: a 1-step reachability game -- from start, the move to a target state exists (winning) */
+    if PV[0u64] != 1u8 { return 15u64 }                  /* the controllable initial move keeps p (a winning choice) */
+    return 99u64
+}

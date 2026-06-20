@@ -16,6 +16,7 @@ The five walls and their canonical documents:
 - **Communication complexity** — `III-COMMCOMPLEXITY-WALL-FORMAL.md` (KAT 1877)
 - **Ramsey theory** — `III-RAMSEY-WALL-FORMAL.md` (KAT 1878)
 - **Constructibility (Galois)** — `III-CONSTRUCTIBILITY-WALL-FORMAL.md` (KAT 1879)
+- **Independence (Goodstein)** — `III-INDEPENDENCE-WALL-FORMAL.md` (KAT 1880) — *the deliberate falsifier*
 
 ---
 
@@ -60,9 +61,20 @@ per wall ("open-by-explosion," a separate "SETTLED" kind); that ran hot (advisor
     bound** (communication complexity, `D(EQ)=n+1`, `1877`) and a **proven impossibility of a construction**
     (constructibility — doubling/trisection, `1879`). (Earlier these were two kinds, "CLIMBED" and "SETTLED"; they are
     one — *closed by proof* — and merging them is the honest call.)
+  - **INDEPENDENT (earned, by the falsifier probe)** — the truth is settled but provability is *relative to the base
+    theory*: **Goodstein** (`1880`) is true (via `ε₀`-induction) yet unprovable in PA (Kirby–Paris). This is a genuinely
+    distinct fourth kind — *not* OPEN (truth settled), *not* OBSTRUCTED (no undecidable computation; each instance is
+    decidable), *not* CLOSED in PA. It is **earned**, anchored to a named phenomenon — the contrast with the over-minted
+    cells (§ below) is the point: this one survives the "is it gated/cited or a gloss?" test.
 - **The essential precondition is wall-specific** (§3) — the *template* is invariant, the *boundary* is not. (But not
   every wall needs a *unique* precondition: Ramsey's was over-claimed as "exhaustion-feasibility" and is really the
   ordinary OPEN methodological gap; see §3.)
+- **The template's first FOUND LIMIT (from the falsifier).** In all nine computational walls the *boundary* was a
+  **computational/structural** quantity. The independence wall (`1880`) makes the boundary **proof-theoretic** (PA vs
+  `ε₀`) — revealing that "boundary = computational difficulty" was a *hidden assumption*, not a universal feature. So the
+  template **partly generalizes and partly breaks**: island and core extend (a new earned INDEPENDENT cell), but the
+  boundary concept stops being computational. A template with a *found limit* is more trustworthy than one with only
+  successes — that, not a tenth confirmation, is the honest culmination.
 
 ---
 
@@ -149,6 +161,7 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 | Communication complexity | log-rank conjecture | **CLOSED** — proven lower bound (D(EQ)=n+1) + open face | — | EQ fooling-set proven lower bound | 1877 |
 | Ramsey theory | R(5,5), … | OPEN (combinatorics) | — | `R(3,3)=6` by exhaustion | 1878 |
 | Constructibility | classical constructions | **CLOSED** — proven impossible (Wantzel) | — | cube/trisection impossible (deg 3≠2^k) | 1879 |
+| Independence (Goodstein) | `∀m, G(m)` terminates | **INDEPENDENT** — true, unprovable in PA (Kirby–Paris) | — | small `G(m)` terminate; values unbounded | 1880 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

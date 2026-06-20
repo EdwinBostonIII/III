@@ -1,0 +1,87 @@
+/* 1880_grail_goodstein_independence.iii -- THE INDEPENDENCE PROBE (a FALSIFIER for the island/boundary/core template):
+ * Goodstein's theorem.  Does the template even APPLY to a statement that is TRUE but INDEPENDENT of its base theory?
+ *
+ * THE OBJECT.  The Goodstein sequence of m: start v=m at base b=2; each step, write v in HEREDITARY base b (every
+ * exponent also in hereditary base b), replace every b by b+1, then subtract 1; increment b.  Goodstein's theorem
+ * (1944): EVERY such sequence eventually reaches 0.
+ *
+ * THE INDEPENDENCE (CITED, Kirby-Paris 1982).  Goodstein's theorem is TRUE (provable using transfinite induction up to
+ * the ordinal epsilon_0) but is UNPROVABLE in Peano Arithmetic.  PA proves "G(m) terminates" for each FIXED m, yet
+ * cannot prove the UNIVERSAL "for all m, G(m) terminates".  So the core here is a fourth kind, distinct from OPEN /
+ * OBSTRUCTED / CLOSED: it is INDEPENDENT -- the truth is settled (true), but provability is RELATIVE to the theory.
+ *
+ * DOES THE TEMPLATE APPLY?  (the falsifier test, honest verdict in the doc)
+ *   - ISLAND (gated here): small Goodstein sequences terminate -- G(1), G(2), G(3) reach 0 in finitely many steps,
+ *     computed exactly via the hereditary-base bump-and-subtract.
+ *   - BOUNDARY (STRAINED): the boundary is no longer computational (a structural quantity) but PROOF-THEORETIC -- it is
+ *     the strength PA-per-instance vs epsilon_0-for-the-universal.  The template's "boundary" slot still applies but
+ *     CHANGES NATURE, from "what makes computation hard" to "what proof strength is required".
+ *   - CORE: INDEPENDENT (true, unprovable in PA).  And the COMPUTATIONAL reason the universal cannot be checked by
+ *     exhaustion is UNBOUNDED GROWTH: a taller-tower start like 16 = 2^(2^2) grows past u64 within a couple of steps (we
+ *     detect the overflow) -- so the values exceed any a-priori fixed bound and no fixed-width exhaustion settles the
+ *     universal; only a stronger PROOF does.  (The famous G(4) also diverges before returning, but only ~quadratically
+ *     in the base, so it stays within u64 for ~3e9 steps -- hence we use 16 to exhibit the overflow quickly.)
+ *
+ * HONEST TAG (math-olympiad #4): the small cases terminating is a gated fact; Goodstein's theorem and its independence
+ * are CITED.  The value is the FALSIFIER verdict -- the template extends to independence but its "boundary" goes
+ * proof-theoretic, an earned new core kind (INDEPENDENT), not a minted one.
+ * exit 99 = G(1),G(2),G(3) terminate (reach 0) AND G(16) grows past u64 (unbounded -> uncheckable by exhaustion). */
+module mgood
+var OVF : [u8; 1]
+
+fn ipow_safe(base: u64, e: u64) -> u64 {
+    let mut r : u64 = 1u64  let mut i : u64 = 0u64  let max : u64 = 0xFFFFFFFFFFFFFFFFu64
+    while i < e {
+        if base != 0u64 { if r > max / base { OVF[0u64] = 1u8  return 0u64 } }
+        r = r * base
+        i = i + 1u64
+    }
+    return r
+}
+/* bump(v,b): value of v in hereditary base b with b replaced by b+1 */
+fn bump(v: u64, b: u64) -> u64 {
+    if v == 0u64 { return 0u64 }
+    let max : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut result : u64 = 0u64  let mut x : u64 = v  let mut i : u64 = 0u64
+    while x > 0u64 {
+        let c : u64 = x % b
+        if c > 0u64 {
+            let e : u64 = bump(i, b)                       /* recurse on the exponent (position) */
+            if OVF[0u64] == 1u8 { return 0u64 }
+            let p : u64 = ipow_safe(b + 1u64, e)
+            if OVF[0u64] == 1u8 { return 0u64 }
+            if p != 0u64 { if c > max / p { OVF[0u64] = 1u8  return 0u64 } }
+            let term : u64 = c * p
+            if result > max - term { OVF[0u64] = 1u8  return 0u64 }
+            result = result + term
+        }
+        x = x / b
+        i = i + 1u64
+    }
+    return result
+}
+/* returns 1 = terminates (reaches 0), 2 = explodes past u64, 0 = step cap hit */
+fn goodstein(m: u64, maxsteps: u32) -> u8 {
+    let mut v : u64 = m  let mut b : u64 = 2u64  let mut steps : u32 = 0u32
+    while v != 0u64 {
+        if steps >= maxsteps { return 0u8 }
+        OVF[0u64] = 0u8
+        let nb : u64 = bump(v, b)
+        if OVF[0u64] == 1u8 { return 2u8 }                 /* exploded past u64 */
+        v = nb - 1u64
+        b = b + 1u64
+        steps = steps + 1u32
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* ISLAND: small Goodstein sequences terminate */
+    if goodstein(1u64, 100000u32) != 1u8 { return 10u64 }
+    if goodstein(2u64, 100000u32) != 1u8 { return 11u64 }
+    if goodstein(3u64, 100000u32) != 1u8 { return 12u64 }
+    /* UNBOUNDED GROWTH: a taller-tower start, 16 = 2^(2^2), outgrows u64 within a couple of steps ->
+     * values exceed any fixed bound, so exhaustion cannot settle the universal statement. */
+    if goodstein(16u64, 100000u32) != 2u8 { return 13u64 }
+    return 99u64
+}

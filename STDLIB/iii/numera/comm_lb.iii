@@ -1,0 +1,98 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\comm_lb.iii
+ *
+ * III STDLIB - numera::comm_lb
+ *
+ * COMMUNICATION-COMPLEXITY LOWER BOUND (the rank method) + GF(2) MATRIX RANK.
+ *
+ * ROLE.  For a 2-party boolean function f given by its communication matrix M (rows = Alice's inputs, cols = Bob's),
+ * a c-bit deterministic protocol partitions M into <= 2^c monochromatic combinatorial rectangles; each 1-rectangle has
+ * rank 1 over any field, so rank_F(M) <= 2^c and the deterministic communication complexity satisfies
+ *     D(f) >= ceil(log2 rank_F(M))   -- a PROVEN lower bound, the climbed face of the communication-complexity wall
+ * (DOCS/III-COMMCOMPLEXITY-WALL-FORMAL.md).  This faculty computes rank over GF(2) (clean and exact) and returns that
+ * certified lower bound.  (Whether the rank bound is also a poly UPPER bound is the open log-rank conjecture.)
+ *
+ * USE CASES.  Certify that a distributed/2-party decision problem provably requires >= L bits of communication (a real
+ * lower bound, not a heuristic); compute the GF(2) rank of any boolean matrix.
+ *
+ * INVOCATION.  cml_reset(n) -> cml_set(r,c,v) (boolean entries of an n x n matrix) -> cml_rank_gf2() (the GF(2) rank)
+ * and cml_lb() (the certified D(f) >= ceil(log2 rank) lower bound).
+ *
+ * IMPACTS / LIMITATIONS (honest).
+ *   - n x n boolean matrices up to CML_MAX = 64 (rows are u64 bit-vectors); exact GF(2) Gaussian elimination.
+ *   - The bound is LOWER only -- it certifies hardness, never an upper bound (the protocol).  The GF(2)-rank bound can
+ *     be weaker than the real-rank bound for some f; it is always VALID (rank over any field lower-bounds D).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W1, W2, W13, W14, W15 (no recursion).
+ * Self-test: cml_kat() -> u64 returns 99 on full KAT pass.
+ */
+module comm_lb
+
+const CML_MAX : u32 = 64u32
+
+var CML_ROW : [u64; 64]    /* CML_ROW[r] bit c = M[r][c] */
+var CML_WRK : [u64; 64]    /* working copy for elimination */
+var CML_N : [u32; 1]
+
+fn cml_reset(n: u32) -> i32 @export {
+    if n > CML_MAX { return 0i32 - 1i32 }            /* [OOB] @export: n caps CML_ROW[64] and u64 cols */
+    CML_N[0u64] = n  let mut i : u32 = 0u32  while i < n { CML_ROW[i as u64] = 0u64  i = i + 1u32 }
+    return 0i32
+}
+fn cml_set(r: u32, c: u32, v: u8) -> i32 @export {
+    let n : u32 = CML_N[0u64]  if r >= n { return 0i32 - 1i32 }  if c >= n { return 0i32 - 1i32 }   /* [OOB] @export */
+    if v == 0u8 { CML_ROW[r as u64] = CML_ROW[r as u64] & ((1u64 << (c as u64)) ^ 0xFFFFFFFFFFFFFFFFu64) }
+    else { CML_ROW[r as u64] = CML_ROW[r as u64] | (1u64 << (c as u64)) }
+    return 0i32
+}
+fn cml_rank_gf2() -> u32 @export {
+    let n : u32 = CML_N[0u64]
+    let mut i : u32 = 0u32  while i < n { CML_WRK[i as u64] = CML_ROW[i as u64]  i = i + 1u32 }   /* work on a copy */
+    let mut rank : u32 = 0u32  let mut col : u32 = 0u32
+    while col < n {
+        /* find a pivot row >= rank with bit col set */
+        let mut piv : u32 = n  let mut r : u32 = rank
+        while r < n { if (CML_WRK[r as u64] & (1u64 << (col as u64))) != 0u64 { piv = r  r = n } else { r = r + 1u32 } }
+        if piv < n {
+            let tmp : u64 = CML_WRK[rank as u64]  CML_WRK[rank as u64] = CML_WRK[piv as u64]  CML_WRK[piv as u64] = tmp
+            let mut j : u32 = 0u32
+            while j < n { if j != rank { if (CML_WRK[j as u64] & (1u64 << (col as u64))) != 0u64 { CML_WRK[j as u64] = CML_WRK[j as u64] ^ CML_WRK[rank as u64] } }  j = j + 1u32 }
+            rank = rank + 1u32
+        }
+        col = col + 1u32
+    }
+    return rank
+}
+fn cml_lb() -> u32 @export {     /* ceil(log2(rank)) -- the certified D(f) lower bound */
+    let r : u32 = cml_rank_gf2()
+    if r <= 1u32 { return 0u32 }
+    let mut c : u32 = 0u32
+    while (1u32 << c) < r { c = c + 1u32 }
+    return c
+}
+
+fn cml_kat() -> u64 @export {
+    /* EQUALITY on 3-bit inputs = the 8x8 identity: GF(2) rank 8, D(EQ) >= ceil(log2 8) = 3 */
+    cml_reset(8u32)
+    let mut i : u32 = 0u32  while i < 8u32 { cml_set(i, i, 1u8)  i = i + 1u32 }
+    if cml_rank_gf2() != 8u32 { return 10u64 }
+    if cml_lb() != 3u32 { return 11u64 }
+    /* a constant all-ones matrix: rank 1, lower bound 0 */
+    cml_reset(4u32)
+    let mut a : u32 = 0u32  while a < 4u32 { let mut b : u32 = 0u32  while b < 4u32 { cml_set(a, b, 1u8)  b = b + 1u32 }  a = a + 1u32 }
+    if cml_rank_gf2() != 1u32 { return 12u64 }
+    if cml_lb() != 0u32 { return 13u64 }
+    /* a rank-2 matrix: two distinct nonzero rows repeated -> rank 2, lb 1 */
+    cml_reset(4u32)
+    cml_set(0u32,0u32,1u8) cml_set(0u32,1u32,1u8)              /* row 1100 */
+    cml_set(1u32,0u32,1u8) cml_set(1u32,1u32,1u8)
+    cml_set(2u32,2u32,1u8) cml_set(2u32,3u32,1u8)              /* row 0011 */
+    cml_set(3u32,2u32,1u8) cml_set(3u32,3u32,1u8)
+    if cml_rank_gf2() != 2u32 { return 14u64 }
+    if cml_lb() != 1u32 { return 15u64 }
+    /* zero matrix: rank 0, lb 0 */
+    cml_reset(3u32)
+    if cml_rank_gf2() != 0u32 { return 16u64 }
+    if cml_lb() != 0u32 { return 17u64 }
+    return 99u64
+}

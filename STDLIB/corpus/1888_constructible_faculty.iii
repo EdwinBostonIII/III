@@ -1,0 +1,60 @@
+/* 1888_constructible_faculty.iii -- GATES the production numera::constructible faculty against independent checks.
+ * exit 99 = ctr_kat()==99 AND ctr_has_rational_root == an independent brute root-search on random cubics, AND
+ *           ctr_ngon_constructible == an independent Gauss-Wantzel recomputation for n=3..400. */
+module mctrf
+extern @abi(c-msvc-x64) fn ctr_has_rational_root(c0: i64, c1: i64, c2: i64, c3: i64, deg: u32) -> u8 from "constructible.iii"
+extern @abi(c-msvc-x64) fn ctr_ngon_constructible(n: u64) -> u8 from "constructible.iii"
+extern @abi(c-msvc-x64) fn ctr_is_pow2(d: u64) -> u8 from "constructible.iii"
+extern @abi(c-msvc-x64) fn ctr_kat() -> u64 from "constructible.iii"
+var SEED : [u64; 1]
+fn xr() -> u64 { let mut x : u64 = SEED[0u64]  x = x ^ (x << 13u64)  x = x ^ (x >> 7u64)  x = x ^ (x << 17u64)  SEED[0u64] = x  return x }
+fn hom(c0: i64, c1: i64, c2: i64, c3: i64, p: i64, q: i64) -> i64 { return c3*p*p*p + c2*p*p*q + c1*p*q*q + c0*q*q*q }
+/* independent brute: search p in [-40,40], q in [1,40] for a root p/q of the homogenised cubic */
+fn brute_root(c0: i64, c1: i64, c2: i64, c3: i64) -> u8 {
+    let mut p : i64 = 0i64 - 40i64
+    while p <= 40i64 { let mut q : i64 = 1i64  while q <= 40i64 { if hom(c0,c1,c2,c3,p,q) == 0i64 { return 1u8 }  q = q + 1i64 }  p = p + 1i64 }
+    return 0u8
+}
+/* independent Gauss-Wantzel: n constructible iff odd part is squarefree product of {3,5,17,257} (range <=400) */
+fn ind_ngon(n: u64) -> u8 {
+    if n < 3u64 { return 1u8 }
+    let mut m : u64 = n  while (m & 1u64) == 0u64 { m = m >> 1u64 }
+    /* m must be squarefree over Fermat primes 3,5,17,257 (65537 > 400 not needed here) */
+    let mut prod : u64 = 1u64
+    if (m % 3u64) == 0u64 { prod = prod * 3u64 }
+    if (m % 5u64) == 0u64 { prod = prod * 5u64 }
+    if (m % 17u64) == 0u64 { prod = prod * 17u64 }
+    if (m % 257u64) == 0u64 { prod = prod * 257u64 }
+    if prod == m { return 1u8 }   /* m equals the product of the distinct Fermat primes dividing it (so squarefree) */
+    return 0u8
+}
+fn main() -> u64 {
+    if ctr_kat() != 99u64 { return 50u64 }
+    SEED[0u64] = 0xC0457217u64
+    /* random cubics: ctr_has_rational_root == brute */
+    let mut t : u32 = 0u32  let mut rooted : u32 = 0u32  let mut irr : u32 = 0u32
+    while t < 4000u32 {
+        let c0 : i64 = ((xr() % 21u64) as i64) - 10i64
+        let c1 : i64 = ((xr() % 21u64) as i64) - 10i64
+        let c2 : i64 = ((xr() % 21u64) as i64) - 10i64
+        let mut c3 : i64 = ((xr() % 21u64) as i64) - 10i64
+        if c3 == 0i64 { c3 = 1i64 }
+        let fac : u8 = ctr_has_rational_root(c0, c1, c2, c3, 3u32)
+        let bru : u8 = brute_root(c0, c1, c2, c3)
+        if fac != bru { return 10u64 }
+        if fac == 1u8 { rooted = rooted + 1u32 } else { irr = irr + 1u32 }
+        t = t + 1u32
+    }
+    /* n-gon: faculty == independent for n=3..400 */
+    let mut n : u64 = 3u64
+    while n <= 400u64 {
+        if ctr_ngon_constructible(n) != ind_ngon(n) { return 11u64 }
+        n = n + 1u64
+    }
+    /* is_pow2 spot checks */
+    if ctr_is_pow2(64u64) != 1u8 { return 12u64 }
+    if ctr_is_pow2(48u64) != 0u8 { return 13u64 }
+    if rooted < 200u32 { return 60u64 }
+    if irr < 200u32 { return 61u64 }
+    return 99u64
+}

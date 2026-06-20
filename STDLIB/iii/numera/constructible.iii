@@ -1,0 +1,121 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\constructible.iii
+ *
+ * III STDLIB - numera::constructible
+ *
+ * STRAIGHTEDGE-AND-COMPASS CONSTRUCTIBILITY (Wantzel) + RATIONAL-ROOT IRREDUCIBILITY + GAUSS-WANTZEL n-GON.
+ *
+ * ROLE.  Decide the classical constructibility questions by the algebraic invariant that resolved them (Wantzel 1837):
+ * a real number is constructible only if its degree [Q(alpha):Q] is a POWER OF 2.  This faculty provides:
+ *   - the rational-root test / cubic irreducibility (so a degree-3 minimal polynomial is recognised, e.g. 2^(1/3) and
+ *     cos20deg -> the impossibility of doubling the cube and trisecting a general angle, corpus 1879);
+ *   - the constructibility test from a minimal-polynomial degree (power-of-2 check);
+ *   - the GAUSS-WANTZEL criterion: a regular n-gon is constructible iff the odd part of n is a product of DISTINCT
+ *     Fermat primes (3, 5, 17, 257, 65537).
+ *
+ * USE CASES.  Decide whether a geometric construction is possible, whether a regular n-gon can be drawn, and test small
+ * integer polynomials for a rational root / cubic irreducibility -- a clean number-theory utility.  See
+ * DOCS/III-CONSTRUCTIBILITY-WALL-FORMAL.md.
+ *
+ * INVOCATION.
+ *   ctr_has_rational_root(c0,c1,c2,c3,deg) -> 1 if the integer polynomial sum c_i x^i (deg<=3) has a rational root.
+ *   ctr_cubic_irreducible(c0,c1,c2,c3)     -> 1 if c3 x^3+...+c0 is irreducible over Q (c3!=0, no rational root).
+ *   ctr_is_pow2(d) / ctr_constructible_from_degree(d) -> 1 if d is a power of 2 (the Wantzel necessary condition).
+ *   ctr_ngon_constructible(n)              -> 1 if a regular n-gon is straightedge-compass constructible (Gauss-Wantzel).
+ *
+ * IMPACTS / LIMITATIONS (honest).
+ *   - The rational-root / cubic-irreducibility test is for integer polynomials of degree <= 3 with i64 coefficients
+ *     (the doubling/trisection witnesses and most classical cases).  Higher degree / bignum is a v2.
+ *   - ctr_constructible_from_degree is the NECESSARY Wantzel condition (degree a power of 2); for a specific number the
+ *     caller supplies the minimal-polynomial degree.
+ *   - Gauss-Wantzel uses the five known Fermat primes (3,5,17,257,65537) -- sufficient for any n that fits i64
+ *     (no Fermat prime beyond 65537 is known, and none exists below 2^32).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W1, W2, W13, W14, W15 (no recursion).
+ * Self-test: ctr_kat() -> u64 returns 99 on full KAT pass.
+ */
+module constructible
+
+fn ctr_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x } return x }
+/* evaluate c3 p^3 + c2 p^2 q + c1 p q^2 + c0 q^3  (the homogenised value at x = p/q for the degree-3 form) */
+fn ctr_eval_hom(c0: i64, c1: i64, c2: i64, c3: i64, p: i64, q: i64) -> i64 {
+    return c3 * p * p * p + c2 * p * p * q + c1 * p * q * q + c0 * q * q * q
+}
+fn ctr_has_rational_root(c0: i64, c1: i64, c2: i64, c3: i64, deg: u32) -> u8 @export {
+    /* leading coefficient by degree */
+    let mut lead : i64 = c0
+    if deg == 1u32 { lead = c1 }  if deg == 2u32 { lead = c2 }  if deg == 3u32 { lead = c3 }
+    if lead == 0i64 { return 0u8 }                       /* malformed: degree claim wrong */
+    if c0 == 0i64 { return 1u8 }                         /* x=0 is a root */
+    let alead : i64 = ctr_iabs(lead)  let ac0 : i64 = ctr_iabs(c0)
+    /* candidate rational roots p/q: p | c0, q | lead */
+    let mut p : i64 = 1i64
+    while p <= ac0 {
+        if (ac0 % p) == 0i64 {
+            let mut q : i64 = 1i64
+            while q <= alead {
+                if (alead % q) == 0i64 {
+                    /* test +p/q and -p/q against the homogenised degree-3 form (pad lower degrees: higher c are 0) */
+                    if ctr_eval_hom(c0, c1, c2, c3, p, q) == 0i64 { return 1u8 }
+                    if ctr_eval_hom(c0, c1, c2, c3, 0i64 - p, q) == 0i64 { return 1u8 }
+                }
+                q = q + 1i64
+            }
+        }
+        p = p + 1i64
+    }
+    return 0u8
+}
+fn ctr_cubic_irreducible(c0: i64, c1: i64, c2: i64, c3: i64) -> u8 @export {
+    if c3 == 0i64 { return 0u8 }                         /* not a cubic */
+    if ctr_has_rational_root(c0, c1, c2, c3, 3u32) == 1u8 { return 0u8 }   /* a cubic with a rational root factors */
+    return 1u8                                            /* degree 3, no rational root => irreducible over Q */
+}
+fn ctr_is_pow2(d: u64) -> u8 @export {
+    if d == 0u64 { return 0u8 }
+    if (d & (d - 1u64)) == 0u64 { return 1u8 }
+    return 0u8
+}
+fn ctr_constructible_from_degree(d: u64) -> u8 @export { return ctr_is_pow2(d) }   /* Wantzel necessary condition */
+
+fn ctr_ngon_constructible(n: u64) -> u8 @export {
+    if n < 3u64 { return 1u8 }                           /* degenerate (0/1/2): trivially "constructible" */
+    let mut m : u64 = n
+    while (m & 1u64) == 0u64 { m = m >> 1u64 }            /* strip factors of 2 -> odd part */
+    /* odd part must be a product of DISTINCT Fermat primes */
+    if (m % 3u64) == 0u64 { m = m / 3u64  if (m % 3u64) == 0u64 { return 0u8 } }
+    if (m % 5u64) == 0u64 { m = m / 5u64  if (m % 5u64) == 0u64 { return 0u8 } }
+    if (m % 17u64) == 0u64 { m = m / 17u64  if (m % 17u64) == 0u64 { return 0u8 } }
+    if (m % 257u64) == 0u64 { m = m / 257u64  if (m % 257u64) == 0u64 { return 0u8 } }
+    if (m % 65537u64) == 0u64 { m = m / 65537u64  if (m % 65537u64) == 0u64 { return 0u8 } }
+    if m == 1u64 { return 1u8 }                           /* fully factored into distinct Fermat primes */
+    return 0u8                                            /* a leftover odd factor that is not a Fermat prime */
+}
+
+fn ctr_kat() -> u64 @export {
+    /* doubling the cube: x^3 - 2 irreducible (deg 3, not a power of 2) -> impossible */
+    if ctr_cubic_irreducible(0i64 - 2i64, 0i64, 0i64, 1i64) != 1u8 { return 10u64 }
+    if ctr_constructible_from_degree(3u64) != 0u8 { return 11u64 }
+    /* trisecting 60deg: 8x^3 - 6x - 1 irreducible -> impossible */
+    if ctr_cubic_irreducible(0i64 - 1i64, 0i64 - 6i64, 0i64, 8i64) != 1u8 { return 12u64 }
+    /* a reducible cubic: x^3 - 1 = (x-1)(x^2+x+1) has the rational root x=1 */
+    if ctr_cubic_irreducible(0i64 - 1i64, 0i64, 0i64, 1i64) != 0u8 { return 13u64 }
+    /* x^3 - x = x(x-1)(x+1): rational roots */
+    if ctr_has_rational_root(0i64, 0i64 - 1i64, 0i64, 1i64, 3u32) != 1u8 { return 14u64 }
+    /* degree power-of-2 */
+    if ctr_constructible_from_degree(4u64) != 1u8 { return 15u64 }
+    if ctr_constructible_from_degree(2u64) != 1u8 { return 16u64 }
+    if ctr_constructible_from_degree(6u64) != 0u8 { return 17u64 }
+    /* Gauss-Wantzel small n: constructible {3,4,5,6,8,10,12,15,16,17,20,24}, not {7,9,11,13,14,18,21,23,25} */
+    if ctr_ngon_constructible(3u64) != 1u8 { return 20u64 }
+    if ctr_ngon_constructible(5u64) != 1u8 { return 21u64 }
+    if ctr_ngon_constructible(15u64) != 1u8 { return 22u64 }   /* 3*5, distinct Fermat */
+    if ctr_ngon_constructible(17u64) != 1u8 { return 23u64 }   /* Fermat prime */
+    if ctr_ngon_constructible(6u64) != 1u8 { return 24u64 }    /* 2*3 */
+    if ctr_ngon_constructible(7u64) != 0u8 { return 25u64 }    /* 7 not Fermat */
+    if ctr_ngon_constructible(9u64) != 0u8 { return 26u64 }    /* 3*3 not distinct */
+    if ctr_ngon_constructible(11u64) != 0u8 { return 27u64 }
+    if ctr_ngon_constructible(25u64) != 0u8 { return 28u64 }   /* 5*5 not distinct */
+    if ctr_ngon_constructible(51u64) != 1u8 { return 29u64 }   /* 3*17 distinct Fermat */
+    return 99u64
+}

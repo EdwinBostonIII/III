@@ -102,5 +102,40 @@ hashes *sources*, not build artifacts, so untracking them is safe:
 | `.lerr/.lderr/.err` | 32 | untrack — error logs |
 | `.iii.o` objects, `.a` lib, `.mhash` seal, generated `.iii`/`.c` | ~127 | **keep tracked** (the prebuilt lib + side-effect objects the flaky build relies on; the seal) |
 
-~8,522 files untracked via `git rm --cached` (kept on disk) + `.gitignore`. Also fixes the documented
-carto-truncation (build/ artifacts ate the cartographer's file budget).
+~8,099 files untracked via `git rm --cached` (kept on disk) + scoped `.gitignore` (commit `69b7043f`:
+STDLIB/build tracked 8,617 → 518; total repo 4,807). Also fixes the documented carto-truncation
+(build/ artifacts ate the cartographer's file budget).
+
+---
+
+## 7. Closure — glyph review, final gate, and the build/gate-error disposition
+
+**glyph `@specialize` review (RESULT: KEEP — does not fit).** `@specialize` (used by
+option/result/iter/map/vec/span/q128/sha256) serves type-*agnostic* generics. `glyph_{u64,i64,f64}` carry
+type-*specific* serialization logic (u64-raw vs i64-sign vs f64-bit-layout — 28 of ~50 lines differ
+u64↔i64); a generic `glyph<T>` cannot express per-type pack/unpack and would be MORE code + regress working
+serializers. KEPT. The 0-importer members (`glyph_i64/f64/set/vec/bytes/str`, tested by corpus 177/178)
+are a serialization feature-family — same disposition as the `*_form` runtime-parser family in §2 (your
+call), not a unilateral cut.
+
+**Thin-module audit (RESULT: no scaffolding).** The 58 "thin" modules (≤1 export or <40 LOC) are genuine
+single-responsibility organs (the `tp_*` format converters, `sha3_256/512`+`shake128/256` variants,
+`keccak_sponge`, small focused gates) — minimal *by design*, not stubs. None cut.
+
+**Final verification gate (RESULT: PASS = 16/16).** hotstuff, cost_lattice, cad, trit, charter_terminal,
+nous_socket, ripple_metric, ripple_loop, proof_ripple_unified, witness_spine, governance, h2_charter,
+xii_discharge, galois, sat, proof_term — all =99 against the slimmed lib. Reseal deterministic (666
+modules, `c53394df`). Zero regression from the 4 cuts + the 8,099-artifact untrack (cuts removed only
+0-importer modules; untrack was git-index-only, files kept on disk).
+
+**Preexisting build/gate "errors" — honest root cause (NOT III-source defects).**
+- *forge_check hang*: the MSYS2 post-install profile copies Windows `\etc` files to a read-only `/etc` on
+  every shell init (the `permission denied` spam on every command); `forge_check`'s subshell loop
+  multiplies it. The SEAL is intact — `seal_sources.sh` ran deterministically twice this session. An
+  environment-config issue (the Git Bash install), not an III-source defect.
+- *carto architectural-gate FAIL*: the `cad_*`/`wvb_*avx512f` collisions are intentional scalar+AVX512
+  dual-dispatch symbols in the SIBLING `III-CARTOGRAPHER` tool (a SOFT/optional build dependency), needing
+  allowlisting in that tool's `gate_allow.json`, not an III fix. This session's cuts introduced ZERO new
+  collisions.
+Both characterized rather than hand-waved; fixing the MSYS2 env or the sibling-tool allowlist is out of the
+III source tree and awaits your direction.

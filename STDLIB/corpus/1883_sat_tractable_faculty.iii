@@ -1,0 +1,121 @@
+/* 1883_sat_tractable_faculty.iii -- GATES the production numera::sat_tractable faculty (the Schaefer-class poly SAT
+ * fast-path) against a brute-force 2^n oracle, per tractable class.
+ *
+ * For random instances OF each class (Horn / dual-Horn / 2-SAT / XOR) the faculty's poly decider must agree with the
+ * brute-force oracle (enumerate all 2^n assignments).  Both SAT and UNSAT must occur in each class.
+ * exit 99 = st_kat()==99 AND every class decider == brute on every sampled instance. */
+module mstf
+extern @abi(c-msvc-x64) fn st_reset(nvars: u32) -> i32 from "sat_tractable.iii"
+extern @abi(c-msvc-x64) fn st_clause(posmask: u32, negmask: u32) -> i32 from "sat_tractable.iii"
+extern @abi(c-msvc-x64) fn st_decide() -> u32 from "sat_tractable.iii"
+extern @abi(c-msvc-x64) fn stx_reset(nvars: u32) -> i32 from "sat_tractable.iii"
+extern @abi(c-msvc-x64) fn stx_eq(varmask: u32, rhs: u8) -> i32 from "sat_tractable.iii"
+extern @abi(c-msvc-x64) fn stx_decide() -> u32 from "sat_tractable.iii"
+extern @abi(c-msvc-x64) fn st_kat() -> u64 from "sat_tractable.iii"
+
+var GP : [u32; 128]
+var GN : [u32; 128]
+var GNC : [u32; 1]
+var GNV : [u32; 1]
+var XVS : [u32; 128]
+var XRS : [u8; 128]
+var XNCS : [u32; 1]
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+fn vmask() -> u32 { return (1u32 << GNV[0u64]) - 1u32 }
+
+fn brute_cnf() -> u8 {   /* 1=SAT, 0=UNSAT */
+    let nv : u32 = GNV[0u64]  let nc : u32 = GNC[0u64]  let lim : u32 = 1u32 << nv  let vm : u32 = vmask()
+    let mut a : u32 = 0u32
+    while a < lim {
+        let mut ok : u8 = 1u8  let mut c : u32 = 0u32
+        while c < nc { if (a & GP[c as u64]) == 0u32 { if (GN[c as u64] & (a ^ 0xFFFFFFFFu32) & vm) == 0u32 { ok = 0u8  c = nc } }  c = c + 1u32 }
+        if ok == 1u8 { return 1u8 }
+        a = a + 1u32
+    }
+    return 0u8
+}
+fn brute_xor() -> u8 {
+    let nv : u32 = GNV[0u64]  let nc : u32 = XNCS[0u64]  let lim : u32 = 1u32 << nv
+    let mut a : u32 = 0u32
+    while a < lim {
+        let mut ok : u8 = 1u8  let mut c : u32 = 0u32
+        while c < nc { if (popc(a & XVS[c as u64]) & 1u32) != (XRS[c as u64] as u32) { ok = 0u8  c = nc }  c = c + 1u32 }
+        if ok == 1u8 { return 1u8 }
+        a = a + 1u32
+    }
+    return 0u8
+}
+/* push the KAT-local CNF into the faculty */
+fn feed_cnf() -> i32 { st_reset(GNV[0u64])  let mut c : u32 = 0u32  let nc : u32 = GNC[0u64]  while c < nc { st_clause(GP[c as u64], GN[c as u64])  c = c + 1u32 }  return 0i32 }
+
+fn main() -> u64 {
+    if st_kat() != 99u64 { return 50u64 }
+    RNG[0u64] = 0x5A7F00Du32
+    /* class cls: 0=Horn(<=1 pos), 1=dual-Horn(<=1 neg), 2=2-SAT(<=2 lits) */
+    let mut cls : u32 = 0u32
+    while cls < 3u32 {
+        let mut t : u32 = 0u32  let mut sat : u32 = 0u32  let mut uns : u32 = 0u32
+        while t < 1500u32 {
+            let nv : u32 = 4u32 + (rnd() % 5u32)            /* 4..8 vars */
+            let nc : u32 = nv + (rnd() % (2u32 * nv))
+            GNV[0u64] = nv  GNC[0u64] = nc
+            let mut c : u32 = 0u32
+            while c < nc {
+                let mut pos : u32 = 0u32  let mut neg : u32 = 0u32
+                if cls == 2u32 {
+                    /* 2-SAT: up to 2 random literals */
+                    let mut j : u32 = 0u32
+                    while j < 2u32 { let v : u32 = rnd() % nv  if (rnd() & 1u32) == 0u32 { pos = pos | (1u32 << v) } else { neg = neg | (1u32 << v) }  j = j + 1u32 }
+                } else {
+                    /* random body of negatives, then maybe 1 positive (Horn) or swap roles (dual-Horn) */
+                    let mut v : u32 = 0u32
+                    while v < nv { if (rnd() % 3u32) == 0u32 { neg = neg | (1u32 << v) }  v = v + 1u32 }
+                    if (rnd() % 10u32) < 7u32 { let h : u32 = rnd() % nv  neg = neg & ((1u32 << h) ^ 0xFFFFFFFFu32)  pos = 1u32 << h }
+                    if pos == 0u32 { if neg == 0u32 { neg = 1u32 << (rnd() % nv) } }
+                    if cls == 1u32 { let tmp : u32 = pos  pos = neg  neg = tmp }   /* dual-Horn: <=1 negative */
+                }
+                GP[c as u64] = pos  GN[c as u64] = neg
+                c = c + 1u32
+            }
+            feed_cnf()
+            let fac : u32 = st_decide()
+            if fac == 2u32 { return (20u64 + cls as u64) }    /* must be classified tractable */
+            let bru : u8 = brute_cnf()
+            if (fac == 1u32) != (bru == 1u8) { return (10u64 + cls as u64) }
+            if bru == 1u8 { sat = sat + 1u32 } else { uns = uns + 1u32 }
+            t = t + 1u32
+        }
+        if sat < 50u32 { return (30u64 + cls as u64) }
+        if uns < 50u32 { return (40u64 + cls as u64) }
+        cls = cls + 1u32
+    }
+    /* XOR class */
+    let mut tx : u32 = 0u32  let mut xs : u32 = 0u32  let mut xu : u32 = 0u32
+    while tx < 2000u32 {
+        let nv : u32 = 4u32 + (rnd() % 5u32)
+        let nc : u32 = nv + (rnd() % (2u32 * nv))
+        GNV[0u64] = nv  XNCS[0u64] = nc
+        stx_reset(nv)
+        let mut c : u32 = 0u32
+        while c < nc {
+            let mut vmsk : u32 = 0u32  let mut v : u32 = 0u32
+            while v < nv { if (rnd() % 3u32) == 0u32 { vmsk = vmsk | (1u32 << v) }  v = v + 1u32 }
+            if vmsk == 0u32 { vmsk = 1u32 << (rnd() % nv) }
+            let rhs : u8 = (rnd() & 1u32) as u8
+            XVS[c as u64] = vmsk  XRS[c as u64] = rhs
+            stx_eq(vmsk, rhs)
+            c = c + 1u32
+        }
+        let facx : u32 = stx_decide()
+        let brux : u8 = brute_xor()
+        if (facx == 1u32) != (brux == 1u8) { return 15u64 }
+        if brux == 1u8 { xs = xs + 1u32 } else { xu = xu + 1u32 }
+        tx = tx + 1u32
+    }
+    if xs < 100u32 { return 45u64 }
+    if xu < 100u32 { return 46u64 }
+    return 99u64
+}

@@ -45,10 +45,11 @@ decidable cutoff.
 | **Hilbert's 10th** (`1881`) | the **oracle** | "a *decidable* ground-truth oracle exists" — false for undecidable problems (MRDP) |
 
 Both still admit a **gated island** (small `G(m)` terminate; linear Diophantine decidable), so the *island* step is
-robust across both probes. What the two falsifiers establish is the template's **domain of validity**: it applies fully
-to problems that have (i) a decidable oracle *and* (ii) a computational boundary — and it *strains in a specific,
-namable way* outside each. A method whose two boundary conditions are *explicitly identified* (by probes designed to
-break it) is more trustworthy than one tested only where it works.
+robust across both probes. What the two falsifiers establish is **two of the template's boundary conditions** — (i) a
+decidable oracle and (ii) a computational boundary — *not* the full domain of validity (two probes are two data points,
+not an enumeration; a third assumption, a clean island/core split, is already strained by communication complexity's
+open log-rank face). A method with even two *explicitly-found* boundary conditions (by probes designed to break it) is
+more trustworthy than one tested only where it works.
 
 ---
 
@@ -62,6 +63,7 @@ break it) is more trustworthy than one tested only where it works.
 
 **Bottom line.** Hilbert's 10th is the second falsifier: its linear island is gated (`1881`), but its general core is
 *undecidable with no computable oracle at all* — breaking the template's **oracle** step, as Goodstein broke its
-**boundary**. Together the two probes draw the method's domain of validity precisely: island/boundary/core holds where a
-decidable oracle and a computational boundary both exist, and strains namably outside each. Eleven walls — the last two
-deliberately chosen to find, and to name, exactly where the template stops.
+**boundary**. Together the two probes *name two of the method's boundary conditions* — a decidable oracle and a
+computational boundary — without claiming to enumerate them (a third, a clean island/core split, is already strained by
+communication complexity's open log-rank face). Eleven walls — the last two deliberately chosen to find, and to name,
+*two* of the places the template stops.

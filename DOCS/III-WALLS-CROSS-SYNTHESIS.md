@@ -78,10 +78,13 @@ per wall ("open-by-explosion," a separate "SETTLED" kind); that ran hot (advisor
   - **Hilbert's 10th (`1881`) breaks the ORACLE.** The template's first step is "build a ground-truth decider"; for an
     *undecidable* problem (MRDP) there is *none*. Hidden assumption: "a decidable oracle exists."
   Both still admit a **gated island** (small `G(m)` terminate; linear Diophantine decidable), so the *island* step is
-  robust. The two probes thus *draw the template's domain of validity*: it holds fully where a decidable oracle **and** a
-  computational boundary both exist, and strains *namably* outside each. A method whose two boundary conditions are
-  explicitly identified — by probes designed to break it — is more trustworthy than one tested only where it works. That,
-  not an eleventh confirmation, is the culmination.
+  robust. The two probes *identify two of the template's boundary conditions* — a decidable oracle, and a computational
+  boundary — but **two data points do not enumerate the assumption set** (advisor-corrected: "draws the domain of
+  validity" overstated it). At least one more assumption is already visible in the confirmation walls: a **clean
+  island/core split**, which communication complexity strains (it is CLOSED yet keeps an open log-rank *face*). So the
+  honest claim is the modest one: *two* hidden assumptions are now named by probes built to break the method; others may
+  remain. A method with even two explicitly-found boundary conditions is more trustworthy than one tested only where it
+  works — that, not an eleventh confirmation, is the culmination.
 
 ---
 

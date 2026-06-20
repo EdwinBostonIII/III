@@ -14,6 +14,7 @@ The five walls and their canonical documents:
 - **Lattice representation** — `III-LATTICE-WALL-FORMAL.md` (KATs 1873–1874)
 - **Primality / factoring** — `III-PRIMALITY-FACTORING-WALL-FORMAL.md` (KATs 1875–1876)
 - **Communication complexity** — `III-COMMCOMPLEXITY-WALL-FORMAL.md` (KAT 1877)
+- **Ramsey theory** — `III-RAMSEY-WALL-FORMAL.md` (KAT 1878)
 
 ---
 
@@ -76,6 +77,8 @@ wall's island+boundary KATs:
 | Confluence | **termination** | terminating ARS, Newman (`1868`) | non-terminating witness (`1869`) |
 | Graph iso | **structural depth** | trees, 1-WL (`1870`) | regular graphs, 1-WL fails (`1871`) |
 | Lattice rep | **finiteness** | `Con(V₄)=M₃`, `Π_n` (`1873`,`1874`) | finite-vs-infinite (Grätzer–Schmidt) |
+| Comm. complexity | **proof-existence** (the LB is provable) | protocols / upper bounds | fooling set / rank (`1877`) |
+| Ramsey | **feasibility of exhaustion** | small cases, `R(3,3)=6` (`1878`) | explosion `2^{C(N,2)}` |
 
 Five walls, five distinct essential preconditions — control, clause-structure, termination, structural-depth,
 finiteness. No two walls are hard "for the same reason," yet all five are mapped by the one template. That tension —
@@ -132,6 +135,7 @@ is tagged a lens, its parallels tagged analogies, its facts anchored to KATs or 
 | Lattice rep | FLRP | OPEN — non-complexity (universal algebra) | — | `Con(V₄)=M₃`; `Π_n` is a lattice | 1873–1874 |
 | Primality/factoring | factoring ∈ classical P? | OPEN — local placement, **quantum-cracked** (Shor) | sub-exp (NFS) | primality ∈ P (fell); factoring NP/self-reducible | 1875–1876 |
 | Communication complexity | log-rank conjecture | **CLIMBED** (D(EQ)=n+1 proven) + open face | — | EQ fooling-set proven lower bound | 1877 |
+| Ramsey theory | R(5,5), … | OPEN — open-by-explosion (combinatorics) | — | `R(3,3)=6` by exhaustion | 1878 |
 
 **The asset thesis.** Each wall, mapped to its limit, is a grounded, cashable asset: its islands are *tools* (poly
 procedures verified in III), its barriers are *constraints* (what provably cannot work), its core is a *precisely

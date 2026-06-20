@@ -1,0 +1,65 @@
+/* 1878_grail_ramsey_r33.iii -- THE RAMSEY WALL (pure combinatorics): R(3,3) = 6, by EXHAUSTION.  (Eighth wall; shows
+ * the template reaches a new domain, with a new ISLAND flavor -- a complete small-case computation rather than an
+ * algorithm == oracle.)
+ *
+ * THE WALL.  The Ramsey number R(k,k) is the least N such that every 2-colouring of the edges of the complete graph
+ * K_N contains a monochromatic K_k.  R(3,3)=6, R(4,4)=18 are known; R(5,5) is OPEN (only 43 <= R(5,5) <= 48), and R(6,6)
+ * and beyond are wide open.  The wall is COMBINATORIAL EXPLOSION: the number of colourings of K_N is 2^C(N,2), so brute
+ * force dies almost immediately (R(5,5) would need 2^C(43,2) ~ 2^903 colourings).
+ *
+ * THE ISLAND (PROVEN here by exhaustion).  R(3,3) = 6, established two-sidedly:
+ *   - R(3,3) > 5: EXHIBIT a 2-colouring of K5 with NO monochromatic triangle -- the pentagon (red) + pentagram (blue).
+ *   - R(3,3) <= 6: EXHAUSTIVELY check all 2^15 colourings of K6 -- every one contains a monochromatic triangle.
+ * Hence R(3,3) = 6, the smallest Ramsey number (the "party problem": among 6 people, 3 mutual acquaintances or 3 mutual
+ * strangers, always).
+ *
+ * HONEST TAG (math-olympiad #4): R(3,3)=6 is a THEOREM, here re-established by exhaustion; the open core (R(5,5), ...)
+ * is untouched -- exhaustion is precisely what the explosion forbids past tiny N.
+ * exit 99 = a K5 colouring with no mono triangle exists AND all 2^15 K6 colourings contain a mono triangle (R(3,3)=6). */
+module mramsey
+
+fn eidx(i: u32, j: u32, n: u32) -> u32 { return i * n - (i * (i + 1u32)) / 2u32 + (j - i - 1u32) }   /* edge index for i<j in K_n */
+fn colour(mask: u32, i: u32, j: u32, n: u32) -> u32 {
+    let mut a : u32 = i  let mut b : u32 = j
+    if a > b { let t : u32 = a  a = b  b = t }
+    return (mask >> eidx(a, b, n)) & 1u32
+}
+fn has_mono_triangle(mask: u32, n: u32) -> u8 {
+    let mut i : u32 = 0u32
+    while i < n { let mut j : u32 = i + 1u32
+        while j < n { let mut k : u32 = j + 1u32
+            while k < n {
+                let cij : u32 = colour(mask, i, j, n)
+                let cjk : u32 = colour(mask, j, k, n)
+                let cik : u32 = colour(mask, i, k, n)
+                if cij == cjk { if cjk == cik { return 1u8 } }
+                k = k + 1u32 }
+            j = j + 1u32 }
+        i = i + 1u32 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    /* R(3,3) > 5: the pentagon/pentagram colouring of K5 (n=5) has no mono triangle.
+     * red (bit 1) = pentagon edges (0,1)(1,2)(2,3)(3,4)(0,4); blue (0) = pentagram (0,2)(1,3)(2,4)(0,3)(1,4). */
+    let n5 : u32 = 5u32
+    let mut pent : u32 = 0u32
+    pent = pent | (1u32 << eidx(0u32, 1u32, n5))
+    pent = pent | (1u32 << eidx(1u32, 2u32, n5))
+    pent = pent | (1u32 << eidx(2u32, 3u32, n5))
+    pent = pent | (1u32 << eidx(3u32, 4u32, n5))
+    pent = pent | (1u32 << eidx(0u32, 4u32, n5))
+    if has_mono_triangle(pent, n5) != 0u8 { return 10u64 }     /* must have NO mono triangle -> R(3,3) > 5 */
+
+    /* R(3,3) <= 6: every 2-colouring of K6 (15 edges) has a mono triangle */
+    let n6 : u32 = 6u32  let lim : u32 = 1u32 << 15u32
+    let mut mask : u32 = 0u32  let mut good : u32 = 0u32
+    while mask < lim {
+        if has_mono_triangle(mask, n6) == 0u8 { good = good + 1u32 }   /* a colouring with NO mono triangle */
+        mask = mask + 1u32
+    }
+    if good != 0u32 { return 11u64 }                            /* there must be ZERO such colourings -> R(3,3) <= 6 */
+
+    /* both sides => R(3,3) = 6 */
+    return 99u64
+}

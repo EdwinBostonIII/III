@@ -440,7 +440,6 @@ MODULES=(
     "aether/inet"
     "aether/inet6"
     "verba/semver"
-    "omnia/proof_ripple"
     "verba/glob"
     "omnia/list"
     "omnia/lru"
@@ -492,8 +491,6 @@ MODULES=(
     # APOTHEOSIS C.11: the tournament quorum optimizer -- selects the 2f+1 most-available peers by
     # SEALED fact (no-ML: a data input, never observed-and-adapted), Byzantine-available by
     # construction. Composes hotstuff_unified. Compiler-unreferenced -> LIBNATIVE.
-    "aether/hotstuff_predict_opt"
-    "aether/hotstuff_heal"
     "numera/sha3_256"
     "numera/sha3_512"
     "numera/shake128"
@@ -872,7 +869,6 @@ MODULES=(
     # APOTHEOSIS C.14: the mechanistic provable cycle bound -- derives a fast path's bound from the
     # C.8 cost manifold (critical path = analytic lower bound); a path slower than bound+margin is a
     # PROVABLE regression, not advisory. Composes unified_cost_manifold. Compiler-unreferenced -> LIBNATIVE.
-    "numera/cost_lattice_unified"
     "aether/bone_marrow"
     "numera/cost_lattice_synth"
     "aether/basal_probe"

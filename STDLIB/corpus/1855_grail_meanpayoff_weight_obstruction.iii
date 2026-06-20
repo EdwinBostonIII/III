@@ -1,0 +1,54 @@
+/* 1855_grail_meanpayoff_weight_obstruction.iii -- FORMAL WALL, the QUANT-GAMES face's precise obstruction (PROVEN).
+ *
+ * THEOREM (Mean-Payoff Reduction forces EXPONENTIAL weights).  The standard reduction parity -> mean-payoff /
+ * energy / discounted game assigns each vertex a weight by priority so that, on ANY cycle (length <= n), a SINGLE
+ * occurrence of the highest priority p outweighs every lower priority combined (this "priority-separating" property
+ * is exactly what makes sign(cycle-sum) = parity(max priority), i.e. what makes the reduction correct).  The MINIMAL
+ * such magnitudes grow GEOMETRICALLY:
+ *     w(0) = 1,   w(p) = 1 + n * sum_{q<p} w(q)   =>   w(p) = (n+1) * w(p-1)   =>   w(p) = (n+1)^p.
+ * Hence the top weight w(d) = (n+1)^d is EXPONENTIAL in the number of priorities d, the induced mean-payoff/energy
+ * values need Theta(d log n) bits, and value iteration over them is only PSEUDO-polynomial (polynomial in the value
+ * MAGNITUDE, which is exponential in d).
+ *
+ * SIGNIFICANCE.  This is the precise, formal reason the whole QUANT-GAMES / ENERGY / LP / DISCOUNTED branch of
+ * Class II (the parity-novel-invent survivors ENERGY-DISJ, ENERGY-VARWEIGHT, DISCOUNT-HOMOTOPY, TROPICAL-SPECTRAL)
+ * inherits the difficulty rather than dissolving it: parity DOES reduce to mean-payoff (an equivalence-web face,
+ * DOCS/III-PARITY-WALL-FORMAL.md Sec 5), but the reduction is forced to carry exponential-magnitude numbers, so a
+ * polynomial mean-payoff algorithm would have to be poly in the BIT-LENGTH (strongly polynomial / sign-only), which
+ * is itself open.  The numbers are where the alternation hides in this face.
+ *
+ * VERIFICATION.  Compute the minimal priority-separating weights for several n and verify (a) the geometric identity
+ * w(p) = (n+1)*w(p-1) exactly, (b) the closed form w(d) = (n+1)^d, and (c) the bit-length of w(d) grows linearly
+ * with d (i.e. magnitude is exponential), in contrast to a polynomial encoding which would need O(log d) bits.
+ * exit 99 = the exponential-weight obstruction holds for every n, d sampled. */
+module mmpo
+var W : [u64; 32]
+
+fn bitlen(x: u64) -> u32 { let mut v : u64 = x  let mut b : u32 = 0u32  while v != 0u64 { b = b + 1u32  v = v >> 1u64 }  return b }
+fn ipow(base: u64, e: u32) -> u64 { let mut r : u64 = 1u64  let mut i : u32 = 0u32  while i < e { r = r * base  i = i + 1u32 }  return r }
+
+fn main() -> u64 {
+    let mut n : u64 = 3u64
+    while n <= 8u64 {
+        let d : u32 = 11u32                          /* priorities 0..11 (keeps (n+1)^d within u64 for n<=8) */
+        /* minimal priority-separating weights: w(0)=1, w(p)=1 + n*sum_{q<p} w(q) */
+        W[0u64] = 1u64
+        let mut acc : u64 = W[0u64]                  /* running sum_{q<=p} */
+        let mut p : u32 = 1u32
+        while p <= d {
+            W[p as u64] = 1u64 + n * (acc)           /* exceed n copies of every lower priority */
+            /* (a) geometric identity: w(p) == (n+1)*w(p-1) */
+            if W[p as u64] != (n + 1u64) * W[(p - 1u32) as u64] { return 10u64 }
+            acc = acc + W[p as u64]
+            p = p + 1u32
+        }
+        /* (b) closed form: w(d) == (n+1)^d */
+        if W[d as u64] != ipow(n + 1u64, d) { return 11u64 }
+        /* (c) EXPONENTIAL magnitude: bit-length of w(d) grows ~ d*log2(n+1); for n>=3 that is >= 2*d -- linear in d.
+         * A POLYNOMIAL-magnitude encoding would have bit-length O(log d); we are far above that. */
+        let bl : u32 = bitlen(W[d as u64])
+        if bl < 2u32 * d { return 12u64 }            /* bitlen(w(d)) >= 2d (n>=3 => log2(n+1) >= 2) -> exponential */
+        n = n + 1u64
+    }
+    return 99u64
+}

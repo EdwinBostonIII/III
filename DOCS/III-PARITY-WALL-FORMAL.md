@@ -122,7 +122,7 @@ are *instantiations* that make each face concrete and oracle-checked.
 | Logic | full modal μ-calculus model-checking ∈ P? | **`1853` VERIFIED**: the parity μ-formula's nested fixpoint (cpre, Emerson–Lei) == the game oracle on every game — a 4th independent solver |
 | Strategy | ∃ a positional-SI pivot rule with poly-many steps? | VJ/LRC SI `1841/1842`, step counts |
 | Algebra | ∃ a poly-degree Nullstellensatz certificate for the winning region? | Gröbner encoding `1847` |
-| Quant. games | mean-payoff / discounted / simple-stochastic games ∈ P? | the sandwich's one-player reductions `1846` |
+| Quant. games | mean-payoff / discounted / simple-stochastic games ∈ P? | sandwich reductions `1846`; **`1855`**: the parity→mean-payoff reduction is real but **forces exponential-magnitude weights** `(n+1)^d` — the numbers are where the alternation hides |
 
 All sit in **UP∩coUP** (B3), with the best general upper bound **quasi-polynomial** (Calude et al. 2017) and the
 universal-tree family **provably** unable to reach P (B1).
@@ -147,6 +147,7 @@ universal-tree family **provably** unable to reach P (B1).
 
 | # | Statement | Status | Anchor |
 |---|---|---|---|
+| F | Order-theoretic foundation: cpre monotone, attractor = lfp (Knaster–Tarski) | **VERIFIED (III)** | `1854` |
 | T0 | Determinacy (W₀,W₁ partition V) | **VERIFIED (III)** + CITED | `1849` |
 | T1 | Positional determinacy (single σ wins W₀) | **VERIFIED (III)** + CITED | `1849` |
 | T2 | Control-blindness barrier (no graph invariant decides parity) | **PROVEN (III)** | `1848` |
@@ -159,6 +160,7 @@ universal-tree family **provably** unable to reach P (B1).
 | B1 | Universal-tree quasi-poly lower bound | CITED (instantiated `1843`) | CDFJLP 2019 |
 | B2 | SI exponential lower bound | CITED (consistent `1840`) | Friedmann 2011 |
 | B3 | parity ∈ UP∩coUP | CITED | Jurdziński 1998 |
+| Q | parity→mean-payoff reduction forces exponential weights `(n+1)^d` | **PROVEN (III)** | `1855` |
 | D | Class I / Class II dichotomy | **PROVEN-NEGATIVE for Class I** (T2) | §4 |
 | O1 | parity games in P? | **OPEN** | the wall |
 | M1 | single invariant incl. PQ ring (char 2 vs 3329, idempotency) | **OBSTRUCTED** | `1851`, `1826` |

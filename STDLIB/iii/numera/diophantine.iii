@@ -8,8 +8,10 @@
  * solved exactly by the extended Euclidean algorithm (Bezout).  a*x+b*y=c has an integer solution iff gcd(a,b) | c, and
  * when it does this faculty returns a particular solution; the general solution is x = x0 + k*(b/g), y = y0 - k*(a/g).
  * It also exposes the two primitives every modular-arithmetic client needs: gcd, the Bezout coefficients, and the
- * modular inverse a^-1 mod m.  (General polynomial Diophantine solvability is UNDECIDABLE, MRDP -- the open core of the
- * Diophantine wall; this is exactly its decidable linear island, DOCS/III-DIOPHANTINE-WALL-FORMAL.md.)
+ * modular inverse a^-1 mod m.  It also provides the CHINESE REMAINDER primitive (dio_crt2) -- simultaneous congruences,
+ * the wall's natural multi-modulus capability, built on the same ext-gcd machinery and handling NON-coprime moduli.
+ * (General polynomial Diophantine solvability is UNDECIDABLE, MRDP -- the open core of the Diophantine wall; this is
+ * exactly its decidable linear island, DOCS/III-DIOPHANTINE-WALL-FORMAL.md.)
  *
  * USE CASES.  Modular inverses (RSA/EC scalar ops, CRT recomposition, Barrett/Montgomery setup), solving congruences,
  * lattice/Bezout computations -- AVAILABLE for any client that re-derives extended Euclid inline to call instead; the
@@ -36,6 +38,8 @@ var DIO_X : [i64; 1]    /* Bezout x from the last dio_ext_gcd */
 var DIO_Y : [i64; 1]    /* Bezout y */
 var DIO_SX : [i64; 1]   /* particular x0 from the last dio_solve */
 var DIO_SY : [i64; 1]   /* particular y0 */
+var DIO_CRT_X : [i64; 1]    /* CRT solution x in [0, lcm) from the last dio_crt2 */
+var DIO_CRT_MOD : [i64; 1]  /* the combined modulus lcm(m1,m2) */
 
 fn dio_iabs(x: i64) -> i64 { if x < 0i64 { return 0i64 - x } return x }
 fn dio_gcd(a: i64, b: i64) -> i64 @export {
@@ -81,6 +85,29 @@ fn dio_mod_inverse(a: i64, m: i64) -> i64 @export {
     return inv
 }
 
+/* CHINESE REMAINDER (the simultaneous-congruence capability of the Diophantine wall, built on ext-gcd).
+ * Solve x == a1 (mod m1) and x == a2 (mod m2).  Solvable iff gcd(m1,m2) | (a2-a1); the solution is unique mod
+ * lcm(m1,m2).  Handles NON-coprime moduli.  Returns 1 on solvable (x in [0,lcm) via dio_crt_x, lcm via dio_crt_mod),
+ * 0 if no solution.  (i64 domain: m1*k and the intermediate products must stay within i64.) */
+fn dio_crt2(a1: i64, m1: i64, a2: i64, m2: i64) -> u8 @export {
+    if m1 <= 0i64 { return 0u8 }
+    if m2 <= 0i64 { return 0u8 }
+    let g : i64 = dio_ext_gcd(m1, m2)              /* sets DIO_X = Bezout x of m1: m1*DIO_X + m2*DIO_Y = g */
+    let diff : i64 = a2 - a1
+    if (diff % g) != 0i64 { return 0u8 }           /* unsolvable */
+    let m2g : i64 = m2 / g
+    /* (m1/g)*DIO_X == 1 (mod m2/g), so k0 = (diff/g)*DIO_X (mod m2/g) */
+    let mut k0 : i64 = (((diff / g) % m2g) * (DIO_X[0u64] % m2g)) % m2g
+    if k0 < 0i64 { k0 = k0 + m2g }
+    let lcm : i64 = (m1 / g) * m2
+    let mut x : i64 = a1 + m1 * k0
+    x = ((x % lcm) + lcm) % lcm                     /* normalise to [0, lcm) */
+    DIO_CRT_X[0u64] = x  DIO_CRT_MOD[0u64] = lcm
+    return 1u8
+}
+fn dio_crt_x() -> i64 @export { return DIO_CRT_X[0u64] }
+fn dio_crt_mod() -> i64 @export { return DIO_CRT_MOD[0u64] }
+
 fn dio_kat() -> u64 @export {
     /* extended Euclid: 240*x + 46*y = gcd(240,46)=2 */
     let g1 : i64 = dio_ext_gcd(240i64, 46i64)
@@ -105,5 +132,15 @@ fn dio_kat() -> u64 @export {
     /* gcd basics */
     if dio_gcd(0i64 - 240i64, 46i64) != 2i64 { return 22u64 }
     if dio_gcd(17i64, 0i64) != 17i64 { return 23u64 }
+    /* CRT coprime: x==2 (mod 3), x==3 (mod 5) -> x=8, lcm=15 */
+    if dio_crt2(2i64, 3i64, 3i64, 5i64) != 1u8 { return 24u64 }
+    if dio_crt_x() != 8i64 { return 25u64 }
+    if dio_crt_mod() != 15i64 { return 26u64 }
+    /* CRT non-coprime solvable: x==1 (mod 6), x==4 (mod 9) -> x=13, lcm=18 */
+    if dio_crt2(1i64, 6i64, 4i64, 9i64) != 1u8 { return 27u64 }
+    if dio_crt_x() != 13i64 { return 28u64 }
+    if dio_crt_mod() != 18i64 { return 29u64 }
+    /* CRT non-coprime unsolvable: x==1 (mod 6), x==2 (mod 9) -> gcd 3 does not divide 1 */
+    if dio_crt2(1i64, 6i64, 2i64, 9i64) != 0u8 { return 30u64 }
     return 99u64
 }

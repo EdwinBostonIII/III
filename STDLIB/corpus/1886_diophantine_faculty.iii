@@ -9,6 +9,9 @@ extern @abi(c-msvc-x64) fn dio_solve(a: i64, b: i64, c: i64) -> u8 from "diophan
 extern @abi(c-msvc-x64) fn dio_sol_x() -> i64 from "diophantine.iii"
 extern @abi(c-msvc-x64) fn dio_sol_y() -> i64 from "diophantine.iii"
 extern @abi(c-msvc-x64) fn dio_mod_inverse(a: i64, m: i64) -> i64 from "diophantine.iii"
+extern @abi(c-msvc-x64) fn dio_crt2(a1: i64, m1: i64, a2: i64, m2: i64) -> u8 from "diophantine.iii"
+extern @abi(c-msvc-x64) fn dio_crt_x() -> i64 from "diophantine.iii"
+extern @abi(c-msvc-x64) fn dio_crt_mod() -> i64 from "diophantine.iii"
 extern @abi(c-msvc-x64) fn dio_kat() -> u64 from "diophantine.iii"
 var SEED : [u64; 1]
 fn xr() -> u64 { let mut x : u64 = SEED[0u64]  x = x ^ (x << 13u64)  x = x ^ (x >> 7u64)  x = x ^ (x << 17u64)  SEED[0u64] = x  return x }
@@ -50,6 +53,33 @@ fn main() -> u64 {
         }
         tm = tm + 1u32
     }
+    /* CRT cross-check: dio_crt2 vs brute search over [0,lcm) */
+    let mut tc : u32 = 0u32  let mut crt_solv : u32 = 0u32  let mut crt_uns : u32 = 0u32
+    while tc < 3000u32 {
+        let m1 : i64 = 1i64 + ((xr() % 30u64) as i64)
+        let m2 : i64 = 1i64 + ((xr() % 30u64) as i64)
+        let a1 : i64 = (xr() % 60u64) as i64
+        let a2 : i64 = (xr() % 60u64) as i64
+        let fac : u8 = dio_crt2(a1, m1, a2, m2)
+        /* brute: scan x in [0, m1*m2) for x%m1==a1%m1 and x%m2==a2%m2 */
+        let lim : i64 = m1 * m2  let mut found : i64 = 0i64 - 1i64  let mut x : i64 = 0i64
+        while x < lim { if (x % m1) == (a1 % m1) { if (x % m2) == (a2 % m2) { found = x  x = lim } else { x = x + 1i64 } } else { x = x + 1i64 } }
+        let bru : u8 = 1u8
+        if found < 0i64 { if fac != 0u8 { return 70u64 }  crt_uns = crt_uns + 1u32 }
+        else {
+            if fac != 1u8 { return 71u64 }
+            /* the faculty solution must satisfy both congruences and lie in [0,lcm) */
+            let xs : i64 = dio_crt_x()
+            if (xs % m1) != (a1 % m1) { return 72u64 }
+            if (xs % m2) != (a2 % m2) { return 73u64 }
+            if xs < 0i64 { return 74u64 }
+            if xs >= dio_crt_mod() { return 75u64 }
+            crt_solv = crt_solv + 1u32
+        }
+        tc = tc + 1u32
+    }
+    if crt_solv < 100u32 { return 76u64 }
+    if crt_uns < 50u32 { return 77u64 }
     if sv < 200u32 { return 60u64 }
     if un < 200u32 { return 61u64 }
     if inv_ok < 200u32 { return 62u64 }

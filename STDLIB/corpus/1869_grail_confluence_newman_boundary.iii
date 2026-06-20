@@ -1,0 +1,88 @@
+/* 1869_grail_confluence_newman_boundary.iii -- THE CONFLUENCE / REWRITING WALL, the boundary: Newman's Lemma REQUIRES
+ * termination.  This is the sharp edge of the decidability island (1868), the analog of parity's T3 / SAT's Schaefer
+ * cliff -- it locates exactly what the island depends on.
+ *
+ * THEOREM (the classic boundary witness).  There is a NON-terminating abstract rewriting system that is LOCALLY
+ * confluent but NOT globally confluent -- so "locally confluent => confluent" (Newman) FAILS without termination.
+ *
+ * WITNESS.  Elements {a, b, c, d}; rules  a -> b, b -> a (the non-terminating cycle), a -> c, b -> d; c, d normal forms.
+ *   - LOCALLY confluent: the only one-step peaks are at a (reducts b, c) and at b (reducts a, d).
+ *       (b, c): b ->* c  (b -> a -> c) and c ->* c  -> common reduct c.
+ *       (a, d): a ->* d  (a -> b -> d) and d ->* d  -> common reduct d.
+ *     Every one-step peak joins -> locally confluent.
+ *   - NOT globally confluent: a ->* c and a ->* d (a->c ; a->b->d), but c and d are DISTINCT normal forms with no
+ *     common reduct.  So global confluence fails.
+ *   - NON-terminating: a -> b -> a is an infinite chain (a reaches itself by a nontrivial path).
+ * Hence local confluence does NOT imply global confluence here; the missing hypothesis is exactly TERMINATION (had the
+ * system been terminating, Newman would force confluence -- 1868).
+ *
+ * HONEST TAG: this proves the island's PRECONDITION is necessary, not that confluence is hard.  It locates the wall:
+ * terminating-confluence is decidable (island, 1868); general-confluence is undecidable (the obstructed core, CITED).
+ * exit 99 = the witness is locally confluent AND not globally confluent AND non-terminating (Newman needs termination). */
+module mnewb
+var STEP : [u32; 16]
+var REACH : [u32; 16]
+var NV : [u32; 1]
+
+fn nv() -> u32 { return NV[0u64] }
+/* GENERAL reflexive-transitive closure (handles cycles) */
+fn build_reach() -> i32 {
+    let n : u32 = nv()  let mut i : u32 = 0u32
+    while i < n { REACH[i as u64] = (1u32 << i) | STEP[i as u64]  i = i + 1u32 }
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let mut changed : u8 = 0u8  let mut x : u32 = 0u32
+        while x < n {
+            let mut add : u32 = 0u32  let mut y : u32 = 0u32
+            while y < n { if (REACH[x as u64] & (1u32 << y)) != 0u32 { add = add | REACH[y as u64] }  y = y + 1u32 }
+            let nr : u32 = REACH[x as u64] | add
+            if nr != REACH[x as u64] { REACH[x as u64] = nr  changed = 1u8 }
+            x = x + 1u32
+        }
+        if changed == 0u8 { done = 1u8 }
+    }
+    return 0i32
+}
+fn local_confluent() -> u8 {
+    let n : u32 = nv()  let mut a : u32 = 0u32
+    while a < n { let mut b : u32 = 0u32
+        while b < n { if (STEP[a as u64] & (1u32 << b)) != 0u32 { let mut c : u32 = 0u32
+            while c < n { if (STEP[a as u64] & (1u32 << c)) != 0u32 { if (REACH[b as u64] & REACH[c as u64]) == 0u32 { return 0u8 } }  c = c + 1u32 }
+        }  b = b + 1u32 }
+        a = a + 1u32 }
+    return 1u8
+}
+fn global_confluent() -> u8 {
+    let n : u32 = nv()  let mut a : u32 = 0u32
+    while a < n { let mut b : u32 = 0u32
+        while b < n { if (REACH[a as u64] & (1u32 << b)) != 0u32 { let mut c : u32 = 0u32
+            while c < n { if (REACH[a as u64] & (1u32 << c)) != 0u32 { if (REACH[b as u64] & REACH[c as u64]) == 0u32 { return 0u8 } }  c = c + 1u32 }
+        }  b = b + 1u32 }
+        a = a + 1u32 }
+    return 1u8
+}
+fn terminating() -> u8 {   /* terminating iff acyclic iff no element reaches itself by a nontrivial step */
+    let n : u32 = nv()  let mut i : u32 = 0u32
+    while i < n { let mut s : u32 = STEP[i as u64]  let mut reach1 : u32 = 0u32  let mut y : u32 = 0u32
+        while y < n { if (s & (1u32 << y)) != 0u32 { reach1 = reach1 | REACH[y as u64] }  y = y + 1u32 }   /* reach via >=1 step */
+        if (reach1 & (1u32 << i)) != 0u32 { return 0u8 }   /* i is on a cycle */
+        i = i + 1u32 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* witness: a=0, b=1, c=2, d=3 */
+    NV[0u64] = 4u32
+    STEP[0u64] = (1u32 << 1u32) | (1u32 << 2u32)   /* a -> b, a -> c */
+    STEP[1u64] = (1u32 << 0u32) | (1u32 << 3u32)   /* b -> a, b -> d */
+    STEP[2u64] = 0u32                               /* c normal form */
+    STEP[3u64] = 0u32                               /* d normal form */
+    build_reach()
+    if local_confluent()  != 1u8 { return 10u64 }   /* must be locally confluent */
+    if global_confluent() != 0u8 { return 11u64 }   /* must NOT be globally confluent */
+    if terminating()      != 0u8 { return 12u64 }   /* must be non-terminating (the missing hypothesis) */
+    /* and the two distinct normal forms reachable from a are exactly the obstruction */
+    let nf_from_a : u32 = REACH[0u64] & ((1u32 << 2u32) | (1u32 << 3u32))
+    if nf_from_a != ((1u32 << 2u32) | (1u32 << 3u32)) { return 13u64 }   /* a reaches both c and d */
+    return 99u64
+}

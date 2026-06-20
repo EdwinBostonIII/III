@@ -1,0 +1,108 @@
+/* 1868_grail_confluence_newman_island.iii -- THE CONFLUENCE / REWRITING WALL, island: confluence of a TERMINATING
+ * system is DECIDABLE, by Newman's Lemma.  (Third wall, parity-grade treatment; this wall's core is OBSTRUCTED
+ * (undecidable) rather than OPEN -- a different KIND of wall.)
+ *
+ * NEWMAN'S LEMMA (CITED, 1942) + Church-Rosser.  For a TERMINATING abstract rewriting system (a relation -> on a finite
+ * set with no infinite chain), the following are EQUIVALENT:
+ *   (G) globally CONFLUENT: for all a, any two reducts b,c of a (a ->* b, a ->* c) have a common reduct d;
+ *   (L) locally confluent:  for all a, any two ONE-STEP reducts b,c of a have a common reduct;
+ *   (U) UNIQUE normal forms: every element reduces to exactly one normal form (irreducible element).
+ * The deep direction is Newman's L => G (local confluence implies global confluence, GIVEN termination).  Because L and
+ * U are checkable in poly time (L by examining one-step peaks = critical pairs; U by computing normal forms), confluence
+ * of a terminating system is DECIDABLE -- this is the island, and the basis of Knuth-Bendix completion.
+ *
+ * VERIFICATION: on random TERMINATING systems (acyclic relations -- edges point strictly downward, so no infinite
+ * chain), the three predicates G, L, U coincide on every system (and both confluent and non-confluent systems occur).
+ *
+ * HONEST TAG (math-olympiad #4): this is the DECIDABLE island.  Newman's lemma REQUIRES termination (see 1869 for the
+ * boundary), and confluence of a GENERAL (non-terminating) system is undecidable (the obstructed core).  Grounding the
+ * island says nothing about the undecidable general case.
+ * exit 99 = G == L == U on every sampled terminating system, with both confluent and non-confluent cases seen. */
+module mnewman
+var STEP : [u32; 16]    /* one-step reducts: STEP[i] = bitmask of j with i -> j */
+var REACH : [u32; 16]   /* reflexive-transitive closure */
+var NV : [u32; 1]
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn nv() -> u32 { return NV[0u64] }
+fn popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+
+/* acyclic generator: edges i -> j only for j < i  => no cycle => TERMINATING */
+fn gen_terminating(n: u32) -> i32 {
+    NV[0u64] = n  let mut i : u32 = 0u32
+    while i < n {
+        let mut s : u32 = 0u32  let mut j : u32 = 0u32
+        while j < i { if (rnd() % 3u32) == 0u32 { s = s | (1u32 << j) }  j = j + 1u32 }
+        STEP[i as u64] = s
+        i = i + 1u32
+    }
+    return 0i32
+}
+/* reflexive-transitive closure: since edges go downward (j<i), one upward pass suffices */
+fn build_reach() -> i32 {
+    let n : u32 = nv()  let mut i : u32 = 0u32
+    while i < n {
+        let mut r : u32 = 1u32 << i  let mut j : u32 = 0u32
+        while j < i { if (STEP[i as u64] & (1u32 << j)) != 0u32 { r = r | REACH[j as u64] }  j = j + 1u32 }
+        REACH[i as u64] = r
+        i = i + 1u32
+    }
+    return 0i32
+}
+fn nf_mask() -> u32 { let n : u32 = nv()  let mut nf : u32 = 0u32  let mut i : u32 = 0u32  while i < n { if STEP[i as u64] == 0u32 { nf = nf | (1u32 << i) }  i = i + 1u32 }  return nf }
+
+fn unique_nf() -> u8 {
+    let n : u32 = nv()  let nf : u32 = nf_mask()  let mut i : u32 = 0u32
+    while i < n { if popc(REACH[i as u64] & nf) != 1u32 { return 0u8 }  i = i + 1u32 }
+    return 1u8
+}
+fn local_confluent() -> u8 {
+    let n : u32 = nv()  let mut a : u32 = 0u32
+    while a < n {
+        let mut b : u32 = 0u32
+        while b < n { if (STEP[a as u64] & (1u32 << b)) != 0u32 {
+            let mut c : u32 = 0u32
+            while c < n { if (STEP[a as u64] & (1u32 << c)) != 0u32 {
+                if (REACH[b as u64] & REACH[c as u64]) == 0u32 { return 0u8 }   /* no common reduct of b,c */
+            }  c = c + 1u32 }
+        }  b = b + 1u32 }
+        a = a + 1u32
+    }
+    return 1u8
+}
+fn global_confluent() -> u8 {
+    let n : u32 = nv()  let mut a : u32 = 0u32
+    while a < n {
+        let mut b : u32 = 0u32
+        while b < n { if (REACH[a as u64] & (1u32 << b)) != 0u32 {
+            let mut c : u32 = 0u32
+            while c < n { if (REACH[a as u64] & (1u32 << c)) != 0u32 {
+                if (REACH[b as u64] & REACH[c as u64]) == 0u32 { return 0u8 }
+            }  c = c + 1u32 }
+        }  b = b + 1u32 }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0xC0F1Eu32
+    let mut t : u32 = 0u32  let mut conf : u32 = 0u32  let mut nonconf : u32 = 0u32
+    while t < 6000u32 {
+        let n : u32 = 3u32 + (rnd() % 8u32)              /* 3..10 elements */
+        gen_terminating(n)
+        build_reach()
+        let g : u8 = global_confluent()
+        let l : u8 = local_confluent()
+        let u : u8 = unique_nf()
+        /* Newman + Church-Rosser: for terminating systems, G == L == U */
+        if g != l { return 10u64 }                        /* Newman's lemma (L => G) or its converse failed */
+        if g != u { return 11u64 }                        /* confluence <=> unique normal forms failed */
+        if g == 1u8 { conf = conf + 1u32 } else { nonconf = nonconf + 1u32 }
+        t = t + 1u32
+    }
+    if conf < 100u32 { return 60u64 }
+    if nonconf < 100u32 { return 61u64 }
+    return 99u64
+}

@@ -1,0 +1,90 @@
+/* 1872_grail_gi_np_higherorder.iii -- THE GRAPH-ISOMORPHISM WALL: GI is in NP, and the 1-WL blind spot (1871) is
+ * escaped by a HIGHER-ORDER invariant -- at higher cost.  This is the GI analog of parity's "control-preservation
+ * escapes the control-blind invariant, but inherits the cost": go up a dimension to see what the cheap invariant
+ * cannot, and you pay for it.
+ *
+ * VERIFIED HERE:
+ *  (1) GI in NP: an isomorphism (a vertex permutation) is a POLY-checkable YES-witness.  We relabel a graph by a random
+ *      permutation, then confirm that permutation poly-checks as a valid isomorphism between the two.
+ *  (2) A higher-order invariant escapes the 1-WL blind spot.  1-WL (1871) cannot distinguish K_{3,3} from the
+ *      triangular prism, but the TRIANGLE COUNT -- a 2nd-order (pair/triple) invariant, exactly the kind 2-WL captures --
+ *      separates them: K_{3,3} has 0 triangles (bipartite), the prism has 2.  So a costlier, higher-dimensional
+ *      invariant sees the distinction the cheap one collapsed.
+ *
+ * THE CROSS-WALL PARALLEL (CITED structural placement).  GI in NP; graph NON-isomorphism is in AM (Goldwasser-Sipser),
+ * so GI is NOT NP-complete unless the polynomial hierarchy collapses; and GI is quasi-polynomial (Babai 2016).  This is
+ * the SAME profile as parity (1860): NP-with-a-good-witness, not believed NP-complete, quasi-polynomial -- a leading
+ * indicator (cf. primality, LP) that the open core may resolve to P.  Two independent quasi-poly intermediate
+ * candidates (parity and GI) strengthen the picture of a populated NP middle (Ladner), each escaping its cheap
+ * invariant only by paying for more structure (k-WL for GI, control-preservation for parity).
+ *
+ * HONEST TAG (math-olympiad #4): GI in NP and "a higher invariant distinguishes one pair" are facts about witnesses and
+ * a specific pair -- they do NOT put GI in P (the open core) and make no claim about it.
+ * exit 99 = the relabeling permutation poly-checks as an isomorphism (GI in NP), AND triangle-count separates K33 (0)
+ *           from the prism (2) where 1-WL could not. */
+module mgiho
+var GA : [u32; 8]
+var GB : [u32; 8]
+var PERM : [u32; 8]
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+/* triangle count of graph in slot (1=GA,2=GB) on n vertices */
+fn triangles(slot: u32, n: u32) -> u32 {
+    let mut cnt : u32 = 0u32  let mut i : u32 = 0u32
+    while i < n { let mut j : u32 = i + 1u32
+        while j < n { let mut k : u32 = j + 1u32
+            while k < n {
+                let mut eij : u32 = 0u32  let mut ejk : u32 = 0u32  let mut eik : u32 = 0u32
+                if slot == 1u32 { eij = (GA[i as u64] >> j) & 1u32  ejk = (GA[j as u64] >> k) & 1u32  eik = (GA[i as u64] >> k) & 1u32 }
+                else { eij = (GB[i as u64] >> j) & 1u32  ejk = (GB[j as u64] >> k) & 1u32  eik = (GB[i as u64] >> k) & 1u32 }
+                if eij == 1u32 { if ejk == 1u32 { if eik == 1u32 { cnt = cnt + 1u32 } } }
+                k = k + 1u32 }
+            j = j + 1u32 }
+        i = i + 1u32 }
+    return cnt
+}
+/* check PERM is an isomorphism GA -> GB (poly): edge(u,v) in GA  <=>  edge(perm u, perm v) in GB */
+fn perm_is_iso(n: u32) -> u8 {
+    let mut u : u32 = 0u32
+    while u < n { let mut v : u32 = 0u32
+        while v < n { let e1 : u32 = (GA[u as u64] >> v) & 1u32  let e2 : u32 = (GB[PERM[u as u64] as u64] >> PERM[v as u64]) & 1u32  if e1 != e2 { return 0u8 }  v = v + 1u32 }
+        u = u + 1u32 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x6112A0u32
+    /* (1) GI in NP: relabel a random graph by a random permutation, confirm the permutation poly-checks as an iso */
+    let mut trials : u32 = 0u32
+    while trials < 2000u32 {
+        let n : u32 = 4u32 + (rnd() % 4u32)              /* 4..7 vertices */
+        /* random graph GA */
+        let mut i : u32 = 0u32  while i < n { GA[i as u64] = 0u32  i = i + 1u32 }
+        let mut u : u32 = 0u32
+        while u < n { let mut v : u32 = u + 1u32 while v < n { if (rnd() & 1u32) == 0u32 { GA[u as u64] = GA[u as u64] | (1u32 << v)  GA[v as u64] = GA[v as u64] | (1u32 << u) }  v = v + 1u32 }  u = u + 1u32 }
+        /* random permutation (Fisher-Yates) */
+        let mut p : u32 = 0u32  while p < n { PERM[p as u64] = p  p = p + 1u32 }
+        let mut q : u32 = n
+        while q > 1u32 { let r : u32 = rnd() % q  let t : u32 = PERM[(q - 1u32) as u64]  PERM[(q - 1u32) as u64] = PERM[r as u64]  PERM[r as u64] = t  q = q - 1u32 }
+        /* GB = PERM(GA): edge(perm u, perm v) iff edge(u,v) */
+        let mut w : u32 = 0u32  while w < n { GB[w as u64] = 0u32  w = w + 1u32 }
+        let mut a : u32 = 0u32
+        while a < n { let mut b : u32 = 0u32
+            while b < n { if ((GA[a as u64] >> b) & 1u32) == 1u32 { GB[PERM[a as u64] as u64] = GB[PERM[a as u64] as u64] | (1u32 << PERM[b as u64]) }  b = b + 1u32 }
+            a = a + 1u32 }
+        if perm_is_iso(n) != 1u8 { return 10u64 }        /* the permutation MUST poly-check as an isomorphism */
+        trials = trials + 1u32
+    }
+    /* (2) higher-order invariant escapes the 1-WL blind spot: triangle count separates K33 (0) from prism (2) */
+    GA[0u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<5u32)  GA[1u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<5u32)  GA[2u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<5u32)
+    GA[3u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<2u32)  GA[4u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<2u32)  GA[5u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<2u32)
+    GB[0u64] = (1u32<<1u32)|(1u32<<2u32)|(1u32<<3u32)  GB[1u64] = (1u32<<0u32)|(1u32<<2u32)|(1u32<<4u32)  GB[2u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<5u32)
+    GB[3u64] = (1u32<<4u32)|(1u32<<5u32)|(1u32<<0u32)  GB[4u64] = (1u32<<3u32)|(1u32<<5u32)|(1u32<<1u32)  GB[5u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<2u32)
+    if triangles(1u32, 6u32) != 0u32 { return 20u64 }   /* K_{3,3}: 0 triangles */
+    if triangles(2u32, 6u32) != 2u32 { return 21u64 }   /* prism: 2 triangles */
+    /* distinct -> the higher-order invariant distinguishes the pair 1-WL collapsed (1871) */
+    if triangles(1u32, 6u32) == triangles(2u32, 6u32) { return 22u64 }
+    return 99u64
+}

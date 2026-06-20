@@ -1,0 +1,143 @@
+/* 1870_grail_gi_tree_island.iii -- THE GRAPH-ISOMORPHISM WALL, island: GI for TREES is in P, via color refinement (1-WL).
+ * (Fourth wall; the closest parallel to parity -- both quasi-polynomial, both intermediate candidates not believed
+ * NP-complete.)
+ *
+ * ISLAND (CITED: 1-WL / color refinement is complete for trees).  Color refinement (the 1-dimensional Weisfeiler-Leman
+ * algorithm) iteratively recolors each vertex by (its color, the multiset of its neighbors' colors) until the coloring
+ * stabilizes.  Two graphs are "1-WL-equivalent" iff, run on their disjoint union, the two halves carry the same color
+ * histogram.  1-WL is always SOUND (1-WL-distinguishable => non-isomorphic) and, for TREES, COMPLETE: 1-WL-equivalent
+ * <=> isomorphic.  This is a POLYNOMIAL isomorphism test for trees.
+ *
+ * VERIFICATION: on random pairs of trees of the same size, 1-WL-equivalence agrees with the brute-force isomorphism
+ * oracle (search over all n! vertex permutations) every time -- both isomorphic and non-isomorphic pairs occur.
+ *
+ * HONEST TAG (math-olympiad #4, and the parity echo): this is the tractable ISLAND.  1-WL is a GRAPH INVARIANT, and --
+ * exactly as the control-blindness barrier (1848) limits graph invariants for parity -- 1-WL is INCOMPLETE on general
+ * graphs (see 1871: it fails to distinguish non-isomorphic regular graphs).  Grounding the tree island says nothing
+ * about general GI (the open core).
+ * exit 99 = 1-WL-equivalence == the brute isomorphism oracle on every sampled tree pair, both outcomes seen. */
+module mgitree
+var G1 : [u32; 8]      /* tree 1 adjacency (per vertex bitmask) */
+var G2 : [u32; 8]      /* tree 2 adjacency */
+var UADJ : [u32; 16]   /* disjoint union adjacency (2n vertices) */
+var COL : [u32; 16]
+var NEW : [u32; 16]
+var CM : [u32; 16]     /* color masks */
+var PERM : [u32; 8]
+var NN : [u32; 1]      /* tree size n */
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+fn popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+
+fn gen_tree(slot: u32, n: u32) -> i32 {   /* random tree: vertex i>0 attaches to a random j<i */
+    let mut i : u32 = 0u32
+    while i < n { if slot == 1u32 { G1[i as u64] = 0u32 } else { G2[i as u64] = 0u32 }  i = i + 1u32 }
+    let mut v : u32 = 1u32
+    while v < n {
+        let p : u32 = rnd() % v
+        if slot == 1u32 { G1[v as u64] = G1[v as u64] | (1u32 << p)  G1[p as u64] = G1[p as u64] | (1u32 << v) }
+        else { G2[v as u64] = G2[v as u64] | (1u32 << p)  G2[p as u64] = G2[p as u64] | (1u32 << v) }
+        v = v + 1u32
+    }
+    return 0i32
+}
+/* build the disjoint union: G1 on 0..n-1, G2 on n..2n-1 */
+fn build_union(n: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < n { UADJ[i as u64] = G1[i as u64]  UADJ[(n + i) as u64] = G2[i as u64] << n  i = i + 1u32 }
+    return 0i32
+}
+fn same_sig(u: u32, v: u32, oldnc: u32) -> u8 {
+    if COL[u as u64] != COL[v as u64] { return 0u8 }
+    let mut c : u32 = 0u32
+    while c < oldnc { if popc(UADJ[u as u64] & CM[c as u64]) != popc(UADJ[v as u64] & CM[c as u64]) { return 0u8 }  c = c + 1u32 }
+    return 1u8
+}
+fn refine(N: u32) -> u32 {
+    let mut v : u32 = 0u32  while v < N { COL[v as u64] = 0u32  v = v + 1u32 }
+    let mut nc : u32 = 1u32  let mut done : u8 = 0u8
+    while done == 0u8 {
+        let oldnc : u32 = nc
+        let mut c : u32 = 0u32  while c < oldnc { CM[c as u64] = 0u32  c = c + 1u32 }
+        let mut w : u32 = 0u32  while w < N { CM[COL[w as u64] as u64] = CM[COL[w as u64] as u64] | (1u32 << w)  w = w + 1u32 }
+        let mut x : u32 = 0u32  while x < N { NEW[x as u64] = 0xFFFFFFFFu32  x = x + 1u32 }
+        let mut nid : u32 = 0u32  let mut a : u32 = 0u32
+        while a < N {
+            if NEW[a as u64] == 0xFFFFFFFFu32 {
+                NEW[a as u64] = nid
+                let mut b : u32 = a + 1u32
+                while b < N { if NEW[b as u64] == 0xFFFFFFFFu32 { if same_sig(a, b, oldnc) == 1u8 { NEW[b as u64] = nid } }  b = b + 1u32 }
+                nid = nid + 1u32
+            }
+            a = a + 1u32
+        }
+        let mut y : u32 = 0u32  while y < N { COL[y as u64] = NEW[y as u64]  y = y + 1u32 }
+        if nid == oldnc { done = 1u8 } else { nc = nid }
+    }
+    return nc
+}
+fn oneWL_equiv(n: u32) -> u8 {   /* histograms of the two halves match */
+    let nc : u32 = refine(2u32 * n)
+    let mut c : u32 = 0u32
+    while c < nc {
+        let mut lo : u32 = 0u32  let mut hi : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if COL[v as u64] == c { lo = lo + 1u32 }  if COL[(n + v) as u64] == c { hi = hi + 1u32 }  v = v + 1u32 }
+        if lo != hi { return 0u8 }
+        c = c + 1u32
+    }
+    return 1u8
+}
+/* brute isomorphism oracle via next_permutation over PERM[0..n) */
+fn next_perm(n: u32) -> u8 {
+    if n < 2u32 { return 0u8 }
+    let mut i : u32 = n - 1u32
+    let mut found_i : u8 = 0u8
+    while found_i == 0u8 { if i == 0u32 { found_i = 2u8 } else { if PERM[(i - 1u32) as u64] < PERM[i as u64] { found_i = 1u8 } else { i = i - 1u32 } } }
+    if found_i == 2u8 { return 0u8 }                 /* last permutation */
+    let pivot : u32 = i - 1u32
+    let mut j : u32 = n - 1u32
+    while PERM[j as u64] <= PERM[pivot as u64] { j = j - 1u32 }
+    let tmp : u32 = PERM[pivot as u64]  PERM[pivot as u64] = PERM[j as u64]  PERM[j as u64] = tmp
+    /* reverse suffix from i..n-1 */
+    let mut lo : u32 = i  let mut hi : u32 = n - 1u32
+    while lo < hi { let t : u32 = PERM[lo as u64]  PERM[lo as u64] = PERM[hi as u64]  PERM[hi as u64] = t  lo = lo + 1u32  hi = hi - 1u32 }
+    return 1u8
+}
+fn iso_under_perm(n: u32) -> u8 {
+    let mut u : u32 = 0u32
+    while u < n { let mut v : u32 = 0u32
+        while v < n {
+            let e1 : u32 = (G1[u as u64] >> v) & 1u32
+            let e2 : u32 = (G2[PERM[u as u64] as u64] >> PERM[v as u64]) & 1u32
+            if e1 != e2 { return 0u8 }
+            v = v + 1u32 }
+        u = u + 1u32 }
+    return 1u8
+}
+fn brute_iso(n: u32) -> u8 {
+    let mut i : u32 = 0u32  while i < n { PERM[i as u64] = i  i = i + 1u32 }
+    let mut more : u8 = 1u8
+    while more == 1u8 { if iso_under_perm(n) == 1u8 { return 1u8 }  more = next_perm(n) }
+    return 0u8
+}
+
+fn main() -> u64 {
+    RNG[0u64] = 0x61A7EEu32
+    let mut t : u32 = 0u32  let mut iso_seen : u32 = 0u32  let mut non_seen : u32 = 0u32
+    while t < 4000u32 {
+        let n : u32 = 3u32 + (rnd() % 5u32)             /* 3..7 vertices */
+        NN[0u64] = n
+        gen_tree(1u32, n)
+        gen_tree(2u32, n)
+        build_union(n)
+        let w : u8 = oneWL_equiv(n)
+        let b : u8 = brute_iso(n)
+        if w != b { return 10u64 }                       /* 1-WL == iso on trees (completeness) */
+        if b == 1u8 { iso_seen = iso_seen + 1u32 } else { non_seen = non_seen + 1u32 }
+        t = t + 1u32
+    }
+    if iso_seen < 100u32 { return 60u64 }
+    if non_seen < 100u32 { return 61u64 }
+    return 99u64
+}

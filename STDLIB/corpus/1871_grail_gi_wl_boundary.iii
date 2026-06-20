@@ -1,0 +1,131 @@
+/* 1871_grail_gi_wl_boundary.iii -- THE GRAPH-ISOMORPHISM WALL, the boundary: color refinement (1-WL) is INCOMPLETE on
+ * general graphs -- it cannot distinguish non-isomorphic REGULAR graphs.  This is the GI analog of parity's
+ * control-blindness barrier (1848): a GRAPH INVARIANT has a hard limit, and the limit is exactly the boundary of the
+ * tractable island (1870, where 1-WL was complete for trees).
+ *
+ * THEOREM (the textbook 1-WL counterexample).  K_{3,3} (complete bipartite, 3-regular) and the TRIANGULAR PRISM
+ * (C3 x K2, 3-regular) are both 3-regular connected graphs on 6 vertices; they are 1-WL-EQUIVALENT (color refinement
+ * gives every vertex the same color in both, since all degrees and all neighbor-degrees are 3), yet they are NOT
+ * isomorphic (K_{3,3} is bipartite / triangle-free; the prism contains triangles).  So 1-WL declares them the same and
+ * is WRONG -- color refinement does not decide graph isomorphism.
+ *
+ * THE PARITY ECHO (cross-wall).  Just as no ownership-BLIND invariant decides parity (T2, 1848), no 1-WL color
+ * histogram decides GI: both are invariants that collapse exactly the distinction that matters (control there;
+ * higher-order structure here).  The fix in both landscapes is more dimensions -- higher-dimensional WL for GI (k-WL),
+ * control-preservation for parity -- at rising cost, never reaching P by the cheap invariant.  This is why GI, like
+ * parity, sits at quasi-polynomial (Babai 2016), an intermediate candidate, not NP-complete.
+ *
+ * HONEST TAG: this refutes "color refinement decides GI" (a residual hope), the GI analog of parity's avenue A.  It
+ * does NOT bear on whether GI is in P (the open core) -- a refuted cheap test cannot, and does not, settle the core.
+ * exit 99 = K_{3,3} and the prism are both 3-regular, 1-WL-equivalent, and NOT isomorphic (1-WL incomplete). */
+module mgiwl
+var G1 : [u32; 8]
+var G2 : [u32; 8]
+var UADJ : [u32; 16]
+var COL : [u32; 16]
+var NEW : [u32; 16]
+var CM : [u32; 16]
+var PERM : [u32; 8]
+
+fn popc(x: u32) -> u32 { let mut c : u32 = 0u32  let mut v : u32 = 0u32  while v < 16u32 { if (x & (1u32 << v)) != 0u32 { c = c + 1u32 }  v = v + 1u32 }  return c }
+fn build_union(n: u32) -> i32 { let mut i : u32 = 0u32  while i < n { UADJ[i as u64] = G1[i as u64]  UADJ[(n + i) as u64] = G2[i as u64] << n  i = i + 1u32 }  return 0i32 }
+fn same_sig(u: u32, v: u32, oldnc: u32) -> u8 {
+    if COL[u as u64] != COL[v as u64] { return 0u8 }
+    let mut c : u32 = 0u32
+    while c < oldnc { if popc(UADJ[u as u64] & CM[c as u64]) != popc(UADJ[v as u64] & CM[c as u64]) { return 0u8 }  c = c + 1u32 }
+    return 1u8
+}
+fn refine(N: u32) -> u32 {
+    let mut v : u32 = 0u32  while v < N { COL[v as u64] = 0u32  v = v + 1u32 }
+    let mut nc : u32 = 1u32  let mut done : u8 = 0u8
+    while done == 0u8 {
+        let oldnc : u32 = nc
+        let mut c : u32 = 0u32  while c < oldnc { CM[c as u64] = 0u32  c = c + 1u32 }
+        let mut w : u32 = 0u32  while w < N { CM[COL[w as u64] as u64] = CM[COL[w as u64] as u64] | (1u32 << w)  w = w + 1u32 }
+        let mut x : u32 = 0u32  while x < N { NEW[x as u64] = 0xFFFFFFFFu32  x = x + 1u32 }
+        let mut nid : u32 = 0u32  let mut a : u32 = 0u32
+        while a < N {
+            if NEW[a as u64] == 0xFFFFFFFFu32 {
+                NEW[a as u64] = nid
+                let mut b : u32 = a + 1u32
+                while b < N { if NEW[b as u64] == 0xFFFFFFFFu32 { if same_sig(a, b, oldnc) == 1u8 { NEW[b as u64] = nid } }  b = b + 1u32 }
+                nid = nid + 1u32
+            }
+            a = a + 1u32
+        }
+        let mut y : u32 = 0u32  while y < N { COL[y as u64] = NEW[y as u64]  y = y + 1u32 }
+        if nid == oldnc { done = 1u8 } else { nc = nid }
+    }
+    return nc
+}
+fn oneWL_equiv(n: u32) -> u8 {
+    let nc : u32 = refine(2u32 * n)
+    let mut c : u32 = 0u32
+    while c < nc {
+        let mut lo : u32 = 0u32  let mut hi : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n { if COL[v as u64] == c { lo = lo + 1u32 }  if COL[(n + v) as u64] == c { hi = hi + 1u32 }  v = v + 1u32 }
+        if lo != hi { return 0u8 }
+        c = c + 1u32
+    }
+    return 1u8
+}
+fn next_perm(n: u32) -> u8 {
+    if n < 2u32 { return 0u8 }
+    let mut i : u32 = n - 1u32  let mut found_i : u8 = 0u8
+    while found_i == 0u8 { if i == 0u32 { found_i = 2u8 } else { if PERM[(i - 1u32) as u64] < PERM[i as u64] { found_i = 1u8 } else { i = i - 1u32 } } }
+    if found_i == 2u8 { return 0u8 }
+    let pivot : u32 = i - 1u32
+    let mut j : u32 = n - 1u32
+    while PERM[j as u64] <= PERM[pivot as u64] { j = j - 1u32 }
+    let tmp : u32 = PERM[pivot as u64]  PERM[pivot as u64] = PERM[j as u64]  PERM[j as u64] = tmp
+    let mut lo : u32 = i  let mut hi : u32 = n - 1u32
+    while lo < hi { let t : u32 = PERM[lo as u64]  PERM[lo as u64] = PERM[hi as u64]  PERM[hi as u64] = t  lo = lo + 1u32  hi = hi - 1u32 }
+    return 1u8
+}
+fn iso_under_perm(n: u32) -> u8 {
+    let mut u : u32 = 0u32
+    while u < n { let mut v : u32 = 0u32
+        while v < n { let e1 : u32 = (G1[u as u64] >> v) & 1u32  let e2 : u32 = (G2[PERM[u as u64] as u64] >> PERM[v as u64]) & 1u32  if e1 != e2 { return 0u8 }  v = v + 1u32 }
+        u = u + 1u32 }
+    return 1u8
+}
+fn brute_iso(n: u32) -> u8 {
+    let mut i : u32 = 0u32  while i < n { PERM[i as u64] = i  i = i + 1u32 }
+    let mut more : u8 = 1u8
+    while more == 1u8 { if iso_under_perm(n) == 1u8 { return 1u8 }  more = next_perm(n) }
+    return 0u8
+}
+fn is_3regular(slot: u32, n: u32) -> u8 {
+    let mut v : u32 = 0u32
+    while v < n {
+        let mut d : u32 = 0u32
+        if slot == 1u32 { d = popc(G1[v as u64]) } else { d = popc(G2[v as u64]) }
+        if d != 3u32 { return 0u8 }
+        v = v + 1u32
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* G1 = K_{3,3}: parts {0,1,2},{3,4,5}; each left to each right */
+    G1[0u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<5u32)
+    G1[1u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<5u32)
+    G1[2u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<5u32)
+    G1[3u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<2u32)
+    G1[4u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<2u32)
+    G1[5u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<2u32)
+    /* G2 = triangular prism: triangles {0,1,2},{3,4,5} + matching 0-3,1-4,2-5 */
+    G2[0u64] = (1u32<<1u32)|(1u32<<2u32)|(1u32<<3u32)
+    G2[1u64] = (1u32<<0u32)|(1u32<<2u32)|(1u32<<4u32)
+    G2[2u64] = (1u32<<0u32)|(1u32<<1u32)|(1u32<<5u32)
+    G2[3u64] = (1u32<<4u32)|(1u32<<5u32)|(1u32<<0u32)
+    G2[4u64] = (1u32<<3u32)|(1u32<<5u32)|(1u32<<1u32)
+    G2[5u64] = (1u32<<3u32)|(1u32<<4u32)|(1u32<<2u32)
+    let n : u32 = 6u32
+    if is_3regular(1u32, n) != 1u8 { return 10u64 }       /* K_{3,3} is 3-regular */
+    if is_3regular(2u32, n) != 1u8 { return 11u64 }       /* prism is 3-regular */
+    build_union(n)
+    if oneWL_equiv(n) != 1u8 { return 12u64 }             /* 1-WL declares them EQUIVALENT (the failure) */
+    if brute_iso(n) != 0u8 { return 13u64 }               /* but they are NOT isomorphic */
+    return 99u64
+}

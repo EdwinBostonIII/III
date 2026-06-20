@@ -107,6 +107,11 @@ untouched:* NP∩coNP membership says nothing about P.
 **CITED**). Like §D, a tractable regime: the wall needs *unbounded structural width* too. So the hard core requires
 **both** unbounded priority alternation (§C/D) **and** unbounded graph width — it is doubly unbounded.
 
+### (extra) Quantum speedup
+**CITED.** There is no known quantum (BQP) advantage for parity games / μ-calculus model-checking: the problem has no
+hidden-subgroup / period-finding structure (the Shor lever) and no oracle-search structure beyond generic Grover (whose
+quadratic speedup does not cross the QP→P gap). Quantum computing is not a known route through this wall.
+
 ---
 
 ## The verdict — a wall with no unlocked door
@@ -127,6 +132,7 @@ untouched:* NP∩coNP membership says nothing about P.
 | L tangle learning | OPEN-SLIVER | — |
 | M "secretly NP-hard" | CLOSED-III reframe (NP∩coNP) | `1860` |
 | width islands | ISLAND-III / CITED | — |
+| N quantum speedup | CITED (no known BQP advantage) | — |
 
 **Every avenue is accounted for.** Three classes remain after the walk: (1) **closed** shortcuts and **islands** —
 provably not a route (A, C, D, E, I, M, width); (2) **cited** ceilings and family lower bounds — provably not

@@ -51,12 +51,18 @@ statement; the "universal speed limit for all safe technology" is the INTERPRETA
 ## Reach 2 — The logic↔cryptography characteristic firewall
 
 **The rigorous core.**
-- **THEOREM (III), `1851`+`1862`.** The two *canonical* algebraic bridges from the lattice-logic Boolean-ring face
-  (characteristic 2) to the post-quantum / zk crypto rings fail — and not just for ML-KEM's `ℤ_3329`: the same two
-  obstructions (no unital ring hom char-2→`ℤ_m` since `2≠0`; the only additive idempotent is `0`, so `∨↦+` collapses)
-  hold for **every deployed modulus** tested — ML-KEM `3329`, Falcon `12289`, ML-DSA `8380417`, the Mersenne primes
-  `2³¹−1` and `2⁶¹−1`, the STARK Goldilocks prime `2⁶⁴−2³²+1`, and the RSA composite `61·53`. It is a *generic*
-  characteristic firewall, not a `3329` coincidence.
+- **THEOREM (III), `1851`+`1862`.** The *canonical* algebraic bridge from the lattice-logic Boolean-ring face
+  (characteristic 2) to the post-quantum / zk crypto rings fails — and the load-bearing reason is the **characteristic**,
+  uniform across the whole deployed stack, not a `3329` coincidence. A unital ring hom char-2→`ℤ_m` forces `2 = 0`,
+  contradicting `2≠0` in odd `ℤ_m` (equivalently: `𝔽₂={0,1}` is not a subring of `ℤ_m`, since `1+1=0` in `𝔽₂` but `=2≠0`
+  here). This is *one* obstruction, viewed several ways, and it is **target-specific**: it vanishes at char 2 (`2=0` in
+  `𝔽₂` itself). Verified for ML-KEM `3329`, Falcon `12289`, ML-DSA `8380417`, the Mersenne primes `2³¹−1` and `2⁶¹−1`,
+  the STARK Goldilocks prime `2⁶⁴−2³²+1`, and the RSA composite `61·53`. *Honest demotion (advisor-audited):* the
+  separate "idempotency" point — the only additive idempotent of `ℤ_m` is `0`, so `∨↦+` collapses — is **generic**, not a
+  crypto firewall: `a+a=a ⟹ a=0` in *every* additive group (including `𝔽₂`), so it carries no information about
+  characteristic or crypto and the modulus-sweep is meaningless for it; it only explains why the *naive* map `∨↦+` is
+  trivially wrong. The whole result rests on the **characteristic**, which is what makes it deep: even the *principled*
+  Stone bridge fails for the same reason.
 
 **What this licenses (THEOREM-level, scoped).** A *single canonical algebraic key* unifying III's lattice logics with
 its post-quantum cryptography is provably empty: the logic side is char 2, the entire deployed crypto stack is odd

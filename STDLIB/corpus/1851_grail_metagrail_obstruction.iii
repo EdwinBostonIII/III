@@ -13,9 +13,12 @@
  *      0 = phi(1+1) = phi(1)+phi(1) = 1+1 = 2 in Z_3329.  But 2 != 0 in Z_3329 (and gcd(2,3329)=1: the characteristics
  *      are coprime, 3329 prime).  Contradiction => NO such phi.  The Boolean-ring face does not embed in / map to Z_q.
  *
- *  (B) IDEMPOTENCY obstruction.  A lattice's join is idempotent: a OR a = a for EVERY a.  A semiring/ring map sending
- *      OR |-> + would need a+a = a for every a; in Z_3329 the additive idempotents {a : 2a = a} = {a : a = 0} = {0}
- *      ALONE.  So the join's universal idempotency collapses under any (+)-map -- no lattice->ring hom on (OR,+).
+ *  (B) IDEMPOTENCY point (GENERIC -- advisor-audited; the WEAKER half).  OR is idempotent (a OR a = a); a map OR |-> +
+ *      would need a+a = a, but the additive idempotents {a : 2a = a} = {0} ALONE.  CAUTION: this is TARGET-INDEPENDENT --
+ *      a+a=a => a=0 in EVERY additive group, including the char-2 Boolean ring itself -- so (B) is generic and carries
+ *      NO characteristic/crypto information; it only rules out the NAIVE map OR |-> + .  The LOAD-BEARING obstruction is
+ *      (A), the CHARACTERISTIC: it is target-specific (vanishes at char 2), and even the PRINCIPLED Stone bridge fails
+ *      for it (F_2 not a subring of Z_q).  See 1862 for (A) generalized across the deployed crypto stack.
  *
  * SIGNIFICANCE.  The De Morgan completion genuinely unifies the LATTICE logics (weave/Voice/logic6, KAT 1826); this
  * theorem shows the two canonical algebraic bridges to PQ provably fail, so the "single canonical key" picture sits

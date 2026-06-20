@@ -143,14 +143,17 @@ universal-tree family **provably** unable to reach P (B1).
 - **O1 — The wall itself.** Is parity-game winner determination in P (equivalently, all of §5)? — **OPEN.** Unmoved
   for 50+ years; a `$1M`-class question. Every Class-II mechanism here reaches it and stops; every Class-I mechanism
   is killed by T2 before reaching it.
-- **M1 — The meta-grail (the two CANONICAL bridges across the lattice logics and the PQ ring).** — **OBSTRUCTED for
-  the canonical bridges** (proven negative, scoped). The De Morgan completion unifies the *lattice* logics
-  (weave/Voice/logic6, KAT `1826`); the two *natural* structural bridges to the post-quantum ring `ℤ_q` provably fail
-  (KAT `1851`): no **unital ring homomorphism** char-2 → `ℤ_3329` (since `2 ≠ 0`, coprime characteristics) and the only
-  **additive idempotent** of `ℤ_3329` is `0` (so `∨ ↦ +` collapses). *Scope:* this rules out the two canonical
-  morphism classes; it does **not** prove that *no* relation of any kind exists — the weave still **simulates** `ℤ_q`
-  as circuits (a real, non-canonical relation). So the canonical "single algebraic key including PQ" is empty; a
-  unification of a *different* kind is not ruled out.
+- **M1 — The meta-grail (the canonical algebraic bridge across the lattice logics and the PQ ring).** — **OBSTRUCTED on
+  CHARACTERISTIC** (proven negative, scoped). The De Morgan completion unifies the *lattice* logics
+  (weave/Voice/logic6, KAT `1826`); the canonical bridge to the post-quantum ring `ℤ_q` provably fails (KAT `1851`, and
+  generically across the deployed crypto stack, `1862`). The **load-bearing** reason is the **characteristic**: a unital
+  ring hom char-2 → `ℤ_q` forces `2 = 0`, contradicting `2 ≠ 0` in odd `ℤ_q` (equivalently `𝔽₂` is not a subring of
+  `ℤ_q`) — *target-specific*, and it vanishes at char 2. *(The separate idempotency point — only additive idempotent is
+  `0`, so `∨↦+` collapses — is **generic**: it holds in every ring including `𝔽₂`, so it carries no crypto information;
+  it only rules out the naive `∨↦+` map. The characteristic carries the result, and even the principled Stone bridge
+  fails for it.)* *Scope:* this rules out the canonical morphism classes; it does **not** prove that *no* relation of any
+  kind exists — the weave still **simulates** `ℤ_q` as char-2 circuits (a real, non-canonical relation). So the
+  canonical "single algebraic key including PQ" is empty; a unification of a *different* kind is not ruled out.
 
 ---
 
@@ -175,7 +178,7 @@ universal-tree family **provably** unable to reach P (B1).
 | Q | the standard parity→mean-payoff separating-weight *scheme* is exponential `(n+1)^d` | **PROVEN (III)** | `1855` |
 | D | Class I / Class II dichotomy | **PROVEN-NEGATIVE for Class I** (T2) | §4 |
 | O1 | parity games in P? | **OPEN** | the wall |
-| M1 | the two *canonical* bridges to the PQ ring fail (char 2 vs 3329, idempotency) | **OBSTRUCTED (canonical bridges)** | `1851`, `1826` |
+| M1 | the canonical algebraic bridge to the PQ ring fails on CHARACTERISTIC (char 2 vs odd `ℤ_q`; idempotency is a generic aside) | **OBSTRUCTED (canonical, on characteristic)** | `1851`,`1862`,`1826` |
 
 **The honest one-line summary.** The "door" the field sees is one **wall** with many equivalent faces (§5); its
 two known faces are *proven* unclimbable for whole method families (B1, B2); its shape is the **control/alternation**

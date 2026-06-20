@@ -1,0 +1,102 @@
+/* 1882_parity_game_faculty.iii -- GATES the production numera::parity_game faculty (the parity-game / mu-calculus
+ * verification engine) against an INDEPENDENT brute-force game oracle.
+ *
+ * The faculty solves by Zielonka attractor decomposition.  This KAT cross-checks pg_winner against a wholly different
+ * method: enumerate ALL positional strategies of both players (Even: se, Odd: so) over out-degree-2 games, and decide
+ * "Even wins v" <=> EXISTS se, FORALL so, the deterministic (se,so)-play from v has even max-infinitely-recurring
+ * priority.  Two unrelated algorithms agreeing on every sampled game is the production correctness gate.
+ *
+ * exit 99 = pg_kat() == 99 AND pg_winner == the brute game oracle on every vertex of every sampled game, both winners seen. */
+module mpgf
+extern @abi(c-msvc-x64) fn pg_reset(n: u32) -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_set_owner(v: u32, owner: u8) -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_set_prio(v: u32, p: u32) -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_add_edge(u: u32, w: u32) -> i32 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_solve_even() -> u64 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_winner(v: u32) -> u8 from "parity_game.iii"
+extern @abi(c-msvc-x64) fn pg_kat() -> u64 from "parity_game.iii"
+
+var OWN : [u8; 8]
+var PRI : [u32; 8]
+var SA : [u32; 8]
+var SB : [u32; 8]
+var IDX : [u32; 8]    /* index of vertex within its owner's strategy list */
+var FS : [u32; 8]     /* forced successor under the current (se,so) */
+var NV : [u32; 1]
+var RNG : [u32; 1]
+
+fn rnd() -> u32 { let mut x : u32 = RNG[0u64]  x = x ^ (x << 13u32)  x = x ^ (x >> 17u32)  x = x ^ (x << 5u32)  RNG[0u64] = x  return x }
+
+/* deterministic play from v under FS: walk to the cycle, return 1 if max-prio-on-cycle is even (Even wins) */
+fn play_even(v: u32) -> u8 {
+    let n : u32 = NV[0u64]
+    let mut pos : u32 = v  let mut i : u32 = 0u32
+    while i < n { pos = FS[pos as u64]  i = i + 1u32 }          /* after n steps, pos is on the cycle */
+    let start : u32 = pos  let mut mx : u32 = PRI[pos as u64]  let mut cur : u32 = FS[pos as u64]
+    while cur != start { if PRI[cur as u64] > mx { mx = PRI[cur as u64] }  cur = FS[cur as u64] }
+    if (mx & 1u32) == 0u32 { return 1u8 }
+    return 0u8
+}
+/* build FS from strategy masks se (Even) / so (Odd) */
+fn build_fs(se: u32, so: u32) -> i32 {
+    let n : u32 = NV[0u64]  let mut v : u32 = 0u32
+    while v < n {
+        let mut bit : u32 = 0u32
+        if OWN[v as u64] == 0u8 { bit = (se >> IDX[v as u64]) & 1u32 } else { bit = (so >> IDX[v as u64]) & 1u32 }
+        if bit == 0u32 { FS[v as u64] = SA[v as u64] } else { FS[v as u64] = SB[v as u64] }
+        v = v + 1u32
+    }
+    return 0i32
+}
+/* brute oracle: Even wins v iff EXISTS se FORALL so play_even(v)=1 */
+fn brute_even_wins(v: u32, ke: u32, ko: u32) -> u8 {
+    let lim_e : u32 = 1u32 << ke  let lim_o : u32 = 1u32 << ko
+    let mut se : u32 = 0u32
+    while se < lim_e {
+        let mut all_o : u8 = 1u8  let mut so : u32 = 0u32
+        while so < lim_o {
+            build_fs(se, so)
+            if play_even(v) == 0u8 { all_o = 0u8  so = lim_o } else { so = so + 1u32 }
+        }
+        if all_o == 1u8 { return 1u8 }
+        se = se + 1u32
+    }
+    return 0u8
+}
+
+fn main() -> u64 {
+    if pg_kat() != 99u64 { return 50u64 }                       /* the faculty's own self-test must pass */
+    RNG[0u64] = 0x9A21CEu32
+    let mut trials : u32 = 0u32  let mut ev : u32 = 0u32  let mut od : u32 = 0u32
+    while trials < 2000u32 {
+        let n : u32 = 4u32 + (rnd() % 3u32)                     /* 4..6 vertices */
+        NV[0u64] = n
+        pg_reset(n)
+        let mut ke : u32 = 0u32  let mut ko : u32 = 0u32  let mut v : u32 = 0u32
+        while v < n {
+            let ow : u8 = (rnd() & 1u32) as u8
+            OWN[v as u64] = ow
+            if ow == 0u8 { IDX[v as u64] = ke  ke = ke + 1u32 } else { IDX[v as u64] = ko  ko = ko + 1u32 }
+            let pr : u32 = rnd() % n
+            PRI[v as u64] = pr
+            let a : u32 = rnd() % n
+            let mut b : u32 = rnd() % n  if b == a { b = (a + 1u32) % n }
+            SA[v as u64] = a  SB[v as u64] = b
+            pg_set_owner(v, ow)  pg_set_prio(v, pr)  pg_add_edge(v, a)  pg_add_edge(v, b)
+            v = v + 1u32
+        }
+        if pg_solve_even() == 0xFFFFFFFFFFFFFFFFu64 { return 51u64 }   /* games are total (out-deg 2) -> no deadend */
+        let mut u : u32 = 0u32
+        while u < n {
+            let fac : u8 = pg_winner(u)                          /* 0 = Even, 1 = Odd */
+            let mut bru : u8 = 1u8  if brute_even_wins(u, ke, ko) == 1u8 { bru = 0u8 }
+            if fac != bru { return 10u64 }                       /* faculty must agree with the brute game oracle */
+            if fac == 0u8 { ev = ev + 1u32 } else { od = od + 1u32 }
+            u = u + 1u32
+        }
+        trials = trials + 1u32
+    }
+    if ev < 200u32 { return 60u64 }
+    if od < 200u32 { return 61u64 }
+    return 99u64
+}

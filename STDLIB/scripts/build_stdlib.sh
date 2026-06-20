@@ -804,6 +804,7 @@ MODULES=(
     "numera/bv_ring"
     "numera/congruence"
     "numera/sat"
+    "numera/parity_game"
     "numera/bv_bits"
     # numera/invent -- the Generative Invention Loop: de-novo cost-directed law synthesis (value-sieve + SAT judge).
     "numera/invent"

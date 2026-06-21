@@ -160,7 +160,7 @@ var LBL_N    : u32 = 0u32
 var SP_PASS  : u32 = 2u32     /* 1 = layout (record label offsets), 2 = final (resolve displacements) */
 
 fn lbl_record(slot: u32, slen2: u32) {   /* the label name is in SYM_NAME scratch slot 'slot' */
-    if LBL_N < 64u32 {
+    if LBL_N < 8192u32 {   /* match the LBL array size (was a 64 dev-scaffold cap; cg_r3 has 998 .text labels) */
         let mut j : u32 = 0u32
         while j < slen2 { LBL_NAME[((LBL_N * 32u32) + j) as u64] = SYM_NAME[((slot * 32u32) + j) as u64]  j = j + 1u32 }
         LBL_NLEN[LBL_N as u64] = slen2
@@ -187,7 +187,7 @@ var EXP_NLEN : [u32; 2048]
 var EXP_OFF  : [u32; 2048]
 var EXP_N    : u32 = 0u32
 fn exp_record(slot: u32, slen2: u32) {
-    if EXP_N < 32u32 {
+    if EXP_N < 2048u32 {   /* match the EXP array size (was a 32 dev-scaffold cap; cg_r3 has 340 .global) */
         let mut j : u32 = 0u32
         while j < slen2 { EXP_NAME[((EXP_N * 32u32) + j) as u64] = SYM_NAME[((slot * 32u32) + j) as u64]  j = j + 1u32 }
         EXP_NLEN[EXP_N as u64] = slen2  EXP_N = EXP_N + 1u32
@@ -671,7 +671,7 @@ fn sp_count_bytes() -> u32 {   /* count comma-separated values on the rest of th
     return cnt
 }
 fn sp_record_at(nlen: u32) {   /* commit the just-read name (in scratch slot SYM_N) as a symbol */
-    if SYM_N < 63u32 {
+    if SYM_N < 8191u32 {   /* 8191 NOT 8192: SYM_N is also the scratch name-write slot (SYM_NAME[SYM_N*32+..]); 8192 would overrun SYM_NAME[262144] */
         SYM_NLEN[SYM_N as u64] = nlen
         SYM_SEC[SYM_N as u64] = CUR_SEC
         SYM_OFF[SYM_N as u64] = SEC_OFF[CUR_SEC as u64]

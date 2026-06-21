@@ -1,0 +1,189 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\sovas.iii
+ *
+ * III STDLIB - omnia::sovas  --  SOVEREIGN x86-64 ASSEMBLER (encoder core, Tier-1 integer set).
+ *
+ * Stage S1 of the sovereign toolchain (DOCS/III-SOVEREIGN-TOOLCHAIN.md): encode the integer-core instruction
+ * forms cg_r3 actually emits (REX / ModRM / SIB / disp / imm) into machine bytes -- so .iii reaches a binary
+ * with NO gcc/ld.  Each encoder reproduces gcc-as's EXACT bytes; the differential KAT (corpus 1934) gates
+ * byte-identity against gcc's real output (objdump of the live module objects).  A wrong byte reddens the gate.
+ *
+ * This is the ENCODER (the subtle, correctness-critical heart).  The .s parser + COFF emit (S1 tail) and the
+ * linker (S2) consume it.  Registers 0..15 (rax=0 rcx=1 rdx=2 rbx=3 rsp=4 rbp=5 rsi=6 rdi=7 r8..r15=8..15).
+ *
+ * NIH; libc-free.  Ring R0.  K 1.00.
+ */
+module omnia_sovas
+
+const SOV_CAP : u32 = 4096u32
+var SOV_BUF : [u8; 4096]
+var SOV_LEN : u32 = 0u32
+
+fn sov_reset() -> i32 @export { SOV_LEN = 0u32  return 0i32 }
+fn sov_len() -> u32 @export { return SOV_LEN }
+fn sov_at(i: u32) -> u32 @export { if i < SOV_LEN { return SOV_BUF[i] as u32 }  return 0xFFFFFFFFu32 }
+
+/* --- internal emit primitives (not exported) --- */
+fn sov_emit(b: u32) {
+    if SOV_LEN < SOV_CAP { SOV_BUF[SOV_LEN] = (b & 0xFFu32) as u8  SOV_LEN = SOV_LEN + 1u32 }
+}
+fn sov_imm(val: u64, n: u32) {
+    let mut k : u32 = 0u32
+    while k < n {
+        sov_emit(((val >> (8u64 * (k as u64))) & 0xFFu64) as u32)
+        k = k + 1u32
+    }
+}
+fn sov_rex(w: u32, r: u32, x: u32, b: u32) {
+    sov_emit(0x40u32 | (w << 3u32) | (r << 2u32) | (x << 1u32) | b)
+}
+/* common REX.W with R from the reg field, B from the r/m field, X=0 */
+fn sov_rexwb(reg: u32, rm: u32) {
+    let mut r : u32 = 0u32
+    let mut b : u32 = 0u32
+    if reg >= 8u32 { r = 1u32 }
+    if rm  >= 8u32 { b = 1u32 }
+    sov_rex(1u32, r, 0u32, b)
+}
+fn sov_modrm(md: u32, reg: u32, rm: u32) {
+    sov_emit((md << 6u32) | ((reg & 7u32) << 3u32) | (rm & 7u32))
+}
+
+/* ── stack ── */
+fn sov_push_r(reg: u32) -> i32 @export {
+    if reg >= 8u32 { sov_emit(0x41u32) }
+    sov_emit(0x50u32 + (reg & 7u32))
+    return 0i32
+}
+fn sov_pop_r(reg: u32) -> i32 @export {
+    if reg >= 8u32 { sov_emit(0x41u32) }
+    sov_emit(0x58u32 + (reg & 7u32))
+    return 0i32
+}
+
+/* ── moves ── */
+/* mov %src,%dst  (64-bit reg→reg) : REX.W 89 /r */
+fn sov_mov_rr(dst: u32, src: u32) -> i32 @export {
+    sov_rexwb(src, dst)  sov_emit(0x89u32)  sov_modrm(3u32, src, dst)  return 0i32
+}
+/* movabs $imm64,%reg : REX.W B8+r io */
+fn sov_movabs(reg: u32, imm: u64) -> i32 @export {
+    let mut b : u32 = 0u32
+    if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xB8u32 + (reg & 7u32))  sov_imm(imm, 8u32)  return 0i32
+}
+/* mov $imm32,%reg (sign-extended) : REX.W C7 /0 id */
+fn sov_mov_imm32(reg: u32, imm: i32) -> i32 @export {
+    let mut b : u32 = 0u32
+    if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xC7u32)  sov_modrm(3u32, 0u32, reg)
+    sov_imm((imm as u32) as u64, 4u32)  return 0i32
+}
+/* mov %reg, disp8(%rbp) : REX.W 89 /r mod=01 rm=101 disp8 */
+fn sov_store_rbp8(reg: u32, disp: i32) -> i32 @export {
+    sov_rexwb(reg, 5u32)  sov_emit(0x89u32)  sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32)  return 0i32
+}
+/* mov disp8(%rbp), %reg : REX.W 8B /r */
+fn sov_load_rbp8(reg: u32, disp: i32) -> i32 @export {
+    sov_rexwb(reg, 5u32)  sov_emit(0x8Bu32)  sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32)  return 0i32
+}
+/* mov %reg, disp32(%rip) : REX.W 89 /r mod=00 rm=101 disp32  (RIP-relative; a REL32 relocation site) */
+fn sov_store_rip(reg: u32, disp: i32) -> i32 @export {
+    let mut r : u32 = 0u32
+    if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32)  return 0i32
+}
+/* mov disp32(%rip), %reg : REX.W 8B /r */
+fn sov_load_rip(reg: u32, disp: i32) -> i32 @export {
+    let mut r : u32 = 0u32
+    if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Bu32)  sov_modrm(0u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32)  return 0i32
+}
+/* lea disp32(%rip), %reg : REX.W 8D /r (RIP-relative; a REL32 relocation site) */
+fn sov_lea_rip(reg: u32, disp: i32) -> i32 @export {
+    let mut r : u32 = 0u32
+    if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Du32)  sov_modrm(0u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32)  return 0i32
+}
+/* mov %eax, disp32(%rip) : 32-bit, NO REX (the L_*_COUNT store form) */
+fn sov_store_rip32(reg: u32, disp: i32) -> i32 @export {
+    sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32)  return 0i32
+}
+/* mov %r8, disp32(%eax,%rcx,1) byte store: 88 /r mod=00 rm=100(SIB) SIB(scale,index,base) */
+fn sov_store_sib8(base: u32, index: u32, scale_log: u32, src: u32) -> i32 @export {
+    sov_emit(0x88u32)  sov_modrm(0u32, src, 4u32)
+    sov_emit((scale_log << 6u32) | ((index & 7u32) << 3u32) | (base & 7u32))  return 0i32
+}
+
+/* ── ALU reg,reg (op %src,%dst) : REX.W <opcode> /r ── */
+fn sov_alu_rr(opcode: u32, dst: u32, src: u32) {
+    sov_rexwb(src, dst)  sov_emit(opcode)  sov_modrm(3u32, src, dst)
+}
+fn sov_add_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x01u32, dst, src)  return 0i32 }
+fn sov_sub_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x29u32, dst, src)  return 0i32 }
+fn sov_cmp_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x39u32, dst, src)  return 0i32 }
+fn sov_and_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x21u32, dst, src)  return 0i32 }
+fn sov_or_rr(dst: u32, src: u32)  -> i32 @export { sov_alu_rr(0x09u32, dst, src)  return 0i32 }
+fn sov_xor_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x31u32, dst, src)  return 0i32 }
+fn sov_test_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x85u32, dst, src)  return 0i32 }
+
+/* ALU $imm32,%reg : REX.W 81 /ext id   (add=/0 sub=/5 cmp=/7) */
+fn sov_alu_imm32(ext: u32, reg: u32, imm: i32) {
+    let mut b : u32 = 0u32
+    if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0x81u32)  sov_modrm(3u32, ext, reg)  sov_imm((imm as u32) as u64, 4u32)
+}
+fn sov_add_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(0u32, reg, imm)  return 0i32 }
+fn sov_sub_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(5u32, reg, imm)  return 0i32 }
+fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(7u32, reg, imm)  return 0i32 }
+
+/* F7 group (one-operand) : REX.W F7 /ext  (not=/2 neg=/3 mul=/4 imul=/5 div=/6 idiv=/7) */
+fn sov_f7(ext: u32, reg: u32) {
+    let mut b : u32 = 0u32
+    if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xF7u32)  sov_modrm(3u32, ext, reg)
+}
+fn sov_not_r(reg: u32)  -> i32 @export { sov_f7(2u32, reg)  return 0i32 }
+fn sov_neg_r(reg: u32)  -> i32 @export { sov_f7(3u32, reg)  return 0i32 }
+fn sov_imul_r(reg: u32) -> i32 @export { sov_f7(5u32, reg)  return 0i32 }
+fn sov_div_r(reg: u32)  -> i32 @export { sov_f7(6u32, reg)  return 0i32 }
+fn sov_idiv_r(reg: u32) -> i32 @export { sov_f7(7u32, reg)  return 0i32 }
+
+/* shift $imm8,%reg : REX.W C1 /ext ib  (shl=/4 shr=/5 sar=/7) */
+fn sov_shift_imm8(ext: u32, reg: u32, imm: u32) {
+    let mut b : u32 = 0u32
+    if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xC1u32)  sov_modrm(3u32, ext, reg)  sov_emit(imm & 0xFFu32)
+}
+fn sov_shl_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift_imm8(4u32, reg, imm)  return 0i32 }
+fn sov_shr_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift_imm8(5u32, reg, imm)  return 0i32 }
+
+/* ── set/movzx ── */
+/* setCC %reg8 : 0F 90+cc /0   (cc: b=2 ae=3 e=4 ne=5 be=6 a=7 l=12 ge=13 le=14 g=15) */
+fn sov_setcc(cc: u32, reg8: u32) -> i32 @export {
+    if reg8 >= 4u32 {
+        let mut b : u32 = 0u32
+        if reg8 >= 8u32 { b = 1u32 }
+        sov_rex(0u32, 0u32, 0u32, b)
+    }
+    sov_emit(0x0Fu32)  sov_emit(0x90u32 + cc)  sov_modrm(3u32, 0u32, reg8)  return 0i32
+}
+/* movzbq %src8,%dst : REX.W 0F B6 /r */
+fn sov_movzbq(dst: u32, src: u32) -> i32 @export {
+    sov_rexwb(dst, src)  sov_emit(0x0Fu32)  sov_emit(0xB6u32)  sov_modrm(3u32, dst, src)  return 0i32
+}
+/* movzwq %src16,%dst : REX.W 0F B7 /r */
+fn sov_movzwq(dst: u32, src: u32) -> i32 @export {
+    sov_rexwb(dst, src)  sov_emit(0x0Fu32)  sov_emit(0xB7u32)  sov_modrm(3u32, dst, src)  return 0i32
+}
+/* movslq %src32,%dst (sign-extend 32→64) : REX.W 63 /r */
+fn sov_movslq(dst: u32, src: u32) -> i32 @export {
+    sov_rexwb(dst, src)  sov_emit(0x63u32)  sov_modrm(3u32, dst, src)  return 0i32
+}
+
+/* ── control flow ── */
+fn sov_jcc_rel8(cc: u32, rel: i32) -> i32 @export { sov_emit(0x70u32 + cc)  sov_emit((rel as u32) & 0xFFu32)  return 0i32 }
+fn sov_jmp_rel8(rel: i32) -> i32 @export { sov_emit(0xEBu32)  sov_emit((rel as u32) & 0xFFu32)  return 0i32 }
+fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 @export { sov_emit(0x0Fu32)  sov_emit(0x80u32 + cc)  sov_imm((rel as u32) as u64, 4u32)  return 0i32 }
+fn sov_jmp_rel32(rel: i32) -> i32 @export { sov_emit(0xE9u32)  sov_imm((rel as u32) as u64, 4u32)  return 0i32 }
+fn sov_call_rel32(rel: i32) -> i32 @export { sov_emit(0xE8u32)  sov_imm((rel as u32) as u64, 4u32)  return 0i32 }
+fn sov_ret() -> i32 @export { sov_emit(0xC3u32)  return 0i32 }

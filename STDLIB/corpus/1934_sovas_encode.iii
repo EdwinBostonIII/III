@@ -1,0 +1,125 @@
+/* 1934_sovas_encode.iii  --  S1 GATE: sovas's encoder must produce gcc-as's EXACT bytes.
+ *
+ * Each instruction's expected bytes are gcc's real output (verified by objdump of the live module objects).
+ * A distinct failure code per instruction localizes any wrong byte.  exit 99 = the integer-core encoder is
+ * byte-identical to gcc on the whole battery -> S1 encoder is provably correct against the reference.
+ */
+module m1934
+
+extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_push_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_pop_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movabs(reg: u32, imm: u64) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_mov_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_rbp8(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_rbp8(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_rip(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_rip(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_lea_rip(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_rip32(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_sib8(base: u32, index: u32, scale_log: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_add_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sub_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cmp_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_and_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_or_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_xor_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_test_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_add_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sub_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_neg_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_not_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_imul_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_idiv_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_div_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_shl_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_shr_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_setcc(cc: u32, reg8: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movzbq(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movzwq(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movslq(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_jcc_rel8(cc: u32, rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_jmp_rel8(rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
+
+var EXP : [u32; 16]
+var EXPN : u32 = 0u32
+fn p1(a: u32) { EXP[0u64] = a  EXPN = 1u32 }
+fn p2(a: u32, b: u32) { EXP[0u64] = a  EXP[1u64] = b  EXPN = 2u32 }
+fn p3(a: u32, b: u32, c: u32) { EXP[0u64] = a  EXP[1u64] = b  EXP[2u64] = c  EXPN = 3u32 }
+fn p4(a: u32, b: u32, c: u32, d: u32) { EXP[0u64] = a  EXP[1u64] = b  EXP[2u64] = c  EXP[3u64] = d  EXPN = 4u32 }
+fn p5(a: u32, b: u32, c: u32, d: u32, e: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXPN=5u32 }
+fn p6(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXP[5u64]=f EXPN=6u32 }
+fn p7(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32, g: u32) { EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXP[5u64]=f EXP[6u64]=g EXPN=7u32 }
+fn p10(a:u32,b:u32,c:u32,d:u32,e:u32,f:u32,g:u32,h:u32,i:u32,j:u32){ EXP[0u64]=a EXP[1u64]=b EXP[2u64]=c EXP[3u64]=d EXP[4u64]=e EXP[5u64]=f EXP[6u64]=g EXP[7u64]=h EXP[8u64]=i EXP[9u64]=j EXPN=10u32 }
+
+fn chk() -> u32 {
+    if sov_len() != EXPN { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < EXPN { if sov_at(i) != EXP[i as u64] { return 0u32 }  i = i + 1u32 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* stack */
+    sov_reset()  sov_push_r(5u32)  p1(0x55u32)                                            if chk()!=1u32 { return 11u64 }
+    sov_reset()  sov_pop_r(1u32)   p1(0x59u32)                                            if chk()!=1u32 { return 12u64 }
+    /* moves */
+    sov_reset()  sov_mov_rr(5u32,4u32)  p3(0x48u32,0x89u32,0xE5u32)                       if chk()!=1u32 { return 13u64 }
+    sov_reset()  sov_movabs(0u32,0x20u64)  p10(0x48u32,0xB8u32,0x20u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32)  if chk()!=1u32 { return 14u64 }
+    sov_reset()  sov_mov_imm32(0u32,0i32)  p7(0x48u32,0xC7u32,0xC0u32,0u32,0u32,0u32,0u32) if chk()!=1u32 { return 15u64 }
+    sov_reset()  sov_store_rbp8(0u32,-8i32)  p4(0x48u32,0x89u32,0x45u32,0xF8u32)          if chk()!=1u32 { return 16u64 }
+    sov_reset()  sov_load_rbp8(0u32,-8i32)   p4(0x48u32,0x8Bu32,0x45u32,0xF8u32)          if chk()!=1u32 { return 17u64 }
+    sov_reset()  sov_store_rip(0u32,8i32)    p7(0x48u32,0x89u32,0x05u32,0x08u32,0u32,0u32,0u32)  if chk()!=1u32 { return 18u64 }
+    sov_reset()  sov_load_rip(0u32,0x10i32)  p7(0x48u32,0x8Bu32,0x05u32,0x10u32,0u32,0u32,0u32)  if chk()!=1u32 { return 19u64 }
+    sov_reset()  sov_lea_rip(0u32,0x24000i32) p7(0x48u32,0x8Du32,0x05u32,0x00u32,0x40u32,0x02u32,0x00u32)  if chk()!=1u32 { return 20u64 }
+    sov_reset()  sov_store_rip32(0u32,0i32)  p6(0x89u32,0x05u32,0u32,0u32,0u32,0u32)      if chk()!=1u32 { return 21u64 }
+    sov_reset()  sov_store_sib8(0u32,1u32,0u32,2u32)  p3(0x88u32,0x14u32,0x08u32)         if chk()!=1u32 { return 22u64 }
+    /* ALU reg,reg */
+    sov_reset()  sov_add_rr(0u32,1u32)  p3(0x48u32,0x01u32,0xC8u32)                       if chk()!=1u32 { return 23u64 }
+    sov_reset()  sov_sub_rr(0u32,1u32)  p3(0x48u32,0x29u32,0xC8u32)                       if chk()!=1u32 { return 24u64 }
+    sov_reset()  sov_cmp_rr(0u32,1u32)  p3(0x48u32,0x39u32,0xC8u32)                       if chk()!=1u32 { return 25u64 }
+    sov_reset()  sov_and_rr(0u32,1u32)  p3(0x48u32,0x21u32,0xC8u32)                       if chk()!=1u32 { return 26u64 }
+    sov_reset()  sov_or_rr(0u32,1u32)   p3(0x48u32,0x09u32,0xC8u32)                       if chk()!=1u32 { return 27u64 }
+    sov_reset()  sov_xor_rr(0u32,1u32)  p3(0x48u32,0x31u32,0xC8u32)                       if chk()!=1u32 { return 28u64 }
+    sov_reset()  sov_test_rr(0u32,0u32) p3(0x48u32,0x85u32,0xC0u32)                       if chk()!=1u32 { return 29u64 }
+    /* ALU imm32 */
+    sov_reset()  sov_sub_imm32(4u32,0x400i32)  p7(0x48u32,0x81u32,0xECu32,0x00u32,0x04u32,0u32,0u32)  if chk()!=1u32 { return 30u64 }
+    sov_reset()  sov_add_imm32(0u32,0x10i32)   p7(0x48u32,0x81u32,0xC0u32,0x10u32,0u32,0u32,0u32)     if chk()!=1u32 { return 31u64 }
+    sov_reset()  sov_cmp_imm32(0u32,5i32)      p7(0x48u32,0x81u32,0xF8u32,0x05u32,0u32,0u32,0u32)     if chk()!=1u32 { return 32u64 }
+    /* F7 group */
+    sov_reset()  sov_neg_r(0u32)   p3(0x48u32,0xF7u32,0xD8u32)                            if chk()!=1u32 { return 33u64 }
+    sov_reset()  sov_not_r(0u32)   p3(0x48u32,0xF7u32,0xD0u32)                            if chk()!=1u32 { return 34u64 }
+    sov_reset()  sov_imul_r(1u32)  p3(0x48u32,0xF7u32,0xE9u32)                            if chk()!=1u32 { return 35u64 }
+    sov_reset()  sov_idiv_r(1u32)  p3(0x48u32,0xF7u32,0xF9u32)                            if chk()!=1u32 { return 36u64 }
+    sov_reset()  sov_div_r(1u32)   p3(0x48u32,0xF7u32,0xF1u32)                            if chk()!=1u32 { return 37u64 }
+    /* shifts */
+    sov_reset()  sov_shl_imm8(0u32,3u32)  p4(0x48u32,0xC1u32,0xE0u32,0x03u32)             if chk()!=1u32 { return 38u64 }
+    sov_reset()  sov_shr_imm8(0u32,3u32)  p4(0x48u32,0xC1u32,0xE8u32,0x03u32)             if chk()!=1u32 { return 39u64 }
+    /* set / movzx / movslq */
+    sov_reset()  sov_setcc(2u32,0u32)  p3(0x0Fu32,0x92u32,0xC0u32)                        if chk()!=1u32 { return 40u64 }
+    sov_reset()  sov_setcc(5u32,0u32)  p3(0x0Fu32,0x95u32,0xC0u32)                        if chk()!=1u32 { return 41u64 }
+    sov_reset()  sov_movzbq(0u32,0u32) p4(0x48u32,0x0Fu32,0xB6u32,0xC0u32)                if chk()!=1u32 { return 42u64 }
+    sov_reset()  sov_movzwq(0u32,0u32) p4(0x48u32,0x0Fu32,0xB7u32,0xC0u32)                if chk()!=1u32 { return 43u64 }
+    sov_reset()  sov_movslq(0u32,0u32) p3(0x48u32,0x63u32,0xC0u32)                        if chk()!=1u32 { return 44u64 }
+    /* control flow */
+    sov_reset()  sov_jcc_rel8(4u32,0x44i32)  p2(0x74u32,0x44u32)                          if chk()!=1u32 { return 45u64 }
+    sov_reset()  sov_jmp_rel8(-0x67i32)      p2(0xEBu32,0x99u32)                          if chk()!=1u32 { return 46u64 }
+    sov_reset()  sov_jcc_rel32(4u32,0i32)    p6(0x0Fu32,0x84u32,0u32,0u32,0u32,0u32)      if chk()!=1u32 { return 47u64 }
+    sov_reset()  sov_jmp_rel32(0i32)         p5(0xE9u32,0u32,0u32,0u32,0u32)              if chk()!=1u32 { return 48u64 }
+    sov_reset()  sov_call_rel32(0i32)        p5(0xE8u32,0u32,0u32,0u32,0u32)              if chk()!=1u32 { return 49u64 }
+    sov_reset()  sov_ret()  p1(0xC3u32)                                                   if chk()!=1u32 { return 50u64 }
+
+    /* high registers: REX.B path (push %r8 = 41 50 ; mov %r8,%r9 = 4d 89 c1) */
+    sov_reset()  sov_push_r(8u32)  p2(0x41u32,0x50u32)                                    if chk()!=1u32 { return 51u64 }
+    sov_reset()  sov_mov_rr(9u32,8u32)  p3(0x4Du32,0x89u32,0xC1u32)                       if chk()!=1u32 { return 52u64 }
+
+    return 99u64
+}

@@ -58,6 +58,7 @@ extern @abi(c-msvc-x64) fn sov_jmp_rel8(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_reset() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_emit(sec: u32, b: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_bss_add(n: u32) -> i32 from "sovas.iii"
@@ -384,6 +385,11 @@ fn sp_dispatch_instr() {
     }
     if mn_is(108u32,101u32,97u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_lea_rip_sym(OPR, S1SEC, S1OFF)  return }  /* leaq */
     if mn_is(109u32,111u32,118u32,97u32,7u32) == 1u32 { sp_two_ops()  sov_movabs(OPR, S1I as u64)  return }         /* movabsq */
+    if mn_is(109u32,111u32,118u32,108u32,4u32) == 1u32 {              /* movl (32-bit reg,reg; mem forms loud) */
+        sp_two_ops()
+        if S1K == 0u32 { if OPK == 0u32 { sov_movl_rr(OPR, S1R)  return } }
+        PARSE_ERR = 1u32  return
+    }
     if mn_is(99u32,97u32,108u32,108u32,5u32) == 1u32 {                                              /* callq <name> */
         sp_skip_ws()
         let nlen : u32 = sp_read_name_into(SYM_N)

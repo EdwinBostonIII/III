@@ -1,0 +1,19 @@
+/* sov_drive6.iii  --  the long-symbol-name COFF driver.  Assembles the REAL cg_r3 stream for a main calling a
+ * >8-char extern (GetCurrentProcessId, kernel32) then returning 99.  Gates TWO paid-for paths: the COFF symbol
+ * STRING TABLE (names > 8 chars use a 0x00000000 + offset name field) AND the `movl` reg-reg dispatch (cg_r3
+ * emits movl %eax,%eax to zero-extend a u32 result).  Exit 0 = emitted.
+ */
+module sovtc_drive6
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  subq $32, %rsp\n  callq GetCurrentProcessId\n  addq $32, %rsp\n  movl %eax, %eax\n  pushq %rax\n  popq %rax\n  movabsq $0x63, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovcoff_emit()
+    return 0u64
+}

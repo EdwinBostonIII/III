@@ -29,7 +29,7 @@ done
 # ── COFF links-and-runs gates: sovcoff emits a real .o, gcc's ld links it, the OS runs it (expect 99) ──
 # drive  = text-only object (.text + main).   drive2 = reloc/data object (.text + .data + REL32 -> .data).
 "$IIIS" "$SOVTC/sovcoff.iii" --compile-only --out "$OUT/sovcoff.o" >/dev/null 2>&1 || { echo "[sovtc] FAIL coff (sovcoff compile)"; fail=1; }
-for d in sov_drive:drive:text-only sov_drive2:drive2:reloc-data sov_drive3:drive3:extern-call sov_drive4:drive4:rodata sov_drive5:drive5:bss; do
+for d in sov_drive:drive:text-only sov_drive2:drive2:reloc-data sov_drive3:drive3:extern-call sov_drive4:drive4:rodata sov_drive5:drive5:bss sov_drive6:drive6:longname; do
     SRC="${d%%:*}"; rest="${d#*:}"; EXE="${rest%%:*}"; LBL="${rest#*:}"
     if ! "$IIIS" "$SOVTC/$SRC.iii" --compile-only --out "$OUT/$SRC.o" >/dev/null 2>&1; then echo "[sovtc] FAIL coff/$LBL ($SRC compile)"; fail=1; continue; fi
     if ! gcc "$OUT/$SRC.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovcoff.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$EXE.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL coff/$LBL (driver link)"; fail=1; continue; fi

@@ -1,0 +1,58 @@
+/* 1980_eidos_accessor_coverage.iii  --  COVERAGE: exercises the 4 EIDOS accessor exports the coverage +
+ * reachability ratchets flagged dark (cmp_qn, weave_qn, weave_plan_len, eidos_ripple_is_ripple).  Each
+ * assertion is behavioural, not tautological:
+ *   - eidos_ripple_is_ripple: a same-hexad edge is FLAT (0); some cross-rank pair is a real ripple (1).
+ *   - cmp_qn: 0 after reset, 1 after one cmp_register (the quantum counter tracks registration).
+ *   - weave_qn: 0 after reset, 1 after one weave_add_ripple.
+ *   - weave_plan_len: >= 1 after a real weave_plan finds the single-quantum 0->1 route (the delegation to
+ *     cmp_plan_len reflects an actual plan, not the identity weave_plan_len()==cmp_plan_len()).
+ * exit 99 = all four accessors behave correctly.
+ */
+module m1980
+
+extern @abi(c-msvc-x64) fn eidos_ripple_is_ripple(hex_from: u8, hex_to: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_qn() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn weave_reset() -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_add_ripple(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8) -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_qn() -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_plan(start_prim: u32, target_prim: u32, order_slot: u32) -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_plan_len() -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_order_direct() -> u32 from "weave.iii"
+
+var COST : [u64; 6]
+
+fn main() -> u64 {
+    /* ── eidos_ripple_is_ripple: flat (same hexad) vs a real cross-rank ripple ── */
+    if eidos_ripple_is_ripple(1u8, 1u8) != 0u32 { return 40u64 }    /* same hexad -> equal rank -> FLAT */
+    let mut ra : u32 = 0u32  let mut rb : u32 = 0u32  let mut found : u32 = 0u32
+    let mut a : u32 = 1u32
+    while a <= 7u32 {
+        let mut b : u32 = 1u32
+        while b <= 7u32 {
+            if found == 0u32 { if eidos_ripple_is_ripple(a as u8, b as u8) == 1u32 { ra = a  rb = b  found = 1u32 } }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    if found != 1u32 { return 41u64 }                              /* a real ripple direction exists */
+
+    /* ── cmp_qn: 0 after reset, 1 after one register ── */
+    cmp_reset()
+    if cmp_qn() != 0u32 { return 10u64 }
+    let mut i : u32 = 0u32
+    while i < 6u32 { COST[i as u64] = 1u64  i = i + 1u32 }
+    cmp_register(0u32, 1u32, &COST as *u64)
+    if cmp_qn() != 1u32 { return 11u64 }
+
+    /* ── weave_qn: 0 after reset, 1 after one add; weave_plan_len reflects a real plan ── */
+    weave_reset()
+    if weave_qn() != 0u32 { return 20u64 }
+    weave_add_ripple(0u8, 1u8, ra as u8, rb as u8)
+    if weave_qn() != 1u32 { return 21u64 }
+    weave_plan(0u32, 1u32, weave_order_direct())
+    if weave_plan_len() < 1u32 { return 30u64 }                    /* the 0->1 route plan has >=1 quantum */
+
+    return 99u64
+}

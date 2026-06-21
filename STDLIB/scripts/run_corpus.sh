@@ -73,6 +73,7 @@ declare -A EXPECTED=(
     [1935_eidos_compose_optimal]=99
     [1936_eidos_weave_real]=99
     [1937_eidos_weave_subadditive]=99
+    [1980_eidos_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

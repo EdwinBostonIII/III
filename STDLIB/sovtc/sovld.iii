@@ -1,0 +1,99 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\sovtc\sovld.iii
+ *
+ * III sovereign toolchain -- sovld, the PE32+ LINKER/IMAGE WRITER (S2).  Replaces gcc's ld for the final step:
+ * takes sovas's assembled .text and lays out a minimal PE32+ executable the Windows loader maps + runs --
+ * NO gcc, NO ld.  Emits to STDOUT (_O_BINARY) via putchar; the harness redirects to out.exe.
+ *
+ * S2.1 scope: a single-.text, NO-IMPORT image.  The entry point is the .text itself; it sets the exit code in
+ * eax and RETs -- RtlUserThreadStart exits the process with that status (so no ExitProcess import is needed
+ * for the minimal case).  Imports (IAT) for extern calls + multi-section layout are the next sovld increments.
+ *
+ * NIH; reads sovas (.text) + msvcrt (putchar/_setmode).  Ring R0.
+ */
+module sovtc_sovld
+
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+
+var LDPOS : u32 = 0u32
+fn p8(b: u32) { putchar((b & 0xFFu32) as i32)  LDPOS = LDPOS + 1u32 }
+fn p16(v: u32) { p8(v)  p8(v >> 8u32) }
+fn p32(v: u32) { p8(v)  p8(v >> 8u32)  p8(v >> 16u32)  p8(v >> 24u32) }
+fn p64(lo: u32, hi: u32) { p32(lo)  p32(hi) }
+fn ppad(target: u32) { while LDPOS < target { p8(0u32) } }
+fn alignup(v: u32, a: u32) -> u32 { return (v + (a - 1u32)) & (0u32 - a) }   /* a a power of two */
+
+fn sovld_emit() -> i32 @export {
+    _setmode(1i32, 0x8000i32)
+    LDPOS = 0u32
+    let textlen : u32 = sov_len()
+    let textraw : u32 = alignup(textlen, 0x200u32)       /* SizeOfRawData (file-aligned) */
+    let textmem : u32 = alignup(textlen, 0x1000u32)      /* in-memory size (section-aligned) */
+
+    /* ── DOS header (64) : "MZ", e_lfanew @ 0x3C = 0x40 ── */
+    p8(77u32) p8(90u32)
+    ppad(0x3Cu32)
+    p32(0x40u32)
+
+    /* ── PE signature ── */
+    p8(80u32) p8(69u32) p8(0u32) p8(0u32)
+
+    /* ── COFF file header (20) ── */
+    p16(0x8664u32)   /* Machine AMD64 */
+    p16(1u32)        /* NumberOfSections */
+    p32(0u32)        /* TimeDateStamp */
+    p32(0u32)        /* PointerToSymbolTable */
+    p32(0u32)        /* NumberOfSymbols */
+    p16(0xF0u32)     /* SizeOfOptionalHeader */
+    p16(0x23u32)     /* Characteristics: RELOCS_STRIPPED|EXECUTABLE_IMAGE|LARGE_ADDRESS_AWARE */
+
+    /* ── Optional header (PE32+, 0xF0) ── */
+    p16(0x20Bu32)    /* Magic PE32+ */
+    p8(14u32) p8(0u32)               /* Linker version */
+    p32(textraw)     /* SizeOfCode */
+    p32(0u32)        /* SizeOfInitializedData */
+    p32(0u32)        /* SizeOfUninitializedData */
+    p32(0x1000u32)   /* AddressOfEntryPoint (.text RVA) */
+    p32(0x1000u32)   /* BaseOfCode */
+    p64(0x40000000u32, 1u32)         /* ImageBase = 0x140000000 */
+    p32(0x1000u32)   /* SectionAlignment */
+    p32(0x200u32)    /* FileAlignment */
+    p16(6u32) p16(0u32)              /* OS version 6.0 */
+    p16(0u32) p16(0u32)              /* Image version */
+    p16(6u32) p16(0u32)              /* Subsystem version 6.0 */
+    p32(0u32)        /* Win32VersionValue */
+    p32(0x1000u32 + textmem)         /* SizeOfImage (headers region + .text region) */
+    p32(0x200u32)    /* SizeOfHeaders */
+    p32(0u32)        /* CheckSum */
+    p16(3u32)        /* Subsystem = WINDOWS_CUI (console) */
+    p16(0u32)        /* DllCharacteristics */
+    p64(0x100000u32, 0u32)           /* SizeOfStackReserve */
+    p64(0x1000u32, 0u32)             /* SizeOfStackCommit */
+    p64(0x100000u32, 0u32)           /* SizeOfHeapReserve */
+    p64(0x1000u32, 0u32)             /* SizeOfHeapCommit */
+    p32(0u32)        /* LoaderFlags */
+    p32(16u32)       /* NumberOfRvaAndSizes */
+    let mut d : u32 = 0u32
+    while d < 16u32 { p32(0u32)  p32(0u32)  d = d + 1u32 }   /* 16 data directories, all empty */
+
+    /* ── section header for .text (40) ── */
+    p8(46u32) p8(116u32) p8(101u32) p8(120u32) p8(116u32) p8(0u32) p8(0u32) p8(0u32)   /* ".text" */
+    p32(textlen)     /* VirtualSize */
+    p32(0x1000u32)   /* VirtualAddress */
+    p32(textraw)     /* SizeOfRawData */
+    p32(0x200u32)    /* PointerToRawData */
+    p32(0u32)        /* PointerToRelocations */
+    p32(0u32)        /* PointerToLinenumbers */
+    p16(0u32)        /* NumberOfRelocations */
+    p16(0u32)        /* NumberOfLinenumbers */
+    p32(0x60000020u32)   /* CODE | MEM_EXECUTE | MEM_READ */
+
+    /* ── pad to PointerToRawData, then the .text raw data, then pad to SizeOfRawData ── */
+    ppad(0x200u32)
+    let mut i : u32 = 0u32
+    while i < textlen { p8(sov_at(i))  i = i + 1u32 }
+    ppad(0x200u32 + textraw)
+    return 0i32
+}

@@ -1,0 +1,18 @@
+/* sov_drivel.iii  --  the sovld (PE32+ linker) driver.  Assembles a minimal entry (.text: set exit code in
+ * rax, ret) and emits a PE32+ executable via sovld -- NO gcc, NO ld.  The harness redirects stdout to out.exe
+ * and runs it; exit 99 = the sovereign linker's image loaded + ran.  Exit 0 from the driver = emitted.
+ */
+module sovtc_drivel
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  movabsq $99, %rax\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

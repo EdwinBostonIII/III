@@ -1,0 +1,53 @@
+/* 1942_eidos_descriptor_remap.iii  --  the JOIN's ROUTE half, completed for REAL ADDRESSES.
+ *
+ * 1940/1941 fold real web blocks, but the route half (desc_build_order/desc_plan) previously skipped any block
+ * whose point ADDRESS exceeded the compose node cap (64) -- so real trace webs (large bare addresses) could not
+ * route.  descriptor now REMAPS each distinct point address to a compact node id (cap = 64 DISTINCT points, not
+ * a cap on the address value) and maps the route back to real addresses.  This KAT proves it on a web of large
+ * addresses with a shortcut: the planner finds the cheaper indirect order-path and returns it in REAL addresses.
+ *
+ * Web (BELOW order, large addresses): 1000<=2000<=3000<=4000 (chain) + 1000<=3000 (shortcut).
+ *
+ *   code 10 BUILD   : a web block failed to add, or desc_order_points != the 4 distinct addresses
+ *   code 11 ROUTE   : desc_plan(1000,4000) did not return the 2-hop shortcut path [1000,3000,4000] in REAL addresses
+ *   code 12 ORDER   : a plan step is not a REAL web order relation (assim_leq)
+ *   code 13 UNREACH : routing to an address NOT in the web did not yield the empty route
+ * exit 99 = the route half handles large real addresses via the remap -- the JOIN routes over real-address webs.
+ */
+module m1942
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn desc_build_order() -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_order_points() -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan(start: u32, target: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan_node(i: u32) -> u32 from "descriptor.iii"
+
+fn main() -> u64 {
+    isub_reset()
+
+    /* ===== code 10: build a large-address web (BELOW chain + shortcut) ===== */
+    if assim_add(0u32, 1000u32, 2000u32) != 1u8 { return 10u64 }
+    if assim_add(0u32, 2000u32, 3000u32) != 1u8 { return 10u64 }
+    if assim_add(0u32, 3000u32, 4000u32) != 1u8 { return 10u64 }
+    if assim_add(0u32, 1000u32, 3000u32) != 1u8 { return 10u64 }   /* the shortcut */
+    desc_build_order()
+    if desc_order_points() != 4u32 { return 10u64 }                /* 4 distinct addresses remapped to nodes 0..3 */
+
+    /* ===== code 11: route 1000->4000 -> the 2-hop shortcut [1000,3000,4000], in REAL addresses ===== */
+    let h : u32 = desc_plan(1000u32, 4000u32)
+    if h != 2u32 { return 11u64 }                                  /* [1000,3000,4000], not the 3-hop chain */
+    if desc_plan_node(0u32) != 1000u32 { return 11u64 }
+    if desc_plan_node(1u32) != 3000u32 { return 11u64 }
+    if desc_plan_node(2u32) != 4000u32 { return 11u64 }
+
+    /* ===== code 12: each plan step is a REAL web order relation ===== */
+    if assim_leq(1000u32, 3000u32) != 1u8 { return 12u64 }
+    if assim_leq(3000u32, 4000u32) != 1u8 { return 12u64 }
+
+    /* ===== code 13: an address not in the web is unreachable ===== */
+    if desc_plan(1000u32, 9999u32) != 0u32 { return 13u64 }
+
+    return 99u64
+}

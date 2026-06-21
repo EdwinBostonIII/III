@@ -44,12 +44,39 @@ const DESC_CAP_ORDER     : u32 = 1u32    /* a BELOW block: provides the order (l
 const DESC_CAP_COMPLEMENT: u32 = 2u32    /* a REFLECT block: provides the order-reversing involution (complement) */
 const DESC_MAXN          : u32 = 64u32
 
-var DESC_ORD  : u32 = 0u32
-var DESC_SRC  : u32 = 0u32
-var DESC_ETO  : [u32; 128]               /* per compose-quantum: its to-node (for plan reconstruction) */
+var DESC_ORD      : u32 = 0u32
+var DESC_SRC_NODE : u32 = 0u32           /* the source NODE of the last plan (for reconstruction) */
+var DESC_NODE2PT  : [u32; 64]            /* compact node id -> real point address (the remap, both ways) */
+var DESC_NPT      : u32 = 0u32           /* number of distinct points == node count */
+var DESC_ETO      : [u32; 128]           /* per compose-quantum: its to-NODE (for plan reconstruction) */
 var DESC_W    : [u64; 6]
 var DESC_ROW  : [u64; 6]
 var DESC_SLOT : [u32; 1]
+
+/* the compact node id for a real point ADDRESS, assigning a fresh id on first sight (cap = 64 distinct points,
+ * NOT a cap on the address value -- so real trace webs with large bare addresses route).  0xFFFFFFFF = full. */
+fn desc_node_of(pt: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < DESC_NPT {
+        if DESC_NODE2PT[i as u64] == pt { return i }
+        i = i + 1u32
+    }
+    if DESC_NPT >= DESC_MAXN { return 0xFFFFFFFFu32 }
+    let id : u32 = DESC_NPT
+    DESC_NODE2PT[id as u64] = pt
+    DESC_NPT = id + 1u32
+    return id
+}
+
+/* find the node for an existing point WITHOUT assigning (for plan endpoints); 0xFFFFFFFF if not in the web. */
+fn desc_find_node(pt: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < DESC_NPT {
+        if DESC_NODE2PT[i as u64] == pt { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
 
 /* the web's block count -- assimilate's Master Web (== the witnessed isub bus). */
 fn desc_count() -> u32 @export { return assim_web_size() }
@@ -78,16 +105,17 @@ fn desc_build_order() -> i32 @export {
     DESC_W[0u64] = 1u64  DESC_W[1u64] = 0u64  DESC_W[2u64] = 0u64  DESC_W[3u64] = 0u64  DESC_W[4u64] = 0u64  DESC_W[5u64] = 0u64
     cl_register_order(&DESC_W as *u64, &DESC_SLOT as *u32)
     DESC_ORD = DESC_SLOT[0u64]
+    DESC_NPT = 0u32
     let n : u32 = assim_web_size()
     let mut i : u32 = 0u32
     while i < n {
         if isub_verb(i) == DESC_V_BELOW {
-            let a : u32 = isub_a(i)
-            let b : u32 = isub_b(i)
-            if a < DESC_MAXN { if b < DESC_MAXN {
+            let na : u32 = desc_node_of(isub_a(i))     /* REMAP the real (possibly large) address -> compact id */
+            let nb : u32 = desc_node_of(isub_b(i))
+            if na != 0xFFFFFFFFu32 { if nb != 0xFFFFFFFFu32 {
                 DESC_ROW[0u64] = 1u64  DESC_ROW[1u64] = 0u64  DESC_ROW[2u64] = 0u64  DESC_ROW[3u64] = 0u64  DESC_ROW[4u64] = 0u64  DESC_ROW[5u64] = 0u64
-                let qid : i32 = cmp_register(a, b, &DESC_ROW as *u64)
-                if qid >= 0i32 { DESC_ETO[(qid as u32) as u64] = b }
+                let qid : i32 = cmp_register(na, nb, &DESC_ROW as *u64)
+                if qid >= 0i32 { DESC_ETO[(qid as u32) as u64] = nb }
             } }
         }
         i = i + 1u32
@@ -95,14 +123,23 @@ fn desc_build_order() -> i32 @export {
     return 0i32
 }
 
-/* route GOAL-DIRECTED over the web's order: the cost-minimal chain of BELOW relations from start to target. */
+/* the number of distinct points (== nodes) in the built order. */
+fn desc_order_points() -> u32 @export { return DESC_NPT }
+
+/* route GOAL-DIRECTED over the web's order: the cost-minimal chain of BELOW relations from start to target
+ * (real point addresses in/out; remapped to compact nodes internally).  0 = unreachable / endpoint not in web. */
 fn desc_plan(start: u32, target: u32) -> u32 @export {
-    DESC_SRC = start
-    return cmp_plan(start, target, DESC_ORD)
+    let ns : u32 = desc_find_node(start)
+    let nt : u32 = desc_find_node(target)
+    if ns == 0xFFFFFFFFu32 { return 0u32 }
+    if nt == 0xFFFFFFFFu32 { return 0u32 }
+    DESC_SRC_NODE = ns
+    return cmp_plan(ns, nt, DESC_ORD)
 }
 fn desc_plan_len() -> u32 @export { return cmp_plan_len() }
 fn desc_plan_node(i: u32) -> u32 @export {
-    if i == 0u32 { return DESC_SRC }
+    if i == 0u32 { return DESC_NODE2PT[DESC_SRC_NODE as u64] }
     let e : u32 = cmp_plan_at(i - 1u32)
-    return DESC_ETO[e as u64]
+    let node : u32 = DESC_ETO[e as u64]
+    return DESC_NODE2PT[node as u64]          /* map the route's nodes back to real point addresses */
 }

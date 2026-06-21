@@ -1,0 +1,78 @@
+/* 1935_sovas_spine.iii  --  S1 REAL SPINE GATE: parse a whole real cg_r3 function's .s and reproduce gcc's
+ * .text byte-for-byte.  The input is the actual AT&T assembly cg_r3 emitted for a reloc-free, branch-free
+ * function (a+b+c); the expected 96 bytes are gcc-as's real output (objdump of the live .o).  sovparse skips
+ * the directive + label, encodes the 38 instructions via sovas, and the result must equal gcc's .text.
+ *
+ *   code 11 : sovparse returned an error
+ *   code 12 : wrong .text length (parser dropped/added an instruction)
+ *   code 13+i : byte i diverged from gcc  (returns 13 + the offset, so the failing byte is pinpointed)
+ * exit 99 = sovas (parser + encoder) is byte-identical to gcc on a whole real function -> the spine holds.
+ */
+module m1935
+
+extern @abi(c-msvc-x64) fn sovparse(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 96] = [
+  0x55u8,
+  0x48u8,0x89u8,0xE5u8,
+  0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,
+  0x48u8,0x89u8,0x4Du8,0xF8u8,
+  0x48u8,0x89u8,0x55u8,0xF0u8,
+  0x4Cu8,0x89u8,0x45u8,0xE8u8,
+  0x48u8,0x8Bu8,0x45u8,0xF8u8,
+  0x50u8,
+  0x48u8,0x8Bu8,0x45u8,0xF0u8,
+  0x50u8,
+  0x59u8,
+  0x58u8,
+  0x48u8,0x01u8,0xC8u8,
+  0x50u8,
+  0x58u8,
+  0x48u8,0x89u8,0x45u8,0xE0u8,
+  0x48u8,0x8Bu8,0x45u8,0xE0u8,
+  0x50u8,
+  0x48u8,0x8Bu8,0x45u8,0xE8u8,
+  0x50u8,
+  0x59u8,
+  0x58u8,
+  0x48u8,0x01u8,0xC8u8,
+  0x50u8,
+  0x58u8,
+  0x48u8,0x89u8,0x45u8,0xD8u8,
+  0x48u8,0x8Bu8,0x45u8,0xD8u8,
+  0x50u8,
+  0x58u8,
+  0x48u8,0x89u8,0xECu8,
+  0x5Du8,
+  0xC3u8,
+  0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,
+  0x50u8,
+  0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,
+  0x48u8,0x89u8,0xECu8,
+  0x5Du8,
+  0xC3u8
+]
+
+/* find the '~' sentinel = the input length (string literals are not NUL-terminated) */
+fn slen(s: *u8) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 4096u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\nsov_demo:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq %rcx, -8(%rbp)\n  movq %rdx, -16(%rbp)\n  movq %r8, -24(%rbp)\n  movq -8(%rbp), %rax\n  pushq %rax\n  movq -16(%rbp), %rax\n  pushq %rax\n  popq %rcx\n  popq %rax\n  addq %rcx, %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -32(%rbp)\n  movq -32(%rbp), %rax\n  pushq %rax\n  movq -24(%rbp), %rax\n  pushq %rax\n  popq %rcx\n  popq %rax\n  addq %rcx, %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -40(%rbp)\n  movq -40(%rbp), %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+
+    if sovparse(src, n) != 0i32 { return 11u64 }
+    if sov_len() != 96u32 { return 12u64 }
+
+    let mut i : u32 = 0u32
+    while i < 96u32 {
+        if sov_at(i) != (GOLD[i as u64] as u32) { return (13u64 + (i as u64)) }
+        i = i + 1u32
+    }
+    return 99u64
+}

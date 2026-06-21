@@ -1,0 +1,241 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\sovparse.iii
+ *
+ * III STDLIB - omnia::sovparse  --  the GAS (.s) PARSER for the sovereign assembler (S1 tail).
+ *
+ * Reads cg_r3's AT&T-syntax assembly text and drives omnia/sovas's encoders, accumulating .text machine bytes.
+ * Skips directives (.* lines), comments (#), labels (name:).  Parses instruction lines: mnemonic + operands,
+ * where an operand is a register (%rax), an immediate ($imm, dec or 0xhex), or a memory ref disp(%base).
+ *
+ * SCOPE (S1 tail, first spine): the integer-core mnemonics over reg / imm / disp(%rbp) operands -- enough to
+ * assemble a reloc-free, branch-free cg_r3 function byte-identical to gcc (gated by corpus 1935).  Symbolic
+ * rip-relative refs (relocations), branches (label resolution), and full SIB are the next increments.
+ *
+ * NIH; reads only sovas.  Ring R0.  K 1.00.
+ */
+module omnia_sovparse
+
+extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_push_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_pop_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movabs(reg: u32, imm: u64) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_mov_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_rbp8(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_rbp8(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_add_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sub_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cmp_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_and_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_or_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_xor_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_add_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sub_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
+
+/* ASCII (numeric, to avoid any char-literal assumptions) */
+const C_SP : u32 = 32u32
+const C_TAB: u32 = 9u32
+const C_NL : u32 = 10u32
+const C_CR : u32 = 13u32
+const C_HASH:u32 = 35u32
+const C_DOT: u32 = 46u32
+const C_COLON:u32 = 58u32
+const C_PCT: u32 = 37u32   /* % */
+const C_DOL: u32 = 36u32   /* $ */
+const C_LP : u32 = 40u32   /* ( */
+const C_RP : u32 = 41u32   /* ) */
+const C_COM: u32 = 44u32   /* , */
+const C_MIN: u32 = 45u32   /* - */
+const C_0  : u32 = 48u32
+const C_9  : u32 = 57u32
+const C_x  : u32 = 120u32
+const C_a  : u32 = 97u32
+const C_z  : u32 = 122u32
+
+var IN_PTR : u64 = 0u64
+var IN_LEN : u32 = 0u32
+var IN_POS : u32 = 0u32
+
+/* operand decode registers: kind 0=reg 1=imm 2=mem(disp(base)) */
+var OPK : u32 = 0u32
+var OPR : u32 = 0u32      /* register (or mem base) */
+var OPD : i32 = 0i32      /* mem displacement */
+var OPI : i64 = 0i64      /* immediate */
+
+fn sp_ch() -> u32 {
+    if IN_POS < IN_LEN { let p : *u8 = IN_PTR as *u8  return p[IN_POS as u64] as u32 }
+    return 0u32
+}
+fn sp_ch1() -> u32 {
+    let n : u32 = IN_POS + 1u32
+    if n < IN_LEN { let p : *u8 = IN_PTR as *u8  return p[n as u64] as u32 }
+    return 0u32
+}
+fn sp_adv() { IN_POS = IN_POS + 1u32 }
+fn sp_skip_ws() { while sp_ch() == C_SP { sp_adv() }  while sp_ch() == C_TAB { sp_adv() }
+    let mut g : u32 = 1u32
+    while g == 1u32 { if sp_ch() == C_SP { sp_adv() } else { if sp_ch() == C_TAB { sp_adv() } else { g = 0u32 } } } }
+fn sp_skip_line() { while IN_POS < IN_LEN { let c : u32 = sp_ch()  sp_adv()  if c == C_NL { return } } }
+
+fn is_digit(c: u32) -> u32 { if c >= C_0 { if c <= C_9 { return 1u32 } }  return 0u32 }
+fn is_lower(c: u32) -> u32 { if c >= C_a { if c <= C_z { return 1u32 } }  return 0u32 }
+fn hexv(c: u32) -> u32 {
+    if c >= C_0 { if c <= C_9 { return c - C_0 } }
+    if c >= C_a { if c <= (C_a + 5u32) { return (c - C_a) + 10u32 } }   /* a..f */
+    return 0u32
+}
+
+/* parse a signed number (decimal, or 0x-hex) at the cursor */
+fn sp_num() -> i64 {
+    let mut neg : u32 = 0u32
+    if sp_ch() == C_MIN { neg = 1u32  sp_adv() }
+    let mut val : i64 = 0i64
+    if sp_ch() == C_0 { if sp_ch1() == C_x {
+        sp_adv()  sp_adv()
+        let mut g : u32 = 1u32
+        while g == 1u32 {
+            let c : u32 = sp_ch()
+            let mut ish : u32 = 0u32
+            if is_digit(c) == 1u32 { ish = 1u32 }
+            if c >= C_a { if c <= (C_a + 5u32) { ish = 1u32 } }
+            if ish == 1u32 { val = (val * 16i64) + (hexv(c) as i64)  sp_adv() } else { g = 0u32 }
+        }
+        if neg == 1u32 { return 0i64 - val }
+        return val
+    } }
+    while is_digit(sp_ch()) == 1u32 { val = (val * 10i64) + ((sp_ch() - C_0) as i64)  sp_adv() }
+    if neg == 1u32 { return 0i64 - val }
+    return val
+}
+
+/* map a register name (cursor just past '%') to a number; advance past the name. */
+fn sp_reg() -> u32 {
+    /* read up to 4 lowercase/digit chars into r0..r3 */
+    let c0 : u32 = sp_ch()
+    sp_adv()
+    let c1 : u32 = sp_ch()
+    /* r8..r15 : 'r' then digits */
+    if c0 == 114u32 { if is_digit(c1) == 1u32 {
+        let mut v : u32 = 0u32
+        while is_digit(sp_ch()) == 1u32 { v = (v * 10u32) + (sp_ch() - C_0)  sp_adv() }
+        return v
+    } }
+    /* 3-letter (r?? / e??) : consume the 2 suffix chars, map by suffix */
+    sp_adv()
+    let c2 : u32 = sp_ch()
+    sp_adv()
+    /* consume any trailing name chars (e.g. nothing more for rax) */
+    while is_lower(sp_ch()) == 1u32 { sp_adv() }
+    /* suffix = (c1,c2) */
+    if c1 == C_a { if c2 == 120u32 { return 0u32 } }            /* ax */
+    if c1 == 99u32 { if c2 == 120u32 { return 1u32 } }          /* cx */
+    if c1 == 100u32 { if c2 == 120u32 { return 2u32 } }         /* dx */
+    if c1 == 98u32 { if c2 == 120u32 { return 3u32 } }          /* bx */
+    if c1 == 115u32 { if c2 == 112u32 { return 4u32 } }         /* sp */
+    if c1 == 98u32 { if c2 == 112u32 { return 5u32 } }          /* bp */
+    if c1 == 115u32 { if c2 == 105u32 { return 6u32 } }         /* si */
+    if c1 == 100u32 { if c2 == 105u32 { return 7u32 } }         /* di */
+    return 0xFFu32
+}
+
+/* decode one operand at the cursor into OPK/OPR/OPD/OPI */
+fn sp_operand() {
+    sp_skip_ws()
+    let c : u32 = sp_ch()
+    if c == C_PCT { sp_adv()  OPK = 0u32  OPR = sp_reg()  return }
+    if c == C_DOL { sp_adv()  OPK = 1u32  OPI = sp_num()  return }
+    /* memory: [disp]('%'base) */
+    OPK = 2u32
+    OPD = 0i32
+    if (c == C_MIN) { OPD = sp_num() as i32 } else { if is_digit(c) == 1u32 { OPD = sp_num() as i32 } }
+    if sp_ch() == C_LP { sp_adv()  if sp_ch() == C_PCT { sp_adv() }  OPR = sp_reg()  if sp_ch() == C_RP { sp_adv() } }
+}
+
+/* read the mnemonic token into m0..m4 (we only need first 5 chars); returns length */
+var MN : [u32; 8]
+var MNN : u32 = 0u32
+fn sp_mnem() {
+    MNN = 0u32
+    while is_lower(sp_ch()) == 1u32 { if MNN < 8u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
+}
+fn mn_is(a: u32, b: u32, c: u32, d: u32, n: u32) -> u32 {
+    if MNN != n { return 0u32 }
+    if MN[0u64] != a { return 0u32 }
+    if n >= 2u32 { if MN[1u64] != b { return 0u32 } }
+    if n >= 3u32 { if MN[2u64] != c { return 0u32 } }
+    if n >= 4u32 { if MN[3u64] != d { return 0u32 } }
+    return 1u32
+}
+
+/* saved first operand */
+var S1K : u32 = 0u32
+var S1R : u32 = 0u32
+var S1D : i32 = 0i32
+var S1I : i64 = 0i64
+
+/* parse + encode the whole buffer.  returns 0 ok, or a negative line-ish error. */
+fn sovparse(ptr: *u8, len: u32) -> i32 @export {
+    sov_reset()
+    IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32
+    while IN_POS < IN_LEN {
+        sp_skip_ws()
+        let c : u32 = sp_ch()
+        if c == C_NL { sp_adv() }
+        else { if c == C_CR { sp_adv() }
+        else { if c == 0u32 { sp_adv() }
+        else { if c == C_DOT { sp_skip_line() }     /* directive */
+        else { if c == C_HASH { sp_skip_line() }    /* comment */
+        else {
+            /* instruction or label: read mnemonic, then decide */
+            sp_mnem()
+            if MNN == 0u32 { sp_skip_line() }        /* unknown token -> skip line */
+            else {
+                if sp_ch() == C_COLON { sp_adv()  sp_skip_line() }   /* it was a label */
+                else {
+                    /* dispatch by mnemonic (q-suffixed integer ops) */
+                    /* pushq / popq */
+                    if mn_is(112u32,117u32,115u32,104u32,5u32) == 1u32 {        /* push(q) */
+                        sp_operand()  sov_push_r(OPR)
+                    } else { if mn_is(112u32,111u32,112u32,113u32,4u32) == 1u32 {  /* popq */
+                        sp_operand()  sov_pop_r(OPR)
+                    } else { if mn_is(114u32,101u32,116u32,113u32,4u32) == 1u32 {  /* retq */
+                        sov_ret()
+                    } else { if mn_is(109u32,111u32,118u32,113u32,4u32) == 1u32 {  /* movq */
+                        sp_operand()  S1K = OPK  S1R = OPR  S1D = OPD  S1I = OPI
+                        sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+                        sp_operand()
+                        if S1K == 0u32 { if OPK == 0u32 { sov_mov_rr(OPR, S1R) } }                 /* movq %s,%d */
+                        if S1K == 0u32 { if OPK == 2u32 { sov_store_rbp8(S1R, OPD) } }             /* movq %s,d(%rbp) */
+                        if S1K == 2u32 { if OPK == 0u32 { sov_load_rbp8(OPR, S1D) } }              /* movq d(%rbp),%d */
+                        if S1K == 1u32 { if OPK == 0u32 { sov_mov_imm32(OPR, S1I as i32) } }       /* movq $i,%d */
+                    } else { if mn_is(109u32,111u32,118u32,97u32,7u32) == 1u32 {   /* movabsq */
+                        sp_operand()  S1I = OPI
+                        sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+                        sp_operand()  sov_movabs(OPR, S1I as u64)
+                    } else {
+                        /* binary ALU: <op>q  src,dst  (op1 reg|imm, op2 reg) */
+                        sp_operand()  S1K = OPK  S1R = OPR  S1I = OPI
+                        sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+                        sp_operand()
+                        /* addq/subq/cmpq/andq/orq/xorq */
+                        if mn_is(97u32,100u32,100u32,113u32,4u32) == 1u32 {        /* addq */
+                            if S1K == 1u32 { sov_add_imm32(OPR, S1I as i32) } else { sov_add_rr(OPR, S1R) }
+                        }
+                        if mn_is(115u32,117u32,98u32,113u32,4u32) == 1u32 {        /* subq */
+                            if S1K == 1u32 { sov_sub_imm32(OPR, S1I as i32) } else { sov_sub_rr(OPR, S1R) }
+                        }
+                        if mn_is(99u32,109u32,112u32,113u32,4u32) == 1u32 {        /* cmpq */
+                            if S1K == 1u32 { sov_cmp_imm32(OPR, S1I as i32) } else { sov_cmp_rr(OPR, S1R) }
+                        }
+                        if mn_is(97u32,110u32,100u32,113u32,4u32) == 1u32 { sov_and_rr(OPR, S1R) }  /* andq */
+                        if mn_is(111u32,114u32,113u32,0u32,3u32) == 1u32 { sov_or_rr(OPR, S1R) }     /* orq */
+                        if mn_is(120u32,111u32,114u32,113u32,4u32) == 1u32 { sov_xor_rr(OPR, S1R) }  /* xorq */
+                    } } } } }
+                    sp_skip_line()
+                }
+            }
+        } } } } }
+    }
+    return 0i32
+}

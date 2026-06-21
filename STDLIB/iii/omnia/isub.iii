@@ -1,0 +1,167 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\isub.iii
+ *
+ * III STDLIB - omnia::isub  --  THE IMMUTABLE METAL BUS: the Ring-(-1) cryptographic bedrock of the
+ * inverse substrate.  An append-only log of UNIFORM GEOMETRIC BLOCKS whose verbs are CONTENT-ADDRESSED:
+ * a block's identity IS the sha256 of its geometric footprint -- computed and committed AT EMIT TIME,
+ * never a name and never derived-on-the-side.
+ *
+ * THE UNIFORM BLOCK (the only matter the bus stores, every block identical in shape):
+ *     < verb , a , b >        verb in { V_BELOW , V_REFLECT }     a,b = bare point ADDRESSES
+ *   V_BELOW(a,b)   = "a sits under b"   (the order -- the shape of every logic; from omnia::logos)
+ *   V_REFLECT(a,b) = "a mirrors to b"   (the order-reversing involution)
+ * There is NO name/string field anywhere in the log.  The VERB is the operator slot -- the place a
+ * "named primitive" (l6_and, ...) would live -- and it admits exactly {0,1}.  A name packed into the verb
+ * slot is a large integer and is STRUCTURALLY REJECTED by isub_emit (the name-gate); operands are bare
+ * addresses, bounded to a sane range.  "No named primitives", enforced at the metal, not by convention.
+ *
+ * CONTENT-ADDRESSED VERBS (CAV) -- CONSTITUTIVE, not decorative:
+ *   - On every emit, the bus computes  CAV_i = sha256( footprint_i )  where footprint = [verb||a(LE32)||
+ *     b(LE32)], and STORES it as the block's identity (isub_event_cav_into reads the stored bytes -- it
+ *     does not recompute).  The identity of a verb IS that hash.
+ *   - The witness is the HASH-CHAIN of those identities:  ROOT_0 = sha256( 0^32 || CAV_0 ),
+ *     ROOT_i = sha256( ROOT_{i-1} || CAV_i ).  O(1)/event (two fixed-size sha256), O(32) memo (the frozen
+ *     root).  The witness is a function OF the content-addresses -- delete the CAV and the root cannot be
+ *     formed.  A transparency-log / Merkle chain over geometric content-addresses.
+ * Identical geometry -> identical CAV (the recognise-and-merge basis); any geometry change -> different
+ * CAV -> different ROOT.  Demonstrably != sha256(a label).
+ *
+ * THE WITNESS ENGINE is the already-sealed omnia::exec_cert streaming sha256 (xc_begin/xc_event_byte/
+ * xc_seal) -- "the streaming cad SHA-256 witness, wired directly to the metal bus".  Authors NO new crypto.
+ *
+ * DISTINCT FROM omnia::event_substrate (no island): event_substrate keys events by a NAMED kind
+ * (EVT_K_MOVE / EVT_K_OBSERVE -- a named enum) and stores raw fields.  isub forbids names and makes the
+ * sha256 content-address the constitutive identity + witness.  isub is the CAV bedrock.
+ *
+ * Ring R(-1) (the metal bus).  K 1.00.  NIH: libc-free; consumes only the sealed exec_cert sha256.
+ */
+module omnia_isub
+
+extern @abi(c-msvc-x64) fn xc_begin() -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_event_byte(b: u32) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_seal(out_32: *u8) -> i32 from "exec_cert.iii"
+
+const ISUB_CAP     : u32 = 512u32
+const ISUB_NULL    : u32 = 0xFFFFFFFFu32
+const ISUB_MAXADDR : u32 = 0x100000u32   /* operands are bare addresses < 2^20 -- not packed strings */
+
+/* the ONLY legal verbs -- the uniform geometric vocabulary (omnia::logos). */
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const V_MAX     : u32 = 1u32              /* anything > this in the verb slot is a NAME -> rejected */
+
+/* the ONE append-only metal bus: uniform blocks <verb, a, b> + logical tick.  No name field exists. */
+var IS_VERB  : [u32; 512]
+var IS_A     : [u32; 512]
+var IS_B     : [u32; 512]
+var IS_TICK  : [u64; 512]
+var IS_COUNT : u32 = 0u32
+var IS_CLOCK : u64 = 0u64
+
+/* the CONSTITUTIVE content-addresses, committed at emit: CAV_i = sha256(footprint_i), 32 bytes each. */
+var IS_CAV   : [u8; 16384]                /* 512 * 32 */
+/* the witness ROOT = hash-chain of the CAVs (the frozen, O(32) memo). */
+var IS_ROOT  : [u8; 32]
+
+/* scratch (module scope -- W4: no fn-local var arrays). */
+var IS_FP    : [u8; 16]                   /* one block's 9-byte geometric footprint */
+var IS_TMP   : [u8; 32]                   /* a freshly-sealed CAV before it is copied into IS_CAV */
+
+fn isub_reset() -> i32 @export {
+    IS_COUNT = 0u32
+    IS_CLOCK = 0u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { IS_ROOT[k] = 0u8  k = k + 1u64 }   /* genesis root = 0^32 */
+    return 0i32
+}
+
+/* THE NAME-GATE: a verb is legal iff it is one of the uniform geometric verbs {BELOW, REFLECT}.  A name
+ * or string packed into the verb slot is a large integer (>= 2) and is structurally illegal. */
+fn isub_legal_verb(v: u32) -> u32 @export {
+    if v <= V_MAX { return 1u32 }
+    return 0u32
+}
+
+/* serialise one block's GEOMETRIC FOOTPRINT into IS_FP: [verb(1) || a(LE32) || b(LE32)] = 9 bytes.
+ * Bare addresses + the order/reflect code -- there is no label in here.  Returns the byte length. */
+fn isub_footprint(verb: u32, a: u32, b: u32) -> u64 {
+    IS_FP[0u64] = (verb & 0xFFu32) as u8
+    IS_FP[1u64] = (a & 0xFFu32) as u8
+    IS_FP[2u64] = ((a >> 8u32) & 0xFFu32) as u8
+    IS_FP[3u64] = ((a >> 16u32) & 0xFFu32) as u8
+    IS_FP[4u64] = ((a >> 24u32) & 0xFFu32) as u8
+    IS_FP[5u64] = (b & 0xFFu32) as u8
+    IS_FP[6u64] = ((b >> 8u32) & 0xFFu32) as u8
+    IS_FP[7u64] = ((b >> 16u32) & 0xFFu32) as u8
+    IS_FP[8u64] = ((b >> 24u32) & 0xFFu32) as u8
+    return 9u64
+}
+
+/* the CONTENT-ADDRESS of a (hypothetical) block: sha256(geometric footprint) into out32.  Pure helper --
+ * the same function the emit path uses to commit identities; lets a caller verify stored == computed. */
+fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 @export {
+    let n : u64 = isub_footprint(verb, a, b)
+    xc_begin()
+    let mut k : u64 = 0u64
+    while k < n { xc_event_byte(IS_FP[k] as u32)  k = k + 1u64 }
+    xc_seal(out32)
+    return 0i32
+}
+
+/* THE ONLY MUTATOR.  Name-gate + operand bound FIRST (a name in the verb slot is REJECTED -- returns 0,
+ * the bus is unchanged).  On accept: append the uniform block, COMMIT its content-address
+ * CAV_i = sha256(footprint_i), and fold it into the witness chain ROOT = sha256(ROOT_prev || CAV_i). */
+fn isub_emit(verb: u32, a: u32, b: u32) -> u64 @export {
+    if isub_legal_verb(verb) == 0u32 { return 0u64 }      /* NAME REJECTED -- structural */
+    if a >= ISUB_MAXADDR { return 0u64 }                  /* operands are bare addresses, bounded */
+    if b >= ISUB_MAXADDR { return 0u64 }
+    if IS_COUNT >= ISUB_CAP { return 0u64 }
+    let i : u32 = IS_COUNT
+    let t : u64 = IS_CLOCK + 1u64
+    IS_VERB[i] = verb
+    IS_A[i]    = a
+    IS_B[i]    = b
+    IS_TICK[i] = t
+    IS_COUNT = i + 1u32
+    IS_CLOCK = t
+
+    /* CAV_i = sha256(footprint_i) -- the constitutive identity, committed now. */
+    let n : u64 = isub_footprint(verb, a, b)
+    xc_begin()
+    let mut p : u64 = 0u64
+    while p < n { xc_event_byte(IS_FP[p] as u32)  p = p + 1u64 }
+    xc_seal(IS_TMP)
+    let base : u32 = i * 32u32
+    let mut c : u32 = 0u32
+    while c < 32u32 { IS_CAV[base + c] = IS_TMP[c]  c = c + 1u32 }
+
+    /* ROOT = sha256( ROOT_prev || CAV_i ) -- fold the identity into the witness chain. */
+    xc_begin()
+    let mut r : u64 = 0u64
+    while r < 32u64 { xc_event_byte(IS_ROOT[r] as u32)  r = r + 1u64 }
+    let mut q : u32 = 0u32
+    while q < 32u32 { xc_event_byte(IS_CAV[base + q] as u32)  q = q + 1u32 }
+    xc_seal(IS_ROOT)                                      /* old ROOT already streamed; seal overwrites it */
+
+    return t
+}
+
+fn isub_count() -> u32 @export { return IS_COUNT }
+fn isub_verb(i: u32) -> u32 @export { if i < IS_COUNT { return IS_VERB[i] }  return ISUB_NULL }
+fn isub_a(i: u32) -> u32 @export { if i < IS_COUNT { return IS_A[i] }  return ISUB_NULL }
+fn isub_b(i: u32) -> u32 @export { if i < IS_COUNT { return IS_B[i] }  return ISUB_NULL }
+
+/* the STORED content-address (identity) of event i -- read from the committed bytes, NOT recomputed. */
+fn isub_event_cav_into(i: u32, out32: *u8) -> i32 @export {
+    if i >= IS_COUNT { return -1i32 }
+    let base : u32 = i * 32u32
+    let mut k : u32 = 0u32
+    while k < 32u32 { out32[k as u64] = IS_CAV[base + k]  k = k + 1u32 }
+    return 0i32
+}
+
+/* the witness ROOT -- the hash-chain of all committed content-addresses. */
+fn isub_witness_into(out32: *u8) -> i32 @export {
+    let mut k : u64 = 0u64
+    while k < 32u64 { out32[k] = IS_ROOT[k]  k = k + 1u64 }
+    return 0i32
+}

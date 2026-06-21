@@ -1,0 +1,142 @@
+/* 1913_isub_cav.iii  --  PHASE 0 (the Cryptographic Bedrock): lock the Immutable Metal Bus (omnia::isub)
+ * with CONSTITUTIVE Content-Addressed Verbs.  The bus itself computes CAV_i = sha256(footprint_i) at emit,
+ * stores it as the block's identity, and folds it into a witness HASH-CHAIN ROOT = sha256(ROOT_prev||CAV_i).
+ * This KAT proves the content-address is the IDENTITY and the WITNESS, not a side decoration: it
+ * reconstructs the chain independently (cad sha256) and matches the bus's stored identities + root.
+ *
+ *   code 11 RED-PROBE   : a NAME in the verb slot (or an out-of-range operand) was ACCEPTED       -> FAIL
+ *   code 12 geometry    : a legal geometric block was rejected
+ *   code 13 CONSTITUTIVE identity : the STORED event identity != sha256(footprint) (CAV is decorative)
+ *   code 14 CONSTITUTIVE witness  : the witness ROOT != the independent hash-chain of the CAVs
+ *   code 15 determinism : re-emitting the identical bus gave a different ROOT
+ *   code 16 assurance   : perturbing one geometric ADDRESS did not move the ROOT (via its CAV)
+ *   code 17 CAV-vs-label: the content-address equals the label hash, or is trivial
+ *   code 18 CAV-dedup   : identical geometry produced different content-addresses
+ * exit 99 = the metal bus is locked: names structurally rejected; the verb's identity IS sha256(geometry),
+ *           and the witness IS the hash-chain of those content-addresses.
+ */
+module m1913
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_legal_verb(v: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_event_cav_into(i: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+
+/* a NAME packed into the verb slot -- a legacy primitive name as a u32; far outside {0,1}. */
+const NAME_REWRITE : u32 = 0x77657221u32
+
+/* write the 9-byte geometric footprint [verb || a(LE32) || b(LE32)] into buf. */
+fn fp_into(verb: u32, a: u32, b: u32, buf: *u8) -> u64 {
+    buf[0u64] = (verb & 0xFFu32) as u8
+    buf[1u64] = (a & 0xFFu32) as u8
+    buf[2u64] = ((a >> 8u32) & 0xFFu32) as u8
+    buf[3u64] = ((a >> 16u32) & 0xFFu32) as u8
+    buf[4u64] = ((a >> 24u32) & 0xFFu32) as u8
+    buf[5u64] = (b & 0xFFu32) as u8
+    buf[6u64] = ((b >> 8u32) & 0xFFu32) as u8
+    buf[7u64] = ((b >> 16u32) & 0xFFu32) as u8
+    buf[8u64] = ((b >> 24u32) & 0xFFu32) as u8
+    return 9u64
+}
+
+fn main() -> u64 {
+    isub_reset()
+
+    /* ===== RED-PROBE: a NAME (or out-of-range operand) must be structurally REJECTED ===== */
+    if isub_emit(NAME_REWRITE, 3u32, 7u32) != 0u64 { return 11u64 }   /* name in verb slot */
+    if isub_emit(V_BELOW, 0x200000u32, 7u32) != 0u64 { return 11u64 } /* operand past the address bound */
+    if isub_count() != 0u32 { return 11u64 }
+    if isub_legal_verb(NAME_REWRITE) != 0u32 { return 11u64 }
+    if isub_legal_verb(2u32) != 0u32 { return 11u64 }
+
+    /* ===== GREEN: geometric blocks are ACCEPTED ===== */
+    if isub_emit(V_BELOW, 3u32, 7u32) == 0u64 { return 12u64 }
+    if isub_emit(V_REFLECT, 7u32, 3u32) == 0u64 { return 12u64 }
+    if isub_count() != 2u32 { return 12u64 }
+
+    /* independent content-addresses of the two footprints (cad sha256) */
+    let fp0 : *u8 = malloc(16u64)
+    let fp1 : *u8 = malloc(16u64)
+    fp_into(V_BELOW, 3u32, 7u32, fp0)
+    fp_into(V_REFLECT, 7u32, 3u32, fp1)
+    let cav0_ref : *u8 = malloc(32u64)
+    let cav1_ref : *u8 = malloc(32u64)
+    cad_oneshot(0u32, fp0, 9u64, cav0_ref)
+    cad_oneshot(0u32, fp1, 9u64, cav1_ref)
+
+    /* ===== code 13: the STORED identity IS sha256(footprint) -- CONSTITUTIVE, not recomputed ===== */
+    let cav0_st : *u8 = malloc(32u64)
+    let cav1_st : *u8 = malloc(32u64)
+    isub_event_cav_into(0u32, cav0_st)
+    isub_event_cav_into(1u32, cav1_st)
+    if cad_eq(cav0_st, cav0_ref) != 1u8 { return 13u64 }
+    if cad_eq(cav1_st, cav1_ref) != 1u8 { return 13u64 }
+
+    /* ===== code 14: the witness ROOT IS the hash-chain of the CAVs ===== */
+    /* ROOT0 = sha256(0^32 || CAV0) ; ROOT1 = sha256(ROOT0 || CAV1) */
+    let chain : *u8 = malloc(64u64)
+    let mut z : u64 = 0u64
+    while z < 32u64 { chain[z] = 0u8  z = z + 1u64 }                 /* genesis 0^32 */
+    let mut c0 : u64 = 0u64
+    while c0 < 32u64 { chain[32u64 + c0] = cav0_ref[c0]  c0 = c0 + 1u64 }
+    let root0_ref : *u8 = malloc(32u64)
+    cad_oneshot(0u32, chain, 64u64, root0_ref)
+    let mut c1 : u64 = 0u64
+    while c1 < 32u64 { chain[c1] = root0_ref[c1]  c1 = c1 + 1u64 }   /* ROOT0 || CAV1 */
+    let mut d1 : u64 = 0u64
+    while d1 < 32u64 { chain[32u64 + d1] = cav1_ref[d1]  d1 = d1 + 1u64 }
+    let root1_ref : *u8 = malloc(32u64)
+    cad_oneshot(0u32, chain, 64u64, root1_ref)
+    let root_st : *u8 = malloc(32u64)
+    isub_witness_into(root_st)
+    if cad_eq(root_st, root1_ref) != 1u8 { return 14u64 }           /* witness == chain of content-addresses */
+
+    /* ===== code 17: the content-address is of GEOMETRY, not a label, and is non-trivial ===== */
+    let lbl : *u8 = malloc(16u64)
+    lbl[0u64] = 98u8  lbl[1u64] = 101u8  lbl[2u64] = 108u8  lbl[3u64] = 111u8  lbl[4u64] = 119u8  /* "below" */
+    let cav_lbl : *u8 = malloc(32u64)
+    cad_oneshot(0u32, lbl, 5u64, cav_lbl)
+    if cad_eq(cav0_st, cav_lbl) == 1u8 { return 17u64 }
+    if cav0_st[0u64] == 0u8 { if cav0_st[1u64] == 0u8 { if cav0_st[2u64] == 0u8 { return 17u64 } } }
+
+    /* ===== code 18: identical geometry -> identical address; different geometry -> different ===== */
+    let ca : *u8 = malloc(32u64)
+    let cb : *u8 = malloc(32u64)
+    let cc : *u8 = malloc(32u64)
+    isub_cav_into(V_BELOW, 3u32, 7u32, ca)
+    isub_cav_into(V_BELOW, 3u32, 7u32, cb)
+    isub_cav_into(V_REFLECT, 7u32, 3u32, cc)
+    if cad_eq(ca, cb) != 1u8 { return 18u64 }
+    if cad_eq(ca, cc) == 1u8 { return 18u64 }
+
+    /* ===== code 15: DETERMINISM -- re-emit the identical bus -> identical ROOT ===== */
+    isub_reset()
+    isub_emit(V_BELOW, 3u32, 7u32)
+    isub_emit(V_REFLECT, 7u32, 3u32)
+    let root_re : *u8 = malloc(32u64)
+    isub_witness_into(root_re)
+    if cad_eq(root_re, root_st) != 1u8 { return 15u64 }
+
+    /* ===== code 16: ASSURANCE -- perturb one geometric ADDRESS -> ROOT must move (via its CAV) ===== */
+    isub_reset()
+    isub_emit(V_BELOW, 3u32, 7u32)
+    isub_emit(V_REFLECT, 7u32, 4u32)                                /* b: 3 -> 4 */
+    let root_t : *u8 = malloc(32u64)
+    isub_witness_into(root_t)
+    if cad_eq(root_t, root_st) == 1u8 { return 16u64 }
+
+    free(fp0) free(fp1) free(cav0_ref) free(cav1_ref) free(cav0_st) free(cav1_st)
+    free(chain) free(root0_ref) free(root1_ref) free(root_st) free(lbl) free(cav_lbl)
+    free(ca) free(cb) free(cc) free(root_re) free(root_t)
+    return 99u64
+}

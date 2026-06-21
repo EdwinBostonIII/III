@@ -1009,6 +1009,13 @@ MODULES=(
     # hash state -- the bounded-regard fold).  Consumed by corpus 1908 (real xii_canonicalise cert) +
     # 1910 (the grail/wall verb-geometry web).  Zero-extern beyond sha256; BSS-neutral.
     "omnia/exec_cert"
+    # isub: THE IMMUTABLE METAL BUS (Ring -1 bedrock of the inverse substrate) -- an append-only log of
+    # UNIFORM GEOMETRIC BLOCKS <verb in {BELOW,REFLECT}, a, b> with CONTENT-ADDRESSED VERBS: a verb's
+    # identity is sha256(geometric footprint), never a name.  The name-gate structurally rejects any verb
+    # outside {0,1} (a name packed into the verb slot).  Witnessed by the streaming exec_cert (O(1)/event).
+    # Consumed by corpus 1913 (the CAV RED-probe); reuses the sealed exec_cert + cad -- zero new crypto,
+    # BSS-neutral, compiler-unreferenced.  Phase 0 of the Master Logic Assimilation (DOCS/III-INVERSE-LIBRARY.md).
+    "omnia/isub"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

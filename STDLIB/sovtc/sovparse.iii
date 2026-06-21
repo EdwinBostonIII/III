@@ -203,6 +203,17 @@ fn sp_export_n() -> u32 @export { return EXP_N }
 fn sp_export_off(i: u32) -> u32 @export { if i < EXP_N { return EXP_OFF[i as u64] }  return 0xFFFFFFFFu32 }
 fn sp_export_namelen(i: u32) -> u32 @export { if i < EXP_N { return EXP_NLEN[i as u64] }  return 0u32 }
 fn sp_export_namebyte(i: u32, j: u32) -> u32 @export { if i < EXP_N { if j < EXP_NLEN[i as u64] { return EXP_NAME[((i * 32u32) + j) as u64] as u32 } }  return 0u32 }
+/* LINKER: register an export named "main" at off, so sovld's find_main_off picks up the merged entry point. */
+fn sp_export_inject(off: u32) -> i32 @export {
+    if EXP_N < 2048u32 {
+        EXP_NAME[(EXP_N * 32u32) as u64] = 109u8
+        EXP_NAME[((EXP_N * 32u32) + 1u32) as u64] = 97u8
+        EXP_NAME[((EXP_N * 32u32) + 2u32) as u64] = 105u8
+        EXP_NAME[((EXP_N * 32u32) + 3u32) as u64] = 110u8
+        EXP_NLEN[EXP_N as u64] = 4u32  EXP_OFF[EXP_N as u64] = off  EXP_N = EXP_N + 1u32
+    }
+    return 0i32
+}
 
 fn is_ident_start(c: u32) -> u32 {
     if c == C_US { return 1u32 }

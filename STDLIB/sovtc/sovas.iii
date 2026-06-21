@@ -60,6 +60,8 @@ fn sov_reloc_off(i: u32) -> u32 @export { if i < REL_N { return REL_OFF[i as u64
 fn sov_reloc_sec(i: u32) -> u32 @export { if i < REL_N { return REL_SEC[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_reloc_sym(i: u32) -> u32 @export { if i < REL_N { return REL_SYM[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_rec_reloc(sec: u32) { if REL_N < 65536u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = 0xFFFFFFFFu32  REL_N = REL_N + 1u32 } }
+/* LINKER: record a reloc at an explicit .text offset (not SOV_LEN) -- merged-image data relocs + import calls. */
+fn sov_rec_reloc_at(off: u32, sec: u32, sym: u32) -> i32 @export { if REL_N < 65536u32 { REL_OFF[REL_N as u64] = off  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = sym  REL_N = REL_N + 1u32 }  return 0i32 }
 
 fn sov_cn_clear() -> i32 @export { CN_LEN = 0u32  return 0i32 }
 fn sov_cn_push(ch: u32) -> i32 @export { if CN_LEN < 256u32 { CN_BUF[CN_LEN as u64] = ch as u8  CN_LEN = CN_LEN + 1u32 }  return 0i32 }
@@ -99,6 +101,9 @@ fn sov_at(i: u32) -> u32 @export { if i < SOV_LEN { return SOV_BUF[i] as u32 }  
 fn sov_emit(b: u32) {
     if SOV_LEN < SOV_CAP { SOV_BUF[SOV_LEN] = (b & 0xFFu32) as u8  SOV_LEN = SOV_LEN + 1u32 }
 }
+/* multi-object LINKER surface: append a .text byte (@export wrapper) + patch an already-emitted .text byte. */
+fn sov_text_emit(b: u32) -> i32 @export { sov_emit(b)  return 0i32 }
+fn sov_patch(i: u32, b: u32) -> i32 @export { if i < SOV_LEN { SOV_BUF[i] = (b & 0xFFu32) as u8 }  return 0i32 }
 /* pad .text to a 16-byte boundary with NOP (0x90) -- matches gas's .text section-end alignment (verified: gas
  * pads every .text to a 16-multiple with 1-byte 0x90 NOPs).  Append-only after the final encode, so it shifts
  * no label or reloc offset (all precede the pad). */

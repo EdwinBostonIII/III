@@ -1,0 +1,256 @@
+/* sovlink_main.iii -- the SOVEREIGN MULTI-OBJECT LINKER (stages 2-4): `sovlink_main a.o b.o ... > out.exe`.
+ * Reads N sov-emitted COFF .o, MERGES their sections (per-object bases), RESOLVES cross-module symbols + keeps
+ * each object's locals local (locals are already section+addend relocs -- never named), RELOCATES, and emits a
+ * native PE via sovld_emit.  NO gcc/ld/gas.  This is the link half of the self-host fixpoint.
+ *   .rodata is folded into .data (sovld has no .rodata section; strings are read-only-in-practice, fine).
+ *   Imports (DLL) are NOT handled yet -- the 2-module gate has none; added next for the full toolchain. */
+module sovtc_sovlink_main
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn sov_text_emit(b: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_emit(sec: u32, b: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_bss_add(n: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_len(sec: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_bss_size() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_patch(i: u32, b: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_rec_reloc_at(off: u32, sec: u32, sym: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sp_export_inject(off: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+const GENERIC_READ : u32 = 0x80000000u32
+const OPEN_EXISTING : u32 = 3u32
+
+var OBJBUF : [u8; 8388608]
+var NXFER  : u32 = 0u32
+var O_NS     : u32 = 0u32
+var O_SYMPTR : u32 = 0u32
+var O_NSYM   : u32 = 0u32
+var O_SEC_ID    : [u32; 16]
+var O_SEC_RAWLEN: [u32; 16]
+var O_SEC_RAWPTR: [u32; 16]
+var O_SEC_RELPTR: [u32; 16]
+var O_SEC_NRELOC: [u32; 16]
+var GSYM_NAME : [u8; 524288]   /* 16384 * 32 */
+var GSYM_NLEN : [u32; 16384]
+var GSYM_OFF  : [u32; 16384]
+var GSYM_N : u32 = 0u32
+var ST_OFF  : [u32; 65536]
+var ST_NAME : [u8; 2097152]    /* 65536 * 32 */
+var ST_NLEN : [u32; 65536]
+var ST_N : u32 = 0u32
+var NMBUF : [u8; 64]
+
+fn rd8(o: u32)  -> u32 { return OBJBUF[o as u64] as u32 }
+fn rd16(o: u32) -> u32 { return rd8(o) | (rd8(o + 1u32) << 8u32) }
+fn rd32(o: u32) -> u32 { return rd16(o) | (rd16(o + 2u32) << 16u32) }
+
+fn secid(nameoff: u32) -> u32 {
+    let b : u32 = rd8(nameoff + 1u32)
+    if b == 116u32 { return 0u32 }
+    if b == 100u32 { return 1u32 }
+    if b == 114u32 { return 2u32 }
+    if b == 98u32  { return 3u32 }
+    return 9u32
+}
+
+fn parse_obj() {
+    O_NS = rd16(2u32)  O_SYMPTR = rd32(8u32)  O_NSYM = rd32(12u32)
+    let mut i : u32 = 0u32
+    while i < O_NS {
+        let sh : u32 = 20u32 + (40u32 * i)
+        O_SEC_ID[i as u64]     = secid(sh)
+        O_SEC_RAWLEN[i as u64] = rd32(sh + 16u32)
+        O_SEC_RAWPTR[i as u64] = rd32(sh + 20u32)
+        O_SEC_RELPTR[i as u64] = rd32(sh + 24u32)
+        O_SEC_NRELOC[i as u64] = rd16(sh + 32u32)
+        i = i + 1u32
+    }
+}
+
+/* read symbol #idx's name into NMBUF; return length */
+fn sym_name(idx: u32) -> u32 {
+    let so : u32 = O_SYMPTR + (idx * 18u32)
+    if rd32(so) == 0u32 {
+        let stroff : u32 = (O_SYMPTR + (O_NSYM * 18u32)) + rd32(so + 4u32)
+        let mut n : u32 = 0u32  let mut go : u32 = 1u32
+        while go == 1u32 { let c : u32 = rd8(stroff + n)  if c == 0u32 { go = 0u32 } else { if n < 64u32 { NMBUF[n as u64] = c as u8 }  n = n + 1u32 } }
+        return n
+    }
+    let mut n : u32 = 0u32  let mut go : u32 = 1u32
+    while go == 1u32 {
+        if n >= 8u32 { go = 0u32 }
+        else { let c : u32 = rd8(so + n)  if c == 0u32 { go = 0u32 } else { NMBUF[n as u64] = c as u8  n = n + 1u32 } }
+    }
+    return n
+}
+
+fn patch32(off: u32, v: u32) {
+    sov_patch(off, v & 0xFFu32)
+    sov_patch(off + 1u32, (v >> 8u32) & 0xFFu32)
+    sov_patch(off + 2u32, (v >> 16u32) & 0xFFu32)
+    sov_patch(off + 3u32, (v >> 24u32) & 0xFFu32)
+}
+
+/* look up NMBUF (len) in the global symbol table -> merged .text offset, or 0xFFFFFFFF */
+fn gsym_find(len: u32) -> u32 {
+    let mut g : u32 = 0u32
+    while g < GSYM_N {
+        if GSYM_NLEN[g as u64] == len {
+            let mut j : u32 = 0u32  let mut eq : u32 = 1u32
+            while j < len { if NMBUF[j as u64] != GSYM_NAME[((g * 32u32) + j) as u64] { eq = 0u32  j = len } else { j = j + 1u32 } }
+            if eq == 1u32 { return GSYM_OFF[g as u64] }
+        }
+        g = g + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* PASS 1: merge one object (.text/.data/.rodata->.data/.bss), collect globals, handle section relocs,
+ * stash cross-module (UND) symbol relocs. */
+fn add_object() {
+    parse_obj()
+    let tb : u32 = sov_len()
+    let db : u32 = sov_data_len(1u32)
+    let bb : u32 = sov_bss_size()
+    let mut ti : u32 = 9u32  let mut di : u32 = 9u32  let mut ri : u32 = 9u32  let mut bi : u32 = 9u32
+    let mut s : u32 = 0u32
+    while s < O_NS {
+        let id : u32 = O_SEC_ID[s as u64]
+        if id == 0u32 { ti = s }  if id == 1u32 { di = s }  if id == 2u32 { ri = s }  if id == 3u32 { bi = s }
+        s = s + 1u32
+    }
+    if ti != 9u32 { let n : u32 = O_SEC_RAWLEN[ti as u64]  let p : u32 = O_SEC_RAWPTR[ti as u64]  let mut i : u32 = 0u32  while i < n { sov_text_emit(rd8(p + i))  i = i + 1u32 } }
+    if di != 9u32 { let n : u32 = O_SEC_RAWLEN[di as u64]  let p : u32 = O_SEC_RAWPTR[di as u64]  let mut i : u32 = 0u32  while i < n { sov_data_emit(1u32, rd8(p + i))  i = i + 1u32 } }
+    let rob : u32 = sov_data_len(1u32)   /* .rodata is folded into .data right after this object's .data */
+    if ri != 9u32 { let n : u32 = O_SEC_RAWLEN[ri as u64]  let p : u32 = O_SEC_RAWPTR[ri as u64]  let mut i : u32 = 0u32  while i < n { sov_data_emit(1u32, rd8(p + i))  i = i + 1u32 } }
+    if bi != 9u32 { sov_bss_add(O_SEC_RAWLEN[bi as u64]) }
+
+    /* collect defined globals (scl=2, sec>0) */
+    let mut k : u32 = 0u32
+    while k < O_NSYM {
+        let so : u32 = O_SYMPTR + (k * 18u32)
+        let scl : u32 = rd8(so + 16u32)
+        let sec : u32 = rd16(so + 12u32)
+        let naux : u32 = rd8(so + 17u32)
+        if scl == 2u32 { if sec > 0u32 {
+            let val : u32 = rd32(so + 8u32)
+            let id : u32 = O_SEC_ID[(sec - 1u32) as u64]
+            let nlen : u32 = sym_name(k)
+            if GSYM_N < 16384u32 {
+                let mut j : u32 = 0u32  while j < nlen { GSYM_NAME[((GSYM_N * 32u32) + j) as u64] = NMBUF[j as u64]  j = j + 1u32 }
+                GSYM_NLEN[GSYM_N as u64] = nlen
+                let mut goff : u32 = tb + val
+                if id == 1u32 { goff = db + val }  if id == 2u32 { goff = rob + val }  if id == 3u32 { goff = bb + val }
+                GSYM_OFF[GSYM_N as u64] = goff
+                GSYM_N = GSYM_N + 1u32
+            }
+        } }
+        k = k + 1u32 + naux
+    }
+
+    /* .text relocs */
+    if ti != 9u32 {
+        let rp : u32 = O_SEC_RELPTR[ti as u64]
+        let nr : u32 = O_SEC_NRELOC[ti as u64]
+        let mut r : u32 = 0u32
+        while r < nr {
+            let ro : u32 = rp + (r * 10u32)
+            let va : u32 = rd32(ro)
+            let symidx : u32 = rd32(ro + 4u32)
+            let merged : u32 = tb + va
+            let so : u32 = O_SYMPTR + (symidx * 18u32)
+            let scl : u32 = rd8(so + 16u32)
+            let sec : u32 = rd16(so + 12u32)
+            if scl == 3u32 {
+                /* section reloc: field holds the addend (offset within the object's section) */
+                let id : u32 = O_SEC_ID[(sec - 1u32) as u64]
+                let addend : u32 = rd32(O_SEC_RAWPTR[ti as u64] + va)
+                if id == 0u32 { patch32(merged, ((tb + addend) - (merged + 4u32))) }    /* .text->.text: inline */
+                else {
+                    let mut base : u32 = db  let mut rsec : u32 = 1u32
+                    if id == 2u32 { base = rob }
+                    if id == 3u32 { base = bb  rsec = 3u32 }
+                    patch32(merged, base + addend)                                       /* adjust addend to merged */
+                    sov_rec_reloc_at(merged, rsec, 0xFFFFFFFFu32)                          /* sovld patches w/ section RVA */
+                }
+            } else {
+                if sec > 0u32 {
+                    /* defined global in THIS object -> resolve inline (.text call) */
+                    let val : u32 = rd32(so + 8u32)
+                    patch32(merged, ((tb + val) - (merged + 4u32)))
+                } else {
+                    /* UND -> stash for pass 2 (cross-module or, later, import) */
+                    let nlen : u32 = sym_name(symidx)
+                    if ST_N < 65536u32 {
+                        ST_OFF[ST_N as u64] = merged
+                        let mut j : u32 = 0u32  while j < nlen { ST_NAME[((ST_N * 32u32) + j) as u64] = NMBUF[j as u64]  j = j + 1u32 }
+                        ST_NLEN[ST_N as u64] = nlen
+                        ST_N = ST_N + 1u32
+                    }
+                }
+            }
+            r = r + 1u32
+        }
+    }
+}
+
+/* PASS 2: resolve stashed cross-module symbol relocs */
+fn resolve() {
+    let mut i : u32 = 0u32
+    while i < ST_N {
+        let off : u32 = ST_OFF[i as u64]
+        let len : u32 = ST_NLEN[i as u64]
+        let mut j : u32 = 0u32  while j < len { NMBUF[j as u64] = ST_NAME[((i * 32u32) + j) as u64]  j = j + 1u32 }
+        let tgt : u32 = gsym_find(len)
+        if tgt != 0xFFFFFFFFu32 { patch32(off, (tgt - (off + 4u32))) }    /* cross-module .text call, inline */
+        i = i + 1u32
+    }
+}
+
+fn find_main() -> u32 {
+    /* "main" = 109,97,105,110 */
+    let mut g : u32 = 0u32
+    while g < GSYM_N {
+        if GSYM_NLEN[g as u64] == 4u32 {
+            if GSYM_NAME[(g * 32u32) as u64] == 109u8 { if GSYM_NAME[((g * 32u32) + 1u32) as u64] == 97u8 { if GSYM_NAME[((g * 32u32) + 2u32) as u64] == 105u8 { if GSYM_NAME[((g * 32u32) + 3u32) as u64] == 110u8 {
+                return GSYM_OFF[g as u64]
+            } } } }
+        }
+        g = g + 1u32
+    }
+    return 0u32
+}
+
+fn read_file(path: *u8) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, 1u32, 0u64, OPEN_EXISTING, 0u32, 0u64)
+    if h == 0xFFFFFFFFFFFFFFFFu64 { return 0u32 }
+    let mut off : u32 = 0u32  let mut go : u32 = 1u32
+    while go == 1u32 {
+        let dst : *u8 = ((&OBJBUF as u64) + (off as u64)) as *u8
+        let ok : i32 = ReadFile(h, dst, 8388608u32 - off, (&NXFER) as u64, 0u64)
+        if ok == 0i32 { go = 0u32 } else { if NXFER == 0u32 { go = 0u32 } else { off = off + NXFER } }
+    }
+    CloseHandle(h)
+    return off
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 { return 2u64 }
+    let pp : *u64 = argv as *u64
+    let ac : u32 = argc as u32
+    let mut a : u32 = 1u32
+    while a < ac {
+        let path : *u8 = pp[a as u64] as *u8
+        let n : u32 = read_file(path)
+        if n == 0u32 { return 3u64 }
+        add_object()
+        a = a + 1u32
+    }
+    resolve()
+    sp_export_inject(find_main())
+    sovld_emit()
+    return 0u64
+}

@@ -126,11 +126,37 @@ fn sov_or_rr(dst: u32, src: u32)  -> i32 @export { sov_alu_rr(0x09u32, dst, src)
 fn sov_xor_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x31u32, dst, src)  return 0i32 }
 fn sov_test_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x85u32, dst, src)  return 0i32 }
 
-/* ALU $imm32,%reg : REX.W 81 /ext id   (add=/0 sub=/5 cmp=/7) */
+/* ALU $imm,%reg : gcc uses the SHORT form 83 /ext ib (imm8 sign-extended) when imm fits a signed byte,
+ * else 81 /ext id (imm32).  Matching this exactly is REQUIRED for .text byte-identity (caught by the
+ * gcc-independent gate: add $0x10 is 48 83 c0 10, NOT 48 81 c0 10 00 00 00).  (add=/0 sub=/5 cmp=/7) */
 fn sov_alu_imm32(ext: u32, reg: u32, imm: i32) {
     let mut b : u32 = 0u32
     if reg >= 8u32 { b = 1u32 }
-    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0x81u32)  sov_modrm(3u32, ext, reg)  sov_imm((imm as u32) as u64, 4u32)
+    sov_rex(1u32, 0u32, 0u32, b)
+    let v : i32 = imm
+    let mut fits : u32 = 0u32
+    if v >= -128i32 { if v <= 127i32 { fits = 1u32 } }
+    if fits == 1u32 {
+        sov_emit(0x83u32)  sov_modrm(3u32, ext, reg)  sov_emit((v as u32) & 0xFFu32)
+    } else {
+        sov_emit(0x81u32)  sov_modrm(3u32, ext, reg)  sov_imm((v as u32) as u64, 4u32)
+    }
+}
+/* 32-bit reg,reg (op %src,%dst), NO REX for low regs : 89 (movl) / 31 (xorl) /r */
+fn sov_op32_rr(opcode: u32, dst: u32, src: u32) {
+    if src >= 8u32 {
+        sov_rex(0u32, 1u32, 0u32, 0u32)  /* simplified: high-reg path emits REX.R; both-high not in cg_r3's int32 use */
+    } else { if dst >= 8u32 { sov_rex(0u32, 0u32, 0u32, 1u32) } }
+    sov_emit(opcode)  sov_modrm(3u32, src, dst)
+}
+fn sov_movl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x89u32, dst, src)  return 0i32 }
+fn sov_xorl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x31u32, dst, src)  return 0i32 }
+/* sign-extend byte/word → quad : REX.W 0F BE/BF /r */
+fn sov_movsbq(dst: u32, src: u32) -> i32 @export {
+    sov_rexwb(dst, src)  sov_emit(0x0Fu32)  sov_emit(0xBEu32)  sov_modrm(3u32, dst, src)  return 0i32
+}
+fn sov_movswq(dst: u32, src: u32) -> i32 @export {
+    sov_rexwb(dst, src)  sov_emit(0x0Fu32)  sov_emit(0xBFu32)  sov_modrm(3u32, dst, src)  return 0i32
 }
 fn sov_add_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(0u32, reg, imm)  return 0i32 }
 fn sov_sub_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(5u32, reg, imm)  return 0i32 }

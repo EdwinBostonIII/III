@@ -48,6 +48,10 @@ extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.i
 extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_xorl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movsbq(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movswq(dst: u32, src: u32) -> i32 from "sovas.iii"
 
 var EXP : [u32; 16]
 var EXPN : u32 = 0u32
@@ -92,8 +96,8 @@ fn main() -> u64 {
     sov_reset()  sov_test_rr(0u32,0u32) p3(0x48u32,0x85u32,0xC0u32)                       if chk()!=1u32 { return 29u64 }
     /* ALU imm32 */
     sov_reset()  sov_sub_imm32(4u32,0x400i32)  p7(0x48u32,0x81u32,0xECu32,0x00u32,0x04u32,0u32,0u32)  if chk()!=1u32 { return 30u64 }
-    sov_reset()  sov_add_imm32(0u32,0x10i32)   p7(0x48u32,0x81u32,0xC0u32,0x10u32,0u32,0u32,0u32)     if chk()!=1u32 { return 31u64 }
-    sov_reset()  sov_cmp_imm32(0u32,5i32)      p7(0x48u32,0x81u32,0xF8u32,0x05u32,0u32,0u32,0u32)     if chk()!=1u32 { return 32u64 }
+    sov_reset()  sov_add_imm32(0u32,0x10i32)   p4(0x48u32,0x83u32,0xC0u32,0x10u32)                    if chk()!=1u32 { return 31u64 }
+    sov_reset()  sov_cmp_imm32(0u32,5i32)      p4(0x48u32,0x83u32,0xF8u32,0x05u32)                    if chk()!=1u32 { return 32u64 }
     /* F7 group */
     sov_reset()  sov_neg_r(0u32)   p3(0x48u32,0xF7u32,0xD8u32)                            if chk()!=1u32 { return 33u64 }
     sov_reset()  sov_not_r(0u32)   p3(0x48u32,0xF7u32,0xD0u32)                            if chk()!=1u32 { return 34u64 }
@@ -120,6 +124,12 @@ fn main() -> u64 {
     /* high registers: REX.B path (push %r8 = 41 50 ; mov %r8,%r9 = 4d 89 c1) */
     sov_reset()  sov_push_r(8u32)  p2(0x41u32,0x50u32)                                    if chk()!=1u32 { return 51u64 }
     sov_reset()  sov_mov_rr(9u32,8u32)  p3(0x4Du32,0x89u32,0xC1u32)                       if chk()!=1u32 { return 52u64 }
+
+    /* common Tier-1 forms added after the gcc-independent gate exposed them (all gcc-confirmed bytes) */
+    sov_reset()  sov_movl_rr(0u32,1u32)  p2(0x89u32,0xC8u32)                               if chk()!=1u32 { return 53u64 }
+    sov_reset()  sov_xorl_rr(0u32,0u32)  p2(0x31u32,0xC0u32)                               if chk()!=1u32 { return 54u64 }
+    sov_reset()  sov_movsbq(0u32,0u32)   p4(0x48u32,0x0Fu32,0xBEu32,0xC0u32)               if chk()!=1u32 { return 55u64 }
+    sov_reset()  sov_movswq(0u32,0u32)   p4(0x48u32,0x0Fu32,0xBFu32,0xC0u32)               if chk()!=1u32 { return 56u64 }
 
     return 99u64
 }

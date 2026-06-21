@@ -221,6 +221,20 @@ fn sov_store_sib_d(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i3
 }
 fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 @export { return sov_load_sib_d(dst, base, index, scale, 0i32) }
 fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 @export { return sov_store_sib_d(src, base, index, scale, 0i32) }
+/* 32-bit (movl) SIB forms -- the movq SIB encoders minus REX.W (REX emitted only if any of reg/index/base is
+ * r8..r15; reuses sov_sib_modrm_disp for the mod/disp/SIB bytes).  cg_r3's u32 array access `arr[i]`. */
+fn sov_rex_sib_w0(reg: u32, index: u32, base: u32) {
+    let mut r : u32 = 0u32  if reg   >= 8u32 { r = 1u32 }
+    let mut x : u32 = 0u32  if index >= 8u32 { x = 1u32 }
+    let mut b : u32 = 0u32  if base  >= 8u32 { b = 1u32 }
+    if (r | x | b) != 0u32 { sov_rex(0u32, r, x, b) }
+}
+fn sov_movl_load_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_rex_sib_w0(dst, index, base)  sov_emit(0x8Bu32)  sov_sib_modrm_disp(dst, base, index, scale, disp)  return 0i32
+}
+fn sov_movl_store_sib(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_rex_sib_w0(src, index, base)  sov_emit(0x89u32)  sov_sib_modrm_disp(src, base, index, scale, disp)  return 0i32
+}
 /* movz/movs from a SIB memory operand: REX.W 0f <op2> + SIB+disp.  op2: b6 movzbq | b7 movzwq | be movsbq |
  * bf movswq.  e.g. movzbq (%rax,%rcx,1),%rax = 48 0f b6 04 08. */
 fn sov_movzx_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32, op2: u32) -> i32 @export {
@@ -267,6 +281,27 @@ fn sov_op32_rr(opcode: u32, dst: u32, src: u32) {
     sov_emit(opcode)  sov_modrm(3u32, src, dst)
 }
 fn sov_movl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x89u32, dst, src)  return 0i32 }
+/* movl disp(%rbp),%reg (load, 8B) and movl %reg,disp(%rbp) (store, 89) -- 32-bit, NO REX.W (REX only for
+ * r8d-r15d).  rbp (rm=101) always carries a disp: mod 01 disp8 if it fits a signed byte, else mod 10 disp32.
+ * This is cg_r3's u32 stack-local access -- by far the most common form the differential sweep was missing. */
+fn sov_movl_load_rbp(reg: u32, disp: i32) -> i32 @export {
+    if reg >= 8u32 { sov_rex(0u32, 1u32, 0u32, 0u32) }
+    sov_emit(0x8Bu32)
+    let mut f8 : u32 = 0u32
+    if disp >= -128i32 { if disp <= 127i32 { f8 = 1u32 } }
+    if f8 == 1u32 { sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32) }
+    else { sov_modrm(2u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32) }
+    return 0i32
+}
+fn sov_movl_store_rbp(reg: u32, disp: i32) -> i32 @export {
+    if reg >= 8u32 { sov_rex(0u32, 1u32, 0u32, 0u32) }
+    sov_emit(0x89u32)
+    let mut f8 : u32 = 0u32
+    if disp >= -128i32 { if disp <= 127i32 { f8 = 1u32 } }
+    if f8 == 1u32 { sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32) }
+    else { sov_modrm(2u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32) }
+    return 0i32
+}
 fn sov_xorl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x31u32, dst, src)  return 0i32 }
 /* sign-extend byte/word → quad : REX.W 0F BE/BF /r */
 fn sov_movsbq(dst: u32, src: u32) -> i32 @export {

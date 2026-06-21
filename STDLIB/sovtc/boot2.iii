@@ -1,0 +1,25 @@
+/* boot2.iii  --  the u32 companion to boot1, to permanently gate movl + movl disp(%rbp) (u32 stack-local
+ * load/store) -- the dominant form boot1 (all u64/movq) never exercises.  u32 helpers, u32 locals, a u32
+ * module array.  40+59=99, 10+20+30+40=100 -> returns 99 iff both correct. */
+module sovtc_boot2
+
+var T32 : [u32; 4] = [ 10u32, 20u32, 30u32, 40u32 ]
+
+fn add32(a: u32, b: u32) -> u32 { return a + b }
+
+fn sum32() -> u32 {
+    let mut s : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        s = s + T32[i]
+        i = i + 1u32
+    }
+    return s
+}
+
+fn main() -> u64 {
+    let x : u32 = add32(40u32, 59u32)
+    let t : u32 = sum32()
+    if x == 99u32 { if t == 100u32 { return 99u64 } }
+    return 1u64
+}

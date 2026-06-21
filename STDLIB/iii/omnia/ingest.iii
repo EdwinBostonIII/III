@@ -49,7 +49,6 @@ fn ingest_extract() -> u32 @export {
     return ING_N
 }
 
-fn ingest_count() -> u32 @export { return ING_N }
 fn ingest_a(i: u32) -> u32 @export { if i < ING_N { return ING_A[i] }  return ING_NULL }
 fn ingest_b(i: u32) -> u32 @export { if i < ING_N { return ING_B[i] }  return ING_NULL }
 

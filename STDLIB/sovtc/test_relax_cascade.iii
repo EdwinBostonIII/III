@@ -1,0 +1,30 @@
+/* test_relax_cascade.iii  --  the RELAXATION FIXPOINT cascade (gas-exact).  `je Aend` is borderline: it FITS
+ * REL8 while `jmp Bfar` is REL8, but jmp Bfar's target is >127 away so it grows REL8->REL32 (+3), which shifts
+ * Aend 3 bytes farther -> je's disp crosses 127 -> je must ALSO grow.  Only a fixpoint that re-checks after
+ * each grow round resolves this; a single pass would leave je as REL8 (wrong).  gas-exact final bytes:
+ *   A: je Aend  @0   = 0f 84 81 00 00 00   (disp32 = 0x81 = 129)
+ *   B: jmp Bfar @130 = e9 82 00 00 00       (disp32 = 0x82 = 130)
+ * exit 99 = both branches grew + correct disp + len 266 (== gas resolves the cascade identically).
+ */
+module sovtc_test_relax_cascade
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+
+var GA : [u8; 6] = [ 0x0Fu8,0x84u8,0x81u8,0x00u8,0x00u8,0x00u8 ]
+var GB : [u8; 5] = [ 0xE9u8,0x82u8,0x00u8,0x00u8,0x00u8 ]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\nmain:\n  je Aend\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  subq $0, %rax\n  jmp Bfar\nAend:\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\nBfar:\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 10u64 }
+    if sov_len() != 266u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 6u32 { if sov_at(i) != (GA[i as u64] as u32) { return (20u64 + (i as u64)) }  i = i + 1u32 }       /* A: je Aend @0 */
+    i = 0u32
+    while i < 5u32 { if sov_at(130u32 + i) != (GB[i as u64] as u32) { return (40u64 + (i as u64)) }  i = i + 1u32 }  /* B: jmp Bfar @130 */
+    return 99u64
+}

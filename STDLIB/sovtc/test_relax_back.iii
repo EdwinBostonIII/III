@@ -1,0 +1,44 @@
+/* test_relax_back.iii  --  BACKWARD REL32 branch relaxation, all condition codes (gas-exact).
+ * L0 + 130-byte filler (13x movabsq $0) + jmp/je/jne/jl/jg L0 -- each target is >127 bytes BACK, so each
+ * relaxes REL8->REL32 with a NEGATIVE disp32.  Must reproduce gas exactly:
+ *   jmp L0 @130 = e9 79 ff ff ff       je L0 @135 = 0f 84 73 ff ff ff   jne L0 @141 = 0f 85 6d ff ff ff
+ *   jl  L0 @147 = 0f 8c 67 ff ff ff     jg L0 @153 = 0f 8f 61 ff ff ff
+ * exit 99 = filler (movabsq pattern) + all 5 backward REL32 branches byte-exact + len 159.
+ */
+module sovtc_test_relax_back
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 29] = [
+  0xE9u8,0x79u8,0xFFu8,0xFFu8,0xFFu8,
+  0x0Fu8,0x84u8,0x73u8,0xFFu8,0xFFu8,0xFFu8,
+  0x0Fu8,0x85u8,0x6Du8,0xFFu8,0xFFu8,0xFFu8,
+  0x0Fu8,0x8Cu8,0x67u8,0xFFu8,0xFFu8,0xFFu8,
+  0x0Fu8,0x8Fu8,0x61u8,0xFFu8,0xFFu8,0xFFu8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\nL0:\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  movabsq $0, %rax\n  jmp L0\n  je L0\n  jne L0\n  jl L0\n  jg L0\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 10u64 }
+    if sov_len() != 159u32 { return 13u64 }
+    /* filler 0..129 is movabsq $0,%rax repeated (48 b8 00*8) */
+    let mut ph : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 130u32 {
+        let mut want : u32 = 0u32
+        if ph == 0u32 { want = 0x48u32 }
+        if ph == 1u32 { want = 0xB8u32 }
+        if sov_at(i) != want { return (14u64 + (i as u64)) }
+        ph = ph + 1u32  if ph == 10u32 { ph = 0u32 }
+        i = i + 1u32
+    }
+    /* backward REL32 branches @130..158 */
+    i = 0u32
+    while i < 29u32 { if sov_at(130u32 + i) != (GOLD[i as u64] as u32) { return (200u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

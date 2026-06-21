@@ -85,6 +85,7 @@ declare -A EXPECTED=(
     [1944_eidos_anchor_real]=99
     [1945_eidos_orchestrate_real]=99
     [1946_eidos_orchestrate_crosshost]=99
+    [1947_eidos_field_real]=99
     [1980_eidos_accessor_coverage]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42

@@ -1516,6 +1516,13 @@ MODULES=(
     # live consumers; a real III op invoking it (e.g. tp_*) is the open next rung.  Reshuffle is one bit per edge;
     # cross-host divergence by construction, untested (one crystal).  Proven (corpus 1945).  BSS-neutral; last.
     "eidos/orchestrate"
+    # eidos/field -- the unified spatial+temporal field (FR-1, DOCS III-EIDOS-ARCHITECTURE 3.3): ONE interface
+    # over the substrate, read as a SPATIAL gradient (WRAPS ripple_field rf_steepest) AND a TEMPORAL fold (WRAPS
+    # event_substrate evt_witness), with branch-retaining REWIND (WRAPS dome) -- the directive's "ripples and
+    # their inverse versions = one thing".  Encapsulates the three real organs; the substrate for the 3.4
+    # try-witness-rewind.  HONEST: unified READER; retire-by-attrition of the redundant ripple machinery is a
+    # separate carto-zero-consumer-proven step (never deletion on faith).  Proven (corpus 1947).  Last.
+    "eidos/field"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

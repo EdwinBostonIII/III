@@ -1,0 +1,62 @@
+/* 1947_eidos_field_real.iii  --  EIDOS the unified field: ONE interface, read SPATIALLY and TEMPORALLY, rewindable.
+ *
+ * eidos::field (FR-1) is the directive's "ripples and their inverse versions = ONE thing": one interface over the
+ * substrate, composing the three REAL organs -- a SPATIAL gradient (ripple_field), a TEMPORAL fold (event_substrate),
+ * and branch-retaining REWIND (dome).  This proves all three reads work behind the one interface.
+ *
+ *   code 11 SPATIAL : the gradient read (steepest / potential) is inconsistent or invalid
+ *   code 12 TEMPORAL: the temporal fold (witness over events) is zero or not deterministic, or the count is wrong
+ *   code 13 REWIND  : rewind did not return OK, or the abandoned span was not retained as provenance
+ * exit 99 = the one field reads spatially (where to grow) AND temporally (where it has been) AND rewinds with
+ *           provenance -- the unification, composing ripple_field + event_substrate + dome.
+ */
+module m1947
+
+extern @abi(c-msvc-x64) fn field_reset() -> i32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_add_node(prim: u8, hexad: u8) -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_add_edge(from_idx: u32, to_idx: u32) -> i32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_grow() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_grow_potential() -> i64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_potential(idx: u32) -> i64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_record(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_event_count() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_temporal_witness(upto: u32) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_mark() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_branch(participant: u64, kind: u64, value: u64, payload: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_rewind(bp: u32) -> i32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_branch_count() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_provenance() -> u32 from "field.iii"
+
+fn main() -> u64 {
+    field_reset()
+
+    /* ===== code 11: SPATIAL read -- the gradient (where to grow) ===== */
+    if field_add_node(0u8, 1u8) != 0u32 { return 11u64 }
+    if field_add_node(1u8, 2u8) != 1u32 { return 11u64 }
+    if field_add_node(2u8, 3u8) != 2u32 { return 11u64 }
+    field_add_edge(0u32, 1u32)
+    field_add_edge(1u32, 2u32)
+    let g : u32 = field_grow()                              /* the steepest node: where the system wants to grow */
+    if g >= 3u32 { return 11u64 }                           /* a valid node */
+    if field_grow_potential() != field_potential(g) { return 11u64 }   /* the gradient read is consistent */
+
+    /* ===== code 12: TEMPORAL read -- the fold (where it has been) ===== */
+    field_record(1u64, 7u64, 100u64, 0xAAu64)
+    field_record(2u64, 7u64, 200u64, 0xBBu64)
+    field_record(3u64, 7u64, 150u64, 0xCCu64)
+    if field_event_count() != 3u32 { return 12u64 }
+    let w1 : u64 = field_temporal_witness(3u32)
+    let w2 : u64 = field_temporal_witness(3u32)
+    if w1 != w2 { return 12u64 }                            /* the temporal fold is deterministic */
+    if w1 == 0u64 { return 12u64 }                          /* and real (a non-empty witness) */
+
+    /* ===== code 13: REWIND -- branch-retaining; the abandoned span is provenance ===== */
+    let bp : u32 = field_mark()                             /* a rewind point */
+    field_branch(1u64, 5u64, 10u64, 0x11u64)
+    field_branch(1u64, 5u64, 20u64, 0x22u64)
+    if field_branch_count() != (bp + 2u32) { return 13u64 } /* two events appended */
+    if field_rewind(bp) != 0i32 { return 13u64 }            /* rewind to the mark */
+    if field_provenance() == 0u32 { return 13u64 }          /* the abandoned span retained as provenance */
+
+    return 99u64
+}

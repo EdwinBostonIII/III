@@ -1,0 +1,69 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\field.iii
+ *
+ * III STDLIB - eidos::field  --  the unified spatial+temporal field (FR-1; DOCS III-EIDOS-ARCHITECTURE 3.3).
+ *
+ * The directive: "I'd like to see ripples and the new versions of them in the inverse modules to be ONE thing."
+ * eidos::field is the ONE interface over the substrate, readable BOTH ways -- a SPATIAL gradient (where the
+ * system wants to grow) AND a TEMPORAL fold (where it has been), with branch-retaining REWIND:
+ *   - SPATIAL read  : steepest-descent / node-potential          [WRAPS omnia/ripple_field rf_steepest]
+ *   - TEMPORAL read : the priority fold + witness over events    [WRAPS omnia/event_substrate evt_*]
+ *   - REWIND        : mark / rewind, abandoned span kept as PROVENANCE  [WRAPS omnia/dome dome_rewind]
+ *
+ * Encapsulation, not reimplementation: field authors no log -- it composes the three REAL substrate organs
+ * behind one interface, so a reader (eidos/compose's TRY+WITNESS+REWIND, the 3.4 algorithm) sees one field.
+ *
+ * HONEST: this is the unified READER/INTERFACE.  "ONE log" is the interface; near-term the three substrates keep
+ * their own storage (the leanness payoff -- retiring the redundant ripple machinery once proven a fold of
+ * eidos/ripple AND carto-zero-consumer -- is a separate, carefully-gated step, never deletion on faith).
+ *
+ * Ring R0.  K 1.00.  Composes ripple_field + event_substrate + dome.  NIH: libc-free.
+ */
+module eidos_field
+
+extern @abi(c-msvc-x64) fn rf_reset() -> i32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_add_node(prim: u8, hexad: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_add_edge(from_idx: u32, to_idx: u32) -> i32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_node_potential(idx: u32) -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_steepest() -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_steepest_potential() -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn dome_reset() -> i32 from "dome.iii"
+extern @abi(c-msvc-x64) fn dome_emit(participant: u64, kind: u64, value: u64, payload: u64) -> u64 from "dome.iii"
+extern @abi(c-msvc-x64) fn dome_mark() -> u32 from "dome.iii"
+extern @abi(c-msvc-x64) fn dome_rewind(bp: u32) -> i32 from "dome.iii"
+extern @abi(c-msvc-x64) fn dome_count() -> u32 from "dome.iii"
+extern @abi(c-msvc-x64) fn dome_provenance_count() -> u32 from "dome.iii"
+
+/* reset the ONE field (all three substrate views). */
+fn field_reset() -> i32 @export {
+    rf_reset()
+    evt_reset()
+    dome_reset()
+    return 0i32
+}
+
+/* --- SPATIAL read: the gradient -- where the system wants to grow --- */
+fn field_add_node(prim: u8, hexad: u8) -> u32 @export { return rf_add_node(prim, hexad) }
+fn field_add_edge(from_idx: u32, to_idx: u32) -> i32 @export { return rf_add_edge(from_idx, to_idx) }
+fn field_grow() -> u32 @export { return rf_steepest() }                 /* the steepest node: where to grow */
+fn field_grow_potential() -> i64 @export { return rf_steepest_potential() }
+fn field_potential(idx: u32) -> i64 @export { return rf_node_potential(idx) }
+
+/* --- TEMPORAL read: the fold -- where the system has been --- */
+fn field_record(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 @export {
+    return evt_perceive(observer, kind, priority, payload)
+}
+fn field_event_count() -> u32 @export { return evt_count() }
+fn field_temporal_witness(upto: u32) -> u64 @export { return evt_witness(upto) }   /* the temporal fold/witness */
+
+/* --- REWIND: branch-retaining; the abandoned span is kept as PROVENANCE --- */
+fn field_mark() -> u32 @export { return dome_mark() }                   /* a rewind point */
+fn field_branch(participant: u64, kind: u64, value: u64, payload: u64) -> u64 @export {
+    return dome_emit(participant, kind, value, payload)
+}
+fn field_rewind(bp: u32) -> i32 @export { return dome_rewind(bp) }      /* rewind, keeping the abandoned span */
+fn field_branch_count() -> u32 @export { return dome_count() }
+fn field_provenance() -> u32 @export { return dome_provenance_count() } /* the abandoned span, retained as provenance */

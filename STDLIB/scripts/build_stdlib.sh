@@ -1486,6 +1486,14 @@ MODULES=(
     # SAT-proven (bb_equal).  This is the Composer's COST-SELECTION half (NOT Bellman-Ford -- that is Task B).
     # Composes invent + bv_bits + cost_lattice.  Proven (corpus 1938).  BSS-neutral, compiler-unreferenced; last.
     "eidos/optgate"
+    # eidos/route -- EIDOS Phase 3 / Task B: the Composer as the REAL topology router.  The shortest-path half
+    # (eidos/compose Bellman-Ford) routes over aether/topology_atlas's REAL typed-edge graph, SUBSUMING +
+    # UPGRADING the atlas's prior dijkstra routing: returns the PATH (not just the distance), general-N (vs
+    # dijkstra's 5), u64, weighted cheaper-indirect, per-edge-kind.  Reads the real adjacency (topoa_neighbors)
+    # -> no island.  Honest: PLAN-OUTPUT over the real typed graph, NOT a multi-dim cost reshuffle (III has no
+    # live multi-dim-cost routing -- the probe).  Proven (corpus 1939).  Composes topology_atlas + compose +
+    # cost_lattice.  BSS-neutral, compiler-unreferenced -> LIBNATIVE; appended last.
+    "eidos/route"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

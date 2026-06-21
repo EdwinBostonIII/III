@@ -1,0 +1,101 @@
+/* 1939_eidos_route_real.iii  --  EIDOS Phase 3 / Task B: the Composer as the REAL topology router.
+ *
+ * The shortest-path half of the Composer (eidos::compose / Bellman-Ford) routing over aether::topology_atlas's
+ * REAL typed-edge graph (built here via topoa_register_region/topoa_add_edge), proving it SUBSUMES + UPGRADES
+ * the atlas's prior dijkstra routing:
+ *   - PLAN-OUTPUT: it returns the ACTUAL PATH (the route), not just the distance dijkstra/BFS report.
+ *   - SUBSUMES BFS: on unit weights the route's hop count == topoa_distance (the atlas's own hop-count answer).
+ *   - CHEAPER-INDIRECT: on weighted links it takes the cheaper detour over a costlier direct edge -- WITH the
+ *     path (dijkstra showed only the cheaper distance).
+ *   - GENERAL N: routes an 8-region atlas (dijkstra was capped at 5).
+ *   - PER-EDGE-KIND: routing the NUMA subgraph vs the POWER subgraph gives DIFFERENT real routes (the real
+ *     typed structure -- not a fabricated multi-dim cost; III has no live multi-dim-cost routing, the probe).
+ *
+ * Topology (slots 0-7, compact):  NUMA: 0-1 1-2 2-3 (line), 0-4 0-5 5-4 (detour);  POWER: 0-6 6-3;  7: isolated.
+ *
+ *   code 10 SETUP    : a region/edge failed to register, or slots are not compact 0..7
+ *   code 11 PLANOUT  : NUMA route 0->3 is not the path [0,1,2,3] at hop 3 == topoa_distance (plan-output/subsume)
+ *   code 12 UNREACH  : routing to the isolated region 7 did not yield the empty route
+ *   code 13 INDIRECT : with the direct 0-4 edge weighted 10, the router did not take the cheaper detour [0,5,4]=2
+ *   code 14 PERKIND  : the POWER route 0->3 is not [0,6,3] hop 2, or did not differ from the NUMA route
+ * exit 99 = the Composer routes the real typed topology with PLAN-OUTPUT (the path), subsuming BFS + dijkstra's
+ *           cheaper-indirect, general-N, per-edge-kind -- the shortest-path half wired to real III structure.
+ */
+module m1939
+
+extern @abi(c-msvc-x64) fn topoa_init() -> i32 from "topology_atlas.iii"
+extern @abi(c-msvc-x64) fn topoa_register_region(region_id: *u8, kind: u8) -> u32 from "topology_atlas.iii"
+extern @abi(c-msvc-x64) fn topoa_add_edge(a: u32, b: u32, edge_kind: u8) -> i32 from "topology_atlas.iii"
+extern @abi(c-msvc-x64) fn topoa_distance(a: u32, b: u32, edge_kind: u8) -> u32 from "topology_atlas.iii"
+extern @abi(c-msvc-x64) fn route_reset(node_count: u32) -> i32 from "route.iii"
+extern @abi(c-msvc-x64) fn route_set_weight(fr: u32, to: u32, w: u64) -> i32 from "route.iii"
+extern @abi(c-msvc-x64) fn route_build(edge_kind: u8) -> i32 from "route.iii"
+extern @abi(c-msvc-x64) fn route_path(src: u32, dst: u32) -> u32 from "route.iii"
+extern @abi(c-msvc-x64) fn route_cost() -> u64 from "route.iii"
+extern @abi(c-msvc-x64) fn route_path_node(i: u32) -> u32 from "route.iii"
+
+var IDS : [u8; 256]                       /* 8 region ids * 32 bytes */
+
+fn main() -> u64 {
+    topoa_init()
+
+    /* register 8 regions -> compact slots 0..7 */
+    let mut i : u32 = 0u32
+    while i < 256u32 { IDS[i as u64] = 0u8  i = i + 1u32 }
+    i = 0u32
+    while i < 8u32 {
+        IDS[(i * 32u32) as u64] = (i + 1u32) as u8                          /* distinct nonzero first byte */
+        let slot : u32 = topoa_register_region(((&IDS as u64) + ((i as u64) * 32u64)) as *u8, 0u8)
+        if slot != i { return 10u64 }                                      /* compact slots */
+        i = i + 1u32
+    }
+
+    /* NUMA edges (kind 1): the line + the detour */
+    if topoa_add_edge(0u32, 1u32, 1u8) != 0i32 { return 10u64 }
+    if topoa_add_edge(1u32, 2u32, 1u8) != 0i32 { return 10u64 }
+    if topoa_add_edge(2u32, 3u32, 1u8) != 0i32 { return 10u64 }
+    if topoa_add_edge(0u32, 4u32, 1u8) != 0i32 { return 10u64 }
+    if topoa_add_edge(0u32, 5u32, 1u8) != 0i32 { return 10u64 }
+    if topoa_add_edge(5u32, 4u32, 1u8) != 0i32 { return 10u64 }
+    /* POWER edges (kind 5): a different 0->3 path */
+    if topoa_add_edge(0u32, 6u32, 5u8) != 0i32 { return 10u64 }
+    if topoa_add_edge(6u32, 3u32, 5u8) != 0i32 { return 10u64 }
+
+    /* ===== code 11: PLAN-OUTPUT + subsume BFS -- NUMA route 0->3 = path [0,1,2,3], hop 3 == topoa_distance ===== */
+    route_reset(8u32)
+    route_build(1u8)
+    let h1 : u32 = route_path(0u32, 3u32)
+    if h1 != 3u32 { return 11u64 }
+    if route_path_node(0u32) != 0u32 { return 11u64 }
+    if route_path_node(1u32) != 1u32 { return 11u64 }
+    if route_path_node(2u32) != 2u32 { return 11u64 }
+    if route_path_node(3u32) != 3u32 { return 11u64 }
+    if topoa_distance(0u32, 3u32, 1u8) != 3u32 { return 11u64 }             /* subsumes the atlas's BFS hop-count */
+
+    /* ===== code 12: UNREACHABLE -- region 7 is isolated under NUMA ===== */
+    if route_path(0u32, 7u32) != 0u32 { return 12u64 }
+
+    /* ===== code 13: CHEAPER-INDIRECT (weighted) + the path -- direct 0-4 weighted 10, detour [0,5,4]=2 ===== */
+    route_reset(8u32)
+    route_set_weight(0u32, 4u32, 10u64)
+    route_build(1u8)
+    let h2 : u32 = route_path(0u32, 4u32)
+    if h2 != 2u32 { return 13u64 }                                         /* the 2-hop detour, not the 1-hop direct */
+    if route_path_node(0u32) != 0u32 { return 13u64 }
+    if route_path_node(1u32) != 5u32 { return 13u64 }
+    if route_path_node(2u32) != 4u32 { return 13u64 }
+    if route_cost() != 2u64 { return 13u64 }                               /* cost 2 (detour), not 10 (direct) */
+
+    /* ===== code 14: PER-EDGE-KIND -- POWER route 0->3 = [0,6,3] hop 2, DIFFERENT from the NUMA route ===== */
+    route_reset(8u32)
+    route_build(5u8)
+    let h4 : u32 = route_path(0u32, 3u32)
+    if h4 != 2u32 { return 14u64 }
+    if route_path_node(0u32) != 0u32 { return 14u64 }
+    if route_path_node(1u32) != 6u32 { return 14u64 }
+    if route_path_node(2u32) != 3u32 { return 14u64 }
+    if topoa_distance(0u32, 3u32, 5u8) != 2u32 { return 14u64 }            /* subsumes BFS under POWER too */
+    if h4 == h1 { return 14u64 }                                          /* different kind -> different real route */
+
+    return 99u64
+}

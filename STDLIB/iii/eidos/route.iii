@@ -1,0 +1,119 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\route.iii
+ *
+ * III STDLIB - eidos::route  --  EIDOS Phase 3 / Task B: the Composer as the REAL topology router.
+ *
+ * The shortest-path half of the Composer (eidos::compose / Bellman-Ford), wired to route over aether::
+ * topology_atlas's REAL typed-edge graph.  It SUBSUMES + UPGRADES the atlas's existing routing:
+ *   - dijkstra (the atlas's prior routing) returns DISTANCES only (dij_dist) and is capped at N=5, u32.
+ *   - eidos::route returns the ACTUAL PATH (the route -- what routing actually needs to move data), to
+ *     64 nodes (12x dijkstra's 5; loud-capped, no silent mis-route), u64 weights, any edge kind.
+ * INPUT-CONSUMER, OUTPUT-ISLAND (intended, like eidos/weave + eidos/optgate): route_build READS the atlas's
+ * real adjacency (topoa_neighbors) -- no INPUT island; but nothing in III yet CALLS route_path, so it is an
+ * OUTPUT island -- a capability for manual wiring, not yet a live-consumed routing path.
+ *
+ * HONEST SCOPE (the probe found it, the user chose it): III today has NO live multi-dimensional-cost routing
+ * substrate -- topology_atlas stores typed edges + hop-count + a single u32 weight (the atlas's own dijkstra
+ * KAT hardcodes those weights).  So this is PLAN-OUTPUT routing over the real typed graph -- NOT a multi-dim
+ * "modeless cost reshuffle" (no real multi-dim cost exists to reshuffle).  What it genuinely delivers: the
+ * route (not just the distance), general N, u64, weighted cheaper-indirect, and PER-EDGE-KIND generality
+ * (route within the NUMA subgraph vs the POWER subgraph -> different real routes, the real typed structure).
+ *
+ * Ring R0.  K 1.00.  Composes topology_atlas + eidos/compose + cost_lattice.  NIH: libc-free.
+ */
+module eidos_route
+
+extern @abi(c-msvc-x64) fn topoa_neighbors(a: u32, edge_kind: u8, out: *u32, out_n: *u32, out_cap: u32) -> i32 from "topology_atlas.iii"
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_len() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_dot(order_slot: u32) -> u64 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 from "cost_lattice.iii"
+
+const WR_MAXN  : u32 = 64u32
+const WR_MAXQ  : u32 = 128u32
+const WR_MAXOV : u32 = 32u32
+
+var WR_N    : u32 = 0u32                  /* node count (topology slots 0..N-1) */
+var WR_ORD  : u32 = 0u32                  /* the hop/weight order (dominate dim 0) */
+var WR_SRC  : u32 = 0u32                  /* last route's source (for path reconstruction) */
+var WR_ETO  : [u32; 128]                  /* per compose-quantum: its to-node (for path reconstruction) */
+var WR_NBUF : [u32; 64]                   /* topoa_neighbors output scratch */
+var WR_NN   : [u32; 1]
+var WR_W    : [u64; 6]
+var WR_ROW  : [u64; 6]
+var WR_SLOT : [u32; 1]
+var WR_OV_F : [u32; 32]                   /* weight-override: from */
+var WR_OV_T : [u32; 32]                   /* weight-override: to */
+var WR_OV_W : [u64; 32]                   /* weight-override: weight */
+var WR_OV_N : u32 = 0u32
+
+fn route_reset(node_count: u32) -> i32 @export {
+    if node_count > WR_MAXN { return -1i32 }   /* LOUD cap: compose routes <= 64 nodes -- fail, never silently mis-route */
+    cmp_reset()                            /* clears cmp registry + cl_init (seeds 0-3, clears 4+) */
+    WR_W[0u64] = 1u64  WR_W[1u64] = 0u64  WR_W[2u64] = 0u64  WR_W[3u64] = 0u64  WR_W[4u64] = 0u64  WR_W[5u64] = 0u64
+    cl_register_order(&WR_W as *u64, &WR_SLOT as *u32)    /* the routing order: edge cost == dim0 (hop or weight) */
+    WR_ORD = WR_SLOT[0u64]
+    WR_N = node_count
+    WR_OV_N = 0u32
+    return 0i32
+}
+
+/* override the weight of an edge (default 1) -- symmetric (undirected).  Set BEFORE route_build. */
+fn route_set_weight(fr: u32, to: u32, w: u64) -> i32 @export {
+    if WR_OV_N >= WR_MAXOV { return -1i32 }
+    let n : u32 = WR_OV_N
+    WR_OV_F[n as u64] = fr  WR_OV_T[n as u64] = to  WR_OV_W[n as u64] = w
+    WR_OV_N = n + 1u32
+    return 0i32
+}
+
+fn route_weight_of(fr: u32, to: u32) -> u64 {
+    let mut i : u32 = 0u32
+    while i < WR_OV_N {
+        if WR_OV_F[i as u64] == fr { if WR_OV_T[i as u64] == to { return WR_OV_W[i as u64] } }
+        if WR_OV_F[i as u64] == to { if WR_OV_T[i as u64] == fr { return WR_OV_W[i as u64] } }
+        i = i + 1u32
+    }
+    return 1u64
+}
+
+/* fold the atlas's REAL adjacency (under edge_kind) into compose quanta -- reads topoa_neighbors. */
+fn route_build(edge_kind: u8) -> i32 @export {
+    let mut u : u32 = 0u32
+    while u < WR_N {
+        topoa_neighbors(u, edge_kind, &WR_NBUF as *u32, &WR_NN as *u32, WR_MAXN)
+        let nn : u32 = WR_NN[0u64]
+        let mut j : u32 = 0u32
+        while j < nn {
+            let v : u32 = WR_NBUF[j as u64]
+            if v < WR_N {
+                let w : u64 = route_weight_of(u, v)
+                WR_ROW[0u64] = w  WR_ROW[1u64] = 0u64  WR_ROW[2u64] = 0u64  WR_ROW[3u64] = 0u64  WR_ROW[4u64] = 0u64  WR_ROW[5u64] = 0u64
+                let qid : i32 = cmp_register(u, v, &WR_ROW as *u64)
+                if qid >= 0i32 { WR_ETO[(qid as u32) as u64] = v }
+            }
+            j = j + 1u32
+        }
+        u = u + 1u32
+    }
+    return 0i32
+}
+
+/* route src->dst; returns the number of hops (edges), 0 if unreachable.  The PATH is exposed via
+ * route_path_node -- the upgrade over distance-only routing. */
+fn route_path(src: u32, dst: u32) -> u32 @export {
+    WR_SRC = src
+    return cmp_plan(src, dst, WR_ORD)
+}
+
+fn route_hops() -> u32 @export { return cmp_plan_len() }
+fn route_cost() -> u64 @export { return cmp_plan_dot(WR_ORD) }
+
+/* the i-th NODE (topology slot) on the route: node 0 = src, node i = the i-th edge's destination. */
+fn route_path_node(i: u32) -> u32 @export {
+    if i == 0u32 { return WR_SRC }
+    let e : u32 = cmp_plan_at(i - 1u32)
+    return WR_ETO[e as u64]
+}

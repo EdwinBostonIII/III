@@ -77,6 +77,7 @@ declare -A EXPECTED=(
     [1936_eidos_weave_real]=99
     [1937_eidos_weave_subadditive]=99
     [1938_eidos_optgate_real]=99
+    [1939_eidos_route_real]=99
     [1980_eidos_accessor_coverage]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42

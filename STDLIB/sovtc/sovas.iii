@@ -284,23 +284,40 @@ fn sov_movl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x89u32, dst, sr
 /* movl disp(%rbp),%reg (load, 8B) and movl %reg,disp(%rbp) (store, 89) -- 32-bit, NO REX.W (REX only for
  * r8d-r15d).  rbp (rm=101) always carries a disp: mod 01 disp8 if it fits a signed byte, else mod 10 disp32.
  * This is cg_r3's u32 stack-local access -- by far the most common form the differential sweep was missing. */
-fn sov_movl_load_rbp(reg: u32, disp: i32) -> i32 @export {
-    if reg >= 8u32 { sov_rex(0u32, 1u32, 0u32, 0u32) }
-    sov_emit(0x8Bu32)
-    let mut f8 : u32 = 0u32
-    if disp >= -128i32 { if disp <= 127i32 { f8 = 1u32 } }
-    if f8 == 1u32 { sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32) }
-    else { sov_modrm(2u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32) }
-    return 0i32
+/* GENERAL disp(%base) modrm+disp -- the shared mem-operand encoder.  Threads ANY base (cg_r3 emits %rbp for
+ * stack locals, %rax for pointer derefs, ...).  mod: 00 (disp0, base!=rbp/r13) | 01 (disp8) | 10 (disp32);
+ * rbp/r13 always need >= disp8; rsp/r12 (rm=100) require a no-index SIB byte.  CALLER emits REX + opcode. */
+fn sov_membase_modrm(reg: u32, base: u32, disp: i32) {
+    let b3 : u32 = base & 7u32
+    let mut m : u32 = 2u32
+    if disp == 0i32 { if b3 == 5u32 { m = 1u32 } else { m = 0u32 } }
+    else { if disp >= -128i32 { if disp <= 127i32 { m = 1u32 } } }
+    if b3 == 4u32 { sov_modrm(m, reg, 4u32)  sov_sib(0u32, 4u32, base) }
+    else { sov_modrm(m, reg, base) }
+    if m == 1u32 { sov_emit((disp as u32) & 0xFFu32) }
+    if m == 2u32 { sov_imm((disp as u32) as u64, 4u32) }
 }
-fn sov_movl_store_rbp(reg: u32, disp: i32) -> i32 @export {
-    if reg >= 8u32 { sov_rex(0u32, 1u32, 0u32, 0u32) }
-    sov_emit(0x89u32)
-    let mut f8 : u32 = 0u32
-    if disp >= -128i32 { if disp <= 127i32 { f8 = 1u32 } }
-    if f8 == 1u32 { sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32) }
-    else { sov_modrm(2u32, reg, 5u32)  sov_imm((disp as u32) as u64, 4u32) }
-    return 0i32
+/* movl disp(%base) load/store -- 32-bit (no REX.W); REX only if reg or base is r8..r15.  Threads the ACTUAL
+ * base (was hardcoded rbp -> every pointer-deref movl mis-encoded as movl disp(%rbp); the byte-gate caught it). */
+fn sov_movl_load_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    let mut r : u32 = 0u32  if reg  >= 8u32 { r = 1u32 }
+    let mut b : u32 = 0u32  if base >= 8u32 { b = 1u32 }
+    if (r | b) != 0u32 { sov_rex(0u32, r, 0u32, b) }
+    sov_emit(0x8Bu32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
+fn sov_movl_store_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    let mut r : u32 = 0u32  if reg  >= 8u32 { r = 1u32 }
+    let mut b : u32 = 0u32  if base >= 8u32 { b = 1u32 }
+    if (r | b) != 0u32 { sov_rex(0u32, r, 0u32, b) }
+    sov_emit(0x89u32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
+/* sign/zero-extend FROM MEMORY disp(%base): movzbq/movzwq/movsbq/movswq = REX.W 0F op2 /r ; movslq = REX.W 63 /r.
+ * cg_r3's "extend a u8/u16/u32 in memory to u64" -- was routed to the reg-reg encoder (the movslq %ebp bug). */
+fn sov_movzx_mem(dst: u32, base: u32, disp: i32, op2: u32) -> i32 @export {
+    sov_rexwb(dst, base)  sov_emit(0x0Fu32)  sov_emit(op2)  sov_membase_modrm(dst, base, disp)  return 0i32
+}
+fn sov_movslq_mem(dst: u32, base: u32, disp: i32) -> i32 @export {
+    sov_rexwb(dst, base)  sov_emit(0x63u32)  sov_membase_modrm(dst, base, disp)  return 0i32
 }
 fn sov_xorl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x31u32, dst, src)  return 0i32 }
 /* sign-extend byte/word → quad : REX.W 0F BE/BF /r */

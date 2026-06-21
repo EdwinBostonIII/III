@@ -518,6 +518,31 @@ fn sp_emit_bytes() {
         if sp_ch() == C_COM { sp_adv()  sp_skip_ws() } else { go = 0u32 }
     }
 }
+/* emit a .ascii/.asciz string's raw bytes into the current data section; return the byte count.  Handles the
+ * common backslash escapes (\0 \n \t \r) + \\ \" .  addnull=1 appends a NUL terminator (.asciz). */
+fn sp_emit_string(addnull: u32) -> u32 {
+    let mut cnt : u32 = 0u32
+    sp_skip_ws()
+    if sp_ch() == 34u32 { sp_adv() }                 /* opening quote */
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let c : u32 = sp_ch()
+        if c == 34u32 { sp_adv()  go = 0u32 }          /* closing quote */
+        else { if c == 0u32 { go = 0u32 }              /* end of buffer (safety) */
+        else { if c == 92u32 {                          /* backslash escape */
+            sp_adv()  let ee : u32 = sp_ch()  sp_adv()
+            let mut bb : u32 = ee
+            if ee == 48u32 { bb = 0u32 }                /* \0 */
+            if ee == 110u32 { bb = 10u32 }              /* \n */
+            if ee == 116u32 { bb = 9u32 }               /* \t */
+            if ee == 114u32 { bb = 13u32 }              /* \r */
+            sov_data_emit(CUR_SEC, bb)  cnt = cnt + 1u32
+        }
+        else { sov_data_emit(CUR_SEC, c)  cnt = cnt + 1u32  sp_adv() } } }
+    }
+    if addnull == 1u32 { sov_data_emit(CUR_SEC, 0u32)  cnt = cnt + 1u32 }
+    return cnt
+}
 fn sp_dir1() {
     sp_read_dir()
     if mn_is(115u32,101u32,99u32,116u32,7u32) == 1u32 {        /* section <name> */
@@ -559,6 +584,13 @@ fn sp_dir1() {
                 if CUR_SEC == 3u32 { sov_bss_add(zn) }
                 else { let mut zk : u32 = 0u32  while zk < zn { sov_data_emit(CUR_SEC, 0u32)  zk = zk + 1u32 } }
             }
+        }
+        if mn_is(97u32,115u32,99u32,105u32,5u32) == 1u32 {         /* .ascii (MN[4]='i') or .asciz (MN[4]='z') */
+            if SP_PASS == 0u32 { if CUR_SEC < 3u32 {
+                let mut an : u32 = 0u32
+                if MN[4u64] == 122u32 { an = 1u32 }
+                SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + sp_emit_string(an)
+            } }
         }
     }
     /* NOTE: .ascii/.asciz raw bytes not yet emitted -> a tracked-section string would under-size the section.

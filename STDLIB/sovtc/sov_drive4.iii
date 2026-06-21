@@ -1,0 +1,19 @@
+/* sov_drive4.iii  --  the .rodata COFF driver.  Assembles the REAL cg_r3 output for a main using a string
+ * literal (`let s = "c"; return 99`) -> a .text+.rodata .o with `.ascii "c\0"` data and a leaq REL32 -> .rodata
+ * reloc.  Gates the .rodata section emission + .ascii byte emission + the .rodata-section-symbol reloc index.
+ * Exit 0 = emitted.
+ */
+module sovtc_drive4
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .rodata\nL_str_0:\n  .ascii \"c\\0\"\n  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  leaq L_str_0(%rip), %rax\n  pushq %rax\n  popq %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -8(%rbp)\n  movabsq $0x63, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovcoff_emit()
+    return 0u64
+}

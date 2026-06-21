@@ -42,6 +42,7 @@ extern @abi(c-msvc-x64) fn sov_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32
 extern @abi(c-msvc-x64) fn sov_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_lea_rip_local(reg: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_rdrand(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_rdseed(reg: u32) -> i32 from "sovas.iii"
@@ -323,6 +324,7 @@ fn sp_operand() {
                 OPSEC = SYM_SEC[i as u64]  OPOFF = SYM_OFF[i as u64] as i32  i = SYM_N
             } else { i = i + 1u32 }
         }
+        if OPSEC == SEC_TEXT { let lo : u32 = lbl_find(SYM_N, nlen)  if lo != 0xFFFFFFFFu32 { OPOFF = lo as i32 } }   /* .text label: real offset from LBL table (SYM_OFF is a 0 placeholder) */
         if sp_ch() == C_LP { sp_adv()  if sp_ch() == C_PCT { sp_adv() }  sp_reg()  if sp_ch() == C_RP { sp_adv() } }
         return
     }
@@ -490,7 +492,10 @@ fn sp_dispatch_instr() {
     }
     if mn_is(108u32,101u32,97u32,113u32,4u32) == 1u32 {                                              /* leaq */
         sp_two_ops()
-        if S1K == 3u32 { sov_lea_rip_sym(OPR, S1SEC, S1OFF)  return }   /* leaq sym(%rip), %reg */
+        if S1K == 3u32 {
+            if S1SEC == SEC_TEXT { sov_lea_rip_local(OPR, S1OFF)  return }   /* same-section .text label: resolve inline, no reloc */
+            sov_lea_rip_sym(OPR, S1SEC, S1OFF)  return                       /* data symbol (.data/.rodata/.bss): rip-rel + reloc */
+        }
         if S1K == 2u32 { sov_lea_base(OPR, S1R, S1D)  return }          /* leaq disp(%base), %reg */
         if S1K == 4u32 { sov_lea_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return }   /* leaq (b,i,s), %reg */
         PARSE_ERR = 1u32  return

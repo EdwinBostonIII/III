@@ -439,6 +439,16 @@ fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {    /* leaq sym
 fn sov_lea_base(reg: u32, base: u32, disp: i32) -> i32 @export {
     sov_rexwb(reg, base)  sov_emit(0x8Du32)  sov_membase_modrm(reg, base, disp)  return 0i32
 }
+/* leaq same-section .text-label(%rip), %reg : resolve the rip-displacement INLINE (no reloc), exactly as gas
+ * does -- disp = label_off - rip, rip = (current pos + 4) after the `48 8d 05` prefix.  Before, a same-section
+ * label deferred to a rsec==0 reloc that sovld's import-thunk path mis-patched -> the self-host fixpoint crash
+ * AND the byte-vs-gas "4 DIFFERS".  Resolving inline closes both. */
+fn sov_lea_rip_local(reg: u32, off: i32) -> i32 @export {
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Du32)  sov_modrm(0u32, reg, 5u32)
+    let disp : i32 = off - ((sov_len() as i32) + 4i32)
+    sov_imm((disp as u32) as u64, 4u32)  return 0i32
+}
 /* movl sym(%rip), %reg : 8B (no REX.W) -- the 32-bit RIP-relative symbol LOAD, RESTORED now that the parser
  * routes it.  THE self-hosting keystone: cg_r3 emits this for u32 globals, and the parallel gas-verified
  * diagnosis found ALL 8 compiler form-blockers (cg_r3_xii/cg_typeclass/jit_emit/main/...) are this one form.

@@ -532,3 +532,17 @@ fn sov_movw_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {
 }
 /* cqto : sign-extend %rax -> %rdx:%rax (before idivq) : REX.W 99 = 48 99, no operands */
 fn sov_cqto() -> i32 @export { sov_rex(1u32, 0u32, 0u32, 0u32)  sov_emit(0x99u32)  return 0i32 }
+/* leaq (%base,%index,scale), %reg : REX.W 8D + SIB, no reloc -- the SIB form B1 didn't cover (array addr math) */
+fn sov_lea_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_rex_sib(reg, index, base)  sov_emit(0x8Du32)  sov_sib_modrm_disp(reg, base, index, scale, disp)  return 0i32
+}
+/* rdrand %reg : REX.W 0F C7 /6 (hardware RNG) */
+fn sov_rdrand(reg: u32) -> i32 @export {
+    let mut b : u32 = 0u32  if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0x0Fu32)  sov_emit(0xC7u32)  sov_modrm(3u32, 6u32, reg)  return 0i32
+}
+/* rdseed %reg : REX.W 0F C7 /7 (hardware entropy seed; rdrand is /6) */
+fn sov_rdseed(reg: u32) -> i32 @export {
+    let mut b : u32 = 0u32  if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0x0Fu32)  sov_emit(0xC7u32)  sov_modrm(3u32, 7u32, reg)  return 0i32
+}

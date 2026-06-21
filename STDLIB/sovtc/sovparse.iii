@@ -42,6 +42,9 @@ extern @abi(c-msvc-x64) fn sov_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32
 extern @abi(c-msvc-x64) fn sov_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_lea_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_rdrand(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_rdseed(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_clear() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_push(ch: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_ext() -> i32 from "sovas.iii"
@@ -123,6 +126,8 @@ const C_z  : u32 = 122u32
 var IN_PTR : u64 = 0u64
 var IN_LEN : u32 = 0u32
 var IN_POS : u32 = 0u32
+var CUR_OFF : u32 = 0u32   /* DIAGNOSTIC: byte offset of the last line start parsed before PARSE_ERR fired */
+fn sov_err_pos() -> u32 @export { return CUR_OFF }
 
 const C_US : u32 = 95u32   /* _ */
 const C_AU : u32 = 65u32   /* A */
@@ -469,6 +474,8 @@ fn sp_dispatch_instr() {
     if mn_is(112u32,111u32,112u32,113u32,4u32) == 1u32 { sp_operand()  sov_pop_r(OPR)  return }    /* popq */
     if mn_is(114u32,101u32,116u32,113u32,4u32) == 1u32 { sov_ret()  return }                       /* retq */
     if mn_is(99u32,113u32,116u32,111u32,4u32) == 1u32 { sov_cqto()  return }                        /* cqto (48 99) */
+    if mn_is(114u32,100u32,114u32,97u32,6u32) == 1u32 { sp_operand()  sov_rdrand(OPR)  return }      /* rdrand %reg */
+    if mn_is(114u32,100u32,115u32,101u32,6u32) == 1u32 { sp_operand()  sov_rdseed(OPR)  return }     /* rdseed %reg */
     if mn_is(109u32,111u32,118u32,113u32,4u32) == 1u32 {                                            /* movq */
         sp_two_ops()
         if S1K == 0u32 { if OPK == 0u32 { sov_mov_rr(OPR, S1R) } }
@@ -485,6 +492,7 @@ fn sp_dispatch_instr() {
         sp_two_ops()
         if S1K == 3u32 { sov_lea_rip_sym(OPR, S1SEC, S1OFF)  return }   /* leaq sym(%rip), %reg */
         if S1K == 2u32 { sov_lea_base(OPR, S1R, S1D)  return }          /* leaq disp(%base), %reg */
+        if S1K == 4u32 { sov_lea_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return }   /* leaq (b,i,s), %reg */
         PARSE_ERR = 1u32  return
     }
     if mn_is(109u32,111u32,118u32,97u32,7u32) == 1u32 { sp_two_ops()  sov_movabs(OPR, S1I as u64)  return }         /* movabsq */
@@ -545,6 +553,7 @@ fn sp_dispatch_instr() {
     if mn_is(115u32,101u32,116u32,97u32,4u32) == 1u32 { sp_operand()  sov_setcc(7u32, OPR)  return }     /* seta */
     if mn_is(115u32,101u32,116u32,97u32,5u32) == 1u32 { sp_operand()  sov_setcc(3u32, OPR)  return }     /* setae */
     if mn_is(115u32,101u32,116u32,98u32,4u32) == 1u32 { sp_operand()  sov_setcc(2u32, OPR)  return }     /* setb */
+    if mn_is(115u32,101u32,116u32,99u32,4u32) == 1u32 { sp_operand()  sov_setcc(2u32, OPR)  return }     /* setc (= setb, CF) */
     if mn_is(115u32,101u32,116u32,98u32,5u32) == 1u32 { sp_operand()  sov_setcc(6u32, OPR)  return }     /* setbe */
     if mn_is(115u32,101u32,116u32,101u32,4u32) == 1u32 { sp_operand()  sov_setcc(4u32, OPR)  return }    /* sete */
     if mn_is(115u32,101u32,116u32,110u32,5u32) == 1u32 { sp_operand()  sov_setcc(5u32, OPR)  return }    /* setne */
@@ -629,6 +638,7 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
     CUR_SEC = SEC_OTHER
     IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32
     while IN_POS < IN_LEN {
+        if PARSE_ERR == 0u32 { CUR_OFF = IN_POS }   /* DIAGNOSTIC: last line-start parsed before the error */
         sp_skip_ws()
         let c : u32 = sp_ch()
         if c == C_NL { sp_adv() }

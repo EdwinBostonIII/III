@@ -36,6 +36,7 @@ extern @abi(c-msvc-x64) fn desc_capability(i: u32) -> u32 from "descriptor.iii"
 extern @abi(c-msvc-x64) fn desc_build_order() -> i32 from "descriptor.iii"
 extern @abi(c-msvc-x64) fn desc_plan(start: u32, target: u32) -> u32 from "descriptor.iii"
 extern @abi(c-msvc-x64) fn desc_plan_node(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan_len() -> u32 from "descriptor.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 
 var DBUF : [u8; 32]
@@ -74,6 +75,7 @@ fn main() -> u64 {
     desc_build_order()
     let h : u32 = desc_plan(0u32, 3u32)
     if h != 2u32 { return 13u64 }                                        /* [0,2,3] via the shortcut, not [0,1,2,3] */
+    if desc_plan_len() != h { return 19u64 }                             /* desc_plan_len reflects the real 2-hop plan */
     if desc_plan_node(0u32) != 0u32 { return 13u64 }
     if desc_plan_node(1u32) != 2u32 { return 13u64 }
     if desc_plan_node(2u32) != 3u32 { return 13u64 }

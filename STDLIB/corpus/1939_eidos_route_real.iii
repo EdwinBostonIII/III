@@ -33,6 +33,7 @@ extern @abi(c-msvc-x64) fn route_build(edge_kind: u8) -> i32 from "route.iii"
 extern @abi(c-msvc-x64) fn route_path(src: u32, dst: u32) -> u32 from "route.iii"
 extern @abi(c-msvc-x64) fn route_cost() -> u64 from "route.iii"
 extern @abi(c-msvc-x64) fn route_path_node(i: u32) -> u32 from "route.iii"
+extern @abi(c-msvc-x64) fn route_hops() -> u32 from "route.iii"
 
 var IDS : [u8; 256]                       /* 8 region ids * 32 bytes */
 
@@ -66,6 +67,7 @@ fn main() -> u64 {
     route_build(1u8)
     let h1 : u32 = route_path(0u32, 3u32)
     if h1 != 3u32 { return 11u64 }
+    if route_hops() != h1 { return 19u64 }                                  /* route_hops reflects the real 3-hop plan */
     if route_path_node(0u32) != 0u32 { return 11u64 }
     if route_path_node(1u32) != 1u32 { return 11u64 }
     if route_path_node(2u32) != 2u32 { return 11u64 }

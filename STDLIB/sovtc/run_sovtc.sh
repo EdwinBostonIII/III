@@ -41,16 +41,19 @@ for d in sov_drive:drive:text-only sov_drive2:drive2:reloc-data sov_drive3:drive
     if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS coff/$LBL (sovereign .o links+runs, exit 99)"; else echo "[sovtc] FAIL coff/$LBL (exit $rc)"; fail=1; fi
 done
 
-# ── S2 sovld gate: sovld lays out a PE32+ executable (NO gcc, NO ld); the OS loads + runs it (expect 99) ──
-"$IIIS" "$SOVTC/sovld.iii"      --compile-only --out "$OUT/sovld.o"      >/dev/null 2>&1 || { echo "[sovtc] FAIL ld (sovld compile)"; fail=1; }
-if "$IIIS" "$SOVTC/sov_drivel.iii" --compile-only --out "$OUT/sov_drivel.o" >/dev/null 2>&1 && \
-   gcc "$OUT/sov_drivel.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovld.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/drivel.exe" >/dev/null 2>&1; then
-    timeout 25 "$OUT/drivel.exe" > "$OUT/sov.exe" 2>/dev/null
-    pemagic=$(od -An -tx1 -N2 "$OUT/sov.exe" 2>/dev/null | tr -d ' \n')   # must be a PE (MZ = 4d5a)
-    if [[ "$pemagic" != "4d5a" ]]; then echo "[sovtc] FAIL ld (sov.exe magic=$pemagic != 4d5a)"; fail=1; fi
-    timeout 10 "$OUT/sov.exe" >/dev/null 2>&1; rc=$?
-    if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS ld (sovereign PE32+ -- no gcc/ld -- loads+runs, exit 99)"; else echo "[sovtc] FAIL ld (sov.exe exit $rc)"; fail=1; fi
-else echo "[sovtc] FAIL ld (driver build)"; fail=1; fi
+# ── S2 sovld gates: sovld lays out a PE32+ executable (NO gcc, NO ld); the OS loads + runs it (expect 99) ──
+# drivel = ret-only single .text.   drivel2 = .text + .data with an internal REL32 reloc APPLIED (data global).
+"$IIIS" "$SOVTC/sovld.iii" --compile-only --out "$OUT/sovld.o" >/dev/null 2>&1 || { echo "[sovtc] FAIL ld (sovld compile)"; fail=1; }
+for l in sov_drivel:lpe:ret-only sov_drivel2:lpe2:data-global; do
+    SRC="${l%%:*}"; rest="${l#*:}"; EXE="${rest%%:*}"; LBL="${rest#*:}"
+    if ! "$IIIS" "$SOVTC/$SRC.iii" --compile-only --out "$OUT/$SRC.o" >/dev/null 2>&1; then echo "[sovtc] FAIL ld/$LBL ($SRC compile)"; fail=1; continue; fi
+    if ! gcc "$OUT/$SRC.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovld.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$EXE-drv.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL ld/$LBL (driver build)"; fail=1; continue; fi
+    timeout 25 "$OUT/$EXE-drv.exe" > "$OUT/$EXE.exe" 2>/dev/null
+    pemagic=$(od -An -tx1 -N2 "$OUT/$EXE.exe" 2>/dev/null | tr -d ' \n')   # must be a PE (MZ = 4d5a)
+    if [[ "$pemagic" != "4d5a" ]]; then echo "[sovtc] FAIL ld/$LBL (magic=$pemagic != 4d5a)"; fail=1; continue; fi
+    timeout 10 "$OUT/$EXE.exe" >/dev/null 2>&1; rc=$?
+    if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS ld/$LBL (sovereign PE32+ -- no gcc/ld -- loads+runs, exit 99)"; else echo "[sovtc] FAIL ld/$LBL (exit $rc)"; fail=1; fi
+done
 
 if [[ $fail -eq 0 ]]; then echo "[sovtc] ALL PASS"; exit 0; fi
 echo "[sovtc] FAILURES PRESENT"; exit 1

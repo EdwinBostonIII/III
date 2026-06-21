@@ -1,0 +1,18 @@
+/* sov_drivel2.iii  --  the S2.2a sovld driver.  Assembles the REAL cg_r3 `var G=99; fn main(){return G}` and
+ * emits a PE32+ via sovld -- multi-section (.text + .data) with the internal REL32 reloc APPLIED (the
+ * rip-relative load of G patched to reach .data).  NO gcc, NO ld.  Entry = main, returns G=99, RET -> exit 99.
+ */
+module sovtc_drivel2
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .data\n  .global L_G\nL_G:\n  .quad 0x63\n  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq L_G(%rip), %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

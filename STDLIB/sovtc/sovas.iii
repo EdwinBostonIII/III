@@ -411,5 +411,30 @@ fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {    /* leaq sym
     sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Du32)  sov_modrm(0u32, reg, 5u32)
     sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
 }
-/* (32-bit movl rip-sym encoders removed: cg_r3 does emit movl for u32 globals, but the parser does not yet
- * route movl, so they would be dead surface.  They return when movl parsing + a gate land together.) */
+/* movl sym(%rip), %reg : 8B (no REX.W) -- the 32-bit RIP-relative symbol LOAD, RESTORED now that the parser
+ * routes it.  THE self-hosting keystone: cg_r3 emits this for u32 globals, and the parallel gas-verified
+ * diagnosis found ALL 8 compiler form-blockers (cg_r3_xii/cg_typeclass/jit_emit/main/...) are this one form.
+ * Critically: sov_rex always emits a 0x40 byte, so emit REX ONLY when reg>=8 (for %eax: 8B 05 <rel32>). */
+fn sov_movl_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    if r != 0u32 { sov_rex(0u32, r, 0u32, 0u32) }
+    sov_emit(0x8Bu32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+/* A3 (same rip-sym region): the store form + the movslq/movzx rip-sym loads the compiler also emits. */
+fn sov_movl_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {   /* movl %reg, sym(%rip) : 89 (no REX.W) */
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    if r != 0u32 { sov_rex(0u32, r, 0u32, 0u32) }
+    sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_movslq_rip(reg: u32, sec: u32, off: i32) -> i32 @export {   /* movslq sym(%rip), %reg : REX.W 63 */
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x63u32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_movzx_rip(reg: u32, sec: u32, off: i32, op2: u32) -> i32 @export {   /* movz/movs b/w sym(%rip),%reg : REX.W 0F op2 */
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x0Fu32)  sov_emit(op2)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}

@@ -63,6 +63,10 @@ extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movl_load_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movl_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movl_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movslq_rip(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movzx_rip(reg: u32, sec: u32, off: i32, op2: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movl_store_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movzx_mem(dst: u32, base: u32, disp: i32, op2: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movslq_mem(dst: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
@@ -463,6 +467,8 @@ fn sp_dispatch_instr() {
         if S1K == 2u32 { if OPK == 0u32 { sov_movl_load_base(OPR, S1R, S1D)  return } }    /* movl disp(%base), %reg */
         if S1K == 0u32 { if OPK == 4u32 { sov_movl_store_sib(S1R, OPR, OPINDEX, OPSCALE, OPD)  return } }   /* movl %r,disp(b,i,s) */
         if S1K == 4u32 { if OPK == 0u32 { sov_movl_load_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return } }    /* movl disp(b,i,s),%r */
+        if S1K == 3u32 { if OPK == 0u32 { sov_movl_load_rip_sym(OPR, S1SEC, S1OFF)  return } }              /* movl sym(%rip), %reg */
+        if S1K == 0u32 { if OPK == 3u32 { sov_movl_store_rip_sym(S1R, OPSEC, OPOFF)  return } }             /* movl %reg, sym(%rip) */
         PARSE_ERR = 1u32  return
     }
     if mn_is(99u32,97u32,108u32,108u32,5u32) == 1u32 {                                              /* callq <name> */
@@ -509,6 +515,11 @@ fn sp_dispatch_instr() {
             if MN[4u64] == 119u32 { op2m = 0xB7u32 }
             sov_movzx_mem(OPR, S1R, S1D, op2m)  return
         }
+        if S1K == 3u32 {                                          /* sym(%rip) source */
+            let mut op2r : u32 = 0xB6u32
+            if MN[4u64] == 119u32 { op2r = 0xB7u32 }
+            sov_movzx_rip(OPR, S1SEC, S1OFF, op2r)  return
+        }
         if MN[4u64] == 98u32 { sov_movzbq(OPR, S1R)  return }     /* movzbq */
         if MN[4u64] == 119u32 { sov_movzwq(OPR, S1R)  return }    /* movzwq */
         PARSE_ERR = 1u32  return
@@ -526,6 +537,12 @@ fn sp_dispatch_instr() {
             let mut op2m : u32 = 0xBEu32
             if MN[4u64] == 119u32 { op2m = 0xBFu32 }
             sov_movzx_mem(OPR, S1R, S1D, op2m)  return
+        }
+        if S1K == 3u32 {                                          /* sym(%rip) source */
+            if MN[4u64] == 108u32 { sov_movslq_rip(OPR, S1SEC, S1OFF)  return }
+            let mut op2r : u32 = 0xBEu32
+            if MN[4u64] == 119u32 { op2r = 0xBFu32 }
+            sov_movzx_rip(OPR, S1SEC, S1OFF, op2r)  return
         }
         if MN[4u64] == 98u32 { sov_movsbq(OPR, S1R)  return }     /* movsbq */
         if MN[4u64] == 119u32 { sov_movswq(OPR, S1R)  return }    /* movswq */

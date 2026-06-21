@@ -32,6 +32,28 @@ var EXT_N    : u32 = 0u32
 var CN_BUF   : [u8; 64]      /* the parser pushes a call-target name here, then calls sov_call_ext */
 var CN_LEN   : u32 = 0u32
 
+/* data-section assembly: .data/.rodata raw bytes + .bss size.  Built in PASS D and PERSISTS across the two
+ * .text encode passes -- so sov_reset (per encode pass) does NOT clear these; sov_data_reset does, once. */
+var DATA_BUF   : [u8; 8192]
+var DATA_LEN   : u32 = 0u32
+var RODATA_BUF : [u8; 8192]
+var RODATA_LEN : u32 = 0u32
+var BSS_SIZE   : u32 = 0u32
+fn sov_data_reset() -> i32 @export { DATA_LEN = 0u32  RODATA_LEN = 0u32  BSS_SIZE = 0u32  return 0i32 }
+fn sov_data_emit(sec: u32, b: u32) -> i32 @export {   /* sec 1=.data 2=.rodata */
+    if sec == 1u32 { if DATA_LEN < 8192u32 { DATA_BUF[DATA_LEN as u64] = (b & 0xFFu32) as u8  DATA_LEN = DATA_LEN + 1u32 } }
+    if sec == 2u32 { if RODATA_LEN < 8192u32 { RODATA_BUF[RODATA_LEN as u64] = (b & 0xFFu32) as u8  RODATA_LEN = RODATA_LEN + 1u32 } }
+    return 0i32
+}
+fn sov_bss_add(n: u32) -> i32 @export { BSS_SIZE = BSS_SIZE + n  return 0i32 }
+fn sov_data_len(sec: u32) -> u32 @export { if sec == 1u32 { return DATA_LEN }  if sec == 2u32 { return RODATA_LEN }  return 0u32 }
+fn sov_data_at(sec: u32, i: u32) -> u32 @export {
+    if sec == 1u32 { if i < DATA_LEN { return DATA_BUF[i as u64] as u32 } }
+    if sec == 2u32 { if i < RODATA_LEN { return RODATA_BUF[i as u64] as u32 } }
+    return 0u32
+}
+fn sov_bss_size() -> u32 @export { return BSS_SIZE }
+
 fn sov_reset() -> i32 @export { SOV_LEN = 0u32  REL_N = 0u32  EXT_N = 0u32  CN_LEN = 0u32  return 0i32 }
 fn sov_reloc_n() -> u32 @export { return REL_N }
 fn sov_reloc_off(i: u32) -> u32 @export { if i < REL_N { return REL_OFF[i as u64] }  return 0xFFFFFFFFu32 }

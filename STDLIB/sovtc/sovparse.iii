@@ -58,6 +58,9 @@ extern @abi(c-msvc-x64) fn sov_jmp_rel8(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_emit(sec: u32, b: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_bss_add(n: u32) -> i32 from "sovas.iii"
 
 /* ASCII (numeric, to avoid any char-literal assumptions) */
 const C_SP : u32 = 32u32
@@ -498,6 +501,23 @@ fn sp_record_at(nlen: u32) {   /* commit the just-read name (in scratch slot SYM
         SYM_N = SYM_N + 1u32
     }
 }
+/* emit n little-endian bytes of a numeric value into the current data section (.data/.rodata) */
+fn sp_emit_val(v: i64, n: u32) {
+    let u : u64 = v as u64
+    let mut k : u32 = 0u32
+    while k < n { sov_data_emit(CUR_SEC, ((u >> (8u64 * (k as u64))) & 0xFFu64) as u32)  k = k + 1u32 }
+}
+/* emit comma-separated .byte values, one byte each */
+fn sp_emit_bytes() {
+    sp_skip_ws()
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let v : i64 = sp_num()
+        sov_data_emit(CUR_SEC, (v as u32) & 0xFFu32)
+        sp_skip_ws()
+        if sp_ch() == C_COM { sp_adv()  sp_skip_ws() } else { go = 0u32 }
+    }
+}
 fn sp_dir1() {
     sp_read_dir()
     if mn_is(115u32,101u32,99u32,116u32,7u32) == 1u32 {        /* section <name> */
@@ -520,19 +540,36 @@ fn sp_dir1() {
         return
     }
     if CUR_SEC < 4u32 {
-        if mn_is(113u32,117u32,97u32,100u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 8u32 }   /* .quad */
-        if mn_is(108u32,111u32,110u32,103u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 4u32 }   /* .long */
-        if mn_is(98u32,121u32,116u32,101u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + sp_count_bytes() }  /* .byte */
-        if mn_is(122u32,101u32,114u32,111u32,4u32) == 1u32 { sp_skip_ws()  SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + (sp_num() as u32) }  /* .zero */
+        if mn_is(113u32,117u32,97u32,100u32,4u32) == 1u32 {        /* .quad */
+            SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 8u32
+            if SP_PASS == 0u32 { if CUR_SEC < 3u32 { sp_skip_ws()  sp_emit_val(sp_num(), 8u32) } }
+        }
+        if mn_is(108u32,111u32,110u32,103u32,4u32) == 1u32 {       /* .long */
+            SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 4u32
+            if SP_PASS == 0u32 { if CUR_SEC < 3u32 { sp_skip_ws()  sp_emit_val(sp_num(), 4u32) } }
+        }
+        if mn_is(98u32,121u32,116u32,101u32,4u32) == 1u32 {        /* .byte */
+            SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + sp_count_bytes()
+            if SP_PASS == 0u32 { if CUR_SEC < 3u32 { sp_emit_bytes() } }
+        }
+        if mn_is(122u32,101u32,114u32,111u32,4u32) == 1u32 {       /* .zero */
+            sp_skip_ws()  let zn : u32 = sp_num() as u32
+            SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + zn
+            if SP_PASS == 0u32 {
+                if CUR_SEC == 3u32 { sov_bss_add(zn) }
+                else { let mut zk : u32 = 0u32  while zk < zn { sov_data_emit(CUR_SEC, 0u32)  zk = zk + 1u32 } }
+            }
+        }
     }
-    /* NOTE: .ascii/.asciz string-length not yet tracked -> tracked-section strings would mis-offset.
-     * cg_r3 keeps its strings in OTHER sections (.iii.ring3), so this is exact for the gate; a real
-     * string-length pass is the next sub-step for full isub-scale data layout. */
+    /* NOTE: .ascii/.asciz raw bytes not yet emitted -> a tracked-section string would under-size the section.
+     * cg_r3 keeps its function-name strings in OTHER sections (.iii.ring3), so this is exact for numeric data;
+     * .ascii/.asciz emission is the next data sub-step (needed for .rodata string literals). */
 }
 fn sp_build_symtab(ptr: *u8, len: u32) {
     SYM_N = 0u32
     EXP_N = 0u32
-    SP_PASS = 0u32      /* pass D: record exports here, once */
+    SP_PASS = 0u32      /* pass D: record exports + emit data-section bytes here, once */
+    sov_data_reset()
     SEC_OFF[0u64] = 0u32  SEC_OFF[1u64] = 0u32  SEC_OFF[2u64] = 0u32  SEC_OFF[3u64] = 0u32
     CUR_SEC = SEC_OTHER
     IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32

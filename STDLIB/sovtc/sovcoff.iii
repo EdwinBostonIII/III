@@ -1,22 +1,31 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\sovtc\sovcoff.iii
  *
- * III sovereign toolchain -- the COFF .o EMITTER (assembler back-end).
+ * III sovereign toolchain -- the COFF .o EMITTER (assembler back-end), reloc/data-section capable.
  *
- * Turns sovas's assembled .text bytes (+ the in-memory reloc/symbol info) into a valid PE/COFF object that
- * gcc's ld accepts.  Emits to STDOUT (set to BINARY first, so 0x0A bytes are not \r\n-translated on Windows);
- * the caller redirects stdout to out.o.  This avoids fopen path/mode NUL-termination and module-array-address
- * pitfalls -- putchar takes an int.
+ * Turns sovas's assembled .text + .data/.rodata/.bss + the in-memory reloc/extern tables into a valid PE/COFF
+ * object gcc's ld accepts.  Emits to STDOUT set to _O_BINARY (so 0x0A bytes are not \r\n-translated on
+ * Windows) via putchar; the caller redirects stdout to out.o.
  *
- * GATE-1 scope: a text-only object (one .text section, the exported function symbols, no relocations) -- the
- * minimal COFF proven (by stripping cg_r3's own .o) to link + run.  Relocations + data sections are the next
- * increment (REL records + .data/.rodata/.bss section symbols).
+ * SYMBOL TABLE ORDER (the contract the relocs index into): section symbols first (.text/.data/.rodata/.bss,
+ * each a symbol + 1 aux record), then exported functions, then extern (undefined) symbols.  A data reloc
+ * (REL_SEC 1/2/3) -> its section symbol's index; a named reloc (REL_SEC 0) -> (2*NS + NEXP + slot).
  *
- * NIH; reads sovas (.text) + sovparse (exports) + msvcrt (putchar/_setmode).  Ring R0.
+ * NIH; reads sovas (.text/.data/relocs/externs) + sovparse (exports) + msvcrt (putchar/_setmode).  Ring R0.
  */
 module sovtc_sovcoff
 
 extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_len(sec: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_data_at(sec: u32, i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_bss_size() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sec(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sym(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_namelen(slot: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_namebyte(slot: u32, j: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sp_export_n() -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_off(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namelen(i: u32) -> u32 from "sovparse.iii"
@@ -24,7 +33,14 @@ extern @abi(c-msvc-x64) fn sp_export_namebyte(i: u32, j: u32) -> u32 from "sovpa
 extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 
-/* string table (for export names > 8 chars): the strings, accumulated during symbol emission, written last. */
+/* per-section (id 0=.text 1=.data 2=.rodata 3=.bss) layout, computed in the prologue */
+var SEC_PRESENT : [u32; 4]
+var SEC_RAWLEN  : [u32; 4]
+var SEC_RAWPTR  : [u32; 4]
+var SEC_SYMIDX  : [u32; 4]
+var NS    : u32 = 0u32   /* number of present sections */
+var NEXP  : u32 = 0u32   /* emitted exports (.text functions, offset resolved) */
+
 var STR_BUF : [u8; 8192]
 var STR_LEN : u32 = 0u32
 
@@ -32,69 +48,152 @@ fn w8(b: u32) { putchar((b & 0xFFu32) as i32) }
 fn w16(v: u32) { w8(v)  w8(v >> 8u32) }
 fn w32(v: u32) { w8(v)  w8(v >> 8u32)  w8(v >> 16u32)  w8(v >> 24u32) }
 
-/* emit an 8-byte COFF symbol Name field: inline if <=8 chars, else 0x00000000 + a string-table offset. */
-fn w_symname(eidx: u32) {
-    let nl : u32 = sp_export_namelen(eidx)
+/* emit an 8-byte section name by id */
+fn w_secname(id: u32) {
+    if id == 0u32 { w8(46u32) w8(116u32) w8(101u32) w8(120u32) w8(116u32) w8(0u32) w8(0u32) w8(0u32) }       /* .text */
+    if id == 1u32 { w8(46u32) w8(100u32) w8(97u32) w8(116u32) w8(97u32) w8(0u32) w8(0u32) w8(0u32) }         /* .data */
+    if id == 2u32 { w8(46u32) w8(114u32) w8(111u32) w8(100u32) w8(97u32) w8(116u32) w8(97u32) w8(0u32) }     /* .rodata */
+    if id == 3u32 { w8(46u32) w8(98u32) w8(115u32) w8(115u32) w8(0u32) w8(0u32) w8(0u32) w8(0u32) }          /* .bss */
+}
+fn sec_chars(id: u32) -> u32 {
+    if id == 0u32 { return 0x60500020u32 }   /* CODE|ALIGN16|EXEC|READ */
+    if id == 1u32 { return 0xC0500040u32 }   /* INIT|ALIGN16|READ|WRITE */
+    if id == 2u32 { return 0x40500040u32 }   /* INIT|ALIGN16|READ */
+    return 0xC0500080u32                     /* .bss: UNINIT|ALIGN16|READ|WRITE */
+}
+
+/* emit a symbol Name field (8 bytes): inline if name<=8, else 0x00000000 + a string-table offset.
+ * which=0 -> export idx, which=1 -> extern slot. */
+fn w_symname(which: u32, idx: u32) {
+    let mut nl : u32 = 0u32
+    if which == 0u32 { nl = sp_export_namelen(idx) } else { nl = sov_ext_namelen(idx) }
     if nl <= 8u32 {
         let mut j : u32 = 0u32
-        while j < 8u32 { if j < nl { w8(sp_export_namebyte(eidx, j)) } else { w8(0u32) }  j = j + 1u32 }
+        while j < 8u32 {
+            if j < nl { if which == 0u32 { w8(sp_export_namebyte(idx, j)) } else { w8(sov_ext_namebyte(idx, j)) } }
+            else { w8(0u32) }
+            j = j + 1u32
+        }
     } else {
-        let off : u32 = 4u32 + STR_LEN           /* offset within the string table (incl. its 4-byte size) */
+        let off : u32 = 4u32 + STR_LEN
         w32(0u32)  w32(off)
         let mut j : u32 = 0u32
-        while j < nl { STR_BUF[STR_LEN as u64] = sp_export_namebyte(eidx, j) as u8  STR_LEN = STR_LEN + 1u32  j = j + 1u32 }
+        while j < nl {
+            if which == 0u32 { STR_BUF[STR_LEN as u64] = sp_export_namebyte(idx, j) as u8 } else { STR_BUF[STR_LEN as u64] = sov_ext_namebyte(idx, j) as u8 }
+            STR_LEN = STR_LEN + 1u32  j = j + 1u32
+        }
         STR_BUF[STR_LEN as u64] = 0u8  STR_LEN = STR_LEN + 1u32
     }
 }
 
-/* emit the whole COFF object to (binary) stdout.  Returns 0. */
+/* the COFF symbol-table index a reloc points at */
+fn reloc_symidx(i: u32) -> u32 {
+    let s : u32 = sov_reloc_sec(i)
+    if s == 0u32 { return ((2u32 * NS) + NEXP) + sov_reloc_sym(i) }   /* named: after sections + exports */
+    return SEC_SYMIDX[s as u64]                                       /* data: the target section's symbol */
+}
+
 fn sovcoff_emit() -> i32 @export {
-    _setmode(1i32, 0x8000i32)                    /* fd 1 = stdout -> _O_BINARY (no \n translation) */
+    _setmode(1i32, 0x8000i32)
     STR_LEN = 0u32
-    let textlen : u32 = sov_len()
-    let nexp : u32 = sp_export_n()
-    let nsym : u32 = 2u32 + nexp                 /* .text section symbol + its aux + the exports */
-    let symptr : u32 = 60u32 + textlen           /* symbol table follows 20-byte file hdr + 40-byte sec hdr + text */
+
+    /* ── compute section presence + sizes ── */
+    SEC_RAWLEN[0u64] = sov_len()  SEC_PRESENT[0u64] = 1u32                 /* .text always */
+    SEC_RAWLEN[1u64] = sov_data_len(1u32)  if SEC_RAWLEN[1u64] > 0u32 { SEC_PRESENT[1u64] = 1u32 } else { SEC_PRESENT[1u64] = 0u32 }
+    SEC_RAWLEN[2u64] = sov_data_len(2u32)  if SEC_RAWLEN[2u64] > 0u32 { SEC_PRESENT[2u64] = 1u32 } else { SEC_PRESENT[2u64] = 0u32 }
+    SEC_RAWLEN[3u64] = sov_bss_size()      if SEC_RAWLEN[3u64] > 0u32 { SEC_PRESENT[3u64] = 1u32 } else { SEC_PRESENT[3u64] = 0u32 }
+
+    /* number of present sections + emitted exports */
+    NS = 0u32
+    let mut id : u32 = 0u32
+    while id < 4u32 { if SEC_PRESENT[id as u64] == 1u32 { NS = NS + 1u32 }  id = id + 1u32 }
+    NEXP = 0u32
+    let mut e : u32 = 0u32
+    while e < sp_export_n() { if sp_export_off(e) != 0xFFFFFFFFu32 { NEXP = NEXP + 1u32 }  e = e + 1u32 }
+    let next : u32 = sov_ext_n()
+    let nsym : u32 = ((2u32 * NS) + NEXP) + next
+    let nreloc : u32 = sov_reloc_n()
+
+    /* ── assign each present section: COFF section number, symbol index, raw-data pointer ── */
+    let hdrs : u32 = 20u32 + (40u32 * NS)
+    let mut cur_ptr : u32 = hdrs
+    let mut cur_sym : u32 = 0u32
+    id = 0u32
+    while id < 4u32 {
+        if SEC_PRESENT[id as u64] == 1u32 {
+            SEC_SYMIDX[id as u64] = cur_sym  cur_sym = cur_sym + 2u32
+            if id == 3u32 { SEC_RAWPTR[id as u64] = 0u32 }                /* .bss: no raw data */
+            else { SEC_RAWPTR[id as u64] = cur_ptr  cur_ptr = cur_ptr + SEC_RAWLEN[id as u64] }
+        }
+        id = id + 1u32
+    }
+    let rawdata_end : u32 = cur_ptr
+    let mut text_relptr : u32 = 0u32
+    if nreloc > 0u32 { text_relptr = rawdata_end }
+    let symptr : u32 = rawdata_end + (nreloc * 10u32)
 
     /* ── IMAGE_FILE_HEADER (20) ── */
-    w16(0x8664u32)   /* Machine = AMD64 */
-    w16(1u32)        /* NumberOfSections */
-    w32(0u32)        /* TimeDateStamp */
-    w32(symptr)      /* PointerToSymbolTable */
-    w32(nsym)        /* NumberOfSymbols */
-    w16(0u32)        /* SizeOfOptionalHeader */
-    w16(0u32)        /* Characteristics */
+    w16(0x8664u32)  w16(NS)  w32(0u32)  w32(symptr)  w32(nsym)  w16(0u32)  w16(0u32)
 
-    /* ── IMAGE_SECTION_HEADER for .text (40) ── */
-    w8(46u32) w8(116u32) w8(101u32) w8(120u32) w8(116u32) w8(0u32) w8(0u32) w8(0u32)   /* ".text\0\0\0" */
-    w32(0u32)            /* VirtualSize */
-    w32(0u32)            /* VirtualAddress */
-    w32(textlen)         /* SizeOfRawData */
-    w32(60u32)           /* PointerToRawData */
-    w32(0u32)            /* PointerToRelocations */
-    w32(0u32)            /* PointerToLinenumbers */
-    w16(0u32)            /* NumberOfRelocations */
-    w16(0u32)            /* NumberOfLinenumbers */
-    w32(0x60500020u32)   /* Characteristics: CODE | ALIGN_16BYTES | MEM_EXECUTE | MEM_READ */
-
-    /* ── .text raw data ── */
-    let mut i : u32 = 0u32
-    while i < textlen { w8(sov_at(i))  i = i + 1u32 }
-
-    /* ── symbol table ── */
-    /* .text section symbol + aux */
-    w8(46u32) w8(116u32) w8(101u32) w8(120u32) w8(116u32) w8(0u32) w8(0u32) w8(0u32)   /* ".text" */
-    w32(0u32)  w16(1u32)  w16(0u32)  w8(3u32)  w8(1u32)    /* Value=0, Sec=1, Type=0, scl=STATIC(3), naux=1 */
-    w32(textlen)  w16(0u32)  w16(0u32)  w32(0u32)  w16(0u32)  w8(0u32)  w8(0u32) w8(0u32) w8(0u32)   /* aux (18) */
-    /* exported function symbols */
-    let mut e : u32 = 0u32
-    while e < nexp {
-        w_symname(e)
-        w32(sp_export_off(e))  w16(1u32)  w16(0u32)  w8(2u32)  w8(0u32)   /* Value=off, Sec=.text, scl=EXTERNAL(2) */
-        e = e + 1u32
+    /* ── section headers (40 each), present sections in .text/.data/.rodata/.bss order ── */
+    id = 0u32
+    while id < 4u32 {
+        if SEC_PRESENT[id as u64] == 1u32 {
+            w_secname(id)
+            w32(0u32)                          /* VirtualSize */
+            w32(0u32)                          /* VirtualAddress */
+            w32(SEC_RAWLEN[id as u64])         /* SizeOfRawData */
+            w32(SEC_RAWPTR[id as u64])         /* PointerToRawData */
+            if id == 0u32 { w32(text_relptr) } else { w32(0u32) }   /* PointerToRelocations (only .text) */
+            w32(0u32)                          /* PointerToLinenumbers */
+            if id == 0u32 { w16(nreloc) } else { w16(0u32) }        /* NumberOfRelocations */
+            w16(0u32)                          /* NumberOfLinenumbers */
+            w32(sec_chars(id))
+        }
+        id = id + 1u32
     }
 
-    /* ── string table (size field + strings) ── */
+    /* ── raw section data: .text, .data, .rodata (.bss has none) ── */
+    let textlen : u32 = SEC_RAWLEN[0u64]
+    let mut i : u32 = 0u32  while i < textlen { w8(sov_at(i))  i = i + 1u32 }
+    if SEC_PRESENT[1u64] == 1u32 { i = 0u32  while i < SEC_RAWLEN[1u64] { w8(sov_data_at(1u32, i))  i = i + 1u32 } }
+    if SEC_PRESENT[2u64] == 1u32 { i = 0u32  while i < SEC_RAWLEN[2u64] { w8(sov_data_at(2u32, i))  i = i + 1u32 } }
+
+    /* ── .text relocation records (IMAGE_RELOCATION, 10 bytes: VA, SymIdx, Type=REL32=4) ── */
+    let mut r : u32 = 0u32
+    while r < nreloc { w32(sov_reloc_off(r))  w32(reloc_symidx(r))  w16(4u32)  r = r + 1u32 }
+
+    /* ── symbol table ── */
+    /* section symbols (+ aux), in present .text/.data/.rodata/.bss order */
+    id = 0u32
+    while id < 4u32 {
+        if SEC_PRESENT[id as u64] == 1u32 {
+            w_secname(id)
+            w32(0u32)  w16((SEC_SYMIDX[id as u64] / 2u32) + 1u32)  w16(0u32)  w8(3u32)  w8(1u32)   /* Value=0, Sec#, Type=0, STATIC, 1 aux */
+            let mut secnreloc : u32 = 0u32
+            if id == 0u32 { secnreloc = nreloc }
+            w32(SEC_RAWLEN[id as u64])  w16(secnreloc)  w16(0u32)  w32(0u32)  w16(0u32)  w8(0u32)  w8(0u32) w8(0u32) w8(0u32)   /* aux (18) */
+        }
+        id = id + 1u32
+    }
+    /* exported function symbols (in .text) */
+    e = 0u32
+    while e < sp_export_n() {
+        if sp_export_off(e) != 0xFFFFFFFFu32 {
+            w_symname(0u32, e)
+            w32(sp_export_off(e))  w16((SEC_SYMIDX[0u64] / 2u32) + 1u32)  w16(0u32)  w8(2u32)  w8(0u32)   /* Sec=.text, EXTERNAL */
+        }
+        e = e + 1u32
+    }
+    /* extern (undefined) symbols */
+    let mut x : u32 = 0u32
+    while x < next {
+        w_symname(1u32, x)
+        w32(0u32)  w16(0u32)  w16(0u32)  w8(2u32)  w8(0u32)   /* Value=0, Sec=0 (undefined), EXTERNAL */
+        x = x + 1u32
+    }
+
+    /* ── string table ── */
     w32(4u32 + STR_LEN)
     let mut s : u32 = 0u32
     while s < STR_LEN { w8(STR_BUF[s as u64] as u32)  s = s + 1u32 }

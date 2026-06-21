@@ -1,0 +1,19 @@
+/* sov_drive2.iii  --  the reloc/data COFF driver.  Assembles the REAL cg_r3 output for
+ * `var G : u64 = 99; fn main() -> u64 { return G }` VERBATIM and emits a multi-section COFF .o
+ * (.text + .data) with a REL32 relocation (.text -> .data section symbol).  The harness links it with gcc
+ * and runs it -- exercising the full reloc/data COFF path end-to-end.  Exit 0 = emitted.
+ */
+module sovtc_drive2
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .rodata\n  .section .data\n  .global L_G\nL_G:\n  .quad 0x63\n  .section .iii.ring3,\"n\"\n  .asciz \"main\"\n  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq L_G(%rip), %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovcoff_emit()
+    return 0u64
+}

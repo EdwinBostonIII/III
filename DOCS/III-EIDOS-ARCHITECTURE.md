@@ -303,7 +303,7 @@ Without an anchor, III has **no self-location** — it cannot know which capabil
 
 **Phase 2 — `eidos/field` (WRAP).** Unify the spatial (`ripple_field`) and temporal (`event_substrate`/`dome`) reads behind one log. **Retire-by-attrition begins:** prove (via `ml_named_is_redundant`) that `omnia/ripple` ∥ `ripple_field` ∥ `forcefield/ripple` are geometric folds of `eidos/ripple`; deprecate the redundant ones. *Leanness gate: module count must not rise.*
 
-**Phase 3 — `eidos/compose` (NEW fold).** The terminating, cost-bounded planner. Wire it to a real task family (e.g., the transform/`tp_*` codecs, or a real `xii` normalization) and show modeless reshuffle + battery-skip on live work — the no-island endpoint.
+**Phase 3 — wire the planner to real III work (the no-island endpoint).** Two desiderata, two targets: **Task A — battery-skip** (✅ DONE, `eidos/optgate` + corpus `1938`): the *cost-selection half* (`cl_dot_slot` + named orders) wakes the **dormant** SAT reducer `invent/gil_forge` only when an order's cost favors it — skip measured, correctness `bb_equal`-proven, golden-safe (faculties absent from `COMPILER/`); honestly one-bit (`is_pow2`) discernment that over-invokes on irreducible `k` (gated). **Task B — modeless reshuffle** (next): upgrade `topology_atlas` routing to the Bellman-Ford planner (u64, plan-output, multi-order) — the *shortest-path half*, on a substrate whose costs (latency/power/bandwidth) genuinely trade off (unlike the sub-additive savings of `weave`). Task A validates cost-selection; Task B is where "the planner reshuffles real III work" becomes true.
 
 **Phase 4 — `eidos/anchor` (OPEN CORE, staged).** Identity crystal first (PROVEN census, immediately). Then the reversible descent, **R0 → R-1 → observe-only below**, each rung its own gated proof, NPT-CoW reversible, against KATABASIS §0.6. *Never assume a rung; schedule its proof.* Performance-improvement (§9.3) only if a gated benchmark earns it.
 
@@ -327,6 +327,7 @@ Without an anchor, III has **no self-location** — it cannot know which capabil
 | `eidos/field` (unified spatial+temporal log) | **NEW** (wrap; enables retire-by-attrition) |
 | `eidos/compose` (modeless terminating planner) | **NEW — PROVEN** (corpus `1933` modeless + `1934` teeth = EXIT 99; sealed + wired; bound proven §5.4) |
 | `eidos/weave` (the integration: compose over real ripple quanta) | **NEW — PROVEN** (corpus `1936` real costs + composition + witnessed execution, EXIT 99 — optimization-among-routes NOT exercised, degenerate by sub-additivity; `1937` sub-additivity gated, EXIT 99; sealed + wired) |
+| `eidos/optgate` (Phase 3 Task A: cost-ordered battery-skip) | **NEW — PROVEN** (corpus `1938` EXIT 99: wakes the DORMANT SAT reducer `invent/gil_forge` cost-optimally; skip MEASURED on the power-of-two simple case, correctness `bb_equal`-proven; **gated limitation** — one-bit `is_pow2` discernment under an optimistic G-bound over-invokes on irreducible `k`; validates the **cost-selection half**, not Bellman-Ford; sealed + wired) |
 | `eidos/anchor` placement descent | **OPEN CORE** (§9; staged, reversible, never assumed) |
 | "melt in → host runs faster" | **SPECULATIVE / NORTH-STAR** (§9.3, burden-of-proof) |
 

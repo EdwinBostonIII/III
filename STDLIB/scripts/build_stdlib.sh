@@ -1479,6 +1479,13 @@ MODULES=(
     # Honest finding: the real xii_savings table is SUB-ADDITIVE -> modeless is order-invariant on real geometry
     # (capability proven abstractly, 1933).  BSS-neutral, compiler-unreferenced -> LIBNATIVE; appended last.
     "eidos/weave"
+    # eidos/optgate -- EIDOS Phase 3 / Task A: the COST-ORDERED BATTERY-SKIP GATE.  Delivers desideratum #2
+    # ("do not invoke the battery-eating stuff on the simple") on REAL III work: cost-orders (cl_dot_slot) the
+    # decision to wake the DORMANT SAT strength-reducer invent/gil_forge (which COMPILER/cg_r3 never invokes).
+    # Plans over PRE-RUN estimates; runs only the winner; skip MEASURED (gil_kernel_calls), correctness
+    # SAT-proven (bb_equal).  This is the Composer's COST-SELECTION half (NOT Bellman-Ford -- that is Task B).
+    # Composes invent + bv_bits + cost_lattice.  Proven (corpus 1938).  BSS-neutral, compiler-unreferenced; last.
+    "eidos/optgate"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

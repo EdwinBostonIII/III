@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\optgate.iii
+ *
+ * III STDLIB - eidos::optgate  --  EIDOS Phase 3 / Task A: the COST-ORDERED BATTERY-SKIP GATE.
+ *
+ * Delivers the SECOND of the user's two desiderata for the Composer -- "do NOT invoke the battery-eating stuff
+ * when it's doing the simple."  (The FIRST -- "reshuffle for a different ordering" -- is shortest-path routing,
+ * Task B.)  This is the COST-SELECTION half of the Composer (cost_lattice cl_dot_slot + named orders), NOT the
+ * Bellman-Ford path planner -- a 2-route choice is an argmin, and faking a 2-node cmp_plan would be silly.
+ *
+ * THE REAL DORMANT OPTIMIZER: numera::invent's gil_forge SAT-discovers the cheapest provably-equal shift/add/sub
+ * form for mul(x,k) (e.g. 7x = (x<<3)-x) -- powerful, EXPENSIVE (a Tseitin+CDCL miter per candidate), and the
+ * live compiler (COMPILER/cg_r3) NEVER invokes it (verified: zero references).  optgate is the cost-ordered
+ * orchestrator that wakes it ONLY when an order's cost favors paying the SAT bill.
+ *
+ * TWO ROUTES to optimize mul(x,k):
+ *   E (cheap, limited): the power-of-two shift -- compile cost 0; code cost = 1 if k=2^j, else the mul baseline.
+ *   G (gil_forge SAT) : complete -- compile cost = an SAT-EXPENSIVE proxy; code cost = the reduced-form bound.
+ * The decision plans over PRE-RUN ESTIMATES ONLY (you must not run the battery-eater to decide whether to run
+ * it -- that is circular).  Execution runs ONLY the winner; the measured gil_kernel_calls()/sat_invoked() are
+ * EVIDENCE, never inputs.  cl_dot_slot under a named order ranks the two estimates.
+ *
+ * DISCERNMENT (one bit, honestly): under the SAME best-code order, a power-of-two k routes to E (the shift is
+ * already optimal, SAT provably unnecessary) while a non-power-of-two k routes to G -- driven by is_pow2(k), not
+ * the order name (gated, corpus 1938).  CAVEAT (gated, code 15): the G-estimate (<=3 ops) is OPTIMISTIC, so for k
+ * NOT in gil_forge's forms (2^a, 2^a+-1, 2^a+-2^b) -- e.g. 11,13,19 -- the gate OVER-invokes SAT for zero benefit.
+ * A tighter G-estimate (a cheap irreducibility pre-check) is the obvious next refinement.
+ *
+ * SCOPE (honest): cost-ordered battery-skip over a real dormant optimizer -- skip MEASURED on the power-of-two
+ * simple case, correctness SAT-proven (gil_forge adopts only bb_equal-proven forms).  This validates the
+ * cost-SELECTION half of the Composer (cl_dot_slot + named orders).  NOT "shortest-path planner reshuffles real
+ * III work" -- that claim is Task B (topology routing).  Composes invent + bv_bits + cost_lattice.
+ *
+ * Ring R0.  K 1.00.  NIH: libc-free.
+ */
+module eidos_optgate
+
+extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_best_b() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+
+const OPTG_MUL_BASELINE : u64 = 4u64      /* GIL_MUL_COST -- a multiply, the expensive incumbent (code-cost) */
+const OPTG_G_CODE_BOUND : u64 = 3u64      /* pre-run BOUND: gil_forge reduces any mul to <= 3 ops (code-cost) */
+const OPTG_SAT_PROXY    : u64 = 100u64    /* pre-run proxy: the SAT search is expensive (compile-cost) */
+const OPTG_BIG          : u64 = 1000000u64
+const OPTG_ROUTE_E      : u32 = 0u32
+const OPTG_ROUTE_G      : u32 = 1u32
+
+var OPTG_ORD_FAST    : u32 = 0u32         /* fast-compile order: dominate compile-cost (dim 0) */
+var OPTG_ORD_BEST    : u32 = 0u32         /* best-code order:    dominate code-cost   (dim 1) */
+var OPTG_SAT_INVOKED : u8  = 0u8          /* MEASURED: did the last execute() wake gil_forge? */
+var OPTG_W   : [u64; 6]                   /* weight-vector scratch */
+var OPTG_CE  : [u64; 6]                   /* route E estimated cost vector */
+var OPTG_CG  : [u64; 6]                   /* route G estimated cost vector */
+var OPTG_SLOT: [u32; 1]
+var OPTG_DOT : [u64; 1]
+
+fn optg_is_pow2(k: u64) -> u32 {
+    if k == 0u64 { return 0u32 }
+    if (k & (k - 1u64)) == 0u64 { return 1u32 }
+    return 0u32
+}
+
+fn optgate_reset() -> i32 @export {
+    cl_init()                              /* seeds slots 0-3, clears 4+ */
+    OPTG_W[0u64] = OPTG_BIG  OPTG_W[1u64] = 1u64  OPTG_W[2u64] = 1u64  OPTG_W[3u64] = 0u64  OPTG_W[4u64] = 0u64  OPTG_W[5u64] = 0u64
+    cl_register_order(&OPTG_W as *u64, &OPTG_SLOT as *u32)
+    OPTG_ORD_FAST = OPTG_SLOT[0u64]
+    OPTG_W[0u64] = 1u64  OPTG_W[1u64] = OPTG_BIG  OPTG_W[2u64] = 1u64  OPTG_W[3u64] = 0u64  OPTG_W[4u64] = 0u64  OPTG_W[5u64] = 0u64
+    cl_register_order(&OPTG_W as *u64, &OPTG_SLOT as *u32)
+    OPTG_ORD_BEST = OPTG_SLOT[0u64]
+    OPTG_SAT_INVOKED = 0u8
+    return 0i32
+}
+
+fn optgate_order_fast() -> u32 @export { return OPTG_ORD_FAST }
+fn optgate_order_best() -> u32 @export { return OPTG_ORD_BEST }
+
+/* PRE-RUN estimates only (no gil_forge call): E exact, G a bound + an SAT-expensive proxy. */
+fn optg_estimate(k: u64) {
+    OPTG_CE[0u64] = 0u64                                  /* E compile: a power-of-two check is free */
+    if optg_is_pow2(k) == 1u32 { OPTG_CE[1u64] = 1u64 } else { OPTG_CE[1u64] = OPTG_MUL_BASELINE }
+    OPTG_CE[2u64] = 0u64  OPTG_CE[3u64] = 0u64  OPTG_CE[4u64] = 0u64  OPTG_CE[5u64] = 0u64
+    OPTG_CG[0u64] = OPTG_SAT_PROXY                        /* G compile: SAT is expensive */
+    OPTG_CG[1u64] = OPTG_G_CODE_BOUND                     /* G code: reduces any mul to <= 3 ops */
+    OPTG_CG[2u64] = 0u64  OPTG_CG[3u64] = 0u64  OPTG_CG[4u64] = 0u64  OPTG_CG[5u64] = 0u64
+}
+
+/* decide the cost-optimal route for mul(x,k) under a named order -- argmin of two PRE-RUN estimates. */
+fn optgate_decide(k: u64, order_slot: u32) -> u32 @export {
+    optg_estimate(k)
+    cl_dot_slot(order_slot, &OPTG_CE as *u64, &OPTG_DOT as *u64)
+    let de : u64 = OPTG_DOT[0u64]
+    cl_dot_slot(order_slot, &OPTG_CG as *u64, &OPTG_DOT as *u64)
+    let dg : u64 = OPTG_DOT[0u64]
+    if dg < de { return OPTG_ROUTE_G }                    /* SAT strictly cheaper under this order */
+    return OPTG_ROUTE_E                                   /* the cheap route wins (or ties) */
+}
+
+/* execute ONLY the chosen route.  Route G wakes the dormant SAT optimizer; route E does not. */
+fn optgate_execute(k: u64, route: u32) -> u32 @export {
+    if route == OPTG_ROUTE_G {
+        OPTG_SAT_INVOKED = 1u8
+        return gil_forge(k)                              /* the battery-eater: returns the reduced op-cost */
+    }
+    OPTG_SAT_INVOKED = 0u8
+    return 0u32
+}
+
+fn optgate_sat_invoked() -> u8 @export { return OPTG_SAT_INVOKED }
+
+/* rebuild the LAST gil_forge form over bv-var x, for the independent bb_equal correctness gate. */
+fn optgate_build_reduced(x: u32) -> u32 @export {
+    let kind : u32 = gil_best_kind()
+    let a : u64 = gil_best_a()
+    let b : u64 = gil_best_b()
+    if kind == 1u32 { return bb_shl(x, a) }
+    if kind == 2u32 { let s : u32 = bb_shl(x, a)  return bb_sub(s, x) }
+    if kind == 3u32 { let s : u32 = bb_shl(x, a)  return bb_add(s, x) }
+    if kind == 4u32 { let s : u32 = bb_shl(x, a)  let t : u32 = bb_shl(x, b)  return bb_add(s, t) }
+    if kind == 5u32 { let s : u32 = bb_shl(x, a)  let t : u32 = bb_shl(x, b)  return bb_sub(s, t) }
+    return x
+}

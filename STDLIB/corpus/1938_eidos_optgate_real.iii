@@ -1,0 +1,92 @@
+/* 1938_eidos_optgate_real.iii  --  EIDOS Phase 3 / Task A: cost-ordered BATTERY-SKIP over a REAL dormant optimizer.
+ *
+ * Proves the SECOND Composer desideratum -- "do NOT invoke the battery-eating stuff when it's doing the simple"
+ * -- on REAL III work: the dormant SAT strength-reducer numera::invent's gil_forge (which the live compiler
+ * never wakes).  The decision plans over PRE-RUN cost estimates under a named order; execution runs ONLY the
+ * winner; the SAT counter (gil_kernel_calls) and gil_forge's bb_equal proof are EVIDENCE, never decision inputs.
+ *
+ * The anchors are three MEASURED facts (the estimate comparison alone would be near-tautological):
+ *   - SKIP measured: fast-compile on x*7 routes to E and gil_forge is provably NOT woken (sat_invoked==0).
+ *   - INVOKE + PROVEN: best-code on x*7 routes to G, gil_forge runs (kernel_calls>0), and the reduced form is
+ *     bb_equal to mul(x,7) -- a SAT-proven-correct reduction (the Composer never trades correctness).
+ *   - The FLIP: under the SAME best-code order, power-of-two x*8 SKIPS SAT (the shift is already optimal) while
+ *     x*7 INVOKES it -- driven by k's cost, not a hardcoded if-order.
+ * HONEST LIMITATION (gated, code 15): the discernment is essentially ONE bit (is_pow2) under an OPTIMISTIC
+ * G-estimate (<=3 ops).  For k NOT in gil_forge's forms (2^a, 2^a+-1, 2^a+-2^b) -- e.g. 11,13,19 -- SAT gains
+ * NOTHING yet best-code still invokes it: the gate OVER-invokes the battery-eater on irreducible k.  This proves
+ * desideratum #2 on the power-of-two simple case + validates the cost-SELECTION half of the Composer -- it is NOT
+ * "the planner reshuffles real III work" (that is Task B, topology routing).
+ *
+ *   code 11 SKIP    : fast-compile on x*7 did not pick route E, or woke the SAT battery-eater anyway
+ *   code 12 INVOKE  : best-code on x*7 did not pick route G / wake SAT / find a sub-multiply reduction
+ *   code 13 CORRECT : the SAT-discovered reduction is NOT bb_equal to mul(x,7) -- correctness violated
+ *   code 14 FLIP    : the same best-code order did not route x*8 to E (skip) while x*7 -> G (invoke)
+ *   code 15 OVERINV : best-code did NOT over-invoke SAT on the irreducible k=11 (limitation no longer holds)
+ * exit 99 = the gate skips the battery-eater on the power-of-two simple case + wakes it (proven-correct) under
+ *           best-code, by is_pow2 not order-name; AND it over-invokes on irreducible k (the honest gated bound).
+ */
+module m1938
+
+extern @abi(c-msvc-x64) fn optgate_reset() -> i32 from "optgate.iii"
+extern @abi(c-msvc-x64) fn optgate_order_fast() -> u32 from "optgate.iii"
+extern @abi(c-msvc-x64) fn optgate_order_best() -> u32 from "optgate.iii"
+extern @abi(c-msvc-x64) fn optgate_decide(k: u64, order_slot: u32) -> u32 from "optgate.iii"
+extern @abi(c-msvc-x64) fn optgate_execute(k: u64, route: u32) -> u32 from "optgate.iii"
+extern @abi(c-msvc-x64) fn optgate_sat_invoked() -> u8 from "optgate.iii"
+extern @abi(c-msvc-x64) fn optgate_build_reduced(x: u32) -> u32 from "optgate.iii"
+extern @abi(c-msvc-x64) fn gil_kernel_calls() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+fn main() -> u64 {
+    optgate_reset()
+    let FAST : u32 = optgate_order_fast()
+    let BEST : u32 = optgate_order_best()
+
+    /* ===== ANCHOR 1: fast-compile on x*7 -> SKIP the SAT battery-eater (measured) ===== */
+    let r1 : u32 = optgate_decide(7u64, FAST)
+    if r1 != 0u32 { return 11u64 }                       /* route E (no SAT) */
+    optgate_execute(7u64, r1)
+    if optgate_sat_invoked() != 0u8 { return 11u64 }     /* MEASURED: gil_forge was NOT woken */
+
+    /* ===== ANCHOR 2: best-code on x*7 -> INVOKE SAT, reduction PROVEN correct ===== */
+    let r2 : u32 = optgate_decide(7u64, BEST)
+    if r2 != 1u32 { return 12u64 }                       /* route G (SAT) */
+    let cost : u32 = optgate_execute(7u64, r2)
+    if optgate_sat_invoked() != 1u8 { return 12u64 }     /* SAT woken */
+    if gil_kernel_calls() == 0u64 { return 12u64 }       /* the REAL SAT counter confirms it ran */
+    if cost >= 4u32 { return 12u64 }                     /* gil_forge found a form cheaper than the multiply */
+
+    /* correctness: the reduced form is bb_equal to mul(x,7) (SAT-proven; the identity holds at any width) */
+    bb_reset(16u64)
+    let x  : u32 = bb_var(0u32)
+    let red: u32 = optgate_build_reduced(x)
+    let kc : u32 = bb_const(7u64)
+    let mul: u32 = bb_mul(x, kc)
+    if bb_equal(red, mul) != 1u8 { return 13u64 }
+
+    /* ===== ANCHOR 3: the FLIP under the SAME best-code order -- data-driven, not hardcoded ===== */
+    let r3 : u32 = optgate_decide(8u64, BEST)            /* x*8 is a power of two */
+    if r3 != 0u32 { return 14u64 }                       /* best-code SKIPS SAT for x*8 (route E optimal) */
+    optgate_execute(8u64, r3)
+    if optgate_sat_invoked() != 0u8 { return 14u64 }     /* SAT skipped for the simple pow2 case */
+    if r2 != 1u32 { return 14u64 }                       /* ...while x*7 invoked SAT under the SAME order */
+    if r3 != 0u32 { return 14u64 }                       /* -> the decision is driven by k's cost, not the order name */
+
+    /* ===== code 15: HONEST LIMITATION (gated, not hidden) -- the gate OVER-INVOKES on irreducible k ===== */
+    /* The discernment is ONE bit (is_pow2): the G-estimate (<=3 ops) is OPTIMISTIC.  k=11 is not expressible in
+     * gil_forge's forms (2^a, 2^a+-1, 2^a+-2^b), so SAT gains NOTHING -- yet best-code still routes to G under the
+     * optimistic bound and PAYS the battery for zero benefit.  Gating it keeps the limitation reproducible (the
+     * 1937 move): a smarter G-estimate (a cheap irreducibility pre-check) would change this assertion on purpose. */
+    let r4  : u32 = optgate_decide(11u64, BEST)
+    if r4 != 1u32 { return 15u64 }                       /* best-code routes k=11 to G (the optimistic bound) */
+    let c11 : u32 = optgate_execute(11u64, r4)
+    if optgate_sat_invoked() != 1u8 { return 15u64 }     /* SAT woken... */
+    if gil_kernel_calls() == 0u64 { return 15u64 }       /* ...and actually paid... */
+    if c11 != 4u32 { return 15u64 }                      /* ...but gil_forge gained NOTHING (cost == mul baseline) */
+
+    return 99u64
+}

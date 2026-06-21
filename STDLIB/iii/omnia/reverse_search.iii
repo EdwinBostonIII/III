@@ -27,6 +27,7 @@ module omnia_reverse_search
 
 extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
 extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_maxpt() -> u32 from "assimilate.iii"
 
 const RS_CAP     : u32 = 128u32
 const RS_TRAPCAP : u32 = 64u32
@@ -121,4 +122,55 @@ fn rs_search_evade(start: u32, goal: u32) -> u8 @export {
         g = g + 1u32
     }
     return 0u8
+}
+
+/* THE IMPOSSIBLE-GAP SEARCH: find a SELF-COMPLEMENTARY point (complement(x) == x).  The naive strategy
+ * iterates complement looking for the fixpoint; in a domain that HAS no self-complement point (e.g. the
+ * De Morgan diamond: 0<->1, 2<->3 -- every point flips), it oscillates forever and FATALLY returns
+ * RS_NULL.  This is a real residual gap: the diamond alone cannot bridge it. */
+fn rs_fixpoint_naive(start: u32) -> u32 @export {
+    rs_reset_search()
+    let mut cur : u32 = start
+    let mut g : u32 = 0u32
+    while g < RS_GUARD {
+        if assim_complement(cur) == cur { return cur }       /* a self-complement point */
+        let nxt : u32 = assim_complement(cur)
+        if nxt == RS_NULL { return RS_NULL }
+        if rs_visited(nxt) == 1u8 { return RS_NULL }          /* the loop closes -- cannot escape: FATAL */
+        rs_push(cur)
+        cur = nxt
+        g = g + 1u32
+    }
+    return RS_NULL
+}
+
+/* EVADE-BY-LIVING across DOMAINS: live the complement iteration; on the lasso, REWIND (retain provenance),
+ * record anti-geometry, and ECHO re-chooses by scanning the whole UNIFIED web for a self-complement point
+ * -- which exists only because a CROSS-DOMAIN system (e.g. the Kleene chain's self-mirroring middle) was
+ * assimilated.  The gap the diamond could not bridge is filled by cross-domain geometry.  Returns the
+ * fixpoint (ALIVE) or RS_NULL. */
+fn rs_fixpoint_evade(start: u32) -> u32 @export {
+    rs_reset_search()
+    let mut cur : u32 = start
+    let mut g : u32 = 0u32
+    while g < RS_GUARD {
+        if assim_complement(cur) == cur { return cur }
+        let nxt : u32 = assim_complement(cur)
+        if nxt == RS_NULL { return RS_NULL }
+        if rs_visited(nxt) == 1u8 {
+            RS_PROV = RS_PROV + 1u32                          /* TIDE: the failed branch is retained */
+            rs_add_trap(cur)                                  /* anti-geometry: this cliff is now an axiom */
+            let mp : u32 = assim_maxpt()                      /* ECHO: reach across the unified web */
+            let mut p : u32 = 0u32
+            while p < mp {
+                if assim_complement(p) == p { return p }      /* a cross-domain self-complement point */
+                p = p + 1u32
+            }
+            return RS_NULL
+        }
+        rs_push(cur)
+        cur = nxt
+        g = g + 1u32
+    }
+    return RS_NULL
 }

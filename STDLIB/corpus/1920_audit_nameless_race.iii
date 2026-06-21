@@ -1,0 +1,88 @@
+/* 1920_audit_nameless_race.iii  --  AUDIT 2 / THE NAMELESS SHADOW RACE (Execution Audit of "Equivalence").
+ *
+ * Proves the Master Web executes the same high-level logic as the legacy named primitives, but WITHOUT
+ * invoking them -- purely by traversing the recovered verbs and geometry.
+ *
+ * A compound expression  f(a,b,c) = OR( AND(a, NOT b), c )  is evaluated two ways over ALL 216 triples:
+ *   LEGACY   f_legacy   uses the NAMED primitives  l6_or / l6_and / l6_not.
+ *   NAMELESS f_nameless uses ONLY the universal verbs  assim_join / assim_meet / assim_complement  recovered
+ *            from the web's geometry -- it calls ZERO named primitives (structural: no l6_* in its body).
+ * The nameless trajectory is witnessed by the real exec_cert (streaming sha256) -> a Divergence Signature.
+ *
+ *   code 11 equiv : the nameless result diverged from the legacy result on some triple (capability lost)
+ *   code 12 sig   : the nameless geometric Divergence Signature is not reproducible (re-run differs)
+ *   code 13 real  : the Divergence Signature is trivial (not a real witness of a real trajectory)
+ * exit 99 = the web computed the exact compound logic by 100% geometric folds, no named primitive invoked.
+ */
+module m1920
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn ml_shatter_logic6() -> i32 from "master_logic.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_join(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn xc_begin() -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_event_byte(b: u32) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn xc_seal(out32: *u8) -> i32 from "exec_cert.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+/* the compound expression -- LEGACY, via the NAMED primitives */
+fn f_legacy(a: u32, b: u32, c: u32) -> u32 { return l6_or(l6_and(a, l6_not(b)), c) }
+/* the SAME expression -- NAMELESS, via ONLY the universal geometric verbs (no l6_* anywhere) */
+fn f_nameless(a: u32, b: u32, c: u32) -> u32 { return assim_join(assim_meet(a, assim_complement(b)), c) }
+
+fn main() -> u64 {
+    isub_reset()
+    ml_shatter_logic6()                    /* the web now holds logic6's geometry */
+
+    /* EQUIVALENCE over all 216 triples, witnessing the nameless trajectory */
+    let d1 : *u8 = malloc(32u64)
+    xc_begin()
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        let mut b : u32 = 0u32
+        while b < 6u32 {
+            let mut c : u32 = 0u32
+            while c < 6u32 {
+                let leg : u32 = f_legacy(a, b, c)
+                let nam : u32 = f_nameless(a, b, c)
+                if leg != nam { return 11u64 }       /* bit-identical: the nameless web lost nothing */
+                xc_event_byte(nam)                    /* witness the geometric-only result */
+                c = c + 1u32
+            }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    xc_seal(d1)
+
+    /* the Divergence Signature is reproducible (the geometric trajectory is stubbornly deterministic) */
+    let d2 : *u8 = malloc(32u64)
+    xc_begin()
+    let mut a2 : u32 = 0u32
+    while a2 < 6u32 {
+        let mut b2 : u32 = 0u32
+        while b2 < 6u32 {
+            let mut c2 : u32 = 0u32
+            while c2 < 6u32 {
+                xc_event_byte(f_nameless(a2, b2, c2))
+                c2 = c2 + 1u32
+            }
+            b2 = b2 + 1u32
+        }
+        a2 = a2 + 1u32
+    }
+    xc_seal(d2)
+    if cad_eq(d1, d2) != 1u8 { return 12u64 }
+
+    /* the witness is real (non-trivial) */
+    if d1[0u64] == 0u8 { if d1[1u64] == 0u8 { if d1[2u64] == 0u8 { return 13u64 } } }
+
+    free(d1)  free(d2)
+    return 99u64
+}

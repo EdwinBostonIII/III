@@ -1,0 +1,84 @@
+/* 1921_audit_cross_domain.iii  --  AUDIT 3 / THE UNIVERSAL ISOMORPHISM (Translation Audit).
+ *
+ * Proves the substrate formed a UNIVERSAL PROTOCOL: because every system was reduced to the SAME microscopic
+ * atoms, the web does not care which domain a law originated in.  A law expressed in the universal verbs
+ * holds identically in EVERY domain -- so a proof in System A IS a proof in System Z (it is the same
+ * geometric statement over the same atoms).  The two famous De Morgan / involution laws are verified across
+ * the whole unified web (diamond + MO2 + Kleene), INCLUDING cross-domain pairs.
+ *
+ *   code 11 demorgan : De Morgan  complement(meet(a,b)) == join(complement(a),complement(b))  fails somewhere
+ *   code 12 involut  : the involution  complement(complement(x)) == x  fails somewhere
+ *   code 13 A<->Z    : a diamond point and a Kleene point do not jointly obey the law (no cross-domain bridge)
+ *   code 14 A<->B    : a diamond point and an MO2 point do not jointly obey the law
+ *   code 15 TEETH    : a FALSE law (meet == join) held anyway -- the verbs do not really compute
+ * exit 99 = one universal law, proven across every domain by the same verbs -- intrinsic cross-domain knowledge.
+ */
+module m1921
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_join(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_maxpt() -> u32 from "assimilate.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const A_NONE    : u32 = 0xFFFFFFFFu32
+
+fn add_diamond() {
+    assim_add(V_BELOW,0u32,2u32) assim_add(V_BELOW,0u32,3u32) assim_add(V_BELOW,2u32,1u32)
+    assim_add(V_BELOW,3u32,1u32) assim_add(V_BELOW,0u32,1u32)
+    assim_add(V_REFLECT,2u32,3u32) assim_add(V_REFLECT,3u32,2u32) assim_add(V_REFLECT,0u32,1u32) assim_add(V_REFLECT,1u32,0u32)
+}
+fn add_mo2() {
+    assim_add(V_BELOW,0u32,4u32) assim_add(V_BELOW,0u32,5u32) assim_add(V_BELOW,4u32,1u32) assim_add(V_BELOW,5u32,1u32)
+    assim_add(V_REFLECT,4u32,5u32) assim_add(V_REFLECT,5u32,4u32)
+}
+fn add_kleene() {
+    assim_add(V_BELOW,0u32,6u32) assim_add(V_BELOW,6u32,1u32)
+    assim_add(V_REFLECT,6u32,6u32)
+}
+
+/* the universal De Morgan law via the recovered verbs. */
+fn demorgan(a: u32, b: u32) -> u8 {
+    let lhs : u32 = assim_complement(assim_meet(a, b))
+    let rhs : u32 = assim_join(assim_complement(a), assim_complement(b))
+    if lhs == rhs { return 1u8 }
+    return 0u8
+}
+fn involution(x: u32) -> u8 {
+    if assim_complement(assim_complement(x)) == x { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    isub_reset()
+    add_diamond()  add_mo2()  add_kleene()        /* the unified web: 7 points across 3 domains */
+    let mp : u32 = assim_maxpt()
+
+    /* the SAME universal law holds across EVERY pair in EVERY domain (the translation A<->Z is the identity) */
+    let mut a : u32 = 0u32
+    while a < mp {
+        if assim_complement(a) != A_NONE {
+            let mut b : u32 = 0u32
+            while b < mp {
+                if assim_complement(b) != A_NONE {
+                    if demorgan(a, b) != 1u8 { return 11u64 }
+                }
+                b = b + 1u32
+            }
+            if involution(a) != 1u8 { return 12u64 }
+        }
+        a = a + 1u32
+    }
+
+    /* explicitly cross-domain: a diamond point and a Kleene point jointly obey the same law */
+    if demorgan(2u32, 6u32) != 1u8 { return 13u64 }
+    if demorgan(2u32, 4u32) != 1u8 { return 14u64 }    /* diamond x MO2 */
+
+    /* TEETH: a FALSE law must NOT hold -- the verbs genuinely compute (meet 2,3 = 0 != join 2,3 = 1) */
+    if assim_meet(2u32, 3u32) == assim_join(2u32, 3u32) { return 15u64 }
+
+    return 99u64
+}

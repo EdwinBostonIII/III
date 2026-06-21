@@ -1,0 +1,77 @@
+/* 1919_audit_compression.iii  --  AUDIT 1 / THE TOPOGRAPHIC COLLAPSE (Structural Audit of "Zero Redundancy").
+ *
+ * Mathematically proves the destruction of duplicate logic.  The BLOAT METRIC = the three Grail systems kept
+ * isolated, no dedup (raw isub_emit): 9 + 15 + 6 = 30 blocks.  The DENSITY METRIC = the same systems
+ * assimilated into ONE web by content-address (assim_add): the shared structure is vaporised, so the web
+ * collapses to far fewer blocks.  If the node count does not collapse, the waste was not cut.
+ *
+ *   code 11 bloat   : the isolated raw union is not 30 blocks (baseline wrong)
+ *   code 12 density : the assimilated web is not 18 blocks (collapse wrong)
+ *   code 13 points  : the web carrier is not 7 points
+ *   code 14 merged  : the collapse (bloat - density) is not 12 (the exact redundancy cut)
+ *   code 15 collapse: the density is not strictly smaller than the bloat (no collapse at all)
+ * exit 99 = the web collapsed 30 -> 18 blocks (12 duplicates vaporised) -- zero redundancy proven.
+ */
+module m1919
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_npoints() -> u32 from "assimilate.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+
+var SYS_V : [u32; 32]
+var SYS_A : [u32; 32]
+var SYS_B : [u32; 32]
+var SYS_N : u32 = 0u32
+
+fn put(v: u32, a: u32, b: u32) { SYS_V[SYS_N] = v  SYS_A[SYS_N] = a  SYS_B[SYS_N] = b  SYS_N = SYS_N + 1u32 }
+
+fn stage_diamond() {
+    SYS_N = 0u32
+    put(V_BELOW,0u32,2u32) put(V_BELOW,0u32,3u32) put(V_BELOW,2u32,1u32) put(V_BELOW,3u32,1u32) put(V_BELOW,0u32,1u32)
+    put(V_REFLECT,2u32,3u32) put(V_REFLECT,3u32,2u32) put(V_REFLECT,0u32,1u32) put(V_REFLECT,1u32,0u32)
+}
+fn stage_mo2() {
+    SYS_N = 0u32
+    put(V_BELOW,0u32,2u32) put(V_BELOW,0u32,3u32) put(V_BELOW,0u32,4u32) put(V_BELOW,0u32,5u32)
+    put(V_BELOW,2u32,1u32) put(V_BELOW,3u32,1u32) put(V_BELOW,4u32,1u32) put(V_BELOW,5u32,1u32) put(V_BELOW,0u32,1u32)
+    put(V_REFLECT,2u32,3u32) put(V_REFLECT,3u32,2u32) put(V_REFLECT,4u32,5u32) put(V_REFLECT,5u32,4u32)
+    put(V_REFLECT,0u32,1u32) put(V_REFLECT,1u32,0u32)
+}
+fn stage_kleene() {
+    SYS_N = 0u32
+    put(V_BELOW,0u32,6u32) put(V_BELOW,6u32,1u32) put(V_BELOW,0u32,1u32)
+    put(V_REFLECT,0u32,1u32) put(V_REFLECT,1u32,0u32) put(V_REFLECT,6u32,6u32)
+}
+fn emit_raw() { let mut i:u32=0u32  while i<SYS_N { isub_emit(SYS_V[i],SYS_A[i],SYS_B[i])  i=i+1u32 } }
+fn emit_dedup() { let mut i:u32=0u32  while i<SYS_N { assim_add(SYS_V[i],SYS_A[i],SYS_B[i])  i=i+1u32 } }
+
+fn main() -> u64 {
+    /* BLOAT METRIC -- the isolated systems, no dedup */
+    isub_reset()
+    stage_diamond() emit_raw()
+    stage_mo2()     emit_raw()
+    stage_kleene()  emit_raw()
+    let bloat : u32 = isub_count()
+    if bloat != 30u32 { return 11u64 }
+
+    /* DENSITY METRIC -- the same systems assimilated by content-address (shared structure merged once) */
+    isub_reset()
+    stage_diamond() emit_dedup()
+    stage_mo2()     emit_dedup()
+    stage_kleene()  emit_dedup()
+    let density : u32 = assim_web_size()
+    if density != 18u32 { return 12u64 }
+    if assim_npoints() != 7u32 { return 13u64 }
+
+    /* THE COLLAPSE -- exactly 12 duplicate blocks vaporised, density strictly below bloat */
+    if (bloat - density) != 12u32 { return 14u64 }
+    if density >= bloat { return 15u64 }
+
+    return 99u64
+}

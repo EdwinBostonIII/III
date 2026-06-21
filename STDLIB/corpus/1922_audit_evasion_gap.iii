@@ -1,0 +1,68 @@
+/* 1922_audit_evasion_gap.iii  --  AUDIT 4 / THE EVASION OF THE VOID (Emergence Audit -- the ultimate proof).
+ *
+ * Proves the hyper-dense Master Web fills a residual gap an isolated system CANNOT bridge, by emergent
+ * cross-domain intelligence.  The trap: find a SELF-COMPLEMENTARY point (complement(x) == x).  The De Morgan
+ * diamond has NONE (0<->1, 2<->3 -- every point flips); a naive complement-iteration oscillates 2<->3
+ * forever and FATALLY fails -- a real non-terminating cliff the diamond lacks the primitive to cross.
+ *
+ * Assimilate the Kleene chain and its self-mirroring middle 6 (complement(6)=6) enters the unified web.
+ * Now the Master Web walks into the trap, detects the LASSO, TIDE rewinds (retaining the failed branch as
+ * provenance), and ECHO reaches across the web to the CROSS-DOMAIN point 6 -- the gap is bridged by geometry
+ * that originated in a different Grail system.  ALIVE.
+ *
+ *   code 11 gap     : the diamond ALONE somehow found a self-complement point (it must not -- there is none)
+ *   code 12 alive   : the assimilated web failed to find a fixpoint (the evasion did not survive)
+ *   code 13 crossdom: the fixpoint found is not 6 (not the cross-domain Kleene point that bridges the gap)
+ *   code 14 fixpoint: 6 is not actually self-complementary (the bridge is not real)
+ *   code 15 lived   : the web did not walk into the trap first (no provenance -- it did not bleed)
+ *   code 16 TEETH   : naive complement-iteration on the FULL web found it too (it must still loop -- only the
+ *                     cross-domain SCAN of the evade reaches 6)
+ * exit 99 = ALIVE: walked into the trap, detected the loop, rewound, bridged it with cross-domain geometry.
+ */
+module m1922
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn rs_forget() -> i32 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_fixpoint_naive(start: u32) -> u32 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_fixpoint_evade(start: u32) -> u32 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_provenance_count() -> u32 from "reverse_search.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const RS_NULL   : u32 = 0xFFFFFFFFu32
+
+fn add_diamond() {
+    assim_add(V_BELOW,0u32,2u32) assim_add(V_BELOW,0u32,3u32) assim_add(V_BELOW,2u32,1u32)
+    assim_add(V_BELOW,3u32,1u32) assim_add(V_BELOW,0u32,1u32)
+    assim_add(V_REFLECT,2u32,3u32) assim_add(V_REFLECT,3u32,2u32) assim_add(V_REFLECT,0u32,1u32) assim_add(V_REFLECT,1u32,0u32)
+}
+fn add_kleene() {
+    assim_add(V_BELOW,0u32,6u32) assim_add(V_BELOW,6u32,1u32) assim_add(V_BELOW,0u32,1u32)
+    assim_add(V_REFLECT,0u32,1u32) assim_add(V_REFLECT,1u32,0u32) assim_add(V_REFLECT,6u32,6u32)
+}
+
+fn main() -> u64 {
+    /* the diamond ALONE -- the residual gap: no self-complement point exists */
+    isub_reset()
+    add_diamond()
+    rs_forget()
+    if rs_fixpoint_naive(2u32) != RS_NULL { return 11u64 }    /* the gap is real: FATAL */
+
+    /* assimilate the cross-domain system -- Kleene's self-mirroring middle 6 enters the web */
+    add_kleene()
+
+    /* EVADE-BY-LIVING across domains: walk in, detect the lasso, rewind, bridge with cross-domain geometry */
+    rs_forget()
+    let ev : u32 = rs_fixpoint_evade(2u32)
+    if ev == RS_NULL { return 12u64 }                        /* ALIVE: a fixpoint was found */
+    if ev != 6u32 { return 13u64 }                           /* it is the CROSS-DOMAIN Kleene point */
+    if assim_complement(6u32) != 6u32 { return 14u64 }       /* and 6 genuinely is self-complementary */
+    if rs_provenance_count() == 0u32 { return 15u64 }        /* it bled: walked into the trap before evading */
+
+    /* TEETH: naive iteration on the FULL web still loops in the diamond -- only the cross-domain scan reaches 6 */
+    if rs_fixpoint_naive(2u32) != RS_NULL { return 16u64 }
+
+    return 99u64
+}

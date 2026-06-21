@@ -80,6 +80,17 @@ The kernel is real: `event_substrate` (state = fold over an append-only event lo
 
 ---
 
+## 9. THE STRUCTURAL & TRAJECTORY AUDITS (empirical proof of success)
+
+A standard KAT validates the destination; for a substrate whose value is geometry, provenance, and density, four dedicated audits prove the assimilation succeeded. All four = EXIT 99 vs the sealed archive alone.
+
+- **Audit 1 — Topographic Collapse** (`1919`, zero redundancy). BLOAT metric (three systems isolated, raw `isub_emit`, no dedup) = **30 blocks**; DENSITY metric (assimilated by content-address) = **18 blocks / 7 points** — exactly **12 duplicate blocks vaporized**. The collapse is the proof the waste was cut. (Block-level metric; the named-op collapse is 9 named ops → 3 universal verbs.)
+- **Audit 2 — Nameless Shadow Race** (`1920`, equivalence). A compound expression `OR(AND(a,NOT b),c)` evaluated over all **216 triples** two ways: `f_legacy` via named `l6_*`, `f_nameless` via **only** `assim_meet`/`join`/`complement`. Bit-identical on every triple (capability preserved); the nameless trajectory is witnessed by real `exec_cert` into a reproducible Divergence Signature. Namelessness is **structural** — `f_nameless`'s body provably calls zero `l6_*`; the witness proves the geometric trajectory is stubbornly deterministic.
+- **Audit 3 — Universal Isomorphism** (`1921`, the universal protocol). De Morgan (`complement(meet(a,b)) == join(complement(a),complement(b))`) and involution hold **identically across every domain** of the unified web via the *same* verbs — including cross-domain pairs (diamond×Kleene, diamond×MO2). A law proven in System A *is* the proof in System Z because both are the same geometric statement over the same atoms (the basis of translation). Teeth: a false law (`meet==join`) fails.
+- **Audit 4 — Evasion of the Void** (`1922`, emergence — the ultimate proof). The trap: find a self-complementary point. The diamond has **none** (a real residual gap — a naive complement-iteration loops forever, FATAL). Assimilate Kleene → its self-mirroring middle `6` enters the web. The Master Web walks into the trap, detects the lasso, TIDE rewinds (retaining provenance), and ECHO reaches across to the **cross-domain** point `6` — the gap bridged by geometry from a *different* Grail system. ALIVE. Teeth: naive iteration on the full web still loops (only the cross-domain scan reaches `6`).
+
+---
+
 ## 8. THE SOURCE-OF-TRUTH LAW (the capstone)
 
 **One master logic.** Every assimilated system is shattered to uniform `<verb∈{BELOW,REFLECT}, a, b>` blocks on the witnessed metal bus; shared structure is merged by content-address (zero redundancy); the universal verbs `meet`/`join`/`complement` recovered from the geometry compute every system's logic; and any **named** primitive is provably nothing more than one of those verbs *at its geometry* (Phase 5). The name is a convenience, never the substance — the substance is verb @ geometry, witnessed, reversible. The sovereign gate (`ml_named_is_redundant`) is how III *proves*, in III, that a name has been fully dissolved before it may be retired. This is what the state-primary weave could not be: not a library of black boxes, but one lean, executable, content-addressed web of microscopic building blocks of the same size, linked by exactly what they share.

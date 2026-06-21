@@ -1,0 +1,48 @@
+/* test_call.iii  --  the CALLQ-to-NAMED-SYMBOL reloc (extern call).  Real cg_r3 .s for a fn that calls an
+ * extern: `callq sov_ext_fn` = e8 00 00 00 00 + REL32 reloc to the NAMED symbol (not a section) at field 0x1c.
+ * Must reproduce gcc's 63 .text bytes, the reloc (offset 0x1c, named: sec=0), and intern the right extern name.
+ *   11 reln / 12 reloff / 13 not-named / 14 extern-name / 15 len / 16+i byte.  exit 99 = call reloc exact vs gcc.
+ */
+module sovtc_test_call
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sec(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_namelen(slot: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_namebyte(slot: u32, j: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 63] = [
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0xB8u8,0x08u8,0x00u8,0x00u8,
+  0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x59u8,0x48u8,0x83u8,0xECu8,0x20u8,0xE8u8,0x00u8,0x00u8,0x00u8,0x00u8,
+  0x48u8,0x83u8,0xC4u8,0x20u8,0x50u8,0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,
+  0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8
+]
+/* "sov_ext_fn" */
+var ENAME : [u32; 10] = [115u32,111u32,118u32,95u32,101u32,120u32,116u32,95u32,102u32,110u32]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .rodata\nL_str_0:\n  .text\nL_sov_e_go:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movabsq $0x8, %rax\n  pushq %rax\n  popq %rcx\n  subq $32, %rsp\n  callq sov_ext_fn\n  addq $32, %rsp\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 10u64 }   /* must not error (callq is handled, not a sibling) */
+
+    if sov_reloc_n() != 1u32 { return 11u64 }
+    if sov_reloc_off(0u32) != 0x1Cu32 { return 12u64 }
+    if sov_reloc_sec(0u32) != 0u32 { return 13u64 }     /* 0 = NAMED reloc (not a section) */
+
+    /* the interned extern symbol must be exactly "sov_ext_fn" */
+    if sov_ext_n() != 1u32 { return 14u64 }
+    if sov_ext_namelen(0u32) != 10u32 { return 14u64 }
+    let mut k : u32 = 0u32
+    while k < 10u32 { if sov_ext_namebyte(0u32, k) != ENAME[k as u64] { return 14u64 }  k = k + 1u32 }
+
+    if sov_len() != 63u32 { return 15u64 }
+    let mut i : u32 = 0u32
+    while i < 63u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (16u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

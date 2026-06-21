@@ -21,14 +21,55 @@ var SOV_LEN : u32 = 0u32
 /* relocation table: each rip-relative reference to a symbol records one REL32 reloc.
  * section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 (match cg_r3's .section names). */
 var REL_OFF : [u32; 256]    /* the disp32 FIELD offset within .text */
-var REL_SEC : [u32; 256]    /* the target SECTION the reloc points at */
+var REL_SEC : [u32; 256]    /* the target: a SECTION id (1/2/3) for data relocs, OR 0 = a NAMED symbol */
+var REL_SYM : [u32; 256]    /* for named relocs (REL_SEC==0): the extern-symbol slot */
 var REL_N   : u32 = 0u32
 
-fn sov_reset() -> i32 @export { SOV_LEN = 0u32  REL_N = 0u32  return 0i32 }
+/* extern (named) symbol table -- the targets of callq-to-named-symbol relocs (and, later, COFF symbols). */
+var EXT_NAME : [u8; 1024]   /* 32 bytes per slot */
+var EXT_NLEN : [u32; 32]
+var EXT_N    : u32 = 0u32
+var CN_BUF   : [u8; 64]      /* the parser pushes a call-target name here, then calls sov_call_ext */
+var CN_LEN   : u32 = 0u32
+
+fn sov_reset() -> i32 @export { SOV_LEN = 0u32  REL_N = 0u32  EXT_N = 0u32  CN_LEN = 0u32  return 0i32 }
 fn sov_reloc_n() -> u32 @export { return REL_N }
 fn sov_reloc_off(i: u32) -> u32 @export { if i < REL_N { return REL_OFF[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_reloc_sec(i: u32) -> u32 @export { if i < REL_N { return REL_SEC[i as u64] }  return 0xFFFFFFFFu32 }
-fn sov_rec_reloc(sec: u32) { if REL_N < 256u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_N = REL_N + 1u32 } }
+fn sov_reloc_sym(i: u32) -> u32 @export { if i < REL_N { return REL_SYM[i as u64] }  return 0xFFFFFFFFu32 }
+fn sov_rec_reloc(sec: u32) { if REL_N < 256u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = 0xFFFFFFFFu32  REL_N = REL_N + 1u32 } }
+
+fn sov_cn_clear() -> i32 @export { CN_LEN = 0u32  return 0i32 }
+fn sov_cn_push(ch: u32) -> i32 @export { if CN_LEN < 64u32 { CN_BUF[CN_LEN as u64] = ch as u8  CN_LEN = CN_LEN + 1u32 }  return 0i32 }
+fn cn_eq(slot: u32) -> u32 {
+    if EXT_NLEN[slot as u64] != CN_LEN { return 0u32 }
+    let mut j : u32 = 0u32
+    while j < CN_LEN { if EXT_NAME[((slot * 32u32) + j) as u64] != CN_BUF[j as u64] { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+fn sov_ext_intern() -> u32 {   /* find or add CN_BUF as an extern symbol; return its slot */
+    let mut i : u32 = 0u32
+    while i < EXT_N { if cn_eq(i) == 1u32 { return i }  i = i + 1u32 }
+    if EXT_N < 32u32 {
+        let mut j : u32 = 0u32
+        while j < CN_LEN { EXT_NAME[((EXT_N * 32u32) + j) as u64] = CN_BUF[j as u64]  j = j + 1u32 }
+        EXT_NLEN[EXT_N as u64] = CN_LEN
+        let s : u32 = EXT_N  EXT_N = EXT_N + 1u32  return s
+    }
+    return 0xFFFFFFFFu32
+}
+fn sov_ext_n() -> u32 @export { return EXT_N }
+fn sov_ext_namelen(slot: u32) -> u32 @export { if slot < EXT_N { return EXT_NLEN[slot as u64] }  return 0xFFFFFFFFu32 }
+fn sov_ext_namebyte(slot: u32, j: u32) -> u32 @export { if slot < EXT_N { if j < EXT_NLEN[slot as u64] { return EXT_NAME[((slot * 32u32) + j) as u64] as u32 } }  return 0xFFFFFFFFu32 }
+
+/* callq to a NAMED symbol (extern): E8 + a REL32 reloc to the symbol in CN_BUF + disp32=0 (the gas convention). */
+fn sov_call_ext() -> i32 @export {
+    sov_emit(0xE8u32)
+    let slot : u32 = sov_ext_intern()
+    if REL_N < 256u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = 0u32  REL_SYM[REL_N as u64] = slot  REL_N = REL_N + 1u32 }
+    sov_imm(0u64, 4u32)
+    return 0i32
+}
 fn sov_len() -> u32 @export { return SOV_LEN }
 fn sov_at(i: u32) -> u32 @export { if i < SOV_LEN { return SOV_BUF[i] as u32 }  return 0xFFFFFFFFu32 }
 

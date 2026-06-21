@@ -35,6 +35,9 @@ extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cn_clear() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cn_push(ch: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_call_ext() -> i32 from "sovas.iii"
 
 /* ASCII (numeric, to avoid any char-literal assumptions) */
 const C_SP : u32 = 32u32
@@ -290,6 +293,23 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
                         sp_operand()  S1I = OPI
                         sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
                         sp_operand()  sov_movabs(OPR, S1I as u64)
+                    } else { if mn_is(99u32,97u32,108u32,108u32,5u32) == 1u32 {   /* callq <name> */
+                        sp_skip_ws()
+                        let nlen : u32 = sp_read_name_into(SYM_N)
+                        let mut sib : u32 = 0u32
+                        let mut ci : u32 = 0u32
+                        while ci < SYM_N {
+                            if sp_names_eq(SYM_N, nlen, ci, SYM_NLEN[ci as u64]) == 1u32 {
+                                if SYM_SEC[ci as u64] == SEC_TEXT { sib = 1u32 }  ci = SYM_N
+                            } else { ci = ci + 1u32 }
+                        }
+                        if sib == 1u32 { PARSE_ERR = 1u32 }   /* sibling call -> needs label resolution (branches) */
+                        else {
+                            sov_cn_clear()
+                            let mut cj : u32 = 0u32
+                            while cj < nlen { sov_cn_push(SYM_NAME[((SYM_N * 32u32) + cj) as u64] as u32)  cj = cj + 1u32 }
+                            sov_call_ext()
+                        }
                     } else {
                         /* binary ALU: <op>q  src,dst.  An UNKNOWN mnemonic falls here and matches nothing ->
                          * HARD ERROR (mt stays 0 -> PARSE_ERR), never a silent missing-bytes drop. */
@@ -310,7 +330,7 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
                         if mn_is(111u32,114u32,113u32,0u32,3u32) == 1u32 { mt = 1u32  sov_or_rr(OPR, S1R) }     /* orq */
                         if mn_is(120u32,111u32,114u32,113u32,4u32) == 1u32 { mt = 1u32  sov_xor_rr(OPR, S1R) }  /* xorq */
                         if mt == 0u32 { PARSE_ERR = 1u32 }    /* unknown mnemonic -> loud, located failure */
-                    } } } } } }
+                    } } } } } } }
                     sp_skip_line()
                 }
             }
@@ -385,7 +405,8 @@ fn sp_build_symtab(ptr: *u8, len: u32) {
             if sp_ch() == C_COLON {
                 if CUR_SEC == SEC_DATA { sp_record_at(nlen) }
                 else { if CUR_SEC == SEC_RODATA { sp_record_at(nlen) }
-                else { if CUR_SEC == SEC_BSS { sp_record_at(nlen) } } }
+                else { if CUR_SEC == SEC_BSS { sp_record_at(nlen) }
+                else { if CUR_SEC == SEC_TEXT { sp_record_at(nlen) } } } }   /* TEXT labels: for sibling-call/branch detection */
             }
             sp_skip_line()
         }

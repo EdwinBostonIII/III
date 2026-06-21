@@ -38,6 +38,7 @@ extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil_best_kind() -> u32 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil_best_a() -> u64 from "invent.iii"
 extern @abi(c-msvc-x64) fn gil_best_b() -> u64 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_reducible(k: u64) -> u8 from "invent.iii"
 extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
@@ -82,13 +83,17 @@ fn optgate_reset() -> i32 @export {
 fn optgate_order_fast() -> u32 @export { return OPTG_ORD_FAST }
 fn optgate_order_best() -> u32 @export { return OPTG_ORD_BEST }
 
-/* PRE-RUN estimates only (no gil_forge call): E exact, G a bound + an SAT-expensive proxy. */
+/* PRE-RUN estimates only (no gil_forge SAT call): E exact, G a cheap-but-SOUND benefit estimate.  The G code
+ * estimate now uses gil_reducible(k) -- a cheap NO-SAT structural check (sound both ways, corpus 1948) -- so G is
+ * only credited the reduced bound when gil_forge WILL actually reduce k; on irreducible k it gets the multiply
+ * baseline (G gains nothing), so best-code no longer prefers G and the SAT battery is NOT woken (fixes the
+ * code-15 over-invoke).  Still no SAT here -- gil_reducible is O(GIL_MAXA^2) bit-checks. */
 fn optg_estimate(k: u64) {
     OPTG_CE[0u64] = 0u64                                  /* E compile: a power-of-two check is free */
     if optg_is_pow2(k) == 1u32 { OPTG_CE[1u64] = 1u64 } else { OPTG_CE[1u64] = OPTG_MUL_BASELINE }
     OPTG_CE[2u64] = 0u64  OPTG_CE[3u64] = 0u64  OPTG_CE[4u64] = 0u64  OPTG_CE[5u64] = 0u64
     OPTG_CG[0u64] = OPTG_SAT_PROXY                        /* G compile: SAT is expensive */
-    OPTG_CG[1u64] = OPTG_G_CODE_BOUND                     /* G code: reduces any mul to <= 3 ops */
+    if gil_reducible(k) == 1u8 { OPTG_CG[1u64] = OPTG_G_CODE_BOUND } else { OPTG_CG[1u64] = OPTG_MUL_BASELINE }
     OPTG_CG[2u64] = 0u64  OPTG_CG[3u64] = 0u64  OPTG_CG[4u64] = 0u64  OPTG_CG[5u64] = 0u64
 }
 

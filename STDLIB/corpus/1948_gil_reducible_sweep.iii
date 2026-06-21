@@ -1,0 +1,32 @@
+/* 1948_gil_reducible_sweep.iii  --  the SOUNDNESS gate for the cheap gil_reducible pre-check (BOTH directions).
+ *
+ * eidos/optgate uses gil_reducible(k) -- a cheap NO-SAT structural check -- to estimate whether gil_forge's SAT
+ * route will actually beat the multiply, so it stops over-invoking the SAT battery on irreducible k (optgate
+ * code-15 was the documented over-invoke).  That fix is only sound if the pre-check AGREES with gil_forge's real
+ * outcome BOTH ways:
+ *   - says-reducible-but-isn't  -> the over-invoke persists (bug not fixed)
+ *   - says-irreducible-but-is    -> optgate skips a REAL reduction -> a REGRESSION, strictly worse
+ * So this is a differential sweep: for every k in a contiguous range, gil_reducible(k) must equal
+ * (gil_forge(k) < GIL_MUL_COST) -- the actual SAT search result.  The range straddles reducible k (2,3,4,7,8,
+ * 15,16,17,...) and irreducible k (11,13,19,23), so both directions are exercised.
+ *
+ *   return 100+k = the pre-check DISAGREED with the SAT outcome at that k (unsound -- fix it)
+ * exit 99 = gil_reducible matches gil_forge across the sweep -- the pre-check is sound, the optgate fix is safe.
+ */
+module m1948
+
+extern @abi(c-msvc-x64) fn gil_reducible(k: u64) -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gil_forge(k: u64) -> u32 from "invent.iii"
+
+fn main() -> u64 {
+    let mut k : u64 = 2u64
+    while k <= 24u64 {
+        let pre : u8 = gil_reducible(k)            /* cheap structural pre-check (no SAT) */
+        let cost : u32 = gil_forge(k)              /* the ACTUAL SAT search */
+        let mut actually : u8 = 0u8
+        if cost < 4u32 { actually = 1u8 }          /* GIL_MUL_COST = 4: a real reduction was found */
+        if pre != actually { return 100u64 + k }   /* disagreement at k -> the pre-check is unsound */
+        k = k + 1u64
+    }
+    return 99u64
+}

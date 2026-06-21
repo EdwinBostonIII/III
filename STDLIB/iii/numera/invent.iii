@@ -145,6 +145,39 @@ fn gil_best_b() -> u64 @export { return GIL_BEST_B }
 fn gil_kernel_calls() -> u64 @export { return GIL_KERNEL_CALLS }
 fn gil_sieve_drops() -> u64 @export { return GIL_SIEVE_DROPS }
 
+/* Cheap STRUCTURAL pre-check (NO SAT): will gil_forge find a cheaper-than-multiply reduction for mul(x,k)?
+ * It mirrors gil_forge's own search (shapes 1..5 over the same a,b ranges) but only checks whether k EQUALS a
+ * shape's value -- which is exactly when that shape equals k*x (e.g. (x<<a)-x == k*x  iff  k == 2^a - 1).  So this
+ * is SOUND BOTH WAYS: gil_reducible(k) == 1  iff  gil_forge(k) < GIL_MUL_COST (proven by the differential sweep,
+ * corpus 1948).  Lets a caller (eidos/optgate) estimate the SAT route's benefit WITHOUT paying the battery. */
+fn gil_reducible(k: u64) -> u8 @export {
+    let mut a : u64 = 0u64                                  /* shape 1: shl(x,a) == 2^a, a = 0..GIL_MAXA */
+    while a <= GIL_MAXA {
+        if k == (1u64 << a) { return 1u8 }
+        a = a + 1u64
+    }
+    a = 1u64                                                /* shapes 2,3: 2^a -/+ 1, a = 1..GIL_MAXA */
+    while a <= GIL_MAXA {
+        let pa : u64 = 1u64 << a
+        if k == (pa - 1u64) { return 1u8 }
+        if k == (pa + 1u64) { return 1u8 }
+        a = a + 1u64
+    }
+    a = 1u64                                                /* shapes 4,5: 2^a +/- 2^b, a = 1..GIL_MAXA, b = 0..a-1 */
+    while a <= GIL_MAXA {
+        let pa : u64 = 1u64 << a
+        let mut b : u64 = 0u64
+        while b < a {
+            let pb : u64 = 1u64 << b
+            if k == (pa + pb) { return 1u8 }
+            if k == (pa - pb) { return 1u8 }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    return 0u8
+}
+
 /* the safety check, exposed: the SAT judge REFUSES a false strength reduction (k*x where k != 2^a - 1
  * against (x<<a)-x).  1 iff correctly refuted. */
 fn gil_refutes_false(k: u64, a: u64) -> u8 @export {

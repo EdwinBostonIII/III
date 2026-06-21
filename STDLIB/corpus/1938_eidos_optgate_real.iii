@@ -11,19 +11,19 @@
  *     bb_equal to mul(x,7) -- a SAT-proven-correct reduction (the Composer never trades correctness).
  *   - The FLIP: under the SAME best-code order, power-of-two x*8 SKIPS SAT (the shift is already optimal) while
  *     x*7 INVOKES it -- driven by k's cost, not a hardcoded if-order.
- * HONEST LIMITATION (gated, code 15): the discernment is essentially ONE bit (is_pow2) under an OPTIMISTIC
- * G-estimate (<=3 ops).  For k NOT in gil_forge's forms (2^a, 2^a+-1, 2^a+-2^b) -- e.g. 11,13,19 -- SAT gains
- * NOTHING yet best-code still invokes it: the gate OVER-invokes the battery-eater on irreducible k.  This proves
- * desideratum #2 on the power-of-two simple case + validates the cost-SELECTION half of the Composer -- it is NOT
- * "the planner reshuffles real III work" (that is Task B, topology routing).
+ * DISCERNMENT (now SOUND, code 15): the G-estimate uses gil_reducible(k) -- a cheap no-SAT structural check,
+ * sound both ways (corpus 1948) -- so G is credited the reduced bound ONLY when gil_forge will actually reduce k.
+ * For k NOT in gil_forge's forms (2^a, 2^a+-1, 2^a+-2^b) -- e.g. 11,13,19 -- best-code now routes to E and does
+ * NOT wake the battery (the prior over-invoke is FIXED).  This proves desideratum #2 + validates the cost-SELECTION
+ * half of the Composer -- it is NOT "the planner reshuffles real III work" (that is Task B, topology routing).
  *
  *   code 11 SKIP    : fast-compile on x*7 did not pick route E, or woke the SAT battery-eater anyway
  *   code 12 INVOKE  : best-code on x*7 did not pick route G / wake SAT / find a sub-multiply reduction
  *   code 13 CORRECT : the SAT-discovered reduction is NOT bb_equal to mul(x,7) -- correctness violated
  *   code 14 FLIP    : the same best-code order did not route x*8 to E (skip) while x*7 -> G (invoke)
- *   code 15 OVERINV : best-code did NOT over-invoke SAT on the irreducible k=11 (limitation no longer holds)
+ *   code 15 FIXED   : best-code did NOT route irreducible k=11 to E (no SAT), or the reducible x*7 regressed
  * exit 99 = the gate skips the battery-eater on the power-of-two simple case + wakes it (proven-correct) under
- *           best-code, by is_pow2 not order-name; AND it over-invokes on irreducible k (the honest gated bound).
+ *           best-code, by reducibility not order-name; AND it does NOT over-invoke on irreducible k (fixed, 1948).
  */
 module m1938
 
@@ -76,17 +76,16 @@ fn main() -> u64 {
     if r2 != 1u32 { return 14u64 }                       /* ...while x*7 invoked SAT under the SAME order */
     if r3 != 0u32 { return 14u64 }                       /* -> the decision is driven by k's cost, not the order name */
 
-    /* ===== code 15: HONEST LIMITATION (gated, not hidden) -- the gate OVER-INVOKES on irreducible k ===== */
-    /* The discernment is ONE bit (is_pow2): the G-estimate (<=3 ops) is OPTIMISTIC.  k=11 is not expressible in
-     * gil_forge's forms (2^a, 2^a+-1, 2^a+-2^b), so SAT gains NOTHING -- yet best-code still routes to G under the
-     * optimistic bound and PAYS the battery for zero benefit.  Gating it keeps the limitation reproducible (the
-     * 1937 move): a smarter G-estimate (a cheap irreducibility pre-check) would change this assertion on purpose. */
-    let r4  : u32 = optgate_decide(11u64, BEST)
-    if r4 != 1u32 { return 15u64 }                       /* best-code routes k=11 to G (the optimistic bound) */
-    let c11 : u32 = optgate_execute(11u64, r4)
-    if optgate_sat_invoked() != 1u8 { return 15u64 }     /* SAT woken... */
-    if gil_kernel_calls() == 0u64 { return 15u64 }       /* ...and actually paid... */
-    if c11 != 4u32 { return 15u64 }                      /* ...but gil_forge gained NOTHING (cost == mul baseline) */
+    /* ===== code 15: the over-invoke is now FIXED -- irreducible k does NOT wake the SAT battery ===== */
+    /* The G-estimate is now SOUND: gil_reducible(k) (a cheap no-SAT structural check, sound both ways, corpus
+     * 1948) credits G the reduced bound ONLY when gil_forge will actually reduce k.  k=11 is NOT in gil_forge's
+     * forms (2^a, 2^a+-1, 2^a+-2^b), so G is credited only the multiply baseline -> best-code routes k=11 to E
+     * and the battery is NOT woken.  The discernment is now REDUCIBILITY, not just is_pow2. */
+    let r4 : u32 = optgate_decide(11u64, BEST)
+    if r4 != 0u32 { return 15u64 }                       /* best-code routes irreducible k=11 to E (no SAT) */
+    optgate_execute(11u64, r4)
+    if optgate_sat_invoked() != 0u8 { return 15u64 }     /* MEASURED: the SAT battery was NOT woken (fix holds) */
+    if r2 != 1u32 { return 15u64 }                       /* ...while the REDUCIBLE x*7 still invoked G (no regression) */
 
     return 99u64
 }

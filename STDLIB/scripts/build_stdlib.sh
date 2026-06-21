@@ -1059,6 +1059,12 @@ MODULES=(
     # The web computes BOTH real systems via the same verbs.  Consumed by corpus 1924; reads logic6/voice +
     # the assimilate web.  BSS-neutral, compiler-unreferenced.
     "omnia/enmesh"
+    # canon_enmesh: ROADMAP 1b -- the STRUCTURAL-ROLE canonical mapper.  Addresses a point by its order-RANK
+    # (below-count), a complete canonical label for a CHAIN -- so two isomorphic chains (voice, trit: the same
+    # 3-valued Kleene algebra) map to identical addresses and FULLY merge (the 2nd adds zero blocks).  Honest
+    # boundary: rank collides on a non-chain (logic6) -- full canonization is GI-hard.  Consumed by corpus
+    # 1926; reads voice/trit/logic6 + the assimilate web.  BSS-neutral, compiler-unreferenced.
+    "omnia/canon_enmesh"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

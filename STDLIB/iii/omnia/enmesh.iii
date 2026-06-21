@@ -21,6 +21,8 @@ extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn voice_meet(a: u32, b: u32) -> u32 from "voice.iii"
 extern @abi(c-msvc-x64) fn voice_not(v: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_not(a: i32) -> i32 from "trit.iii"
 extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
 
 const V_BELOW   : u32 = 0u32
@@ -29,6 +31,7 @@ const EN_NONE   : u32 = 0xFFFFFFFFu32
 
 var EN_L6   : [u32; 6]      /* logic6 value -> canonical web point */
 var EN_V    : [u32; 3]      /* voice value  -> canonical web point */
+var EN_T    : [u32; 3]      /* trit  index (0,1,2 for -1,0,+1) -> canonical web point */
 var EN_NEXT : u32 = 2u32    /* next fresh interior point (0=bottom, 1=top are the shared frame) */
 
 fn enmesh_reset() -> i32 @export { EN_NEXT = 2u32  return 0i32 }
@@ -104,3 +107,72 @@ fn enmesh_voice() -> i32 @export {
 
 fn enmesh_l6_image(v: u32) -> u32 @export { if v < 6u32 { return EN_L6[v] }  return EN_NONE }
 fn enmesh_v_image(v: u32) -> u32 @export { if v < 3u32 { return EN_V[v] }  return EN_NONE }
+
+/* trit values are SIGNED (-1,0,+1); we index them 0,1,2 with value = index-1.  All comparisons are
+ * EQUALITY on locals (the i32 ordering trap is about <,<=,>,>= on call-results, not ==). */
+fn t_val(i: u32) -> i32 { return (i as i32) - 1i32 }
+
+fn t_bottom() -> u32 {                                       /* meet-annihilator: and(v,x)==v for all x */
+    let mut i : u32 = 0u32
+    while i < 3u32 {
+        let vi : i32 = t_val(i)
+        let mut all : u32 = 1u32
+        let mut x : u32 = 0u32
+        while x < 3u32 {
+            let vx : i32 = t_val(x)
+            let r : i32 = iii_trit_and(vi, vx)
+            if r != vi { all = 0u32 }
+            x = x + 1u32
+        }
+        if all == 1u32 { return i }
+        i = i + 1u32
+    }
+    return EN_NONE
+}
+fn t_top() -> u32 {                                          /* meet-identity: and(v,x)==x for all x */
+    let mut i : u32 = 0u32
+    while i < 3u32 {
+        let vi : i32 = t_val(i)
+        let mut all : u32 = 1u32
+        let mut x : u32 = 0u32
+        while x < 3u32 {
+            let vx : i32 = t_val(x)
+            let r : i32 = iii_trit_and(vi, vx)
+            if r != vx { all = 0u32 }
+            x = x + 1u32
+        }
+        if all == 1u32 { return i }
+        i = i + 1u32
+    }
+    return EN_NONE
+}
+
+/* shatter REAL trit onto the canonical frame and assimilate it (shares the bottom/top frame with voice). */
+fn enmesh_trit() -> i32 @export {
+    let bot : u32 = t_bottom()
+    let top : u32 = t_top()
+    let mut z : u32 = 0u32
+    while z < 3u32 { EN_T[z] = EN_NONE  z = z + 1u32 }
+    EN_T[bot] = 0u32  EN_T[top] = 1u32
+    let mut w : u32 = 0u32
+    while w < 3u32 { if w != bot { if w != top { EN_T[w] = EN_NEXT  EN_NEXT = EN_NEXT + 1u32 } }  w = w + 1u32 }
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let va : i32 = t_val(a)
+        let mut b : u32 = 0u32
+        while b < 3u32 {
+            if a != b {
+                let vb : i32 = t_val(b)
+                let r : i32 = iii_trit_and(va, vb)
+                if r == va { assim_add(V_BELOW, EN_T[a], EN_T[b]) }
+            }
+            b = b + 1u32
+        }
+        let nv : i32 = iii_trit_not(va)
+        let ni : u32 = (nv + 1i32) as u32
+        assim_add(V_REFLECT, EN_T[a], EN_T[ni])
+        a = a + 1u32
+    }
+    return 0i32
+}
+fn enmesh_t_image(i: u32) -> u32 @export { if i < 3u32 { return EN_T[i] }  return EN_NONE }

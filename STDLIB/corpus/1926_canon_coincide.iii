@@ -1,0 +1,76 @@
+/* 1926_canon_coincide.iii  --  ROADMAP 1b: FULL structural recognition.  Under the order-rank canonical
+ * mapper, voice and trit -- the SAME 3-valued strong-Kleene algebra, differently encoded -- map to identical
+ * canonical addresses, so the web RECOGNISES they are one algebra: assimilating trit after voice adds ZERO
+ * new blocks.  This is the strong "intrinsic knowledge of exactly what they share" result the frame-aligned
+ * mapper could not reach.  The honest boundary is witnessed too: logic6 is not a chain, so order-rank is not
+ * a canonical labeling for it (full canonization is GI-hard).
+ *
+ *   code 11 chains  : voice or trit was not recognised as a chain (rank not injective)
+ *   code 12 COINCIDE: assimilating trit after voice added new blocks -- the web did NOT recognise them as one
+ *   code 13 compute : the web does not compute voice/trit over the shared canonical addresses
+ *   code 14 identity: voice's middle and trit's middle are not the SAME web point (not fully merged)
+ *   code 15 boundary: logic6 was wrongly reported a chain (the GI boundary must hold -- it is NOT)
+ * exit 99 = voice and trit are FULLY merged (one algebra, zero redundancy); the GI boundary is honest.
+ */
+module m1926
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn canon_voice() -> u8 from "canon_enmesh.iii"
+extern @abi(c-msvc-x64) fn canon_trit() -> u8 from "canon_enmesh.iii"
+extern @abi(c-msvc-x64) fn canon_v_image(v: u32) -> u32 from "canon_enmesh.iii"
+extern @abi(c-msvc-x64) fn canon_t_image(i: u32) -> u32 from "canon_enmesh.iii"
+extern @abi(c-msvc-x64) fn canon_logic6_is_chain() -> u8 from "canon_enmesh.iii"
+extern @abi(c-msvc-x64) fn voice_meet(a: u32, b: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+
+fn tv(i: u32) -> i32 { return (i as i32) - 1i32 }
+
+fn main() -> u64 {
+    isub_reset()
+
+    if canon_voice() != 1u8 { return 11u64 }
+    let after_v : u32 = assim_web_size()
+    if canon_trit() != 1u8 { return 11u64 }
+    let after_t : u32 = assim_web_size()
+
+    /* FULL COINCIDENCE: trit adds ZERO new -- voice and trit are recognised as the SAME algebra */
+    if (after_t - after_v) != 0u32 { return 12u64 }
+
+    /* the web computes voice over the shared canonical addresses */
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let mut b : u32 = 0u32
+        while b < 3u32 {
+            if assim_meet(canon_v_image(a), canon_v_image(b)) != canon_v_image(voice_meet(a, b)) { return 13u64 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    /* and the SAME web computes trit over the SAME addresses */
+    let mut c : u32 = 0u32
+    while c < 3u32 {
+        let vc : i32 = tv(c)
+        let mut d : u32 = 0u32
+        while d < 3u32 {
+            let vd : i32 = tv(d)
+            let m : i32 = iii_trit_and(vc, vd)
+            let mi : u32 = (m + 1i32) as u32
+            if assim_meet(canon_t_image(c), canon_t_image(d)) != canon_t_image(mi) { return 13u64 }
+            d = d + 1u32
+        }
+        c = c + 1u32
+    }
+
+    /* IDENTITY: voice's middle (value 1) and trit's middle (index 1) are the SAME web point (rank 1) */
+    if canon_v_image(1u32) != canon_t_image(1u32) { return 14u64 }
+    /* and the frame too: bottoms coincide (rank 0), tops coincide (rank 2) */
+    if canon_v_image(0u32) != canon_t_image(0u32) { return 14u64 }
+    if canon_v_image(2u32) != canon_t_image(2u32) { return 14u64 }
+
+    /* THE GI BOUNDARY: logic6 is NOT a chain -- rank is not a canonical labeling for it */
+    if canon_logic6_is_chain() != 0u8 { return 15u64 }
+
+    return 99u64
+}

@@ -1,0 +1,134 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\canon_enmesh.iii
+ *
+ * III STDLIB - omnia::canon_enmesh  --  ROADMAP 1b: the STRUCTURAL-ROLE canonical mapper.
+ *
+ * The frame-aligned enmesh merges only bottom/top, so two differently-encoded copies of the SAME algebra
+ * (voice and trit, both 3-valued strong-Kleene) share only their frame.  To make the web RECOGNISE they are
+ * identical, a point must be addressed by its STRUCTURAL ROLE, not its native code.  The canonical label
+ * used here is the ORDER-RANK: rank(p) = #{ q != p : q <= p }.  For a CHAIN (a total order) the ranks are
+ * 0..n-1 and DISTINCT, so rank is a complete canonical labeling -- and two isomorphic chains map to the same
+ * addresses, so the second one adds ZERO new blocks (content-address recognises them as the same algebra).
+ *
+ * THE HONEST BOUNDARY: rank is canonical only when injective.  A non-chain lattice (e.g. logic6: two
+ * incomparable middles share a rank) makes rank COLLIDE -- and a complete canonical labeling for an arbitrary
+ * lattice is GRAPH-ISOMORPHISM-hard (one of the documented walls).  canon_logic6_is_chain() witnesses that
+ * boundary: full structural recognition for the non-chain case needs GI-grade canonization, not just rank.
+ *
+ * NIH: reads only voice/trit/logic6 behaviour + the assimilate web.  Ring R0.  K 1.00.
+ */
+module omnia_canon_enmesh
+
+extern @abi(c-msvc-x64) fn voice_meet(a: u32, b: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_not(v: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_not(a: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const CE_NONE   : u32 = 0xFFFFFFFFu32
+
+var CE_VR : [u32; 3]    /* voice value -> canonical rank */
+var CE_TR : [u32; 3]    /* trit  index -> canonical rank */
+
+/* assimilate voice by its order-rank; return 1 if it is a chain (ranks distinct), 0 otherwise. */
+fn canon_voice() -> u8 @export {
+    let mut v : u32 = 0u32
+    while v < 3u32 {
+        let mut r : u32 = 0u32
+        let mut x : u32 = 0u32
+        while x < 3u32 {
+            if x != v { if voice_meet(x, v) == x { r = r + 1u32 } }
+            x = x + 1u32
+        }
+        CE_VR[v] = r
+        v = v + 1u32
+    }
+    if CE_VR[0u64] == CE_VR[1u64] { return 0u8 }
+    if CE_VR[0u64] == CE_VR[2u64] { return 0u8 }
+    if CE_VR[1u64] == CE_VR[2u64] { return 0u8 }
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let mut b : u32 = 0u32
+        while b < 3u32 {
+            if a != b { if voice_meet(a, b) == a { assim_add(V_BELOW, CE_VR[a], CE_VR[b]) } }
+            b = b + 1u32
+        }
+        assim_add(V_REFLECT, CE_VR[a], CE_VR[voice_not(a)])
+        a = a + 1u32
+    }
+    return 1u8
+}
+fn canon_v_image(v: u32) -> u32 @export { if v < 3u32 { return CE_VR[v] }  return CE_NONE }
+
+/* assimilate trit by its order-rank (signed values, equality-only comparisons). */
+fn canon_trit() -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < 3u32 {
+        let vi : i32 = (i as i32) - 1i32
+        let mut r : u32 = 0u32
+        let mut x : u32 = 0u32
+        while x < 3u32 {
+            if x != i {
+                let vx : i32 = (x as i32) - 1i32
+                let m : i32 = iii_trit_and(vx, vi)
+                if m == vx { r = r + 1u32 }
+            }
+            x = x + 1u32
+        }
+        CE_TR[i] = r
+        i = i + 1u32
+    }
+    if CE_TR[0u64] == CE_TR[1u64] { return 0u8 }
+    if CE_TR[0u64] == CE_TR[2u64] { return 0u8 }
+    if CE_TR[1u64] == CE_TR[2u64] { return 0u8 }
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let va : i32 = (a as i32) - 1i32
+        let mut b : u32 = 0u32
+        while b < 3u32 {
+            if a != b {
+                let vb : i32 = (b as i32) - 1i32
+                let m : i32 = iii_trit_and(va, vb)
+                if m == va { assim_add(V_BELOW, CE_TR[a], CE_TR[b]) }
+            }
+            b = b + 1u32
+        }
+        let nv : i32 = iii_trit_not(va)
+        let ni : u32 = (nv + 1i32) as u32
+        assim_add(V_REFLECT, CE_TR[a], CE_TR[ni])
+        a = a + 1u32
+    }
+    return 1u8
+}
+fn canon_t_image(i: u32) -> u32 @export { if i < 3u32 { return CE_TR[i] }  return CE_NONE }
+
+/* THE GI BOUNDARY: 1 iff logic6's order-rank is injective (a chain).  It is NOT (incomparable middles tie),
+ * so rank alone is not a canonical labeling for it -- full canonization is GI-hard. */
+fn canon_logic6_is_chain() -> u8 @export {
+    l6_init()
+    let mut v : u32 = 0u32
+    while v < 6u32 {
+        let mut rv : u32 = 0u32
+        let mut x : u32 = 0u32
+        while x < 6u32 {
+            if x != v { if l6_and(x, v) == x { rv = rv + 1u32 } }
+            x = x + 1u32
+        }
+        let mut w : u32 = 0u32
+        while w < v {
+            let mut rw : u32 = 0u32
+            let mut y : u32 = 0u32
+            while y < 6u32 {
+                if y != w { if l6_and(y, w) == y { rw = rw + 1u32 } }
+                y = y + 1u32
+            }
+            if rw == rv { return 0u8 }
+            w = w + 1u32
+        }
+        v = v + 1u32
+    }
+    return 1u8
+}

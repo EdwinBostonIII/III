@@ -1,0 +1,61 @@
+/* 1925_enmesh_trit.iii  --  ROADMAP 1a: the THIRD real finite logic, trit, assimilated.  trit is the same
+ * 3-valued strong-Kleene algebra as voice (AND=min, OR=max, NOT=negate), but SIGNED-encoded (-1,0,+1).
+ * Shattered from BEHAVIOUR onto the canonical frame, it shares the bottom/top frame with voice (those blocks
+ * merge by content-address) and contributes its own middle; the ONE web then computes trit via the verbs.
+ *
+ *   code 11 frame : trit did not share voice's frame (it added all 6 of its blocks, not just its 3 new ones)
+ *   code 12 compute: the web does not compute REAL trit (assim_meet != iii_trit_and over the canonical images)
+ *   code 13 frame2 : trit's bottom/top are not the shared web points 0/1
+ * exit 99 = trit (3rd real finite logic) assimilated, frame shared with voice, computed by the web's verbs.
+ *
+ * NOTE: this is the FRAME-level result (1a).  Full voice==trit coincidence (they are the SAME algebra) needs
+ * the structural-role canonical mapper -- roadmap 1b (1926).
+ */
+module m1925
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn enmesh_reset() -> i32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_voice() -> i32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_trit() -> i32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_t_image(i: u32) -> u32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+
+fn tv(i: u32) -> i32 { return (i as i32) - 1i32 }
+
+fn main() -> u64 {
+    isub_reset()
+    enmesh_reset()
+
+    enmesh_voice()
+    let after_voice : u32 = assim_web_size()
+    enmesh_trit()
+    let after_trit : u32 = assim_web_size()
+
+    /* trit's full shatter is 6 blocks (3 order + 3 involution); 3 are the shared frame and merge, so it
+     * adds exactly 3 new -- it shares voice's frame */
+    let trit_added : u32 = after_trit - after_voice
+    if trit_added != 3u32 { return 11u64 }
+
+    /* the web computes REAL trit through the same verb (assim_meet == iii_trit_and over canonical images) */
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let va : i32 = tv(a)
+        let mut b : u32 = 0u32
+        while b < 3u32 {
+            let vb : i32 = tv(b)
+            let r : i32 = iii_trit_and(va, vb)
+            let ri : u32 = (r + 1i32) as u32
+            if assim_meet(enmesh_t_image(a), enmesh_t_image(b)) != enmesh_t_image(ri) { return 12u64 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+
+    /* trit's bottom (NEG, index 0) and top (POS, index 2) are the shared web frame points 0 and 1 */
+    if enmesh_t_image(0u32) != 0u32 { return 13u64 }
+    if enmesh_t_image(2u32) != 1u32 { return 13u64 }
+
+    return 99u64
+}

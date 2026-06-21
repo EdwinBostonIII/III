@@ -356,7 +356,22 @@ fn sov_idiv_r(reg: u32) -> i32 @export { sov_f7(7u32, reg)  return 0i32 }
 fn sov_shift_imm8(ext: u32, reg: u32, imm: u32) {
     let mut b : u32 = 0u32
     if reg >= 8u32 { b = 1u32 }
-    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xC1u32)  sov_modrm(3u32, ext, reg)  sov_emit(imm & 0xFFu32)
+    sov_rex(1u32, 0u32, 0u32, b)
+    if (imm & 0xFFu32) == 1u32 { sov_emit(0xD1u32)  sov_modrm(3u32, ext, reg) }                          /* B3: shift-by-1 -> D1, NO imm byte */
+    else { sov_emit(0xC1u32)  sov_modrm(3u32, ext, reg)  sov_emit(imm & 0xFFu32) }
+}
+/* B4: shift by %cl -> D3 /ext, no immediate */
+fn sov_shift_cl(ext: u32, reg: u32) {
+    let mut b : u32 = 0u32  if reg >= 8u32 { b = 1u32 }
+    sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xD3u32)  sov_modrm(3u32, ext, reg)
+}
+fn sov_shl_cl(reg: u32) -> i32 @export { sov_shift_cl(4u32, reg)  return 0i32 }
+fn sov_shr_cl(reg: u32) -> i32 @export { sov_shift_cl(5u32, reg)  return 0i32 }
+/* B2: callq *%reg (indirect call through a register) : FF /2, mod=11, REX.B for r8+.  `callq *%rax` = ff d0.
+ * The handler was reading *%rax as a symbol name -> bogus e8 + reloc. */
+fn sov_call_reg(reg: u32) -> i32 @export {
+    if reg >= 8u32 { sov_emit(0x41u32) }
+    sov_emit(0xFFu32)  sov_modrm(3u32, 2u32, reg)  return 0i32
 }
 fn sov_shl_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift_imm8(4u32, reg, imm)  return 0i32 }
 fn sov_shr_imm8(reg: u32, imm: u32) -> i32 @export { sov_shift_imm8(5u32, reg, imm)  return 0i32 }

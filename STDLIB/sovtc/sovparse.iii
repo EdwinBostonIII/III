@@ -40,6 +40,7 @@ extern @abi(c-msvc-x64) fn sov_lea_base(reg: u32, base: u32, disp: i32) -> i32 f
 extern @abi(c-msvc-x64) fn sov_cn_clear() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cn_push(ch: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_ext() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_call_reg(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_test_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_setcc(cc: u32, reg8: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movzbq(dst: u32, src: u32) -> i32 from "sovas.iii"
@@ -57,6 +58,8 @@ extern @abi(c-msvc-x64) fn sov_idiv_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_div_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_shl_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_shr_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_shl_cl(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_shr_cl(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jcc_rel8(cc: u32, rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jmp_rel8(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.iii"
@@ -495,8 +498,11 @@ fn sp_dispatch_instr() {
         if S1K == 4u32 { if OPK == 0u32 { sov_movb_load_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return } }    /* movb (b,i,s), %reg */
         PARSE_ERR = 1u32  return
     }
-    if mn_is(99u32,97u32,108u32,108u32,5u32) == 1u32 {                                              /* callq <name> */
+    if mn_is(99u32,97u32,108u32,108u32,5u32) == 1u32 {                                              /* callq <name> | *%reg */
         sp_skip_ws()
+        if sp_ch() == 42u32 {                                          /* B2: callq *%reg -> FF /2 (ff d0), no reloc */
+            sp_adv()  if sp_ch() == C_PCT { sp_adv() }  sov_call_reg(sp_reg())  return
+        }
         let nlen : u32 = sp_read_name_into(SYM_N)
         let mut sib : u32 = 0u32
         let mut ci : u32 = 0u32
@@ -580,8 +586,8 @@ fn sp_dispatch_instr() {
     if mn_is(105u32,100u32,105u32,118u32,5u32) == 1u32 { sp_operand()  sov_idiv_r(OPR)  return }   /* idivq */
     if mn_is(100u32,105u32,118u32,113u32,4u32) == 1u32 { sp_operand()  sov_div_r(OPR)  return }    /* divq */
     /* shift $imm8,%reg */
-    if mn_is(115u32,104u32,108u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_shl_imm8(OPR, S1I as u32)  return }  /* shlq */
-    if mn_is(115u32,104u32,114u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_shr_imm8(OPR, S1I as u32)  return }  /* shrq */
+    if mn_is(115u32,104u32,108u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shl_imm8(OPR, S1I as u32) } else { sov_shl_cl(OPR) }  return }  /* shlq $imm|%cl */
+    if mn_is(115u32,104u32,114u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shr_imm8(OPR, S1I as u32) } else { sov_shr_cl(OPR) }  return }  /* shrq $imm|%cl */
     /* branches (jmp/jcc to a .text label) -- resolved via the two-pass */
     if sp_try_branch() == 1u32 { return }
     PARSE_ERR = 1u32    /* unknown mnemonic -> loud, located failure */

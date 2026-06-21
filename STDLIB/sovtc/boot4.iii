@@ -1,0 +1,20 @@
+/* boot4.iii  --  isolates B3 (shift by constant 1 -> D1) and B4 (shift by a variable -> %cl / D3).
+ *   x >> 1   -> shrq $1   (B3: 48 d1 e8, not 48 c1 e8 01)
+ *   x >> n   -> shrq %cl  (B4: 48 d3 e8, not 48 c1 e8 <stale>)
+ *   x << 1 / x << n  -> shlq $1 / shlq %cl
+ * 16>>1=8, 16>>2=4, 16<<1=32, 16<<2=64 -> 108. */
+module sovtc_boot4
+
+fn shifts(x: u64, n: u64) -> u64 {
+    let a : u64 = x >> 1u64
+    let b : u64 = x >> n
+    let c : u64 = x << 1u64
+    let d : u64 = x << n
+    return a + b + c + d
+}
+
+fn main() -> u64 {
+    let r : u64 = shifts(16u64, 2u64)
+    if r == 108u64 { return 99u64 }
+    return 1u64
+}

@@ -1528,6 +1528,10 @@ MODULES=(
     # corrupt the field or flake a build.  Autonomous via coin_fold_web (one call folds the field) + the 1981
     # build-gate.  WRAPS isub + assimilate; zero new mass beyond one fold.
     "eidos/coincidence"
+    # memo: the LIVE CONSUMER -- coin_recall wired into a real recompute path (bv_bits' SAT-backed bb_equal).
+    # memo_equal recalls a prior equivalence verdict by the query's content-address, SKIPPING the SAT solve;
+    # sound (exact sha256 match), measurable (memo_hits = SAT solves saved).  WRAPS bv_bits + coincidence + cad.
+    "eidos/memo"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

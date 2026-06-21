@@ -89,6 +89,7 @@ declare -A EXPECTED=(
     [1948_gil_reducible_sweep]=99
     [1980_eidos_accessor_coverage]=99
     [1981_eidos_coincidence]=99
+    [1982_eidos_memo_real]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

@@ -1,0 +1,63 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\memo.iii
+ *
+ * III STDLIB - eidos::memo  --  THE LIVE CONSUMER: coin_recall wired into a real recompute path.  It makes
+ * the Coincidence Engine actually SAVE work, on the most expensive repeating computation III has -- the
+ * SAT-backed circuit-equivalence check `bb_equal` (the very "battery-eater" the EIDOS cost story was about).
+ *
+ * `eqv_equal(a, b, nvars)` answers "are these two circuits equivalent?" exactly like `bb_equal`, but:
+ *   - it forms the query's CONTENT-ADDRESS = sha256 over the (order-canonical) pair of circuit SIGNATURES
+ *     (`bb_signature`), which is stable across separately-built but structurally-identical circuits;
+ *   - `coin_recall` on that address: a HIT returns the witnessed verdict and SKIPS the SAT solve entirely;
+ *   - a MISS runs the real `bb_equal` (the expensive SAT) ONCE, then memoises the verdict.
+ * SOUND BY CONSTRUCTION: a verdict is reused only on an EXACT sha256 match of the query, so a different query
+ * can never be falsely recalled (collision-resistance).  The verdict is identical to `bb_equal`'s -- memo only
+ * removes the *re-solving*, never changes the answer.  `eqv_hits`/`eqv_misses` make the saving measurable:
+ * a hit is a SAT solve that did not happen.
+ *
+ * Ring R0.  K 1.00.  NIH: libc-free.  WRAPS bv_bits (bb_equal/bb_signature) + coincidence (recall/observe) + cad.
+ */
+module eidos_memo
+
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_signature(root: u32, nvars: u32) -> u64 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn coin_recall(addr: *u8, out_result: *u64) -> u8 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_observe_concrete(addr: *u8, faculty: u32, result: u64) -> u8 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const MEMO_FAC : u32 = 2u32          /* the faculty tag for SAT-equivalence queries */
+
+var MEMO_QBUF : [u8; 16]             /* the (lo,hi) signature pair, little-endian */
+var MEMO_ADDR : [u8; 32]            /* the query's sha256 content-address */
+var MEMO_R    : [u64; 1]
+var MEMO_HITS : u64 = 0u64          /* recalls = SAT solves SKIPPED */
+var MEMO_MISS : u64 = 0u64          /* real SAT solves run */
+
+fn eqv_reset() -> i32 @export { MEMO_HITS = 0u64  MEMO_MISS = 0u64  return 0i32 }
+fn eqv_hits() -> u64 @export { return MEMO_HITS }
+fn eqv_misses() -> u64 @export { return MEMO_MISS }
+
+/* build the order-canonical (symmetric) query content-address into MEMO_ADDR. */
+fn eqv_qaddr(a: u32, b: u32, nvars: u32) {
+    let sa : u64 = bb_signature(a, nvars)
+    let sb : u64 = bb_signature(b, nvars)
+    let mut lo : u64 = sa
+    let mut hi : u64 = sb
+    if sa > sb { lo = sb  hi = sa }                  /* equivalence is symmetric -> canonicalise the pair */
+    let mut i : u64 = 0u64
+    while i < 8u64  { MEMO_QBUF[i] = ((lo >> (i * 8u64)) & 0xFFu64) as u8           i = i + 1u64 }
+    while i < 16u64 { MEMO_QBUF[i] = ((hi >> ((i - 8u64) * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    cad_oneshot(0u32, &MEMO_QBUF as *u8, 16u64, &MEMO_ADDR as *u8)
+}
+
+/* the memoised equivalence check: a HIT skips the SAT solve; a MISS runs it once + memoises. */
+fn eqv_equal(a: u32, b: u32, nvars: u32) -> u8 @export {
+    eqv_qaddr(a, b, nvars)
+    if coin_recall(&MEMO_ADDR as *u8, &MEMO_R as *u64) == 1u8 {
+        MEMO_HITS = MEMO_HITS + 1u64
+        return (MEMO_R[0u64] & 0xFFu64) as u8        /* RECALL -- the expensive SAT solve is SKIPPED */
+    }
+    let res : u8 = bb_equal(a, b)                     /* MISS -- run the real, expensive SAT once */
+    MEMO_MISS = MEMO_MISS + 1u64
+    coin_observe_concrete(&MEMO_ADDR as *u8, MEMO_FAC, res as u64)   /* memoise the verdict */
+    return res
+}

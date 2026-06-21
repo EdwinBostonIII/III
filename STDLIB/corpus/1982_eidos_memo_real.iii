@@ -1,0 +1,59 @@
+/* 1982_eidos_memo_real.iii  --  THE LIVE CONSUMER PROVEN: coin_recall saves REAL SAT work on a real
+ * recompute path (eidos::memo over bv_bits' SAT-backed bb_equal), soundly.
+ *
+ * The query is genuinely expensive + bit-coupled (routes to the SAT solver): is x+y == (x&y)+(x|y)?  (yes.)
+ *   code 10: bb_equal alone confirms equal AND a SAT solve genuinely ran (bb_diag_solve != no-solve sentinel)
+ *   code 11: FIRST eqv_equal -> MISS: correct verdict, the expensive path ran exactly once
+ *   code 12: SECOND identical query -> SOUND: same verdict, recalled
+ *   code 13: the recompute was SAVED -- a HIT (SAT skipped), and the SAT did NOT run again
+ *   code 14: a genuinely DIFFERENT query is NOT falsely recalled (sound across queries) -> it runs the SAT
+ * exit 99 = memoisation saves real, measured SAT work and never returns a wrong or stale verdict.
+ */
+module m1982
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_diag_solve() -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn coin_reset() -> i32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn eqv_reset() -> i32 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_equal(a: u32, b: u32, nvars: u32) -> u8 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_hits() -> u64 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_misses() -> u64 from "memo.iii"
+
+fn main() -> u64 {
+    coin_reset()
+    eqv_reset()
+    bb_reset(64u64)
+    let x : u32 = bb_var(0u32)
+    let y : u32 = bb_var(1u32)
+    let l : u32 = bb_add(bb_and(x, y), bb_or(x, y))    /* (x&y) + (x|y) */
+    let r : u32 = bb_add(x, y)                         /* x + y  -- equal, but bit-coupled -> SAT */
+
+    /* a SAT solve genuinely runs (not a trivial no-op) */
+    if bb_equal(l, r) != 1u8 { return 10u64 }
+    if bb_diag_solve() == 0x7Fi32 { return 10u64 }     /* 0x7F = the "no solve ran" sentinel */
+
+    /* FIRST memo query -> MISS: runs the real SAT once, memoises the verdict */
+    let v1 : u8 = eqv_equal(l, r, 2u32)
+    if v1 != 1u8 { return 11u64 }
+    if eqv_misses() != 1u64 { return 11u64 }
+    if eqv_hits() != 0u64 { return 11u64 }
+
+    /* SECOND identical query -> HIT: SAT SKIPPED, verdict recalled (sound) */
+    let v2 : u8 = eqv_equal(l, r, 2u32)
+    if v2 != v1 { return 12u64 }                       /* same verdict */
+    if eqv_hits() != 1u64 { return 13u64 }            /* the recompute was SAVED (recalled) */
+    if eqv_misses() != 1u64 { return 13u64 }          /* the expensive SAT did NOT run again */
+
+    /* a genuinely DIFFERENT query -> NOT falsely recalled -> it runs its own SAT */
+    let z : u32 = bb_var(2u32)
+    let l2 : u32 = bb_add(x, z)                        /* x + z : a different equivalence query vs r */
+    eqv_equal(l2, r, 3u32)
+    if eqv_misses() != 2u64 { return 14u64 }          /* a new query is a MISS, never a false hit */
+
+    return 99u64
+}

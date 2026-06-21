@@ -101,7 +101,7 @@ fn coin_key_put(slot: u32, addr: *u8) {
 
 /* observe one content-address under a faculty + its witnessed result.
  * returns 0 = new, 1 = repeat (same faculty), 2 = CROSS-faculty coincidence. */
-fn coin_observe_concrete(addr: *u8, faculty: u32, result: u64) -> u8 {
+fn coin_observe_concrete(addr: *u8, faculty: u32, result: u64) -> u8 @export {
     let fbit : u32 = 1u32 << (faculty & 31u32)
     let start : u32 = coin_slot32(addr)
     let mut s : u32 = start

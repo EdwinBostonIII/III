@@ -505,3 +505,30 @@ fn sov_movb_store_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) ->
 fn sov_movb_load_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
     sov_rex_sib_w0(reg, index, base)  sov_emit(0x8Au32)  sov_sib_modrm_disp(reg, base, index, scale, disp)  return 0i32
 }
+/* movw (16-bit) -- 0x66 operand-size prefix + movl opcodes (89 store / 8B load), NO REX.W.  cg_r3 emits the
+ * SIB store (movw %reg,(%b,%i,sc)) + rip store (movw %reg,sym(%rip)); base+load twins for completeness. */
+fn sov_movw_store_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    sov_emit(0x66u32)
+    let mut rr : u32 = 0u32  if reg  >= 8u32 { rr = 1u32 }
+    let mut bb : u32 = 0u32  if base >= 8u32 { bb = 1u32 }
+    if (rr | bb) != 0u32 { sov_rex(0u32, rr, 0u32, bb) }
+    sov_emit(0x89u32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
+fn sov_movw_load_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    sov_emit(0x66u32)
+    let mut rr : u32 = 0u32  if reg  >= 8u32 { rr = 1u32 }
+    let mut bb : u32 = 0u32  if base >= 8u32 { bb = 1u32 }
+    if (rr | bb) != 0u32 { sov_rex(0u32, rr, 0u32, bb) }
+    sov_emit(0x8Bu32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
+fn sov_movw_store_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_emit(0x66u32)  sov_rex_sib_w0(reg, index, base)  sov_emit(0x89u32)  sov_sib_modrm_disp(reg, base, index, scale, disp)  return 0i32
+}
+fn sov_movw_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {
+    sov_emit(0x66u32)
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    if r != 0u32 { sov_rex(0u32, r, 0u32, 0u32) }
+    sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)  sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+/* cqto : sign-extend %rax -> %rdx:%rax (before idivq) : REX.W 99 = 48 99, no operands */
+fn sov_cqto() -> i32 @export { sov_rex(1u32, 0u32, 0u32, 0u32)  sov_emit(0x99u32)  return 0i32 }

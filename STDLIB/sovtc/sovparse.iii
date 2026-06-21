@@ -33,6 +33,11 @@ extern @abi(c-msvc-x64) fn sov_add_imm32(reg: u32, imm: i32) -> i32 from "sovas.
 extern @abi(c-msvc-x64) fn sov_sub_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movw_store_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movw_load_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movw_store_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movw_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cqto() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
@@ -463,6 +468,7 @@ fn sp_dispatch_instr() {
     if mn_is(112u32,117u32,115u32,104u32,5u32) == 1u32 { sp_operand()  sov_push_r(OPR)  return }   /* pushq */
     if mn_is(112u32,111u32,112u32,113u32,4u32) == 1u32 { sp_operand()  sov_pop_r(OPR)  return }    /* popq */
     if mn_is(114u32,101u32,116u32,113u32,4u32) == 1u32 { sov_ret()  return }                       /* retq */
+    if mn_is(99u32,113u32,116u32,111u32,4u32) == 1u32 { sov_cqto()  return }                        /* cqto (48 99) */
     if mn_is(109u32,111u32,118u32,113u32,4u32) == 1u32 {                                            /* movq */
         sp_two_ops()
         if S1K == 0u32 { if OPK == 0u32 { sov_mov_rr(OPR, S1R) } }
@@ -502,6 +508,14 @@ fn sp_dispatch_instr() {
         if S1K == 3u32 { if OPK == 0u32 { sov_movb_load_rip_sym(OPR, S1SEC, S1OFF)  return } }    /* movb sym(%rip), %reg */
         if S1K == 0u32 { if OPK == 4u32 { sov_movb_store_sib(S1R, OPR, OPINDEX, OPSCALE, OPD)  return } }   /* movb %reg, (b,i,s) */
         if S1K == 4u32 { if OPK == 0u32 { sov_movb_load_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return } }    /* movb (b,i,s), %reg */
+        PARSE_ERR = 1u32  return
+    }
+    if mn_is(109u32,111u32,118u32,119u32,4u32) == 1u32 {                                             /* movw (16-bit) */
+        sp_two_ops()
+        if S1K == 0u32 { if OPK == 2u32 { sov_movw_store_base(S1R, OPR, OPD)  return } }
+        if S1K == 2u32 { if OPK == 0u32 { sov_movw_load_base(OPR, S1R, S1D)  return } }
+        if S1K == 0u32 { if OPK == 4u32 { sov_movw_store_sib(S1R, OPR, OPINDEX, OPSCALE, OPD)  return } }
+        if S1K == 0u32 { if OPK == 3u32 { sov_movw_store_rip_sym(S1R, OPSEC, OPOFF)  return } }
         PARSE_ERR = 1u32  return
     }
     if mn_is(99u32,97u32,108u32,108u32,5u32) == 1u32 {                                              /* callq <name> | *%reg */

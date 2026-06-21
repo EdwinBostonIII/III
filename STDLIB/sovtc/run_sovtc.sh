@@ -31,6 +31,9 @@ if ! "$IIIS" "$SOVTC/sovcoff.iii"   --compile-only --out "$OUT/sovcoff.o"   >/de
 if ! "$IIIS" "$SOVTC/sov_drive.iii" --compile-only --out "$OUT/sov_drive.o" >/dev/null 2>&1; then echo "[sovtc] FAIL coff (driver compile)"; fail=1; fi
 if gcc "$OUT/sov_drive.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovcoff.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/drive.exe" >/dev/null 2>&1; then
     timeout 25 "$OUT/drive.exe" > "$OUT/out.o" 2>/dev/null
+    # stdout-cleanliness: out.o must START with the COFF magic 64 86 (AMD64 machine, LE) -- no leading runtime noise
+    magic=$(od -An -tx1 -N2 "$OUT/out.o" 2>/dev/null | tr -d ' \n')
+    if [[ "$magic" != "6486" ]]; then echo "[sovtc] FAIL coff (out.o magic=$magic, expected 6486 -- stdout not clean)"; fail=1; fi
     if gcc "$OUT/out.o" -o "$OUT/out.exe" >/dev/null 2>&1; then
         timeout 10 "$OUT/out.exe" >/dev/null 2>&1; rc=$?
         if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS coff (sovereign .o links+runs, exit 99)"; else echo "[sovtc] FAIL coff (out.exe exit $rc)"; fail=1; fi

@@ -1,7 +1,10 @@
 /* sov_drive.iii  --  the sovereign assembler DRIVER.  Assembles an embedded .s and emits a COFF .o to stdout.
  * The harness redirects stdout to out.o, links it with gcc, and runs it -- the links-and-runs gate.
- * GATE-1 input: a minimal `main` returning 99 (the .text -- movabsq/retq -- is already byte-gated; this
- * isolates COFF object validity).  Exit 0 = emitted.
+ *
+ * Input = the REAL cg_r3 output for `fn main() -> u64 { return 99 }`, VERBATIM (full frame: pushq %rbp /
+ * subq $1024 / movabsq $0x63 / push-pop / leave-pop-ret / the default-return stub; plus the .rodata +
+ * .iii.ring3/.asciz "main" data-section lines cg_r3 emits).  So the proven chain is genuinely
+ * .iii -> cg_r3 .s -> sovas/sovparse/sovcoff -> .o -> ld -> run, not a hand-written stub.  Exit 0 = emitted.
  */
 module sovtc_drive
 
@@ -11,7 +14,7 @@ extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
 fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
 
 fn main() -> u64 {
-    let src : *u8 = "  .text\n  .global main\nmain:\n  movabsq $99, %rax\n  retq\n~" as *u8
+    let src : *u8 = "  .section .rodata\n  .section .iii.ring3,\"n\"\n  .asciz \"main\"\n  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movabsq $0x63, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
     let n : u32 = slen(src)
     if sovparse_full(src, n) != 0i32 { return 1u64 }   /* assembly error -> nonzero, harness sees no valid .o */
     sovcoff_emit()

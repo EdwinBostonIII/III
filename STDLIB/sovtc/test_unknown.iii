@@ -11,8 +11,8 @@ extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovpar
 fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
 
 fn main() -> u64 {
-    /* movzbq is not yet routed by the parser -> must be a HARD error, not a silent missing-byte drop */
-    let bad : *u8 = "  movzbq %al, %rax\n~" as *u8
+    /* xchgq is not routed by the parser -> must be a HARD error, not a silent missing-byte drop */
+    let bad : *u8 = "  xchgq %rax, %rcx\n~" as *u8
     if sovparse_full(bad, slen(bad)) == 0i32 { return 11u64 }
     /* a handled mnemonic must still succeed */
     let ok : *u8 = "  retq\n~" as *u8

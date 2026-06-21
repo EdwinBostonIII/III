@@ -1,0 +1,30 @@
+/* test_cmp.iii  --  STAGE 1 (mnemonic completion): a real cg_r3 comparison fn `(a>b) as u64` exercises
+ * cmpq + seta (setCC) + movzbq -- mnemonics the parser now routes via the refactored early-return dispatch.
+ * No branch, no reloc.  Must reproduce gcc's 80 .text bytes exactly.
+ *   11 parse / 12 len / 13+i byte i.  exit 99 = setcc/movzbq wired byte-exact vs gcc.
+ */
+module sovtc_test_cmp
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 80] = [
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0x89u8,0x4Du8,0xF8u8,0x48u8,
+  0x89u8,0x55u8,0xF0u8,0x48u8,0x8Bu8,0x45u8,0xF8u8,0x50u8,0x48u8,0x8Bu8,0x45u8,0xF0u8,0x50u8,0x59u8,0x58u8,0x48u8,
+  0x39u8,0xC8u8,0x0Fu8,0x97u8,0xC0u8,0x48u8,0x0Fu8,0xB6u8,0xC0u8,0x50u8,0x58u8,0x50u8,0x58u8,0x48u8,0x89u8,0x45u8,
+  0xE8u8,0x48u8,0x8Bu8,0x45u8,0xE8u8,0x50u8,0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,0xC7u8,0xC0u8,0x00u8,
+  0x00u8,0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\nL_sov_m_cmp:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq %rcx, -8(%rbp)\n  movq %rdx, -16(%rbp)\n  movq -8(%rbp), %rax\n  pushq %rax\n  movq -16(%rbp), %rax\n  pushq %rax\n  popq %rcx\n  popq %rax\n  cmpq %rcx, %rax\n  seta %al\n  movzbq %al, %rax\n  pushq %rax\n  popq %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -24(%rbp)\n  movq -24(%rbp), %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 11u64 }
+    if sov_len() != 80u32 { return 12u64 }
+    let mut i : u32 = 0u32
+    while i < 80u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (13u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

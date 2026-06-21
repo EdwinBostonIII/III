@@ -1,0 +1,35 @@
+/* test_branch.iii  --  STAGE 2 (two-pass branch resolution).  Real cg_r3 if-function: `jz L_if_end_1` is
+ * resolved intra-.text to 74 19 (REL8, no reloc) -- the parser's LAYOUT pass records L_if_end_1's byte offset,
+ * the FINAL pass computes rel8 = off-(site+2).  Must reproduce gcc's 122 .text bytes exactly, with ZERO relocs.
+ *   11 parse / 12 reloc(must be 0) / 13 len / 14+i byte i.  exit 99 = branch resolved byte-exact vs gcc.
+ */
+module sovtc_test_branch
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+
+var GOLD : [u8; 122] = [
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0x89u8,0x4Du8,0xF8u8,0x48u8,
+  0xB8u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x58u8,0x48u8,0x89u8,0x45u8,0xF0u8,0x48u8,
+  0x8Bu8,0x45u8,0xF8u8,0x50u8,0x48u8,0xB8u8,0x05u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x59u8,
+  0x58u8,0x48u8,0x39u8,0xC8u8,0x0Fu8,0x97u8,0xC0u8,0x48u8,0x0Fu8,0xB6u8,0xC0u8,0x50u8,0x58u8,0x48u8,0x85u8,0xC0u8,
+  0x74u8,0x19u8,0x48u8,0xB8u8,0x01u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x58u8,0x48u8,0x89u8,
+  0x45u8,0xF0u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x58u8,0x48u8,0x8Bu8,0x45u8,0xF0u8,0x50u8,
+  0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,
+  0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\nL_sov_b_if:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq %rcx, -8(%rbp)\n  movabsq $0x0, %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -16(%rbp)\n  movq -8(%rbp), %rax\n  pushq %rax\n  movabsq $0x5, %rax\n  pushq %rax\n  popq %rcx\n  popq %rax\n  cmpq %rcx, %rax\n  seta %al\n  movzbq %al, %rax\n  pushq %rax\n  popq %rax\n  testq %rax, %rax\n  jz L_if_end_1\n  movabsq $0x1, %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -16(%rbp)\n  movq $0, %rax\n  pushq %rax\n  popq %rax\nL_if_end_1:\n  movq -16(%rbp), %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 11u64 }
+    if sov_reloc_n() != 0u32 { return 12u64 }     /* intra-.text branch: no relocations */
+    if sov_len() != 122u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 122u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (14u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

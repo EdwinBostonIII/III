@@ -19,7 +19,7 @@ mkdir -p "$OUT"
 "$IIIS" "$SOVTC/sovparse.iii" --compile-only --out "$OUT/sovparse.o" || { echo "[sovtc] FATAL: sovparse compile"; exit 2; }
 
 fail=0
-for t in test_encode test_spine test_reloc test_store test_lea test_unknown test_call test_cmp; do
+for t in test_encode test_spine test_reloc test_store test_lea test_unknown test_call test_cmp test_branch test_sibcall; do
     if ! "$IIIS" "$SOVTC/$t.iii" --compile-only --out "$OUT/$t.o" >/dev/null 2>&1; then echo "[sovtc] FAIL $t (compile)"; fail=1; continue; fi
     if ! gcc "$OUT/$t.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$t.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL $t (link)"; fail=1; continue; fi
     timeout 25 "$OUT/$t.exe" >/dev/null 2>&1; rc=$?

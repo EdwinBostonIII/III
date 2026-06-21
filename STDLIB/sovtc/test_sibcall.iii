@@ -1,0 +1,34 @@
+/* test_sibcall.iii  --  SIBLING call (callq L_x, L_x defined in this .text): gas resolves it to e8 + computed
+ * rel32, NO reloc.  Two functions in one .s; the caller's `callq L_sov_sc_callee` must become e8 bc ff ff ff
+ * (rel32 = 0 - (0x3f+5) = -68).  Same two-pass LBL machinery as branches, applied to a 5-byte call.
+ *   11 parse / 12 reloc(0) / 13 len / 14+i byte i.  exit 99 = sibling call resolved byte-exact vs gcc.
+ */
+module sovtc_test_sibcall
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+
+var GOLD : [u8; 99] = [
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0xB8u8,0x07u8,0x00u8,0x00u8,
+  0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,0xC7u8,0xC0u8,0x00u8,
+  0x00u8,0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0x83u8,0xECu8,0x20u8,0xE8u8,
+  0xBCu8,0xFFu8,0xFFu8,0xFFu8,0x48u8,0x83u8,0xC4u8,0x20u8,0x50u8,0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,
+  0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,
+  0xECu8,0x5Du8,0xC3u8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\nL_sov_sc_callee:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movabsq $0x7, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  .text\nL_sov_sc_caller:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  subq $32, %rsp\n  callq L_sov_sc_callee\n  addq $32, %rsp\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 11u64 }
+    if sov_reloc_n() != 0u32 { return 12u64 }
+    if sov_len() != 99u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 99u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (14u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

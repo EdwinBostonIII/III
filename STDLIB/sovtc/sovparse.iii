@@ -15,6 +15,7 @@
 module sovtc_sovparse
 
 extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_push_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_pop_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
@@ -107,6 +108,34 @@ var SYM_OFF  : [u32; 64]
 var SYM_N    : u32 = 0u32
 var SEC_OFF  : [u32; 4]      /* running byte offset per section (TEXT/DATA/RODATA/BSS) */
 var CUR_SEC  : u32 = 9u32
+
+/* .text label byte-offset table (for branch + sibling-call resolution), built in the LAYOUT pass. */
+var LBL_NAME : [u8; 2048]
+var LBL_NLEN : [u32; 64]
+var LBL_OFF  : [u32; 64]
+var LBL_N    : u32 = 0u32
+var SP_PASS  : u32 = 2u32     /* 1 = layout (record label offsets), 2 = final (resolve displacements) */
+
+fn lbl_record(slot: u32, slen2: u32) {   /* the label name is in SYM_NAME scratch slot 'slot' */
+    if LBL_N < 64u32 {
+        let mut j : u32 = 0u32
+        while j < slen2 { LBL_NAME[((LBL_N * 32u32) + j) as u64] = SYM_NAME[((slot * 32u32) + j) as u64]  j = j + 1u32 }
+        LBL_NLEN[LBL_N as u64] = slen2
+        LBL_OFF[LBL_N as u64] = sov_len()
+        LBL_N = LBL_N + 1u32
+    }
+}
+fn lbl_name_eq(slot: u32, slen2: u32, lidx: u32) -> u32 {
+    if LBL_NLEN[lidx as u64] != slen2 { return 0u32 }
+    let mut j : u32 = 0u32
+    while j < slen2 { if SYM_NAME[((slot * 32u32) + j) as u64] != LBL_NAME[((lidx * 32u32) + j) as u64] { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+fn lbl_find(slot: u32, slen2: u32) -> u32 {   /* return the .text offset of the label, or 0xFFFFFFFF */
+    let mut i : u32 = 0u32
+    while i < LBL_N { if lbl_name_eq(slot, slen2, i) == 1u32 { return LBL_OFF[i as u64] }  i = i + 1u32 }
+    return 0xFFFFFFFFu32
+}
 
 fn is_ident_start(c: u32) -> u32 {
     if c == C_US { return 1u32 }
@@ -263,9 +292,51 @@ var S1SEC : u32 = 0u32
 var S1OFF : i32 = 0i32
 var PARSE_ERR : u32 = 0u32   /* set on an unknown mnemonic; sovparse returns nonzero so the gate fails LOUDLY */
 
-/* sibling call / branch resolution -- filled in by the two-pass (Stage 2).  Stubs error loudly for now. */
-fn sp_sibcall(nlen: u32) { PARSE_ERR = 1u32 }
-fn sp_try_branch() -> u32 { return 0u32 }
+/* sibling call: callq L_x (L_x a .text label) -> E8 + computed disp32 (5 bytes), no reloc.  The target name
+ * is already in SYM_NAME scratch slot SYM_N (read by the callq dispatch). */
+fn sp_sibcall(nlen: u32) {
+    if SP_PASS == 1u32 { sov_call_rel32(0i32) }       /* layout: 5-byte placeholder */
+    else {
+        let off : u32 = lbl_find(SYM_N, nlen)
+        if off == 0xFFFFFFFFu32 { PARSE_ERR = 1u32 }
+        else { let site : u32 = sov_len()  let rel : i32 = (off as i32) - ((site + 5u32) as i32)  sov_call_rel32(rel) }
+    }
+}
+/* branch: jmp/jCC L_x -> opcode + computed rel8 (2 bytes), no reloc.  Returns 1 if MN was a branch. */
+fn sp_try_branch() -> u32 {
+    let mut isbr : u32 = 0u32  let mut isjmp : u32 = 0u32  let mut cc : u32 = 0u32
+    if mn_is(106u32,109u32,112u32,0u32,3u32) == 1u32 { isbr = 1u32  isjmp = 1u32 }   /* jmp */
+    if mn_is(106u32,122u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 4u32 }        /* jz */
+    if mn_is(106u32,101u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 4u32 }        /* je */
+    if mn_is(106u32,110u32,101u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 5u32 }      /* jne */
+    if mn_is(106u32,110u32,122u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 5u32 }      /* jnz */
+    if mn_is(106u32,108u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 12u32 }       /* jl */
+    if mn_is(106u32,108u32,101u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 14u32 }     /* jle */
+    if mn_is(106u32,103u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 15u32 }       /* jg */
+    if mn_is(106u32,103u32,101u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 13u32 }     /* jge */
+    if mn_is(106u32,98u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 2u32 }         /* jb */
+    if mn_is(106u32,98u32,101u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 6u32 }       /* jbe */
+    if mn_is(106u32,97u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 7u32 }         /* ja */
+    if mn_is(106u32,97u32,101u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 3u32 }       /* jae */
+    if isbr == 0u32 { return 0u32 }
+    sp_skip_ws()
+    let nlen : u32 = sp_read_name_into(SYM_N)
+    if SP_PASS == 1u32 {
+        if isjmp == 1u32 { sov_jmp_rel8(0i32) } else { sov_jcc_rel8(cc, 0i32) }     /* layout: 2-byte placeholder */
+    } else {
+        let off : u32 = lbl_find(SYM_N, nlen)
+        if off == 0xFFFFFFFFu32 { PARSE_ERR = 1u32 }
+        else {
+            let site : u32 = sov_len()
+            let rel : i32 = (off as i32) - ((site + 2u32) as i32)
+            let mut fits : u32 = 0u32
+            if rel >= -128i32 { if rel <= 127i32 { fits = 1u32 } }
+            if fits == 1u32 { if isjmp == 1u32 { sov_jmp_rel8(rel) } else { sov_jcc_rel8(cc, rel) } }
+            else { PARSE_ERR = 1u32 }   /* REL32 relaxation deferred (loud, not silently wrong) */
+        }
+    }
+    return 1u32
+}
 
 /* read two comma-separated operands (op1 saved to S1*, op2 in OP*) */
 fn sp_two_ops() {
@@ -351,10 +422,13 @@ fn sp_dispatch_instr() {
     PARSE_ERR = 1u32    /* unknown mnemonic -> loud, located failure */
 }
 
-/* parse + encode the whole buffer.  returns 0 ok, or a negative line-ish error. */
+/* ONE encode pass (LAYOUT if SP_PASS==1, FINAL if SP_PASS==2).  Tracks CUR_SEC (for label-section), reads the
+ * full token (so long labels are not truncated), records .text label offsets in the layout pass, dispatches
+ * instructions otherwise.  Returns 0 ok / -1 on PARSE_ERR. */
 fn sovparse(ptr: *u8, len: u32) -> i32 @export {
     sov_reset()
     PARSE_ERR = 0u32
+    CUR_SEC = SEC_OTHER
     IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32
     while IN_POS < IN_LEN {
         sp_skip_ws()
@@ -362,19 +436,24 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
         if c == C_NL { sp_adv() }
         else { if c == C_CR { sp_adv() }
         else { if c == 0u32 { sp_adv() }
-        else { if c == C_DOT { sp_skip_line() }     /* directive */
+        else { if c == C_DOT { sp_adv()  sp_dir1()  sp_skip_line() }   /* directive: track CUR_SEC */
         else { if c == C_HASH { sp_skip_line() }    /* comment */
         else {
-            /* instruction or label: read mnemonic, then decide */
-            sp_mnem()
-            if MNN == 0u32 { sp_skip_line() }        /* unknown token -> skip line */
-            else {
-                if sp_ch() == C_COLON { sp_adv()  sp_skip_line() }   /* it was a label */
-                else {
-                    sp_dispatch_instr()    /* read operands + encode (early-return form; unknown -> PARSE_ERR) */
+            if is_ident_start(c) == 1u32 {
+                /* read the FULL token into scratch slot SYM_N; mirror first <=8 chars into MN for mn_is */
+                let tlen : u32 = sp_read_name_into(SYM_N)
+                MNN = tlen  if MNN > 8u32 { MNN = 8u32 }
+                let mut mi : u32 = 0u32
+                while mi < MNN { MN[mi as u64] = SYM_NAME[((SYM_N * 32u32) + mi) as u64] as u32  mi = mi + 1u32 }
+                if sp_ch() == C_COLON {
+                    sp_adv()
+                    if SP_PASS == 1u32 { if CUR_SEC == SEC_TEXT { lbl_record(SYM_N, tlen) } }   /* record .text label offset */
+                    sp_skip_line()
+                } else {
+                    sp_dispatch_instr()
                     sp_skip_line()
                 }
-            }
+            } else { sp_skip_line() }
         } } } } }
     }
     if PARSE_ERR == 1u32 { return 0i32 - 1i32 }
@@ -455,8 +534,11 @@ fn sp_build_symtab(ptr: *u8, len: u32) {
     }
 }
 
-/* the full two-pass assemble: build the symbol table, then encode .text + emit the reloc table. */
+/* the full assemble: D (data symbol table) -> L (layout: record .text label offsets) -> F (final: resolve
+ * branch + sibling-call displacements and emit).  The final pass's SOV_BUF + reloc table are the result. */
 fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
-    sp_build_symtab(ptr, len)
-    return sovparse(ptr, len)
+    sp_build_symtab(ptr, len)        /* D */
+    LBL_N = 0u32
+    SP_PASS = 1u32  sovparse(ptr, len)          /* L */
+    SP_PASS = 2u32  return sovparse(ptr, len)   /* F */
 }

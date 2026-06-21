@@ -1016,6 +1016,14 @@ MODULES=(
     # Consumed by corpus 1913 (the CAV RED-probe); reuses the sealed exec_cert + cad -- zero new crypto,
     # BSS-neutral, compiler-unreferenced.  Phase 0 of the Master Logic Assimilation (DOCS/III-INVERSE-LIBRARY.md).
     "omnia/isub"
+    # --- DOME (omnia::dome + dome_audit + dome_society): the inverse-form ARENA -- a sealed event-space where
+    # a society of event-primary twins (EYE/WAVE/ECHO/TIDE) co-inhabit one append-only, witnessed, REVERSIBLE
+    # history with deliberation (choose -> live the butterfly-effect -> rewind + re-choose, the abandoned branch
+    # RETAINED as provenance).  Complete leaf modules (compile clean); corpus 1903/1904/1905 drive them.
+    # Compiler-unreferenced (corpus-only), authored on the DOME line but never added to MODULES -- restored.
+    "omnia/dome"
+    "omnia/dome_audit"
+    "omnia/dome_society"
     # xii_isub: PHASE 1 of the Master Logic Assimilation -- XII ENCAPSULATED.  Drives the REAL xii_rewrite
     # to fixpoint, emitting each real firing as a BELOW reduction-step into the witnessed isub bus; derives
     # "the current term" as a pure FOLD over that history (state = side-effect of events), with time-travel
@@ -1231,6 +1239,12 @@ MODULES=(
     # before/after state roots, extends a genesis-anchored hash-chained ledger, and either commits
     # (apprentice-gated) or rolls back byte-exact.  Composes all six organs + vbd + attest_box.
     "sanctus/autogenesis"
+    # --- AUTOGENESIS CLI: sanctus/autogenesis_cli -- the context-aware native command surface.  agc_run
+    # parses a text command line and DISPATCHES to self_model/theorem_grow/autogenesis (a lean front-end,
+    # adds no new authority -- cycle/commit run under the agc_attach session cap).  A complete production
+    # module (compiles clean; deps all above) that was authored but never added to MODULES, so corpus 1410
+    # -- which covers its agc_attach/agc_exec exports -- could not link.  Restored here.
+    "sanctus/autogenesis_cli"
     # --- THE SELF-AWARENESS SEAM (omnia::self_atlas): the III-native self-model of its OWN
     # module dependency graph -- the cartographer machine brought INSIDE III so the
     # generative organs can query blast-radius / would-this-refactor-cycle / is-this-edge-

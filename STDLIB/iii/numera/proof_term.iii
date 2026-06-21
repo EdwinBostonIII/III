@@ -110,7 +110,10 @@ const PT_RULE_FORALL_ELIM    : u8 = 0x17u8   // @x(φ)        |- φ[x:=t]       
 const PT_RULE_EXISTS_INTRO   : u8 = 0x18u8   // φ[x:=t]      |- ?x(φ)              (existential generalisation)
 const PT_RULE_FORALL_INTRO   : u8 = 0x19u8   // φ            |- @x(φ)   [eigenvar] (universal generalisation)
 const PT_RULE_EXISTS_ELIM    : u8 = 0x1Au8   // ?x(φ), [φ]..C |- C       [eigenvar] (existential instantiation)
-const PT_RULE_MAX            : u8 = 0x1Au8
+// LEIBNIZ (substitution of equals, the indiscernibility of identicals) -- lifts equality from an opaque
+// relation to FOL=: from a=b and a formula φ mentioning a, conclude φ with SOME a's replaced by b.
+const PT_RULE_LEIBNIZ        : u8 = 0x1Bu8   // a=b, φ(a)    |- φ[a:=b]   (single-byte terms; partial swap OK)
+const PT_RULE_MAX            : u8 = 0x1Bu8
 const PT_MAX_ASSUMPTIONS     : u64 = 64u64   // one bit per live assumption in the u64 dependency mask
 const PT_OP_AND              : u8 = 0x26u8    // '&' conjunction separator A & B
 const PT_OP_OR               : u8 = 0x7Cu8    // '|' disjunction separator A | B
@@ -529,6 +532,7 @@ fn pt_verify_step(slot: u64, step: u32) -> i32 {
     if kind == PT_RULE_EXISTS_INTRO { return pt_replay_exists_intro(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_FORALL_INTRO { return pt_replay_forall_intro(slot, idx, pcount, c, cl) }
     if kind == PT_RULE_EXISTS_ELIM { return pt_replay_exists_elim(slot, idx, pcount, c, cl) }
+    if kind == PT_RULE_LEIBNIZ { return pt_replay_leibniz(slot, idx, pcount, c, cl) }
     return PT_E_INVALID_INFERENCE
 }
 
@@ -1011,6 +1015,45 @@ fn pt_replay_reflexivity(c: u64, cl: u64, pcount: u32) -> i32 {
     if pcount != 0u32 { return PT_E_INVALID_INFERENCE }
     if cl == 0u64 { return PT_E_INVALID_INFERENCE }
     if pt_check_reflexivity(c, cl) == 0u8 { return PT_E_INVALID_INFERENCE }
+    return PT_OK
+}
+
+// LEIBNIZ replay (substitution of equals, FOL= 0x1B).  Premise 0 is the equality a=b (a top-level relation of
+// SINGLE-byte terms: exactly "a '=' b", 3 bytes); premise 1 is the formula phi.  The conclusion c must equal
+// phi position-by-position EXCEPT that SOME occurrences of a may be replaced by b -- each i: c[i]==phi[i] OR
+// (phi[i]==a AND c[i]==b).  Sound: any other change (a non-a byte altered, or an a replaced by something other
+// than b) fails the fold.  Permissive on WHICH a's swap (the indiscernibility of identicals replaces some, not
+// necessarily all).  phi and the conclusion share length.
+fn pt_replay_leibniz(slot: u64, idx: u64, pcount: u32, c: u64, cl: u64) -> i32 {
+    if pcount != 2u32 { return PT_E_INVALID_INFERENCE }
+    if cl == 0u64 { return PT_E_INVALID_INFERENCE }
+    let base : u64 = idx * 8u64
+    let e0 : u64 = slot * PT_MAX_STEPS + (PT_STEP_PREMISES[base + 0u64] as u64)
+    let eq_p : u64 = pt_concl_addr(e0)
+    let eq_l : u64 = PT_STEP_CONCL_LENS[e0] as u64
+    let e1 : u64 = slot * PT_MAX_STEPS + (PT_STEP_PREMISES[base + 1u64] as u64)
+    let phi_p : u64 = pt_concl_addr(e1)
+    let phi_l : u64 = PT_STEP_CONCL_LENS[e1] as u64
+    let sc : i64 = pt_find_toplevel_op(eq_p, eq_l, PT_OP_RELATION)
+    if sc == -1i64 { return PT_E_INVALID_INFERENCE }
+    if eq_l != 3u64 { return PT_E_INVALID_INFERENCE }            /* single-byte terms: a '=' b */
+    if (sc as u64) != 1u64 { return PT_E_INVALID_INFERENCE }
+    let eqb : *u8 = eq_p as *u8
+    let a : u8 = eqb[0u64]
+    let b : u8 = eqb[2u64]
+    if phi_l != cl { return PT_E_INVALID_INFERENCE }
+    let cbp : *u8 = c as *u8
+    let pbp : *u8 = phi_p as *u8
+    let mut bad : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < cl {
+        let mut ok : u32 = 0u32
+        if cbp[i] == pbp[i] { ok = 1u32 }
+        if pbp[i] == a { if cbp[i] == b { ok = 1u32 } }
+        if ok == 0u32 { bad = 1u32 }
+        i = i + 1u64
+    }
+    if bad == 1u32 { return PT_E_INVALID_INFERENCE }
     return PT_OK
 }
 

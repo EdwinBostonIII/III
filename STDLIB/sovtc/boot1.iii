@@ -1,0 +1,31 @@
+/* boot1.iii  --  a REAL self-contained multi-function III program for the sovereign-bootstrap beachhead.
+ * NOT cherry-picked: ordinary code -- module data, helper fns, cross-calls, a loop, branches.
+ *   add2/mul2  : leaf arithmetic helpers (cross-called by main = sibling calls)
+ *   sum_table  : a while-loop fold over a MODULE-level array (data section + data reloc + backward branch)
+ *   main       : calls all three, checks the total, returns 99 iff correct (entry = main, rax+RET exit code)
+ * 40+50=90, 3*3=9, 1+2+3+4=10 -> 109 -> exit 99.  Integer-only (no SIMD/SEH) so it stays in sovas Tier-1.
+ */
+module sovtc_boot1
+
+var TABLE : [u64; 4] = [ 1u64, 2u64, 3u64, 4u64 ]
+
+fn add2(a: u64, b: u64) -> u64 { return a + b }
+fn mul2(a: u64, b: u64) -> u64 { return a * b }
+
+fn sum_table() -> u64 {
+    let mut s : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        s = s + TABLE[i]
+        i = i + 1u64
+    }
+    return s
+}
+
+fn main() -> u64 {
+    let x : u64 = add2(40u64, 50u64)
+    let y : u64 = mul2(3u64, 3u64)
+    let t : u64 = sum_table()
+    if (x + y + t) == 109u64 { return 99u64 }
+    return 1u64
+}

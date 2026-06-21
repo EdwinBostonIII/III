@@ -51,6 +51,7 @@ extern @abi(c-msvc-x64) fn sov_movsxd_sib(dst: u32, base: u32, index: u32, scale
 extern @abi(c-msvc-x64) fn sov_neg_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_not_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_imul_r(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_imul_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_idiv_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_div_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_shl_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
@@ -513,7 +514,7 @@ fn sp_dispatch_instr() {
     /* F7 unary */
     if mn_is(110u32,101u32,103u32,113u32,4u32) == 1u32 { sp_operand()  sov_neg_r(OPR)  return }    /* negq */
     if mn_is(110u32,111u32,116u32,113u32,4u32) == 1u32 { sp_operand()  sov_not_r(OPR)  return }    /* notq */
-    if mn_is(105u32,109u32,117u32,108u32,5u32) == 1u32 { sp_operand()  sov_imul_r(OPR)  return }   /* imulq */
+    if mn_is(105u32,109u32,117u32,108u32,5u32) == 1u32 { sp_two_ops()  sov_imul_rr(OPR, S1R)  return }   /* imulq %src,%dst -> REX.W 0F AF /r */
     if mn_is(105u32,100u32,105u32,118u32,5u32) == 1u32 { sp_operand()  sov_idiv_r(OPR)  return }   /* idivq */
     if mn_is(100u32,105u32,118u32,113u32,4u32) == 1u32 { sp_operand()  sov_div_r(OPR)  return }    /* divq */
     /* shift $imm8,%reg */

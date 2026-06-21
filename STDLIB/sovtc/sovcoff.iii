@@ -15,6 +15,7 @@
 module sovtc_sovcoff
 
 extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_text_pad16() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_len(sec: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_at(sec: u32, i: u32) -> u32 from "sovas.iii"
@@ -96,6 +97,7 @@ fn reloc_symidx(i: u32) -> u32 {
 fn sovcoff_emit() -> i32 @export {
     _setmode(1i32, 0x8000i32)
     STR_LEN = 0u32
+    sov_text_pad16()                          /* gas-match: pad .text to a 16-byte boundary (NOP) before layout */
 
     /* ── compute section presence + sizes ── */
     SEC_RAWLEN[0u64] = sov_len()  SEC_PRESENT[0u64] = 1u32                 /* .text always */

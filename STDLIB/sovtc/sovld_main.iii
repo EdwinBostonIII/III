@@ -1,0 +1,53 @@
+/* sovld_main.iii  --  the full sovereign assemble+link TOOL: `sovld_main <input.s> > out.exe`.  Reads a .s
+ * file (argv[1]), assembles it (sovparse) and emits a native PE32+ executable (sovld) to stdout -- NO gcc,
+ * NO ld, NO gas anywhere.  This is `.iii -> (iiis) .s -> (sovld_main) .exe` with the entire back half
+ * sovereign.  Exit: 2 = no argv, 3 = read failed, 4 = assembly error (LOUD), 0 = PE emitted to stdout. */
+module sovtc_sovld_main
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+const GENERIC_READ   : u32 = 0x80000000u32
+const OPEN_EXISTING  : u32 = 3u32
+const SHARE_READ     : u32 = 1u32
+const ATTR_NORMAL    : u32 = 0x80u32
+const INVALID_HANDLE : u64 = 0xFFFFFFFFFFFFFFFFu64
+const SBUF_MAX       : u32 = 1048576u32
+
+var NXFER : [u8; 8]
+var SBUF  : [u8; 1048576]
+
+fn read_file(path: *u8) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, SHARE_READ, 0u64, OPEN_EXISTING, ATTR_NORMAL, 0u64)
+    if h == INVALID_HANDLE { return 0u32 }
+    let mut off : u32 = 0u32
+    let mut go  : u32 = 1u32
+    while go == 1u32 {
+        let dst : *u8 = ((&SBUF as u64) + (off as u64)) as *u8
+        let ok  : i32 = ReadFile(h, dst, SBUF_MAX - off, (&NXFER) as u64, 0u64)
+        if ok == 0i32 { go = 0u32 }
+        else {
+            let p  : *u32 = (&NXFER) as *u32
+            let nr : u32 = p[0u64]
+            if nr == 0u32 { go = 0u32 }
+            else { off = off + nr }
+        }
+    }
+    CloseHandle(h)
+    return off
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    let ac : i32 = argc
+    if ac < 2i32 { return 2u64 }
+    let pp   : *u64 = argv as *u64
+    let path : *u8  = pp[1u64] as *u8
+    let n    : u32  = read_file(path)
+    if n == 0u32 { return 3u64 }
+    if sovparse_full((&SBUF) as *u8, n) != 0i32 { return 4u64 }
+    sovld_emit()
+    return 0u64
+}

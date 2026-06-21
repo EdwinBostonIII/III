@@ -1,0 +1,60 @@
+/* test_reloc.iii  --  S1 RELOCATION SPINE: parse a real cg_r3 function that TOUCHES GLOBALS and reproduce
+ * gcc's .text AND its relocation table.  Input = the actual .s for `fn(){ return A + B }` (A@.data+0,
+ * B@.data+8); the parser lays out the data section, builds the symbol table, and emits each movq sym(%rip)
+ * with disp32 = the symbol's section offset + a REL32 reloc to .data.  Both the 79 .text bytes (disp32=0 for
+ * A, =8 for B) AND the 2 relocs (field 0xe->.data, 0x1b->.data) must match gcc exactly.
+ *
+ *   code 11 reln  : wrong number of relocations
+ *   code 12 relent: a reloc entry (field offset or target section) diverged from gcc
+ *   code 13 len   : wrong .text length
+ *   code 14+i     : .text byte i diverged from gcc
+ * exit 99 = sovas+sovparse reproduce gcc's .text AND reloc table on a global-touching function.
+ */
+module sovtc_test_reloc
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sec(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 79] = [
+  0x55u8, 0x48u8,0x89u8,0xE5u8, 0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,
+  0x48u8,0x8Bu8,0x05u8,0x00u8,0x00u8,0x00u8,0x00u8,   /* movq L_A(%rip),%rax  disp32=0 */
+  0x50u8, 0x58u8, 0x48u8,0x89u8,0x45u8,0xF8u8,
+  0x48u8,0x8Bu8,0x05u8,0x08u8,0x00u8,0x00u8,0x00u8,   /* movq L_B(%rip),%rax  disp32=8 */
+  0x50u8, 0x58u8, 0x48u8,0x89u8,0x45u8,0xF0u8,
+  0x48u8,0x8Bu8,0x45u8,0xF8u8, 0x50u8, 0x48u8,0x8Bu8,0x45u8,0xF0u8, 0x50u8, 0x59u8, 0x58u8,
+  0x48u8,0x01u8,0xC8u8, 0x50u8, 0x58u8, 0x48u8,0x89u8,0xECu8, 0x5Du8, 0xC3u8,
+  0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8, 0x50u8,
+  0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8, 0x48u8,0x89u8,0xECu8, 0x5Du8, 0xC3u8
+]
+
+fn slen(s: *u8) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .rodata\n  .section .data\nL_A:\n  .quad 0x0\nL_B:\n  .quad 0x0\n  .text\nL_sov_r2_get:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq L_A(%rip), %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -8(%rbp)\n  movq L_B(%rip), %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -16(%rbp)\n  movq -8(%rbp), %rax\n  pushq %rax\n  movq -16(%rbp), %rax\n  pushq %rax\n  popq %rcx\n  popq %rax\n  addq %rcx, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    sovparse_full(src, n)
+
+    /* the relocation table must match gcc: 2 REL32 relocs to .data(1) at field offsets 0xe and 0x1b */
+    if sov_reloc_n() != 2u32 { return 11u64 }
+    if sov_reloc_off(0u32) != 0x0Eu32 { return 12u64 }
+    if sov_reloc_sec(0u32) != 1u32 { return 12u64 }
+    if sov_reloc_off(1u32) != 0x1Bu32 { return 12u64 }
+    if sov_reloc_sec(1u32) != 1u32 { return 12u64 }
+
+    /* the .text bytes (incl. disp32 = section offsets 0 and 8) must match gcc */
+    if sov_len() != 79u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 79u32 {
+        if sov_at(i) != (GOLD[i as u64] as u32) { return (14u64 + (i as u64)) }
+        i = i + 1u32
+    }
+    return 99u64
+}

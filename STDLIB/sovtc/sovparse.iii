@@ -32,6 +32,9 @@ extern @abi(c-msvc-x64) fn sov_add_imm32(reg: u32, imm: i32) -> i32 from "sovas.
 extern @abi(c-msvc-x64) fn sov_sub_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
 
 /* ASCII (numeric, to avoid any char-literal assumptions) */
 const C_SP : u32 = 32u32
@@ -57,11 +60,61 @@ var IN_PTR : u64 = 0u64
 var IN_LEN : u32 = 0u32
 var IN_POS : u32 = 0u32
 
-/* operand decode registers: kind 0=reg 1=imm 2=mem(disp(base)) */
+const C_US : u32 = 95u32   /* _ */
+const C_AU : u32 = 65u32   /* A */
+const C_ZU : u32 = 90u32   /* Z */
+
+/* operand decode registers: kind 0=reg 1=imm 2=mem(disp(base)) 3=sym(%rip) */
 var OPK : u32 = 0u32
 var OPR : u32 = 0u32      /* register (or mem base) */
 var OPD : i32 = 0i32      /* mem displacement */
 var OPI : i64 = 0i64      /* immediate */
+var OPSEC : u32 = 0u32    /* sym(%rip): resolved target section */
+var OPOFF : i32 = 0i32    /* sym(%rip): resolved offset within that section (the disp32 addend) */
+
+/* the data-symbol table (pass 1).  section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 OTHER=9. */
+const SEC_TEXT : u32 = 0u32
+const SEC_DATA : u32 = 1u32
+const SEC_RODATA : u32 = 2u32
+const SEC_BSS : u32 = 3u32
+const SEC_OTHER : u32 = 9u32
+var SYM_NAME : [u8; 2048]   /* flat name bytes, 32 per slot */
+var SYM_NLEN : [u32; 64]
+var SYM_SEC  : [u32; 64]
+var SYM_OFF  : [u32; 64]
+var SYM_N    : u32 = 0u32
+var SEC_OFF  : [u32; 4]      /* running byte offset per section (TEXT/DATA/RODATA/BSS) */
+var CUR_SEC  : u32 = 9u32
+
+fn is_ident_start(c: u32) -> u32 {
+    if c == C_US { return 1u32 }
+    if is_lower(c) == 1u32 { return 1u32 }
+    if c >= C_AU { if c <= C_ZU { return 1u32 } }
+    return 0u32
+}
+fn is_ident(c: u32) -> u32 {
+    if is_ident_start(c) == 1u32 { return 1u32 }
+    if is_digit(c) == 1u32 { return 1u32 }
+    return 0u32
+}
+/* read an identifier at the cursor into a 32-byte slot at SYM_N (not yet committed); return its length */
+fn sp_read_name_into(slot: u32) -> u32 {
+    let mut n : u32 = 0u32
+    while is_ident(sp_ch()) == 1u32 {
+        if n < 32u32 { SYM_NAME[((slot * 32u32) + n) as u64] = sp_ch() as u8  n = n + 1u32 }
+        sp_adv()
+    }
+    return n
+}
+fn sp_names_eq(slot: u32, alen: u32, blot: u32, blen: u32) -> u32 {
+    if alen != blen { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < alen {
+        if SYM_NAME[((slot * 32u32) + i) as u64] != SYM_NAME[((blot * 32u32) + i) as u64] { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
 
 fn sp_ch() -> u32 {
     if IN_POS < IN_LEN { let p : *u8 = IN_PTR as *u8  return p[IN_POS as u64] as u32 }
@@ -145,6 +198,20 @@ fn sp_operand() {
     let c : u32 = sp_ch()
     if c == C_PCT { sp_adv()  OPK = 0u32  OPR = sp_reg()  return }
     if c == C_DOL { sp_adv()  OPK = 1u32  OPI = sp_num()  return }
+    if is_ident_start(c) == 1u32 {
+        /* sym(%rip) : read the symbol, resolve via the data-symbol table, consume "(%rip)" */
+        OPK = 3u32
+        let nlen : u32 = sp_read_name_into(SYM_N)        /* SYM_N = a scratch slot beyond the recorded set */
+        OPSEC = SEC_OTHER  OPOFF = 0i32
+        let mut i : u32 = 0u32
+        while i < SYM_N {
+            if sp_names_eq(SYM_N, nlen, i, SYM_NLEN[i as u64]) == 1u32 {
+                OPSEC = SYM_SEC[i as u64]  OPOFF = SYM_OFF[i as u64] as i32  i = SYM_N
+            } else { i = i + 1u32 }
+        }
+        if sp_ch() == C_LP { sp_adv()  if sp_ch() == C_PCT { sp_adv() }  sp_reg()  if sp_ch() == C_RP { sp_adv() } }
+        return
+    }
     /* memory: [disp]('%'base) */
     OPK = 2u32
     OPD = 0i32
@@ -173,6 +240,8 @@ var S1K : u32 = 0u32
 var S1R : u32 = 0u32
 var S1D : i32 = 0i32
 var S1I : i64 = 0i64
+var S1SEC : u32 = 0u32
+var S1OFF : i32 = 0i32
 
 /* parse + encode the whole buffer.  returns 0 ok, or a negative line-ish error. */
 fn sovparse(ptr: *u8, len: u32) -> i32 @export {
@@ -202,13 +271,19 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
                     } else { if mn_is(114u32,101u32,116u32,113u32,4u32) == 1u32 {  /* retq */
                         sov_ret()
                     } else { if mn_is(109u32,111u32,118u32,113u32,4u32) == 1u32 {  /* movq */
-                        sp_operand()  S1K = OPK  S1R = OPR  S1D = OPD  S1I = OPI
+                        sp_operand()  S1K = OPK  S1R = OPR  S1D = OPD  S1I = OPI  S1SEC = OPSEC  S1OFF = OPOFF
                         sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
                         sp_operand()
                         if S1K == 0u32 { if OPK == 0u32 { sov_mov_rr(OPR, S1R) } }                 /* movq %s,%d */
                         if S1K == 0u32 { if OPK == 2u32 { sov_store_rbp8(S1R, OPD) } }             /* movq %s,d(%rbp) */
                         if S1K == 2u32 { if OPK == 0u32 { sov_load_rbp8(OPR, S1D) } }              /* movq d(%rbp),%d */
                         if S1K == 1u32 { if OPK == 0u32 { sov_mov_imm32(OPR, S1I as i32) } }       /* movq $i,%d */
+                        if S1K == 3u32 { if OPK == 0u32 { sov_load_rip_sym(OPR, S1SEC, S1OFF) } }  /* movq sym(%rip),%d */
+                        if S1K == 0u32 { if OPK == 3u32 { sov_store_rip_sym(S1R, OPSEC, OPOFF) } } /* movq %s,sym(%rip) */
+                    } else { if mn_is(108u32,101u32,97u32,113u32,4u32) == 1u32 {   /* leaq */
+                        sp_operand()  S1SEC = OPSEC  S1OFF = OPOFF
+                        sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+                        sp_operand()  sov_lea_rip_sym(OPR, S1SEC, S1OFF)                           /* leaq sym(%rip),%d */
                     } else { if mn_is(109u32,111u32,118u32,97u32,7u32) == 1u32 {   /* movabsq */
                         sp_operand()  S1I = OPI
                         sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
@@ -231,11 +306,90 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
                         if mn_is(97u32,110u32,100u32,113u32,4u32) == 1u32 { sov_and_rr(OPR, S1R) }  /* andq */
                         if mn_is(111u32,114u32,113u32,0u32,3u32) == 1u32 { sov_or_rr(OPR, S1R) }     /* orq */
                         if mn_is(120u32,111u32,114u32,113u32,4u32) == 1u32 { sov_xor_rr(OPR, S1R) }  /* xorq */
-                    } } } } }
+                    } } } } } }
                     sp_skip_line()
                 }
             }
         } } } } }
     }
     return 0i32
+}
+
+/* ── PASS 1: build the data-symbol table (L_* -> section, offset within section) ── */
+fn sp_read_dir() {   /* read a directive name (after the '.') into MN */
+    MNN = 0u32
+    while is_ident(sp_ch()) == 1u32 { if MNN < 8u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
+}
+fn sp_count_bytes() -> u32 {   /* count comma-separated values on the rest of the line (.byte a,b,c) */
+    let save : u32 = IN_POS
+    let mut cnt : u32 = 1u32
+    while IN_POS < IN_LEN { let c : u32 = sp_ch()  if c == C_NL { IN_POS = save  return cnt }  if c == C_COM { cnt = cnt + 1u32 }  sp_adv() }
+    IN_POS = save
+    return cnt
+}
+fn sp_record_at(nlen: u32) {   /* commit the just-read name (in scratch slot SYM_N) as a symbol */
+    if SYM_N < 63u32 {
+        SYM_NLEN[SYM_N as u64] = nlen
+        SYM_SEC[SYM_N as u64] = CUR_SEC
+        SYM_OFF[SYM_N as u64] = SEC_OFF[CUR_SEC as u64]
+        SYM_N = SYM_N + 1u32
+    }
+}
+fn sp_dir1() {
+    sp_read_dir()
+    if mn_is(115u32,101u32,99u32,116u32,7u32) == 1u32 {        /* section <name> */
+        sp_skip_ws()
+        if sp_ch() == C_DOT { sp_adv() }
+        let f : u32 = sp_ch()
+        if f == 100u32 { CUR_SEC = SEC_DATA }                  /* .data */
+        else { if f == 114u32 { CUR_SEC = SEC_RODATA }         /* .rodata */
+        else { if f == 98u32 { CUR_SEC = SEC_BSS }             /* .bss */
+        else { if f == 116u32 { CUR_SEC = SEC_TEXT }           /* .text */
+        else { CUR_SEC = SEC_OTHER } } } }
+        return
+    }
+    if mn_is(116u32,101u32,120u32,116u32,4u32) == 1u32 { CUR_SEC = SEC_TEXT  return }     /* .text */
+    if mn_is(100u32,97u32,116u32,97u32,4u32) == 1u32 { CUR_SEC = SEC_DATA  return }       /* .data */
+    if mn_is(98u32,115u32,115u32,0u32,3u32) == 1u32 { CUR_SEC = SEC_BSS  return }         /* .bss */
+    if mn_is(114u32,111u32,100u32,97u32,6u32) == 1u32 { CUR_SEC = SEC_RODATA  return }    /* .rodata */
+    if CUR_SEC < 4u32 {
+        if mn_is(113u32,117u32,97u32,100u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 8u32 }   /* .quad */
+        if mn_is(108u32,111u32,110u32,103u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 4u32 }   /* .long */
+        if mn_is(98u32,121u32,116u32,101u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + sp_count_bytes() }  /* .byte */
+        if mn_is(122u32,101u32,114u32,111u32,4u32) == 1u32 { sp_skip_ws()  SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + (sp_num() as u32) }  /* .zero */
+    }
+    /* NOTE: .ascii/.asciz string-length not yet tracked -> tracked-section strings would mis-offset.
+     * cg_r3 keeps its strings in OTHER sections (.iii.ring3), so this is exact for the gate; a real
+     * string-length pass is the next sub-step for full isub-scale data layout. */
+}
+fn sp_build_symtab(ptr: *u8, len: u32) {
+    SYM_N = 0u32
+    SEC_OFF[0u64] = 0u32  SEC_OFF[1u64] = 0u32  SEC_OFF[2u64] = 0u32  SEC_OFF[3u64] = 0u32
+    CUR_SEC = SEC_OTHER
+    IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32
+    while IN_POS < IN_LEN {
+        sp_skip_ws()
+        let c : u32 = sp_ch()
+        if c == C_NL { sp_adv() }
+        else { if c == C_CR { sp_adv() }
+        else { if c == 0u32 { sp_adv() }
+        else { if c == C_HASH { sp_skip_line() }
+        else { if c == C_DOT { sp_adv()  sp_dir1()  sp_skip_line() }
+        else { if is_ident_start(c) == 1u32 {
+            let nlen : u32 = sp_read_name_into(SYM_N)
+            if sp_ch() == C_COLON {
+                if CUR_SEC == SEC_DATA { sp_record_at(nlen) }
+                else { if CUR_SEC == SEC_RODATA { sp_record_at(nlen) }
+                else { if CUR_SEC == SEC_BSS { sp_record_at(nlen) } } }
+            }
+            sp_skip_line()
+        }
+        else { sp_skip_line() } } } } } }
+    }
+}
+
+/* the full two-pass assemble: build the symbol table, then encode .text + emit the reloc table. */
+fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
+    sp_build_symtab(ptr, len)
+    return sovparse(ptr, len)
 }

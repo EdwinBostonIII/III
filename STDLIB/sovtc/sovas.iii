@@ -18,7 +18,17 @@ const SOV_CAP : u32 = 4096u32
 var SOV_BUF : [u8; 4096]
 var SOV_LEN : u32 = 0u32
 
-fn sov_reset() -> i32 @export { SOV_LEN = 0u32  return 0i32 }
+/* relocation table: each rip-relative reference to a symbol records one REL32 reloc.
+ * section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 (match cg_r3's .section names). */
+var REL_OFF : [u32; 256]    /* the disp32 FIELD offset within .text */
+var REL_SEC : [u32; 256]    /* the target SECTION the reloc points at */
+var REL_N   : u32 = 0u32
+
+fn sov_reset() -> i32 @export { SOV_LEN = 0u32  REL_N = 0u32  return 0i32 }
+fn sov_reloc_n() -> u32 @export { return REL_N }
+fn sov_reloc_off(i: u32) -> u32 @export { if i < REL_N { return REL_OFF[i as u64] }  return 0xFFFFFFFFu32 }
+fn sov_reloc_sec(i: u32) -> u32 @export { if i < REL_N { return REL_SEC[i as u64] }  return 0xFFFFFFFFu32 }
+fn sov_rec_reloc(sec: u32) { if REL_N < 256u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_N = REL_N + 1u32 } }
 fn sov_len() -> u32 @export { return SOV_LEN }
 fn sov_at(i: u32) -> u32 @export { if i < SOV_LEN { return SOV_BUF[i] as u32 }  return 0xFFFFFFFFu32 }
 
@@ -213,3 +223,31 @@ fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 @export { sov_emit(0x0Fu32)  sov_emit
 fn sov_jmp_rel32(rel: i32) -> i32 @export { sov_emit(0xE9u32)  sov_imm((rel as u32) as u64, 4u32)  return 0i32 }
 fn sov_call_rel32(rel: i32) -> i32 @export { sov_emit(0xE8u32)  sov_imm((rel as u32) as u64, 4u32)  return 0i32 }
 fn sov_ret() -> i32 @export { sov_emit(0xC3u32)  return 0i32 }
+
+/* ── rip-relative-to-SYMBOL (relocation sites) ──
+ * Encode mod=00 rm=101 (RIP+disp32), record a REL32 reloc at the disp32 field, and store disp32 = the
+ * symbol's offset within its section (the gas addend convention, recon-verified).  The reloc targets the
+ * SECTION (sec), not the named symbol. */
+fn sov_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {   /* movq sym(%rip), %reg : REX.W 8B */
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Bu32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {  /* movq %reg, sym(%rip) : REX.W 89 */
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {    /* leaq sym(%rip), %reg : REX.W 8D */
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Du32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_load_rip32_sym(reg: u32, sec: u32, off: i32) -> i32 @export { /* movl sym(%rip), %reg : 8B (no REX) */
+    sov_emit(0x8Bu32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_store_rip32_sym(reg: u32, sec: u32, off: i32) -> i32 @export {/* movl %reg, sym(%rip) : 89 (no REX) */
+    sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}

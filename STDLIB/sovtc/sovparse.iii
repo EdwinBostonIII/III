@@ -60,6 +60,12 @@ extern @abi(c-msvc-x64) fn sov_shl_imm8(reg: u32, imm: u32) -> i32 from "sovas.i
 extern @abi(c-msvc-x64) fn sov_shr_imm8(reg: u32, imm: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_shl_cl(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_shr_cl(reg: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_xorl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_addl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_subl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_andl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_orl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cmpl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jcc_rel8(cc: u32, rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jmp_rel8(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.iii"
@@ -588,6 +594,13 @@ fn sp_dispatch_instr() {
     /* shift $imm8,%reg */
     if mn_is(115u32,104u32,108u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shl_imm8(OPR, S1I as u32) } else { sov_shl_cl(OPR) }  return }  /* shlq $imm|%cl */
     if mn_is(115u32,104u32,114u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_shr_imm8(OPR, S1I as u32) } else { sov_shr_cl(OPR) }  return }  /* shrq $imm|%cl */
+    /* 32-bit reg-reg ALU -- sov_op32_rr/sov_xorl_rr existed but were never dispatched; xorl %eax,%eax zeroing dominates (122 modules) */
+    if mn_is(120u32,111u32,114u32,108u32,4u32) == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_xorl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* xorl */
+    if mn_is(97u32,100u32,100u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_addl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* addl */
+    if mn_is(115u32,117u32,98u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_subl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* subl */
+    if mn_is(97u32,110u32,100u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_andl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* andl */
+    if mn_is(111u32,114u32,108u32,0u32,3u32)   == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_orl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* orl */
+    if mn_is(99u32,109u32,112u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_cmpl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* cmpl */
     /* branches (jmp/jcc to a .text label) -- resolved via the two-pass */
     if sp_try_branch() == 1u32 { return }
     PARSE_ERR = 1u32    /* unknown mnemonic -> loud, located failure */

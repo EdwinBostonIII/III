@@ -323,6 +323,13 @@ fn sov_movslq_mem(dst: u32, base: u32, disp: i32) -> i32 @export {
     sov_rexwb(dst, base)  sov_emit(0x63u32)  sov_membase_modrm(dst, base, disp)  return 0i32
 }
 fn sov_xorl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x31u32, dst, src)  return 0i32 }
+/* the rest of the 32-bit reg-reg ALU family -- same sov_op32_rr helper, different /r opcode (op r/m32, r32). */
+fn sov_addl_rr(dst: u32, src: u32)  -> i32 @export { sov_op32_rr(0x01u32, dst, src)  return 0i32 }
+fn sov_subl_rr(dst: u32, src: u32)  -> i32 @export { sov_op32_rr(0x29u32, dst, src)  return 0i32 }
+fn sov_andl_rr(dst: u32, src: u32)  -> i32 @export { sov_op32_rr(0x21u32, dst, src)  return 0i32 }
+fn sov_orl_rr(dst: u32, src: u32)   -> i32 @export { sov_op32_rr(0x09u32, dst, src)  return 0i32 }
+fn sov_cmpl_rr(dst: u32, src: u32)  -> i32 @export { sov_op32_rr(0x39u32, dst, src)  return 0i32 }
+fn sov_testl_rr(dst: u32, src: u32) -> i32 @export { sov_op32_rr(0x85u32, dst, src)  return 0i32 }
 /* sign-extend byte/word → quad : REX.W 0F BE/BF /r */
 fn sov_movsbq(dst: u32, src: u32) -> i32 @export {
     sov_rexwb(dst, src)  sov_emit(0x0Fu32)  sov_emit(0xBEu32)  sov_modrm(3u32, dst, src)  return 0i32

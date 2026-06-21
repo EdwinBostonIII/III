@@ -1,0 +1,87 @@
+/* 1941_eidos_descriptor_trace.iii  --  EIDOS the JOIN, END-TO-END: descriptor folds a web SHATTERED FROM A
+ * REAL EXECUTION.  This is the milestone 1940 could not reach: 1940 built the web with hand-written assim_add;
+ * here the web is built FROM A REAL xii_rewrite trace (the pipeline_real spine), so descriptor's "trace-derived
+ * input" claim is PROVEN, not aspirational.
+ *
+ * Drive: build_term -> xii_isub_normalize (the REAL rewrite; its witnessed reduction lands on isub) -> unravel
+ * (read the real trace geometry) -> ingest_extract -> ingest_commit (build the Master Web from the real
+ * execution, deduped by content-address).  THEN descriptor folds that real trace-derived web.
+ *
+ *   code 10 TRACE   : the real rewrite did not produce a multi-step trace, or it did not shatter+ingest into a
+ *                     non-empty web == the real trace geometry
+ *   code 11 FOLD    : descriptor's view (desc_count) != the real trace-derived web size
+ *   code 12 DERIVED : a descriptor's content-address/capability != the REAL trace block's, or a non-uniform verb
+ * exit 99 = the capability web was SHATTERED FROM A REAL EXECUTION and descriptor folds it -- each descriptor
+ *           DERIVED from a real trace block.  EIDOS now has a proven trace-derived input (the DESCRIBE half;
+ *           the ROUTE half is bounded by compose's 64-node cap, so large-address trace webs route only in part).
+ */
+module m1941
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn unravel_is_chain(start: u32) -> u8 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_height(start: u32) -> u32 from "unravel.iii"
+extern @abi(c-msvc-x64) fn ingest_extract() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_commit() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn desc_count() -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_cav_into(i: u32, out32: *u8) -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_capability(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var DBUF : [u8; 32]
+var EBUF : [u8; 32]
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let s : u32 = build_term()
+
+    /* ===== code 10: drive the REAL rewrite -> shatter -> ingest -> the web IS the real trace geometry ===== */
+    isub_reset()
+    xii_isub_normalize(s)
+    if xii_isub_steps() < 2u32 { return 10u64 }            /* a real multi-step reduction trace */
+    if unravel_is_chain(s) != 1u8 { return 10u64 }
+    let h : u32 = unravel_height(s)
+    let ext : u32 = ingest_extract()
+    if ext != h { return 10u64 }
+    if ext == 0u32 { return 10u64 }                        /* non-empty real geometry */
+    isub_reset()
+    let new1 : u32 = ingest_commit()                       /* build the web FROM the real execution */
+    if assim_web_size() != ext { return 10u64 }
+    if new1 != ext { return 10u64 }
+
+    /* ===== code 11: descriptor folds the REAL trace-derived web ===== */
+    if desc_count() != ext { return 11u64 }
+
+    /* ===== code 12: each descriptor is DERIVED from a real trace block (not hand-built) ===== */
+    let mut i : u32 = 0u32
+    while i < ext {
+        let v : u32 = isub_verb(i)
+        if v > 1u32 { return 12u64 }                       /* uniform <verb,a,b> blocks only (BELOW/REFLECT) */
+        desc_cav_into(i, &DBUF as *u8)
+        isub_cav_into(v, isub_a(i), isub_b(i), &EBUF as *u8)
+        if cad_eq(&DBUF as *u8, &EBUF as *u8) != 1u8 { return 12u64 }   /* eidos identity == the real trace block's */
+        let mut expcap : u32 = 2u32
+        if v == 0u32 { expcap = 1u32 }
+        if desc_capability(i) != expcap { return 12u64 }   /* capability derived from the real verb */
+        i = i + 1u32
+    }
+
+    return 99u64
+}

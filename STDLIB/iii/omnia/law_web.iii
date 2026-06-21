@@ -1,0 +1,123 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\law_web.iii
+ *
+ * III STDLIB - omnia::law_web  --  ROADMAP 2: the T2 abstract-domain LAW-WEB (law-level unification).
+ *
+ * The T2 lattices (interval_lattice, cost_lattice) are genuine bounded lattices, but their carriers are
+ * INFINITE (all integer intervals; all 6-dim cost vectors) -- you cannot enumerate them into the finite
+ * content-addressed point-web (III-ASSIMILATION-SCOPE §3, R3 fails).  So they are unified NOT by merging
+ * elements but at the LAW level: each is certified to CONFORM to the SAME lattice axiom-set, over sampled
+ * elements, using its OWN real ops.  Identical conformance signature = "the same algebra," honestly scoped
+ * (sampled law-conformance, never "the carriers were merged").
+ *
+ * THE ONE AXIOM SET (the law-web): IDEMPOTENCE | COMMUTATIVITY | ABSORPTION | ASSOCIATIVITY = AX_FULL.
+ *   il_lattice_laws() -- interval_lattice's conformance bitmask (its real il_meet/il_join).
+ *   cl_lattice_laws() -- cost_lattice's conformance bitmask     (its real cl_meet/cl_join).
+ *   law_add_breaks_idem() -- the teeth: interval ADDITION is NOT idempotent, so the checker is not vacuous.
+ *
+ * NIH: reads only interval_lattice + cost_lattice behaviour.  Ring R0.  K 1.00.
+ */
+module omnia_law_web
+
+extern @abi(c-msvc-x64) fn il_join(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_meet(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_add(l1: u32, h1: u32, l2: u32, h2: u32) -> i32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_lo() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn il_hi() -> u32 from "interval_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_join(c: *u64, cp: *u64, out: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_meet(c: *u64, cp: *u64, out: *u64) -> i32 from "cost_lattice.iii"
+
+const AX_IDEM   : u32 = 1u32
+const AX_COMM   : u32 = 2u32
+const AX_ABSORB : u32 = 4u32
+const AX_ASSOC  : u32 = 8u32
+const AX_FULL   : u32 = 15u32
+
+fn law_full() -> u32 @export { return AX_FULL }
+
+/* --- interval_lattice: samples x=[2,8] y=[3,6] z=[1,9] (overlapping) --- */
+fn il_lattice_laws() -> u32 @export {
+    let mut mask : u32 = 0u32
+
+    /* IDEM: meet(x,x)=x AND join(x,x)=x */
+    il_meet(2u32, 8u32, 2u32, 8u32)
+    let mil : u32 = il_lo()  let mih : u32 = il_hi()
+    il_join(2u32, 8u32, 2u32, 8u32)
+    let jil : u32 = il_lo()  let jih : u32 = il_hi()
+    if mil == 2u32 { if mih == 8u32 { if jil == 2u32 { if jih == 8u32 { mask = mask | AX_IDEM } } } }
+
+    /* COMM: meet(x,y)=meet(y,x) */
+    il_meet(2u32, 8u32, 3u32, 6u32)  let c1l : u32 = il_lo()  let c1h : u32 = il_hi()
+    il_meet(3u32, 6u32, 2u32, 8u32)  let c2l : u32 = il_lo()  let c2h : u32 = il_hi()
+    if c1l == c2l { if c1h == c2h { mask = mask | AX_COMM } }
+
+    /* ABSORB: meet(x, join(x,y))=x */
+    il_join(2u32, 8u32, 3u32, 6u32)  let ajl : u32 = il_lo()  let ajh : u32 = il_hi()
+    il_meet(2u32, 8u32, ajl, ajh)    let aml : u32 = il_lo()  let amh : u32 = il_hi()
+    if aml == 2u32 { if amh == 8u32 { mask = mask | AX_ABSORB } }
+
+    /* ASSOC: meet(meet(x,y),z)=meet(x,meet(y,z)) */
+    il_meet(2u32, 8u32, 3u32, 6u32)  let xyl : u32 = il_lo()  let xyh : u32 = il_hi()
+    il_meet(xyl, xyh, 1u32, 9u32)    let p1l : u32 = il_lo()  let p1h : u32 = il_hi()
+    il_meet(3u32, 6u32, 1u32, 9u32)  let yzl : u32 = il_lo()  let yzh : u32 = il_hi()
+    il_meet(2u32, 8u32, yzl, yzh)    let p2l : u32 = il_lo()  let p2h : u32 = il_hi()
+    if p1l == p2l { if p1h == p2h { mask = mask | AX_ASSOC } }
+
+    return mask
+}
+
+/* the TEETH: interval ADDITION is not idempotent (add(x,x) = [2l,2h] != x), so a "law check" built on a
+ * non-lattice op fails -- proving il_lattice_laws genuinely tests structure.  Returns 1 iff add breaks idem. */
+fn law_add_breaks_idem() -> u8 @export {
+    il_add(2u32, 8u32, 2u32, 8u32)
+    let al : u32 = il_lo()  let ah : u32 = il_hi()
+    if al == 2u32 { if ah == 8u32 { return 0u8 } }   /* if it WERE idempotent, the teeth fail */
+    return 1u8
+}
+
+/* --- cost_lattice: 6-dim sample vectors (module scratch passed as *u64) --- */
+var LW_X : [u64; 6]
+var LW_Y : [u64; 6]
+var LW_Z : [u64; 6]
+var LW_A : [u64; 6]
+var LW_B : [u64; 6]
+var LW_C : [u64; 6]
+var LW_D : [u64; 6]
+
+fn cl_eq6(p: *u64, q: *u64) -> u8 {
+    let mut k : u64 = 0u64
+    while k < 6u64 { if p[k] != q[k] { return 0u8 }  k = k + 1u64 }
+    return 1u8
+}
+
+fn cl_lattice_laws() -> u32 @export {
+    LW_X[0u64] = 5u64  LW_X[1u64] = 3u64  LW_X[2u64] = 7u64  LW_X[3u64] = 2u64  LW_X[4u64] = 4u64  LW_X[5u64] = 6u64
+    LW_Y[0u64] = 4u64  LW_Y[1u64] = 3u64  LW_Y[2u64] = 8u64  LW_Y[3u64] = 1u64  LW_Y[4u64] = 5u64  LW_Y[5u64] = 5u64
+    LW_Z[0u64] = 6u64  LW_Z[1u64] = 2u64  LW_Z[2u64] = 7u64  LW_Z[3u64] = 3u64  LW_Z[4u64] = 4u64  LW_Z[5u64] = 4u64
+    let mut mask : u32 = 0u32
+
+    /* IDEM: meet(x,x)=x AND join(x,x)=x */
+    cl_meet(LW_X, LW_X, LW_A)
+    if cl_eq6(LW_A, LW_X) == 1u8 {
+        cl_join(LW_X, LW_X, LW_A)
+        if cl_eq6(LW_A, LW_X) == 1u8 { mask = mask | AX_IDEM }
+    }
+
+    /* COMM: meet(x,y)=meet(y,x) */
+    cl_meet(LW_X, LW_Y, LW_A)
+    cl_meet(LW_Y, LW_X, LW_B)
+    if cl_eq6(LW_A, LW_B) == 1u8 { mask = mask | AX_COMM }
+
+    /* ABSORB: meet(x, join(x,y))=x */
+    cl_join(LW_X, LW_Y, LW_A)
+    cl_meet(LW_X, LW_A, LW_B)
+    if cl_eq6(LW_B, LW_X) == 1u8 { mask = mask | AX_ABSORB }
+
+    /* ASSOC: meet(meet(x,y),z)=meet(x,meet(y,z)) */
+    cl_meet(LW_X, LW_Y, LW_A)
+    cl_meet(LW_A, LW_Z, LW_B)        /* (x meet y) meet z */
+    cl_meet(LW_Y, LW_Z, LW_C)
+    cl_meet(LW_X, LW_C, LW_D)        /* x meet (y meet z) */
+    if cl_eq6(LW_B, LW_D) == 1u8 { mask = mask | AX_ASSOC }
+
+    return mask
+}

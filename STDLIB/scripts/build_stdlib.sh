@@ -1065,6 +1065,12 @@ MODULES=(
     # boundary: rank collides on a non-chain (logic6) -- full canonization is GI-hard.  Consumed by corpus
     # 1926; reads voice/trit/logic6 + the assimilate web.  BSS-neutral, compiler-unreferenced.
     "omnia/canon_enmesh"
+    # law_web: ROADMAP 2 -- the T2 abstract-domain LAW-WEB.  interval_lattice + cost_lattice have INFINITE
+    # carriers (¬R3, cannot be element-merged), so they are unified at the LAW level: each certified to conform
+    # to the SAME bounded-lattice axiom-set (idempotence/commutativity/absorption/associativity) over sampled
+    # elements via its own real ops.  Consumed by corpus 1927; reads interval_lattice + cost_lattice.
+    # BSS-neutral, compiler-unreferenced.
+    "omnia/law_web"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

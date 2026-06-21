@@ -77,6 +77,13 @@ point on the line the web generalizes."
 
 ## 4. THE REALIZABLE ROADMAP (priority-ordered, each gated like Phases 0–5)
 
+> **STATUS — EXECUTED (all gated green).** 1a `omnia/enmesh.iii` += `enmesh_trit` → KAT `1925`=99 (trit
+> assimilates, shares voice's frame). 1b `omnia/canon_enmesh.iii` (order-rank canonical mapper) → KAT
+> `1926`=99 (**voice ≡ trit fully coincide** — trit adds 0; GI boundary on logic6 witnessed). 2
+> `omnia/law_web.iii` → KAT `1927`=99 (interval + cost certified to the **same** lattice axiom-set,
+> law-level). 3 KAT `1928`=99 (the web's parity-diamond meet reproduces `reduced_product`'s combination,
+> cross-validated vs real `rp_count`). 4 (stop at T3) — held. The lattice/logic family is unified.
+
 1. **T1 completion — `trit`, and the canonical-mapper depth it exposes.** `trit` (`iii_trit_and`=min /
    `iii_trit_or`=max / `iii_trit_not`=negate, values NEG/ZERO/POS) is confirmed the **same 3-valued Kleene
    algebra as `voice`**, only signed-encoded. The architecturally important finding: under the **current**

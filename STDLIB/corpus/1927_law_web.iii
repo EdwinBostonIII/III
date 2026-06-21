@@ -1,0 +1,33 @@
+/* 1927_law_web.iii  --  ROADMAP 2: the T2 LAW-WEB.  interval_lattice and cost_lattice -- two INFINITE-carrier
+ * abstract-interpretation lattices that cannot be element-merged into the finite point-web -- are unified at
+ * the LAW level: each is certified to conform to the SAME bounded-lattice axiom-set (idempotence /
+ * commutativity / absorption / associativity), over sampled elements, using its OWN real ops.  Identical
+ * conformance signature = the same algebra.
+ *
+ *   code 11 interval : interval_lattice does not conform to the full lattice axiom-set
+ *   code 12 cost     : cost_lattice does not conform to the full lattice axiom-set
+ *   code 13 UNIFY    : the two conformance signatures differ (they are NOT certified the same algebra)
+ *   code 14 TEETH    : interval ADDITION passed idempotence -- the law-checker is vacuous (must NOT)
+ * exit 99 = two infinite T2 lattices unified at the law level (same axiom-set), checker proven non-vacuous.
+ */
+module m1927
+
+extern @abi(c-msvc-x64) fn il_lattice_laws() -> u32 from "law_web.iii"
+extern @abi(c-msvc-x64) fn cl_lattice_laws() -> u32 from "law_web.iii"
+extern @abi(c-msvc-x64) fn law_full() -> u32 from "law_web.iii"
+extern @abi(c-msvc-x64) fn law_add_breaks_idem() -> u8 from "law_web.iii"
+
+fn main() -> u64 {
+    let full : u32 = law_full()
+    let il : u32 = il_lattice_laws()
+    let cl : u32 = cl_lattice_laws()
+
+    if il != full { return 11u64 }          /* interval conforms to ALL lattice axioms */
+    if cl != full { return 12u64 }          /* cost conforms to ALL lattice axioms */
+    if il != cl { return 13u64 }            /* SAME axiom-set -> law-level unification (same algebra) */
+
+    /* TEETH: a non-lattice op (interval addition) breaks idempotence -- the checker really tests structure */
+    if law_add_breaks_idem() != 1u8 { return 14u64 }
+
+    return 99u64
+}

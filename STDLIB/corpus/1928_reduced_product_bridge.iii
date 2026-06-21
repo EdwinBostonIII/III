@@ -1,0 +1,73 @@
+/* 1928_reduced_product_bridge.iii  --  ROADMAP 3: the reduced_product <-> enmesh BRIDGE.
+ *
+ * numera::reduced_product hand-wires the combination of TWO abstract domains (interval x parity) -- "let each
+ * refine the other."  omnia::assimilate is the GENERAL form: combine two lattices into one web by their order.
+ * This proves the convergence on a finite instance: the PARITY domain reduced_product uses is a finite lattice
+ * (bottom=contradiction < EVEN, ODD < top=ANY = the De Morgan diamond), and the WEB's meet reproduces exactly
+ * the parity reduction reduced_product performs -- cross-validated against reduced_product's REAL rp_count.
+ *
+ *   code 11 real    : reduced_product's refinement is not real (rp_count EVEN must be strictly < ANY in [0,9])
+ *   code 12 combine : the web's meet does not reproduce the parity combination (EVEN^ANY=EVEN, EVEN^ODD=bottom)
+ *   code 13 bridge  : mapping web-meet results back to value-counts does not reproduce reduced_product's
+ *                     refined counts (EVEN^ANY -> 5 even values ; EVEN^ODD -> 0, the contradiction)
+ * exit 99 = the web (the general lattice-combinator) reproduces reduced_product's domain combination, gated
+ *           against real rp_count -- enmesh IS the general reduced_product.
+ */
+module m1928
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn rp_count(lo: u32, hi: u32, p: u32) -> u32 from "reduced_product.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+
+/* reduced_product's parity codes */
+const RP_EVEN : u32 = 0u32
+const RP_ODD  : u32 = 1u32
+const RP_ANY  : u32 = 2u32
+
+/* the parity lattice mapped onto web points: bottom(contradiction)=0, ANY(top)=1, EVEN=2, ODD=3 (the diamond) */
+const PB : u32 = 0u32
+const PA : u32 = 1u32
+const PE : u32 = 2u32
+const PO : u32 = 3u32
+
+/* map a web parity-point back to its concrete value-count over [lo,hi] via reduced_product's REAL rp_count */
+fn web_to_count(pt: u32, lo: u32, hi: u32) -> u32 {
+    if pt == PB { return 0u32 }                       /* contradiction -> empty */
+    if pt == PE { return rp_count(lo, hi, RP_EVEN) }
+    if pt == PO { return rp_count(lo, hi, RP_ODD) }
+    return rp_count(lo, hi, RP_ANY)                   /* ANY */
+}
+
+fn main() -> u64 {
+    /* (1) reduced_product's refinement is REAL: EVEN strictly sharper than ANY over [0,9] */
+    let n_even : u32 = rp_count(0u32, 9u32, RP_EVEN)
+    let n_any  : u32 = rp_count(0u32, 9u32, RP_ANY)
+    if n_even != 5u32 { return 11u64 }                /* {0,2,4,6,8} */
+    if n_any != 10u32 { return 11u64 }
+    if n_even >= n_any { return 11u64 }               /* emergent precision */
+
+    /* (2) assimilate the parity lattice (the diamond) into the web, and the web's meet reproduces the
+     * parity combination reduced_product performs */
+    isub_reset()
+    assim_add(V_BELOW, PB, PE)  assim_add(V_BELOW, PB, PO)  assim_add(V_BELOW, PE, PA)
+    assim_add(V_BELOW, PO, PA)  assim_add(V_BELOW, PB, PA)
+    assim_add(V_REFLECT, PE, PO)  assim_add(V_REFLECT, PO, PE)
+    assim_add(V_REFLECT, PB, PA)  assim_add(V_REFLECT, PA, PB)
+
+    if assim_meet(PE, PA) != PE { return 12u64 }      /* EVEN ^ ANY = EVEN  (ANY = top, refines nothing) */
+    if assim_meet(PE, PO) != PB { return 12u64 }      /* EVEN ^ ODD = bottom (the contradiction) */
+    if assim_meet(PE, PE) != PE { return 12u64 }      /* idempotent */
+
+    /* (3) THE BRIDGE: map the web's meet results back through reduced_product's REAL rp_count -- they
+     * reproduce exactly the refined value-counts reduced_product would compute */
+    let comb_even_any : u32 = assim_meet(PE, PA)       /* = EVEN */
+    if web_to_count(comb_even_any, 0u32, 9u32) != 5u32 { return 13u64 }   /* refined to the 5 even values */
+    let comb_even_odd : u32 = assim_meet(PE, PO)       /* = bottom */
+    if web_to_count(comb_even_odd, 0u32, 9u32) != 0u32 { return 13u64 }   /* the contradiction -> empty */
+
+    return 99u64
+}

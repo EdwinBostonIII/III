@@ -1,0 +1,20 @@
+/* sov_drivel7.iii  --  the BRANCH-RELAXATION sovld gate.  A jz must jump over a >127-byte block, forcing the
+ * relaxation to grow it from REL8 (74) to REL32 (0f 84) and compute the right disp32.  rax=0 -> jz TAKEN ->
+ * if the relaxed branch reaches L_end (over the 14x movabsq block), main returns 99; a wrong size/disp lands
+ * mid-block (movabsq $1 -> rax=1) or crashes.  Emitted via sovld, NO gcc/ld.  (Real cg_r3 large fns emit the
+ * same REL32 jcc -- recon'd 0f 84 at disp 0x117.)
+ */
+module sovtc_drivel7
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  movabsq $0, %rax\n  testq %rax, %rax\n  jz L_end\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\n  movabsq $1, %rax\nL_end:\n  movabsq $99, %rax\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

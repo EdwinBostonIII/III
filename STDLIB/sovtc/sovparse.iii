@@ -338,7 +338,50 @@ fn sp_sibcall(nlen: u32) {
         else { let site : u32 = sov_len()  let rel : i32 = (off as i32) - ((site + 5u32) as i32)  sov_call_rel32(rel) }
     }
 }
-/* branch: jmp/jCC L_x -> opcode + computed rel8 (2 bytes), no reloc.  Returns 1 if MN was a branch. */
+/* ── branch relaxation state ── per branch (in encounter order): site, chosen size (rel8/rel32), kind, cc,
+ * and target name.  The layout pass is iterated; a REL8 branch that overflows is grown to REL32 (which shifts
+ * later offsets), until stable. */
+var BR_SITE : [u32; 128]
+var BR_BIG  : [u32; 128]    /* 0 = rel8 (2B), 1 = rel32 (jmp 5B / jcc 6B) */
+var BR_JMP  : [u32; 128]
+var BR_CC   : [u32; 128]
+var BR_TNAME: [u8; 4096]    /* 128 slots * 32 */
+var BR_TLEN : [u32; 128]
+var BR_N    : u32 = 0u32
+var BR_IDX  : u32 = 0u32
+
+fn sp_branch_size(id: u32, isjmp: u32) -> u32 {
+    if BR_BIG[id as u64] == 1u32 { if isjmp == 1u32 { return 5u32 }  return 6u32 }
+    return 2u32
+}
+fn sp_emit_branch(id: u32, isjmp: u32, cc: u32, rel: i32) {
+    if BR_BIG[id as u64] == 1u32 { if isjmp == 1u32 { sov_jmp_rel32(rel) } else { sov_jcc_rel32(cc, rel) } }
+    else { if isjmp == 1u32 { sov_jmp_rel8(rel) } else { sov_jcc_rel8(cc, rel) } }
+}
+/* after a layout pass: grow any still-REL8 branch whose displacement no longer fits a signed byte. returns 1
+ * if anything grew (-> re-layout). */
+fn sp_relax_check() -> u32 {
+    let mut changed : u32 = 0u32
+    let mut id : u32 = 0u32
+    while id < BR_N {
+        if BR_BIG[id as u64] == 0u32 {
+            let nlen : u32 = BR_TLEN[id as u64]
+            let mut jj : u32 = 0u32
+            while jj < nlen { SYM_NAME[((SYM_N * 32u32) + jj) as u64] = BR_TNAME[((id * 32u32) + jj) as u64]  jj = jj + 1u32 }
+            let off : u32 = lbl_find(SYM_N, nlen)
+            if off != 0xFFFFFFFFu32 {
+                let rel : i32 = (off as i32) - ((BR_SITE[id as u64] + 2u32) as i32)
+                let mut fits : u32 = 0u32
+                if rel >= -128i32 { if rel <= 127i32 { fits = 1u32 } }
+                if fits == 0u32 { BR_BIG[id as u64] = 1u32  changed = 1u32 }
+            }
+        }
+        id = id + 1u32
+    }
+    return changed
+}
+
+/* branch: jmp/jCC L_x -> opcode + computed rel8/rel32 (relaxed), no reloc.  Returns 1 if MN was a branch. */
 fn sp_try_branch() -> u32 {
     let mut isbr : u32 = 0u32  let mut isjmp : u32 = 0u32  let mut cc : u32 = 0u32
     if mn_is(106u32,109u32,112u32,0u32,3u32) == 1u32 { isbr = 1u32  isjmp = 1u32 }   /* jmp */
@@ -355,20 +398,23 @@ fn sp_try_branch() -> u32 {
     if mn_is(106u32,97u32,0u32,0u32,2u32) == 1u32 { isbr = 1u32  cc = 7u32 }         /* ja */
     if mn_is(106u32,97u32,101u32,0u32,3u32) == 1u32 { isbr = 1u32  cc = 3u32 }       /* jae */
     if isbr == 0u32 { return 0u32 }
+    let id : u32 = BR_IDX  BR_IDX = BR_IDX + 1u32
     sp_skip_ws()
     let nlen : u32 = sp_read_name_into(SYM_N)
-    if SP_PASS == 1u32 {
-        if isjmp == 1u32 { sov_jmp_rel8(0i32) } else { sov_jcc_rel8(cc, 0i32) }     /* layout: 2-byte placeholder */
-    } else {
+    if SP_PASS == 1u32 {                                   /* LAYOUT: record site + target; placeholder at the chosen size */
+        BR_SITE[id as u64] = sov_len()
+        BR_JMP[id as u64] = isjmp  BR_CC[id as u64] = cc  BR_TLEN[id as u64] = nlen
+        let mut jj : u32 = 0u32
+        while jj < nlen { BR_TNAME[((id * 32u32) + jj) as u64] = SYM_NAME[((SYM_N * 32u32) + jj) as u64]  jj = jj + 1u32 }
+        if (id + 1u32) > BR_N { BR_N = id + 1u32 }
+        sp_emit_branch(id, isjmp, cc, 0i32)
+    } else {                                               /* FINAL: resolve + emit at the relaxed size */
         let off : u32 = lbl_find(SYM_N, nlen)
         if off == 0xFFFFFFFFu32 { PARSE_ERR = 1u32 }
         else {
             let site : u32 = sov_len()
-            let rel : i32 = (off as i32) - ((site + 2u32) as i32)
-            let mut fits : u32 = 0u32
-            if rel >= -128i32 { if rel <= 127i32 { fits = 1u32 } }
-            if fits == 1u32 { if isjmp == 1u32 { sov_jmp_rel8(rel) } else { sov_jcc_rel8(cc, rel) } }
-            else { PARSE_ERR = 1u32 }   /* REL32 relaxation deferred (loud, not silently wrong) */
+            let sz : u32 = sp_branch_size(id, isjmp)
+            sp_emit_branch(id, isjmp, cc, (off as i32) - ((site + sz) as i32))
         }
     }
     return 1u32
@@ -653,9 +699,21 @@ fn sp_build_symtab(ptr: *u8, len: u32) {
  * branch + sibling-call displacements and emit).  The final pass's SOV_BUF + reloc table are the result. */
 fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
     sp_build_symtab(ptr, len)        /* D */
-    LBL_N = 0u32
-    SP_PASS = 1u32  sovparse(ptr, len)          /* L */
-    /* resolve each export's .text offset now that the layout pass built LBL */
+    /* L: layout, iterated for branch RELAXATION -- all branches start REL8; any that overflows grows to REL32
+     * (shifting later offsets), re-layout, until stable. */
+    let mut bi : u32 = 0u32
+    while bi < 128u32 { BR_BIG[bi as u64] = 0u32  bi = bi + 1u32 }
+    BR_N = 0u32
+    let mut iter : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        LBL_N = 0u32  BR_IDX = 0u32
+        SP_PASS = 1u32  sovparse(ptr, len)
+        go = sp_relax_check()
+        iter = iter + 1u32
+        if iter > 8u32 { go = 0u32 }
+    }
+    /* resolve each export's .text offset now that the layout (incl. relaxation) is stable */
     let mut e : u32 = 0u32
     while e < EXP_N {
         let mut j : u32 = 0u32
@@ -663,5 +721,6 @@ fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
         EXP_OFF[e as u64] = lbl_find(SYM_N, EXP_NLEN[e as u64])
         e = e + 1u32
     }
+    BR_IDX = 0u32
     SP_PASS = 2u32  return sovparse(ptr, len)   /* F */
 }

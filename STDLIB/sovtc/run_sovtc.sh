@@ -44,7 +44,7 @@ done
 # ── S2 sovld gates: sovld lays out a PE32+ executable (NO gcc, NO ld); the OS loads + runs it (expect 99) ──
 # drivel = ret-only single .text.   drivel2 = .text + .data with an internal REL32 reloc APPLIED (data global).
 "$IIIS" "$SOVTC/sovld.iii" --compile-only --out "$OUT/sovld.o" >/dev/null 2>&1 || { echo "[sovtc] FAIL ld (sovld compile)"; fail=1; }
-for l in sov_drivel:lpe:ret-only sov_drivel2:lpe2:data-global sov_drivel3:lpe3:import sov_drivel4:lpe4:import2 sov_drivel5:lpe5:multidll sov_drivel6:lpe6:msvcrt-only; do
+for l in sov_drivel:lpe:ret-only sov_drivel2:lpe2:data-global sov_drivel3:lpe3:import sov_drivel4:lpe4:import2 sov_drivel5:lpe5:multidll sov_drivel6:lpe6:msvcrt-only sov_drivel7:lpe7:relax; do
     SRC="${l%%:*}"; rest="${l#*:}"; EXE="${rest%%:*}"; LBL="${rest#*:}"
     if ! "$IIIS" "$SOVTC/$SRC.iii" --compile-only --out "$OUT/$SRC.o" >/dev/null 2>&1; then echo "[sovtc] FAIL ld/$LBL ($SRC compile)"; fail=1; continue; fi
     if ! gcc "$OUT/$SRC.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovld.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$EXE-drv.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL ld/$LBL (driver build)"; fail=1; continue; fi

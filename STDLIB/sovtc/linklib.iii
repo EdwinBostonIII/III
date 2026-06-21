@@ -1,0 +1,7 @@
+/* linklib.iii -- module B of the multi-object link gate.  Defines a global + a LOCAL string label (L_str_0). */
+module linklib
+fn lib_answer() -> u64 @export {
+    let s : *u8 = "lib" as *u8        /* -> a local .rodata label (L_str_0) in THIS object */
+    if s[0u64] == 108u8 { return 42u64 }
+    return 0u64
+}

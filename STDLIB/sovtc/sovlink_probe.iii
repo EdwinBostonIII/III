@@ -1,0 +1,80 @@
+/* sovlink_probe.iii -- STAGE 1 of the sovereign multi-object LINKER: the COFF READER, in isolation.
+ * Reads one sov-emitted .o (argv[1]), parses the COFF the way sovcoff writes it, and prints NS / nsym /
+ * per-section (id,rawlen,nreloc).  Gated by diffing this against `objdump -h`/`-t`/`-r` -- prove the reader
+ * before building merge/resolve/relocate on top of it.  NO toolchain coupling; throwaway once the reader
+ * is folded into sovlink.iii. */
+module sovlink_probe
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+const GENERIC_READ : u32 = 0x80000000u32
+const OPEN_EXISTING : u32 = 3u32
+
+var OBJBUF : [u8; 4194304]
+var OBJLEN : u32 = 0u32
+var NXFER  : u32 = 0u32
+
+fn rd8(off: u32)  -> u32 { return OBJBUF[off as u64] as u32 }
+fn rd16(off: u32) -> u32 { return rd8(off) | (rd8(off + 1u32) << 8u32) }
+fn rd32(off: u32) -> u32 { return rd16(off) | (rd16(off + 2u32) << 16u32) }
+
+/* classify a section by the 2nd byte of its 8-byte name (.text/.data/.rodata/.bss all differ there) */
+fn secid(nameoff: u32) -> u32 {
+    let b : u32 = rd8(nameoff + 1u32)
+    if b == 116u32 { return 0u32 }   /* 't' .text */
+    if b == 100u32 { return 1u32 }   /* 'd' .data */
+    if b == 114u32 { return 2u32 }   /* 'r' .rodata */
+    if b == 98u32  { return 3u32 }   /* 'b' .bss */
+    return 9u32
+}
+
+fn putu(v: u32) {
+    let q : u32 = v / 10u32
+    let r : u32 = v - (q * 10u32)
+    if q > 0u32 { putu(q) }
+    putchar((48u32 + r) as i32)
+}
+fn sp() { putchar(32i32) }
+fn nl() { putchar(10i32) }
+
+fn read_file(path: *u8) -> u32 {
+    let h : u64 = CreateFileA(path, GENERIC_READ, 1u32, 0u64, OPEN_EXISTING, 0u32, 0u64)
+    if h == 0xFFFFFFFFFFFFFFFFu64 { return 0u32 }
+    let mut off : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let dst : *u8 = ((&OBJBUF as u64) + (off as u64)) as *u8
+        let ok : i32 = ReadFile(h, dst, 4194304u32 - off, (&NXFER) as u64, 0u64)
+        if ok == 0i32 { go = 0u32 } else { if NXFER == 0u32 { go = 0u32 } else { off = off + NXFER } }
+    }
+    CloseHandle(h)
+    return off
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 { return 2u64 }
+    let pp : *u64 = argv as *u64
+    let path : *u8 = pp[1u64] as *u8
+    OBJLEN = read_file(path)
+    if OBJLEN == 0u32 { return 3u64 }
+
+    let ns   : u32 = rd16(2u32)
+    let nsym : u32 = rd32(12u32)
+    putchar(78i32) putchar(83i32) putchar(61i32)  putu(ns)  sp()        /* NS= */
+    putchar(83i32) putchar(89i32) putchar(61i32)  putu(nsym) nl()       /* SY= */
+
+    let mut i : u32 = 0u32
+    while i < ns {
+        let sh  : u32 = 20u32 + (40u32 * i)
+        let sid : u32 = secid(sh)
+        let rawlen : u32 = rd32(sh + 16u32)
+        let nrel   : u32 = rd16(sh + 32u32)
+        putchar(115i32) putchar(58i32)              /* s: */
+        putu(sid) sp() putu(rawlen) sp() putu(nrel) nl()
+        i = i + 1u32
+    }
+    return 99u64
+}

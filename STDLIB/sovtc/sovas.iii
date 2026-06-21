@@ -214,6 +214,15 @@ fn sov_store_sib_d(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i3
 }
 fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 @export { return sov_load_sib_d(dst, base, index, scale, 0i32) }
 fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 @export { return sov_store_sib_d(src, base, index, scale, 0i32) }
+/* movz/movs from a SIB memory operand: REX.W 0f <op2> + SIB+disp.  op2: b6 movzbq | b7 movzwq | be movsbq |
+ * bf movswq.  e.g. movzbq (%rax,%rcx,1),%rax = 48 0f b6 04 08. */
+fn sov_movzx_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32, op2: u32) -> i32 @export {
+    sov_rex_sib(dst, index, base)  sov_emit(0x0Fu32)  sov_emit(op2)  sov_sib_modrm_disp(dst, base, index, scale, disp)  return 0i32
+}
+/* movslq (movsxd, sign-extend i32->i64) from a SIB memory operand: REX.W 63 + SIB+disp.  No 0f prefix. */
+fn sov_movsxd_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_rex_sib(dst, index, base)  sov_emit(0x63u32)  sov_sib_modrm_disp(dst, base, index, scale, disp)  return 0i32
+}
 
 /* ── ALU reg,reg (op %src,%dst) : REX.W <opcode> /r ── */
 fn sov_alu_rr(opcode: u32, dst: u32, src: u32) {

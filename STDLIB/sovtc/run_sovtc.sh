@@ -19,7 +19,7 @@ mkdir -p "$OUT"
 "$IIIS" "$SOVTC/sovparse.iii" --compile-only --out "$OUT/sovparse.o" || { echo "[sovtc] FATAL: sovparse compile"; exit 2; }
 
 fail=0
-for t in test_encode test_spine test_reloc test_store test_lea test_unknown test_call test_cmp test_branch test_sibcall test_sib test_sib_disp; do
+for t in test_encode test_spine test_reloc test_store test_lea test_unknown test_call test_cmp test_branch test_sibcall test_sib test_sib_disp test_movzx_sib; do
     if ! "$IIIS" "$SOVTC/$t.iii" --compile-only --out "$OUT/$t.o" >/dev/null 2>&1; then echo "[sovtc] FAIL $t (compile)"; fail=1; continue; fi
     if ! gcc "$OUT/$t.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$t.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL $t (link)"; fail=1; continue; fi
     timeout 25 "$OUT/$t.exe" >/dev/null 2>&1; rc=$?
@@ -29,7 +29,7 @@ done
 # ── COFF links-and-runs gates: sovcoff emits a real .o, gcc's ld links it, the OS runs it (expect 99) ──
 # drive  = text-only object (.text + main).   drive2 = reloc/data object (.text + .data + REL32 -> .data).
 "$IIIS" "$SOVTC/sovcoff.iii" --compile-only --out "$OUT/sovcoff.o" >/dev/null 2>&1 || { echo "[sovtc] FAIL coff (sovcoff compile)"; fail=1; }
-for d in sov_drive:drive:text-only sov_drive2:drive2:reloc-data sov_drive3:drive3:extern-call sov_drive4:drive4:rodata sov_drive5:drive5:bss sov_drive6:drive6:longname; do
+for d in sov_drive:drive:text-only sov_drive2:drive2:reloc-data sov_drive3:drive3:extern-call sov_drive4:drive4:rodata sov_drive5:drive5:bss sov_drive6:drive6:longname sov_drive7:drive7:movzbq; do
     SRC="${d%%:*}"; rest="${d#*:}"; EXE="${rest%%:*}"; LBL="${rest#*:}"
     if ! "$IIIS" "$SOVTC/$SRC.iii" --compile-only --out "$OUT/$SRC.o" >/dev/null 2>&1; then echo "[sovtc] FAIL coff/$LBL ($SRC compile)"; fail=1; continue; fi
     if ! gcc "$OUT/$SRC.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovcoff.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$EXE.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL coff/$LBL (driver link)"; fail=1; continue; fi

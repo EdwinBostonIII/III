@@ -1,0 +1,19 @@
+/* sov_drive7.iii  --  the movzbq-from-SIB links-and-runs COFF gate.  The REAL cg_r3 output for
+ * `let s = "c"; return s[0]` -- which reads the string byte via `movzbq (%rax,%rcx,1), %rax` and returns it.
+ * 'c' = 99, so the SIB byte-read result IS the exit code: a wrong SIB encoding -> wrong byte -> not 99.
+ * .text + .rodata (.ascii "c\0") + a leaq -> .rodata reloc; emitted as a COFF .o, gcc links it, out.exe = 99.
+ */
+module sovtc_drive7
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .rodata\nL_str_0:\n  .ascii \"c\\0\"\n  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  leaq L_str_0(%rip), %rax\n  pushq %rax\n  popq %rax\n  pushq %rax\n  popq %rax\n  movq %rax, -8(%rbp)\n  movq -8(%rbp), %rax\n  pushq %rax\n  movabsq $0x0, %rax\n  pushq %rax\n  popq %rcx\n  popq %rax\n  movzbq (%rax,%rcx,1), %rax\n  pushq %rax\n  popq %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovcoff_emit()
+    return 0u64
+}

@@ -1,0 +1,23 @@
+/* sov_drivel8.iii  --  the extern->DLL TABLE gate.  Calls lstrlenA -- a LOWERCASE kernel32 function the
+ * case-heuristic mis-routes to msvcrt.  Only the TABLE routes it to kernel32, so the PE's import resolves and
+ * it runs; the heuristic would put lstrlenA under msvcrt -> unresolved -> the loader rejects the image.
+ *
+ * lstrlenA's arg = the .text base (0x140001000, mapped READ+EXEC; an early NUL in the code -> returns a small
+ * length, no over-read).  `subq $40` at entry aligns RSP to 16 at each callq (entry RSP is 8 (mod 16); 40 ≡ 8,
+ * so RSP ≡ 0 -- the x64 ABI alignment a bare hand-written stub otherwise misses, which faults SSE-using
+ * imports like lstrlenA).  Then ExitProcess(99).  Both kernel32.  Emitted via sovld, NO gcc/ld.
+ */
+module sovtc_drivel8
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  subq $40, %rsp\n  movabsq $0x140001000, %rcx\n  callq lstrlenA\n  movabsq $99, %rcx\n  callq ExitProcess\n  addq $40, %rsp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

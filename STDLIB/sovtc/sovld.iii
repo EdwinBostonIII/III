@@ -72,8 +72,45 @@ fn find_main_off() -> u32 {
     }
     return 0u32
 }
-/* DLL of an import: UPPER-first name => Windows API => kernel32(0); else CRT => msvcrt(1) */
+fn name_eq(slot: u32, lit: *u8, litlen: u32) -> u32 {
+    if sov_ext_namelen(slot) != litlen { return 0u32 }
+    let mut j : u32 = 0u32
+    while j < litlen { if sov_ext_namebyte(slot, j) != (lit[j as u64] as u32) { return 0u32 }  j = j + 1u32 }
+    return 1u32
+}
+/* DLL of an import (kernel32=0, msvcrt=1).  A TABLE of known functions (exact -- notably the lowercase
+ * kernel32 lstr* functions a case-heuristic mis-routes), then the case heuristic as a fallback for the rest. */
 fn ext_dll_of(slot: u32) -> u32 {
+    /* kernel32 (incl. lowercase lstr* the heuristic would wrongly send to msvcrt) */
+    if name_eq(slot, "lstrlenA" as *u8, 8u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "lstrcpyA" as *u8, 8u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "lstrcatA" as *u8, 8u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "lstrcmpA" as *u8, 8u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "ExitProcess" as *u8, 11u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "GetTickCount" as *u8, 12u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "GetCurrentProcessId" as *u8, 19u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "GetStdHandle" as *u8, 12u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "WriteFile" as *u8, 9u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "ReadFile" as *u8, 8u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "CloseHandle" as *u8, 11u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "GetLastError" as *u8, 12u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "Sleep" as *u8, 5u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "GetProcAddress" as *u8, 14u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "LoadLibraryA" as *u8, 12u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "GetModuleHandleA" as *u8, 16u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "VirtualAlloc" as *u8, 12u32) == 1u32 { return 0u32 }
+    if name_eq(slot, "VirtualFree" as *u8, 11u32) == 1u32 { return 0u32 }
+    /* msvcrt (CRT) */
+    if name_eq(slot, "putchar" as *u8, 7u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "puts" as *u8, 4u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "printf" as *u8, 6u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "malloc" as *u8, 6u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "free" as *u8, 4u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "memcpy" as *u8, 6u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "memset" as *u8, 6u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "strlen" as *u8, 6u32) == 1u32 { return 1u32 }
+    if name_eq(slot, "fwrite" as *u8, 6u32) == 1u32 { return 1u32 }
+    /* fallback: case heuristic (UPPER-first => kernel32, else msvcrt) */
     let c0 : u32 = sov_ext_namebyte(slot, 0u32)
     if c0 >= 65u32 { if c0 <= 90u32 { return 0u32 } }
     return 1u32

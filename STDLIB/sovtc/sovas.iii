@@ -14,29 +14,29 @@
  */
 module sovtc_sovas
 
-const SOV_CAP : u32 = 4096u32
-var SOV_BUF : [u8; 4096]
+const SOV_CAP : u32 = 1048576u32
+var SOV_BUF : [u8; 1048576]
 var SOV_LEN : u32 = 0u32
 
 /* relocation table: each rip-relative reference to a symbol records one REL32 reloc.
  * section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 (match cg_r3's .section names). */
-var REL_OFF : [u32; 256]    /* the disp32 FIELD offset within .text */
-var REL_SEC : [u32; 256]    /* the target: a SECTION id (1/2/3) for data relocs, OR 0 = a NAMED symbol */
-var REL_SYM : [u32; 256]    /* for named relocs (REL_SEC==0): the extern-symbol slot */
+var REL_OFF : [u32; 65536]    /* the disp32 FIELD offset within .text */
+var REL_SEC : [u32; 65536]    /* the target: a SECTION id (1/2/3) for data relocs, OR 0 = a NAMED symbol */
+var REL_SYM : [u32; 65536]    /* for named relocs (REL_SEC==0): the extern-symbol slot */
 var REL_N   : u32 = 0u32
 
 /* extern (named) symbol table -- the targets of callq-to-named-symbol relocs (and, later, COFF symbols). */
-var EXT_NAME : [u8; 1024]   /* 32 bytes per slot */
-var EXT_NLEN : [u32; 32]
+var EXT_NAME : [u8; 65536]   /* 32 bytes per slot */
+var EXT_NLEN : [u32; 2048]
 var EXT_N    : u32 = 0u32
-var CN_BUF   : [u8; 64]      /* the parser pushes a call-target name here, then calls sov_call_ext */
+var CN_BUF   : [u8; 256]      /* the parser pushes a call-target name here, then calls sov_call_ext */
 var CN_LEN   : u32 = 0u32
 
 /* data-section assembly: .data/.rodata raw bytes + .bss size.  Built in PASS D and PERSISTS across the two
  * .text encode passes -- so sov_reset (per encode pass) does NOT clear these; sov_data_reset does, once. */
-var DATA_BUF   : [u8; 8192]
+var DATA_BUF   : [u8; 1048576]
 var DATA_LEN   : u32 = 0u32
-var RODATA_BUF : [u8; 8192]
+var RODATA_BUF : [u8; 1048576]
 var RODATA_LEN : u32 = 0u32
 var BSS_SIZE   : u32 = 0u32
 fn sov_data_reset() -> i32 @export { DATA_LEN = 0u32  RODATA_LEN = 0u32  BSS_SIZE = 0u32  return 0i32 }
@@ -158,13 +158,13 @@ fn sov_mov_imm32(reg: u32, imm: i32) -> i32 @export {
     sov_rex(1u32, 0u32, 0u32, b)  sov_emit(0xC7u32)  sov_modrm(3u32, 0u32, reg)
     sov_imm((imm as u32) as u64, 4u32)  return 0i32
 }
-/* mov %reg, disp8(%rbp) : REX.W 89 /r mod=01 rm=101 disp8 */
-fn sov_store_rbp8(reg: u32, disp: i32) -> i32 @export {
-    sov_rexwb(reg, 5u32)  sov_emit(0x89u32)  sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32)  return 0i32
+/* mov %reg,disp(%base) : REX.W 89 /r ; mov disp(%base),%reg : REX.W 8B /r.  GENERAL base + disp8/disp32 via
+ * sov_membase_modrm (was rbp-disp8-only -> truncated movq %rax,-0x88(%rbp) to a wrong disp8; byte-gate caught it). */
+fn sov_store_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    sov_rexwb(reg, base)  sov_emit(0x89u32)  sov_membase_modrm(reg, base, disp)  return 0i32
 }
-/* mov disp8(%rbp), %reg : REX.W 8B /r */
-fn sov_load_rbp8(reg: u32, disp: i32) -> i32 @export {
-    sov_rexwb(reg, 5u32)  sov_emit(0x8Bu32)  sov_modrm(1u32, reg, 5u32)  sov_emit((disp as u32) & 0xFFu32)  return 0i32
+fn sov_load_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    sov_rexwb(reg, base)  sov_emit(0x8Bu32)  sov_membase_modrm(reg, base, disp)  return 0i32
 }
 /* mov %reg, disp32(%rip) : REX.W 89 /r mod=00 rm=101 disp32  (RIP-relative; a REL32 relocation site) */
 fn sov_store_rip(reg: u32, disp: i32) -> i32 @export {

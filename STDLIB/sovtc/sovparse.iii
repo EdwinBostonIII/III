@@ -21,8 +21,8 @@ extern @abi(c-msvc-x64) fn sov_pop_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movabs(reg: u32, imm: u64) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
-extern @abi(c-msvc-x64) fn sov_store_rbp8(reg: u32, disp: i32) -> i32 from "sovas.iii"
-extern @abi(c-msvc-x64) fn sov_load_rbp8(reg: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_add_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_sub_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cmp_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
@@ -118,18 +118,18 @@ const SEC_DATA : u32 = 1u32
 const SEC_RODATA : u32 = 2u32
 const SEC_BSS : u32 = 3u32
 const SEC_OTHER : u32 = 9u32
-var SYM_NAME : [u8; 2048]   /* flat name bytes, 32 per slot */
-var SYM_NLEN : [u32; 64]
-var SYM_SEC  : [u32; 64]
-var SYM_OFF  : [u32; 64]
+var SYM_NAME : [u8; 262144]   /* flat name bytes, 32 per slot */
+var SYM_NLEN : [u32; 8192]
+var SYM_SEC  : [u32; 8192]
+var SYM_OFF  : [u32; 8192]
 var SYM_N    : u32 = 0u32
 var SEC_OFF  : [u32; 4]      /* running byte offset per section (TEXT/DATA/RODATA/BSS) */
 var CUR_SEC  : u32 = 9u32
 
 /* .text label byte-offset table (for branch + sibling-call resolution), built in the LAYOUT pass. */
-var LBL_NAME : [u8; 2048]
-var LBL_NLEN : [u32; 64]
-var LBL_OFF  : [u32; 64]
+var LBL_NAME : [u8; 262144]
+var LBL_NLEN : [u32; 8192]
+var LBL_OFF  : [u32; 8192]
 var LBL_N    : u32 = 0u32
 var SP_PASS  : u32 = 2u32     /* 1 = layout (record label offsets), 2 = final (resolve displacements) */
 
@@ -156,9 +156,9 @@ fn lbl_find(slot: u32, slen2: u32) -> u32 {   /* return the .text offset of the 
 
 /* exported symbols (.global names) -- the COFF defined-external symbols.  Names recorded in pass D, .text
  * offsets resolved from LBL after the layout pass. */
-var EXP_NAME : [u8; 1024]
-var EXP_NLEN : [u32; 32]
-var EXP_OFF  : [u32; 32]
+var EXP_NAME : [u8; 65536]
+var EXP_NLEN : [u32; 2048]
+var EXP_OFF  : [u32; 2048]
 var EXP_N    : u32 = 0u32
 fn exp_record(slot: u32, slen2: u32) {
     if EXP_N < 32u32 {
@@ -350,12 +350,12 @@ fn sp_sibcall(nlen: u32) {
 /* ── branch relaxation state ── per branch (in encounter order): site, chosen size (rel8/rel32), kind, cc,
  * and target name.  The layout pass is iterated; a REL8 branch that overflows is grown to REL32 (which shifts
  * later offsets), until stable. */
-var BR_SITE : [u32; 128]
-var BR_BIG  : [u32; 128]    /* 0 = rel8 (2B), 1 = rel32 (jmp 5B / jcc 6B) */
-var BR_JMP  : [u32; 128]
-var BR_CC   : [u32; 128]
-var BR_TNAME: [u8; 4096]    /* 128 slots * 32 */
-var BR_TLEN : [u32; 128]
+var BR_SITE : [u32; 16384]
+var BR_BIG  : [u32; 16384]    /* 0 = rel8 (2B), 1 = rel32 (jmp 5B / jcc 6B) */
+var BR_JMP  : [u32; 16384]
+var BR_CC   : [u32; 16384]
+var BR_TNAME: [u8; 524288]    /* 16384 slots * 32 */
+var BR_TLEN : [u32; 16384]
 var BR_N    : u32 = 0u32
 var BR_IDX  : u32 = 0u32
 
@@ -445,8 +445,8 @@ fn sp_dispatch_instr() {
     if mn_is(109u32,111u32,118u32,113u32,4u32) == 1u32 {                                            /* movq */
         sp_two_ops()
         if S1K == 0u32 { if OPK == 0u32 { sov_mov_rr(OPR, S1R) } }
-        if S1K == 0u32 { if OPK == 2u32 { sov_store_rbp8(S1R, OPD) } }
-        if S1K == 2u32 { if OPK == 0u32 { sov_load_rbp8(OPR, S1D) } }
+        if S1K == 0u32 { if OPK == 2u32 { sov_store_base(S1R, OPR, OPD) } }   /* movq %reg, disp(%base) */
+        if S1K == 2u32 { if OPK == 0u32 { sov_load_base(OPR, S1R, S1D) } }    /* movq disp(%base), %reg */
         if S1K == 1u32 { if OPK == 0u32 { sov_mov_imm32(OPR, S1I as i32) } }
         if S1K == 3u32 { if OPK == 0u32 { sov_load_rip_sym(OPR, S1SEC, S1OFF) } }
         if S1K == 0u32 { if OPK == 3u32 { sov_store_rip_sym(S1R, OPSEC, OPOFF) } }

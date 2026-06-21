@@ -1457,6 +1457,14 @@ MODULES=(
     # total order over the shared cost_lattice), identified as the integration-phase wiring (DOCS ADR-6, not yet
     # done).  BSS-neutral, compiler-unreferenced -> LIBNATIVE; last.
     "eidos/compose"
+    # eidos/weave -- THE EIDOS INTEGRATION: the Composer plans + executes over REAL ripple quanta.  A planner
+    # quantum is a REAL eidos/ripple (real prim/hexad endpoints over ripple_field + isub); its cost is DERIVED
+    # FROM REAL GEOMETRY (|rf_edge_field| magnitude + rf_rank-derived verb, not hand-assigned); the plan EXECUTES
+    # as REAL WITNESSED ripples.  Composes ripple_field + eidos/ripple + eidos/compose + cost_lattice (no island).
+    # Proven (corpus 1936): a real 2-ripple composition, costs == independently-recomputed geometry, witnessed.
+    # Honest finding: the real xii_savings table is SUB-ADDITIVE -> modeless is order-invariant on real geometry
+    # (capability proven abstractly, 1933).  BSS-neutral, compiler-unreferenced -> LIBNATIVE; appended last.
+    "eidos/weave"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

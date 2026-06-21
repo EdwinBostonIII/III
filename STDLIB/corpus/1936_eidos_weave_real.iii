@@ -1,0 +1,191 @@
+/* 1936_eidos_weave_real.iii  --  EIDOS INTEGRATION: the Composer plans + executes over REAL ripple quanta.
+ *
+ * Connects the two Slice-0 mechanisms: the planner (eidos::compose) now plans over REAL eidos::ripple quanta
+ * whose costs are DERIVED FROM REAL GEOMETRY (rf_edge_field / rf_rank), and the plan EXECUTES as REAL WITNESSED
+ * ripples on the isub bus.  Evergreen: the fixture is SCANNED from the live sealed tables (no hardcoded values).
+ *
+ * PHASE 1 (real composition): with only S->M and M->T registered, the planner COMPOSES the 2-ripple path
+ *   S->M->T and executes it as two real witnessed ripples -- and each quantum's cost is proven == the rf_edge_field
+ *   magnitude AND rf_rank-derived verb recomputed in-KAT (the FAITHFUL-COPY gate: weave carries the REAL sealed
+ *   geometry, not a hand-assigned fixture -- both call rf_edge_field, so it is weaker than 1931's independent cad).
+ * PHASE 2 (degenerate, by the substrate): adding the direct S->T edge, BOTH orders pick it -- because the savings
+ *   table is SUB-ADDITIVE (gated by corpus 1937), so the direct path is optimal under every monotone order.
+ *
+ * HONEST SCOPE: this proves real COSTS, real COMPOSITION, and real WITNESSED EXECUTION over real ripple quanta.
+ * It does NOT exercise optimization-AMONG-ALTERNATIVES: Phase 1 has a SINGLE route, and Phase 2's direct edge
+ * dominates under both orders -- so the optimizer (proven load-bearing on FIXTURES in 1933/1935) is never
+ * decisive here.  That is not a gap in the test but a property of the real geometry: sub-additivity (1937) makes
+ * the shortest path optimal under every order, so there is nothing to reshuffle.  The modeless CAPABILITY is 1933.
+ *
+ *   code 10 NO-VECTOR : the sealed tables lack 3 distinct-rank hexads or a savings>0 prim triple
+ *   code 11 COMPOSE   : the planner did not compose the real 2-ripple path S->M->T
+ *   code 12 REAL-COST : a quantum's cost != the rf geometry recomputed in-KAT (faithful-copy gate; mag or verb)
+ *   code 13 COST-FAITHFUL : the planner's reported plan cost != the route's per-edge cl_dot_slot sum (single route
+ *                       here -> cost-faithfulness, NOT optimization-among-routes; that is 1933/1935, degenerate here)
+ *   code 14 WITNESSED : the executed plan did not emit the planned real ripples, or was not reproducible
+ *   code 15 ORDER-INV : with a direct edge present, the two orders did NOT both pick it (degenerate; see 1937)
+ *   code 16 SUBADD    : sav(S,T) > sav(S,M)+sav(M,T) on this triple (local check; the UNIVERSAL finding is 1937)
+ * exit 99 = the Composer plans + executes over REAL ripple quanta with REAL-geometry costs; modeless is
+ *           order-invariant on the real (sub-additive) savings geometry (capability proven abstractly, 1933).
+ */
+module m1936
+
+extern @abi(c-msvc-x64) fn weave_reset() -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_order_direct() -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_order_thrift() -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_add_ripple(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8) -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_quantum_cost_into(qid: u32, out: *u64) -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_plan(start_prim: u32, target_prim: u32, order_slot: u32) -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_plan_at(i: u32) -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_plan_dot(order_slot: u32) -> u64 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_execute() -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_witness_into(out32: *u8) -> i32 from "weave.iii"
+extern @abi(c-msvc-x64) fn rf_edge_field(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_direction(hex_from: u8, hex_to: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_verb(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_a(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_b(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var COST0  : [u64; 6]
+var COST1  : [u64; 6]
+var DOTBUF : [u64; 1]
+var ROOT_A : [u8; 32]
+var ROOT_A2: [u8; 32]
+
+/* the independent magnitude recompute: |rf_edge_field| (= the real savings). */
+fn mag(pa: u8, pb: u8, ha: u8, hb: u8) -> u64 {
+    let g : i64 = rf_edge_field(pa, pb, ha, hb)
+    if g < 0i64 { return (0i64 - g) as u64 }
+    return g as u64
+}
+
+fn dot1(order: u32, c: *u64) -> u64 {
+    cl_dot_slot(order, c, &DOTBUF as *u64)
+    return DOTBUF[0u64]
+}
+
+fn main() -> u64 {
+    weave_reset()
+    let DIRECT : u32 = weave_order_direct()
+    let THRIFT : u32 = weave_order_thrift()
+
+    /* ===== scan 3 pairwise-distinct-rank hexads (so every fixture edge is a real non-flat ripple) ===== */
+    let mut foundh : u32 = 0u32
+    let mut hA : u8 = 0u8
+    let mut hB : u8 = 0u8
+    let mut hC : u8 = 0u8
+    let mut i : u8 = 1u8
+    while i <= 7u8 {
+        let mut j : u8 = 1u8
+        while j <= 7u8 {
+            let mut k : u8 = 1u8
+            while k <= 7u8 {
+                if foundh == 0u32 {
+                    let ri : u32 = rf_rank(i)
+                    let rj : u32 = rf_rank(j)
+                    let rk : u32 = rf_rank(k)
+                    if ri != rj { if ri != rk { if rj != rk { hA = i  hB = j  hC = k  foundh = 1u32 } } }
+                }
+                k = k + 1u8
+            }
+            j = j + 1u8
+        }
+        i = i + 1u8
+    }
+    if foundh == 0u32 { return 10u64 }
+
+    /* ===== scan a prim triple S,M,T (distinct) with all three savings > 0 (real ripples) ===== */
+    let mut foundp : u32 = 0u32
+    let mut S : u8 = 0u8
+    let mut M : u8 = 0u8
+    let mut T : u8 = 0u8
+    let mut a : u8 = 0u8
+    while a < 24u8 {
+        let mut b : u8 = 0u8
+        while b < 24u8 {
+            let mut c : u8 = 0u8
+            while c < 24u8 {
+                if foundp == 0u32 {
+                    if a != b { if a != c { if b != c {
+                        /* the 2-hop path must be real non-zero ripples (savings>0); the direct edge S->T
+                         * is registered at whatever magnitude the table gives (>=0; sub-additive). */
+                        let m1 : u64 = mag(a, b, hA, hC)
+                        let m2 : u64 = mag(b, c, hC, hB)
+                        if m1 > 0u64 { if m2 > 0u64 { S = a  M = b  T = c  foundp = 1u32 } }
+                    } } }
+                }
+                c = c + 1u8
+            }
+            b = b + 1u8
+        }
+        a = a + 1u8
+    }
+    if foundp == 0u32 { return 10u64 }
+
+    /* ===== PHASE 1: real composition (no direct edge) ===== */
+    if weave_add_ripple(S, M, hA, hC) != 0i32 { return 10u64 }    /* qid 0: S->M */
+    if weave_add_ripple(M, T, hC, hB) != 1i32 { return 10u64 }    /* qid 1: M->T */
+
+    /* code 11: the planner COMPOSES the real 2-ripple path S->M->T */
+    let pl : u32 = weave_plan(S as u32, T as u32, DIRECT)
+    if pl != 2u32 { return 11u64 }
+    if weave_plan_at(0u32) != 0u32 { return 11u64 }
+    if weave_plan_at(1u32) != 1u32 { return 11u64 }
+
+    /* code 12: each quantum's cost == the independently-recomputed rf geometry (magnitude AND verb) */
+    weave_quantum_cost_into(0u32, &COST0 as *u64)
+    weave_quantum_cost_into(1u32, &COST1 as *u64)
+    let mag0 : u64 = mag(S, M, hA, hC)
+    let v0   : u32 = eidos_ripple_direction(hA, hC)
+    let mut r0 : u64 = 0u64
+    if v0 == 1u32 { r0 = 1u64 }
+    if COST0[0u64] != 1u64  { return 12u64 }
+    if COST0[1u64] != mag0  { return 12u64 }
+    if COST0[2u64] != r0    { return 12u64 }
+    let mag1 : u64 = mag(M, T, hC, hB)
+    let v1   : u32 = eidos_ripple_direction(hC, hB)
+    let mut r1 : u64 = 0u64
+    if v1 == 1u32 { r1 = 1u64 }
+    if COST1[0u64] != 1u64  { return 12u64 }
+    if COST1[1u64] != mag1  { return 12u64 }
+    if COST1[2u64] != r1    { return 12u64 }
+
+    /* code 13: the planner's achieved cost == the independent per-edge cl_dot_slot sum (optimal) */
+    let route : u64 = dot1(DIRECT, &COST0 as *u64) + dot1(DIRECT, &COST1 as *u64)
+    if weave_plan_dot(DIRECT) != route { return 13u64 }
+
+    /* code 14: execute -> two REAL witnessed ripples matching the plan; reproducible */
+    weave_execute()
+    if eidos_ripple_count() != 2u32 { return 14u64 }
+    if eidos_ripple_event_a(0u32) != (S as u32) { return 14u64 }
+    if eidos_ripple_event_b(0u32) != (M as u32) { return 14u64 }
+    if eidos_ripple_event_verb(0u32) != v0 { return 14u64 }
+    if eidos_ripple_event_a(1u32) != (M as u32) { return 14u64 }
+    if eidos_ripple_event_b(1u32) != (T as u32) { return 14u64 }
+    if eidos_ripple_event_verb(1u32) != v1 { return 14u64 }
+    weave_witness_into(&ROOT_A as *u8)
+    weave_execute()
+    weave_witness_into(&ROOT_A2 as *u8)
+    if cad_eq(&ROOT_A as *u8, &ROOT_A2 as *u8) != 1u8 { return 14u64 }
+
+    /* ===== PHASE 2: sub-additivity / order-invariance finding (add the direct edge) ===== */
+    if weave_add_ripple(S, T, hA, hB) != 2i32 { return 15u64 }    /* qid 2: the direct edge S->T */
+
+    /* code 15: BOTH orders now pick the direct edge -> order-invariant on real (sub-additive) geometry */
+    let pd : u32 = weave_plan(S as u32, T as u32, DIRECT)
+    if pd != 1u32 { return 15u64 }
+    if weave_plan_at(0u32) != 2u32 { return 15u64 }
+    let pt : u32 = weave_plan(S as u32, T as u32, THRIFT)
+    if pt != 1u32 { return 15u64 }
+    if weave_plan_at(0u32) != 2u32 { return 15u64 }
+
+    /* code 16: the substrate finding -- sav(S,T) <= sav(S,M)+sav(M,T) (sub-additivity, probed universal) */
+    let magST : u64 = mag(S, T, hA, hB)
+    if magST > mag0 + mag1 { return 16u64 }
+
+    return 99u64
+}

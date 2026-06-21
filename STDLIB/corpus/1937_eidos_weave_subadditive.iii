@@ -1,0 +1,54 @@
+/* 1937_eidos_weave_subadditive.iii  --  GATES the substrate finding behind eidos/weave's modeless degeneracy.
+ *
+ * The real xii_savings table -- the magnitude of every ripple (|rf_edge_field| = xii_savings_get) -- is
+ * SUB-ADDITIVE: for EVERY prim triple S,M,T with all three savings positive, sav(S,M)+sav(M,T) >= sav(S,T)
+ * (there is NO anti-triangle).  Consequence (the honest finding in DOCS/III-EIDOS-ARCHITECTURE.md): over real
+ * ripple geometry the direct/shortest path is optimal under EVERY monotone cost order, so eidos/compose's
+ * modeless reshuffle -- proven as a CAPABILITY abstractly (corpus 1933) -- is ORDER-INVARIANT on this substrate.
+ * This KAT makes that finding REPRODUCIBLE + GATED (not a deleted throwaway probe): a future change to the
+ * savings table that introduced an anti-triangle would redden it.
+ *
+ *   code 11 : the savings table has NO positive entries -> the finding would be vacuous
+ *   code 12 : an ANTI-TRIANGLE exists (sav(S,M)+sav(M,T) < sav(S,T)) -> the table is NOT sub-additive
+ * exit 99 = sub-additive confirmed over all positive triangles; the modeless-over-real degeneracy is grounded.
+ */
+module m1937
+
+extern @abi(c-msvc-x64) fn xii_savings_get(a: u8, b: u8) -> u8 from "xii_savings.iii"
+
+fn main() -> u64 {
+    let mut anti : u32 = 0u32
+    let mut pos  : u32 = 0u32
+    let mut s : u8 = 0u8
+    while s < 24u8 {
+        let mut t : u8 = 0u8
+        while t < 24u8 {
+            if s != t {
+                let st : u32 = xii_savings_get(s, t) as u32
+                if st > 0u32 {
+                    pos = pos + 1u32
+                    let mut m : u8 = 0u8
+                    while m < 24u8 {
+                        if m != s {
+                            if m != t {
+                                let sm : u32 = xii_savings_get(s, m) as u32
+                                let mt : u32 = xii_savings_get(m, t) as u32
+                                if sm > 0u32 {
+                                    if mt > 0u32 {
+                                        if sm + mt < st { anti = anti + 1u32 }
+                                    }
+                                }
+                            }
+                        }
+                        m = m + 1u8
+                    }
+                }
+            }
+            t = t + 1u8
+        }
+        s = s + 1u8
+    }
+    if pos == 0u32 { return 11u64 }      /* the table has positive savings (non-vacuous) */
+    if anti != 0u32 { return 12u64 }     /* NO anti-triangle -> sub-additive */
+    return 99u64
+}

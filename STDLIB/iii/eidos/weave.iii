@@ -1,0 +1,146 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\weave.iii
+ *
+ * III STDLIB - eidos::weave  --  THE EIDOS INTEGRATION: the Composer planning over REAL ripple quanta.
+ *
+ * Connects the two Slice-0 mechanisms (DOCS/III-EIDOS-ARCHITECTURE.md): a planner quantum is now a REAL
+ * eidos::ripple (real prim/hexad endpoints over the real ripple_field geometry + the real isub bus), its
+ * cost is DERIVED FROM REAL GEOMETRY (not hand-assigned), the planner is the real eidos::compose, and a plan
+ * EXECUTES as REAL WITNESSED ripples.  No island: it composes four real organs (ripple_field + eidos::ripple
+ * + eidos::compose + cost_lattice) and the real isub witness.
+ *
+ * THE COST OF A RIPPLE (real, recomputable):  weave_ripple_cost = [ hop=1 ,  magnitude=|rf_edge_field| (the
+ * real delta-K savings) ,  reflect=(verb==REFLECT?1:0) (the order-reversing involution, from rf_rank) , 0,0,0 ].
+ * A KAT independently recomputes these from rf_edge_field + rf_rank and asserts the planner used the REAL
+ * sealed-table values, not a fixture (the non-toy gate).  The cost_lattice vector ALGEBRA is reused with
+ * RIPPLE-FACET dimensions (documented) -- not the microarch latency/energy labels.
+ *
+ * MODELESS NOTE (honest): the real xii_savings table is SUB-ADDITIVE (probed: no triple with
+ * sav(S,M)+sav(M,T) < sav(S,T)) -- so over this real geometry the shortest/direct path is optimal under
+ * EVERY monotone order, and the optimal plan is ORDER-INVARIANT (a gated finding, KAT 1936 §2).  The modeless
+ * reshuffle CAPABILITY is proven abstractly in corpus 1933; it needs trade-off cost dimensions the savings
+ * geometry alone does not carry (a richer cost model -- e.g. real per-ripple execution cost -- is future).
+ *
+ * SCOPE (honest): a planner over a ripple FIXTURE.  A node is a prim; each edge carries its own (hex_a,hex_b),
+ * so the organ does not enforce hexad consistency at a shared prim -- the general object is node=(prim,hexad).
+ * The KAT's fixture is hexad-consistent; the GENERAL ripple-graph planner is a further step.
+ *
+ * Ring R0.  K 1.00 (pure over four sealed organs).  NIH: libc-free.
+ */
+module eidos_weave
+
+extern @abi(c-msvc-x64) fn rf_edge_field(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_direction(hex_from: u8, hex_to: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_emit(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_reset() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_witness_into(out32: *u8) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_len() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_dot(order_slot: u32) -> u64 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 from "cost_lattice.iii"
+
+const WV_MAXQ      : u32 = 128u32
+const ER_V_REFLECT : u32 = 1u32
+const WV_BIG       : u64 = 1000000u64   /* dominating weight for a single-facet custom order (no saturation: <2^20 * small facets) */
+
+/* the ripple table: geometry + the cost weave registered, indexed by quantum id (== cmp's qid). */
+var WV_PA   : [u8; 128]
+var WV_PB   : [u8; 128]
+var WV_HA   : [u8; 128]
+var WV_HB   : [u8; 128]
+var WV_COST : [u64; 768]                 /* 128 * 6 */
+var WV_QN   : u32 = 0u32
+
+var WV_ORD_DIRECT : u32 = 0u32           /* custom order slot: dominate hop count (fewest ripples) */
+var WV_ORD_THRIFT : u32 = 0u32           /* custom order slot: dominate magnitude (least savings-mass) */
+
+var WV_W    : [u64; 6]                    /* weight-vector scratch for cl_register_order */
+var WV_ROW  : [u64; 6]                    /* a cost row scratch */
+var WV_SLOT : [u32; 1]                    /* cl_register_order out-slot scratch */
+
+/* |rf_edge_field| -- the real magnitude (= the delta-K savings; sign carries direction, magnitude the savings). */
+fn weave_abs_mag(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8) -> u64 {
+    let g : i64 = rf_edge_field(prim_a, prim_b, hex_a, hex_b)
+    if g < 0i64 { return (0i64 - g) as u64 }
+    return g as u64
+}
+
+/* derive a ripple's cost vector FROM REAL GEOMETRY (ripple-facet dims; the cost_lattice algebra reused). */
+fn weave_ripple_cost_into(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8, out: *u64) -> i32 @export {
+    let mag  : u64 = weave_abs_mag(prim_a, prim_b, hex_a, hex_b)
+    let verb : u32 = eidos_ripple_direction(hex_a, hex_b)
+    out[0u64] = 1u64                       /* hop */
+    out[1u64] = mag                        /* real magnitude */
+    out[2u64] = 0u64
+    if verb == ER_V_REFLECT { out[2u64] = 1u64 }   /* reflect / involution count */
+    out[3u64] = 0u64  out[4u64] = 0u64  out[5u64] = 0u64
+    return 0i32
+}
+
+fn weave_reset() -> i32 @export {
+    eidos_ripple_reset()
+    cmp_reset()                            /* cl_init re-seeds slots 0-3, clears 4+, clears the cmp registry */
+    /* register the custom ripple-native orders AFTER cl_init (which cleared 4+). */
+    WV_W[0u64] = WV_BIG  WV_W[1u64] = 1u64  WV_W[2u64] = 1u64  WV_W[3u64] = 0u64  WV_W[4u64] = 0u64  WV_W[5u64] = 0u64
+    cl_register_order(&WV_W as *u64, &WV_SLOT as *u32)
+    WV_ORD_DIRECT = WV_SLOT[0u64]
+    WV_W[0u64] = 1u64  WV_W[1u64] = WV_BIG  WV_W[2u64] = 1u64  WV_W[3u64] = 0u64  WV_W[4u64] = 0u64  WV_W[5u64] = 0u64
+    cl_register_order(&WV_W as *u64, &WV_SLOT as *u32)
+    WV_ORD_THRIFT = WV_SLOT[0u64]
+    WV_QN = 0u32
+    return 0i32
+}
+
+fn weave_order_direct() -> u32 @export { return WV_ORD_DIRECT }
+fn weave_order_thrift() -> u32 @export { return WV_ORD_THRIFT }
+fn weave_qn() -> u32 @export { return WV_QN }
+
+/* register a REAL ripple <prim_a -> prim_b @ (hex_a,hex_b)> as a planner quantum (from=prim_a, to=prim_b),
+ * with its real-geometry cost.  Rejects a flat edge (V_NONE = not a ripple).  Returns the quantum id. */
+fn weave_add_ripple(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8) -> i32 @export {
+    if WV_QN >= WV_MAXQ { return -1i32 }
+    let verb : u32 = eidos_ripple_direction(hex_a, hex_b)
+    if verb > ER_V_REFLECT { return -2i32 }            /* flat edge -> not a ripple */
+    weave_ripple_cost_into(prim_a, prim_b, hex_a, hex_b, &WV_ROW as *u64)
+    let qid : i32 = cmp_register(prim_a as u32, prim_b as u32, &WV_ROW as *u64)
+    if qid < 0i32 { return -3i32 }
+    let q : u32 = qid as u32
+    WV_PA[q as u64] = prim_a  WV_PB[q as u64] = prim_b  WV_HA[q as u64] = hex_a  WV_HB[q as u64] = hex_b
+    let base : u32 = q * 6u32
+    let mut k : u32 = 0u32
+    while k < 6u32 { WV_COST[(base + k) as u64] = WV_ROW[k as u64]  k = k + 1u32 }
+    WV_QN = q + 1u32
+    return qid
+}
+
+/* the cost weave registered for quantum qid (== the value handed to the planner). */
+fn weave_quantum_cost_into(qid: u32, out: *u64) -> i32 @export {
+    if qid >= WV_QN { return -1i32 }
+    let base : u32 = qid * 6u32
+    let mut k : u32 = 0u32
+    while k < 6u32 { out[k as u64] = WV_COST[(base + k) as u64]  k = k + 1u32 }
+    return 0i32
+}
+
+fn weave_plan(start_prim: u32, target_prim: u32, order_slot: u32) -> u32 @export {
+    return cmp_plan(start_prim, target_prim, order_slot)
+}
+fn weave_plan_len() -> u32 @export { return cmp_plan_len() }
+fn weave_plan_at(i: u32) -> u32 @export { return cmp_plan_at(i) }
+fn weave_plan_dot(order_slot: u32) -> u64 @export { return cmp_plan_dot(order_slot) }
+
+/* execute the current plan as REAL WITNESSED ripples: emit each planned quantum's ripple onto the isub bus. */
+fn weave_execute() -> i32 @export {
+    eidos_ripple_reset()
+    let n : u32 = cmp_plan_len()
+    let mut i : u32 = 0u32
+    while i < n {
+        let q : u32 = cmp_plan_at(i)
+        eidos_ripple_emit(WV_PA[q as u64], WV_PB[q as u64], WV_HA[q as u64], WV_HB[q as u64])
+        i = i + 1u32
+    }
+    return 0i32
+}
+fn weave_witness_into(out32: *u8) -> i32 @export { return eidos_ripple_witness_into(out32) }

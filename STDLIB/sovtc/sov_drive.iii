@@ -1,0 +1,19 @@
+/* sov_drive.iii  --  the sovereign assembler DRIVER.  Assembles an embedded .s and emits a COFF .o to stdout.
+ * The harness redirects stdout to out.o, links it with gcc, and runs it -- the links-and-runs gate.
+ * GATE-1 input: a minimal `main` returning 99 (the .text -- movabsq/retq -- is already byte-gated; this
+ * isolates COFF object validity).  Exit 0 = emitted.
+ */
+module sovtc_drive
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  movabsq $99, %rax\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }   /* assembly error -> nonzero, harness sees no valid .o */
+    sovcoff_emit()
+    return 0u64
+}

@@ -137,6 +137,24 @@ fn lbl_find(slot: u32, slen2: u32) -> u32 {   /* return the .text offset of the 
     return 0xFFFFFFFFu32
 }
 
+/* exported symbols (.global names) -- the COFF defined-external symbols.  Names recorded in pass D, .text
+ * offsets resolved from LBL after the layout pass. */
+var EXP_NAME : [u8; 1024]
+var EXP_NLEN : [u32; 32]
+var EXP_OFF  : [u32; 32]
+var EXP_N    : u32 = 0u32
+fn exp_record(slot: u32, slen2: u32) {
+    if EXP_N < 32u32 {
+        let mut j : u32 = 0u32
+        while j < slen2 { EXP_NAME[((EXP_N * 32u32) + j) as u64] = SYM_NAME[((slot * 32u32) + j) as u64]  j = j + 1u32 }
+        EXP_NLEN[EXP_N as u64] = slen2  EXP_N = EXP_N + 1u32
+    }
+}
+fn sp_export_n() -> u32 @export { return EXP_N }
+fn sp_export_off(i: u32) -> u32 @export { if i < EXP_N { return EXP_OFF[i as u64] }  return 0xFFFFFFFFu32 }
+fn sp_export_namelen(i: u32) -> u32 @export { if i < EXP_N { return EXP_NLEN[i as u64] }  return 0u32 }
+fn sp_export_namebyte(i: u32, j: u32) -> u32 @export { if i < EXP_N { if j < EXP_NLEN[i as u64] { return EXP_NAME[((i * 32u32) + j) as u64] as u32 } }  return 0u32 }
+
 fn is_ident_start(c: u32) -> u32 {
     if c == C_US { return 1u32 }
     if is_lower(c) == 1u32 { return 1u32 }
@@ -497,6 +515,10 @@ fn sp_dir1() {
     if mn_is(100u32,97u32,116u32,97u32,4u32) == 1u32 { CUR_SEC = SEC_DATA  return }       /* .data */
     if mn_is(98u32,115u32,115u32,0u32,3u32) == 1u32 { CUR_SEC = SEC_BSS  return }         /* .bss */
     if mn_is(114u32,111u32,100u32,97u32,6u32) == 1u32 { CUR_SEC = SEC_RODATA  return }    /* .rodata */
+    if mn_is(103u32,108u32,111u32,98u32,6u32) == 1u32 {   /* .global <name> -> an exported COFF symbol */
+        if SP_PASS == 0u32 { sp_skip_ws()  let gl : u32 = sp_read_name_into(SYM_N)  exp_record(SYM_N, gl) }
+        return
+    }
     if CUR_SEC < 4u32 {
         if mn_is(113u32,117u32,97u32,100u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 8u32 }   /* .quad */
         if mn_is(108u32,111u32,110u32,103u32,4u32) == 1u32 { SEC_OFF[CUR_SEC as u64] = SEC_OFF[CUR_SEC as u64] + 4u32 }   /* .long */
@@ -509,6 +531,8 @@ fn sp_dir1() {
 }
 fn sp_build_symtab(ptr: *u8, len: u32) {
     SYM_N = 0u32
+    EXP_N = 0u32
+    SP_PASS = 0u32      /* pass D: record exports here, once */
     SEC_OFF[0u64] = 0u32  SEC_OFF[1u64] = 0u32  SEC_OFF[2u64] = 0u32  SEC_OFF[3u64] = 0u32
     CUR_SEC = SEC_OTHER
     IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32
@@ -540,5 +564,13 @@ fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
     sp_build_symtab(ptr, len)        /* D */
     LBL_N = 0u32
     SP_PASS = 1u32  sovparse(ptr, len)          /* L */
+    /* resolve each export's .text offset now that the layout pass built LBL */
+    let mut e : u32 = 0u32
+    while e < EXP_N {
+        let mut j : u32 = 0u32
+        while j < EXP_NLEN[e as u64] { SYM_NAME[((SYM_N * 32u32) + j) as u64] = EXP_NAME[((e * 32u32) + j) as u64]  j = j + 1u32 }
+        EXP_OFF[e as u64] = lbl_find(SYM_N, EXP_NLEN[e as u64])
+        e = e + 1u32
+    }
     SP_PASS = 2u32  return sovparse(ptr, len)   /* F */
 }

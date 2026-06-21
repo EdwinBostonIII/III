@@ -26,5 +26,16 @@ for t in test_encode test_spine test_reloc test_store test_lea test_unknown test
     if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS $t (exit 99)"; else echo "[sovtc] FAIL $t (exit $rc)"; fail=1; fi
 done
 
+# ── COFF links-and-runs gate: sovcoff emits a real .o, gcc's ld links it, the OS runs it (expect 99) ──
+if ! "$IIIS" "$SOVTC/sovcoff.iii"   --compile-only --out "$OUT/sovcoff.o"   >/dev/null 2>&1; then echo "[sovtc] FAIL coff (sovcoff compile)"; fail=1; fi
+if ! "$IIIS" "$SOVTC/sov_drive.iii" --compile-only --out "$OUT/sov_drive.o" >/dev/null 2>&1; then echo "[sovtc] FAIL coff (driver compile)"; fail=1; fi
+if gcc "$OUT/sov_drive.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$OUT/sovcoff.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/drive.exe" >/dev/null 2>&1; then
+    timeout 25 "$OUT/drive.exe" > "$OUT/out.o" 2>/dev/null
+    if gcc "$OUT/out.o" -o "$OUT/out.exe" >/dev/null 2>&1; then
+        timeout 10 "$OUT/out.exe" >/dev/null 2>&1; rc=$?
+        if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS coff (sovereign .o links+runs, exit 99)"; else echo "[sovtc] FAIL coff (out.exe exit $rc)"; fail=1; fi
+    else echo "[sovtc] FAIL coff (gcc could not link the sovereign .o)"; fail=1; fi
+else echo "[sovtc] FAIL coff (driver link)"; fail=1; fi
+
 if [[ $fail -eq 0 ]]; then echo "[sovtc] ALL PASS"; exit 0; fi
 echo "[sovtc] FAILURES PRESENT"; exit 1

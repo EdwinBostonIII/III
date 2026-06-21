@@ -1,0 +1,45 @@
+/* 1983_weave_adopt_memo.iii  --  THE GOLDEN ADOPTION FLOW now consults the EIDOS memoisation substrate.
+ *
+ * gild_adopt_ch / gild_adopt_maj (the weave's cost-true optform adoption deciders, exercised live by
+ * 1775_weave_adopt) each carry a "prove before adopt" soundness gate -- a SAT-backed bb_equal that proves the
+ * optimised form equals the spec.  Those gates are now routed through eqv_equal, so a REPEATED adoption
+ * evaluation recalls the equivalence verdict by content-address and SKIPS the SAT solve.
+ *
+ *   code 11: first Ch evaluation -> MISS (the soundness SAT runs once); verdict ADOPT is unchanged (SOUND)
+ *   code 12/13: second Ch evaluation -> HIT (SAT skipped), verdict abstain unchanged; the SAT was SAVED
+ *   code 14: Maj is a DIFFERENT equivalence query -> its own MISS (no false recall across Ch/Maj)
+ *   code 15: second Maj evaluation -> HIT (saved)
+ * exit 99 = the live adoption flow saves real SAT work via memoisation, with every verdict identical to before.
+ */
+module m1983
+
+extern @abi(c-msvc-x64) fn gild_adopt_ch(target: u32) -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_adopt_maj(target: u32) -> i32 from "invent.iii"
+extern @abi(c-msvc-x64) fn coin_reset() -> i32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn eqv_reset() -> i32 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_hits() -> u64 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_misses() -> u64 from "memo.iii"
+
+fn main() -> u64 {
+    coin_reset()
+    eqv_reset()
+
+    /* FIRST Ch adoption evaluation -> MISS: the soundness SAT runs once; verdict still ADOPT (sound) */
+    if gild_adopt_ch(1u32) != 1i32 { return 11u64 }
+    if eqv_misses() != 1u64 { return 11u64 }
+
+    /* SECOND Ch adoption evaluation -> HIT: same equivalence query, SAT SKIPPED; verdict still abstain */
+    if gild_adopt_ch(0u32) != 0i32 { return 12u64 }
+    if eqv_hits() != 1u64 { return 13u64 }            /* the live adoption flow SAVED a SAT solve */
+    if eqv_misses() != 1u64 { return 13u64 }          /* and did not re-solve */
+
+    /* Maj is a DIFFERENT equivalence query -> its own MISS (sound across distinct queries) */
+    if gild_adopt_maj(1u32) != 1i32 { return 14u64 }
+    if eqv_misses() != 2u64 { return 14u64 }
+
+    /* SECOND Maj evaluation -> HIT (saved) */
+    if gild_adopt_maj(0u32) != 0i32 { return 15u64 }
+    if eqv_hits() != 2u64 { return 15u64 }
+
+    return 99u64
+}

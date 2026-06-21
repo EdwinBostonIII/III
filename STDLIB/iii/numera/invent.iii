@@ -35,6 +35,11 @@ extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+/* the adoption soundness gates consult the EIDOS memoisation substrate: a repeated equivalence proof is
+ * RECALLED by content-address, skipping the SAT solve.  eqv_equal returns bb_equal's verdict EXACTLY (sound);
+ * it only removes the re-solving.  This is the EIDOS-consulted-substrate pattern (a decision faculty consults
+ * the coincidence engine), acyclic: memo's deps (bv_bits/coincidence/cad) never reach invent. */
+extern @abi(c-msvc-x64) fn eqv_equal(a: u32, b: u32, nvars: u32) -> u8 from "memo.iii"
 extern @abi(c-msvc-x64) fn bb_count_and() -> u64 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
 extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
@@ -846,7 +851,7 @@ fn gild_adopt_ch(target: u32) -> i32 @export {
     let g : u32 = bb_var(2u32)
     let spec : u32 = bb_xor(bb_and(e, f), bb_and(bb_not(e), g))
     let opt  : u32 = bb_xor(g, bb_and(e, bb_xor(f, g)))
-    if bb_equal(spec, opt) != 1u8 { return -1i32 }                  /* soundness gate: prove before adopt */
+    if eqv_equal(spec, opt, 3u32) != 1u8 { return -1i32 }                  /* soundness gate: prove before adopt */
     if target == 1u32 {
         if opt_ands < spec_ands { return 1i32 }                    /* gate-count: the AND saving is real -> ADOPT */
         return 0i32
@@ -874,7 +879,7 @@ fn gild_adopt_maj(target: u32) -> i32 @export {
     let c3 : u32 = bb_var(2u32)
     let spec : u32 = bb_xor(bb_xor(bb_and(a3, b3), bb_and(a3, c3)), bb_and(b3, c3))
     let opt  : u32 = bb_xor(bb_and(a3, b3), bb_and(c3, bb_xor(a3, b3)))
-    if bb_equal(spec, opt) != 1u8 { return -1i32 }
+    if eqv_equal(spec, opt, 3u32) != 1u8 { return -1i32 }
     if target == 1u32 {
         if opt_ands < spec_ands { return 1i32 }
         return 0i32

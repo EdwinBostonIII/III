@@ -4,18 +4,22 @@
  * whole arc in one gate, all on a web SHATTERED FROM A REAL xii_rewrite EXECUTION:
  *   (1) a real reduction trace is shattered (unravel) + ingested into omnia::assimilate's content-addressed web;
  *   (2) eidos::descriptor DESCRIBES it -- each block self-identifying by content-address (DERIVED, not tagged);
- *   (3) eidos::descriptor + eidos::compose SELF-COMPOSE -- the planner routes goal-directed over the web's order,
- *       in REAL point addresses (via the remap), each step a real assim_leq relation.
- * No hand-built fixtures: the data is a real execution.  No new organ: this composes the committed arc end-to-end.
+ *   (3) eidos::descriptor + eidos::compose route over the web's order, in REAL point addresses (via the remap),
+ *       the routed relation a real assim_leq.  HONEST: the real trace web is a CHAIN, so a0->b0 is a single BELOW
+ *       edge -- the planner confirms a 1-hop direct order edge here, NOT a composed multi-hop path.  Non-trivial
+ *       shortest-path routing (a cheaper indirect via a shortcut) is proven on the large-address FIXTURE, corpus 1942.
+ * No hand-built fixtures in the DATA: it is a real execution.  No new organ: this composes the committed arc.
  *
- * HONEST: this proves the EIDOS SUBSTRATE is coherent end-to-end over real data -- it does NOT create a live
- * CONSUMER (nothing in III calls this; that remains the tp_* binary-production decision).  Substrate complete != live.
+ * HONEST: this proves the EIDOS SUBSTRATE is coherent end-to-end over real data (real trace -> describe -> route)
+ * -- it does NOT create a live CONSUMER (nothing in III calls this; that remains the tp_* decision).  And the
+ * routing exercised over the REAL trace web is trivial (1-hop); non-trivial routing is 1942's fixture.  Substrate-
+ * coherent != live, and != "non-trivial routing over real trace data".
  *
  *   code 10 TRACE    : no real multi-step trace shattered+ingested into a non-empty web
  *   code 11 DESCRIBE : descriptor's view != the real web, or block 0's content-address != the real block's
- *   code 12 COMPOSE  : the planner did not route a0->b0 over the real web in real addresses
+ *   code 12 COMPOSE  : the planner did not route a0->b0 over the real web in real addresses (the 1-hop order edge)
  *   code 13 ORDER    : the routed relation is not a real web order (assim_leq)
- * exit 99 = real execution -> self-describing web -> self-composing route, end-to-end, no fixtures.  EIDOS realized.
+ * exit 99 = real execution -> self-describing web -> a confirmed order route, end-to-end, no fixtures in the data.
  */
 module m1943
 

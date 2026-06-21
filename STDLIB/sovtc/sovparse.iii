@@ -59,8 +59,8 @@ extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.i
 extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
-extern @abi(c-msvc-x64) fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 from "sovas.iii"
-extern @abi(c-msvc-x64) fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_sib_d(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_sib_d(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_reset() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_emit(sec: u32, b: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_bss_add(n: u32) -> i32 from "sovas.iii"
@@ -441,8 +441,8 @@ fn sp_dispatch_instr() {
         if S1K == 1u32 { if OPK == 0u32 { sov_mov_imm32(OPR, S1I as i32) } }
         if S1K == 3u32 { if OPK == 0u32 { sov_load_rip_sym(OPR, S1SEC, S1OFF) } }
         if S1K == 0u32 { if OPK == 3u32 { sov_store_rip_sym(S1R, OPSEC, OPOFF) } }
-        if S1K == 0u32 { if OPK == 4u32 { sov_store_sib(S1R, OPR, OPINDEX, OPSCALE) } }   /* movq %s,(base,idx,sc) */
-        if S1K == 4u32 { if OPK == 0u32 { sov_load_sib(OPR, S1R, S1INDEX, S1SCALE) } }    /* movq (base,idx,sc),%d */
+        if S1K == 0u32 { if OPK == 4u32 { sov_store_sib_d(S1R, OPR, OPINDEX, OPSCALE, OPD) } }   /* movq %s,disp(base,idx,sc) */
+        if S1K == 4u32 { if OPK == 0u32 { sov_load_sib_d(OPR, S1R, S1INDEX, S1SCALE, S1D) } }    /* movq disp(base,idx,sc),%d */
         return
     }
     if mn_is(108u32,101u32,97u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_lea_rip_sym(OPR, S1SEC, S1OFF)  return }  /* leaq */

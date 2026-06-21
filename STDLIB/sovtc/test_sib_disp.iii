@@ -1,0 +1,31 @@
+/* test_sib_disp.iii  --  SIB-memory with DISPLACEMENT, disp(%base,%index,scale).  Must reproduce gas exactly:
+ *   movq %rdx, 8(%rax,%rcx,8)    = 48 89 54 c8 08            (disp8,  mod=01)
+ *   movq 16(%rax,%rcx,8), %rax   = 48 8b 44 c8 10            (disp8,  mod=01)
+ *   movq %rdx, 200(%rax,%rcx,8)  = 48 89 94 c8 c8 00 00 00   (disp32, mod=10)
+ *   movq (%rax,%rcx,8), %rax     = 48 8b 04 c8               (no disp, mod=00 -- refactor preserved)
+ * exit 99 = all 22 bytes match gas.  13 len / 14+i byte i.
+ */
+module sovtc_test_sib_disp
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 22] = [
+  0x48u8,0x89u8,0x54u8,0xC8u8,0x08u8,
+  0x48u8,0x8Bu8,0x44u8,0xC8u8,0x10u8,
+  0x48u8,0x89u8,0x94u8,0xC8u8,0xC8u8,0x00u8,0x00u8,0x00u8,
+  0x48u8,0x8Bu8,0x04u8,0xC8u8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  movq %rdx, 8(%rax,%rcx,8)\n  movq 16(%rax,%rcx,8), %rax\n  movq %rdx, 200(%rax,%rcx,8)\n  movq (%rax,%rcx,8), %rax\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 10u64 }
+    if sov_len() != 22u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 22u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (14u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

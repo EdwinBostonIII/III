@@ -196,12 +196,24 @@ fn sov_rex_sib(regfield: u32, index: u32, base: u32) {
     sov_rex(1u32, r, x, b)
 }
 fn sov_sib(scale: u32, index: u32, base: u32) { sov_emit((sov_scalelog(scale) << 6u32) | ((index & 7u32) << 3u32) | (base & 7u32)) }
-fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 @export {   /* movq (%base,%index,scale),%dst */
-    sov_rex_sib(dst, index, base)  sov_emit(0x8Bu32)  sov_modrm(0u32, dst, 4u32)  sov_sib(scale, index, base)  return 0i32
+/* ModRM(SIB)+disp: mod=00 (disp 0, base not rbp/r13) | mod=01 (disp8) | mod=10 (disp32) */
+fn sov_sib_modrm_disp(reg: u32, base: u32, index: u32, scale: u32, disp: i32) {
+    let mut m8 : u32 = 0u32
+    let mut m32 : u32 = 0u32
+    if disp == 0i32 { if (base & 7u32) == 5u32 { m8 = 1u32 } }      /* rbp/r13 base needs an explicit disp8=0 */
+    else { if disp >= -128i32 { if disp <= 127i32 { m8 = 1u32 } else { m32 = 1u32 } } else { m32 = 1u32 } }
+    if m32 == 1u32 { sov_modrm(2u32, reg, 4u32)  sov_sib(scale, index, base)  sov_imm((disp as u32) as u64, 4u32) }
+    else { if m8 == 1u32 { sov_modrm(1u32, reg, 4u32)  sov_sib(scale, index, base)  sov_emit((disp as u32) & 0xFFu32) }
+    else { sov_modrm(0u32, reg, 4u32)  sov_sib(scale, index, base) } }
 }
-fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 @export {  /* movq %src,(%base,%index,scale) */
-    sov_rex_sib(src, index, base)  sov_emit(0x89u32)  sov_modrm(0u32, src, 4u32)  sov_sib(scale, index, base)  return 0i32
+fn sov_load_sib_d(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {   /* movq disp(%base,%index,scale),%dst */
+    sov_rex_sib(dst, index, base)  sov_emit(0x8Bu32)  sov_sib_modrm_disp(dst, base, index, scale, disp)  return 0i32
 }
+fn sov_store_sib_d(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {  /* movq %src,disp(%base,%index,scale) */
+    sov_rex_sib(src, index, base)  sov_emit(0x89u32)  sov_sib_modrm_disp(src, base, index, scale, disp)  return 0i32
+}
+fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 @export { return sov_load_sib_d(dst, base, index, scale, 0i32) }
+fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 @export { return sov_store_sib_d(src, base, index, scale, 0i32) }
 
 /* ── ALU reg,reg (op %src,%dst) : REX.W <opcode> /r ── */
 fn sov_alu_rr(opcode: u32, dst: u32, src: u32) {

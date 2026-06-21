@@ -166,6 +166,9 @@ fn sov_store_base(reg: u32, base: u32, disp: i32) -> i32 @export {
 fn sov_load_base(reg: u32, base: u32, disp: i32) -> i32 @export {
     sov_rexwb(reg, base)  sov_emit(0x8Bu32)  sov_membase_modrm(reg, base, disp)  return 0i32
 }
+/* back-compat aliases -- the test_encode unit gate pins the rbp disp8 form by the old names (rbp=5). */
+fn sov_store_rbp8(reg: u32, disp: i32) -> i32 @export { return sov_store_base(reg, 5u32, disp) }
+fn sov_load_rbp8(reg: u32, disp: i32) -> i32 @export { return sov_load_base(reg, 5u32, disp) }
 /* mov %reg, disp32(%rip) : REX.W 89 /r mod=00 rm=101 disp32  (RIP-relative; a REL32 relocation site) */
 fn sov_store_rip(reg: u32, disp: i32) -> i32 @export {
     let mut r : u32 = 0u32

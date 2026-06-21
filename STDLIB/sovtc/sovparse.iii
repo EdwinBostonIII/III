@@ -59,6 +59,8 @@ extern @abi(c-msvc-x64) fn sov_jcc_rel32(cc: u32, rel: i32) -> i32 from "sovas.i
 extern @abi(c-msvc-x64) fn sov_jmp_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_call_rel32(rel: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movl_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_reset() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_emit(sec: u32, b: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_bss_add(n: u32) -> i32 from "sovas.iii"
@@ -98,6 +100,8 @@ var OPD : i32 = 0i32      /* mem displacement */
 var OPI : i64 = 0i64      /* immediate */
 var OPSEC : u32 = 0u32    /* sym(%rip): resolved target section */
 var OPOFF : i32 = 0i32    /* sym(%rip): resolved offset within that section (the disp32 addend) */
+var OPINDEX : u32 = 0u32  /* SIB (OPK=4): index register */
+var OPSCALE : u32 = 1u32  /* SIB: scale (1/2/4/8) */
 
 /* the data-symbol table (pass 1).  section ids: TEXT=0 DATA=1 RODATA=2 BSS=3 OTHER=9. */
 const SEC_TEXT : u32 = 0u32
@@ -282,11 +286,19 @@ fn sp_operand() {
         if sp_ch() == C_LP { sp_adv()  if sp_ch() == C_PCT { sp_adv() }  sp_reg()  if sp_ch() == C_RP { sp_adv() } }
         return
     }
-    /* memory: [disp]('%'base) */
+    /* memory: [disp](%base[,%index,scale]) */
     OPK = 2u32
     OPD = 0i32
     if (c == C_MIN) { OPD = sp_num() as i32 } else { if is_digit(c) == 1u32 { OPD = sp_num() as i32 } }
-    if sp_ch() == C_LP { sp_adv()  if sp_ch() == C_PCT { sp_adv() }  OPR = sp_reg()  if sp_ch() == C_RP { sp_adv() } }
+    if sp_ch() == C_LP {
+        sp_adv()  if sp_ch() == C_PCT { sp_adv() }  OPR = sp_reg()
+        if sp_ch() == C_COM {                                   /* SIB: ,%index,scale -> OPK=4 */
+            sp_adv()  if sp_ch() == C_PCT { sp_adv() }  OPINDEX = sp_reg()
+            if sp_ch() == C_COM { sp_adv()  OPSCALE = sp_num() as u32 }
+            OPK = 4u32
+        }
+        if sp_ch() == C_RP { sp_adv() }
+    }
 }
 
 /* read the mnemonic token into m0..m4 (we only need first 5 chars); returns length */
@@ -312,6 +324,8 @@ var S1D : i32 = 0i32
 var S1I : i64 = 0i64
 var S1SEC : u32 = 0u32
 var S1OFF : i32 = 0i32
+var S1INDEX : u32 = 0u32
+var S1SCALE : u32 = 1u32
 var PARSE_ERR : u32 = 0u32   /* set on an unknown mnemonic; sovparse returns nonzero so the gate fails LOUDLY */
 
 /* sibling call: callq L_x (L_x a .text label) -> E8 + computed disp32 (5 bytes), no reloc.  The target name
@@ -362,7 +376,7 @@ fn sp_try_branch() -> u32 {
 
 /* read two comma-separated operands (op1 saved to S1*, op2 in OP*) */
 fn sp_two_ops() {
-    sp_operand()  S1K = OPK  S1R = OPR  S1D = OPD  S1I = OPI  S1SEC = OPSEC  S1OFF = OPOFF
+    sp_operand()  S1K = OPK  S1R = OPR  S1D = OPD  S1I = OPI  S1SEC = OPSEC  S1OFF = OPOFF  S1INDEX = OPINDEX  S1SCALE = OPSCALE
     sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
     sp_operand()
 }
@@ -381,6 +395,8 @@ fn sp_dispatch_instr() {
         if S1K == 1u32 { if OPK == 0u32 { sov_mov_imm32(OPR, S1I as i32) } }
         if S1K == 3u32 { if OPK == 0u32 { sov_load_rip_sym(OPR, S1SEC, S1OFF) } }
         if S1K == 0u32 { if OPK == 3u32 { sov_store_rip_sym(S1R, OPSEC, OPOFF) } }
+        if S1K == 0u32 { if OPK == 4u32 { sov_store_sib(S1R, OPR, OPINDEX, OPSCALE) } }   /* movq %s,(base,idx,sc) */
+        if S1K == 4u32 { if OPK == 0u32 { sov_load_sib(OPR, S1R, S1INDEX, S1SCALE) } }    /* movq (base,idx,sc),%d */
         return
     }
     if mn_is(108u32,101u32,97u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_lea_rip_sym(OPR, S1SEC, S1OFF)  return }  /* leaq */

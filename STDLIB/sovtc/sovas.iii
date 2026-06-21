@@ -186,6 +186,22 @@ fn sov_store_sib8(base: u32, index: u32, scale_log: u32, src: u32) -> i32 @expor
     sov_emit(0x88u32)  sov_modrm(0u32, src, 4u32)
     sov_emit((scale_log << 6u32) | ((index & 7u32) << 3u32) | (base & 7u32))  return 0i32
 }
+/* ── 64-bit SIB-memory load/store (movq (%base,%index,scale),%reg and the reverse), mod=00 rm=100(SIB) ── */
+fn sov_scalelog(scale: u32) -> u32 { if scale == 2u32 { return 1u32 }  if scale == 4u32 { return 2u32 }  if scale == 8u32 { return 3u32 }  return 0u32 }
+fn sov_rex_sib(regfield: u32, index: u32, base: u32) {
+    let mut r : u32 = 0u32  let mut x : u32 = 0u32  let mut b : u32 = 0u32
+    if regfield >= 8u32 { r = 1u32 }
+    if index >= 8u32 { x = 1u32 }
+    if base >= 8u32 { b = 1u32 }
+    sov_rex(1u32, r, x, b)
+}
+fn sov_sib(scale: u32, index: u32, base: u32) { sov_emit((sov_scalelog(scale) << 6u32) | ((index & 7u32) << 3u32) | (base & 7u32)) }
+fn sov_load_sib(dst: u32, base: u32, index: u32, scale: u32) -> i32 @export {   /* movq (%base,%index,scale),%dst */
+    sov_rex_sib(dst, index, base)  sov_emit(0x8Bu32)  sov_modrm(0u32, dst, 4u32)  sov_sib(scale, index, base)  return 0i32
+}
+fn sov_store_sib(src: u32, base: u32, index: u32, scale: u32) -> i32 @export {  /* movq %src,(%base,%index,scale) */
+    sov_rex_sib(src, index, base)  sov_emit(0x89u32)  sov_modrm(0u32, src, 4u32)  sov_sib(scale, index, base)  return 0i32
+}
 
 /* ── ALU reg,reg (op %src,%dst) : REX.W <opcode> /r ── */
 fn sov_alu_rr(opcode: u32, dst: u32, src: u32) {

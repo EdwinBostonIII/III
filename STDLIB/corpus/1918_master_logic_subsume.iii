@@ -1,0 +1,44 @@
+/* 1918_master_logic_subsume.iii  --  PHASE 5: SUBSUMPTION + CAPSTONE.  The real NAMED primitive logic6
+ * (l6_and / l6_or / l6_not) is shattered into bare geometry and PROVED to be nothing more than a geometric
+ * fold over the Master Logic Web -- the sovereign, in-III justification for deprecation by attrition.
+ *
+ * No logic taken as gospel: the order is DERIVED from l6_and's observed behaviour (a<=b iff l6_and(a,b)==a),
+ * the involution from l6_not.  Then the web's universal verbs are proved to reproduce the named primitive
+ * EXACTLY over all 6 values.
+ *
+ *   code 11 meet  : the web's assim_meet does NOT equal l6_and over all 36 pairs (subsumption of AND fails)
+ *   code 12 join  : assim_join does NOT equal l6_or  (subsumption of OR fails)
+ *   code 13 not   : assim_complement does NOT equal l6_not over all 6 values (subsumption of NOT fails)
+ *   code 14 gate  : the sovereign redundancy gate did not certify the named primitive a geometric fold
+ *   code 15 TEETH : a shatter WITHOUT the order still "subsumed" meet -- the proof is vacuous (it must fail)
+ * exit 99 = the named primitive logic6 is provably meet/join/complement @ geometry -- the name is redundant.
+ */
+module m1918
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn ml_shatter_logic6() -> i32 from "master_logic.iii"
+extern @abi(c-msvc-x64) fn ml_shatter_reflect_only() -> i32 from "master_logic.iii"
+extern @abi(c-msvc-x64) fn ml_subsumes_meet() -> u8 from "master_logic.iii"
+extern @abi(c-msvc-x64) fn ml_subsumes_join() -> u8 from "master_logic.iii"
+extern @abi(c-msvc-x64) fn ml_subsumes_complement() -> u8 from "master_logic.iii"
+extern @abi(c-msvc-x64) fn ml_named_is_redundant() -> u8 from "master_logic.iii"
+
+fn main() -> u64 {
+    isub_reset()
+    ml_shatter_logic6()                               /* shatter the REAL logic6 into the web */
+
+    /* the web's universal verbs reproduce the named primitive EXACTLY */
+    if ml_subsumes_meet() != 1u8 { return 11u64 }     /* assim_meet == l6_and over all 36 pairs */
+    if ml_subsumes_join() != 1u8 { return 12u64 }     /* assim_join == l6_or */
+    if ml_subsumes_complement() != 1u8 { return 13u64 }  /* assim_complement == l6_not over all 6 */
+
+    /* the sovereign gate: the named primitive is provably a geometric fold -- deletion justified */
+    if ml_named_is_redundant() != 1u8 { return 14u64 }
+
+    /* TEETH: a shatter WITHOUT the derived order cannot reproduce the named op -- the proof is non-vacuous */
+    isub_reset()
+    ml_shatter_reflect_only()
+    if ml_subsumes_meet() == 1u8 { return 15u64 }
+
+    return 99u64
+}

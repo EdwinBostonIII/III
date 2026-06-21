@@ -1042,6 +1042,13 @@ MODULES=(
     # anti-geometry PERSISTS, so the system gets smarter.  Consumed by corpus 1917; reads only the assimilate
     # web -- BSS-neutral, compiler-unreferenced.
     "omnia/reverse_search"
+    # master_logic: PHASE 5 -- SUBSUMPTION + CAPSTONE (deprecation by attrition).  Takes the REAL named
+    # primitive logic6 (l6_and/l6_or/l6_not) as a BLACK BOX, shatters its behaviour into bare geometry (the
+    # order DERIVED from l6_and -- no logic taken as gospel), and PROVES the web's universal verbs reproduce
+    # it exactly over all values (assim_meet==l6_and, etc.).  ml_named_is_redundant is the sovereign in-III
+    # gate certifying a name is provably a geometric fold -- the justification for retiring it.  Consumed by
+    # corpus 1918; reads logic6's behaviour + the assimilate web -- BSS-neutral, compiler-unreferenced.
+    "omnia/master_logic"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

@@ -1,0 +1,115 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\master_logic.iii
+ *
+ * III STDLIB - omnia::master_logic  --  PHASE 5 of the Master Logic Assimilation: SUBSUMPTION + CAPSTONE.
+ *
+ * "Deprecation by attrition": the endgame in which a real NAMED primitive is proved to be nothing more than
+ * a geometric fold over the Master Logic Web -- so the name is redundant.  This takes the REAL logic6
+ * (a 6-valued De Morgan algebra: l6_and / l6_or / l6_not) as a BLACK BOX, shatters its BEHAVIOUR into bare
+ * geometry, and proves the web's recovered universal verbs reproduce the named primitive EXACTLY over every
+ * value -- the sovereign, in-III justification for deleting the name.
+ *
+ * THE SHATTER (no logic taken as gospel): the order is DERIVED from l6_and's behaviour --  a <= b  iff
+ * l6_and(a,b) == a  (the meet absorbs the smaller) -- and the involution from l6_not.  Nothing about
+ * logic6's internal structure is assumed; only its observed input/output is read and re-expressed as
+ * {BELOW, REFLECT} blocks in the web.
+ *
+ * THE SUBSUMPTION (the proof the name dissolves): over all 36 value-pairs,
+ *     assim_meet       == l6_and   (the universal conjunction IS the named AND)
+ *     assim_join       == l6_or    (the universal disjunction IS the named OR)
+ *     assim_complement == l6_not   (the universal involution IS the named NOT)
+ * If all three hold, the named primitive is PROVABLY a geometric fold (ml_named_is_redundant) -- the
+ * sovereign gate that licenses its deprecation.  The mechanism is general: any lattice-structured named
+ * primitive is shattered and subsumed the same way (the "also all others" horizon).
+ *
+ * NOT observational learning: the order is a fixed derivation from behaviour, the verbs fixed folds over
+ * geometry.  Ring R0.  K 1.00.  NIH: reads only logic6's behaviour + the sealed assimilate web.
+ */
+module omnia_master_logic
+
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_join(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const L6_N      : u32 = 6u32
+
+/* shatter the REAL logic6 into the web: derive the order from l6_and's behaviour, the involution from
+ * l6_not -- NO assumption about logic6's internals (the value codes are just point addresses). */
+fn ml_shatter_logic6() -> i32 @export {
+    l6_init()
+    let mut a : u32 = 0u32
+    while a < L6_N {
+        let mut b : u32 = 0u32
+        while b < L6_N {
+            if a != b { if l6_and(a, b) == a { assim_add(V_BELOW, a, b) } }   /* a <= b */
+            b = b + 1u32
+        }
+        assim_add(V_REFLECT, a, l6_not(a))                                    /* the involution */
+        a = a + 1u32
+    }
+    return 0i32
+}
+
+/* teeth control: shatter the involution ONLY (no order) -- meet cannot then be reproduced. */
+fn ml_shatter_reflect_only() -> i32 @export {
+    l6_init()
+    let mut a : u32 = 0u32
+    while a < L6_N {
+        assim_add(V_REFLECT, a, l6_not(a))
+        a = a + 1u32
+    }
+    return 0i32
+}
+
+/* SUBSUMPTION: the web's geometric meet reproduces the named l6_and over every value-pair. */
+fn ml_subsumes_meet() -> u8 @export {
+    let mut a : u32 = 0u32
+    while a < L6_N {
+        let mut b : u32 = 0u32
+        while b < L6_N {
+            if assim_meet(a, b) != l6_and(a, b) { return 0u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* the web's geometric join reproduces the named l6_or over every value-pair. */
+fn ml_subsumes_join() -> u8 @export {
+    let mut a : u32 = 0u32
+    while a < L6_N {
+        let mut b : u32 = 0u32
+        while b < L6_N {
+            if assim_join(a, b) != l6_or(a, b) { return 0u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* the web's geometric complement reproduces the named l6_not over every value. */
+fn ml_subsumes_complement() -> u8 @export {
+    let mut a : u32 = 0u32
+    while a < L6_N {
+        if assim_complement(a) != l6_not(a) { return 0u8 }
+        a = a + 1u32
+    }
+    return 1u8
+}
+
+/* THE SOVEREIGN GATE: the named primitive is PROVABLY a geometric fold over the web -- the name is
+ * redundant, its deprecation licensed.  Returns 1 iff all three operations are subsumed exactly. */
+fn ml_named_is_redundant() -> u8 @export {
+    if ml_subsumes_meet() != 1u8 { return 0u8 }
+    if ml_subsumes_join() != 1u8 { return 0u8 }
+    if ml_subsumes_complement() != 1u8 { return 0u8 }
+    return 1u8
+}

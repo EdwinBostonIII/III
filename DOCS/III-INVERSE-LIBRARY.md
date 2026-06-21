@@ -80,6 +80,17 @@ The kernel is real: `event_substrate` (state = fold over an append-only event lo
 
 ---
 
+## 10. THE SPINE — wiring the pipeline + real-system enmeshment (a correction)
+
+**Honest correction (adversarial pass).** The first cut of Phases 3–5 + the four audits operated on *hand-authored* lattices (`put(V_BELOW,0,2)` literals for the De Morgan diamond / MO2 / Kleene) and **never called** `xii_isub_*` (Phase 1) or `unravel_*` (Phase 2) — the shredder produced geometry that flowed nowhere, and the inputs were typed-in, not shattered from real executions. (Phase 5's `logic6` shatter was the exception — it *is* a real behavioral shatter.) Two modules close the gap:
+
+- **`omnia/ingest.iii`** (the spine, KAT `1923` = 99). A REAL `xii_rewrite` execution flows end-to-end: `xii_isub_normalize` (Phase 1, real firings → witnessed trace) → `unravel_is_chain`/`unravel_height` (Phase 2, confirms the real geometry) → `ingest_extract` (carries it past an `isub_reset`) → `ingest_commit` → `assim_add` (Phase 3, into the web, deduped). The web is built **from a shattered real execution**, the real reduction order survives end-to-end, and re-committing the same execution adds zero blocks (content-addressed zero redundancy on real data).
+- **`omnia/enmesh.iii`** (two real systems, KAT `1924` = 99). `logic6` (6-valued) and `voice` (3-valued) — two REAL named logics — are each taken as a **black box** and shattered from behavior (order derived from `meet`, involution from `not`) onto a canonical frame (bottom→0, top→1). Their shared frame (the bottom<top order + bottom↔top involution — the **common denominator**) merges by content-address (`voice` adds only its 3 distinct blocks); the ONE web then computes BOTH real systems' `meet`/`join`/`complement` exactly via the same verbs.
+
+**Honest boundary:** the eleven *walls* (parity/SAT/GI/Goodstein…) of `1910` are a verb-geometry **taxonomy**, not lattices, so they are outside this `meet`/`join` assimilation engine — a category distinction, not a dodge. The lattice-structured real systems (`logic6`, `voice`, and real XII reduction geometry) are what the engine assimilates.
+
+---
+
 ## 9. THE STRUCTURAL & TRAJECTORY AUDITS (empirical proof of success)
 
 A standard KAT validates the destination; for a substrate whose value is geometry, provenance, and density, four dedicated audits prove the assimilation succeeded. All four = EXIT 99 vs the sealed archive alone.

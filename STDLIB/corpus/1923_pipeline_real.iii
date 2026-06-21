@@ -1,0 +1,73 @@
+/* 1923_pipeline_real.iii  --  THE CONNECTED PIPELINE: a REAL xii_rewrite execution flows end-to-end
+ * xii_isub (Phase 1) -> unravel (Phase 2) -> ingest -> assimilate (Phase 3).  The Master Web is built from
+ * a SHATTERED REAL EXECUTION, deduped by content-address -- NOT from hand-authored block literals.  This is
+ * the spine the assimilation audits were missing.
+ *
+ *   code 11 exec   : the real xii_rewrite did not produce a multi-step trace (nothing to shatter)
+ *   code 12 unravel: Phase 2 does not see Phase 1's real trace as a clean geometry (chain)
+ *   code 13 extract: the carried geometry != the real reduction height (the shredder lost steps)
+ *   code 14 commit : the web built from the real execution is not exactly that geometry (first ingest)
+ *   code 15 dedup  : re-committing the SAME real geometry added blocks (zero-redundancy broken)
+ *   code 16 order  : the real reduction order did not survive into the assimilated web
+ * exit 99 = a real execution shattered by unravel and assimilated into the web, deduped -- pipeline wired.
+ */
+module m1923
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn unravel_is_chain(start: u32) -> u8 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_height(start: u32) -> u32 from "unravel.iii"
+extern @abi(c-msvc-x64) fn ingest_extract() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_commit() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_a(i: u32) -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_b(i: u32) -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let s : u32 = build_term()
+
+    /* PHASE 1: drive the REAL xii_rewrite; the witnessed reduction trace lands on isub */
+    isub_reset()
+    xii_isub_normalize(s)
+    if xii_isub_steps() < 2u32 { return 11u64 }
+
+    /* PHASE 2: the unraveling engine reads Phase 1's REAL trace and confirms its geometry */
+    if unravel_is_chain(s) != 1u8 { return 12u64 }
+    let h : u32 = unravel_height(s)
+
+    /* PHASE 2 -> 3 bridge: carry the shattered geometry out, past the reset */
+    let ext : u32 = ingest_extract()
+    if ext != h { return 13u64 }
+
+    /* PHASE 3: the Master Web is now built FROM THE REAL EXECUTION's geometry, deduped */
+    let a0 : u32 = ingest_a(0u32)
+    let b0 : u32 = ingest_b(0u32)
+    isub_reset()
+    let new1 : u32 = ingest_commit()
+    if assim_web_size() != ext { return 14u64 }       /* the web == the real trace geometry (all new) */
+    if new1 != ext { return 14u64 }
+
+    /* ZERO REDUNDANCY on REAL geometry: re-committing the same execution adds nothing (content-addressed) */
+    let new2 : u32 = ingest_commit()
+    if new2 != 0u32 { return 15u64 }
+    if assim_web_size() != ext { return 15u64 }
+
+    /* the REAL reduction order survived end-to-end into the assimilated web */
+    if assim_leq(a0, b0) != 1u8 { return 16u64 }
+
+    return 99u64
+}

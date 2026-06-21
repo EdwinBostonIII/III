@@ -1,0 +1,106 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\enmesh.iii
+ *
+ * III STDLIB - omnia::enmesh  --  enmesh TWO REAL named logic systems into ONE web by their COMMON
+ * DENOMINATOR, by shattering their BEHAVIOUR (not hand-authored lattices, no logic taken as gospel).
+ *
+ * Each real system (logic6: l6_and/l6_or/l6_not, 6 values ; voice: voice_meet/join/not, 3 values) is taken
+ * as a black box and shattered: its order is DERIVED from meet's behaviour (a<=b iff meet(a,b)==a), its
+ * involution from not.  Both are mapped onto a CANONICAL frame -- each system's bottom (the meet-annihilator)
+ * -> web point 0, its top (the meet-identity) -> web point 1, its interior values -> globally-fresh points.
+ * Because both share that frame, their common structure (the bottom<top order + the bottom<->top involution)
+ * has the SAME geometry and is RECOGNISED-and-MERGED by content-address (assim_add) -- zero redundancy on the
+ * shared denominator -- while each system's distinct interior extends the web.  The ONE web then computes
+ * BOTH real systems through the same verbs.
+ *
+ * NIH: reads only logic6/voice behaviour + the assimilate web.  Ring R0.  K 1.00.
+ */
+module omnia_enmesh
+
+extern @abi(c-msvc-x64) fn l6_init() -> i32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn voice_meet(a: u32, b: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_not(v: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const EN_NONE   : u32 = 0xFFFFFFFFu32
+
+var EN_L6   : [u32; 6]      /* logic6 value -> canonical web point */
+var EN_V    : [u32; 3]      /* voice value  -> canonical web point */
+var EN_NEXT : u32 = 2u32    /* next fresh interior point (0=bottom, 1=top are the shared frame) */
+
+fn enmesh_reset() -> i32 @export { EN_NEXT = 2u32  return 0i32 }
+
+/* bottom = the meet-annihilator (meet(v,x)==v for all x); top = the meet-identity (meet(v,x)==x for all x) */
+fn l6_bottom() -> u32 {
+    let mut v : u32 = 0u32
+    while v < 6u32 { let mut all : u32 = 1u32  let mut x : u32 = 0u32
+        while x < 6u32 { if l6_and(v, x) != v { all = 0u32 }  x = x + 1u32 }
+        if all == 1u32 { return v }  v = v + 1u32 }
+    return EN_NONE
+}
+fn l6_top() -> u32 {
+    let mut v : u32 = 0u32
+    while v < 6u32 { let mut all : u32 = 1u32  let mut x : u32 = 0u32
+        while x < 6u32 { if l6_and(v, x) != x { all = 0u32 }  x = x + 1u32 }
+        if all == 1u32 { return v }  v = v + 1u32 }
+    return EN_NONE
+}
+fn v_bottom() -> u32 {
+    let mut v : u32 = 0u32
+    while v < 3u32 { let mut all : u32 = 1u32  let mut x : u32 = 0u32
+        while x < 3u32 { if voice_meet(v, x) != v { all = 0u32 }  x = x + 1u32 }
+        if all == 1u32 { return v }  v = v + 1u32 }
+    return EN_NONE
+}
+fn v_top() -> u32 {
+    let mut v : u32 = 0u32
+    while v < 3u32 { let mut all : u32 = 1u32  let mut x : u32 = 0u32
+        while x < 3u32 { if voice_meet(v, x) != x { all = 0u32 }  x = x + 1u32 }
+        if all == 1u32 { return v }  v = v + 1u32 }
+    return EN_NONE
+}
+
+/* shatter REAL logic6 onto the canonical frame and assimilate it. */
+fn enmesh_logic6() -> i32 @export {
+    l6_init()
+    let bot : u32 = l6_bottom()
+    let top : u32 = l6_top()
+    let mut z : u32 = 0u32
+    while z < 6u32 { EN_L6[z] = EN_NONE  z = z + 1u32 }
+    EN_L6[bot] = 0u32  EN_L6[top] = 1u32
+    let mut w : u32 = 0u32
+    while w < 6u32 { if w != bot { if w != top { EN_L6[w] = EN_NEXT  EN_NEXT = EN_NEXT + 1u32 } }  w = w + 1u32 }
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        let mut b : u32 = 0u32
+        while b < 6u32 { if a != b { if l6_and(a, b) == a { assim_add(V_BELOW, EN_L6[a], EN_L6[b]) } }  b = b + 1u32 }
+        assim_add(V_REFLECT, EN_L6[a], EN_L6[l6_not(a)])
+        a = a + 1u32
+    }
+    return 0i32
+}
+
+/* shatter REAL voice onto the SAME canonical frame and assimilate it (shared frame merges by content-address). */
+fn enmesh_voice() -> i32 @export {
+    let bot : u32 = v_bottom()
+    let top : u32 = v_top()
+    let mut z : u32 = 0u32
+    while z < 3u32 { EN_V[z] = EN_NONE  z = z + 1u32 }
+    EN_V[bot] = 0u32  EN_V[top] = 1u32
+    let mut w : u32 = 0u32
+    while w < 3u32 { if w != bot { if w != top { EN_V[w] = EN_NEXT  EN_NEXT = EN_NEXT + 1u32 } }  w = w + 1u32 }
+    let mut a : u32 = 0u32
+    while a < 3u32 {
+        let mut b : u32 = 0u32
+        while b < 3u32 { if a != b { if voice_meet(a, b) == a { assim_add(V_BELOW, EN_V[a], EN_V[b]) } }  b = b + 1u32 }
+        assim_add(V_REFLECT, EN_V[a], EN_V[voice_not(a)])
+        a = a + 1u32
+    }
+    return 0i32
+}
+
+fn enmesh_l6_image(v: u32) -> u32 @export { if v < 6u32 { return EN_L6[v] }  return EN_NONE }
+fn enmesh_v_image(v: u32) -> u32 @export { if v < 3u32 { return EN_V[v] }  return EN_NONE }

@@ -1,0 +1,81 @@
+/* 1924_enmesh_two_real.iii  --  TWO REAL named logic systems enmeshed into ONE web by their COMMON
+ * DENOMINATOR, shattered from BEHAVIOUR (not hand-authored lattices).  logic6 (6-valued De Morgan) and
+ * voice (3-valued) are each taken as a black box, mapped onto a canonical frame (bottom->0, top->1), and
+ * assimilated; their shared frame (bottom<top + the bottom<->top involution) is RECOGNISED-and-MERGED by
+ * content-address, while each system's distinct interior extends the web.  The ONE web then computes BOTH
+ * real systems through the same recovered verbs.
+ *
+ *   code 11 dedup   : voice did not merge its shared frame (it added all 6 blocks, not just its 3 new ones)
+ *   code 12 logic6  : the unified web does not compute REAL logic6 (meet/join/complement != l6_and/or/not)
+ *   code 13 voice   : the unified web does not compute REAL voice (meet/join/complement != voice_meet/join/not)
+ *   code 14 common  : the two systems' bottom/top are NOT the same shared web points (no common denominator)
+ * exit 99 = two real logics enmeshed by their common denominator into one executable web, zero redundancy.
+ */
+module m1924
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_join(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn enmesh_reset() -> i32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_logic6() -> i32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_voice() -> i32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_l6_image(v: u32) -> u32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn enmesh_v_image(v: u32) -> u32 from "enmesh.iii"
+extern @abi(c-msvc-x64) fn l6_and(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_or(a: u32, b: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn l6_not(v: u32) -> u32 from "logic6.iii"
+extern @abi(c-msvc-x64) fn voice_meet(a: u32, b: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_join(a: u32, b: u32) -> u32 from "voice.iii"
+extern @abi(c-msvc-x64) fn voice_not(v: u32) -> u32 from "voice.iii"
+
+fn main() -> u64 {
+    isub_reset()
+    enmesh_reset()
+
+    /* assimilate REAL logic6 (behavioural shatter), then REAL voice INTO the same web */
+    enmesh_logic6()
+    let after_l6 : u32 = assim_web_size()
+    enmesh_voice()
+    let after_both : u32 = assim_web_size()
+
+    /* voice's full shatter is 6 blocks (3 order + 3 involution); 3 are the shared frame and merge, so it
+     * must add exactly 3 new -- zero redundancy on the common denominator */
+    let voice_added : u32 = after_both - after_l6
+    if voice_added != 3u32 { return 11u64 }
+
+    /* the unified web computes REAL logic6 through the same verbs (over its canonical images) */
+    let mut a : u32 = 0u32
+    while a < 6u32 {
+        let mut b : u32 = 0u32
+        while b < 6u32 {
+            if assim_meet(enmesh_l6_image(a), enmesh_l6_image(b)) != enmesh_l6_image(l6_and(a, b)) { return 12u64 }
+            if assim_join(enmesh_l6_image(a), enmesh_l6_image(b)) != enmesh_l6_image(l6_or(a, b)) { return 12u64 }
+            b = b + 1u32
+        }
+        if assim_complement(enmesh_l6_image(a)) != enmesh_l6_image(l6_not(a)) { return 12u64 }
+        a = a + 1u32
+    }
+
+    /* the SAME web computes REAL voice through the same verbs */
+    let mut c : u32 = 0u32
+    while c < 3u32 {
+        let mut d : u32 = 0u32
+        while d < 3u32 {
+            if assim_meet(enmesh_v_image(c), enmesh_v_image(d)) != enmesh_v_image(voice_meet(c, d)) { return 13u64 }
+            if assim_join(enmesh_v_image(c), enmesh_v_image(d)) != enmesh_v_image(voice_join(c, d)) { return 13u64 }
+            d = d + 1u32
+        }
+        if assim_complement(enmesh_v_image(c)) != enmesh_v_image(voice_not(c)) { return 13u64 }
+        c = c + 1u32
+    }
+
+    /* THE COMMON DENOMINATOR: both systems' bottom and top are the SAME shared web points (0 and 1) */
+    if enmesh_l6_image(4u32) != 0u32 { return 14u64 }   /* logic6 NULL (bottom) -> 0 */
+    if enmesh_v_image(0u32)  != 0u32 { return 14u64 }   /* voice PASSIVE (bottom) -> 0 (same point) */
+    if enmesh_l6_image(5u32) != 1u32 { return 14u64 }   /* logic6 ALL (top) -> 1 */
+    if enmesh_v_image(2u32)  != 1u32 { return 14u64 }   /* voice ACTIVE (top) -> 1 (same point) */
+
+    return 99u64
+}

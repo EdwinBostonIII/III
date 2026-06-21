@@ -1049,6 +1049,16 @@ MODULES=(
     # gate certifying a name is provably a geometric fold -- the justification for retiring it.  Consumed by
     # corpus 1918; reads logic6's behaviour + the assimilate web -- BSS-neutral, compiler-unreferenced.
     "omnia/master_logic"
+    # ingest: THE SPINE -- wires Phase 1 (xii_isub, real-XII trace) + Phase 2 (unravel, geometry extractor)
+    # into Phase 3 (assimilate).  Carries a real execution's shattered geometry past an isub_reset and
+    # commits it into the Master Web by content-address (deduped) -- the web is built from REAL executions,
+    # not block literals.  Consumed by corpus 1923; reads only isub + assimilate.  BSS-neutral, compiler-unref.
+    "omnia/ingest"
+    # enmesh: enmesh TWO REAL named logics (logic6 + voice) into ONE web by their COMMON DENOMINATOR, shattered
+    # from BEHAVIOUR onto a canonical frame (bottom->0, top->1); the shared frame merges by content-address.
+    # The web computes BOTH real systems via the same verbs.  Consumed by corpus 1924; reads logic6/voice +
+    # the assimilate web.  BSS-neutral, compiler-unreferenced.
+    "omnia/enmesh"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

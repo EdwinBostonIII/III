@@ -1,0 +1,65 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\ingest.iii
+ *
+ * III STDLIB - omnia::ingest  --  THE MISSING SPINE: wire Phase 1 (xii_isub, real-XII encapsulation) and
+ * Phase 2 (unravel, the geometry extractor) into Phase 3 (assimilate, the Master Logic Web).
+ *
+ * Without this the assimilator was fed hand-authored block literals -- the shredder produced geometry that
+ * flowed nowhere.  ingest closes the loop: it reads the GEOMETRY a real execution left on the witnessed bus
+ * (the BELOW reduction-steps xii_isub emitted, that unravel confirmed is a real chain), carries it across an
+ * isub_reset into a buffer, and COMMITS it into the Master Web by content-address (assim_add) -- so the web
+ * is built from a SHATTERED REAL EXECUTION, deduped, not from typed-in lattices.
+ *
+ *   ingest_extract()  -- copy the current isub trace's BELOW geometry into the buffer (survives a reset)
+ *   ingest_commit()   -- assimilate the buffered geometry into the (reset) web, deduped; returns new blocks
+ *   ingest_count / ingest_a / ingest_b -- the carried geometry
+ *
+ * Ring R0.  K 1.00.  NIH: reads only the sealed isub bus + the assimilate web.
+ */
+module omnia_ingest
+
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+
+const V_BELOW : u32 = 0u32
+const ING_CAP : u32 = 256u32
+const ING_NULL: u32 = 0xFFFFFFFFu32
+
+var ING_A : [u32; 256]
+var ING_B : [u32; 256]
+var ING_N : u32 = 0u32
+
+/* carry the current isub trace's BELOW geometry into the buffer (so it survives an isub_reset). */
+fn ingest_extract() -> u32 @export {
+    ING_N = 0u32
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == V_BELOW {
+            if ING_N < ING_CAP {
+                ING_A[ING_N] = isub_a(i)
+                ING_B[ING_N] = isub_b(i)
+                ING_N = ING_N + 1u32
+            }
+        }
+        i = i + 1u32
+    }
+    return ING_N
+}
+
+fn ingest_count() -> u32 @export { return ING_N }
+fn ingest_a(i: u32) -> u32 @export { if i < ING_N { return ING_A[i] }  return ING_NULL }
+fn ingest_b(i: u32) -> u32 @export { if i < ING_N { return ING_B[i] }  return ING_NULL }
+
+/* commit the buffered REAL-execution geometry into the Master Web, deduped by content-address. */
+fn ingest_commit() -> u32 @export {
+    let mut newc : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < ING_N {
+        if assim_add(V_BELOW, ING_A[i], ING_B[i]) == 1u8 { newc = newc + 1u32 }
+        i = i + 1u32
+    }
+    return newc
+}

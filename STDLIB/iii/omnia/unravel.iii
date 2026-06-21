@@ -1,0 +1,127 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\unravel.iii
+ *
+ * III STDLIB - omnia::unravel  --  PHASE 2 of the Master Logic Assimilation: THE UNRAVELING ENGINE.
+ *
+ * A pure FOLD over a real execution trace already on the witnessed metal bus (omnia::isub) that strips it
+ * to its GEOMETRY and synthesises a VERB for every transition -- no black box survives.  It does not run
+ * anything; it READS the witnessed blocks Phase 1 (xii_isub) recorded and extracts pure structure:
+ *
+ *   GEOMETRY:
+ *     - unravel_height(start)  -- the length of the strict descending chain from `start` (0xFFFFFFFF if the
+ *                                 trace is not a clean chain from start).  The reduction's "depth".
+ *     - unravel_is_chain(start)-- the whole trace is ONE strict chain (a finite total order), no fork/cycle.
+ *     - unravel_has_lasso()    -- does any produced term RECUR? (a lasso).  For a terminating reduction: 0.
+ *                                 (the event_substrate lasso idea, read directly off the isub geometry.)
+ *     - unravel_bottom(start)  -- the chain's bottom = the normal form (the geometry's infimum).
+ *   VERBS (the synthesiser): unravel_verb(i) classifies transition i as one of
+ *     REDUCE (a fresh strict descent) | RECUR (its target recurs -- a lasso edge) | IDENTITY (a == b) |
+ *     REFLECT (the block is a REFLECT involution).  Every block reduces to a (verb, geometry) pair.
+ *   NO-BLACK-BOX gate: unravel_all_geometric() asserts every recorded event is a {BELOW,REFLECT} block --
+ *     the trace is FULLY translated to geometry+verb (isub enforces this at emit; the fold re-confirms it).
+ *
+ * Extracting these from a REAL xii_rewrite trace PROVES, from the witness rather than by assertion, that
+ * III's rewriting is a terminating strict descent (acyclic geometry, lasso == 0).  Pure fixed folds (no
+ * observational learning, no hashing).  Ring R0.  K 1.00.  NIH: reads only the sealed isub bus.
+ */
+module omnia_unravel
+
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const U_NONE    : u32 = 0xFFFFFFFFu32
+
+/* the synthesised verbs */
+const VERB_REDUCE   : u32 = 0u32
+const VERB_RECUR    : u32 = 1u32
+const VERB_IDENTITY : u32 = 2u32
+const VERB_REFLECT  : u32 = 3u32
+
+/* NO-BLACK-BOX: every recorded event is a {BELOW, REFLECT} geometric block (no name, no opaque kind). */
+fn unravel_all_geometric() -> u8 @export {
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        let v : u32 = isub_verb(i)
+        if v != V_BELOW { if v != V_REFLECT { return 0u8 } }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* the strict descending chain height from `start`: each BELOW block whose b == the running current advances
+ * current to a (a != b strictly).  Returns U_NONE if a self-loop (a == b) appears on the walked chain. */
+fn unravel_height(start: u32) -> u32 @export {
+    let n : u32 = isub_count()
+    let mut cur : u32 = start
+    let mut h : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == V_BELOW {
+            if isub_b(i) == cur {
+                if isub_a(i) == cur { return U_NONE }   /* not a strict descent */
+                cur = isub_a(i)
+                h = h + 1u32
+            }
+        }
+        i = i + 1u32
+    }
+    return h
+}
+
+/* the whole trace is ONE strict chain: the walk from start consumes exactly every BELOW block. */
+fn unravel_is_chain(start: u32) -> u8 @export {
+    let h : u32 = unravel_height(start)
+    if h == U_NONE { return 0u8 }
+    let n : u32 = isub_count()
+    let mut below : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n { if isub_verb(i) == V_BELOW { below = below + 1u32 }  i = i + 1u32 }
+    if h == below { return 1u8 }
+    return 0u8
+}
+
+/* LASSO: any produced term (block 'a') that recurs as a later block 'a' is a cycle in the geometry. */
+fn unravel_has_lasso() -> u8 @export {
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        let ai : u32 = isub_a(i)
+        let mut j : u32 = i + 1u32
+        while j < n {
+            if isub_a(j) == ai { return 1u8 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+/* the geometry's bottom (infimum) -- walk the chain from start to its end. */
+fn unravel_bottom(start: u32) -> u32 @export {
+    let n : u32 = isub_count()
+    let mut cur : u32 = start
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == V_BELOW { if isub_b(i) == cur { cur = isub_a(i) } }
+        i = i + 1u32
+    }
+    return cur
+}
+
+/* the synthesised VERB of transition i. */
+fn unravel_verb(i: u32) -> u32 @export {
+    if i >= isub_count() { return U_NONE }
+    if isub_verb(i) == V_REFLECT { return VERB_REFLECT }
+    if isub_a(i) == isub_b(i) { return VERB_IDENTITY }
+    let ai : u32 = isub_a(i)
+    let mut j : u32 = 0u32
+    while j < i {
+        if isub_a(j) == ai { return VERB_RECUR }
+        j = j + 1u32
+    }
+    return VERB_REDUCE
+}

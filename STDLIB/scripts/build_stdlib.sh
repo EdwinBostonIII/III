@@ -1022,6 +1022,12 @@ MODULES=(
     # (xii_isub_prefix) the state-mutating XII discards.  Consumed by corpus 1914.  Externs isub + the live
     # xii_rewrite -- authors no new rewriting, no new crypto; BSS-neutral, compiler-unreferenced.
     "omnia/xii_isub"
+    # unravel: PHASE 2 -- THE UNRAVELING ENGINE.  A pure fold that strips a real execution trace on the isub
+    # bus to its GEOMETRY (strict-descent chain height, acyclicity/lasso, infimum) and synthesises a VERB
+    # (REDUCE/RECUR/IDENTITY/REFLECT) for every transition -- proving from the witness that III's rewriting
+    # is a terminating strict descent, with no black box surviving.  Consumed by corpus 1915; reads only the
+    # sealed isub bus -- zero new state, BSS-neutral, compiler-unreferenced.
+    "omnia/unravel"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

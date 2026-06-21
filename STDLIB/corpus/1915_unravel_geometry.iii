@@ -1,0 +1,82 @@
+/* 1915_unravel_geometry.iii  --  PHASE 2: the UNRAVELING ENGINE strips a REAL xii_rewrite trace (recorded
+ * on the witnessed bus by Phase 1) to pure GEOMETRY + synthesised VERBS.  It PROVES, from the witness rather
+ * than by assertion, that III's rewriting is a terminating strict descent (a finite chain, acyclic), and
+ * that every recorded event is a (verb, geometry) pair -- no black box.
+ *
+ *   code 11 no-black-box : some recorded event is not a {BELOW,REFLECT} geometric block
+ *   code 12 chain        : the real reduction trace is not ONE strict descending chain
+ *   code 13 height       : the chain height != the real reduction step count
+ *   code 14 acyclic      : the terminating reduction shows a lasso (it must not)
+ *   code 15 bottom       : the geometry's bottom != XII's real normal form
+ *   code 16 verbs        : some transition of a pure reduction was not synthesised as REDUCE
+ *   code 17 TEETH        : injecting a RECURRING block did NOT register as a lasso / a RECUR verb (the
+ *                          detectors are vacuous)
+ * exit 99 = a real execution unravelled into geometry+verbs; terminating strict descent, witnessed.
+ */
+module m1915
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn unravel_all_geometric() -> u8 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_height(start: u32) -> u32 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_is_chain(start: u32) -> u8 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_has_lasso() -> u8 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_bottom(start: u32) -> u32 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_verb(i: u32) -> u32 from "unravel.iii"
+
+const VERB_REDUCE : u32 = 0u32
+const VERB_RECUR  : u32 = 1u32
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let s : u32 = build_term()
+    isub_reset()
+    let nrm : u32 = xii_isub_normalize(s)        /* real XII reduction, witnessed on the bus */
+    let steps : u32 = xii_isub_steps()
+
+    /* code 11: every recorded event is a geometry/verb pair (no black box) */
+    if unravel_all_geometric() != 1u8 { return 11u64 }
+
+    /* code 12: the real reduction trace is ONE strict descending chain */
+    if unravel_is_chain(s) != 1u8 { return 12u64 }
+
+    /* code 13: the chain height equals the real reduction step count */
+    if unravel_height(s) != steps { return 13u64 }
+
+    /* code 14: a terminating reduction is ACYCLIC -- no lasso */
+    if unravel_has_lasso() != 0u8 { return 14u64 }
+
+    /* code 15: the geometry's bottom is XII's real normal form */
+    if unravel_bottom(s) != nrm { return 15u64 }
+
+    /* code 16: every transition of this pure reduction is synthesised as REDUCE */
+    let mut i : u32 = 0u32
+    while i < steps {
+        if unravel_verb(i) != VERB_REDUCE { return 16u64 }
+        i = i + 1u32
+    }
+
+    /* code 17: TEETH -- inject a block whose target RECURS (the term produced by step 1 reappears).
+     * The lasso detector must now fire, and that block's verb must be RECUR -- proving they are not vacuous. */
+    let recurring : u32 = isub_a(0u32)           /* the term produced by the first real step */
+    let last : u32 = xii_isub_steps()            /* index of the block we are about to add */
+    isub_emit(0u32, recurring, nrm)              /* BELOW(recurring, nrm): re-introduces `recurring` as a target */
+    if unravel_has_lasso() != 1u8 { return 17u64 }
+    if unravel_verb(last) != VERB_RECUR { return 17u64 }
+
+    return 99u64
+}

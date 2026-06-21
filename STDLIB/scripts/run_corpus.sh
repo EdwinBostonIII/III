@@ -52,6 +52,7 @@ declare -A EXPECTED=(
     [1910_grail_logic_web]=99
     [1913_isub_cav]=99
     [1914_xii_encapsulated]=99
+    [1915_unravel_geometry]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

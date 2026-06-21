@@ -3,13 +3,13 @@
  * III sovereign toolchain -- sovld, the PE32+ LINKER/IMAGE WRITER (S2).  Replaces gcc's ld -- NO gcc, NO ld.
  * Emits a PE32+ executable to _O_BINARY stdout via putchar.
  *
- * S2.2 scope:
  *   - multi-section: .text [+ .data] [+ .idata], section-aligned RVAs.
- *   - APPLY internal REL32 relocations (.data) : disp = target_RVA - (field_RVA + 4).
- *   - IMPORTS (S2.2b): for each extern (sov_ext, assumed kernel32), build the import directory + ILT + IAT +
- *     hint/name + DLL name in a READ|WRITE .idata section; set data directories IMPORT(1) + IAT(12); generate a
- *     jump thunk per import (FF 25 jmp *[IAT-entry], rip-relative) appended to .text; patch the call's E8 REL32
- *     to the thunk's RVA.  So an EXTERN-CALLING program (e.g. ExitProcess(99)) links + runs sovereignly.
+ *   - APPLY internal REL32 relocations (.data): disp = target_RVA - (field_RVA + 4).
+ *   - IMPORTS, MULTI-DLL: externs are grouped by DLL (heuristic: a CamelCase/UPPER-first name is a Windows
+ *     API -> kernel32; a lowercase-first name is a CRT fn -> msvcrt).  The .idata section holds one import
+ *     descriptor per used DLL, each with its own ILT + IAT + DLL-name; one shared hint/name table; and a jump
+ *     thunk per import appended to .text.  Data dirs IMPORT(1) + IAT(12).  The named E8 call's REL32 is patched
+ *     to its thunk's RVA.  So a program importing from msvcrt AND kernel32 links + runs sovereignly.
  *   - entry = the `main` export (else .text+0); ret-only entries exit via RtlUserThreadStart.
  *
  * NIH; reads sovas (.text/.data/relocs/externs) + sovparse (exports) + msvcrt (putchar/_setmode).  Ring R0.
@@ -36,7 +36,14 @@ extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 
 var LDPOS : u32 = 0u32
 var TEXTBUF : [u8; 16384]
-var HN_RVA  : [u32; 64]      /* per-import hint/name RVA */
+var EXT_DLL    : [u32; 64]   /* DLL id (0=kernel32, 1=msvcrt) per import */
+var EXT_HNRVA  : [u32; 64]   /* hint/name RVA per import */
+var EXT_IATRVA : [u32; 64]   /* IAT-entry RVA per import */
+var DLL_USED   : [u32; 4]
+var DLL_COUNT  : [u32; 4]
+var DLL_ILTRVA : [u32; 4]
+var DLL_IATRVA : [u32; 4]
+var DLL_NAMERVA: [u32; 4]
 
 fn p8(b: u32) { putchar((b & 0xFFu32) as i32)  LDPOS = LDPOS + 1u32 }
 fn p16(v: u32) { p8(v)  p8(v >> 8u32) }
@@ -65,6 +72,17 @@ fn find_main_off() -> u32 {
     }
     return 0u32
 }
+/* DLL of an import: UPPER-first name => Windows API => kernel32(0); else CRT => msvcrt(1) */
+fn ext_dll_of(slot: u32) -> u32 {
+    let c0 : u32 = sov_ext_namebyte(slot, 0u32)
+    if c0 >= 65u32 { if c0 <= 90u32 { return 0u32 } }
+    return 1u32
+}
+fn dll_name_len(d: u32) -> u32 { if d == 0u32 { return 13u32 }  return 11u32 }   /* kernel32.dll\0 / msvcrt.dll\0 */
+fn emit_dll_name(d: u32) {
+    if d == 0u32 { p8(107u32) p8(101u32) p8(114u32) p8(110u32) p8(101u32) p8(108u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32) }
+    else { p8(109u32) p8(115u32) p8(118u32) p8(99u32) p8(114u32) p8(116u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32) }
+}
 
 fn sovld_emit() -> i32 @export {
     _setmode(1i32, 0x8000i32)
@@ -73,7 +91,7 @@ fn sovld_emit() -> i32 @export {
     let mut i : u32 = 0u32
     while i < textlen { TEXTBUF[i as u64] = sov_at(i) as u8  i = i + 1u32 }
 
-    let k : u32 = sov_ext_n()              /* number of imports (thunks) */
+    let k : u32 = sov_ext_n()
     let new_textlen : u32 = textlen + (k * 6u32)
     let text_rva : u32 = 0x1000u32
     let text_mem : u32 = alignup(new_textlen, 0x1000u32)
@@ -85,74 +103,69 @@ fn sovld_emit() -> i32 @export {
     let mut has_idata : u32 = 0u32
     if k > 0u32 { has_idata = 1u32 }
 
-    /* section RVAs in order .text / .data / .idata */
     let mut cur_rva : u32 = text_rva + text_mem
     let mut data_rva : u32 = 0u32
     let data_mem : u32 = alignup(datalen, 0x1000u32)
     if has_data == 1u32 { data_rva = cur_rva  cur_rva = cur_rva + data_mem }
-    let mut idata_rva : u32 = 0u32
 
-    /* ── .idata internal layout (IDT | ILT | IAT | hint/names | dll name) ── */
-    let ilt_off : u32 = 40u32                         /* after 2 import descriptors */
-    let iat_off : u32 = 40u32 + ((k + 1u32) * 8u32)
-    let hn_off  : u32 = iat_off + ((k + 1u32) * 8u32)
+    /* ── classify imports by DLL + lay out .idata ── */
+    let mut idata_rva : u32 = 0u32
     let mut idata_len : u32 = 0u32
-    let mut dll_rva : u32 = 0u32
-    let mut iat_rva : u32 = 0u32
     let mut idt_rva : u32 = 0u32
-    let mut ilt_rva : u32 = 0u32
+    let mut dnum : u32 = 0u32
+    let mut iat_total : u32 = 0u32
+    let mut iat_dir_rva : u32 = 0u32
     if has_idata == 1u32 {
         idata_rva = cur_rva
         idt_rva = idata_rva
-        ilt_rva = idata_rva + ilt_off
-        iat_rva = idata_rva + iat_off
-        let mut cur : u32 = hn_off
-        let mut s : u32 = 0u32
-        while s < k {
-            HN_RVA[s as u64] = idata_rva + cur
-            let nl : u32 = sov_ext_namelen(s)
-            cur = cur + alignup(2u32 + nl + 1u32, 2u32)   /* hint(2)+name+nul, even */
-            s = s + 1u32
+        DLL_USED[0u64] = 0u32  DLL_USED[1u64] = 0u32  DLL_COUNT[0u64] = 0u32  DLL_COUNT[1u64] = 0u32
+        i = 0u32
+        while i < k { let d : u32 = ext_dll_of(i)  EXT_DLL[i as u64] = d  DLL_USED[d as u64] = 1u32  DLL_COUNT[d as u64] = DLL_COUNT[d as u64] + 1u32  i = i + 1u32 }
+        dnum = DLL_USED[0u64] + DLL_USED[1u64]
+        let mut cur : u32 = idata_rva + ((dnum + 1u32) * 20u32)
+        let mut d : u32 = 0u32                                  /* ILTs */
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { DLL_ILTRVA[d as u64] = cur  cur = cur + ((DLL_COUNT[d as u64] + 1u32) * 8u32) }  d = d + 1u32 }
+        iat_dir_rva = cur                                       /* IAT data-directory base = first IAT RVA */
+        d = 0u32                                                /* IATs (contiguous) */
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { DLL_IATRVA[d as u64] = cur  iat_total = iat_total + ((DLL_COUNT[d as u64] + 1u32) * 8u32)  cur = cur + ((DLL_COUNT[d as u64] + 1u32) * 8u32) }  d = d + 1u32 }
+        let mut p0 : u32 = 0u32  let mut p1 : u32 = 0u32        /* per-import IAT-entry RVA */
+        i = 0u32
+        while i < k {
+            if EXT_DLL[i as u64] == 0u32 { EXT_IATRVA[i as u64] = DLL_IATRVA[0u64] + (p0 * 8u32)  p0 = p0 + 1u32 }
+            else { EXT_IATRVA[i as u64] = DLL_IATRVA[1u64] + (p1 * 8u32)  p1 = p1 + 1u32 }
+            i = i + 1u32
         }
-        dll_rva = idata_rva + cur
-        idata_len = (cur + 13u32)                         /* "kernel32.dll\0" = 13 */
+        i = 0u32                                                /* hint/name RVAs */
+        while i < k { EXT_HNRVA[i as u64] = cur  cur = cur + alignup(2u32 + sov_ext_namelen(i) + 1u32, 2u32)  i = i + 1u32 }
+        d = 0u32                                                /* DLL-name RVAs */
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { DLL_NAMERVA[d as u64] = cur  cur = cur + dll_name_len(d) }  d = d + 1u32 }
+        idata_len = cur - idata_rva
         cur_rva = cur_rva + alignup(idata_len, 0x1000u32)
     }
     let size_of_image : u32 = cur_rva
 
-    /* ── generate jump thunks (FF 25 jmp *[IAT-entry]) appended to TEXTBUF ── */
+    /* ── generate thunks (FF 25 jmp *[IAT-entry]) + patch relocations ── */
     let mut s2 : u32 = 0u32
     while s2 < k {
         let toff : u32 = textlen + (s2 * 6u32)
         let thunk_rva : u32 = text_rva + toff
-        let iat_entry_rva : u32 = iat_rva + (s2 * 8u32)
-        TEXTBUF[toff as u64] = 0xFFu8
-        TEXTBUF[(toff + 1u32) as u64] = 0x25u8
-        wr32(toff + 2u32, iat_entry_rva - (thunk_rva + 6u32))
+        TEXTBUF[toff as u64] = 0xFFu8  TEXTBUF[(toff + 1u32) as u64] = 0x25u8
+        wr32(toff + 2u32, EXT_IATRVA[s2 as u64] - (thunk_rva + 6u32))
         s2 = s2 + 1u32
     }
-
-    /* ── apply relocations ── */
     let nreloc : u32 = sov_reloc_n()
     let mut r : u32 = 0u32
     while r < nreloc {
         let rsec : u32 = sov_reloc_sec(r)
         let roff : u32 = sov_reloc_off(r)
-        if rsec == 1u32 {                                 /* .data reloc */
-            let field_rva : u32 = text_rva + roff
-            wr32(roff, (data_rva + rd32(roff)) - (field_rva + 4u32))
-        }
-        if rsec == 0u32 {                                 /* named reloc -> the import thunk */
-            let thunk_rva : u32 = text_rva + textlen + (sov_reloc_sym(r) * 6u32)
-            wr32(roff, thunk_rva - (text_rva + roff + 4u32))
-        }
+        if rsec == 1u32 { wr32(roff, (data_rva + rd32(roff)) - ((text_rva + roff) + 4u32)) }
+        if rsec == 0u32 { wr32(roff, (text_rva + textlen + (sov_reloc_sym(r) * 6u32)) - ((text_rva + roff) + 4u32)) }
         r = r + 1u32
     }
 
     let entry_rva : u32 = text_rva + find_main_off()
     let nsec : u32 = (1u32 + has_data) + has_idata
-    let text_fileptr : u32 = 0x200u32
-    let mut cur_file : u32 = text_fileptr + text_raw
+    let mut cur_file : u32 = 0x200u32 + text_raw
     let data_raw : u32 = alignup(datalen, 0x200u32)
     let mut data_fileptr : u32 = 0u32
     if has_data == 1u32 { data_fileptr = cur_file  cur_file = cur_file + data_raw }
@@ -161,9 +174,9 @@ fn sovld_emit() -> i32 @export {
     if has_idata == 1u32 { idata_fileptr = cur_file  cur_file = cur_file + idata_raw }
 
     /* ── headers ── */
-    p8(77u32) p8(90u32)  ppad(0x3Cu32)  p32(0x40u32)            /* DOS */
-    p8(80u32) p8(69u32) p8(0u32) p8(0u32)                       /* PE\0\0 */
-    p16(0x8664u32)  p16(nsec)  p32(0u32)  p32(0u32)  p32(0u32)  p16(0xF0u32)  p16(0x23u32)   /* COFF */
+    p8(77u32) p8(90u32)  ppad(0x3Cu32)  p32(0x40u32)
+    p8(80u32) p8(69u32) p8(0u32) p8(0u32)
+    p16(0x8664u32)  p16(nsec)  p32(0u32)  p32(0u32)  p32(0u32)  p16(0xF0u32)  p16(0x23u32)
     p16(0x20Bu32)  p8(14u32) p8(0u32)
     p32(text_raw)  p32(data_raw + idata_raw)  p32(0u32)
     p32(entry_rva)  p32(text_rva)
@@ -174,12 +187,11 @@ fn sovld_emit() -> i32 @export {
     p16(3u32)  p16(0u32)
     p64(0x100000u32, 0u32)  p64(0x1000u32, 0u32)  p64(0x100000u32, 0u32)  p64(0x1000u32, 0u32)
     p32(0u32)  p32(16u32)
-    /* 16 data directories */
     let mut dd : u32 = 0u32
     while dd < 16u32 {
         if has_idata == 1u32 {
-            if dd == 1u32 { p32(idt_rva)  p32(40u32) }                    /* IMPORT */
-            else { if dd == 12u32 { p32(iat_rva)  p32((k + 1u32) * 8u32) }  /* IAT */
+            if dd == 1u32 { p32(idt_rva)  p32((dnum + 1u32) * 20u32) }       /* IMPORT */
+            else { if dd == 12u32 { p32(iat_dir_rva)  p32(iat_total) }       /* IAT (first used DLL's IAT) */
             else { p32(0u32)  p32(0u32) } }
         } else { p32(0u32)  p32(0u32) }
         dd = dd + 1u32
@@ -187,7 +199,7 @@ fn sovld_emit() -> i32 @export {
 
     /* ── section headers ── */
     p8(46u32) p8(116u32) p8(101u32) p8(120u32) p8(116u32) p8(0u32) p8(0u32) p8(0u32)   /* .text */
-    p32(new_textlen)  p32(text_rva)  p32(text_raw)  p32(text_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0x60000020u32)
+    p32(new_textlen)  p32(text_rva)  p32(text_raw)  p32(0x200u32)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0x60000020u32)
     if has_data == 1u32 {
         p8(46u32) p8(100u32) p8(97u32) p8(116u32) p8(97u32) p8(0u32) p8(0u32) p8(0u32)   /* .data */
         p32(datalen)  p32(data_rva)  p32(data_raw)  p32(data_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0xC0000040u32)
@@ -197,39 +209,45 @@ fn sovld_emit() -> i32 @export {
         p32(idata_len)  p32(idata_rva)  p32(idata_raw)  p32(idata_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0xC0000040u32)
     }
 
-    /* ── raw data: .text ── */
+    /* ── raw data ── */
     ppad(0x200u32)
     i = 0u32  while i < new_textlen { p8(TEXTBUF[i as u64] as u32)  i = i + 1u32 }
-    ppad(text_fileptr + text_raw)
-    /* ── .data ── */
+    ppad(0x200u32 + text_raw)
     if has_data == 1u32 {
         i = 0u32  while i < datalen { p8(sov_data_at(1u32, i))  i = i + 1u32 }
         ppad(data_fileptr + data_raw)
     }
-    /* ── .idata ── */
     if has_idata == 1u32 {
-        /* IDT: descriptor[0] = kernel32, then a null descriptor */
-        p32(ilt_rva)  p32(0u32)  p32(0u32)  p32(dll_rva)  p32(iat_rva)
+        /* IDT: one descriptor per used DLL (order 0,1), then a null descriptor */
+        let mut d : u32 = 0u32
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { p32(DLL_ILTRVA[d as u64])  p32(0u32)  p32(0u32)  p32(DLL_NAMERVA[d as u64])  p32(DLL_IATRVA[d as u64]) }  d = d + 1u32 }
         p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)
-        /* ILT: K name-RVA entries + null */
-        i = 0u32  while i < k { p64(HN_RVA[i as u64], 0u32)  i = i + 1u32 }
-        p64(0u32, 0u32)
-        /* IAT: identical (loader overwrites with addresses) */
-        i = 0u32  while i < k { p64(HN_RVA[i as u64], 0u32)  i = i + 1u32 }
-        p64(0u32, 0u32)
-        /* hint/name table */
+        /* ILTs: per used DLL, its imports' hint/name RVAs + null */
+        d = 0u32
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 {
+            i = 0u32  while i < k { if EXT_DLL[i as u64] == d { p64(EXT_HNRVA[i as u64], 0u32) }  i = i + 1u32 }
+            p64(0u32, 0u32)
+        } d = d + 1u32 }
+        /* IATs: identical (loader overwrites) */
+        d = 0u32
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 {
+            i = 0u32  while i < k { if EXT_DLL[i as u64] == d { p64(EXT_HNRVA[i as u64], 0u32) }  i = i + 1u32 }
+            p64(0u32, 0u32)
+        } d = d + 1u32 }
+        /* hint/name table (all imports) */
         i = 0u32
         while i < k {
-            p16(0u32)                                       /* hint */
+            p16(0u32)
             let nl : u32 = sov_ext_namelen(i)
             let mut j : u32 = 0u32
             while j < nl { p8(sov_ext_namebyte(i, j))  j = j + 1u32 }
             p8(0u32)
-            if ((2u32 + nl + 1u32) & 1u32) == 1u32 { p8(0u32) }   /* pad to even */
+            if ((2u32 + nl + 1u32) & 1u32) == 1u32 { p8(0u32) }
             i = i + 1u32
         }
-        /* DLL name "kernel32.dll\0" */
-        p8(107u32) p8(101u32) p8(114u32) p8(110u32) p8(101u32) p8(108u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)
+        /* DLL name strings (per used DLL, order 0,1) */
+        d = 0u32
+        while d < 2u32 { if DLL_USED[d as u64] == 1u32 { emit_dll_name(d) }  d = d + 1u32 }
         ppad(idata_fileptr + idata_raw)
     }
     return 0i32

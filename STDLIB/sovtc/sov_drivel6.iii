@@ -1,0 +1,18 @@
+/* sov_drivel6.iii  --  the ONLY-msvcrt sovld gate (exercises the IAT-directory fix: when kernel32 is NOT used,
+ * the IAT data directory must point at the first USED DLL's IAT -- msvcrt -- not DLL[0]).  A REAL cg_r3 main
+ * calling putchar('A') (msvcrt only) then returning 99 (ret-only exit).  Prints 'A', exits 99.  NO gcc, NO ld.
+ */
+module sovtc_drivel6
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movabsq $0x41, %rax\n  pushq %rax\n  popq %rcx\n  subq $32, %rsp\n  callq putchar\n  addq $32, %rsp\n  movslq %eax, %rax\n  pushq %rax\n  popq %rax\n  movabsq $0x63, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

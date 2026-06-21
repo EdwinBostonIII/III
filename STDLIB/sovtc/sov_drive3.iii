@@ -1,0 +1,20 @@
+/* sov_drive3.iii  --  the extern-call COFF driver.  Assembles the REAL cg_r3 instruction stream for a main
+ * that calls an extern libc fn (putchar('A')) then returns 99, and emits a COFF .o with a NAMED REL32 reloc to
+ * `putchar` (an undefined external symbol).  The harness links it (gcc resolves putchar against msvcrt) and
+ * runs it -- exercising the named-reloc symidx path (2*NS + NEXP + slot) + undefined-symbol emission.
+ * (.rodata "msvcrt" metadata cg_r3 emits is incidental -- not referenced by the .text reloc -- so omitted.)
+ */
+module sovtc_drive3
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovcoff_emit() -> i32 from "sovcoff.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movabsq $0x41, %rax\n  pushq %rax\n  popq %rcx\n  subq $32, %rsp\n  callq putchar\n  addq $32, %rsp\n  movslq %eax, %rax\n  pushq %rax\n  popq %rax\n  movabsq $0x63, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovcoff_emit()
+    return 0u64
+}

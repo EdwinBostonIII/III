@@ -1,0 +1,96 @@
+/* 1935_eidos_compose_optimal.iii  --  EIDOS Slice 0 (Composer): GLOBAL optimality -- relaxation is load-bearing.
+ *
+ * 1933/1934 prove modeless reshuffle + cost-not-hops, but in all of those the locally-cheapest first edge also
+ * begins the globally-optimal route -- so a naive GREEDY planner would pass them too.  This KAT closes that gap
+ * with the classic greedy TRAP, proving the planner is genuinely GLOBAL (Bellman-Ford relaxation), not greedy:
+ *
+ *   weights (via cost_lattice dim 1, weight 1 under lowpower):
+ *     q0: 0->1 (1)   q1: 1->3 (100)     <- greedy takes q0 first (cheapest edge), then is trapped: total 101
+ *     q2: 0->2 (2)   q3: 2->3 (1)       <- the GLOBAL optimum: total 3
+ * A greedy "cheapest outgoing edge" planner picks q0 and returns 101; the relaxing planner returns 0->2->3 = 3.
+ *
+ *   code 10 SETUP    : a quantum failed to register, or the trap is mis-built (greedy edge !< optimal edge, or
+ *                      the greedy total is not worse than the optimal total)
+ *   code 15 SATURATE : a cost saturated cl_dot
+ *   code 11 OPTIMAL  : the planner did not return the global optimum 0->2->3 with achieved cost 3
+ *   code 17 TERMINATE: Bellman-Ford did not converge below the round bound
+ *   code 12 GREEDYBAD: the planner took the locally-cheapest first edge (q0) -- i.e. it is greedy, not global
+ *   code 13 UNREACH  : a target with no inbound path did not yield the empty plan (the negative path)
+ * exit 99 = the planner returns the GLOBAL optimum even when the greedy first step is a trap: relaxation proven
+ *           load-bearing (Bellman-Ford, not greedy); and an unreachable target yields no plan.
+ */
+module m1935
+
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_dot(order_slot: u32) -> u64 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_rounds() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+
+const LP  : u32 = 2u32
+const SAT : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var COST_Q0 : [u64; 6]
+var COST_Q1 : [u64; 6]
+var COST_Q2 : [u64; 6]
+var COST_Q3 : [u64; 6]
+var DOTBUF  : [u64; 1]
+
+/* put the weight in dim 1 (throughput) -- weight 1 under lowpower, so cl_dot_slot(LP, .) == w exactly. */
+fn fill_w(p: *u64, w: u64) -> i32 {
+    p[0u64] = 0u64  p[1u64] = w  p[2u64] = 0u64  p[3u64] = 0u64  p[4u64] = 0u64  p[5u64] = 0u64
+    return 0i32
+}
+
+fn dot1(order: u32, c: *u64) -> u64 {
+    cl_dot_slot(order, c, &DOTBUF as *u64)
+    return DOTBUF[0u64]
+}
+
+fn main() -> u64 {
+    cmp_reset()
+
+    fill_w(&COST_Q0 as *u64, 1u64)
+    fill_w(&COST_Q1 as *u64, 100u64)
+    fill_w(&COST_Q2 as *u64, 2u64)
+    fill_w(&COST_Q3 as *u64, 1u64)
+
+    if cmp_register(0u32, 1u32, &COST_Q0 as *u64) != 0i32 { return 10u64 }   /* q0 (greedy bait) */
+    if cmp_register(1u32, 3u32, &COST_Q1 as *u64) != 1i32 { return 10u64 }   /* q1 (the trap) */
+    if cmp_register(0u32, 2u32, &COST_Q2 as *u64) != 2i32 { return 10u64 }   /* q2 (global route) */
+    if cmp_register(2u32, 3u32, &COST_Q3 as *u64) != 3i32 { return 10u64 }   /* q3 */
+
+    let w_q0 : u64 = dot1(LP, &COST_Q0 as *u64)         /* 1 */
+    let w_q2 : u64 = dot1(LP, &COST_Q2 as *u64)         /* 2 */
+    let greedy_total : u64 = w_q0 + dot1(LP, &COST_Q1 as *u64)   /* 1 + 100 = 101 */
+    let opt_total    : u64 = w_q2 + dot1(LP, &COST_Q3 as *u64)   /* 2 +   1 =   3 */
+
+    /* ===== code 15: no saturation ===== */
+    if w_q0 >= SAT { return 15u64 }
+    if greedy_total >= SAT { return 15u64 }
+    if opt_total >= SAT { return 15u64 }
+
+    /* ===== code 10: the trap must be real -- greedy's first edge is cheaper, yet its total is worse ===== */
+    if w_q0 >= w_q2 { return 10u64 }                    /* greedy WOULD pick q0 first (1 < 2) */
+    if opt_total >= greedy_total { return 10u64 }       /* but the global optimum (3) beats greedy (101) */
+
+    /* ===== code 11: the planner returns the GLOBAL optimum 0->2->3 with achieved cost 3 ===== */
+    let pl : u32 = cmp_plan(0u32, 3u32, LP)
+    if pl != 2u32 { return 11u64 }
+    if cmp_rounds() >= 64u32 { return 17u64 }
+    if cmp_plan_at(0u32) != 2u32 { return 11u64 }       /* took q2 (the globally-optimal first step) */
+    if cmp_plan_at(1u32) != 3u32 { return 11u64 }
+    if cmp_plan_dot(LP) != opt_total { return 11u64 }   /* achieved the independent optimum (3) */
+
+    /* ===== code 12: relaxation load-bearing -- the planner did NOT take the locally-cheapest first edge ===== */
+    if cmp_plan_at(0u32) == 0u32 { return 12u64 }       /* a greedy planner would have started with q0 */
+    if cmp_plan_dot(LP) >= greedy_total { return 12u64 }/* and would have paid 101; the planner pays 3 */
+
+    /* ===== code 13: UNREACHABLE target (node 5 has no inbound edge) yields the empty plan ===== */
+    let upl : u32 = cmp_plan(0u32, 5u32, LP)
+    if upl != 0u32 { return 13u64 }
+
+    return 99u64
+}

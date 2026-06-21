@@ -1,0 +1,110 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\ripple.iii
+ *
+ * III STDLIB - eidos::ripple  --  THE UNIFIED RIPPLE QUANTUM (EIDOS Slice 0).
+ *
+ * THESIS (DOCS/III-EIDOS-ARCHITECTURE.md, FR-1): the LEGACY spatial ripple (a directed field magnitude on
+ * a dependency edge, omnia::ripple_field) and its INVERSE-FORM twin (a content-addressed <verb,a,b> event
+ * on the witnessed metal bus, omnia::isub) are NOT two structures -- they are ONE content-addressed block,
+ * read two ways:
+ *
+ *   SPATIAL  view  (gradient, "now") : rf_edge_field(a,b) -- a signed magnitude over the edge a->b.
+ *   TEMPORAL view  (event,   "over time") : the SAME <verb,a,b> block appended to the isub log; state = fold.
+ *
+ * The block is < verb in {V_BELOW, V_REFLECT}, a, b >, exactly the isub uniform block:
+ *   - the VERB *is* the real spatial DIRECTION -- it is DERIVED from ripple_field's own dominance rank
+ *     (rf_rank), never a free label:  rank(b) > rank(a)  =>  V_BELOW   (a sits under b: the edge CLIMBS),
+ *                                     rank(b) < rank(a)  =>  V_REFLECT (the order-reversing involution:
+ *                                                                       the SID/inverse backward pull),
+ *                                     rank(b) == rank(a) =>  V_NONE    (FLAT = NO ripple).
+ *
+ * LOSSLESS 3->2 (no compromise): ripple_field is 3-valued in direction (climb / flat / descend), but its own
+ * source states a FLAT edge "carries magnitude but no DIRECTION, so it contributes no gradient" -- a flat edge
+ * is the ABSENCE of a ripple, not a third KIND of ripple.  So flat folds to the sentinel V_NONE (=2, NOT a legal
+ * isub verb): a flat edge emits NOTHING and has NO content-address.  The two verbs {V_BELOW, V_REFLECT} therefore
+ * cover the two real ripple directions EXACTLY -- the unification is lossless, no third verb required, no flat
+ * edge ever aliased onto a climb block (corpus 1931 gates this boundary at code 19).
+ *   - the operands a,b *are* the real edge endpoints (the prim identities / addresses).
+ *   - the IDENTITY of the block is sha256(verb||a||b) -- committed by isub at emit, the SAME hash whether
+ *     the block is read as a spatial edge or a temporal event.  ONE address binds the two views.
+ *
+ * This organ AUTHORS NO ripple machinery and NO crypto: it is a pure FOLD that DRIVES the real ripple_field
+ * (rf_rank / rf_edge_field) and the real isub bus (isub_emit / content-address / witness).  Encapsulation,
+ * not reimplementation (DOCS/III-INVERSE-LIBRARY.md §2).  The answer -- the gradient and the witness -- comes
+ * from the real faculties; eidos::ripple only proves, and exposes, that they are one block.
+ *
+ * Ring R0.  K 1.00 (pure functions over two sealed organs).  NIH: libc-free; consumes only ripple_field+isub.
+ */
+module eidos_ripple
+
+/* the LEGACY spatial ripple (omnia::ripple_field) -- driven, not reimplemented. */
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_edge_field(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 from "ripple_field.iii"
+
+/* the INVERSE-FORM content-addressed bus (omnia::isub) -- driven, not reimplemented. */
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_event_cav_into(i: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+
+/* the uniform geometric verbs (omnia::logos vocabulary, mirrored from isub). */
+const ER_V_BELOW   : u32 = 0u32   /* a sits under b -- the edge CLIMBS the dominance order */
+const ER_V_REFLECT : u32 = 1u32   /* a mirrors to b -- the order-reversing involution (the inverse field) */
+const ER_V_NONE    : u32 = 2u32   /* FLAT (equal rank) = NO ripple -- a sentinel, NOT a legal isub verb */
+
+/* ── DIRECTION: the verb IS the real spatial direction, derived from ripple_field's own rank ──
+ * Never a free label: rank(b) > rank(a) climbs (BELOW); rank(b) < rank(a) descends (REFLECT, the
+ * involution); rank(b) == rank(a) is FLAT -> V_NONE (no ripple: ripple_field gives a flat edge zero
+ * gradient).  V_NONE is rejected by emit/cav, so a flat edge is never aliased onto a directional block. */
+fn eidos_ripple_direction(hex_from: u8, hex_to: u8) -> u32 @export {
+    let rf : u32 = rf_rank(hex_from)
+    let rt : u32 = rf_rank(hex_to)
+    if rt > rf { return ER_V_BELOW }
+    if rt < rf { return ER_V_REFLECT }
+    return ER_V_NONE
+}
+
+/* 1 iff (hex_from,hex_to) is a real ripple direction (a legal verb); 0 for a flat (no-ripple) edge. */
+fn eidos_ripple_is_ripple(hex_from: u8, hex_to: u8) -> u32 @export {
+    let v : u32 = eidos_ripple_direction(hex_from, hex_to)
+    if v > ER_V_REFLECT { return 0u32 }
+    return 1u32
+}
+
+/* ── SPATIAL view: the signed gradient magnitude -- the REAL legacy ripple, unchanged. ── */
+fn eidos_ripple_magnitude(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 @export {
+    return rf_edge_field(prim_from, prim_to, hex_from, hex_to)
+}
+
+/* clear the temporal log (= the isub bus). */
+fn eidos_ripple_reset() -> i32 @export { return isub_reset() }
+
+/* ── THE UNIFICATION: one emit produces the TEMPORAL event whose <verb,a,b> IS the SPATIAL ripple. ──
+ * verb = the real direction; (a,b) = the real endpoints.  Returns the isub logical tick (0 = rejected). */
+fn eidos_ripple_emit(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> u64 @export {
+    let verb : u32 = eidos_ripple_direction(hex_from, hex_to)
+    if verb > ER_V_REFLECT { return 0u64 }   /* FLAT edge: no ripple, no quantum -- emit nothing */
+    let a : u32 = prim_from as u32
+    let b : u32 = prim_to as u32
+    return isub_emit(verb, a, b)
+}
+
+/* ── the content-address of the ripple block: the identity that binds the spatial and temporal views.
+ * Same hash the emit path commits -- a caller can verify stored == computed == sha256(geometry). ── */
+fn eidos_ripple_cav_into(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8, out32: *u8) -> i32 @export {
+    let verb : u32 = eidos_ripple_direction(hex_from, hex_to)
+    if verb > ER_V_REFLECT { return -1i32 }  /* FLAT edge: no ripple, no content-address */
+    return isub_cav_into(verb, prim_from as u32, prim_to as u32, out32)
+}
+
+/* ── temporal reads (the event view): geometry, stored identity, witness, count. ── */
+fn eidos_ripple_count() -> u32 @export { return isub_count() }
+fn eidos_ripple_event_verb(i: u32) -> u32 @export { return isub_verb(i) }
+fn eidos_ripple_event_a(i: u32) -> u32 @export { return isub_a(i) }
+fn eidos_ripple_event_b(i: u32) -> u32 @export { return isub_b(i) }
+fn eidos_ripple_event_cav_into(i: u32, out32: *u8) -> i32 @export { return isub_event_cav_into(i, out32) }
+fn eidos_ripple_witness_into(out32: *u8) -> i32 @export { return isub_witness_into(out32) }

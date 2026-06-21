@@ -1,0 +1,135 @@
+/* 1933_eidos_compose_modeless.iii  --  EIDOS SLICE 0 (the Composer half): MODELESS DETERMINISTIC COMPOSITION.
+ *
+ * Proves FR-3/4 of DOCS/III-EIDOS-ARCHITECTURE.md on a cost FIXTURE: the SAME planner, given two different cost
+ * ORDERS over the SAME quantum graph, returns two DIFFERENT optimal plans -- and under the energy-weighted order
+ * it OMITS the "battery-eating" (high-energy) quanta the latency-weighted order takes.  No modes, no ML.
+ *
+ * The graph (two disjoint routes 0 -> 3):
+ *   route A (energy-cheap):  q0: 0->1 (lat2,eng1) ; q1: 1->3 (lat2,eng1)
+ *   route B (latency-cheap): q2: 0->2 (lat1,eng9) ; q3: 2->3 (lat1,eng9)   <- the battery-eaters
+ * Under lowpower (slot 2, energy-weighted) route A wins; under realtime (slot 1, latency-weighted) route B wins.
+ *
+ * NON-TOY (the proof is not the typed answer): the KAT INDEPENDENTLY computes each route's cost via the real
+ * cl_dot_slot and asserts the planner's ACHIEVED cost == the independent argmin -- a complete optimality proof
+ * over the candidate routes (the same planner-vs-independent cross-check that made 1931 non-toy).
+ *
+ *   code 10 SETUP    : a quantum failed to register, or the fixture does not discriminate (A!<B under lowpower)
+ *   code 15 SATURATE : a route cost saturated cl_dot (== CL_DOT_SAT) -> the scalarisation is unreliable
+ *   code 11 REACH    : the planner did not reach the target in 2 edges under some order
+ *   code 17 TERMINATE: Bellman-Ford did not converge below the hard round bound (non-termination)
+ *   code 12 OPTIMAL  : the planner's achieved cost != the independent argmin route, or picked the wrong route
+ *   code 13 MODELESS : the two orders produced the SAME plan (no reshuffle), or lowpower took a battery-eater
+ *   code 14 ENERGY   : the lowpower plan did not consume strictly LESS energy than the realtime plan
+ *   code 16 WITNESS  : a plan's witness was not reproducible, or the two distinct plans shared one witness
+ * exit 99 = one planner, two orders, two optimal plans: modeless reshuffle + measured battery-skip, witnessed.
+ */
+module m1933
+
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_rounds() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_contains(qid: u32) -> u8 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_cost_into(out: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_dot(order_slot: u32) -> u64 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_execute() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_witness_into(out32: *u8) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const LP  : u32 = 2u32                              /* lowpower order slot (energy-weighted) */
+const RT  : u32 = 1u32                              /* realtime order slot (latency-weighted) */
+const SAT : u64 = 0xFFFFFFFFFFFFFFFFu64             /* cl_dot saturation sentinel */
+
+var COST_A0 : [u64; 6]
+var COST_A1 : [u64; 6]
+var COST_B0 : [u64; 6]
+var COST_B1 : [u64; 6]
+var DOTBUF  : [u64; 1]
+var PCOST_LP: [u64; 6]
+var PCOST_RT: [u64; 6]
+var ROOT_LP : [u8; 32]
+var ROOT_LP2: [u8; 32]
+var ROOT_RT : [u8; 32]
+
+/* fill a 6-dim cost: only latency (dim 0) + energy (dim 5) vary; the rest are 0 (fixture). */
+fn fill_le(p: *u64, lat: u64, eng: u64) -> i32 {
+    p[0u64] = lat  p[1u64] = 0u64  p[2u64] = 0u64  p[3u64] = 0u64  p[4u64] = 0u64  p[5u64] = eng
+    return 0i32
+}
+
+/* one cost vector's scalarisation under an order (the real cost_lattice). */
+fn dot1(order: u32, c: *u64) -> u64 {
+    cl_dot_slot(order, c, &DOTBUF as *u64)
+    return DOTBUF[0u64]
+}
+
+fn main() -> u64 {
+    cmp_reset()                                     /* clears the registry + seeds the cost orders */
+
+    fill_le(&COST_A0 as *u64, 2u64, 1u64)
+    fill_le(&COST_A1 as *u64, 2u64, 1u64)
+    fill_le(&COST_B0 as *u64, 1u64, 9u64)
+    fill_le(&COST_B1 as *u64, 1u64, 9u64)
+
+    if cmp_register(0u32, 1u32, &COST_A0 as *u64) != 0i32 { return 10u64 }   /* q0 */
+    if cmp_register(1u32, 3u32, &COST_A1 as *u64) != 1i32 { return 10u64 }   /* q1 */
+    if cmp_register(0u32, 2u32, &COST_B0 as *u64) != 2i32 { return 10u64 }   /* q2 (battery) */
+    if cmp_register(2u32, 3u32, &COST_B1 as *u64) != 3i32 { return 10u64 }   /* q3 (battery) */
+
+    /* ===== independent route costs (the cross-check oracle) ===== */
+    let rA_lp : u64 = dot1(LP, &COST_A0 as *u64) + dot1(LP, &COST_A1 as *u64)
+    let rB_lp : u64 = dot1(LP, &COST_B0 as *u64) + dot1(LP, &COST_B1 as *u64)
+    let rA_rt : u64 = dot1(RT, &COST_A0 as *u64) + dot1(RT, &COST_A1 as *u64)
+    let rB_rt : u64 = dot1(RT, &COST_B0 as *u64) + dot1(RT, &COST_B1 as *u64)
+
+    /* ===== code 15: no route cost may saturate cl_dot (else the metric is meaningless) ===== */
+    if rA_lp >= SAT { return 15u64 }
+    if rB_lp >= SAT { return 15u64 }
+    if rA_rt >= SAT { return 15u64 }
+    if rB_rt >= SAT { return 15u64 }
+
+    /* ===== code 10: the fixture must genuinely discriminate (A cheaper under LP, B cheaper under RT) ===== */
+    if rA_lp >= rB_lp { return 10u64 }
+    if rB_rt >= rA_rt { return 10u64 }
+
+    /* ===== plan under LOWPOWER ===== */
+    let lpl : u32 = cmp_plan(0u32, 3u32, LP)
+    if lpl != 2u32 { return 11u64 }                                 /* reaches target in 2 edges */
+    if cmp_rounds() >= 64u32 { return 17u64 }                       /* converged below the hard bound */
+    if cmp_plan_dot(LP) != rA_lp { return 12u64 }                   /* achieved == independent argmin (route A) */
+    if cmp_plan_at(0u32) != 0u32 { return 12u64 }                   /* the plan IS route A: q0 then q1 */
+    if cmp_plan_at(1u32) != 1u32 { return 12u64 }
+    cmp_plan_cost_into(&PCOST_LP as *u64)
+    cmp_execute()
+    cmp_witness_into(&ROOT_LP as *u8)
+
+    /* ===== plan under REALTIME ===== */
+    let rtl : u32 = cmp_plan(0u32, 3u32, RT)
+    if rtl != 2u32 { return 11u64 }
+    if cmp_rounds() >= 64u32 { return 17u64 }
+    if cmp_plan_dot(RT) != rB_rt { return 12u64 }                   /* achieved == independent argmin (route B) */
+    if cmp_plan_at(0u32) != 2u32 { return 12u64 }                   /* the plan IS route B: q2 then q3 */
+    if cmp_plan_at(1u32) != 3u32 { return 12u64 }
+    cmp_plan_cost_into(&PCOST_RT as *u64)
+    cmp_execute()
+    cmp_witness_into(&ROOT_RT as *u8)
+
+    /* ===== code 14: the lowpower plan provably consumes LESS energy (dim 5) -- the measured battery-skip ===== */
+    if PCOST_LP[5u64] >= PCOST_RT[5u64] { return 14u64 }
+
+    /* ===== code 13: MODELESS -- the same planner reshuffled; lowpower took NO battery-eater ===== */
+    cmp_plan(0u32, 3u32, LP)                                        /* re-derive the LP plan (state was RT's) */
+    if cmp_plan_at(0u32) == 2u32 { return 13u64 }                   /* LP must not start on the battery route */
+    if cmp_plan_contains(2u32) == 1u8 { return 13u64 }             /* nor contain q2 ... */
+    if cmp_plan_contains(3u32) == 1u8 { return 13u64 }             /* ... nor q3 */
+
+    /* ===== code 16: the plan is a reproducible, task-distinct witnessed object ===== */
+    cmp_execute()
+    cmp_witness_into(&ROOT_LP2 as *u8)
+    if cad_eq(&ROOT_LP as *u8, &ROOT_LP2 as *u8) != 1u8 { return 16u64 }   /* same plan -> same witness */
+    if cad_eq(&ROOT_LP as *u8, &ROOT_RT as *u8) == 1u8 { return 16u64 }    /* different plans -> different witness */
+
+    return 99u64
+}

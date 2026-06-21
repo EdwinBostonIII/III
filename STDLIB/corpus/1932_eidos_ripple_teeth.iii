@@ -1,0 +1,119 @@
+/* 1932_eidos_ripple_teeth.iii  --  EIDOS SLICE 0 TEETH: the unification is LOAD-BEARING, not tautological.
+ *
+ * 1931 proves ripple and inverse-event are ONE content-addressed block.  This teeth proves that proof is
+ * NON-VACUOUS by constructing the DECOUPLED alternative (a binding where the verb is a free constant label
+ * instead of the real spatial direction) and showing it provably DIVERGES from the real binding:
+ *
+ *   - DIRECTION: the real verb FLIPS on the reverse edge (BELOW<->REFLECT); a constant verb does NOT.
+ *   - IDENTITY : feeding the reverse edge a decoupled constant verb yields a DIFFERENT content-address than
+ *                the real REFLECT verb -- i.e. get the direction wrong and the block's identity is wrong.
+ *                The decoupled reverse address in fact aliases an UNRELATED forward block <BELOW,pt,pf>.
+ *   - CO-MOVE  : the real gradient MOVES under endpoint perturbation; a constant gradient never would.
+ *
+ *   code 10 NO-VECTOR : degenerate sealed tables (no climb edge / no perturbation)
+ *   code 11 DIRECTION : the REAL verb did not flip (1931's direction premise is itself broken)
+ *   code 12 IDENTITY  : the decoupled-constant verb gave the SAME address as the real REFLECT verb
+ *                       (the verb would not matter to identity -> 1931 code 12/16 would be vacuous)
+ *   code 13 CO-MOVE   : the real gradient did not move under perturbation (1931 code 15 premise broken)
+ * exit 99 = the discriminators are real: a decoupled binding is provably caught, so 1931's positive
+ *           assertions are load-bearing.  Get the direction wrong and BOTH views and the identity break.
+ */
+module m1932
+
+extern @abi(c-msvc-x64) fn eidos_ripple_direction(hex_from: u8, hex_to: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_magnitude(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_cav_into(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8, out32: *u8) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const ER_V_BELOW : u32 = 0u32   /* the decoupled CONSTANT verb -- a free label, ignores direction */
+
+var FP       : [u8; 16]
+var CAV_REAL : [u8; 32]   /* the real reverse-edge address: <REFLECT, pt, pf> */
+var CAV_DEC  : [u8; 32]   /* the decoupled reverse-edge address: <BELOW, pt, pf> (constant verb) */
+
+fn fp_into(verb: u32, a: u32, b: u32, buf: *u8) -> u64 {
+    buf[0u64] = (verb & 0xFFu32) as u8
+    buf[1u64] = (a & 0xFFu32) as u8
+    buf[2u64] = ((a >> 8u32) & 0xFFu32) as u8
+    buf[3u64] = ((a >> 16u32) & 0xFFu32) as u8
+    buf[4u64] = ((a >> 24u32) & 0xFFu32) as u8
+    buf[5u64] = (b & 0xFFu32) as u8
+    buf[6u64] = ((b >> 8u32) & 0xFFu32) as u8
+    buf[7u64] = ((b >> 16u32) & 0xFFu32) as u8
+    buf[8u64] = ((b >> 24u32) & 0xFFu32) as u8
+    return 9u64
+}
+
+fn main() -> u64 {
+    /* scan the same real climb edge (evergreen). */
+    let mut found1 : u32 = 0u32
+    let mut hexa : u8 = 0u8
+    let mut hexb : u8 = 0u8
+    let mut hi : u8 = 1u8
+    while hi <= 7u8 {
+        let mut hj : u8 = 1u8
+        while hj <= 7u8 {
+            if found1 == 0u32 {
+                let ri : u32 = rf_rank(hi)
+                let rj : u32 = rf_rank(hj)
+                if rj > ri { hexa = hi  hexb = hj  found1 = 1u32 }
+            }
+            hj = hj + 1u8
+        }
+        hi = hi + 1u8
+    }
+    if found1 == 0u32 { return 10u64 }
+
+    let mut found2 : u32 = 0u32
+    let mut pf : u8 = 0u8
+    let mut pt : u8 = 0u8
+    let mut a1 : u8 = 0u8
+    while a1 < 24u8 {
+        let mut b1 : u8 = 0u8
+        while b1 < 24u8 {
+            if found2 == 0u32 {
+                if a1 != b1 {
+                    let g : i64 = eidos_ripple_magnitude(a1, b1, hexa, hexb)
+                    if g > 0i64 { pf = a1  pt = b1  found2 = 1u32 }
+                }
+            }
+            b1 = b1 + 1u8
+        }
+        a1 = a1 + 1u8
+    }
+    if found2 == 0u32 { return 10u64 }
+
+    let gf : i64 = eidos_ripple_magnitude(pf, pt, hexa, hexb)
+    let mut found3 : u32 = 0u32
+    let mut pt2 : u8 = 0u8
+    let mut c1 : u8 = 0u8
+    while c1 < 24u8 {
+        if found3 == 0u32 {
+            if c1 != pt {
+                let g2s : i64 = eidos_ripple_magnitude(pf, c1, hexa, hexb)
+                if g2s != gf { pt2 = c1  found3 = 1u32 }
+            }
+        }
+        c1 = c1 + 1u8
+    }
+    if found3 == 0u32 { return 10u64 }
+
+    /* ===== code 11: the REAL binding flips the verb on the reverse edge ===== */
+    let vfwd : u32 = eidos_ripple_direction(hexa, hexb)
+    let vrev : u32 = eidos_ripple_direction(hexb, hexa)
+    if vfwd == vrev { return 11u64 }                 /* real MUST flip; a constant would not */
+
+    /* ===== code 12: IDENTITY-CORRUPTION -- a decoupled constant verb yields the WRONG reverse address ===== */
+    eidos_ripple_cav_into(pt, pf, hexb, hexa, &CAV_REAL as *u8)    /* real: <REFLECT, pt, pf> */
+    fp_into(ER_V_BELOW, pt as u32, pf as u32, &FP as *u8)          /* decoupled: <BELOW, pt, pf> (constant) */
+    cad_oneshot(0u32, &FP as *u8, 9u64, &CAV_DEC as *u8)
+    if cad_eq(&CAV_REAL as *u8, &CAV_DEC as *u8) == 1u8 { return 12u64 }  /* MUST differ: the verb is load-bearing */
+
+    /* ===== code 13: the REAL gradient moves under endpoint perturbation (a constant would not) ===== */
+    let g2 : i64 = eidos_ripple_magnitude(pf, pt2, hexa, hexb)
+    if gf == g2 { return 13u64 }
+
+    return 99u64
+}

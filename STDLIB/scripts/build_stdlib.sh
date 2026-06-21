@@ -1440,6 +1440,23 @@ MODULES=(
     # DISCOVERS strength reduction itself (SAT-proven at width 64, finds non-power-of-two forms like 7x=(x<<3)-x);
     # bb_eval executes.  There was no reducer to build and no law to author -- the would-be sibling (weave_reduce) +
     # the would-be hand rule (bb_intern_mul) were both reverted.  KAT 1824 proves the codegen draws on these.
+    # eidos/ripple -- EIDOS SLICE 0: the UNIFIED RIPPLE QUANTUM.  Proves (corpus 1931/1932) that the legacy spatial
+    # ripple (omnia/ripple_field gradient) and its inverse-form twin (an omnia/isub content-addressed <verb,a,b>
+    # event) are ONE content-addressed block -- the verb IS the real direction (rf_rank), the witness binds both
+    # views.  A pure FOLD driving the REAL ripple_field + isub: authors no ripple machinery, no crypto.  See
+    # DOCS/III-EIDOS-ARCHITECTURE.md.  BSS-neutral, compiler-unreferenced -> LIBNATIVE; appended last.
+    "eidos/ripple"
+    # eidos/compose -- EIDOS SLICE 0 (the Composer half): the MODELESS DETERMINISTIC PLANNER.  Given a task
+    # (start, target, cost ORDER) it folds the globally cost-minimal plan via bounded Bellman-Ford with edge
+    # weight = cl_dot_slot(order, cost) -- the same planner returns a DIFFERENT plan per order (reshuffle), and
+    # under an energy-weighted order OMITS the battery-eating quanta a latency order takes.  Composes the REAL
+    # numera/cost_lattice (weights) + omnia/isub (witnessed execution); shortest-path core hand-rolled (dijkstra
+    # is N=5/u32/distances-only).  Proven (corpus 1933/1934/1935) vs an independent cl_dot_slot argmin.  No ML.
+    # nous proposer is CORRECTLY SCOPED OUT (nous_value/nous_policy rank XII rewrite RULES toward a normal form --
+    # a wrong-faculty island for cost-graph planning); the faithful nous link is nous_costlin (the canonical
+    # total order over the shared cost_lattice), identified as the integration-phase wiring (DOCS ADR-6, not yet
+    # done).  BSS-neutral, compiler-unreferenced -> LIBNATIVE; last.
+    "eidos/compose"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1,0 +1,102 @@
+/* 1934_eidos_compose_teeth.iii  --  EIDOS SLICE 0 TEETH: the planner COST-OPTIMISES, it does not hop-count.
+ *
+ * 1933 proves the planner reshuffles per order.  This teeth proves the reshuffle is genuinely cost-driven (not
+ * a trivial fewest-hops rule) by the shortest-path HALLMARK: a cheaper INDIRECT route is preferred over a
+ * costlier DIRECT edge -- and the choice flips with the order, binding cost->plan in BOTH directions.
+ *
+ * The graph (a direct edge and a 2-hop detour, both 0 -> 3):
+ *   q0: 0->3 DIRECT  (lat1, eng9)   <- one hop, fast, battery-eating
+ *   q1: 0->1 (lat3, eng1) ; q2: 1->3 (lat3, eng1)   <- two hops, slow, energy-cheap
+ * Under lowpower (energy): the 2-hop detour (eng 2) beats the 1-hop direct edge (eng 9) -> the planner takes
+ * the LONGER path.  A hop-counter would always take the direct edge; the planner does NOT.
+ * Under realtime (latency): the 1-hop direct edge (lat 1) beats the detour (lat 6) -> the planner takes it.
+ *
+ *   code 10 SETUP    : a quantum failed to register, or the fixture does not discriminate
+ *   code 15 SATURATE : a route cost saturated cl_dot
+ *   code 11 INDIRECT : under lowpower the planner did NOT prefer the cheaper 2-hop detour over the direct edge
+ *   code 17 TERMINATE: Bellman-Ford did not converge below the round bound
+ *   code 12 DIRECT   : under realtime the planner did NOT take the cheaper 1-hop direct edge
+ *   code 13 NOHOPCT  : the plans did not flip with the order (cost->plan not bound both ways / hop-counting)
+ * exit 99 = the planner prefers the cheaper indirect route under one order and the direct edge under the other:
+ *           a genuine cost optimiser, not a hop counter.
+ */
+module m1934
+
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_rounds() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_contains(qid: u32) -> u8 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_dot(order_slot: u32) -> u64 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+
+const LP  : u32 = 2u32
+const RT  : u32 = 1u32
+const SAT : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var COST_D  : [u64; 6]                              /* the direct edge cost */
+var COST_I0 : [u64; 6]                              /* detour edge 1 */
+var COST_I1 : [u64; 6]                              /* detour edge 2 */
+var DOTBUF  : [u64; 1]
+
+fn fill_le(p: *u64, lat: u64, eng: u64) -> i32 {
+    p[0u64] = lat  p[1u64] = 0u64  p[2u64] = 0u64  p[3u64] = 0u64  p[4u64] = 0u64  p[5u64] = eng
+    return 0i32
+}
+
+fn dot1(order: u32, c: *u64) -> u64 {
+    cl_dot_slot(order, c, &DOTBUF as *u64)
+    return DOTBUF[0u64]
+}
+
+fn main() -> u64 {
+    cmp_reset()
+
+    fill_le(&COST_D  as *u64, 1u64, 9u64)           /* direct: fast, battery-eating */
+    fill_le(&COST_I0 as *u64, 3u64, 1u64)           /* detour: slow, energy-cheap */
+    fill_le(&COST_I1 as *u64, 3u64, 1u64)
+
+    if cmp_register(0u32, 3u32, &COST_D  as *u64) != 0i32 { return 10u64 }   /* q0 direct */
+    if cmp_register(0u32, 1u32, &COST_I0 as *u64) != 1i32 { return 10u64 }   /* q1 detour-a */
+    if cmp_register(1u32, 3u32, &COST_I1 as *u64) != 2i32 { return 10u64 }   /* q2 detour-b */
+
+    let direct_lp   : u64 = dot1(LP, &COST_D as *u64)
+    let indirect_lp : u64 = dot1(LP, &COST_I0 as *u64) + dot1(LP, &COST_I1 as *u64)
+    let direct_rt   : u64 = dot1(RT, &COST_D as *u64)
+    let indirect_rt : u64 = dot1(RT, &COST_I0 as *u64) + dot1(RT, &COST_I1 as *u64)
+
+    /* ===== code 15: no saturation ===== */
+    if direct_lp >= SAT { return 15u64 }
+    if indirect_lp >= SAT { return 15u64 }
+    if direct_rt >= SAT { return 15u64 }
+    if indirect_rt >= SAT { return 15u64 }
+
+    /* ===== code 10: the fixture must discriminate (detour cheaper under LP, direct cheaper under RT) ===== */
+    if indirect_lp >= direct_lp { return 10u64 }
+    if direct_rt >= indirect_rt { return 10u64 }
+
+    /* ===== code 11: under LOWPOWER the planner prefers the cheaper 2-HOP detour over the direct edge ===== */
+    let lpl : u32 = cmp_plan(0u32, 3u32, LP)
+    if lpl != 2u32 { return 11u64 }                            /* TWO hops, not the one-hop direct edge */
+    if cmp_rounds() >= 64u32 { return 17u64 }
+    if cmp_plan_at(0u32) != 1u32 { return 11u64 }              /* q1 then q2 (the detour) */
+    if cmp_plan_at(1u32) != 2u32 { return 11u64 }
+    if cmp_plan_contains(0u32) == 1u8 { return 11u64 }         /* the direct edge q0 is NOT used */
+    if cmp_plan_dot(LP) != indirect_lp { return 11u64 }        /* achieved == the detour's independent cost */
+
+    /* ===== code 12: under REALTIME the planner takes the cheaper 1-HOP direct edge ===== */
+    let rtl : u32 = cmp_plan(0u32, 3u32, RT)
+    if rtl != 1u32 { return 12u64 }                            /* ONE hop */
+    if cmp_rounds() >= 64u32 { return 17u64 }
+    if cmp_plan_at(0u32) != 0u32 { return 12u64 }              /* the direct edge q0 */
+    if cmp_plan_dot(RT) != direct_rt { return 12u64 }
+
+    /* ===== code 13: the choice FLIPPED with the order -- cost->plan bound both ways, hop-counting refuted ===== */
+    cmp_plan(0u32, 3u32, LP)
+    if cmp_plan_at(0u32) != 1u32 { return 13u64 }              /* LP detour again (re-derived) */
+    let again_lp : u32 = cmp_plan(0u32, 3u32, LP)
+    if again_lp == rtl { return 13u64 }                        /* LP plan (2 hops) != RT plan (1 hop) */
+
+    return 99u64
+}

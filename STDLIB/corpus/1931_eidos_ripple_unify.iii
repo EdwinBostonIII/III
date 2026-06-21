@@ -1,0 +1,221 @@
+/* 1931_eidos_ripple_unify.iii  --  EIDOS SLICE 0 (THE PROOF): ripple and inverse-event are ONE block.
+ *
+ * Proves the FR-1 conjecture of DOCS/III-EIDOS-ARCHITECTURE.md: the LEGACY spatial ripple (omnia::ripple_field
+ * gradient) and its INVERSE-FORM twin (an omnia::isub content-addressed <verb,a,b> event) are not two
+ * structures but ONE content-addressed block, read two ways -- with the witness binding them.  The eidos::ripple
+ * organ DRIVES the real ripple_field (rf_rank/rf_edge_field) and the real isub bus (emit/CAV/witness); this KAT
+ * cross-checks the binding against an INDEPENDENT cad sha256 reconstruction.  Evergreen: the test vector is
+ * SCANNED from the live sealed tables (never a hardcoded table value), so it cannot drift.
+ *
+ *   code 10 NO-VECTOR     : the sealed rank/savings tables are degenerate (no climb edge / no perturbation)
+ *   code 11 DIRECTION     : the verb is NOT the real spatial direction (climb!=BELOW, descend!=REFLECT, or no flip)
+ *   code 12 ONE-IDENTITY  : the stored event CAV != the direct CAV != independent sha256(geometry)
+ *   code 13 SPATIAL==TEMP : the emitted block's (verb,a,b) != the ripple edge's (direction, endpoints)
+ *   code 14 WITNESS-BINDS : the witness ROOT != the independent hash-chain of the ripple-event CAVs
+ *   code 15 CO-MOVEMENT   : perturbing the endpoint moved ONLY one view (the two are not bound to one block)
+ *   code 16 DEDUP         : identical geometry gave different addresses, or different geometry gave the same
+ *   code 17 INVOLUTION    : reversing the edge did NOT flip the verb AND the gradient sign (REFLECT not the real inverse)
+ *   code 18 DETERMINISM   : replaying the identical ripples gave a different witness ROOT
+ *   code 19 FLAT-BOUNDARY : an equal-rank (flat) edge was NOT treated as a non-ripple -- it emitted a quantum,
+ *                           got an address, or aliased a directional block (the lossless 3->2 boundary leaked)
+ * exit 99 = ripple and inverse-event are ONE content-addressed block: bound in DIRECTION (the verb is the real
+ *           ripple direction), IDENTITY (one sha256(geometry) for both views), and WITNESS (the chain of those) --
+ *           LOSSLESSLY: the 2 verbs cover the 2 real directions exactly, and a flat edge is the ABSENCE of a ripple.
+ */
+module m1931
+
+extern @abi(c-msvc-x64) fn eidos_ripple_reset() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_direction(hex_from: u8, hex_to: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_magnitude(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_emit(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_cav_into(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8, out32: *u8) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_verb(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_a(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_b(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_cav_into(i: u32, out32: *u8) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_witness_into(out32: *u8) -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+/* module-scope scratch (no fn-local var arrays; no libc -- pure in-image buffers). */
+var FP       : [u8; 16]
+var CAV_E    : [u8; 32]    /* stored event content-address */
+var CAV_D    : [u8; 32]    /* directly-computed block content-address */
+var CAV_REF  : [u8; 32]    /* independent sha256(geometry) */
+var CAV_D2   : [u8; 32]    /* perturbed-endpoint content-address */
+var CAV_R    : [u8; 32]    /* reflected-block content-address */
+var CAV0     : [u8; 32]
+var CAV1     : [u8; 32]
+var ROOT_ST  : [u8; 32]
+var ROOT0_REF: [u8; 32]
+var ROOT1_REF: [u8; 32]
+var ROOT_RE  : [u8; 32]
+var CHAIN    : [u8; 64]
+
+/* the 9-byte geometric footprint [verb || a(LE32) || b(LE32)] -- identical to the isub emit serialisation. */
+fn fp_into(verb: u32, a: u32, b: u32, buf: *u8) -> u64 {
+    buf[0u64] = (verb & 0xFFu32) as u8
+    buf[1u64] = (a & 0xFFu32) as u8
+    buf[2u64] = ((a >> 8u32) & 0xFFu32) as u8
+    buf[3u64] = ((a >> 16u32) & 0xFFu32) as u8
+    buf[4u64] = ((a >> 24u32) & 0xFFu32) as u8
+    buf[5u64] = (b & 0xFFu32) as u8
+    buf[6u64] = ((b >> 8u32) & 0xFFu32) as u8
+    buf[7u64] = ((b >> 16u32) & 0xFFu32) as u8
+    buf[8u64] = ((b >> 24u32) & 0xFFu32) as u8
+    return 9u64
+}
+
+fn main() -> u64 {
+    eidos_ripple_reset()
+
+    /* ===== scan a REAL climb edge from the live sealed tables (evergreen; no hardcoded values) ===== */
+    /* Stage 1: hexads HEXA,HEXB in 1..7 with rf_rank(HEXB) > rf_rank(HEXA) (a real dominance climb). */
+    let mut found1 : u32 = 0u32
+    let mut hexa : u8 = 0u8
+    let mut hexb : u8 = 0u8
+    let mut hi : u8 = 1u8
+    while hi <= 7u8 {
+        let mut hj : u8 = 1u8
+        while hj <= 7u8 {
+            if found1 == 0u32 {
+                let ri : u32 = rf_rank(hi)
+                let rj : u32 = rf_rank(hj)
+                if rj > ri { hexa = hi  hexb = hj  found1 = 1u32 }
+            }
+            hj = hj + 1u8
+        }
+        hi = hi + 1u8
+    }
+    if found1 == 0u32 { return 10u64 }
+
+    /* Stage 2: endpoints PF,PT (0..23, PF != PT) with a strictly positive gradient on that climb. */
+    let mut found2 : u32 = 0u32
+    let mut pf : u8 = 0u8
+    let mut pt : u8 = 0u8
+    let mut a1 : u8 = 0u8
+    while a1 < 24u8 {
+        let mut b1 : u8 = 0u8
+        while b1 < 24u8 {
+            if found2 == 0u32 {
+                if a1 != b1 {
+                    let g : i64 = eidos_ripple_magnitude(a1, b1, hexa, hexb)
+                    if g > 0i64 { pf = a1  pt = b1  found2 = 1u32 }
+                }
+            }
+            b1 = b1 + 1u8
+        }
+        a1 = a1 + 1u8
+    }
+    if found2 == 0u32 { return 10u64 }
+
+    /* Stage 3: a perturbed endpoint PT2 (!= PT) whose gradient DIFFERS (the co-movement vector). */
+    let gf : i64 = eidos_ripple_magnitude(pf, pt, hexa, hexb)
+    let mut found3 : u32 = 0u32
+    let mut pt2 : u8 = 0u8
+    let mut c1 : u8 = 0u8
+    while c1 < 24u8 {
+        if found3 == 0u32 {
+            if c1 != pt {
+                let g2s : i64 = eidos_ripple_magnitude(pf, c1, hexa, hexb)
+                if g2s != gf { pt2 = c1  found3 = 1u32 }
+            }
+        }
+        c1 = c1 + 1u8
+    }
+    if found3 == 0u32 { return 10u64 }
+
+    /* ===== code 19: FLAT BOUNDARY -- an equal-rank edge is NOT a ripple (the lossless 3->2 boundary) =====
+     * ripple_field itself: a flat edge "contributes no gradient".  So flat folds to V_NONE (2), emits NOTHING,
+     * and has NO content-address -- it can never alias onto a directional (climb/descend) block.  The two verbs
+     * {BELOW,REFLECT} cover the two real ripple directions EXACTLY; flat is the ABSENCE of a ripple, not a third. */
+    if eidos_ripple_direction(hexa, hexa) != 2u32 { return 19u64 }           /* equal rank -> V_NONE, not a false BELOW */
+    let gflat : i64 = eidos_ripple_magnitude(pf, pt, hexa, hexa)
+    if gflat != 0i64 { return 19u64 }                                        /* a flat edge has zero gradient */
+    if eidos_ripple_cav_into(pf, pt, hexa, hexa, &CAV_R as *u8) != -1i32 { return 19u64 }  /* flat -> no address */
+    eidos_ripple_reset()
+    if eidos_ripple_emit(pf, pt, hexa, hexa) != 0u64 { return 19u64 }        /* flat -> nothing emitted */
+    if eidos_ripple_count() != 0u32 { return 19u64 }                         /* the log stayed empty */
+    eidos_ripple_reset()
+
+    /* ===== code 11: DIRECTION BINDING -- the verb IS the real spatial direction ===== */
+    let vfwd : u32 = eidos_ripple_direction(hexa, hexb)     /* climb  -> V_BELOW   */
+    let vrev : u32 = eidos_ripple_direction(hexb, hexa)     /* descend-> V_REFLECT */
+    if vfwd != 0u32 { return 11u64 }
+    if vrev != 1u32 { return 11u64 }
+    if vfwd == vrev { return 11u64 }    /* teeth: a decoupled/constant verb would NOT flip with direction */
+
+    /* ===== code 17: INVOLUTION -- reversing the edge flips the verb AND the gradient sign =====
+     * V_REFLECT is the real order-reversing involution (the inverse/SID field), not a label: the forward
+     * climb is strictly positive; the reverse descent is non-positive -- the sign flipped with the verb. */
+    let grev : i64 = eidos_ripple_magnitude(pt, pf, hexb, hexa)
+    if gf <= 0i64 { return 17u64 }
+    if grev > 0i64 { return 17u64 }
+
+    /* ===== code 16: DEDUP -- identical geometry -> identical address; different -> different ===== */
+    eidos_ripple_cav_into(pf, pt, hexa, hexb, &CAV_D as *u8)
+    eidos_ripple_cav_into(pf, pt, hexa, hexb, &CAV_E as *u8)        /* the SAME block again */
+    if cad_eq(&CAV_D as *u8, &CAV_E as *u8) != 1u8 { return 16u64 }
+    eidos_ripple_cav_into(pt, pf, hexb, hexa, &CAV_R as *u8)        /* the reflected block <REFLECT,pt,pf> */
+    if cad_eq(&CAV_D as *u8, &CAV_R as *u8) == 1u8 { return 16u64 }
+
+    /* ===== code 15: CO-MOVEMENT -- perturb the endpoint: BOTH views move together ===== */
+    let g2 : i64 = eidos_ripple_magnitude(pf, pt2, hexa, hexb)
+    eidos_ripple_cav_into(pf, pt2, hexa, hexb, &CAV_D2 as *u8)
+    if gf == g2 { return 15u64 }                                    /* spatial view moved (gradient changed) */
+    if cad_eq(&CAV_D as *u8, &CAV_D2 as *u8) == 1u8 { return 15u64 }/* temporal identity moved with it */
+    /* teeth: a DECOUPLED gradient would NOT move when the block's identity moved; it DID -> one block. */
+
+    /* ===== emit the two REAL ripple-events for the identity + witness proofs ===== */
+    eidos_ripple_reset()
+    let t0 : u64 = eidos_ripple_emit(pf, pt, hexa, hexb)            /* R0: <BELOW,  pf, pt>  (the climb)   */
+    if t0 == 0u64 { return 12u64 }
+    let t1 : u64 = eidos_ripple_emit(pt, pf, hexb, hexa)            /* R1: <REFLECT,pt, pf>  (the reflect) */
+    if t1 == 0u64 { return 12u64 }
+    if eidos_ripple_count() != 2u32 { return 12u64 }
+
+    /* ===== code 12: ONE IDENTITY -- stored event CAV == direct CAV == independent sha256(geometry) ===== */
+    eidos_ripple_event_cav_into(0u32, &CAV_E as *u8)               /* temporal stored identity */
+    eidos_ripple_cav_into(pf, pt, hexa, hexb, &CAV_D as *u8)       /* the same block, recomputed */
+    fp_into(0u32, pf as u32, pt as u32, &FP as *u8)
+    cad_oneshot(0u32, &FP as *u8, 9u64, &CAV_REF as *u8)           /* independent sha256 of the geometry */
+    if cad_eq(&CAV_E as *u8, &CAV_REF as *u8) != 1u8 { return 12u64 }
+    if cad_eq(&CAV_D as *u8, &CAV_REF as *u8) != 1u8 { return 12u64 }
+
+    /* ===== code 13: SPATIAL == TEMPORAL -- the emitted block geometry == the ripple edge ===== */
+    if eidos_ripple_event_verb(0u32) != 0u32 { return 13u64 }
+    if eidos_ripple_event_a(0u32) != (pf as u32) { return 13u64 }
+    if eidos_ripple_event_b(0u32) != (pt as u32) { return 13u64 }
+    if eidos_ripple_event_verb(1u32) != 1u32 { return 13u64 }
+    if eidos_ripple_event_a(1u32) != (pt as u32) { return 13u64 }
+    if eidos_ripple_event_b(1u32) != (pf as u32) { return 13u64 }
+
+    /* ===== code 14: WITNESS BINDS -- ROOT == independent sha256 hash-chain of the ripple-event CAVs ===== */
+    fp_into(0u32, pf as u32, pt as u32, &FP as *u8)
+    cad_oneshot(0u32, &FP as *u8, 9u64, &CAV0 as *u8)
+    fp_into(1u32, pt as u32, pf as u32, &FP as *u8)
+    cad_oneshot(0u32, &FP as *u8, 9u64, &CAV1 as *u8)
+    let mut z : u64 = 0u64
+    while z < 32u64 { CHAIN[z] = 0u8  z = z + 1u64 }                /* genesis 0^32 */
+    let mut k0 : u64 = 0u64
+    while k0 < 32u64 { CHAIN[32u64 + k0] = CAV0[k0]  k0 = k0 + 1u64 }
+    cad_oneshot(0u32, &CHAIN as *u8, 64u64, &ROOT0_REF as *u8)     /* ROOT0 = sha256(0^32 || CAV0) */
+    let mut k1 : u64 = 0u64
+    while k1 < 32u64 { CHAIN[k1] = ROOT0_REF[k1]  k1 = k1 + 1u64 }
+    let mut k2 : u64 = 0u64
+    while k2 < 32u64 { CHAIN[32u64 + k2] = CAV1[k2]  k2 = k2 + 1u64 }
+    cad_oneshot(0u32, &CHAIN as *u8, 64u64, &ROOT1_REF as *u8)     /* ROOT1 = sha256(ROOT0 || CAV1) */
+    eidos_ripple_witness_into(&ROOT_ST as *u8)
+    if cad_eq(&ROOT_ST as *u8, &ROOT1_REF as *u8) != 1u8 { return 14u64 }
+
+    /* ===== code 18: DETERMINISM -- replay the identical ripples -> identical ROOT ===== */
+    eidos_ripple_reset()
+    eidos_ripple_emit(pf, pt, hexa, hexb)
+    eidos_ripple_emit(pt, pf, hexb, hexa)
+    eidos_ripple_witness_into(&ROOT_RE as *u8)
+    if cad_eq(&ROOT_RE as *u8, &ROOT_ST as *u8) != 1u8 { return 18u64 }
+
+    return 99u64
+}

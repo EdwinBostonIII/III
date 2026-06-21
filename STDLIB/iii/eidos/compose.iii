@@ -1,0 +1,244 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\compose.iii
+ *
+ * III STDLIB - eidos::compose  --  THE MODELESS DETERMINISTIC PLANNER (EIDOS Slice 0, the Composer half).
+ *
+ * THESIS (DOCS/III-EIDOS-ARCHITECTURE.md, FR-3/4): no fixed pipeline.  Given a task -- a START point, a TARGET
+ * point, and a cost ORDER -- the planner folds the GLOBALLY cost-minimal sequence of quanta (a "plan") that
+ * reaches the target under that order.  Change the order and the SAME planner returns a DIFFERENT plan: it
+ * reshuffles per task and, under an energy-weighted order, omits the "battery-eating" (high-energy) quanta a
+ * latency-weighted order would take.  No modes; no ML; deterministic.
+ *
+ * MECHANISM: a quantum is a directed transition <from -> to> carrying a 6-dim cost descriptor
+ * (latency,throughput,registers,icache,dcache,ENERGY -- the numera::cost_lattice vector).  The planner runs a
+ * bounded BELLMAN-FORD with predecessor tracking over the quantum graph, with edge weight =
+ * cl_dot_slot(order, cost) (the REAL cost_lattice scalarisation -- the modeless knob), then reconstructs the
+ * optimal plan and (optionally) EXECUTES it as witnessed isub blocks (the inverse-substrate witness binds the
+ * plan, reproducibly).
+ *
+ * COMPOSES (no island): numera::cost_lattice (weights + dominance) + omnia::isub (the witnessed execution).
+ * The shortest-path core is hand-rolled (numera::dijkstra is N=5, u32, distances-only -- no plan output and no
+ * u64 order-weighted costs), per III's NIH discipline (dijkstra itself is hand-rolled).
+ *
+ * PROVABLY TERMINATING + COST-BOUNDED: <= (nodes-1) relaxation rounds, each O(edges); non-negative weights ->
+ * no negative cycle -> strict-< relaxation in registration order gives a DETERMINISTIC predecessor (and thus a
+ * reproducible witness).  An overflow guard keeps a saturating cost from wrapping a distance.
+ *
+ * SCOPE (honest): this proves the planner MECHANISM (modeless / optimal-vs-independent-argmin / terminating /
+ * witnessed) on a cost FIXTURE.  It does NOT yet claim "III reshuffles its real pipelines" -- that is Phase 3
+ * (wire the planner to real work, e.g. routing binary production tp_iii_to_asm->tp_x86_assemble->tp_asm_to_pe
+ * vs the C path under a trust-root-vs-speed order).  nous as the proposer is DEFERRED (nous ranks XII terms;
+ * encoding quanta as terms is future) -- here the proposer is the deterministic cost-argmin (sanctioned, no ML).
+ *
+ * Ring R0.  K 1.00 (pure functions over a registered graph + two sealed organs).  NIH: libc-free.
+ */
+module eidos_compose
+
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+
+const CMP_MAXN : u32 = 64u32                       /* max point ids (graph nodes) */
+const CMP_MAXQ : u32 = 128u32                      /* max quanta (edges) */
+const CMP_INF  : u64 = 0xFFFFFFFFFFFFFFFFu64       /* unreachable distance / saturated weight sentinel */
+const CMP_NONE : u32 = 0xFFFFFFFFu32
+
+/* the quantum registry (module scope; W4 -- no fn-local var arrays). */
+var CMP_FROM   : [u32; 128]
+var CMP_TO     : [u32; 128]
+var CMP_COST   : [u64; 768]                        /* 128 * 6, row-major cost[q*6 + dim] */
+var CMP_QN     : u32 = 0u32
+
+/* planner scratch + output. */
+var CMP_WEIGHT : [u64; 128]                        /* per-edge weight under the current order */
+var CMP_DIST   : [u64; 64]
+var CMP_PREDQ  : [u32; 64]                          /* predecessor EDGE id reaching each node */
+var CMP_PLAN   : [u32; 128]                        /* the plan: quantum ids, forward order */
+var CMP_REV    : [u32; 128]                        /* reversed-path scratch */
+var CMP_PLEN   : u32 = 0u32
+var CMP_PCOST  : [u64; 6]                           /* the plan's total 6-dim cost vector */
+var CMP_ROUNDS : u32 = 0u32                         /* Bellman-Ford rounds run (termination witness) */
+var CMP_ROW    : [u64; 6]                           /* one edge's cost row, staged for cl_dot_slot */
+var CMP_TMP    : [u64; 1]                           /* cl_dot_slot out scratch */
+
+fn cmp_reset() -> i32 @export {
+    CMP_QN = 0u32
+    CMP_PLEN = 0u32
+    CMP_ROUNDS = 0u32
+    cl_init()                                       /* seed the standard cost orders (server/realtime/lowpower/balanced) */
+    return 0i32
+}
+
+/* register a quantum <from -> to> with its 6-dim cost vector (read from cost_ptr[0..6)).  Returns the
+ * quantum id (0..), or -1 on a bad point id / full registry. */
+fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 @export {
+    if from_pt >= CMP_MAXN { return -1i32 }
+    if to_pt >= CMP_MAXN { return -1i32 }
+    if CMP_QN >= CMP_MAXQ { return -1i32 }
+    let n : u32 = CMP_QN
+    CMP_FROM[n as u64] = from_pt
+    CMP_TO[n as u64]   = to_pt
+    let base : u32 = n * 6u32
+    let mut k : u32 = 0u32
+    while k < 6u32 { CMP_COST[(base + k) as u64] = cost_ptr[k as u64]  k = k + 1u32 }
+    CMP_QN = n + 1u32
+    return n as i32
+}
+
+fn cmp_qn() -> u32 @export { return CMP_QN }
+
+/* one edge's weight under an order = cl_dot_slot(order, cost_edge) -- the REAL cost_lattice scalarisation. */
+fn cmp_weight(order_slot: u32, e: u32) -> u64 {
+    let base : u32 = e * 6u32
+    let mut k : u32 = 0u32
+    while k < 6u32 { CMP_ROW[k as u64] = CMP_COST[(base + k) as u64]  k = k + 1u32 }
+    cl_dot_slot(order_slot, &CMP_ROW as *u64, &CMP_TMP as *u64)
+    return CMP_TMP[0u64]
+}
+
+/* THE PLANNER: the globally cost-minimal plan from start to target under `order_slot`.
+ * Returns the plan length (number of quanta), or 0 if the target is unreachable. */
+fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 @export {
+    if start >= CMP_MAXN { return 0u32 }
+    if target >= CMP_MAXN { return 0u32 }
+    CMP_PLEN = 0u32
+    CMP_ROUNDS = 0u32
+
+    /* init distances + predecessors. */
+    let mut i : u32 = 0u32
+    while i < CMP_MAXN {
+        CMP_DIST[i as u64]  = CMP_INF
+        CMP_PREDQ[i as u64] = CMP_NONE
+        i = i + 1u32
+    }
+    CMP_DIST[start as u64] = 0u64
+
+    /* precompute every edge weight under this order (once). */
+    let mut e : u32 = 0u32
+    while e < CMP_QN { CMP_WEIGHT[e as u64] = cmp_weight(order_slot, e)  e = e + 1u32 }
+
+    /* Bellman-Ford: relax all edges in REGISTRATION ORDER, strict-< (deterministic predecessor),
+     * until a full pass makes no change.  Hard-bounded by CMP_MAXN passes (non-negative weights converge
+     * in <= nodes-1). */
+    let mut round  : u32 = 0u32
+    let mut changed: u32 = 1u32
+    while changed == 1u32 {
+        changed = 0u32
+        if round < CMP_MAXN {
+            let mut ee : u32 = 0u32
+            while ee < CMP_QN {
+                let u  : u32 = CMP_FROM[ee as u64]
+                let v  : u32 = CMP_TO[ee as u64]
+                let du : u64 = CMP_DIST[u as u64]
+                let w  : u64 = CMP_WEIGHT[ee as u64]
+                if du != CMP_INF {
+                    if w < CMP_INF {
+                        if du <= CMP_INF - w {                 /* overflow guard: du + w cannot wrap */
+                            let nd : u64 = du + w
+                            if nd < CMP_DIST[v as u64] {       /* STRICT < -> lowest-edge-id predecessor wins */
+                                CMP_DIST[v as u64]  = nd
+                                CMP_PREDQ[v as u64] = ee
+                                changed = 1u32
+                            }
+                        }
+                    }
+                }
+                ee = ee + 1u32
+            }
+            round = round + 1u32
+        }
+    }
+    CMP_ROUNDS = round
+
+    if CMP_DIST[target as u64] == CMP_INF { return 0u32 }      /* unreachable */
+
+    /* reconstruct the path target -> start via predecessor edges (bounded by node count). */
+    let mut node : u32 = target
+    let mut cnt  : u32 = 0u32
+    let mut ok   : u32 = 1u32
+    while node != start {
+        if cnt >= CMP_MAXN {
+            ok = 0u32
+            node = start
+        } else {
+            let pe : u32 = CMP_PREDQ[node as u64]
+            if pe == CMP_NONE {
+                ok = 0u32
+                node = start
+            } else {
+                CMP_REV[cnt as u64] = pe
+                cnt = cnt + 1u32
+                node = CMP_FROM[pe as u64]
+            }
+        }
+    }
+    if ok == 0u32 { return 0u32 }
+
+    /* reverse into the forward plan + accumulate the plan's total cost vector. */
+    CMP_PLEN = cnt
+    let mut d : u32 = 0u32
+    while d < 6u32 { CMP_PCOST[d as u64] = 0u64  d = d + 1u32 }
+    let mut j : u32 = 0u32
+    while j < cnt {
+        let q : u32 = CMP_REV[(cnt - 1u32 - j) as u64]
+        CMP_PLAN[j as u64] = q
+        let base : u32 = q * 6u32
+        let mut k : u32 = 0u32
+        while k < 6u32 { CMP_PCOST[k as u64] = CMP_PCOST[k as u64] + CMP_COST[(base + k) as u64]  k = k + 1u32 }
+        j = j + 1u32
+    }
+    return CMP_PLEN
+}
+
+fn cmp_plan_len() -> u32 @export { return CMP_PLEN }
+fn cmp_rounds()   -> u32 @export { return CMP_ROUNDS }
+
+fn cmp_plan_at(i: u32) -> u32 @export {
+    if i < CMP_PLEN { return CMP_PLAN[i as u64] }
+    return CMP_NONE
+}
+
+fn cmp_plan_contains(qid: u32) -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < CMP_PLEN {
+        if CMP_PLAN[i as u64] == qid { return 1u8 }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+/* the plan's total 6-dim cost vector (per-dim sum over the plan's quanta). */
+fn cmp_plan_cost_into(out: *u64) -> i32 @export {
+    let mut k : u32 = 0u32
+    while k < 6u32 { out[k as u64] = CMP_PCOST[k as u64]  k = k + 1u32 }
+    return 0i32
+}
+
+/* the plan's ACHIEVED scalarised cost under an order = sum of per-edge cl_dot_slot (what Bellman-Ford
+ * minimised).  A caller cross-checks this against an independent argmin over the candidate routes. */
+fn cmp_plan_dot(order_slot: u32) -> u64 @export {
+    let mut tot : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < CMP_PLEN {
+        let w : u64 = cmp_weight(order_slot, CMP_PLAN[i as u64])
+        tot = tot + w
+        i = i + 1u32
+    }
+    return tot
+}
+
+/* execute the plan as witnessed isub blocks: each quantum <from -> to> is emitted as <V_BELOW, from, to>
+ * onto the metal bus, so the plan acquires a reproducible, task-distinct witness ROOT. */
+fn cmp_execute() -> i32 @export {
+    isub_reset()
+    let mut i : u32 = 0u32
+    while i < CMP_PLEN {
+        let q : u32 = CMP_PLAN[i as u64]
+        isub_emit(0u32, CMP_FROM[q as u64], CMP_TO[q as u64])
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn cmp_witness_into(out32: *u8) -> i32 @export { return isub_witness_into(out32) }

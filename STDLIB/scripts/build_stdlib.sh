@@ -1509,6 +1509,13 @@ MODULES=(
     # unrepresentable.  The actual ring-descent (WRMSR at R-1) is the gated/reversible/observe-first north-star,
     # DECLARED not executed (host-faster stays burden-of-proof).  Proven (corpus 1944).  BSS-neutral; last.
     "eidos/anchor"
+    # eidos/orchestrate -- HOST-ADAPTIVE COMPOSITION (a capability; NOT yet a live consumer).  CALLS eidos/compose
+    # gated by eidos/anchor: a capability whose host requirement the silicon Census Crystal does not verify is
+    # EXCLUDED, so the planner reshuffles AROUND it.  Self-location (anchor) + self-description => host-adaptive
+    # pipelines.  HONEST (advisor): nothing but a test calls orchestrate -> still SEVEN EIDOS capabilities, ZERO
+    # live consumers; a real III op invoking it (e.g. tp_*) is the open next rung.  Reshuffle is one bit per edge;
+    # cross-host divergence by construction, untested (one crystal).  Proven (corpus 1945).  BSS-neutral; last.
+    "eidos/orchestrate"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

@@ -1,0 +1,65 @@
+/* 1945_eidos_orchestrate_real.iii  --  EIDOS host-adaptive composition (MECHANISM, on this host's real census).
+ *
+ * eidos::orchestrate CALLS eidos::compose, gated by eidos::anchor's observe-only verification against the silicon
+ * Census Crystal: a capability whose host requirement the crystal does NOT verify is EXCLUDED, so the planner
+ * reshuffles AROUND it.  HONEST (advisor): orchestrate is a host-adaptive LAYER, NOT a live consumer -- only this
+ * test calls it (seven EIDOS capabilities, still zero live consumers).  And this proves the MECHANISM on ONE host:
+ * cross-host divergence follows BY CONSTRUCTION but is untested (one crystal).  The reshuffle is one bit per edge.
+ *
+ * Same task (0 -> 2), same three capabilities, ONLY the fast path's host requirement differs (met vs the host's
+ * real cpu_count + 1):
+ *   RUN 1: the fast direct capability C requires a fact the host VERIFIES -> plan = [C] (1 hop).
+ *   RUN 2: C requires a fact the host LACKS -> C excluded -> plan reshuffles to the fallback [A,B] (2 hops).
+ *
+ *   code 11 FAST     : with C host-reachable, the orchestrator did not take the 1-hop fast path (excluded != 0)
+ *   code 12 RESHUFFLE: with C host-UNreachable, it did not exclude C + reshuffle to the 2-hop fallback
+ *   code 13 REAL     : the host does not genuinely verify one requirement and not the other, or the plan did not change
+ * exit 99 = the planner is CALLED + host-adaptive: it reshuffles around a host-unverified capability (mechanism,
+ *           real census, one host; cross-host by construction).  NOT a live consumer -- nothing but this test calls it.
+ */
+module m1945
+
+extern @abi(c-msvc-x64) fn anchor_fact(idx: u64) -> u64 from "anchor.iii"
+extern @abi(c-msvc-x64) fn anchor_verifies(idx: u64, value: u64) -> u8 from "anchor.iii"
+extern @abi(c-msvc-x64) fn orch_reset() -> i32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_add_capability(fr: u32, to: u32, fact_idx: u64, fact_value: u64, cost: u64) -> i32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_plan(start: u32, target: u32) -> u32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_excluded() -> u32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_plan_node(i: u32) -> u32 from "orchestrate.iii"
+
+fn main() -> u64 {
+    let met   : u64 = anchor_fact(10u64)    /* the host's cpu_count (a real census fact) */
+    let unmet : u64 = met + 1u64            /* a value this host does NOT have */
+
+    /* ===== code 13 (sanity): the host genuinely verifies one requirement, not the other ===== */
+    if anchor_verifies(10u64, met) != 1u8 { return 13u64 }
+    if anchor_verifies(10u64, unmet) != 0u8 { return 13u64 }
+
+    /* ===== code 11: fast path C host-reachable -> the 1-hop plan [0,2] ===== */
+    orch_reset()
+    orch_add_capability(0u32, 1u32, 10u64, met, 1u64)     /* A: 0->1 (reachable) */
+    orch_add_capability(1u32, 2u32, 10u64, met, 1u64)     /* B: 1->2 (reachable) */
+    orch_add_capability(0u32, 2u32, 10u64, met, 1u64)     /* C: 0->2 fast direct (reachable) */
+    let h1 : u32 = orch_plan(0u32, 2u32)
+    if h1 != 1u32 { return 11u64 }
+    if orch_plan_node(0u32) != 0u32 { return 11u64 }
+    if orch_plan_node(1u32) != 2u32 { return 11u64 }
+    if orch_excluded() != 0u32 { return 11u64 }
+
+    /* ===== code 12: fast path C host-UNREACHABLE -> excluded -> reshuffle to the 2-hop fallback [0,1,2] ===== */
+    orch_reset()
+    orch_add_capability(0u32, 1u32, 10u64, met, 1u64)     /* A */
+    orch_add_capability(1u32, 2u32, 10u64, met, 1u64)     /* B */
+    orch_add_capability(0u32, 2u32, 10u64, unmet, 1u64)   /* C: requires what the host LACKS -> excluded */
+    let h2 : u32 = orch_plan(0u32, 2u32)
+    if h2 != 2u32 { return 12u64 }
+    if orch_plan_node(0u32) != 0u32 { return 12u64 }
+    if orch_plan_node(1u32) != 1u32 { return 12u64 }
+    if orch_plan_node(2u32) != 2u32 { return 12u64 }
+    if orch_excluded() != 1u32 { return 12u64 }
+
+    /* the plan RESHUFFLED with the host's reachability (1 hop vs 2) -- III adapted to where it runs */
+    if h1 == h2 { return 13u64 }
+
+    return 99u64
+}

@@ -1,0 +1,108 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\orchestrate.iii
+ *
+ * III STDLIB - eidos::orchestrate  --  HOST-ADAPTIVE COMPOSITION (a capability; NOT yet a live consumer).
+ *
+ * The host-adaptive LAYER over the EIDOS planner.  It CALLS eidos::compose -- but (see HONEST) nothing but a
+ * test calls orchestrate, so this is a longer call chain, not yet a live consumer.  Given a task (start ->
+ * target) over a registry of capabilities, it builds the cost-optimal pipeline using ONLY the capabilities this
+ * host can REACH -- reachability decided by eidos::anchor's observe-only verification against the silicon Census
+ * Crystal (anchor_verifies).  A capability whose host requirement the crystal does not verify is EXCLUDED from
+ * the graph, so the planner routes AROUND it.
+ *
+ * Toward the directive's "III is dumb ... can't reshuffle efficiently": self-location (anchor) + self-description
+ * (each capability) => the Composer reshuffles the pipeline by host VERIFICATION.  A different machine (different
+ * crystal) WOULD verify a different capability set and get a different plan -- BY CONSTRUCTION; UNTESTED here (one
+ * crystal available), so only the MECHANISM is gated.  No modes; no ML; the filter is the real silicon.
+ *
+ * Encapsulation: orchestrate authors no planning -- it composes eidos::compose (the real Bellman-Ford) gated by
+ * eidos::anchor (the real census).  The cost is the capability's real cost; the filter is the real silicon.
+ *
+ * HONEST (advisor-calibrated): orchestrate CALLS cmp_plan, but it is NOT live-consumed -- nothing but a test
+ * calls orchestrate, so the ratio is still SEVEN EIDOS capabilities, ZERO live consumers (relocated, not closed).
+ * A real III operation invoking orchestrate for its own reasons (e.g. tp_* binary production) is the OPEN next
+ * rung -- the gap.  And the reshuffle is ONE BIT per edge (anchor_verifies), like optgate's is_pow2: a mechanism,
+ * not rich reasoning.  Cross-host divergence is inference from the mechanism, not a tested result.
+ *
+ * Ring R0.  K 1.00.  Composes eidos/anchor + eidos/compose + cost_lattice.  NIH: libc-free.
+ */
+module eidos_orchestrate
+
+extern @abi(c-msvc-x64) fn anchor_verifies(idx: u64, value: u64) -> u8 from "anchor.iii"
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_len() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 from "cost_lattice.iii"
+
+const ORCH_MAXC : u32 = 128u32
+
+/* the capability registry: each capability is a pipeline edge <from -> to> with a real COST and a HOST
+ * REQUIREMENT (census fact idx == value) that anchor must verify for it to be reachable here. */
+var ORCH_FROM : [u32; 128]
+var ORCH_TO   : [u32; 128]
+var ORCH_FIDX : [u64; 128]
+var ORCH_FVAL : [u64; 128]
+var ORCH_COST : [u64; 128]
+var ORCH_NC   : u32 = 0u32
+
+var ORCH_ORD      : u32 = 0u32
+var ORCH_SRC      : u32 = 0u32
+var ORCH_EXCLUDED : u32 = 0u32           /* capabilities the host could NOT reach (the self-awareness evidence) */
+var ORCH_ETO      : [u32; 128]
+var ORCH_W    : [u64; 6]
+var ORCH_ROW  : [u64; 6]
+var ORCH_SLOT : [u32; 1]
+
+fn orch_reset() -> i32 @export {
+    ORCH_NC = 0u32
+    return 0i32
+}
+
+/* register a capability: the pipeline edge <from->to>, its cost, and the host requirement (census fact idx==value
+ * -- use fact_idx 0xFFFFFFFFFFFFFFFF for "no requirement / always reachable" via the verify path below). */
+fn orch_add_capability(fr: u32, to: u32, fact_idx: u64, fact_value: u64, cost: u64) -> i32 @export {
+    if ORCH_NC >= ORCH_MAXC { return -1i32 }
+    let n : u32 = ORCH_NC
+    ORCH_FROM[n as u64] = fr  ORCH_TO[n as u64] = to
+    ORCH_FIDX[n as u64] = fact_idx  ORCH_FVAL[n as u64] = fact_value  ORCH_COST[n as u64] = cost
+    ORCH_NC = n + 1u32
+    return n as i32
+}
+
+/* 1 iff the host reaches this capability: anchor verifies its requirement (no-requirement sentinel always passes). */
+fn orch_reachable(c: u32) -> u8 {
+    if ORCH_FIDX[c as u64] == 0xFFFFFFFFFFFFFFFFu64 { return 1u8 }
+    return anchor_verifies(ORCH_FIDX[c as u64], ORCH_FVAL[c as u64])
+}
+
+/* PLAN host-adaptively: register into the Composer ONLY the host-reachable capabilities, then route.  Unreachable
+ * capabilities are EXCLUDED -> the planner reshuffles around them.  Returns the plan length (hops), 0 if no path. */
+fn orch_plan(start: u32, target: u32) -> u32 @export {
+    cmp_reset()
+    ORCH_W[0u64] = 1u64  ORCH_W[1u64] = 0u64  ORCH_W[2u64] = 0u64  ORCH_W[3u64] = 0u64  ORCH_W[4u64] = 0u64  ORCH_W[5u64] = 0u64
+    cl_register_order(&ORCH_W as *u64, &ORCH_SLOT as *u32)
+    ORCH_ORD = ORCH_SLOT[0u64]
+    ORCH_EXCLUDED = 0u32
+    let mut c : u32 = 0u32
+    while c < ORCH_NC {
+        if orch_reachable(c) == 1u8 {
+            ORCH_ROW[0u64] = ORCH_COST[c as u64]  ORCH_ROW[1u64] = 0u64  ORCH_ROW[2u64] = 0u64  ORCH_ROW[3u64] = 0u64  ORCH_ROW[4u64] = 0u64  ORCH_ROW[5u64] = 0u64
+            let qid : i32 = cmp_register(ORCH_FROM[c as u64], ORCH_TO[c as u64], &ORCH_ROW as *u64)
+            if qid >= 0i32 { ORCH_ETO[(qid as u32) as u64] = ORCH_TO[c as u64] }
+        } else {
+            ORCH_EXCLUDED = ORCH_EXCLUDED + 1u32         /* the host cannot reach it -> reshuffle around it */
+        }
+        c = c + 1u32
+    }
+    ORCH_SRC = start
+    return cmp_plan(start, target, ORCH_ORD)
+}
+
+fn orch_excluded() -> u32 @export { return ORCH_EXCLUDED }
+fn orch_plan_len() -> u32 @export { return cmp_plan_len() }
+fn orch_plan_node(i: u32) -> u32 @export {
+    if i == 0u32 { return ORCH_SRC }
+    let e : u32 = cmp_plan_at(i - 1u32)
+    return ORCH_ETO[e as u64]
+}

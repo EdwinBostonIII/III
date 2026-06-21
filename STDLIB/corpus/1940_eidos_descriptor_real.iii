@@ -1,0 +1,90 @@
+/* 1940_eidos_descriptor_real.iii  --  EIDOS the JOIN: descriptor folds assimilate's REAL capability web.
+ *
+ * eidos::descriptor is the "master representation system" -- each block of the trace-derived capability web
+ * (omnia::assimilate, the deduped <verb,a,b> Master Web on the witnessed isub bus) exposed as a SELF-DESCRIBING
+ * quantum: content-address (identity), verb (purpose), granular capability (ORDER for BELOW, COMPLEMENT for
+ * REFLECT).  This is the reconciliation of the two tracks: assimilate builds the web FROM REAL TRACES; EIDOS
+ * composes over it.  descriptor is the bridge -- giving the Composer a REAL trace-fed input, not a fixture.
+ *
+ * The web here is built via assim_add (the real recognise-and-merge primitive; in production fed by the
+ * pipeline_real trace spine): a small order lattice 0<=1<=2<=3 with a 0<=2 shortcut and a REFLECT(0,3) complement.
+ *
+ *   code 10 WEB     : a web block failed to add, content-address dedup failed, or the web size is wrong
+ *   code 12 DERIVED : a descriptor's content-address/verb/capability != the REAL block's (it was hand-tagged)
+ *   code 13 JOIN    : the Composer did not route goal-directed over the web's order, or a step violates assim_leq
+ *   code 14 CAPABIL : the REFLECT block's capability != COMPLEMENT, or assim_complement disagrees
+ * exit 99 = descriptor folds assimilate's REAL web into self-describing, Composer-plannable capability-quanta --
+ *           the JOIN: EIDOS now composes over a real trace-derived input (the descriptors are DERIVED, not tagged).
+ */
+module m1940
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn desc_count() -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_verb(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_a(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_b(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_cav_into(i: u32, out32: *u8) -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_capability(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_build_order() -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan(start: u32, target: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan_node(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var DBUF : [u8; 32]
+var EBUF : [u8; 32]
+
+fn main() -> u64 {
+    isub_reset()
+
+    /* ===== code 10: build the REAL web via recognise-and-merge; the re-add must DEDUP by content-address ===== */
+    if assim_add(0u32, 0u32, 1u32) != 1u8 { return 10u64 }   /* BELOW 0<=1 (new) */
+    if assim_add(0u32, 1u32, 2u32) != 1u8 { return 10u64 }   /* BELOW 1<=2 */
+    if assim_add(0u32, 2u32, 3u32) != 1u8 { return 10u64 }   /* BELOW 2<=3 */
+    if assim_add(0u32, 0u32, 2u32) != 1u8 { return 10u64 }   /* BELOW 0<=2 (the shortcut) */
+    if assim_add(1u32, 0u32, 3u32) != 1u8 { return 10u64 }   /* REFLECT(0,3) -- the complement */
+    if assim_add(0u32, 0u32, 1u32) != 0u8 { return 10u64 }   /* RECOGNISED -- content-address dedup */
+    if assim_web_size() != 5u32 { return 10u64 }
+
+    /* ===== code 12: each descriptor is DERIVED from the real block (content-address + verb + capability) ===== */
+    if desc_count() != 5u32 { return 12u64 }
+    let mut i : u32 = 0u32
+    while i < 5u32 {
+        desc_cav_into(i, &DBUF as *u8)
+        isub_cav_into(isub_verb(i), isub_a(i), isub_b(i), &EBUF as *u8)
+        if cad_eq(&DBUF as *u8, &EBUF as *u8) != 1u8 { return 12u64 }     /* eidos identity == the real block's */
+        let v : u32 = isub_verb(i)
+        let mut expcap : u32 = 2u32
+        if v == 0u32 { expcap = 1u32 }                                    /* BELOW->ORDER, REFLECT->COMPLEMENT */
+        if desc_capability(i) != expcap { return 12u64 }
+        if desc_verb(i) != v { return 12u64 }
+        if desc_a(i) != isub_a(i) { return 12u64 }
+        if desc_b(i) != isub_b(i) { return 12u64 }
+        i = i + 1u32
+    }
+
+    /* ===== code 13: the JOIN -- the Composer routes goal-directed over the web's order; each step is assim_leq ===== */
+    desc_build_order()
+    let h : u32 = desc_plan(0u32, 3u32)
+    if h != 2u32 { return 13u64 }                                        /* [0,2,3] via the shortcut, not [0,1,2,3] */
+    if desc_plan_node(0u32) != 0u32 { return 13u64 }
+    if desc_plan_node(1u32) != 2u32 { return 13u64 }
+    if desc_plan_node(2u32) != 3u32 { return 13u64 }
+    if assim_leq(0u32, 2u32) != 1u8 { return 13u64 }                     /* each plan step is a REAL web order relation */
+    if assim_leq(2u32, 3u32) != 1u8 { return 13u64 }
+
+    /* ===== code 14: capability self-knowledge -- the REFLECT block provides COMPLEMENT, tied to assim_complement ===== */
+    /* block 4 is REFLECT(0,3) */
+    if desc_capability(4u32) != 2u32 { return 14u64 }                    /* COMPLEMENT */
+    if desc_verb(4u32) != 1u32 { return 14u64 }
+    if assim_complement(0u32) != 3u32 { return 14u64 }                   /* the web's universal NOT agrees */
+
+    return 99u64
+}

@@ -1,0 +1,108 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\descriptor.iii
+ *
+ * III STDLIB - eidos::descriptor  --  the EIDOS (capability-as-geometry): the JOIN of the two tracks.
+ *
+ * The "master representation system across individual ripples" (the architect directive): every block in the
+ * assimilate capability web (omnia::assimilate -- the Master Web of shattered <verb,a,b> blocks, deduped by
+ * sha256(geometry) on the witnessed isub bus) is exposed as a SELF-DESCRIBING quantum carrying its eidos -- its
+ * content-address (identity), its verb (purpose), and a CAPABILITY TAG (1 bit: ORDER for a BELOW block,
+ * COMPLEMENT/involution for a REFLECT block -- the universal operation the geometry realizes).
+ *
+ * ENCAPSULATE, NOT REIMPLEMENT (the cardinal law, [[feedback_one_substrate_no_islands]]): the capability web
+ * already exists -- assimilate builds it via recognise-and-merge (assim_add), fed in production by the
+ * pipeline_real trace spine (xii_rewrite -> unravel -> ingest -> assim_add).  descriptor is a THIN FOLD over
+ * assimilate's exports: it does NOT rebuild the web, it DESCRIBES it and BRIDGES it to the Composer.
+ * desc_build_order folds the web's BELOW order into eidos::compose quanta, so the planner routes GOAL-DIRECTED
+ * over the web (the descriptors are DERIVED from the blocks, never hand-tagged).
+ *
+ * HONEST SCOPE (calibrated): corpus 1940 proves descriptor faithfully folds a web built via the REAL primitive
+ * (assim_add); the END-TO-END trace feed (a real execution shattered onto the bus) is NOT exercised there --
+ * that is the production source.  So "trace-derived input" is the design, PROVEN only when a real trace drives
+ * the bus.  CAVEAT: desc_count == the CURRENT isub bus contents (== "the assimilate web" only when the bus holds
+ * only the web).  And descriptor does NOT create a live CONSUMER of EIDOS's planning (that remains tp_*).
+ * "descriptor done" != "EIDOS is live" and != "trace-feed proven end-to-end".
+ *
+ * Ring R0.  K 1.00.  Composes assimilate + isub + eidos/compose + cost_lattice.  NIH: libc-free.
+ */
+module eidos_descriptor
+
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_len() -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
+extern @abi(c-msvc-x64) fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 from "cost_lattice.iii"
+
+const DESC_V_BELOW       : u32 = 0u32
+const DESC_V_REFLECT     : u32 = 1u32
+const DESC_CAP_ORDER     : u32 = 1u32    /* a BELOW block: provides the order (leq / meet / join) */
+const DESC_CAP_COMPLEMENT: u32 = 2u32    /* a REFLECT block: provides the order-reversing involution (complement) */
+const DESC_MAXN          : u32 = 64u32
+
+var DESC_ORD  : u32 = 0u32
+var DESC_SRC  : u32 = 0u32
+var DESC_ETO  : [u32; 128]               /* per compose-quantum: its to-node (for plan reconstruction) */
+var DESC_W    : [u64; 6]
+var DESC_ROW  : [u64; 6]
+var DESC_SLOT : [u32; 1]
+
+/* the web's block count -- assimilate's Master Web (== the witnessed isub bus). */
+fn desc_count() -> u32 @export { return assim_web_size() }
+
+fn desc_verb(i: u32) -> u32 @export { return isub_verb(i) }
+fn desc_a(i: u32) -> u32 @export { return isub_a(i) }
+fn desc_b(i: u32) -> u32 @export { return isub_b(i) }
+
+/* the i-th block's EIDOS identity: sha256 of its geometric footprint (its content-address). DERIVED, not tagged. */
+fn desc_cav_into(i: u32, out32: *u8) -> i32 @export {
+    return isub_cav_into(isub_verb(i), isub_a(i), isub_b(i), out32)
+}
+
+/* the i-th block's granular CAPABILITY, recovered from its verb-geometry (never hand-assigned). */
+fn desc_capability(i: u32) -> u32 @export {
+    let v : u32 = isub_verb(i)
+    if v == DESC_V_BELOW { return DESC_CAP_ORDER }
+    if v == DESC_V_REFLECT { return DESC_CAP_COMPLEMENT }
+    return 0u32
+}
+
+/* THE BRIDGE: fold the web's BELOW order into eidos::compose quanta, so the planner can route over the REAL
+ * web.  Points must be < 64 (the compose node cap) -- larger-id blocks are skipped (the planner's bound). */
+fn desc_build_order() -> i32 @export {
+    cmp_reset()
+    DESC_W[0u64] = 1u64  DESC_W[1u64] = 0u64  DESC_W[2u64] = 0u64  DESC_W[3u64] = 0u64  DESC_W[4u64] = 0u64  DESC_W[5u64] = 0u64
+    cl_register_order(&DESC_W as *u64, &DESC_SLOT as *u32)
+    DESC_ORD = DESC_SLOT[0u64]
+    let n : u32 = assim_web_size()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == DESC_V_BELOW {
+            let a : u32 = isub_a(i)
+            let b : u32 = isub_b(i)
+            if a < DESC_MAXN { if b < DESC_MAXN {
+                DESC_ROW[0u64] = 1u64  DESC_ROW[1u64] = 0u64  DESC_ROW[2u64] = 0u64  DESC_ROW[3u64] = 0u64  DESC_ROW[4u64] = 0u64  DESC_ROW[5u64] = 0u64
+                let qid : i32 = cmp_register(a, b, &DESC_ROW as *u64)
+                if qid >= 0i32 { DESC_ETO[(qid as u32) as u64] = b }
+            } }
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* route GOAL-DIRECTED over the web's order: the cost-minimal chain of BELOW relations from start to target. */
+fn desc_plan(start: u32, target: u32) -> u32 @export {
+    DESC_SRC = start
+    return cmp_plan(start, target, DESC_ORD)
+}
+fn desc_plan_len() -> u32 @export { return cmp_plan_len() }
+fn desc_plan_node(i: u32) -> u32 @export {
+    if i == 0u32 { return DESC_SRC }
+    let e : u32 = cmp_plan_at(i - 1u32)
+    return DESC_ETO[e as u64]
+}

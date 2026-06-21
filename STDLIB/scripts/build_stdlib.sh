@@ -1494,6 +1494,14 @@ MODULES=(
     # live multi-dim-cost routing -- the probe).  Proven (corpus 1939).  Composes topology_atlas + compose +
     # cost_lattice.  BSS-neutral, compiler-unreferenced -> LIBNATIVE; appended last.
     "eidos/route"
+    # eidos/descriptor -- the EIDOS (capability-as-geometry): the JOIN of the two tracks.  A THIN FOLD over
+    # omnia/assimilate's REAL trace-derived capability web (the deduped <verb,a,b> Master Web on the isub bus):
+    # each block exposed as a self-describing quantum (content-address = identity, verb = purpose, granular
+    # CAPABILITY = ORDER for BELOW / COMPLEMENT for REFLECT), and the web's BELOW order BRIDGED into eidos/compose
+    # so the planner routes goal-directed over the REAL web.  ENCAPSULATES assimilate (does NOT rebuild it) ->
+    # gives EIDOS a real trace-fed INPUT, not a fixture.  Honest: still no live CONSUMER (that's tp_*).  Proven
+    # (corpus 1940).  Composes assimilate + isub + compose + cost_lattice.  BSS-neutral, compiler-unreferenced; last.
+    "eidos/descriptor"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

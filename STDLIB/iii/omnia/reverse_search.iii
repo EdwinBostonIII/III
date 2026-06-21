@@ -1,0 +1,124 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\reverse_search.iii
+ *
+ * III STDLIB - omnia::reverse_search  --  PHASE 4 of the Master Logic Assimilation: REVERSIBLE SEARCH.
+ *
+ * The Dome's ECHO (re-choice) and TIDE (rewind) pointed at the assimilated Master Logic Web (omnia::
+ * assimilate / isub).  A search over the web that a classical deterministic strategy CANNOT survive --
+ * because the move it greedily prefers forms a LASSO -- is survived by EVADE-BY-LIVING: live the move,
+ * detect the loop, rewind (retaining the failed branch as provenance), record the trap as ANTI-GEOMETRY,
+ * and re-choose -- now immunised against that specific topological cliff.
+ *
+ * HONEST SCOPE: real XII rewriting TERMINATES (omnia::unravel proves its reduction is an acyclic strict
+ * descent), so the non-termination here is NOT real-XII looping -- it is a genuine 2-cycle in the web's
+ * own geometry: complement is an order-reversing INVOLUTION, so complement(complement(x)) == x.  A naive
+ * "iterate complement to climb" strategy oscillates x <-> comp(x) forever (FATAL); the reversible search
+ * evades it.  The LOOP is a real mathematical fact of the real web; the rewind/anti-geometry mechanism is
+ * real and general -- the search merely needs a space with bad branches, which the involution supplies.
+ *
+ * PROVENANCE AS AXIOMS: anti-geometry (rs_is_trap) PERSISTS across searches -- a second search that would
+ * hit the same cliff climbs straight past it without re-living the loop (rs_provenance_count stays 0).
+ * The system gets smarter every time it fails.  rs_forget clears it; rs_reset_search keeps it.
+ *
+ * NOT observational learning: the trap is a RECORDED fact the next search replays (a witnessed event),
+ * exactly as event_substrate's re-choice changes only because the lesson is a recorded event -- no
+ * counting-to-adapt, no threshold.  Ring R0.  K 1.00.  NIH: reads only the sealed assimilate web.
+ */
+module omnia_reverse_search
+
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+
+const RS_CAP     : u32 = 128u32
+const RS_TRAPCAP : u32 = 64u32
+const RS_GUARD   : u32 = 64u32
+const RS_NULL    : u32 = 0xFFFFFFFFu32
+
+/* the search trajectory (the rewindable event-log of visited states) */
+var RS_STATE : [u32; 128]
+var RS_N     : u32 = 0u32
+/* anti-geometry: states from which the greedy (complement) move is a known trap -- persists = immunity */
+var RS_TRAP  : [u32; 64]
+var RS_NTRAP : u32 = 0u32
+/* provenance: how many looped branches this search abandoned (retained, not erased) */
+var RS_PROV  : u32 = 0u32
+
+/* full clear -- forget the anti-geometry too (a fresh, un-immunised system). */
+fn rs_forget() -> i32 @export {
+    RS_N = 0u32
+    RS_NTRAP = 0u32
+    RS_PROV = 0u32
+    return 0i32
+}
+
+/* per-search reset -- the trajectory + provenance clear, but the ANTI-GEOMETRY PERSISTS (immunity). */
+fn rs_reset_search() {
+    RS_N = 0u32
+    RS_PROV = 0u32
+}
+
+fn rs_push(s: u32) {
+    if RS_N < RS_CAP { RS_STATE[RS_N] = s  RS_N = RS_N + 1u32 }
+}
+fn rs_visited(s: u32) -> u8 {
+    let mut i : u32 = 0u32
+    while i < RS_N { if RS_STATE[i] == s { return 1u8 }  i = i + 1u32 }
+    return 0u8
+}
+fn rs_add_trap(s: u32) {
+    if RS_NTRAP < RS_TRAPCAP { RS_TRAP[RS_NTRAP] = s  RS_NTRAP = RS_NTRAP + 1u32 }
+}
+fn rs_is_trap(s: u32) -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < RS_NTRAP { if RS_TRAP[i] == s { return 1u8 }  i = i + 1u32 }
+    return 0u8
+}
+fn rs_provenance_count() -> u32 @export { return RS_PROV }
+fn rs_anti_count() -> u32 @export { return RS_NTRAP }
+
+/* the CLASSICAL DETERMINISTIC strategy: greedily iterate complement (it looks like progress); when the
+ * lasso closes it has no way to undo the commit -> FATAL (returns 0).  Returns 1 only if it reaches goal. */
+fn rs_search_naive(start: u32, goal: u32) -> u8 @export {
+    rs_reset_search()
+    let mut cur : u32 = start
+    let mut g : u32 = 0u32
+    while g < RS_GUARD {
+        if cur == goal { return 1u8 }
+        let nxt : u32 = assim_complement(cur)
+        if nxt == RS_NULL { return 0u8 }
+        if rs_visited(nxt) == 1u8 { return 0u8 }     /* the lasso closes -- and it cannot rewind: FATAL */
+        rs_push(cur)
+        cur = nxt
+        g = g + 1u32
+    }
+    return 0u8
+}
+
+/* EVADE-BY-LIVING: live the complement move; on a lasso, REWIND (retain the looped branch as provenance),
+ * record ANTI-GEOMETRY, and re-choose a CLIMB toward the goal -- reaching it ALIVE.  Anti-geometry persists,
+ * so a later search past the same cliff climbs immediately (smarter), without re-living the loop. */
+fn rs_search_evade(start: u32, goal: u32) -> u8 @export {
+    rs_reset_search()
+    let mut cur : u32 = start
+    let mut g : u32 = 0u32
+    while g < RS_GUARD {
+        if cur == goal { return 1u8 }
+        if rs_is_trap(cur) == 1u8 {
+            if assim_leq(cur, goal) == 1u8 { cur = goal }   /* immunised: climb straight past the cliff */
+            else { return 0u8 }
+        } else {
+            let nxt : u32 = assim_complement(cur)
+            if nxt == RS_NULL { return 0u8 }
+            if rs_visited(nxt) == 1u8 {
+                RS_PROV = RS_PROV + 1u32                     /* TIDE: retain the looped branch as provenance */
+                rs_add_trap(cur)                            /* anti-geometry: complement-from-cur is a trap */
+                if assim_leq(cur, goal) == 1u8 { cur = goal }  /* ECHO: re-choose a climb to the goal */
+                else { return 0u8 }
+            } else {
+                rs_push(cur)
+                cur = nxt
+            }
+        }
+        g = g + 1u32
+    }
+    return 0u8
+}

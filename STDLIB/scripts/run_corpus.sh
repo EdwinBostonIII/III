@@ -54,6 +54,7 @@ declare -A EXPECTED=(
     [1914_xii_encapsulated]=99
     [1915_unravel_geometry]=99
     [1916_grail_assimilate]=99
+    [1917_reverse_search]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

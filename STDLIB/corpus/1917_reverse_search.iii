@@ -1,0 +1,63 @@
+/* 1917_reverse_search.iii  --  PHASE 4: REVERSIBLE SEARCH over the assimilated Master Logic Web.  The Dome's
+ * ECHO/TIDE evade a search a classical deterministic strategy cannot survive.
+ *
+ * The web (the De Morgan diamond) gives a real involution: complement(2)=3, complement(3)=2.  A naive
+ * "iterate complement to climb from middle 2 to top 1" strategy oscillates 2<->3 forever (FATAL).  The
+ * reversible search lives it, detects the lasso, rewinds (retains the failed branch as provenance), records
+ * the trap as ANTI-GEOMETRY, and re-chooses a climb -> reaches the top ALIVE.  And it gets smarter: a second
+ * search past the same cliff climbs immediately, never re-living the loop.
+ *
+ *   code 11 FATAL    : the naive deterministic strategy did NOT loop (it must -- complement is an involution)
+ *   code 12 ALIVE    : the reversible search did not reach the goal (it must evade)
+ *   code 13 provenance: the evasion retained no looped-branch provenance (it must -- it bled for the answer)
+ *   code 14 anti-geom : no anti-geometry trap was recorded / it is not persistent
+ *   code 15 smarter  : a second search re-lived the loop instead of using the persistent anti-geometry
+ * exit 99 = the survival asymmetry: deterministic FATAL, reversible ALIVE, immunised by anti-geometry.
+ */
+module m1917
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn rs_forget() -> i32 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_search_naive(start: u32, goal: u32) -> u8 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_search_evade(start: u32, goal: u32) -> u8 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_provenance_count() -> u32 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_anti_count() -> u32 from "reverse_search.iii"
+extern @abi(c-msvc-x64) fn rs_is_trap(s: u32) -> u8 from "reverse_search.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+
+/* stage the De Morgan diamond into the web (0=bottom,1=top, 2,3 mirrored middles). */
+fn stage_diamond() {
+    assim_add(V_BELOW, 0u32, 2u32)  assim_add(V_BELOW, 0u32, 3u32)  assim_add(V_BELOW, 2u32, 1u32)
+    assim_add(V_BELOW, 3u32, 1u32)  assim_add(V_BELOW, 0u32, 1u32)
+    assim_add(V_REFLECT, 2u32, 3u32)  assim_add(V_REFLECT, 3u32, 2u32)
+    assim_add(V_REFLECT, 0u32, 1u32)  assim_add(V_REFLECT, 1u32, 0u32)
+}
+
+fn main() -> u64 {
+    isub_reset()
+    stage_diamond()
+    rs_forget()
+
+    /* the classical deterministic strategy LOOPS on the involution -> FATAL */
+    if rs_search_naive(2u32, 1u32) != 0u8 { return 11u64 }
+
+    /* the reversible search EVADES -> ALIVE */
+    if rs_search_evade(2u32, 1u32) != 1u8 { return 12u64 }
+
+    /* it bled for the answer: a looped branch was retained as provenance */
+    if rs_provenance_count() == 0u32 { return 13u64 }
+
+    /* anti-geometry recorded + persistent (the trap is now a known axiom) */
+    if rs_anti_count() == 0u32 { return 14u64 }
+    if rs_is_trap(3u32) != 1u8 { return 14u64 }
+
+    /* GETS SMARTER: a second search past the same cliff uses the persistent anti-geometry, climbing straight
+     * past it -- it does NOT re-live the loop, so it abandons zero new provenance */
+    if rs_search_evade(3u32, 1u32) != 1u8 { return 15u64 }
+    if rs_provenance_count() != 0u32 { return 15u64 }
+
+    return 99u64
+}

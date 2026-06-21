@@ -1035,6 +1035,13 @@ MODULES=(
     # complement recovered from the geometry compute every system's logic, dissolving named primitives.
     # Consumed by corpus 1916; reads/writes only isub + cad -- zero new crypto, BSS-neutral, compiler-unref.
     "omnia/assimilate"
+    # reverse_search: PHASE 4 -- REVERSIBLE SEARCH (the Dome's ECHO/TIDE) over the assimilated web.  A search
+    # a classical deterministic strategy cannot survive (it greedily iterates complement, a real involution,
+    # and oscillates forever -- FATAL) is survived by EVADE-BY-LIVING: live the move, detect the lasso,
+    # rewind (retain the failed branch as provenance), record ANTI-GEOMETRY, re-choose a climb -> ALIVE.  The
+    # anti-geometry PERSISTS, so the system gets smarter.  Consumed by corpus 1917; reads only the assimilate
+    # web -- BSS-neutral, compiler-unreferenced.
+    "omnia/reverse_search"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

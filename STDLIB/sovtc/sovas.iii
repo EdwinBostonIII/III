@@ -411,6 +411,12 @@ fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {    /* leaq sym
     sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Du32)  sov_modrm(0u32, reg, 5u32)
     sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
 }
+/* B1: leaq disp(%base), %reg : REX.W 8D, NO reloc -- cg_r3 emits this for stack-local addresses (&local).
+ * The dispatch was unconditionally routing leaq to the RIP form (sov_lea_rip_sym), corrupting `leaq -8(%rbp)`
+ * into `lea 0x0(%rip)` + a spurious reloc.  Reuses sov_membase_modrm. */
+fn sov_lea_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    sov_rexwb(reg, base)  sov_emit(0x8Du32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
 /* movl sym(%rip), %reg : 8B (no REX.W) -- the 32-bit RIP-relative symbol LOAD, RESTORED now that the parser
  * routes it.  THE self-hosting keystone: cg_r3 emits this for u32 globals, and the parallel gas-verified
  * diagnosis found ALL 8 compiler form-blockers (cg_r3_xii/cg_typeclass/jit_emit/main/...) are this one form.
@@ -437,4 +443,43 @@ fn sov_movzx_rip(reg: u32, sec: u32, off: i32, op2: u32) -> i32 @export {   /* m
     let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
     sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x0Fu32)  sov_emit(op2)  sov_modrm(0u32, reg, 5u32)
     sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+/* A1 -- movb (8-bit move): 0x88 store / 0x8A load, NO REX.W, 8-bit reg field.  cg_r3 emits only the STORE forms
+ * (movb %reg,(%base) 8501x ; movb %reg,sym(%rip) 469x) with %al/%dl (0,2), so the spl/bpl/sil/dil REX case never
+ * arises; REX emitted only for r8b+ / r8+ base.  Load + rr twins for completeness.  Reuses sov_membase_modrm. */
+fn sov_movb_store_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    let mut rr : u32 = 0u32  if reg  >= 8u32 { rr = 1u32 }
+    let mut bb : u32 = 0u32  if base >= 8u32 { bb = 1u32 }
+    if (rr | bb) != 0u32 { sov_rex(0u32, rr, 0u32, bb) }
+    sov_emit(0x88u32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
+fn sov_movb_load_base(reg: u32, base: u32, disp: i32) -> i32 @export {
+    let mut rr : u32 = 0u32  if reg  >= 8u32 { rr = 1u32 }
+    let mut bb : u32 = 0u32  if base >= 8u32 { bb = 1u32 }
+    if (rr | bb) != 0u32 { sov_rex(0u32, rr, 0u32, bb) }
+    sov_emit(0x8Au32)  sov_membase_modrm(reg, base, disp)  return 0i32
+}
+fn sov_movb_store_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    if r != 0u32 { sov_rex(0u32, r, 0u32, 0u32) }
+    sov_emit(0x88u32)  sov_modrm(0u32, reg, 5u32)  sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_movb_load_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {
+    let mut r : u32 = 0u32  if reg >= 8u32 { r = 1u32 }
+    if r != 0u32 { sov_rex(0u32, r, 0u32, 0u32) }
+    sov_emit(0x8Au32)  sov_modrm(0u32, reg, 5u32)  sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+fn sov_movb_rr(dst: u32, src: u32) -> i32 @export {
+    let mut rr : u32 = 0u32  if src >= 8u32 { rr = 1u32 }
+    let mut bb : u32 = 0u32  if dst >= 8u32 { bb = 1u32 }
+    if (rr | bb) != 0u32 { sov_rex(0u32, rr, 0u32, bb) }
+    sov_emit(0x88u32)  sov_modrm(3u32, src, dst)  return 0i32
+}
+/* movb SIB forms -- cg_r3's u8 array/pointer store `arr[i]=v` is `movb %reg,(%base,%index,scale)` (88 14 08),
+ * NOT base-only.  Reuse sov_rex_sib_w0 (REX no-W only for r8+) + sov_sib_modrm_disp. */
+fn sov_movb_store_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_rex_sib_w0(reg, index, base)  sov_emit(0x88u32)  sov_sib_modrm_disp(reg, base, index, scale, disp)  return 0i32
+}
+fn sov_movb_load_sib(reg: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_rex_sib_w0(reg, index, base)  sov_emit(0x8Au32)  sov_sib_modrm_disp(reg, base, index, scale, disp)  return 0i32
 }

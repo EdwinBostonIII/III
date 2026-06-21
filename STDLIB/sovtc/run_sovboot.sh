@@ -24,7 +24,7 @@ done
 gcc "$OUT/sovas_main.o" "$OUT/sovparse.o" "$OUT/sovcoff.o" "$OUT/sovas.o" -lkernel32 -o "$OUT/sovas_main.exe" 2>/dev/null || { echo "[sovboot] FAIL link sovas_main"; fail=1; }
 gcc "$OUT/sovld_main.o" "$OUT/sovld.o" "$OUT/sovparse.o" "$OUT/sovas.o" -lkernel32 -o "$OUT/sovld_main.exe" 2>/dev/null || { echo "[sovboot] FAIL link sovld_main"; fail=1; }
 
-for prog in boot1 boot2; do
+for prog in boot1 boot2 boot3; do
   "$IIIS" "$SOV/$prog.iii" --compile-only --out "$OUT/$prog.o" >/dev/null 2>&1 || { echo "[sovboot] FAIL compile $prog"; fail=1; continue; }
   S="$OUT/$prog.o.s"
   # step 2: sovereign .o, byte-differential vs gas

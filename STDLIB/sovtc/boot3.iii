@@ -1,0 +1,19 @@
+/* boot3.iii  --  isolates movb (8-bit store), the self-host keystone form.  cg_r3 emits movb only as STORES:
+ *   p[0] = v   -> movb %reg, (%base)    (store to a base register, no disp)
+ *   BG  = 7    -> movb %al, L_BG(%rip)  (store to a rip-relative global)
+ * Both with %al/%dl, so no spl/bpl/sil/dil REX case.  Reads come back as movzbq (already handled). */
+module sovtc_boot3
+
+var BG : u8 = 0u8
+
+fn put(p: *u8, v: u8) -> i32 { p[0u64] = v  return 0i32 }
+
+fn main() -> u64 {
+    var buf : [u8; 8]
+    put((&buf) as *u8, 99u8)        /* movb %reg, (%base) */
+    BG = 7u8                        /* movb %al, L_BG(%rip) */
+    let a : u8 = buf[0u64]
+    let b : u8 = BG
+    if a == 99u8 { if b == 7u8 { return 99u64 } }
+    return 1u64
+}

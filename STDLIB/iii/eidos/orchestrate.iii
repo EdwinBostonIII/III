@@ -28,6 +28,7 @@
 module eidos_orchestrate
 
 extern @abi(c-msvc-x64) fn anchor_verifies(idx: u64, value: u64) -> u8 from "anchor.iii"
+extern @abi(c-msvc-x64) fn anchor_has_feature(bit: u32) -> u8 from "anchor.iii"
 extern @abi(c-msvc-x64) fn cmp_reset() -> i32 from "compose.iii"
 extern @abi(c-msvc-x64) fn cmp_register(from_pt: u32, to_pt: u32, cost_ptr: *u64) -> i32 from "compose.iii"
 extern @abi(c-msvc-x64) fn cmp_plan(start: u32, target: u32, order_slot: u32) -> u32 from "compose.iii"
@@ -36,6 +37,10 @@ extern @abi(c-msvc-x64) fn cmp_plan_at(i: u32) -> u32 from "compose.iii"
 extern @abi(c-msvc-x64) fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 from "cost_lattice.iii"
 
 const ORCH_MAXC : u32 = 128u32
+/* a capability's requirement is normally a census fact (anchor_verifies(idx,value)); if its fact_idx is this
+ * sentinel, the requirement is instead a CPU FEATURE (fact_value = a CPUFEAT_BIT_*), gated by anchor_has_feature
+ * -- the host-feature reachability that a KAT can flip with cpufeat_force_mask to PROVE cross-host divergence. */
+const ORCH_REQ_FEATURE : u64 = 0xFEA7000000000000u64
 
 /* the capability registry: each capability is a pipeline edge <from -> to> with a real COST and a HOST
  * REQUIREMENT (census fact idx == value) that anchor must verify for it to be reachable here. */
@@ -72,9 +77,14 @@ fn orch_add_capability(fr: u32, to: u32, fact_idx: u64, fact_value: u64, cost: u
 
 /* 1 iff the host reaches this capability: anchor verifies its requirement (no-requirement sentinel always passes). */
 fn orch_reachable(c: u32) -> u8 {
-    if ORCH_FIDX[c as u64] == 0xFFFFFFFFFFFFFFFFu64 { return 1u8 }
-    return anchor_verifies(ORCH_FIDX[c as u64], ORCH_FVAL[c as u64])
+    let fidx : u64 = ORCH_FIDX[c as u64]
+    if fidx == 0xFFFFFFFFFFFFFFFFu64 { return 1u8 }                              /* no requirement -> always reachable */
+    if fidx == ORCH_REQ_FEATURE { return anchor_has_feature(ORCH_FVAL[c as u64] as u32) }   /* CPU-FEATURE gate */
+    return anchor_verifies(fidx, ORCH_FVAL[c as u64])                           /* census-FACT gate */
 }
+
+/* the sentinel a caller passes as fact_idx so a capability's requirement is a CPU feature (fact_value = bit). */
+fn orch_req_feature() -> u64 @export { return ORCH_REQ_FEATURE }
 
 /* PLAN host-adaptively: register into the Composer ONLY the host-reachable capabilities, then route.  Unreachable
  * capabilities are EXCLUDED -> the planner reshuffles around them.  Returns the plan length (hops), 0 if no path. */

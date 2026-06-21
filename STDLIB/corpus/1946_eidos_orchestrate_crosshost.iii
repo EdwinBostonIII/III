@@ -1,0 +1,69 @@
+/* 1946_eidos_orchestrate_crosshost.iii  --  host-adaptive composition, CROSS-HOST DIVERGENCE PROVEN (not inferred).
+ *
+ * 1945 proved the mechanism on one host; the advisor flagged "a different machine gets a different plan" as
+ * inference (one crystal).  This closes it: numera/cpufeat exposes the REAL CPU-feature set via native CPUID, and
+ * cpufeat_force_mask lets a KAT force a feature OFF -- simulating a different host's silicon.  So we prove the
+ * orchestrator's plan DIVERGES across host feature-sets, on the same machine, with real silicon.
+ *
+ * Same task (0->2): a HW capability C (0->2 direct) requires CPU feature SSE2; a SW fallback A->B (0->1->2) needs
+ * nothing.  Run 1: SSE2 present -> C reachable -> plan [C] (1 hop).  Run 2: SSE2 FORCED OFF (a host without it) ->
+ * C excluded -> plan reshuffles to the SW fallback [A,B] (2 hops).  The plan is a function of the host's silicon.
+ *
+ *   code 10 BASE     : this host does not advertise SSE2 (the test's baseline feature)
+ *   code 11 PRESENT  : with SSE2 present, the orchestrator did not take the 1-hop HW path
+ *   code 12 ABSENT   : with SSE2 forced off, it did not exclude the HW path + reshuffle to the SW fallback
+ *   code 13 DIVERGE  : the feature did not actually flip, or the plan did not diverge across host feature-sets
+ * exit 99 = the host-adaptive plan DIVERGES across host feature-sets -- cross-host adaptivity proven with real
+ *           silicon (cpufeat) + the force-mask, not merely inferred.
+ */
+module m1946
+
+extern @abi(c-msvc-x64) fn cpufeat_force_mask(m: u32) -> i32 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn anchor_has_feature(bit: u32) -> u8 from "anchor.iii"
+extern @abi(c-msvc-x64) fn orch_reset() -> i32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_add_capability(fr: u32, to: u32, fact_idx: u64, fact_value: u64, cost: u64) -> i32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_req_feature() -> u64 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_plan(start: u32, target: u32) -> u32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_excluded() -> u32 from "orchestrate.iii"
+extern @abi(c-msvc-x64) fn orch_plan_node(i: u32) -> u32 from "orchestrate.iii"
+
+fn main() -> u64 {
+    let FEAT  : u64 = orch_req_feature()          /* the CPU-feature requirement sentinel */
+    let SSE2  : u64 = 0u64                         /* CPUFEAT_BIT_SSE2 = 0 (universally present on x86-64) */
+    let NOREQ : u64 = 0xFFFFFFFFFFFFFFFFu64        /* no requirement -> always reachable */
+
+    /* ===== code 10: baseline -- this host advertises SSE2 ===== */
+    cpufeat_force_mask(0xFFFFFFFFu32)
+    if anchor_has_feature(0u32) != 1u8 { return 10u64 }
+
+    /* ===== code 11: feature PRESENT -> the 1-hop HW path ===== */
+    orch_reset()
+    orch_add_capability(0u32, 1u32, NOREQ, 0u64, 1u64)        /* A (SW fallback leg) */
+    orch_add_capability(1u32, 2u32, NOREQ, 0u64, 1u64)        /* B (SW fallback leg) */
+    orch_add_capability(0u32, 2u32, FEAT, SSE2, 1u64)         /* C: HW path, needs SSE2 (present) */
+    let h1 : u32 = orch_plan(0u32, 2u32)
+    if h1 != 1u32 { return 11u64 }
+    if orch_plan_node(0u32) != 0u32 { return 11u64 }
+    if orch_plan_node(1u32) != 2u32 { return 11u64 }
+    if orch_excluded() != 0u32 { return 11u64 }
+
+    /* ===== code 12: SIMULATE a host WITHOUT SSE2 -> reshuffle to the SW fallback ===== */
+    cpufeat_force_mask(0xFFFFFFFEu32)                          /* clear bit 0 (SSE2) -- a different host's silicon */
+    if anchor_has_feature(0u32) != 0u8 { return 13u64 }       /* the feature is now absent */
+    orch_reset()
+    orch_add_capability(0u32, 1u32, NOREQ, 0u64, 1u64)
+    orch_add_capability(1u32, 2u32, NOREQ, 0u64, 1u64)
+    orch_add_capability(0u32, 2u32, FEAT, SSE2, 1u64)         /* C: HW path, now UNREACHABLE */
+    let h2 : u32 = orch_plan(0u32, 2u32)
+    cpufeat_force_mask(0xFFFFFFFFu32)                          /* RESTORE the real feature set */
+    if h2 != 2u32 { return 12u64 }
+    if orch_plan_node(0u32) != 0u32 { return 12u64 }
+    if orch_plan_node(1u32) != 1u32 { return 12u64 }
+    if orch_plan_node(2u32) != 2u32 { return 12u64 }
+    if orch_excluded() != 1u32 { return 12u64 }
+
+    /* the plan DIVERGED across host feature-sets (1 hop with SSE2, 2 hops without) -- cross-host adaptivity proven */
+    if h1 == h2 { return 13u64 }
+
+    return 99u64
+}

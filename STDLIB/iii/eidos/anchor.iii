@@ -31,6 +31,17 @@ extern @abi(c-msvc-x64) fn katabasis_census_hash(out_addr: u64) -> i32 from "cen
 extern @abi(c-msvc-x64) fn katabasis_census_fact_count() -> u64 from "census.iii"
 extern @abi(c-msvc-x64) fn katabasis_census_fact(idx: u64) -> u64 from "census.iii"
 extern @abi(c-msvc-x64) fn katabasis_census_fact_matches(idx: u64, value: u64) -> u8 from "census.iii"
+/* CPU-feature reachability -- numera/cpufeat: native CPUID (UNPRIVILEGED, observe-only, no write, no metal).
+ * The cpufeat_has_* exports honor cpufeat_force_mask (so a KAT can simulate a host without a feature). */
+extern @abi(c-msvc-x64) fn cpufeat_has_sse2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_sse41() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_aesni() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_sha() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_rdrand() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_rdseed() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_bmi2() -> u8 from "cpufeat.iii"
 
 const ANCHOR_RUNG_LATCH : u32 = 3u32      /* R3: the universal latch rung -- always reached, needs no privilege */
 
@@ -53,3 +64,20 @@ fn anchor_fact(idx: u64) -> u64 @export { return katabasis_census_fact(idx) }
  * == value)?  Pure fact comparison, NO write.  A capability is reachable here iff the host verifies its
  * requirement -- this is what lets the Composer reshuffle around the host (the self-aware consumer). */
 fn anchor_verifies(idx: u64, value: u64) -> u8 @export { return katabasis_census_fact_matches(idx, value) }
+
+/* CPU-FEATURE reachability (the finer self-location for implementation choice): does THIS host advertise CPU
+ * feature `bit` (numera/cpufeat CPUFEAT_BIT_*: SSE2=0 SSE41=1 AESNI=2 AVX2=3 SHA=4 ...)?  Native CPUID --
+ * UNPRIVILEGED, observe-only, NO write/metal.  This is what lets a host-adaptive operation pick a HW path only
+ * where the silicon supports it (and a KAT prove cross-host divergence via cpufeat_force_mask). */
+fn anchor_has_feature(bit: u32) -> u8 @export {
+    if bit == 0u32 { return cpufeat_has_sse2() }       /* CPUFEAT_BIT_SSE2 */
+    if bit == 1u32 { return cpufeat_has_sse41() }
+    if bit == 2u32 { return cpufeat_has_aesni() }
+    if bit == 3u32 { return cpufeat_has_avx2() }
+    if bit == 4u32 { return cpufeat_has_sha() }
+    if bit == 5u32 { return cpufeat_has_rdrand() }
+    if bit == 6u32 { return cpufeat_has_rdseed() }
+    if bit == 7u32 { return cpufeat_has_avx512f() }
+    if bit == 8u32 { return cpufeat_has_bmi2() }
+    return 0u8
+}

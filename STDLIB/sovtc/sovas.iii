@@ -65,6 +65,7 @@ fn sov_rec_reloc_at(off: u32, sec: u32, sym: u32) -> i32 @export { if REL_N < 65
 
 fn sov_cn_clear() -> i32 @export { CN_LEN = 0u32  return 0i32 }
 fn sov_cn_push(ch: u32) -> i32 @export { if CN_LEN < 256u32 { CN_BUF[CN_LEN as u64] = ch as u8  CN_LEN = CN_LEN + 1u32 }  return 0i32 }
+fn sov_ext_intern_pub() -> u32 @export { return sov_ext_intern() }   /* LINKER: intern CN_BUF as an import, return its slot */
 fn cn_eq(slot: u32) -> u32 {
     if EXT_NLEN[slot as u64] != CN_LEN { return 0u32 }
     let mut j : u32 = 0u32

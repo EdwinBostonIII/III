@@ -1,0 +1,19 @@
+/* sov_drivel3.iii  --  the S2.2b sovld IMPORT driver.  Assembles the REAL cg_r3 instruction stream for a main
+ * that calls an extern (ExitProcess(99), kernel32) and emits a PE32+ via sovld -- with a full import directory
+ * + IAT + a jump thunk, NO gcc, NO ld.  The loader resolves ExitProcess from kernel32; main calls it with 99;
+ * the process exits 99.  (.rodata "kernel32" metadata cg_r3 emits is incidental -- not referenced -- so omitted.)
+ */
+module sovtc_drivel3
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .text\n  .global main\nmain:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movabsq $0x63, %rax\n  pushq %rax\n  popq %rcx\n  subq $32, %rsp\n  callq ExitProcess\n  addq $32, %rsp\n  movl %eax, %eax\n  pushq %rax\n  popq %rax\n  movabsq $0x0, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    if sovparse_full(src, n) != 0i32 { return 1u64 }
+    sovld_emit()
+    return 0u64
+}

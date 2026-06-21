@@ -1,15 +1,18 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\sovtc\sovld.iii
  *
- * III sovereign toolchain -- sovld, the PE32+ LINKER/IMAGE WRITER (S2).  Replaces gcc's ld: lays out a PE32+
- * executable the Windows loader maps + runs -- NO gcc, NO ld.  Emits to _O_BINARY stdout via putchar.
+ * III sovereign toolchain -- sovld, the PE32+ LINKER/IMAGE WRITER (S2).  Replaces gcc's ld -- NO gcc, NO ld.
+ * Emits a PE32+ executable to _O_BINARY stdout via putchar.
  *
- * S2.2a scope: multi-section (.text [+ .data]) + APPLY internal REL32 relocations against the laid-out RVAs
- * (disp = target_RVA - (field_RVA + 4)) + entry = the `main` export.  So a program with a DATA GLOBAL links
- * sovereignly (the rip-relative load of G is patched to reach .data).  Entry sets the exit code in rax + RETs
- * -- RtlUserThreadStart exits with that status, so NO imports are needed for the no-extern-call case.
- * (NAMED relocs / imports / IAT = S2.2b.)
+ * S2.2 scope:
+ *   - multi-section: .text [+ .data] [+ .idata], section-aligned RVAs.
+ *   - APPLY internal REL32 relocations (.data) : disp = target_RVA - (field_RVA + 4).
+ *   - IMPORTS (S2.2b): for each extern (sov_ext, assumed kernel32), build the import directory + ILT + IAT +
+ *     hint/name + DLL name in a READ|WRITE .idata section; set data directories IMPORT(1) + IAT(12); generate a
+ *     jump thunk per import (FF 25 jmp *[IAT-entry], rip-relative) appended to .text; patch the call's E8 REL32
+ *     to the thunk's RVA.  So an EXTERN-CALLING program (e.g. ExitProcess(99)) links + runs sovereignly.
+ *   - entry = the `main` export (else .text+0); ret-only entries exit via RtlUserThreadStart.
  *
- * NIH; reads sovas (.text/.data/relocs) + sovparse (exports) + msvcrt (putchar/_setmode).  Ring R0.
+ * NIH; reads sovas (.text/.data/relocs/externs) + sovparse (exports) + msvcrt (putchar/_setmode).  Ring R0.
  */
 module sovtc_sovld
 
@@ -20,6 +23,10 @@ extern @abi(c-msvc-x64) fn sov_data_at(sec: u32, i: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_reloc_sec(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sym(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_namelen(slot: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_namebyte(slot: u32, j: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sp_export_n() -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_off(i: u32) -> u32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sp_export_namelen(i: u32) -> u32 from "sovparse.iii"
@@ -28,7 +35,8 @@ extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 
 var LDPOS : u32 = 0u32
-var TEXTBUF : [u8; 16384]    /* a patchable copy of the .text (relocs applied in place) */
+var TEXTBUF : [u8; 16384]
+var HN_RVA  : [u32; 64]      /* per-import hint/name RVA */
 
 fn p8(b: u32) { putchar((b & 0xFFu32) as i32)  LDPOS = LDPOS + 1u32 }
 fn p16(v: u32) { p8(v)  p8(v >> 8u32) }
@@ -36,17 +44,15 @@ fn p32(v: u32) { p8(v)  p8(v >> 8u32)  p8(v >> 16u32)  p8(v >> 24u32) }
 fn p64(lo: u32, hi: u32) { p32(lo)  p32(hi) }
 fn ppad(target: u32) { while LDPOS < target { p8(0u32) } }
 fn alignup(v: u32, a: u32) -> u32 { return (v + (a - 1u32)) & (0u32 - a) }
-
-fn rd32(off: u32) -> u32 {
-    return (TEXTBUF[off as u64] as u32) | ((TEXTBUF[(off + 1u32) as u64] as u32) << 8u32) | ((TEXTBUF[(off + 2u32) as u64] as u32) << 16u32) | ((TEXTBUF[(off + 3u32) as u64] as u32) << 24u32)
-}
 fn wr32(off: u32, v: u32) {
     TEXTBUF[off as u64] = (v & 0xFFu32) as u8
     TEXTBUF[(off + 1u32) as u64] = ((v >> 8u32) & 0xFFu32) as u8
     TEXTBUF[(off + 2u32) as u64] = ((v >> 16u32) & 0xFFu32) as u8
     TEXTBUF[(off + 3u32) as u64] = ((v >> 24u32) & 0xFFu32) as u8
 }
-/* the .text offset of the `main` export (the entry), or 0 if none */
+fn rd32(off: u32) -> u32 {
+    return (TEXTBUF[off as u64] as u32) | ((TEXTBUF[(off + 1u32) as u64] as u32) << 8u32) | ((TEXTBUF[(off + 2u32) as u64] as u32) << 16u32) | ((TEXTBUF[(off + 3u32) as u64] as u32) << 24u32)
+}
 fn find_main_off() -> u32 {
     let mut e : u32 = 0u32
     while e < sp_export_n() {
@@ -67,81 +73,164 @@ fn sovld_emit() -> i32 @export {
     let mut i : u32 = 0u32
     while i < textlen { TEXTBUF[i as u64] = sov_at(i) as u8  i = i + 1u32 }
 
+    let k : u32 = sov_ext_n()              /* number of imports (thunks) */
+    let new_textlen : u32 = textlen + (k * 6u32)
     let text_rva : u32 = 0x1000u32
-    let text_mem : u32 = alignup(textlen, 0x1000u32)
-    let text_raw : u32 = alignup(textlen, 0x200u32)
-    let datalen  : u32 = sov_data_len(1u32)
+    let text_mem : u32 = alignup(new_textlen, 0x1000u32)
+    let text_raw : u32 = alignup(new_textlen, 0x200u32)
+
+    let datalen : u32 = sov_data_len(1u32)
     let mut has_data : u32 = 0u32
     if datalen > 0u32 { has_data = 1u32 }
-    let data_rva : u32 = text_rva + text_mem
-    let data_mem : u32 = alignup(datalen, 0x1000u32)
-    let data_raw : u32 = alignup(datalen, 0x200u32)
+    let mut has_idata : u32 = 0u32
+    if k > 0u32 { has_idata = 1u32 }
 
-    /* ── apply internal REL32 relocations into TEXTBUF: disp = target_RVA - (field_RVA + 4) ── */
+    /* section RVAs in order .text / .data / .idata */
+    let mut cur_rva : u32 = text_rva + text_mem
+    let mut data_rva : u32 = 0u32
+    let data_mem : u32 = alignup(datalen, 0x1000u32)
+    if has_data == 1u32 { data_rva = cur_rva  cur_rva = cur_rva + data_mem }
+    let mut idata_rva : u32 = 0u32
+
+    /* ── .idata internal layout (IDT | ILT | IAT | hint/names | dll name) ── */
+    let ilt_off : u32 = 40u32                         /* after 2 import descriptors */
+    let iat_off : u32 = 40u32 + ((k + 1u32) * 8u32)
+    let hn_off  : u32 = iat_off + ((k + 1u32) * 8u32)
+    let mut idata_len : u32 = 0u32
+    let mut dll_rva : u32 = 0u32
+    let mut iat_rva : u32 = 0u32
+    let mut idt_rva : u32 = 0u32
+    let mut ilt_rva : u32 = 0u32
+    if has_idata == 1u32 {
+        idata_rva = cur_rva
+        idt_rva = idata_rva
+        ilt_rva = idata_rva + ilt_off
+        iat_rva = idata_rva + iat_off
+        let mut cur : u32 = hn_off
+        let mut s : u32 = 0u32
+        while s < k {
+            HN_RVA[s as u64] = idata_rva + cur
+            let nl : u32 = sov_ext_namelen(s)
+            cur = cur + alignup(2u32 + nl + 1u32, 2u32)   /* hint(2)+name+nul, even */
+            s = s + 1u32
+        }
+        dll_rva = idata_rva + cur
+        idata_len = (cur + 13u32)                         /* "kernel32.dll\0" = 13 */
+        cur_rva = cur_rva + alignup(idata_len, 0x1000u32)
+    }
+    let size_of_image : u32 = cur_rva
+
+    /* ── generate jump thunks (FF 25 jmp *[IAT-entry]) appended to TEXTBUF ── */
+    let mut s2 : u32 = 0u32
+    while s2 < k {
+        let toff : u32 = textlen + (s2 * 6u32)
+        let thunk_rva : u32 = text_rva + toff
+        let iat_entry_rva : u32 = iat_rva + (s2 * 8u32)
+        TEXTBUF[toff as u64] = 0xFFu8
+        TEXTBUF[(toff + 1u32) as u64] = 0x25u8
+        wr32(toff + 2u32, iat_entry_rva - (thunk_rva + 6u32))
+        s2 = s2 + 1u32
+    }
+
+    /* ── apply relocations ── */
     let nreloc : u32 = sov_reloc_n()
     let mut r : u32 = 0u32
     while r < nreloc {
-        if sov_reloc_sec(r) == 1u32 {          /* .data reloc (S2.2a; named relocs/imports = S2.2b) */
-            let roff : u32 = sov_reloc_off(r)
-            let addend : u32 = rd32(roff)
+        let rsec : u32 = sov_reloc_sec(r)
+        let roff : u32 = sov_reloc_off(r)
+        if rsec == 1u32 {                                 /* .data reloc */
             let field_rva : u32 = text_rva + roff
-            let target_rva : u32 = data_rva + addend
-            wr32(roff, target_rva - (field_rva + 4u32))
+            wr32(roff, (data_rva + rd32(roff)) - (field_rva + 4u32))
+        }
+        if rsec == 0u32 {                                 /* named reloc -> the import thunk */
+            let thunk_rva : u32 = text_rva + textlen + (sov_reloc_sym(r) * 6u32)
+            wr32(roff, thunk_rva - (text_rva + roff + 4u32))
         }
         r = r + 1u32
     }
 
     let entry_rva : u32 = text_rva + find_main_off()
-    let mut nsec : u32 = 1u32
-    if has_data == 1u32 { nsec = 2u32 }
-    let mut size_of_image : u32 = text_rva + text_mem
-    if has_data == 1u32 { size_of_image = data_rva + data_mem }
-    let data_fileptr : u32 = 0x200u32 + text_raw
+    let nsec : u32 = (1u32 + has_data) + has_idata
+    let text_fileptr : u32 = 0x200u32
+    let mut cur_file : u32 = text_fileptr + text_raw
+    let data_raw : u32 = alignup(datalen, 0x200u32)
+    let mut data_fileptr : u32 = 0u32
+    if has_data == 1u32 { data_fileptr = cur_file  cur_file = cur_file + data_raw }
+    let idata_raw : u32 = alignup(idata_len, 0x200u32)
+    let mut idata_fileptr : u32 = 0u32
+    if has_idata == 1u32 { idata_fileptr = cur_file  cur_file = cur_file + idata_raw }
 
-    /* ── DOS header ── */
-    p8(77u32) p8(90u32)  ppad(0x3Cu32)  p32(0x40u32)
-    /* ── PE signature ── */
-    p8(80u32) p8(69u32) p8(0u32) p8(0u32)
-    /* ── COFF file header ── */
-    p16(0x8664u32)  p16(nsec)  p32(0u32)  p32(0u32)  p32(0u32)  p16(0xF0u32)  p16(0x23u32)
-    /* ── Optional header PE32+ ── */
+    /* ── headers ── */
+    p8(77u32) p8(90u32)  ppad(0x3Cu32)  p32(0x40u32)            /* DOS */
+    p8(80u32) p8(69u32) p8(0u32) p8(0u32)                       /* PE\0\0 */
+    p16(0x8664u32)  p16(nsec)  p32(0u32)  p32(0u32)  p32(0u32)  p16(0xF0u32)  p16(0x23u32)   /* COFF */
     p16(0x20Bu32)  p8(14u32) p8(0u32)
-    p32(text_raw)        /* SizeOfCode */
-    p32(data_raw)        /* SizeOfInitializedData */
-    p32(0u32)            /* SizeOfUninitializedData */
-    p32(entry_rva)       /* AddressOfEntryPoint */
-    p32(text_rva)        /* BaseOfCode */
-    p64(0x40000000u32, 1u32)   /* ImageBase 0x140000000 */
-    p32(0x1000u32)       /* SectionAlignment */
-    p32(0x200u32)        /* FileAlignment */
+    p32(text_raw)  p32(data_raw + idata_raw)  p32(0u32)
+    p32(entry_rva)  p32(text_rva)
+    p64(0x40000000u32, 1u32)
+    p32(0x1000u32)  p32(0x200u32)
     p16(6u32) p16(0u32)  p16(0u32) p16(0u32)  p16(6u32) p16(0u32)
-    p32(0u32)            /* Win32VersionValue */
-    p32(size_of_image)   /* SizeOfImage */
-    p32(0x200u32)        /* SizeOfHeaders */
-    p32(0u32)            /* CheckSum */
-    p16(3u32)            /* Subsystem CONSOLE */
-    p16(0u32)            /* DllCharacteristics */
+    p32(0u32)  p32(size_of_image)  p32(0x200u32)  p32(0u32)
+    p16(3u32)  p16(0u32)
     p64(0x100000u32, 0u32)  p64(0x1000u32, 0u32)  p64(0x100000u32, 0u32)  p64(0x1000u32, 0u32)
-    p32(0u32)            /* LoaderFlags */
-    p32(16u32)           /* NumberOfRvaAndSizes */
+    p32(0u32)  p32(16u32)
+    /* 16 data directories */
     let mut dd : u32 = 0u32
-    while dd < 16u32 { p32(0u32)  p32(0u32)  dd = dd + 1u32 }
+    while dd < 16u32 {
+        if has_idata == 1u32 {
+            if dd == 1u32 { p32(idt_rva)  p32(40u32) }                    /* IMPORT */
+            else { if dd == 12u32 { p32(iat_rva)  p32((k + 1u32) * 8u32) }  /* IAT */
+            else { p32(0u32)  p32(0u32) } }
+        } else { p32(0u32)  p32(0u32) }
+        dd = dd + 1u32
+    }
 
     /* ── section headers ── */
     p8(46u32) p8(116u32) p8(101u32) p8(120u32) p8(116u32) p8(0u32) p8(0u32) p8(0u32)   /* .text */
-    p32(textlen)  p32(text_rva)  p32(text_raw)  p32(0x200u32)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0x60000020u32)
+    p32(new_textlen)  p32(text_rva)  p32(text_raw)  p32(text_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0x60000020u32)
     if has_data == 1u32 {
         p8(46u32) p8(100u32) p8(97u32) p8(116u32) p8(97u32) p8(0u32) p8(0u32) p8(0u32)   /* .data */
         p32(datalen)  p32(data_rva)  p32(data_raw)  p32(data_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0xC0000040u32)
     }
+    if has_idata == 1u32 {
+        p8(46u32) p8(105u32) p8(100u32) p8(97u32) p8(116u32) p8(97u32) p8(0u32) p8(0u32)   /* .idata */
+        p32(idata_len)  p32(idata_rva)  p32(idata_raw)  p32(idata_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0xC0000040u32)
+    }
 
-    /* ── raw section data ── */
+    /* ── raw data: .text ── */
     ppad(0x200u32)
-    i = 0u32  while i < textlen { p8(TEXTBUF[i as u64] as u32)  i = i + 1u32 }
-    ppad(0x200u32 + text_raw)
+    i = 0u32  while i < new_textlen { p8(TEXTBUF[i as u64] as u32)  i = i + 1u32 }
+    ppad(text_fileptr + text_raw)
+    /* ── .data ── */
     if has_data == 1u32 {
         i = 0u32  while i < datalen { p8(sov_data_at(1u32, i))  i = i + 1u32 }
         ppad(data_fileptr + data_raw)
+    }
+    /* ── .idata ── */
+    if has_idata == 1u32 {
+        /* IDT: descriptor[0] = kernel32, then a null descriptor */
+        p32(ilt_rva)  p32(0u32)  p32(0u32)  p32(dll_rva)  p32(iat_rva)
+        p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)
+        /* ILT: K name-RVA entries + null */
+        i = 0u32  while i < k { p64(HN_RVA[i as u64], 0u32)  i = i + 1u32 }
+        p64(0u32, 0u32)
+        /* IAT: identical (loader overwrites with addresses) */
+        i = 0u32  while i < k { p64(HN_RVA[i as u64], 0u32)  i = i + 1u32 }
+        p64(0u32, 0u32)
+        /* hint/name table */
+        i = 0u32
+        while i < k {
+            p16(0u32)                                       /* hint */
+            let nl : u32 = sov_ext_namelen(i)
+            let mut j : u32 = 0u32
+            while j < nl { p8(sov_ext_namebyte(i, j))  j = j + 1u32 }
+            p8(0u32)
+            if ((2u32 + nl + 1u32) & 1u32) == 1u32 { p8(0u32) }   /* pad to even */
+            i = i + 1u32
+        }
+        /* DLL name "kernel32.dll\0" */
+        p8(107u32) p8(101u32) p8(114u32) p8(110u32) p8(101u32) p8(108u32) p8(51u32) p8(50u32) p8(46u32) p8(100u32) p8(108u32) p8(108u32) p8(0u32)
+        ppad(idata_fileptr + idata_raw)
     }
     return 0i32
 }

@@ -4,7 +4,7 @@
  * A distinct failure code per instruction localizes any wrong byte.  exit 99 = the integer-core encoder is
  * byte-identical to gcc on the whole battery -> S1 encoder is provably correct against the reference.
  */
-module m1934
+module sovtc_test_encode
 
 extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"

@@ -12,7 +12,7 @@
  *
  * NIH; libc-free.  Ring R0.  K 1.00.
  */
-module omnia_sovas
+module sovtc_sovas
 
 const SOV_CAP : u32 = 4096u32
 var SOV_BUF : [u8; 4096]

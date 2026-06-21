@@ -12,7 +12,7 @@
  *
  * NIH; reads only sovas.  Ring R0.  K 1.00.
  */
-module omnia_sovparse
+module sovtc_sovparse
 
 extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_push_r(reg: u32) -> i32 from "sovas.iii"

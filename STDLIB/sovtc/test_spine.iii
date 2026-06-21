@@ -8,7 +8,7 @@
  *   code 13+i : byte i diverged from gcc  (returns 13 + the offset, so the failing byte is pinpointed)
  * exit 99 = sovas (parser + encoder) is byte-identical to gcc on a whole real function -> the spine holds.
  */
-module m1935
+module sovtc_test_spine
 
 extern @abi(c-msvc-x64) fn sovparse(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"

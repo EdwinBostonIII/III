@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# STDLIB/sovtc/run_sovtc.sh — the SOVEREIGN-TOOLCHAIN self-test gate.
+#
+# The sovereign toolchain (sovas encoder + sovparse parser) is a META-TOOL with a special link requirement
+# (its test exes link sovas.o + sovparse.o DIRECTLY on the line, not via the stdlib archive), so it is NOT a
+# stdlib conformance test and does NOT live in STDLIB/corpus/ (which would FATAL run_corpus on a missing
+# EXPECTED entry and contend for corpus numbers with other tracks).  This runner is its decoupled gate.
+#
+# Each test exits 99 on success.  Exit 0 = all toolchain tests pass.
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+IIIS="$ROOT/COMPILED/iiis-2.exe"
+ARCH="$ROOT/STDLIB/build/iii/libiii_native.a"
+SOVTC="$ROOT/STDLIB/sovtc"
+OUT="$ROOT/STDLIB/build/sovtc"
+mkdir -p "$OUT"
+
+"$IIIS" "$SOVTC/sovas.iii"    --compile-only --out "$OUT/sovas.o"    || { echo "[sovtc] FATAL: sovas compile";    exit 2; }
+"$IIIS" "$SOVTC/sovparse.iii" --compile-only --out "$OUT/sovparse.o" || { echo "[sovtc] FATAL: sovparse compile"; exit 2; }
+
+fail=0
+for t in test_encode test_spine; do
+    if ! "$IIIS" "$SOVTC/$t.iii" --compile-only --out "$OUT/$t.o" >/dev/null 2>&1; then echo "[sovtc] FAIL $t (compile)"; fail=1; continue; fi
+    if ! gcc "$OUT/$t.o" "$OUT/sovas.o" "$OUT/sovparse.o" "$ARCH" -lws2_32 -lkernel32 -o "$OUT/$t.exe" >/dev/null 2>&1; then echo "[sovtc] FAIL $t (link)"; fail=1; continue; fi
+    timeout 25 "$OUT/$t.exe" >/dev/null 2>&1; rc=$?
+    if [[ $rc -eq 99 ]]; then echo "[sovtc] PASS $t (exit 99)"; else echo "[sovtc] FAIL $t (exit $rc)"; fail=1; fi
+done
+
+if [[ $fail -eq 0 ]]; then echo "[sovtc] ALL PASS"; exit 0; fi
+echo "[sovtc] FAILURES PRESENT"; exit 1

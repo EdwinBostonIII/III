@@ -1,9 +1,12 @@
-/* linkmain.iii -- module A.  Calls lib_answer (cross-module) + defines its OWN L_str_0 (collides if concatenated). */
+/* linkmain.iii -- module A: cross-module call + a LOCAL L_str_0 + now a DLL IMPORT (putchar) to exercise the
+ * linker's import path (the .o-concat gate had none). */
 module linkmain
 extern @abi(c-msvc-x64) fn lib_answer() -> u64 from "linklib.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 fn main() -> u64 {
-    let s : *u8 = "main" as *u8       /* L_str_0 in THIS object too */
-    let a : u64 = lib_answer()        /* cross-module REL32 to a UND symbol */
+    let s : *u8 = "main" as *u8
+    putchar(75i32)  putchar(10i32)        /* 'K' -- import through the multi-object linker */
+    let a : u64 = lib_answer()
     if s[0u64] == 109u8 { if a == 42u64 { return 99u64 } }
     return 1u64
 }

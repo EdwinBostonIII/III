@@ -1,7 +1,9 @@
-/* linklib.iii -- module B of the multi-object link gate.  Defines a global + a LOCAL string label (L_str_0). */
+/* linklib.iii -- module B: global + local L_str_0 + now a 1MB .bss array (exercise the linker's .bss path). */
 module linklib
+var LBUF : [u8; 1048576]
 fn lib_answer() -> u64 @export {
-    let s : *u8 = "lib" as *u8        /* -> a local .rodata label (L_str_0) in THIS object */
-    if s[0u64] == 108u8 { return 42u64 }
+    let s : *u8 = "lib" as *u8
+    LBUF[1048575u64] = 9u8
+    if s[0u64] == 108u8 { if LBUF[1048575u64] == 9u8 { return 42u64 } }
     return 0u64
 }

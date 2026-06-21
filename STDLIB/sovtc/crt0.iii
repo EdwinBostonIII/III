@@ -1,0 +1,50 @@
+/* crt0.iii -- the missing C-runtime shim for SOVEREIGN-linked PEs.
+ * A Windows PE entry point is handed NO argc/argv (rcx/rdx are undefined) -- the C runtime is what normally
+ * calls GetCommandLine, builds argv, and invokes main.  sovld jumps straight to the program's main, which is
+ * fine for an argument-less main (boot1-8, the gate) but feeds GARBAGE to a main that reads argv[1] (sovas_main
+ * -> CreateFileA(argv[1]) -> strlen on junk -> crash).  cstart is that runtime: GetCommandLineA -> tokenize
+ * (space-split, honoring "quoted" tokens) -> main(argc, &argv) -> ExitProcess(rc).  sovld's entry = cstart. */
+module crt0
+
+extern @abi(c-msvc-x64) fn GetCommandLineA() -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ExitProcess(code: u32) -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn main(argc: i32, argv: u64) -> u64 from "sovas_main.iii"
+
+var ARGV : [u64; 256]
+var CBUF : [u8; 16384]
+
+fn cstart() -> u64 @export {
+    let s : *u8 = GetCommandLineA() as *u8
+    let mut argc : u32 = 0u32
+    let mut o : u32 = 0u32              /* write cursor into CBUF */
+    let mut i : u32 = 0u32              /* read cursor into the command line */
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        while s[i as u64] == 32u8 { i = i + 1u32 }            /* skip inter-token spaces */
+        if s[i as u64] == 0u8 { go = 0u32 }
+        else {
+            if argc < 256u32 { ARGV[argc as u64] = (&CBUF as u64) + (o as u64) }
+            let mut inq : u32 = 0u32
+            let mut t : u32 = 1u32
+            while t == 1u32 {
+                let c : u8 = s[i as u64]
+                if c == 0u8 { t = 0u32 }
+                else {
+                    if c == 34u8 {                            /* a double-quote toggles quoting; not copied */
+                        if inq == 0u32 { inq = 1u32 } else { inq = 0u32 }
+                        i = i + 1u32
+                    } else {
+                        if c == 32u8 {
+                            if inq == 1u32 { CBUF[o as u64] = c  o = o + 1u32  i = i + 1u32 } else { t = 0u32 }
+                        } else { CBUF[o as u64] = c  o = o + 1u32  i = i + 1u32 }
+                    }
+                }
+            }
+            CBUF[o as u64] = 0u8  o = o + 1u32                /* NUL-terminate this token */
+            argc = argc + 1u32
+        }
+    }
+    let rc : u64 = main(argc as i32, (&ARGV) as u64)
+    ExitProcess(rc as u32)
+    return 0u64
+}

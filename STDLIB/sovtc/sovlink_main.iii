@@ -17,6 +17,9 @@ extern @abi(c-msvc-x64) fn sov_data_len(sec: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_bss_size() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_patch(i: u32, b: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_rec_reloc_at(off: u32, sec: u32, sym: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cn_clear() -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_cn_push(ch: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_ext_intern_pub() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sp_export_inject(off: u32) -> i32 from "sovparse.iii"
 extern @abi(c-msvc-x64) fn sovld_emit() -> i32 from "sovld.iii"
 
@@ -206,6 +209,11 @@ fn resolve() {
         let mut j : u32 = 0u32  while j < len { NMBUF[j as u64] = ST_NAME[((i * 32u32) + j) as u64]  j = j + 1u32 }
         let tgt : u32 = gsym_find(len)
         if tgt != 0xFFFFFFFFu32 { patch32(off, (tgt - (off + 4u32))) }    /* cross-module .text call, inline */
+        else {                                                           /* unresolved name -> DLL import: intern + rsec==0 thunk reloc */
+            sov_cn_clear()
+            let mut p : u32 = 0u32  while p < len { sov_cn_push(NMBUF[p as u64])  p = p + 1u32 }
+            sov_rec_reloc_at(off, 0u32, sov_ext_intern_pub())
+        }
         i = i + 1u32
     }
 }
@@ -222,6 +230,20 @@ fn find_main() -> u32 {
         g = g + 1u32
     }
     return 0u32
+}
+
+fn find_cstart() -> u32 {
+    /* "cstart" = 99,115,116,97,114,116 -- the crt0 argv shim, if it was linked in */
+    let mut g : u32 = 0u32
+    while g < GSYM_N {
+        if GSYM_NLEN[g as u64] == 6u32 {
+            if GSYM_NAME[(g * 32u32) as u64] == 99u8 { if GSYM_NAME[((g * 32u32) + 1u32) as u64] == 115u8 { if GSYM_NAME[((g * 32u32) + 2u32) as u64] == 116u8 { if GSYM_NAME[((g * 32u32) + 3u32) as u64] == 97u8 { if GSYM_NAME[((g * 32u32) + 4u32) as u64] == 114u8 { if GSYM_NAME[((g * 32u32) + 5u32) as u64] == 116u8 {
+                return GSYM_OFF[g as u64]
+            } } } } } }
+        }
+        g = g + 1u32
+    }
+    return 0xFFFFFFFFu32
 }
 
 fn read_file(path: *u8) -> u32 {
@@ -250,7 +272,9 @@ fn main(argc: i32, argv: u64) -> u64 {
         a = a + 1u32
     }
     resolve()
-    sp_export_inject(find_main())
+    let mut entry : u32 = find_cstart()              /* prefer the crt0 shim (builds argv) if linked */
+    if entry == 0xFFFFFFFFu32 { entry = find_main() }
+    sp_export_inject(entry)
     sovld_emit()
     return 0u64
 }

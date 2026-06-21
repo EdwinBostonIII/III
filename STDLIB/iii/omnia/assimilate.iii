@@ -1,0 +1,165 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\assimilate.iii
+ *
+ * III STDLIB - omnia::assimilate  --  PHASE 3 of the Master Logic Assimilation: ONE EXECUTABLE WEB, by
+ * CONTENT-ADDRESS.  The inverse-form harvest of omnia::logos.
+ *
+ * The WEB is the witnessed metal bus (omnia::isub): each logic system is shattered into UNIFORM blocks of
+ * the SAME size and shape -- < verb in {BELOW, REFLECT}, a, b > with a,b bare point ADDRESSES, no names.
+ * Recognition is by CONTENT-ADDRESS: a block's identity is sha256(its geometric footprint), so two systems'
+ * shared structure has the SAME content-address and is RECOGNISED-and-MERGED (added once) -- every merge is
+ * a cryptographic fact, never a heuristic.  Genuinely-new geometry extends the web.  Zero redundancy.
+ *
+ * ASSIMILATION (one system absorbed INTO the web, then the next):
+ *   assim_add(verb,a,b)  -- recognise-and-merge: emit IFF the content-address is new.  1 = EXTENDED the web
+ *                           (new geometry); 0 = RECOGNISED (merged -- the substrate proved it identical).
+ *
+ * THE WEB IS EXECUTABLE -- the named operations are DISSOLVED into universal VERBS recovered from the
+ * geometry, so the ONE web computes EVERY assimilated system's logic with the SAME verbs:
+ *   assim_leq(a,b)        -- the order: a sits under b (a BELOW(a,b) block exists, or a == b)
+ *   assim_meet(a,b)       -- greatest lower bound  (the universal AND / conjunction)
+ *   assim_join(a,b)       -- least upper bound      (the universal OR / disjunction)
+ *   assim_complement(a)   -- the REFLECT image      (the universal NOT / order-reversing involution)
+ * meet/join are recovered purely from the BELOW order; complement purely from the REFLECT blocks.  A
+ * system's "l6_and" is proved to be nothing more than "meet @ this geometry" -- the name is gone.
+ *
+ * Pure (no observational learning): a fixed sha256 of geometry decides every merge; the verbs are fixed
+ * folds over the order.  Ring R0.  K 1.00.  NIH: reads/writes only the sealed isub bus + cad sha256.
+ */
+module omnia_assimilate
+
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+const AS_NONE   : u32 = 0xFFFFFFFFu32
+
+var AS_CAND  : [u8; 32]      /* content-address of the candidate block */
+var AS_EXIST : [u8; 32]      /* content-address of an existing web block */
+
+/* ── recognise-and-merge by content-address ── */
+
+/* is a block of this exact geometry already in the web?  Recognition is by CONTENT-ADDRESS equality. */
+fn assim_contains(verb: u32, a: u32, b: u32) -> u8 @export {
+    isub_cav_into(verb, a, b, AS_CAND)
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        isub_cav_into(isub_verb(i), isub_a(i), isub_b(i), AS_EXIST)
+        if cad_eq(AS_CAND, AS_EXIST) == 1u8 { return 1u8 }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+/* add a block IFF its content-address is new.  1 = EXTENDED the web, 0 = RECOGNISED (merged). */
+fn assim_add(verb: u32, a: u32, b: u32) -> u8 @export {
+    if assim_contains(verb, a, b) == 1u8 { return 0u8 }
+    isub_emit(verb, a, b)
+    return 1u8
+}
+
+fn assim_web_size() -> u32 @export { return isub_count() }
+
+/* the web's carrier: one past the largest point address used by any block. */
+fn assim_maxpt() -> u32 @export {
+    let n : u32 = isub_count()
+    let mut m : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let a : u32 = isub_a(i)
+        let b : u32 = isub_b(i)
+        if a + 1u32 > m { m = a + 1u32 }
+        if b + 1u32 > m { m = b + 1u32 }
+        i = i + 1u32
+    }
+    return m
+}
+
+/* the number of distinct point addresses in the web (the carrier size). */
+fn assim_npoints() -> u32 @export {
+    let mp : u32 = assim_maxpt()
+    let n : u32 = isub_count()
+    let mut cnt : u32 = 0u32
+    let mut p : u32 = 0u32
+    while p < mp {
+        let mut seen : u8 = 0u8
+        let mut i : u32 = 0u32
+        while i < n {
+            if isub_a(i) == p { seen = 1u8 }
+            if isub_b(i) == p { seen = 1u8 }
+            i = i + 1u32
+        }
+        if seen == 1u8 { cnt = cnt + 1u32 }
+        p = p + 1u32
+    }
+    return cnt
+}
+
+/* ── the universal verbs, recovered from the web's geometry ── */
+
+/* the order: a sits under b.  Reflexive, plus a direct BELOW(a,b) block. */
+fn assim_leq(a: u32, b: u32) -> u8 @export {
+    if a == b { return 1u8 }
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == V_BELOW {
+            if isub_a(i) == a { if isub_b(i) == b { return 1u8 } }
+        }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+/* meet = greatest lower bound (the universal conjunction). */
+fn assim_meet(a: u32, b: u32) -> u32 @export {
+    let mp : u32 = assim_maxpt()
+    let mut best : u32 = AS_NONE
+    let mut c : u32 = 0u32
+    while c < mp {
+        if assim_leq(c, a) == 1u8 {
+            if assim_leq(c, b) == 1u8 {
+                if best == AS_NONE { best = c }
+                else { if assim_leq(best, c) == 1u8 { best = c } }   /* c is the higher lower-bound */
+            }
+        }
+        c = c + 1u32
+    }
+    return best
+}
+
+/* join = least upper bound (the universal disjunction). */
+fn assim_join(a: u32, b: u32) -> u32 @export {
+    let mp : u32 = assim_maxpt()
+    let mut best : u32 = AS_NONE
+    let mut c : u32 = 0u32
+    while c < mp {
+        if assim_leq(a, c) == 1u8 {
+            if assim_leq(b, c) == 1u8 {
+                if best == AS_NONE { best = c }
+                else { if assim_leq(c, best) == 1u8 { best = c } }   /* c is the lower upper-bound */
+            }
+        }
+        c = c + 1u32
+    }
+    return best
+}
+
+/* complement = the REFLECT image (the universal order-reversing involution). */
+fn assim_complement(a: u32) -> u32 @export {
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == V_REFLECT {
+            if isub_a(i) == a { return isub_b(i) }
+        }
+        i = i + 1u32
+    }
+    return AS_NONE
+}

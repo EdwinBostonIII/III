@@ -1028,6 +1028,13 @@ MODULES=(
     # is a terminating strict descent, with no black box surviving.  Consumed by corpus 1915; reads only the
     # sealed isub bus -- zero new state, BSS-neutral, compiler-unreferenced.
     "omnia/unravel"
+    # assimilate: PHASE 3 -- SEQUENTIAL GRAIL ASSIMILATION into ONE executable verb-geometry web.  The
+    # inverse-form harvest of logos: the web is the isub bus; each logic system is shattered to uniform
+    # {BELOW,REFLECT} blocks and absorbed one INTO the web, recognition by CONTENT-ADDRESS (sha256 of
+    # geometry) so shared structure is merged once (zero redundancy).  The web is EXECUTABLE -- meet/join/
+    # complement recovered from the geometry compute every system's logic, dissolving named primitives.
+    # Consumed by corpus 1916; reads/writes only isub + cad -- zero new crypto, BSS-neutral, compiler-unref.
+    "omnia/assimilate"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

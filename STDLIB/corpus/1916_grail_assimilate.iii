@@ -1,0 +1,124 @@
+/* 1916_grail_assimilate.iii  --  PHASE 3: SEQUENTIAL GRAIL ASSIMILATION into ONE executable verb-geometry
+ * web, by content-address, zero redundancy.  Three real logic systems are each shattered to UNIFORM blocks
+ * (verb in {BELOW,REFLECT}, bare addresses -- NO names) and absorbed one INTO the web after the other:
+ *
+ *   SYSTEM A: the De Morgan diamond (0=bottom,1=top, 2,3 mirrored middles)   -- seeds the web.
+ *   SYSTEM B: the MO2 orthomodular (quantum) lattice (shares 0,1,2,3; adds mirrored pair 4,5).
+ *   SYSTEM C: the 3-valued Kleene chain 0 < 6 < 1 (shares 0,1; adds self-mirroring middle 6).
+ *
+ * Recognition is by CONTENT-ADDRESS (sha256 of the block's geometry): shared structure is RECOGNISED and
+ * MERGED (added once), the rest extends the web -- so the web is far smaller than the sum, with intrinsic
+ * knowledge of exactly what the systems share.  And the ONE web is EXECUTABLE: the same recovered verbs
+ * (meet/join/complement) compute every system's operations -- the named primitives are dissolved.
+ *
+ *   code 11 seed   : the diamond did not seed cleanly (9 new blocks, 4 points)
+ *   code 12 ops-A  : the web does not compute the diamond's meet/join/complement
+ *   code 13 merge-B: absorbing MO2 did not recognise the 9 shared blocks (added != 6 new)
+ *   code 14 ops-B  : the web does not compute MO2's ops AND still the diamond's (intrinsic shared knowledge)
+ *   code 15 merge-C: absorbing Kleene did not recognise the 3 shared blocks (added != 3 new)
+ *   code 16 ops-C  : the web does not compute Kleene's ops (incl. the self-mirroring middle)
+ *   code 17 lean   : the web is not the lean union (size != 18, points != 7) -- redundancy crept in
+ *   code 18 TEETH  : re-adding an existing block was NOT recognised, or a genuinely-new block was NOT added
+ * exit 99 = three grail systems flattened into ONE lean, executable, content-addressed verb-geometry web.
+ */
+module m1916
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_npoints() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_meet(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_join(a: u32, b: u32) -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_complement(a: u32) -> u32 from "assimilate.iii"
+
+const V_BELOW   : u32 = 0u32
+const V_REFLECT : u32 = 1u32
+
+/* a system staged as uniform blocks (parallel arrays). */
+var SYS_V : [u32; 32]
+var SYS_A : [u32; 32]
+var SYS_B : [u32; 32]
+var SYS_N : u32 = 0u32
+
+fn put(v: u32, a: u32, b: u32) {
+    SYS_V[SYS_N] = v  SYS_A[SYS_N] = a  SYS_B[SYS_N] = b  SYS_N = SYS_N + 1u32
+}
+
+/* absorb the staged system; return how many blocks were genuinely NEW (extended the web). */
+fn stage_absorb() -> u32 {
+    let mut newc : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < SYS_N {
+        if assim_add(SYS_V[i], SYS_A[i], SYS_B[i]) == 1u8 { newc = newc + 1u32 }
+        i = i + 1u32
+    }
+    return newc
+}
+
+fn stage_diamond() {
+    SYS_N = 0u32
+    put(V_BELOW, 0u32, 2u32)  put(V_BELOW, 0u32, 3u32)  put(V_BELOW, 2u32, 1u32)
+    put(V_BELOW, 3u32, 1u32)  put(V_BELOW, 0u32, 1u32)
+    put(V_REFLECT, 2u32, 3u32)  put(V_REFLECT, 3u32, 2u32)
+    put(V_REFLECT, 0u32, 1u32)  put(V_REFLECT, 1u32, 0u32)
+}
+
+fn stage_mo2() {
+    SYS_N = 0u32
+    put(V_BELOW, 0u32, 2u32)  put(V_BELOW, 0u32, 3u32)  put(V_BELOW, 0u32, 4u32)  put(V_BELOW, 0u32, 5u32)
+    put(V_BELOW, 2u32, 1u32)  put(V_BELOW, 3u32, 1u32)  put(V_BELOW, 4u32, 1u32)  put(V_BELOW, 5u32, 1u32)
+    put(V_BELOW, 0u32, 1u32)
+    put(V_REFLECT, 2u32, 3u32)  put(V_REFLECT, 3u32, 2u32)  put(V_REFLECT, 4u32, 5u32)  put(V_REFLECT, 5u32, 4u32)
+    put(V_REFLECT, 0u32, 1u32)  put(V_REFLECT, 1u32, 0u32)
+}
+
+fn stage_kleene() {
+    SYS_N = 0u32
+    put(V_BELOW, 0u32, 6u32)  put(V_BELOW, 6u32, 1u32)  put(V_BELOW, 0u32, 1u32)
+    put(V_REFLECT, 0u32, 1u32)  put(V_REFLECT, 1u32, 0u32)  put(V_REFLECT, 6u32, 6u32)
+}
+
+fn main() -> u64 {
+    isub_reset()
+
+    /* ── SYSTEM A: seed the web with the De Morgan diamond ── */
+    stage_diamond()
+    if stage_absorb() != 9u32 { return 11u64 }
+    if assim_npoints() != 4u32 { return 11u64 }
+    /* the web computes the diamond's logic via the recovered verbs */
+    if assim_meet(2u32, 3u32) != 0u32 { return 12u64 }        /* the two middles meet at bottom */
+    if assim_join(2u32, 3u32) != 1u32 { return 12u64 }        /* and join at top */
+    if assim_complement(2u32) != 3u32 { return 12u64 }        /* mirrored middles */
+    if assim_complement(0u32) != 1u32 { return 12u64 }        /* bottom <-> top */
+    if assim_leq(0u32, 1u32) != 1u8 { return 12u64 }
+
+    /* ── SYSTEM B: absorb MO2 INTO the same web ── */
+    stage_mo2()
+    if stage_absorb() != 6u32 { return 13u64 }                /* 9 shared recognised, 6 new */
+    /* the web now computes MO2's ops AND still the diamond's (intrinsic shared knowledge) */
+    if assim_meet(4u32, 5u32) != 0u32 { return 14u64 }        /* MO2's new pair */
+    if assim_join(4u32, 5u32) != 1u32 { return 14u64 }
+    if assim_complement(4u32) != 5u32 { return 14u64 }
+    if assim_meet(2u32, 3u32) != 0u32 { return 14u64 }        /* the diamond's ops survive the merge */
+    if assim_complement(3u32) != 2u32 { return 14u64 }
+
+    /* ── SYSTEM C: absorb the Kleene chain INTO the same web ── */
+    stage_kleene()
+    if stage_absorb() != 3u32 { return 15u64 }                /* 3 shared recognised, 3 new */
+    if assim_leq(0u32, 6u32) != 1u8 { return 16u64 }
+    if assim_leq(6u32, 1u32) != 1u8 { return 16u64 }
+    if assim_meet(0u32, 6u32) != 0u32 { return 16u64 }
+    if assim_join(6u32, 1u32) != 1u32 { return 16u64 }
+    if assim_complement(6u32) != 6u32 { return 16u64 }        /* the self-mirroring middle */
+
+    /* ── LEAN: the web is the deduped union, far smaller than 9+15+6 = 30 ── */
+    if assim_web_size() != 18u32 { return 17u64 }
+    if assim_npoints() != 7u32 { return 17u64 }
+
+    /* ── TEETH: recognition is real -- re-adding an existing block merges (0); a new block extends (1) ── */
+    if assim_add(V_BELOW, 0u32, 2u32) != 0u8 { return 18u64 } /* already present -> recognised */
+    if assim_add(V_BELOW, 2u32, 4u32) != 1u8 { return 18u64 } /* genuinely new geometry -> extended */
+
+    return 99u64
+}

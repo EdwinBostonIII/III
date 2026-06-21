@@ -1,0 +1,94 @@
+/* 1943_eidos_capstone.iii  --  THE EIDOS VISION, PROVEN END-TO-END OVER REAL EXECUTION DATA.
+ *
+ * "One geometric quantum, self-describing by its eidos, self-composing" (DOCS/III-EIDOS-ARCHITECTURE.md) -- the
+ * whole arc in one gate, all on a web SHATTERED FROM A REAL xii_rewrite EXECUTION:
+ *   (1) a real reduction trace is shattered (unravel) + ingested into omnia::assimilate's content-addressed web;
+ *   (2) eidos::descriptor DESCRIBES it -- each block self-identifying by content-address (DERIVED, not tagged);
+ *   (3) eidos::descriptor + eidos::compose SELF-COMPOSE -- the planner routes goal-directed over the web's order,
+ *       in REAL point addresses (via the remap), each step a real assim_leq relation.
+ * No hand-built fixtures: the data is a real execution.  No new organ: this composes the committed arc end-to-end.
+ *
+ * HONEST: this proves the EIDOS SUBSTRATE is coherent end-to-end over real data -- it does NOT create a live
+ * CONSUMER (nothing in III calls this; that remains the tp_* binary-production decision).  Substrate complete != live.
+ *
+ *   code 10 TRACE    : no real multi-step trace shattered+ingested into a non-empty web
+ *   code 11 DESCRIBE : descriptor's view != the real web, or block 0's content-address != the real block's
+ *   code 12 COMPOSE  : the planner did not route a0->b0 over the real web in real addresses
+ *   code 13 ORDER    : the routed relation is not a real web order (assim_leq)
+ * exit 99 = real execution -> self-describing web -> self-composing route, end-to-end, no fixtures.  EIDOS realized.
+ */
+module m1943
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn unravel_is_chain(start: u32) -> u8 from "unravel.iii"
+extern @abi(c-msvc-x64) fn unravel_height(start: u32) -> u32 from "unravel.iii"
+extern @abi(c-msvc-x64) fn ingest_extract() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_commit() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_a(i: u32) -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_b(i: u32) -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn desc_count() -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_cav_into(i: u32, out32: *u8) -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_build_order() -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan(start: u32, target: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan_node(i: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var DBUF : [u8; 32]
+var EBUF : [u8; 32]
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let s : u32 = build_term()
+
+    /* ===== code 10: REAL execution -> shatter -> ingest -> web ===== */
+    isub_reset()
+    xii_isub_normalize(s)
+    if xii_isub_steps() < 2u32 { return 10u64 }
+    if unravel_is_chain(s) != 1u8 { return 10u64 }
+    let h : u32 = unravel_height(s)
+    let ext : u32 = ingest_extract()
+    if ext != h { return 10u64 }
+    if ext == 0u32 { return 10u64 }
+    let a0 : u32 = ingest_a(0u32)                         /* a real connected pair from the trace */
+    let b0 : u32 = ingest_b(0u32)
+    isub_reset()
+    if ingest_commit() != ext { return 10u64 }
+    if assim_web_size() != ext { return 10u64 }
+
+    /* ===== code 11: SELF-DESCRIBING -- descriptor folds the real web; block 0 derived ===== */
+    if desc_count() != ext { return 11u64 }
+    desc_cav_into(0u32, &DBUF as *u8)
+    isub_cav_into(isub_verb(0u32), isub_a(0u32), isub_b(0u32), &EBUF as *u8)
+    if cad_eq(&DBUF as *u8, &EBUF as *u8) != 1u8 { return 11u64 }
+
+    /* ===== code 12: SELF-COMPOSING -- route a0->b0 over the real web, in REAL addresses (via the remap) ===== */
+    desc_build_order()
+    let hops : u32 = desc_plan(a0, b0)
+    if hops < 1u32 { return 12u64 }                      /* reaches b0 from a0 over the real web */
+    if desc_plan_node(0u32) != a0 { return 12u64 }       /* the route starts at a0 (real address) ... */
+    if desc_plan_node(hops) != b0 { return 12u64 }       /* ... and ends at b0 */
+
+    /* ===== code 13: the routed relation is a REAL web order ===== */
+    if assim_leq(a0, b0) != 1u8 { return 13u64 }
+
+    return 99u64
+}

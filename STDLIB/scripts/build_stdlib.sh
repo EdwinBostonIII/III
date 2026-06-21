@@ -1016,6 +1016,12 @@ MODULES=(
     # Consumed by corpus 1913 (the CAV RED-probe); reuses the sealed exec_cert + cad -- zero new crypto,
     # BSS-neutral, compiler-unreferenced.  Phase 0 of the Master Logic Assimilation (DOCS/III-INVERSE-LIBRARY.md).
     "omnia/isub"
+    # xii_isub: PHASE 1 of the Master Logic Assimilation -- XII ENCAPSULATED.  Drives the REAL xii_rewrite
+    # to fixpoint, emitting each real firing as a BELOW reduction-step into the witnessed isub bus; derives
+    # "the current term" as a pure FOLD over that history (state = side-effect of events), with time-travel
+    # (xii_isub_prefix) the state-mutating XII discards.  Consumed by corpus 1914.  Externs isub + the live
+    # xii_rewrite -- authors no new rewriting, no new crypto; BSS-neutral, compiler-unreferenced.
+    "omnia/xii_isub"
     # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
     # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
     "forcefield/pleroma"

@@ -1,0 +1,86 @@
+/* 1914_xii_encapsulated.iii  --  PHASE 1: XII ENCAPSULATED into the witnessed metal bus.  Drives the REAL
+ * xii_rewrite to its normal form while emitting each real firing as a BELOW reduction step into omnia::isub,
+ * then derives "the current term" as a pure FOLD over the witnessed history -- recovering XII's real answer
+ * AND carrying the reversible, tamper-evident trajectory the state-mutating XII discards.
+ *
+ *   code 11 answer     : the fold/normalize result is NOT a real XII normal form (apply_one still fires)
+ *   code 12 fold==real : the read-side fold over events != the normalize result (encapsulation lost the answer)
+ *   code 13 provenance : fewer than 2 reduction steps were recorded (no trajectory to carry)
+ *   code 14 time-travel: prefix(1) == normal form, or prefix(steps) != normal form (the trajectory is not carried)
+ *   code 15 determinism: re-running the real normalisation gave a different witness ROOT (not reproducible)
+ *   code 16 TEETH      : with NO recorded events the fold did not yield the START -> the answer leaked from a
+ *                        hidden re-run of XII inside the fold, not from the witnessed history (anti-tautology)
+ * exit 99 = real XII encapsulated: answer preserved, trajectory witnessed + reversible, fold is constitutive.
+ */
+module m1914
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_current(start: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_prefix(start: u32, k: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+/* a real multi-step-reducible term: a null-compose chain.  apply_one is ROOT-only, and R037
+ * (F.COMPOSE(K06_NULL, a) -> a) returns a DISTINCT ref each time, exposing the next COMPOSE at the root:
+ *   COMPOSE(0, COMPOSE(0, COMPOSE(0, v)))  ->  COMPOSE(0, COMPOSE(0, v))  ->  COMPOSE(0, v)  ->  v
+ * three real R037 reduction steps.  K06_NULL = make_basis(kind 5 = K06_COMPOSE, subform NULL_GROUND). */
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)            /* a value leaf */
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)       /* K06_NULL (null ground form) */
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)           /* COMPOSE(0, v) */
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)          /* COMPOSE(0, COMPOSE(0, v)) */
+    return xii_term_make_fusion2(18u8, nul, i2)                   /* 3-deep null-compose chain -> 3 R037 steps */
+}
+
+fn main() -> u64 {
+    let s : u32 = build_term()
+    isub_reset()
+    let nrm : u32 = xii_isub_normalize(s)            /* drive REAL xii_rewrite, witnessing each firing */
+
+    /* code 13: a multi-step trajectory was actually recorded */
+    let steps : u32 = xii_isub_steps()
+    if steps < 2u32 { return 13u64 }
+
+    /* code 11: the result IS a real XII normal form (XII itself finds it irreducible) */
+    xii_rewrite_apply_one(nrm)
+    if xii_rewrite_last_rule_fired() != 0u32 { return 11u64 }
+
+    /* code 12: the read-side FOLD over the witnessed events recovers the SAME normal form */
+    if xii_isub_current(s) != nrm { return 12u64 }
+
+    /* code 14: TIME-TRAVEL -- prefix(1) is an intermediate state (!= normal form); prefix(steps) == normal form */
+    if xii_isub_prefix(s, 1u32) == nrm { return 14u64 }
+    if xii_isub_prefix(s, steps) != nrm { return 14u64 }
+
+    /* code 16: TEETH (anti-tautology) -- with the bus EMPTY the fold yields the START, not the normal form,
+     * so the recovered answer comes from the witnessed history, not a hidden re-run of XII inside the fold */
+    isub_reset()
+    if xii_isub_current(s) != s { return 16u64 }
+    if xii_isub_prefix(s, 5u32) != s { return 16u64 }
+
+    /* code 15: DETERMINISM -- the witnessed reduction trajectory is reproducible (identical ROOT) */
+    let s1 : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s1)
+    let r1 : *u8 = malloc(32u64)
+    isub_witness_into(r1)
+    let s2 : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s2)
+    let r2 : *u8 = malloc(32u64)
+    isub_witness_into(r2)
+    if cad_eq(r1, r2) != 1u8 { return 15u64 }
+
+    free(r1) free(r2)
+    return 99u64
+}

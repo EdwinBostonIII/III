@@ -1,0 +1,81 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_isub.iii
+ *
+ * III STDLIB - omnia::xii_isub  --  PHASE 1 of the Master Logic Assimilation: ENCAPSULATE XII.
+ *
+ * XII is not reimplemented and not replaced -- it is ENCAPSULATED.  xii_isub_normalize runs the REAL
+ * xii_rewrite to fixpoint and, as it runs, emits each REAL rule-firing as a uniform geometric block into
+ * the witnessed metal bus (omnia::isub): a reduction step  cur -> nxt  is the block  BELOW(nxt, cur)
+ * ("nxt sits below cur in the reduction order").  This is geometrically honest: term rewriting IS a
+ * reduction order and the normal form is its bottom.  XII's ANSWER is unchanged -- it is still real XII's
+ * normal form; what the bus gains is the tamper-evident, content-addressed, REVERSIBLE reduction
+ * trajectory that the state-mutating XII (which overwrites its "current term" cell) structurally discards.
+ *
+ * STATE AS A FOLD (the inverse form): xii_isub_current derives "the current term" NOT from a stored cell
+ * but as a pure fold over the witnessed history -- one forward walk down the BELOW chain to its bottom.
+ * xii_isub_prefix folds a PREFIX of the history -> an intermediate XII state (time-travel) the overwriting
+ * form cannot recover.  The witness ROOT (isub) makes the whole trajectory reproducible + tamper-evident.
+ *
+ * NOT observational learning: every fold is a fixed pure function of the recorded events; the answer comes
+ * from REAL xii_rewrite, the fold only re-derives + witnesses it.  Ring R0.  K 1.00.  NIH: consumes only
+ * the sealed isub bus + the live xii_rewrite -- authors no new rewriting and no new crypto.
+ */
+module omnia_xii_isub
+
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+const V_BELOW     : u32 = 0u32
+const XI_MAXSTEPS : u32 = 256u32
+
+/* ENCAPSULATED XII: run REAL xii_rewrite to fixpoint, emitting each real firing as a BELOW reduction step
+ * into the witnessed bus; return the REAL normal form.  The caller resets isub first so the bus holds
+ * exactly this normalisation's trace.  (Term indices are bare addresses < isub's bound for normal terms.) */
+fn xii_isub_normalize(t: u32) -> u32 @export {
+    let mut cur : u32 = t
+    let mut steps : u32 = 0u32
+    while steps < XI_MAXSTEPS {
+        let nxt : u32 = xii_rewrite_apply_one(cur)
+        let fired : u32 = xii_rewrite_last_rule_fired()
+        if fired == 0u32 { steps = XI_MAXSTEPS }
+        else {
+            isub_emit(V_BELOW, nxt, cur)         /* the real reduction step: content-addressed + witnessed */
+            cur = nxt
+            steps = steps + 1u32
+        }
+    }
+    return cur
+}
+
+/* the CURRENT TERM as a read-side FOLD over the witnessed reduction history: walk the BELOW chain from the
+ * start term down to its bottom (the normal form).  No stored "current term" cell -- state is the fold. */
+fn xii_isub_current(start: u32) -> u32 @export {
+    let mut cur : u32 = start
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == V_BELOW {
+            if isub_b(i) == cur { cur = isub_a(i) }
+        }
+        i = i + 1u32
+    }
+    return cur
+}
+
+/* the number of recorded reduction steps -- the provenance the overwriting XII discards. */
+fn xii_isub_steps() -> u32 @export { return isub_count() }
+
+/* TIME-TRAVEL: the term after exactly k recorded steps.  Block i = BELOW(nxt_i, cur_i) and the term after
+ * step (i+1) is nxt_i = isub_a(i); so after k steps the term is isub_a(k-1).  An intermediate XII state the
+ * overwriting form cannot recover -- it is literally in the witnessed log. */
+fn xii_isub_prefix(start: u32, k: u32) -> u32 @export {
+    let n : u32 = isub_count()
+    if k == 0u32 { return start }
+    if n == 0u32 { return start }
+    if k <= n { return isub_a(k - 1u32) }
+    return isub_a(n - 1u32)
+}

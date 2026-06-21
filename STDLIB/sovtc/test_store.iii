@@ -1,0 +1,36 @@
+/* test_store.iii  --  the STORE reloc path (movq %reg, sym(%rip)): the operand-order-sensitive 89-class.
+ * Real cg_r3 .s for `fn(v){ A = v }` (A@.data+0).  Must reproduce gcc's 65 .text bytes incl. the store
+ * `movq %rax, L_A(%rip)` = 48 89 05 00 00 00 00 AND the reloc (field 0x18 -> .data).
+ *   11 reln / 12 relent / 13 len / 14+i byte i.  exit 99 = store reloc path byte+reloc exact vs gcc.
+ */
+module sovtc_test_store
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sec(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 65] = [
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0x89u8,0x4Du8,0xF8u8,0x48u8,
+  0x8Bu8,0x45u8,0xF8u8,0x50u8,0x58u8,0x48u8,0x89u8,0x05u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0xB8u8,0x00u8,0x00u8,
+  0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,0xC7u8,0xC0u8,
+  0x00u8,0x00u8,0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,0xECu8,0x5Du8,
+  0xC3u8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .data\nL_A:\n  .quad 0x0\n  .text\nL_sov_y_set:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  movq %rcx, -8(%rbp)\n  movq -8(%rbp), %rax\n  pushq %rax\n  popq %rax\n  movq %rax, L_A(%rip)\n  movabsq $0x0, %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    sovparse_full(src, n)
+    if sov_reloc_n() != 1u32 { return 11u64 }
+    if sov_reloc_off(0u32) != 0x18u32 { return 12u64 }
+    if sov_reloc_sec(0u32) != 1u32 { return 12u64 }
+    if sov_len() != 65u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 65u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (14u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

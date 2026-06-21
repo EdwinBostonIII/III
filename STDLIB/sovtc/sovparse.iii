@@ -222,9 +222,9 @@ fn sp_operand() {
 /* read the mnemonic token into m0..m4 (we only need first 5 chars); returns length */
 var MN : [u32; 8]
 var MNN : u32 = 0u32
-fn sp_mnem() {
+fn sp_mnem() {   /* read a full identifier (so a label like L_foo: or foo_bar: is detected as a label, not an op) */
     MNN = 0u32
-    while is_lower(sp_ch()) == 1u32 { if MNN < 8u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
+    while is_ident(sp_ch()) == 1u32 { if MNN < 8u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
 }
 fn mn_is(a: u32, b: u32, c: u32, d: u32, n: u32) -> u32 {
     if MNN != n { return 0u32 }
@@ -242,10 +242,12 @@ var S1D : i32 = 0i32
 var S1I : i64 = 0i64
 var S1SEC : u32 = 0u32
 var S1OFF : i32 = 0i32
+var PARSE_ERR : u32 = 0u32   /* set on an unknown mnemonic; sovparse returns nonzero so the gate fails LOUDLY */
 
 /* parse + encode the whole buffer.  returns 0 ok, or a negative line-ish error. */
 fn sovparse(ptr: *u8, len: u32) -> i32 @export {
     sov_reset()
+    PARSE_ERR = 0u32
     IN_PTR = ptr as u64  IN_LEN = len  IN_POS = 0u32
     while IN_POS < IN_LEN {
         sp_skip_ws()
@@ -289,29 +291,32 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
                         sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
                         sp_operand()  sov_movabs(OPR, S1I as u64)
                     } else {
-                        /* binary ALU: <op>q  src,dst  (op1 reg|imm, op2 reg) */
+                        /* binary ALU: <op>q  src,dst.  An UNKNOWN mnemonic falls here and matches nothing ->
+                         * HARD ERROR (mt stays 0 -> PARSE_ERR), never a silent missing-bytes drop. */
+                        let mut mt : u32 = 0u32
                         sp_operand()  S1K = OPK  S1R = OPR  S1I = OPI
                         sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
                         sp_operand()
-                        /* addq/subq/cmpq/andq/orq/xorq */
                         if mn_is(97u32,100u32,100u32,113u32,4u32) == 1u32 {        /* addq */
-                            if S1K == 1u32 { sov_add_imm32(OPR, S1I as i32) } else { sov_add_rr(OPR, S1R) }
+                            mt = 1u32  if S1K == 1u32 { sov_add_imm32(OPR, S1I as i32) } else { sov_add_rr(OPR, S1R) }
                         }
                         if mn_is(115u32,117u32,98u32,113u32,4u32) == 1u32 {        /* subq */
-                            if S1K == 1u32 { sov_sub_imm32(OPR, S1I as i32) } else { sov_sub_rr(OPR, S1R) }
+                            mt = 1u32  if S1K == 1u32 { sov_sub_imm32(OPR, S1I as i32) } else { sov_sub_rr(OPR, S1R) }
                         }
                         if mn_is(99u32,109u32,112u32,113u32,4u32) == 1u32 {        /* cmpq */
-                            if S1K == 1u32 { sov_cmp_imm32(OPR, S1I as i32) } else { sov_cmp_rr(OPR, S1R) }
+                            mt = 1u32  if S1K == 1u32 { sov_cmp_imm32(OPR, S1I as i32) } else { sov_cmp_rr(OPR, S1R) }
                         }
-                        if mn_is(97u32,110u32,100u32,113u32,4u32) == 1u32 { sov_and_rr(OPR, S1R) }  /* andq */
-                        if mn_is(111u32,114u32,113u32,0u32,3u32) == 1u32 { sov_or_rr(OPR, S1R) }     /* orq */
-                        if mn_is(120u32,111u32,114u32,113u32,4u32) == 1u32 { sov_xor_rr(OPR, S1R) }  /* xorq */
+                        if mn_is(97u32,110u32,100u32,113u32,4u32) == 1u32 { mt = 1u32  sov_and_rr(OPR, S1R) }  /* andq */
+                        if mn_is(111u32,114u32,113u32,0u32,3u32) == 1u32 { mt = 1u32  sov_or_rr(OPR, S1R) }     /* orq */
+                        if mn_is(120u32,111u32,114u32,113u32,4u32) == 1u32 { mt = 1u32  sov_xor_rr(OPR, S1R) }  /* xorq */
+                        if mt == 0u32 { PARSE_ERR = 1u32 }    /* unknown mnemonic -> loud, located failure */
                     } } } } } }
                     sp_skip_line()
                 }
             }
         } } } } }
     }
+    if PARSE_ERR == 1u32 { return 0i32 - 1i32 }
     return 0i32
 }
 

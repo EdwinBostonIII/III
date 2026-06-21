@@ -1,0 +1,34 @@
+/* test_lea.iii  --  the LEA reloc path (leaq sym(%rip), %reg) targeting .rodata.  Real cg_r3 .s for a
+ * string-returning fn (L_str_0 @ .rodata+0).  Must reproduce gcc's 47 .text bytes incl. leaq L_str_0(%rip)
+ * = 48 8d 05 00 00 00 00 AND the reloc (field 0xe -> .rodata, section id 2).
+ *   11 reln / 12 relent / 13 len / 14+i byte i.  exit 99 = lea reloc path byte+reloc exact vs gcc.
+ */
+module sovtc_test_lea
+
+extern @abi(c-msvc-x64) fn sovparse_full(ptr: *u8, len: u32) -> i32 from "sovparse.iii"
+extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_reloc_sec(i: u32) -> u32 from "sovas.iii"
+
+var GOLD : [u8; 47] = [
+  0x55u8,0x48u8,0x89u8,0xE5u8,0x48u8,0x81u8,0xECu8,0x00u8,0x04u8,0x00u8,0x00u8,0x48u8,0x8Du8,0x05u8,0x00u8,0x00u8,
+  0x00u8,0x00u8,0x50u8,0x58u8,0x50u8,0x58u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,
+  0x00u8,0x00u8,0x50u8,0x48u8,0xC7u8,0xC0u8,0x00u8,0x00u8,0x00u8,0x00u8,0x48u8,0x89u8,0xECu8,0x5Du8,0xC3u8
+]
+
+fn slen(s: *u8) -> u32 { let mut i : u32 = 0u32  while i < 8192u32 { if s[i as u64] == 126u8 { return i }  i = i + 1u32 }  return 0u32 }
+
+fn main() -> u64 {
+    let src : *u8 = "  .section .rodata\nL_str_0:\n  .text\nL_sov_z_str:\n  pushq %rbp\n  movq %rsp, %rbp\n  subq $1024, %rsp\n  leaq L_str_0(%rip), %rax\n  pushq %rax\n  popq %rax\n  pushq %rax\n  popq %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n  movq $0, %rax\n  pushq %rax\n  movq $0, %rax\n  movq %rbp, %rsp\n  popq %rbp\n  retq\n~" as *u8
+    let n : u32 = slen(src)
+    sovparse_full(src, n)
+    if sov_reloc_n() != 1u32 { return 11u64 }
+    if sov_reloc_off(0u32) != 0x0Eu32 { return 12u64 }
+    if sov_reloc_sec(0u32) != 2u32 { return 12u64 }   /* .rodata */
+    if sov_len() != 47u32 { return 13u64 }
+    let mut i : u32 = 0u32
+    while i < 47u32 { if sov_at(i) != (GOLD[i as u64] as u32) { return (14u64 + (i as u64)) }  i = i + 1u32 }
+    return 99u64
+}

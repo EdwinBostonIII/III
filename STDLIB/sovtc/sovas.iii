@@ -243,11 +243,5 @@ fn sov_lea_rip_sym(reg: u32, sec: u32, off: i32) -> i32 @export {    /* leaq sym
     sov_rex(1u32, r, 0u32, 0u32)  sov_emit(0x8Du32)  sov_modrm(0u32, reg, 5u32)
     sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
 }
-fn sov_load_rip32_sym(reg: u32, sec: u32, off: i32) -> i32 @export { /* movl sym(%rip), %reg : 8B (no REX) */
-    sov_emit(0x8Bu32)  sov_modrm(0u32, reg, 5u32)
-    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
-}
-fn sov_store_rip32_sym(reg: u32, sec: u32, off: i32) -> i32 @export {/* movl %reg, sym(%rip) : 89 (no REX) */
-    sov_emit(0x89u32)  sov_modrm(0u32, reg, 5u32)
-    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
-}
+/* (32-bit movl rip-sym encoders removed: cg_r3 does emit movl for u32 globals, but the parser does not yet
+ * route movl, so they would be dead surface.  They return when movl parsing + a gate land together.) */

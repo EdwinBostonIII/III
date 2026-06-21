@@ -1,0 +1,14 @@
+/* boot8 -- .bss + .idata TOGETHER + multiple imports per DLL (the two ways sovas differs from boot7). */
+module sovtc_boot8
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn GetCurrentProcessId() -> u32 from "kernel32"
+extern @abi(c-msvc-x64) fn GetTickCount() -> u32 from "kernel32"
+var BIG : [u8; 1048576]
+fn main() -> u64 {
+    let a : u32 = GetCurrentProcessId()
+    let b : u32 = GetTickCount()
+    BIG[1048575u64] = 7u8
+    putchar(66i32)  putchar(10i32)
+    if BIG[1048575u64] == 7u8 { if a > 0u32 { if b > 0u32 { return 99u64 } } }
+    return 1u64
+}

@@ -1,0 +1,12 @@
+/* boot5.iii  --  isolates the IMPORT path: one msvcrt import (putchar), linked by sovld (NO gcc/ld).
+ * boot1-4 had zero imports, so sovld's .idata/ILT/IAT/thunk code has never actually EXECUTED.  If this
+ * prints 'I' and exits 99, the sovereign import machinery is live. */
+module sovtc_boot5
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+fn main() -> u64 {
+    putchar(73i32)   /* 'I' */
+    putchar(10i32)   /* newline */
+    return 99u64
+}

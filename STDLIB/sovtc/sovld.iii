@@ -19,6 +19,7 @@ module sovtc_sovld
 extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_at(i: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_len(sec: u32) -> u32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_bss_size() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_data_at(sec: u32, i: u32) -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_reloc_n() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_reloc_off(i: u32) -> u32 from "sovas.iii"
@@ -179,6 +180,13 @@ fn sovld_emit() -> i32 @export {
         idata_len = cur - idata_rva
         cur_rva = cur_rva + alignup(idata_len, 0x1000u32)
     }
+    /* ── .bss: uninitialized data, virtual-only (no file bytes).  sovld dropped it before -> any program with a
+     * large .bss (boot7's 1MB array, sovas's ~5MB buffers) accessed unmapped memory -> segfault. ── */
+    let bsslen : u32 = sov_bss_size()
+    let mut has_bss : u32 = 0u32
+    if bsslen > 0u32 { has_bss = 1u32 }
+    let mut bss_rva : u32 = 0u32
+    if has_bss == 1u32 { bss_rva = cur_rva  cur_rva = cur_rva + alignup(bsslen, 0x1000u32) }
     let size_of_image : u32 = cur_rva
 
     /* ── generate thunks (FF 25 jmp *[IAT-entry]) + patch relocations ── */
@@ -197,11 +205,12 @@ fn sovld_emit() -> i32 @export {
         let roff : u32 = sov_reloc_off(r)
         if rsec == 1u32 { wr32(roff, (data_rva + rd32(roff)) - ((text_rva + roff) + 4u32)) }
         if rsec == 0u32 { wr32(roff, (text_rva + textlen + (sov_reloc_sym(r) * 6u32)) - ((text_rva + roff) + 4u32)) }
+        if rsec == 3u32 { wr32(roff, (bss_rva + rd32(roff)) - ((text_rva + roff) + 4u32)) }   /* .bss rip-relative */
         r = r + 1u32
     }
 
     let entry_rva : u32 = text_rva + find_main_off()
-    let nsec : u32 = (1u32 + has_data) + has_idata
+    let nsec : u32 = ((1u32 + has_data) + has_idata) + has_bss
     let mut cur_file : u32 = 0x200u32 + text_raw
     let data_raw : u32 = alignup(datalen, 0x200u32)
     let mut data_fileptr : u32 = 0u32
@@ -244,6 +253,10 @@ fn sovld_emit() -> i32 @export {
     if has_idata == 1u32 {
         p8(46u32) p8(105u32) p8(100u32) p8(97u32) p8(116u32) p8(97u32) p8(0u32) p8(0u32)   /* .idata */
         p32(idata_len)  p32(idata_rva)  p32(idata_raw)  p32(idata_fileptr)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0xC0000040u32)
+    }
+    if has_bss == 1u32 {
+        p8(46u32) p8(98u32) p8(115u32) p8(115u32) p8(0u32) p8(0u32) p8(0u32) p8(0u32)   /* .bss */
+        p32(bsslen)  p32(bss_rva)  p32(0u32)  p32(0u32)  p32(0u32)  p32(0u32)  p16(0u32)  p16(0u32)  p32(0xC0000080u32)   /* UNINIT|R|W, no raw data */
     }
 
     /* ── raw data ── */

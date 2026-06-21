@@ -1,0 +1,3 @@
+module sovtc_boot7
+var BIG : [u8; 1048576]
+fn main() -> u64 { BIG[1048575u64] = 7u8  if BIG[1048575u64] == 7u8 { return 99u64 }  return 1u64 }

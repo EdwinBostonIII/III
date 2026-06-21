@@ -1,0 +1,11 @@
+/* boot6.iii -- isolates MULTI-DLL imports: msvcrt (putchar) + kernel32 (ExitProcess) together.
+ * sovld groups externs by DLL into separate import descriptors; boot5 used one DLL, this uses two. */
+module sovtc_boot6
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ExitProcess(code: u32) -> u64 from "kernel32"
+fn main() -> u64 {
+    putchar(75i32)
+    putchar(10i32)
+    ExitProcess(99u32)
+    return 1u64
+}

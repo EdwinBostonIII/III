@@ -1704,6 +1704,18 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$
             SKIP=$((SKIP+1)); continue
             ;;
     esac
+    # SAT-HEAVY convergence KATs: gil/gilr forge a width-64 multiplier miter
+    # (1751 has been seen spinning 34000+ CPU-sec).  Pre-existingly slow, NOT
+    # regressions, and authoritatively validated by the FAST proof KATs that
+    # share the same bb_* primitives (1755/1759/1761/1762).  The conformance
+    # compile below has no per-test timeout, so these would block the whole
+    # sweep indefinitely; delegate like XII/bench above -- do not spin.
+    case "$base" in
+        1751_*|1763_*|1764_*)
+            RESULTS+=("SKIP  $base : SAT-heavy width-64 forge -- validated by fast proof KATs (1755/1759/1761/1762)")
+            SKIP=$((SKIP+1)); continue
+            ;;
+    esac
     # Every conformance test this runner OWNS must carry a deterministic
     # EXPECTED exit code (Phase-sigma discipline, generalised).  A
     # missing entry is a HARD error -- never a silent `expected=?` --

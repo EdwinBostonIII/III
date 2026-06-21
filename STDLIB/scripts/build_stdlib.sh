@@ -1523,6 +1523,11 @@ MODULES=(
     # try-witness-rewind.  HONEST: unified READER; retire-by-attrition of the redundant ripple machinery is a
     # separate carto-zero-consumer-proven step (never deletion on faith).  Proven (corpus 1947).  Last.
     "eidos/field"
+    # coincidence: the COINCIDENCE ENGINE -- mines the live field for content-address coincidences (concrete =
+    # memoisation; structural = the cross-faculty self-map), observe-only + O(1) + bounded, so it can never
+    # corrupt the field or flake a build.  Autonomous via coin_fold_web (one call folds the field) + the 1981
+    # build-gate.  WRAPS isub + assimilate; zero new mass beyond one fold.
+    "eidos/coincidence"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

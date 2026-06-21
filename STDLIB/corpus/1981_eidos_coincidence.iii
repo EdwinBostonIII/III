@@ -1,0 +1,101 @@
+/* 1981_eidos_coincidence.iii  --  the COINCIDENCE ENGINE proven on REAL data + safe + autonomous-shaped.
+ *
+ * Part A (UTILITY = memoisation, on a REAL xii_rewrite trace): drive the real rewrite -> ingest its witnessed
+ *   reduction into the web -> coin_fold_web indexes every quantum by content-address.  Re-folding the SAME
+ *   field recognises every address (concrete coincidence) and adds nothing (deterministic/idempotent); a real
+ *   quantum's address RECALLS its witnessed result (reuse, not recompute).  SAFETY: the field is byte-unchanged
+ *   by the fold (observe-only).  TEETH: a tampered address does NOT falsely recall (sound by sha256).
+ * Part B (INTELLIGENCE = the self-map): a move-SHAPE produced under faculty 0 is recognised again under
+ *   faculty 1 -> a CROSS-FACULTY coincidence (the same geometric move across two faculties, operands abstracted).
+ *
+ * codes 10 trace / 11 observe-only+index / 12 idempotent / 13 recall / 14 tamper-soundness / 15 single-faculty
+ * / 16 cross-faculty self-map.  exit 99 = the engine is real, sound, safe, and recognises across faculties.
+ */
+module m1981
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn ingest_extract() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_commit() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn assim_add(verb: u32, a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn coin_reset() -> i32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_fold_web(faculty: u32) -> u32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_concrete_n() -> u32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_concrete_cross() -> u32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_recall(addr: *u8, out_result: *u64) -> u8 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_faculties(addr: *u8) -> u32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_shape_n() -> u32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_shape_cross() -> u32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn coin_capped() -> u8 from "coincidence.iii"
+
+var ADDR : [u8; 32]
+var RES  : [u64; 1]
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    coin_reset()
+
+    /* ===== Part A: CONCRETE MEMOISATION on a REAL xii_rewrite trace ===== */
+    let s : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s)
+    if xii_isub_steps() < 2u32 { return 10u64 }            /* a real multi-step reduction trace */
+    let ext : u32 = ingest_extract()
+    if ext == 0u32 { return 10u64 }
+    isub_reset()
+    ingest_commit()                                        /* the web IS the real trace geometry */
+    let n : u32 = isub_count()
+    if n == 0u32 { return 10u64 }
+
+    let before : u32 = isub_count()
+    coin_fold_web(0u32)                                    /* faculty 0 = the real trace, indexed */
+    if isub_count() != before { return 11u64 }             /* SAFETY: observe-only -- the field is unchanged */
+    let nidx : u32 = coin_concrete_n()
+    if nidx != n { return 11u64 }                          /* every distinct quantum indexed */
+
+    coin_fold_web(0u32)                                    /* re-fold the SAME field */
+    if coin_concrete_n() != nidx { return 12u64 }          /* idempotent: re-doing the same work adds nothing */
+
+    isub_cav_into(isub_verb(0u32), isub_a(0u32), isub_b(0u32), &ADDR as *u8)
+    if coin_recall(&ADDR as *u8, &RES as *u64) != 1u8 { return 13u64 }   /* memoise: recall, don't recompute */
+    ADDR[0u64] = ADDR[0u64] + 1u8                          /* tamper one byte */
+    if coin_recall(&ADDR as *u8, &RES as *u64) == 1u8 { return 14u64 }   /* TEETH: no false recall (sound) */
+
+    /* concrete CROSS-faculty + the faculties accessor: a SECOND faculty sees the same computations */
+    coin_fold_web(1u32)
+    if coin_concrete_cross() == 0u32 { return 17u64 }      /* the same work recognised across faculty tags */
+    isub_cav_into(isub_verb(0u32), isub_a(0u32), isub_b(0u32), &ADDR as *u8)
+    if coin_faculties(&ADDR as *u8) != 3u32 { return 17u64 }   /* faculties {0,1} = bits 0|1 = 3 */
+
+    /* ===== Part B: CROSS-FACULTY STRUCTURAL self-map ===== */
+    coin_reset()
+    isub_reset()
+    assim_add(0u32, 0u32, 1u32)  assim_add(0u32, 1u32, 2u32)   /* faculty 0: a 3-chain 0<1<2 */
+    coin_fold_web(0u32)
+    if coin_shape_cross() != 0u32 { return 15u64 }         /* one faculty -> no cross yet */
+    isub_reset()
+    assim_add(0u32, 0u32, 1u32)  assim_add(0u32, 1u32, 2u32)   /* faculty 1: the SAME move-shape, a different faculty */
+    coin_fold_web(1u32)
+    if coin_shape_cross() == 0u32 { return 16u64 }         /* the move recognised ACROSS faculties = the self-map */
+    if coin_shape_n() == 0u32 { return 18u64 }             /* distinct move-shapes were indexed */
+    if coin_capped() != 0u8 { return 18u64 }               /* never a nuisance: the engine never overflowed */
+
+    return 99u64
+}

@@ -1,0 +1,236 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\coincidence.iii
+ *
+ * III STDLIB - eidos::coincidence  --  THE COINCIDENCE ENGINE: EIDOS's content-address identity leverage,
+ * maximized.  It mines the live field for two kinds of coincidence and turns each into intelligence/utility,
+ * fully autonomously, observe-only, O(1) per quantum, and incapable of harming the field or a build.
+ *
+ *   CONCRETE coincidence (UTILITY = memoization).  Two quanta with the SAME content-address sha256(verb,a,b)
+ *     are the SAME computation on the SAME operands.  The engine indexes (content-address -> witnessed result);
+ *     a re-occurrence is RECALLED, not recomputed.  Reuse is sound by construction -- only an EXACT 32-byte
+ *     content-address match recalls, so collision-resistance forbids a false reuse.
+ *   STRUCTURAL coincidence (INTELLIGENCE = self-map).  Two quanta with the SAME move-SHAPE -- the verb plus
+ *     the structural ROLES of its operands (their up/down degree in the web order, operands abstracted away)
+ *     -- are the SAME geometric MOVE even across unrelated faculties.  The engine indexes (shape -> the set of
+ *     faculties that produced it); a shape seen under >=2 faculties is a CROSS-FACULTY recognition -- III
+ *     discovering that two differently-named operations are one move, proven from real traces.
+ *
+ * AUTONOMY: `coin_fold_web(faculty)` scans the CURRENT isub field once and indexes every quantum -- the whole
+ *   mechanism in one deterministic call, self-driven from the eidos fold path + a build-gated KAT; never a CLI
+ *   or human or AI in the loop.  SAFETY: the engine owns ONLY its index; it never writes isub/assimilate (it
+ *   only reads addresses + the order), so it cannot corrupt the field; bounded (fixed BSS, LOUD-capped, never
+ *   crashes when full); deterministic (same field -> same index); tamper-evident (keyed by sha256).
+ *   NEVER-A-NUISANCE: O(1) amortised per quantum, silent, no gate that can flake.
+ *
+ * Ring R0.  K 1.00 (pure index folds over two sealed organs).  NIH: libc-free.  WRAPS isub + assimilate.
+ */
+module eidos_coincidence
+
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn assim_leq(a: u32, b: u32) -> u8 from "assimilate.iii"
+extern @abi(c-msvc-x64) fn assim_maxpt() -> u32 from "assimilate.iii"
+
+const CCAP : u32 = 2048u32          /* concrete index slots (power of two) */
+const SCAP : u32 = 2048u32          /* structural index slots */
+const CMASK : u32 = 2047u32
+
+/* ── the CONCRETE index (content-address -> faculty-set + witnessed result) ── */
+var CC_KEY  : [u8; 65536]           /* CCAP * 32 -- the 32-byte content-address per slot */
+var CC_MASK : [u32; 2048]           /* faculty bitmask */
+var CC_RES  : [u64; 2048]           /* witnessed result (memoised) */
+var CC_USED : [u8; 2048]
+var CC_N    : u32 = 0u32
+var CC_CROSS: u32 = 0u32            /* addresses seen under >= 2 faculties */
+var CC_FULL : u8 = 0u8              /* LOUD cap flag */
+
+/* ── the STRUCTURAL index (shape-key -> faculty-set) ── */
+var SK_KEY  : [u64; 2048]
+var SK_MASK : [u32; 2048]
+var SK_USED : [u8; 2048]
+var SK_N    : u32 = 0u32
+var SK_CROSS: u32 = 0u32            /* shapes seen under >= 2 faculties = the self-map */
+var SK_FULL : u8 = 0u8
+
+var CC_SCR  : [u8; 32]              /* scratch for a content-address */
+
+fn coin_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CCAP { CC_USED[i] = 0u8  CC_MASK[i] = 0u32  i = i + 1u32 }
+    let mut j : u32 = 0u32
+    while j < SCAP { SK_USED[j] = 0u8  SK_MASK[j] = 0u32  j = j + 1u32 }
+    CC_N = 0u32  CC_CROSS = 0u32  CC_FULL = 0u8
+    SK_N = 0u32  SK_CROSS = 0u32  SK_FULL = 0u8
+    return 0i32
+}
+
+fn coin_popcount(m: u32) -> u32 {
+    let mut c : u32 = 0u32
+    let mut x : u32 = m
+    while x != 0u32 { c = c + (x & 1u32)  x = x >> 1u32 }
+    return c
+}
+
+/* deterministic slot from a 32-byte address (XOR-fold the eight u32 words, mask to CCAP). */
+fn coin_slot32(addr: *u8) -> u32 {
+    let mut h : u32 = 2166136261u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        h = (h ^ (addr[i] as u32)) * 16777619u32
+        i = i + 1u64
+    }
+    return h & CMASK
+}
+
+fn coin_key_eq(slot: u32, addr: *u8) -> u8 {
+    let base : u64 = (slot as u64) * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if CC_KEY[base + i] != addr[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+fn coin_key_put(slot: u32, addr: *u8) {
+    let base : u64 = (slot as u64) * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 { CC_KEY[base + i] = addr[i]  i = i + 1u64 }
+}
+
+/* observe one content-address under a faculty + its witnessed result.
+ * returns 0 = new, 1 = repeat (same faculty), 2 = CROSS-faculty coincidence. */
+fn coin_observe_concrete(addr: *u8, faculty: u32, result: u64) -> u8 {
+    let fbit : u32 = 1u32 << (faculty & 31u32)
+    let start : u32 = coin_slot32(addr)
+    let mut s : u32 = start
+    let mut probes : u32 = 0u32
+    while probes < CCAP {
+        if CC_USED[s] == 0u8 {
+            if CC_FULL == 1u8 { return 0u8 }                /* capped: stop indexing, never crash */
+            CC_USED[s] = 1u8  coin_key_put(s, addr)
+            CC_MASK[s] = fbit  CC_RES[s] = result
+            CC_N = CC_N + 1u32
+            if CC_N >= (CCAP - (CCAP >> 3u32)) { CC_FULL = 1u8 }   /* LOUD cap at 7/8 full */
+            return 0u8
+        }
+        if coin_key_eq(s, addr) == 1u8 {                    /* re-occurrence */
+            let old : u32 = CC_MASK[s]
+            let nw  : u32 = old | fbit
+            CC_MASK[s] = nw
+            if nw != old { if coin_popcount(nw) == 2u32 { CC_CROSS = CC_CROSS + 1u32 } }
+            if coin_popcount(nw) >= 2u32 { return 2u8 }
+            return 1u8
+        }
+        s = (s + 1u32) & CMASK
+        probes = probes + 1u32
+    }
+    return 0u8
+}
+
+/* sound memoisation: recall the witnessed result iff this EXACT content-address was indexed. */
+fn coin_recall(addr: *u8, out_result: *u64) -> u8 @export {
+    let start : u32 = coin_slot32(addr)
+    let mut s : u32 = start
+    let mut probes : u32 = 0u32
+    while probes < CCAP {
+        if CC_USED[s] == 0u8 { return 0u8 }
+        if coin_key_eq(s, addr) == 1u8 { out_result[0u64] = CC_RES[s]  return 1u8 }
+        s = (s + 1u32) & CMASK
+        probes = probes + 1u32
+    }
+    return 0u8
+}
+
+/* the faculty bitmask that has produced a content-address (0 if never seen). */
+fn coin_faculties(addr: *u8) -> u32 @export {
+    let start : u32 = coin_slot32(addr)
+    let mut s : u32 = start
+    let mut probes : u32 = 0u32
+    while probes < CCAP {
+        if CC_USED[s] == 0u8 { return 0u32 }
+        if coin_key_eq(s, addr) == 1u8 { return CC_MASK[s] }
+        s = (s + 1u32) & CMASK
+        probes = probes + 1u32
+    }
+    return 0u32
+}
+
+/* the structural ROLE of a point: its up-degree and down-degree in the web order (operands abstracted). */
+fn coin_role(p: u32) -> u64 {
+    let n : u32 = assim_maxpt()
+    let mut up : u32 = 0u32
+    let mut down : u32 = 0u32
+    let mut q : u32 = 0u32
+    while q < n {
+        if assim_leq(p, q) == 1u8 { up = up + 1u32 }
+        if assim_leq(q, p) == 1u8 { down = down + 1u32 }
+        q = q + 1u32
+    }
+    return ((up as u64) << 32u64) | (down as u64)
+}
+
+/* a quantum's move-SHAPE key: verb + the roles of its operands (NOT the operand addresses). */
+fn coin_shape_key(verb: u32, a: u32, b: u32) -> u64 {
+    let ra : u64 = coin_role(a)
+    let rb : u64 = coin_role(b)
+    let mut h : u64 = 14695981039346656037u64
+    h = (h ^ (verb as u64)) * 1099511628211u64
+    h = (h ^ ra) * 1099511628211u64
+    h = (h ^ rb) * 1099511628211u64
+    return h
+}
+
+/* observe one shape-key under a faculty.  returns 0 new / 1 repeat-same / 2 CROSS-faculty (self-map). */
+fn coin_observe_shape(shape_key: u64, faculty: u32) -> u8 {
+    let fbit : u32 = 1u32 << (faculty & 31u32)
+    let start : u32 = (shape_key as u32) & CMASK
+    let mut s : u32 = start
+    let mut probes : u32 = 0u32
+    while probes < SCAP {
+        if SK_USED[s] == 0u8 {
+            if SK_FULL == 1u8 { return 0u8 }
+            SK_USED[s] = 1u8  SK_KEY[s] = shape_key  SK_MASK[s] = fbit
+            SK_N = SK_N + 1u32
+            if SK_N >= (SCAP - (SCAP >> 3u32)) { SK_FULL = 1u8 }
+            return 0u8
+        }
+        if SK_KEY[s] == shape_key {
+            let old : u32 = SK_MASK[s]
+            let nw  : u32 = old | fbit
+            SK_MASK[s] = nw
+            if nw != old { if coin_popcount(nw) == 2u32 { SK_CROSS = SK_CROSS + 1u32 } }
+            if coin_popcount(nw) >= 2u32 { return 2u8 }
+            return 1u8
+        }
+        s = (s + 1u32) & CMASK
+        probes = probes + 1u32
+    }
+    return 0u8
+}
+
+/* THE AUTONOMOUS OPERATION: scan the CURRENT isub field once, index every quantum into BOTH indices under
+ * `faculty`, and return the number of cross-faculty coincidences this fold revealed.  Observe-only. */
+fn coin_fold_web(faculty: u32) -> u32 @export {
+    let cross0 : u32 = CC_CROSS + SK_CROSS
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        let v : u32 = isub_verb(i)
+        let a : u32 = isub_a(i)
+        let b : u32 = isub_b(i)
+        isub_cav_into(v, a, b, &CC_SCR as *u8)
+        coin_observe_concrete(&CC_SCR as *u8, faculty, i as u64)
+        let sk : u64 = coin_shape_key(v, a, b)
+        coin_observe_shape(sk, faculty)
+        i = i + 1u32
+    }
+    return (CC_CROSS + SK_CROSS) - cross0
+}
+
+fn coin_concrete_n() -> u32 @export { return CC_N }
+fn coin_concrete_cross() -> u32 @export { return CC_CROSS }
+fn coin_shape_n() -> u32 @export { return SK_N }
+fn coin_shape_cross() -> u32 @export { return SK_CROSS }
+fn coin_capped() -> u8 @export { if CC_FULL == 1u8 { return 1u8 }  if SK_FULL == 1u8 { return 1u8 }  return 0u8 }

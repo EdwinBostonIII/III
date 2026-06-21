@@ -1502,6 +1502,13 @@ MODULES=(
     # gives EIDOS a real trace-fed INPUT, not a fixture.  Honest: still no live CONSUMER (that's tp_*).  Proven
     # (corpus 1940).  Composes assimilate + isub + compose + cost_lattice.  BSS-neutral, compiler-unreferenced; last.
     "eidos/descriptor"
+    # eidos/anchor -- the GROUNDING / self-location (EIDOS open core, DOCS III-EIDOS-ARCHITECTURE 9).  WRAPS the
+    # proven unprivileged katabasis Census Crystal: IDENTITY (content-addressed, byte-identical across runs = FR-2)
+    # + observe-only VERIFICATION (does THIS host verify a requirement? = the reachability the Composer reshuffles
+    # around).  SAFE BY CONSTRUCTION: ZERO metal, NO write function -> the KATABASIS 0.6 bricking-write is
+    # unrepresentable.  The actual ring-descent (WRMSR at R-1) is the gated/reversible/observe-first north-star,
+    # DECLARED not executed (host-faster stays burden-of-proof).  Proven (corpus 1944).  BSS-neutral; last.
+    "eidos/anchor"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

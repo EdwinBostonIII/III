@@ -1,0 +1,55 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\anchor.iii
+ *
+ * III STDLIB - eidos::anchor  --  the GROUNDING / self-location (EIDOS open core, DOCS III-EIDOS-ARCHITECTURE §9).
+ *
+ * The directive's hardest clause -- "grounded in the best place on the computer, agnostic to hardware/firmware,
+ * latch onto a reliable point, melt in least-disruptively" -- split into its two real questions (§9.1):
+ *   IDENTITY ("what machine am I on?") -- SOLVED + PROVEN: the unprivileged silicon Census Crystal
+ *     (katabasis::census, KAT corpus 603) mints a CONTENT-ADDRESSED identity from vendor-explicit silicon facts.
+ *     Two runs -> byte-identical (FR-2).  This is the RELIABLE POINT to latch onto -- present on every machine,
+ *     needs no privilege, pure data + one sha256.  anchor WRAPS it as the self-location.
+ *   PLACEMENT ("where do I stand to reap the benefit?") -- the descent through rings is the OPEN CORE.
+ *
+ * SAFETY-BY-CONSTRUCTION (designed against KATABASIS §0.6 -- "a wrong constant at the metal reboots the machine"):
+ * anchor near-term is IDENTITY + observe-only VERIFICATION ONLY.  It has NO metal-write function at all, so the
+ * bricking write (Host Save Area / bad IMAGE_BASE) is UNREPRESENTABLE -- it cannot be constructed.  The actual
+ * descent (WRMSR/mem-write at R-1) is the north-star: gated (capability token), reversible (NPT-CoW snapshot),
+ * observe-first, safe-write-in-guest (a #GP is a VMEXIT, the host never faults) -- declared, NOT executed here.
+ * "Non-disruptive" is the defensible claim; "improves host performance" stays a burden-of-proof north-star (§9.3).
+ *
+ * SELF-LOCATION FOR DYNAMIC COMPOSITION (§9.4): the verification primitive (anchor_verifies) answers "does THIS
+ * host verify a capability's requirement?" -- so eidos/compose can reshuffle around the capabilities ACTUALLY
+ * reachable here (the live consumer, eidos self-awareness).  Different host (different crystal) -> different
+ * reachable set -> different plan.  Grounding + self-description = the self-awareness that ends "III is dumb".
+ *
+ * Ring R0.  K 1.00.  WRAPS katabasis::census (pure data).  NIH: libc-free.  ZERO metal.
+ */
+module eidos_anchor
+
+extern @abi(c-msvc-x64) fn katabasis_census_init() -> i32 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_hash(out_addr: u64) -> i32 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_fact_count() -> u64 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_fact(idx: u64) -> u64 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_fact_matches(idx: u64, value: u64) -> u8 from "census.iii"
+
+const ANCHOR_RUNG_LATCH : u32 = 3u32      /* R3: the universal latch rung -- always reached, needs no privilege */
+
+/* LATCH: mint the content-addressed identity crystal (the self-location).  Always succeeds (unprivileged, pure
+ * data + sha256); two calls -> byte-identical (FR-2).  This is the ONLY grounding op; there is deliberately NO
+ * write function, so the metal bricking-write is unrepresentable. */
+fn anchor_latch(out_crystal: *u8) -> i32 @export {
+    katabasis_census_init()
+    return katabasis_census_hash(out_crystal as u64)
+}
+
+/* the universal rung anchor stands on (R3); deeper rungs are the gated, plan-only descent (north-star). */
+fn anchor_rung_latched() -> u32 @export { return ANCHOR_RUNG_LATCH }
+
+/* the host's verified silicon facts -- the self-location's content. */
+fn anchor_fact_count() -> u64 @export { return katabasis_census_fact_count() }
+fn anchor_fact(idx: u64) -> u64 @export { return katabasis_census_fact(idx) }
+
+/* OBSERVE-ONLY VERIFICATION (the reachability primitive): does THIS host verify a requirement (census fact idx
+ * == value)?  Pure fact comparison, NO write.  A capability is reachable here iff the host verifies its
+ * requirement -- this is what lets the Composer reshuffle around the host (the self-aware consumer). */
+fn anchor_verifies(idx: u64, value: u64) -> u8 @export { return katabasis_census_fact_matches(idx, value) }

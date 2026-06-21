@@ -1,0 +1,49 @@
+/* 1944_eidos_anchor_real.iii  --  EIDOS GROUNDING: self-location via the proven, unprivileged Census Crystal.
+ *
+ * eidos::anchor is the self-location half of EIDOS (the answer to "III is dumb": no anchor => no self-location).
+ * It WRAPS the proven katabasis Census Crystal: IDENTITY (a content-addressed crystal, byte-identical across
+ * runs -- FR-2) + observe-only VERIFICATION (does THIS host verify a requirement?).  ZERO metal -- there is no
+ * write function, so the KATABASIS 0.6 bricking-write is unrepresentable.
+ *
+ *   code 11 IDENTITY : the latch did not mint a deterministic, non-zero identity crystal
+ *   code 12 VERIFY   : a fact failed self-verification, or a wrong fact was NOT detected (drift), or count wrong
+ *   code 13 RUNG     : the latched rung is not R3 (the universal, unprivileged latch)
+ * exit 99 = anchor mints a deterministic content-addressed self-location + an observe-only verification primitive
+ *           (the reachability the Composer reshuffles around) -- safe by construction, zero metal.
+ */
+module m1944
+
+extern @abi(c-msvc-x64) fn anchor_latch(out_crystal: *u8) -> i32 from "anchor.iii"
+extern @abi(c-msvc-x64) fn anchor_rung_latched() -> u32 from "anchor.iii"
+extern @abi(c-msvc-x64) fn anchor_fact_count() -> u64 from "anchor.iii"
+extern @abi(c-msvc-x64) fn anchor_fact(idx: u64) -> u64 from "anchor.iii"
+extern @abi(c-msvc-x64) fn anchor_verifies(idx: u64, value: u64) -> u8 from "anchor.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+var C1 : [u8; 32]
+var C2 : [u8; 32]
+
+fn main() -> u64 {
+    /* ===== code 11: the identity crystal is deterministic (FR-2) + non-zero ===== */
+    anchor_latch(&C1 as *u8)
+    anchor_latch(&C2 as *u8)
+    if cad_eq(&C1 as *u8, &C2 as *u8) != 1u8 { return 11u64 }   /* two latches -> byte-identical self-location */
+    if cad_is_zero(&C1 as *u8) == 1u8 { return 11u64 }          /* a real identity, not the empty hash */
+
+    /* ===== code 12: the observe-only verification primitive (reachability) ===== */
+    let n : u64 = anchor_fact_count()
+    if n != 16u64 { return 12u64 }
+    let mut i : u64 = 0u64
+    while i < n {
+        let v : u64 = anchor_fact(i)
+        if anchor_verifies(i, v) != 1u8 { return 12u64 }        /* the host verifies its own facts */
+        i = i + 1u64
+    }
+    if anchor_verifies(0u64, anchor_fact(0u64) + 1u64) != 0u8 { return 12u64 }   /* a wrong fact is DETECTED (drift) */
+
+    /* ===== code 13: the universal latch rung is R3 ===== */
+    if anchor_rung_latched() != 3u32 { return 13u64 }
+
+    return 99u64
+}

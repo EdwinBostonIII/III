@@ -826,7 +826,7 @@ fn sovparse_full(ptr: *u8, len: u32) -> i32 @export {
     /* L: layout, iterated for branch RELAXATION -- all branches start REL8; any that overflows grows to REL32
      * (shifting later offsets), re-layout, until stable. */
     let mut bi : u32 = 0u32
-    while bi < 128u32 { BR_BIG[bi as u64] = 0u32  bi = bi + 1u32 }
+    while bi < 16384u32 { BR_BIG[bi as u64] = 0u32  bi = bi + 1u32 }
     BR_N = 0u32
     let mut iter : u32 = 0u32
     let mut go : u32 = 1u32

@@ -59,10 +59,10 @@ fn sov_reloc_n() -> u32 @export { return REL_N }
 fn sov_reloc_off(i: u32) -> u32 @export { if i < REL_N { return REL_OFF[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_reloc_sec(i: u32) -> u32 @export { if i < REL_N { return REL_SEC[i as u64] }  return 0xFFFFFFFFu32 }
 fn sov_reloc_sym(i: u32) -> u32 @export { if i < REL_N { return REL_SYM[i as u64] }  return 0xFFFFFFFFu32 }
-fn sov_rec_reloc(sec: u32) { if REL_N < 256u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = 0xFFFFFFFFu32  REL_N = REL_N + 1u32 } }
+fn sov_rec_reloc(sec: u32) { if REL_N < 65536u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = sec  REL_SYM[REL_N as u64] = 0xFFFFFFFFu32  REL_N = REL_N + 1u32 } }
 
 fn sov_cn_clear() -> i32 @export { CN_LEN = 0u32  return 0i32 }
-fn sov_cn_push(ch: u32) -> i32 @export { if CN_LEN < 64u32 { CN_BUF[CN_LEN as u64] = ch as u8  CN_LEN = CN_LEN + 1u32 }  return 0i32 }
+fn sov_cn_push(ch: u32) -> i32 @export { if CN_LEN < 256u32 { CN_BUF[CN_LEN as u64] = ch as u8  CN_LEN = CN_LEN + 1u32 }  return 0i32 }
 fn cn_eq(slot: u32) -> u32 {
     if EXT_NLEN[slot as u64] != CN_LEN { return 0u32 }
     let mut j : u32 = 0u32
@@ -72,7 +72,7 @@ fn cn_eq(slot: u32) -> u32 {
 fn sov_ext_intern() -> u32 {   /* find or add CN_BUF as an extern symbol; return its slot */
     let mut i : u32 = 0u32
     while i < EXT_N { if cn_eq(i) == 1u32 { return i }  i = i + 1u32 }
-    if EXT_N < 32u32 {
+    if EXT_N < 2048u32 {
         let mut j : u32 = 0u32
         while j < CN_LEN { EXT_NAME[((EXT_N * 32u32) + j) as u64] = CN_BUF[j as u64]  j = j + 1u32 }
         EXT_NLEN[EXT_N as u64] = CN_LEN
@@ -88,7 +88,7 @@ fn sov_ext_namebyte(slot: u32, j: u32) -> u32 @export { if slot < EXT_N { if j <
 fn sov_call_ext() -> i32 @export {
     sov_emit(0xE8u32)
     let slot : u32 = sov_ext_intern()
-    if REL_N < 256u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = 0u32  REL_SYM[REL_N as u64] = slot  REL_N = REL_N + 1u32 }
+    if REL_N < 65536u32 { REL_OFF[REL_N as u64] = SOV_LEN  REL_SEC[REL_N as u64] = 0u32  REL_SYM[REL_N as u64] = slot  REL_N = REL_N + 1u32 }
     sov_imm(0u64, 4u32)
     return 0i32
 }

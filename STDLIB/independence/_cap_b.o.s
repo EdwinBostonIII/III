@@ -32,38 +32,40 @@ L_str_12:
 L_str_13:
     .ascii "zk_stark.iii\0"
 L_str_14:
-    .ascii "zk_snark.iii\0"
+    .ascii "zk_air.iii\0"
 L_str_15:
-    .ascii "zk_field.iii\0"
+    .ascii "zk_snark.iii\0"
 L_str_16:
-    .ascii "typecheck.iii\0"
+    .ascii "zk_field.iii\0"
 L_str_17:
-    .ascii "ccl.iii\0"
+    .ascii "typecheck.iii\0"
 L_str_18:
-    .ascii "hotstuff.iii\0"
+    .ascii "ccl.iii\0"
 L_str_19:
-    .ascii "sov_isa.iii\0"
+    .ascii "hotstuff.iii\0"
 L_str_20:
-    .ascii "h1_charter.iii\0"
+    .ascii "sov_isa.iii\0"
 L_str_21:
-    .ascii "h2_charter.iii\0"
+    .ascii "h1_charter.iii\0"
 L_str_22:
-    .ascii "h3_charter.iii\0"
+    .ascii "h2_charter.iii\0"
 L_str_23:
-    .ascii "h4_charter.iii\0"
+    .ascii "h3_charter.iii\0"
 L_str_24:
-    .ascii "h5_charter.iii\0"
+    .ascii "h4_charter.iii\0"
 L_str_25:
-    .ascii "h6_charter.iii\0"
+    .ascii "h5_charter.iii\0"
 L_str_26:
-    .ascii "h9_charter.iii\0"
+    .ascii "h6_charter.iii\0"
 L_str_27:
-    .ascii "h10_charter.iii\0"
+    .ascii "h9_charter.iii\0"
 L_str_28:
-    .ascii "h11_charter.iii\0"
+    .ascii "h10_charter.iii\0"
 L_str_29:
-    .ascii "h12_charter.iii\0"
+    .ascii "h11_charter.iii\0"
 L_str_30:
+    .ascii "h12_charter.iii\0"
+L_str_31:
     .ascii "h13_charter.iii\0"
     .section .iii.ring3,"n"
     .asciz "chk"
@@ -678,11 +680,11 @@ L_if_end_27:
     pushq %rax
     popq %rax
 L_if_end_29:
-    movabsq $0x1c, %rax
+    movabsq $0x1b, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq zk_snark_kat
+    callq zk_air_stark_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -717,11 +719,11 @@ L_if_end_29:
     pushq %rax
     popq %rax
 L_if_end_31:
-    movabsq $0x1d, %rax
+    movabsq $0x1c, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq zkf_pairing_selftest
+    callq zk_snark_kat
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -756,11 +758,11 @@ L_if_end_31:
     pushq %rax
     popq %rax
 L_if_end_33:
-    movabsq $0x20, %rax
+    movabsq $0x1d, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq typecheck_selftest
+    callq zkf_pairing_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -795,11 +797,11 @@ L_if_end_33:
     pushq %rax
     popq %rax
 L_if_end_35:
-    movabsq $0x21, %rax
+    movabsq $0x20, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq ccl_beta_kat
+    callq typecheck_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -834,11 +836,11 @@ L_if_end_35:
     pushq %rax
     popq %rax
 L_if_end_37:
-    movabsq $0x22, %rax
+    movabsq $0x21, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq hs_selftest
+    callq ccl_beta_kat
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -873,11 +875,11 @@ L_if_end_37:
     pushq %rax
     popq %rax
 L_if_end_39:
-    movabsq $0x24, %rax
+    movabsq $0x22, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq sov_isa_kat
+    callq hs_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -912,11 +914,11 @@ L_if_end_39:
     pushq %rax
     popq %rax
 L_if_end_41:
-    movabsq $0x25, %rax
+    movabsq $0x24, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h1_selftest
+    callq sov_isa_kat
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -951,11 +953,11 @@ L_if_end_41:
     pushq %rax
     popq %rax
 L_if_end_43:
-    movabsq $0x26, %rax
+    movabsq $0x25, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h2_selftest
+    callq h1_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -990,11 +992,11 @@ L_if_end_43:
     pushq %rax
     popq %rax
 L_if_end_45:
-    movabsq $0x27, %rax
+    movabsq $0x26, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h3_selftest
+    callq h2_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1029,11 +1031,11 @@ L_if_end_45:
     pushq %rax
     popq %rax
 L_if_end_47:
-    movabsq $0x28, %rax
+    movabsq $0x27, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h4_selftest
+    callq h3_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1068,11 +1070,11 @@ L_if_end_47:
     pushq %rax
     popq %rax
 L_if_end_49:
-    movabsq $0x29, %rax
+    movabsq $0x28, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h5_selftest
+    callq h4_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1107,11 +1109,11 @@ L_if_end_49:
     pushq %rax
     popq %rax
 L_if_end_51:
-    movabsq $0x2a, %rax
+    movabsq $0x29, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h6_selftest
+    callq h5_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1146,11 +1148,11 @@ L_if_end_51:
     pushq %rax
     popq %rax
 L_if_end_53:
-    movabsq $0x2d, %rax
+    movabsq $0x2a, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h9_selftest
+    callq h6_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1185,11 +1187,11 @@ L_if_end_53:
     pushq %rax
     popq %rax
 L_if_end_55:
-    movabsq $0x2e, %rax
+    movabsq $0x2d, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h10_selftest
+    callq h9_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1224,11 +1226,11 @@ L_if_end_55:
     pushq %rax
     popq %rax
 L_if_end_57:
-    movabsq $0x2f, %rax
+    movabsq $0x2e, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h11_selftest
+    callq h10_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1263,11 +1265,11 @@ L_if_end_57:
     pushq %rax
     popq %rax
 L_if_end_59:
-    movabsq $0x30, %rax
+    movabsq $0x2f, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h12_selftest
+    callq h11_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1302,11 +1304,11 @@ L_if_end_59:
     pushq %rax
     popq %rax
 L_if_end_61:
-    movabsq $0x31, %rax
+    movabsq $0x30, %rax
     pushq %rax
     subq $8, %rsp
     subq $32, %rsp
-    callq h13_selftest
+    callq h12_selftest
     addq $32, %rsp
     addq $8, %rsp
     pushq %rax
@@ -1341,6 +1343,45 @@ L_if_end_61:
     pushq %rax
     popq %rax
 L_if_end_63:
+    movabsq $0x31, %rax
+    pushq %rax
+    subq $8, %rsp
+    subq $32, %rsp
+    callq h13_selftest
+    addq $32, %rsp
+    addq $8, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_chk
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_65
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_65:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

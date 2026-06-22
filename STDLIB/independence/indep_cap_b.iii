@@ -23,6 +23,7 @@ extern @abi(c-msvc-x64) fn rsa_pss_selftest() -> u64 from "rsa.iii"
 extern @abi(c-msvc-x64) fn galois_selftest() -> u64 from "galois.iii"
 extern @abi(c-msvc-x64) fn ntt_selftest() -> u64 from "ntt.iii"
 extern @abi(c-msvc-x64) fn zk_stark_kat() -> u64 from "zk_stark.iii"
+extern @abi(c-msvc-x64) fn zk_air_stark_selftest() -> u64 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn zk_snark_kat() -> u64 from "zk_snark.iii"
 extern @abi(c-msvc-x64) fn zkf_pairing_selftest() -> u64 from "zk_field.iii"
 extern @abi(c-msvc-x64) fn typecheck_selftest() -> u64 from "typecheck.iii"
@@ -62,6 +63,7 @@ fn main() -> u64 {
     r = chk(galois_selftest(), 24u64);    if r != 0u64 { return r }
     r = chk(ntt_selftest(), 25u64);    if r != 0u64 { return r }
     r = chk(zk_stark_kat(), 26u64);    if r != 0u64 { return r }
+    r = chk(zk_air_stark_selftest(), 27u64);    if r != 0u64 { return r }
     r = chk(zk_snark_kat(), 28u64);    if r != 0u64 { return r }
     r = chk(zkf_pairing_selftest(), 29u64);    if r != 0u64 { return r }
     r = chk(typecheck_selftest(), 32u64);    if r != 0u64 { return r }

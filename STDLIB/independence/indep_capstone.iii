@@ -120,9 +120,10 @@ fn main() -> u64 {
     r = chk(galois_selftest(), 24u64);             if r != 0u64 { return r }
     r = chk(ntt_selftest(), 25u64);                if r != 0u64 { return r }
     r = chk(zk_stark_kat(), 26u64);                if r != 0u64 { return r }
-    /* 27 = zk_air_stark_selftest — temporarily isolated: zk_air + zk_stark share
-     * duplicate global sf_* symbols (the latent collision this capstone surfaced).
-     * Proven standalone in indep_zkair.iii; re-unified after the visibility fix. */
+    /* 27 RE-UNIFIED (2026-06-21): the sf_* collision is resolved -- zk_air + zk_stark both extern the
+     * field arithmetic from the shared ntt_fri_organ.iii, so they define no common symbol and link clean
+     * (proven: zk_stark+zk_air+zk_snark coexist + pass).  All 49 faculties are back in the conjunction. */
+    r = chk(zk_air_stark_selftest(), 27u64);       if r != 0u64 { return r }
     r = chk(zk_snark_kat(), 28u64);                if r != 0u64 { return r }
     r = chk(zkf_pairing_selftest(), 29u64);        if r != 0u64 { return r }
     r = chk(symreg_selftest(), 30u64);             if r != 0u64 { return r }

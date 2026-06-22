@@ -1,0 +1,98 @@
+/* 1992_eidos_web_temporal.iii -- THE TEMPORAL FOLD AS AN ANIMATED FRAME SEQUENCE (display arch Phase 3 done).
+ *
+ * The isub bus IS the temporal event log (EIDOS thesis: state = fold over history).  eidos/web renders the web
+ * AS OF tick k (quanta 0..k-1), and the k=1..N sequence is the trace UNFOLDING -- written as a cleared+homed
+ * multi-frame animation.  This gate proves the negative: each frame folds exactly its tick prefix (monotone, no
+ * silent cap), the final frame reproduces the full web EXACTLY, frames are deterministic, and every frame is
+ * written.  Driven by a REAL reduction trace (xii_isub_normalize).
+ *   10  the real-trace web is empty / too small to animate
+ *   11  web_frame_count != the isub log length
+ *   12  a frame does not fold exactly its tick prefix (web_render_frame(k) != k, or iterated != k)
+ *   13  the final frame != the full web (the fold of the whole log != the live web)
+ *   14  a frame is not deterministic
+ *   15  the animation did not write every frame (cat build/eidos_web_temporal.ans)
+ *   99  the temporal fold animates monotonically, closes on the full web, deterministic, fully written.
+ */
+module corpus_1992
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+
+extern @abi(c-msvc-x64) fn web_render() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_render_frame(k: u32) -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_frame_count() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_iterated() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn eidos_web_animate(cap: u64, path_ptr: u64, nframes: u32) -> u32 from "web.iii"
+
+extern @abi(c-msvc-x64) fn canvas_sig() -> u64 from "canvas.iii"
+
+var P_OUT : [u8; 64]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+
+    /* ===== code 10: a REAL trace log to fold over time ===== */
+    let s : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s)
+    let n : u32 = isub_count()
+    if n < 2u32 { return 10u64 }
+
+    /* ===== code 11: the frame count is the full log length ===== */
+    if web_frame_count() != n { return 11u64 }
+
+    /* ===== code 12: every frame folds exactly its tick prefix (monotone, no silent cap) ===== */
+    let mut k : u32 = 1u32
+    while k <= n {
+        if web_render_frame(k) != k { return 12u64 }
+        if web_iterated() != k { return 12u64 }
+        k = k + 1u32
+    }
+
+    /* ===== code 13: the final frame reproduces the full live web EXACTLY ===== */
+    web_render()
+    let sig_full : u64 = canvas_sig()
+    web_render_frame(n)
+    let sig_last : u64 = canvas_sig()
+    if sig_full != sig_last { return 13u64 }
+
+    /* ===== code 14: a frame is deterministic ===== */
+    web_render_frame(1u32)
+    let f1a : u64 = canvas_sig()
+    web_render_frame(1u32)
+    let f1b : u64 = canvas_sig()
+    if f1a != f1b { return 14u64 }
+
+    /* ===== code 15: the animation writes EVERY frame ===== */
+    bcopy((&P_OUT as u64), ("build/eidos_web_temporal.ans" as u64), 28u64)
+    if eidos_web_animate(cap, (&P_OUT as u64), n) != n { return 15u64 }
+
+    return 99u64
+}

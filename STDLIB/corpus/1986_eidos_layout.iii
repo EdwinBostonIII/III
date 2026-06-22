@@ -1,0 +1,69 @@
+/* 1986_eidos_layout.iii -- the barycentric crossing-minimiser, proven SOUND (eidos::layout).
+ *
+ * Gates the layout's INVARIANTS over the real self_atlas (scarto_map walks the live iii/ tree), each
+ * proving a negative -- and critically VERIFIES THE SORT ACTUALLY SORTS (a broken insertion sort
+ * yields deterministic garbage that still places every node, so determinism + completeness alone
+ * cannot catch it):
+ *   10  the sort self-test fails        (lay_sort_layer on {bc 3,1,2,1} must give ids {11,13,12,10})
+ *   11  empty atlas
+ *   12  two builds differ               (determinism: layout_sig equal)
+ *   13  not every node placed           (layout_node_count == satlas_node_count)
+ *   14  layer 0 not barycentre-ordered  (end-to-end: its final order is non-decreasing in fresh bc)
+ *   15  the sweep INCREASED edge span    (quality, non-strict: barycentre must not do worse than the
+ *                                         un-ordered baseline -- the value itself is REPORTED in the
+ *                                         1985 caption, not frozen here, per the no-flaky-gate rule)
+ *   99  all hold.
+ */
+module corpus_1986
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn scarto_map(cap: u64, root_ptr: u64, root_len: u64) -> u32 from "self_cartographer.iii"
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+
+extern @abi(c-msvc-x64) fn layout_sort_check() -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_build() -> i32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_build_identity() -> i32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_sig() -> u64 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_node_count() -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_layer0_monotone() -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_edge_span() -> u64 from "layout.iii"
+
+var P_ROOT : [u8; 16]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+fn main() -> u64 {
+    /* sort self-test FIRST (it clobbers module state; the real build rebuilds everything) */
+    if layout_sort_check() != 1u32 { return 10u64 }
+
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    bcopy((&P_ROOT as u64), ("iii" as u64), 3u64)
+    let nc : u32 = scarto_map(cap, (&P_ROOT as u64), 3u64)
+    if nc == 0u32 { return 11u64 }
+
+    layout_build()
+    let s1 : u64 = layout_sig()
+    layout_build()
+    let s2 : u64 = layout_sig()
+    if s1 != s2 { return 12u64 }
+
+    if layout_node_count() != satlas_node_count() { return 13u64 }
+    if layout_layer0_monotone() != 1u32 { return 14u64 }
+
+    layout_build_identity()
+    let span0 : u64 = layout_edge_span()
+    layout_build()
+    let span1 : u64 = layout_edge_span()
+    if span1 > span0 { return 15u64 }
+
+    return 99u64
+}

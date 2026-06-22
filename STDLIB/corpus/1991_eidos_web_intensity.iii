@@ -1,0 +1,139 @@
+/* 1991_eidos_web_intensity.iii -- MAGNITUDE -> GLYPH INTENSITY (display arch Phase 2 completion).
+ *
+ * eidos/web modulates each quantum's brightness by its STRUCTURAL MAGNITUDE -- its prominence (in+out degree)
+ * in the composition web.  This gate proves the negative: intensity TRACKS structure (the brightest quantum is
+ * a max-degree hub), is not a constant stub, never makes a quantum invisible, and never leaks into the HUE (the
+ * palette law stays the pure content-address).  Driven by a REAL reduction trace (xii_isub_normalize).
+ *   10  the real-trace web is empty / too small to vary
+ *   11  intensity is CONSTANT (max == min) -- not tracking structure (a stub)
+ *   12  the brightest quantum is NOT a max-degree hub -- intensity does not track structural magnitude
+ *   13  a quantum is below the brightness floor (invisible)
+ *   14  intensity leaked into HUE (web_block_rgb != the documented FNV palette law)
+ *   15  the render is not deterministic
+ *   16  the .ans artifact was not written (cat build/eidos_web_intensity.ans)
+ *   99  brightness carries structural magnitude; hue stays the pure content-address; deterministic.
+ */
+module corpus_1991
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+
+extern @abi(c-msvc-x64) fn web_render() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_intensity(i: u32) -> u8 from "web.iii"
+extern @abi(c-msvc-x64) fn web_block_rgb(i: u32) -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn eidos_web_write(cap: u64, path_ptr: u64) -> u32 from "web.iii"
+
+extern @abi(c-msvc-x64) fn canvas_sig() -> u64 from "canvas.iii"
+
+const FNV_OFF   : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME : u64 = 0x100000001b3u64
+const FLOOR     : u32 = 0x40u32
+const INT_FLOOR : u32 = 96u32                        /* == web WEB_INT_FLOOR */
+
+var CAV0  : [u8; 32]
+var P_OUT : [u8; 64]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+/* independent structural degree (mirror of web_degree) -- so the gate verifies intensity, not trusts it. */
+fn kat_degree(i: u32, n: u32) -> u32 {
+    let ai : u32 = isub_a(i)
+    let bi : u32 = isub_b(i)
+    let mut d : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < n {
+        if j != i {
+            if isub_b(j) == ai { d = d + 1u32 }
+            if isub_a(j) == bi { d = d + 1u32 }
+        }
+        j = j + 1u32
+    }
+    return d
+}
+
+/* independent palette recompute over CAV0 (mirror of the documented FNV law). */
+fn kat_expected_rgb() -> u32 {
+    let p : *u8 = (&CAV0 as u64) as *u8
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < 32u64 { h = h ^ (p[i] as u64)  h = h * FNV_PRIME  i = i + 1u64 }
+    let r : u32 = (((h >> 16u64) as u32) & 0xFFu32) | FLOOR
+    let g : u32 = (((h >> 8u64)  as u32) & 0xFFu32) | FLOOR
+    let b : u32 = ((h as u32)            & 0xFFu32) | FLOOR
+    return (r << 16u32) | (g << 8u32) | b
+}
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+
+    /* ===== code 10: a REAL trace web with structural variation ===== */
+    let s : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s)
+    let n : u32 = isub_count()
+    if n < 2u32 { return 10u64 }
+    if web_render() != n { return 10u64 }
+
+    /* ===== codes 11/12/13: intensity tracks structural magnitude ===== */
+    let mut maxi    : u32 = 0u32
+    let mut mini    : u32 = 256u32
+    let mut maxiblk : u32 = 0u32
+    let mut maxdeg  : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let inten : u32 = web_intensity(i) as u32
+        let deg   : u32 = kat_degree(i, n)
+        if inten > maxi { maxi = inten  maxiblk = i }
+        if inten < mini { mini = inten }
+        if deg > maxdeg { maxdeg = deg }
+        i = i + 1u32
+    }
+    if maxi == mini { return 11u64 }                          /* varies with structure, not constant */
+    if kat_degree(maxiblk, n) != maxdeg { return 12u64 }      /* the brightest quantum is a max-degree hub */
+    if mini < INT_FLOOR { return 13u64 }                      /* no quantum is below the brightness floor */
+
+    /* ===== code 14: intensity did NOT leak into HUE -- the palette law is the pure content-address ===== */
+    isub_cav_into(isub_verb(0u32), isub_a(0u32), isub_b(0u32), (&CAV0 as u64) as *u8)
+    if web_block_rgb(0u32) != kat_expected_rgb() { return 14u64 }
+
+    /* ===== code 15: determinism ===== */
+    let sg1 : u64 = canvas_sig()
+    web_render()
+    let sg2 : u64 = canvas_sig()
+    if sg1 != sg2 { return 15u64 }
+
+    /* ===== code 16: the SEEN artifact ===== */
+    bcopy((&P_OUT as u64), ("build/eidos_web_intensity.ans" as u64), 29u64)
+    if eidos_web_write(cap, (&P_OUT as u64)) == 0u32 { return 16u64 }
+
+    return 99u64
+}

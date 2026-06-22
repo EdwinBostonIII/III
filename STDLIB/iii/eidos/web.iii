@@ -1,0 +1,613 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\web.iii
+ *
+ * III STDLIB - eidos::web  --  THE EIDOS-WEB PROJECTION (display arch Phase 2): render the REAL isub
+ * content-addressed web onto the plane.
+ *
+ * eidos::render projects the self_atlas (III's MODULE graph).  eidos::web is its sibling over the OTHER
+ * real geometry -- the live isub bus: the content-addressed <verb,a,b> quanta a real reduction trace
+ * (xii_isub_normalize) shatters onto the metal bus.  NO hand-built web: web authors no quanta; a real
+ * execution drives the bus and this projects what is there (display arch FR-1 caveat, eidos/descriptor).
+ *
+ * THE PROJECTION (block = node, the content-address IS the colour, FR-2):
+ *   - identity : each quantum's 32-byte content-address sha256(verb||a||b) (isub_cav).
+ *   - colour   : eidos/palette over that identity -- two content-identical quanta are the SAME colour BY
+ *                CONSTRUCTION, so coincidence (what the coincidence engine PROVES) is literally VISIBLE.
+ *   - x (col)  : a SECOND readout of the same identity (palette_pos_seed) -- hue and column are two faces
+ *                of one content-address (ADR-2), independent of the operand addresses.
+ *   - y (row)  : the geometric VERB band (BELOW vs REFLECT -- the real ripple direction, ripple.iii),
+ *                jittered WITHIN the band by a third identity readout, so each direction is a filled band.
+ *   - edges    : the web's COMPOSITION adjacency (quantum i's sink == quantum j's source, b_i==a_j) drawn
+ *                UNDER the nodes in the source colour, dimmed -- the real <verb,a,b> chain structure.
+ * Off-plane and pixel-coincident quanta are COUNTED, never silently dropped (NFR-completeness).  The
+ * projection is total by construction (col<W, row<H always), so a sound gate asserts off-plane == 0.
+ *
+ * ENCAPSULATE, NOT REIMPLEMENT (no island): web reads the REAL isub bus and composes the REAL
+ * eidos/canvas (the plane) + eidos/palette (the colour law).  It re-authors no bus, no plane, no colour.
+ *
+ * Ring R0.  K 1.00 (pure projection over two sealed organs + the live bus).  NIH: libc-free.  W2 (<=4 params).
+ */
+module eidos_web
+
+/* the live content-addressed web -- the isub bus (driven by a real trace, never hand-built). */
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+
+/* the colour law (eidos/palette) -- colour IS the content-address. */
+extern @abi(c-msvc-x64) fn palette_rgb(p32: u64) -> u32 from "palette.iii"
+extern @abi(c-msvc-x64) fn palette_pos_seed(p32: u64) -> u32 from "palette.iii"
+extern @abi(c-msvc-x64) fn palette_dim(rgb: u32) -> u32 from "palette.iii"
+
+/* the plane (eidos/canvas). */
+extern @abi(c-msvc-x64) fn canvas_w() -> u32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_h() -> u32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_reset() -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_pen(rgb: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_plot(col: u32, row: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_line(x0: u32, y0: u32, x1: u32, y1: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_serialize(b: u64) -> i32 from "canvas.iii"
+
+/* the COMPOSER (eidos/descriptor -> eidos/compose Bellman-Ford): routes the web's order in REAL point
+ * addresses.  web is its FIRST live consumer through the display (Phase 3 plan-overlay). */
+extern @abi(c-msvc-x64) fn desc_build_order() -> i32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan(start: u32, target: u32) -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan_len() -> u32 from "descriptor.iii"
+extern @abi(c-msvc-x64) fn desc_plan_node(i: u32) -> u32 from "descriptor.iii"
+
+/* the Composer's RIPPLE half (eidos/weave): plans over real ripple quanta + EXECUTES the plan as witnessed
+ * ripples onto the isub bus -- so web renders weave's executed plan (weave's first live consumer). */
+extern @abi(c-msvc-x64) fn weave_plan(start_prim: u32, target_prim: u32, order_slot: u32) -> u32 from "weave.iii"
+extern @abi(c-msvc-x64) fn weave_execute() -> i32 from "weave.iii"
+
+/* the Composer's TOPOLOGY half (eidos/route over aether/topology_atlas's real typed-edge graph) + the atlas
+ * adjacency -- so web renders the topology graph + highlights route_path's geodesic (route's first live consumer). */
+extern @abi(c-msvc-x64) fn topoa_neighbors(a: u32, edge_kind: u8, out: *u32, out_n: *u32, out_cap: u32) -> i32 from "topology_atlas.iii"
+extern @abi(c-msvc-x64) fn route_path(src: u32, dst: u32) -> u32 from "route.iii"
+extern @abi(c-msvc-x64) fn route_path_node(i: u32) -> u32 from "route.iii"
+
+/* the artifact (the SEEN deliverable): arena/builder/format + aether/fs (same discipline as eidos/cli). */
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+
+const WEB_NMAX    : u32 = 4096u32       /* loud cap: refuse (not silently truncate) a web larger than this */
+const WEB_HITMAX  : u64 = 65536u64      /* >= canvas_w * canvas_h (sized generously -- tolerates a canvas up to
+                                         * 256x256 so web survives a canvas resize; refuse only if truly bigger) */
+const WEB_MARGIN  : u32 = 3u32
+const WEB_BANDS   : u32 = 2u32          /* the two real ripple directions: BELOW (0), REFLECT (1) */
+const WEB_EDGECAP : u32 = 512u32        /* O(n^2) adjacency pass bound -- above this, edges are skipped (reported) */
+const WEB_ARENA   : u64 = 4194304u64    /* 4 MiB scratch for the serialized frame */
+const WEB_HINT    : u64 = 1048576u64
+const WEB_WRITE   : u32 = 2u32
+
+var WEB_DG  : [u8; 32]
+var WEB_COL : [u32; 4096]
+var WEB_ROW : [u32; 4096]
+var WEB_RGB : [u32; 4096]
+var WEB_HIT : [u8; 65536]
+
+var WEB_ITER     : u32 = 0u32
+var WEB_ON       : u32 = 0u32
+var WEB_OFF      : u32 = 0u32
+var WEB_COLL     : u32 = 0u32
+var WEB_EDGES    : u32 = 0u32           /* composition-adjacency edges drawn */
+var WEB_EDGE_CUT : u8  = 0u8            /* 1 iff the edge pass was skipped (n > WEB_EDGECAP): honest, not silent */
+var WEB_MODE     : u32 = 0u32           /* the rendered geometry: 0 = isub content-addressed web, 2 = topology graph */
+
+/* MAGNITUDE -> GLYPH INTENSITY (display arch Phase 2): a quantum's brightness reflects its STRUCTURAL
+ * MAGNITUDE -- its prominence (in+out degree) in the composition web.  A hub (many quanta compose through it)
+ * glows full-bright; a leaf dims to the floor.  Bus-computable + general (ripple magnitude is the special case
+ * of a ripple web); the palette HUE stays the pure content-address, only VALUE (brightness) carries magnitude. */
+const WEB_INT_FLOOR : u32 = 96u32       /* min brightness scale (a leaf is ~38% bright, never invisible) */
+var WEB_INT : [u8; 4096]                /* per-quantum intensity 0..255 (255 = the brightest hub) */
+
+/* TEMPORAL FOLD as an animated frame sequence (display arch Phase 3): the isub bus IS the temporal event log
+ * (state = fold over history) -- so rendering quanta 0..k-1 is the web AS OF tick k, and the k=1..N sequence is
+ * the trace UNFOLDING.  WEB_FRAME_LIMIT caps the active quanta to a tick; default = unlimited (the full web). */
+const WEB_ANIM_ARENA : u64 = 16777216u64   /* 16 MiB: holds a multi-frame animation buffer */
+const WEB_ANIM_HINT  : u64 = 8388608u64
+const WEB_ANIM_MAX   : u32 = 64u32         /* loud cap on frames per animation */
+var WEB_FRAME_LIMIT : u32 = 0xFFFFFFFFu32  /* the active tick horizon (0xFFFFFFFF = no limit) */
+
+/* the active quantum count = isub_count() capped at the temporal horizon WEB_FRAME_LIMIT (the web AS OF a tick). */
+fn web_active_n() -> u32 {
+    let c : u32 = isub_count()
+    if c > WEB_FRAME_LIMIT { return WEB_FRAME_LIMIT }
+    return c
+}
+
+/* the content-address of web quantum i into WEB_DG (sha256(verb||a||b) -- the same hash isub commits). */
+fn web_block_digest(i: u32) -> i32 {
+    isub_cav_into(isub_verb(i), isub_a(i), isub_b(i), (&WEB_DG as u64) as *u8)
+    return 0i32
+}
+
+/* the colour assigned to quantum i (= palette over its content-address).  Exposed for the gate. */
+fn web_block_rgb(i: u32) -> u32 @export {
+    web_block_digest(i)
+    return palette_rgb(&WEB_DG as u64)
+}
+
+/* PRE-PASS: fill per-quantum (col,row,rgb) from the content-address + the verb band.  Returns 0, or -1 if
+ * the web exceeds the static capacity (reported, never silently truncated), -2 on a canvas-too-big config. */
+fn web_prepass() -> i32 {
+    let n : u32 = web_active_n()
+    if n > WEB_NMAX { return -1i32 }
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+    if (w as u64) * (h as u64) > WEB_HITMAX { return -2i32 }
+    let span_x : u32 = w - 1u32 - (WEB_MARGIN + WEB_MARGIN)
+    let span_y : u32 = h - 1u32 - (WEB_MARGIN + WEB_MARGIN)
+    let base_y : u32 = h - 1u32 - WEB_MARGIN
+    let maxl   : u32 = WEB_BANDS
+
+    /* clear the coincidence-occupancy map */
+    let mut k : u64 = 0u64
+    while k < WEB_HITMAX { WEB_HIT[k] = 0u8  k = k + 1u64 }
+
+    let mut i : u32 = 0u32
+    while i < n {
+        web_block_digest(i)
+        let rgb  : u32 = palette_rgb(&WEB_DG as u64)
+        let seed : u32 = palette_pos_seed(&WEB_DG as u64)
+        let sx   : u32 = span_x
+        let col  : u32 = WEB_MARGIN + (seed % sx)
+        let mut lvl : u32 = isub_verb(i)                  /* 0 = BELOW band, 1 = REFLECT band */
+        if lvl >= maxl { lvl = maxl - 1u32 }
+        /* y = the verb band CENTRE, then jitter WITHIN the band by a third identity readout
+         * (content-address bytes 12..15) so each direction is a filled band, not a single line. */
+        let center : u32 = base_y - ((lvl * span_y) / maxl)
+        let dg : *u8 = (&WEB_DG as u64) as *u8
+        let rs : u32 = (dg[12u64] as u32) | ((dg[13u64] as u32) << 8u32) | ((dg[14u64] as u32) << 16u32) | ((dg[15u64] as u32) << 24u32)
+        let mut bh : u32 = span_y / maxl
+        if bh == 0u32 { bh = 1u32 }
+        let jit  : u32 = rs % bh
+        let half : u32 = bh >> 1u32
+        let lo   : u32 = center + jit
+        let mut row : u32 = 0u32
+        if lo >= half { row = lo - half }                 /* guard u32 underflow at the top band */
+        if row >= h { row = h - 1u32 }
+        WEB_COL[i as u64] = col
+        WEB_ROW[i as u64] = row
+        WEB_RGB[i as u64] = rgb
+        i = i + 1u32
+    }
+    WEB_ITER = n
+    return 0i32
+}
+
+/* a quantum's STRUCTURAL MAGNITUDE: its in-degree + out-degree in the composition web (how many quanta feed
+ * its source or are fed by its sink) -- the count of compositions it participates in. */
+fn web_degree(i: u32, n: u32) -> u32 {
+    let ai : u32 = isub_a(i)
+    let bi : u32 = isub_b(i)
+    let mut d : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < n {
+        if j != i {
+            if isub_b(j) == ai { d = d + 1u32 }            /* in: quantum j's sink feeds i's source */
+            if isub_a(j) == bi { d = d + 1u32 }            /* out: i's sink feeds quantum j's source */
+        }
+        j = j + 1u32
+    }
+    return d
+}
+
+/* fill WEB_INT[0..n) = floor + (degree / maxdegree) * (255-floor) -- the brightest hub at 255, leaves at the
+ * floor.  Bounded by WEB_EDGECAP (above it, full intensity -- the O(n^2) degree pass would be a drag). */
+fn web_compute_intensity(n: u32) {
+    if n > WEB_EDGECAP {
+        let mut i : u32 = 0u32
+        while i < n { WEB_INT[i as u64] = 255u8  i = i + 1u32 }
+        return
+    }
+    let mut maxd : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let d : u32 = web_degree(i, n)
+        if d > maxd { maxd = d }
+        i = i + 1u32
+    }
+    if maxd == 0u32 { maxd = 1u32 }
+    let span : u32 = 255u32 - WEB_INT_FLOOR
+    i = 0u32
+    while i < n {
+        let d : u32 = web_degree(i, n)
+        WEB_INT[i as u64] = (WEB_INT_FLOOR + ((d * span) / maxd)) as u8
+        i = i + 1u32
+    }
+}
+
+/* scale a packed rgb's brightness (VALUE) by inten/255, per channel -- hue preserved, magnitude carried. */
+fn web_scale_rgb(rgb: u32, inten: u32) -> u32 {
+    let r : u32 = (((rgb >> 16u32) & 0xFFu32) * inten) / 255u32
+    let g : u32 = (((rgb >> 8u32)  & 0xFFu32) * inten) / 255u32
+    let b : u32 = ((rgb            & 0xFFu32) * inten) / 255u32
+    return ((r & 0xFFu32) << 16u32) | ((g & 0xFFu32) << 8u32) | (b & 0xFFu32)
+}
+
+fn web_intensity(i: u32) -> u8 @export {
+    if i < WEB_ITER { return WEB_INT[i as u64] }
+    return 0u8
+}
+
+/* RENDER the live isub web onto the plane.  Returns the number of quanta ITERATED (== isub_count on
+ * success; 0 if the prepass refused for capacity). */
+fn web_render() -> u32 @export {
+    canvas_reset()
+    WEB_EDGES = 0u32
+    WEB_EDGE_CUT = 0u8
+    WEB_MODE = 0u32
+    let rc : i32 = web_prepass()
+    if rc != 0i32 { return 0u32 }
+    let n : u32 = web_active_n()
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+
+    /* edges UNDER nodes: the composition adjacency b_i == a_j (quantum i's sink feeds quantum j's source),
+     * in the source quantum's colour, dimmed.  O(n^2); above WEB_EDGECAP the pass is skipped + REPORTED. */
+    if n <= WEB_EDGECAP {
+        let mut i : u32 = 0u32
+        while i < n {
+            let bi : u32 = isub_b(i)
+            let mut j : u32 = 0u32
+            while j < n {
+                if i != j {
+                    if isub_a(j) == bi {
+                        canvas_pen(palette_dim(WEB_RGB[i as u64]))
+                        canvas_line(WEB_COL[i as u64], WEB_ROW[i as u64], WEB_COL[j as u64], WEB_ROW[j as u64])
+                        WEB_EDGES = WEB_EDGES + 1u32
+                    }
+                }
+                j = j + 1u32
+            }
+            i = i + 1u32
+        }
+    } else {
+        WEB_EDGE_CUT = 1u8
+    }
+
+    web_compute_intensity(n)                            /* structural magnitude -> per-quantum brightness */
+
+    /* nodes on top; count on-plane / off-plane / pixel-coincident honestly. */
+    WEB_ON = 0u32
+    WEB_OFF = 0u32
+    WEB_COLL = 0u32
+    let mut q : u32 = 0u32
+    while q < n {
+        let c : u32 = WEB_COL[q as u64]
+        let r : u32 = WEB_ROW[q as u64]
+        if c < w {
+            if r < h {
+                WEB_ON = WEB_ON + 1u32
+                let hidx : u64 = ((r * w) + c) as u64
+                if WEB_HIT[hidx] == 1u8 { WEB_COLL = WEB_COLL + 1u32 } else { WEB_HIT[hidx] = 1u8 }
+                canvas_pen(web_scale_rgb(WEB_RGB[q as u64], WEB_INT[q as u64] as u32))   /* magnitude -> intensity */
+                canvas_plot(c, r)
+            }
+        }
+        if c >= w { WEB_OFF = WEB_OFF + 1u32 } else { if r >= h { WEB_OFF = WEB_OFF + 1u32 } }
+        q = q + 1u32
+    }
+    return n
+}
+
+fn web_iterated()    -> u32 @export { return WEB_ITER }
+fn web_on_plane()    -> u32 @export { return WEB_ON }
+fn web_off_plane()   -> u32 @export { return WEB_OFF }
+fn web_collisions()  -> u32 @export { return WEB_COLL }
+fn web_edges()       -> u32 @export { return WEB_EDGES }
+fn web_edge_capped() -> u8  @export { return WEB_EDGE_CUT }
+
+/* count quanta in the BELOW (verb 0) / REFLECT (verb 1) bands -- the legend's direction census. */
+fn web_below_count() -> u32 @export {
+    let n : u32 = web_active_n()
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n { if isub_verb(i) == 0u32 { c = c + 1u32 }  i = i + 1u32 }
+    return c
+}
+fn web_reflect_count() -> u32 @export {
+    let n : u32 = web_active_n()
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n { if isub_verb(i) == 1u32 { c = c + 1u32 }  i = i + 1u32 }
+    return c
+}
+
+/* ---- Phase 3: THE PLAN OVERLAY -- the display as the Composer's FIRST LIVE CONSUMER ----
+ * Given start/target POINTS over the SAME web on the bus, route via eidos/descriptor (which folds the web's
+ * BELOW order into eidos/compose and runs the real Bellman-Ford planner), then HIGHLIGHT that geodesic over
+ * the rendered web in full-bright.  This is the Composer's first live consumer THROUGH the read-only display
+ * (no self-host tp_ / cg_r3 edits): web CALLS desc_plan and DRAWS its REAL route -- never a hardcoded path (the gate
+ * proves every highlighted block IS a real plan edge, corpus 1988).  HONEST: a real reduction-trace web is a
+ * CHAIN, so the route is the chain's own 1-hop BELOW edges; non-trivial shortest-path routing (cheaper
+ * indirect) is descriptor's own fixture gate (1942).  The value here is the WIRING -- a live consumer of the
+ * real planner output -- not the route's branching. */
+const WEB_HILITE : u32 = 0xFFFFFFu32     /* the geodesic highlight colour (full-bright over the coloured web) */
+var WEB_OV_BLK : [u32; 256]              /* the block ids on the highlighted route (exposed for the gate) */
+var WEB_OV_N   : u32 = 0u32
+
+/* the web block whose <a,b> == <pa,pb> (a real BELOW plan edge); 0xFFFFFFFF if none. */
+fn web_find_block(pa: u32, pb: u32) -> u32 {
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_a(i) == pa { if isub_b(i) == pb { return i } }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* overlay the descriptor/compose geodesic from start_pt to target_pt onto the CURRENT web image: re-route via
+ * the REAL planner, then highlight each plan edge's block + the connecting geodesic in full-bright.  Records
+ * the highlighted blocks (web_overlay_block) so a gate can prove the highlight IS the planner's route.
+ * Returns the hop count (0 = unreachable / endpoint not in web).  Call AFTER web_render(). */
+fn web_overlay_plan(start_pt: u32, target_pt: u32) -> u32 @export {
+    WEB_OV_N = 0u32
+    desc_build_order()
+    let hops : u32 = desc_plan(start_pt, target_pt)
+    if hops < 1u32 { return 0u32 }
+    let mut prev_blk : u32 = 0xFFFFFFFFu32
+    let mut i : u32 = 0u32
+    while i < hops {
+        let pa : u32 = desc_plan_node(i)
+        let pb : u32 = desc_plan_node(i + 1u32)
+        let bk : u32 = web_find_block(pa, pb)
+        if bk != 0xFFFFFFFFu32 {
+            if prev_blk != 0xFFFFFFFFu32 {                 /* the bright geodesic edge from the prior plan block */
+                canvas_pen(WEB_HILITE)
+                canvas_line(WEB_COL[prev_blk as u64], WEB_ROW[prev_blk as u64], WEB_COL[bk as u64], WEB_ROW[bk as u64])
+            }
+            canvas_pen(WEB_HILITE)                          /* the bright plan-block node, on top */
+            canvas_plot(WEB_COL[bk as u64], WEB_ROW[bk as u64])
+            if WEB_OV_N < 256u32 { WEB_OV_BLK[WEB_OV_N as u64] = bk  WEB_OV_N = WEB_OV_N + 1u32 }
+            prev_blk = bk
+        }
+        i = i + 1u32
+    }
+    return hops
+}
+
+fn web_overlay_count() -> u32 @export { return WEB_OV_N }
+fn web_overlay_block(i: u32) -> u32 @export {
+    if i < WEB_OV_N { return WEB_OV_BLK[i as u64] }
+    return 0xFFFFFFFFu32
+}
+
+/* RENDER WEAVE'S EXECUTED PLAN: route start->target over the registered ripple graph via the Composer's ripple
+ * half (eidos/weave), EXECUTE it (the planned ripples are witnessed onto the isub bus), then render that bus.
+ * The rendered web IS the executed plan -- weave's FIRST live consumer, through the display.  Caller registers
+ * the ripple graph (weave_add_ripple) first.  Returns the rendered quantum count (== the executed plan length;
+ * 0 = the planner found no route). */
+fn web_render_weave(start_prim: u32, target_prim: u32, order_slot: u32) -> u32 @export {
+    let hops : u32 = weave_plan(start_prim, target_prim, order_slot)
+    if hops == 0u32 { return 0u32 }
+    weave_execute()                        /* emit the planned ripples onto the isub bus (resets, then emits) */
+    return web_render()                    /* render the executed plan */
+}
+
+/* ---- THE TOPOLOGY PROJECTION + ROUTE OVERLAY -- eidos/route's first live consumer ----
+ * web's OTHER graph: aether/topology_atlas's REAL typed-edge graph (NUMA, POWER, ... subgraphs).  A topology
+ * slot is NOT content-addressed (it is a region, not a quantum), so its colour/position come from a SYNTHETIC
+ * per-slot identity (an FNV avalanche of the slot id) through the SAME palette law -- honestly synthetic (the
+ * content-address thesis is the isub web; this is its topology sibling).  web_render_topology draws the typed
+ * graph; web_overlay_route CALLS the real eidos/route (route_path) and highlights its geodesic, making the
+ * read-only display route's first live consumer.  Caller does route_reset/route_build first. */
+const WEB_TMAX : u32 = 64u32             /* route's node cap (== compose CMP_MAXN) */
+var WEB_NBUF : [u32; 64]                 /* topoa_neighbors scratch */
+var WEB_NN   : [u32; 1]
+
+/* a SYNTHETIC 32-byte identity for a topology slot (FNV-1a avalanche of the slot id): distinct per slot,
+ * deterministic, so the palette law spreads slots across hue + column like real content-addresses. */
+fn web_topo_ident(slot: u32, out: *u8) {
+    let mut h : u64 = 14695981039346656037u64
+    h = (h ^ (slot as u64)) * 1099511628211u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        h = (h ^ (i + 1u64)) * 1099511628211u64
+        out[i] = (h >> 29u64) as u8
+        i = i + 1u64
+    }
+}
+
+/* RENDER the real topology graph (slots 0..node_count-1 under edge_kind): synthetic-identity colour + position,
+ * topoa adjacency as dimmed edges, slots as nodes.  Returns node_count (0 if it exceeds the static cap). */
+fn web_render_topology(node_count: u32, edge_kind: u8) -> u32 @export {
+    canvas_reset()
+    WEB_EDGES = 0u32
+    WEB_EDGE_CUT = 0u8
+    WEB_MODE = 2u32
+    if node_count > WEB_TMAX { return 0u32 }
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+    if (w as u64) * (h as u64) > WEB_HITMAX { return 0u32 }
+    let span_x : u32 = w - 1u32 - (WEB_MARGIN + WEB_MARGIN)
+    let span_y : u32 = h - 1u32 - (WEB_MARGIN + WEB_MARGIN)
+    let mut k : u64 = 0u64
+    while k < WEB_HITMAX { WEB_HIT[k] = 0u8  k = k + 1u64 }
+    let mut s : u32 = 0u32
+    while s < node_count {
+        web_topo_ident(s, (&WEB_DG as u64) as *u8)
+        let rgb  : u32 = palette_rgb(&WEB_DG as u64)
+        let seed : u32 = palette_pos_seed(&WEB_DG as u64)
+        let dg : *u8 = (&WEB_DG as u64) as *u8
+        let ys : u32 = (dg[16u64] as u32) | ((dg[17u64] as u32) << 8u32) | ((dg[18u64] as u32) << 16u32) | ((dg[19u64] as u32) << 24u32)
+        WEB_COL[s as u64] = WEB_MARGIN + (seed % span_x)
+        WEB_ROW[s as u64] = WEB_MARGIN + (ys % span_y)
+        WEB_RGB[s as u64] = rgb
+        s = s + 1u32
+    }
+    WEB_ITER = node_count
+    /* edges UNDER nodes: the real topoa adjacency under edge_kind, dimmed (each undirected edge drawn once) */
+    let mut u : u32 = 0u32
+    while u < node_count {
+        topoa_neighbors(u, edge_kind, (&WEB_NBUF as u64) as *u32, (&WEB_NN as u64) as *u32, WEB_TMAX)
+        let nn : u32 = WEB_NN[0u64]
+        let mut j : u32 = 0u32
+        while j < nn {
+            let v : u32 = WEB_NBUF[j as u64]
+            if v < node_count {
+                if u < v {
+                    canvas_pen(palette_dim(WEB_RGB[u as u64]))
+                    canvas_line(WEB_COL[u as u64], WEB_ROW[u as u64], WEB_COL[v as u64], WEB_ROW[v as u64])
+                    WEB_EDGES = WEB_EDGES + 1u32
+                }
+            }
+            j = j + 1u32
+        }
+        u = u + 1u32
+    }
+    WEB_ON = 0u32  WEB_OFF = 0u32  WEB_COLL = 0u32
+    let mut q : u32 = 0u32
+    while q < node_count {
+        let c : u32 = WEB_COL[q as u64]
+        let r : u32 = WEB_ROW[q as u64]
+        if c < w { if r < h {
+            WEB_ON = WEB_ON + 1u32
+            let hidx : u64 = ((r * w) + c) as u64
+            if WEB_HIT[hidx] == 1u8 { WEB_COLL = WEB_COLL + 1u32 } else { WEB_HIT[hidx] = 1u8 }
+            canvas_pen(WEB_RGB[q as u64])
+            canvas_plot(c, r)
+        } }
+        if c >= w { WEB_OFF = WEB_OFF + 1u32 } else { if r >= h { WEB_OFF = WEB_OFF + 1u32 } }
+        q = q + 1u32
+    }
+    return node_count
+}
+
+/* overlay eidos/route's geodesic from src to dst onto the CURRENT topology image: CALL the real route_path, then
+ * highlight each route NODE + the connecting geodesic in full-bright.  Records the highlighted slots
+ * (web_overlay_block) so a gate proves the highlight IS route's real path.  Returns the hop count (0 =
+ * unreachable).  Caller does route_reset/route_build first; call AFTER web_render_topology. */
+fn web_overlay_route(src: u32, dst: u32) -> u32 @export {
+    WEB_OV_N = 0u32
+    let hops : u32 = route_path(src, dst)
+    if hops < 1u32 { return 0u32 }
+    let mut prev : u32 = 0xFFFFFFFFu32
+    let mut i : u32 = 0u32
+    while i <= hops {
+        let nd : u32 = route_path_node(i)
+        if prev != 0xFFFFFFFFu32 {
+            canvas_pen(WEB_HILITE)
+            canvas_line(WEB_COL[prev as u64], WEB_ROW[prev as u64], WEB_COL[nd as u64], WEB_ROW[nd as u64])
+        }
+        canvas_pen(WEB_HILITE)
+        canvas_plot(WEB_COL[nd as u64], WEB_ROW[nd as u64])
+        if WEB_OV_N < 256u32 { WEB_OV_BLK[WEB_OV_N as u64] = nd  WEB_OV_N = WEB_OV_N + 1u32 }
+        prev = nd
+        i = i + 1u32
+    }
+    return hops
+}
+
+/* a one-line legend appended UNDER the image (ASCII; explicit lengths -- no NUL reliance). */
+fn web_caption(b: u64) -> i32 @export {
+    if WEB_MODE == 2u32 {                              /* topology graph: nodes (not isub quanta) */
+        builder_push_bytes(b, ("III EIDOS-TOPOLOGY  nodes=" as u64), 26u64)
+        format_decimal_u32(b, WEB_ITER)
+        builder_push_bytes(b, (" edges=" as u64), 7u64)
+        format_decimal_u32(b, WEB_EDGES)
+        builder_push_bytes(b, (" onplane=" as u64), 9u64)
+        format_decimal_u32(b, WEB_ON)
+        builder_push_bytes(b, (" offplane=" as u64), 10u64)
+        format_decimal_u32(b, WEB_OFF)
+        builder_push_bytes(b, (" coincide=" as u64), 10u64)
+        format_decimal_u32(b, WEB_COLL)
+        return 0i32
+    }
+    builder_push_bytes(b, ("III EIDOS-WEB  quanta=" as u64), 22u64)
+    format_decimal_u32(b, web_active_n())
+    builder_push_bytes(b, (" below=" as u64), 7u64)
+    format_decimal_u32(b, web_below_count())
+    builder_push_bytes(b, (" reflect=" as u64), 9u64)
+    format_decimal_u32(b, web_reflect_count())
+    builder_push_bytes(b, (" edges=" as u64), 7u64)
+    format_decimal_u32(b, WEB_EDGES)
+    builder_push_bytes(b, (" onplane=" as u64), 9u64)
+    format_decimal_u32(b, WEB_ON)
+    builder_push_bytes(b, (" offplane=" as u64), 10u64)
+    format_decimal_u32(b, WEB_OFF)
+    builder_push_bytes(b, (" coincide=" as u64), 10u64)
+    format_decimal_u32(b, WEB_COLL)
+    return 0i32
+}
+
+/* serialize the CURRENT plane (the web image) + the web legend to path; returns bytes written (0 = failure).
+ * Same composition as eidos/cli's write, with the web-specific caption. */
+fn eidos_web_write(cap: u64, path_ptr: u64) -> u32 @export {
+    let a    : u64 = arena_new(WEB_ARENA)
+    let bld  : u64 = builder_new(a, WEB_HINT)
+    canvas_serialize(bld)
+    web_caption(bld)
+    let base : u64 = builder_seal(bld)
+    let len  : u64 = builder_len(bld)
+    let h    : u64 = fs_open(cap, path_ptr, WEB_WRITE)
+    if h == 0u64 { builder_drop(bld)  return 0u32 }
+    let wr : u64 = fs_write(h, base, len)
+    fs_close(h)
+    builder_drop(bld)
+    return wr as u32
+}
+
+/* ---- TEMPORAL FOLD ANIMATION (display arch Phase 3): the isub log unfolding tick-by-tick ---- */
+
+/* the total temporal ticks available (the full isub log). */
+fn web_frame_count() -> u32 @export { return isub_count() }
+
+/* render the web AS OF tick k -- only quanta 0..k-1 (the temporal fold up to k).  Returns the quanta rendered. */
+fn web_render_frame(k: u32) -> u32 @export {
+    WEB_FRAME_LIMIT = k
+    let r : u32 = web_render()
+    WEB_FRAME_LIMIT = 0xFFFFFFFFu32
+    return r
+}
+
+/* a frame separator: ESC[2J (clear screen) + ESC[H (cursor home) -- a player overwrites the prior frame. */
+fn web_anim_sep(b: u64) -> i32 {
+    builder_push_byte(b, 27u32)  builder_push_byte(b, 91u32)  builder_push_byte(b, 50u32)  builder_push_byte(b, 74u32)
+    builder_push_byte(b, 27u32)  builder_push_byte(b, 91u32)  builder_push_byte(b, 72u32)
+    return 0i32
+}
+
+/* write a temporal ANIMATION: nframes frames (the web at ticks 1..nframes), each cleared+homed so a player shows
+ * the trace UNFOLDING.  The per-frame caption reflects that tick's active quantum count.  Returns the number of
+ * frames written (0 = failure).  cat the file (or feed a frame-paced player) to watch the web grow. */
+fn eidos_web_animate(cap: u64, path_ptr: u64, nframes: u32) -> u32 @export {
+    let total : u32 = isub_count()
+    let mut nf : u32 = nframes
+    if nf > total { nf = total }
+    if nf > WEB_ANIM_MAX { nf = WEB_ANIM_MAX }
+    if nf == 0u32 { return 0u32 }
+    let a   : u64 = arena_new(WEB_ANIM_ARENA)
+    let bld : u64 = builder_new(a, WEB_ANIM_HINT)
+    let mut k : u32 = 1u32
+    while k <= nf {
+        WEB_FRAME_LIMIT = k                              /* render the web AS OF tick k (caption reflects k) */
+        web_render()
+        web_anim_sep(bld)
+        canvas_serialize(bld)
+        web_caption(bld)
+        builder_push_byte(bld, 10u32)                    /* newline after the caption */
+        k = k + 1u32
+    }
+    WEB_FRAME_LIMIT = 0xFFFFFFFFu32
+    let base : u64 = builder_seal(bld)
+    let len  : u64 = builder_len(bld)
+    let h    : u64 = fs_open(cap, path_ptr, WEB_WRITE)
+    if h == 0u64 { builder_drop(bld)  return 0u32 }
+    fs_write(h, base, len)
+    fs_close(h)
+    builder_drop(bld)
+    return nf
+}

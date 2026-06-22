@@ -1,0 +1,230 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\canvas.iii
+ *
+ * III STDLIB - eidos::canvas  --  THE PLANE (a law) + the hyper-efficient rasterizer.
+ *
+ * Edwin's directive: "make the flat 2D plane upon which dimensionality is perceived an actual thing
+ * or law or space."  The plane is a module-scope framebuffer of PIXELS that holds only COLOR -- it
+ * does not know it carries an N-dimensional structure; the projection (eidos/render) knows, and WE
+ * see it.  The rasterizer is integer-only and deterministic:
+ *   - canvas_plot/canvas_line draw with a module-scope PEN (the W2 "<=4 params" discipline).
+ *   - canvas_serialize emits TRUECOLOR ANSI via Unicode HALF-BLOCKS (U+2580): one character cell
+ *     carries TWO vertical pixels (fg = top, bg = bottom), doubling vertical resolution.  It is
+ *     "hyper-efficient" by RUN-LENGTH COALESCING: an SGR colour escape is emitted only when the
+ *     colour CHANGES along a scanline -- a sparse field costs almost nothing.
+ *
+ * A pixel is a u32: bit 31 = OCCUPIED, bits 23..0 = 0xRRGGBB.  Off-plane plots are COUNTED
+ * (canvas_clipped), never silently dropped (NFR-completeness).
+ *
+ * Ring R0.  K 1.00.  NIH: libc-free; composes verba/builder + verba/format only.  Source is ASCII;
+ * the half-block + SGR bytes are OUTPUT, a conscious choice for legibility (ADR-3).
+ */
+module eidos_canvas
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+
+const CANVAS_W   : u32 = 160u32
+const CANVAS_H   : u32 = 160u32           /* must be EVEN: two pixels per character row */
+const CANVAS_N   : u64 = 25600u64         /* CANVAS_W * CANVAS_H */
+const CANVAS_OCC : u32 = 0x80000000u32    /* the occupied bit */
+const CANVAS_RGB : u32 = 0x00FFFFFFu32
+const FNV_OFF    : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME  : u64 = 0x100000001b3u64
+
+var CANVAS_FB   : [u32; 25600]
+var CANVAS_PEN  : u32 = 0xFFFFFFu32
+var CANVAS_PEN2 : u32 = 0xFFFFFFu32       /* line END colour (gradient); == PEN for a solid line */
+var CANVAS_CLIP : u32 = 0u32
+
+/* serializer run-length state (reset at each scanline start) */
+var CV_PREV_FG : u32 = 0u32
+var CV_PREV_BG : u32 = 0u32
+var CV_HAVE    : u32 = 0u32
+
+fn canvas_w() -> u32 @export { return CANVAS_W }
+fn canvas_h() -> u32 @export { return CANVAS_H }
+
+/* clear the plane to empty (black) and reset the off-plane counter. */
+fn canvas_reset() -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < CANVAS_N { CANVAS_FB[i] = 0u32  i = i + 1u64 }
+    CANVAS_CLIP = 0u32
+    return 0i32
+}
+
+/* set the drawing pen (a packed 0xRRGGBB).  Sets BOTH endpoints, so a line is solid unless a distinct
+ * end colour is then set via canvas_pen2 -- backward compatible with solid callers. */
+fn canvas_pen(rgb: u32) -> i32 @export { let c : u32 = rgb & CANVAS_RGB  CANVAS_PEN = c  CANVAS_PEN2 = c  return 0i32 }
+
+/* set the line's END colour (the gradient target); the START stays whatever canvas_pen set. */
+fn canvas_pen2(rgb: u32) -> i32 @export { CANVAS_PEN2 = rgb & CANVAS_RGB  return 0i32 }
+
+/* linear interpolation of two packed colours at k/nn (integer, per channel). */
+fn cv_lerp(c0: u32, c1: u32, k: u32, nn: u32) -> u32 {
+    if nn == 0u32 { return c0 }
+    let r0 : i64 = ((c0 >> 16u32) & 0xFFu32) as i64
+    let g0 : i64 = ((c0 >> 8u32)  & 0xFFu32) as i64
+    let b0 : i64 = (c0 & 0xFFu32) as i64
+    let r1 : i64 = ((c1 >> 16u32) & 0xFFu32) as i64
+    let g1 : i64 = ((c1 >> 8u32)  & 0xFFu32) as i64
+    let b1 : i64 = (c1 & 0xFFu32) as i64
+    let kk : i64 = k as i64
+    let dn : i64 = nn as i64
+    let r  : i64 = r0 + (((r1 - r0) * kk) / dn)
+    let g  : i64 = g0 + (((g1 - g0) * kk) / dn)
+    let b  : i64 = b0 + (((b1 - b0) * kk) / dn)
+    return (((r as u32) & 0xFFu32) << 16u32) | (((g as u32) & 0xFFu32) << 8u32) | ((b as u32) & 0xFFu32)
+}
+
+/* plot one pixel with the current pen; an out-of-bounds plot is COUNTED, not dropped. */
+fn canvas_plot(col: u32, row: u32) -> i32 @export {
+    if col >= CANVAS_W { CANVAS_CLIP = CANVAS_CLIP + 1u32  return 0i32 }
+    if row >= CANVAS_H { CANVAS_CLIP = CANVAS_CLIP + 1u32  return 0i32 }
+    let idx : u32 = row * CANVAS_W + col
+    CANVAS_FB[idx as u64] = CANVAS_OCC | (CANVAS_PEN & CANVAS_RGB)
+    return 0i32
+}
+
+/* read a pixel (0 if empty / out of bounds). */
+fn canvas_get(col: u32, row: u32) -> u32 @export {
+    if col >= CANVAS_W { return 0u32 }
+    if row >= CANVAS_H { return 0u32 }
+    let idx : u32 = row * CANVAS_W + col
+    return CANVAS_FB[idx as u64]
+}
+
+fn canvas_clipped() -> u32 @export { return CANVAS_CLIP }
+
+/* integer Bresenham line, GRADIENT-coloured from CANVAS_PEN (start) to CANVAS_PEN2 (end) -- each pixel
+ * interpolates by its position along the line, so an edge flows from the source node's identity-colour
+ * to the target's.  Solid when PEN == PEN2.  Endpoints clamped via canvas_plot's bounds check. */
+fn canvas_line(x0: u32, y0: u32, x1: u32, y1: u32) -> i32 @export {
+    let c0 : u32 = CANVAS_PEN
+    let c1 : u32 = CANVAS_PEN2
+    let mut x  : i64 = x0 as i64
+    let mut y  : i64 = y0 as i64
+    let tx : i64 = x1 as i64
+    let ty : i64 = y1 as i64
+    let mut adx : i64 = tx - x
+    if adx < 0i64 { adx = 0i64 - adx }
+    let mut ady : i64 = ty - y
+    if ady < 0i64 { ady = 0i64 - ady }
+    let mut nn : u32 = adx as u32
+    if (ady as u32) > nn { nn = ady as u32 }
+    let dx : i64 = adx
+    let dy : i64 = 0i64 - ady
+    let mut sx : i64 = 1i64
+    if x >= tx { sx = 0i64 - 1i64 }
+    let mut sy : i64 = 1i64
+    if y >= ty { sy = 0i64 - 1i64 }
+    let mut err : i64 = dx + dy
+    let cap : i64 = (CANVAS_W as i64) + (CANVAS_H as i64) + 4i64
+    let mut steps : i64 = 0i64
+    let mut k : u32 = 0u32
+    let mut go : i32 = 1i32
+    while go == 1i32 {
+        CANVAS_PEN = cv_lerp(c0, c1, k, nn)
+        canvas_plot(x as u32, y as u32)
+        if x == tx { if y == ty { go = 0i32 } }
+        if go == 1i32 {
+            let e2 : i64 = err + err
+            if e2 >= dy { err = err + dy  x = x + sx }
+            if e2 <= dx { err = err + dx  y = y + sy }
+            if k < nn { k = k + 1u32 }
+            steps = steps + 1i64
+            if steps > cap { go = 0i32 }
+        }
+    }
+    CANVAS_PEN = c1
+    return 0i32
+}
+
+/* a deterministic FNV-1a signature of the whole plane -- equal iff two renders are byte-identical
+ * (the determinism gate, corpus 1985 step 2). */
+fn canvas_sig() -> u64 @export {
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < CANVAS_N {
+        h = h ^ (CANVAS_FB[i] as u64)
+        h = h * FNV_PRIME
+        i = i + 1u64
+    }
+    return h
+}
+
+/* ---- truecolor half-block ANSI serializer ---------------------------- */
+
+/* push one SGR true-colour escape: kind 0 = foreground (38), 1 = background (48). */
+fn cv_push_sgr(b: u64, kind: u32, rgb: u32) -> i32 {
+    builder_push_byte(b, 27u32)        /* ESC */
+    builder_push_byte(b, 91u32)        /* [   */
+    if kind == 0u32 { builder_push_byte(b, 51u32) } else { builder_push_byte(b, 52u32) }  /* 3 / 4 */
+    builder_push_byte(b, 56u32)        /* 8   */
+    builder_push_byte(b, 59u32)        /* ;   */
+    builder_push_byte(b, 50u32)        /* 2   */
+    builder_push_byte(b, 59u32)        /* ;   */
+    format_decimal_u32(b, (rgb >> 16u32) & 0xFFu32)
+    builder_push_byte(b, 59u32)
+    format_decimal_u32(b, (rgb >> 8u32) & 0xFFu32)
+    builder_push_byte(b, 59u32)
+    format_decimal_u32(b, rgb & 0xFFu32)
+    builder_push_byte(b, 109u32)       /* m   */
+    return 0i32
+}
+
+/* the UPPER HALF BLOCK glyph U+2580 (UTF-8 E2 96 80). */
+fn cv_push_block(b: u64) -> i32 {
+    builder_push_byte(b, 226u32)
+    builder_push_byte(b, 150u32)
+    builder_push_byte(b, 128u32)
+    return 0i32
+}
+
+/* SGR reset + newline at a scanline's end. */
+fn cv_push_eol(b: u64) -> i32 {
+    builder_push_byte(b, 27u32)
+    builder_push_byte(b, 91u32)
+    builder_push_byte(b, 48u32)        /* 0 */
+    builder_push_byte(b, 109u32)       /* m */
+    builder_push_byte(b, 10u32)        /* \n */
+    return 0i32
+}
+
+/* colour of a pixel cell: its rgb if occupied, else black. */
+fn cv_cell_rgb(cell: u32) -> u32 {
+    if (cell & CANVAS_OCC) == 0u32 { return 0u32 }
+    return cell & CANVAS_RGB
+}
+
+/* render the whole plane into builder b as truecolor half-block ANSI, run-length coalesced. */
+fn canvas_serialize(b: u64) -> i32 @export {
+    let halfh : u32 = CANVAS_H >> 1u32
+    let mut cr : u32 = 0u32
+    while cr < halfh {
+        let toprow : u32 = cr + cr
+        let botrow : u32 = toprow + 1u32
+        CV_HAVE = 0u32
+        let mut c : u32 = 0u32
+        while c < CANVAS_W {
+            let tcell : u32 = CANVAS_FB[((toprow * CANVAS_W) + c) as u64]
+            let bcell : u32 = CANVAS_FB[((botrow * CANVAS_W) + c) as u64]
+            let fg : u32 = cv_cell_rgb(tcell)
+            let bg : u32 = cv_cell_rgb(bcell)
+            if CV_HAVE == 0u32 {
+                cv_push_sgr(b, 0u32, fg)
+                cv_push_sgr(b, 1u32, bg)
+            } else {
+                if fg != CV_PREV_FG { cv_push_sgr(b, 0u32, fg) }
+                if bg != CV_PREV_BG { cv_push_sgr(b, 1u32, bg) }
+            }
+            CV_PREV_FG = fg
+            CV_PREV_BG = bg
+            CV_HAVE = 1u32
+            cv_push_block(b)
+            c = c + 1u32
+        }
+        cv_push_eol(b)
+        cr = cr + 1u32
+    }
+    return 0i32
+}

@@ -1,0 +1,129 @@
+/* 1987_eidos_web.iii -- III RENDERS ITS OWN ISUB WEB, natively, over a REAL execution trace.
+ *
+ * eidos/web (display arch Phase 2) projects the LIVE isub content-addressed web -- the <verb,a,b> quanta a
+ * real reduction (xii_isub_normalize) shatters onto the metal bus (the 1943 real-trace pattern; NO hand-built
+ * web -- web authors no quanta, it projects what the trace put there).  Gates on INVARIANTS that cannot go
+ * stale as the trace grows, each proving a NEGATIVE:
+ *   10  the web is non-empty               (a real trace populated the bus -- catches a vacuous render)
+ *   11  two renders are byte-identical      (determinism: canvas_sig equal)
+ *   12  two renders iterate equally
+ *   13  render iterates EVERY quantum        (web_iterated == isub_count: no silent cap)
+ *   14  render's return == quantum count
+ *   15  on-plane + off-plane == iterated     (accounting closes; nothing vanishes)
+ *   16  no quantum lands off-plane           (the projection is total by construction)
+ *   17  distinct identities -> distinct colours   (colour IS the content-address, FR-2)
+ *   18  palette recomputes its documented FNV fold (not a stub -- prove the law on a real digest)
+ *   19  the .ans artifact is written         (the SEEN deliverable; cat build/eidos_web.ans)
+ *   99  all hold.
+ */
+module corpus_1987
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+
+/* build a real term + normalise it -> the reduction trace is emitted onto the isub bus (1943 pattern). */
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_cav_into(verb: u32, a: u32, b: u32, out32: *u8) -> i32 from "isub.iii"
+
+extern @abi(c-msvc-x64) fn web_render() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_iterated() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_on_plane() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_off_plane() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn eidos_web_write(cap: u64, path_ptr: u64) -> u32 from "web.iii"
+
+extern @abi(c-msvc-x64) fn canvas_sig() -> u64 from "canvas.iii"
+extern @abi(c-msvc-x64) fn palette_rgb(p32: u64) -> u32 from "palette.iii"
+
+const FNV_OFF   : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME : u64 = 0x100000001b3u64
+const FLOOR     : u32 = 0x40u32
+
+var P_OUT : [u8; 64]
+var CAV1  : [u8; 32]
+var CAV2  : [u8; 32]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+/* recompute CAV1's palette colour by the DOCUMENTED law (FNV-1a fold + |0x40 floor), independently of
+ * eidos/palette -- so step 18 proves the law, not a constant stub. */
+fn kat_expected_rgb() -> u32 {
+    let p : *u8 = (&CAV1 as u64) as *u8
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        h = h ^ (p[i] as u64)
+        h = h * FNV_PRIME
+        i = i + 1u64
+    }
+    let r : u32 = (((h >> 16u64) as u32) & 0xFFu32) | FLOOR
+    let g : u32 = (((h >> 8u64)  as u32) & 0xFFu32) | FLOOR
+    let b : u32 = ((h as u32)            & 0xFFu32) | FLOOR
+    return (r << 16u32) | (g << 8u32) | b
+}
+
+/* a real term: a chain of nul-fusions over a basis var (same shape 1943 uses to drive a real trace). */
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    bcopy((&P_OUT as u64), ("build/eidos_web.ans" as u64), 19u64)
+
+    /* ===== code 10: a REAL trace populates the isub web ===== */
+    let s : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s)                                  /* emits the reduction steps onto the bus */
+    let nq : u32 = isub_count()
+    if nq == 0u32 { return 10u64 }
+
+    /* ===== codes 11/12: determinism ===== */
+    let r1 : u32 = web_render()
+    let s1 : u64 = canvas_sig()
+    let r2 : u32 = web_render()
+    let s2 : u64 = canvas_sig()
+    if s1 != s2 { return 11u64 }
+    if r1 != r2 { return 12u64 }
+
+    /* ===== codes 13/14/15/16: completeness + total accounting ===== */
+    if web_iterated() != nq { return 13u64 }
+    if r1 != nq { return 14u64 }
+    let on  : u32 = web_on_plane()
+    let off : u32 = web_off_plane()
+    if (on + off) != web_iterated() { return 15u64 }
+    if off != 0u32 { return 16u64 }
+
+    /* ===== codes 17/18: colour IS the content-address (distinct identities -> distinct colours), and the
+     * palette law recomputes (not a stub) ===== */
+    isub_cav_into(0u32, 5u32, 7u32, (&CAV1 as u64) as *u8)
+    isub_cav_into(1u32, 5u32, 7u32, (&CAV2 as u64) as *u8)
+    let c1 : u32 = palette_rgb(&CAV1 as u64)
+    let c2 : u32 = palette_rgb(&CAV2 as u64)
+    if c1 == c2 { return 17u64 }
+    if c1 != kat_expected_rgb() { return 18u64 }
+
+    /* ===== code 19: the SEEN artifact ===== */
+    let w : u32 = eidos_web_write(cap, (&P_OUT as u64))
+    if w == 0u32 { return 19u64 }
+
+    return 99u64
+}

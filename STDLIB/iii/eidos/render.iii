@@ -1,0 +1,261 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\render.iii
+ *
+ * III STDLIB - eidos::render  --  THE PROJECTION LAW (N-dim batcave -> the 2D plane).
+ *
+ * This is the "law/space" of Edwin's directive: a fixed deterministic map from a node's
+ * N-dimensional coordinates (IDENTITY x STRATUM x degree) onto the plane (eidos/canvas), such that
+ * we can read the higher structure back out of a flat picture:
+ *   - x (column)  : derived from the node's IDENTITY (sha256 of its name) -- so horizontal position
+ *                   and HUE are two readouts of one content-address (ADR-2).
+ *   - y (row)     : the architectural STRATUM (self_atlas level) -- foundational leaves low, the
+ *                   integrators high; depth becomes altitude.
+ *   - colour      : eidos/palette over the identity digest (FR-2): colour IS the content-address.
+ * Edges are drawn UNDER nodes in the source colour, dimmed, so the dependency web glows beneath the
+ * bright node points.  Off-plane and pixel-COINCIDENT nodes are COUNTED, never silently dropped
+ * (NFR-completeness; corpus 1985 step 3).
+ *
+ * ENCAPSULATE, NOT REIMPLEMENT: render authors no graph and no hash.  It READS the real self_atlas
+ * (the same model self_report summarises and self_cartographer builds) and drives the real sha256.
+ * It is the VISUAL sibling of omnia/self_report -- no island.
+ *
+ * Ring R0.  K 0.99 (reads a filesystem-derived model).  NIH: libc-free.  W2 (<=4 params), W8 (static
+ * bounds == self_atlas's 2048-node capacity, so no silent cap), W13/W14/W15.
+ */
+module eidos_render
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_from(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_to(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_level(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_name_into(n: u32, out_ptr: u64, max: u64) -> u64 from "self_atlas.iii"
+
+extern @abi(c-msvc-x64) fn salens_max_level() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_coupling() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_emergence_index() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_count_cycle_nodes() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_top_hub() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_deepest_integrator() -> u32 from "self_atlas_lens.iii"
+extern @abi(c-msvc-x64) fn salens_argmax_fanin() -> u32 from "self_atlas_lens.iii"
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+extern @abi(c-msvc-x64) fn palette_rgb(p32: u64) -> u32 from "palette.iii"
+extern @abi(c-msvc-x64) fn palette_dim(rgb: u32) -> u32 from "palette.iii"
+
+extern @abi(c-msvc-x64) fn layout_build() -> i32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_build_identity() -> i32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_col(v: u32) -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_row(v: u32) -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_max_layer() -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_layer_max_count() -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_edge_span() -> u64 from "layout.iii"
+
+extern @abi(c-msvc-x64) fn canvas_w() -> u32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_h() -> u32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_reset() -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_pen(rgb: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_pen2(rgb: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_plot(col: u32, row: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_line(x0: u32, y0: u32, x1: u32, y1: u32) -> i32 from "canvas.iii"
+
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+
+const RND_NMAX     : u32 = 2048u32      /* == self_atlas SATLAS_MAX_NODES (no silent cap) */
+const RND_HITMAX   : u64 = 25600u64     /* >= canvas_w * canvas_h */
+const RND_MARGIN   : u32 = 3u32
+const RND_EDGE_NEAR : u32 = 2u32        /* edges spanning > this many strata recede (quarter-bright) */
+
+var RND_NAME : [u8; 64]
+var RND_DG   : [u8; 32]
+var RND_COL  : [u32; 2048]
+var RND_ROW  : [u32; 2048]
+var RND_RGB  : [u32; 2048]
+var RND_HIT  : [u8; 25600]
+
+var RND_ITER : u32 = 0u32
+var RND_ON   : u32 = 0u32
+var RND_OFF  : u32 = 0u32
+var RND_COLL : u32 = 0u32
+var RL_NAME  : [u8; 64]                  /* legend: node-name scratch */
+
+/* compute the identity digest of node n into RND_DG (sha256 of its name). */
+fn render_node_digest(n: u32) -> i32 {
+    let np : u64 = (&RND_NAME as u64)
+    let len : u64 = satlas_name_into(n, np, 64u64)
+    sha256_oneshot(np as *u8, len, (&RND_DG as u64) as *u8)
+    return 0i32
+}
+
+/* the colour assigned to node n (= palette over its identity digest).  Exposed for the gate. */
+fn render_node_rgb(n: u32) -> u32 @export {
+    render_node_digest(n)
+    return palette_rgb(&RND_DG as u64)
+}
+
+/* PRE-PASS: positions come from the barycentric LAYOUT (eidos/layout); colour from identity.  X now
+ * carries TOPOLOGY (connected nodes drift together), freeing identity to own colour alone.  Returns 0,
+ * or -1 if the atlas exceeds the static node capacity (reported, never silently truncated). */
+fn render_prepass() -> i32 {
+    let n : u32 = satlas_node_count()
+    if n > RND_NMAX { return -1i32 }
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+    if (w as u64) * (h as u64) > RND_HITMAX { return -2i32 }
+
+    layout_build()                               /* the deterministic crossing-minimiser */
+
+    /* clear the node-occupancy map for collision counting */
+    let mut k : u64 = 0u64
+    while k < RND_HITMAX { RND_HIT[k] = 0u8  k = k + 1u64 }
+
+    let mut i : u32 = 0u32
+    while i < n {
+        render_node_digest(i)
+        RND_RGB[i as u64] = palette_rgb(&RND_DG as u64)   /* colour = content-address (FR-2) */
+        RND_COL[i as u64] = layout_col(i)                 /* x = topology (barycentric order) */
+        RND_ROW[i as u64] = layout_row(i)                 /* y = stratum */
+        i = i + 1u32
+    }
+    RND_ITER = n
+    return 0i32
+}
+
+/* RENDER the whole batcave atlas onto the plane.  Returns the number of nodes ITERATED
+ * (== satlas_node_count on success; 0 if the prepass refused for capacity). */
+fn render_atlas() -> u32 @export {
+    canvas_reset()
+    let rc : i32 = render_prepass()
+    if rc != 0i32 { return 0u32 }
+    let n : u32 = satlas_node_count()
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+
+    /* edges first (under the nodes), in the source node's colour, dimmed */
+    let e : u32 = satlas_edge_count()
+    let mut i : u32 = 0u32
+    while i < e {
+        let f : u32 = satlas_edge_from(i)
+        let t : u32 = satlas_edge_to(i)
+        if f < n {
+            if t < n {
+                let lf : u32 = satlas_level(f)
+                let lt : u32 = satlas_level(t)
+                let mut dl : u32 = 0u32
+                if lf >= lt { dl = lf - lt } else { dl = lt - lf }
+                let mut c0 : u32 = palette_dim(RND_RGB[f as u64])
+                let mut c1 : u32 = palette_dim(RND_RGB[t as u64])
+                if dl > RND_EDGE_NEAR { c0 = palette_dim(c0)  c1 = palette_dim(c1) }  /* long edges recede; none culled */
+                canvas_pen(c0)                                     /* edge flows from source... */
+                canvas_pen2(c1)                                    /* ...to target identity-colour */
+                canvas_line(RND_COL[f as u64], RND_ROW[f as u64], RND_COL[t as u64], RND_ROW[t as u64])
+            }
+        }
+        i = i + 1u32
+    }
+
+    /* nodes on top; count on-plane / off-plane / pixel-coincident honestly */
+    RND_ON = 0u32
+    RND_OFF = 0u32
+    RND_COLL = 0u32
+    let mut j : u32 = 0u32
+    while j < n {
+        let c : u32 = RND_COL[j as u64]
+        let r : u32 = RND_ROW[j as u64]
+        if c < w {
+            if r < h {
+                RND_ON = RND_ON + 1u32
+                let hidx : u64 = ((r * w) + c) as u64
+                if RND_HIT[hidx] == 1u8 { RND_COLL = RND_COLL + 1u32 } else { RND_HIT[hidx] = 1u8 }
+                canvas_pen(RND_RGB[j as u64])
+                canvas_plot(c, r)
+            }
+        }
+        if c >= w { RND_OFF = RND_OFF + 1u32 } else { if r >= h { RND_OFF = RND_OFF + 1u32 } }
+        j = j + 1u32
+    }
+    return n
+}
+
+fn render_iterated() -> u32 @export { return RND_ITER }
+fn render_on_plane() -> u32 @export { return RND_ON }
+fn render_off_plane() -> u32 @export { return RND_OFF }
+fn render_collisions() -> u32 @export { return RND_COLL }
+
+/* a one-line legend appended UNDER the image (the lens summary, ASCII). */
+fn render_caption(b: u64) -> i32 @export {
+    builder_push_bytes(b, ("III BATCAVE  nodes=" as u64), 19u64)
+    format_decimal_u32(b, satlas_node_count())
+    builder_push_bytes(b, (" edges=" as u64), 7u64)
+    format_decimal_u32(b, satlas_edge_count())
+    builder_push_bytes(b, (" strata=" as u64), 8u64)
+    format_decimal_u32(b, salens_max_level())
+    builder_push_bytes(b, (" coupling=" as u64), 10u64)
+    format_decimal_u32(b, salens_coupling())
+    builder_push_bytes(b, (" emergence=" as u64), 11u64)
+    format_decimal_u32(b, salens_emergence_index())
+    builder_push_bytes(b, (" cycles=" as u64), 8u64)
+    format_decimal_u32(b, salens_count_cycle_nodes())
+    builder_push_bytes(b, (" onplane=" as u64), 9u64)
+    format_decimal_u32(b, RND_ON)
+    builder_push_bytes(b, (" offplane=" as u64), 10u64)
+    format_decimal_u32(b, RND_OFF)
+    builder_push_bytes(b, (" coincide=" as u64), 10u64)
+    format_decimal_u32(b, RND_COLL)
+    /* layout quality: barycentric edge-span vs the un-ordered baseline (REPORTED, not gated) + skew */
+    let sl : u64 = layout_edge_span()            /* current build is barycentric (render_atlas left it) */
+    builder_push_bytes(b, (" span=" as u64), 6u64)
+    format_decimal_u32(b, sl as u32)
+    layout_build_identity()
+    let sb : u64 = layout_edge_span()
+    builder_push_bytes(b, ("/" as u64), 1u64)
+    format_decimal_u32(b, sb as u32)
+    layout_build()                               /* restore the barycentric layout */
+    builder_push_bytes(b, (" maxlayer=" as u64), 10u64)
+    format_decimal_u32(b, layout_max_layer())
+    builder_push_bytes(b, (" fat=" as u64), 5u64)
+    format_decimal_u32(b, layout_layer_max_count())
+    return 0i32
+}
+
+/* ---- THE LEGEND (display Phase 4): a key for the content-address colourmap ----------------------
+ * Colour = identity, so the viewer's question is "which module is THAT colour?".  The legend answers it
+ * for the structurally pivotal nodes: a true-colour SWATCH (the node's own identity-colour) + its name +
+ * its role.  Composes self_atlas_lens (the argmaxes) + render_node_rgb (the colour law) -- no island. */
+
+/* push an SGR background-colour escape (the swatch fill). */
+fn rl_push_bg(b: u64, rgb: u32) -> i32 {
+    builder_push_byte(b, 27u32)  builder_push_byte(b, 91u32)  builder_push_byte(b, 52u32)  builder_push_byte(b, 56u32)  builder_push_byte(b, 59u32)  builder_push_byte(b, 50u32)  builder_push_byte(b, 59u32)
+    format_decimal_u32(b, (rgb >> 16u32) & 0xFFu32)  builder_push_byte(b, 59u32)
+    format_decimal_u32(b, (rgb >> 8u32) & 0xFFu32)   builder_push_byte(b, 59u32)
+    format_decimal_u32(b, rgb & 0xFFu32)             builder_push_byte(b, 109u32)
+    return 0i32
+}
+
+/* one legend row: newline, a 2-cell swatch in the node's identity-colour, its name, its role label. */
+fn rl_row(b: u64, node: u32, label_ptr: u64, label_len: u64) -> i32 {
+    builder_push_byte(b, 10u32)                                  /* newline */
+    rl_push_bg(b, render_node_rgb(node))
+    builder_push_byte(b, 32u32)  builder_push_byte(b, 32u32)     /* the swatch (two coloured cells) */
+    builder_push_byte(b, 27u32)  builder_push_byte(b, 91u32)  builder_push_byte(b, 48u32)  builder_push_byte(b, 109u32)  /* ESC[0m */
+    builder_push_byte(b, 32u32)                                  /* space */
+    let nl : u64 = satlas_name_into(node, (&RL_NAME as u64), 63u64)
+    builder_push_bytes(b, (&RL_NAME as u64), nl)
+    builder_push_bytes(b, (" [" as u64), 2u64)
+    builder_push_bytes(b, label_ptr, label_len)
+    builder_push_byte(b, 93u32)                                  /* ']' */
+    return 0i32
+}
+
+/* render the legend (swatch + name + role for the pivotal nodes).  Returns the number of rows emitted. */
+fn render_legend(b: u64) -> u32 @export {
+    builder_push_byte(b, 10u32)
+    builder_push_bytes(b, ("LEGEND (swatch = identity-colour):" as u64), 34u64)
+    rl_row(b, salens_top_hub(),            ("hub" as u64),        3u64)
+    rl_row(b, salens_deepest_integrator(), ("integrator" as u64), 10u64)
+    rl_row(b, salens_argmax_fanin(),       ("fan-in" as u64),     6u64)
+    builder_push_byte(b, 10u32)
+    return 3u32
+}

@@ -1532,6 +1532,34 @@ MODULES=(
     # memo_equal recalls a prior equivalence verdict by the query's content-address, SKIPPING the SAT solve;
     # sound (exact sha256 match), measurable (memo_hits = SAT solves saved).  WRAPS bv_bits + coincidence + cad.
     "eidos/memo"
+    # --- THE EIDOS DISPLAY: III sees its own batcave (DOCS/III-EIDOS-DISPLAY-ARCHITECTURE.md) ---
+    # palette: COLOUR IS THE CONTENT-ADDRESS -- a pure law mapping a 32-byte identity digest to a vivid
+    # RGB, so coincidence is visible (FR-2).  Pure; no deps.  Compiler-unreferenced -> LIBNATIVE; last.
+    "eidos/palette"
+    # canvas: THE PLANE (a law) + the half-block truecolor ANSI rasterizer (integer plot/Bresenham,
+    # gradient lines, run-length colour coalescing).  Composes builder + format.  LIBNATIVE; last.
+    "eidos/canvas"
+    # layout: DETERMINISTIC BARYCENTRIC CROSSING-MINIMISER (Sugiyama) + radial/orbital projection.
+    # Identity-keyed (a pure function of names+edges, invariant to node numbering); integer cos table by
+    # recurrence.  Reads self_atlas + canvas dims.  Proven corpus 1986.  LIBNATIVE; last.
+    "eidos/layout"
+    # render: THE PROJECTION LAW -- places each self_atlas node by (identity->x, stratum->y), colours by
+    # palette, draws edges then nodes, counts off-plane/coincident.  The visual sibling of self_report (no
+    # island): READS the real self_atlas(+lens) + sha256.  Compiler-unreferenced -> LIBNATIVE; last.
+    "eidos/render"
+    # temporal: THE TIME AXIS (display Phase 4) -- the batcave revealed over EVENT-TIME, stratum-by-stratum,
+    # as a field-witnessed flipbook.  Composes layout + render + canvas + palette + eidos/field (the real
+    # temporal organ) + fs.  Proven corpus 2000.  Compiler-unreferenced -> LIBNATIVE; last.
+    "eidos/temporal"
+    # cli: THE UNIFIED DISPLAY COMMAND (display FR-5) -- eidos_cli_run(verb,cap,path) dispatches map/web/plan/
+    # field over the REAL system (composes render+layout+canvas+web+temporal + xii trace driver + fs); an
+    # unknown verb is refused.  Proven corpus 1985 + 2001.  Compiler-unreferenced -> LIBNATIVE; last.
+    "eidos/cli"
+    # web: THE EIDOS-WEB PROJECTION (display Phase 2) -- render's sibling over the OTHER real geometry: the
+    # live isub content-addressed web (the <verb,a,b> quanta a real xii_isub_normalize trace shatters onto the
+    # bus).  Colour IS the content-address (palette over isub_cav); composes canvas + palette + isub (no island,
+    # NO hand-built web).  Compiler-unreferenced -> LIBNATIVE; last.  Proven corpus 1987.
+    "eidos/web"
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

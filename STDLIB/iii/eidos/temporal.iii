@@ -1,0 +1,185 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\temporal.iii
+ *
+ * III STDLIB - eidos::temporal  --  THE TIME AXIS (display arch Phase 4): the batcave revealed over
+ * EVENT-TIME, as a flipbook animation, witnessed through the real eidos/field organ.
+ *
+ * eidos/render draws the batcave as ONE still image; eidos/temporal adds the missing dimension -- TIME.
+ * It reveals the dependency graph stratum-by-stratum (foundational primitives first, then what builds on
+ * them, up to the apps + the cyclic rim) -- the order the system could be CONSTRUCTED bottom-up. Each
+ * stratum is one tick recorded into eidos/field (the spatial+temporal substrate), so the sequence carries
+ * a real TEMPORAL WITNESS (field_temporal_witness): a content-addressed seal of the revealed prefix at
+ * each frame. The geometry is the radial mandala (eidos/layout) and the colour is the content-address
+ * (eidos/palette via render_node_rgb) -- so the animation is the SAME picture, grown in time.
+ *
+ * ENCAPSULATE, NOT REIMPLEMENT (no island): temporal authors no graph, no plane, no colour, no event log.
+ * It composes self_atlas + eidos/{layout,render,palette,canvas} + eidos/field + aether/fs. The time
+ * semantics (record / witness / fold) come from the REAL field organ; temporal only sequences them.
+ *
+ * Ring R0.  K 0.99 (filesystem-bound).  NIH: libc-free.  W2 (<=4 params).  Output bytes are ANSI; source
+ * ASCII.  Frames are separated by ESC[2J ESC[H (clear+home) so a player steps them; `cat` shows the last.
+ */
+module eidos_temporal
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_from(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_to(i: u32) -> u32 from "self_atlas.iii"
+
+extern @abi(c-msvc-x64) fn layout_build() -> i32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_col(v: u32) -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_row(v: u32) -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_max_layer() -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_node_level(v: u32) -> u32 from "layout.iii"
+extern @abi(c-msvc-x64) fn layout_layer_count(L: u32) -> u32 from "layout.iii"
+
+extern @abi(c-msvc-x64) fn render_node_rgb(n: u32) -> u32 from "render.iii"
+extern @abi(c-msvc-x64) fn palette_dim(rgb: u32) -> u32 from "palette.iii"
+
+extern @abi(c-msvc-x64) fn canvas_reset() -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_pen(rgb: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_pen2(rgb: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_plot(col: u32, row: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_line(x0: u32, y0: u32, x1: u32, y1: u32) -> i32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_serialize(b: u64) -> i32 from "canvas.iii"
+
+extern @abi(c-msvc-x64) fn field_reset() -> i32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_record(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_event_count() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_temporal_witness(upto: u32) -> u64 from "field.iii"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+
+const TEMP_NMAX  : u32 = 2048u32
+const TEMP_ARENA : u64 = 8388608u64      /* 8 MiB: a flipbook of ~15 frames */
+const TEMP_HINT  : u64 = 2097152u64
+const TEMP_WRITE : u32 = 2u32
+
+var TMP_RGB : [u32; 2048]
+var TEMP_N  : u32 = 0u32
+
+/* cumulative node count with stratum <= k (the # revealed at frame k). */
+fn temporal_cum(k: u32) -> u32 {
+    let maxl : u32 = layout_max_layer()
+    let mut c : u32 = 0u32
+    let mut L : u32 = 0u32
+    while L <= k {
+        if L <= maxl { c = c + layout_layer_count(L) }
+        L = L + 1u32
+    }
+    return c
+}
+
+/* BUILD the temporal model: layout (positions) + precompute colours + record ONE field event per
+ * stratum (the construction order), so each frame is one real temporal tick with a witness. */
+fn temporal_build() -> i32 @export {
+    if satlas_node_count() > TEMP_NMAX { return -1i32 }
+    layout_build()
+    let n : u32 = satlas_node_count()
+    TEMP_N = n
+    let mut i : u32 = 0u32
+    while i < n { TMP_RGB[i as u64] = render_node_rgb(i)  i = i + 1u32 }
+    field_reset()
+    let maxl : u32 = layout_max_layer()
+    let mut L : u32 = 0u32
+    while L <= maxl {
+        let cum : u32 = temporal_cum(L)
+        field_record(L as u64, L as u64, L as u64, cum as u64)
+        L = L + 1u32
+    }
+    return 0i32
+}
+
+fn temporal_event_count() -> u32 @export { return field_event_count() }
+fn temporal_max_level() -> u32 @export { return layout_max_layer() }
+
+/* RENDER frame k: reveal every node + edge with stratum <= k (edges as dimmed gradients, nodes on top).
+ * Returns the number of nodes revealed. */
+fn temporal_render_frame(k: u32) -> u32 @export {
+    canvas_reset()
+    let n : u32 = TEMP_N
+    let e : u32 = satlas_edge_count()
+    let mut j : u32 = 0u32
+    while j < e {
+        let f : u32 = satlas_edge_from(j)
+        let t : u32 = satlas_edge_to(j)
+        if f < n { if t < n {
+            if layout_node_level(f) <= k { if layout_node_level(t) <= k {
+                canvas_pen(palette_dim(TMP_RGB[f as u64]))
+                canvas_pen2(palette_dim(TMP_RGB[t as u64]))
+                canvas_line(layout_col(f), layout_row(f), layout_col(t), layout_row(t))
+            } }
+        } }
+        j = j + 1u32
+    }
+    let mut revealed : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        if layout_node_level(i) <= k {
+            canvas_pen(TMP_RGB[i as u64])
+            canvas_plot(layout_col(i), layout_row(i))
+            revealed = revealed + 1u32
+        }
+        i = i + 1u32
+    }
+    return revealed
+}
+
+/* the field temporal witness at frame k (a content-addressed seal of the revealed prefix). */
+fn temporal_frame_witness(k: u32) -> u64 @export { return field_temporal_witness(k + 1u32) }
+
+/* ---- flipbook serialization --------------------------------------------- */
+
+fn tmp_push_clear(b: u64) -> i32 {
+    builder_push_byte(b, 27u32)  builder_push_byte(b, 91u32)  builder_push_byte(b, 50u32)  builder_push_byte(b, 74u32)  /* ESC[2J */
+    builder_push_byte(b, 27u32)  builder_push_byte(b, 91u32)  builder_push_byte(b, 72u32)                                /* ESC[H  */
+    return 0i32
+}
+
+fn tmp_banner(b: u64, k: u32, rev: u32, witlow: u32) -> i32 {
+    builder_push_bytes(b, ("FIELD  t=" as u64), 9u64)
+    format_decimal_u32(b, k)
+    builder_push_bytes(b, ("/" as u64), 1u64)
+    format_decimal_u32(b, layout_max_layer())
+    builder_push_bytes(b, (" revealed=" as u64), 10u64)
+    format_decimal_u32(b, rev)
+    builder_push_bytes(b, (" witness=" as u64), 9u64)
+    format_decimal_u32(b, witlow)
+    builder_push_byte(b, 10u32)
+    return 0i32
+}
+
+/* write the whole flipbook (frame 0 .. maxlayer) to path: each frame = clear+home, the image, a banner.
+ * Play with:  while read -r; do clear; done  -- or step it. Returns bytes written (0 = failure). */
+fn eidos_temporal_write(cap: u64, path_ptr: u64) -> u32 @export {
+    let a   : u64 = arena_new(TEMP_ARENA)
+    let b   : u64 = builder_new(a, TEMP_HINT)
+    let maxl : u32 = layout_max_layer()
+    let mut k : u32 = 0u32
+    while k <= maxl {
+        let rev : u32 = temporal_render_frame(k)
+        tmp_push_clear(b)
+        canvas_serialize(b)
+        let wit : u64 = temporal_frame_witness(k)
+        tmp_banner(b, k, rev, wit as u32)
+        k = k + 1u32
+    }
+    let base : u64 = builder_seal(b)
+    let len  : u64 = builder_len(b)
+    let h    : u64 = fs_open(cap, path_ptr, TEMP_WRITE)
+    if h == 0u64 { builder_drop(b)  return 0u32 }
+    let w : u64 = fs_write(h, base, len)
+    fs_close(h)
+    builder_drop(b)
+    return w as u32
+}

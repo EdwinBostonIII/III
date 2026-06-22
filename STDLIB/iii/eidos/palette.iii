@@ -1,0 +1,67 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\palette.iii
+ *
+ * III STDLIB - eidos::palette  --  COLOR IS THE CONTENT-ADDRESS (the active participant).
+ *
+ * Edwin's directive: "color must be an intrinsic or even an active participant."  In EIDOS every
+ * block has an IDENTITY: a 32-byte content-address (isub's sha256(verb||a||b); for a self_atlas node,
+ * sha256(name)).  This module makes color a pure FUNCTION of that identity -- never a chosen label.
+ * Two content-identical things therefore have the SAME color BY CONSTRUCTION: coincidence (the thing
+ * EIDOS's coincidence engine proves) becomes literally VISIBLE.  Color does not describe the geometry;
+ * it IS a projection of the geometry's identity into three bytes.
+ *
+ * THE LAW (documented so a gate can recompute it without trusting this code -- corpus 1985 step 4):
+ *   h := FNV-1a-64 over the 32 identity bytes  (h0 = 0xcbf29ce484222325, prime = 0x100000001b3)
+ *   r := ((h >> 16) & 0xFF) | 0x40 ;  g := ((h >> 8) & 0xFF) | 0x40 ;  b := (h & 0xFF) | 0x40
+ *   palette_rgb := (r << 16) | (g << 8) | b
+ * The `| 0x40` lifts every channel to >= 0x40 so no identity ever maps to near-black (legible on a
+ * black field).  FNV folds ALL 32 bytes, so distinct content-addresses spread across the cube (not a
+ * mere 3-byte prefix that would collide on shared sha256 stems).
+ *
+ * Ring R0.  K 1.00 (a pure total function).  NIH: libc-free; composes nothing -- it is a law.
+ */
+module eidos_palette
+
+const PAL_FNV_OFF   : u64 = 0xcbf29ce484222325u64
+const PAL_FNV_PRIME : u64 = 0x100000001b3u64
+const PAL_FLOOR     : u32 = 0x40u32          /* per-channel brightness floor */
+
+/* FNV-1a-64 fold of the 32 identity bytes at p32 (a *u8 held as u64). */
+fn palette_fold32(p32: u64) -> u64 @export {
+    let p : *u8 = p32 as *u8
+    let mut h : u64 = PAL_FNV_OFF
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        h = h ^ (p[i] as u64)
+        h = h * PAL_FNV_PRIME
+        i = i + 1u64
+    }
+    return h
+}
+
+/* THE COLOR LAW: a 32-byte identity -> a vivid packed 0x00RRGGBB. */
+fn palette_rgb(p32: u64) -> u32 @export {
+    let h : u64 = palette_fold32(p32)
+    let r : u32 = (((h >> 16u64) as u32) & 0xFFu32) | PAL_FLOOR
+    let g : u32 = (((h >> 8u64)  as u32) & 0xFFu32) | PAL_FLOOR
+    let b : u32 = ((h as u32)            & 0xFFu32) | PAL_FLOOR
+    return (r << 16u32) | (g << 8u32) | b
+}
+
+/* a horizontal-position seed from the SAME identity (bytes 8..11 LE): position is a second readout of
+ * identity, so the x-axis and the hue are two faces of one content-address (ADR-2). */
+fn palette_pos_seed(p32: u64) -> u32 @export {
+    let p : *u8 = p32 as *u8
+    let b0 : u32 = p[8u64]  as u32
+    let b1 : u32 = p[9u64]  as u32
+    let b2 : u32 = p[10u64] as u32
+    let b3 : u32 = p[11u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* dim a packed rgb to half brightness per channel (edges sit UNDER nodes, so they read quieter). */
+fn palette_dim(rgb: u32) -> u32 @export {
+    let r : u32 = ((rgb >> 16u32) & 0xFFu32) >> 1u32
+    let g : u32 = ((rgb >> 8u32)  & 0xFFu32) >> 1u32
+    let b : u32 = (rgb            & 0xFFu32) >> 1u32
+    return (r << 16u32) | (g << 8u32) | b
+}

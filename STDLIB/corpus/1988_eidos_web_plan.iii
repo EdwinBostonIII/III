@@ -1,0 +1,128 @@
+/* 1988_eidos_web_plan.iii -- THE DISPLAY BECOMES THE COMPOSER'S FIRST LIVE CONSUMER.
+ *
+ * eidos/web (Phase 3) overlays the EIDOS planner's geodesic onto the rendered isub web: it CALLS the real
+ * Composer (eidos/descriptor -> eidos/compose Bellman-Ford) over the SAME real-trace web on the bus, and DRAWS
+ * the route it returns in full-bright.  This makes the read-only display a LIVE CONSUMER of desc_plan -- the
+ * Composer's first (the §12 ledger's standing gap was "zero live consumers"), reached WITHOUT touching any
+ * fragile self-host path.  Gates prove the negative -- that the highlight is the planner's REAL output, not a
+ * hardcoded path, and that it is actually drawn:
+ *   10  the real-trace web did not build (trace -> ingest -> commit produced an empty web)
+ *   11  web_render did not iterate the whole committed web (silent cap)
+ *   12  the Composer did not route a0->b0 over the real web (web_overlay_plan == 0)
+ *   13  the overlay drew NOTHING (canvas_sig unchanged) -- the planner output is not visible
+ *   14  the highlight is NOT the planner's route (count != hops, or a highlighted block != its plan edge)
+ *   15  the render+overlay is not deterministic
+ *   99  the display faithfully draws the real Composer geodesic over the real web -- a live consumer.
+ *
+ * HONEST: a real reduction-trace web is a CHAIN, so the routed geodesic is the chain's own 1-hop BELOW edges;
+ * non-trivial shortest-path routing (cheaper indirect) is descriptor's fixture gate (1942).  The proof here is
+ * the WIRING -- the display consumes the real planner output -- not the route's branching.
+ */
+module corpus_1988
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_isub_normalize(t: u32) -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn xii_isub_steps() -> u32 from "xii_isub.iii"
+extern @abi(c-msvc-x64) fn unravel_height(start: u32) -> u32 from "unravel.iii"
+extern @abi(c-msvc-x64) fn ingest_extract() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_commit() -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_a(i: u32) -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn ingest_b(i: u32) -> u32 from "ingest.iii"
+extern @abi(c-msvc-x64) fn assim_web_size() -> u32 from "assimilate.iii"
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+
+extern @abi(c-msvc-x64) fn desc_plan_node(i: u32) -> u32 from "descriptor.iii"
+
+extern @abi(c-msvc-x64) fn web_render() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_iterated() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_overlay_plan(start_pt: u32, target_pt: u32) -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_overlay_count() -> u32 from "web.iii"
+extern @abi(c-msvc-x64) fn web_overlay_block(i: u32) -> u32 from "web.iii"
+
+extern @abi(c-msvc-x64) fn canvas_sig() -> u64 from "canvas.iii"
+
+/* write the overlaid plane as the SEEN artifact (cat build/eidos_web_plan.ans). */
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn eidos_web_write(cap: u64, path_ptr: u64) -> u32 from "web.iii"
+
+var P_OUT : [u8; 64]
+
+fn bcopy(dst: u64, src: u64, n: u64) -> u64 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    d[n] = 0u8
+    return n
+}
+
+fn build_term() -> u32 {
+    xii_term_arena_reset()
+    let v   : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let nul : u32 = xii_term_make_basis(5u8, 0xFFFFFFFFu32)
+    let i1  : u32 = xii_term_make_fusion2(18u8, nul, v)
+    let i2  : u32 = xii_term_make_fusion2(18u8, nul, i1)
+    return xii_term_make_fusion2(18u8, nul, i2)
+}
+
+fn main() -> u64 {
+    /* ===== code 10: build the REAL committed web (trace -> ingest -> commit), aligned on the isub bus ===== */
+    let s : u32 = build_term()
+    isub_reset()
+    xii_isub_normalize(s)
+    if xii_isub_steps() < 2u32 { return 10u64 }            /* a real multi-step trace */
+    let h : u32 = unravel_height(s)
+    let ext : u32 = ingest_extract()
+    if ext != h { return 10u64 }
+    if ext == 0u32 { return 10u64 }
+    let a0 : u32 = ingest_a(0u32)                          /* a real connected pair from the trace */
+    let b0 : u32 = ingest_b(0u32)
+    isub_reset()
+    if ingest_commit() != ext { return 10u64 }            /* the committed web is now on the bus + in assimilate */
+    if assim_web_size() != ext { return 10u64 }
+
+    /* ===== code 11: render the whole committed web ===== */
+    let n : u32 = web_render()
+    if n != isub_count() { return 11u64 }
+    if web_iterated() != isub_count() { return 11u64 }
+    let sig0 : u64 = canvas_sig()                          /* the un-overlaid web image */
+
+    /* ===== code 12: the Composer routes a0->b0 over the REAL web; the display DRAWS it ===== */
+    let hops : u32 = web_overlay_plan(a0, b0)
+    if hops < 1u32 { return 12u64 }
+    let sig1 : u64 = canvas_sig()
+
+    /* ===== code 13: the overlay is VISIBLE (it changed the plane) ===== */
+    if sig1 == sig0 { return 13u64 }
+
+    /* ===== code 14: the highlight IS the planner's route -- every highlighted block is its real plan edge ===== */
+    if web_overlay_count() != hops { return 14u64 }
+    let mut i : u32 = 0u32
+    while i < hops {
+        let bk : u32 = web_overlay_block(i)
+        if isub_a(bk) != desc_plan_node(i) { return 14u64 }
+        if isub_b(bk) != desc_plan_node(i + 1u32) { return 14u64 }
+        i = i + 1u32
+    }
+
+    /* ===== code 15: determinism -- a fresh render + overlay reproduces the same plane ===== */
+    web_render()
+    web_overlay_plan(a0, b0)
+    let sig2 : u64 = canvas_sig()
+    if sig2 != sig1 { return 15u64 }
+
+    /* ===== code 16: the SEEN artifact -- the web with the highlighted geodesic (cat build/eidos_web_plan.ans) ===== */
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    bcopy((&P_OUT as u64), ("build/eidos_web_plan.ans" as u64), 24u64)
+    if eidos_web_write(cap, (&P_OUT as u64)) == 0u32 { return 16u64 }
+
+    return 99u64
+}

@@ -1,0 +1,548 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\eidos\layout.iii
+ *
+ * III STDLIB - eidos::layout  --  DETERMINISTIC BARYCENTRIC CROSSING-MINIMISER (Sugiyama).
+ *
+ * Phase-1's X was hash(identity) -- meaningless, so edges crossed at random (a hairball).  This frees
+ * X to carry TOPOLOGY: identity already owns colour (eidos/palette), so X should place CONNECTED nodes
+ * near each other.  The classic layered-graph layout: the strata (self_atlas level) ARE the layers;
+ * the unsolved step is the WITHIN-layer order that minimises edge crossings.  The barycentric heuristic:
+ * each node wants to sit at the average position of its neighbours; sort each layer by that average;
+ * sweep down then up; iterate.  Connected nodes drift into vertical alignment -> short edges -> legible.
+ *
+ * PURE INTEGER + DETERMINISTIC (the III contract): barycentre = sum(neighbour normalised-position) /
+ * degree (i64 accumulate, truncating divide); a fixed LAY_SWEEPS pass count; a stable insertion sort
+ * with a (barycentre, node-id) TOTAL order, so the result is byte-identical every run -- no float, no
+ * randomness.  Neighbour position is NORMALISED to a common LAY_SCALE before averaging, so layers of
+ * different sizes compare fairly.  ENCAPSULATE: reads only the real self_atlas graph -- no island.
+ *
+ * Ring R0.  K 0.99.  NIH: libc-free.  W2 (<=4 params), W8 (static bounds == self_atlas capacity),
+ * W14/W15 (flag-driven loops, no recursion).  The insertion-sort flag DRIVES the while condition
+ * itself (the documented active-flag trap).
+ */
+module eidos_layout
+
+extern @abi(c-msvc-x64) fn satlas_node_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_count() -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_from(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_edge_to(i: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_level(n: u32) -> u32 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn satlas_name_into(n: u32, out_ptr: u64, max: u64) -> u64 from "self_atlas.iii"
+extern @abi(c-msvc-x64) fn canvas_w() -> u32 from "canvas.iii"
+extern @abi(c-msvc-x64) fn canvas_h() -> u32 from "canvas.iii"
+
+const LAY_NMAX   : u32 = 2048u32
+const LAY_LMAX   : u32 = 128u32          /* max strata */
+const LAY_SCALE  : u32 = 4096u32         /* normalised within-layer position scale */
+const LAY_SWEEPS : u32 = 6u32
+const LAY_MARGIN : u32 = 3u32
+const FNV_OFF    : u64 = 0xcbf29ce484222325u64
+const FNV_PRIME  : u64 = 0x100000001b3u64
+
+var LAY_LCOUNT : [u32; 128]
+var LAY_LSTART : [u32; 128]
+var LAY_CUR    : [u32; 128]
+var LAY_LEVEL  : [u32; 2048]             /* cached clamped level per node */
+var LAY_BYL    : [u32; 2048]             /* node ids grouped by layer, in current order */
+var LAY_ORDER  : [u32; 2048]             /* node -> index within its layer */
+var LAY_BC     : [u32; 2048]             /* node -> barycentre (current pass) */
+var LAY_DEG    : [u32; 2048]
+var LAY_ASTART : [u32; 2049]             /* CSR adjacency start */
+var LAY_ACUR   : [u32; 2048]             /* CSR fill cursor */
+var LAY_ADJ    : [u32; 8192]             /* 4096 edges x 2 directions */
+var LAY_COL    : [u32; 2048]
+var LAY_ROW    : [u32; 2048]
+var LAY_KEY    : [u32; 2048]             /* stable identity key = hash(name): makes the layout a pure
+                                            function of (names, edges), invariant to node-id assignment */
+var LAY_NAME   : [u8; 64]
+var LAY_MAXL   : u32 = 0u32
+var LAY_N      : u32 = 0u32
+
+var LAY_COSQ      : [i32; 65]            /* quarter-wave cosine table, Q12 (cos(i*pi/128), i=0..64) */
+var LAY_COS_READY : u32 = 0u32
+var LAY_PROJ      : u32 = 1u32           /* 0 = stripes, 1 = radial/orbital (default) */
+var LAY_LRAD      : [u32; 128]           /* equal-area ring radius per stratum (radial projection) */
+
+fn lay_clamp_level(v: u32) -> u32 {
+    let l : u32 = satlas_level(v)
+    if l >= LAY_LMAX { return LAY_LMAX - 1u32 }
+    return l
+}
+
+/* stable identity key of node v = FNV-1a hash of its name (content, not node id). */
+fn lay_name_key(v: u32) -> u32 {
+    let np : u64 = (&LAY_NAME as u64)
+    let ln : u64 = satlas_name_into(v, np, 64u64)
+    let p : *u8 = np as *u8
+    let mut h : u64 = FNV_OFF
+    let mut i : u64 = 0u64
+    while i < ln { h = (h ^ (p[i] as u64)) * FNV_PRIME  i = i + 1u64 }
+    return h as u32
+}
+
+/* Build the Q12 quarter cosine table by the rotation recurrence (no float, no hardcoded table): start
+ * at angle 0 and rotate by Delta = pi/128 sixty-four times.  seeds cos(Delta)~4095/4096, sin~101/4096.
+ * Deterministic integer -> byte-identical every run; tiny rounding drift is fixed + harmless. */
+fn lay_cos_init() -> i32 {
+    if LAY_COS_READY == 1u32 { return 0i32 }
+    let cd : i64 = 4095i64
+    let sd : i64 = 101i64
+    let mut c : i64 = 4096i64
+    let mut s : i64 = 0i64
+    LAY_COSQ[0u64] = 4096i32
+    let mut i : u32 = 1u32
+    while i <= 64u32 {
+        let nc : i64 = (c * cd - s * sd + 2048i64) / 4096i64
+        let ns : i64 = (s * cd + c * sd + 2048i64) / 4096i64
+        c = nc
+        s = ns
+        LAY_COSQ[i as u64] = c as i32
+        i = i + 1u32
+    }
+    LAY_COS_READY = 1u32
+    return 0i32
+}
+
+/* cos(idx * 2pi/256) in Q12, via quarter-wave symmetry. */
+fn lay_cos256(idx: u32) -> i32 {
+    let a : u32 = idx & 255u32
+    if a < 64u32 { return LAY_COSQ[a as u64] }
+    if a < 128u32 { return 0i32 - LAY_COSQ[(128u32 - a) as u64] }
+    if a < 192u32 { return 0i32 - LAY_COSQ[(a - 128u32) as u64] }
+    return LAY_COSQ[(256u32 - a) as u64]
+}
+
+/* sin(theta) = cos(theta - pi/2): shift the index by -64 (== +192 mod 256). */
+fn lay_sin256(idx: u32) -> i32 { return lay_cos256((idx + 192u32) & 255u32) }
+
+/* integer floor(sqrt(x)) via Newton's method (converges from above; stops when it stops decreasing). */
+fn lay_isqrt(x: u64) -> u64 {
+    if x < 2u64 { return x }
+    let mut r : u64 = x
+    let mut last : u64 = x
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        last = r
+        r = (r + x / r) / 2u64
+        if r >= last { go = 0u32 }
+    }
+    return last
+}
+
+/* bucket nodes by stratum, fill LAY_BYL in node-id order, set LAY_ORDER + cached LAY_LEVEL. */
+fn lay_bucket() -> i32 {
+    let n : u32 = satlas_node_count()
+    LAY_N = n
+    let mut i : u32 = 0u32
+    while i < LAY_LMAX { LAY_LCOUNT[i as u64] = 0u32  i = i + 1u32 }
+    /* pass 1: cache raw levels and find the max FINITE stratum.  satlas_level returns ~NCOUNT for a
+     * cyclic / above-cycle node (unbounded depth) -- those must NOT define the vertical scale or they
+     * squish every real stratum into a sliver. */
+    let mut maxfin : u32 = 0u32
+    let mut v : u32 = 0u32
+    while v < n {
+        let raw : u32 = satlas_level(v)
+        LAY_LEVEL[v as u64] = raw
+        if raw < LAY_LMAX { if raw > maxfin { maxfin = raw } }
+        v = v + 1u32
+    }
+    let mut cyc : u32 = maxfin + 1u32            /* the dedicated CYCLIC band, just above the strata */
+    if cyc >= LAY_LMAX { cyc = LAY_LMAX - 1u32 }
+    /* pass 2: remap the saturated (cyclic) nodes into that one band, count, bound the max layer */
+    let mut maxl : u32 = 0u32
+    v = 0u32
+    while v < n {
+        let raw : u32 = LAY_LEVEL[v as u64]
+        let mut l : u32 = raw
+        if raw >= LAY_LMAX { l = cyc }
+        LAY_LEVEL[v as u64] = l
+        LAY_LCOUNT[l as u64] = LAY_LCOUNT[l as u64] + 1u32
+        if l > maxl { maxl = l }
+        v = v + 1u32
+    }
+    LAY_MAXL = maxl
+    let mut acc : u32 = 0u32
+    let mut L : u32 = 0u32
+    while L <= maxl {
+        LAY_LSTART[L as u64] = acc
+        LAY_CUR[L as u64] = acc
+        acc = acc + LAY_LCOUNT[L as u64]
+        L = L + 1u32
+    }
+    v = 0u32
+    while v < n {
+        let l : u32 = LAY_LEVEL[v as u64]
+        let pos : u32 = LAY_CUR[l as u64]
+        LAY_BYL[pos as u64] = v
+        LAY_CUR[l as u64] = pos + 1u32
+        v = v + 1u32
+    }
+    L = 0u32
+    while L <= maxl {
+        let st : u32 = LAY_LSTART[L as u64]
+        let m  : u32 = LAY_LCOUNT[L as u64]
+        let mut k : u32 = 0u32
+        while k < m { LAY_ORDER[LAY_BYL[(st + k) as u64] as u64] = k  k = k + 1u32 }
+        L = L + 1u32
+    }
+    return 0i32
+}
+
+/* build the undirected CSR adjacency (each valid edge contributes both directions). */
+fn lay_build_adj() -> i32 {
+    let n : u32 = LAY_N
+    let mut v : u32 = 0u32
+    while v < n { LAY_DEG[v as u64] = 0u32  v = v + 1u32 }
+    let e : u32 = satlas_edge_count()
+    let mut i : u32 = 0u32
+    while i < e {
+        let f : u32 = satlas_edge_from(i)
+        let t : u32 = satlas_edge_to(i)
+        if f < n { if t < n {
+            LAY_DEG[f as u64] = LAY_DEG[f as u64] + 1u32
+            LAY_DEG[t as u64] = LAY_DEG[t as u64] + 1u32
+        } }
+        i = i + 1u32
+    }
+    LAY_ASTART[0u64] = 0u32
+    v = 0u32
+    while v < n { LAY_ASTART[(v + 1u32) as u64] = LAY_ASTART[v as u64] + LAY_DEG[v as u64]  v = v + 1u32 }
+    v = 0u32
+    while v < n { LAY_ACUR[v as u64] = LAY_ASTART[v as u64]  v = v + 1u32 }
+    i = 0u32
+    while i < e {
+        let f : u32 = satlas_edge_from(i)
+        let t : u32 = satlas_edge_to(i)
+        if f < n { if t < n {
+            LAY_ADJ[LAY_ACUR[f as u64] as u64] = t
+            LAY_ACUR[f as u64] = LAY_ACUR[f as u64] + 1u32
+            LAY_ADJ[LAY_ACUR[t as u64] as u64] = f
+            LAY_ACUR[t as u64] = LAY_ACUR[t as u64] + 1u32
+        } }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* normalised within-layer position of u, scaled to [0, LAY_SCALE). */
+fn lay_norm_pos(u: u32) -> u32 {
+    let l : u32 = LAY_LEVEL[u as u64]
+    let m : u32 = LAY_LCOUNT[l as u64]
+    if m == 0u32 { return 0u32 }
+    let ord : u32 = LAY_ORDER[u as u64]
+    return ((ord + ord + 1u32) * LAY_SCALE) / (m + m)
+}
+
+/* barycentre of v = mean neighbour normalised-position (own position if isolated). */
+fn lay_barycentre(v: u32) -> u32 {
+    let d : u32 = LAY_DEG[v as u64]
+    if d == 0u32 { return lay_norm_pos(v) }
+    let a : u32 = LAY_ASTART[v as u64]
+    let b : u32 = LAY_ASTART[(v + 1u32) as u64]
+    let mut sum : i64 = 0i64
+    let mut j : u32 = a
+    while j < b {
+        let u : u32 = LAY_ADJ[j as u64]
+        sum = sum + (lay_norm_pos(u) as i64)
+        j = j + 1u32
+    }
+    let r : i64 = sum / (d as i64)
+    return r as u32
+}
+
+/* stable insertion sort of layer L's segment by (LAY_BC, node-id) ascending; reassign LAY_ORDER.
+ * The `moving` flag DRIVES the while condition (the active-flag trap). */
+fn lay_sort_layer(L: u32) -> i32 {
+    let st : u32 = LAY_LSTART[L as u64]
+    let m  : u32 = LAY_LCOUNT[L as u64]
+    let mut k : u32 = 1u32
+    while k < m {
+        let key   : u32 = LAY_BYL[(st + k) as u64]
+        let keybc : u32 = LAY_BC[key as u64]
+        let mut j : u32 = k
+        let mut moving : u32 = 1u32
+        while moving == 1u32 {
+            if j == 0u32 { moving = 0u32 } else {
+                let prev : u32 = LAY_BYL[(st + j - 1u32) as u64]
+                let pbc  : u32 = LAY_BC[prev as u64]
+                let mut gt : u32 = 0u32
+                if pbc > keybc { gt = 1u32 } else { if pbc == keybc {
+                    let pk : u32 = LAY_KEY[prev as u64]
+                    let kk : u32 = LAY_KEY[key as u64]
+                    if pk > kk { gt = 1u32 } else { if pk == kk { if prev > key { gt = 1u32 } } }
+                } }
+                if gt == 1u32 { LAY_BYL[(st + j) as u64] = prev  j = j - 1u32 } else { moving = 0u32 }
+            }
+        }
+        LAY_BYL[(st + j) as u64] = key
+        k = k + 1u32
+    }
+    let mut q : u32 = 0u32
+    while q < m { LAY_ORDER[LAY_BYL[(st + q) as u64] as u64] = q  q = q + 1u32 }
+    return 0i32
+}
+
+/* compute identity keys and seed each layer's initial order by them, so the final layout depends only
+ * on (names, edges) -- never on node-id assignment -- and is byte-stable under any directory walk order. */
+fn lay_seed_keys() -> i32 {
+    let n : u32 = LAY_N
+    let mut v : u32 = 0u32
+    while v < n { LAY_KEY[v as u64] = lay_name_key(v)  v = v + 1u32 }
+    let mut L : u32 = 0u32
+    while L <= LAY_MAXL {
+        let st : u32 = LAY_LSTART[L as u64]
+        let m  : u32 = LAY_LCOUNT[L as u64]
+        let mut k : u32 = 0u32
+        while k < m { let vv : u32 = LAY_BYL[(st + k) as u64]  LAY_BC[vv as u64] = LAY_KEY[vv as u64]  k = k + 1u32 }
+        lay_sort_layer(L)
+        L = L + 1u32
+    }
+    return 0i32
+}
+
+/* recompute every node's barycentre in layer L and sort it. */
+fn lay_order_layer(L: u32) -> i32 {
+    let st : u32 = LAY_LSTART[L as u64]
+    let m  : u32 = LAY_LCOUNT[L as u64]
+    let mut k : u32 = 0u32
+    while k < m {
+        let v : u32 = LAY_BYL[(st + k) as u64]
+        LAY_BC[v as u64] = lay_barycentre(v)
+        k = k + 1u32
+    }
+    lay_sort_layer(L)
+    return 0i32
+}
+
+/* LAY_SWEEPS down+up passes of barycentric reordering. */
+fn lay_sweep() -> i32 {
+    let mut pass : u32 = 0u32
+    while pass < LAY_SWEEPS {
+        let mut L : u32 = 0u32
+        while L <= LAY_MAXL { lay_order_layer(L)  L = L + 1u32 }
+        let mut Lp : u32 = LAY_MAXL + 1u32
+        while Lp > 0u32 { Lp = Lp - 1u32  lay_order_layer(Lp) }
+        pass = pass + 1u32
+    }
+    return 0i32
+}
+
+/* STRIPES: row = stratum band; col = even spread of the final within-layer order. */
+fn lay_assign_stripes() -> i32 {
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+    let span_x : u32 = w - 1u32 - (LAY_MARGIN + LAY_MARGIN)
+    let span_y : u32 = h - 1u32 - (LAY_MARGIN + LAY_MARGIN)
+    let base_y : u32 = h - 1u32 - LAY_MARGIN
+    let mut md : u32 = LAY_MAXL
+    if md == 0u32 { md = 1u32 }
+    let mut L : u32 = 0u32
+    while L <= LAY_MAXL {
+        let st : u32 = LAY_LSTART[L as u64]
+        let m  : u32 = LAY_LCOUNT[L as u64]
+        let rowL : u32 = base_y - ((L * span_y) / md)
+        let mut k : u32 = 0u32
+        while k < m {
+            let v : u32 = LAY_BYL[(st + k) as u64]
+            let col : u32 = LAY_MARGIN + (((k + k + 1u32) * span_x) / (m + m))
+            LAY_COL[v as u64] = col
+            LAY_ROW[v as u64] = rowL
+            k = k + 1u32
+        }
+        L = L + 1u32
+    }
+    return 0i32
+}
+
+/* RADIAL / ORBITAL: stratum -> RADIUS (foundational core at centre, apps + cyclic band orbiting out);
+ * within-layer order -> ANGLE around the ring.  Connected nodes share an angle across rings, so edges
+ * become short radial spokes -> a mandala, not a hairball.  A ring also holds a fat layer far better
+ * than a line (circumference >> width), dissolving the skew. */
+fn lay_assign_radial() -> i32 {
+    let w : u32 = canvas_w()
+    let h : u32 = canvas_h()
+    let cx : i64 = (w / 2u32) as i64
+    let cy : i64 = (h / 2u32) as i64
+    let mut rmax : u32 = w / 2u32
+    if (h / 2u32) < rmax { rmax = h / 2u32 }
+    rmax = rmax - LAY_MARGIN
+    let rmin : u32 = 4u32
+    let total : u32 = LAY_N
+    if total == 0u32 { return 0i32 }
+    let rmax2 : u64 = (rmax as u64) * (rmax as u64)
+    /* EQUAL-AREA ring radii: a layer's ring sits where the cumulative DISK AREA matches its cumulative
+     * node fraction (r = rmax*sqrt(cumfrac)), so a populous layer is pushed outward to a longer
+     * circumference -- dissolving the inner-ring crowding that a linear radius produced. */
+    let mut cum : u32 = 0u32
+    let mut L : u32 = 0u32
+    while L <= LAY_MAXL {
+        let m : u32 = LAY_LCOUNT[L as u64]
+        let mid : u64 = (cum as u64) + ((m as u64) / 2u64)
+        let mut rL : u32 = lay_isqrt((mid * rmax2) / (total as u64)) as u32
+        if rL < rmin { rL = rmin }
+        if rL > rmax { rL = rmax }
+        LAY_LRAD[L as u64] = rL
+        cum = cum + m
+        L = L + 1u32
+    }
+    let n : u32 = total
+    let mut v : u32 = 0u32
+    while v < n {
+        let lv  : u32 = LAY_LEVEL[v as u64]
+        let m   : u32 = LAY_LCOUNT[lv as u64]
+        let ord : u32 = LAY_ORDER[v as u64]
+        let radius : i64 = LAY_LRAD[lv as u64] as i64
+        let mut aidx : u32 = 0u32
+        if m > 0u32 { aidx = (ord * 256u32) / m }
+        aidx = (aidx + (lv * 40u32)) & 255u32        /* golden-ish per-ring rotation: stagger rings so
+                                                       * spokes don't align radially (prettier, fewer overlaps) */
+        let cosv : i64 = lay_cos256(aidx) as i64
+        let sinv : i64 = lay_sin256(aidx) as i64
+        let x : i64 = cx + ((radius * cosv) / 4096i64)
+        let y : i64 = cy + ((radius * sinv) / 4096i64)
+        let mut xc : u32 = 0u32
+        if x > 0i64 { xc = x as u32 }
+        if xc >= w { xc = w - 1u32 }
+        let mut yc : u32 = 0u32
+        if y > 0i64 { yc = y as u32 }
+        if yc >= h { yc = h - 1u32 }
+        LAY_COL[v as u64] = xc
+        LAY_ROW[v as u64] = yc
+        v = v + 1u32
+    }
+    return 0i32
+}
+
+/* dispatch on the projection mode (default radial). */
+fn lay_assign_positions() -> i32 {
+    if LAY_PROJ == 0u32 { return lay_assign_stripes() }
+    lay_cos_init()
+    return lay_assign_radial()
+}
+
+/* select the projection: 0 = stripes (layered), 1 = radial/orbital.  Takes effect on the next build. */
+fn layout_set_proj(mode: u32) -> i32 @export { LAY_PROJ = mode  return 0i32 }
+
+/* THE LAYOUT: bucket -> adjacency -> barycentric sweeps -> positions.  Returns 0 (or -1 over capacity). */
+fn layout_build() -> i32 @export {
+    if satlas_node_count() > LAY_NMAX { return -1i32 }
+    lay_bucket()
+    lay_seed_keys()
+    lay_build_adj()
+    lay_sweep()
+    lay_assign_positions()
+    return 0i32
+}
+
+/* BASELINE (for the quality report): bucket + positions with NO barycentric sweeps -- the un-ordered
+ * layout, so a caller can compare its edge-span against the swept layout's. */
+fn layout_build_identity() -> i32 @export {
+    if satlas_node_count() > LAY_NMAX { return -1i32 }
+    lay_bucket()
+    lay_seed_keys()
+    lay_build_adj()
+    lay_assign_positions()
+    return 0i32
+}
+
+fn layout_col(v: u32) -> u32 @export { if v >= LAY_N { return 0u32 }  return LAY_COL[v as u64] }
+fn layout_row(v: u32) -> u32 @export { if v >= LAY_N { return 0u32 }  return LAY_ROW[v as u64] }
+fn layout_node_count() -> u32 @export { return LAY_N }
+fn layout_max_layer() -> u32 @export { return LAY_MAXL }
+/* the REMAPPED stratum of node v (cyclic/above-cycle nodes folded into the top band) -- the same band
+ * the radial/stripe projection uses, so a temporal reveal-by-stratum matches the picture. */
+fn layout_node_level(v: u32) -> u32 @export { if v >= LAY_N { return 0u32 }  return LAY_LEVEL[v as u64] }
+fn layout_layer_count(L: u32) -> u32 @export { if L >= LAY_LMAX { return 0u32 }  return LAY_LCOUNT[L as u64] }
+
+/* the largest single-stratum node count (skew indicator -- a fat layer is a dense line whatever the order). */
+fn layout_layer_max_count() -> u32 @export {
+    let mut mx : u32 = 0u32
+    let mut L : u32 = 0u32
+    while L <= LAY_MAXL {
+        let c : u32 = LAY_LCOUNT[L as u64]
+        if c > mx { mx = c }
+        L = L + 1u32
+    }
+    return mx
+}
+
+/* total within-layer ORDER distance over valid edges (each endpoint's normalised position) -- a
+ * projection-INDEPENDENT crossing/spread proxy, so the quality holds under stripes OR radial.
+ * REPORTED in the caption, and the 1986 gate asserts barycentre does not worsen it vs the baseline. */
+fn layout_edge_span() -> u64 @export {
+    let n : u32 = LAY_N
+    let e : u32 = satlas_edge_count()
+    let mut sum : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < e {
+        let f : u32 = satlas_edge_from(i)
+        let t : u32 = satlas_edge_to(i)
+        if f < n { if t < n {
+            let pf : u32 = lay_norm_pos(f)
+            let pt : u32 = lay_norm_pos(t)
+            if pf >= pt { sum = sum + ((pf - pt) as u64) } else { sum = sum + ((pt - pf) as u64) }
+        } }
+        i = i + 1u32
+    }
+    return sum
+}
+
+/* FNV signature of all positions -- equal iff two builds are byte-identical (determinism gate). */
+fn layout_sig() -> u64 @export {
+    let mut h : u64 = FNV_OFF
+    let mut v : u32 = 0u32
+    while v < LAY_N {
+        h = (h ^ (LAY_COL[v as u64] as u64)) * FNV_PRIME
+        h = (h ^ (LAY_ROW[v as u64] as u64)) * FNV_PRIME
+        v = v + 1u32
+    }
+    return h
+}
+
+/* SELF-TEST of the sort routine on a known segment (proves the sort sorts -- a broken sort otherwise
+ * produces deterministic garbage that still places every node).  Sorts node ids {10,11,12,13} with
+ * barycentres {3,1,2,1}; correct stable result is {11,13,12,10} (bc 1,1 tie -> id 11<13, then 2, 3).
+ * Returns 1 iff correct.  CLOBBERS module state -- call before layout_build. */
+fn layout_sort_check() -> u32 @export {
+    LAY_LSTART[0u64] = 0u32
+    LAY_LCOUNT[0u64] = 4u32
+    LAY_BYL[0u64] = 10u32  LAY_BYL[1u64] = 11u32  LAY_BYL[2u64] = 12u32  LAY_BYL[3u64] = 13u32
+    LAY_BC[10u64] = 3u32   LAY_BC[11u64] = 1u32   LAY_BC[12u64] = 2u32   LAY_BC[13u64] = 1u32
+    LAY_KEY[10u64] = 10u32 LAY_KEY[11u64] = 11u32 LAY_KEY[12u64] = 12u32 LAY_KEY[13u64] = 13u32
+    lay_sort_layer(0u32)
+    if LAY_BYL[0u64] != 11u32 { return 0u32 }
+    if LAY_BYL[1u64] != 13u32 { return 0u32 }
+    if LAY_BYL[2u64] != 12u32 { return 0u32 }
+    if LAY_BYL[3u64] != 10u32 { return 0u32 }
+    return 1u32
+}
+
+/* after a build, check layer 0's final order is non-decreasing in the STORED barycentres (the values
+ * the last sort actually used).  Stored LAY_BC[v] and LAY_ORDER are written together by the layer's
+ * last lay_order_layer call and never change afterwards, so this reliably proves the sort ordered the
+ * real data correctly -- robust to intra-layer edges (which make a FRESH recompute drift).  The unit
+ * test (layout_sort_check) proves the routine; this proves it ran correctly on the live graph.
+ * Returns 1 iff monotone. */
+fn layout_layer0_monotone() -> u32 @export {
+    let st : u32 = LAY_LSTART[0u64]
+    let m  : u32 = LAY_LCOUNT[0u64]
+    if m < 2u32 { return 1u32 }
+    let mut previd : u32 = LAY_BYL[st as u64]
+    let mut prevbc : u32 = LAY_BC[previd as u64]
+    let mut k : u32 = 1u32
+    while k < m {
+        let v  : u32 = LAY_BYL[(st + k) as u64]
+        let bc : u32 = LAY_BC[v as u64]
+        /* mirror the sort's TOTAL order: (barycentre, identity-key, node-id) ascending */
+        if bc < prevbc { return 0u32 }
+        if bc == prevbc {
+            let pk : u32 = LAY_KEY[previd as u64]
+            let kk : u32 = LAY_KEY[v as u64]
+            if kk < pk { return 0u32 }
+            if kk == pk { if v < previd { return 0u32 } }
+        }
+        prevbc = bc
+        previd = v
+        k = k + 1u32
+    }
+    return 1u32
+}

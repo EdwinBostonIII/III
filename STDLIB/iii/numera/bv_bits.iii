@@ -837,6 +837,73 @@ fn bb_struct_all_widths(a: u32, b: u32) -> u8 @export {
     return 1u8
 }
 
+const BB_SI_MAX : u32 = 4096u32
+var BB_SI_ST : [u32; 4096]            /* the serialisation work stack (operands have smaller ids -> acyclic) */
+
+/* SERIALISE root's structural tree-unfolding into `out` (at most cap bytes); return the byte length, or 0 on
+ * overflow.  Two circuits produce IDENTICAL bytes IFF structurally identical -- same kinds, var indices, const
+ * values, shift amounts, and shape (this is exactly what bb_struct_equal compares).  So sha256(these bytes) is a
+ * SOUND content-address for ANY circuit, coupled or not: same address => same structure => same function => same
+ * equivalence verdict.  A commuted or differently-shared form yields DIFFERENT bytes -> a MISS, never a false
+ * hit.  The encoding is unambiguous (each kind's arity is fixed), so distinct structures never collide. */
+fn bb_struct_into(root: u32, out: *u8, cap: u32) -> u32 @export {
+    let mut sp : u32 = 0u32
+    BB_SI_ST[0u64] = root  sp = 1u32
+    let mut n : u32 = 0u32
+    let m : u64 = bb_wmask()
+    while sp > 0u32 {
+        sp = sp - 1u32
+        let x : u32 = BB_SI_ST[sp as u64]
+        if x >= BB_NN {
+            if (n + 1u32) > cap { return 0u32 }
+            out[n as u64] = 0xFFu8  n = n + 1u32
+        } else {
+            let k : u32 = BB_NKIND[x as u64]
+            if (n + 1u32) > cap { return 0u32 }
+            out[n as u64] = k as u8  n = n + 1u32
+            if k == EK_VAR {
+                if (n + 4u32) > cap { return 0u32 }
+                let vi : u32 = BB_NA[x as u64]
+                out[n as u64]          = (vi & 0xFFu32) as u8
+                out[(n + 1u32) as u64] = ((vi >> 8u32)  & 0xFFu32) as u8
+                out[(n + 2u32) as u64] = ((vi >> 16u32) & 0xFFu32) as u8
+                out[(n + 3u32) as u64] = ((vi >> 24u32) & 0xFFu32) as u8
+                n = n + 4u32
+            } else { if k == EK_CONST {
+                if (n + 8u32) > cap { return 0u32 }
+                let cv : u64 = BB_NCONST[x as u64] & m
+                let mut bi : u32 = 0u32
+                while bi < 8u32 { out[(n + bi) as u64] = ((cv >> ((bi as u64) * 8u64)) & 0xFFu64) as u8  bi = bi + 1u32 }
+                n = n + 8u32
+            } else { if k == EK_NOT {
+                if sp >= BB_SI_MAX { return 0u32 }
+                BB_SI_ST[sp as u64] = BB_NA[x as u64]  sp = sp + 1u32
+            } else { if k == EK_SHL {
+                if (n + 8u32) > cap { return 0u32 }
+                let sa : u64 = BB_NK[x as u64]
+                let mut bj : u32 = 0u32
+                while bj < 8u32 { out[(n + bj) as u64] = ((sa >> ((bj as u64) * 8u64)) & 0xFFu64) as u8  bj = bj + 1u32 }
+                n = n + 8u32
+                if sp >= BB_SI_MAX { return 0u32 }
+                BB_SI_ST[sp as u64] = BB_NA[x as u64]  sp = sp + 1u32
+            } else { if k == EK_SHR {
+                if (n + 8u32) > cap { return 0u32 }
+                let sb : u64 = BB_NK[x as u64]
+                let mut bk : u32 = 0u32
+                while bk < 8u32 { out[(n + bk) as u64] = ((sb >> ((bk as u64) * 8u64)) & 0xFFu64) as u8  bk = bk + 1u32 }
+                n = n + 8u32
+                if sp >= BB_SI_MAX { return 0u32 }
+                BB_SI_ST[sp as u64] = BB_NA[x as u64]  sp = sp + 1u32
+            } else { if bb_kind_arity2(k) == 1u8 {
+                if (sp + 1u32) >= BB_SI_MAX { return 0u32 }
+                BB_SI_ST[sp as u64] = BB_NA[x as u64]  sp = sp + 1u32
+                BB_SI_ST[sp as u64] = BB_NB[x as u64]  sp = sp + 1u32
+            } } } } } }
+        }
+    }
+    return n
+}
+
 /* PER-CIRCUIT GATE COST: the number of DISTINCT gate nodes (AND/OR/XOR/NOT/SHL/SHR/ADD/SUB/MUL) in the transitive
  * fan-in of `root` -- the true DAG gate count (sharing counted once), the minimal-cost metric a synthesizer ranks
  * by.  No stack: operands always have smaller ids than their node, so a single high-to-low sweep marks the cone. */

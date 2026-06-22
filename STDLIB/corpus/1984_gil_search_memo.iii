@@ -1,0 +1,62 @@
+/* 1984_gil_search_memo.iii  --  the gil_forge equivalence checks now flow through the EIDOS memoisation
+ * substrate, soundly, via a STRUCTURAL content-address (sound for the BIT-COUPLED circuits the search/law
+ * functions build -- where a truth-table signature could collide).
+ *
+ * gild_demorgan / gild_assoc each PROVE a fixed Boolean law with SAT-backed equivalence checks (now eqv_eq).
+ * Proving the SAME law twice issues the IDENTICAL queries twice -> the second proof RECALLS every verdict and
+ * SKIPS the SAT, with the law's truth (the verdict) unchanged.
+ *
+ *   code 11: first De Morgan proof -> holds; the equivalence SATs run (misses), no hits yet
+ *   code 12: second proof -> SAME verdict (sound); code 13: every query recalled, no SAT re-ran (saved)
+ *   code 14/15: the same, for associativity -> the saving generalises across the law functions
+ * exit 99 = the gil_forge search/law equivalence checks save real SAT work, soundly, with verdicts unchanged.
+ */
+module m1984
+
+extern @abi(c-msvc-x64) fn gild_demorgan() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn gild_assoc() -> u8 from "invent.iii"
+extern @abi(c-msvc-x64) fn coin_reset() -> i32 from "coincidence.iii"
+extern @abi(c-msvc-x64) fn eqv_reset() -> i32 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_eq(a: u32, b: u32) -> u8 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_hits() -> u64 from "memo.iii"
+extern @abi(c-msvc-x64) fn eqv_misses() -> u64 from "memo.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+
+fn main() -> u64 {
+    coin_reset()
+    eqv_reset()
+
+    /* FIRST De Morgan proof -> the equivalence SATs run */
+    if gild_demorgan() != 1u8 { return 11u64 }        /* law holds (verdict unchanged by memo) */
+    let m1 : u64 = eqv_misses()
+    if m1 == 0u64 { return 11u64 }                     /* real SATs ran */
+    if eqv_hits() != 0u64 { return 11u64 }
+
+    /* SECOND proof of the SAME law -> every query recalls, SAT skipped */
+    if gild_demorgan() != 1u8 { return 12u64 }         /* SAME verdict (sound) */
+    if eqv_misses() != m1 { return 13u64 }             /* no new SAT ran */
+    if eqv_hits() != m1 { return 13u64 }               /* every equivalence recalled = SAT saved */
+
+    /* generalises: associativity, a DIFFERENT set of queries -> own misses, then recalls */
+    let h1 : u64 = eqv_hits()
+    if gild_assoc() != 1u8 { return 14u64 }            /* its own queries -> misses (not false hits) */
+    if eqv_misses() <= m1 { return 14u64 }
+    let m2 : u64 = eqv_misses()
+    if gild_assoc() != 1u8 { return 15u64 }            /* second proof -> recalls */
+    if eqv_misses() != m2 { return 15u64 }
+    if eqv_hits() <= h1 { return 15u64 }
+
+    /* SOUNDNESS: the structural key distinguishes distinct queries -> NO false cross-recall.
+     * Memoise the verdict of (x,x)=equal, then ask (x,y): it MUST return its own verdict (not-equal),
+     * never a false recall of the (x,x) verdict.  A broken/colliding key would return 1 here. */
+    coin_reset()
+    eqv_reset()
+    bb_reset(64u64)
+    let xv : u32 = bb_var(0u32)
+    let yv : u32 = bb_var(1u32)
+    if eqv_eq(xv, xv) != 1u8 { return 16u64 }          /* x == x -> 1, memoised */
+    if eqv_eq(xv, yv) != 0u8 { return 17u64 }          /* x != y -> MUST be 0, not a false recall of (x,x)=1 */
+
+    return 99u64
+}

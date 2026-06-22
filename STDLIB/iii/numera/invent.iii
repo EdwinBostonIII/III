@@ -34,7 +34,7 @@ extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
 extern @abi(c-msvc-x64) fn bb_not(a: u32) -> u32 from "bv_bits.iii"
-extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn eqv_eq(a: u32, b: u32) -> u8 from "memo.iii"
 /* the adoption soundness gates consult the EIDOS memoisation substrate: a repeated equivalence proof is
  * RECALLED by content-address, skipping the SAT solve.  eqv_equal returns bb_equal's verdict EXACTLY (sound);
  * it only removes the re-solving.  This is the EIDOS-consulted-substrate pattern (a decision faculty consults
@@ -99,7 +99,7 @@ fn gil_consider(k: u64, kind: u32, a: u64, b: u64) -> i32 {
     let target : u32 = bb_mul(x, bb_const(k))
     let cand : u32 = gil_build(kind, x, a, b)
     GIL_KERNEL_CALLS = GIL_KERNEL_CALLS + 1u64
-    if bb_equal(target, cand) == 1u8 {
+    if eqv_eq(target, cand) == 1u8 {
         GIL_BEST_COST = c
         GIL_BEST_KIND = kind
         GIL_BEST_A = a
@@ -190,7 +190,7 @@ fn gil_refutes_false(k: u64, a: u64) -> u8 @export {
     let x : u32 = bb_var(0u32)
     let target : u32 = bb_mul(x, bb_const(k))
     let cand : u32 = bb_sub(bb_shl(x, a), x)
-    if bb_equal(target, cand) == 0u8 { return 1u8 }
+    if eqv_eq(target, cand) == 0u8 { return 1u8 }
     return 0u8
 }
 
@@ -263,7 +263,7 @@ fn gilx_consider(kind: u32, cost: u32, mode: u32, a: u32, b: u32) -> i32 {
     let mut cand : u32 = 0u32
     if mode == 99u32 { cand = gilx_leaf(a, x, y) } else { cand = gilx_op(mode, gilx_leaf(a, x, y), gilx_leaf(b, x, y)) }
     GILX_KERNEL_CALLS = GILX_KERNEL_CALLS + 1u64
-    if bb_equal(target, cand) == 1u8 {
+    if eqv_eq(target, cand) == 1u8 {
         GILX_BEST_COST = cost
         GILX_BEST_MODE = mode
         GILX_BEST_A = a
@@ -343,7 +343,7 @@ fn gilr_proves(k: u64, c: u64, cc: u64) -> u8 @export {
     let lhs : u32 = bb_sub(x, r)
     let p   : u64 = twok - c
     let rhs : u32 = bb_mul(hi, bb_const(p))
-    return bb_equal(lhs, rhs)
+    return eqv_eq(lhs, rhs)
 }
 
 /* the op-cost of the fold for multiplier cc: and + shr + add, plus a multiply iff cc != 1. */
@@ -634,7 +634,7 @@ fn gilw_consider(kind: u32, mode: u32, oo: u32, aop: u32, ai: u32, aj: u32, bop:
     let target : u32 = gilw_target(kind, a, b, c)
     let cand : u32 = gilw_build(mode, oo, aop, ai, aj, bop, bi, bj, a, b, c)
     GILW_KCALLS = GILW_KCALLS + 1u64
-    if bb_equal(target, cand) == 1u8 {
+    if eqv_eq(target, cand) == 1u8 {
         GILW_BEST_COST = cost
         GILW_FOUND = 1u8
         GILW_B_MODE = mode  GILW_B_OO = oo  GILW_B_AOP = aop  GILW_B_BOP = bop
@@ -760,7 +760,7 @@ fn gild_rotdual_find(k: u64) -> i64 @export {
     while j < GILD_W {
         bb_reset(GILD_W)
         let x : u32 = bb_var(0u32)
-        if bb_equal(gild_rotl(x, k), gild_rotr(x, j)) == 1u8 { return j as i64 }
+        if eqv_eq(gild_rotl(x, k), gild_rotr(x, j)) == 1u8 { return j as i64 }
         j = j + 1u64
     }
     return -1i64
@@ -786,7 +786,7 @@ fn gild_selfdual_k() -> i64 @export {
     while k < GILD_W {
         bb_reset(GILD_W)
         let x : u32 = bb_var(0u32)
-        if bb_equal(gild_rotl(x, k), gild_rotr(x, k)) == 1u8 { return k as i64 }
+        if eqv_eq(gild_rotl(x, k), gild_rotr(x, k)) == 1u8 { return k as i64 }
         k = k + 1u64
     }
     return -1i64
@@ -806,9 +806,9 @@ fn gild_selflaw_rhs(op: u32) -> i32 @export {
     bb_reset(GILD_W)
     let x : u32 = bb_var(0u32)
     let lhs : u32 = gild_selflaw_lhs(op, x)
-    if bb_equal(lhs, bb_const(0u64)) == 1u8 { return 0i32 }                       /* collapses to 0 */
-    if bb_equal(lhs, bb_var(0u32)) == 1u8 { return 1i32 }                         /* collapses to x */
-    if bb_equal(lhs, bb_const(0xFFFFFFFFu64)) == 1u8 { return 2i32 }              /* collapses to all-ones */
+    if eqv_eq(lhs, bb_const(0u64)) == 1u8 { return 0i32 }                       /* collapses to 0 */
+    if eqv_eq(lhs, bb_var(0u32)) == 1u8 { return 1i32 }                         /* collapses to x */
+    if eqv_eq(lhs, bb_const(0xFFFFFFFFu64)) == 1u8 { return 2i32 }              /* collapses to all-ones */
     return -1i32
 }
 
@@ -951,7 +951,7 @@ fn gild_shiftmask_ok(k: u64) -> u8 {
     let maskval : u64 = (0xFFFFFFFFu64 << k) & 0xFFFFFFFFu64
     bb_reset(GILD_W)
     let x : u32 = bb_var(0u32)
-    return bb_equal(bb_shl(bb_shr(x, k), k), bb_and(x, bb_const(maskval)))
+    return eqv_eq(bb_shl(bb_shr(x, k), k), bb_and(x, bb_const(maskval)))
 }
 fn gild_shiftmask_count() -> u64 @export {
     let mut count : u64 = 0u64
@@ -968,11 +968,11 @@ fn gild_demorgan() -> u8 @export {
     bb_reset(GILD_W)
     let a : u32 = bb_var(0u32)
     let b : u32 = bb_var(1u32)
-    if bb_equal(bb_not(bb_and(a, b)), bb_or(bb_not(a), bb_not(b))) != 1u8 { return 0u8 }
+    if eqv_eq(bb_not(bb_and(a, b)), bb_or(bb_not(a), bb_not(b))) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)
     let b2 : u32 = bb_var(1u32)
-    return bb_equal(bb_not(bb_or(a2, b2)), bb_and(bb_not(a2), bb_not(b2)))
+    return eqv_eq(bb_not(bb_or(a2, b2)), bb_and(bb_not(a2), bb_not(b2)))
 }
 
 /* absorption: a|(a&b)==a  AND  a&(a|b)==a. */
@@ -980,11 +980,11 @@ fn gild_absorb() -> u8 @export {
     bb_reset(GILD_W)
     let a : u32 = bb_var(0u32)
     let b : u32 = bb_var(1u32)
-    if bb_equal(bb_or(a, bb_and(a, b)), a) != 1u8 { return 0u8 }
+    if eqv_eq(bb_or(a, bb_and(a, b)), a) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)
     let b2 : u32 = bb_var(1u32)
-    return bb_equal(bb_and(a2, bb_or(a2, b2)), a2)
+    return eqv_eq(bb_and(a2, bb_or(a2, b2)), a2)
 }
 
 /* distributivity: a&(b|c)==(a&b)|(a&c)  AND  a|(b&c)==(a|b)&(a|c). */
@@ -993,12 +993,12 @@ fn gild_distrib() -> u8 @export {
     let a : u32 = bb_var(0u32)
     let b : u32 = bb_var(1u32)
     let c : u32 = bb_var(2u32)
-    if bb_equal(bb_and(a, bb_or(b, c)), bb_or(bb_and(a, b), bb_and(a, c))) != 1u8 { return 0u8 }
+    if eqv_eq(bb_and(a, bb_or(b, c)), bb_or(bb_and(a, b), bb_and(a, c))) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)
     let b2 : u32 = bb_var(1u32)
     let c2 : u32 = bb_var(2u32)
-    return bb_equal(bb_or(a2, bb_and(b2, c2)), bb_and(bb_or(a2, b2), bb_or(a2, c2)))
+    return eqv_eq(bb_or(a2, bb_and(b2, c2)), bb_and(bb_or(a2, b2), bb_or(a2, c2)))
 }
 
 /* the XOR involution: (x^c)^c == x for all x -- xor-with-c is self-inverse (the cipher round's reversibility). */
@@ -1006,65 +1006,65 @@ fn gild_xor_involution(c: u64) -> u8 @export {
     bb_reset(GILD_W)
     let x  : u32 = bb_var(0u32)
     let cc : u32 = bb_const(c)
-    return bb_equal(bb_xor(bb_xor(x, cc), cc), x)
+    return eqv_eq(bb_xor(bb_xor(x, cc), cc), x)
 }
 
 /* associativity: (a&b)&c==a&(b&c), (a|b)|c==a|(b|c), (a^b)^c==a^(b^c).  1 iff all three proven. */
 fn gild_assoc() -> u8 @export {
     bb_reset(GILD_W)
     let a : u32 = bb_var(0u32)  let b : u32 = bb_var(1u32)  let c : u32 = bb_var(2u32)
-    if bb_equal(bb_and(bb_and(a, b), c), bb_and(a, bb_and(b, c))) != 1u8 { return 0u8 }
+    if eqv_eq(bb_and(bb_and(a, b), c), bb_and(a, bb_and(b, c))) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a1 : u32 = bb_var(0u32)  let b1 : u32 = bb_var(1u32)  let c1 : u32 = bb_var(2u32)
-    if bb_equal(bb_or(bb_or(a1, b1), c1), bb_or(a1, bb_or(b1, c1))) != 1u8 { return 0u8 }
+    if eqv_eq(bb_or(bb_or(a1, b1), c1), bb_or(a1, bb_or(b1, c1))) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)  let b2 : u32 = bb_var(1u32)  let c2 : u32 = bb_var(2u32)
-    return bb_equal(bb_xor(bb_xor(a2, b2), c2), bb_xor(a2, bb_xor(b2, c2)))
+    return eqv_eq(bb_xor(bb_xor(a2, b2), c2), bb_xor(a2, bb_xor(b2, c2)))
 }
 
 /* commutativity: a&b==b&a, a|b==b|a, a^b==b^a. */
 fn gild_comm() -> u8 @export {
     bb_reset(GILD_W)
     let a : u32 = bb_var(0u32)  let b : u32 = bb_var(1u32)
-    if bb_equal(bb_and(a, b), bb_and(b, a)) != 1u8 { return 0u8 }
+    if eqv_eq(bb_and(a, b), bb_and(b, a)) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a1 : u32 = bb_var(0u32)  let b1 : u32 = bb_var(1u32)
-    if bb_equal(bb_or(a1, b1), bb_or(b1, a1)) != 1u8 { return 0u8 }
+    if eqv_eq(bb_or(a1, b1), bb_or(b1, a1)) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)  let b2 : u32 = bb_var(1u32)
-    return bb_equal(bb_xor(a2, b2), bb_xor(b2, a2))
+    return eqv_eq(bb_xor(a2, b2), bb_xor(b2, a2))
 }
 
 /* complement: a&~a==0, a|~a==all-ones, ~~a==a (double negation). */
 fn gild_complement() -> u8 @export {
     bb_reset(GILD_W)
     let a : u32 = bb_var(0u32)
-    if bb_equal(bb_and(a, bb_not(a)), bb_const(0u64)) != 1u8 { return 0u8 }
+    if eqv_eq(bb_and(a, bb_not(a)), bb_const(0u64)) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a1 : u32 = bb_var(0u32)
-    if bb_equal(bb_or(a1, bb_not(a1)), bb_const(0xFFFFFFFFu64)) != 1u8 { return 0u8 }
+    if eqv_eq(bb_or(a1, bb_not(a1)), bb_const(0xFFFFFFFFu64)) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)
-    return bb_equal(bb_not(bb_not(a2)), a2)
+    return eqv_eq(bb_not(bb_not(a2)), a2)
 }
 
 /* identity + annihilator: a&0==0, a|0==a, a^0==a, a|all-ones==all-ones, a&all-ones==a. */
 fn gild_identity() -> u8 @export {
     bb_reset(GILD_W)
     let a : u32 = bb_var(0u32)
-    if bb_equal(bb_and(a, bb_const(0u64)), bb_const(0u64)) != 1u8 { return 0u8 }
+    if eqv_eq(bb_and(a, bb_const(0u64)), bb_const(0u64)) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a1 : u32 = bb_var(0u32)
-    if bb_equal(bb_or(a1, bb_const(0u64)), a1) != 1u8 { return 0u8 }
+    if eqv_eq(bb_or(a1, bb_const(0u64)), a1) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a2 : u32 = bb_var(0u32)
-    if bb_equal(bb_xor(a2, bb_const(0u64)), a2) != 1u8 { return 0u8 }
+    if eqv_eq(bb_xor(a2, bb_const(0u64)), a2) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a3 : u32 = bb_var(0u32)
-    if bb_equal(bb_or(a3, bb_const(0xFFFFFFFFu64)), bb_const(0xFFFFFFFFu64)) != 1u8 { return 0u8 }
+    if eqv_eq(bb_or(a3, bb_const(0xFFFFFFFFu64)), bb_const(0xFFFFFFFFu64)) != 1u8 { return 0u8 }
     bb_reset(GILD_W)
     let a4 : u32 = bb_var(0u32)
-    return bb_equal(bb_and(a4, bb_const(0xFFFFFFFFu64)), a4)
+    return eqv_eq(bb_and(a4, bb_const(0xFFFFFFFFu64)), a4)
 }
 
 /* THE CONSENSUS THEOREM (a non-trivial identity): (a&b)|(~a&c)|(b&c) == (a&b)|(~a&c) -- the consensus term b&c
@@ -1076,7 +1076,7 @@ fn gild_consensus() -> u8 @export {
     let c : u32 = bb_var(2u32)
     let full : u32 = bb_or(bb_or(bb_and(a, b), bb_and(bb_not(a), c)), bb_and(b, c))
     let red  : u32 = bb_or(bb_and(a, b), bb_and(bb_not(a), c))
-    return bb_equal(full, red)
+    return eqv_eq(full, red)
 }
 
 /* rotation composition: rotl(rotl(x,a),b) == rotl(x,(a+b) mod 32) -- the rotations form a cyclic group, a
@@ -1085,7 +1085,7 @@ fn gild_rotcompose(a: u64, b: u64) -> u8 @export {
     let s : u64 = (a + b) & 31u64
     bb_reset(GILD_W)
     let x : u32 = bb_var(0u32)
-    return bb_equal(gild_rotl(gild_rotl(x, a), b), gild_rotl(x, s))
+    return eqv_eq(gild_rotl(gild_rotl(x, a), b), gild_rotl(x, s))
 }
 
 /* ============================================================================================================
@@ -1129,7 +1129,7 @@ fn gild_conjecture_count() -> u64 @export {
             let a : u32 = bb_var(0u32)
             let b : u32 = bb_var(1u32)
             GILC_KCALLS = GILC_KCALLS + 1u64
-            if bb_equal(gild_expr(i, a, b), gild_expr(j, a, b)) == 1u8 { found = found + 1u64 }
+            if eqv_eq(gild_expr(i, a, b), gild_expr(j, a, b)) == 1u8 { found = found + 1u64 }
             j = j + 1u32
         }
         i = i + 1u32
@@ -1185,7 +1185,7 @@ fn gild3_conjecture_count() -> u64 @export {
             let b : u32 = bb_var(1u32)
             let c : u32 = bb_var(2u32)
             GILC3_KCALLS = GILC3_KCALLS + 1u64
-            if bb_equal(gild3_expr(i, a, b, c), gild3_expr(j, a, b, c)) == 1u8 {
+            if eqv_eq(gild3_expr(i, a, b, c), gild3_expr(j, a, b, c)) == 1u8 {
                 if GILC3_DN < 64u64 { GILC3_DI[GILC3_DN] = i ; GILC3_DJ[GILC3_DN] = j ; GILC3_DN = GILC3_DN + 1u64 }
             }
             j = j + 1u32

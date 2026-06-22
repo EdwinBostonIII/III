@@ -91,6 +91,7 @@ declare -A EXPECTED=(
     [1981_eidos_coincidence]=99
     [1982_eidos_memo_real]=99
     [1983_weave_adopt_memo]=99
+    [1984_gil_search_memo]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

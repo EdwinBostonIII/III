@@ -82,6 +82,8 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x70u32 { let fp : *u8 = (base + boff + p) as *u8  let f : u32 = fp[0u64] as u32  p = p + 2u64  c_emit(0x10u32)  c_leb_u((f + IC) as u64) }   /* CALL -> call (funcidx + imports) */
         if op == 0x71u32 { c_emit(0x10u32)  c_leb_u(0u64) }   /* PRINT_CHAR -> call $putc (import 0) */
         if op == 0x72u32 { c_emit(0x1Au32) }                  /* DROP */
+        if op == 0x80u32 { c_emit(0xA7u32)  c_emit(0x31u32)  c_emit(0x00u32)  c_emit(0x00u32) }   /* LOAD8: i32.wrap_i64 ; i64.load8_u a0 o0 */
+        if op == 0x81u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x3Cu32)  c_emit(0x00u32)  c_emit(0x00u32) }   /* STORE8: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store8 */
     }
     c_emit(0x0Bu32)
 }
@@ -91,6 +93,22 @@ fn body_has_print(base: u64, boff: u64, blen: u64) -> u32 {
     while s < blen {
         let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
         if o == 0x71u32 { return 1u32 }
+        if o == 0x01u32 { s = s + 8u64 }
+        if o == 0x10u32 { s = s + 1u64 }
+        if o == 0x11u32 { s = s + 1u64 }
+        if o == 0x50u32 { s = s + 1u64 }
+        if o == 0x51u32 { s = s + 1u64 }
+        if o == 0x70u32 { s = s + 2u64 }
+    }
+    return 0u32
+}
+
+fn body_has_mem(base: u64, boff: u64, blen: u64) -> u32 {
+    let mut s : u64 = 0u64
+    while s < blen {
+        let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+        if o == 0x80u32 { return 1u32 }
+        if o == 0x81u32 { return 1u32 }
         if o == 0x01u32 { s = s + 8u64 }
         if o == 0x10u32 { s = s + 1u64 }
         if o == 0x11u32 { s = s + 1u64 }
@@ -120,10 +138,15 @@ fn main() -> u64 {
         off = off + 4u64 + blen
         i = i + 1u32
     }
-    /* does any function print? -> need the env.putc import */
+    /* does any function print? -> env.putc import.  use memory? -> memory + scratch global sections */
     IC = 0u32
+    let mut UM : u32 = 0u32
     let mut pf : u32 = 0u32
-    while pf < FN_N { if body_has_print(base, FN_BOFF[pf as u64], FN_BLEN[pf as u64]) == 1u32 { IC = 1u32 }  pf = pf + 1u32 }
+    while pf < FN_N {
+        if body_has_print(base, FN_BOFF[pf as u64], FN_BLEN[pf as u64]) == 1u32 { IC = 1u32 }
+        if body_has_mem(base, FN_BOFF[pf as u64], FN_BLEN[pf as u64]) == 1u32 { UM = 1u32 }
+        pf = pf + 1u32
+    }
 
     /* build every function body into CBUF */
     CLEN = 0u64
@@ -154,6 +177,11 @@ fn main() -> u64 {
     let mut g : u32 = 0u32  while g < FN_N { flen = flen + leblen_u((g + IC) as u64)  g = g + 1u32 }
     pc(0x03u32)  pleb_u(flen)  pleb_u(FN_N as u64)
     g = 0u32  while g < FN_N { pleb_u((g + IC) as u64)  g = g + 1u32 }
+    /* Memory section (id 5): 1 page (64 KiB).  Global section (id 6): one mutable i64 scratch (STORE8 reorder). */
+    if UM == 1u32 {
+        pc(0x05u32) pc(0x03u32) pc(0x01u32) pc(0x00u32) pc(0x01u32)
+        pc(0x06u32) pc(0x06u32) pc(0x01u32) pc(0x7Eu32) pc(0x01u32) pc(0x42u32) pc(0x00u32) pc(0x0Bu32)
+    }
     /* Export section: "main" -> func index IC (defined func 0, after imports) */
     pc(0x07u32) pc(0x08u32) pc(0x01u32) pc(0x04u32) pc(0x6Du32) pc(0x61u32) pc(0x69u32) pc(0x6Eu32) pc(0x00u32)  pleb_u(IC as u64)
     /* Code section */

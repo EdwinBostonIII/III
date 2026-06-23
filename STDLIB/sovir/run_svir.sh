@@ -17,7 +17,7 @@ done
 [ -s "$BOOT/sovlink_main.exe" ] || gcc "$BOOT/sovlink_main.o" "$BOOT/sovld.o" "$BOOT/sovparse.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovlink_main.exe" 2>/dev/null
 [ -s "$BOOT/crt0_sov.o" ]       || timeout 30 "$BOOT/sovas_main.exe" "$BOOT/crt0.o.s" > "$BOOT/crt0_sov.o" 2>/dev/null
 
-for m in svir_prog svir_loop svir_call svir_fact svir_x86 svir_wasm; do
+for m in svir_prog svir_loop svir_call svir_fact svir_bignum svir_x86 svir_wasm; do
   "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }
 done
 
@@ -62,7 +62,26 @@ if [ $xrc -eq 99 ] && [ $wrc -eq 99 ] && [ "$xn" = "1" ] && [ "$xk" = "1" ] \
   say "fact RECURSIVE 20! : x86(sovereign,kernel32-only)==wasm==golden [$(cat "$W/fact.x86.out" | tr -d '\n')], both exit 99"
 else say "FAIL fact: x86exit=$xrc wasmexit=$wrc dlls=$xn k32=$xk  x86out=[$(cat "$W/fact.x86.out" 2>/dev/null)] wasmout=[$(cat "$W/fact.wasm.out" 2>/dev/null)]"; fail=1; fi
 
+# ---- svir_bignum: ARBITRARY-PRECISION factorial (100! exact, 158 digits, in SVIR linear memory).  A C
+#      long long overflows at 21!; this computes 100! exactly.  Gated differential: x86==wasm==node-bignum. ----
+gcc "$W/svir_x86.o"  "$W/svir_bignum.o" -o "$W/tx_bn.exe" 2>/dev/null
+gcc "$W/svir_wasm.o" "$W/svir_bignum.o" -o "$W/tw_bn.exe" 2>/dev/null
+"$W/tx_bn.exe" > "$W/bn.s" 2>/dev/null
+timeout 25 "$BOOT/sovas_main.exe" "$W/bn.s" > "$W/bn.o2" 2>/dev/null
+timeout 25 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/bn.o2" > "$W/bn.x86.exe" 2>/dev/null
+timeout 10 "$W/bn.x86.exe" > "$W/bn.x86.out" 2>/dev/null; bxr=$?
+"$W/tw_bn.exe" > "$W/bn.wasm" 2>/dev/null
+node "$S/run_wasm.mjs" "$W/bn.wasm" > "$W/bn.wasm.out" 2>/dev/null; bwr=$?
+node -e 'let f=1n;for(let i=1n;i<=100n;i++)f*=i;process.stdout.write(f.toString()+"\n")' > "$W/bn.gold.out"
+bxk=$(objdump -p "$W/bn.x86.exe" 2>/dev/null | grep -i "DLL Name" | grep -ic kernel32)
+bxn=$(objdump -p "$W/bn.x86.exe" 2>/dev/null | grep -ic "DLL Name")
+ndig=$(tr -d '\n' < "$W/bn.x86.out" | wc -c)
+if [ $bxr -eq 99 ] && [ $bwr -eq 99 ] && [ "$bxn" = "1" ] && [ "$bxk" = "1" ] \
+   && cmp -s "$W/bn.x86.out" "$W/bn.wasm.out" && cmp -s "$W/bn.x86.out" "$W/bn.gold.out"; then
+  say "bignum ARBITRARY-PRECISION 100! : x86(sovereign,kernel32-only)==wasm==golden, $ndig digits EXACT, both exit 99"
+else say "FAIL bignum: x86exit=$bxr wasmexit=$bwr dlls=$bxn k32=$bxk digits=$ndig"; fail=1; fi
+
 if [ $fail -eq 0 ]; then
-  say "ALL PASS -- 4 SVIR programs (arith + loop + CALL + RECURSIVE factorial w/ printed output) x 2 independent translators; the factorial's x86==wasm==golden differential is byte-identical (sovereign x86, kernel32-only)."
+  say "ALL PASS -- 5 SVIR programs (arith, loop, CALL, recursive factorial, ARBITRARY-PRECISION 100!) x 2 independent translators; the factorials' x86==wasm==golden differentials are byte-identical (sovereign x86, kernel32-only).  20!=long-long-equiv (toolchain superiority); 100!=158 exact digits no fixed-width type can hold (PROGRAM superiority)."
 fi
 exit $fail

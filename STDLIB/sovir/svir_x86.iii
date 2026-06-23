@@ -79,6 +79,8 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         }
         if op == 0x50u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  ez("jmp Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64) }
         if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  ez("popq %rax\ntestq %rax, %rax\njnz Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64) }
+        if op == 0x80u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovzbq (%rcx,%rax,1), %rax\npushq %rax\n~" as u64) }   /* LOAD8 mem[addr] */
+        if op == 0x81u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovb %dl, (%rcx,%rax,1)\n~" as u64) }       /* STORE8 mem[addr]=val */
         if op == 0x24u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rdx\n~" as u64) }   /* SREM -> remainder in %rdx */
         if op == 0x72u32 { ez("addq $8, %rsp\n~" as u64) }                                          /* DROP */
         if op == 0x71u32 { ez("popq %rcx\nmovq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq __putc\nmovq -8(%rbp), %rsp\n~" as u64) }   /* PRINT_CHAR -> __putc(char in rcx) */
@@ -121,6 +123,32 @@ fn mod_has_print(base: u64) -> u32 {
     return 0u32
 }
 
+/* does the module use LOAD8/STORE8? -> emit the .bss memory buffer */
+fn mod_has_mem(base: u64) -> u32 {
+    let hp : *u8 = base as *u8  let nf : u32 = hp[0u64] as u32
+    let mut off : u64 = 1u64  let mut i : u32 = 0u32
+    while i < nf {
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        let boff : u64 = off + 4u64
+        let mut s : u64 = 0u64
+        while s < blen {
+            let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+            if o == 0x80u32 { return 1u32 }
+            if o == 0x81u32 { return 1u32 }
+            if o == 0x01u32 { s = s + 8u64 }
+            if o == 0x10u32 { s = s + 1u64 }
+            if o == 0x11u32 { s = s + 1u64 }
+            if o == 0x50u32 { s = s + 1u64 }
+            if o == 0x51u32 { s = s + 1u64 }
+            if o == 0x70u32 { s = s + 2u64 }
+        }
+        off = off + 4u64 + blen
+        i = i + 1u32
+    }
+    return 0u32
+}
+
 fn main() -> u64 {
     _setmode(1i32, 0x8000i32)
     let base : u64 = svir_ptr()
@@ -141,6 +169,10 @@ fn main() -> u64 {
     /* the byte-output helper: __putc(char in %rcx) -> GetStdHandle(-11) + WriteFile (kernel32, raw bytes) */
     if mod_has_print(base) == 1u32 {
         ez("__putc:\npushq %rbp\nmovq %rsp, %rbp\nsubq $64, %rsp\nmovb %cl, -1(%rbp)\nmovq $-11, %rcx\ncallq GetStdHandle\nmovq %rax, %rcx\nleaq -1(%rbp), %rdx\nmovq $1, %r8\nleaq -16(%rbp), %r9\nxorl %eax, %eax\nmovq %rax, 32(%rsp)\ncallq WriteFile\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64)
+    }
+    /* SVIR linear memory: a zero-filled .bss buffer (64 KiB) */
+    if mod_has_mem(base) == 1u32 {
+        ez(".section .bss\n.global svir_mem\nsvir_mem:\n.zero 65536\n~" as u64)
     }
     return 0u64
 }

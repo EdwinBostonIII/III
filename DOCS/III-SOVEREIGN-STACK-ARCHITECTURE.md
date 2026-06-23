@@ -23,6 +23,14 @@
 > toolchain trust, differential correctness) — NOT **PROGRAM** superiority (`20!` overflows i64 at `21!` like any
 > `long long`). Program superiority = a never-overflowing arbitrary-precision factorial → needs **SVIR linear
 > memory** (Phase 2c). Authoring tool: `svir_asm.mjs` (readable instruction lists → SVIR bytes).
+> **Phase 2c LANDED — PROGRAM superiority (arbitrary precision):** SVIR gains **linear memory** (`LOAD8`/`STORE8`;
+> x86 = a `.bss` `svir_mem` buffer + rip-relative SIB load/store; WASM = a memory section + a scratch global for
+> the store operand-reorder). `svir_bignum.iii` computes **100! EXACTLY** (158 decimal digits) as a base-10 digit
+> array in memory — a C `long long` factorial overflows at **21!**; this has no fixed-width limit. The gate
+> asserts the differential: x86 stdout == wasm stdout == an independent node-bignum 100!, **byte-identical**, both
+> exit 99, x86 kernel32-only. This is the program that *justifies its existence*: it does what no fixed-width
+> type can, from one sovereign IR, on two architectures, self-verified. (Surfaced + fixed another real bug: `sovas`
+> had no `andq $imm` encoder; added `sov_and_imm32`, byte-identical to gcc, fixpoint re-run ALL PASS.)
 > **For the worker:** Phase 1 (§7) is meticulous + gated. Phases 2–6 (§8) are a directional roadmap with honest
 > caveats — NOT yet task-decomposed. Build Phase 1 before planning the rest. No subagents (III rule).
 

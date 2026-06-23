@@ -1,0 +1,12 @@
+/* prog_sat.iii -- a REAL, SUBSTANTIAL III program built FULLY SOVEREIGN (sovas+sovld, no gcc/ld).
+ * main() drives numera/sat's own self-verifier (a 805-line DPLL/CDCL SAT solver) and returns its
+ * verdict (99 on success).  sat is self-contained (Tier-1, no SIMD), so its entire closure assembles
+ * through sovas and links through sovld with gcc NOWHERE in the path -- the headline "the independent
+ * one, executable": III's own toolchain producing a running PE for a real faculty. */
+module prog_sat
+
+extern @abi(c-msvc-x64) fn sat_selftest() -> u64 from "sat.iii"
+
+fn main() -> u64 {
+    return sat_selftest()
+}

@@ -1,0 +1,3 @@
+module prog_smt
+extern @abi(c-msvc-x64) fn smt_selftest() -> u64 from "smt.iii"
+fn main() -> u64 { return smt_selftest() }

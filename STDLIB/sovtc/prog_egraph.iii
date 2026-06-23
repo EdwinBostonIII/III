@@ -1,0 +1,13 @@
+/* prog_egraph.iii -- a REAL, SUBSTANTIAL III program built through the ROUTED sovereign path.
+ * main() drives omnia/egraph's self-verifier (bounded equality saturation + extraction).  egraph's
+ * closure is 28 modules: 25 assemble SOVEREIGN through sovas (Tier-1), and 3 -- the SIMD/wide-mul tail
+ * (sha256, keccak, bigint) -- route to the gcc-as WITNESS because sovas Tier-2 (VEX/EVEX/SHA-NI) is not
+ * yet built.  ALL 28 link through sovld (no ld).  The per-module route is the consequential, capability-
+ * true decision EIDOS makes a live consumer of (the silicon census selects the tier-reachable encoder). */
+module prog_egraph
+
+extern @abi(c-msvc-x64) fn eg_selftest() -> u64 from "egraph.iii"
+
+fn main() -> u64 {
+    return eg_selftest()
+}

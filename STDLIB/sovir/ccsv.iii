@@ -19,6 +19,9 @@ extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 var SRC : [u8; 65536]
 var SLEN : u64 = 0u64
 var MODE_RB : [u8; 3] = [114u8, 98u8, 0u8]
+var RAW : [u8; 65536]  var RLEN : u64 = 0u64        /* the main file, pre-flatten */
+var IBUF : [u8; 32768]                              /* an included file's content */
+var IPATH : [u8; 512]  var DIRLEN : u64 = 0u64      /* resolved include path = main's dir + the "filename" */
 var TK : [u32; 8192]  var TV : [i64; 8192]  var TO : [u32; 8192]  var TL : [u32; 8192]  var NT : u32 = 0u32  var C : u32 = 0u32
 
 const Q_LP:i64=1i64 const Q_RP:i64=2i64 const Q_LB:i64=3i64 const Q_RB:i64=4i64 const Q_SEMI:i64=7i64 const Q_ASN:i64=8i64
@@ -407,7 +410,15 @@ fn cfn(fk: u32) {
     C=FNT[fk as u64]  C=C+1u32  C=C+1u32  eat(Q_LP)         /* int NAME ( */
     LN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  lz=lz+1u32 }   /* reset char-ptr and struct-ptr flags per fn */
     let mut params:u32=0u32  let mut go:u32=1u32
-    while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { let isc:u32=kw(C,"char" as u64,4u32)  C=C+1u32  let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }  let pt2:u32=C  C=C+1u32  let sl:u32=ladd(pt2)  if isc==1u32 { if isp==1u32 { LCH[sl as u64]=1u32 } }  params=params+1u32  eat(Q_COM) } } }   /* [char|int] [*] NAME */
+    while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else {   /* [char|int|struct Name|TypedefName] [*] NAME */
+        let tt:u32=C  let isc:u32=kw(C,"char" as u64,4u32)  let mut styp:i32=0i32-1i32
+        if kw(C,"struct" as u64,6u32)==1u32 { C=C+1u32  styp=stidx(C)  C=C+1u32 } else { styp=stidx(tt)  C=C+1u32 }
+        let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }
+        let pt2:u32=C  C=C+1u32  let sl:u32=ladd(pt2)
+        if isc==1u32 { if isp==1u32 { LCH[sl as u64]=1u32 } }
+        if styp>=0i32 { if isp==1u32 { LPT[sl as u64]=styp } }
+        params=params+1u32  eat(Q_COM)
+    } } }
     eat(Q_RP)  BL=0u64  pblock()   /* string region is initialised by the SVIR data section (no main-entry init) */
     mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
     let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }
@@ -426,13 +437,47 @@ fn emit_module() {
     pdec(total)  pstr("u64 }\n~" as u64)
 }
 
+fn rawb(i:u64) -> u32 { let p:*u8=((&RAW as u64)+i) as *u8  return p[0u64] as u32 }
+fn src_emit(b:u32) { if SLEN<65535u64 { let p:*u8=((&SRC as u64)+SLEN) as *u8  p[0u64]=(b & 0xFFu32) as u8  SLEN=SLEN+1u64 } }
+fn read_inc() -> u64 { let f:u64=fopen(&IPATH as u64, &MODE_RB as u64)  if f==0u64 {return 0u64}  let n:u64=fread(&IBUF as u64, 1u64, 32767u64, f)  fclose(f)  return n }
+/* does RAW[i0..] begin (after ws) with `#include "` ? (local include; <...> system includes return 0 -> skipped) */
+fn is_include(i0:u64) -> u32 {
+    let mut k:u64=i0  let mut g:u32=1u32  while g==1u32 { if k>=RLEN {g=0u32} else { let ch:u32=rawb(k)  if ch==32u32 {k=k+1u64} else { if ch==9u32 {k=k+1u64} else {g=0u32} } } }
+    if k>=RLEN { return 0u32 }  if rawb(k)!=35u32 { return 0u32 }  k=k+1u64
+    let mut g2:u32=1u32  while g2==1u32 { if k>=RLEN {g2=0u32} else { let ch:u32=rawb(k)  if ch==32u32 {k=k+1u64} else { if ch==9u32 {k=k+1u64} else {g2=0u32} } } }
+    if (k+7u64) > RLEN { return 0u32 }
+    if rawb(k)!=105u32 { return 0u32 }  if rawb(k+1u64)!=110u32 { return 0u32 }  if rawb(k+2u64)!=99u32 { return 0u32 }  if rawb(k+3u64)!=108u32 { return 0u32 }
+    if rawb(k+4u64)!=117u32 { return 0u32 }  if rawb(k+5u64)!=100u32 { return 0u32 }  if rawb(k+6u64)!=101u32 { return 0u32 }
+    let mut k2:u64=k+7u64  let mut hq:u32=0u32  let mut g3:u32=1u32
+    while g3==1u32 { if k2>=RLEN {g3=0u32} else { let ch:u32=rawb(k2)  if ch==10u32 {g3=0u32} else { if ch==34u32 {hq=1u32 g3=0u32} else {k2=k2+1u64} } } }
+    return hq
+}
+/* flatten RAW -> SRC, inlining `#include "f"` (read relative to the main file's dir = IPATH[0..DIRLEN]). */
+fn flatten() {
+    SLEN=0u64  let mut i:u64=0u64  let mut atls:u32=1u32
+    while i < RLEN {
+        if atls==1u32 { if is_include(i)==1u32 {
+            let mut k:u64=i  let mut g:u32=1u32  while g==1u32 { if k>=RLEN {g=0u32} else { if rawb(k)==34u32 {g=0u32} else {k=k+1u64} } }  k=k+1u64   /* past opening " */
+            let mut d:u64=DIRLEN  let mut g2:u32=1u32  while g2==1u32 { if k>=RLEN {g2=0u32} else { let ch:u32=rawb(k)  if ch==34u32 {g2=0u32} else { let ip:*u8=((&IPATH as u64)+d) as *u8  ip[0u64]=(ch & 0xFFu32) as u8  d=d+1u64  k=k+1u64 } } }
+            let ipe:*u8=((&IPATH as u64)+d) as *u8  ipe[0u64]=0u8
+            let n:u64=read_inc()  let mut m:u64=0u64  while m<n { let ibp:*u8=((&IBUF as u64)+m) as *u8  src_emit(ibp[0u64] as u32)  m=m+1u64 }  src_emit(10u32)
+            let mut g3:u32=1u32  while g3==1u32 { if i>=RLEN {g3=0u32} else { if rawb(i)==10u32 {g3=0u32} else {i=i+1u64} } }  if i<RLEN { i=i+1u64 }
+        } else { let ch:u32=rawb(i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 } }
+        else { let ch:u32=rawb(i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 }
+    }
+}
 fn main(argc: i32, argv: u64) -> u64 {
     if argc < 2i32 { return 2u64 }
     let pp : *u64 = argv as *u64
     let f : u64 = fopen(pp[1u64], &MODE_RB as u64)
     if f == 0u64 { return 3u64 }
-    SLEN = fread(&SRC as u64, 1u64, 65535u64, f)
+    RLEN = fread(&RAW as u64, 1u64, 65535u64, f)
     fclose(f)
+    /* main file's directory (up to & incl the last / or \) -> IPATH prefix, so includes resolve beside it */
+    let mp:*u8 = pp[1u64] as *u8  let mut j:u64=0u64  let mut last:u64=0u64
+    let mut gg:u32=1u32  while gg==1u32 { let ch:u32=mp[j] as u32  if ch==0u32 {gg=0u32} else { if ch==47u32 {last=j+1u64} if ch==92u32 {last=j+1u64}  j=j+1u64 } }
+    let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
+    flatten()
     lex()  prescan()  prescan_str()  prescan_arr()  prescan_struct()  prescan_enum()
     ML=0u64
     let mut k:u32=0u32

@@ -63,4 +63,17 @@ rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c)
 if [ "$rp" = "ok" ] && [ "$rs" = "ok" ]; then
   say "ccsv C TIERS : local int arrays (8-byte cells) + char literals + pointers (test_ptr.c) AND structs (test_struct.c) -> sovereign x86 + wasm + verifier + gcc, all 99.  ccsv = C integer core + arrays + output + pointers + structs."
 else say "FAIL tiers: ptr=$rp struct=$rs"; fail=1; fi
+
+# string literals: char *s = "..."; s[i] -> sovereign x86 prints the string == gcc's output (content); exit 99.
+"$W/ccsv.exe" "$S/test_str.c" > "$W/gen_str.iii" 2>/dev/null
+"$IIIS" "$W/gen_str.iii" --compile-only --out "$W/gen_str.o" >/dev/null 2>&1
+gcc "$W/svir_x86.o" "$W/gen_str.o" -o "$W/tx_str.exe" 2>/dev/null; "$W/tx_str.exe" > "$W/str.s" 2>/dev/null
+timeout 20 "$BOOT/sovas_main.exe" "$W/str.s" > "$W/str.o2" 2>/dev/null
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/str.o2" > "$W/str.x86.exe" 2>/dev/null
+timeout 10 "$W/str.x86.exe" > "$W/out_str.txt" 2>/dev/null; sv=$?
+gcc "$S/test_str.c" -o "$W/str_gcc.exe" 2>/dev/null; "$W/str_gcc.exe" > "$W/_sg.txt" 2>/dev/null; sg=$?; tr -d '\r' < "$W/_sg.txt" > "$W/out_str_gcc.txt"
+scon="NO"; cmp -s "$W/out_str.txt" "$W/out_str_gcc.txt" && scon="YES"
+if [ $sv -eq 99 ] && [ $sg -eq 99 ] && [ "$scon" = "YES" ]; then
+  say "ccsv STRING LITERALS : char *s=\"...\"; s[i] -> sovereign x86 prints [$(cat "$W/out_str.txt" | tr -d '\n')] == gcc(content)=$scon -> 99.  (8-byte-per-char region inited at main entry; data-section = the ideal optimization residual.)"
+else say "FAIL string: sovereign=$sv gcc=$sg content=$scon"; fail=1; fi
 exit $fail

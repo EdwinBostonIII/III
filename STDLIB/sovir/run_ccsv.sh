@@ -59,10 +59,10 @@ cfeat(){  # $1 = test file basename (in $S)
   gcc "$S/$1" -o "$W/gcc_$1.exe" 2>/dev/null; "$W/gcc_$1.exe" >/dev/null 2>&1; local gc=$?
   if [ $vf -eq 99 ] && [ $x -eq 99 ] && [ $w -eq 99 ] && [ $gc -eq 99 ]; then echo "ok"; else echo "FAIL($1 vf=$vf x86=$x wasm=$w gcc=$gc)"; fi
 }
-rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c)
-if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ]; then
-  say "ccsv C TIERS : local int arrays + char + pointers (test_ptr.c) + structs (test_struct.c) + typedef/union/p->f (test_td.c) -> sovereign x86 + wasm + verifier + gcc, all 99."
-else say "FAIL tiers: ptr=$rp struct=$rs td=$rt"; fail=1; fi
+rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c); re=$(cfeat test_enum.c)
+if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ] && [ "$re" = "ok" ]; then
+  say "ccsv C TIERS : arrays+char+pointers (test_ptr) + structs (test_struct) + typedef/union/p->f (test_td) + enum/#define/typedef-ptr (test_enum) -> sovereign x86 + wasm + verifier + gcc, all 99."
+else say "FAIL tiers: ptr=$rp struct=$rs td=$rt enum=$re"; fail=1; fi
 
 # string literals: char *s = "..."; s[i] -> sovereign x86 prints the string == gcc's output (content); exit 99.
 "$W/ccsv.exe" "$S/test_str.c" > "$W/gen_str.iii" 2>/dev/null

@@ -266,6 +266,66 @@ fn sov_or_rr(dst: u32, src: u32)  -> i32 @export { sov_alu_rr(0x09u32, dst, src)
 fn sov_xor_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x31u32, dst, src)  return 0i32 }
 fn sov_test_rr(dst: u32, src: u32) -> i32 @export { sov_alu_rr(0x85u32, dst, src)  return 0i32 }
 
+/* ── SSE / SHA-NI (legacy-encoded) -- the crypto SIMD tail (Tier-2, non-VEX).  xmm regs 0..15.
+ *    Convention: modrm reg = DEST, rm = SRC (the /r dest-in-reg form, verified vs gcc-as).  REX is
+ *    CONDITIONAL with W=0 (unlike Tier-1's always-REX.W): a byte is emitted only when dst>=8 (R) or
+ *    src>=8 (B); the legacy prefix (66/F3) precedes REX, matching gas exactly (66 41 0f fe f0).
+ *    Byte-identity vs gcc-as is the gate (run_fixpoint / the .text diff). */
+fn sov_sse_pre(pfx: u32, dst: u32, src: u32) {
+    if pfx != 0u32 { sov_emit(pfx) }
+    let mut r : u32 = 0u32  if dst >= 8u32 { r = 1u32 }
+    let mut b : u32 = 0u32  if src >= 8u32 { b = 1u32 }
+    if (r | b) != 0u32 { sov_rex(0u32, r, 0u32, b) }
+}
+/* 0F <op> /r        : paddd (66,FE) ; movdqu reg-reg uses sov_movdqu_rr below */
+fn sov_sse_0f(pfx: u32, op: u32, dst: u32, src: u32) -> i32 @export {
+    sov_sse_pre(pfx, dst, src)  sov_emit(0x0Fu32)  sov_emit(op)  sov_modrm(3u32, dst, src)  return 0i32
+}
+/* 0F <op> /r ib     : pshufd (66,70) */
+fn sov_sse_0f_ib(pfx: u32, op: u32, dst: u32, src: u32, imm: u32) -> i32 @export {
+    sov_sse_pre(pfx, dst, src)  sov_emit(0x0Fu32)  sov_emit(op)  sov_modrm(3u32, dst, src)  sov_emit(imm & 0xFFu32)  return 0i32
+}
+/* 0F 38 <op> /r     : pshufb (66,00) ; sha256rnds2 (0,CB) ; sha256msg1 (0,CC) ; sha256msg2 (0,CD) */
+fn sov_sse_0f38(pfx: u32, op: u32, dst: u32, src: u32) -> i32 @export {
+    sov_sse_pre(pfx, dst, src)  sov_emit(0x0Fu32)  sov_emit(0x38u32)  sov_emit(op)  sov_modrm(3u32, dst, src)  return 0i32
+}
+/* 0F 3A <op> /r ib  : palignr (66,0F) ; pblendw (66,0E) */
+fn sov_sse_0f3a_ib(pfx: u32, op: u32, dst: u32, src: u32, imm: u32) -> i32 @export {
+    sov_sse_pre(pfx, dst, src)  sov_emit(0x0Fu32)  sov_emit(0x3Au32)  sov_emit(op)  sov_modrm(3u32, dst, src)  sov_emit(imm & 0xFFu32)  return 0i32
+}
+/* ── movdqu (F3 0F 6F load / F3 0F 7F store).  F3 precedes the conditional W0 REX (R=xmm, X=index, B=base). ── */
+fn sov_movdqu_mempre(xreg: u32, base: u32, index: u32) {
+    sov_emit(0xF3u32)
+    let mut r : u32 = 0u32  if xreg  >= 8u32 { r = 1u32 }
+    let mut x : u32 = 0u32  if index >= 8u32 { x = 1u32 }
+    let mut b : u32 = 0u32  if base  >= 8u32 { b = 1u32 }
+    if (r | x | b) != 0u32 { sov_rex(0u32, r, x, b) }
+}
+/* movdqu %src,%dst (reg-reg, 6F: modrm 11 dst src) */
+fn sov_movdqu_rr(dst: u32, src: u32) -> i32 @export {
+    sov_movdqu_mempre(dst, src, 0u32)  sov_emit(0x0Fu32)  sov_emit(0x6Fu32)  sov_modrm(3u32, dst, src)  return 0i32
+}
+/* movdqu disp(%base),%dst  (load) */
+fn sov_movdqu_load_base(dst: u32, base: u32, disp: i32) -> i32 @export {
+    sov_movdqu_mempre(dst, base, 0u32)  sov_emit(0x0Fu32)  sov_emit(0x6Fu32)  sov_membase_modrm(dst, base, disp)  return 0i32
+}
+/* movdqu %src,disp(%base)  (store, 7F) */
+fn sov_movdqu_store_base(src: u32, base: u32, disp: i32) -> i32 @export {
+    sov_movdqu_mempre(src, base, 0u32)  sov_emit(0x0Fu32)  sov_emit(0x7Fu32)  sov_membase_modrm(src, base, disp)  return 0i32
+}
+/* movdqu sym(%rip),%dst  (load; REL32 reloc to the data symbol) */
+fn sov_movdqu_load_rip_sym(dst: u32, sec: u32, off: i32) -> i32 @export {
+    sov_movdqu_mempre(dst, 0u32, 0u32)  sov_emit(0x0Fu32)  sov_emit(0x6Fu32)  sov_modrm(0u32, dst, 5u32)
+    sov_rec_reloc(sec)  sov_imm((off as u32) as u64, 4u32)  return 0i32
+}
+/* movdqu disp(%base,%index,scale),%dst (load) and the reverse store */
+fn sov_movdqu_load_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_movdqu_mempre(dst, base, index)  sov_emit(0x0Fu32)  sov_emit(0x6Fu32)  sov_sib_modrm_disp(dst, base, index, scale, disp)  return 0i32
+}
+fn sov_movdqu_store_sib(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 @export {
+    sov_movdqu_mempre(src, base, index)  sov_emit(0x0Fu32)  sov_emit(0x7Fu32)  sov_sib_modrm_disp(src, base, index, scale, disp)  return 0i32
+}
+
 /* ALU $imm,%reg : gcc uses the SHORT form 83 /ext ib (imm8 sign-extended) when imm fits a signed byte,
  * else 81 /ext id (imm32).  Matching this exactly is REQUIRED for .text byte-identity (caught by the
  * gcc-independent gate: add $0x10 is 48 83 c0 10, NOT 48 81 c0 10 00 00 00).  (add=/0 sub=/5 cmp=/7) */

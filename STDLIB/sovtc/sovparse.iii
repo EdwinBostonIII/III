@@ -18,6 +18,17 @@ extern @abi(c-msvc-x64) fn sov_reset() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_len() -> u32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_push_r(reg: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_pop_r(reg: u32) -> i32 from "sovas.iii"
+/* SSE/SHA-NI (Tier-2) encoders */
+extern @abi(c-msvc-x64) fn sov_sse_0f(pfx: u32, op: u32, dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sse_0f_ib(pfx: u32, op: u32, dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sse_0f38(pfx: u32, op: u32, dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_sse_0f3a_ib(pfx: u32, op: u32, dst: u32, src: u32, imm: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movdqu_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movdqu_load_base(dst: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movdqu_store_base(src: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movdqu_load_rip_sym(dst: u32, sec: u32, off: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movdqu_load_sib(dst: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_movdqu_store_sib(src: u32, base: u32, index: u32, scale: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_rr(dst: u32, src: u32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movabs(reg: u32, imm: u64) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_mov_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
@@ -265,6 +276,7 @@ fn is_lower(c: u32) -> u32 { if c >= C_a { if c <= C_z { return 1u32 } }  return
 fn hexv(c: u32) -> u32 {
     if c >= C_0 { if c <= C_9 { return c - C_0 } }
     if c >= C_a { if c <= (C_a + 5u32) { return (c - C_a) + 10u32 } }   /* a..f */
+    if c >= 65u32 { if c <= 70u32 { return (c - 65u32) + 10u32 } }      /* A..F (hand-written asm: $0xB1) */
     return 0u32
 }
 
@@ -281,6 +293,7 @@ fn sp_num() -> i64 {
             let mut ish : u32 = 0u32
             if is_digit(c) == 1u32 { ish = 1u32 }
             if c >= C_a { if c <= (C_a + 5u32) { ish = 1u32 } }
+            if c >= 65u32 { if c <= 70u32 { ish = 1u32 } }   /* A..F uppercase hex */
             if ish == 1u32 { val = (val * 16i64) + (hexv(c) as i64)  sp_adv() } else { g = 0u32 }
         }
         if neg == 1u32 { return 0i64 - val }
@@ -299,6 +312,17 @@ fn sp_reg() -> u32 {
     if sp_rc(sp_ch()) == 1u32 { rn0 = sp_ch()  sp_adv()  rln = 1u32 }
     if sp_rc(sp_ch()) == 1u32 { rn1 = sp_ch()  sp_adv()  rln = 2u32 }
     if sp_rc(sp_ch()) == 1u32 { rn2 = sp_ch()  sp_adv()  rln = 3u32 }
+    /* xmm/ymm/zmm<N> : a vector register -- ?mm prefix then a DECIMAL number (the reg id 0..15/31).
+     * Must read the number HERE (the generic trailing consumer below would discard it). */
+    if rln == 3u32 { if rn1 == 109u32 { if rn2 == 109u32 {
+        let mut isv : u32 = 0u32
+        if rn0 == 120u32 { isv = 1u32 }  if rn0 == 121u32 { isv = 1u32 }  if rn0 == 122u32 { isv = 1u32 }
+        if isv == 1u32 {
+            let mut xv : u32 = 0u32
+            while is_digit(sp_ch()) == 1u32 { xv = (xv * 10u32) + (sp_ch() - 48u32)  sp_adv() }
+            return xv
+        }
+    } } }
     while sp_rc(sp_ch()) == 1u32 { sp_adv() }   /* consume any trailing (r10d, etc.) */
     /* r8..r15 : 'r' then digit(s) */
     if rn0 == 114u32 { if is_digit(rn1) == 1u32 {
@@ -355,11 +379,11 @@ fn sp_operand() {
 }
 
 /* read the mnemonic token into m0..m4 (we only need first 5 chars); returns length */
-var MN : [u32; 8]
+var MN : [u32; 16]   /* up to 16 chars so long SIMD mnemonics (sha256msg1/2, len 10) are disambiguable by MN[9] */
 var MNN : u32 = 0u32
 fn sp_mnem() {   /* read a full identifier (so a label like L_foo: or foo_bar: is detected as a label, not an op) */
     MNN = 0u32
-    while is_ident(sp_ch()) == 1u32 { if MNN < 8u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
+    while is_ident(sp_ch()) == 1u32 { if MNN < 16u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
 }
 fn mn_is(a: u32, b: u32, c: u32, d: u32, n: u32) -> u32 {
     if MNN != n { return 0u32 }
@@ -476,6 +500,17 @@ fn sp_try_branch() -> u32 {
 /* read two comma-separated operands (op1 saved to S1*, op2 in OP*) */
 fn sp_two_ops() {
     sp_operand()  S1K = OPK  S1R = OPR  S1D = OPD  S1I = OPI  S1SEC = OPSEC  S1OFF = OPOFF  S1INDEX = OPINDEX  S1SCALE = OPSCALE
+    sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+    sp_operand()
+}
+
+/* three-operand reader (SIMD imm/implicit forms): op1 -> T1*, op2 -> T2*, op3 -> OP*. */
+var T1K : u32 = 0u32  var T1R : u32 = 0u32  var T1I : i64 = 0i64
+var T2K : u32 = 0u32  var T2R : u32 = 0u32
+fn sp_three_ops() {
+    sp_operand()  T1K = OPK  T1R = OPR  T1I = OPI
+    sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
+    sp_operand()  T2K = OPK  T2R = OPR
     sp_skip_ws()  if sp_ch() == C_COM { sp_adv() }
     sp_operand()
 }
@@ -640,6 +675,32 @@ fn sp_dispatch_instr() {
     if mn_is(97u32,110u32,100u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_andl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* andl */
     if mn_is(111u32,114u32,108u32,0u32,3u32)   == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_orl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* orl */
     if mn_is(99u32,109u32,112u32,108u32,4u32)  == 1u32 { sp_two_ops()  if S1K == 0u32 { if OPK == 0u32 { sov_cmpl_rr(OPR, S1R)  return } }  PARSE_ERR = 1u32  return }   /* cmpl */
+    /* ── SSE / SHA-NI (Tier-2 crypto SIMD): xmm operands; modrm reg=DEST, rm=SRC; conditional W0 REX ── */
+    if mn_is(112u32,97u32,100u32,100u32,5u32) == 1u32 { sp_two_ops()  sov_sse_0f(0x66u32, 0xFEu32, OPR, S1R)  return }                       /* paddd %src,%dst : 66 0F FE /r */
+    if mn_is(112u32,115u32,104u32,117u32,6u32) == 1u32 {                                                                                    /* pshu? (MN[5] b=98 / d=100) */
+        if MN[5u64] == 98u32  { sp_two_ops()    sov_sse_0f38(0x66u32, 0x00u32, OPR, S1R)  return }                                          /* pshufb %src,%dst : 66 0F 38 00 /r */
+        if MN[5u64] == 100u32 { sp_three_ops()  sov_sse_0f_ib(0x66u32, 0x70u32, OPR, T2R, T1I as u32)  return }                              /* pshufd $i,%src,%dst : 66 0F 70 /r ib */
+        PARSE_ERR = 1u32  return
+    }
+    if mn_is(112u32,97u32,108u32,105u32,7u32) == 1u32 { sp_three_ops()  sov_sse_0f3a_ib(0x66u32, 0x0Fu32, OPR, T2R, T1I as u32)  return }    /* palignr $i,%src,%dst : 66 0F 3A 0F /r ib */
+    if mn_is(112u32,98u32,108u32,101u32,7u32) == 1u32 { sp_three_ops()  sov_sse_0f3a_ib(0x66u32, 0x0Eu32, OPR, T2R, T1I as u32)  return }    /* pblendw $i,%src,%dst : 66 0F 3A 0E /r ib */
+    if mn_is(115u32,104u32,97u32,50u32,11u32) == 1u32 { sp_three_ops()  sov_sse_0f38(0x00u32, 0xCBu32, OPR, T2R)  return }                   /* sha256rnds2 %xmm0,%src,%dst : 0F 38 CB /r (xmm0 implicit) */
+    if mn_is(115u32,104u32,97u32,50u32,10u32) == 1u32 {                                                                                     /* sha256msg1/2 (MN[9] '1'=49 / '2'=50) */
+        sp_two_ops()
+        if MN[9u64] == 49u32 { sov_sse_0f38(0x00u32, 0xCCu32, OPR, S1R)  return }                                                           /* sha256msg1 : 0F 38 CC /r */
+        if MN[9u64] == 50u32 { sov_sse_0f38(0x00u32, 0xCDu32, OPR, S1R)  return }                                                           /* sha256msg2 : 0F 38 CD /r */
+        PARSE_ERR = 1u32  return
+    }
+    if mn_is(109u32,111u32,118u32,100u32,6u32) == 1u32 { if MN[5u64] == 117u32 {                                                            /* movdqu (MN[5] u=117; guards vs movdqa) */
+        sp_two_ops()
+        if S1K == 0u32 { if OPK == 0u32 { sov_movdqu_rr(OPR, S1R)  return } }                                                               /* movdqu %src,%dst : F3 0F 6F /r */
+        if S1K == 2u32 { if OPK == 0u32 { sov_movdqu_load_base(OPR, S1R, S1D)  return } }                                                   /* movdqu disp(%base),%dst */
+        if S1K == 4u32 { if OPK == 0u32 { sov_movdqu_load_sib(OPR, S1R, S1INDEX, S1SCALE, S1D)  return } }                                  /* movdqu disp(b,i,s),%dst */
+        if S1K == 3u32 { if OPK == 0u32 { sov_movdqu_load_rip_sym(OPR, S1SEC, S1OFF)  return } }                                            /* movdqu sym(%rip),%dst (REL32) */
+        if S1K == 0u32 { if OPK == 2u32 { sov_movdqu_store_base(S1R, OPR, OPD)  return } }                                                  /* movdqu %src,disp(%base) : F3 0F 7F /r */
+        if S1K == 0u32 { if OPK == 4u32 { sov_movdqu_store_sib(S1R, OPR, OPINDEX, OPSCALE, OPD)  return } }                                 /* movdqu %src,disp(b,i,s) */
+        PARSE_ERR = 1u32  return
+    } }
     /* branches (jmp/jcc to a .text label) -- resolved via the two-pass */
     if sp_try_branch() == 1u32 { return }
     PARSE_ERR = 1u32    /* unknown mnemonic -> loud, located failure */
@@ -666,7 +727,7 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
             if is_ident_start(c) == 1u32 {
                 /* read the FULL token into scratch slot SYM_N; mirror first <=8 chars into MN for mn_is */
                 let tlen : u32 = sp_read_name_into(SYM_N)
-                MNN = tlen  if MNN > 8u32 { MNN = 8u32 }
+                MNN = tlen  if MNN > 16u32 { MNN = 16u32 }   /* 16 (was 8): long SIMD mnemonics need MN[9] disambiguation */
                 let mut mi : u32 = 0u32
                 while mi < MNN { MN[mi as u64] = SYM_NAME[((SYM_N * 32u32) + mi) as u64] as u32  mi = mi + 1u32 }
                 if sp_ch() == C_COLON {
@@ -687,7 +748,7 @@ fn sovparse(ptr: *u8, len: u32) -> i32 @export {
 /* ── PASS 1: build the data-symbol table (L_* -> section, offset within section) ── */
 fn sp_read_dir() {   /* read a directive name (after the '.') into MN */
     MNN = 0u32
-    while is_ident(sp_ch()) == 1u32 { if MNN < 8u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
+    while is_ident(sp_ch()) == 1u32 { if MNN < 16u32 { MN[MNN as u64] = sp_ch()  MNN = MNN + 1u32 }  sp_adv() }
 }
 fn sp_count_bytes() -> u32 {   /* count comma-separated values on the rest of the line (.byte a,b,c) */
     let save : u32 = IN_POS

@@ -1,0 +1,26 @@
+/* prog_sha256ni.iii -- the Tier-2 FLIP TARGET (self-contained single-witness program).
+ * Computes SHA-256("abc") via numera/sha256_ni (the hardware SHA-NI core) and checks it against the
+ * FIPS 180-4 vector, returning 99 on match.  sha256_ni has ZERO externs, so its closure is {prog, sha256_ni}
+ * -- witness=[sha256_ni] only.  Once sovas encodes sha256_ni's 9 legacy SSE/SHA-NI mnemonics (movdqu/paddd/
+ * pshufd/palignr/pshufb/pblendw + sha256rnds2/msg1/msg2) byte-identical to gcc-as, this flips FULLY sovereign. */
+module prog_sha256ni
+
+extern @abi(c-msvc-x64) fn sha256_ni_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_ni.iii"
+
+var NI_IN  : [u8; 3]  = [97u8, 98u8, 99u8]   /* "abc" */
+var NI_OUT : [u8; 32]
+/* SHA-256("abc") = ba7816bf 8f01cfea 414140de 5dae2223 b00361a3 96177a9c b410ff61 f20015ad */
+var NI_EXP : [u8; 32] = [
+    186u8,120u8, 22u8,191u8,143u8,  1u8,207u8,234u8, 65u8, 65u8, 64u8,222u8, 93u8,174u8, 34u8, 35u8,
+    176u8,  3u8, 97u8,163u8,150u8, 23u8,122u8,156u8,180u8, 16u8,255u8, 97u8,242u8,  0u8, 21u8,173u8
+]
+
+fn main() -> u64 {
+    sha256_ni_oneshot(&NI_IN as *u8, 3u64, &NI_OUT as *u8)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if NI_OUT[i] != NI_EXP[i] { return 1u64 }
+        i = i + 1u64
+    }
+    return 99u64
+}

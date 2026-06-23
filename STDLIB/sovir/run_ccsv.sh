@@ -61,7 +61,7 @@ cfeat(){  # $1 = test file basename (in $S)
 }
 rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c)
 if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ]; then
-  say "ccsv C TIERS : local int arrays (8-byte cells) + char literals + pointers (test_ptr.c) AND structs (test_struct.c) -> sovereign x86 + wasm + verifier + gcc, all 99.  ccsv = + typedef + union + p->f (test_td.c).")
+  say "ccsv C TIERS : local int arrays + char + pointers (test_ptr.c) + structs (test_struct.c) + typedef/union/p->f (test_td.c) -> sovereign x86 + wasm + verifier + gcc, all 99."
 else say "FAIL tiers: ptr=$rp struct=$rs td=$rt"; fail=1; fi
 
 # string literals: char *s = "..."; s[i] -> sovereign x86 prints the string == gcc's output (content); exit 99.

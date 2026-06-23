@@ -59,8 +59,8 @@ cfeat(){  # $1 = test file basename (in $S)
   gcc "$S/$1" -o "$W/gcc_$1.exe" 2>/dev/null; "$W/gcc_$1.exe" >/dev/null 2>&1; local gc=$?
   if [ $vf -eq 99 ] && [ $x -eq 99 ] && [ $w -eq 99 ] && [ $gc -eq 99 ]; then echo "ok"; else echo "FAIL($1 vf=$vf x86=$x wasm=$w gcc=$gc)"; fi
 }
-rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c); re=$(cfeat test_enum.c); ri=$(cfeat main_inc.c); rn=$(cfeat main_nest.c); rr=$(cfeat test_real.c); rw=$(cfeat test_width.c)
-if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ] && [ "$re" = "ok" ] && [ "$ri" = "ok" ] && [ "$rn" = "ok" ] && [ "$rr" = "ok" ] && [ "$rw" = "ok" ]; then
+rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c); re=$(cfeat test_enum.c); ri=$(cfeat main_inc.c); rn=$(cfeat main_nest.c); rr=$(cfeat test_real.c); rw=$(cfeat test_width.c); ra=$(cfeat test_arrinit.c)
+if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ] && [ "$re" = "ok" ] && [ "$ri" = "ok" ] && [ "$rn" = "ok" ] && [ "$rr" = "ok" ] && [ "$rw" = "ok" ] && [ "$ra" = "ok" ]; then
   say "ccsv C TIERS : arrays+char+pointers + structs + typedef/union/p->f + enum/#define/typedef-ptr + #include + nested/diamond include-once + HEX/for/++/--/static/const/unsigned/stdint (test_real, from real iiis-0 gaps) -> sovereign x86 + wasm + verifier + gcc, all 99."
 else say "FAIL tiers: ptr=$rp struct=$rs td=$rt enum=$re include=$ri nest=$rn real=$rr"; fail=1; fi
 

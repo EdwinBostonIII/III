@@ -168,7 +168,7 @@ fn byc(ty: u32) -> u32 { if aesz_of(ty)==1i64 {return 1u32}  return 0u32 }   /* 
 /* struct types: NAME + a flattened field list (field name -> byte offset).  Struct vars reuse AO/AL/AB (base in
  * mem) + AVT (struct type index of that entry, -1 for plain arrays). */
 var STNO:[u32;32]  var STNL:[u32;32]  var STFB:[u32;32]  var STNF:[u32;32]  var STSZ:[u64;32]  var STN:u32=0u32
-var SFO:[u32;256]  var SFL:[u32;256]  var SFOFF:[u64;256]  var SFEL:[i64;256]  var SFAR:[u32;256]  var SFN:u32=0u32  var AVT:[i32;64]   /* SFEL=field elem size ; SFAR=1 if array field (bare access decays to addr) */
+var SFO:[u32;256]  var SFL:[u32;256]  var SFOFF:[u64;256]  var SFEL:[i64;256]  var SFAR:[u32;256]  var SFMASK:[i64;256]  var SFN:u32=0u32  var AVT:[i32;64]   /* SFEL=elem size ; SFAR=array? ; SFMASK=field width-mask (uint32 field -> 0xFFFFFFFF) */
 /* named integer constants: enum members + object-like #define <number>.  Resolved in eprim -> econst. */
 var CNO:[u32;1024]  var CNL:[u32;1024]  var CNV:[i64;1024]  var CN:u32=0u32
 fn cadd(o:u32, l:u32, v:i64) { if CN<1024u32 { CNO[CN as u64]=o  CNL[CN as u64]=l  CNV[CN as u64]=v  CN=CN+1u32 } }
@@ -178,6 +178,7 @@ fn avtype(t:u32)->i32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[
 fn fieldoff(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64-1i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFOFF[fi as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn fieldelem(sti:i32, ft:u32)->i64 { if sti<0i32 {return 8i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFEL[fi as u64]}  k=k+1u32 }  return 8i64 }   /* element size of a (possibly array) field */
 fn fieldisarr(sti:i32, ft:u32)->u32 { if sti<0i32 {return 0u32}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFAR[fi as u64]}  k=k+1u32 }  return 0u32 }   /* is this field an array? (bare access decays to address) */
+fn fieldmask(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFMASK[fi as u64]}  k=k+1u32 }  return 0i64 }   /* the field's width mask (fixed-width field store/compound) */
 /* string literals: a BYTE-PACKED region at the START of svir_mem (real C layout), emitted as a SVIR DATA SECTION
  * (initialised linear memory -- no main-entry STORE init).  char *s = "..."; s[i] -> LOAD8 at s+i (stride 1, via
  * the char* flag LCH).  Each STRING token's TV becomes its byte address; arrays/structs follow (prescan_arr MTOP=DLEN). */
@@ -462,15 +463,15 @@ fn pstmt() {
     } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT {   /* v.field[/[i]] = e ; (struct field store) */
         let nt:u32=C  let vt:i32=avtype(nt)
-        if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  let fe:i64=fieldelem(vt,ft)
-            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  econst(fe)  eb(0x22u32)  econst(vb+foff)  eb(0x20u32)  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
-            C=C+3u32  econst(vb+foff)  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
+        if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  let fe:i64=fieldelem(vt,ft)  let fm:i64=fieldmask(vt,ft)
+            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  econst(fe)  eb(0x22u32)  econst(vb+foff)  eb(0x20u32)  emit_av(fe, fm)  eat(Q_SEMI)  return }
+            C=C+3u32  econst(vb+foff)  emit_av(fe, fm)  eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field[/[i]] = e ; (struct-ptr field store) */
         let nt:u32=C  let ptt:i32=lpt(nt)
-        if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)
-            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  econst(fe)  eb(0x22u32)  eu8(0x10u32,pl as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
-            C=C+3u32  eu8(0x10u32, pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
+        if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)  let fm:i64=fieldmask(ptt,ft)
+            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  econst(fe)  eb(0x22u32)  eu8(0x10u32,pl as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  emit_av(fe, fm)  eat(Q_SEMI)  return }
+            C=C+3u32  eu8(0x10u32, pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  emit_av(fe, fm)  eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
         let nt:u32=C  let ab:i64=abase(nt)
@@ -569,9 +570,9 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
     while g==1u32 {
         if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32}
         else { if dtype(q)==1u32 {
-            let mut esz:i64=aesz_of(q)  let mut fq:u32=q+1u32  if ispat(fq,Q_MUL)==1u32 { fq=fq+1u32  esz=8i64 }   /* element/scalar size (ptr->8) */
+            let mut esz:i64=aesz_of(q)  let mut fmask:i64=type_mask(q)  let mut fq:u32=q+1u32  if ispat(fq,Q_MUL)==1u32 { fq=fq+1u32  esz=8i64  fmask=0i64 }   /* element/scalar size + width-mask (ptr -> 8 / no mask) */
             let mut isarr:u32=0u32  if ispat(fq+1u32,Q_LBR)==1u32 { isarr=1u32 }
-            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr
+            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmask
             let mut fsz:u64=esz as u64                                                          /* scalar field size */
             if isarr==1u32 { if TK[(fq+2u32) as u64]==2u32 { fsz=(TV[(fq+2u32) as u64] as u64)*(esz as u64) } }   /* array field: NUM*elem */
             SFN=SFN+1u32  nf=nf+1u32

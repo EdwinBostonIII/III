@@ -142,7 +142,7 @@ fn cp(p: i64) -> u32 { if TK[C as u64]==3u32 { if TV[C as u64]==p {return 1u32} 
 fn eat(p: i64) -> u32 { if cp(p)==1u32 { C=C+1u32  return 1u32 }  return 0u32 }
 fn ispat(t: u32, p: i64) -> u32 { if TK[t as u64]==3u32 { if TV[t as u64]==p {return 1u32} }  return 0u32 }
 
-var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32; 256]  var FRM : [i64; 256]  var FN : u32 = 0u32  var CUR_RMASK : i64 = 0i64   /* FRM=per-fn return width-mask */
+var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32; 256]  var FRM : [i64; 256]  var FN : u32 = 0u32  var CUR_RMASK : i64 = 0i64  var ENDED_RET : u32 = 0u32   /* FRM=per-fn return width-mask ; ENDED_RET=last stmt was a return */
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width AND-mask (0=full i64) */
 fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
@@ -286,6 +286,7 @@ fn emit_for_incr() {   /* the for-loop's incr clause (no trailing ;): i++ / i-- 
     ebin(0u32)  eb(0x72u32)
 }
 fn pstmt() {
+    ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
     if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
     if cp(Q_MUL)==1u32 {                                            /* *p = e ;  (pointer deref store) */
         C=C+1u32  let mut ischp:u32=0u32
@@ -329,7 +330,7 @@ fn pstmt() {
         if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  let s:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s as u64]=1u32 } }  if isp==0u32 { LW[s as u64]=tym }  emit_lset(s)  eat(Q_SEMI)  return }   /* int x = e ; (mask if a fixed-width type) */
         let s2:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s2 as u64]=1u32 } }  if isp==0u32 { LW[s2 as u64]=tym }  eat(Q_SEMI)  return    /* int x ; (uninit, mask recorded for later assigns) */
     }
-    if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  eat(Q_SEMI)  return }   /* mask return to the declared width */
+    if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  ENDED_RET=1u32  eat(Q_SEMI)  return }   /* mask return to the declared width */
     if kw(C,"if" as u64,2u32)==1u32 {
         C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  pblock()
         if kw(C,"else" as u64,4u32)==1u32 { C=C+1u32  eb(0x43u32)  pblock() }
@@ -522,7 +523,8 @@ fn cfn(fk: u32) {
         if isp==0u32 { LW[sl as u64]=pm }
         params=params+1u32  eat(Q_COM)
     } } }
-    eat(Q_RP)  BL=0u64  pblock()   /* string region is initialised by the SVIR data section (no main-entry init) */
+    eat(Q_RP)  BL=0u64  ENDED_RET=0u32  pblock()
+    if ENDED_RET==0u32 { econst(0i64)  eb(0x60u32) }          /* default `return 0` ONLY for void/fall-through fns (return-ending fns stay byte-identical -> byte-DDC preserved) */
     mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
     let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }
 }

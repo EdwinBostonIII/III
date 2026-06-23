@@ -27,4 +27,21 @@ xl="NO"; cmp -s "$W/gen_csvir.iii" "$W/_ii.iii" && xl="YES"
 if [ $cv -eq 99 ] && [ $gv -eq 99 ] && [ "$k" = "1" ] && [ "$xl" = "YES" ]; then
   say "ccsv NON-GCC C COMPILER : real C -> SVIR -> x86(sovereign,kernel32-only)=$cv ; mini-DDC gcc=$gv agree ; cross-language byte-DDC ccsv(C)==iiisv(.iii)=$xl.  Foundation for seed-DDC; full iiis-0 C = the long road."
 else say "FAIL: ccsv=$cv gcc=$gv dlls=$k crosslang=$xl"; fail=1; fi
+
+# arbitrary-precision: ccsv compiles a C bignum (100! via global array + putchar) -> sovereign x86 -> the 158
+# digits, matching the golden AND (content) gcc.  ccsv now handles global arrays, array index, output, and skips
+# #preprocessor lines.
+"$W/ccsv.exe" "$S/test_bignum.c" > "$W/gen_bnc.iii" 2>/dev/null
+"$IIIS" "$W/gen_bnc.iii" --compile-only --out "$W/gen_bnc.o" >/dev/null 2>&1
+gcc "$W/svir_x86.o" "$W/gen_bnc.o" -o "$W/tx_bnc.exe" 2>/dev/null; "$W/tx_bnc.exe" > "$W/bnc.s" 2>/dev/null
+timeout 20 "$BOOT/sovas_main.exe" "$W/bnc.s" > "$W/bnc.o2" 2>/dev/null
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/bnc.o2" > "$W/bnc.x86.exe" 2>/dev/null
+timeout 10 "$W/bnc.x86.exe" > "$W/out_ccsv.txt" 2>/dev/null; bv=$?
+node -e 'let f=1n;for(let i=1n;i<=100n;i++)f*=i;console.log(f.toString())' > "$W/out_gold.txt" 2>/dev/null
+gcc "$S/test_bignum.c" -o "$W/bnc_gcc.exe" 2>/dev/null; "$W/bnc_gcc.exe" 2>/dev/null | tr -d '\r' > "$W/out_gcc.txt"
+gold="NO"; cmp -s "$W/out_ccsv.txt" "$W/out_gold.txt" && gold="YES"
+gccm="NO"; cmp -s "$W/out_ccsv.txt" "$W/out_gcc.txt" && gccm="YES"
+if [ $bv -eq 99 ] && [ "$gold" = "YES" ] && [ "$gccm" = "YES" ]; then
+  say "ccsv ARBITRARY-PRECISION : C bignum (global array + putchar) -> sovereign x86 prints 100! (158 digits) == golden(node)=$gold == gcc(content)=$gccm -> 99.  ccsv grew: global arrays, indexing, output, #-line skip."
+else say "FAIL bignum: exit=$bv golden=$gold gcc=$gccm"; fail=1; fi
 exit $fail

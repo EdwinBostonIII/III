@@ -1,0 +1,4 @@
+module svir_bad_op
+var SVIR : [u8; 6] = [1u8, 0u8,1u8,1u8,0u8, 255u8]
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 6u64 }

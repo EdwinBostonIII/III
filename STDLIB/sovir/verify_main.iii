@@ -1,0 +1,11 @@
+/* verify_main.iii -- driver: verify the linked SVIR module; exit 99 if valid (0), else the error code.
+ * Links against any module exporting svir_ptr/svir_len (the same surface the translators consume). */
+module verify_main
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn svir_verify(src: u64, len: u64) -> u64 from "svir_verify.iii"
+fn main() -> u64 {
+    let r : u64 = svir_verify(svir_ptr(), svir_len())
+    if r == 0u64 { return 99u64 }
+    return r
+}

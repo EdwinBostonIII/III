@@ -1,0 +1,66 @@
+/* svir_verify.iii -- the auditable SVIR v1 verifier (the trust anchor).  Validates a SVIR module against
+ * DOCS/SVIR-V1-CANONICAL.md: header consistency, every opcode known, operands in range, structured control
+ * balanced, a conservative eval-stack never underflows, and each body is consumed EXACTLY.  Returns 0 if valid,
+ * else a nonzero error code.  Small + readable on purpose -- the whole system's trust anchors here.
+ *
+ * Error codes: 1 bad header  2 unknown opcode  4 body length mismatch  5 control unbalanced
+ *   6 ELSE without IF  7 BR/BR_IF depth out of range  8 eval-stack underflow  9 CALL funcidx out of range */
+module svir_verify
+
+fn vb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return p[0u64] as u32 }
+
+var CSTK : [u32; 256]      /* construct stack: 0=BLOCK/LOOP, 2=IF (module-scope: fn-local runtime arrays segfault) */
+var CSN : u32 = 0u32
+
+fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 {
+    CSN = 0u32
+    let mut depth : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op : u32 = vb(base, boff + p)
+        p = p + 1u64
+        let mut known : u32 = 0u32
+        if op == 0x01u32 { p = p + 8u64  depth = depth + 1i64  known = 1u32 }                 /* CONST */
+        if op == 0x10u32 { p = p + 1u64  depth = depth + 1i64  known = 1u32 }                 /* LOCAL_GET */
+        if op == 0x11u32 { p = p + 1u64  depth = depth - 1i64  known = 1u32 }                 /* LOCAL_SET */
+        if op >= 0x20u32 { if op <= 0x35u32 { depth = depth - 1i64  known = 1u32 } }          /* binops 0x20..0x35: net -1 */
+        if op == 0x40u32 { CSTK[CSN as u64] = 0u32  CSN = CSN + 1u32  known = 1u32 }          /* BLOCK */
+        if op == 0x41u32 { CSTK[CSN as u64] = 0u32  CSN = CSN + 1u32  known = 1u32 }          /* LOOP */
+        if op == 0x42u32 { depth = depth - 1i64  CSTK[CSN as u64] = 2u32  CSN = CSN + 1u32  known = 1u32 }   /* IF pops cond */
+        if op == 0x43u32 { if CSN == 0u32 { return 6u64 }  if CSTK[(CSN - 1u32) as u64] != 2u32 { return 6u64 }  known = 1u32 }   /* ELSE */
+        if op == 0x44u32 { if CSN == 0u32 { return 5u64 }  CSN = CSN - 1u32  known = 1u32 }   /* END */
+        if op == 0x50u32 { let d : u32 = vb(base, boff + p)  p = p + 1u64  if d >= CSN { return 7u64 }  known = 1u32 }            /* BR */
+        if op == 0x51u32 { let d : u32 = vb(base, boff + p)  p = p + 1u64  depth = depth - 1i64  if d >= CSN { return 7u64 }  known = 1u32 }   /* BR_IF */
+        if op == 0x60u32 { depth = depth - 1i64  known = 1u32 }                               /* RETURN */
+        if op == 0x70u32 { let fi : u32 = vb(base, boff + p)  let ac : u32 = vb(base, boff + p + 1u64)  p = p + 2u64  if fi >= nfunc { return 9u64 }  depth = depth - (ac as i64) + 1i64  known = 1u32 }   /* CALL */
+        if op == 0x71u32 { depth = depth - 1i64  known = 1u32 }                               /* PRINT_CHAR */
+        if op == 0x72u32 { depth = depth - 1i64  known = 1u32 }                               /* DROP */
+        if op == 0x80u32 { known = 1u32 }                                                     /* LOAD8: net 0 */
+        if op == 0x81u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE8 */
+        if known == 0u32 { return 2u64 }
+        if depth < 0i64 { return 8u64 }
+    }
+    if p != blen { return 4u64 }
+    if CSN != 0u32 { return 5u64 }
+    return 0u64
+}
+
+fn svir_verify(src: u64, len: u64) -> u64 @export {
+    if len < 1u64 { return 1u64 }
+    let nfunc : u32 = vb(src, 0u64)
+    if nfunc == 0u32 { return 1u64 }
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        if (off + 4u64) > len { return 1u64 }
+        let blen : u64 = (vb(src, off + 2u64) as u64) | ((vb(src, off + 3u64) as u64) << 8u64)
+        let boff : u64 = off + 4u64
+        if (boff + blen) > len { return 1u64 }
+        let r : u64 = verify_body(src, boff, blen, nfunc)
+        if r != 0u64 { return r }
+        off = boff + blen
+        i = i + 1u32
+    }
+    if off != len { return 1u64 }
+    return 0u64
+}

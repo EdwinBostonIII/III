@@ -1,0 +1,71 @@
+/* zk_svir_mul.iii -- arithmetize the SVIR MUL opcode over the 30-bit field via LIMB SCHOOLBOOK MULTIPLICATION.
+ * a,b < 2^28 (2 limbs each, <=14 bits); a*b < 2^56 (4 result limbs).  Each partial product a_i*b_j < 2^28 < the
+ * field, so the schoolbook columns + carry are all degree-<=2 over zk_air -- WHICH IS WHY zk_air's air_add_term
+ * (a degree-2 term coeff*var_a*var_b) suffices, no field-tower needed.  The per-position product structure is
+ * non-uniform across rows, so the carry-chain ROW layout (zk_svir_add) does NOT fit; instead a ONE-ROW WIDE
+ * TABLEAU (11 columns) -- which needed zk_air's capacity expanded W:4->16 ("make the organ ideal").
+ *
+ * Columns (row 0): a0 a1 b0 b1 c0 c1 c2 c3 k0 k1 k2  (vars 1..11; var0=const1).  Four degree-<=2 column
+ * constraints (cur-only -> hold at every trace row; padding rows are all-zero):
+ *   con0: a0*b0 - c0 - k0*2^14 == 0
+ *   con1: a0*b1 + a1*b0 + k0 - c1 - k1*2^14 == 0
+ *   con2: a1*b1 + k1 - c2 - k2*2^14 == 0
+ *   con3: k2 - c3 == 0
+ * a=19088743 (a0=1383,a1=1165), b=144358622 (b0=15582,b1=8810) ; c0..c3=4946,11791,9117,626 ; k0..k2=1315,1851,626.
+ *
+ * Returns 99 iff the honest schoolbook trace satisfies the AIR (air_constraints_hold==1 + CP consistent) AND a
+ * forged result limb is rejected (air_constraints_hold==0).  RESIDUAL: soundness of the result needs each c_i<2^14
+ * and each carry k_i in range -- the range-check gadget (zk_svir_range) composes per column. */
+module zk_svir_mul
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+
+/* row 0 = the schoolbook tableau (cols 0..10); rows 1..3 = zero padding (constraints hold trivially). */
+var ROW0 : [u32; 11] = [1383u32, 1165u32, 15582u32, 8810u32, 4946u32, 11791u32, 9117u32, 626u32, 1315u32, 1851u32, 626u32]
+
+fn fill_trace() {
+    let mut c : u64 = 0u64
+    while c < 11u64 { air_set_trace(0u64, c, ROW0[c])  c = c + 1u64 }
+    let mut r : u64 = 1u64
+    while r < 4u64 { let mut cc : u64 = 0u64  while cc < 11u64 { air_set_trace(r, cc, 0u32)  cc = cc + 1u64 }  r = r + 1u64 }
+}
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    let n14 : u32 = p - 16384u32                     /* -(2^14) mod p */
+    /* con0: a0*b0 - c0 - k0*2^14   (vars: a0=1,a1=2,b0=3,b1=4,c0=5,c1=6,c2=7,c3=8,k0=9,k1=10,k2=11) */
+    air_add_term(0u32, 1u32, 1u32, 3u32)  air_add_term(0u32, p - 1u32, 5u32, 0u32)  air_add_term(0u32, n14, 9u32, 0u32)
+    /* con1: a0*b1 + a1*b0 + k0 - c1 - k1*2^14 */
+    air_add_term(1u32, 1u32, 1u32, 4u32)  air_add_term(1u32, 1u32, 2u32, 3u32)  air_add_term(1u32, 1u32, 9u32, 0u32)
+    air_add_term(1u32, p - 1u32, 6u32, 0u32)  air_add_term(1u32, n14, 10u32, 0u32)
+    /* con2: a1*b1 + k1 - c2 - k2*2^14 */
+    air_add_term(2u32, 1u32, 2u32, 4u32)  air_add_term(2u32, 1u32, 10u32, 0u32)  air_add_term(2u32, p - 1u32, 7u32, 0u32)  air_add_term(2u32, n14, 11u32, 0u32)
+    /* con3: k2 - c3 */
+    air_add_term(3u32, 1u32, 11u32, 0u32)  air_add_term(3u32, p - 1u32, 8u32, 0u32)
+    air_set_alpha(0u64, 3u32)  air_set_alpha(1u64, 5u32)  air_set_alpha(2u64, 7u32)  air_set_alpha(3u64, 11u32)
+}
+
+fn build_air() { air_reset(11u32, 4u32)  fill_trace()  setup_constraints()  air_build_lde()  air_build_cp() }
+
+fn main() -> u64 {
+    build_air()
+    if air_constraints_hold() != 1u8 { return 1u64 }      /* the schoolbook columns + carries all vanish */
+    if air_cp_consistent_at(1u64) != 1u8 { return 2u64 }
+    if air_cp_consistent_at(5u64) != 1u8 { return 3u64 }
+    /* SOUNDNESS NEGATIVE: forge a result limb (c1 11791 -> 9999) -> con1 no longer vanishes -> wrong product caught. */
+    build_air()  air_set_trace(0u64, 5u64, 9999u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 4u64 }
+    /* forge a carry (k1 1851 -> 0) -> con1 + con2 break. */
+    build_air()  air_set_trace(0u64, 9u64, 0u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 5u64 }
+    build_air()
+    if air_constraints_hold() != 1u8 { return 6u64 }
+    return 99u64
+}

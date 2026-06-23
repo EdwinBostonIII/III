@@ -54,9 +54,10 @@ extern @abi(c-msvc-x64) fn zk_proof_seal_eq(a: u64, b: u64) -> u8 from "zk_stark
 const AIR_Q : u32 = 998244353u32
 const AIR_B : u64 = 4u64            /* LDE blowup factor (D = B*N) */
 
-/* Capacity (module-global; iiis runtime-indexed locals SIGSEGV -- all working
- * arrays are module-scope by necessity).  W<=4 columns, N<=64 rows, D<=256. */
-const AIR_WMAX : u64 = 4u64
+/* Capacity (module-global; iiis runtime-indexed locals SIGSEGV -- all working arrays are module-scope by
+ * necessity).  W<=16 columns (expanded from 4 to hold wide opcode tableaux -- e.g. the SVIR MUL gadget's
+ * 11-column limb*limb schoolbook), N<=64 rows, D<=256.  Arrays sized WMAX*NMAX / WMAX*DMAX accordingly. */
+const AIR_WMAX : u64 = 16u64
 const AIR_NMAX : u64 = 64u64
 const AIR_DMAX : u64 = 256u64       /* WMAX irrelevant; per-column D */
 const AIR_TMAX : u64 = 64u64        /* transition terms */
@@ -64,9 +65,9 @@ const AIR_CMAX : u64 = 8u64         /* transition constraints */
 
 var AIR_W      : [u32; 1]
 var AIR_N      : [u32; 1]
-var AIR_TRACE  : [u32; 256]         /* row-major: T[row*W + col]  (WMAX*NMAX) */
-var AIR_TCOEF  : [u32; 1024]        /* per-column coeffs, padded to D (WMAX*DMAX) */
-var AIR_LDE    : [u32; 1024]        /* per-column LDE over H_D (WMAX*DMAX) */
+var AIR_TRACE  : [u32; 1024]        /* row-major: T[row*W + col]  (WMAX*NMAX = 16*64) */
+var AIR_TCOEF  : [u32; 4096]        /* per-column coeffs, padded to D (WMAX*DMAX = 16*256) */
+var AIR_LDE    : [u32; 4096]        /* per-column LDE over H_D (WMAX*DMAX = 16*256) */
 var AIR_CP     : [u32; 256]         /* composition polynomial over H_D (DMAX) */
 /* transition constraint term lists */
 var AIR_TT_COEF : [u32; 64]
@@ -282,8 +283,8 @@ fn air_cp_consistent_at(j: u64) -> u8 @export {
  * st_verify does at its (currently hard-coded) transition line, generalized to W
  * columns + the data-driven term lists.  Pinning air_combine_opened == air_combine
  * is the bridge that lets the general verifier replace the x^2+c special case. */
-var AIR_OPEN_CUR  : [u32; 4]
-var AIR_OPEN_NEXT : [u32; 4]
+var AIR_OPEN_CUR  : [u32; 16]
+var AIR_OPEN_NEXT : [u32; 16]
 
 fn air_set_open(col: u64, cur_v: u32, next_v: u32) -> i32 @export {
     if col >= AIR_WMAX { return 0i32 - 1i32 }   /* AIR_OPEN_CUR/NEXT have AIR_WMAX slots */

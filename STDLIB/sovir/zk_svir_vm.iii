@@ -1,0 +1,82 @@
+/* zk_svir_vm.iii -- the PER-STEP VM TRACE LAYOUT: chain opcode-AIRs into a proof that a SVIR-style program
+ * EXECUTED correctly.  A minimal but real selector-dispatched accumulator VM (2 opcodes: ADD v, MUL v): each
+ * trace ROW is an execution STEP; the running accumulator chains step-to-step (next.acc == this step's result).
+ *
+ * Columns (W=5): acc, v, prod, sel_add, sel_mul.  Opcode dispatch is degree-2 (NOT 3) because the product is
+ * MATERIALIZED in a column (prod, pinned by prod==acc*v) -- the standard zkVM trick to fit a degree-<=2 AIR.
+ * Constraints (vars: acc=1,v=2,prod=3,sel_add=4,sel_mul=5 ; next.acc=6):
+ *   con0 dispatch:  next.acc - sel_add*(acc+v) - sel_mul*prod == 0
+ *   con1 product:   prod - acc*v == 0
+ *   con2 one-hot:   sel_add + sel_mul - 1 == 0
+ *   con3,4 boolean: sel_add^2-sel_add==0 ; sel_mul^2-sel_mul==0
+ * Program: acc=2 ; MUL 3 ->6 ; ADD 5 ->11 ; MUL 2 ->22 ; ADD 7 ->29 ; then HALT (sel_add,v=0 self-loop, padded).
+ *
+ * Returns 99 iff the honest execution satisfies the AIR (every step's dispatch + product + selector vanish) AND a
+ * TAMPERED execution (forged intermediate acc) is REJECTED.  This is the layer that turns per-opcode AIRs into
+ * "arbitrary SVIR bytecode proven": every step is constrained, the state chains, a wrong step reddens the proof.
+ * RESIDUAL: 2 opcodes + field-fitting values demonstrated; the full SVIR ISA folds in the limb ADD/MUL gadgets
+ * (zk_svir_add/mul) per step (i64 over the field) + range checks (zk_svir_range) -- the composition is the zkVM. */
+module zk_svir_vm
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+
+/* the execution trace (8 steps: 4 ops + halt self-loop padding to a power of two). */
+var ACC  : [u32; 8] = [2u32, 6u32, 11u32, 22u32, 29u32, 29u32, 29u32, 29u32]
+var VV   : [u32; 8] = [3u32, 5u32, 2u32, 7u32, 0u32, 0u32, 0u32, 0u32]
+var PROD : [u32; 8] = [6u32, 30u32, 22u32, 154u32, 0u32, 0u32, 0u32, 0u32]
+var SADD : [u32; 8] = [0u32, 1u32, 0u32, 1u32, 1u32, 1u32, 1u32, 1u32]
+var SMUL : [u32; 8] = [1u32, 0u32, 1u32, 0u32, 0u32, 0u32, 0u32, 0u32]
+
+fn fill_trace() {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, ACC[i])   air_set_trace(i, 1u64, VV[i])   air_set_trace(i, 2u64, PROD[i])
+        air_set_trace(i, 3u64, SADD[i])  air_set_trace(i, 4u64, SMUL[i])
+        i = i + 1u64
+    }
+}
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    /* con0 dispatch: next.acc - sel_add*acc - sel_add*v - sel_mul*prod == 0  (sel_add*(acc+v) split into 2 terms) */
+    air_add_term(0u32, 1u32, 6u32, 0u32)             /* + next.acc */
+    air_add_term(0u32, p - 1u32, 4u32, 1u32)         /* - sel_add*acc */
+    air_add_term(0u32, p - 1u32, 4u32, 2u32)         /* - sel_add*v */
+    air_add_term(0u32, p - 1u32, 5u32, 3u32)         /* - sel_mul*prod */
+    /* con1 product: prod - acc*v == 0 */
+    air_add_term(1u32, 1u32, 3u32, 0u32)  air_add_term(1u32, p - 1u32, 1u32, 2u32)
+    /* con2 one-hot: sel_add + sel_mul - 1 == 0 */
+    air_add_term(2u32, 1u32, 4u32, 0u32)  air_add_term(2u32, 1u32, 5u32, 0u32)  air_add_term(2u32, p - 1u32, 0u32, 0u32)
+    /* con3,4 boolean selectors */
+    air_add_term(3u32, 1u32, 4u32, 4u32)  air_add_term(3u32, p - 1u32, 4u32, 0u32)
+    air_add_term(4u32, 1u32, 5u32, 5u32)  air_add_term(4u32, p - 1u32, 5u32, 0u32)
+    air_set_alpha(0u64, 3u32)  air_set_alpha(1u64, 5u32)  air_set_alpha(2u64, 7u32)  air_set_alpha(3u64, 11u32)  air_set_alpha(4u64, 13u32)
+}
+
+fn build_air() { air_reset(5u32, 8u32)  fill_trace()  setup_constraints()  air_build_lde()  air_build_cp() }
+
+fn main() -> u64 {
+    build_air()
+    /* the whole EXECUTION is constrained: every step's dispatch + product + one-hot + boolean vanish. */
+    if air_constraints_hold() != 1u8 { return 1u64 }
+    if air_cp_consistent_at(1u64) != 1u8 { return 2u64 }
+    if air_cp_consistent_at(3u64) != 1u8 { return 3u64 }
+    /* SOUNDNESS NEGATIVE: forge an intermediate accumulator (acc at step 2: 11 -> 99) -> the step-1 dispatch
+     * (next.acc must be 11) no longer vanishes -> a wrong execution is caught. */
+    build_air()  air_set_trace(2u64, 0u64, 99u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 4u64 }
+    /* forge an opcode (step 1 sel_add 1 -> 0, sel_mul 0 -> 1: claim MUL where the trace was ADD) -> one-hot still
+     * holds but the dispatch now demands next.acc = prod, which mismatches -> caught. */
+    build_air()  air_set_trace(1u64, 3u64, 0u32)  air_set_trace(1u64, 4u64, 1u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 5u64 }
+    build_air()
+    if air_constraints_hold() != 1u8 { return 6u64 }
+    return 99u64
+}

@@ -74,6 +74,6 @@ timeout 10 "$W/str.x86.exe" > "$W/out_str.txt" 2>/dev/null; sv=$?
 gcc "$S/test_str.c" -o "$W/str_gcc.exe" 2>/dev/null; "$W/str_gcc.exe" > "$W/_sg.txt" 2>/dev/null; sg=$?; tr -d '\r' < "$W/_sg.txt" > "$W/out_str_gcc.txt"
 scon="NO"; cmp -s "$W/out_str.txt" "$W/out_str_gcc.txt" && scon="YES"
 if [ $sv -eq 99 ] && [ $sg -eq 99 ] && [ "$scon" = "YES" ]; then
-  say "ccsv STRING LITERALS : char *s=\"...\"; s[i] -> sovereign x86 prints [$(cat "$W/out_str.txt" | tr -d '\n')] == gcc(content)=$scon -> 99.  (8-byte-per-char region inited at main entry; data-section = the ideal optimization residual.)"
+  say "ccsv STRING LITERALS : char *s=\"...\"; s[i] -> sovereign x86 prints [$(cat "$W/out_str.txt" | tr -d '\n')] == gcc(content)=$scon -> 99.  BYTE-PACKED via a SVIR DATA SECTION (real C layout, initialised memory) + char* stride-1 LOAD8."
 else say "FAIL string: sovereign=$sv gcc=$sg content=$scon"; fail=1; fi
 exit $fail

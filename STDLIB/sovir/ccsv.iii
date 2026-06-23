@@ -98,7 +98,7 @@ fn ispat(t: u32, p: i64) -> u32 { if TK[t as u64]==3u32 { if TV[t as u64]==p {re
 
 var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32; 256]  var FN : u32 = 0u32
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
-var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32
+var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]   /* LCH[slot]=1 iff a char* (stride-1 byte access) */
 fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 fn ladd(t: u32) -> u32 { let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LN=LN+1u32 }  return s }
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
@@ -111,31 +111,29 @@ var SFO:[u32;256]  var SFL:[u32;256]  var SFOFF:[u64;256]  var SFN:u32=0u32  var
 fn stidx(t:u32)->i32 { let mut k:u32=0u32  while k<STN { if neq(STNO[k as u64],STNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 fn avtype(t:u32)->i32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AVT[k as u64]}  k=k+1u32 }  return 0i32-1i32 }
 fn fieldoff(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64-1i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFOFF[fi as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
-/* string literals: a region at the START of svir_mem, one char per 8-BYTE CELL (so the uniform 8-byte pointer
- * indexing reads chars: char *s = "..."; s[i] -> LOAD64 at s+i*8).  Initialised at main's entry; each STRING
- * token's TV becomes its byte address.  Arrays/structs are allocated AFTER it (prescan_arr sets MTOP=DLEN). */
-var SCHARS:[i64;4096]  var SC:u32=0u32  var DLEN:u64=0u64
-fn schar(v:i64) { if SC<4096u32 { SCHARS[SC as u64]=v  SC=SC+1u32 } }
+/* string literals: a BYTE-PACKED region at the START of svir_mem (real C layout), emitted as a SVIR DATA SECTION
+ * (initialised linear memory -- no main-entry STORE init).  char *s = "..."; s[i] -> LOAD8 at s+i (stride 1, via
+ * the char* flag LCH).  Each STRING token's TV becomes its byte address; arrays/structs follow (prescan_arr MTOP=DLEN). */
+var SDAT:[u8;16384]  var DLEN:u64=0u64
+fn sbyte(v:u32) { if DLEN<16384u64 { SDAT[DLEN]=(v & 0xFFu32) as u8  DLEN=DLEN+1u64 } }
 fn prescan_str() {
-    SC=0u32  let mut t:u32=0u32
+    DLEN=0u64  let mut t:u32=0u32
     while t<NT {
         if TK[t as u64]==4u32 {
-            TV[t as u64]=(SC as i64) * 8i64                  /* address = char-cell byte offset (8-byte cells) */
+            TV[t as u64]=DLEN as i64                          /* address = byte offset in the packed region */
             let o:u32=TO[t as u64]  let l:u32=TL[t as u64]  let mut k:u32=0u32
             while k<l {
                 let cc:u32=sb((o+k) as u64)
                 if cc==92u32 { let e:u32=sb((o+k+1u32) as u64)   /* escape \n \t \0 \r (\\ \" -> literal) */
-                    if e==110u32 {schar(10i64)} else { if e==116u32 {schar(9i64)} else { if e==48u32 {schar(0i64)} else { if e==114u32 {schar(13i64)} else {schar(e as i64)} } } }
+                    if e==110u32 {sbyte(10u32)} else { if e==116u32 {sbyte(9u32)} else { if e==48u32 {sbyte(0u32)} else { if e==114u32 {sbyte(13u32)} else {sbyte(e)} } } }
                     k=k+2u32
-                } else { schar(cc as i64)  k=k+1u32 }
+                } else { sbyte(cc)  k=k+1u32 }
             }
-            schar(0i64)                                      /* NUL terminator */
+            sbyte(0u32)                                      /* NUL terminator */
         }
         t=t+1u32
     }
-    DLEN = (SC as u64) * 8u64                                 /* region size in bytes */
 }
-fn emit_string_init() { let mut c:u32=0u32  while c<SC { econst((c as i64)*8i64)  econst(SCHARS[c as u64])  eb(0x83u32)  c=c+1u32 } }   /* STORE64 char -> svir_mem[c*8] */
 
 var BD : [u8; 16384]  var BL : u64 = 0u64
 fn eb(b: u32) { if BL<16384u64 { BD[BL]=(b & 0xFFu32) as u8  BL=BL+1u64 } }
@@ -160,7 +158,10 @@ fn opc(p: i64) -> u32 {
 }
 
 fn eprim() {
-    if cp(Q_MUL)==1u32 { C=C+1u32  eprim()  eb(0x82u32)  return }   /* *p : pointer deref -> LOAD64 at the address */
+    if cp(Q_MUL)==1u32 { C=C+1u32                                  /* *p : pointer deref */
+        if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 { if LCH[dli as u64]==1u32 { eu8(0x10u32,dli as u32)  C=C+1u32  eb(0x80u32)  return } } }   /* char* -> LOAD8 */
+        eprim()  eb(0x82u32)  return                              /* int* -> LOAD64 */
+    }
     if cp(Q_AND)==1u32 {                                            /* &arr[i] / &arr : address-of (no load) */
         C=C+1u32
         if TK[C as u64]==1u32 { let at:u32=C  let ab:i64=abase(at)
@@ -185,7 +186,10 @@ fn eprim() {
         if cp(Q_LBR)==1u32 {                                         /* NAME[i] : array load (8-byte C int cell) */
             let ab:i64=abase(t)
             if ab>=0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eb(0x82u32)  return }   /* i*8 (+base) ; LOAD64 */
-            let pli:i32=lidx(t)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  eb(0x20u32)  eb(0x82u32)  return }   /* pointer p[i] = *(p + i*8) */
+            let pli:i32=lidx(t)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)
+                if LCH[pli as u64]==1u32 { eb(0x20u32)  eb(0x80u32) }                       /* char* p[i]=*(p+i), LOAD8 */
+                else { econst(8i64)  eb(0x22u32)  eb(0x20u32)  eb(0x82u32) }                 /* int* p[i]=*(p+i*8), LOAD64 */
+                return }
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field : struct field load */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  econst(vb + foff)  eb(0x82u32)  return }
@@ -205,20 +209,23 @@ fn ebin(minp: u32) {
 
 fn pstmt() {
     if cp(Q_MUL)==1u32 {                                            /* *p = e ;  (pointer deref store) */
-        C=C+1u32  eprim()  eat(Q_ASN)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return
+        C=C+1u32  let mut ischp:u32=0u32
+        if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 { if LCH[dli as u64]==1u32 {ischp=1u32} } }
+        eprim()  eat(Q_ASN)  ebin(0u32)  if ischp==1u32 { eb(0x81u32) } else { eb(0x83u32) }  eat(Q_SEMI)  return
     }
     if kw(C,"struct" as u64,6u32)==1u32 {                           /* struct Name v ;  (local struct decl -> registered by prescan_struct; skip) */
         let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
     }
     if dtype(C)==1u32 {                                            /* int/char decl (int x ; int *p ; char *s ; int arr[N] ;) */
-        C=C+1u32  if cp(Q_MUL)==1u32 { C=C+1u32 }                    /* `int/char *p` -> pointer local (an i64 address) */
+        let isc:u32=kw(C,"char" as u64,4u32)
+        C=C+1u32  let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }    /* `int/char *p` -> pointer local (an i64 address) */
         let nt:u32=C
         if ispat(C+1u32, Q_LBR)==1u32 {                             /* int NAME[NUM]; local array -> registered by prescan_arr; skip the decl */
             C=C+1u32  let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
         }
         C=C+1u32
-        if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  let s:u32=ladd(nt)  eu8(0x11u32,s)  eat(Q_SEMI)  return }   /* int x = e ;  (or int *p = e ;) */
-        ladd(nt)  eat(Q_SEMI)  return                               /* int x ;  (uninitialized local) */
+        if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  let s:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s as u64]=1u32 } }  eu8(0x11u32,s)  eat(Q_SEMI)  return }   /* int x = e ;  (or char *s = e ;) */
+        let s2:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s2 as u64]=1u32 } }  eat(Q_SEMI)  return    /* int x ;  (uninitialized local) */
     }
     if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  eb(0x60u32)  eat(Q_SEMI)  return }
     if kw(C,"if" as u64,2u32)==1u32 {
@@ -237,7 +244,10 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
         let nt:u32=C  let ab:i64=abase(nt)
         if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eat(Q_ASN)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }   /* global array store (8-byte) */
-        let pli:i32=lidx(nt)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }   /* pointer p[i] = e */
+        let pli:i32=lidx(nt)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)
+            if LCH[pli as u64]==1u32 { eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  eb(0x81u32) }                  /* char* p[i]=e: STORE8 */
+            else { econst(8i64)  eb(0x22u32)  eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  eb(0x83u32) }           /* int* p[i]=e: STORE64 */
+            eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ASN {   /* x = e ; */
         let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { eu8(0x11u32,li as u32) }  eat(Q_SEMI)  return
@@ -303,9 +313,10 @@ fn prescan_struct() {
 }
 fn cfn(fk: u32) {
     C=FNT[fk as u64]  C=C+1u32  C=C+1u32  eat(Q_LP)         /* int NAME ( */
-    LN=0u32  let mut params:u32=0u32  let mut go:u32=1u32
-    while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { C=C+1u32  if cp(Q_MUL)==1u32 { C=C+1u32 }  let pt2:u32=C  C=C+1u32  ladd(pt2)  params=params+1u32  eat(Q_COM) } } }   /* int [*] NAME */
-    eat(Q_RP)  BL=0u64  if fk==0u32 { emit_string_init() }  pblock()   /* main inits the string region first */
+    LN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  lz=lz+1u32 }   /* reset char* flags per fn */
+    let mut params:u32=0u32  let mut go:u32=1u32
+    while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { let isc:u32=kw(C,"char" as u64,4u32)  C=C+1u32  let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }  let pt2:u32=C  C=C+1u32  let sl:u32=ladd(pt2)  if isc==1u32 { if isp==1u32 { LCH[sl as u64]=1u32 } }  params=params+1u32  eat(Q_COM) } } }   /* [char|int] [*] NAME */
+    eat(Q_RP)  BL=0u64  pblock()   /* string region is initialised by the SVIR data section (no main-entry init) */
     mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
     let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }
 }
@@ -334,6 +345,10 @@ fn main(argc: i32, argv: u64) -> u64 {
     ML=0u64
     let mut k:u32=0u32
     while k<FN { cfn(k)  k=k+1u32 }
+    if DLEN > 0u64 {                                                /* append the SVIR data section [u16 len][bytes] */
+        mb((DLEN & 0xFFu64) as u32)  mb(((DLEN >> 8u64) & 0xFFu64) as u32)
+        let mut d:u64=0u64  while d<DLEN { mb(SDAT[d] as u32)  d=d+1u64 }
+    }
     emit_module()
     return 0u64
 }

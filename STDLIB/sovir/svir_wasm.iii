@@ -159,6 +159,11 @@ fn main() -> u64 {
         if body_has_mem(base, FN_BOFF[pf as u64], FN_BLEN[pf as u64]) == 1u32 { UM = 1u32 }
         pf = pf + 1u32
     }
+    /* trailing data section [u16 len][bytes] after the last function -> byte-packed initial linear memory */
+    let total : u64 = svir_len()
+    let mut dlen : u64 = 0u64
+    if off < total { let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64) }
+    if dlen > 0u64 { UM = 1u32 }
 
     /* build every function body into CBUF */
     CLEN = 0u64
@@ -207,6 +212,13 @@ fn main() -> u64 {
         let mut q : u64 = 0u64
         while q < FN_CLEN[h as u64] { pc(CBUF[FN_COFF[h as u64] + q] as u32)  q = q + 1u64 }
         h = h + 1u32
+    }
+    /* Data section (id 11): one active segment at offset 0 with the byte-packed initial memory. */
+    if dlen > 0u64 {
+        let seglen : u64 = 4u64 + leblen_u(dlen) + dlen          /* 0x00 0x41 0x00 0x0B + lenLEB + bytes */
+        pc(0x0Bu32)  pleb_u(1u64 + seglen)  pleb_u(1u64)         /* section id, len, count=1 */
+        pc(0x00u32)  pc(0x41u32)  pc(0x00u32)  pc(0x0Bu32)  pleb_u(dlen)   /* flags=0 ; i32.const 0 ; end ; len */
+        let mut d:u64=0u64  while d < dlen { let dp:*u8=(base+off+2u64+d) as *u8  pc(dp[0u64] as u32)  d=d+1u64 }
     }
     return 0u64
 }

@@ -182,9 +182,20 @@ fn main() -> u64 {
     if mod_has_print(base) == 1u32 {
         ez("__putc:\npushq %rbp\nmovq %rsp, %rbp\nsubq $64, %rsp\nmovb %cl, -1(%rbp)\nmovq $-11, %rcx\ncallq GetStdHandle\nmovq %rax, %rcx\nleaq -1(%rbp), %rdx\nmovq $1, %r8\nleaq -16(%rbp), %r9\nxorl %eax, %eax\nmovq %rax, 32(%rsp)\ncallq WriteFile\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64)
     }
-    /* SVIR linear memory: a zero-filled .bss buffer (64 KiB) */
+    /* SVIR linear memory (64 KiB).  A trailing data section [u16 len][bytes] (after the last function) initialises
+     * svir_mem byte-packed (.data); else a zero .bss. */
+    let total : u64 = svir_len()
+    let mut dlen : u64 = 0u64
+    if off < total { let d0:*u8=(base+off) as *u8  let d1:*u8=(base+off+1u64) as *u8  dlen = (d0[0u64] as u64) | ((d1[0u64] as u64) << 8u64) }
     if mod_has_mem(base) == 1u32 {
-        ez(".section .bss\n.global svir_mem\nsvir_mem:\n.zero 65536\n~" as u64)
+        if dlen > 0u64 {
+            ez(".section .data\n.global svir_mem\nsvir_mem:\n.byte ~" as u64)
+            let mut d:u64=0u64
+            while d < dlen { if d > 0u64 { ez(",~" as u64) }  let dp:*u8=(base+off+2u64+d) as *u8  edec(dp[0u64] as u64)  d=d+1u64 }
+            ez("\n.zero ~" as u64)  edec(65536u64 - dlen)  ez("\n~" as u64)
+        } else {
+            ez(".section .bss\n.global svir_mem\nsvir_mem:\n.zero 65536\n~" as u64)
+        }
     }
     return 0u64
 }

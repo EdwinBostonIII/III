@@ -63,6 +63,12 @@ fn svir_verify(src: u64, len: u64) -> u64 @export {
         off = boff + blen
         i = i + 1u32
     }
+    if off < len {                              /* optional trailing data section [u16 len][bytes] */
+        if (off + 2u64) > len { return 1u64 }
+        let dl : u64 = (vb(src, off) as u64) | ((vb(src, off + 1u64) as u64) << 8u64)
+        if (off + 2u64 + dl) != len { return 1u64 }   /* data section must consume the rest exactly */
+        return 0u64
+    }
     if off != len { return 1u64 }
     return 0u64
 }

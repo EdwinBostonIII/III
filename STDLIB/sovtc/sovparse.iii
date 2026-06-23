@@ -43,6 +43,7 @@ extern @abi(c-msvc-x64) fn sov_xor_rr(dst: u32, src: u32) -> i32 from "sovas.iii
 extern @abi(c-msvc-x64) fn sov_add_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_sub_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
+extern @abi(c-msvc-x64) fn sov_and_imm32(reg: u32, imm: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_ret() -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movw_store_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
 extern @abi(c-msvc-x64) fn sov_movw_load_base(reg: u32, base: u32, disp: i32) -> i32 from "sovas.iii"
@@ -597,7 +598,7 @@ fn sp_dispatch_instr() {
     if mn_is(115u32,117u32,98u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_sub_imm32(OPR, S1I as i32) } else { sov_sub_rr(OPR, S1R) }  return }   /* subq */
     if mn_is(99u32,109u32,112u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_cmp_imm32(OPR, S1I as i32) } else { sov_cmp_rr(OPR, S1R) }  return }   /* cmpq */
     if mn_is(116u32,101u32,115u32,116u32,5u32) == 1u32 { sp_two_ops()  sov_test_rr(OPR, S1R)  return }   /* testq */
-    if mn_is(97u32,110u32,100u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_and_rr(OPR, S1R)  return }     /* andq */
+    if mn_is(97u32,110u32,100u32,113u32,4u32) == 1u32 { sp_two_ops()  if S1K == 1u32 { sov_and_imm32(OPR, S1I as i32) } else { sov_and_rr(OPR, S1R) }  return }     /* andq (imm or reg) */
     if mn_is(111u32,114u32,113u32,0u32,3u32) == 1u32 { sp_two_ops()  sov_or_rr(OPR, S1R)  return }       /* orq */
     if mn_is(120u32,111u32,114u32,113u32,4u32) == 1u32 { sp_two_ops()  sov_xor_rr(OPR, S1R)  return }    /* xorq */
     /* setCC %reg8 (cc: b=2 ae=3 e=4 ne=5 be=6 a=7 l=12 ge=13 le=14 g=15) */

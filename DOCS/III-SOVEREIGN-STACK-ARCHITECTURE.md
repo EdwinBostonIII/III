@@ -13,6 +13,16 @@
 > translators — x86 via the **Win64 ABI** (args→`rcx/rdx/r8/r9`, 16-byte align + 32B shadow, an rsp-save slot so a
 > call can't corrupt the live eval stack), WASM via its native multi-function `call`. `run_svir.sh` = **3 programs
 > × 2 translators, all 99**. Function calls — the key primitive for real programs — work on both machines.
+> **Phase 2b LANDED — a real RECURSIVE program + printed output (`svir_fact.iii`):** `fact_rec` (recursive) and
+> `fact_iter` compute `20!`, cross-checked `== 2432902008176640000`; a **recursive** `print_dec` prints the
+> 19-digit result. New ops `SREM`/`DROP`/`PRINT_CHAR` (x86: `WriteFile` via a `__putc` helper, raw bytes,
+> kernel32-only; WASM: imported `env.putc`). The gate asserts the **differential**: x86 stdout == wasm stdout ==
+> an independent golden 20!, byte-identical, both exit 99. Two bugs were caught *because* the backends disagreed:
+> a `sovas` `andq $imm` encoding gap (crash) and a WASM `lt_s`/`gt_s` opcode swap. **Honest framing (advisor):**
+> this proves **TOOLCHAIN** superiority (one IR → two architectures, verified-identical output, x86 zero external-
+> toolchain trust, differential correctness) — NOT **PROGRAM** superiority (`20!` overflows i64 at `21!` like any
+> `long long`). Program superiority = a never-overflowing arbitrary-precision factorial → needs **SVIR linear
+> memory** (Phase 2c). Authoring tool: `svir_asm.mjs` (readable instruction lists → SVIR bytes).
 > **For the worker:** Phase 1 (§7) is meticulous + gated. Phases 2–6 (§8) are a directional roadmap with honest
 > caveats — NOT yet task-decomposed. Build Phase 1 before planning the rest. No subagents (III rule).
 

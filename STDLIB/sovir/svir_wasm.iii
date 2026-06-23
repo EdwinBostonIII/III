@@ -1,7 +1,7 @@
 /* svir_wasm.iii -- TRANSLATOR #2 (SVIR v1): a multi-function .wasm module to stdout.
  * v1 module: [u8 func_count] then per func [u8 params][u8 nresults][u16 LE body_len][body].
- * Each SVIR function -> a WASM function (sig (i64^params)->i64); CALL 0x70 -> WASM call 0x10.
- * Independent of svir_x86 (its own cursor/lowering -- advisor #3). */
+ * PRINT_CHAR -> call an imported env.putc (the host does I/O); imports shift the func index space, so a module
+ * that prints gets import_count=1 and every CALL/main/export index is offset by 1.  Independent of svir_x86. */
 module svir_wasm
 
 extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
@@ -13,13 +13,12 @@ fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
 fn pleb_u(n0: u64) { let mut n : u64 = n0  let mut go : u32 = 1u32  while go == 1u32 { if n >= 128u64 { pc(((n & 0x7Fu64) | 0x80u64) as u32)  n = n >> 7u64 } else { pc(n as u32)  go = 0u32 } } }
 fn leblen_u(n0: u64) -> u64 { let mut n : u64 = n0  let mut c : u64 = 1u64  while n >= 128u64 { c = c + 1u64  n = n >> 7u64 }  return c }
 
-/* function table (parsed from the module header) */
 var FN_PARAMS : [u32; 64]
-var FN_BOFF   : [u64; 64]      /* body offset into the SVIR bytes */
+var FN_BOFF   : [u64; 64]
 var FN_BLEN   : [u64; 64]
 var FN_N : u32 = 0u32
+var IC : u32 = 0u32                 /* import count (1 if any PRINT_CHAR -> env.putc) */
 
-/* all function bodies, built once into CBUF; per-func start/len recorded */
 var CBUF : [u8; 32768]
 var CLEN : u64 = 0u64
 var FN_COFF : [u64; 64]
@@ -38,9 +37,7 @@ fn c_leb_s64(v0: i64) {
     }
 }
 
-/* build ONE function body (local decl + lowered ops + end) into CBUF */
 fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
-    /* per-function max local slot -> extra (non-param) i64 locals */
     let mut nloc : u32 = params
     let mut s : u64 = 0u64
     while s < blen {
@@ -70,8 +67,9 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x21u32 { c_emit(0x7Du32) }
         if op == 0x22u32 { c_emit(0x7Eu32) }
         if op == 0x23u32 { c_emit(0x7Fu32) }
+        if op == 0x24u32 { c_emit(0x81u32) }                  /* SREM -> i64.rem_s */
         if op == 0x30u32 { c_emit(0x51u32)  c_emit(0xADu32) }
-        if op == 0x32u32 { c_emit(0x55u32)  c_emit(0xADu32) }
+        if op == 0x32u32 { c_emit(0x53u32)  c_emit(0xADu32) }  /* LT_S -> i64.lt_s (0x53; 0x55 is gt_s) ; extend */
         if op == 0x33u32 { c_emit(0x59u32)  c_emit(0xADu32) }
         if op == 0x40u32 { c_emit(0x02u32)  c_emit(0x40u32) }
         if op == 0x41u32 { c_emit(0x03u32)  c_emit(0x40u32) }
@@ -81,17 +79,33 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x50u32 { let dp : *u8 = (base + boff + p) as *u8  p = p + 1u64  c_emit(0x0Cu32)  c_leb_u(dp[0u64] as u64) }
         if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  p = p + 1u64  c_emit(0xA7u32)  c_emit(0x0Du32)  c_leb_u(dp[0u64] as u64) }
         if op == 0x60u32 { c_emit(0x0Fu32) }
-        if op == 0x70u32 { let fp : *u8 = (base + boff + p) as *u8  let f : u32 = fp[0u64] as u32  p = p + 2u64  c_emit(0x10u32)  c_leb_u(f as u64) }   /* CALL funcidx (argcount implicit on stack) */
+        if op == 0x70u32 { let fp : *u8 = (base + boff + p) as *u8  let f : u32 = fp[0u64] as u32  p = p + 2u64  c_emit(0x10u32)  c_leb_u((f + IC) as u64) }   /* CALL -> call (funcidx + imports) */
+        if op == 0x71u32 { c_emit(0x10u32)  c_leb_u(0u64) }   /* PRINT_CHAR -> call $putc (import 0) */
+        if op == 0x72u32 { c_emit(0x1Au32) }                  /* DROP */
     }
     c_emit(0x0Bu32)
+}
+
+fn body_has_print(base: u64, boff: u64, blen: u64) -> u32 {
+    let mut s : u64 = 0u64
+    while s < blen {
+        let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+        if o == 0x71u32 { return 1u32 }
+        if o == 0x01u32 { s = s + 8u64 }
+        if o == 0x10u32 { s = s + 1u64 }
+        if o == 0x11u32 { s = s + 1u64 }
+        if o == 0x50u32 { s = s + 1u64 }
+        if o == 0x51u32 { s = s + 1u64 }
+        if o == 0x70u32 { s = s + 2u64 }
+    }
+    return 0u32
 }
 
 fn main() -> u64 {
     _setmode(1i32, 0x8000i32)
     let base : u64 = svir_ptr()
-    let len  : u64 = svir_len()
 
-    /* parse module header into the function table */
+    /* parse module header */
     let hp : *u8 = base as *u8
     FN_N = hp[0u64] as u32
     let mut off : u64 = 1u64
@@ -106,39 +120,42 @@ fn main() -> u64 {
         off = off + 4u64 + blen
         i = i + 1u32
     }
+    /* does any function print? -> need the env.putc import */
+    IC = 0u32
+    let mut pf : u32 = 0u32
+    while pf < FN_N { if body_has_print(base, FN_BOFF[pf as u64], FN_BLEN[pf as u64]) == 1u32 { IC = 1u32 }  pf = pf + 1u32 }
 
     /* build every function body into CBUF */
     CLEN = 0u64
     let mut f : u32 = 0u32
-    while f < FN_N {
-        FN_COFF[f as u64] = CLEN
-        build_body(base, FN_BOFF[f as u64], FN_BLEN[f as u64], FN_PARAMS[f as u64])
-        FN_CLEN[f as u64] = CLEN - FN_COFF[f as u64]
-        f = f + 1u32
-    }
+    while f < FN_N { FN_COFF[f as u64] = CLEN  build_body(base, FN_BOFF[f as u64], FN_BLEN[f as u64], FN_PARAMS[f as u64])  FN_CLEN[f as u64] = CLEN - FN_COFF[f as u64]  f = f + 1u32 }
 
     /* ---- emit module ---- */
     pc(0x00u32) pc(0x61u32) pc(0x73u32) pc(0x6Du32) pc(0x01u32) pc(0x00u32) pc(0x00u32) pc(0x00u32)
-    /* Type section: one type per function (i64^params)->i64 */
-    let mut tlen : u64 = leblen_u(FN_N as u64)
+    /* Type section: [putc (i64)->() if IC] + one type per function */
+    let ntypes : u64 = (FN_N as u64) + (IC as u64)
+    let mut tlen : u64 = leblen_u(ntypes)
+    if IC == 1u32 { tlen = tlen + 4u64 }                      /* 0x60 01 7e 00 */
     let mut t : u32 = 0u32
-    while t < FN_N { tlen = tlen + 1u64 + leblen_u(FN_PARAMS[t as u64] as u64) + (FN_PARAMS[t as u64] as u64) + 1u64 + 1u64  t = t + 1u32 }   /* 0x60 + paramvec + resultvec(1 i64) */
-    pc(0x01u32)  pleb_u(tlen)  pleb_u(FN_N as u64)
+    while t < FN_N { tlen = tlen + 1u64 + leblen_u(FN_PARAMS[t as u64] as u64) + (FN_PARAMS[t as u64] as u64) + 2u64  t = t + 1u32 }
+    pc(0x01u32)  pleb_u(tlen)  pleb_u(ntypes)
+    if IC == 1u32 { pc(0x60u32)  pc(0x01u32)  pc(0x7Eu32)  pc(0x00u32) }   /* putc: (i64)->() */
     t = 0u32
     while t < FN_N {
-        pc(0x60u32)
-        pleb_u(FN_PARAMS[t as u64] as u64)
+        pc(0x60u32)  pleb_u(FN_PARAMS[t as u64] as u64)
         let mut a : u32 = 0u32  while a < FN_PARAMS[t as u64] { pc(0x7Eu32)  a = a + 1u32 }
-        pc(0x01u32)  pc(0x7Eu32)                         /* result: 1 i64 */
+        pc(0x01u32)  pc(0x7Eu32)
         t = t + 1u32
     }
-    /* Function section: func i -> type i */
+    /* Import section: env.putc -> type 0 (only when IC) */
+    if IC == 1u32 { pc(0x02u32)  pc(0x0Cu32)  pc(0x01u32)  pc(0x03u32) pc(0x65u32)pc(0x6Eu32)pc(0x76u32)  pc(0x04u32) pc(0x70u32)pc(0x75u32)pc(0x74u32)pc(0x63u32)  pc(0x00u32)  pc(0x00u32) }   /* import "env"."putc" func type0 (content=12) */
+    /* Function section: func i -> type (i + IC) */
     let mut flen : u64 = leblen_u(FN_N as u64)
-    let mut g : u32 = 0u32  while g < FN_N { flen = flen + leblen_u(g as u64)  g = g + 1u32 }
+    let mut g : u32 = 0u32  while g < FN_N { flen = flen + leblen_u((g + IC) as u64)  g = g + 1u32 }
     pc(0x03u32)  pleb_u(flen)  pleb_u(FN_N as u64)
-    g = 0u32  while g < FN_N { pleb_u(g as u64)  g = g + 1u32 }
-    /* Export section: "main" -> func 0 */
-    pc(0x07u32) pc(0x08u32) pc(0x01u32) pc(0x04u32) pc(0x6Du32) pc(0x61u32) pc(0x69u32) pc(0x6Eu32) pc(0x00u32) pc(0x00u32)
+    g = 0u32  while g < FN_N { pleb_u((g + IC) as u64)  g = g + 1u32 }
+    /* Export section: "main" -> func index IC (defined func 0, after imports) */
+    pc(0x07u32) pc(0x08u32) pc(0x01u32) pc(0x04u32) pc(0x6Du32) pc(0x61u32) pc(0x69u32) pc(0x6Eu32) pc(0x00u32)  pleb_u(IC as u64)
     /* Code section */
     let mut clen : u64 = leblen_u(FN_N as u64)
     let mut h : u32 = 0u32

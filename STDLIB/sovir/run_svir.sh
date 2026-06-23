@@ -17,7 +17,7 @@ done
 [ -s "$BOOT/sovlink_main.exe" ] || gcc "$BOOT/sovlink_main.o" "$BOOT/sovld.o" "$BOOT/sovparse.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovlink_main.exe" 2>/dev/null
 [ -s "$BOOT/crt0_sov.o" ]       || timeout 30 "$BOOT/sovas_main.exe" "$BOOT/crt0.o.s" > "$BOOT/crt0_sov.o" 2>/dev/null
 
-for m in svir_prog svir_loop svir_call svir_x86 svir_wasm; do
+for m in svir_prog svir_loop svir_call svir_fact svir_x86 svir_wasm; do
   "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }
 done
 
@@ -44,7 +44,25 @@ wasmpath(){ local prog="$1" lbl="$2"
 x86path  svir_prog sum;  x86path  svir_loop loop;  x86path  svir_call call
 wasmpath svir_prog sum;  wasmpath svir_loop loop;  wasmpath svir_call call
 
+# ---- svir_fact: a real RECURSIVE program (factorial + recursive decimal print).  The DIFFERENTIAL is the
+#      superiority claim, gated: x86 stdout == wasm stdout == an independent golden 20!, both exit 99. ----
+gcc "$W/svir_x86.o"  "$W/svir_fact.o" -o "$W/tx_fact.exe"  2>/dev/null
+gcc "$W/svir_wasm.o" "$W/svir_fact.o" -o "$W/tw_fact.exe"  2>/dev/null
+"$W/tx_fact.exe" > "$W/fact.s" 2>/dev/null
+timeout 20 "$BOOT/sovas_main.exe" "$W/fact.s" > "$W/fact.o2" 2>/dev/null
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/fact.o2" > "$W/fact.x86.exe" 2>/dev/null
+timeout 10 "$W/fact.x86.exe" > "$W/fact.x86.out" 2>/dev/null; xrc=$?
+"$W/tw_fact.exe" > "$W/fact.wasm" 2>/dev/null
+node "$S/run_wasm.mjs" "$W/fact.wasm" > "$W/fact.wasm.out" 2>/dev/null; wrc=$?
+node -e 'let f=1n;for(let i=1n;i<=20n;i++)f*=i;process.stdout.write(f.toString()+"\n")' > "$W/fact.gold.out"
+xk=$(objdump -p "$W/fact.x86.exe" 2>/dev/null | grep -i "DLL Name" | grep -ic kernel32)
+xn=$(objdump -p "$W/fact.x86.exe" 2>/dev/null | grep -ic "DLL Name")
+if [ $xrc -eq 99 ] && [ $wrc -eq 99 ] && [ "$xn" = "1" ] && [ "$xk" = "1" ] \
+   && cmp -s "$W/fact.x86.out" "$W/fact.wasm.out" && cmp -s "$W/fact.x86.out" "$W/fact.gold.out"; then
+  say "fact RECURSIVE 20! : x86(sovereign,kernel32-only)==wasm==golden [$(cat "$W/fact.x86.out" | tr -d '\n')], both exit 99"
+else say "FAIL fact: x86exit=$xrc wasmexit=$wrc dlls=$xn k32=$xk  x86out=[$(cat "$W/fact.x86.out" 2>/dev/null)] wasmout=[$(cat "$W/fact.wasm.out" 2>/dev/null)]"; fail=1; fi
+
 if [ $fail -eq 0 ]; then
-  say "ALL PASS -- 3 SVIR programs (arith + counted loop + a 2-function CALL) x 2 independent translators, all execute to 99 (x86-64 sovereign + WASM)."
+  say "ALL PASS -- 4 SVIR programs (arith + loop + CALL + RECURSIVE factorial w/ printed output) x 2 independent translators; the factorial's x86==wasm==golden differential is byte-identical (sovereign x86, kernel32-only)."
 fi
 exit $fail

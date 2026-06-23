@@ -406,6 +406,7 @@ fn sov_movswq(dst: u32, src: u32) -> i32 @export {
 fn sov_add_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(0u32, reg, imm)  return 0i32 }
 fn sov_sub_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(5u32, reg, imm)  return 0i32 }
 fn sov_cmp_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(7u32, reg, imm)  return 0i32 }
+fn sov_and_imm32(reg: u32, imm: i32) -> i32 @export { sov_alu_imm32(4u32, reg, imm)  return 0i32 }   /* andq $imm,%reg (/4); e.g. stack-align andq $-16,%rsp */
 
 /* F7 group (one-operand) : REX.W F7 /ext  (not=/2 neg=/3 mul=/4 imul=/5 div=/6 idiv=/7) */
 fn sov_f7(ext: u32, reg: u32) {

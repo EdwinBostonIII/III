@@ -1,0 +1,58 @@
+/* svir_x86.iii -- TRANSLATOR #1: SVIR v0 -> x86-64 AT&T assembly (.s) to stdout.
+ * Lowers the stack machine onto the NATIVE stack (eval-stack = push/pop).  Output is assembled+linked
+ * SOVEREIGNLY by sovas+sovld (no gcc) into a PE that runs to the SVIR's result (99).
+ * Independent of svir_wasm (its own cursor/lowering -- advisor #3).  Straight-line subset (no control flow). */
+module svir_x86
+
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
+
+fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
+/* emit a '~'-terminated string literal (0x7E sentinel; .iii literals have no NUL) */
+fn ez(p: u64) {
+    let mut i : u64 = 0u64
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let bp : *u8 = (p + i) as *u8
+        let b : u32 = bp[0u64] as u32
+        if b == 126u32 { go = 0u32 } else { pc(b)  i = i + 1u64 }
+    }
+}
+var NUMBUF : [u8; 24]    /* module-scope (function-local runtime-indexed arrays segfault) */
+fn edec(v0: u64) {
+    if v0 == 0u64 { pc(48u32)  return }
+    let mut v : u64 = v0
+    let mut n : u32 = 0u32
+    while v > 0u64 { NUMBUF[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }
+    while n > 0u32 { n = n - 1u32  pc(NUMBUF[n as u64] as u32) }
+}
+
+fn main() -> u64 {
+    _setmode(1i32, 0x8000i32)                                  /* stdout binary: clean \n for the assembler */
+    let base : u64 = svir_ptr()
+    let len  : u64 = svir_len()
+    ez(".text\n.global main\nmain:\npushq %rbp\nmovq %rsp, %rbp\n~" as u64)   /* .global (6 chars) -- sovparse's export directive */
+    let mut p : u64 = 0u64
+    while p < len {
+        let opp : *u8 = (base + p) as *u8
+        let op  : u32 = opp[0u64] as u32
+        p = p + 1u64
+        if op == 0x01u32 {                                     /* CONST_I64: 8 LE bytes */
+            let mut imm : u64 = 0u64
+            let mut k : u64 = 0u64
+            while k < 8u64 { let bp : *u8 = (base + p + k) as *u8  imm = imm | ((bp[0u64] as u64) << (8u64 * k))  k = k + 1u64 }
+            p = p + 8u64
+            ez("movabsq $~" as u64)  edec(imm)  ez(", %rax\npushq %rax\n~" as u64)
+        }
+        if op == 0x20u32 { ez("popq %rcx\npopq %rax\naddq %rcx, %rax\npushq %rax\n~" as u64) }                   /* ADD */
+        if op == 0x21u32 { ez("popq %rcx\npopq %rax\nsubq %rcx, %rax\npushq %rax\n~" as u64) }                   /* SUB */
+        if op == 0x22u32 { ez("popq %rcx\npopq %rax\nimulq %rcx, %rax\npushq %rax\n~" as u64) }                  /* MUL */
+        if op == 0x23u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rax\n~" as u64) }                  /* SDIV */
+        if op == 0x30u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsete %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }   /* EQ */
+        if op == 0x32u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetl %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }   /* LT_S */
+        if op == 0x60u32 { ez("popq %rax\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64) }                         /* RETURN (retq: sovas Tier-1 form) */
+    }
+    return 0u64
+}

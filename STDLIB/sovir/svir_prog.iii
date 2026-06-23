@@ -1,0 +1,30 @@
+/* svir_prog.iii -- the hand-authored SVIR v0 program (the SINGLE source of truth both translators consume).
+ * Independent of cg_r3 and of any host ISA (advisor #3): these are SVIR bytes written by hand.
+ *
+ * Straight-line (no control flow yet -- minimal translator surface, no WASM relooper):
+ *   gauss = 100 * 99 / 2            ( = 4950, the closed-form Sum(0..99) )
+ *   cond  = (gauss == 4950)         ( = 1 )
+ *   result= cond * 98 + 1           ( = 99 )   RETURN result
+ * Both translators must lower THIS to an artifact that yields 99.
+ *
+ *   CONST 100; CONST 99; MUL; CONST 2; SDIV; CONST 4950; EQ; CONST 98; MUL; CONST 1; ADD; RETURN
+ * opcodes: CONST_I64=0x01(+8 LE) MUL=0x22 SDIV=0x23 EQ=0x30 ADD=0x20 RETURN=0x60 */
+module svir_prog
+
+var SVIR : [u8; 60] = [
+    1u8,100u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,      /* CONST 100  */
+    1u8, 99u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,      /* CONST 99   */
+    0x22u8,                                      /* MUL  -> 9900 */
+    1u8,  2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,      /* CONST 2    */
+    0x23u8,                                      /* SDIV -> 4950 */
+    1u8,0x56u8,0x13u8,0u8,0u8,0u8,0u8,0u8,0u8,  /* CONST 4950 (0x1356) */
+    0x30u8,                                      /* EQ  -> 1 */
+    1u8, 98u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,      /* CONST 98   */
+    0x22u8,                                      /* MUL -> 98 */
+    1u8,  1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,      /* CONST 1    */
+    0x20u8,                                      /* ADD -> 99 */
+    0x60u8                                       /* RETURN */
+]
+
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 60u64 }

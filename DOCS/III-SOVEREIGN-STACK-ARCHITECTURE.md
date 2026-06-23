@@ -1,7 +1,11 @@
 # III Sovereign Stack — Architecture & Phase-1 Plan: the IR + Translator pivot
 
 > **Pass:** `/architect` · `/writing-plans` · `/creative-solve` · advisor-disciplined (5 guardrails) · main-session (no subagents).
-> **Date:** 2026-06-22. **Status:** ARCHITECTURE accepted; Phase 1 task-decomposed and ready to build.
+> **Date:** 2026-06-22. **Status:** ARCHITECTURE accepted; **Phase 1 LANDED** — `STDLIB/sovir/run_svir.sh` =
+> ALL PASS: one hand-authored SVIR program (`svir_prog.iii`), two independent translators (`svir_x86.iii` →
+> sovereign PE; `svir_wasm.iii` → `.wasm`), **both execute to 99 on this host** (x86-64 sovereign + WASM/node).
+> Phase 1 used the *straight-line* SVIR core (arithmetic + compare, no control flow yet — minimal translator
+> surface); the structured-control ops (`BLOCK`/`LOOP`/`IF`/`BR`) in §3 are **Phase 1b** (the counted-loop form).
 > **For the worker:** Phase 1 (§7) is meticulous + gated. Phases 2–6 (§8) are a directional roadmap with honest
 > caveats — NOT yet task-decomposed. Build Phase 1 before planning the rest. No subagents (III rule).
 

@@ -1,0 +1,18 @@
+/* Independence proof — the bitwise integer ops, EXERCISED (so OR/XOR/SHL/SHR are gated, not just present).
+ * a=12 (1100b), b=10 (1010b):  a|b=14 ; a^b=6 ; a<<2=48 ; a>>1=6.  Returns 99 iff all hold.
+ * Pure III; compiled by the independent iiisv (.iii -> SVIR) -> x86 + WASM. */
+module indep_ops
+
+fn main() -> u64 {
+    let a : u64 = 12u64
+    let b : u64 = 10u64
+    let o : u64 = a | b
+    let x : u64 = a ^ b
+    let s : u64 = a << 2u64
+    let r : u64 = a >> 1u64
+    if o != 14u64 { return 1u64 }
+    if x != 6u64 { return 2u64 }
+    if s != 48u64 { return 3u64 }
+    if r != 6u64 { return 4u64 }
+    return 99u64
+}

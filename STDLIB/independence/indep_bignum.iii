@@ -41,5 +41,14 @@ fn main() -> u64 {
     }
     if len != 158u64 { return 1u64 }
     if sum != 648u64 { return 2u64 }
+    /* position checks: 100! has exactly 24 trailing zeros, digits[24]==4, top digit (digits[157])==9.
+     * len+digit-sum alone is necessary-not-sufficient (digit-sum is auto-0-mod-9); these pin the value. */
+    let mut z : u64 = 0u64
+    while z < 24u64 {
+        if digits[z] != 0u64 { return 3u64 }
+        z = z + 1u64
+    }
+    if digits[24] != 4u64 { return 4u64 }
+    if digits[157] != 9u64 { return 5u64 }
     return 99u64
 }

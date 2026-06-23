@@ -102,6 +102,19 @@ if [ $ivx -eq 99 ] && [ $ivw -eq 99 ] && [ $cgx -eq 99 ] && [ "$ik" = "1" ]; the
   say "iiisv INDEPENDENT compiler : real indep_toolchain.iii -> SVIR -> x86(sovereign)=$ivx & wasm=$ivw ; cg_r3 differential=$cgx -> all agree (99)"
 else say "FAIL iiisv: x86=$ivx wasm=$ivw cg_r3=$cgx dlls=$ik"; fail=1; fi
 
+# ---- indep_ops: EXERCISE the bitwise ops OR/XOR/SHL/SHR through iiisv (gated, not just present) ----
+"$W/iiisv.exe" "$ROOT/STDLIB/independence/indep_ops.iii" > "$W/gen_ops.iii" 2>/dev/null
+"$IIIS" "$W/gen_ops.iii" --compile-only --out "$W/gen_ops.o" >/dev/null 2>&1 || { say "FAIL compile iiisv ops output"; fail=1; }
+gcc "$W/svir_x86.o"  "$W/gen_ops.o" -o "$W/tx_ops.exe" 2>/dev/null
+gcc "$W/svir_wasm.o" "$W/gen_ops.o" -o "$W/tw_ops.exe" 2>/dev/null
+"$W/tx_ops.exe" > "$W/ops.s" 2>/dev/null
+timeout 20 "$BOOT/sovas_main.exe" "$W/ops.s" > "$W/ops.o2" 2>/dev/null
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/ops.o2" > "$W/ops.x86.exe" 2>/dev/null
+timeout 10 "$W/ops.x86.exe" >/dev/null 2>&1; opx=$?
+"$W/tw_ops.exe" > "$W/ops.wasm" 2>/dev/null
+node "$S/run_wasm.mjs" "$W/ops.wasm" >/dev/null 2>&1; opw=$?
+if [ $opx -eq 99 ] && [ $opw -eq 99 ]; then say "iiisv bitwise (OR/XOR/SHL/SHR) EXERCISED : x86=$opx wasm=$opw -> 99"; else say "FAIL ops: x86=$opx wasm=$opw"; fail=1; fi
+
 # ---- THE CAPSTONE: indep_bignum.iii -- a REAL .iii arbitrary-precision factorial (100! exact, 158 digits, a
 #      base-10 digit array in a module-level buffer) compiled by the INDEPENDENT iiisv -> SVIR -> x86+wasm, AND
 #      by cg_r3.  Every superiority in one real source program: arbitrary precision + independent compiler +

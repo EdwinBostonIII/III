@@ -20,8 +20,9 @@ var SRC : [u8; 65536]
 var SLEN : u64 = 0u64
 var MODE_RB : [u8; 3] = [114u8, 98u8, 0u8]
 var RAW : [u8; 65536]  var RLEN : u64 = 0u64        /* the main file, pre-flatten */
-var IBUF : [u8; 32768]                              /* an included file's content */
-var IPATH : [u8; 512]  var DIRLEN : u64 = 0u64      /* resolved include path = main's dir + the "filename" */
+var IBUFS : [u8; 262144]                            /* 8 include levels x 32768 (depth-indexed; recursion-safe) */
+var IPATH : [u8; 512]  var DIRLEN : u64 = 0u64  var IPLEN : u64 = 0u64   /* resolved include path = main's dir + "filename" */
+var PATHBUF : [u8; 8192]  var POFF : [u64; 256]  var PLEN : [u64; 256]  var PN : u32 = 0u32  var PBE : u64 = 0u64   /* include-once set */
 var TK : [u32; 8192]  var TV : [i64; 8192]  var TO : [u32; 8192]  var TL : [u32; 8192]  var NT : u32 = 0u32  var C : u32 = 0u32
 
 const Q_LP:i64=1i64 const Q_RP:i64=2i64 const Q_LB:i64=3i64 const Q_RB:i64=4i64 const Q_SEMI:i64=7i64 const Q_ASN:i64=8i64
@@ -437,33 +438,41 @@ fn emit_module() {
     pdec(total)  pstr("u64 }\n~" as u64)
 }
 
-fn rawb(i:u64) -> u32 { let p:*u8=((&RAW as u64)+i) as *u8  return p[0u64] as u32 }
+fn bb(base:u64, i:u64) -> u32 { let p:*u8=(base+i) as *u8  return p[0u64] as u32 }
 fn src_emit(b:u32) { if SLEN<65535u64 { let p:*u8=((&SRC as u64)+SLEN) as *u8  p[0u64]=(b & 0xFFu32) as u8  SLEN=SLEN+1u64 } }
-fn read_inc() -> u64 { let f:u64=fopen(&IPATH as u64, &MODE_RB as u64)  if f==0u64 {return 0u64}  let n:u64=fread(&IBUF as u64, 1u64, 32767u64, f)  fclose(f)  return n }
-/* does RAW[i0..] begin (after ws) with `#include "` ? (local include; <...> system includes return 0 -> skipped) */
-fn is_include(i0:u64) -> u32 {
-    let mut k:u64=i0  let mut g:u32=1u32  while g==1u32 { if k>=RLEN {g=0u32} else { let ch:u32=rawb(k)  if ch==32u32 {k=k+1u64} else { if ch==9u32 {k=k+1u64} else {g=0u32} } } }
-    if k>=RLEN { return 0u32 }  if rawb(k)!=35u32 { return 0u32 }  k=k+1u64
-    let mut g2:u32=1u32  while g2==1u32 { if k>=RLEN {g2=0u32} else { let ch:u32=rawb(k)  if ch==32u32 {k=k+1u64} else { if ch==9u32 {k=k+1u64} else {g2=0u32} } } }
-    if (k+7u64) > RLEN { return 0u32 }
-    if rawb(k)!=105u32 { return 0u32 }  if rawb(k+1u64)!=110u32 { return 0u32 }  if rawb(k+2u64)!=99u32 { return 0u32 }  if rawb(k+3u64)!=108u32 { return 0u32 }
-    if rawb(k+4u64)!=117u32 { return 0u32 }  if rawb(k+5u64)!=100u32 { return 0u32 }  if rawb(k+6u64)!=101u32 { return 0u32 }
+fn read_into(ib:u64) -> u64 { let f:u64=fopen(&IPATH as u64, &MODE_RB as u64)  if f==0u64 {return 0u64}  let n:u64=fread(ib, 1u64, 32767u64, f)  fclose(f)  return n }
+fn path_seen() -> u32 { let mut e:u32=0u32  while e<PN { if PLEN[e as u64]==IPLEN { let mut k:u64=0u64  let mut eq:u32=1u32  while k<IPLEN { let ip:*u8=((&IPATH as u64)+k) as *u8  let pp:*u8=((&PATHBUF as u64)+POFF[e as u64]+k) as *u8  if ip[0u64]!=pp[0u64] {eq=0u32}  k=k+1u64 }  if eq==1u32 {return 1u32} }  e=e+1u32 }  return 0u32 }
+fn path_add() { if PN<256u32 { if (PBE+IPLEN)<8192u64 { POFF[PN as u64]=PBE  PLEN[PN as u64]=IPLEN  let mut k:u64=0u64  while k<IPLEN { let ip:*u8=((&IPATH as u64)+k) as *u8  let pp:*u8=((&PATHBUF as u64)+PBE+k) as *u8  pp[0u64]=ip[0u64]  k=k+1u64 }  PBE=PBE+IPLEN  PN=PN+1u32 } } }
+/* does (base)[i0..] begin (after ws) with `#include "` ?  (local "..." -> 1 ; system <...> -> 0, lexer skips it) */
+fn is_inc2(base:u64, i0:u64, len:u64) -> u32 {
+    let mut k:u64=i0  let mut g:u32=1u32  while g==1u32 { if k>=len {g=0u32} else { let ch:u32=bb(base,k)  if ch==32u32 {k=k+1u64} else { if ch==9u32 {k=k+1u64} else {g=0u32} } } }
+    if k>=len { return 0u32 }  if bb(base,k)!=35u32 { return 0u32 }  k=k+1u64
+    let mut g2:u32=1u32  while g2==1u32 { if k>=len {g2=0u32} else { let ch:u32=bb(base,k)  if ch==32u32 {k=k+1u64} else { if ch==9u32 {k=k+1u64} else {g2=0u32} } } }
+    if (k+7u64) > len { return 0u32 }
+    if bb(base,k)!=105u32 { return 0u32 }  if bb(base,k+1u64)!=110u32 { return 0u32 }  if bb(base,k+2u64)!=99u32 { return 0u32 }  if bb(base,k+3u64)!=108u32 { return 0u32 }
+    if bb(base,k+4u64)!=117u32 { return 0u32 }  if bb(base,k+5u64)!=100u32 { return 0u32 }  if bb(base,k+6u64)!=101u32 { return 0u32 }
     let mut k2:u64=k+7u64  let mut hq:u32=0u32  let mut g3:u32=1u32
-    while g3==1u32 { if k2>=RLEN {g3=0u32} else { let ch:u32=rawb(k2)  if ch==10u32 {g3=0u32} else { if ch==34u32 {hq=1u32 g3=0u32} else {k2=k2+1u64} } } }
+    while g3==1u32 { if k2>=len {g3=0u32} else { let ch:u32=bb(base,k2)  if ch==10u32 {g3=0u32} else { if ch==34u32 {hq=1u32 g3=0u32} else {k2=k2+1u64} } } }
     return hq
 }
-/* flatten RAW -> SRC, inlining `#include "f"` (read relative to the main file's dir = IPATH[0..DIRLEN]). */
-fn flatten() {
-    SLEN=0u64  let mut i:u64=0u64  let mut atls:u32=1u32
-    while i < RLEN {
-        if atls==1u32 { if is_include(i)==1u32 {
-            let mut k:u64=i  let mut g:u32=1u32  while g==1u32 { if k>=RLEN {g=0u32} else { if rawb(k)==34u32 {g=0u32} else {k=k+1u64} } }  k=k+1u64   /* past opening " */
-            let mut d:u64=DIRLEN  let mut g2:u32=1u32  while g2==1u32 { if k>=RLEN {g2=0u32} else { let ch:u32=rawb(k)  if ch==34u32 {g2=0u32} else { let ip:*u8=((&IPATH as u64)+d) as *u8  ip[0u64]=(ch & 0xFFu32) as u8  d=d+1u64  k=k+1u64 } } }
-            let ipe:*u8=((&IPATH as u64)+d) as *u8  ipe[0u64]=0u8
-            let n:u64=read_inc()  let mut m:u64=0u64  while m<n { let ibp:*u8=((&IBUF as u64)+m) as *u8  src_emit(ibp[0u64] as u32)  m=m+1u64 }  src_emit(10u32)
-            let mut g3:u32=1u32  while g3==1u32 { if i>=RLEN {g3=0u32} else { if rawb(i)==10u32 {g3=0u32} else {i=i+1u64} } }  if i<RLEN { i=i+1u64 }
-        } else { let ch:u32=rawb(i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 } }
-        else { let ch:u32=rawb(i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 }
+/* recursively flatten (base)[0..len) -> SRC, inlining `#include "f"` (resolved vs main's dir), each file ONCE. */
+fn flatten_buf(base:u64, len:u64, depth:u32) {
+    if depth>=8u32 { return }
+    let mut i:u64=0u64  let mut atls:u32=1u32
+    while i < len {
+        if atls==1u32 { if is_inc2(base,i,len)==1u32 {
+            let mut k:u64=i  let mut g:u32=1u32  while g==1u32 { if k>=len {g=0u32} else { if bb(base,k)==34u32 {g=0u32} else {k=k+1u64} } }  k=k+1u64
+            let mut d:u64=DIRLEN  let mut g2:u32=1u32  while g2==1u32 { if k>=len {g2=0u32} else { let ch:u32=bb(base,k)  if ch==34u32 {g2=0u32} else { let ip:*u8=((&IPATH as u64)+d) as *u8  ip[0u64]=(ch & 0xFFu32) as u8  d=d+1u64  k=k+1u64 } } }
+            let ipe:*u8=((&IPATH as u64)+d) as *u8  ipe[0u64]=0u8  IPLEN=d
+            if path_seen()==0u32 {
+                path_add()
+                let ib:u64 = (&IBUFS as u64) + (depth as u64)*32768u64
+                let n:u64 = read_into(ib)
+                flatten_buf(ib, n, depth+1u32)  src_emit(10u32)
+            }
+            let mut g3:u32=1u32  while g3==1u32 { if i>=len {g3=0u32} else { if bb(base,i)==10u32 {g3=0u32} else {i=i+1u64} } }  if i<len { i=i+1u64 }
+        } else { let ch:u32=bb(base,i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 } }
+        else { let ch:u32=bb(base,i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 }
     }
 }
 fn main(argc: i32, argv: u64) -> u64 {
@@ -477,7 +486,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mp:*u8 = pp[1u64] as *u8  let mut j:u64=0u64  let mut last:u64=0u64
     let mut gg:u32=1u32  while gg==1u32 { let ch:u32=mp[j] as u32  if ch==0u32 {gg=0u32} else { if ch==47u32 {last=j+1u64} if ch==92u32 {last=j+1u64}  j=j+1u64 } }
     let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
-    flatten()
+    SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
     lex()  prescan()  prescan_str()  prescan_arr()  prescan_struct()  prescan_enum()
     ML=0u64
     let mut k:u32=0u32

@@ -89,6 +89,8 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  ez("popq %rax\ntestq %rax, %rax\njnz Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64) }
         if op == 0x80u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovzbq (%rcx,%rax,1), %rax\npushq %rax\n~" as u64) }   /* LOAD8 mem[addr] */
         if op == 0x81u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovb %dl, (%rcx,%rax,1)\n~" as u64) }       /* STORE8 mem[addr]=val */
+        if op == 0x82u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovq (%rcx,%rax,1), %rax\npushq %rax\n~" as u64) }     /* LOAD64 mem[addr] (8-byte) */
+        if op == 0x83u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovq %rdx, (%rcx,%rax,1)\n~" as u64) }      /* STORE64 mem[addr]=val (8-byte) */
         if op == 0x24u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rdx\n~" as u64) }   /* SREM -> remainder in %rdx */
         if op == 0x72u32 { ez("addq $8, %rsp\n~" as u64) }                                          /* DROP */
         if op == 0x71u32 { ez("popq %rcx\nmovq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq __putc\nmovq -8(%rbp), %rsp\n~" as u64) }   /* PRINT_CHAR -> __putc(char in rcx) */
@@ -144,6 +146,8 @@ fn mod_has_mem(base: u64) -> u32 {
             let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
             if o == 0x80u32 { return 1u32 }
             if o == 0x81u32 { return 1u32 }
+            if o == 0x82u32 { return 1u32 }
+            if o == 0x83u32 { return 1u32 }
             if o == 0x01u32 { s = s + 8u64 }
             if o == 0x10u32 { s = s + 1u64 }
             if o == 0x11u32 { s = s + 1u64 }

@@ -92,6 +92,8 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x72u32 { c_emit(0x1Au32) }                  /* DROP */
         if op == 0x80u32 { c_emit(0xA7u32)  c_emit(0x31u32)  c_emit(0x00u32)  c_emit(0x00u32) }   /* LOAD8: i32.wrap_i64 ; i64.load8_u a0 o0 */
         if op == 0x81u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x3Cu32)  c_emit(0x00u32)  c_emit(0x00u32) }   /* STORE8: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store8 */
+        if op == 0x82u32 { c_emit(0xA7u32)  c_emit(0x29u32)  c_emit(0x03u32)  c_emit(0x00u32) }   /* LOAD64: i32.wrap_i64 ; i64.load a3 o0 */
+        if op == 0x83u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x37u32)  c_emit(0x03u32)  c_emit(0x00u32) }   /* STORE64: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store a3 o0 */
     }
     c_emit(0x0Bu32)
 }
@@ -117,6 +119,8 @@ fn body_has_mem(base: u64, boff: u64, blen: u64) -> u32 {
         let sop : *u8 = (base + boff + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
         if o == 0x80u32 { return 1u32 }
         if o == 0x81u32 { return 1u32 }
+        if o == 0x82u32 { return 1u32 }
+        if o == 0x83u32 { return 1u32 }
         if o == 0x01u32 { s = s + 8u64 }
         if o == 0x10u32 { s = s + 1u64 }
         if o == 0x11u32 { s = s + 1u64 }

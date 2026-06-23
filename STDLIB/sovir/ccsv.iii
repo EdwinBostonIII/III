@@ -1,0 +1,201 @@
+/* ccsv.iii -- the FOUNDATION of the non-gcc C compiler: compiles the C integer core -> SVIR, thence to a
+ * SOVEREIGN x86 PE (svir_x86 -> sovas -> sovld) with NO gcc in the artifact path.  This is the seed-DDC's
+ * missing input begun: an independent C front-end whose backend is III's own sovereign toolchain, not gcc.
+ *
+ * Subset (C's integer core, == SVIR's): int NAME(int p, ...) { ... } ; int x = e ; x = e ; if (e) {} else {} ;
+ *   while (e) {} ; return e ; calls ; + - * / % & | ^ << >> == != < > <= >= , parens, int literals, locals.
+ *   All ints are i64.  Reads argv[1] (a .c file); emits a .iii module wrapping SVIR v1 bytes (DOCS/SVIR-V1-
+ *   CANONICAL.md), consumed by svir_x86/svir_wasm.  main() is SVIR func 0.
+ * HONEST SCOPE: this compiles the integer core; the 26k-line iiis-0 seed uses full C (structs, pointers,
+ * preprocessor, ...) -- the long road this foundation begins.  Demonstrates: a C program -> sovereign x86 (no
+ * gcc) AND a mini-DDC (ccsv build vs gcc build agree on behaviour). */
+module ccsv
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, n: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+
+var SRC : [u8; 65536]
+var SLEN : u64 = 0u64
+var MODE_RB : [u8; 3] = [114u8, 98u8, 0u8]
+var TK : [u32; 8192]  var TV : [i64; 8192]  var TO : [u32; 8192]  var TL : [u32; 8192]  var NT : u32 = 0u32  var C : u32 = 0u32
+
+const Q_LP:i64=1i64 const Q_RP:i64=2i64 const Q_LB:i64=3i64 const Q_RB:i64=4i64 const Q_SEMI:i64=7i64 const Q_ASN:i64=8i64
+const Q_EQ:i64=10i64 const Q_NE:i64=11i64 const Q_LT:i64=12i64 const Q_GT:i64=13i64 const Q_LE:i64=14i64 const Q_GE:i64=15i64
+const Q_ADD:i64=16i64 const Q_SUB:i64=17i64 const Q_MUL:i64=18i64 const Q_DIV:i64=19i64 const Q_MOD:i64=20i64
+const Q_AND:i64=21i64 const Q_OR:i64=22i64 const Q_XOR:i64=23i64 const Q_SHL:i64=24i64 const Q_SHR:i64=25i64 const Q_COM:i64=6i64
+
+fn sp(c: u32) -> u32 { if c==32u32 {return 1u32} if c==9u32 {return 1u32} if c==10u32 {return 1u32} if c==13u32 {return 1u32} return 0u32 }
+fn dg(c: u32) -> u32 { if c>=48u32 { if c<=57u32 {return 1u32} } return 0u32 }
+fn idc(c: u32) -> u32 { if c==95u32 {return 1u32} if c>=48u32 { if c<=57u32 {return 1u32} } if c>=65u32 { if c<=90u32 {return 1u32} } if c>=97u32 { if c<=122u32 {return 1u32} } return 0u32 }
+fn ids(c: u32) -> u32 { if c==95u32 {return 1u32} if c>=65u32 { if c<=90u32 {return 1u32} } if c>=97u32 { if c<=122u32 {return 1u32} } return 0u32 }
+fn sb(i: u64) -> u32 { let p : *u8 = ((&SRC as u64) + i) as *u8  return p[0u64] as u32 }
+fn pt(k: u32, v: i64, o: u32, l: u32) { if NT < 8192u32 { TK[NT as u64]=k  TV[NT as u64]=v  TO[NT as u64]=o  TL[NT as u64]=l  NT=NT+1u32 } }
+
+fn lex() {
+    NT = 0u32
+    let mut i : u64 = 0u64
+    while i < SLEN {
+        let c : u32 = sb(i)  let c2 : u32 = sb(i+1u64)  let mut done : u32 = 0u32
+        if sp(c)==1u32 { i=i+1u64  done=1u32 }
+        if done==0u32 { if c==47u32 { if c2==47u32 { i=i+2u64  let mut g:u32=1u32  while g==1u32 { if i>=SLEN {g=0u32} else { if sb(i)==10u32 {g=0u32} else {i=i+1u64} } }  done=1u32 }
+                                      else { if c2==42u32 { i=i+2u64  let mut g:u32=1u32  while g==1u32 { if i>=SLEN {g=0u32} else { if sb(i)==42u32 { if sb(i+1u64)==47u32 {i=i+2u64 g=0u32} else {i=i+1u64} } else {i=i+1u64} } }  done=1u32 } } } }
+        if done==0u32 { if ids(c)==1u32 { let o:u64=i  let mut g:u32=1u32  while g==1u32 { if i>=SLEN {g=0u32} else { if idc(sb(i))==1u32 {i=i+1u64} else {g=0u32} } }  pt(1u32,0i64,o as u32,(i-o) as u32)  done=1u32 } }
+        if done==0u32 { if dg(c)==1u32 { let mut v:i64=0i64  let mut g:u32=1u32  while g==1u32 { if i>=SLEN {g=0u32} else { if dg(sb(i))==1u32 { v=(v*10i64)+((sb(i)-48u32) as i64)  i=i+1u64 } else {g=0u32} } }  let mut g2:u32=1u32  while g2==1u32 { if i>=SLEN {g2=0u32} else { if idc(sb(i))==1u32 {i=i+1u64} else {g2=0u32} } }  pt(2u32,v,0u32,0u32)  done=1u32 } }
+        if done==0u32 {
+            let mut adv : u32 = 0u32
+            if c==61u32 { if c2==61u32 { pt(3u32,Q_EQ,0u32,0u32) adv=2u32 } else { pt(3u32,Q_ASN,0u32,0u32) adv=1u32 } }
+            if c==33u32 { if c2==61u32 { pt(3u32,Q_NE,0u32,0u32) adv=2u32 } else { adv=1u32 } }
+            if c==60u32 { if c2==61u32 { pt(3u32,Q_LE,0u32,0u32) adv=2u32 } else { if c2==60u32 { pt(3u32,Q_SHL,0u32,0u32) adv=2u32 } else { pt(3u32,Q_LT,0u32,0u32) adv=1u32 } } }
+            if c==62u32 { if c2==61u32 { pt(3u32,Q_GE,0u32,0u32) adv=2u32 } else { if c2==62u32 { pt(3u32,Q_SHR,0u32,0u32) adv=2u32 } else { pt(3u32,Q_GT,0u32,0u32) adv=1u32 } } }
+            if c==38u32 { pt(3u32,Q_AND,0u32,0u32) adv=1u32 }
+            if c==124u32 { pt(3u32,Q_OR,0u32,0u32) adv=1u32 }
+            if c==40u32 { pt(3u32,Q_LP,0u32,0u32) adv=1u32 }
+            if c==41u32 { pt(3u32,Q_RP,0u32,0u32) adv=1u32 }
+            if c==123u32 { pt(3u32,Q_LB,0u32,0u32) adv=1u32 }
+            if c==125u32 { pt(3u32,Q_RB,0u32,0u32) adv=1u32 }
+            if c==59u32 { pt(3u32,Q_SEMI,0u32,0u32) adv=1u32 }
+            if c==44u32 { pt(3u32,Q_COM,0u32,0u32) adv=1u32 }
+            if c==43u32 { pt(3u32,Q_ADD,0u32,0u32) adv=1u32 }
+            if c==45u32 { pt(3u32,Q_SUB,0u32,0u32) adv=1u32 }
+            if c==42u32 { pt(3u32,Q_MUL,0u32,0u32) adv=1u32 }
+            if c==47u32 { pt(3u32,Q_DIV,0u32,0u32) adv=1u32 }
+            if c==37u32 { pt(3u32,Q_MOD,0u32,0u32) adv=1u32 }
+            if c==94u32 { pt(3u32,Q_XOR,0u32,0u32) adv=1u32 }
+            if adv==0u32 { adv=1u32 }
+            i = i + (adv as u64)
+        }
+    }
+    pt(0u32,0i64,0u32,0u32)
+}
+
+fn neq(o1: u32, l1: u32, o2: u32, l2: u32) -> u32 { if l1!=l2 {return 0u32}  let mut j:u32=0u32  while j<l1 { if sb((o1+j) as u64)!=sb((o2+j) as u64) {return 0u32}  j=j+1u32 }  return 1u32 }
+fn kw(t: u32, s: u64, n: u32) -> u32 { if TK[t as u64]!=1u32 {return 0u32}  if TL[t as u64]!=n {return 0u32}  let mut j:u32=0u32  while j<n { let p:*u8=(s+(j as u64)) as *u8  if sb((TO[t as u64]+j) as u64)!=(p[0u64] as u32) {return 0u32}  j=j+1u32 }  return 1u32 }
+fn cp(p: i64) -> u32 { if TK[C as u64]==3u32 { if TV[C as u64]==p {return 1u32} }  return 0u32 }
+fn eat(p: i64) -> u32 { if cp(p)==1u32 { C=C+1u32  return 1u32 }  return 0u32 }
+fn ispat(t: u32, p: i64) -> u32 { if TK[t as u64]==3u32 { if TV[t as u64]==p {return 1u32} }  return 0u32 }
+
+var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32; 256]  var FN : u32 = 0u32
+fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
+var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32
+fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
+fn ladd(t: u32) -> u32 { let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LN=LN+1u32 }  return s }
+
+var BD : [u8; 16384]  var BL : u64 = 0u64
+fn eb(b: u32) { if BL<16384u64 { BD[BL]=(b & 0xFFu32) as u8  BL=BL+1u64 } }
+fn econst(v: i64) { eb(0x01u32)  let mut k:u32=0u32  while k<8u32 { eb(((v as u64) >> (8u64*(k as u64))) as u32)  k=k+1u32 } }
+fn eu8(o: u32, a: u32) { eb(o)  eb(a) }
+var MO : [u8; 32768]  var ML : u64 = 0u64
+fn mb(b: u32) { if ML<32768u64 { MO[ML]=(b & 0xFFu32) as u8  ML=ML+1u64 } }
+
+fn prec(p: i64) -> u32 {
+    if p==Q_MUL {return 9u32} if p==Q_DIV {return 9u32} if p==Q_MOD {return 9u32}
+    if p==Q_ADD {return 8u32} if p==Q_SUB {return 8u32}  if p==Q_SHL {return 7u32} if p==Q_SHR {return 7u32}
+    if p==Q_LT {return 6u32} if p==Q_GT {return 6u32} if p==Q_LE {return 6u32} if p==Q_GE {return 6u32}
+    if p==Q_EQ {return 5u32} if p==Q_NE {return 5u32}  if p==Q_AND {return 4u32} if p==Q_XOR {return 3u32} if p==Q_OR {return 2u32}
+    return 0u32
+}
+fn opc(p: i64) -> u32 {
+    if p==Q_MUL {return 0x22u32} if p==Q_DIV {return 0x23u32} if p==Q_MOD {return 0x24u32}
+    if p==Q_ADD {return 0x20u32} if p==Q_SUB {return 0x21u32}  if p==Q_SHL {return 0x28u32} if p==Q_SHR {return 0x29u32}
+    if p==Q_LT {return 0x32u32} if p==Q_GT {return 0x35u32} if p==Q_LE {return 0x34u32} if p==Q_GE {return 0x33u32}
+    if p==Q_EQ {return 0x30u32} if p==Q_NE {return 0x31u32}  if p==Q_AND {return 0x25u32} if p==Q_XOR {return 0x27u32} if p==Q_OR {return 0x26u32}
+    return 0u32
+}
+
+fn eprim() {
+    if cp(Q_LP)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RP)  return }
+    if TK[C as u64]==2u32 { econst(TV[C as u64])  C=C+1u32  return }
+    if TK[C as u64]==1u32 {
+        let t : u32 = C  C=C+1u32
+        if cp(Q_LP)==1u32 { C=C+1u32  let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)  let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac) }  return }
+        let li:i32=lidx(t)  if li>=0i32 { eu8(0x10u32, li as u32) }  return
+    }
+    C=C+1u32
+}
+fn ebin(minp: u32) {
+    eprim()  let mut go:u32=1u32
+    while go==1u32 {
+        if TK[C as u64]!=3u32 { go=0u32 }
+        else { let p:i64=TV[C as u64]  let pr:u32=prec(p)
+            if pr==0u32 { go=0u32 } else { if pr<minp { go=0u32 } else { C=C+1u32  ebin(pr+1u32)  eb(opc(p)) } } }
+    }
+}
+
+fn pstmt() {
+    if kw(C,"int" as u64,3u32)==1u32 {                              /* int x = e ; */
+        C=C+1u32  let nt:u32=C  C=C+1u32  eat(Q_ASN)  ebin(0u32)  let s:u32=ladd(nt)  eu8(0x11u32,s)  eat(Q_SEMI)  return
+    }
+    if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  eb(0x60u32)  eat(Q_SEMI)  return }
+    if kw(C,"if" as u64,2u32)==1u32 {
+        C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  pblock()
+        if kw(C,"else" as u64,4u32)==1u32 { C=C+1u32  eb(0x43u32)  pblock() }
+        eb(0x44u32)  return
+    }
+    if kw(C,"while" as u64,5u32)==1u32 {
+        C=C+1u32  eat(Q_LP)  eb(0x40u32)  eb(0x41u32)  ebin(0u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_RP)
+        pblock()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  return
+    }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ASN {   /* x = e ; */
+        let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { eu8(0x11u32,li as u32) }  eat(Q_SEMI)  return
+    } } }
+    ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)
+}
+fn pblock() {
+    eat(Q_LB)  let mut go:u32=1u32
+    while go==1u32 { if cp(Q_RB)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { pstmt() } } }
+    eat(Q_RB)
+}
+
+fn cparams(nt: u32) -> u32 {   /* int NAME ( int a, int b ) -> count the comma-separated `int x` params */
+    let mut q:u32=nt+2u32
+    if ispat(q,Q_RP)==1u32 { return 0u32 }
+    let mut np:u32=1u32  let mut go:u32=1u32
+    while go==1u32 { if TK[q as u64]==0u32 {go=0u32} else { if ispat(q,Q_RP)==1u32 {go=0u32} else { if ispat(q,Q_COM)==1u32 {np=np+1u32}  q=q+1u32 } } }
+    return np
+}
+fn rec_fn(ft: u32) { let nt:u32=ft+1u32  FNO[FN as u64]=TO[nt as u64]  FNL[FN as u64]=TL[nt as u64]  FNP[FN as u64]=cparams(nt)  FNT[FN as u64]=ft  FN=FN+1u32 }
+fn is_fn(t: u32) -> u32 { if kw(t,"int" as u64,3u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LP)==1u32 { return 1u32 } } }  return 0u32 }
+fn prescan() {
+    FN=0u32  let mut t:u32=0u32
+    while t<NT { if is_fn(t)==1u32 { if kw(t+1u32,"main" as u64,4u32)==1u32 { rec_fn(t) } }  t=t+1u32 }
+    t=0u32
+    while t<NT { if is_fn(t)==1u32 { if kw(t+1u32,"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
+}
+fn cfn(fk: u32) {
+    C=FNT[fk as u64]  C=C+1u32  C=C+1u32  eat(Q_LP)         /* int NAME ( */
+    LN=0u32  let mut params:u32=0u32  let mut go:u32=1u32
+    while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { C=C+1u32  let pt2:u32=C  C=C+1u32  ladd(pt2)  params=params+1u32  eat(Q_COM) } } }   /* int NAME */
+    eat(Q_RP)  BL=0u64  pblock()
+    mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
+    let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }
+}
+
+fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
+fn pstr(s: u64) { let mut i:u64=0u64  let mut go:u32=1u32  while go==1u32 { let p:*u8=(s+i) as *u8  let b:u32=p[0u64] as u32  if b==126u32 {go=0u32} else { pc(b)  i=i+1u64 } } }
+var DB : [u8; 24]
+fn pdec(v0: u64) { if v0==0u64 { pc(48u32)  return }  let mut v:u64=v0  let mut n:u32=0u32  while v>0u64 { DB[n as u64]=(48u64+(v%10u64)) as u8  n=n+1u32  v=v/10u64 }  while n>0u32 { n=n-1u32  pc(DB[n as u64] as u32) } }
+fn emit_module() {
+    let total:u64=ML+1u64
+    pstr("module gen_svir\nvar SVIR : [u8; ~" as u64)  pdec(total)  pstr("] = [\n~" as u64)
+    pdec(FN as u64)  pstr("u8~" as u64)
+    let mut i:u64=0u64  while i<ML { pc(44u32)  pdec(MO[i] as u64)  pstr("u8~" as u64)  i=i+1u64 }
+    pstr("\n]\nfn svir_ptr() -> u64 @export { return &SVIR as u64 }\nfn svir_len() -> u64 @export { return ~" as u64)
+    pdec(total)  pstr("u64 }\n~" as u64)
+}
+
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 { return 2u64 }
+    let pp : *u64 = argv as *u64
+    let f : u64 = fopen(pp[1u64], &MODE_RB as u64)
+    if f == 0u64 { return 3u64 }
+    SLEN = fread(&SRC as u64, 1u64, 65535u64, f)
+    fclose(f)
+    lex()  prescan()
+    ML=0u64
+    let mut k:u32=0u32
+    while k<FN { cfn(k)  k=k+1u32 }
+    emit_module()
+    return 0u64
+}

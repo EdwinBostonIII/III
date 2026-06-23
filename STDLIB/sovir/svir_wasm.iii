@@ -1,9 +1,7 @@
 /* svir_wasm.iii -- TRANSLATOR #2: SVIR v0 -> a WebAssembly (.wasm) module to stdout.
- * Consumes the SAME svir_prog bytes as svir_x86, but with its OWN cursor + lowering (independent -- advisor #3).
- * node runs the produced .wasm; main() returns the SVIR result (99).  Straight-line subset (no control flow).
- *
- * WASM typing note: i64.eq/lt_s yield i32 -> follow with i64.extend_i32_u to keep the stack i64 (SVIR is all-i64).
- * The code section carries LEB128 size prefixes (body buffered to measure it). */
+ * Consumes the SAME SVIR bytes as svir_x86, with its OWN cursor + lowering (independent -- advisor #3).
+ * Stack machine maps ~1:1 to WASM.  i64 compares yield i32 -> i64.extend_i32_u (keep stack i64).
+ * br_if/if want an i32 cond -> i32.wrap_i64.  Locals declared from a max-slot pre-scan. */
 module svir_wasm
 
 extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
@@ -14,16 +12,15 @@ extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
 fn pleb_u(n0: u64) { let mut n : u64 = n0  let mut go : u32 = 1u32  while go == 1u32 { if n >= 128u64 { pc(((n & 0x7Fu64) | 0x80u64) as u32)  n = n >> 7u64 } else { pc(n as u32)  go = 0u32 } } }
 
-var BBUF : [u8; 8192]    /* the function body, buffered so we can LEB-prefix its length */
+var BBUF : [u8; 8192]
 var BLEN : u64 = 0u64
 fn b_emit(byte: u32) { if BLEN < 8192u64 { BBUF[BLEN] = (byte & 0xFFu32) as u8  BLEN = BLEN + 1u64 } }
-/* signed LEB128 of an i64 into the body buffer */
+fn b_leb_u(n0: u64) { let mut n : u64 = n0  let mut go : u32 = 1u32  while go == 1u32 { if n >= 128u64 { b_emit(((n & 0x7Fu64) | 0x80u64) as u32)  n = n >> 7u64 } else { b_emit(n as u32)  go = 0u32 } } }
 fn b_leb_s64(v0: i64) {
-    let mut v : i64 = v0
-    let mut more : u32 = 1u32
+    let mut v : i64 = v0  let mut more : u32 = 1u32
     while more == 1u32 {
         let byte : u32 = ((v as u64) & 0x7Fu64) as u32
-        v = v >> 7i64                                   /* arithmetic (sign-propagating) shift */
+        v = v >> 7i64
         let signset : u32 = byte & 0x40u32
         if v == 0i64 { if signset == 0u32 { more = 0u32 } }
         if v == (0i64 - 1i64) { if signset != 0u32 { more = 0u32 } }
@@ -36,45 +33,59 @@ fn main() -> u64 {
     let base : u64 = svir_ptr()
     let len  : u64 = svir_len()
 
-    /* ---- build the function body into BBUF: locals(0) + lowered ops + end ---- */
-    b_emit(0x00u32)                                      /* local declaration count = 0 */
+    /* ---- pre-scan: number of i64 locals = max LOCAL slot + 1 (walk ops, respecting operand sizes) ---- */
+    let mut nlocals : u32 = 0u32
+    let mut s : u64 = 0u64
+    while s < len {
+        let sop : *u8 = (base + s) as *u8  let o : u32 = sop[0u64] as u32  s = s + 1u64
+        if o == 0x01u32 { s = s + 8u64 }
+        if o == 0x10u32 { let lp : *u8 = (base + s) as *u8  let sl : u32 = lp[0u64] as u32  s = s + 1u64  if (sl + 1u32) > nlocals { nlocals = sl + 1u32 } }
+        if o == 0x11u32 { let lp : *u8 = (base + s) as *u8  let sl : u32 = lp[0u64] as u32  s = s + 1u64  if (sl + 1u32) > nlocals { nlocals = sl + 1u32 } }
+        if o == 0x50u32 { s = s + 1u64 }
+        if o == 0x51u32 { s = s + 1u64 }
+    }
+
+    /* ---- build the body: local-decl + lowered ops + final end ---- */
+    if nlocals == 0u32 { b_emit(0x00u32) }                     /* no locals */
+    else { b_emit(0x01u32)  b_leb_u(nlocals as u64)  b_emit(0x7Eu32) }   /* 1 group of <nlocals> i64 */
     let mut p : u64 = 0u64
     while p < len {
-        let opp : *u8 = (base + p) as *u8
-        let op  : u32 = opp[0u64] as u32
-        p = p + 1u64
-        if op == 0x01u32 {                               /* CONST_I64 -> i64.const <sleb> */
-            let mut imm : u64 = 0u64
-            let mut k : u64 = 0u64
+        let opp : *u8 = (base + p) as *u8  let op : u32 = opp[0u64] as u32  p = p + 1u64
+        if op == 0x01u32 {                                     /* CONST_I64 -> i64.const */
+            let mut imm : u64 = 0u64  let mut k : u64 = 0u64
             while k < 8u64 { let bp : *u8 = (base + p + k) as *u8  imm = imm | ((bp[0u64] as u64) << (8u64 * k))  k = k + 1u64 }
             p = p + 8u64
             b_emit(0x42u32)  b_leb_s64(imm as i64)
         }
-        if op == 0x20u32 { b_emit(0x7Cu32) }             /* ADD  -> i64.add */
-        if op == 0x21u32 { b_emit(0x7Du32) }             /* SUB  -> i64.sub */
-        if op == 0x22u32 { b_emit(0x7Eu32) }             /* MUL  -> i64.mul */
-        if op == 0x23u32 { b_emit(0x7Fu32) }             /* SDIV -> i64.div_s */
-        if op == 0x30u32 { b_emit(0x51u32)  b_emit(0xADu32) }   /* EQ   -> i64.eq ; i64.extend_i32_u */
-        if op == 0x32u32 { b_emit(0x55u32)  b_emit(0xADu32) }   /* LT_S -> i64.lt_s ; i64.extend_i32_u */
-        if op == 0x60u32 { b_emit(0x0Fu32) }             /* RETURN -> return */
+        if op == 0x10u32 { let lp : *u8 = (base + p) as *u8  p = p + 1u64  b_emit(0x20u32)  b_leb_u(lp[0u64] as u64) }   /* local.get */
+        if op == 0x11u32 { let lp : *u8 = (base + p) as *u8  p = p + 1u64  b_emit(0x21u32)  b_leb_u(lp[0u64] as u64) }   /* local.set */
+        if op == 0x20u32 { b_emit(0x7Cu32) }                   /* ADD  -> i64.add */
+        if op == 0x21u32 { b_emit(0x7Du32) }                   /* SUB  -> i64.sub */
+        if op == 0x22u32 { b_emit(0x7Eu32) }                   /* MUL  -> i64.mul */
+        if op == 0x23u32 { b_emit(0x7Fu32) }                   /* SDIV -> i64.div_s */
+        if op == 0x30u32 { b_emit(0x51u32)  b_emit(0xADu32) }  /* EQ   -> i64.eq ; extend_i32_u */
+        if op == 0x32u32 { b_emit(0x55u32)  b_emit(0xADu32) }  /* LT_S -> i64.lt_s ; extend_i32_u */
+        if op == 0x33u32 { b_emit(0x59u32)  b_emit(0xADu32) }  /* GE_S -> i64.ge_s ; extend_i32_u */
+        if op == 0x40u32 { b_emit(0x02u32)  b_emit(0x40u32) }  /* BLOCK (void) */
+        if op == 0x41u32 { b_emit(0x03u32)  b_emit(0x40u32) }  /* LOOP (void) */
+        if op == 0x42u32 { b_emit(0xA7u32)  b_emit(0x04u32)  b_emit(0x40u32) }   /* IF: wrap i64->i32 ; if (void) */
+        if op == 0x43u32 { b_emit(0x05u32) }                   /* ELSE */
+        if op == 0x44u32 { b_emit(0x0Bu32) }                   /* END */
+        if op == 0x50u32 { let dp : *u8 = (base + p) as *u8  p = p + 1u64  b_emit(0x0Cu32)  b_leb_u(dp[0u64] as u64) }   /* br depth */
+        if op == 0x51u32 { let dp : *u8 = (base + p) as *u8  p = p + 1u64  b_emit(0xA7u32)  b_emit(0x0Du32)  b_leb_u(dp[0u64] as u64) }  /* wrap ; br_if depth */
+        if op == 0x60u32 { b_emit(0x0Fu32) }                   /* RETURN -> return */
     }
-    b_emit(0x0Bu32)                                      /* end (close the function body) */
+    b_emit(0x0Bu32)                                            /* function end */
 
     /* ---- emit the module ---- */
-    /* magic + version */
     pc(0x00u32) pc(0x61u32) pc(0x73u32) pc(0x6Du32) pc(0x01u32) pc(0x00u32) pc(0x00u32) pc(0x00u32)
-    /* Type section: 1 type, () -> i64 */
-    pc(0x01u32) pc(0x05u32) pc(0x01u32) pc(0x60u32) pc(0x00u32) pc(0x01u32) pc(0x7Eu32)
-    /* Function section: 1 func, type 0 */
-    pc(0x03u32) pc(0x02u32) pc(0x01u32) pc(0x00u32)
-    /* Export section: "main" -> func 0 */
-    pc(0x07u32) pc(0x08u32) pc(0x01u32) pc(0x04u32) pc(0x6Du32) pc(0x61u32) pc(0x69u32) pc(0x6Eu32) pc(0x00u32) pc(0x00u32)
-    /* Code section: id, secsize, count=1, body_size, body */
-    pc(0x0Au32)
-    /* secsize = count(1) + leb_len(body_size) + body_size.  body_size = BLEN (< 16384 so leb_len in {1,2}). */
+    pc(0x01u32) pc(0x05u32) pc(0x01u32) pc(0x60u32) pc(0x00u32) pc(0x01u32) pc(0x7Eu32)         /* type () -> i64 */
+    pc(0x03u32) pc(0x02u32) pc(0x01u32) pc(0x00u32)                                              /* func 0:type 0 */
+    pc(0x07u32) pc(0x08u32) pc(0x01u32) pc(0x04u32) pc(0x6Du32) pc(0x61u32) pc(0x69u32) pc(0x6Eu32) pc(0x00u32) pc(0x00u32)  /* export main */
+    pc(0x0Au32)                                                /* code section */
     let mut bszlen : u64 = 1u64
     if BLEN >= 128u64 { bszlen = 2u64 }
-    pleb_u(1u64 + bszlen + BLEN)
+    pleb_u(1u64 + bszlen + BLEN)                               /* secsize = count + leb(body_size) + body */
     pc(0x01u32)
     pleb_u(BLEN)
     let mut q : u64 = 0u64

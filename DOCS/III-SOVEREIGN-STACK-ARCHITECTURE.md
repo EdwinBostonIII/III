@@ -4,8 +4,10 @@
 > **Date:** 2026-06-22. **Status:** ARCHITECTURE accepted; **Phase 1 LANDED** — `STDLIB/sovir/run_svir.sh` =
 > ALL PASS: one hand-authored SVIR program (`svir_prog.iii`), two independent translators (`svir_x86.iii` →
 > sovereign PE; `svir_wasm.iii` → `.wasm`), **both execute to 99 on this host** (x86-64 sovereign + WASM/node).
-> Phase 1 used the *straight-line* SVIR core (arithmetic + compare, no control flow yet — minimal translator
-> surface); the structured-control ops (`BLOCK`/`LOOP`/`IF`/`BR`) in §3 are **Phase 1b** (the counted-loop form).
+> **Phase 1b LANDED** too: the structured-control ops (`BLOCK`/`LOOP`/`BR`/`BR_IF`) + locals + `GE_S` now lower on
+> BOTH translators, and a real **counted loop** (`svir_loop.iii`, sum 0..99 == 4950 → 99) runs to 99 on both
+> machines (x86 through `sovas`'s branch relaxation, sovereign; WASM via node). `run_svir.sh` = 2 programs × 2
+> translators, all 99. The SVIR v0 core (arithmetic + locals + structured control) is complete and dual-targeted.
 > **For the worker:** Phase 1 (§7) is meticulous + gated. Phases 2–6 (§8) are a directional roadmap with honest
 > caveats — NOT yet task-decomposed. Build Phase 1 before planning the rest. No subagents (III rule).
 

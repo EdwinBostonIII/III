@@ -1,0 +1,29 @@
+/* svir_loop.iii -- the SECOND hand-authored SVIR program: a real COUNTED LOOP (structured control + locals).
+ *   acc=0; i=0; block { loop { if i>=100 break; acc+=i; i+=1; continue } } ; return (acc==4950) ? 99 : 1
+ * Proves BLOCK/LOOP/BR/BR_IF + LOCAL_GET/SET + GE_S lower correctly on BOTH translators (x86 + WASM).
+ * Same translators as svir_prog (linked against whichever program) -> the translators are GENERIC.
+ *
+ * ops: CONST=01(+8) LOCAL_GET=10(+u8) LOCAL_SET=11(+u8) ADD=20 EQ=30 GE_S=33 MUL=22
+ *      BLOCK=40 LOOP=41 END=44 BR=50(+u8 depth) BR_IF=51(+u8 depth) RETURN=60
+ * locals: slot 0 = acc, slot 1 = i.  depth: inside LOOP, 0=loop(continue) 1=block(break). */
+module svir_loop
+
+var SVIR : [u8; 96] = [
+    1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,   0x11u8,0u8,          /* CONST 0; LOCAL_SET 0  (acc=0) */
+    1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,   0x11u8,1u8,          /* CONST 0; LOCAL_SET 1  (i=0) */
+    0x40u8,                                                     /* BLOCK */
+    0x41u8,                                                     /*   LOOP */
+    0x10u8,1u8,   1u8,100u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x33u8, 0x51u8,1u8,   /* i; 100; GE_S; BR_IF 1 (break) */
+    0x10u8,0u8,   0x10u8,1u8,   0x20u8,   0x11u8,0u8,           /*     acc = acc + i */
+    0x10u8,1u8,   1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x20u8, 0x11u8,1u8,     /*     i = i + 1 */
+    0x50u8,0u8,                                                /*     BR 0 (continue) */
+    0x44u8,                                                    /*   END (loop) */
+    0x44u8,                                                    /* END (block) */
+    0x10u8,0u8,   1u8,0x56u8,0x13u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x30u8,   /* acc; 4950; EQ */
+    1u8,98u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x22u8,              /* 98; MUL */
+    1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x20u8,               /* 1; ADD  -> 99 */
+    0x60u8                                                     /* RETURN */
+]
+
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 96u64 }

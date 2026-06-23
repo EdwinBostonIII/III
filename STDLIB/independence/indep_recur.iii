@@ -1,0 +1,18 @@
+/* indep_recur.iii -- the SAME field recurrence zk_svir_exec.iii ZK-attests, run SOVEREIGNLY via the SVIR
+ * toolchain (iiisv -> SVIR -> x86 + WASM).  x_{i+1} = (x_i^2 + c) mod p ; p=998244353, c=7, x_0=3, 7 steps.
+ * Returns 99 iff x_7 == 254673617 (the golden value the ZK proof attests).  So one computation is both
+ * ZK-attested (zk_air) and sovereign-run (SVIR), agreeing on the result.  Pure III (zero externs). */
+module indep_recur
+
+fn main() -> u64 {
+    let p : u64 = 998244353u64
+    let c : u64 = 7u64
+    let mut x : u64 = 3u64
+    let mut i : u64 = 0u64
+    while i < 7u64 {
+        x = (x * x + c) % p
+        i = i + 1u64
+    }
+    if x != 254673617u64 { return 1u64 }
+    return 99u64
+}

@@ -62,6 +62,14 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         if op == 0x30u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsete %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
         if op == 0x32u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetl %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
         if op == 0x33u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetge %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
+        if op == 0x34u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetle %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }   /* LE_S */
+        if op == 0x35u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetg %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }    /* GT_S */
+        if op == 0x31u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetne %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }   /* NE */
+        if op == 0x25u32 { ez("popq %rcx\npopq %rax\nandq %rcx, %rax\npushq %rax\n~" as u64) }   /* AND */
+        if op == 0x26u32 { ez("popq %rcx\npopq %rax\norq %rcx, %rax\npushq %rax\n~" as u64) }    /* OR */
+        if op == 0x27u32 { ez("popq %rcx\npopq %rax\nxorq %rcx, %rax\npushq %rax\n~" as u64) }   /* XOR */
+        if op == 0x28u32 { ez("popq %rcx\npopq %rax\nshlq %cl, %rax\npushq %rax\n~" as u64) }    /* SHL (count in cl) */
+        if op == 0x29u32 { ez("popq %rcx\npopq %rax\nshrq %cl, %rax\npushq %rax\n~" as u64) }    /* SHR_U (logical) */
         if op == 0x40u32 { CS_KIND[CS_N as u64] = 0u32  CS_TGT[CS_N as u64] = LBLCTR  LBLCTR = LBLCTR + 1u32  CS_N = CS_N + 1u32 }
         if op == 0x41u32 { let id : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32  lbl_def(id)  CS_KIND[CS_N as u64] = 1u32  CS_TGT[CS_N as u64] = id  CS_N = CS_N + 1u32 }
         if op == 0x42u32 {

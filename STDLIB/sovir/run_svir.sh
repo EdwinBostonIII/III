@@ -17,7 +17,7 @@ done
 [ -s "$BOOT/sovlink_main.exe" ] || gcc "$BOOT/sovlink_main.o" "$BOOT/sovld.o" "$BOOT/sovparse.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovlink_main.exe" 2>/dev/null
 [ -s "$BOOT/crt0_sov.o" ]       || timeout 30 "$BOOT/sovas_main.exe" "$BOOT/crt0.o.s" > "$BOOT/crt0_sov.o" 2>/dev/null
 
-for m in svir_prog svir_loop svir_call svir_fact svir_bignum svir_x86 svir_wasm; do
+for m in svir_prog svir_loop svir_call svir_fact svir_bignum svir_x86 svir_wasm iiisv; do
   "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }
 done
 
@@ -81,7 +81,28 @@ if [ $bxr -eq 99 ] && [ $bwr -eq 99 ] && [ "$bxn" = "1" ] && [ "$bxk" = "1" ] \
   say "bignum ARBITRARY-PRECISION 100! : x86(sovereign,kernel32-only)==wasm==golden, $ndig digits EXACT, both exit 99"
 else say "FAIL bignum: x86exit=$bxr wasmexit=$bwr dlls=$bxn k32=$bxk digits=$ndig"; fail=1; fi
 
+# ---- iiisv: an INDEPENDENT .iii -> SVIR compiler (shares zero code with cg_r3).  Compile the REAL
+#      indep_toolchain.iii source through it -> SVIR -> both machines -> 99; then the differential vs cg_r3. ----
+gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null || { say "FAIL link iiisv tool"; fail=1; }
+"$W/iiisv.exe" "$ROOT/STDLIB/independence/indep_toolchain.iii" > "$W/gen_svir.iii" 2>/dev/null
+"$IIIS" "$W/gen_svir.iii" --compile-only --out "$W/gen_svir.o" >/dev/null 2>&1 || { say "FAIL compile iiisv output"; fail=1; }
+gcc "$W/svir_x86.o"  "$W/gen_svir.o" -o "$W/tx_ind.exe" 2>/dev/null
+gcc "$W/svir_wasm.o" "$W/gen_svir.o" -o "$W/tw_ind.exe" 2>/dev/null
+"$W/tx_ind.exe" > "$W/ind.s" 2>/dev/null
+timeout 20 "$BOOT/sovas_main.exe" "$W/ind.s" > "$W/ind.o2" 2>/dev/null
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/ind.o2" > "$W/ind.x86.exe" 2>/dev/null
+timeout 10 "$W/ind.x86.exe" >/dev/null 2>&1; ivx=$?
+"$W/tw_ind.exe" > "$W/ind.wasm" 2>/dev/null
+node "$S/run_wasm.mjs" "$W/ind.wasm" >/dev/null 2>&1; ivw=$?
+"$IIIS" "$ROOT/STDLIB/independence/indep_toolchain.iii" --compile-only --out "$W/indep_cg.o" >/dev/null 2>&1
+timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/indep_cg.o" > "$W/indep_cg.exe" 2>/dev/null
+timeout 10 "$W/indep_cg.exe" >/dev/null 2>&1; cgx=$?
+ik=$(objdump -p "$W/ind.x86.exe" 2>/dev/null | grep -ic "DLL Name")
+if [ $ivx -eq 99 ] && [ $ivw -eq 99 ] && [ $cgx -eq 99 ] && [ "$ik" = "1" ]; then
+  say "iiisv INDEPENDENT compiler : real indep_toolchain.iii -> SVIR -> x86(sovereign)=$ivx & wasm=$ivw ; cg_r3 differential=$cgx -> all agree (99)"
+else say "FAIL iiisv: x86=$ivx wasm=$ivw cg_r3=$cgx dlls=$ik"; fail=1; fi
+
 if [ $fail -eq 0 ]; then
-  say "ALL PASS -- 5 SVIR programs (arith, loop, CALL, recursive factorial, ARBITRARY-PRECISION 100!) x 2 independent translators; the factorials' x86==wasm==golden differentials are byte-identical (sovereign x86, kernel32-only).  20!=long-long-equiv (toolchain superiority); 100!=158 exact digits no fixed-width type can hold (PROGRAM superiority)."
+  say "ALL PASS -- 5 SVIR programs (arith, loop, CALL, recursive factorial, ARBITRARY-PRECISION 100!) x 2 translators; PLUS iiisv: an INDEPENDENT .iii->SVIR compiler that lowers REAL III source to x86(sovereign)+wasm and agrees with cg_r3 (independent differential compilation -- the foundation for DDC).  20!=long-long-equiv (toolchain superiority); 100!=arbitrary precision (PROGRAM superiority); iiisv=real source, independent compiler, 2 machines, cross-verified (TRUST + PORTABILITY superiority)."
 fi
 exit $fail

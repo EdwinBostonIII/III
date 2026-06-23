@@ -31,6 +31,15 @@
 > exit 99, x86 kernel32-only. This is the program that *justifies its existence*: it does what no fixed-width
 > type can, from one sovereign IR, on two architectures, self-verified. (Surfaced + fixed another real bug: `sovas`
 > had no `andq $imm` encoder; added `sov_and_imm32`, byte-identical to gcc, fixpoint re-run ALL PASS.)
+> **Phase 3 LANDED — `iiisv`, an INDEPENDENT `.iii → SVIR` compiler (real source enters the IR):** a from-scratch
+> lexer + recursive-descent parser + single-pass lowerer (`STDLIB/sovir/iiisv.iii`) that shares **zero code** with
+> `cg_r3`. It compiles the *real* `STDLIB/independence/indep_toolchain.iii` → an SVIR module → x86 (sovereign) **and**
+> WASM, both exit 99; the gate runs the **differential**: the *same source* through `cg_r3` (`iiis-2`) also exits 99
+> — two toolchains that share no code agree. SVIR grew to the full integer language (`AND/OR/XOR/SHL/SHR`, `NE/LE/GT`)
+> to receive it. **Honest scope (advisor):** this is *independent differential compilation* (a real trust signal +
+> the foundation for DDC), **not** byte-identical Thompson-DDC — the two toolchains emit different machine code and
+> agree on *behavior*; full DDC needs convergent output or an audited seed. Superiority: real III source → an
+> independent sovereign compiler → two architectures → cross-verified against the mainline.
 > **For the worker:** Phase 1 (§7) is meticulous + gated. Phases 2–6 (§8) are a directional roadmap with honest
 > caveats — NOT yet task-decomposed. Build Phase 1 before planning the rest. No subagents (III rule).
 

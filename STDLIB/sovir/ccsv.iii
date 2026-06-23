@@ -233,7 +233,7 @@ fn eprim() {
         }
         return
     }
-    if cp(Q_NOT)==1u32 { C=C+1u32  eprim()  econst(4294967295i64)  eb(0x27u32)  return }   /* ~x = x XOR 0xFFFFFFFF (32-bit NOT; positive const -> wasm-safe) */
+    if cp(Q_NOT)==1u32 { C=C+1u32  eprim()  econst(0i64-1i64)  eb(0x27u32)  return }   /* ~x = x XOR -1 (correct for any width; svir_wasm c_leb_s64 now encodes negatives) */
     if cp(Q_LP)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RP)  return }
     if TK[C as u64]==2u32 { econst(TV[C as u64])  C=C+1u32  return }
     if TK[C as u64]==4u32 { econst(TV[C as u64])  C=C+1u32  return }   /* "str" -> its address in the string region */

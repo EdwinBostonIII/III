@@ -29,7 +29,9 @@ fn c_leb_s64(v0: i64) {
     let mut v : i64 = v0  let mut more : u32 = 1u32
     while more == 1u32 {
         let byte : u32 = ((v as u64) & 0x7Fu64) as u32
-        v = v >> 7i64
+        let neg : u32 = ((v as u64) >> 63u64) as u32                              /* sign bit before the shift */
+        v = ((v as u64) >> 7u64) as i64                                          /* logical >> ... */
+        if neg == 1u32 { v = ((v as u64) | 0xFE00000000000000u64) as i64 }       /* ...then sign-extend -> ARITHMETIC (robust vs iiis-2's >>) */
         let signset : u32 = byte & 0x40u32
         if v == 0i64 { if signset == 0u32 { more = 0u32 } }
         if v == (0i64 - 1i64) { if signset != 0u32 { more = 0u32 } }

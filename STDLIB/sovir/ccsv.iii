@@ -25,7 +25,7 @@ const Q_LP:i64=1i64 const Q_RP:i64=2i64 const Q_LB:i64=3i64 const Q_RB:i64=4i64 
 const Q_EQ:i64=10i64 const Q_NE:i64=11i64 const Q_LT:i64=12i64 const Q_GT:i64=13i64 const Q_LE:i64=14i64 const Q_GE:i64=15i64
 const Q_ADD:i64=16i64 const Q_SUB:i64=17i64 const Q_MUL:i64=18i64 const Q_DIV:i64=19i64 const Q_MOD:i64=20i64
 const Q_AND:i64=21i64 const Q_OR:i64=22i64 const Q_XOR:i64=23i64 const Q_SHL:i64=24i64 const Q_SHR:i64=25i64 const Q_COM:i64=6i64
-const Q_LBR:i64=26i64 const Q_RBR:i64=27i64 const Q_DOT:i64=28i64
+const Q_LBR:i64=26i64 const Q_RBR:i64=27i64 const Q_DOT:i64=28i64 const Q_ARROW:i64=29i64
 
 fn sp(c: u32) -> u32 { if c==32u32 {return 1u32} if c==9u32 {return 1u32} if c==10u32 {return 1u32} if c==13u32 {return 1u32} return 0u32 }
 fn dg(c: u32) -> u32 { if c>=48u32 { if c<=57u32 {return 1u32} } return 0u32 }
@@ -77,7 +77,7 @@ fn lex() {
             if c==59u32 { pt(3u32,Q_SEMI,0u32,0u32) adv=1u32 }
             if c==44u32 { pt(3u32,Q_COM,0u32,0u32) adv=1u32 }
             if c==43u32 { pt(3u32,Q_ADD,0u32,0u32) adv=1u32 }
-            if c==45u32 { pt(3u32,Q_SUB,0u32,0u32) adv=1u32 }
+            if c==45u32 { if c2==62u32 { pt(3u32,Q_ARROW,0u32,0u32) adv=2u32 } else { pt(3u32,Q_SUB,0u32,0u32) adv=1u32 } }   /* -> or - */
             if c==42u32 { pt(3u32,Q_MUL,0u32,0u32) adv=1u32 }
             if c==47u32 { pt(3u32,Q_DIV,0u32,0u32) adv=1u32 }
             if c==37u32 { pt(3u32,Q_MOD,0u32,0u32) adv=1u32 }
@@ -98,8 +98,9 @@ fn ispat(t: u32, p: i64) -> u32 { if TK[t as u64]==3u32 { if TV[t as u64]==p {re
 
 var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32; 256]  var FN : u32 = 0u32
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
-var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]   /* LCH[slot]=1 iff a char* (stride-1 byte access) */
+var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]   /* LCH=char* ; LPT[slot]=struct type idx for a struct-pointer local (-1 else) */
 fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
+fn lpt(t: u32) -> i32 { let li:i32=lidx(t)  if li<0i32 {return 0i32-1i32}  return LPT[li as u64] }
 fn ladd(t: u32) -> u32 { let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LN=LN+1u32 }  return s }
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
 var AO : [u32; 64]  var AL : [u32; 64]  var AB : [u64; 64]  var AN : u32 = 0u32  var MTOP : u64 = 0u64
@@ -194,6 +195,9 @@ fn eprim() {
         if cp(Q_DOT)==1u32 {                                         /* v.field : struct field load */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  econst(vb + foff)  eb(0x82u32)  return }
         }
+        if cp(Q_ARROW)==1u32 {                                       /* p->field : struct-pointer field load */
+            let ptt:i32=lpt(t)  if ptt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  eu8(0x10u32, lidx(t) as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  eb(0x82u32)  return }
+        }
         let li:i32=lidx(t)  if li>=0i32 { eu8(0x10u32, li as u32) }  return
     }
     C=C+1u32
@@ -213,9 +217,24 @@ fn pstmt() {
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 { if LCH[dli as u64]==1u32 {ischp=1u32} } }
         eprim()  eat(Q_ASN)  ebin(0u32)  if ischp==1u32 { eb(0x81u32) } else { eb(0x83u32) }  eat(Q_SEMI)  return
     }
-    if kw(C,"struct" as u64,6u32)==1u32 {                           /* struct Name v ;  (local struct decl -> registered by prescan_struct; skip) */
+    if kw(C,"struct" as u64,6u32)==1u32 {
+        let sti:i32=stidx(C+1u32)
+        if TK[(C+2u32) as u64]==3u32 { if TV[(C+2u32) as u64]==Q_MUL {   /* struct Name *p [= e] ; -> struct-pointer local */
+            C=C+3u32  let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  if sti>=0i32 { LPT[s as u64]=sti }
+            if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  eu8(0x11u32,s) }
+            eat(Q_SEMI)  return
+        } }
+        let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return   /* struct Name v ; -> value (registered by prescan_struct); skip */
+    }
+    if kw(C,"union" as u64,5u32)==1u32 {                            /* union Name u ; (local) -> registered by prescan; skip */
         let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
     }
+    if kw(C,"typedef" as u64,7u32)==1u32 {                          /* local typedef def -> registered by prescan; skip */
+        let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
+    }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==1u32 { let stc:i32=stidx(C)  if stc>=0i32 {   /* TypedefName v ; (local) -> registered by prescan; skip */
+        let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
+    } } }
     if dtype(C)==1u32 {                                            /* int/char decl (int x ; int *p ; char *s ; int arr[N] ;) */
         let isc:u32=kw(C,"char" as u64,4u32)
         C=C+1u32  let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }    /* `int/char *p` -> pointer local (an i64 address) */
@@ -240,6 +259,10 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT {   /* v.field = e ; (struct field store) */
         let nt:u32=C  let vt:i32=avtype(nt)
         if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  C=C+3u32  eat(Q_ASN)  econst(vb+foff)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }
+    } } }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field = e ; (struct-ptr field store) */
+        let nt:u32=C  let ptt:i32=lpt(nt)
+        if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  C=C+3u32  eat(Q_ASN)  eu8(0x10u32, lidx(nt) as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
         let nt:u32=C  let ab:i64=abase(nt)
@@ -284,36 +307,52 @@ fn prescan_arr() {   /* global/local `int NAME[NUM];` -> cumulative base in SVIR
         t=t+1u32
     }
 }
+/* register a struct/union type: parse `int|char [*] field ;` entries from after_brace to the }, offsets cumulative
+ * (struct) or all-0 (union).  is_union -> size 8 (max i64/ptr field). */
+fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
+    STNO[STN as u64]=TO[name_tok as u64]  STNL[STN as u64]=TL[name_tok as u64]  STFB[STN as u64]=SFN
+    let mut q:u32=after_brace  let mut off:u64=0u64  let mut nf:u32=0u32  let mut g:u32=1u32
+    while g==1u32 {
+        if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32}
+        else { if dtype(q)==1u32 {
+            let mut fq:u32=q+1u32  if ispat(fq,Q_MUL)==1u32 { fq=fq+1u32 }
+            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFN=SFN+1u32  nf=nf+1u32
+            if is_union==0u32 { off=off+8u64 }
+            let mut g2:u32=1u32  while g2==1u32 { if ispat(q,Q_SEMI)==1u32 {g2=0u32} else { if TK[q as u64]==0u32 {g2=0u32} else {q=q+1u32} } }  q=q+1u32
+        } else { q=q+1u32 } } }
+    }
+    let mut sz:u64=off  if is_union==1u32 { sz=8u64 }
+    STNF[STN as u64]=nf  STSZ[STN as u64]=sz  STN=STN+1u32
+}
+fn find_rb(after_brace:u32) -> u32 { let mut q:u32=after_brace  let mut g:u32=1u32  while g==1u32 { if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32} else {q=q+1u32} } }  return q }
+fn reg_var(name_tok:u32, sti:i32) { if sti>=0i32 { AO[AN as u64]=TO[name_tok as u64]  AL[AN as u64]=TL[name_tok as u64]  AB[AN as u64]=MTOP  AVT[AN as u64]=sti  MTOP=MTOP+STSZ[sti as u64]  AN=AN+1u32 } }
+fn istk(t:u32) -> u32 { if kw(t,"struct" as u64,6u32)==1u32 {return 1u32}  if kw(t,"union" as u64,5u32)==1u32 {return 1u32}  if kw(t,"typedef" as u64,7u32)==1u32 {return 1u32}  return 0u32 }
 fn prescan_struct() {
     STN=0u32  SFN=0u32
-    let mut t:u32=0u32                                              /* pass 1: struct Name { int f; ... } -> type + field offsets */
+    let mut t:u32=0u32                                              /* pass 1: register struct/union/typedef types */
     while t<NT {
-        if kw(t,"struct" as u64,6u32)==1u32 { if ispat(t+2u32,Q_LB)==1u32 {
-            STNO[STN as u64]=TO[(t+1u32) as u64]  STNL[STN as u64]=TL[(t+1u32) as u64]  STFB[STN as u64]=SFN
-            let mut q:u32=t+3u32  let mut off:u64=0u64  let mut nf:u32=0u32  let mut g:u32=1u32
-            while g==1u32 {
-                if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32}
-                else { if kw(q,"int" as u64,3u32)==1u32 {
-                    let fn2:u32=q+1u32
-                    SFO[SFN as u64]=TO[fn2 as u64]  SFL[SFN as u64]=TL[fn2 as u64]  SFOFF[SFN as u64]=off  SFN=SFN+1u32  off=off+8u64  nf=nf+1u32  q=q+3u32
-                } else { q=q+1u32 } } }
-            }
-            STNF[STN as u64]=nf  STSZ[STN as u64]=off  STN=STN+1u32
-        } }
+        if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LB)==1u32 { reg_type(t+1u32, t+3u32, 0u32) } } }
+        if kw(t,"union" as u64,5u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LB)==1u32 { reg_type(t+1u32, t+3u32, 1u32) } } }
+        if kw(t,"typedef" as u64,7u32)==1u32 {
+            if kw(t+1u32,"struct" as u64,6u32)==1u32 { if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 0u32) } }
+            if kw(t+1u32,"union" as u64,5u32)==1u32 { if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) } }
+        }
         t=t+1u32
     }
-    t=0u32                                                         /* pass 2: struct Name v ; -> a mem region (base) + its type */
+    t=0u32                                                         /* pass 2: var decls -> mem region + type */
     while t<NT {
-        if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 {
-            let sti:i32=stidx(t+1u32)
-            if sti>=0i32 { AO[AN as u64]=TO[(t+2u32) as u64]  AL[AN as u64]=TL[(t+2u32) as u64]  AB[AN as u64]=MTOP  AVT[AN as u64]=sti  MTOP=MTOP+STSZ[sti as u64]  AN=AN+1u32 }
-        } } }
+        if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 { reg_var(t+2u32, stidx(t+1u32)) } } }
+        if kw(t,"union" as u64,5u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 { reg_var(t+2u32, stidx(t+1u32)) } } }
+        if TK[t as u64]==1u32 { if TK[(t+1u32) as u64]==1u32 {     /* TypedefName v ; (IDENT IDENT, first a registered type, not after struct/union/typedef) */
+            let sti:i32=stidx(t)
+            if sti>=0i32 { let mut pk:u32=0u32  if t>0u32 { pk=istk(t-1u32) }  if pk==0u32 { reg_var(t+1u32, sti) } }
+        } }
         t=t+1u32
     }
 }
 fn cfn(fk: u32) {
     C=FNT[fk as u64]  C=C+1u32  C=C+1u32  eat(Q_LP)         /* int NAME ( */
-    LN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  lz=lz+1u32 }   /* reset char* flags per fn */
+    LN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  lz=lz+1u32 }   /* reset char-ptr and struct-ptr flags per fn */
     let mut params:u32=0u32  let mut go:u32=1u32
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { let isc:u32=kw(C,"char" as u64,4u32)  C=C+1u32  let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }  let pt2:u32=C  C=C+1u32  let sl:u32=ladd(pt2)  if isc==1u32 { if isp==1u32 { LCH[sl as u64]=1u32 } }  params=params+1u32  eat(Q_COM) } } }   /* [char|int] [*] NAME */
     eat(Q_RP)  BL=0u64  pblock()   /* string region is initialised by the SVIR data section (no main-entry init) */

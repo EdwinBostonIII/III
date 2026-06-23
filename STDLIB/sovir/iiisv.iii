@@ -32,7 +32,7 @@ const PU_COM:i64=6i64 const PU_SEMI:i64=7i64 const PU_ASSIGN:i64=8i64 const PU_A
 const PU_NE:i64=11i64 const PU_LT:i64=12i64  const PU_GT:i64=13i64  const PU_LE:i64=14i64  const PU_GE:i64=15i64
 const PU_ADD:i64=16i64 const PU_SUB:i64=17i64 const PU_MUL:i64=18i64 const PU_DIV:i64=19i64 const PU_MOD:i64=20i64
 const PU_AND:i64=21i64 const PU_OR:i64=22i64  const PU_XOR:i64=23i64 const PU_SHL:i64=24i64 const PU_SHR:i64=25i64
-const PU_ANDAND:i64=26i64 const PU_OROR:i64=27i64
+const PU_ANDAND:i64=26i64 const PU_OROR:i64=27i64 const PU_LBR:i64=28i64 const PU_RBR:i64=29i64
 
 fn is_sp(c: u32) -> u32 { if c == 32u32 { return 1u32 } if c == 9u32 { return 1u32 } if c == 10u32 { return 1u32 } if c == 13u32 { return 1u32 } return 0u32 }
 fn is_dig(c: u32) -> u32 { if c >= 48u32 { if c <= 57u32 { return 1u32 } } return 0u32 }
@@ -86,6 +86,8 @@ fn lex() {
             if c == 37u32 { add_tok(3u32, PU_MOD, 0u32, 0u32)  adv = 1u32 }
             if c == 94u32 { add_tok(3u32, PU_XOR, 0u32, 0u32)  adv = 1u32 }
             if c == 59u32 { add_tok(3u32, PU_SEMI, 0u32, 0u32)  adv = 1u32 }
+            if c == 91u32 { add_tok(3u32, PU_LBR, 0u32, 0u32)  adv = 1u32 }
+            if c == 93u32 { add_tok(3u32, PU_RBR, 0u32, 0u32)  adv = 1u32 }
             if adv == 0u32 { adv = 1u32 }
             i = i + (adv as u64)
         } } } }
@@ -118,6 +120,18 @@ fn fn_index(t: u32) -> i32 {
     let mut k : u32 = 0u32
     while k < FN_NF { if names_eq(FN_OFF[k as u64], FN_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return k as i32 }  k = k + 1u32 }
     return 0i32 - 1i32
+}
+
+/* module-level arrays -> SVIR linear memory (var NAME : [T; SIZE]) */
+var ARR_OFF : [u32; 64]
+var ARR_LEN : [u32; 64]
+var ARR_BASE : [u64; 64]
+var ARR_N : u32 = 0u32
+var MEM_TOP : u64 = 0u64
+fn arr_base(t: u32) -> i64 {   /* base offset if t names an array, else -1 */
+    let mut k : u32 = 0u32
+    while k < ARR_N { if names_eq(ARR_OFF[k as u64], ARR_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return ARR_BASE[k as u64] as i64 }  k = k + 1u32 }
+    return 0i64 - 1i64
 }
 
 var LOC_OFF : [u32; 256]
@@ -178,6 +192,7 @@ fn parse_primary() {
             if fi >= 0i32 { e_call(fi as u32, ac) }
             return
         }
+        if cur_punct(PU_LBR) == 1u32 { let ab : i64 = arr_base(t)  if ab >= 0i64 { TP = TP + 1u32  parse_bin(0u32)  eat(PU_RBR)  if ab > 0i64 { e_const(ab)  e_op(0x20u32) }  e_op(0x80u32)  return } }   /* array load: addr=index(+base) ; LOAD8 */
         let li : i32 = loc_index(t)
         if li >= 0i32 { e_u8(0x10u32, li as u32) }
         return
@@ -226,6 +241,15 @@ fn parse_stmt() {
         e_op(0x44u32)  e_op(0x44u32)
         return
     }
+    if TK_KIND[TP as u64] == 1u32 { if TK_KIND[(TP + 1u32) as u64] == 3u32 { if TK_VAL[(TP + 1u32) as u64] == PU_LBR {   /* array store: NAME [ index ] = value */
+        let nt : u32 = TP  let ab : i64 = arr_base(nt)
+        if ab >= 0i64 {
+            TP = TP + 2u32  parse_bin(0u32)  eat(PU_RBR)
+            if ab > 0i64 { e_const(ab)  e_op(0x20u32) }
+            eat(PU_ASSIGN)  parse_bin(0u32)  e_op(0x81u32)
+            return
+        }
+    } } }
     if TK_KIND[TP as u64] == 1u32 { if TK_KIND[(TP + 1u32) as u64] == 3u32 { if TK_VAL[(TP + 1u32) as u64] == PU_ASSIGN {
         let nt : u32 = TP  TP = TP + 2u32  parse_bin(0u32)
         let li : i32 = loc_index(nt)  if li >= 0i32 { e_u8(0x11u32, li as u32) }
@@ -262,6 +286,23 @@ fn prescan() {   /* main FIRST (SVIR func 0 = the entry), then the others in sou
     while t < NTOK { if tok_kw(t, "fn" as u64, 2u32) == 1u32 { if tok_kw(t + 1u32, "main" as u64, 4u32) == 1u32 { record_fn(t) } }  t = t + 1u32 }
     t = 0u32
     while t < NTOK { if tok_kw(t, "fn" as u64, 2u32) == 1u32 { if tok_kw(t + 1u32, "main" as u64, 4u32) == 0u32 { record_fn(t) } }  t = t + 1u32 }
+}
+fn prescan_arrays() {   /* var NAME : [ T ; SIZE ]  -> assign a base offset in SVIR linear memory */
+    ARR_N = 0u32  MEM_TOP = 0u64
+    let mut t : u32 = 0u32
+    while t < NTOK {
+        if tok_kw(t, "var" as u64, 3u32) == 1u32 {
+            let nt : u32 = t + 1u32
+            if cur_punct_at(nt + 2u32, PU_LBR) == 1u32 {       /* NAME : [ T ; NUM ] */
+                if TK_KIND[(nt + 5u32) as u64] == 2u32 {
+                    ARR_OFF[ARR_N as u64] = TK_OFF[nt as u64]  ARR_LEN[ARR_N as u64] = TK_LEN[nt as u64]  ARR_BASE[ARR_N as u64] = MEM_TOP
+                    MEM_TOP = MEM_TOP + (TK_VAL[(nt + 5u32) as u64] as u64)
+                    ARR_N = ARR_N + 1u32
+                }
+            }
+        }
+        t = t + 1u32
+    }
 }
 
 fn compile_fn(fk: u32) {
@@ -308,6 +349,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     fclose(f)
     lex()
     prescan()
+    prescan_arrays()
     MLEN = 0u64
     let mut k : u32 = 0u32
     while k < FN_NF { compile_fn(k)  k = k + 1u32 }

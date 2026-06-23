@@ -1,0 +1,45 @@
+/* Independence proof — ARBITRARY PRECISION, in real III source.
+ * Computes 100! EXACTLY (158 decimal digits) as a base-10 digit array in a module-level buffer, then verifies
+ * (length == 158, digit-sum == 648) and returns 99.  A C `long long` factorial overflows at 21!; this has no
+ * fixed-width limit.  Pure III (zero externs).  Compilable BOTH by the mainline cg_r3 AND by the independent
+ * iiisv (.iii -> SVIR) front-end -> x86 (sovereign) + WASM -- the capstone: program-superiority (arbitrary
+ * precision) authored in real source and lowered by an independent compiler to multiple architectures. */
+module indep_bignum
+
+var digits : [u8; 512]
+
+fn fact_big(n: u64) -> u64 {
+    digits[0] = 1u64
+    let mut len : u64 = 1u64
+    let mut k : u64 = 2u64
+    while k <= n {
+        let mut carry : u64 = 0u64
+        let mut i : u64 = 0u64
+        while i < len {
+            let prod : u64 = digits[i] * k + carry
+            digits[i] = prod % 10u64
+            carry = prod / 10u64
+            i = i + 1u64
+        }
+        while carry > 0u64 {
+            digits[len] = carry % 10u64
+            carry = carry / 10u64
+            len = len + 1u64
+        }
+        k = k + 1u64
+    }
+    return len
+}
+
+fn main() -> u64 {
+    let len : u64 = fact_big(100u64)
+    let mut sum : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < len {
+        sum = sum + digits[i]
+        i = i + 1u64
+    }
+    if len != 158u64 { return 1u64 }
+    if sum != 648u64 { return 2u64 }
+    return 99u64
+}

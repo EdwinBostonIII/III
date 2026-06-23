@@ -8,6 +8,11 @@
 > BOTH translators, and a real **counted loop** (`svir_loop.iii`, sum 0..99 == 4950 → 99) runs to 99 on both
 > machines (x86 through `sovas`'s branch relaxation, sovereign; WASM via node). `run_svir.sh` = 2 programs × 2
 > translators, all 99. The SVIR v0 core (arithmetic + locals + structured control) is complete and dual-targeted.
+> **Phase 2 LANDED**: SVIR **v1** = a multi-function module (`[func_count]` + per-func `[params][nresults][body_len]`)
+> + the `CALL funcidx argcount` op. `svir_call.iii` (`main` calls a looping `helper(100)`) lowers on both
+> translators — x86 via the **Win64 ABI** (args→`rcx/rdx/r8/r9`, 16-byte align + 32B shadow, an rsp-save slot so a
+> call can't corrupt the live eval stack), WASM via its native multi-function `call`. `run_svir.sh` = **3 programs
+> × 2 translators, all 99**. Function calls — the key primitive for real programs — work on both machines.
 > **For the worker:** Phase 1 (§7) is meticulous + gated. Phases 2–6 (§8) are a directional roadmap with honest
 > caveats — NOT yet task-decomposed. Build Phase 1 before planning the rest. No subagents (III rule).
 

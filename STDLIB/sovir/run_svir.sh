@@ -17,7 +17,7 @@ done
 [ -s "$BOOT/sovlink_main.exe" ] || gcc "$BOOT/sovlink_main.o" "$BOOT/sovld.o" "$BOOT/sovparse.o" "$BOOT/sovas.o" -lkernel32 -o "$BOOT/sovlink_main.exe" 2>/dev/null
 [ -s "$BOOT/crt0_sov.o" ]       || timeout 30 "$BOOT/sovas_main.exe" "$BOOT/crt0.o.s" > "$BOOT/crt0_sov.o" 2>/dev/null
 
-for m in svir_prog svir_loop svir_x86 svir_wasm; do
+for m in svir_prog svir_loop svir_call svir_x86 svir_wasm; do
   "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }
 done
 
@@ -41,10 +41,10 @@ wasmpath(){ local prog="$1" lbl="$2"
   node "$S/run_wasm.mjs" "$W/$lbl.wasm" >/dev/null 2>&1; local rc=$?
   if [ $rc -eq 99 ]; then say "wasm $lbl  (node) -> 99"; else say "FAIL wasm/$lbl: exit=$rc"; fail=1; fi; }
 
-x86path  svir_prog sum;  x86path  svir_loop loop
-wasmpath svir_prog sum;  wasmpath svir_loop loop
+x86path  svir_prog sum;  x86path  svir_loop loop;  x86path  svir_call call
+wasmpath svir_prog sum;  wasmpath svir_loop loop;  wasmpath svir_call call
 
 if [ $fail -eq 0 ]; then
-  say "ALL PASS -- 2 SVIR programs (arith + counted loop) x 2 independent translators, all execute to 99 (x86-64 sovereign + WASM)."
+  say "ALL PASS -- 3 SVIR programs (arith + counted loop + a 2-function CALL) x 2 independent translators, all execute to 99 (x86-64 sovereign + WASM)."
 fi
 exit $fail

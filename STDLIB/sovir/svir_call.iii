@@ -1,0 +1,36 @@
+/* svir_call.iii -- SVIR v1 module: TWO functions + a CALL.  main() calls helper(100); helper(n) sums 0..n-1
+ * via a loop and returns it; main checks == 4950 -> 99.  Proves CALL (0x70 funcidx argcount), params, and a
+ * loop in the callee, lowered on BOTH translators (x86 Win64 ABI + WASM native call).
+ *   op CALL = 0x70 [u8 funcidx][u8 argcount].  args are the top `argcount` eval-stack values (arg0 deepest). */
+module svir_call
+
+var SVIR : [u8; 111] = [
+    2u8,                                /* func_count = 2 */
+    0u8, 1u8, 43u8, 0u8,                /* func0 (main): params=0 results=1 body_len=43 */
+    /* main: CONST 100; CALL f1 a1; CONST 4950; EQ; CONST 98; MUL; CONST 1; ADD; RETURN */
+    1u8,100u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,
+    0x70u8,1u8,1u8,
+    1u8,0x56u8,0x13u8,0u8,0u8,0u8,0u8,0u8,0u8,
+    0x30u8,
+    1u8,98u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,
+    0x22u8,
+    1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,
+    0x20u8,
+    0x60u8,
+    1u8, 1u8, 59u8, 0u8,                /* func1 (helper): params=1 results=1 body_len=59 */
+    /* helper(n=local0): acc=local1; i=local2; loop sum; return acc */
+    1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x11u8,1u8,
+    1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x11u8,2u8,
+    0x40u8,
+    0x41u8,
+    0x10u8,2u8, 0x10u8,0u8, 0x33u8, 0x51u8,1u8,
+    0x10u8,1u8, 0x10u8,2u8, 0x20u8, 0x11u8,1u8,
+    0x10u8,2u8, 1u8,1u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8, 0x20u8, 0x11u8,2u8,
+    0x50u8,0u8,
+    0x44u8,
+    0x44u8,
+    0x10u8,1u8, 0x60u8
+]
+
+fn svir_ptr() -> u64 @export { return &SVIR as u64 }
+fn svir_len() -> u64 @export { return 111u64 }

@@ -1,9 +1,8 @@
-/* svir_x86.iii -- TRANSLATOR #1: SVIR v0 -> x86-64 AT&T assembly (.s) to stdout.
- * Stack machine onto the NATIVE stack (eval-stack = push/pop); locals at -8*(slot+1)(%rbp); structured
- * control via a construct stack mapping BR depth -> a label.  Output is assembled+linked SOVEREIGNLY by
- * sovas+sovld (no gcc) into a PE that runs to the SVIR's result (99).  Independent of svir_wasm (advisor #3).
- *
- * Mnemonics matched to sovas Tier-1 EXACTLY: retq (not ret), .global (6 chars, not .globl). */
+/* svir_x86.iii -- TRANSLATOR #1 (SVIR v1): a multi-function x86-64 AT&T .s to stdout.
+ * Stack machine on the native stack; locals at -(16+8*slot)(%rbp); -8(%rbp) reserved as the call rsp-save slot.
+ * Win64 call lowering for CALL: args -> %rcx/%rdx/%r8/%r9, 16-byte align + 32B shadow, then restore the eval stack.
+ * Func 0 -> `main` (the entry); funcs 1.. -> `Lfn<idx>` (local).  Assembled sovereignly by sovas+sovld.
+ * Mnemonics matched to sovas Tier-1: retq / .global / callq. */
 module svir_x86
 
 extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
@@ -20,11 +19,15 @@ fn edec(v0: u64) {
     while v > 0u64 { NUMBUF[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }
     while n > 0u32 { n = n - 1u32  pc(NUMBUF[n as u64] as u32) }
 }
-/* a label "Lsv<id>" : as a definition ("Lsv<id>:\n") or a jmp/jcc target ("Lsv<id>\n") */
 fn lbl_def(id: u32) { ez("Lsv~" as u64)  edec(id as u64)  ez(":\n~" as u64) }
-fn lbl_ref(id: u32) { ez("Lsv~" as u64)  edec(id as u64)  ez("\n~" as u64) }
+fn loc_off(slot: u32) -> u32 { return 16u32 + (8u32 * slot) }                 /* local slot -> +offset below rbp */
+fn arg_reg(j: u32) {                                                          /* Win64 int arg register j */
+    if j == 0u32 { ez("%rcx~" as u64) }
+    if j == 1u32 { ez("%rdx~" as u64) }
+    if j == 2u32 { ez("%r8~"  as u64) }
+    if j == 3u32 { ez("%r9~"  as u64) }
+}
 
-/* construct stack: kind 0=BLOCK 1=LOOP 2=IF ; target = label id for BR to this construct */
 var CS_KIND : [u32; 64]
 var CS_TGT  : [u32; 64]
 var CS_ELSE : [u32; 64]
@@ -32,73 +35,80 @@ var CS_ELSEEN : [u32; 64]
 var CS_N : u32 = 0u32
 var LBLCTR : u32 = 0u32
 
-fn main() -> u64 {
-    _setmode(1i32, 0x8000i32)
-    let base : u64 = svir_ptr()
-    let len  : u64 = svir_len()
-    CS_N = 0u32  LBLCTR = 0u32
-    ez(".text\n.global main\nmain:\npushq %rbp\nmovq %rsp, %rbp\nsubq $256, %rsp\n~" as u64)  /* reserve 256B for locals */
+fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
+    CS_N = 0u32
+    if fidx == 0u32 { ez(".global main\nmain:\n~" as u64) } else { ez("Lfn~" as u64)  edec(fidx as u64)  ez(":\n~" as u64) }
+    ez("pushq %rbp\nmovq %rsp, %rbp\nsubq $512, %rsp\n~" as u64)
+    let mut j : u32 = 0u32                                                    /* spill the (<=4) register params to locals */
+    while j < params {
+        if j < 4u32 { ez("movq ~" as u64)  arg_reg(j)  ez(", -~" as u64)  edec(loc_off(j) as u64)  ez("(%rbp)\n~" as u64) }
+        j = j + 1u32
+    }
     let mut p : u64 = 0u64
-    while p < len {
-        let opp : *u8 = (base + p) as *u8
-        let op  : u32 = opp[0u64] as u32
-        p = p + 1u64
-        if op == 0x01u32 {                                     /* CONST_I64 */
+    while p < blen {
+        let opp : *u8 = (base + boff + p) as *u8  let op : u32 = opp[0u64] as u32  p = p + 1u64
+        if op == 0x01u32 {
             let mut imm : u64 = 0u64  let mut k : u64 = 0u64
-            while k < 8u64 { let bp : *u8 = (base + p + k) as *u8  imm = imm | ((bp[0u64] as u64) << (8u64 * k))  k = k + 1u64 }
+            while k < 8u64 { let bp : *u8 = (base + boff + p + k) as *u8  imm = imm | ((bp[0u64] as u64) << (8u64 * k))  k = k + 1u64 }
             p = p + 8u64
             ez("movabsq $~" as u64)  edec(imm)  ez(", %rax\npushq %rax\n~" as u64)
         }
-        if op == 0x10u32 {                                     /* LOCAL_GET slot */
-            let sp : *u8 = (base + p) as *u8  let slot : u32 = sp[0u64] as u32  p = p + 1u64
-            ez("movq -~" as u64)  edec(((slot + 1u32) * 8u32) as u64)  ez("(%rbp), %rax\npushq %rax\n~" as u64)
-        }
-        if op == 0x11u32 {                                     /* LOCAL_SET slot */
-            let sp : *u8 = (base + p) as *u8  let slot : u32 = sp[0u64] as u32  p = p + 1u64
-            ez("popq %rax\nmovq %rax, -~" as u64)  edec(((slot + 1u32) * 8u32) as u64)  ez("(%rbp)\n~" as u64)
-        }
+        if op == 0x10u32 { let lp : *u8 = (base + boff + p) as *u8  let slot : u32 = lp[0u64] as u32  p = p + 1u64  ez("movq -~" as u64)  edec(loc_off(slot) as u64)  ez("(%rbp), %rax\npushq %rax\n~" as u64) }
+        if op == 0x11u32 { let lp : *u8 = (base + boff + p) as *u8  let slot : u32 = lp[0u64] as u32  p = p + 1u64  ez("popq %rax\nmovq %rax, -~" as u64)  edec(loc_off(slot) as u64)  ez("(%rbp)\n~" as u64) }
         if op == 0x20u32 { ez("popq %rcx\npopq %rax\naddq %rcx, %rax\npushq %rax\n~" as u64) }
         if op == 0x21u32 { ez("popq %rcx\npopq %rax\nsubq %rcx, %rax\npushq %rax\n~" as u64) }
         if op == 0x22u32 { ez("popq %rcx\npopq %rax\nimulq %rcx, %rax\npushq %rax\n~" as u64) }
         if op == 0x23u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rax\n~" as u64) }
         if op == 0x30u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsete %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
         if op == 0x32u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetl %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
-        if op == 0x33u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetge %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }  /* GE_S */
-        if op == 0x40u32 {                                     /* BLOCK */
-            CS_KIND[CS_N as u64] = 0u32  CS_TGT[CS_N as u64] = LBLCTR  LBLCTR = LBLCTR + 1u32  CS_N = CS_N + 1u32
-        }
-        if op == 0x41u32 {                                     /* LOOP: header label here */
-            let id : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
-            lbl_def(id)
-            CS_KIND[CS_N as u64] = 1u32  CS_TGT[CS_N as u64] = id  CS_N = CS_N + 1u32
-        }
-        if op == 0x42u32 {                                     /* IF: pop cond, jz else */
+        if op == 0x33u32 { ez("popq %rcx\npopq %rax\ncmpq %rcx, %rax\nsetge %al\nmovzbq %al, %rax\npushq %rax\n~" as u64) }
+        if op == 0x40u32 { CS_KIND[CS_N as u64] = 0u32  CS_TGT[CS_N as u64] = LBLCTR  LBLCTR = LBLCTR + 1u32  CS_N = CS_N + 1u32 }
+        if op == 0x41u32 { let id : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32  lbl_def(id)  CS_KIND[CS_N as u64] = 1u32  CS_TGT[CS_N as u64] = id  CS_N = CS_N + 1u32 }
+        if op == 0x42u32 {
             let endid : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
             let elsid : u32 = LBLCTR  LBLCTR = LBLCTR + 1u32
             ez("popq %rax\ntestq %rax, %rax\njz Lsv~" as u64)  edec(elsid as u64)  ez("\n~" as u64)
             CS_KIND[CS_N as u64] = 2u32  CS_TGT[CS_N as u64] = endid  CS_ELSE[CS_N as u64] = elsid  CS_ELSEEN[CS_N as u64] = 0u32  CS_N = CS_N + 1u32
         }
-        if op == 0x43u32 {                                     /* ELSE */
-            let t : u32 = CS_N - 1u32
-            ez("jmp Lsv~" as u64)  edec(CS_TGT[t as u64] as u64)  ez("\n~" as u64)
-            lbl_def(CS_ELSE[t as u64])  CS_ELSEEN[t as u64] = 1u32
-        }
-        if op == 0x44u32 {                                     /* END */
+        if op == 0x43u32 { let tt : u32 = CS_N - 1u32  ez("jmp Lsv~" as u64)  edec(CS_TGT[tt as u64] as u64)  ez("\n~" as u64)  lbl_def(CS_ELSE[tt as u64])  CS_ELSEEN[tt as u64] = 1u32 }
+        if op == 0x44u32 {
             CS_N = CS_N - 1u32
             let kind : u32 = CS_KIND[CS_N as u64]
-            if kind == 0u32 { lbl_def(CS_TGT[CS_N as u64]) }                                   /* BLOCK: break target */
+            if kind == 0u32 { lbl_def(CS_TGT[CS_N as u64]) }
             if kind == 2u32 { if CS_ELSEEN[CS_N as u64] == 0u32 { lbl_def(CS_ELSE[CS_N as u64]) }  lbl_def(CS_TGT[CS_N as u64]) }
-            /* LOOP (kind 1): no label at end */
         }
-        if op == 0x50u32 {                                     /* BR depth */
-            let dp : *u8 = (base + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64
-            ez("jmp Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64)
+        if op == 0x50u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  ez("jmp Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64) }
+        if op == 0x51u32 { let dp : *u8 = (base + boff + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64  ez("popq %rax\ntestq %rax, %rax\njnz Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64) }
+        if op == 0x60u32 { ez("popq %rax\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64) }
+        if op == 0x70u32 {                                                    /* CALL funcidx argcount */
+            let fp : *u8 = (base + boff + p) as *u8  let fi : u32 = fp[0u64] as u32
+            let ap : *u8 = (base + boff + p + 1u64) as *u8  let ac : u32 = ap[0u64] as u32
+            p = p + 2u64
+            let mut a : u32 = ac
+            while a > 0u32 { a = a - 1u32  ez("popq ~" as u64)  arg_reg(a)  ez("\n~" as u64) }   /* pop args into regs (top=arg_{n-1}) */
+            ez("movq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq ~" as u64)
+            if fi == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(fi as u64) }
+            ez("\nmovq -8(%rbp), %rsp\npushq %rax\n~" as u64)
         }
-        if op == 0x51u32 {                                     /* BR_IF depth */
-            let dp : *u8 = (base + p) as *u8  let depth : u32 = dp[0u64] as u32  p = p + 1u64
-            ez("popq %rax\ntestq %rax, %rax\njnz Lsv~" as u64)  edec(CS_TGT[((CS_N - 1u32) - depth) as u64] as u64)  ez("\n~" as u64)
-        }
-        if op == 0x60u32 { ez("popq %rax\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64) }        /* RETURN */
+    }
+}
+
+fn main() -> u64 {
+    _setmode(1i32, 0x8000i32)
+    let base : u64 = svir_ptr()
+    LBLCTR = 0u32
+    let hp : *u8 = base as *u8
+    let nfunc : u32 = hp[0u64] as u32
+    ez(".text\n~" as u64)
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        let pp : *u8 = (base + off) as *u8  let params : u32 = pp[0u64] as u32
+        let lp0 : *u8 = (base + off + 2u64) as *u8  let lp1 : *u8 = (base + off + 3u64) as *u8
+        let blen : u64 = (lp0[0u64] as u64) | ((lp1[0u64] as u64) << 8u64)
+        emit_function(base, i, off + 4u64, blen, params)
+        off = off + 4u64 + blen
+        i = i + 1u32
     }
     return 0u64
 }

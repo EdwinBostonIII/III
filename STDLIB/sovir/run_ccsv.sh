@@ -60,6 +60,8 @@ cfeat(){  # $1 = test file basename (in $S)
   if [ $vf -eq 99 ] && [ $x -eq 99 ] && [ $w -eq 99 ] && [ $gc -eq 99 ]; then echo "ok"; else echo "FAIL($1 vf=$vf x86=$x wasm=$w gcc=$gc)"; fi
 }
 rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c); re=$(cfeat test_enum.c); ri=$(cfeat main_inc.c); rn=$(cfeat main_nest.c); rr=$(cfeat test_real.c); rw=$(cfeat test_width.c); ra=$(cfeat test_arrinit.c)
+rtn=$(cfeat test_ternary.c)
+if [ "$rtn" = "ok" ]; then say "ccsv SEED-DDC #1 : ternary ?: (cond?a:b, nested, right-assoc; temp-local lowering keeps the IF void -> x86+wasm+verifier all correct) -> all 99.  First iiis-0 worklist gap closed (ternary: ast.c 55x, sema.c 51x, cg_r3.c 43x)."; else say "FAIL seed-ddc ternary: $rtn"; fail=1; fi
 sha=$(cfeat sha256.c); shf=$(cfeat sha256_full.c); shg=$(cfeat sha256_generic.c)
 if [ "$sha" = "ok" ] && [ "$shf" = "ok" ] && [ "$shg" = "ok" ]; then say "*** ccsv CAPSTONE : SHA-256 in C -> ccsv -> SOVEREIGN x86(kernel32-only) + wasm + verifier + gcc, all 99.  CORE(\"abc\") + GENERAL multi-block(NIST 2-block) + GENERIC(sha256(msg,len) DYNAMIC padding, 9 input lengths 0..120 spanning every block-count boundary, 18 known-answer tests).  A from-scratch non-gcc C-subset compiler producing a sovereign artifact (no gcc in its path) that computes correct SHA-256 for ARBITRARY-length input, cross-verified vs gcc + wasm + NIST vectors. ***"; else say "FAIL CAPSTONE sha256=$sha sha_full=$shf sha_generic=$shg"; fail=1; fi
 cc=$(cfeat chacha20.c); hm=$(cfeat hmac_sha256.c)

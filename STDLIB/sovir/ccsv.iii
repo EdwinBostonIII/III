@@ -347,6 +347,20 @@ fn emit_for_incr() {   /* the for-loop's incr clause (no trailing ;): i++ / i-- 
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ASN)==1u32 { let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  return } }
     ebin(0u32)  eb(0x72u32)
 }
+/* the lvalue ADDRESS is already on the stack; consume `= rhs` or `op= rhs` and emit the store (esz=elem byte size,
+ * mask=width mask or 0).  Compound uses a fresh temp so the address is computed once: SET tmp; GET(store-addr);
+ * GET;LOAD(cur val); rhs; OP; [mask]; STORE. */
+fn emit_av(esz:i64, mask:i64) {
+    let op:i64=TV[C as u64]
+    if op==Q_ASN { C=C+1u32  ebin(0u32)  if mask!=0i64 {econst(mask)  eb(0x25u32)}  if esz==1i64 {eb(0x81u32)} else {eb(0x83u32)} }
+    else {
+        C=C+2u32  let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
+        eu8(0x11u32,tmp)  eu8(0x10u32,tmp)  eu8(0x10u32,tmp)
+        if esz==1i64 {eb(0x80u32)} else {eb(0x82u32)}
+        ebin(0u32)  eb(opc(op))  if mask!=0i64 {econst(mask)  eb(0x25u32)}
+        if esz==1i64 {eb(0x81u32)} else {eb(0x83u32)}
+    }
+}
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
     if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
@@ -424,25 +438,25 @@ fn pstmt() {
     } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT {   /* v.field[/[i]] = e ; (struct field store) */
         let nt:u32=C  let vt:i32=avtype(nt)
-        if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)
-            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  let fe:i64=fieldelem(vt,ft)  econst(fe)  eb(0x22u32)  econst(vb+foff)  eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  if fe==1i64 {eb(0x81u32)} else {eb(0x83u32)}  eat(Q_SEMI)  return }
-            C=C+3u32  eat(Q_ASN)  econst(vb+foff)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }
+        if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  let fe:i64=fieldelem(vt,ft)
+            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  econst(fe)  eb(0x22u32)  econst(vb+foff)  eb(0x20u32)  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
+            C=C+3u32  econst(vb+foff)  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field[/[i]] = e ; (struct-ptr field store) */
         let nt:u32=C  let ptt:i32=lpt(nt)
-        if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)
-            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  let fe:i64=fieldelem(ptt,ft)  econst(fe)  eb(0x22u32)  eu8(0x10u32,pl as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eat(Q_ASN)  ebin(0u32)  if fe==1i64 {eb(0x81u32)} else {eb(0x83u32)}  eat(Q_SEMI)  return }
-            C=C+3u32  eat(Q_ASN)  eu8(0x10u32, pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }
+        if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)
+            if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  econst(fe)  eb(0x22u32)  eu8(0x10u32,pl as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
+            C=C+3u32  eu8(0x10u32, pl as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  emit_av(fe, 0i64)  eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
         let nt:u32=C  let ab:i64=abase(nt)
-        if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)
-            if sz==1i64 { if ab>0i64 { econst(ab)  eb(0x20u32) }  eat(Q_ASN)  ebin(0u32)  eb(0x81u32) }      /* byte array: i (+base) = e ; STORE8 (truncates) */
-            else { econst(8i64)  eb(0x22u32)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eat(Q_ASN)  ebin(0u32)  let am:i64=awmask(nt)  if am!=0i64 { econst(am)  eb(0x25u32) }  eb(0x83u32) }   /* cell array: i*8 (+base) = e ; STORE64 (width-masked) */
-            eat(Q_SEMI)  return }
-        let pli:i32=lidx(nt)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)
-            if LCH[pli as u64]==1u32 { eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  eb(0x81u32) }                  /* char* p[i]=e: STORE8 */
-            else { econst(8i64)  eb(0x22u32)  eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  eb(0x83u32) }           /* int* p[i]=e: STORE64 */
+        if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let am:i64=awmask(nt)   /* NAME[i] [op]= e */
+            if sz==1i64 { if ab>0i64 { econst(ab)  eb(0x20u32) } }                                       /* byte array: i (+base) */
+            else { econst(8i64)  eb(0x22u32)  if ab>0i64 { econst(ab)  eb(0x20u32) } }                   /* cell array: i*8 (+base) */
+            emit_av(sz, am)  eat(Q_SEMI)  return }
+        let pli:i32=lidx(nt)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)   /* pointer p[i] [op]= e */
+            if LCH[pli as u64]==1u32 { eb(0x20u32)  emit_av(1i64, 0i64) }                                /* char* p[i]: byte */
+            else { econst(8i64)  eb(0x22u32)  eb(0x20u32)  emit_av(8i64, 0i64) }                          /* int* p[i]: cell */
             eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if prec(TV[(C+1u32) as u64])>0u32 { if TK[(C+2u32) as u64]==3u32 { if TV[(C+2u32) as u64]==Q_ASN {   /* x op= e ; (compound assign, local: += -= *= &= |= ^= >>= <<= ...) */

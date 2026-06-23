@@ -415,16 +415,20 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==1u32 { let stc:i32=stidx(C)  if stc>=0i32 {   /* TypedefName v ; (local) -> registered by prescan; skip */
         let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
     } } }
-    if dtype(C)==1u32 {                                            /* int/char decl (int x ; int *p ; char *s ; int arr[N] ; uint32_t u ;) */
-        let isc:u32=byc(C)  let tym:i64=type_mask(C)
-        C=C+1u32  let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }    /* `int/char *p` -> pointer local (an i64 address) */
-        let nt:u32=C
-        if ispat(C+1u32, Q_LBR)==1u32 {                             /* int NAME[NUM]; local array -> registered by prescan_arr; skip the decl */
-            C=C+1u32  let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
+    if dtype(C)==1u32 {                                            /* int/char decl, incl MULTI: `T a [=e], *p, b[N], c=e ;` */
+        let isc:u32=byc(C)  let tym:i64=type_mask(C)  C=C+1u32  let mut more:u32=1u32
+        while more==1u32 {
+            let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }
+            let nt:u32=C
+            if ispat(C+1u32, Q_LBR)==1u32 {                         /* NAME[NUM] local array -> prescan_arr; skip to , or ; */
+                C=C+1u32  let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if cp(Q_COM)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } }
+            } else {
+                C=C+1u32  let s:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s as u64]=1u32 } }  if isp==0u32 { LW[s as u64]=tym }
+                if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  emit_lset(s) }
+            }
+            if cp(Q_COM)==1u32 { C=C+1u32  more=1u32 } else { more=0u32 }
         }
-        C=C+1u32
-        if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  let s:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s as u64]=1u32 } }  if isp==0u32 { LW[s as u64]=tym }  emit_lset(s)  eat(Q_SEMI)  return }   /* int x = e ; (mask if a fixed-width type) */
-        let s2:u32=ladd(nt)  if isc==1u32 { if isp==1u32 { LCH[s2 as u64]=1u32 } }  if isp==0u32 { LW[s2 as u64]=tym }  eat(Q_SEMI)  return    /* int x ; (uninit, mask recorded for later assigns) */
+        eat(Q_SEMI)  return
     }
     if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  ENDED_RET=1u32  eat(Q_SEMI)  return }   /* mask return to the declared width */
     if kw(C,"if" as u64,2u32)==1u32 {

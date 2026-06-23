@@ -445,6 +445,10 @@ fn pstmt() {
             else { econst(8i64)  eb(0x22u32)  eb(0x20u32)  eat(Q_ASN)  ebin(0u32)  eb(0x83u32) }           /* int* p[i]=e: STORE64 */
             eat(Q_SEMI)  return }
     } } }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if prec(TV[(C+1u32) as u64])>0u32 { if TK[(C+2u32) as u64]==3u32 { if TV[(C+2u32) as u64]==Q_ASN {   /* x op= e ; (compound assign, local: += -= *= &= |= ^= >>= <<= ...) */
+        let nt:u32=C  let opn:i64=TV[(C+1u32) as u64]  C=C+3u32  let li:i32=lidx(nt)
+        if li>=0i32 { eu8(0x10u32,li as u32)  ebin(0u32)  eb(opc(opn))  emit_lset(li as u32) }  eat(Q_SEMI)  return
+    } } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ASN {   /* x = e ; */
         let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  eat(Q_SEMI)  return
     } } }

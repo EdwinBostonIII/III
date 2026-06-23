@@ -15,11 +15,11 @@ fail=0; say(){ echo "[zk] $*"; }
 for m in svir_x86 svir_wasm iiisv zk_svir_exec; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 
-# (A) ZK-attested
+# (A) ZK-attested.  zk_air (with the additive air_lde_at accessor) is in libiii_native.a; link the archive.
 gcc "$W/zk_svir_exec.o" "$LIB" -lkernel32 -o "$W/zk_svir_exec.exe" 2>/dev/null
 timeout 30 "$W/zk_svir_exec.exe" >/dev/null 2>&1; zrc=$?
-if [ $zrc -eq 99 ]; then say "ZK-ATTESTED : zk_air proves the execution trace (honest AIR holds + CP consistent) AND rejects a tampered trace -> 99"
-else say "FAIL zk: zk_svir_exec=$zrc (1=honest-fail 2/3=cp 4=tamper-NOT-rejected 5=re-verify)"; fail=1; fi
+if [ $zrc -eq 99 ]; then say "ZK-ATTESTED : zk_air arithmetizes the trace; PROVER satisfaction (air_constraints_hold + CP consistent) + VERIFIER reproduces the constraint from openings (air_combine_opened) + 2-cell soundness negative (forged trace rejected) -> 99"
+else say "FAIL zk: zk_svir_exec=$zrc (1=satisfaction 2/3=cp 6=verifier-bridge 4/7=tamper-NOT-rejected 5=re-verify)"; fail=1; fi
 
 # (B) sovereign-run of the SAME recurrence
 "$W/iiisv.exe" "$ROOT/STDLIB/independence/indep_recur.iii" > "$W/gen_rec.iii" 2>/dev/null

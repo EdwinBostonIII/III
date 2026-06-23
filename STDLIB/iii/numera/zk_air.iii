@@ -117,6 +117,15 @@ fn air_get_trace(row: u64, col: u64) -> u32 @export {
     if c >= w { return 0u32 }
     return AIR_TRACE[r * w + c]
 }
+/* read the LDE value at (col, j): exposes the committed per-column evaluation so an EXTERNAL verifier can
+ * OPEN it (air_set_open: cur=LDE[q], next=LDE[q+B]) and reproduce the constraint combination from the openings
+ * alone (air_combine_opened), without the full trace.  D = B*N per column.  (Additive read accessor.) */
+fn air_lde_at(col: u64, j: u64) -> u32 @export {
+    let d : u64 = AIR_B * (AIR_N[0] as u64)
+    if col >= AIR_WMAX { return 0u32 }
+    if j >= d { return 0u32 }
+    return AIR_LDE[col * d + j]
+}
 /* append a transition term  coeff*var_a*var_b  to constraint k. */
 fn air_add_term(con: u32, coeff: u32, var_a: u32, var_b: u32) -> i32 @export {
     let t : u64 = AIR_NT[0] as u64

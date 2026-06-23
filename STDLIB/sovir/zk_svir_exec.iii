@@ -21,6 +21,9 @@ extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_lde_at(col: u64, j: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_open(col: u64, cur_v: u32, next_v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_combine_opened(w_cols: u64) -> u32 from "zk_air.iii"
 
 /* fill the trace with the genuine recurrence (the "execution"): x_{i+1} = (x_i^2 + c) mod p. */
 fn fill_trace() {
@@ -49,18 +52,30 @@ fn setup_constraints() {
 fn build_air() { air_reset(1u32, 8u32)  fill_trace()  setup_constraints()  air_build_lde()  air_build_cp() }
 
 fn main() -> u64 {
+    let p : u64 = 998244353u64
+    let c : u64 = 7u64
     build_air()
-    /* HONEST proof: the AIR satisfaction predicate holds on the trace domain, CP is consistent off it. */
+    /* (1) PROVER-SIDE: the AIR satisfaction predicate holds on the trace domain, CP is consistent off it. */
     if air_constraints_hold() != 1u8 { return 1u64 }
     if air_cp_consistent_at(1u64) != 1u8 { return 2u64 }
     if air_cp_consistent_at(3u64) != 1u8 { return 3u64 }
-    /* NEGATIVE arm (soundness hinge): corrupt one trace cell -> the recurrence is violated -> the constraints
-     * must NO LONGER vanish on the trace domain (a cheating witness is caught).  If it still held, the AIR is
-     * vacuous and the proof proves nothing. */
-    air_set_trace(4u64, 0u64, 123456u32)
-    air_build_lde()
+    /* (2) VERIFIER-SIDE bridge: from ONLY the OPENED LDE values at a query (q=1: cur=LDE[1], next=LDE[q+B=5]) --
+     * not the full trace -- the verifier's constraint combination must equal the independently-computed value.
+     * This is what a STARK verifier checks at each FRI query; reproducing it pins acceptance-from-openings. */
+    let cur : u64 = air_lde_at(0u64, 1u64) as u64
+    let nxt : u64 = air_lde_at(0u64, 5u64) as u64
+    air_set_open(0u64, cur as u32, nxt as u32)
+    let cc  : u64 = (cur * cur) % p
+    let e1  : u64 = ((nxt + p) - cc) % p
+    let exp : u64 = ((e1 + p) - c) % p                 /* expected = next - cur^2 - c  (mod p) */
+    if (air_combine_opened(1u64) as u64) != exp { return 6u64 }
+    /* (3) SOUNDNESS NEGATIVE, robust: corrupt TWO distinct transition-constrained cells -> each makes the
+     * constraints NO LONGER vanish on the trace domain (a forged trace is caught -- not one-cell luck). */
+    build_air()  air_set_trace(4u64, 0u64, 123456u32)  air_build_lde()
     if air_constraints_hold() != 0u8 { return 4u64 }
-    /* the tamper was isolated: the honest trace proves again. */
+    build_air()  air_set_trace(2u64, 0u64, 999u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 7u64 }
+    /* (4) the tampers were isolated: the honest trace proves again. */
     build_air()
     if air_constraints_hold() != 1u8 { return 5u64 }
     return 99u64

@@ -60,8 +60,8 @@ cfeat(){  # $1 = test file basename (in $S)
   if [ $vf -eq 99 ] && [ $x -eq 99 ] && [ $w -eq 99 ] && [ $gc -eq 99 ]; then echo "ok"; else echo "FAIL($1 vf=$vf x86=$x wasm=$w gcc=$gc)"; fi
 }
 rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c); rt=$(cfeat test_td.c); re=$(cfeat test_enum.c); ri=$(cfeat main_inc.c); rn=$(cfeat main_nest.c); rr=$(cfeat test_real.c); rw=$(cfeat test_width.c); ra=$(cfeat test_arrinit.c)
-sha=$(cfeat sha256.c)
-if [ "$sha" = "ok" ]; then say "*** ccsv CAPSTONE : REAL SHA-256(\"abc\") in C -> ccsv -> SOVEREIGN x86 + wasm + verifier + gcc, all 99 == ba7816bf...f20015ad.  A non-gcc C compiler compiling PRODUCTION CRYPTOGRAPHY to a sovereign binary, gcc-cross-verified. ***"; else say "FAIL CAPSTONE sha256: $sha"; fail=1; fi
+sha=$(cfeat sha256.c); shf=$(cfeat sha256_full.c)
+if [ "$sha" = "ok" ] && [ "$shf" = "ok" ]; then say "*** ccsv CAPSTONE : SHA-256 in C -> ccsv -> SOVEREIGN x86(kernel32-only) + wasm + verifier + gcc, all 99.  CORE on \"abc\"=ba7816bf...f20015ad AND GENERAL (real padding + multi-block loop) on the NIST 2-block vector=248d6a61...19db06c1.  A from-scratch non-gcc C-subset compiler producing a sovereign artifact (no gcc in its path) that computes a correct cryptographic hash, cross-verified vs gcc + wasm + the known vectors. ***"; else say "FAIL CAPSTONE sha256=$sha sha_full=$shf"; fail=1; fi
 if [ "$rp" = "ok" ] && [ "$rs" = "ok" ] && [ "$rt" = "ok" ] && [ "$re" = "ok" ] && [ "$ri" = "ok" ] && [ "$rn" = "ok" ] && [ "$rr" = "ok" ] && [ "$rw" = "ok" ] && [ "$ra" = "ok" ]; then
   say "ccsv C TIERS : arrays+char+pointers + structs + typedef/union/p->f + enum/#define/typedef-ptr + #include + nested/diamond include-once + HEX/for/++/--/static/const/unsigned/stdint (test_real, from real iiis-0 gaps) -> sovereign x86 + wasm + verifier + gcc, all 99."
 else say "FAIL tiers: ptr=$rp struct=$rs td=$rt enum=$re include=$ri nest=$rn real=$rr"; fail=1; fi

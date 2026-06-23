@@ -25,7 +25,7 @@ const Q_LP:i64=1i64 const Q_RP:i64=2i64 const Q_LB:i64=3i64 const Q_RB:i64=4i64 
 const Q_EQ:i64=10i64 const Q_NE:i64=11i64 const Q_LT:i64=12i64 const Q_GT:i64=13i64 const Q_LE:i64=14i64 const Q_GE:i64=15i64
 const Q_ADD:i64=16i64 const Q_SUB:i64=17i64 const Q_MUL:i64=18i64 const Q_DIV:i64=19i64 const Q_MOD:i64=20i64
 const Q_AND:i64=21i64 const Q_OR:i64=22i64 const Q_XOR:i64=23i64 const Q_SHL:i64=24i64 const Q_SHR:i64=25i64 const Q_COM:i64=6i64
-const Q_LBR:i64=26i64 const Q_RBR:i64=27i64
+const Q_LBR:i64=26i64 const Q_RBR:i64=27i64 const Q_DOT:i64=28i64
 
 fn sp(c: u32) -> u32 { if c==32u32 {return 1u32} if c==9u32 {return 1u32} if c==10u32 {return 1u32} if c==13u32 {return 1u32} return 0u32 }
 fn dg(c: u32) -> u32 { if c>=48u32 { if c<=57u32 {return 1u32} } return 0u32 }
@@ -68,6 +68,7 @@ fn lex() {
             if c==125u32 { pt(3u32,Q_RB,0u32,0u32) adv=1u32 }
             if c==91u32 { pt(3u32,Q_LBR,0u32,0u32) adv=1u32 }
             if c==93u32 { pt(3u32,Q_RBR,0u32,0u32) adv=1u32 }
+            if c==46u32 { pt(3u32,Q_DOT,0u32,0u32) adv=1u32 }
             if c==59u32 { pt(3u32,Q_SEMI,0u32,0u32) adv=1u32 }
             if c==44u32 { pt(3u32,Q_COM,0u32,0u32) adv=1u32 }
             if c==43u32 { pt(3u32,Q_ADD,0u32,0u32) adv=1u32 }
@@ -97,6 +98,13 @@ fn ladd(t: u32) -> u32 { let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
 var AO : [u32; 64]  var AL : [u32; 64]  var AB : [u64; 64]  var AN : u32 = 0u32  var MTOP : u64 = 0u64
 fn abase(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AB[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
+/* struct types: NAME + a flattened field list (field name -> byte offset).  Struct vars reuse AO/AL/AB (base in
+ * mem) + AVT (struct type index of that entry, -1 for plain arrays). */
+var STNO:[u32;32]  var STNL:[u32;32]  var STFB:[u32;32]  var STNF:[u32;32]  var STSZ:[u64;32]  var STN:u32=0u32
+var SFO:[u32;256]  var SFL:[u32;256]  var SFOFF:[u64;256]  var SFN:u32=0u32  var AVT:[i32;64]
+fn stidx(t:u32)->i32 { let mut k:u32=0u32  while k<STN { if neq(STNO[k as u64],STNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
+fn avtype(t:u32)->i32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AVT[k as u64]}  k=k+1u32 }  return 0i32-1i32 }
+fn fieldoff(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64-1i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFOFF[fi as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 
 var BD : [u8; 16384]  var BL : u64 = 0u64
 fn eb(b: u32) { if BL<16384u64 { BD[BL]=(b & 0xFFu32) as u8  BL=BL+1u64 } }
@@ -147,6 +155,9 @@ fn eprim() {
             if ab>=0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eb(0x82u32)  return }   /* i*8 (+base) ; LOAD64 */
             let pli:i32=lidx(t)  if pli>=0i32 { eu8(0x10u32,pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  eb(0x20u32)  eb(0x82u32)  return }   /* pointer p[i] = *(p + i*8) */
         }
+        if cp(Q_DOT)==1u32 {                                         /* v.field : struct field load */
+            let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  econst(vb + foff)  eb(0x82u32)  return }
+        }
         let li:i32=lidx(t)  if li>=0i32 { eu8(0x10u32, li as u32) }  return
     }
     C=C+1u32
@@ -163,6 +174,9 @@ fn ebin(minp: u32) {
 fn pstmt() {
     if cp(Q_MUL)==1u32 {                                            /* *p = e ;  (pointer deref store) */
         C=C+1u32  eprim()  eat(Q_ASN)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return
+    }
+    if kw(C,"struct" as u64,6u32)==1u32 {                           /* struct Name v ;  (local struct decl -> registered by prescan_struct; skip) */
+        let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
     }
     if kw(C,"int" as u64,3u32)==1u32 {
         C=C+1u32  if cp(Q_MUL)==1u32 { C=C+1u32 }                    /* `int *p` -> pointer local (an i64 address) */
@@ -184,6 +198,10 @@ fn pstmt() {
         C=C+1u32  eat(Q_LP)  eb(0x40u32)  eb(0x41u32)  ebin(0u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_RP)
         pblock()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  return
     }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT {   /* v.field = e ; (struct field store) */
+        let nt:u32=C  let vt:i32=avtype(nt)
+        if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  C=C+3u32  eat(Q_ASN)  econst(vb+foff)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }
+    } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
         let nt:u32=C  let ab:i64=abase(nt)
         if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  econst(8i64)  eb(0x22u32)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eat(Q_ASN)  ebin(0u32)  eb(0x83u32)  eat(Q_SEMI)  return }   /* global array store (8-byte) */
@@ -219,8 +237,35 @@ fn prescan_arr() {   /* global `int NAME[NUM];` -> cumulative base offset in SVI
     AN=0u32  MTOP=0u64  let mut t:u32=0u32
     while t<NT {
         if kw(t,"int" as u64,3u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LBR)==1u32 { if TK[(t+3u32) as u64]==2u32 {
-            let nt:u32=t+1u32  AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=MTOP  MTOP=MTOP+((TV[(t+3u32) as u64] as u64) * 8u64)  AN=AN+1u32   /* 8 bytes per C int cell */
+            let nt:u32=t+1u32  AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=MTOP  AVT[AN as u64]=0i32-1i32  MTOP=MTOP+((TV[(t+3u32) as u64] as u64) * 8u64)  AN=AN+1u32   /* 8 bytes per C int cell */
         } } } }
+        t=t+1u32
+    }
+}
+fn prescan_struct() {
+    STN=0u32  SFN=0u32
+    let mut t:u32=0u32                                              /* pass 1: struct Name { int f; ... } -> type + field offsets */
+    while t<NT {
+        if kw(t,"struct" as u64,6u32)==1u32 { if ispat(t+2u32,Q_LB)==1u32 {
+            STNO[STN as u64]=TO[(t+1u32) as u64]  STNL[STN as u64]=TL[(t+1u32) as u64]  STFB[STN as u64]=SFN
+            let mut q:u32=t+3u32  let mut off:u64=0u64  let mut nf:u32=0u32  let mut g:u32=1u32
+            while g==1u32 {
+                if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32}
+                else { if kw(q,"int" as u64,3u32)==1u32 {
+                    let fn2:u32=q+1u32
+                    SFO[SFN as u64]=TO[fn2 as u64]  SFL[SFN as u64]=TL[fn2 as u64]  SFOFF[SFN as u64]=off  SFN=SFN+1u32  off=off+8u64  nf=nf+1u32  q=q+3u32
+                } else { q=q+1u32 } } }
+            }
+            STNF[STN as u64]=nf  STSZ[STN as u64]=off  STN=STN+1u32
+        } }
+        t=t+1u32
+    }
+    t=0u32                                                         /* pass 2: struct Name v ; -> a mem region (base) + its type */
+    while t<NT {
+        if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 {
+            let sti:i32=stidx(t+1u32)
+            if sti>=0i32 { AO[AN as u64]=TO[(t+2u32) as u64]  AL[AN as u64]=TL[(t+2u32) as u64]  AB[AN as u64]=MTOP  AVT[AN as u64]=sti  MTOP=MTOP+STSZ[sti as u64]  AN=AN+1u32 }
+        } } }
         t=t+1u32
     }
 }
@@ -253,7 +298,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     if f == 0u64 { return 3u64 }
     SLEN = fread(&SRC as u64, 1u64, 65535u64, f)
     fclose(f)
-    lex()  prescan()  prescan_arr()
+    lex()  prescan()  prescan_arr()  prescan_struct()
     ML=0u64
     let mut k:u32=0u32
     while k<FN { cfn(k)  k=k+1u32 }

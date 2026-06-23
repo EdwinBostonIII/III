@@ -44,4 +44,23 @@ gccm="NO"; cmp -s "$W/out_ccsv.txt" "$W/out_gcc.txt" && gccm="YES"
 if [ $bv -eq 99 ] && [ "$gold" = "YES" ] && [ "$gccm" = "YES" ]; then
   say "ccsv ARBITRARY-PRECISION : C bignum (global array + putchar) -> sovereign x86 prints 100! (158 digits) == golden(node)=$gold == gcc(content)=$gccm -> 99.  ccsv grew: global arrays, indexing, output, #-line skip."
 else say "FAIL bignum: exit=$bv golden=$gold gcc=$gccm"; fail=1; fi
+
+# C feature tiers: compile a .c via ccsv -> SVIR -> sovereign x86 + wasm, verifier-accepted, gcc-agreed (all 99).
+cfeat(){  # $1 = test file basename (in $S)
+  "$W/ccsv.exe" "$S/$1" > "$W/g_$1.iii" 2>/dev/null
+  "$IIIS" "$W/g_$1.iii" --compile-only --out "$W/g_$1.o" >/dev/null 2>&1
+  gcc "$W/verify_main.o" "$W/svir_verify.o" "$W/g_$1.o" -o "$W/vf_$1.exe" 2>/dev/null; "$W/vf_$1.exe" >/dev/null 2>&1; local vf=$?
+  gcc "$W/svir_x86.o" "$W/g_$1.o" -o "$W/tx_$1.exe" 2>/dev/null; "$W/tx_$1.exe" > "$W/$1.s" 2>/dev/null
+  timeout 20 "$BOOT/sovas_main.exe" "$W/$1.s" > "$W/$1.o2" 2>/dev/null
+  timeout 20 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/$1.o2" > "$W/$1.x86.exe" 2>/dev/null
+  timeout 10 "$W/$1.x86.exe" >/dev/null 2>&1; local x=$?
+  gcc "$W/svir_wasm.o" "$W/g_$1.o" -o "$W/tw_$1.exe" 2>/dev/null; "$W/tw_$1.exe" > "$W/$1.wasm" 2>/dev/null
+  node "$S/run_wasm.mjs" "$W/$1.wasm" >/dev/null 2>&1; local w=$?
+  gcc "$S/$1" -o "$W/gcc_$1.exe" 2>/dev/null; "$W/gcc_$1.exe" >/dev/null 2>&1; local gc=$?
+  if [ $vf -eq 99 ] && [ $x -eq 99 ] && [ $w -eq 99 ] && [ $gc -eq 99 ]; then echo "ok"; else echo "FAIL($1 vf=$vf x86=$x wasm=$w gcc=$gc)"; fi
+}
+rp=$(cfeat test_ptr.c); rs=$(cfeat test_struct.c)
+if [ "$rp" = "ok" ] && [ "$rs" = "ok" ]; then
+  say "ccsv C TIERS : local int arrays (8-byte cells) + char literals + pointers (test_ptr.c) AND structs (test_struct.c) -> sovereign x86 + wasm + verifier + gcc, all 99.  ccsv = C integer core + arrays + output + pointers + structs."
+else say "FAIL tiers: ptr=$rp struct=$rs"; fail=1; fi
 exit $fail

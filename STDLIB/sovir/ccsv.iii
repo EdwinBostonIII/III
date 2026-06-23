@@ -432,13 +432,13 @@ fn pstmt() {
     }
     if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  ENDED_RET=1u32  eat(Q_SEMI)  return }   /* mask return to the declared width */
     if kw(C,"if" as u64,2u32)==1u32 {
-        C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  pblock()
-        if kw(C,"else" as u64,4u32)==1u32 { C=C+1u32  eb(0x43u32)  pblock() }
+        C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  pbody()
+        if kw(C,"else" as u64,4u32)==1u32 { C=C+1u32  eb(0x43u32)  pbody() }
         eb(0x44u32)  return
     }
     if kw(C,"while" as u64,5u32)==1u32 {
         C=C+1u32  eat(Q_LP)  eb(0x40u32)  eb(0x41u32)  ebin(0u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_RP)
-        pblock()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  return
+        pbody()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  return
     }
     if kw(C,"for" as u64,3u32)==1u32 {                              /* for (init; cond; incr) body */
         C=C+1u32  eat(Q_LP)
@@ -448,7 +448,7 @@ fn pstmt() {
         econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_SEMI)   /* cond==0 -> BR_IF 1 (break) */
         let incrC:u32=C                                            /* incr is emitted AFTER the body */
         let mut gI:u32=1u32  while gI==1u32 { if cp(Q_RP)==1u32 {gI=0u32} else { if TK[C as u64]==0u32 {gI=0u32} else {C=C+1u32} } }  eat(Q_RP)
-        pblock()                                                   /* body */
+        pbody()                                                    /* body */
         let after:u32=C
         C=incrC  emit_for_incr()                                   /* replay the incr */
         eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)            /* BR 0 ; END END */
@@ -497,6 +497,7 @@ fn pblock() {
     while go==1u32 { if cp(Q_RB)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { pstmt() } } }
     eat(Q_RB)
 }
+fn pbody() { if cp(Q_LB)==1u32 { pblock() } else { pstmt() } }   /* a control-flow body: a { block } OR a single braceless statement */
 
 fn cparams(nt: u32) -> u32 {   /* int NAME ( int a, int b ) -> count the comma-separated `int x` params */
     let mut q:u32=nt+2u32
@@ -527,9 +528,17 @@ fn prescan() {
     while t<NT { if is_fn(t)==1u32 { if kw(fn_nametok(t),"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
 }
 fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SVIR linear memory (after strings) + init data */
-    AN=0u32  MTOP=DLEN  DEND=DLEN  let mut t:u32=0u32
+    AN=0u32  MTOP=DLEN  DEND=DLEN  let mut t:u32=0u32  let mut pd:u32=0u32
     while t<NT {
+        if ispat(t,Q_LP)==1u32 {pd=pd+1u32}  if ispat(t,Q_RP)==1u32 { if pd>0u32 {pd=pd-1u32} }   /* paren depth: params live at pd>0, NOT global arrays */
+        let mut isst:u32=0u32  if kw(t,"struct" as u64,6u32)==1u32 {isst=1u32}  if kw(t,"union" as u64,5u32)==1u32 {isst=1u32}
+        let mut adv:u32=1u32
+        if isst==1u32 {                                            /* struct/union body -> SKIP (fields are NOT global arrays) */
+            let mut sq:u32=t+1u32  if TK[sq as u64]==1u32 { sq=sq+1u32 }   /* optional tag */
+            if ispat(sq,Q_LB)==1u32 { let mut d:u32=0u32  let mut sg:u32=1u32  while sg==1u32 { if sq>=NT {sg=0u32} else { if ispat(sq,Q_LB)==1u32 {d=d+1u32}  if ispat(sq,Q_RB)==1u32 {d=d-1u32}  sq=sq+1u32  if d==0u32 {sg=0u32} } }  t=sq  adv=0u32 }
+        } else {
         let mut isd:u32=0u32  if isqual(t)==1u32 {isd=1u32}  if dtype(t)==1u32 {isd=1u32}
+        if pd>0u32 {isd=0u32}                                       /* inside a param list -> the array param decays to a pointer, not a global array */
         if isd==1u32 {
             let mut q:u32=t  let mut g0:u32=1u32  while g0==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g0=0u32} }   /* skip quals */
             if dtype(q)==1u32 { let nt:u32=q+1u32
@@ -548,7 +557,8 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
                 } } }
             }
         }
-        t=t+1u32
+        }
+        if adv==1u32 { t=t+1u32 }
     }
 }
 /* register a struct/union type: parse `int|char [*] field ;` entries from after_brace to the }, offsets cumulative
@@ -633,6 +643,7 @@ fn cfn(fk: u32) {
                       else { if TK[C as u64]==1u32 { let si:i32=stidx(C)  if si>=0i32 { let nx:u32=C+1u32  let mut isty:u32=0u32  if ispat(nx,Q_MUL)==1u32 {isty=1u32}  if TK[nx as u64]==1u32 {isty=1u32}  if isty==1u32 { styp=si  C=C+1u32 } } } } } }
         let mut isp:u32=0u32  let mut gp:u32=1u32  while gp==1u32 { if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 } else {gp=0u32} }
         let pt2:u32=C  C=C+1u32  let sl:u32=ladd(pt2)
+        if cp(Q_LBR)==1u32 { isp=1u32  let mut ga:u32=1u32  while ga==1u32 { if cp(Q_RBR)==1u32 {ga=0u32} else { if TK[C as u64]==0u32 {ga=0u32} else {C=C+1u32} } }  eat(Q_RBR) }   /* array param `T name[N]` -> pointer decay */
         if isc==1u32 { if isp==1u32 { LCH[sl as u64]=1u32 } }
         if styp>=0i32 { if isp==1u32 { LPT[sl as u64]=styp } }
         if isp==0u32 { LW[sl as u64]=pm }

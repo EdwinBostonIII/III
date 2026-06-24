@@ -61,14 +61,19 @@ byte-identity gate — build-flag portability is invisible; source shims are not
 **What this closes, and what it does NOT (yet).** CLOSED: an *independent-lineage* compiler now produces a working
 iiis-0 — the diverse-toolchain prerequisite the original residual lacked.
 
-**THE DDC SWEEP — DONE at the `.o` level (gated).** `COMPILER/BOOT/seed_ddc_msvc.sh` compiles **every** iiis-1
-ported source (`.iii`) with BOTH seeds (`COMPILED/iiis-0.exe` gcc-lineage and `build/_msvcddc/iiis-0_msvc.exe`
-MSVC-lineage), `--compile-only`, and byte-compares the object output. **Result: 23/23 byte-identical, 0 diverged, 0
-errored — reproducible, exit 0.** Two independent-lineage iiis-0 seeds emit *identical* iiis-1 object code for every
-ported TU. This is precisely "the seed compiled by an independent toolchain and the outputs verified byte-for-byte":
-**the gcc-built seed carries no output-altering Thompson backdoor that MSVC's lineage does not also carry.** The
-deepest residual hurdle — a *seed* backdoor invisible to frontend agreement — is now directly tested and refuted at
-the iiis-0 → iiis-1 codegen step.
+**THE DDC SWEEP — DONE at the `.o` level (gated).** `COMPILER/BOOT/seed_ddc_msvc.sh` compiles `.iii` sources with
+BOTH seeds (`COMPILED/iiis-0.exe` gcc-lineage and `build/_msvcddc/iiis-0_msvc.exe` MSVC-lineage), `--compile-only`,
+and byte-compares the object output, in two phases:
+- **CHAIN** — every iiis-1 ported source (the TUs `iiis-1` itself is built from): **23/23 byte-identical, 0 diverged.**
+- **BROAD WITNESS** — every other reachable `.iii` (BOOT + STDLIB/sovir): **50/50 byte-identical, 0 diverged**
+  (7 unsupported by the minimal stage-0 seed, legitimately — not divergences).
+
+**Result: ~50 diverse programs, two independent compiler lineages, IDENTICAL object code, zero divergence —
+reproducible, exit 0.** This is precisely "the seed compiled by an independent toolchain and the outputs verified
+byte-for-byte": **the gcc-built seed carries no output-altering Thompson backdoor that MSVC's lineage does not also
+carry.** The deepest residual hurdle — a *seed* backdoor invisible to frontend agreement — is now directly tested
+and refuted at the iiis-0 → iiis-1 codegen step, across a wide, diverse witness set (an attacker's backdoor would
+have to be byte-invisible across all ~50 programs *and* present identically in both gcc and MSVC lineages).
 
 **Honest remaining scope (precise, not a headline).** (1) This proves the codegen step at the `.o` level for all
 ported TUs; the *link* into `iiis-1.exe` and the further `iiis-1 → iiis-2` rung are deterministic given identical

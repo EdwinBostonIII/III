@@ -40,11 +40,27 @@ for t in $PORTED; do
   if cmp -s "$OUT/ddc_g_$t.o" "$OUT/ddc_m_$t.o"; then ok=$((ok+1)); else bad=$((bad+1)); echo "[ddc] DIVERGE $t"; fi
 done
 
-echo "[ddc] SEED-DDC (gcc-lineage vs MSVC-lineage): $ok/$total byte-identical .o ; diverged=$bad ; errored=$err"
-if [ $ok -eq $total ] && [ $total -gt 0 ] && [ $bad -eq 0 ] && [ $err -eq 0 ]; then
-  echo "[ddc] PASS -- two independent-lineage iiis-0 seeds emit IDENTICAL iiis-1 object code for every ported TU."
+echo "[ddc] CHAIN (iiis-1 ported TUs): $ok/$total byte-identical .o ; diverged=$bad ; errored=$err"
+
+# 4. BROAD WITNESS: every other .iii reachable (BOOT + sovir), to widen the diverse-lineage agreement set.
+#    (space-safe array iteration -- the host path contains a space; word-splitting would mangle every name.)
+wok=0; wbad=0; werr=0; wtot=0
+mapfile -t WSRCS < <(ls "$BOOT"/*.iii "$ROOT"/STDLIB/sovir/*.iii 2>/dev/null)
+for src in "${WSRCS[@]}"; do
+  [ -f "$src" ] || continue
+  b=$(basename "$src" .iii); wtot=$((wtot+1))
+  timeout 60 "$G" "$src" --compile-only --out "$OUT/w_g_$b.o" >/dev/null 2>&1; rg=$?
+  timeout 60 "$M" "$src" --compile-only --out "$OUT/w_m_$b.o" >/dev/null 2>&1; rm2=$?
+  if [ $rg -ne 0 ] || [ $rm2 -ne 0 ]; then werr=$((werr+1)); continue; fi
+  if cmp -s "$OUT/w_g_$b.o" "$OUT/w_m_$b.o"; then wok=$((wok+1)); else wbad=$((wbad+1)); echo "[ddc] WITNESS-DIVERGE $b"; fi
+done
+echo "[ddc] BROAD WITNESS (all reachable .iii): $wok byte-identical / $((wtot-werr)) compiled-by-both ; diverged=$wbad ; (unsupported=$werr)"
+
+if [ $ok -eq $total ] && [ $total -gt 0 ] && [ $bad -eq 0 ] && [ $err -eq 0 ] && [ $wbad -eq 0 ]; then
+  echo "[ddc] PASS -- two independent-lineage iiis-0 seeds (gcc vs MSVC) emit IDENTICAL object code for every iiis-1"
+  echo "[ddc]         ported TU AND for all $wok reachable witness programs.  Zero divergence across the lineages."
   echo "[ddc] The gcc-built seed carries no output-altering Thompson backdoor that MSVC's lineage does not share."
   exit 0
 else
-  echo "[ddc] FAIL -- divergence or error; the seeds do not agree (investigate build/_msvcddc/ddc_*.o)"; exit 1
+  echo "[ddc] FAIL -- divergence or error; the seeds do not agree (investigate build/_msvcddc/*.o)"; exit 1
 fi

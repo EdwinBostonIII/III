@@ -329,15 +329,20 @@ fn esizeof() {
 }
 fn is_type_start(t:u32) -> u32 {   /* does token t begin a type (for cast / decl disambiguation)? */
     if dtype(t)==1u32 {return 1u32}  if isqual(t)==1u32 {return 1u32}
+    if kw(t,"unsigned" as u64,8u32)==1u32 {return 1u32}  if kw(t,"signed" as u64,6u32)==1u32 {return 1u32}   /* `unsigned`/`signed` [base] cast */
     if kw(t,"struct" as u64,6u32)==1u32 {return 1u32}  if kw(t,"union" as u64,5u32)==1u32 {return 1u32}
     if TK[t as u64]==1u32 { if stidx(t)>=0i32 {return 1u32} }   /* typedef name */
     return 0u32
 }
 /* parse a cast type `[quals] base [*]...` at C, return its narrowing AND-mask (0 = none / pointer / int). */
 fn cast_mask() -> i64 {
-    skipquals()  let mut m:i64=0i64
-    if kw(C,"struct" as u64,6u32)==1u32 { C=C+2u32 } else { if kw(C,"union" as u64,5u32)==1u32 { C=C+2u32 } else { if dtype(C)==1u32 { m=type_mask(C)  C=C+1u32 } else { if TK[C as u64]==1u32 { C=C+1u32 } } } }
-    let mut g:u32=1u32  while g==1u32 { if cp(Q_MUL)==1u32 { m=0i64  C=C+1u32 } else {g=0u32} }   /* pointer cast -> no narrowing */
+    skipquals()  let mut sz:i64=8i64  let mut usk:u32=0u32                                     /* sz = target byte size -> narrowing AND-mask (8/ptr = none) */
+    if kw(C,"unsigned" as u64,8u32)==1u32 {usk=1u32  C=C+1u32} else { if kw(C,"signed" as u64,6u32)==1u32 {usk=1u32  C=C+1u32} }   /* `unsigned`/`signed` prefix -> optional base */
+    if kw(C,"struct" as u64,6u32)==1u32 { C=C+2u32 } else { if kw(C,"union" as u64,5u32)==1u32 { C=C+2u32 }
+        else { if dtype(C)==1u32 { sz=type_size(C)  C=C+1u32  if kw(C,"long" as u64,4u32)==1u32 { sz=8i64  C=C+1u32 } }   /* base size ; `long long` = 8B */
+               else { if usk==1u32 { sz=4i64 } else { if TK[C as u64]==1u32 { C=C+1u32 } } } } }   /* bare `unsigned`/`signed` = int */
+    let mut g:u32=1u32  while g==1u32 { if cp(Q_MUL)==1u32 { sz=8i64  C=C+1u32 } else {g=0u32} }   /* pointer cast -> no narrowing */
+    let mut m:i64=0i64  if sz==1i64 {m=255i64} else { if sz==2i64 {m=65535i64} else { if sz==4i64 {m=4294967295i64} } }   /* width -> AND-mask (size 8 -> 0 = none) */
     return m
 }
 /* memcpy(dst,src,n) builtin: inline byte-copy loop (no libc on the sovereign target).  Parses the 3 args at C into

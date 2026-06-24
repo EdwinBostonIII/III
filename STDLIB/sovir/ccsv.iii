@@ -1279,7 +1279,8 @@ fn cfn(fk: u32) {
         if kw(C,"struct" as u64,6u32)==1u32 { C=C+1u32  styp=stidx(C)  C=C+1u32 }
         else { if kw(C,"union" as u64,5u32)==1u32 { C=C+1u32  styp=stidx(C)  C=C+1u32 }
                else { if dtype(C)==1u32 { if byc(C)==1u32 {isc=1u32}  bsz=type_size(C)  bsg=type_signed(C)  C=C+1u32 }
-                      else { if TK[C as u64]==1u32 { let si:i32=stidx(C)  if si>=0i32 { let nx:u32=C+1u32  let mut isty:u32=0u32  if ispat(nx,Q_MUL)==1u32 {isty=1u32}  if TK[nx as u64]==1u32 {isty=1u32}  if isty==1u32 { styp=si  C=C+1u32 } } } } } }
+                      else { if TK[C as u64]==1u32 { let si:i32=stidx(C)  let nx:u32=C+1u32  let mut isty:u32=0u32  if ispat(nx,Q_MUL)==1u32 {isty=1u32}  if TK[nx as u64]==1u32 {isty=1u32}
+                                 if si>=0i32 { if isty==1u32 { styp=si  C=C+1u32 } } else { if isty==1u32 { C=C+1u32 } } } } } }   /* unknown typedef name (enum / forward typedef) used as a TYPE (followed by * or NAME) -> consume it as a scalar param-type, not a phantom param */
         let mut isp:u32=0u32  let mut gp:u32=1u32  while gp==1u32 { if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 } else {gp=0u32} }
         let pt2:u32=C  C=C+1u32  let sl:u32=ladd(pt2)
         if cp(Q_LBR)==1u32 { isp=1u32  let mut ga:u32=1u32  while ga==1u32 { if cp(Q_RBR)==1u32 {ga=0u32} else { if TK[C as u64]==0u32 {ga=0u32} else {C=C+1u32} } }  eat(Q_RBR) }   /* array param `T name[N]` -> pointer decay */

@@ -1177,6 +1177,15 @@ fn pstmt() {
             return
         } }
     } } } }
+    if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ARROW)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_DOT)==1u32 {   /* p->f0.f1.f2... [op]= e : arrow into an INLINE aggregate field, then a DOT-chain, then store (n->u.ring_set.mask = m) -- the STORE twin of the eprim arrow-then-dots READ */
+        let pt0d:i32=lpt(C)  if pt0d>=0i32 { let f0d:i32=fieldpt(pt0d,C+2u32)  if f0d>=0i32 {
+            emit_lget(lidx(C) as u32)  let foff0d:i64=fieldoff(pt0d,C+2u32)  C=C+3u32   /* p ; C at the first `.` ; acc starts at f0's offset */
+            let mut curd:i32=f0d  let mut accd:i64=foff0d  let mut gcd:u32=1u32
+            while gcd==1u32 { C=C+1u32  let nfd:u32=C  C=C+1u32  let nfod:i64=fieldoff(curd,nfd)  accd=accd+nfod  let nptd:i32=fieldpt(curd,nfd)  let mut mored:u32=0u32  if nptd>=0i32 { if cp(Q_DOT)==1u32 {mored=1u32} }
+                if mored==1u32 { curd=nptd } else { if accd>0i64 {econst(accd)  eb(0x20u32)}  emit_av(fieldelem(curd,nfd), fieldsign(curd,nfd), fieldmask(curd,nfd))  eat(Q_SEMI)  gcd=0u32 } }
+            return
+        } }
+    } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field[/[i]] = e ; (struct-ptr field store) */
         let nt:u32=C  let ptt:i32=lpt(nt)
         if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)  let fm:i64=fieldmask(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)

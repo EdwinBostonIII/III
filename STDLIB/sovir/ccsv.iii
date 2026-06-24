@@ -148,6 +148,9 @@ var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]  var LMEM : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width mask ; LMEM=spill memory addr if &-taken (-1=SVIR slot) */
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed */
+var BLKD : i64 = 0i64                                  /* live structured-control nesting depth (BLOCK/LOOP/IF open count) -- read by `break` */
+var BRKT : [i64; 32]  var BRKN : u32 = 0u32            /* break-target stack: BLKD just inside each enclosing loop/switch's exit block ; break -> BR(BLKD - BRKT[top]) */
+var SWCC : [i64; 128]  var SWCN : u32 = 0u32           /* case constants of the switch being lowered (prescan, in source order) */
 var ADN_O : [u32; 128]  var ADN_L : [u32; 128]  var ADN_N : u32 = 0u32   /* per-fn set of local names whose address is taken (-> spilled to memory) */
 fn adn_has(o:u32, l:u32) -> u32 { let mut k:u32=0u32  while k<ADN_N { if neq(ADN_O[k as u64],ADN_L[k as u64],o,l)==1u32 {return 1u32}  k=k+1u32 }  return 0u32 }
 fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
@@ -429,6 +432,30 @@ fn emit_av(esz:i64, sgn:u32, mask:i64) {
         estore(esz)
     }
 }
+/* a switch case constant: an integer/char literal (TK==2 -> TV) or an enum/#define name (cidx -> CNV). */
+fn swconst(q:u32) -> i64 { if TK[q as u64]==2u32 { return TV[q as u64] }  let ci:i32=cidx(q)  if ci>=0i32 { return CNV[ci as u64] }  return 0i64 }
+/* emit the case/default bodies (second walk over { }): close one case block before each case body (fall-through =
+ * sequential emission), close B_def before the default body, close B_exit at the }.  `break` (handled in pstmt via
+ * the BRKT stack) branches to B_exit.  Scope: default LAST or absent (the common/seed form); cases in source order. */
+fn emit_switch_bodies(n:u32) {
+    let mut closed:u32=0u32  let mut indef:u32=0u32  let mut g:u32=1u32
+    while g==1u32 {
+        if cp(Q_RB)==1u32 {
+            if indef==0u32 { eb(0x44u32)  BLKD=BLKD-1i64 }          /* close B_def (no explicit default) */
+            eb(0x44u32)  BLKD=BLKD-1i64  if BRKN>0u32 { BRKN=BRKN-1u32 }  C=C+1u32  g=0u32   /* close B_exit ; pop break target */
+        } else { if TK[C as u64]==0u32 { g=0u32 }
+            else { if kw(C,"case" as u64,4u32)==1u32 {
+                       C=C+1u32  let mut sg:u32=1u32  while sg==1u32 { if cp(Q_COLON)==1u32 {sg=0u32} else { if TK[C as u64]==0u32 {sg=0u32} else {C=C+1u32} } }  eat(Q_COLON)   /* skip `case CONST :` */
+                       eb(0x44u32)  BLKD=BLKD-1i64  closed=closed+1u32                       /* close B_{closed} -> this case's body lands here */
+                   } else { if kw(C,"default" as u64,7u32)==1u32 {
+                       C=C+1u32  eat(Q_COLON)
+                       while closed<n { eb(0x44u32)  BLKD=BLKD-1i64  closed=closed+1u32 }     /* close any case blocks not yet closed */
+                       eb(0x44u32)  BLKD=BLKD-1i64  indef=1u32                                /* close B_def -> default body lands here */
+                   } else { pstmt() } }
+            }
+        }
+    }
+}
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
     if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
@@ -486,18 +513,18 @@ fn pstmt() {
     }
     if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  ENDED_RET=1u32  eat(Q_SEMI)  return }   /* mask return to the declared width */
     if kw(C,"if" as u64,2u32)==1u32 {
-        C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  pbody()
+        C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  BLKD=BLKD+1i64  pbody()
         if kw(C,"else" as u64,4u32)==1u32 { C=C+1u32  eb(0x43u32)  pbody() }
-        eb(0x44u32)  return
+        eb(0x44u32)  BLKD=BLKD-1i64  return                         /* IF opens a structured block (BLKD) for the lifetime of the body(ies) */
     }
     if kw(C,"while" as u64,5u32)==1u32 {
-        C=C+1u32  eat(Q_LP)  eb(0x40u32)  eb(0x41u32)  ebin(0u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_RP)
-        pbody()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  return
+        C=C+1u32  eat(Q_LP)  eb(0x40u32)  BLKD=BLKD+1i64  if BRKN<32u32 { BRKT[BRKN as u64]=BLKD  BRKN=BRKN+1u32 }  eb(0x41u32)  BLKD=BLKD+1i64  ebin(0u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_RP)
+        pbody()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}  return   /* break target = the outer BLOCK */
     }
     if kw(C,"for" as u64,3u32)==1u32 {                              /* for (init; cond; incr) body */
         C=C+1u32  eat(Q_LP)
         if cp(Q_SEMI)==0u32 { for_init() }  eat(Q_SEMI)
-        eb(0x40u32)  eb(0x41u32)                                    /* BLOCK LOOP */
+        eb(0x40u32)  BLKD=BLKD+1i64  if BRKN<32u32 { BRKT[BRKN as u64]=BLKD  BRKN=BRKN+1u32 }  eb(0x41u32)  BLKD=BLKD+1i64   /* BLOCK(break target) LOOP */
         if cp(Q_SEMI)==0u32 { ebin(0u32) } else { econst(1i64) }    /* cond (empty = true) */
         econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_SEMI)   /* cond==0 -> BR_IF 1 (break) */
         let incrC:u32=C                                            /* incr is emitted AFTER the body */
@@ -505,8 +532,31 @@ fn pstmt() {
         pbody()                                                    /* body */
         let after:u32=C
         C=incrC  emit_for_incr()                                   /* replay the incr */
-        eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)            /* BR 0 ; END END */
+        eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}   /* BR 0 ; END END */
         C=after  return
+    }
+    if kw(C,"break" as u64,5u32)==1u32 {                            /* break ; -> BR to the innermost loop/switch exit block */
+        C=C+1u32  if BRKN>0u32 { let bt:i64=BRKT[(BRKN-1u32) as u64]  let d:i64=BLKD-bt  eu8(0x50u32, d as u32) }  eat(Q_SEMI)  return
+    }
+    if kw(C,"switch" as u64,6u32)==1u32 {                           /* switch (e) { case C: ... default: ... } -> nested-BLOCK ladder */
+        C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)                  /* selector e onto the stack */
+        let t:u32=LN  if LN<255u32 {LN=LN+1u32}  eu8(0x11u32,t)     /* t = e (a fresh temp local) */
+        eat(Q_LB)  let bodyC:u32=C
+        SWCN=0u32  let mut q:u32=C  let mut bd2:i32=1i32  let mut gp:u32=1u32   /* prescan: case constants in source order, brace-depth 1 */
+        while gp==1u32 {
+            if TK[q as u64]==0u32 {gp=0u32}
+            else { if ispat(q,Q_LB)==1u32 {bd2=bd2+1i32}
+                   else { if ispat(q,Q_RB)==1u32 { bd2=bd2-1i32  if bd2==0i32 {gp=0u32} }
+                          else { if bd2==1i32 { if kw(q,"case" as u64,4u32)==1u32 { if SWCN<128u32 { SWCC[SWCN as u64]=swconst(q+1u32)  SWCN=SWCN+1u32 } } } } }
+                   if gp==1u32 {q=q+1u32} }
+        }
+        let n:u32=SWCN
+        eb(0x40u32)  BLKD=BLKD+1i64  if BRKN<32u32 { BRKT[BRKN as u64]=BLKD  BRKN=BRKN+1u32 }   /* B_exit (break target) */
+        eb(0x40u32)  BLKD=BLKD+1i64                                                              /* B_def */
+        let mut ko:u32=0u32  while ko<n { eb(0x40u32)  BLKD=BLKD+1i64  ko=ko+1u32 }              /* n case blocks B_{n-1}..B_0 */
+        let mut i:u32=0u32  while i<n { eu8(0x10u32,t)  econst(SWCC[i as u64])  eb(0x30u32)  eu8(0x51u32,i)  i=i+1u32 }   /* dispatch: t==C_i -> BR_IF i */
+        eu8(0x50u32, n)                                                                          /* else -> BR n (B_def / default) */
+        C=bodyC  emit_switch_bodies(n)  ENDED_RET=0u32  return   /* a switch stmt doesn't guarantee return -> cfn appends the trailing `return 0` (wasm requires the reachable fn-end to be typed; inner case returns set ENDED_RET) */
     }
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_INC)==1u32 {          /* i++ ; */
         let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x20u32)  emit_lset(li as u32) }  C=C+2u32  eat(Q_SEMI)  return

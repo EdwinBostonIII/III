@@ -188,8 +188,8 @@ fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL
 /* the width AND-mask for a fixed-width C type token (uintN_t/intN_t -> 2^N-1 ; else 0 = full i64). */
 fn type_mask(t:u32) -> i64 {
     if kw(t,"uint32_t" as u64,8u32)==1u32 {return 4294967295i64}  if kw(t,"int32_t" as u64,7u32)==1u32 {return 4294967295i64}
-    if kw(t,"uint16_t" as u64,8u32)==1u32 {return 65535i64}  if kw(t,"int16_t" as u64,7u32)==1u32 {return 65535i64}
-    if kw(t,"uint8_t" as u64,7u32)==1u32 {return 255i64}  if kw(t,"int8_t" as u64,6u32)==1u32 {return 255i64}
+    if kw(t,"uint16_t" as u64,8u32)==1u32 {return 65535i64}  if kw(t,"int16_t" as u64,7u32)==1u32 {return 65535i64}  if kw(t,"short" as u64,5u32)==1u32 {return 65535i64}
+    if kw(t,"uint8_t" as u64,7u32)==1u32 {return 255i64}  if kw(t,"int8_t" as u64,6u32)==1u32 {return 255i64}  if kw(t,"char" as u64,4u32)==1u32 {return 255i64}  if kw(t,"bool" as u64,4u32)==1u32 {return 255i64}   /* char/short narrow like their int8_t/int16_t equivalents (a char local held its un-narrowed i64 before) */
     return 0i64
 }
 /* the REAL C size of a scalar/element type (the P1 ABI: char=1, short=2, int/u32=4, long/u64/ptr-ish=8). */

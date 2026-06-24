@@ -1052,6 +1052,7 @@ fn fn_has_body(nm: u32) -> u32 {
     return 0u32
 }
 fn is_fn(t: u32) -> u32 {
+    if t>=1u32 { if isqual(t-1u32)==1u32 { return 0u32 }  if dtype(t-1u32)==1u32 { return 0u32 } }   /* t must be the START of the decl: a token PRECEDED by a qual/type (e.g. `void` in `static void f`) is NOT a new fn -- else `static void f` registers twice (at `static` AND `void`) */
     let mut ok:u32=0u32  if isqual(t)==1u32 {ok=1u32}  if dtype(t)==1u32 {ok=1u32}  if kw(t,"struct" as u64,6u32)==1u32 {ok=1u32}  if kw(t,"union" as u64,5u32)==1u32 {ok=1u32}
     if ok==0u32 { return 0u32 }
     let nm:u32=fn_nametok(t)  if TK[nm as u64]==1u32 { if ispat(nm+1u32,Q_LP)==1u32 { if fn_has_body(nm)==1u32 { return 1u32 } } }   /* DEFINITION only (not a prototype) */
@@ -1385,6 +1386,10 @@ fn main(argc: i32, argv: u64) -> u64 {
     SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
     preprocess()                                                   /* strip inactive #ifdef/#ifndef/#if-0 branches before lex */
     lex()  prescan()  prescan_str()  prescan_arr()  prescan_struct()  prescan_enum()
+    if argc>=3i32 {   /* DEBUG: `ccsv file.c <any-2nd-arg>` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
+        let mut fk:u32=0u32  while fk<FN { pdec(fk as u64)  pc(58u32)  pc(32u32)  let mut ci:u32=0u32  while ci<FNL[fk as u64] { pc(sb((FNO[fk as u64]+ci) as u64))  ci=ci+1u32 }  pc(10u32)  fk=fk+1u32 }
+        return 0u64
+    }
     ML=0u64
     let mut k:u32=0u32
     while k<FN { cfn(k)  k=k+1u32 }

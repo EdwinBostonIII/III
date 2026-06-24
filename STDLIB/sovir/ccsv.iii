@@ -30,7 +30,7 @@ const Q_EQ:i64=10i64 const Q_NE:i64=11i64 const Q_LT:i64=12i64 const Q_GT:i64=13
 const Q_ADD:i64=16i64 const Q_SUB:i64=17i64 const Q_MUL:i64=18i64 const Q_DIV:i64=19i64 const Q_MOD:i64=20i64
 const Q_AND:i64=21i64 const Q_OR:i64=22i64 const Q_XOR:i64=23i64 const Q_SHL:i64=24i64 const Q_SHR:i64=25i64 const Q_COM:i64=6i64
 const Q_LBR:i64=26i64 const Q_RBR:i64=27i64 const Q_DOT:i64=28i64 const Q_ARROW:i64=29i64 const Q_INC:i64=30i64 const Q_DEC:i64=31i64 const Q_NOT:i64=32i64 const Q_QUEST:i64=33i64 const Q_COLON:i64=34i64
-const Q_LAND:i64=35i64 const Q_LOR:i64=36i64   /* logical && / || (short-circuit; distinct from bitwise Q_AND/Q_OR) */
+const Q_LAND:i64=35i64 const Q_LOR:i64=36i64 const Q_LNOT:i64=37i64   /* logical && / || / ! (distinct from bitwise Q_AND/Q_OR/Q_NOT) */
 
 fn sp(c: u32) -> u32 { if c==32u32 {return 1u32} if c==9u32 {return 1u32} if c==10u32 {return 1u32} if c==13u32 {return 1u32} return 0u32 }
 fn dg(c: u32) -> u32 { if c>=48u32 { if c<=57u32 {return 1u32} } return 0u32 }
@@ -94,7 +94,7 @@ fn lex() {
         if done==0u32 {
             let mut adv : u32 = 0u32
             if c==61u32 { if c2==61u32 { pt(3u32,Q_EQ,0u32,0u32) adv=2u32 } else { pt(3u32,Q_ASN,0u32,0u32) adv=1u32 } }
-            if c==33u32 { if c2==61u32 { pt(3u32,Q_NE,0u32,0u32) adv=2u32 } else { adv=1u32 } }
+            if c==33u32 { if c2==61u32 { pt(3u32,Q_NE,0u32,0u32) adv=2u32 } else { pt(3u32,Q_LNOT,0u32,0u32) adv=1u32 } }   /* != or ! (logical NOT) */
             if c==60u32 { if c2==61u32 { pt(3u32,Q_LE,0u32,0u32) adv=2u32 } else { if c2==60u32 { pt(3u32,Q_SHL,0u32,0u32) adv=2u32 } else { pt(3u32,Q_LT,0u32,0u32) adv=1u32 } } }
             if c==62u32 { if c2==61u32 { pt(3u32,Q_GE,0u32,0u32) adv=2u32 } else { if c2==62u32 { pt(3u32,Q_SHR,0u32,0u32) adv=2u32 } else { pt(3u32,Q_GT,0u32,0u32) adv=1u32 } } }
             if c==38u32 { if c2==38u32 { pt(3u32,Q_LAND,0u32,0u32) adv=2u32 } else { pt(3u32,Q_AND,0u32,0u32) adv=1u32 } }   /* && or & */
@@ -398,6 +398,7 @@ fn eprim() {
         return
     }
     if cp(Q_NOT)==1u32 { C=C+1u32  eprim()  econst(0i64-1i64)  eb(0x27u32)  return }   /* ~x = x XOR -1 (correct for any width; svir_wasm c_leb_s64 now encodes negatives) */
+    if cp(Q_LNOT)==1u32 { C=C+1u32  eprim()  econst(0i64)  eb(0x30u32)  return }   /* !x = (x == 0) -> 0/1 (logical NOT) */
     if cp(Q_SUB)==1u32 { C=C+1u32  econst(0i64)  eprim()  eb(0x21u32)  return }          /* -x = 0 - x (eprim had NO unary minus -> `-var` underflowed the eval stack) */
     if cp(Q_LP)==1u32 {
         if is_type_start(C+1u32)==1u32 { C=C+1u32  let cm:i64=cast_mask()  eat(Q_RP)  eprim()  if cm!=0i64 { econst(cm)  eb(0x25u32) }  return }   /* (TYPE)expr cast: i64-noop except narrowing -> AND-mask */

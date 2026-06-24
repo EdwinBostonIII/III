@@ -39,9 +39,10 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
     CS_N = 0u32
     if fidx == 0u32 { ez(".global main\nmain:\n~" as u64) } else { ez("Lfn~" as u64)  edec(fidx as u64)  ez(":\n~" as u64) }
     ez("pushq %rbp\nmovq %rsp, %rbp\nsubq $512, %rsp\n~" as u64)
-    let mut j : u32 = 0u32                                                    /* spill the (<=4) register params to locals */
+    let mut j : u32 = 0u32                                                    /* spill params to locals: 0-3 from regs, 4+ from the incoming stack args [rbp+48+8*(j-4)] */
     while j < params {
         if j < 4u32 { ez("movq ~" as u64)  arg_reg(j)  ez(", -~" as u64)  edec(loc_off(j) as u64)  ez("(%rbp)\n~" as u64) }
+        else { ez("movq ~" as u64)  edec((48u32+(8u32*(j-4u32))) as u64)  ez("(%rbp), %rax\nmovq %rax, -~" as u64)  edec(loc_off(j) as u64)  ez("(%rbp)\n~" as u64) }
         j = j + 1u32
     }
     let mut p : u64 = 0u64
@@ -101,14 +102,19 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         if op == 0x72u32 { ez("addq $8, %rsp\n~" as u64) }                                          /* DROP */
         if op == 0x71u32 { ez("popq %rcx\nmovq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq __putc\nmovq -8(%rbp), %rsp\n~" as u64) }   /* PRINT_CHAR -> __putc(char in rcx) */
         if op == 0x60u32 { ez("popq %rax\nmovq %rbp, %rsp\npopq %rbp\nretq\n~" as u64) }
-        if op == 0x70u32 {                                                    /* CALL funcidx argcount */
+        if op == 0x70u32 {                                                    /* CALL funcidx argcount (Win64: 4 regs + stack args 5+) */
             let fp : *u8 = (base + boff + p) as *u8  let fi : u32 = fp[0u64] as u32
             let ap : *u8 = (base + boff + p + 1u64) as *u8  let ac : u32 = ap[0u64] as u32
             p = p + 2u64
-            let mut a : u32 = ac
-            while a > 0u32 { a = a - 1u32  ez("popq ~" as u64)  arg_reg(a)  ez("\n~" as u64) }   /* pop args into regs (top=arg_{n-1}) */
-            ez("movq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq ~" as u64)
-            if fi == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(fi as u64) }
+            /* args are on the eval stack (arg_{ac-1} on top) ; arg_i at 8*(ac-1-i)(%r11).  r11=args base, kept across reg/stack setup. */
+            ez("movq %rsp, %r11\nleaq ~" as u64)  edec((8u32*ac) as u64)  ez("(%rsp), %rax\nmovq %rax, -8(%rbp)\nandq $-16, %rsp\n~" as u64)   /* save post-pop rsp ; align */
+            let mut stackargs:u32=0u32  if ac>4u32 { stackargs=ac-4u32 }  let fsz:u32=(((32u32+(8u32*stackargs))+15u32)/16u32)*16u32   /* shadow(32) + 8*stackargs, 16-aligned */
+            ez("subq $~" as u64)  edec(fsz as u64)  ez(", %rsp\n~" as u64)
+            let mut nreg:u32=ac  if nreg>4u32 {nreg=4u32}  let mut j:u32=0u32
+            while j<nreg { ez("movq ~" as u64)  edec((8u32*(ac-1u32-j)) as u64)  ez("(%r11), ~" as u64)  arg_reg(j)  ez("\n~" as u64)  j=j+1u32 }   /* reg args 0-3 */
+            let mut i:u32=4u32
+            while i<ac { ez("movq ~" as u64)  edec((8u32*(ac-1u32-i)) as u64)  ez("(%r11), %rax\nmovq %rax, ~" as u64)  edec((32u32+(8u32*(i-4u32))) as u64)  ez("(%rsp)\n~" as u64)  i=i+1u32 }   /* stack args 5+ -> [rsp+32+8*(i-4)] */
+            ez("callq ~" as u64)  if fi == 0u32 { ez("main~" as u64) } else { ez("Lfn~" as u64)  edec(fi as u64) }
             ez("\nmovq -8(%rbp), %rsp\npushq %rax\n~" as u64)
         }
     }

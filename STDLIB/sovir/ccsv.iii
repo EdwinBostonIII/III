@@ -284,7 +284,10 @@ fn alen(t: u32) -> u64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL
 fn esizeof() {
     let mut hasp:u32=0u32  if cp(Q_LP)==1u32 { C=C+1u32  hasp=1u32 }
     let mut sz:i64=8i64
-    if dtype(C)==1u32 { sz=type_size(C)  C=C+1u32  let mut g:u32=1u32  while g==1u32 { if cp(Q_MUL)==1u32 {sz=8i64  C=C+1u32} else {g=0u32} } }
+    if cp(Q_MUL)==1u32 { C=C+1u32   /* sizeof(*ptr) -> pointee size (struct ptr -> STSZ ; scalar ptr -> LPSZ) */
+        let dpt:i32=lpt(C)  if dpt>=0i32 { sz=STSZ[dpt as u64] as i64 } else { let dli:i32=lidx(C)  if dli>=0i32 { sz=LPSZ[dli as u64] } }
+        C=C+1u32 }
+    else { if dtype(C)==1u32 { sz=type_size(C)  C=C+1u32  let mut g:u32=1u32  while g==1u32 { if cp(Q_MUL)==1u32 {sz=8i64  C=C+1u32} else {g=0u32} } }
     else { if kw(C,"struct" as u64,6u32)==1u32 { C=C+1u32  let si:i32=stidx(C)  if si>=0i32 {sz=STSZ[si as u64] as i64}  C=C+1u32  let mut g2:u32=1u32  while g2==1u32 { if cp(Q_MUL)==1u32 {sz=8i64  C=C+1u32} else {g2=0u32} } }
            else { if kw(C,"union" as u64,5u32)==1u32 { C=C+1u32  let si:i32=stidx(C)  if si>=0i32 {sz=STSZ[si as u64] as i64}  C=C+1u32  let mut g3:u32=1u32  while g3==1u32 { if cp(Q_MUL)==1u32 {sz=8i64  C=C+1u32} else {g3=0u32} } }
                   else { if TK[C as u64]==1u32 {
@@ -296,7 +299,7 @@ fn esizeof() {
                               if ispat(C+1u32,Q_LBR)==1u32 { sz=aesize(C)  C=C+2u32  let mut g5:u32=1u32  while g5==1u32 { if cp(Q_RBR)==1u32 {g5=0u32} else { if TK[C as u64]==0u32 {g5=0u32} else {C=C+1u32} } }  eat(Q_RBR) }
                               else { sz=(alen(C) as i64)*aesize(C)  C=C+1u32 } }
                           else { sz=8i64  C=C+1u32 } } }
-                  } else { C=C+1u32 } } } }
+                  } else { C=C+1u32 } } } } }
     if hasp==1u32 { eat(Q_RP) }
     econst(sz)
 }

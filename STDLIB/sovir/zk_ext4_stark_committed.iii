@@ -18,18 +18,23 @@
  * (a claimed f value inconsistent with TROOT) is REJECTED; (R) a corrupted committed root is REJECTED; (S) the
  * trace-low-degree SOUNDNESS gap is CLOSED (see below).
  *
- * SOUNDNESS GAP found + FIXED 2026-06-24 (DOCS/III-ZKVM-TRACE-LDT-GAP.md).  Originally verify() bound the trace by
- * MERKLE ONLY (values, not degree) and FRI touched only the CP layers, so a malicious prover could commit an HONEST
- * low-degree CP + a SEPARATELY-committed HIGH-DEGREE trace (agreeing with the LDE off-H but violating next=cur^2 at
- * one row) and verify() ACCEPTED a FALSE statement -- build_attack/zk_trace_attack_k demonstrate it executably.
- * FIX (LANDED): trace_fri_commit() adds a FRI LOW-DEGREE TEST directly on the committed trace LDE (lifted to GF(p^4),
- * layer 0 tied to TROOT by a per-query consistency open), and verify() checks its final-constant + fold-consistency.
- * A high-degree committed trace folds to a NON-constant final layer -> REJECT (codes 20-24).  With deg(trace)<N,
- * G=zh*CP-fac*combine has degree<2N so vanishing at the queried points forces G==0.  The (S)/(S2) checks confirm the
- * attack is now REJECTED *by the trace LDT* (load-bearing, not a dead check).  Adversary-verified end-to-end: a
- * committed, witness-free STARK whose soundness now rests on the Merkle binding AND the trace+CP low-degree tests.
- * (This N=16/16-query gadget gives ~2^-16 line-755 soundness; the ~2^-86 PRODUCTION figure is the full fused zkVM at
- * 128 queries -- the SAME trace-LDT fix must be carried into zk_air::air_stark_verify, which shares the gap.) */
+ * !!! SOUNDNESS STATUS -- this DEMO gadget is NOT sound; the production artifact zk_fused_committed IS. !!!
+ * (Full account: DOCS/III-ZKVM-TRACE-LDT-GAP.md.)  History: (1) the original verify bound the trace by MERKLE only
+ * (values, not degree), so a high-degree decoupled trace + honest CP passed -- found + demonstrated executably
+ * (build_attack/zk_trace_attack_k).  (2) trace_fri_commit() added a FRI low-degree test on the committed trace; the
+ * self-test went green.  (3) An ADVERSARIAL FS AUDIT on the FIXED verifier found that fix is INSUFFICIENT -- TWO
+ * CRITICAL holes remain (both refuter-confirmed):
+ *   HOLE 1 (binding): the trace FRI (TFA/TFROOT) is a SEPARATE commitment from the constraint trace (TROOT); verify
+ *     ties them ONLY at the 16 queries (the layer-0 consistency open).  A prover commits TROOT=violating + the trace
+ *     FRI on a DECOUPLED low-degree DECOY -> the LDT passes on the decoy.  The self-test missed this (it folds only the
+ *     COUPLED tampered TLEAF).  FIX: make the trace-FRI layer 0 BE the TROOT-committed trace (single commitment / mixed
+ *     4-byte layer-0, no decoupled column) -- a substantial FRI rework, NOT yet landed.
+ *   HOLE 2 (self-inflicted by step 2): the query seed = keccak(final TFROOT) ALONE no longer binds the CP roots, so an
+ *     adaptive prover fixes the trace, learns the queries, and crafts a degree-<N CP satisfying line-755 only there.
+ *     FIX: seed queries from keccak(CP_final_root || trace_final_root) (or a running transcript) -- small, NOT yet landed.
+ * The (S)/(S2) self-tests below return 99 only because they model the COUPLED prover, not these two.  PRODUCTION
+ * (zk_fused_committed, ~2^-86) is UNAFFECTED: it reads the LIVE air LDE (degree-<N by construction, no decoupling) and
+ * seeds queries from the CP final root (binds the CP).  This gadget is a demo with the two documented residuals. */
 module zk_ext4_stark_committed
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"

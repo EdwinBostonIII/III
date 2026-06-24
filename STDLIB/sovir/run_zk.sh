@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic zk_svir_loop; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic zk_svir_loop zk_svir_vm_fused; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -110,6 +110,10 @@ else say "FAIL ZK-MEMORY: zk_svir_mem_dynamic=$memrc (1=honest-rejected 2=value-
 looprc=$(runzk zk_svir_loop)
 if [ "$looprc" = "99" ]; then say "ZK-LOOP : a real LOOP (i=0; while i<3 { i=i+1 }) attested SOUNDLY -- the program counter follows the control flow (CHECK -> body-or-exit by the condition; BODY -> back-edge; EXIT -> halt), the condition i<3 certified by an inverse-witness IS-ZERO on (3-i), the counter by next.i = i + is_body, pc bound to one-hot {check,body,exit} -- via air_stark_prove/verify -> witness-free verifier ACCEPTS the honest loop, REJECTS a forged ITERATION COUNT (skipped increment) AND a forged CONTROL decision (back-edge instead of exit) by the math -> 99 (the THIRD zkVM pillar: compute + memory + CONTROL all sound)"
 else say "FAIL ZK-LOOP: zk_svir_loop=$looprc (1=honest-rejected 2=forged-count-accepted 3=forged-control-accepted 4=re-prove)"; fail=1; fi
+# (0o) ZK-FUSED: the COMPLETE zkVM -- compute + memory + control on ONE trace for a real loop-with-memory program.
+fusrc=$(runzk zk_svir_vm_fused)
+if [ "$fusrc" = "99" ]; then say "ZK-FUSED : a real loop-with-memory program (for i in 0..6 { mem[i] = 7*i }; LOAD mem[3]=>21) attested SOUNDLY with ALL THREE PILLARS on ONE trace -- CONTROL (the counter i increments, driving the addresses), COMPUTE (vp = 7*i, linked to the counter by is_store*(vp-7i)=0), MEMORY (the dynamic STORE/LOAD accesses proven by the grand-product PERMUTATION + READ-CONSISTENCY: the LOAD of mem[3] returns the STORED 21) -- via air_stark_prove/verify -> witness-free verifier ACCEPTS the honest fused execution, REJECTS a forged LOAD value (read-consistency) AND a forged COMPUTED store value (the compute link) by the math -> 99 (W=15, needed WMAX 16->32; a complete zkVM step over a real program, all pillars proven TOGETHER)"
+else say "FAIL ZK-FUSED: zk_svir_vm_fused=$fusrc (1=honest-rejected 2=forged-LOAD-accepted 3=forged-COMPUTE-accepted 4=re-prove)"; fail=1; fi
 
 # (A) ZK-attested.  zk_air (with the additive air_lde_at accessor) is in libiii_native.a; link the archive.
 gcc "$W/zk_svir_exec.o" "$LIB" -lkernel32 -o "$W/zk_svir_exec.exe" 2>/dev/null

@@ -1027,22 +1027,33 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
         if pd>0u32 {isd=0u32}                                       /* inside a param list -> the array param decays to a pointer, not a global array */
         if isd==1u32 {
             let mut q:u32=t  let mut g0:u32=1u32  while g0==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g0=0u32} }   /* skip quals */
-            if dtype(q)==1u32 { let nt:u32=q+1u32
-                if TK[nt as u64]==1u32 { if ispat(nt+1u32,Q_LBR)==1u32 { if TK[(nt+2u32) as u64]==2u32 {   /* NAME [ NUM ] */
-                    let n:u64=TV[(nt+2u32) as u64] as u64  let base:u64=MTOP  let esz:i64=aesz_of(q)  let eszu:u64=esz as u64
-                    AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=type_mask(q)  AESZ[AN as u64]=esz  ALEN[AN as u64]=n  ASGN[AN as u64]=type_signed(q)  MTOP=MTOP+(n*eszu)  AN=AN+1u32
-                    if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 {   /* NAME [ NUM ] = { v0, v1, ... } (] at nt+3, = at nt+4, { at nt+5) */
-                        let mut p:u32=nt+6u32  let mut idx:u64=0u64  let mut gg:u32=1u32
-                        while gg==1u32 {
-                            if ispat(p,Q_RB)==1u32 {gg=0u32} else { if TK[p as u64]==0u32 {gg=0u32}
-                            else { if TK[p as u64]==2u32 { data_putn(esz, base + idx*eszu, TV[p as u64])  idx=idx+1u64  p=p+1u32  if ispat(p,Q_COM)==1u32 {p=p+1u32} }
-                                   else { let ci:i32=cidx(p)  if ci>=0i32 { data_putn(esz, base + idx*eszu, CNV[ci as u64])  idx=idx+1u64 }  p=p+1u32 } } }
+            if dtype(q)==1u32 {
+                let mut nt:u32=q+1u32  let mut pelem:u32=0u32  if ispat(nt,Q_MUL)==1u32 { pelem=1u32  nt=nt+1u32 }   /* `type * NAME[]` -> pointer elements (8B) */
+                if TK[nt as u64]==1u32 { if ispat(nt+1u32,Q_LBR)==1u32 {                                             /* NAME [ NUM | empty ] [= {...}] */
+                    let mut esz:i64=aesz_of(q)  if pelem==1u32 {esz=8i64}  let eszu:u64=esz as u64  let base:u64=MTOP
+                    let mut n:u64=0u64  let mut brc:u32=0u32  let mut have:u32=0u32
+                    if TK[(nt+2u32) as u64]==2u32 { n=TV[(nt+2u32) as u64] as u64                                   /* [NUM] */
+                        if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32  have=1u32 } } }
+                    else { if ispat(nt+2u32,Q_RBR)==1u32 { if ispat(nt+3u32,Q_ASN)==1u32 { if ispat(nt+4u32,Q_LB)==1u32 {   /* [] = { ... } -> size from init count */
+                        brc=nt+5u32  have=1u32  let mut cq:u32=brc  let mut cg2:u32=1u32
+                        while cg2==1u32 { if ispat(cq,Q_RB)==1u32 {cg2=0u32} else { if TK[cq as u64]==0u32 {cg2=0u32} else { if ispat(cq,Q_COM)==1u32 {cq=cq+1u32} else { n=n+1u64  cq=cq+1u32 } } } }
+                    } } } }
+                    if n>0u64 {
+                        AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=type_mask(q)  AESZ[AN as u64]=esz  ALEN[AN as u64]=n  ASGN[AN as u64]=type_signed(q)  MTOP=MTOP+(n*eszu)  AN=AN+1u32
+                        if have==1u32 {
+                            let mut p:u32=brc  let mut idx:u64=0u64  let mut gg:u32=1u32
+                            while gg==1u32 {
+                                if ispat(p,Q_RB)==1u32 {gg=0u32} else { if TK[p as u64]==0u32 {gg=0u32}
+                                else { if TK[p as u64]==2u32 { data_putn(esz, base + idx*eszu, TV[p as u64])  idx=idx+1u64  p=p+1u32 }            /* numeric */
+                                       else { if TK[p as u64]==4u32 { data_putn(esz, base + idx*eszu, TV[p as u64])  idx=idx+1u64  p=p+1u32 }    /* string literal -> its address */
+                                              else { let ci:i32=cidx(p)  if ci>=0i32 { data_putn(esz, base + idx*eszu, CNV[ci as u64])  idx=idx+1u64 }  p=p+1u32 } }
+                                       if ispat(p,Q_COM)==1u32 {p=p+1u32} } }
+                            }
+                            let de:u64=base + idx*eszu  if de > DEND { DEND=de }
                         }
-                        let de:u64=base + idx*eszu  if de > DEND { DEND=de }
-                    } }
+                    }
                 } } }
             }
-        }
         }
         if adv==1u32 { t=t+1u32 }
     }

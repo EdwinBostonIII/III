@@ -1054,6 +1054,15 @@ fn pstmt() {
             } }
         }
     } } } } }
+    if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ARROW)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_ARROW)==1u32 {   /* p->f1->f2->...->fn [op]= e : CHAINED pointer-field store (a->head->used += n) */
+        let pt0:i32=lpt(C)  if pt0>=0i32 { if fieldpt(pt0,C+2u32)>=0i32 {
+            emit_lget(lidx(C) as u32)  C=C+1u32  let mut cur:i32=pt0  let mut gc:u32=1u32   /* skip the NAME -> C at the first `->` */
+            while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)
+                if cp(Q_ARROW)==1u32 { if fo>0i64 {econst(fo)  eb(0x20u32)}  eb(0x82u32)  cur=fieldpt(cur,ftc) }   /* intermediate `->` : load the pointer */
+                else { if fo>0i64 {econst(fo)  eb(0x20u32)}  emit_av(fieldelem(cur,ftc), fieldsign(cur,ftc), fieldmask(cur,ftc))  eat(Q_SEMI)  gc=0u32 } }   /* last field : address + emit_av (= / op= / ++) */
+            return
+        } }
+    } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field[/[i]] = e ; (struct-ptr field store) */
         let nt:u32=C  let ptt:i32=lpt(nt)
         if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)  let fm:i64=fieldmask(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)

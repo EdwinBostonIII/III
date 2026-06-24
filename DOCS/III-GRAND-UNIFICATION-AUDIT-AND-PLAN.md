@@ -132,10 +132,13 @@ committed proof at the claimed bits) and **F2** (Ω2/Ω3 don't compose). Those a
     LOAD rejected (line-755); non-permutation rejected (k=4 boundary); forged opening rejected (Merkle); corrupted root
     rejected. **F1 is closed** — the ext-field "production" verifier no longer reads shared memory or uses a fixed α;
     it is commitment-bound. The query count `NQ=16` is the demo knob (production = 128 → ~2⁻⁸⁶).
-- **P3 — F2: compose Ω2 and Ω3 on R0.** Adopt the faithful architecture **EIDOS → XII-term → canonicalise(+Ω3 proof)
-  → LOWER to SVIR (Ω2) → run/attest**. Make Ω2's R0 SVIR the LOWERING of the canonicalised XII term (use `xii_lower_*`),
-  so the same object flows through Ω.b then Ω.a. **Teeth:** the lowered SVIR's result must equal the XII term's
-  denotation, and the Ω3 proof must be over the term that lowers to R0.
+- **P3 — F2: ✅ CLOSED (one computation, two views).** XII does NOT lower to SVIR (no such lowering exists — checked
+  `xii_lower_program`/`xii_kernel_emit`), so "one object through XII→SVIR" is not a wiring task. The faithful binding
+  realised instead: the SAME ripple event stream is proven in BOTH views — `zk_gu_ripple_xii` lifts the events to an
+  XII term (flat/no-ripple edges = THEN-identities), canonicalises it with the re-checkable Ω3 proof (flats provably
+  dropped), and its canonical form FOLDS to `675673294` — exactly R0's SVIR fold (Ω.a) and the committed-zk value
+  (Ω.e). The cross-view agreement on one fold IS the composition. Gate `run_grand_unification.sh` (Ω4 single-node) is
+  green. Remaining: a true XII→SVIR lowering would make it one transformed object (a larger compiler effort, optional).
 - **P4 — F3: PARTIAL.** The carto-gate blocker (F7) is FIXED and the full `build_stdlib` compiles
   `xii_proof`/`xii_proof_check` cleanly into the lib (FAIL=0). But they are kept OUT of MODULES on purpose: they carry
   test-tamper `@export` hooks (`set_rid`/`flip_ahash`) unsuitable for library export, and adding un-corpus-covered

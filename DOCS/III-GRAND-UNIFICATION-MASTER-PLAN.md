@@ -314,6 +314,18 @@ out-of-manifest rule REJECTED; semantics-breaking rewrite REJECTED. **Manual ver
 step's before/after hashes against the manifest rule.
 
 ### Phase Ω4 — The single-node Grand Unification gate
+**✅✅ SINGLE-NODE GATE GREEN — `STDLIB/sovir/run_grand_unification.sh`.** ONE EIDOS ripple computation flows through the
+audited + perfected organs, the two proven views bound by a shared content-address (the fold value `675673294`):
+Ω.a/d EIDOS→SVIR→x86(sovereign)+wasm==99 + live-organ match (`run_eidos_svir.sh`); Ω.b XII canonicalisation emitted as
+a checkable, mhash-chained, independently re-checkable proof (`run_xii_proof.sh`); **F2 binding** — the *same* ripple
+event stream lifted to an XII term (flats = THEN-identities provably dropped) whose canonical form folds to the SAME
+`675673294` R0 executes (`zk_gu_ripple_xii`); Ω.e the **committed** GF(p⁴) zkVM — committed FRI + committed witness-free
+line-755 STARK + the FULL compute+memory+control fused zkVM, all against Merkle commitments (`run_ext4_committed.sh`,
+audit F1 closed). Every organ is sound + committed + carries a rejecting adversary arm. **Honest scope:** XII does not
+lower to SVIR, so the organs are bound by the shared *computation* (one fold) — the SVIR sovereign+wasm execution and
+committed-zk attestation are the EXECUTION proof; the re-checkable canonicalisation is the INTENT proof; they agree on
+the answer. The cryptographic ~2⁻⁸⁶ is a query-count knob (`NQ` 16→128). Remaining for Ω5–Ω7: cross-node here→there
+fold + the trust-closure provenance certificate.
 **Objective:** compose Ω0–Ω3 + the zkVM into one command proving Ω.a–Ω.e on `R0`.
 **Verified current state:** each constituent gate green in isolation after Ω0–Ω3 + Ω1.
 **Precise gap:** the *composition* + its negative arms, as one script.

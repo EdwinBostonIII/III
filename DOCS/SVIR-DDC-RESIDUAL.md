@@ -75,11 +75,18 @@ carry.** The deepest residual hurdle — a *seed* backdoor invisible to frontend
 and refuted at the iiis-0 → iiis-1 codegen step, across a wide, diverse witness set (an attacker's backdoor would
 have to be byte-invisible across all ~50 programs *and* present identically in both gcc and MSVC lineages).
 
-**Honest remaining scope (precise, not a headline).** (1) This proves the codegen step at the `.o` level for all
-ported TUs; the *link* into `iiis-1.exe` and the further `iiis-1 → iiis-2` rung are deterministic given identical
-`.o`, so the substantive proof is the object agreement — but a full chain-to-`iiis-2` byte-compare is the natural
-next gate. (2) DDC's premise stands: MSVC must not be backdoored *identically* to gcc (independent lineages make
-this implausible, which is the whole point). (3) The irreducible TCB — CPU/microcode, OS loader — is never
-DDC-removable; the achievable end state is the smallest practical TCB, and this shrinks it by removing the
-*compiler-lineage* trust. This is real movement from "frontend closed" to "the seed's codegen is independently
-witnessed byte-for-byte" — stated precisely.
+**Honest remaining scope (precise, not a headline).** (1) The rigorous proof is at the **`.o` level** — fixed
+output paths, back-to-back per-source compiles, so it is drift- and timestamp-clean. (1a) A **full `iiis-1.exe`
+binary** comparison was attempted and found **confounded by build non-determinism in this environment, not by any
+seed divergence**: two *same-seed* `build_iiis1.sh` runs produce *different* binaries even under the reproducible
+env (`SOURCE_DATE_EPOCH=0` …), because the space in the host path breaks `-ffile-prefix-map` and PE
+timestamps/temp-dir paths leak into the link. The *seed-dependent* inputs — the `.iii.o` — are proven byte-identical
+across lineages (re-confirmed by a live drift-check), so the binary variance is a pre-existing build-reproducibility
+issue (the project's own `iiis-1.mhash` golden is flaky in this env for the same reason), **independent of the DDC
+question.** Fixing that reproducibility (normalize the path map / strip the PE timestamp) would make the binary-level
+DDC clean too; until then the `.o`-level agreement plus the link-determinism *property* (which reproducible builds
+are supposed to provide) is the precise claim. (2) DDC's premise stands: MSVC must not be backdoored *identically* to
+gcc (independent lineages make this implausible, which is the whole point). (3) The irreducible TCB — CPU/microcode,
+OS loader — is never DDC-removable; this shrinks it by removing the *compiler-lineage* trust. This is real movement
+from "frontend closed" to "the seed's codegen is independently witnessed byte-for-byte" — stated precisely, with the
+binary-level confound named rather than papered over.

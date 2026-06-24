@@ -854,7 +854,7 @@ fn loop_has_cont() -> u32 {
 }
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
-    if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
+    if isqual(C)==1u32 { let mut sg:u32=1u32  while sg==1u32 { if isqual(C)==1u32 { if kw(C,"unsigned" as u64,8u32)==1u32 {sg=0u32} else { if kw(C,"signed" as u64,6u32)==1u32 {sg=0u32} else {C=C+1u32} } } else {sg=0u32} } }   /* skip leading const/static/volatile but KEEP unsigned/signed (type specifiers -> the decl handler reads them) */
     if cp(Q_INC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* ++lvalue ; (prefix inc statement -> eval + DROP) */
     if cp(Q_DEC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* --lvalue ; */
     if cp(Q_MUL)==1u32 {                                            /* *p [op]= e ;  (pointer deref store/compound, typed width) */
@@ -892,8 +892,14 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==1u32 { let stc:i32=stidx(C)  if stc>=0i32 {   /* TypedefName v ; (local) -> registered by prescan; skip */
         let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return
     } } }
-    if dtype(C)==1u32 {                                            /* int/char decl, incl MULTI: `T a [=e], *p, b[N], c=e ;` */
-        let isc:u32=byc(C)  let tym:i64=type_mask(C)  let bsz:i64=type_size(C)  let bsg:u32=type_signed(C)  C=C+1u32  let mut more:u32=1u32
+    let mut uovs:i32=0i32-1i32  let mut usk:u32=0u32                /* leading unsigned/signed prefix (bare `unsigned` = unsigned int) */
+    if kw(C,"unsigned" as u64,8u32)==1u32 { uovs=0i32  usk=1u32 } else { if kw(C,"signed" as u64,6u32)==1u32 { uovs=1i32  usk=1u32 } }
+    let mut isdcl:u32=0u32  if dtype(C)==1u32 {isdcl=1u32}  if uovs>=0i32 {isdcl=1u32}
+    if isdcl==1u32 {                                               /* int/char/[un]signed decl, incl MULTI: `T a [=e], *p, b[N], c=e ;` */
+        let dtt:u32=C+usk  let mut tt:u32=C  let mut bsz:i64=4i64  let mut tym:i64=4294967295i64  let mut bsg:u32=0u32  let mut adv:u32=1u32
+        if uovs>=0i32 { bsg=uovs as u32  if dtype(dtt)==1u32 { tt=dtt  bsz=type_size(dtt)  tym=type_mask(dtt)  adv=2u32 } }   /* `unsigned int/char/long` ; bare `unsigned` -> int (4B/0xFFFFFFFF) */
+        else { bsz=type_size(C)  tym=type_mask(C)  bsg=type_signed(C) }
+        let isc:u32=byc(tt)  C=C+adv  let mut more:u32=1u32
         while more==1u32 {
             let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }
             let nt:u32=C

@@ -301,7 +301,7 @@ fn prescan_str() {
                     k=k+2u32
                 } else { sbyte(cc)  k=k+1u32 }
             }
-            sbyte(0u32)                                      /* NUL terminator */
+            if TK[(t+1u32) as u64]!=4u32 { sbyte(0u32) }     /* NUL only at the END of an adjacent-string run: `"a" "b"` -> "ab\0" (C string concatenation; the run is packed contiguously) */
         }
         t=t+1u32
     }
@@ -642,7 +642,7 @@ fn eprim() {
         C=C+1u32  ebin(0u32)  let mut gc:u32=1u32  while gc==1u32 { if cp(Q_COM)==1u32 { eb(0x72u32)  C=C+1u32  ebin(0u32) } else {gc=0u32} }  eat(Q_RP)  return   /* ( a, b, c ) : comma operator -> eval a (DROP), ..., result = last */
     }
     if TK[C as u64]==2u32 { econst(TV[C as u64])  C=C+1u32  return }
-    if TK[C as u64]==4u32 { econst(TV[C as u64])  C=C+1u32  return }   /* "str" -> its address in the string region */
+    if TK[C as u64]==4u32 { econst(TV[C as u64])  C=C+1u32  let mut gsc:u32=1u32  while gsc==1u32 { if TK[C as u64]==4u32 {C=C+1u32} else {gsc=0u32} }  return }   /* "str" -> its address ; CONSUME adjacent string literals `"a" "b"` (C concatenation; prescan_str packed them contiguously) */
     if TK[C as u64]==1u32 {
         let t : u32 = C  C=C+1u32
         if kw(t,"sizeof" as u64,6u32)==1u32 { esizeof()  return }    /* sizeof(...) */

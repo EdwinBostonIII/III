@@ -1169,6 +1169,11 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
     STNF[STN as u64]=nf  STSZ[STN as u64]=sz  STN=STN+1u32
 }
 fn find_rb(after_brace:u32) -> u32 { let mut q:u32=after_brace  let mut g:u32=1u32  while g==1u32 { if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32} else {q=q+1u32} } }  return q }
+fn find_struct_body(tag:u32) -> u32 {   /* scan for `struct <name(tag)> {` -> the token after `{` (the body) ; 0 if none -- resolves `typedef struct TAG Name;` where TAG's body lives elsewhere (opaque type) */
+    let mut q:u32=0u32
+    while q<NT { if kw(q,"struct" as u64,6u32)==1u32 { if TK[(q+1u32) as u64]==1u32 { if neq(TO[(q+1u32) as u64],TL[(q+1u32) as u64],TO[tag as u64],TL[tag as u64])==1u32 { if ispat(q+2u32,Q_LB)==1u32 { return q+3u32 } } } }  q=q+1u32 }
+    return 0u32
+}
 fn reg_var(name_tok:u32, sti:i32) { if sti>=0i32 { AO[AN as u64]=TO[name_tok as u64]  AL[AN as u64]=TL[name_tok as u64]  AB[AN as u64]=MTOP  AVT[AN as u64]=sti  MTOP=MTOP+STSZ[sti as u64]  AN=AN+1u32 } }
 fn istk(t:u32) -> u32 { if kw(t,"struct" as u64,6u32)==1u32 {return 1u32}  if kw(t,"union" as u64,5u32)==1u32 {return 1u32}  if kw(t,"typedef" as u64,7u32)==1u32 {return 1u32}  return 0u32 }
 fn prescan_struct() {
@@ -1180,7 +1185,8 @@ fn prescan_struct() {
         if kw(t,"typedef" as u64,7u32)==1u32 {
             if kw(t+1u32,"struct" as u64,6u32)==1u32 {
                 if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 0u32) }                                                /* typedef struct { } Name */
-                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=find_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 0u32) } } }   /* typedef struct TAG { } Name */
+                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=find_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 0u32) }     /* typedef struct TAG { } Name */
+                       else { if TK[(t+3u32) as u64]==1u32 { let bp:u32=find_struct_body(t+2u32)  if bp>0u32 { reg_type(t+3u32, bp, 0u32) } } } } }       /* typedef struct TAG Name ; (opaque: TAG's body is elsewhere) */
             }
             if kw(t+1u32,"union" as u64,5u32)==1u32 {
                 if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) }

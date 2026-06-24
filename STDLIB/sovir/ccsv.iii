@@ -358,6 +358,52 @@ fn emit_malloc() {
     econst(HEAP_BASE)  eu8(0x10u32,te)  eu8(0x10u32,tn)  econst(7i64)  eb(0x20u32)  econst(0i64-8i64)  eb(0x25u32)  eb(0x20u32)  eb(0x83u32)   /* *(HEAP_BASE) = te + ((size+7)&~7) */
     eu8(0x10u32,te)                                                                                       /* leave the block address */
 }
+/* libc string builtins (no libc on the sovereign target) -- inline loops, result left on the stack.
+ * Verifier-safe: results held in a temp, loops break via BR_IF (no IF-with-break). */
+fn emit_strcmp() {   /* strcmp(a,b) -> (unsigned char)*a - *b at the first difference (0 if equal) */
+    let ta:u32=LN  if LN<255u32 {LN=LN+1u32}  let tb:u32=LN  if LN<255u32 {LN=LN+1u32}  let ca:u32=LN  if LN<255u32 {LN=LN+1u32}  let cb:u32=LN  if LN<255u32 {LN=LN+1u32}  let tr:u32=LN  if LN<255u32 {LN=LN+1u32}
+    ebin(0u32)  eu8(0x11u32,ta)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tb)  econst(0i64)  eu8(0x11u32,tr)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ta)  eb(0x80u32)  eu8(0x11u32,ca)  eu8(0x10u32,tb)  eb(0x80u32)  eu8(0x11u32,cb)        /* ca=*a cb=*b */
+    eu8(0x10u32,ca)  eu8(0x10u32,cb)  eb(0x21u32)  eu8(0x11u32,tr)                                       /* tr = ca-cb */
+    eu8(0x10u32,ca)  eu8(0x10u32,cb)  eb(0x31u32)  eu8(0x51u32,1u32)                                     /* if ca!=cb break */
+    eu8(0x10u32,ca)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)                                        /* if ca==0 break */
+    eu8(0x10u32,ta)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ta)  eu8(0x10u32,tb)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tb)  eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)  eu8(0x10u32,tr)
+}
+fn emit_strncmp() {   /* strncmp(a,b,n) */
+    let ta:u32=LN  if LN<255u32 {LN=LN+1u32}  let tb:u32=LN  if LN<255u32 {LN=LN+1u32}  let tn:u32=LN  if LN<255u32 {LN=LN+1u32}  let ca:u32=LN  if LN<255u32 {LN=LN+1u32}  let cb:u32=LN  if LN<255u32 {LN=LN+1u32}  let tr:u32=LN  if LN<255u32 {LN=LN+1u32}  let ti:u32=LN  if LN<255u32 {LN=LN+1u32}
+    ebin(0u32)  eu8(0x11u32,ta)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tb)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tn)  econst(0i64)  eu8(0x11u32,tr)  econst(0i64)  eu8(0x11u32,ti)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ti)  eu8(0x10u32,tn)  eb(0x33u32)  eu8(0x51u32,1u32)                                     /* if i>=n break */
+    eu8(0x10u32,ta)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eu8(0x11u32,ca)                          /* ca=a[i] */
+    eu8(0x10u32,tb)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eu8(0x11u32,cb)                          /* cb=b[i] */
+    eu8(0x10u32,ca)  eu8(0x10u32,cb)  eb(0x21u32)  eu8(0x11u32,tr)
+    eu8(0x10u32,ca)  eu8(0x10u32,cb)  eb(0x31u32)  eu8(0x51u32,1u32)                                     /* if differ break */
+    eu8(0x10u32,ca)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)                                        /* if NUL break */
+    eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)  eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)  eu8(0x10u32,tr)
+}
+fn emit_strlen() {   /* strlen(s) */
+    let ts:u32=LN  if LN<255u32 {LN=LN+1u32}  let tn:u32=LN  if LN<255u32 {LN=LN+1u32}
+    ebin(0u32)  eu8(0x11u32,ts)  econst(0i64)  eu8(0x11u32,tn)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ts)  eb(0x80u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)                           /* if *s==0 break */
+    eu8(0x10u32,tn)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tn)  eu8(0x10u32,ts)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ts)  eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)  eu8(0x10u32,tn)
+}
+fn emit_memcmp() {   /* memcmp(a,b,n) */
+    let ta:u32=LN  if LN<255u32 {LN=LN+1u32}  let tb:u32=LN  if LN<255u32 {LN=LN+1u32}  let tn:u32=LN  if LN<255u32 {LN=LN+1u32}  let ca:u32=LN  if LN<255u32 {LN=LN+1u32}  let cb:u32=LN  if LN<255u32 {LN=LN+1u32}  let tr:u32=LN  if LN<255u32 {LN=LN+1u32}  let ti:u32=LN  if LN<255u32 {LN=LN+1u32}
+    ebin(0u32)  eu8(0x11u32,ta)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tb)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tn)  econst(0i64)  eu8(0x11u32,tr)  econst(0i64)  eu8(0x11u32,ti)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ti)  eu8(0x10u32,tn)  eb(0x33u32)  eu8(0x51u32,1u32)                                     /* if i>=n break */
+    eu8(0x10u32,ta)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eu8(0x11u32,ca)
+    eu8(0x10u32,tb)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eu8(0x11u32,cb)
+    eu8(0x10u32,ca)  eu8(0x10u32,cb)  eb(0x21u32)  eu8(0x11u32,tr)
+    eu8(0x10u32,ca)  eu8(0x10u32,cb)  eb(0x31u32)  eu8(0x51u32,1u32)                                     /* if differ break */
+    eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)  eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)  eu8(0x10u32,tr)
+}
 /* vsnprintf core: emit the format-walk loop.  td=dst cursor, tf=fmt cursor, tap=va cursor (all temp slots,
  * pre-loaded).  Supports %s %d %u %x %c %%.  Number->string via FMT_SCRATCH (reversed digits, copied forward).
  * Verifier-safe: IF/ELSE that "produce" a value route through a temp; nested copy/digit loops are self-contained. */
@@ -512,6 +558,10 @@ fn eprim() {
             C=C+1u32
             if kw(t,"memcpy" as u64,6u32)==1u32 { emit_memcpy()  eat(Q_RP)  return }
             if kw(t,"memset" as u64,6u32)==1u32 { emit_memset()  eat(Q_RP)  return }
+            if kw(t,"strcmp" as u64,6u32)==1u32 { emit_strcmp()  eat(Q_RP)  return }
+            if kw(t,"strncmp" as u64,7u32)==1u32 { emit_strncmp()  eat(Q_RP)  return }
+            if kw(t,"strlen" as u64,6u32)==1u32 { emit_strlen()  eat(Q_RP)  return }
+            if kw(t,"memcmp" as u64,6u32)==1u32 { emit_memcmp()  eat(Q_RP)  return }
             if kw(t,"malloc" as u64,6u32)==1u32 { ebin(0u32)  emit_malloc()  eat(Q_RP)  return }                                  /* malloc(size) */
             if kw(t,"calloc" as u64,6u32)==1u32 { ebin(0u32)  eat(Q_COM)  ebin(0u32)  eb(0x22u32)  emit_malloc()  eat(Q_RP)  return }   /* calloc(n,sz) = malloc(n*sz) (bump mem is fresh-zero) */
             if kw(t,"free" as u64,4u32)==1u32 { ebin(0u32)  eb(0x72u32)  econst(0i64)  eat(Q_RP)  return }                          /* free(p) -> no-op (bump alloc); eval+drop, push 0 */

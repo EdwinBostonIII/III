@@ -1,4 +1,5 @@
-/* zk_svir_vm_fused.iii -- THE FUSED zkVM: COMPUTE + MEMORY + CONTROL on ONE trace, attested soundly.
+/* zk_svir_vm_fused.iii -- THE FUSED zkVM: COMPUTE + MEMORY + CONTROL on ONE trace, attested soundly, with the
+ * memory permutation now FIAT-SHAMIR-BOUND (the prover cannot choose the challenge alpha,beta).
  *
  * A real loop-with-memory program:  for i in 0..6 { mem[i] = 7*i }  then LOAD mem[3] (=> 21).  Every VM step is one
  * row, and -- crucially -- one memory access (no nulls): rows 0..5 STORE mem[i]=7*i (the loop body), row 6 LOADs
@@ -6,19 +7,24 @@
  *   CONTROL: the loop counter i increments every row (next.i = i + 1) -- the iteration that drives the addresses.
  *   COMPUTE: the stored value is computed, vp = 7*i at the store rows (linked to the counter).
  *   MEMORY (dynamic): the (addr,val,iswrite) accesses are proven consistent by the grand-product PERMUTATION
- *     (program-order == (addr,time)-sorted, FS-alpha,beta) + READ-CONSISTENCY (the LOAD of mem[3] returns the
- *     value STORED there, 21, via an inverse-witness is-zero on the sorted address-difference) + SORTEDNESS.
+ *     (program-order == (addr,time)-sorted) with alpha,beta DERIVED FROM THE COMMITTED ACCESS COLUMNS (air_perm_setup
+ *     over cols 1..6, air_add_perm_term) + READ-CONSISTENCY (the LOAD of mem[3] returns the value STORED there, 21,
+ *     via an inverse-witness is-zero on the sorted address-difference) + SORTEDNESS.
  * The COMPUTE/CONTROL link binds the memory access to the loop: is_store*(ap - i) = 0 and is_store*(vp - 7*i) = 0.
  *
- * W=15 (needs the WMAX 16->32 enlargement), 17 constraints.  Returns 99 iff the honest fused execution VERIFIES
- * (air_stark_prove/verify) and BOTH a forged LOAD value (read-consistency) AND a forged stored value (the compute
- * link) are REJECTED BY THE MATH.  This is a complete zkVM step over a real program: compute, memory, and control
- * proven TOGETHER on one trace, by a verifier that never sees the witness. */
+ * W=15 (needs the WMAX 16->32 enlargement), 17 constraints.  Returns 99 iff the honest fused execution VERIFIES and
+ * (2) a forged LOAD value (read-consistency), (3) a forged stored value (the compute link), AND (5) a MALICIOUS prover
+ * who builds the grand products with its OWN chosen alpha'=11 instead of the FS-derived one are ALL REJECTED BY THE
+ * MATH.  A complete zkVM step over a real program -- compute, memory, control proven TOGETHER on one trace, with the
+ * memory argument sound against an adaptive prover (verified, not self-graded). */
 module zk_svir_vm_fused
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_perm_term(con: u32, kind: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_setup(start: u64, nv: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_beta() -> u32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
@@ -57,23 +63,27 @@ fn mod_pow(base: u32, ex: u32) -> u32 {
     return r
 }
 fn inv(d: u32) -> u32 { if d == 0u32 { return 0u32 } return mod_pow(d, PRIME - 2u32) }
-fn derive(seed: u32) -> u32 {
-    let mut a : u32 = seed  let mut i : u64 = 0u64
+
+/* aov = 0: HONEST (build the grand products with the FS-derived alpha).  aov != 0: MALICIOUS (build them with the
+ * prover's chosen alpha'=aov instead) -- the constraint still uses the FS alpha, so a non-FS aov must be REJECTED. */
+fn build(aov: u32) -> u32 {
+    air_reset(15u32, 8u32)
+    air_boundary_reset()
+    let mut i : u64 = 0u64
+    /* PHASE 1: set the ACCESS columns (1..6) ONLY; air_perm_setup commits them + derives alpha,beta (prover can't choose). */
     while i < 8u64 {
-        a = sf_add(sf_mul(a, 16777619u32), AP[i])  a = sf_add(sf_mul(a, a), 1u32)
-        a = sf_add(sf_mul(a, 16777619u32), VP[i])  a = sf_add(sf_mul(a, a), 2u32)
+        air_set_trace(i, 1u64, AP[i])  air_set_trace(i, 2u64, VP[i])  air_set_trace(i, 3u64, WP[i])
+        air_set_trace(i, 4u64, AS[i])  air_set_trace(i, 5u64, VS[i])  air_set_trace(i, 6u64, WS[i])
         i = i + 1u64
     }
-    if a < 2u32 { a = 2u32 }
-    return a
-}
-
-fn build() -> u32 {
-    let alpha : u32 = derive(169647555u32)
-    let beta  : u32 = derive(305419896u32)
+    let fs_alpha : u32 = air_perm_setup(1u64, 6u64)
+    let beta  : u32 = air_perm_beta()
     let beta2 : u32 = sf_mul(beta, beta)
+    let mut alpha : u32 = fs_alpha
+    if aov != 0u32 { alpha = aov }                  /* MALICIOUS override */
+    /* PHASE 2: grand products with alpha,beta; enc = addr + beta*val + beta^2*iswrite. */
     ACP[0] = 1u32  ACS[0] = 1u32
-    let mut i : u64 = 0u64
+    i = 0u64
     while i < 7u64 {
         let ep : u32 = sf_add(sf_add(AP[i], sf_mul(beta, VP[i])), sf_mul(beta2, WP[i]))
         let es : u32 = sf_add(sf_add(AS[i], sf_mul(beta, VS[i])), sf_mul(beta2, WS[i]))
@@ -92,27 +102,24 @@ fn build() -> u32 {
         RA[i] = sf_mul(IZ[i], sf_sub(VS[inx], VS[i]))
         i = i + 1u64
     }
-    air_reset(15u32, 8u32)
-    air_boundary_reset()
+    /* set the remaining columns (0 counter, 7/8 products, 9..12 witnesses, 13/14 selectors). */
     i = 0u64
     while i < 8u64 {
-        air_set_trace(i, 0u64, IC[i])  air_set_trace(i, 1u64, AP[i])  air_set_trace(i, 2u64, VP[i])  air_set_trace(i, 3u64, WP[i])
-        air_set_trace(i, 4u64, AS[i])  air_set_trace(i, 5u64, VS[i])  air_set_trace(i, 6u64, WS[i])
+        air_set_trace(i, 0u64, IC[i])
         air_set_trace(i, 7u64, ACP[i]) air_set_trace(i, 8u64, ACS[i])
         air_set_trace(i, 9u64, DM[i])  air_set_trace(i, 10u64, WV[i]) air_set_trace(i, 11u64, IZ[i]) air_set_trace(i, 12u64, RA[i])
         air_set_trace(i, 13u64, IST[i]) air_set_trace(i, 14u64, ILD[i])
         i = i + 1u64
     }
-    let am : u32 = sf_sub(0u32, alpha)
     /* vars: 0=1 ; cur 1=i 2=ap 3=vp 4=wp 5=as 6=vs 7=ws 8=acp 9=acs 10=dm 11=wv 12=iz 13=ra 14=ist 15=ild ;
      *        next 16=i 17=ap 18=vp 19=wp 20=as 21=vs 22=ws 23=acp 24=acs 25=dm ... */
     air_add_term(0u32, 1u32, 16u32, 0u32)  air_add_term(0u32, NEG1, 1u32, 0u32)  air_add_term(0u32, NEG1, 0u32, 0u32)  /* con0 counter: next.i - i - 1 */
     air_add_term(1u32, 1u32, 14u32, 2u32)  air_add_term(1u32, NEG1, 14u32, 1u32)                                       /* con1 link addr: is_store*(ap - i) */
     air_add_term(2u32, 1u32, 14u32, 3u32)  air_add_term(2u32, NEG7, 14u32, 1u32)                                       /* con2 link val: is_store*(vp - 7*i) */
-    air_add_term(3u32, 1u32, 23u32, 0u32)  air_add_term(3u32, am, 8u32, 0u32)
-    air_add_term(3u32, 1u32, 8u32, 2u32)   air_add_term(3u32, beta, 8u32, 3u32)  air_add_term(3u32, beta2, 8u32, 4u32) /* con3 perm_p */
-    air_add_term(4u32, 1u32, 24u32, 0u32)  air_add_term(4u32, am, 9u32, 0u32)
-    air_add_term(4u32, 1u32, 9u32, 5u32)   air_add_term(4u32, beta, 9u32, 6u32)  air_add_term(4u32, beta2, 9u32, 7u32) /* con4 perm_s */
+    air_add_term(3u32, 1u32, 23u32, 0u32)  air_add_perm_term(3u32, 1u32, 8u32, 0u32)                                   /* con3 perm_p: next.acp -alpha*acp +acp*ap +beta*acp*vp +beta^2*acp*wp */
+    air_add_term(3u32, 1u32, 8u32, 2u32)   air_add_perm_term(3u32, 2u32, 8u32, 3u32)  air_add_perm_term(3u32, 3u32, 8u32, 4u32)
+    air_add_term(4u32, 1u32, 24u32, 0u32)  air_add_perm_term(4u32, 1u32, 9u32, 0u32)                                   /* con4 perm_s */
+    air_add_term(4u32, 1u32, 9u32, 5u32)   air_add_perm_term(4u32, 2u32, 9u32, 6u32)  air_add_perm_term(4u32, 3u32, 9u32, 7u32)
     air_add_term(5u32, 1u32, 10u32, 0u32)  air_add_term(5u32, NEG1, 20u32, 0u32) air_add_term(5u32, 1u32, 5u32, 0u32)  /* con5 dm - as_next + as */
     air_add_term(6u32, 1u32, 12u32, 10u32)                                                                             /* con6 iz*dm */
     air_add_term(7u32, 1u32, 12u32, 0u32)  air_add_term(7u32, 1u32, 10u32, 11u32) air_add_term(7u32, NEG1, 0u32, 0u32) /* con7 iz + dm*wv - 1 */
@@ -135,23 +142,27 @@ fn build() -> u32 {
 
 fn main() -> u64 {
     /* (1) HONEST fused execution: control + compute + memory all hold -> the sound verifier ACCEPTS. */
-    build()  air_stark_prove()
+    build(0u32)  air_stark_prove()
     if air_stark_verify() != 0u64 { return 1u64 }
     /* (2) FORGED LOAD value: mem[3] returns 99 (program row 6, its sorted image row 4) -> read-consistency REJECTS. */
     VP[6] = 99u32  VS[4] = 99u32
-    build()  air_stark_prove()
+    build(0u32)  air_stark_prove()
     let fl : u64 = air_stark_verify()
     VP[6] = 21u32  VS[4] = 21u32
     if fl == 0u64 { return 2u64 }
-    /* (3) FORGED COMPUTE: a store writes the wrong value (mem[3] = 99 instead of 7*3=21) -> the compute link
-     * is_store*(vp - 7*i) REJECTS (the stored value is not 7*i). */
+    /* (3) FORGED COMPUTE: a store writes the wrong value (mem[3] = 99 instead of 7*3=21) -> the compute link REJECTS. */
     VP[3] = 99u32  VS[3] = 99u32
-    build()  air_stark_prove()
+    build(0u32)  air_stark_prove()
     let fc : u64 = air_stark_verify()
     VP[3] = 21u32  VS[3] = 21u32
     if fc == 0u64 { return 3u64 }
+    /* (5) MALICIOUS alpha: the prover builds the grand products with its OWN alpha'=11, NOT the FS-derived one.  The
+     * constraint uses the FS alpha (!= 11), so the transitions fail -> REJECT.  (The memory permutation is sound
+     * against an adaptive prover -- the same defeat zk_perm_malicious proves, now ON THE FUSED zkVM.) */
+    build(11u32)  air_stark_prove()
+    if air_stark_verify() == 0u64 { return 5u64 }
     /* (4) honest re-proves. */
-    build()  air_stark_prove()
+    build(0u32)  air_stark_prove()
     if air_stark_verify() != 0u64 { return 4u64 }
     return 99u64
 }

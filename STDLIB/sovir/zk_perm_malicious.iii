@@ -16,7 +16,7 @@ extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_perm_term(con: u32, kind: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
-extern @abi(c-msvc-x64) fn air_perm_setup(nv: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_setup(start: u64, nv: u64) -> u32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
@@ -34,7 +34,7 @@ fn main() -> u64 {
     /* PHASE 1: set the ACCESS columns (vO,vS) and let the STARK commit them + derive alpha (the prover cannot choose it). */
     let mut i : u64 = 0u64
     while i < 8u64 { air_set_trace(i, 0u64, VO[i])  air_set_trace(i, 1u64, VS[i])  i = i + 1u64 }
-    air_perm_setup(2u64)
+    air_perm_setup(0u64, 2u64)
     /* PHASE 2 (MALICIOUS): build the product columns with the prover's OWN alpha'=11 (ignoring the derived alpha). */
     i = 0u64
     while i < 8u64 { air_set_trace(i, 2u64, AO[i])  air_set_trace(i, 3u64, AS[i])  i = i + 1u64 }

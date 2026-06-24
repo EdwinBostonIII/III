@@ -77,7 +77,8 @@ var AIR_TT_CON  : [u32; 64]         /* which constraint k this term belongs to *
 var AIR_TT_PERM : [u32; 64]         /* 1 = this term's coefficient is the FS-derived permutation challenge -AIR_PERM_A */
 var AIR_PERM_A  : [u32; 1]          /* the grand-product permutation challenge, Fiat-Shamir-derived from the committed access-column roots (air_perm_setup) */
 var AIR_PERM_B  : [u32; 1]          /* the tuple-ENCODING challenge beta (also FS-derived); perm-term kinds: 1 = -alpha, 2 = beta, 3 = beta^2 */
-var AIR_PERM_NV : [u32; 1]          /* number of leading ACCESS columns whose committed roots derive AIR_PERM_A/B */
+var AIR_PERM_NV : [u32; 1]          /* number of ACCESS columns whose committed roots derive AIR_PERM_A/B */
+var AIR_PERM_START : [u32; 1]       /* first ACCESS column index (so gadgets whose accesses are not column-0-first can still FS-bind) */
 var AIR_NT      : [u32; 1]          /* number of terms */
 var AIR_NC      : [u32; 1]          /* number of transition constraints */
 var AIR_ALPHA   : [u32; 32]         /* per-constraint Fiat-Shamir coefficient (AIR_CMAX slots) */
@@ -102,6 +103,7 @@ fn air_reset(w_cols: u32, n_rows: u32) -> i32 @export {
     AIR_NC[0] = 0u32
     AIR_PERM_A[0] = 0u32
     AIR_PERM_B[0] = 0u32
+    AIR_PERM_START[0] = 0u32
     AIR_PERM_NV[0] = 0u32
     let mut k : u64 = 0u64
     while k < AIR_CMAX { AIR_ALPHA[k] = 0u32  k = k + 1u64 }
@@ -662,10 +664,11 @@ fn air_derive_alphas(tlen: u64) -> i32 {
 /* a non-linear (square-mixing) hash of the first nv committed column roots (nv*32 bytes of ZKAIR_TRACE_ROOTS) -> a
  * field element.  Both prover (air_perm_setup) and verifier (air_stark_verify) compute it from the SAME committed
  * roots, so the permutation challenge alpha is bound to the access commitment and the prover cannot choose it. */
-fn air_perm_field(nv: u64, seed: u32) -> u32 {
+fn air_perm_field(start: u64, nv: u64, seed: u32) -> u32 {
     let mut h : u32 = seed
-    let nb : u64 = nv * 32u64
-    let mut i : u64 = 0u64
+    let lo : u64 = start * 32u64
+    let nb : u64 = (start + nv) * 32u64
+    let mut i : u64 = lo
     while i < nb {
         let p : *u8 = ((&ZKAIR_TRACE_ROOTS as u64) + i) as *u8
         h = sf_add(sf_mul(h, 16777619u32), p[0u64] as u32)
@@ -679,19 +682,20 @@ fn air_perm_field(nv: u64, seed: u32) -> u32 {
 /* PHASE 1 of the sound permutation: commit the first nv ACCESS columns, derive the permutation challenge alpha from
  * their committed roots, and store it.  The gadget calls this AFTER setting the access columns and BEFORE building the
  * grand-product (accumulator) columns -- so the products use an alpha the prover could not choose.  Returns alpha. */
-fn air_perm_setup(nv: u64) -> u32 @export {
+fn air_perm_setup(start: u64, nv: u64) -> u32 @export {
     air_build_lde()
     let d  : u64 = AIR_B * (AIR_N[0] as u64)
     let tbsz : u64 = 2u64 * d * 32u64
-    let mut w : u64 = 0u64
-    while w < nv {
+    let mut w : u64 = start
+    while w < start + nv {
         air_merkle_build(&AIR_LDE as u64, w*tbsz, w*d, d)
         air_copy32((&ZKAIR_TRACE_ROOTS as u64) + w*32u64, air_merkle_root(w*tbsz))
         w = w + 1u64
     }
+    AIR_PERM_START[0] = start as u32
     AIR_PERM_NV[0] = nv as u32
-    AIR_PERM_A[0] = air_perm_field(nv, 169647555u32)
-    AIR_PERM_B[0] = air_perm_field(nv, 305419896u32)
+    AIR_PERM_A[0] = air_perm_field(start, nv, 169647555u32)
+    AIR_PERM_B[0] = air_perm_field(start, nv, 305419896u32)
     return AIR_PERM_A[0]
 }
 fn air_perm_beta() -> u32 @export { return AIR_PERM_B[0] }   /* the FS-derived tuple-encoding challenge (the gadget builds products with it) */
@@ -822,7 +826,7 @@ fn air_stark_verify() -> u64 @export {
         tlen = tlen + 32u64  w = w + 1u64
     }
     air_derive_alphas(tlen)   /* re-derive the FS composition coefficients (== prover's) */
-    if AIR_PERM_NV[0] > 0u32 { AIR_PERM_A[0] = air_perm_field(AIR_PERM_NV[0] as u64, 169647555u32)  AIR_PERM_B[0] = air_perm_field(AIR_PERM_NV[0] as u64, 305419896u32) }   /* re-derive alpha,beta from the committed access roots -> a prover-chosen alpha/beta is rejected */
+    if AIR_PERM_NV[0] > 0u32 { AIR_PERM_A[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 169647555u32)  AIR_PERM_B[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 305419896u32) }   /* re-derive alpha,beta from the committed access roots -> a prover-chosen alpha/beta is rejected */
     air_copy32((&ZKAIR_TRANS as u64) + tlen, &ZKAIR_CP_ROOT as u64)
     tlen = tlen + 32u64
     let NL : u64 = ZKAIR_FRI_NL[0] as u64

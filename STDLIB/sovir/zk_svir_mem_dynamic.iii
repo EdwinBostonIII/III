@@ -26,7 +26,7 @@ extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i
 extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_perm_term(con: u32, kind: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
-extern @abi(c-msvc-x64) fn air_perm_setup(nv: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_setup(start: u64, nv: u64) -> u32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_perm_beta() -> u32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
@@ -88,7 +88,7 @@ fn build() -> u32 {
         air_set_trace(i, 3u64, AS[i])  air_set_trace(i, 4u64, VS[i])  air_set_trace(i, 5u64, WS[i])
         i = i + 1u64
     }
-    let alpha : u32 = air_perm_setup(6u64)
+    let alpha : u32 = air_perm_setup(0u64, 6u64)
     let beta  : u32 = air_perm_beta()
     let beta2 : u32 = sf_mul(beta, beta)
     /* PHASE 2: grand products with the FS-bound alpha,beta; enc = addr + beta*val + beta^2*iswrite. */

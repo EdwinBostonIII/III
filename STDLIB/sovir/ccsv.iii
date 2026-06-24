@@ -544,7 +544,10 @@ fn eprim() {
     }
     if cp(Q_AND)==1u32 {                                            /* &arr[i] / &arr : address-of (no load) */
         C=C+1u32
-        if TK[C as u64]==1u32 { let at:u32=C  let ab:i64=abase(at)
+        if TK[C as u64]==1u32 { let at:u32=C
+            let vt:i32=avtype(at)  if vt>=0i32 { if ispat(at+1u32,Q_DOT)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(at)  C=C+3u32  econst(vb+foff)  return } }   /* &v.field : struct-value field address = base+offset */
+            let ptt:i32=lpt(at)  if ptt>=0i32 { if ispat(at+1u32,Q_ARROW)==1u32 { let ft:u32=at+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(at)  C=C+3u32  emit_lget(pl as u32)  if foff>0i64 {econst(foff)  eb(0x20u32)}  return } }   /* &p->field : ptr + field offset */
+            let ab:i64=abase(at)
             if ab>=0i64 {
                 if ispat(C+1u32,Q_LBR)==1u32 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(at)  estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }  return }   /* &arr[i] : i*esz (+base) */
                 C=C+1u32  econst(ab)  return

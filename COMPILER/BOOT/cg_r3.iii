@@ -210,6 +210,9 @@ extern @abi(c-msvc-x64) fn iii_ast_type_param_name_len(ast: u64, node: u32) -> u
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_tc_expr_is_signed(ast: u64, node: u32) -> u32 from "cg_typeclass.iii"
+/* Path C: the strength-reduction EMISSION law, factored into a single source the STDLIB certifier kernel-proves. */
+extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
 
 extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
@@ -852,12 +855,11 @@ fn r3_mul_pow2_k(op: u32, rhs: u32) -> u32 {
     if op != 3u32 { return 0u32 }
     if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
     let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
-    if v < 2u64 { return 0u32 }
-    if (v & (v - 1u64)) != 0u64 { return 0u32 }
-    let mut k: u32 = 0u32
-    let mut t: u64 = v
-    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
-    return k
+    /* TABLE-DRIVEN (Path C): the admit + shift decision is the single-source law in cg_opt_rules.iii that the
+     * STDLIB certifier kernel-proves sound.  Identical result to the former inline (v>=2 && pow2 -> log2(v)),
+     * so cg_r3.c's inline twin stays byte-equivalent (build_iiis2 --check-corpus). */
+    if cgopt_mul_admit(v) != 1u32 { return 0u32 }
+    return cgopt_mul_shift_k(v)
 }
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.c's shift_const_k -- IDENTICAL logic so the emitted assembly
  * is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL(9)/SHR(10) and rhs is a constant

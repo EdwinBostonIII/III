@@ -1,0 +1,29 @@
+/* COMPILER/BOOT/cg_opt_rules.iii -- Path C: the SINGLE SOURCE of cg_r3's strength-reduction EMISSION law,
+ * factored out of r3_mul_pow2_k so the very admit/shift functions that DRIVE codegen are the ones the
+ * STDLIB certifier (forcefield/cg_opt_cert.iii) kernel-PROVES sound (x*2^k == x<<k mod 2^64, via the CIC
+ * BV64 kernel) over the full emittable range k=1..63.  Before this, r3_mul_pow2_k computed k inline and the
+ * proof lived in a sandbox that never inspected the emitter -- the F6 "no proof->emit binding" gap.  Now
+ * cg_r3 is TABLE-DRIVEN: it delegates the (admit, shift) decision here, and the certifier proves THIS code.
+ *
+ * Zero deps (integer-only, no externs) so iiis-0 compiles it standalone and it links into iiis-2.  The logic
+ * is IDENTICAL to cg_r3.c's inline mul_pow2_k, so iiis-0 (C, inline) and iiis-2 (.iii, delegating here) emit
+ * byte-for-byte the same assembly -- mechanically gated by build_iiis2.sh --check-corpus.  K: 1.00. */
+module boot_cg_opt_rules
+
+/* admit: is `x * v` a WIDTH-FAITHFUL strength reduction (mul -> shift)?  1 iff v is an exact power of two
+ * >= 2 (then x*v == x<<log2(v) mod 2^64 for signed + unsigned).  A non-pow2 / overflowing factor is REJECTED
+ * -- the soundness boundary the CIC kernel proof and this admit share. */
+fn cgopt_mul_admit(v: u64) -> u32 @export {
+    if v < 2u64 { return 0u32 }
+    if (v & (v - 1u64)) != 0u64 { return 0u32 }
+    return 1u32
+}
+
+/* shift_k: the shift amount k such that v == 2^k.  Caller guarantees cgopt_mul_admit(v)==1, so v is an
+ * exact power of two in 2^1..2^63 and this returns 1..63. */
+fn cgopt_mul_shift_k(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut t: u64 = v
+    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
+    return k
+}

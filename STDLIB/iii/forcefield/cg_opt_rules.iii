@@ -30,6 +30,10 @@ extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+/* The ACTUAL strength-reduction emission law cg_r3 now delegates to (COMPILER/BOOT/cg_opt_rules.iii) --
+ * proven sound here, so the certifier binds the kernel proof to the very functions that DRIVE codegen. */
+extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
 
 /* The SR rule table: row i = (factor 2^shift  ->  emit `shl $shift`).  Covers the FULL emittable range
  * shift 1..63 -- exactly what cg_r3's r3_mul_pow2_k can emit (an F6 re-audit flagged that the old 7-row
@@ -112,10 +116,31 @@ fn cor_rejects_unsound() -> u8 @export {
     return 1u8
 }
 
-/* The full self-test: certifier green AND the negative arm bites. 99 = the table is kernel-certified
- * width-faithfully and the certifier provably rejects unsound rules. */
+/* THE PROOF->EMIT BINDING (Path C, now mechanical at the SOURCE level): the ACTUAL functions cg_r3
+ * delegates to (cgopt_mul_admit / cgopt_mul_shift_k in COMPILER/BOOT/cg_opt_rules.iii) agree with this
+ * kernel-certified table on EVERY rule -- so proving the table proves the live emitter.  1 iff agreement:
+ *   for each certified rule (factor 2^k): cgopt_mul_admit(factor)==1 AND cgopt_mul_shift_k(factor)==k;
+ *   AND the emitter REJECTS what the certifier rejects (non-pow2 3/6, and 0/1 below the floor). */
+fn cor_boot_agrees() -> u8 @export {
+    cor_init()
+    let mut i : u64 = 0u64
+    while i < COR_N {
+        if cgopt_mul_admit(COR_FACTOR[i]) != 1u32 { return 0u8 }
+        if (cgopt_mul_shift_k(COR_FACTOR[i]) as u64) != COR_SHIFT[i] { return 0u8 }
+        i = i + 1u64
+    }
+    if cgopt_mul_admit(0u64) != 0u32 { return 0u8 }     /* below the floor */
+    if cgopt_mul_admit(1u64) != 0u32 { return 0u8 }     /* x*1 is the identity fold, not a shift */
+    if cgopt_mul_admit(3u64) != 0u32 { return 0u8 }     /* non-pow2 */
+    if cgopt_mul_admit(6u64) != 0u32 { return 0u8 }     /* non-pow2 */
+    return 1u8
+}
+
+/* The full self-test: the table is kernel-certified width-faithfully, the negative arm bites, AND the
+ * live cg_r3 emission law agrees with the certified table on every rule. 99 = all three. */
 fn cor_selftest() -> u64 @export {
     if cor_certify_all() != 99u64 { return cor_certify_all() }
     if cor_rejects_unsound() != 1u8 { return 5u64 }
+    if cor_boot_agrees() != 1u8 { return 6u64 }
     return 99u64
 }

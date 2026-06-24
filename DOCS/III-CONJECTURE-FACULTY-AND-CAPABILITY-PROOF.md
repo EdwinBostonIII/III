@@ -5,6 +5,21 @@
 alone — every proof a `.iii` program compiled by `iiis-2` (itself written in III) and linked only
 against `libiii_native.a` + libc. No rigging; no external harness does III's work.
 
+> **F6 calibration (2026-06-24, `III-F6-LEDGER-AUDIT.md`).** The faculty's mechanism is genuinely
+> **sound** (each disposer is real — μ reduction-order termination, exhaustive bounded decision,
+> congruence-closure joinability — and §2's two impossibility theorems are honestly stated). But read
+> "a real capability" precisely: it is a **sound-but-inert standalone demonstration**, not a live
+> faculty acting on III. It operates only over **toy, test-constructed carriers** (32 ground symbols /
+> depth-1 f-terms / 5 hardcoded predicates) and is wired to **no live consumer** — and per §2 a live-XII
+> consumer would be **vacuous** (XII is already Knuth–Bendix-complete). It demonstrates that the
+> propose→dispose→admit *mechanism* is sound where an open space exists; it does not (yet) discover
+> anything III's live engine needs. Second residual: §2's "mechanism-isolated regression" (KAT 1104
+> **case D**) is **over-determined** — the unsound-candidate rejection there is **seed-driven** (the
+> seeded rule set forces it), not strictly **candidate-driven**; a tighter test would hold the seed
+> fixed and vary only the candidate, exhibiting that *only* the cycle-inducing candidate is rejected.
+> The faculty is real and sound; its *reach* is a bounded demonstration, stated here so the headline
+> doesn't oversell it.
+
 ---
 
 ## 1. The Conjecture faculty (`nous/nous_conjecture*`) — the "leap beyond enumeration"

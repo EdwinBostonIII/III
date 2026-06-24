@@ -288,7 +288,7 @@ fn prescan() {   /* main FIRST (SVIR func 0 = the entry), then the others in sou
     while t < NTOK { if tok_kw(t, "fn" as u64, 2u32) == 1u32 { if tok_kw(t + 1u32, "main" as u64, 4u32) == 0u32 { record_fn(t) } }  t = t + 1u32 }
 }
 fn prescan_arrays() {   /* var NAME : [ T ; SIZE ]  -> assign a base offset in SVIR linear memory */
-    ARR_N = 0u32  MEM_TOP = 0u64
+    ARR_N = 0u32  MEM_TOP = 16u64   /* reserve [0..15] for NULL -- match ccsv's data origin so address 0 is never a real object (cross-language byte-DDC + correct NULL semantics) */
     let mut t : u32 = 0u32
     while t < NTOK {
         if tok_kw(t, "var" as u64, 3u32) == 1u32 {

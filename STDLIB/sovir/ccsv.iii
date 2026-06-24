@@ -238,7 +238,7 @@ fn data_put16(off:u64, v:i64) { let mut b:u64=0u64  while b<2u64 { if (off+b)<26
 fn data_put32(off:u64, v:i64) { let mut b:u64=0u64  while b<4u64 { if (off+b)<262144u64 { let p:*u8=((&SDAT as u64)+off+b) as *u8  p[0u64]=(((v as u64) >> (8u64*b)) & 0xFFu64) as u8 }  b=b+1u64 } }   /* 4-byte LE */
 fn data_putn(esz:i64, off:u64, v:i64) { if esz==1i64 { data_put8(off,v)  return }  if esz==2i64 { data_put16(off,v)  return }  if esz==4i64 { data_put32(off,v)  return }  data_put64(off,v) }   /* width-typed initializer store (real C stride) */
 fn prescan_str() {
-    DLEN=0u64  let mut t:u32=0u32
+    DLEN=16u64  let mut t:u32=0u32   /* reserve [0..15] for NULL: address 0 must be distinct from any real string/array/data pointer (the seed checks `if(p)` / `p==NULL` on first-allocated objects -- e.g. &"firststring") */
     while t<NT {
         if TK[t as u64]==4u32 {
             TV[t as u64]=DLEN as i64                          /* address = byte offset in the packed region */
@@ -1014,7 +1014,7 @@ fn prescan() {
     while t<NT { if is_fn(t)==1u32 { if kw(fn_nametok(t),"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
 }
 fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SVIR linear memory (after strings) + init data */
-    AN=0u32  MTOP=DLEN  DEND=DLEN  let mut t:u32=0u32  let mut pd:u32=0u32
+    AN=0u32  MTOP=DLEN  DEND=0u64  if DLEN>16u64 {DEND=DLEN}  let mut t:u32=0u32  let mut pd:u32=0u32   /* the [0..15] NULL reserve is implicit zeros (linear mem is zero-init) -> only emit a data section when REAL data (strings DLEN>16 / array inits) sits above it; keeps no-data modules data-section-free (cross-language DDC) */
     while t<NT {
         if ispat(t,Q_LP)==1u32 {pd=pd+1u32}  if ispat(t,Q_RP)==1u32 { if pd>0u32 {pd=pd-1u32} }   /* paren depth: params live at pd>0, NOT global arrays */
         let mut isst:u32=0u32  if kw(t,"struct" as u64,6u32)==1u32 {isst=1u32}  if kw(t,"union" as u64,5u32)==1u32 {isst=1u32}
@@ -1176,7 +1176,7 @@ fn cfn(fk: u32) {
     let ft:u32=FNT[fk as u64]  C=fn_nametok(ft)  C=C+1u32  eat(Q_LP)   /* [quals] type [*] NAME ( -> at ( */
     CUR_RMASK=FRM[fk as u64]
     LN=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  lz=lz+1u32 }   /* reset per-fn local flags + control-depth */
-    let mut params:u32=0u32  let mut go:u32=1u32  CUR_VAPTR=0i32-1i32
+    let mut params:u32=0u32  let mut go:u32=1u32  CUR_VAPTR=0i32-1i32  ADN_N=0u32   /* clear &-taken set BEFORE the param loop: ladd(param) must see THIS fn's ADN (empty until prescan_addrof), not the caller's -- else `f(&x)` in the caller spuriously spills f's param x (read from an un-stored spill slot) */
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else {   /* [quals] type [*] NAME */
         if ispat(C,Q_DOT)==1u32 { CUR_VAPTR=LN as i32  LN=LN+1u32  params=params+1u32  let mut gd:u32=1u32  while gd==1u32 { if cp(Q_DOT)==1u32 {C=C+1u32} else {gd=0u32} }  go=0u32 }   /* `...` -> hidden va-ptr param (slot CUR_VAPTR; the caller passes VA_BUF) */
         else {

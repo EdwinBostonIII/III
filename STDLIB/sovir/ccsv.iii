@@ -823,6 +823,16 @@ fn ebin(minp: u32) {
             eu8(0x11u32,tmp)  eu8(0x10u32,tmp)  emit_lset(li as u32)  eu8(0x10u32,tmp)  return   /* tmp=rhs (decouple value from spill store) ; store ; leave value */
         }
     } } } }
+    if minp==0u32 { if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ARROW)==1u32 { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_ASN)==1u32 {   /* s->field = rhs : pointer-field assignment EXPRESSION -> store AND LEAVE the value (so chains `a->x = b->y = v` fold) */
+        let pt:i32=lpt(C)  let li2:i32=lidx(C)  if pt>=0i32 { if li2>=0i32 {
+            let foff:i64=fieldoff(pt,C+2u32)  let fe:i64=fieldelem(pt,C+2u32)  let fm:i64=fieldmask(pt,C+2u32)
+            emit_lget(li2 as u32)  if foff>0i64 {econst(foff)  eb(0x20u32)}   /* addr = s + foff */
+            C=C+4u32  ebin(0u32)                                              /* rhs (right-assoc recurse) */
+            if fm!=0i64 {econst(fm)  eb(0x25u32)}                             /* field width mask */
+            let tmp2:u32=LN  if LN<255u32 {LN=LN+1u32}
+            eu8(0x11u32,tmp2)  eu8(0x10u32,tmp2)  estore(fe)  eu8(0x10u32,tmp2)  return   /* SET tmp; GET tmp; STORE; GET tmp -> store + leave value */
+        } }
+    } } } } }
     eprim()  let mut go:u32=1u32
     while go==1u32 {
         if TK[C as u64]!=3u32 { go=0u32 }

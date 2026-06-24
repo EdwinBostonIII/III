@@ -788,10 +788,14 @@ fn emit_av(esz:i64, sgn:u32, mask:i64) {
     let op:i64=TV[C as u64]
     if op==Q_ASN { C=C+1u32  ebin(0u32)  if mask!=0i64 {econst(mask)  eb(0x25u32)}  estore(esz) }
     else {
-        C=C+2u32  let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
+        let mut isinc:u32=0u32  if op==Q_INC {isinc=1u32}  if op==Q_DEC {isinc=1u32}   /* lvalue++ / lvalue-- (no RHS) vs op= (RHS) */
+        if isinc==1u32 { C=C+1u32 } else { C=C+2u32 }
+        let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
         eu8(0x11u32,tmp)  eu8(0x10u32,tmp)  eu8(0x10u32,tmp)
         eload(esz, sgv)
-        ebin(0u32)  eb(opc(op))  if mask!=0i64 {econst(mask)  eb(0x25u32)}
+        if isinc==1u32 { econst(1i64)  if op==Q_INC {eb(0x20u32)} else {eb(0x21u32)} }   /* +1 / -1 */
+        else { ebin(0u32)  eb(opc(op)) }
+        if mask!=0i64 {econst(mask)  eb(0x25u32)}
         estore(esz)
     }
 }

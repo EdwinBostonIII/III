@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic zk_svir_loop zk_svir_vm_fused zk_perm_malicious zk_ext2; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic zk_svir_loop zk_svir_vm_fused zk_perm_malicious zk_ext2_kat zk_ext2_fri; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -142,10 +142,14 @@ timeout 10 "$W/rec_cg.exe" >/dev/null 2>&1; crc=$?
 if [ $xrc -eq 99 ] && [ $wrc -eq 99 ] && [ $crc -eq 99 ] && [ "$k" = "1" ]; then say "SOVEREIGN-RUN : same recurrence -> iiisv -> SVIR -> x86(sovereign)=99 wasm=99 ; cg_r3=99 (x_7==254673617)"
 else say "FAIL sovereign: x86=$xrc wasm=$wrc cg_r3=$crc dlls=$k"; fail=1; fi
 
-# (0p) ZK-EXT2: GF(p^2) arithmetic -- the verifiable foundation for EXTENSION-FIELD challenges (lifts the ~27-bit concrete floor).
-ext2rc=$(runzk zk_ext2)
-if [ "$ext2rc" = "99" ]; then say "ZK-EXT2 : GF(p^2) = F_p[u]/(u^2+u+1) arithmetic VERIFIED (irreducible because p=2 mod 3 -> no cube roots of unity) -- defining relation u^2+u+1=0, a*a^-1=1 (would fail on a zero divisor from a reducible modulus), commutativity, distributivity, associativity, norm-in-base-field, nontrivial Frobenius all hold -> 99. The arithmetic FOUNDATION for lifting the FS challenges + FRI fold + OOD point off the 30-bit base field (degree-2 ~2^60; tower GF(p^4) ~2^120 = production). NEXT: wire it into air_derive_alphas/air_perm_field/FRI."
-else say "FAIL ZK-EXT2: zk_ext2=$ext2rc (1=modulus 2/3=inverse 4=commut 5=distrib 6=assoc 7/8=norm 9=frobenius)"; fail=1; fi
+# (0p) ZK-EXT2: GF(p^2) arithmetic (numera/zk_ext2.iii library) -- the verifiable foundation for EXTENSION-FIELD challenges.
+ext2rc=$(runzk zk_ext2_kat)
+if [ "$ext2rc" = "99" ]; then say "ZK-EXT2 : GF(p^2) = F_p[u]/(u^2+u+1) arithmetic VERIFIED (irreducible because p=2 mod 3 -> no cube roots of unity) -- u^2+u+1=0, a*a^-1=1 (would fail on a zero divisor from a reducible modulus), commutativity/distributivity/associativity, norm-in-base-field, nontrivial Frobenius -> 99. The FOUNDATION for lifting FS challenges + FRI off the 30-bit base field (deg-2 ~2^60; tower GF(p^4) ~2^120 = production)."
+else say "FAIL ZK-EXT2: zk_ext2_kat=$ext2rc (1=modulus 2/3=inverse 4=commut 5=distrib 6=assoc 7/8=norm 9=frobenius)"; fail=1; fi
+# (0q) ZK-EXT2-FRI: the FRI low-degree test FOLD over GF(p^2) -- the heart of the extension-field fix, verified standalone.
+efrirc=$(runzk zk_ext2_fri)
+if [ "$efrirc" = "99" ]; then say "ZK-EXT2-FRI : the FRI fold f'(x^2) = (f(x)+f(-x))/2 + r*(f(x)-f(-x))/(2x) OVER GF(p^2) (challenge r in GF(p^2)) VERIFIED on a size-16 domain -- a degree-3 CODEWORD folds (16->8->4) to a CONSTANT last layer (ACCEPT), a degree-15 function does NOT (REJECT, the adversary the test turns away) -> 99. The hardest component of lifting the live STARK's FRI to GF(p^2) (~2^60 fold challenges), built + verified BEFORE integration so the rebuild is not blind. NEXT: route air_build_cp's CP + air's FRI fold + air_stark_verify through GF(p^2)."
+else say "FAIL ZK-EXT2-FRI: zk_ext2_fri=$efrirc (1=codeword-not-constant 2=high-degree-wrongly-accepted)"; fail=1; fi
 say "CONCRETE-SOUNDNESS [applies to EVERY 'SOUND' above]: all 'SOUND' = STRUCTURAL soundness (no prover can bypass the FS binding -- proven by the malicious-prover oracles). It is NOT yet PRODUCTION security. Field p~2^30, blowup 4, 16 FRI queries => concrete error ~2^-11 (FRI-query-limited), every algebraic+folding challenge CAPPED at ~2^-27 by the 30-bit field, Fiat-Shamir GRINDABLE at ~2^27. Production targets 80-128 bits; we deliver ~11-27. THE BOTTLENECK = the base field: requires EXTENSION-FIELD challenges (GF(p^3)~2^90) + more queries. See DOCS/III-ZK-CONCRETE-SOUNDNESS.md. (advisor-surfaced; the asterisk is the honest word)"
 if [ $fail -eq 0 ]; then
   say "ZK-ATTESTED EXECUTION -- one recurrence, ZK-proven by III's general zk_air (tampered trace rejected) AND sovereign-run via the SVIR toolchain (x86+wasm, cg_r3-agreed), agreeing on x_7=254673617."

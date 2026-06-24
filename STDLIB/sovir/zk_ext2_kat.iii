@@ -1,0 +1,34 @@
+/* zk_ext2_kat.iii -- the field-axiom KAT for the GF(p^2) library (numera/zk_ext2.iii).  Returns 99 iff EVERY axiom
+ * verifies: the defining relation u^2+u+1=0 genuinely vanishes (the modulus is the field's -> irreducible), a*a^-1=1
+ * (a zero divisor from a REDUCIBLE modulus would FAIL this -- not self-graded), commutativity, distributivity,
+ * associativity, norm-lands-in-base-field, nontrivial Frobenius. */
+module zk_ext2_kat
+
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_conj(a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_norm(a: u64) -> u32 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_inv(a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2hi(x: u64) -> u32 from "zk_ext2.iii"
+
+const ONE : u64 = 1u64
+
+fn main() -> u64 {
+    let a : u64 = e2pack(123456u32, 789012u32)
+    let b : u64 = e2pack(345678u32, 901234u32)
+    let c : u64 = e2pack(555555u32, 222222u32)
+    let u : u64 = e2pack(0u32, 1u32)
+    let uu : u64 = ext2_mul(u, u)
+    if ext2_add(ext2_add(uu, u), ONE) != 0u64 { return 1u64 }       /* u^2 + u + 1 = 0 */
+    if ext2_mul(a, ext2_inv(a)) != ONE { return 2u64 }
+    if ext2_mul(b, ext2_inv(b)) != ONE { return 3u64 }
+    if ext2_mul(a, b) != ext2_mul(b, a) { return 4u64 }             /* commutativity */
+    if ext2_mul(a, ext2_add(b, c)) != ext2_add(ext2_mul(a, b), ext2_mul(a, c)) { return 5u64 } /* distributivity */
+    if ext2_mul(ext2_mul(a, b), c) != ext2_mul(a, ext2_mul(b, c)) { return 6u64 }              /* associativity */
+    let nrm : u64 = ext2_mul(a, ext2_conj(a))
+    if e2hi(nrm) != 0u32 { return 7u64 }                            /* norm in base field */
+    if nrm != ext2_norm(a) { return 8u64 }
+    if ext2_conj(a) == a { return 9u64 }                            /* Frobenius nontrivial */
+    return 99u64
+}

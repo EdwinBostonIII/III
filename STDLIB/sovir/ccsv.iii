@@ -789,7 +789,9 @@ fn ebin(minp: u32) {
 fn for_init() {   /* the for-loop's init clause (no trailing ;): `T i=0[, j=1]` or `i=0[, j=1]` or an expression (comma-separated) */
     skipquals()
     if dtype(C)==1u32 { let tym:i64=type_mask(C)  let bsz:i64=type_size(C)  let bsg:u32=type_signed(C)  C=C+1u32  let mut more:u32=1u32
-        while more==1u32 { let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LW[s as u64]=tym  LSZ[s as u64]=bsz  LSG[s as u64]=bsg
+        while more==1u32 { let mut isp:u32=0u32  while cp(Q_MUL)==1u32 { isp=1u32  C=C+1u32 }   /* `T *p` pointer declarator in the for-init */
+            let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)
+            if isp==1u32 { LW[s as u64]=0i64  LSZ[s as u64]=8i64  LSG[s as u64]=0u32  LPSZ[s as u64]=bsz  LPSG[s as u64]=bsg } else { LW[s as u64]=tym  LSZ[s as u64]=bsz  LSG[s as u64]=bsg }
             if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  emit_lset(s) }
             if cp(Q_COM)==1u32 { C=C+1u32  more=1u32 } else { more=0u32 } }
         return }

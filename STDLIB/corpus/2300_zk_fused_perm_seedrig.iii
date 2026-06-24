@@ -1,25 +1,11 @@
-/* zk_fused_committed.iii -- P2b SCALE-UP (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md): the FULL compute+memory+control
- * zkVM (a real 32-STORE + 32-LOAD program, ONE N=64 trace, W=19, 20 transition constraints + a k=4 grand-product
- * permutation) verified as a COMMITTED proof over GF(p^4) -- closing finding F1 for the whole fused AIR.
- *
- * Over zk_fused_prod (whose verify() read the prover's FRI arrays from shared memory and used a FIXED combination
- * alpha), this adds:
- *   (1) the 19 trace-column LDEs are MERKLE-COMMITTED (one SHA-256 root per column); the composition polynomial CP is
- *       committed as the FRI layer-0 root; every FRI layer is committed (P2a).  Challenges + queries derive from the
- *       committed roots, so the prover is BOUND before it sees them.
- *   (2) the combination challenge alpha (GF(p^4), per constraint) is FS-DERIVED from the committed trace roots (sound
- *       order: commit-then-challenge) -- not the fixed alpha zk_fused_prod baked in (a prover could otherwise pick a
- *       trace whose constraint violations cancel under a known alpha).
- *   (3) the verifier, per FS-derived query q, OPENS + merkle_verify_proof's every trace leaf air_combine_ext4 reads
- *       (all 19 columns at q and at q+B) against their committed roots, BINDING air's proven combine to the commitment;
- *       opens CP(q); checks the construction-exact line-755 CP*Z_H == combine*(x-omega^{n-1}) + the GF(p^4) FRI fold;
- *       and checks the k=4 permutation boundary at OPENED accumulator leaves.
- *
- * Returns 99 iff: (H) the honest execution VERIFIES + the k=4 boundary holds; (L) a FORGED LOAD value (read-consistency)
- * is REJECTED by the line-755 at a query; (P) a FORGED program access (non-permutation) is REJECTED by the k=4 boundary;
- * (O) a forged trace OPENING is REJECTED by Merkle; (R) a corrupted committed root is REJECTED.  A committed,
- * commitment-bound fused zkVM -- the production claim earned against Merkle openings, not shared memory. */
-module zk_fused_committed
+/* zk_fused_perm_seedrig.iii -- REGRESSION KAT for the grand-product SEED-PIN fix (DOCS/III-ZK-PERM-SEED-GAP.md).
+ * Verbatim copy of zk_fused_committed.iii's verifier (verify + boundary_ok, INCLUDING the seed pin) + its prover
+ * plumbing, with build_rig(): a NON-PERMUTATION trace (VP[32]=99, exactly forge==2) that SEED-RIGS the k=4 grand
+ * products so P_k[63]==S_k[63] for every k (S_k[0]=Pi_p_k*inv(Pi_s_k)).  BEFORE the seed pin the verifier ACCEPTED
+ * this memory-inconsistent execution (the hole; this returned 99 by accepting); AFTER, boundary_ok REJECTS it
+ * because S_k[0]!=1 fails the Z(1)=1 pin.  main returns 99 iff: the trace is a genuine non-permutation, honest seeds
+ * are rejected, the rig's TRANSITIONS still hold, and the seed-pinned boundary_ok REJECTS the rig.  rc=2 = hole open. */
+module zk_fused_perm_seedrig
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
@@ -67,19 +53,19 @@ const NN    : u64 = 64u64
 const BLOW  : u64 = 4u64
 const WCOL  : u64 = 19u64
 const G4    : u64 = 4294967298u64
-const NQPB  : u64 = 32u64           /* FS queries per keccak batch */
-const NBATCH: u64 = 4u64            /* 4 re-hash batches * 32 = 128 FS queries -> PRODUCTION query soundness ~2^-86 */
+const NQPB  : u64 = 32u64
+const NBATCH: u64 = 4u64
 
 var OM   : [u32; 256]
 var FA   : [u64; 512]    var FB : [u64; 512]
 var OFFS : [u64; 8]      var SIZES: [u64; 8]
-var FROOT: [u8; 256]                 /* per-FRI-layer root */
+var FROOT: [u8; 256]
 var RR   : [u64; 8]      var RI : [u64; 8]
-var TROOT: [u8; 640]                 /* 19 trace-column roots (col*32) */
-var TLEAF: [u8; 1024]                /* one column's D u32 leaves (D*4) */
-var ALA  : [u64; 32]     var ALB : [u64; 32]   /* per-constraint GF(p^4) combination alpha (FS) */
+var TROOT: [u8; 640]
+var TLEAF: [u8; 1024]
+var ALA  : [u64; 32]     var ALB : [u64; 32]
 var DIG  : [u8; 32]
-var LEAF : [u8; 8192]                /* FRI layer GF(p^4) leaves (16B each) */
+var LEAF : [u8; 8192]
 var PRF  : [u8; 512]
 var QLEAF: [u8; 16]
 var TQ4  : [u8; 4]
@@ -121,7 +107,6 @@ fn encf(a: u32, v: u32, w: u32, alpha: u32, beta: u32, bsq: u32) -> u32 {
     return sf_sub(alpha, enc)
 }
 
-/* commit one trace-column LDE (col) into TROOT[col]; leaves = air_lde_at(col,j), 4-byte LE. */
 fn commit_col(col: u64) {
     let mut j : u64 = 0u64
     while j < DOM {
@@ -134,7 +119,6 @@ fn commit_col(col: u64) {
     }
     merkle_compute_root((&TLEAF as u64), DOM as u32, 4u64, (&TROOT as u64) + col * 32u64)
 }
-/* open + Merkle-verify trace leaf (col, idx) against TROOT[col]; returns 1 ok, 0 reject. */
 fn open_col(col: u64, idx: u64) -> u64 {
     let mut j : u64 = 0u64
     while j < DOM {
@@ -152,7 +136,6 @@ fn open_col(col: u64, idx: u64) -> u64 {
     return merkle_verify_proof((&TQ4 as u64), merkle_pack_verify_meta(4u32, idx as u32, plen), (&PRF as u64), (&TROOT as u64) + col * 32u64) as u64
 }
 
-/* serialise + commit a FRI layer (GF(p^4), 16B leaves) at flat offset off/size into FROOT[li]. */
 fn commit_fri_layer(off: u64, size: u64, li: u64) {
     let mut i : u64 = 0u64
     while i < size {
@@ -186,68 +169,19 @@ fn qb() -> u64 { let mut b : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 
 fn zt_h(q: u64) -> u32 { return sf_sub(OM[(NN * q) & (DOM - 1u64)], 1u32) }
 fn zt_fac(q: u64) -> u32 { return sf_sub(OM[q], OM[DOM - BLOW]) }
 
-/* PROVER: build the fused trace (verbatim zk_fused_prod), commit the 19 trace columns, FS-derive the combination
- * alpha from the trace commitment, build the GF(p^4) CP, FRI-fold + commit every layer. */
-fn build(forge: u64) {
-    air_reset(WCOL as u32, NN as u32)
-    let mut k : u64 = 0u64
-    while k < 32u64 {
-        AP[k] = k as u32  VP[k] = sf_mul(7u32, k as u32)  WP[k] = 1u32
-        AP[32u64 + k] = k as u32  VP[32u64 + k] = sf_mul(7u32, k as u32)  WP[32u64 + k] = 0u32
-        AS[2u64 * k] = k as u32  VS[2u64 * k] = sf_mul(7u32, k as u32)  WS[2u64 * k] = 1u32
-        AS[2u64 * k + 1u64] = k as u32  VS[2u64 * k + 1u64] = sf_mul(7u32, k as u32)  WS[2u64 * k + 1u64] = 0u32
-        k = k + 1u64
-    }
-    if forge == 1u64 { VS[1] = 99u32 }
-    if forge == 2u64 { VP[32] = 99u32 }
-    let mut i : u64 = 0u64
-    while i < 64u64 {
-        air_set_trace(i, 0u64, i as u32)  air_set_trace(i, 1u64, AP[i])  air_set_trace(i, 2u64, VP[i])  air_set_trace(i, 3u64, WP[i])
-        air_set_trace(i, 4u64, AS[i])  air_set_trace(i, 5u64, VS[i])  air_set_trace(i, 6u64, WS[i])
-        i = i + 1u64
-    }
-    let aa1 : u32 = air_perm_setup(1u64, 6u64)
-    let b1b : u32 = air_perm_beta()  let b2b : u32 = air_perm_r4()  let b3b : u32 = air_perm_r5()  let b4b : u32 = air_perm_r7()
-    let aa2 : u32 = air_perm_r2()  let aa3 : u32 = air_perm_r3()  let aa4 : u32 = air_perm_r6()
-    P1[0] = 1u32  S1[0] = 1u32  P2[0] = 1u32  S2[0] = 1u32  P3[0] = 1u32  S3[0] = 1u32  P4[0] = 1u32  S4[0] = 1u32
-    let q1 : u32 = sf_mul(b1b, b1b)  let q2 : u32 = sf_mul(b2b, b2b)  let q3 : u32 = sf_mul(b3b, b3b)  let q4 : u32 = sf_mul(b4b, b4b)
-    i = 0u64
-    while i < 63u64 {
-        P1[i + 1u64] = sf_mul(P1[i], encf(AP[i], VP[i], WP[i], aa1, b1b, q1))  S1[i + 1u64] = sf_mul(S1[i], encf(AS[i], VS[i], WS[i], aa1, b1b, q1))
-        P2[i + 1u64] = sf_mul(P2[i], encf(AP[i], VP[i], WP[i], aa2, b2b, q2))  S2[i + 1u64] = sf_mul(S2[i], encf(AS[i], VS[i], WS[i], aa2, b2b, q2))
-        P3[i + 1u64] = sf_mul(P3[i], encf(AP[i], VP[i], WP[i], aa3, b3b, q3))  S3[i + 1u64] = sf_mul(S3[i], encf(AS[i], VS[i], WS[i], aa3, b3b, q3))
-        P4[i + 1u64] = sf_mul(P4[i], encf(AP[i], VP[i], WP[i], aa4, b4b, q4))  S4[i + 1u64] = sf_mul(S4[i], encf(AS[i], VS[i], WS[i], aa4, b4b, q4))
-        i = i + 1u64
-    }
-    i = 0u64
-    while i < 64u64 {
-        let inx : u64 = (i + 1u64) & 63u64
-        DM[i] = sf_sub(AS[inx], AS[i])  WV[i] = inv0(DM[i])
-        if DM[i] == 0u32 { IZ[i] = 1u32 } else { IZ[i] = 0u32 }
-        RA[i] = sf_mul(IZ[i], sf_sub(VS[inx], VS[i]))
-        i = i + 1u64
-    }
-    i = 0u64
-    while i < 64u64 {
-        air_set_trace(i, 7u64, P1[i])  air_set_trace(i, 8u64, S1[i])  air_set_trace(i, 9u64, P2[i])  air_set_trace(i, 10u64, S2[i])
-        air_set_trace(i, 11u64, P3[i])  air_set_trace(i, 12u64, S3[i])  air_set_trace(i, 13u64, P4[i])  air_set_trace(i, 14u64, S4[i])
-        air_set_trace(i, 15u64, DM[i])  air_set_trace(i, 16u64, WV[i])  air_set_trace(i, 17u64, IZ[i])  air_set_trace(i, 18u64, RA[i])
-        i = i + 1u64
-    }
+/* Shared constraint+CP+FRI tail (verbatim build() body after the accumulator columns are set). */
+fn finish_proof() {
     air_build_lde()
-    /* commit the 19 trace-column LDEs, then FS-derive the combination alpha from the concatenated roots. */
     let mut c : u64 = 0u64
     while c < WCOL { commit_col(c)  c = c + 1u64 }
     keccak256_oneshot((&TROOT as u64), WCOL * 32u64, (&DIG as u64))
     c = 0u64
     while c < 20u64 {
-        /* derive a fresh per-constraint alpha by re-hashing (chain DIG). */
         ALA[c] = e2pack(rd4(0u64), rd4(4u64))  ALB[c] = e2pack(rd4(8u64), rd4(12u64))
         air_set_alpha_ext4(c, ALA[c], ALB[c])
         keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))
         c = c + 1u64
     }
-    /* the 20 transition constraints + perm terms (verbatim zk_fused_prod). */
     air_add_term(0u32, 1u32, 20u32, 0u32)  air_add_term(0u32, NEG1, 1u32, 0u32)  air_add_term(0u32, NEG1, 0u32, 0u32)
     air_add_term(1u32, 1u32, 4u32, 3u32)   air_add_term(1u32, NEG7, 4u32, 2u32)
     air_add_term(2u32, 1u32, 7u32, 6u32)   air_add_term(2u32, NEG7, 7u32, 5u32)
@@ -269,7 +203,6 @@ fn build(forge: u64) {
     air_add_term(18u32, 1u32, 7u32, 7u32) air_add_term(18u32, NEG1, 7u32, 0u32)
     air_add_term(19u32, 1u32, 18u32, 18u32) air_add_term(19u32, NEG1, 18u32, 0u32)
     air_build_cp_ext4()
-    /* FRI layer 0 = CP; fold + commit each layer; fold challenge from each committed root. */
     let mut j : u64 = 0u64
     while j < DOM { FA[j] = air_cp_ext4_a(j)  FB[j] = air_cp_ext4_b(j)  j = j + 1u64 }
     let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
@@ -291,24 +224,76 @@ fn build(forge: u64) {
     commit_fri_layer(off, size, li)
 }
 
-/* the k=4 permutation boundary at OPENED accumulator leaves.  SOUND grand product requires BOTH the START PIN
- * P_k[0]==S_k[0]==1 (Z(1)=1) AND the final equality P_k[63]==S_k[63].  Without the seed pin a malicious prover rigs
- * S_k[0]=Pi_p_k*inv(Pi_s_k) so a NON-permutation satisfies the final equality -> ACCEPT (DOCS/III-ZK-PERM-SEED-GAP).
- * With both seeds pinned to 1, P_k[63]==S_k[63] forces Pi_p_k==Pi_s_k -> genuine permutation. All leaves merkle-opened. */
+/* fill cols 0..6 (program + sorted) for the forged (VP[32]=99) non-permutation trace, derive perm challenges. */
+var AA1:[u32;1] var AA2:[u32;1] var AA3:[u32;1] var AA4:[u32;1]
+var B1:[u32;1]  var B2:[u32;1]  var B3:[u32;1]  var B4:[u32;1]
+var Q1:[u32;1]  var Q2:[u32;1]  var Q3:[u32;1]  var Q4:[u32;1]
+fn setup_forged_trace() {
+    air_reset(WCOL as u32, NN as u32)
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        AP[k] = k as u32  VP[k] = sf_mul(7u32, k as u32)  WP[k] = 1u32
+        AP[32u64 + k] = k as u32  VP[32u64 + k] = sf_mul(7u32, k as u32)  WP[32u64 + k] = 0u32
+        AS[2u64 * k] = k as u32  VS[2u64 * k] = sf_mul(7u32, k as u32)  WS[2u64 * k] = 1u32
+        AS[2u64 * k + 1u64] = k as u32  VS[2u64 * k + 1u64] = sf_mul(7u32, k as u32)  WS[2u64 * k + 1u64] = 0u32
+        k = k + 1u64
+    }
+    VP[32] = 99u32                                  /* forge==2: program LOAD at addr 0 reads 99, not 0 -> NON-permutation */
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        air_set_trace(i, 0u64, i as u32)  air_set_trace(i, 1u64, AP[i])  air_set_trace(i, 2u64, VP[i])  air_set_trace(i, 3u64, WP[i])
+        air_set_trace(i, 4u64, AS[i])  air_set_trace(i, 5u64, VS[i])  air_set_trace(i, 6u64, WS[i])
+        i = i + 1u64
+    }
+    air_perm_setup(1u64, 6u64)
+    B1[0] = air_perm_beta()  B2[0] = air_perm_r4()  B3[0] = air_perm_r5()  B4[0] = air_perm_r7()
+    AA1[0] = air_perm_setup(1u64, 6u64)  AA2[0] = air_perm_r2()  AA3[0] = air_perm_r3()  AA4[0] = air_perm_r6()
+    Q1[0] = sf_mul(B1[0], B1[0])  Q2[0] = sf_mul(B2[0], B2[0])  Q3[0] = sf_mul(B3[0], B3[0])  Q4[0] = sf_mul(B4[0], B4[0])
+    /* memory-consistency helper columns (sorted): honest -- they validate the (honest) sorted trace as read-consistent. */
+    i = 0u64
+    while i < 64u64 {
+        let inx : u64 = (i + 1u64) & 63u64
+        DM[i] = sf_sub(AS[inx], AS[i])  WV[i] = inv0(DM[i])
+        if DM[i] == 0u32 { IZ[i] = 1u32 } else { IZ[i] = 0u32 }
+        RA[i] = sf_mul(IZ[i], sf_sub(VS[inx], VS[i]))
+        i = i + 1u64
+    }
+}
+
+/* run the k=4 grand products with a chosen seed pair (p0_k, s0_k); fill P/S arrays rows 0..63. */
+fn run_products(p10:u32, s10:u32, p20:u32, s20:u32, p30:u32, s30:u32, p40:u32, s40:u32) {
+    P1[0]=p10  S1[0]=s10  P2[0]=p20  S2[0]=s20  P3[0]=p30  S3[0]=s30  P4[0]=p40  S4[0]=s40
+    let mut i : u64 = 0u64
+    while i < 63u64 {
+        P1[i + 1u64] = sf_mul(P1[i], encf(AP[i], VP[i], WP[i], AA1[0], B1[0], Q1[0]))  S1[i + 1u64] = sf_mul(S1[i], encf(AS[i], VS[i], WS[i], AA1[0], B1[0], Q1[0]))
+        P2[i + 1u64] = sf_mul(P2[i], encf(AP[i], VP[i], WP[i], AA2[0], B2[0], Q2[0]))  S2[i + 1u64] = sf_mul(S2[i], encf(AS[i], VS[i], WS[i], AA2[0], B2[0], Q2[0]))
+        P3[i + 1u64] = sf_mul(P3[i], encf(AP[i], VP[i], WP[i], AA3[0], B3[0], Q3[0]))  S3[i + 1u64] = sf_mul(S3[i], encf(AS[i], VS[i], WS[i], AA3[0], B3[0], Q3[0]))
+        P4[i + 1u64] = sf_mul(P4[i], encf(AP[i], VP[i], WP[i], AA4[0], B4[0], Q4[0]))  S4[i + 1u64] = sf_mul(S4[i], encf(AS[i], VS[i], WS[i], AA4[0], B4[0], Q4[0]))
+        i = i + 1u64
+    }
+}
+fn set_acc_cols() {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        air_set_trace(i, 7u64, P1[i])  air_set_trace(i, 8u64, S1[i])  air_set_trace(i, 9u64, P2[i])  air_set_trace(i, 10u64, S2[i])
+        air_set_trace(i, 11u64, P3[i])  air_set_trace(i, 12u64, S3[i])  air_set_trace(i, 13u64, P4[i])  air_set_trace(i, 14u64, S4[i])
+        air_set_trace(i, 15u64, DM[i])  air_set_trace(i, 16u64, WV[i])  air_set_trace(i, 17u64, IZ[i])  air_set_trace(i, 18u64, RA[i])
+        i = i + 1u64
+    }
+}
+
 fn boundary_ok() -> u64 {
     let bi : u64 = 63u64 * BLOW
-    let bi0 : u64 = 0u64                               /* trace row 0 -> LDE index 0: the accumulator SEED */
+    let bi0 : u64 = 0u64                               /* SEED-PIN FIX mirrored from zk_fused_committed.iii */
     let mut kk : u64 = 0u64
     while kk < 4u64 {
         let pcol : u64 = 7u64 + 2u64 * kk  let scol : u64 = 8u64 + 2u64 * kk
-        /* SEED PIN (Z(1)=1): P_k[0] and S_k[0] must BOTH equal 1, opened+verified at row 0. */
         if open_col(pcol, bi0) == 0u64 { return 0u64 }
         let p0 : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
         if p0 != 1u32 { return 0u64 }
         if open_col(scol, bi0) == 0u64 { return 0u64 }
         let s0 : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
         if s0 != 1u32 { return 0u64 }
-        /* FINAL EQUALITY: P_k[63]==S_k[63] (with both seeds pinned to 1 -> Pi_p_k==Pi_s_k -> permutation). */
         if open_col(pcol, bi) == 0u64 { return 0u64 }
         let pv : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
         if open_col(scol, bi) == 0u64 { return 0u64 }
@@ -320,7 +305,6 @@ fn boundary_ok() -> u64 {
 }
 
 fn verify() -> u64 {
-    /* re-derive combination alpha from the committed trace roots (same chain as build). */
     keccak256_oneshot((&TROOT as u64), WCOL * 32u64, (&DIG as u64))
     let mut c : u64 = 0u64
     while c < 20u64 {
@@ -329,7 +313,6 @@ fn verify() -> u64 {
         keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))
         c = c + 1u64
     }
-    /* re-derive FRI fold challenges + offsets from the committed layer roots. */
     let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut i : u64 = 0u64
     while size > 4u64 {
         OFFS[i] = off  SIZES[i] = size
@@ -342,7 +325,6 @@ fn verify() -> u64 {
     let fa0 : u64 = FA[foff]  let fb0 : u64 = FB[foff]
     let mut cc : u64 = 1u64
     while cc < 4u64 { if FA[foff + cc] != fa0 { return 0u64 }  if FB[foff + cc] != fb0 { return 0u64 }  cc = cc + 1u64 }
-    /* queries from keccak(final FRI root): NBATCH re-hash batches of NQPB -> 128 FS-derived queries (~2^-86). */
     keccak256_oneshot((&FROOT as u64) + nl * 32u64, 32u64, (&DIG as u64))
     let mut batch : u64 = 0u64
     while batch < NBATCH {
@@ -350,7 +332,6 @@ fn verify() -> u64 {
       while qi < NQPB {
         let pq : *u8 = ((&DIG as u64) + qi) as *u8
         let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
-        /* bind air's combine: open+verify ALL 19 columns at q0 and at q0+B (every leaf air_eval_var reads). */
         let qn : u64 = (q0 + BLOW) & (DOM - 1u64)
         let mut col : u64 = 0u64
         while col < WCOL {
@@ -358,14 +339,12 @@ fn verify() -> u64 {
             if open_col(col, qn) == 0u64 { return 0u64 }
             col = col + 1u64
         }
-        /* open CP(q0) (FRI layer 0) + the line-755 against air's now-bound combine. */
         if open_fri(0u64, DOM, q0, 0u64) == 0u64 { return 0u64 }
         let cpa : u64 = qa()  let cpb : u64 = qb()
         let mba : u64 = air_combine_ext4_at(q0)  let mbb : u64 = air_cmb4_b()
         let zh : u32 = zt_h(q0)  let fac : u32 = zt_fac(q0)
         if ext2_smul(zh, cpa) != ext2_smul(fac, mba) { return 0u64 }
         if ext2_smul(zh, cpb) != ext2_smul(fac, mbb) { return 0u64 }
-        /* FRI fold-consistency up the layers (opened + verified). */
         let mut li : u64 = 0u64
         while li < nl {
             let s : u64 = SIZES[li]  let o : u64 = OFFS[li]  let half : u64 = s / 2u64
@@ -383,7 +362,7 @@ fn verify() -> u64 {
         }
         qi = qi + 1u64
       }
-      keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))   /* re-hash for the next query batch */
+      keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))
       batch = batch + 1u64
     }
     return 1u64
@@ -391,27 +370,35 @@ fn verify() -> u64 {
 
 fn main() -> u64 {
     fill_om()
-    /* (H) honest: committed verify ACCEPTS + the k=4 boundary holds. */
-    build(0u64)
-    if verify() != 1u64 { return 1u64 }
-    if boundary_ok() != 1u64 { return 2u64 }
-    /* (L) forged LOAD value (read-consistency): line-755 REJECTS. */
-    build(1u64)
-    if verify() == 1u64 { return 3u64 }
-    /* (P) forged program access (non-permutation): transitions still hold but the k=4 boundary REJECTS. */
-    build(2u64)
-    if verify() != 1u64 { return 5u64 }
-    if boundary_ok() == 1u64 { return 4u64 }
-    /* (O) forged trace OPENING: claim a wrong leaf -> Merkle REJECTS. */
-    build(0u64)
-    commit_col(0u64)
-    let plen : u32 = merkle_proof_len_for(DOM as u32, 0u32)
-    merkle_compute_proof((&TLEAF as u64), 4u64, merkle_pack_count_index(DOM as u32, 0u32), (&PRF as u64))
-    TQ4[0u64] = TLEAF[0u64] ^ 1u8  TQ4[1u64] = TLEAF[1u64]  TQ4[2u64] = TLEAF[2u64]  TQ4[3u64] = TLEAF[3u64]
-    if merkle_verify_proof((&TQ4 as u64), merkle_pack_verify_meta(4u32, 0u32, plen), (&PRF as u64), (&TROOT as u64)) != 0u8 { return 6u64 }
-    /* (R) corrupted committed root: verify REJECTS. */
-    build(0u64)
-    FROOT[0u64] = FROOT[0u64] ^ 1u8
-    if verify() == 1u64 { return 7u64 }
-    return 99u64
+    setup_forged_trace()
+    /* (1) CONTROL: honest seeds=1 -> products end at Pi_p_k, Pi_s_k. Confirm the trace is a genuine NON-permutation
+     *     (some k has P_k[63] != S_k[63]); capture Pi_p_k, Pi_s_k. */
+    run_products(1u32,1u32, 1u32,1u32, 1u32,1u32, 1u32,1u32)
+    let pp1 : u32 = P1[63]  let ps1 : u32 = S1[63]
+    let pp2 : u32 = P2[63]  let ps2 : u32 = S2[63]
+    let pp3 : u32 = P3[63]  let ps3 : u32 = S3[63]
+    let pp4 : u32 = P4[63]  let ps4 : u32 = S4[63]
+    let mut nonperm : u64 = 0u64
+    if pp1 != ps1 { nonperm = 1u64 }
+    if pp2 != ps2 { nonperm = 1u64 }
+    if pp3 != ps3 { nonperm = 1u64 }
+    if pp4 != ps4 { nonperm = 1u64 }
+    if nonperm == 0u64 { return 50u64 }                 /* would mean it IS a permutation -- nothing to forge */
+    /* control sanity: with honest seeds, commit + boundary REJECTS (the existing gate's behaviour). */
+    set_acc_cols()
+    finish_proof()
+    if boundary_ok() == 1u64 { return 51u64 }           /* honest seeds MUST be rejected by boundary; if accepted, demo is moot */
+    /* (2) ATTACK: rig S_k[0] = Pi_p_k * inv(Pi_s_k), keep P_k[0]=1. Re-run products, re-commit, re-prove. */
+    setup_forged_trace()
+    let s10 : u32 = sf_mul(pp1, base_inv(ps1))
+    let s20 : u32 = sf_mul(pp2, base_inv(ps2))
+    let s30 : u32 = sf_mul(pp3, base_inv(ps3))
+    let s40 : u32 = sf_mul(pp4, base_inv(ps4))
+    run_products(1u32,s10, 1u32,s20, 1u32,s30, 1u32,s40)
+    set_acc_cols()
+    finish_proof()
+    /* the malicious accept: transitions hold (recurrence satisfied) AND boundary holds (seed absorbed the ratio). */
+    if verify() != 1u64 { return 52u64 }                /* transitions DO hold for the rig (recurrence satisfied) -- expected */
+    if boundary_ok() == 1u64 { return 2u64 }            /* boundary ACCEPTS the seed-rigged non-permutation -> HOLE OPEN (RED) */
+    return 99u64                                        /* SEED PIN rejects the rigged non-permutation -> SOUND (the fix holds) */
 }

@@ -477,6 +477,13 @@ fn elor_tail() {
     }
 }
 fn ebin(minp: u32) {
+    if minp==0u32 { if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ASN {   /* NAME = rhs : assignment EXPRESSION (a=b=c, while((c=x)), f(c=x)) -- only a SIMPLE local lvalue */
+        let t:u32=C  let li:i32=lidx(t)  if li>=0i32 {
+            C=C+2u32  ebin(0u32)                                  /* rhs (right-assoc -> a=b=c folds correctly) */
+            let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
+            eu8(0x11u32,tmp)  eu8(0x10u32,tmp)  emit_lset(li as u32)  eu8(0x10u32,tmp)  return   /* tmp=rhs (decouple value from spill store) ; store ; leave value */
+        }
+    } } } }
     eprim()  let mut go:u32=1u32
     while go==1u32 {
         if TK[C as u64]!=3u32 { go=0u32 }
@@ -575,14 +582,14 @@ fn pstmt() {
     if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
     if cp(Q_INC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* ++lvalue ; (prefix inc statement -> eval + DROP) */
     if cp(Q_DEC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* --lvalue ; */
-    if cp(Q_MUL)==1u32 {                                            /* *p = e ;  (pointer deref store, typed width) */
+    if cp(Q_MUL)==1u32 {                                            /* *p [op]= e ;  (pointer deref store/compound, typed width) */
         C=C+1u32
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 {
-            let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]   /* read into immutable lets BEFORE eprim (direct read, multi-use dli -> spilled) */
-            eprim()  eat(Q_ASN)  ebin(0u32)
-            if lp<0i32 { estore(psz) } else { estore(8i64) }
+            let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]  let psg:u32=LPSG[dli as u64]   /* read into immutable lets BEFORE eprim (direct read, multi-use dli -> spilled) */
+            eprim()                                                 /* store ADDRESS: *p (or *p++ -> old p, advance) */
+            if lp<0i32 { emit_av(psz, psg, 0i64) } else { emit_av(8i64, 0u32, 0i64) }   /* = or op= (compound) via the unified store */
             eat(Q_SEMI)  return } }
-        eprim()  eat(Q_ASN)  ebin(0u32)  estore(8i64)  eat(Q_SEMI)  return   /* complex deref expr -> 8 */
+        eprim()  emit_av(8i64, 0u32, 0i64)  eat(Q_SEMI)  return   /* complex deref expr -> 8 */
     }
     if kw(C,"struct" as u64,6u32)==1u32 {
         let sti:i32=stidx(C+1u32)

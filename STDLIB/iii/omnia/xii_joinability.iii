@@ -64,6 +64,10 @@ var XJN_NJ_J  : [u64; 128] /* every NONJOIN: rewritten rule-id (rid_j) */
 var XJN_NJ_P  : [u64; 128] /* every NONJOIN: position (0=ca 1=cb 2=cc for subterm; 0 for root) */
 var XJN_NJ_K  : [u64; 128] /* every NONJOIN: overlap kind (0=root 1=subterm) -- B-JN-1: pos alone
                             * cannot separate a root non-join from a ca-position subterm one */
+var XJN_NJ_RV : [u8; 128]  /* C.1 per-pair route-R PROOF (COMPUTED, not asserted): 1 iff xii_canonicalise reduces this
+                            * pair's UNREDUCED witness to the SAME NF as the inner-first reduct -- i.e. the strategy
+                            * reduces the inner redex before the outer lift, so the divergent outer-first reduct is
+                            * non-normal-reachable.  Read by xii_discharge::xdc_route_of as is_subterm -> 0 => BOUNDARY. */
 
 /* A guard-firing instance of an XII kind (the kind->sentinel map). */
 fn _xjn_inst(kind: u64) -> u32 {
@@ -165,6 +169,26 @@ fn _xjn_check_idx(k: u32) -> u8 {
     return xjn_check_subterm(si, sj, cpe_pos_at(k))
 }
 
+/* C.1 route-R SOUNDNESS, computed PER PAIR (not asserted from two global facts): route R holds for a subterm overlap
+ * iff xii_canonicalise's normal form of the UNREDUCED witness equals the inner-first NF -- so the strategy reduces the
+ * inner redex (rule_i) before the outer lift (rule_j), and the divergent outer-first reduct is non-normal-reachable.
+ * Returns 1 (route R verified for this pair) / 0 (NOT inner-first-discharged -> xdc grades it BOUNDARY, with teeth).
+ * Builds fresh witnesses in its own arena (called AFTER _xjn_check_idx's arena work, so the reset is safe). */
+fn xjn_route_r_holds(slot_i: u32, slot_j: u32, pos: u32) -> u8 {
+    let rid_i : u32 = xrp_rid_at(slot_i)
+    xii_term_arena_reset()
+    let w : u32 = _xjn_build_witness(slot_j, slot_j)      /* W = j's redex with i's redex at child[pos], UNREDUCED */
+    let cw : u32 = _xjn_build_witness(slot_i, slot_i)
+    _xjn_set_child(w, pos, cw)
+    let wb : u32 = _xjn_build_witness(slot_j, slot_j)      /* inner-first reduct: a FRESH witness, rule_i fired at the child */
+    let cb : u32 = _xjn_build_witness(slot_i, slot_i)
+    _xjn_set_child(wb, pos, cb)
+    let chp : u32 = xii_rewrite_apply_specific(rid_i, cb)
+    if xii_rewrite_last_rule_fired() != rid_i { return 0u8 }   /* the inner reduct could not be built -> not R-discharged */
+    _xjn_set_child(wb, pos, chp)
+    return xjn_converge(w, wb)                            /* canonicalise(W) == inner-first NF  =>  route R verified */
+}
+
 /* The gate: iterate the enumerated table, tally verdicts.  GREEN(1) iff zero NONJOIN. */
 fn xjn_gate() -> u32 @export {
     let n : u64 = cpe_enumerate() as u64
@@ -177,7 +201,7 @@ fn xjn_gate() -> u32 @export {
         if v == 1u8 { join = join + 1u64 }
         if v == 2u8 { nowit = nowit + 1u64 }
         if v == 0u8 {
-            if nonjoin < 128u64 { XJN_NJ_I[nonjoin] = xrp_rid_at(cpe_si_at(k as u32)) as u64  XJN_NJ_J[nonjoin] = xrp_rid_at(cpe_sj_at(k as u32)) as u64  XJN_NJ_P[nonjoin] = cpe_pos_at(k as u32) as u64  XJN_NJ_K[nonjoin] = cpe_kind_at(k as u32) }
+            if nonjoin < 128u64 { XJN_NJ_I[nonjoin] = xrp_rid_at(cpe_si_at(k as u32)) as u64  XJN_NJ_J[nonjoin] = xrp_rid_at(cpe_sj_at(k as u32)) as u64  XJN_NJ_P[nonjoin] = cpe_pos_at(k as u32) as u64  XJN_NJ_K[nonjoin] = cpe_kind_at(k as u32)  if cpe_kind_at(k as u32) == 1u64 { XJN_NJ_RV[nonjoin] = xjn_route_r_holds(cpe_si_at(k as u32), cpe_sj_at(k as u32), cpe_pos_at(k as u32)) } else { XJN_NJ_RV[nonjoin] = 0u8 } }
             nonjoin = nonjoin + 1u64
         }
         k = k + 1u64
@@ -197,6 +221,7 @@ fn xjn_njtab_i(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64
 fn xjn_njtab_j(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_J[i] }
 fn xjn_njtab_p(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_P[i] }
 fn xjn_njtab_k(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_K[i] }
+fn xjn_njtab_rv(k: u32) -> u8 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u8 }  return XJN_NJ_RV[i] }
 
 /* v in [lo,hi] (unsigned compares -- safe). */
 fn _xjn_in(v: u64, lo: u64, hi: u64) -> u8 { if v < lo { return 0u8 } if v > hi { return 0u8 } return 1u8 }

@@ -27,6 +27,7 @@ extern @abi(c-msvc-x64) fn xjn_nonjoin_count() -> u64 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xjn_njtab_i(k: u32) -> u64 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xjn_njtab_j(k: u32) -> u64 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xjn_njtab_p(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_rv(k: u32) -> u8 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xjn_gate_root() -> u32 from "xii_joinability.iii"
 extern @abi(c-msvc-x64) fn xsd_strategy_is_deterministic() -> u8 from "xii_strategy_det.iii"
 
@@ -90,7 +91,10 @@ fn xdc_route_of(k: u32) -> u8 @export {
     let mut assoc : u8 = 0u8
     if _xdc_in(i, 1u64, 4u64) == 1u8 { assoc = 1u8 }
     if _xdc_in(j, 1u64, 4u64) == 1u8 { assoc = 1u8 }
-    return xdc_route_classify(assoc, 1u8, 0u8)
+    /* is_subterm is now COMPUTED per pair: xjn_njtab_rv(k)==1 iff xii_canonicalise actually reduces THIS pair's
+     * witness inner-first (the route-R proof), not the literal 1 it used to be -- so if a pair is NOT inner-first-
+     * discharged the classifier genuinely returns BOUNDARY (is_cost_equal stays 0: route C is out of scope, ARCH S3.C). */
+    return xdc_route_classify(assoc, xjn_njtab_rv(k), 0u8)
 }
 
 /* The per-pair PROOF HANDLE: the overlap witness coordinates (rid_i, rid_j, pos) packed into one u64.

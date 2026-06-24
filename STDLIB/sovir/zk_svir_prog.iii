@@ -1,0 +1,105 @@
+/* zk_svir_prog.iii -- the COMPOSITION (Omega1-T7 seed): prove a real SVIR PROGRAM with CONTROL FLOW by running the
+ * EXECUTION-dispatch argument AND the CONTROL-flow argument on ONE trace.  Where the per-opcode bricks each prove a
+ * single instruction class in isolation, this proves a whole LOOP -- the bricks become the building.
+ *
+ * Program: a counting loop.  Body = [pc0: ADD (acc += 1), pc1: BR back-or-exit], run 3 times, then halt at pc2.
+ *   trace (8 steps): pc=[0,1,0,1,0,1,2,2], acc=[0,1,1,2,2,3,3,3] -- acc increments on each ADD step, the back-edge
+ *   re-enters the body, the exit branch leaves it.  Two argument types share the trace (columns W=6:
+ *   [pc, acc, is_add, sel_seq, sel_br, target]):
+ *     con0 (EXECUTION dispatch): next.acc - acc - is_add == 0     (ADD steps add 1; non-ADD steps hold)
+ *     con1 (CONTROL pc-update):  next.pc - sel_seq*(pc+1) - sel_br*target == 0
+ *     con2 one-hot ; con3 is_add boolean ; con4 sel_seq boolean
+ * The two arguments are INDEPENDENT (acc says what each step computes; pc says where control goes) yet must BOTH
+ * hold on the same rows -- so a forged result, a forged jump, OR a forged opcode each reddens a different
+ * constraint.  This is the integration the per-opcode gadgets were built for: an arbitrary program is the conjunction
+ * of its execution trace and its control trace.
+ *
+ * Returns 99 iff the honest loop satisfies the AIR AND three soundness negatives are rejected: a FORGED RESULT
+ * (acc tampered -> dispatch con0 breaks), a SKIPPED LOOP (a back-edge relabelled sequential -> control con1 breaks,
+ * the pc won't match a fall-through), and a FAKED COMPUTATION (a non-ADD step claims is_add=1 -> dispatch con0
+ * breaks, an accumulation that didn't happen).  HONEST RESIDUAL: is_add/selectors are given consistent with the
+ * program here; binding them to the actual SVIR bytecode (a program-table lookup) + folding in the memory/call
+ * permutation arguments is the full-VM layer -- the named next step toward attesting an arbitrary EIDOS ripple. */
+module zk_svir_prog
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+
+var PC  : [u32; 8] = [0u32, 1u32, 0u32, 1u32, 0u32, 1u32, 2u32, 2u32]    /* program counter (loop body pc 0,1; halt pc 2) */
+var ACC : [u32; 8] = [0u32, 1u32, 1u32, 2u32, 2u32, 3u32, 3u32, 3u32]    /* accumulator (increments on each ADD) */
+var ISA : [u32; 8] = [1u32, 0u32, 1u32, 0u32, 1u32, 0u32, 0u32, 0u32]    /* is_add: 1 at pc0 (the body's ADD) */
+var SS  : [u32; 8] = [1u32, 0u32, 1u32, 0u32, 1u32, 0u32, 0u32, 1u32]    /* sel_seq: fall-through */
+var SB  : [u32; 8] = [0u32, 1u32, 0u32, 1u32, 0u32, 1u32, 1u32, 0u32]    /* sel_br: taken branch (back-edge/exit/halt) */
+var TG  : [u32; 8] = [0u32, 0u32, 0u32, 0u32, 0u32, 2u32, 2u32, 0u32]    /* branch target (pc1->0 back-edge, pc1->2 exit, pc2->2 halt) */
+
+fn fill_trace() {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, PC[i])
+        air_set_trace(i, 1u64, ACC[i])
+        air_set_trace(i, 2u64, ISA[i])
+        air_set_trace(i, 3u64, SS[i])
+        air_set_trace(i, 4u64, SB[i])
+        air_set_trace(i, 5u64, TG[i])
+        i = i + 1u64
+    }
+}
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    /* vars: 0=const1 ; cur 1=pc 2=acc 3=is_add 4=sel_seq 5=sel_br 6=target ; next 7=pc 8=acc 9=is_add 10=sel_seq 11=sel_br 12=target. */
+    /* con0 (EXECUTION dispatch): next.acc - acc - is_add. */
+    air_add_term(0u32, 1u32, 8u32, 0u32)             /* + next.acc */
+    air_add_term(0u32, p - 1u32, 2u32, 0u32)         /* - acc */
+    air_add_term(0u32, p - 1u32, 3u32, 0u32)         /* - is_add */
+    /* con1 (CONTROL pc-update): next.pc - sel_seq*pc - sel_seq - sel_br*target. */
+    air_add_term(1u32, 1u32, 7u32, 0u32)             /* + next.pc */
+    air_add_term(1u32, p - 1u32, 4u32, 1u32)         /* - sel_seq*pc */
+    air_add_term(1u32, p - 1u32, 4u32, 0u32)         /* - sel_seq */
+    air_add_term(1u32, p - 1u32, 5u32, 6u32)         /* - sel_br*target */
+    /* con2 (one-hot): sel_seq + sel_br - 1. */
+    air_add_term(2u32, 1u32, 4u32, 0u32)
+    air_add_term(2u32, 1u32, 5u32, 0u32)
+    air_add_term(2u32, p - 1u32, 0u32, 0u32)
+    /* con3 (is_add boolean): is_add^2 - is_add. */
+    air_add_term(3u32, 1u32, 3u32, 3u32)
+    air_add_term(3u32, p - 1u32, 3u32, 0u32)
+    /* con4 (sel_seq boolean): sel_seq^2 - sel_seq. */
+    air_add_term(4u32, 1u32, 4u32, 4u32)
+    air_add_term(4u32, p - 1u32, 4u32, 0u32)
+    air_set_alpha(0u64, 3u32)
+    air_set_alpha(1u64, 5u32)
+    air_set_alpha(2u64, 7u32)
+    air_set_alpha(3u64, 9u32)
+    air_set_alpha(4u64, 11u32)
+}
+
+fn build() { air_reset(6u32, 8u32)  fill_trace()  setup_constraints()  air_build_lde()  air_build_cp() }
+
+fn main() -> u64 {
+    /* honest: the loop program -- execution (acc) AND control (pc) both vanish on every step. */
+    build()
+    if air_constraints_hold() != 1u8 { return 1u64 }
+    if air_cp_consistent_at(1u64) != 1u8 { return 7u64 }
+    /* NEGATIVE 1 (forged result): tamper acc_3 (2 -> 9) -> dispatch con0 at step 2 breaks (9 - 1 - 1 = 7). */
+    build()  air_set_trace(3u64, 1u64, 9u32)  air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 0u8 { return 2u64 }
+    /* NEGATIVE 2 (skipped loop): relabel the first back-edge (step1) as sequential (sel_seq 0->1, sel_br 1->0) to
+     * skip the loop -> control con1 at step 1 breaks (next.pc 0 != pc+1 = 2). */
+    build()  air_set_trace(1u64, 3u64, 1u32)  air_set_trace(1u64, 4u64, 0u32)  air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 0u8 { return 3u64 }
+    /* NEGATIVE 3 (faked computation): claim the branch step (step1) also adds (is_add 0->1) -> dispatch con0 at
+     * step 1 breaks (acc_2 - acc_1 - 1 = 1 - 1 - 1 = -1): an accumulation that never happened. */
+    build()  air_set_trace(1u64, 2u64, 1u32)  air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 0u8 { return 4u64 }
+    /* tampers isolated: the honest program proves again. */
+    build()
+    if air_constraints_hold() != 1u8 { return 5u64 }
+    return 99u64
+}

@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -63,6 +63,10 @@ else say "FAIL zkVM-SHIFT: zk_svir_shift=$shfrc (1=trans 2=bound 7=cp 3=NEG-A 4=
 vrc=$(runzk zk_svir_vm)
 if [ "$vrc" = "99" ]; then say "zkVM-TRACE : per-step opcode-dispatched VM (selector ADD/MUL, product materialized for degree-2) ; honest execution holds + forged acc AND forged opcode rejected -> 99"
 else say "FAIL zkVM-TRACE: zk_svir_vm=$vrc"; fail=1; fi
+# (0e) zkVM COMPOSITION: a real LOOP PROGRAM proven by EXECUTION-dispatch (X) CONTROL-flow on ONE trace -- the Ω1-T7 integration.
+progrc=$(runzk zk_svir_prog)
+if [ "$progrc" = "99" ]; then say "zkVM-COMPOSE : a real SVIR loop program (a 3-iteration counting loop) proven by BOTH the execution-dispatch (acc += is_add) AND the control-flow (pc back-edge/exit) arguments on ONE trace over GF(998244353) -- the per-opcode bricks composed into a whole-program proof ; honest loop holds + a FORGED RESULT (dispatch-caught) + a SKIPPED LOOP (control-caught) + a FAKED COMPUTATION (dispatch-caught) all rejected -> 99 (Ω1-T7: a program = the conjunction of its execution + control traces)"
+else say "FAIL zkVM-COMPOSE: zk_svir_prog=$progrc (1=honest 7=cp 2=forged-result 3=skipped-loop 4=faked-compute 5=re-prove)"; fail=1; fi
 
 # (A) ZK-attested.  zk_air (with the additive air_lde_at accessor) is in libiii_native.a; link the archive.
 gcc "$W/zk_svir_exec.o" "$LIB" -lkernel32 -o "$W/zk_svir_exec.exe" 2>/dev/null

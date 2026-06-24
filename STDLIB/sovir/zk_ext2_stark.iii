@@ -1,0 +1,87 @@
+/* zk_ext2_stark.iii -- the COMBINE -> CP -> FRI core of a GF(p^2) STARK, the proof-of-concept for lifting the live
+ * air_stark to the extension field.  After the GF(p^2) arithmetic (zk_ext2) and the GF(p^2) FRI fold (zk_ext2_fri),
+ * this is the missing middle: the constraint-combination step, done over GF(p^2).
+ *
+ * Two constraint evaluations C0, C1 on a size-16 base-field domain are combined by a GF(p^2) challenge alpha into the
+ * composition polynomial  CP(x) = C0(x) + alpha * C1(x)  (a GF(p^2)-valued function: C0,C1 base-field embed as
+ * (c,0), and alpha*C1 = ext2_smul(C1, alpha)).  CP is low-degree iff BOTH C0 and C1 are -- i.e. iff every constraint
+ * holds.  The GF(p^2) FRI fold then certifies low-degree.  In the live STARK, C_i = constraint_i / Z_T and a false
+ * statement makes some C_i non-polynomial; here C1's DEGREE stands in for "the constraint holds (low) vs is violated
+ * (high)".  The combination challenge ranging over GF(p^2) (~2^60) instead of F_p (~2^30) is the soundness lift.
+ *
+ * Returns 99 iff a TRUE statement (C0,C1 both degree-3) yields a low-degree CP that folds to a CONSTANT (ACCEPT) AND a
+ * FALSE statement (C1 degree-15) yields a high-degree CP that does NOT (REJECT). */
+module zk_ext2_stark
+
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+
+const PRIME : u32 = 998244353u32
+
+var OM : [u32; 16] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+var FA : [u32; 16] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+var FB : [u32; 16] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+var CP : [u64; 16] = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+var CA : [u32; 16] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+var CB : [u32; 16] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+
+fn base_inv(v: u32) -> u32 {
+    let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
+    while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }
+    return r
+}
+fn fill_om() {
+    let om : u32 = sf_rou(16u32)  OM[0] = 1u32
+    let mut j : u64 = 1u64
+    while j < 16u64 { OM[j] = sf_mul(OM[j - 1u64], om)  j = j + 1u64 }
+}
+/* set CA / CB to a degree-(ncoef-1) base-field polynomial's coefficients (distinct seeds so C0 != C1). */
+fn set_ca(ncoef: u64) { let mut k : u64 = 0u64  while k < 16u64 { if k < ncoef { CA[k] = ((k as u32)*131u32)+5u32 } else { CA[k] = 0u32 }  k = k + 1u64 } }
+fn set_cb(ncoef: u64) { let mut k : u64 = 0u64  while k < 16u64 { if k < ncoef { CB[k] = ((k as u32)*977u32)+3u32 } else { CB[k] = 0u32 }  k = k + 1u64 } }
+fn eval_fa() { let mut j : u64 = 0u64  while j < 16u64 { let mut a : u32 = 0u32  let mut k : u64 = 0u64  while k < 16u64 { a = sf_add(a, sf_mul(CA[k], OM[(j*k)&15u64]))  k = k + 1u64 }  FA[j] = a  j = j + 1u64 } }
+fn eval_fb() { let mut j : u64 = 0u64  while j < 16u64 { let mut a : u32 = 0u32  let mut k : u64 = 0u64  while k < 16u64 { a = sf_add(a, sf_mul(CB[k], OM[(j*k)&15u64]))  k = k + 1u64 }  FB[j] = a  j = j + 1u64 } }
+
+/* CP(x) = C0(x) + alpha * C1(x), a GF(p^2) function (the constraint combination over the extension field). */
+fn combine(alpha: u64) {
+    let mut j : u64 = 0u64
+    while j < 16u64 { CP[j] = ext2_add(e2pack(FA[j], 0u32), ext2_smul(FB[j], alpha))  j = j + 1u64 }
+}
+fn fold(size: u64, gstep: u64, r: u64) {
+    let inv2 : u32 = base_inv(2u32)  let half : u64 = size / 2u64
+    let mut j : u64 = 0u64
+    while j < half {
+        let x  : u32 = OM[j * gstep]
+        let lo : u64 = CP[j]  let hi : u64 = CP[j + half]
+        let fe : u64 = ext2_smul(inv2, ext2_add(lo, hi))
+        let fo : u64 = ext2_smul(base_inv(sf_add(x, x)), ext2_sub(lo, hi))
+        CP[j] = ext2_add(fe, ext2_mul(r, fo))
+        j = j + 1u64
+    }
+}
+fn low_degree_ok(r1: u64, r2: u64) -> u64 {
+    fold(16u64, 1u64, r1)  fold(8u64, 2u64, r2)
+    if CP[0] != CP[1] { return 0u64 }
+    if CP[1] != CP[2] { return 0u64 }
+    if CP[2] != CP[3] { return 0u64 }
+    return 1u64
+}
+
+fn main() -> u64 {
+    fill_om()
+    let alpha : u64 = e2pack(13u32, 9u32)    /* the GF(p^2) constraint-combination challenge */
+    let r1 : u64 = e2pack(7u32, 3u32)
+    let r2 : u64 = e2pack(11u32, 5u32)
+    /* TRUE: C0,C1 both degree-3 -> CP = C0 + alpha*C1 is low-degree -> folds to a constant -> ACCEPT. */
+    set_ca(4u64)  set_cb(4u64)  eval_fa()  eval_fb()  combine(alpha)
+    if low_degree_ok(r1, r2) != 1u64 { return 1u64 }
+    /* FALSE: C1 degree-15 (a violated constraint) -> CP high-degree -> NOT constant -> REJECT. */
+    set_cb(16u64)  eval_fb()  combine(alpha)
+    if low_degree_ok(r1, r2) == 1u64 { return 2u64 }
+    return 99u64
+}

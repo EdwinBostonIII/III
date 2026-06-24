@@ -223,8 +223,8 @@ fn aisc(t: u32) -> u32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL
 var DCM_MO:[u32;128]  var DCM_ML:[u32;128]  var DCM_AO:[u32;128]  var DCM_AL:[u32;128]  var DCM_N:u32=0u32   /* deferred array-count macros: `#define N (sizeof(ARR)/sizeof(ARR[0]))` -> resolve N to ALEN(ARR) at the USE site (ARR registered by then) */
 fn alen_by_name(o:u32, l:u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],o,l)==1u32 {return ALEN[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn dcm_resolve(t:u32) -> i64 { let mut k:u32=0u32  while k<DCM_N { if neq(DCM_MO[k as u64],DCM_ML[k as u64],TO[t as u64],TL[t as u64])==1u32 { return alen_by_name(DCM_AO[k as u64], DCM_AL[k as u64]) }  k=k+1u32 }  return 0i64-1i64 }
-fn abase(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AB[k as u64] as i64}  k=k+1u32 }
-    let lv:i32=lidx(t)  if lv>=0i32 { let vt:i32=LVT[lv as u64]  if vt>=0i32 { return LVB[lv as u64] } }  return 0i64-1i64 }   /* local struct-VALUE only if NOT a global; vt bound to a let FIRST -- inline i32 array-elem `>=0` is the zero-extend trap (-1 reads huge) */
+fn abase(t: u32) -> i64 { let lv:i32=lidx(t)  if lv>=0i32 { let vt:i32=LVT[lv as u64]  if vt>=0i32 { return LVB[lv as u64] } }   /* a local struct-VALUE shadows its (redundant) reg_var global entry -> LVB is the ONE base (field access + packing + entry-store all agree); vt bound to a let FIRST (i32 array-elem >=0 zero-extend trap) */
+    let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AB[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn awmask(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AW[k as u64]}  k=k+1u32 }  return 0i64 }
 fn aesize(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AESZ[k as u64]}  k=k+1u32 }  return 8i64 }
 fn asign(t: u32) -> u32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return ASGN[k as u64]}  k=k+1u32 }  return 0u32 }
@@ -271,8 +271,8 @@ fn ppc_expr(minprec:u32) -> i64 { let mut lhs:i64=ppc_atom()  let mut g:u32=1u32
     return lhs }
 fn cidx(t:u32)->i32 { let mut k:u32=0u32  while k<CN { if neq(CNO[k as u64],CNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 fn stidx(t:u32)->i32 { let mut k:u32=0u32  while k<STN { if neq(STNO[k as u64],STNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
-fn avtype(t:u32)->i32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AVT[k as u64]}  k=k+1u32 }
-    let lv:i32=lidx(t)  if lv>=0i32 { let vt:i32=LVT[lv as u64]  if vt>=0i32 { return vt } }  return 0i32-1i32 }   /* local struct-VALUE's type; vt bound to a let FIRST -- inline i32 array-elem `>=0` is the zero-extend trap */
+fn avtype(t:u32)->i32 { let lv:i32=lidx(t)  if lv>=0i32 { let vt:i32=LVT[lv as u64]  if vt>=0i32 { return vt } }   /* a local struct-VALUE's type shadows its reg_var global entry (consistent with abase); vt bound to a let FIRST (i32 array-elem >=0 trap) */
+    let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AVT[k as u64]}  k=k+1u32 }  return 0i32-1i32 }
 fn fieldoff(sti:i32, ft:u32)->i64 { if sti<0i32 {return 0i64-1i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFOFF[fi as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn fieldelem(sti:i32, ft:u32)->i64 { if sti<0i32 {return 8i64}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFEL[fi as u64]}  k=k+1u32 }  return 8i64 }   /* element size of a (possibly array) field */
 fn fieldisarr(sti:i32, ft:u32)->u32 { if sti<0i32 {return 0u32}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFAR[fi as u64]}  k=k+1u32 }  return 0u32 }   /* is this field an array? (bare access decays to address) */
@@ -774,6 +774,7 @@ fn eprim() {
         let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64])  return }   /* enum member / #define constant */
         let dcv:i64=dcm_resolve(t)  if dcv>=0i64 { econst(dcv)  return }   /* array-count macro N = sizeof(ARR)/sizeof(ARR[0]) -> ALEN(ARR) */
         let li:i32=lidx(t)  if li>=0i32 {
+            let svt:i32=LVT[li as u64]  if svt>=0i32 { let ssz:u64=STSZ[svt as u64]  if ssz<=8u64 { let pb:i64=abase(t)  econst(pb)  eb(0x82u32)  return } }   /* bare struct-VALUE (<=8B) used as a value -> LOAD64 its packed bytes from abase() (the SAME base field access uses; reg_var registers a local struct var globally so LVB != abase) */
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_local(li as u32,0u32,1u32)  return }   /* i++ (postfix) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_local(li as u32,1u32,1u32)  return }   /* i-- (postfix) */
             emit_lget(li as u32) }
@@ -1541,6 +1542,7 @@ fn cfn(fk: u32) {
         if styp>=0i32 { if isp==1u32 { LPT[sl as u64]=styp } }
         if isp==1u32 { if styp<0i32 { LPSZ[sl as u64]=bsz  LPSG[sl as u64]=bsg } }   /* scalar/array pointer param: pointee width+sign */
         if isp==0u32 { LW[sl as u64]=pm  LSZ[sl as u64]=bsz  LSG[sl as u64]=bsg }    /* scalar param: size + sign (spill) */
+        if styp>=0i32 { if isp==0u32 { let ssz:u64=STSZ[styp as u64]  if ssz>0u64 { if ssz<=8u64 { LVT[sl as u64]=styp  LVB[sl as u64]=MTOP as i64  MTOP=MTOP+8u64 } } } }   /* struct-VALUE param (<=8B, passed in ONE slot) -> a struct-value local; entry-store the packed slot into its frame region (below) so `args.field` works */
         params=params+1u32  eat(Q_COM) }
     } } }
     eat(Q_RP)  prescan_addrof()  BL=0u64  ENDED_RET=0u32             /* mark &-taken locals (spill) BEFORE the body's ladd */
@@ -1551,6 +1553,7 @@ fn cfn(fk: u32) {
             let psz:i64=LSZ[pp as u64]  let m:u64=MTOP
             LMEM[pp as u64]=m as i64  econst(m as i64)  eu8(0x10u32, pp)  estore(psz)  MTOP=m+8u64
         } }
+        let svt:i32=LVT[pp as u64]  if svt>=0i32 { econst(LVB[pp as u64])  eu8(0x10u32, pp)  eb(0x83u32) }   /* struct-VALUE param: STORE64 the incoming packed slot into its frame region (LVB) */
         pp=pp+1u32
     }
     prescan_labels(C)  eat(Q_LB)

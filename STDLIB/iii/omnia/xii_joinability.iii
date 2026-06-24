@@ -169,13 +169,22 @@ fn _xjn_check_idx(k: u32) -> u8 {
     return xjn_check_subterm(si, sj, cpe_pos_at(k))
 }
 
-/* C.1 route-R SOUNDNESS, computed PER PAIR (not asserted from two global facts): route R holds for a subterm overlap
- * iff xii_canonicalise's normal form of the UNREDUCED witness equals the inner-first NF -- so the strategy reduces the
- * inner redex (rule_i) before the outer lift (rule_j), and the divergent outer-first reduct is non-normal-reachable.
- * Returns 1 (route R verified for this pair) / 0 (NOT inner-first-discharged -> xdc grades it BOUNDARY, with teeth).
- * Builds fresh witnesses in its own arena (called AFTER _xjn_check_idx's arena work, so the reset is safe). */
-fn xjn_route_r_holds(slot_i: u32, slot_j: u32, pos: u32) -> u8 {
+/* C.1 route-R SOUNDNESS, computed PER PAIR (not asserted from two global facts).  The discharge holds iff the
+ * strategy reduces the inner redex (rule_i) before the outer lift (rule_j), so the divergent outer-first reduct is
+ * non-normal-reachable.  This is verified by CONSTRUCTING BOTH reducts and checking the FULL property -- not just the
+ * inner half (an F6 refutation showed canonicalise(W)==inner-NF alone is a theorem of the bottom-up strategy, so a
+ * one-sided check is vacuous: it cannot distinguish a discharged pair from a non-discharged one).  The three conjuncts:
+ *   (1) xjn_converge(W, wb)==1  -- the strategy's NF of the UNREDUCED witness IS the inner-first NF;
+ *   (2) xjn_converge(W, ra)==0  -- the strategy does NOT reach the OUTER-first divergent reduct ra (rule_j at root);
+ *   (3) xjn_converge(ra, wb)==0 -- ra and wb genuinely DIVERGE (re-checks the NONJOIN premise PER PAIR, which the
+ *       one-sided check silently inherited from the caller).
+ * BOUNDARY is genuinely reachable: a pair whose strategy reached ra (e.g. a non-bottom-up regression) fails (2) -> 0.
+ * For the live (correct, deterministic bottom-up) engine all 20 pass, so BOUNDARY is empty -- now WITNESSED per pair
+ * (incl. the constructed outer reduct + the re-checked divergence), not a foregone 1.  Returns 1 = route R / 0 = BOUNDARY.
+ * Builds fresh disjoint witnesses in its own arena (called AFTER _xjn_check_idx's arena work, so the reset is safe). */
+fn xjn_route_r_holds(slot_i: u32, slot_j: u32, pos: u32) -> u8 @export {
     let rid_i : u32 = xrp_rid_at(slot_i)
+    let rid_j : u32 = xrp_rid_at(slot_j)
     xii_term_arena_reset()
     let w : u32 = _xjn_build_witness(slot_j, slot_j)      /* W = j's redex with i's redex at child[pos], UNREDUCED */
     let cw : u32 = _xjn_build_witness(slot_i, slot_i)
@@ -186,7 +195,50 @@ fn xjn_route_r_holds(slot_i: u32, slot_j: u32, pos: u32) -> u8 {
     let chp : u32 = xii_rewrite_apply_specific(rid_i, cb)
     if xii_rewrite_last_rule_fired() != rid_i { return 0u8 }   /* the inner reduct could not be built -> not R-discharged */
     _xjn_set_child(wb, pos, chp)
-    return xjn_converge(w, wb)                            /* canonicalise(W) == inner-first NF  =>  route R verified */
+    let wr : u32 = _xjn_build_witness(slot_j, slot_j)      /* outer-first reduct: a FRESH witness, rule_j fired at the ROOT */
+    let cr : u32 = _xjn_build_witness(slot_i, slot_i)
+    _xjn_set_child(wr, pos, cr)
+    let ra : u32 = xii_rewrite_apply_specific(rid_j, wr)
+    if xii_rewrite_last_rule_fired() != rid_j { return 0u8 }   /* the outer reduct could not be built -> not a real overlap */
+    /* canonicalise each of the three disjoint terms EXACTLY ONCE (re-canonicalising an already-reduced term in this
+     * arena is fragile), then compare the normal forms structurally. */
+    let nfw : u32 = xii_canonicalise(w)                       /* the strategy's NF of the unreduced witness */
+    let nfb : u32 = xii_canonicalise(wb)                      /* the inner-first NF */
+    let nfa : u32 = xii_canonicalise(ra)                      /* the outer-first divergent NF */
+    if xii_rewrite_struct_eq(nfw, nfb) != 1u8 { return 0u8 }  /* (1) strategy's NF == inner-first NF */
+    if xii_rewrite_struct_eq(nfw, nfa) == 1u8 { return 0u8 }  /* (2) strategy does NOT reach the outer-first reduct */
+    if xii_rewrite_struct_eq(nfa, nfb) == 1u8 { return 0u8 }  /* (3) ra and wb genuinely diverge (NONJOIN premise, re-checked) */
+    return 1u8
+}
+
+/* TEETH for xjn_route_r_holds (prove conjuncts (2)/(3) are NOT dead): scan every subterm critical pair and confirm
+ * route_r_holds DISCRIMINATES -- a JOINABLE overlap (ra,wb converge) is REJECTED (rv=0, by conjunct (3)), while a
+ * genuine NONJOIN is accepted (rv=1).  Returns join_sub*10000 + join_rejected*100 + nonjoin_accepted so the teeth KAT
+ * can assert (a) at least one joinable subterm overlap exists and was rejected, (b) every nonjoin was accepted. */
+fn xjn_route_r_teeth_diag() -> u64 @export {
+    let n : u64 = cpe_enumerate() as u64
+    let mut k : u64 = 0u64
+    let mut join_sub : u64 = 0u64
+    let mut join_rej : u64 = 0u64
+    let mut nonjoin_acc : u64 = 0u64
+    while k < n {
+        if cpe_kind_at(k as u32) == 1u64 {
+            let si : u32 = cpe_si_at(k as u32)
+            let sj : u32 = cpe_sj_at(k as u32)
+            let p : u32 = cpe_pos_at(k as u32)
+            let v : u8 = xjn_check_subterm(si, sj, p)
+            let rr : u8 = xjn_route_r_holds(si, sj, p)
+            if v == XJN_JOIN {
+                join_sub = join_sub + 1u64
+                if rr == 0u8 { join_rej = join_rej + 1u64 }
+            }
+            if v == XJN_NONJOIN {
+                if rr == 1u8 { nonjoin_acc = nonjoin_acc + 1u64 }
+            }
+        }
+        k = k + 1u64
+    }
+    return join_sub * 10000u64 + join_rej * 100u64 + nonjoin_acc
 }
 
 /* The gate: iterate the enumerated table, tally verdicts.  GREEN(1) iff zero NONJOIN. */

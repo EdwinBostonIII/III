@@ -55,11 +55,15 @@ else
 fi
 
 if [ $fail -eq 0 ]; then
-  say "VERDICT: the FULL III pipeline is byte-reproducible -- the FRONT-END (ccsv->iiis-2->svir_x86) emits a"
-  say "         byte-identical .s across two from-scratch runs, AND the SOVEREIGN back-end (sovas/sovld) emits a"
-  say "         byte-identical PE -- where the host mingw-ld is NOT (PE-link layout/timestamp variance at iiis-1"
-  say "         scale, SVIR-DDC-RESIDUAL.md).  Two from-scratch III pieces (deterministic frontend+compiler+lowering"
-  say "         AND a reproducible assembler+linker) compose into a reproducible toolchain; the ONLY residual is the"
-  say "         host gcc-LINKED iiis-1 binary -- whose non-reproducibility this measures to the HOST, not to III."
+  say "VERDICT: the III pipeline is OUTPUT-byte-reproducible (same inputs -> same output BYTES, reproducible-builds"
+  say "         semantics): the FRONT-END (ccsv->iiis-2->svir_x86) emits byte-identical .iii/.o/.s across two"
+  say "         from-scratch runs, AND the SOVEREIGN back-end (sovas/sovld) emits a byte-identical PE.  This is"
+  say "         OUTPUT determinism -- DISTINCT from tool-BINARY reproducibility: the tools themselves (ccsv.exe,"
+  say "         iiis-2.exe, tx_tn_*.exe) are gcc-LINKED and NOT byte-reproducible.  Demonstrated, and it CUTS FOR"
+  say "         the thesis: tx_tn_a.exe != tx_tn_b.exe (host PE-timestamp) yet they emit byte-IDENTICAL .s -- so"
+  say "         output-determinism survives non-reproducible host tooling.  The only non-reproducible SHIPPED"
+  say "         artifact is the gcc-LINKED iiis-1 (PE-link variance at scale, SVIR-DDC-RESIDUAL.md) -- a HOST"
+  say "         property; routing iiis-1 through the sovereign back-end removes it.  (Scope: output determinism"
+  say "         shown for one input over two runs on one host; the .o-level seed-DDC is the rigorous part.)"
 fi
 exit $fail

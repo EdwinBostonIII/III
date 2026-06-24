@@ -1,0 +1,20 @@
+/* 2003 -- xii route-R discharge TEETH (the F6 anti-vacuity proof). An F6 refutation showed a one-sided
+ * check (canonicalise(W)==inner-NF) is a THEOREM of the bottom-up strategy -> a foregone 1, no
+ * discriminating power. The strengthened xjn_route_r_holds now CONSTRUCTS the outer-first reduct ra
+ * (rule_j at root) and verifies the FULL property: (1) strategy NF == inner-first NF, (2) strategy does
+ * NOT reach ra, (3) ra and wb genuinely diverge. This KAT proves the teeth BITE on REAL critical pairs:
+ * every JOINABLE subterm overlap (ra,wb converge) is graded NOT-route-R (rv=0, conjunct 3), while every
+ * genuine NONJOIN is graded route-R (rv=1). xjn_route_r_teeth_diag = join_sub*10000 + join_rej*100 +
+ * nonjoin_acc. 99 = the per-pair check is DISCRIMINATING (8 joinable overlaps rejected, 20 nonjoins accepted). */
+module corpus_2003
+extern @abi(c-msvc-x64) fn xjn_route_r_teeth_diag() -> u64 from "xii_joinability.iii"
+fn main() -> u64 {
+    let v : u64 = xjn_route_r_teeth_diag()
+    let join_sub : u64 = v / 10000u64
+    let join_rej : u64 = (v / 100u64) - (join_sub * 100u64)
+    let nonjoin_acc : u64 = v - ((v / 100u64) * 100u64)
+    if join_sub < 1u64 { return 1u64 }          /* the teeth must be EXERCISED -- a real joinable subterm overlap exists */
+    if join_rej != join_sub { return 2u64 }     /* EVERY joinable overlap REJECTED (rv=0) -> the check is not a foregone 1 */
+    if nonjoin_acc != 20u64 { return 3u64 }     /* EVERY genuine nonjoin ACCEPTED (rv=1) -> the positive arm holds */
+    return 99u64
+}

@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -93,6 +93,15 @@ else say "FAIL ZK-OPCODE: zk_svir_straightline=$slrc (1=honest-rejected 2=forged
 strc=$(runzk zk_svir_stack)
 if [ "$strc" = "99" ]; then say "ZK-STACK : a straight-line SVIR expression (CONST 5, CONST 257, MUL, CONST 7, ADD = 5*257+7) evaluated on an explicit 2-slot stack [s0,s1] -- every PUSH (s1'=arg, s0'=s1) and POP2-PUSH1 (s1'=s0 OP s1, s0'=0) MECHANICALLY interpreted + proven by the sound STARK -> witness-free verifier ACCEPTS the honest stack execution, REJECTS a forged STACK-TOP and a forged product-aux by the math -> 99 (the SVIR stack ISA attested soundly = the shape iiisv emits; reading real iiisv bytecode into this AIR is wiring, not new crypto). Residual: LOCAL_GET/SET + public-bytecode binding"
 else say "FAIL ZK-STACK: zk_svir_stack=$strc (1=honest-rejected 2=forged-top-accepted 3=forged-aux-accepted 4=re-prove)"; fail=1; fi
+# (0l) ZK-OMEGA-E: the genuine Omega.e closure -- prove the execution of iiisv's REAL SVIR bytecode for a real .iii program.
+printf 'fn f() -> i64 { return 5 * 257 + 7; }\n' > "$W/test_fold.iii"
+gcc "$W/iiisv.o" "$LIB" -lkernel32 -o "$W/iiisv.exe" 2>/dev/null
+"$W/iiisv.exe" "$W/test_fold.iii" > "$W/gen_svir.iii" 2>/dev/null
+"$IIIS" "$W/gen_svir.iii" --compile-only --out "$W/gen_svir.o" >/dev/null 2>&1
+gcc "$W/zk_iiisv_attest.o" "$W/gen_svir.o" "$LIB" -lkernel32 -o "$W/zk_iiisv_attest.exe" 2>/dev/null
+timeout 60 "$W/zk_iiisv_attest.exe" >/dev/null 2>&1; oerc=$?
+if [ "$oerc" = "99" ]; then say "ZK-OMEGA-E: iiisv compiled a REAL .iii program (return 5*257+7) -> SVIR bytecode; this gadget READ the bytes (svir_ptr/svir_len), PARSED the 5 opcodes (CONST 5, CONST 257, MUL=0x22, CONST 7, ADD=0x20), confirmed they compute 1292, and PROVED the execution with the sound STARK -> witness-free verifier ACCEPTS the honest execution, REJECTS a forged stack-top by the math -> 99 (THE COMPILER'S OWN OUTPUT attested soundly: .iii -> iiisv -> SVIR -> sound ZK = Omega.e for a straight-line program)"
+else say "FAIL ZK-OMEGA-E: zk_iiisv_attest=$oerc (6=opcode-count 5=result!=1292 1=honest-rejected 2=forge-accepted; 0=link/run error)"; fail=1; fi
 
 # (A) ZK-attested.  zk_air (with the additive air_lde_at accessor) is in libiii_native.a; link the archive.
 gcc "$W/zk_svir_exec.o" "$LIB" -lkernel32 -o "$W/zk_svir_exec.exe" 2>/dev/null

@@ -151,6 +151,7 @@ var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u
 var LOVF : u32 = 0u32                                  /* LOUD local-overflow flag: the SVIR LOCAL_GET/SET operand is ONE byte, so >256 locals/fn would silently collide (slot 256&0xFF=0); set this instead, fail the whole compile clearly */
 var BLKD : i64 = 0i64                                  /* live structured-control nesting depth (BLOCK/LOOP/IF open count) -- read by `break` */
 var BRKT : [i64; 32]  var BRKN : u32 = 0u32            /* break-target stack: BLKD just inside each enclosing loop/switch's exit block ; break -> BR(BLKD - BRKT[top]) */
+var LBLO : [u32; 64]  var LBLL : [u32; 64]  var LBLBD : [i64; 64]  var LBLN : u32 = 0u32   /* per-fn FORWARD-goto labels: name offset/len + the BLKD of each label's goto-block (label[0]=innermost) */
 var SWCC : [i64; 128]  var SWCN : u32 = 0u32           /* case constants of the switch being lowered (prescan, in source order) */
 var ADN_O : [u32; 128]  var ADN_L : [u32; 128]  var ADN_N : u32 = 0u32   /* per-fn set of local names whose address is taken (-> spilled to memory) */
 fn adn_has(o:u32, l:u32) -> u32 { let mut k:u32=0u32  while k<ADN_N { if neq(ADN_O[k as u64],ADN_L[k as u64],o,l)==1u32 {return 1u32}  k=k+1u32 }  return 0u32 }
@@ -435,6 +436,29 @@ fn emit_av(esz:i64, sgn:u32, mask:i64) {
 }
 /* a switch case constant: an integer/char literal (TK==2 -> TV) or an enum/#define name (cidx -> CNV). */
 fn swconst(q:u32) -> i64 { if TK[q as u64]==2u32 { return TV[q as u64] }  let ci:i32=cidx(q)  if ci>=0i32 { return CNV[ci as u64] }  return 0i64 }
+/* keywords that can never be a goto-label name (so `IDENT :` after them is case/ternary/decl, not a label). */
+fn is_label_kw(t:u32) -> u32 {
+    if kw(t,"case" as u64,4u32)==1u32 {return 1u32}  if kw(t,"default" as u64,7u32)==1u32 {return 1u32}  if kw(t,"goto" as u64,4u32)==1u32 {return 1u32}  if dtype(t)==1u32 {return 1u32}  if isqual(t)==1u32 {return 1u32}
+    if kw(t,"if" as u64,2u32)==1u32 {return 1u32}  if kw(t,"else" as u64,4u32)==1u32 {return 1u32}  if kw(t,"while" as u64,5u32)==1u32 {return 1u32}  if kw(t,"for" as u64,3u32)==1u32 {return 1u32}  if kw(t,"do" as u64,2u32)==1u32 {return 1u32}  if kw(t,"switch" as u64,6u32)==1u32 {return 1u32}  if kw(t,"return" as u64,6u32)==1u32 {return 1u32}  if kw(t,"break" as u64,5u32)==1u32 {return 1u32}
+    if kw(t,"struct" as u64,6u32)==1u32 {return 1u32}  if kw(t,"union" as u64,5u32)==1u32 {return 1u32}  if kw(t,"enum" as u64,4u32)==1u32 {return 1u32}  if kw(t,"typedef" as u64,7u32)==1u32 {return 1u32}  if kw(t,"sizeof" as u64,6u32)==1u32 {return 1u32}
+    return 0u32
+}
+fn lblidx(t:u32) -> i32 { let mut k:u32=0u32  while k<LBLN { if neq(LBLO[k as u64],LBLL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
+/* collect TOP-LEVEL (function-brace-depth 1) labels `IDENT :` at statement boundaries (the `goto fail` form). */
+fn prescan_labels(start:u32) {
+    LBLN=0u32  let mut q:u32=start  let mut bd:i32=0i32  let mut atb:u32=1u32  let mut g:u32=1u32
+    while g==1u32 {
+        if TK[q as u64]==0u32 { g=0u32 }
+        else { if ispat(q,Q_LB)==1u32 { bd=bd+1i32  atb=1u32  q=q+1u32 }
+               else { if ispat(q,Q_RB)==1u32 { bd=bd-1i32  if bd==0i32 {g=0u32} else { atb=1u32  q=q+1u32 } }
+                      else { if ispat(q,Q_SEMI)==1u32 { atb=1u32  q=q+1u32 }
+                             else { let mut islbl:u32=0u32
+                                    if bd==1i32 { if atb==1u32 { if TK[q as u64]==1u32 { if is_label_kw(q)==0u32 { if ispat(q+1u32,Q_COLON)==1u32 { islbl=1u32 } } } } }
+                                    if islbl==1u32 { if LBLN<64u32 { LBLO[LBLN as u64]=TO[q as u64]  LBLL[LBLN as u64]=TL[q as u64]  LBLN=LBLN+1u32 }  q=q+2u32  atb=1u32 }
+                                    else { atb=0u32  q=q+1u32 } } } }
+        }
+    }
+}
 /* emit the case/default bodies (second walk over { }): close one case block before each case body (fall-through =
  * sequential emission), close B_def before the default body, close B_exit at the }.  `break` (handled in pstmt via
  * the BRKT stack) branches to B_exit.  Scope: default LAST or absent (the common/seed form); cases in source order. */
@@ -536,6 +560,15 @@ fn pstmt() {
         eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}   /* BR 0 ; END END */
         C=after  return
     }
+    if kw(C,"do" as u64,2u32)==1u32 {                               /* do { body } while (cond) ; -> body runs first, cond at the loop tail */
+        C=C+1u32
+        eb(0x40u32)  BLKD=BLKD+1i64  if BRKN<32u32 { BRKT[BRKN as u64]=BLKD  BRKN=BRKN+1u32 }  eb(0x41u32)  BLKD=BLKD+1i64   /* BLOCK(break target) LOOP */
+        pbody()
+        if kw(C,"while" as u64,5u32)==1u32 { C=C+1u32 }  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eat(Q_SEMI)
+        eu8(0x51u32, 0u32)                                          /* cond ; BR_IF 0 -> if nonzero, restart the LOOP */
+        eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}   /* END(loop) END(block) */
+        return
+    }
     if kw(C,"break" as u64,5u32)==1u32 {                            /* break ; -> BR to the innermost loop/switch exit block */
         C=C+1u32  if BRKN>0u32 { let bt:i64=BRKT[(BRKN-1u32) as u64]  let d:i64=BLKD-bt  eu8(0x50u32, d as u32) }  eat(Q_SEMI)  return
     }
@@ -559,6 +592,12 @@ fn pstmt() {
         eu8(0x50u32, n)                                                                          /* else -> BR n (B_def / default) */
         C=bodyC  emit_switch_bodies(n)  ENDED_RET=0u32  return   /* a switch stmt doesn't guarantee return -> cfn appends the trailing `return 0` (wasm requires the reachable fn-end to be typed; inner case returns set ENDED_RET) */
     }
+    if kw(C,"goto" as u64,4u32)==1u32 {                             /* goto L ; -> BR to L's forward goto-block */
+        C=C+1u32  let li:i32=lblidx(C)  if li>=0i32 { let d:i64=BLKD - LBLBD[li as u64]  eu8(0x50u32, d as u32) }  C=C+1u32  eat(Q_SEMI)  return
+    }
+    if TK[C as u64]==1u32 { if is_label_kw(C)==0u32 { if ispat(C+1u32,Q_COLON)==1u32 {   /* L : -> a label decl -> close its goto-block (the label lands at the block end) */
+        let li:i32=lblidx(C)  if li>=0i32 { eb(0x44u32)  BLKD=BLKD-1i64 }  C=C+2u32  return
+    } } }
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_INC)==1u32 {          /* i++ ; */
         let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x20u32)  emit_lset(li as u32) }  C=C+2u32  eat(Q_SEMI)  return
     } }
@@ -756,7 +795,7 @@ fn prescan_addrof() {
 fn cfn(fk: u32) {
     let ft:u32=FNT[fk as u64]  C=fn_nametok(ft)  C=C+1u32  eat(Q_LP)   /* [quals] type [*] NAME ( -> at ( */
     CUR_RMASK=FRM[fk as u64]
-    LN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  lz=lz+1u32 }   /* reset per-fn local flags */
+    LN=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  lz=lz+1u32 }   /* reset per-fn local flags + control-depth */
     let mut params:u32=0u32  let mut go:u32=1u32
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else {   /* [quals] type [*] NAME */
         skipquals()  let mut isc:u32=0u32  let mut styp:i32=0i32-1i32  let mut bsz:i64=8i64  let mut bsg:u32=0u32  let pm:i64=type_mask(C)
@@ -773,7 +812,11 @@ fn cfn(fk: u32) {
         if isp==0u32 { LW[sl as u64]=pm  LSZ[sl as u64]=bsz  LSG[sl as u64]=bsg }    /* scalar param: size + sign (spill) */
         params=params+1u32  eat(Q_COM)
     } } }
-    eat(Q_RP)  prescan_addrof()  BL=0u64  ENDED_RET=0u32  pblock()   /* mark &-taken locals (spill) BEFORE the body's ladd */
+    eat(Q_RP)  prescan_addrof()  BL=0u64  ENDED_RET=0u32             /* mark &-taken locals (spill) BEFORE the body's ladd */
+    prescan_labels(C)  eat(Q_LB)
+    let mut lo:u32=0u32  while lo<LBLN { let idx:u32=LBLN-1u32-lo  eb(0x40u32)  BLKD=BLKD+1i64  LBLBD[idx as u64]=BLKD  lo=lo+1u32 }   /* open a goto-block per top-level label (label[0] = innermost, closes first) */
+    let mut gb:u32=1u32  while gb==1u32 { if cp(Q_RB)==1u32 {gb=0u32} else { if TK[C as u64]==0u32 {gb=0u32} else { pstmt() } } }   /* the body (label `L:` closes its block; goto -> BR to it) */
+    eat(Q_RB)
     if ENDED_RET==0u32 { econst(0i64)  eb(0x60u32) }          /* default `return 0` ONLY for void/fall-through fns (return-ending fns stay byte-identical -> byte-DDC preserved) */
     mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
     let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }

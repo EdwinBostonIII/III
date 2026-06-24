@@ -963,6 +963,15 @@ fn cfn(fk: u32) {
         params=params+1u32  eat(Q_COM)
     } } }
     eat(Q_RP)  prescan_addrof()  BL=0u64  ENDED_RET=0u32             /* mark &-taken locals (spill) BEFORE the body's ladd */
+    let mut pp:u32=0u32                                              /* &-taken PARAMS: prescan_addrof runs AFTER the param loop, so spill them now + entry-store the incoming slot value (enables &param, e.g. update(s,&v,1)) */
+    while pp<params {
+        let lm:i64=LMEM[pp as u64]  let taken:u32=adn_has(LO[pp as u64], LL[pp as u64])   /* bind before the compare (iiis array-elem-ordering hygiene) */
+        if lm<0i64 { if taken==1u32 {
+            let psz:i64=LSZ[pp as u64]  let m:u64=MTOP
+            LMEM[pp as u64]=m as i64  econst(m as i64)  eu8(0x10u32, pp)  estore(psz)  MTOP=m+8u64
+        } }
+        pp=pp+1u32
+    }
     prescan_labels(C)  eat(Q_LB)
     let mut lo:u32=0u32  while lo<LBLN { let idx:u32=LBLN-1u32-lo  eb(0x40u32)  BLKD=BLKD+1i64  LBLBD[idx as u64]=BLKD  lo=lo+1u32 }   /* open a goto-block per top-level label (label[0] = innermost, closes first) */
     let mut gb:u32=1u32  while gb==1u32 { if cp(Q_RB)==1u32 {gb=0u32} else { if TK[C as u64]==0u32 {gb=0u32} else { pstmt() } } }   /* the body (label `L:` closes its block; goto -> BR to it) */

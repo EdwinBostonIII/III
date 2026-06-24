@@ -566,13 +566,13 @@ var ZKAIR_FSIZE       : [u32; 12]
 var ZKAIR_FOMEGA      : [u32; 12]
 var ZKAIR_FLOFF       : [u32; 12]
 var ZKAIR_FTOFF       : [u32; 12]
-var ZKAIR_TQ          : [u32; 64]   /* 16 queries * 4 cols */
-var ZKAIR_TQN         : [u32; 64]
+var ZKAIR_TQ          : [u32; 256]  /* 16 queries * up to WMAX=16 cols (stride = AIR_W, not a hardcoded 4) */
+var ZKAIR_TQN         : [u32; 256]
 var ZKAIR_CQ          : [u32; 16]
 var ZKAIR_FQ          : [u32; 192]  /* 16 * 12 */
 var ZKAIR_FSIB        : [u32; 192]
-var ZKAIR_TPATH       : [u8; 20480] /* 16*4 * 10 levels * 32 */
-var ZKAIR_TNPATH      : [u8; 20480]
+var ZKAIR_TPATH       : [u8; 81920] /* 16 queries * WMAX=16 cols * 10 levels * 32 */
+var ZKAIR_TNPATH      : [u8; 81920]
 var ZKAIR_CPATH       : [u8; 5120]  /* 16 * 10 * 32 */
 var ZKAIR_FPATH       : [u8; 61440] /* 16*12 * 10 * 32 */
 /* boundary (public-input) constraints: trace cell (col,row) must equal value. */
@@ -700,10 +700,10 @@ fn air_stark_prove() -> i32 @export {
         let jqn : u64 = (jq + AIR_B) & (d - 1u64)
         w = 0u64
         while w < wc {
-            ZKAIR_TQ[qi*4u64 + w]  = AIR_LDE[w*d + jq]
-            ZKAIR_TQN[qi*4u64 + w] = AIR_LDE[w*d + jqn]
-            air_merkle_open(w*tbsz, d, jq,  (&ZKAIR_TPATH as u64)  + (qi*4u64 + w)*320u64)
-            air_merkle_open(w*tbsz, d, jqn, (&ZKAIR_TNPATH as u64) + (qi*4u64 + w)*320u64)
+            ZKAIR_TQ[qi*wc + w]  = AIR_LDE[w*d + jq]
+            ZKAIR_TQN[qi*wc + w] = AIR_LDE[w*d + jqn]
+            air_merkle_open(w*tbsz, d, jq,  (&ZKAIR_TPATH as u64)  + (qi*wc + w)*320u64)
+            air_merkle_open(w*tbsz, d, jqn, (&ZKAIR_TNPATH as u64) + (qi*wc + w)*320u64)
             w = w + 1u64
         }
         ZKAIR_CQ[qi] = AIR_CP[jq]
@@ -769,9 +769,9 @@ fn air_stark_verify() -> u64 @export {
         w = 0u64
         while w < wc {
             let troot : u64 = (&ZKAIR_TRACE_ROOTS as u64) + w*32u64
-            if air_merkle_verify(troot, d, jq,  ZKAIR_TQ[i*4u64 + w],  (&ZKAIR_TPATH as u64)  + (i*4u64 + w)*320u64, plenD) == 0u64 { return 1u64 }
-            if air_merkle_verify(troot, d, jqn, ZKAIR_TQN[i*4u64 + w], (&ZKAIR_TNPATH as u64) + (i*4u64 + w)*320u64, plenD) == 0u64 { return 2u64 }
-            air_set_open(w, ZKAIR_TQ[i*4u64 + w], ZKAIR_TQN[i*4u64 + w])
+            if air_merkle_verify(troot, d, jq,  ZKAIR_TQ[i*wc + w],  (&ZKAIR_TPATH as u64)  + (i*wc + w)*320u64, plenD) == 0u64 { return 1u64 }
+            if air_merkle_verify(troot, d, jqn, ZKAIR_TQN[i*wc + w], (&ZKAIR_TNPATH as u64) + (i*wc + w)*320u64, plenD) == 0u64 { return 2u64 }
+            air_set_open(w, ZKAIR_TQ[i*wc + w], ZKAIR_TQN[i*wc + w])
             w = w + 1u64
         }
         if air_merkle_verify(&ZKAIR_CP_ROOT as u64, d, jq, ZKAIR_CQ[i], (&ZKAIR_CPATH as u64) + i*320u64, plenD) == 0u64 { return 3u64 }

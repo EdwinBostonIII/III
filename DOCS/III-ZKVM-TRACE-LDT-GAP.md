@@ -1,7 +1,15 @@
 # III — CRITICAL zkVM soundness hole: the committed STARK has NO low-degree test on the TRACE  **[FIXED 2026-06-24]**
 
-> **STATUS UPDATE 2026-06-24 — the first fix (`6e6cc75b`) was INSUFFICIENT; an FS audit on the fixed verifier found
-> TWO deeper CRITICAL holes (both refuter-confirmed). Re-fix required, NOT yet landed.**
+> **STATUS UPDATE 2026-06-24 — the first fix (`6e6cc75b`) was INSUFFICIENT (FS audit found two deeper holes); BOTH
+> are now FIXED + verified by reproduce-then-fix. Production was verified unaffected throughout.**
+> - **HOLE 1 FIXED:** trace_fri_commit no longer commits layer 0 separately — its commitment IS TROOT, and verify()
+>   folds layer 0 from `open_trace(TROOT)`, so the LDT folds the SAME trace line-755 reads (no decoupled column).
+>   `build_attack_decoupled`/`zk_trace_attack_decoupled` REPRODUCE the hole (rc=8 ACCEPT) and confirm the fix (rc 8→99
+>   REJECT); the gadget's (S3) check gates it.
+> - **HOLE 2 FIXED:** queries seed from `keccak(CP_final_root || trace_final_root)`, binding the CP commitment before
+>   the queries (the interpolation-based reproduction is a separate sub-project; the binding fix is argued structurally).
+> - Gadget `main()` rc=99 again — but now its self-tests model the COUPLED **and** DECOUPLED provers (not just coupled);
+>   `run_ext4_committed.sh` EXIT 0. (Original analysis below, retained.)
 > 1. **Binding gap:** the trace FRI (`TFA`/`TFROOT`, the LDT) is a SEPARATE Merkle commitment from the
 >    constraint-tested trace (`TROOT`/`TLEAF`); `verify()` ties them ONLY pointwise at the 16 queries
 >    (`open_leaf_tf(0,DOM,q0)==lift(fq)`). A prover commits `TROOT` on a violating trace + the trace-FRI on a

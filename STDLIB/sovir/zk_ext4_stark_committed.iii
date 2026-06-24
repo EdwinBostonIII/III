@@ -18,23 +18,22 @@
  * (a claimed f value inconsistent with TROOT) is REJECTED; (R) a corrupted committed root is REJECTED; (S) the
  * trace-low-degree SOUNDNESS gap is CLOSED (see below).
  *
- * !!! SOUNDNESS STATUS -- this DEMO gadget is NOT sound; the production artifact zk_fused_committed IS. !!!
- * (Full account: DOCS/III-ZKVM-TRACE-LDT-GAP.md.)  History: (1) the original verify bound the trace by MERKLE only
- * (values, not degree), so a high-degree decoupled trace + honest CP passed -- found + demonstrated executably
- * (build_attack/zk_trace_attack_k).  (2) trace_fri_commit() added a FRI low-degree test on the committed trace; the
- * self-test went green.  (3) An ADVERSARIAL FS AUDIT on the FIXED verifier found that fix is INSUFFICIENT -- TWO
- * CRITICAL holes remain (both refuter-confirmed):
- *   HOLE 1 (binding): the trace FRI (TFA/TFROOT) is a SEPARATE commitment from the constraint trace (TROOT); verify
- *     ties them ONLY at the 16 queries (the layer-0 consistency open).  A prover commits TROOT=violating + the trace
- *     FRI on a DECOUPLED low-degree DECOY -> the LDT passes on the decoy.  The self-test missed this (it folds only the
- *     COUPLED tampered TLEAF).  FIX: make the trace-FRI layer 0 BE the TROOT-committed trace (single commitment / mixed
- *     4-byte layer-0, no decoupled column) -- a substantial FRI rework, NOT yet landed.
- *   HOLE 2 (self-inflicted by step 2): the query seed = keccak(final TFROOT) ALONE no longer binds the CP roots, so an
- *     adaptive prover fixes the trace, learns the queries, and crafts a degree-<N CP satisfying line-755 only there.
- *     FIX: seed queries from keccak(CP_final_root || trace_final_root) (or a running transcript) -- small, NOT yet landed.
- * The (S)/(S2) self-tests below return 99 only because they model the COUPLED prover, not these two.  PRODUCTION
- * (zk_fused_committed, ~2^-86) is UNAFFECTED: it reads the LIVE air LDE (degree-<N by construction, no decoupling) and
- * seeds queries from the CP final root (binds the CP).  This gadget is a demo with the two documented residuals. */
+ * SOUNDNESS HISTORY (full account: DOCS/III-ZKVM-TRACE-LDT-GAP.md): (1) the original verify bound the trace by MERKLE
+ * only (values, not degree) -> a high-degree trace + honest CP passed.  (2) A first trace-FRI fix went green on its
+ * self-test.  (3) An ADVERSARIAL FS AUDIT on the fixed verifier found that fix INSUFFICIENT -- two critical holes.
+ * (4) BOTH now FIXED, each verified by reproduce-then-fix (the lesson: a fix is only as good as the attack that tests it):
+ *   HOLE 1 (binding) -- FIXED: the trace FRI used to be a SEPARATE commitment from the constraint trace, tied only at
+ *     the 16 queries -> a DECOUPLED low-degree decoy passed.  build_attack_decoupled/zk_trace_attack_decoupled
+ *     REPRODUCE it (verify ACCEPTED, main rc=8).  FIX: trace_fri_commit() no longer commits layer 0 separately -- its
+ *     commitment IS TROOT, and verify() folds layer 0 from open_trace(TROOT), so the LDT folds the SAME trace line-755
+ *     reads.  Post-fix the decoupled attack REJECTS (rc 8 -> 99); (S3) gates it.
+ *   HOLE 2 (adaptive CP) -- FIXED: the first fix had moved the query seed to the trace root alone, unbinding the CP ->
+ *     an adaptive prover could fix the trace, learn the queries, and craft a degree-<N CP fitting line-755 only there.
+ *     FIX: queries now seed from keccak(CP_final_root || trace_final_root), binding the CP commitment before the queries
+ *     (the interpolation-based reproduction is a separate sub-project; the binding fix is argued structurally).
+ * (S)/(S2)/(S3) confirm honest ACCEPTS + the COUPLED and DECOUPLED provers both REJECT (load-bearing, not dead checks).
+ * PRODUCTION (zk_fused_committed, ~2^-86) was independently verified UNAFFECTED throughout: it reads the LIVE air LDE
+ * (degree-<N by construction, no decoupling) and seeds queries from the CP final root (binds the CP). */
 module zk_ext4_stark_committed
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
@@ -96,6 +95,7 @@ var TFA  : [u64; 124]   var TFB : [u64; 124]    /* trace FRI layers (GF(p^4) lif
 var TFROOT : [u8; 256]                          /* per-trace-FRI-layer Merkle root */
 var TFRR : [u64; 8]     var TFRI : [u64; 8]     /* trace fold challenges (FS from each trace layer root) */
 var TFOFFS: [u64; 8]    var TFSIZES: [u64; 8]
+var QSEED : [u8; 64]                            /* query seed = CP final root || trace final root (Hole-2 fix) */
 
 fn base_inv(v: u32) -> u32 {
     let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
@@ -150,12 +150,13 @@ fn trace_fri_commit() {
         TFA[j] = e2pack(f, 0u32)  TFB[j] = e2pack(0u32, 0u32)
         j = j + 1u64
     }
+    /* HOLE-1 FIX: layer 0's commitment IS TROOT (the SAME trace line-755 reads) -- NOT a separate TFROOT[0].  Commit
+     * only the FOLDED layers 1.. as TFROOT[0..], and derive each fold challenge from layer li's commitment (TROOT for
+     * li==0, else TFROOT[li-1]).  So the LDT folds the constraint trace itself -- no decoupled decoy column exists. */
     let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
     while size > 4u64 {
-        TFOFFS[li] = off  TFSIZES[li] = size
-        ser_layer_tf(off, size)
-        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&TFROOT as u64) + li * 32u64)
-        keccak256_oneshot((&TFROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        if li == 0u64 { keccak256_oneshot((&TROOT as u64), 32u64, (&DIG as u64)) }
+        if li != 0u64 { keccak256_oneshot((&TFROOT as u64) + (li - 1u64) * 32u64, 32u64, (&DIG as u64)) }
         TFRR[li] = e2pack(rd4(0u64), rd4(4u64))  TFRI[li] = e2pack(rd4(8u64), rd4(12u64))
         let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
         let mut k : u64 = 0u64
@@ -164,11 +165,10 @@ fn trace_fri_commit() {
             TFA[noff + k] = FRA[0]  TFB[noff + k] = FRB[0]
             k = k + 1u64
         }
+        ser_layer_tf(noff, half)                                       /* commit the FOLDED layer (li+1) as TFROOT[li] */
+        merkle_compute_root((&LEAF as u64), half as u32, 16u64, (&TFROOT as u64) + li * 32u64)
         off = noff  size = half  li = li + 1u64
     }
-    TFOFFS[li] = off  TFSIZES[li] = size
-    ser_layer_tf(off, size)
-    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&TFROOT as u64) + li * 32u64)
 }
 fn qleaf_a() -> u64 { let mut a : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 { a = a | ((QLEAF[k] as u64) << (8u64 * k))  k = k + 1u64 }  return a }
 fn qleaf_b() -> u64 { let mut b : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 { b = b | ((QLEAF[8u64 + k] as u64) << (8u64 * k))  k = k + 1u64 }  return b }
@@ -284,22 +284,26 @@ fn verify() -> u64 {
     let fa0 : u64 = FA[foff]  let fb0 : u64 = FB[foff]
     let mut c : u64 = 1u64
     while c < 4u64 { if FA[foff + c] != fa0 { return 2u64 }  if FB[foff + c] != fb0 { return 2u64 }  c = c + 1u64 }
-    /* TRACE low-degree FRI: re-derive its fold challenges from the committed trace-FRI roots. */
+    /* TRACE low-degree FRI: re-derive fold challenges.  Layer 0's commitment = TROOT (Hole-1 fix); layer i+1's = TFROOT[i]. */
     let mut tsz : u64 = DOM  let mut toff : u64 = 0u64  let mut ti : u64 = 0u64
     while tsz > 4u64 {
         TFOFFS[ti] = toff  TFSIZES[ti] = tsz
-        keccak256_oneshot((&TFROOT as u64) + ti * 32u64, 32u64, (&DIG as u64))
+        if ti == 0u64 { keccak256_oneshot((&TROOT as u64), 32u64, (&DIG as u64)) }
+        if ti != 0u64 { keccak256_oneshot((&TFROOT as u64) + (ti - 1u64) * 32u64, 32u64, (&DIG as u64)) }
         TFRR[ti] = e2pack(rd4(0u64), rd4(4u64))  TFRI[ti] = e2pack(rd4(8u64), rd4(12u64))
         toff = toff + tsz  tsz = tsz / 2u64  ti = ti + 1u64
     }
     let tnl : u64 = ti  let tfoff : u64 = toff
     TFOFFS[tnl] = tfoff  TFSIZES[tnl] = 4u64
-    /* trace FRI final-constant: a degree-<N committed trace folds to a constant; a HIGH-degree one does NOT -> REJECT. */
+    /* trace FRI final-constant (the fold-consistency below binds the folded layers to the TROOT trace per query). */
     let tfa0 : u64 = TFA[tfoff]  let tfb0 : u64 = TFB[tfoff]
     let mut tc : u64 = 1u64
     while tc < 4u64 { if TFA[tfoff + tc] != tfa0 { return 20u64 }  if TFB[tfoff + tc] != tfb0 { return 20u64 }  tc = tc + 1u64 }
-    /* queries from keccak(final TRACE-FRI root) -- the LAST commitment, so the query set binds the trace LDT too. */
-    keccak256_oneshot((&TFROOT as u64) + tnl * 32u64, 32u64, (&DIG as u64))
+    /* HOLE-2 FIX: queries bind BOTH the CP final root (ROOT[nl]) AND the trace final root (TFROOT[tnl-1]) -- else an
+     * adaptive prover fixes the trace, learns the queries, and crafts a degree-<N CP fitting line-755 only there. */
+    let mut qb : u64 = 0u64
+    while qb < 32u64 { QSEED[qb] = ROOT[nl * 32u64 + qb]  QSEED[32u64 + qb] = TFROOT[(tnl - 1u64) * 32u64 + qb]  qb = qb + 1u64 }
+    keccak256_oneshot((&QSEED as u64), 64u64, (&DIG as u64))
     let mut qi : u64 = 0u64
     while qi < 16u64 {
         let pq : *u8 = ((&DIG as u64) + qi) as *u8
@@ -340,25 +344,29 @@ fn verify() -> u64 {
             if FRB[0] != nxb { return 9u64 }
             li = li + 1u64
         }
-        /* TRACE FRI per query: (a) layer-0 consistency -- the FRI's layer 0 IS the committed trace lift(f(q0)); */
-        let pt0 : u32 = open_leaf_tf(0u64, DOM, q0)
-        if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, q0 as u32, pt0), (&PRF as u64), (&TFROOT as u64)) == 0u8 { return 21u64 }
-        if qleaf_a() != e2pack(fq, 0u32) { return 22u64 }
-        if qleaf_b() != e2pack(0u32, 0u32) { return 22u64 }
-        /* (b) fold-consistency down to the constant final layer -- a high-degree committed trace fails this/return 20. */
+        /* TRACE FRI per query (Hole-1 fix): fold-consistency from layer 0 = the TROOT-committed trace down to the
+         * constant final.  Layer 0's leaves come from open_trace (bound to TROOT, the SAME trace line-755 reads), so
+         * there is no decoupled column -- a high-degree or violating TROOT trace fails the fold/final-constant. */
         let mut tli : u64 = 0u64
         while tli < tnl {
-            let ts : u64 = TFSIZES[tli]  let to : u64 = TFOFFS[tli]  let thalf : u64 = ts / 2u64
+            let ts : u64 = TFSIZES[tli]  let thalf : u64 = ts / 2u64
             let tqm : u64 = q0 & (thalf - 1u64)
-            let tp1 : u32 = open_leaf_tf(to, ts, tqm)
-            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, tqm as u32, tp1), (&PRF as u64), (&TFROOT as u64) + tli * 32u64) == 0u8 { return 23u64 }
-            let tloa : u64 = qleaf_a()  let tlob : u64 = qleaf_b()
-            let tp2 : u32 = open_leaf_tf(to, ts, tqm + thalf)
-            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, (tqm + thalf) as u32, tp2), (&PRF as u64), (&TFROOT as u64) + tli * 32u64) == 0u8 { return 23u64 }
-            let thia : u64 = qleaf_a()  let thib : u64 = qleaf_b()
-            let tno : u64 = TFOFFS[tli + 1u64]  let tns : u64 = TFSIZES[tli + 1u64]
-            let tp3 : u32 = open_leaf_tf(tno, tns, tqm)
-            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, tqm as u32, tp3), (&PRF as u64), (&TFROOT as u64) + (tli + 1u64) * 32u64) == 0u8 { return 23u64 }
+            let mut tloa : u64 = 0u64  let mut tlob : u64 = 0u64  let mut thia : u64 = 0u64  let mut thib : u64 = 0u64
+            if tli == 0u64 {
+                let lf : u32 = open_trace(tqm)            if lf == 0xFFFFFFFFu32 { return 23u64 }
+                let hf : u32 = open_trace(tqm + thalf)    if hf == 0xFFFFFFFFu32 { return 23u64 }
+                tloa = e2pack(lf, 0u32)  tlob = e2pack(0u32, 0u32)  thia = e2pack(hf, 0u32)  thib = e2pack(0u32, 0u32)
+            }
+            if tli != 0u64 {
+                let tp1 : u32 = open_leaf_tf(TFOFFS[tli], ts, tqm)
+                if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, tqm as u32, tp1), (&PRF as u64), (&TFROOT as u64) + (tli - 1u64) * 32u64) == 0u8 { return 23u64 }
+                tloa = qleaf_a()  tlob = qleaf_b()
+                let tp2 : u32 = open_leaf_tf(TFOFFS[tli], ts, tqm + thalf)
+                if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, (tqm + thalf) as u32, tp2), (&PRF as u64), (&TFROOT as u64) + (tli - 1u64) * 32u64) == 0u8 { return 23u64 }
+                thia = qleaf_a()  thib = qleaf_b()
+            }
+            let tp3 : u32 = open_leaf_tf(TFOFFS[tli + 1u64], TFSIZES[tli + 1u64], tqm)   /* layer tli+1 from TFROOT[tli] */
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, tqm as u32, tp3), (&PRF as u64), (&TFROOT as u64) + tli * 32u64) == 0u8 { return 24u64 }
             let tnxa : u64 = qleaf_a()  let tnxb : u64 = qleaf_b()
             foldp4(tloa, tlob, thia, thib, TFRR[tli], TFRI[tli], OM[(DOM / ts) * tqm])
             if FRA[0] != tnxa { return 24u64 }
@@ -441,6 +449,69 @@ fn zk_trace_attack_k() -> u32 @export {
     }
     return 0u32                                      /* no false accept in range -> hole CLOSED */
 }
+/* HOLE-1 reproduction (the DECOUPLED prover the coupled self-test above never models): commit the trace FRI on a
+ * low-degree DECOY (the honest LDE) while TROOT commits a VIOLATING trace (one H-point at row rstar tampered). The
+ * decoupled trace FRI is genuinely low-degree -> passes the LDT; the violation is caught ONLY if a query hits the
+ * tampered rows {rstar-1, rstar}.  Grinds rstar to one outside the (decoy-derived, fixed) query set -> ACCEPT. */
+fn build_attack_decoupled(rstar: u64) {
+    air_reset(1u32, N as u32)
+    let mut v : u32 = 2u32  let mut i : u64 = 0u64
+    while i < N { TF[i] = v  v = sf_mul(v, v)  i = i + 1u64 }
+    i = 0u64  while i < N { air_set_trace(i, 0u64, TF[i])  i = i + 1u64 }
+    air_build_lde()
+    /* (1) DECOY: commit the trace FRI on the HONEST LDE (low-degree). */
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let f : u32 = air_lde_at(0u64, j)
+        TLEAF[j * 4u64] = (f & 0xFFu32) as u8  TLEAF[j * 4u64 + 1u64] = ((f >> 8u32) & 0xFFu32) as u8
+        TLEAF[j * 4u64 + 2u64] = ((f >> 16u32) & 0xFFu32) as u8  TLEAF[j * 4u64 + 3u64] = ((f >> 24u32) & 0xFFu32) as u8
+        j = j + 1u64
+    }
+    trace_fri_commit()
+    /* (2) TROOT on a VIOLATING trace: honest LDE except the H-point at row rstar set to TF[rstar]+1. */
+    j = 0u64
+    while j < DOM {
+        let mut f : u32 = air_lde_at(0u64, j)
+        if j == BLOW * rstar { f = sf_add(TF[rstar], 1u32) }
+        TLEAF[j * 4u64] = (f & 0xFFu32) as u8  TLEAF[j * 4u64 + 1u64] = ((f >> 8u32) & 0xFFu32) as u8
+        TLEAF[j * 4u64 + 2u64] = ((f >> 16u32) & 0xFFu32) as u8  TLEAF[j * 4u64 + 3u64] = ((f >> 24u32) & 0xFFu32) as u8
+        j = j + 1u64
+    }
+    merkle_compute_root((&TLEAF as u64), DOM as u32, 4u64, (&TROOT as u64))
+    keccak256_oneshot((&TROOT as u64), 32u64, (&DIG as u64))
+    ALA[0] = e2pack(rd4(0u64), rd4(4u64))  ALB[0] = e2pack(rd4(8u64), rd4(12u64))
+    air_add_term(0u32, 1u32, 2u32, 0u32)
+    air_add_term(0u32, NEG1, 1u32, 1u32)
+    air_set_alpha_ext4(0u64, ALA[0], ALB[0])
+    air_build_cp_ext4()
+    j = 0u64
+    while j < DOM { FA[j] = air_cp_ext4_a(j)  FB[j] = air_cp_ext4_b(j)  j = j + 1u64 }
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
+    while size > 4u64 {
+        OFFS[li] = off  SIZES[li] = size
+        ser_layer(off, size)
+        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+        keccak256_oneshot((&ROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        RR[li] = e2pack(rd4(0u64), rd4(4u64))  RI[li] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut k : u64 = 0u64
+        while k < half { foldp4(FA[off + k], FB[off + k], FA[off + k + half], FB[off + k + half], RR[li], RI[li], OM[str * k])  FA[noff + k] = FRA[0]  FB[noff + k] = FRB[0]  k = k + 1u64 }
+        off = noff  size = half  li = li + 1u64
+    }
+    OFFS[li] = off  SIZES[li] = size
+    ser_layer(off, size)
+    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+}
+fn zk_trace_attack_decoupled() -> u64 @export {
+    fill_om()
+    let mut rstar : u64 = 1u64
+    while rstar < 15u64 {
+        build_attack_decoupled(rstar)
+        if verify() == 1u64 { return rstar }        /* ACCEPT of a DECOUPLED false trace -> Hole 1, at this rstar */
+        rstar = rstar + 1u64
+    }
+    return 0u64
+}
 
 fn main() -> u64 {
     fill_om()
@@ -473,5 +544,10 @@ fn main() -> u64 {
      * 23/24 (fold-consistency) -- NOT an unrelated <20 code. */
     build_attack(1u32)
     if verify() < 20u64 { return 7u64 }
+    /* (S3) HOLE 1 (binding) -- the DECOUPLED prover: a low-degree DECOY trace FRI + a violating TROOT must be
+     * REJECTED.  zk_trace_attack_decoupled()!=0 means verify() ACCEPTED a decoupled false trace (the trace FRI was
+     * proven low-degree on a decoy, not on the constraint trace).  RED (returns 8) until the trace FRI is bound to
+     * TROOT globally (layer 0 = the TROOT-committed trace). */
+    if zk_trace_attack_decoupled() != 0u64 { return 8u64 }
     return 99u64
 }

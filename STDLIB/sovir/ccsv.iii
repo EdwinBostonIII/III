@@ -883,7 +883,9 @@ fn pstmt() {
         }
         eat(Q_SEMI)  return
     }
-    if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32  ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  ENDED_RET=1u32  eat(Q_SEMI)  return }   /* mask return to the declared width */
+    if kw(C,"return" as u64,6u32)==1u32 { C=C+1u32
+        if cp(Q_SEMI)==1u32 { econst(0i64)  eb(0x60u32)  ENDED_RET=1u32  C=C+1u32  return }   /* bare `return;` (void) -> push 0 (SVIR RET always pops a value) */
+        ebin(0u32)  if CUR_RMASK!=0i64 { econst(CUR_RMASK)  eb(0x25u32) }  eb(0x60u32)  ENDED_RET=1u32  eat(Q_SEMI)  return }   /* `return e;` masked to the declared width */
     if kw(C,"if" as u64,2u32)==1u32 {
         C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eb(0x42u32)  BLKD=BLKD+1i64  pbody()
         if kw(C,"else" as u64,4u32)==1u32 { C=C+1u32  eb(0x43u32)  pbody() }

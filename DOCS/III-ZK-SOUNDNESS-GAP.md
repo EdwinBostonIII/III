@@ -102,9 +102,24 @@ independent compilers must agree byte-for-byte). `zk_svir_attest` restores an or
 verifier that must reject a false statement. Until it returns 99, the zk attestation is not sound, and no report
 should claim otherwise.
 
-## The SECOND landmine — the permutation argument (✅ RESOLVED via Fiat-Shamir-α, was QUARANTINED)
+## The SECOND landmine — the permutation argument (⚠️ STILL UNSOUND IN-PROTOCOL; the FS-α "fix" was self-graded)
 
-> **✅ RESOLVED (the quarantine is lifted).** `zk_perm_oracle` now reads **99**: it reproduces the fixed-α=11
+> **⚠️ REOPENED (advisor-surfaced, malicious-prover test). The FS-α "fix" below was INSUFFICIENT and self-graded.**
+> `zk_perm_oracle=99` only proved the *honest* α (= `derive(trace)`) rejects *one hand-picked* forge -- it never let a
+> MALICIOUS prover CHOOSE α. The discriminating test `zk_perm_malicious.iii` does: it bakes a NON-permutation
+> `{3,3,5,10}` (vs program `{3,7,5,9}`) with the prover's OWN colliding `α'=11` into the constraints and runs the FULL
+> STARK. **`air_stark_verify` ACCEPTS it (exit 50)** -- because the permutation challenge α is set by `air_add_term`
+> BEFORE proving and `air_stark_verify` NEVER re-derives it from the committed trace (it re-derives only the
+> *combination* alphas, `air_derive_alphas`). So the permutation is **unsound in-protocol**, and **ZK-MEMORY +
+> ZK-FUSED inherit it** (their permutation pillar is forgeable; their "99" is self-graded, the same flaw one level up).
+> **THE REAL FIX:** `air_stark_verify` must re-derive α (and β) from the committed trace roots and reject any proof
+> not using that α -- i.e. the grand-product challenge must be a STARK-managed Fiat-Shamir value bound to the
+> commitment, not a baked constant. `zk_perm_malicious` flips 50->99 when fixed. SOUND meanwhile: the TRANSITION-ONLY
+> pillars (ZK-STACK/OPCODE/LOOP/OMEGA-E) -- they don't use the permutation and rest on the re-derived combination
+> alphas. The Z_T quotient fix and the two overflow-bug fixes also stand. The (insufficient) FS-α history follows.
+
+### (insufficient) the FS-α attempt
+> `zk_perm_oracle` reads **99**: it reproduces the fixed-α=11
 > unsoundness (the forge `{3,3,5,10}` is accepted), then shows the fix — **α derived by Fiat-Shamir from a non-linear
 > (square-mixing) hash of the access values VO++VS** — REJECTS the same forge, while still ACCEPTING an honest
 > permutation (a permutation's grand product is **α-invariant**, so correctness is preserved). The adaptive attack

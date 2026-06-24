@@ -30,10 +30,10 @@ const OPEN_EXISTING  : u32 = 3u32
 const SHARE_READ     : u32 = 1u32
 const ATTR_NORMAL    : u32 = 0x80u32
 const INVALID_HANDLE : u64 = 0xFFFFFFFFFFFFFFFFu64
-const SBUF_MAX       : u32 = 1048576u32
+const SBUF_MAX       : u32 = 16777216u32   /* 16MB: the .s for a seed core file exceeds 1MB (parse.c .s ~1MB+; was 1048576 -> silently truncated -> capped .text -> crash) */
 
 var NXFER : [u8; 8]
-var SBUF  : [u8; 1048576]
+var SBUF  : [u8; 16777216]
 
 fn read_file(path: *u8) -> u32 {
     let h : u64 = CreateFileA(path, GENERIC_READ, SHARE_READ, 0u64, OPEN_EXISTING, ATTR_NORMAL, 0u64)

@@ -30,6 +30,7 @@ const Q_EQ:i64=10i64 const Q_NE:i64=11i64 const Q_LT:i64=12i64 const Q_GT:i64=13
 const Q_ADD:i64=16i64 const Q_SUB:i64=17i64 const Q_MUL:i64=18i64 const Q_DIV:i64=19i64 const Q_MOD:i64=20i64
 const Q_AND:i64=21i64 const Q_OR:i64=22i64 const Q_XOR:i64=23i64 const Q_SHL:i64=24i64 const Q_SHR:i64=25i64 const Q_COM:i64=6i64
 const Q_LBR:i64=26i64 const Q_RBR:i64=27i64 const Q_DOT:i64=28i64 const Q_ARROW:i64=29i64 const Q_INC:i64=30i64 const Q_DEC:i64=31i64 const Q_NOT:i64=32i64 const Q_QUEST:i64=33i64 const Q_COLON:i64=34i64
+const Q_LAND:i64=35i64 const Q_LOR:i64=36i64   /* logical && / || (short-circuit; distinct from bitwise Q_AND/Q_OR) */
 
 fn sp(c: u32) -> u32 { if c==32u32 {return 1u32} if c==9u32 {return 1u32} if c==10u32 {return 1u32} if c==13u32 {return 1u32} return 0u32 }
 fn dg(c: u32) -> u32 { if c>=48u32 { if c<=57u32 {return 1u32} } return 0u32 }
@@ -96,8 +97,8 @@ fn lex() {
             if c==33u32 { if c2==61u32 { pt(3u32,Q_NE,0u32,0u32) adv=2u32 } else { adv=1u32 } }
             if c==60u32 { if c2==61u32 { pt(3u32,Q_LE,0u32,0u32) adv=2u32 } else { if c2==60u32 { pt(3u32,Q_SHL,0u32,0u32) adv=2u32 } else { pt(3u32,Q_LT,0u32,0u32) adv=1u32 } } }
             if c==62u32 { if c2==61u32 { pt(3u32,Q_GE,0u32,0u32) adv=2u32 } else { if c2==62u32 { pt(3u32,Q_SHR,0u32,0u32) adv=2u32 } else { pt(3u32,Q_GT,0u32,0u32) adv=1u32 } } }
-            if c==38u32 { pt(3u32,Q_AND,0u32,0u32) adv=1u32 }
-            if c==124u32 { pt(3u32,Q_OR,0u32,0u32) adv=1u32 }
+            if c==38u32 { if c2==38u32 { pt(3u32,Q_LAND,0u32,0u32) adv=2u32 } else { pt(3u32,Q_AND,0u32,0u32) adv=1u32 } }   /* && or & */
+            if c==124u32 { if c2==124u32 { pt(3u32,Q_LOR,0u32,0u32) adv=2u32 } else { pt(3u32,Q_OR,0u32,0u32) adv=1u32 } }   /* || or | */
             if c==40u32 { pt(3u32,Q_LP,0u32,0u32) adv=1u32 }
             if c==41u32 { pt(3u32,Q_RP,0u32,0u32) adv=1u32 }
             if c==123u32 { pt(3u32,Q_LB,0u32,0u32) adv=1u32 }
@@ -327,11 +328,62 @@ fn emit_memset() {
     eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)
     econst(0i64)
 }
+/* ++ / -- on a scalar LOCAL (scale 1).  isdec:1=-- ; post:1=leave OLD (postfix) / 0=leave NEW (prefix). */
+fn pinc_local(slot:u32, isdec:u32, post:u32) {
+    let tv:u32=LN  if LN<255u32 {LN=LN+1u32}
+    if post==1u32 {
+        emit_lget(slot)  eu8(0x11u32,tv)                                                          /* tv = old */
+        eu8(0x10u32,tv)  econst(1i64)  if isdec==1u32 {eb(0x21u32)} else {eb(0x20u32)}  emit_lset(slot)   /* slot = old +/-1 */
+        eu8(0x10u32,tv)                                                                            /* leave OLD */
+    } else {
+        emit_lget(slot)  econst(1i64)  if isdec==1u32 {eb(0x21u32)} else {eb(0x20u32)}  emit_lset(slot)
+        emit_lget(slot)                                                                            /* leave NEW (canonical reload) */
+    }
+}
+/* ++ / -- on a MEMORY lvalue: the store ADDRESS is ALREADY on the eval stack.  elem size/sign/mask ; scale 1. */
+fn pinc_mem(esz:i64, sgn:u32, mask:i64, isdec:u32, post:u32) {
+    let ta:u32=LN  if LN<255u32 {LN=LN+1u32}
+    let tv:u32=LN  if LN<255u32 {LN=LN+1u32}
+    eu8(0x11u32,ta)                                                                                /* ta = addr (computed once) */
+    if post==1u32 {
+        eu8(0x10u32,ta)  eload(esz,sgn)  eu8(0x11u32,tv)                                           /* tv = old = *addr */
+        eu8(0x10u32,ta)  eu8(0x10u32,tv)  econst(1i64)  if isdec==1u32 {eb(0x21u32)} else {eb(0x20u32)}  if mask!=0i64 {econst(mask) eb(0x25u32)}  estore(esz)   /* *addr = old +/-1 */
+        eu8(0x10u32,tv)                                                                            /* leave OLD */
+    } else {
+        eu8(0x10u32,ta)  eload(esz,sgn)  econst(1i64)  if isdec==1u32 {eb(0x21u32)} else {eb(0x20u32)}  if mask!=0i64 {econst(mask) eb(0x25u32)}  eu8(0x11u32,tv)   /* tv = new (masked) */
+        eu8(0x10u32,ta)  eu8(0x10u32,tv)  estore(esz)                                              /* *addr = new */
+        eu8(0x10u32,tv)                                                                            /* leave NEW */
+    }
+}
+/* parse an lvalue at C and pre/post inc/dec it.  Handles NAME[idx] (global array / pointer) and bare scalar local NAME. */
+fn elvalinc(isdec:u32, post:u32) {
+    if TK[C as u64]==1u32 {
+        let t:u32=C
+        if ispat(C+1u32,Q_LBR)==1u32 {
+            let ab:i64=abase(t)
+            if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)  let am:i64=awmask(t)
+                estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }  pinc_mem(sz,sg,am,isdec,post)  return }
+            let pli:i32=lidx(t)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)
+                estride(psz)  eb(0x20u32)  pinc_mem(psz,psg,0i64,isdec,post)  return }
+        }
+        let li:i32=lidx(t)  if li>=0i32 { C=C+1u32  pinc_local(li as u32,isdec,post)  return }
+    }
+    eprim()                                                                                        /* not a recognized lvalue -> plain (++*p etc., rare) */
+}
 fn eprim() {
+    if cp(Q_INC)==1u32 { C=C+1u32  elvalinc(0u32,0u32)  return }   /* ++lvalue (prefix, leave NEW) */
+    if cp(Q_DEC)==1u32 { C=C+1u32  elvalinc(1u32,0u32)  return }   /* --lvalue (prefix) */
     if cp(Q_MUL)==1u32 { C=C+1u32                                  /* *p : pointer deref (typed by pointee width) */
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 {
             let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]  let psg:u32=LPSG[dli as u64]   /* read into lets BEFORE branching (inline LPT[dli]<0 after lidx miscompiles -> skips, LOAD64) */
-            if lp<0i32 { emit_lget(dli as u32)  C=C+1u32  eload(psz, psg)  return } } }
+            if lp<0i32 {
+                if ispat(C+1u32,Q_INC)==1u32 { let ta:u32=LN  if LN<255u32 {LN=LN+1u32}   /* *(p++) : deref OLD p, advance p by pointee size */
+                    emit_lget(dli as u32)  eu8(0x11u32,ta)  emit_lget(dli as u32)  econst(psz)  eb(0x20u32)  emit_lset(dli as u32)
+                    eu8(0x10u32,ta)  eload(psz,psg)  C=C+2u32  return }
+                if ispat(C+1u32,Q_DEC)==1u32 { let ta:u32=LN  if LN<255u32 {LN=LN+1u32}   /* *(p--) */
+                    emit_lget(dli as u32)  eu8(0x11u32,ta)  emit_lget(dli as u32)  econst(psz)  eb(0x21u32)  emit_lset(dli as u32)
+                    eu8(0x10u32,ta)  eload(psz,psg)  C=C+2u32  return }
+                emit_lget(dli as u32)  C=C+1u32  eload(psz, psg)  return } } }
         eprim()  eb(0x82u32)  return                              /* fallback (struct-ptr / complex deref) -> LOAD64 */
     }
     if cp(Q_AND)==1u32 {                                            /* &arr[i] / &arr : address-of (no load) */
@@ -368,9 +420,15 @@ fn eprim() {
         if cp(Q_LBR)==1u32 {                                         /* NAME[i] : array / pointer index load (typed width) */
             let ab:i64=abase(t)
             if ab>=0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)
-                estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eload(sz, sg)  return }                 /* arr[i] : i*esz (+base) ; LOADn */
+                estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
+                if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),0u32,1u32)  return }   /* arr[i]++ */
+                if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),1u32,1u32)  return }   /* arr[i]-- */
+                eload(sz, sg)  return }                 /* arr[i] : i*esz (+base) ; LOADn */
             let pli:i32=lidx(t)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)
-                estride(psz)  eb(0x20u32)  eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
+                estride(psz)  eb(0x20u32)
+                if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,0u32,1u32)  return }   /* p[i]++ */
+                if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,1u32,1u32)  return }   /* p[i]-- */
+                eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)
@@ -387,9 +445,36 @@ fn eprim() {
         if kw(t,"true" as u64,4u32)==1u32 { econst(1i64)  return }  if kw(t,"false" as u64,5u32)==1u32 { econst(0i64)  return }  if kw(t,"NULL" as u64,4u32)==1u32 { econst(0i64)  return }   /* bool / null literals */
         let ad:i64=abase(t)  if ad>=0i64 { econst(ad)  return }               /* bare array name -> &arr[0] (array->pointer decay) */
         let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64])  return }   /* enum member / #define constant */
-        let li:i32=lidx(t)  if li>=0i32 { emit_lget(li as u32) }  return
+        let li:i32=lidx(t)  if li>=0i32 {
+            if cp(Q_INC)==1u32 { C=C+1u32  pinc_local(li as u32,0u32,1u32)  return }   /* i++ (postfix) */
+            if cp(Q_DEC)==1u32 { C=C+1u32  pinc_local(li as u32,1u32,1u32)  return }   /* i-- (postfix) */
+            emit_lget(li as u32) }
+        return
     }
     C=C+1u32
+}
+/* logical && : LHS truthiness already on the stack ; fold `&& rhs` LEFT-assoc with SHORT-CIRCUIT (rhs only
+ * evaluated when LHS is true).  rhs is a bitwise-or expression (ebin(2)) -- && binds looser than every binop. */
+fn eland_tail() {
+    while cp(Q_LAND)==1u32 {
+        C=C+1u32  let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
+        eb(0x42u32)                                     /* IF (pops LHS ; nonzero = true) */
+        ebin(2u32)  econst(0i64)  eb(0x31u32)  eu8(0x11u32,tmp)   /* tmp = (rhs != 0) -> 0/1 */
+        eb(0x43u32)  econst(0i64)  eu8(0x11u32,tmp)     /* ELSE tmp = 0 (short-circuit) */
+        eb(0x44u32)  eu8(0x10u32,tmp)                   /* END ; result on stack (new LHS for chaining) */
+    }
+}
+/* logical || : LHS on the stack ; fold `|| rhs` LEFT-assoc with SHORT-CIRCUIT.  rhs is an &&-expression
+ * (ebin(2) + eland_tail) since && binds tighter than ||. */
+fn elor_tail() {
+    while cp(Q_LOR)==1u32 {
+        C=C+1u32  let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
+        eb(0x42u32)                                     /* IF (LHS true) */
+        econst(1i64)  eu8(0x11u32,tmp)                  /* tmp = 1 (short-circuit) */
+        eb(0x43u32)                                     /* ELSE */
+        ebin(2u32)  eland_tail()  econst(0i64)  eb(0x31u32)  eu8(0x11u32,tmp)   /* tmp = (rhs != 0) */
+        eb(0x44u32)  eu8(0x10u32,tmp)                   /* END ; result */
+    }
 }
 fn ebin(minp: u32) {
     eprim()  let mut go:u32=1u32
@@ -398,7 +483,10 @@ fn ebin(minp: u32) {
         else { let p:i64=TV[C as u64]  let pr:u32=prec(p)
             if pr==0u32 { go=0u32 } else { if pr<minp { go=0u32 } else { C=C+1u32  ebin(pr+1u32)  eb(opc(p)) } } }
     }
-    if minp==0u32 { if cp(Q_QUEST)==1u32 {            /* cond ? a : b (lowest prec, right-assoc) */
+    if minp==0u32 {
+        eland_tail()                                     /* && (binds tighter than ||) */
+        elor_tail()                                      /* || */
+        if cp(Q_QUEST)==1u32 {            /* cond ? a : b (lowest prec, right-assoc) */
         let tmp:u32=LN  if LN<255u32 { LN=LN+1u32 }   /* fresh temp local carries the value across the join */
         C=C+1u32  eb(0x42u32)                         /* cond ; IF (void block) */
         ebin(0u32)  eu8(0x11u32,tmp)                  /* then: a ; LOCAL_SET tmp */
@@ -485,6 +573,8 @@ fn emit_switch_bodies(n:u32) {
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
     if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
+    if cp(Q_INC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* ++lvalue ; (prefix inc statement -> eval + DROP) */
+    if cp(Q_DEC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* --lvalue ; */
     if cp(Q_MUL)==1u32 {                                            /* *p = e ;  (pointer deref store, typed width) */
         C=C+1u32
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 {
@@ -621,9 +711,14 @@ fn pstmt() {
         let nt:u32=C  let ab:i64=abase(nt)
         if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let sg:u32=asign(nt)  let am:i64=awmask(nt)   /* arr[i] [op]= e (typed width) */
             estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
+            if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]++ ; (statement: eval + DROP) */
+            if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,1u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]-- ; */
             emit_av(sz, sg, am)  eat(Q_SEMI)  return }
         let pli:i32=lidx(nt)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)
-            estride(psz)  eb(0x20u32)  emit_av(psz, psg, 0i64)   /* pointee width: direct read, pli */
+            estride(psz)  eb(0x20u32)
+            if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* p[i]++ ; */
+            if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(psz,psg,0i64,1u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* p[i]-- ; */
+            emit_av(psz, psg, 0i64)   /* pointee width: direct read, pli */
             eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if prec(TV[(C+1u32) as u64])>0u32 { if TK[(C+2u32) as u64]==3u32 { if TV[(C+2u32) as u64]==Q_ASN {   /* x op= e ; (compound assign, local: += -= *= &= |= ^= >>= <<= ...) */

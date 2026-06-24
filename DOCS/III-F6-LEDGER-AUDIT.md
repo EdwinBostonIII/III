@@ -54,8 +54,14 @@ gate was RED on BOTH the old and new iiis-2 (so **not** caused by the affine cha
    params 1-4 in registers (rcx/rdx/r8/r9) and 5+ on the stack; **cg_r0 emits a reference to each stack param as an
    undefined GLOBAL symbol `L_p_<name>` instead of loading it from the caller's stack frame.** So the Ring-0 backend
    cannot correctly compile any function with >4 parameters. This is the parameter-handling defect class the
-   CRASH-DEBUGGING-PROTOCOL flags; the fix is in `cg_r0.iii`'s parameter-resolution codegen and must follow the
-   protocol (read the whole param path, audit before edit, disassemble-verify the fixed `.o`) — a focused backend pass,
+   CRASH-DEBUGGING-PROTOCOL flags. **Exact root cause: `cg_r0.iii:1283` — `if pc > 4u32 { pmax = 4u32 }`** caps the
+   prologue's param→frame-slot spill at the 4 register params (rcx/rdx/r8/r9); params 5+ (Win64 stack args, at
+   `[rbp + 48 + 8*(i-4)]` after saved-rbp + return-addr + 32-byte shadow) are **never given a frame slot**, so the
+   body's reference to such a param resolves to the global path and emits `L_p_<name>`. **Fix approach:** in the
+   prologue (cg_r0.iii ~1278-1286), for `pi` in `[4, pc)` load the stack arg from the caller frame and store it to the
+   param's local slot (so every param has a slot), *or* teach the param-ref codegen (`r0_emit_param_sal` /
+   the IDENT path) to emit a `[rbp+offset]` load for `pi>=4`. Must follow the protocol (read the whole frame/param
+   path, audit before edit, disassemble-verify the fixed `.o` reproduces the FIPS vector) — a focused backend pass,
    not a tail-of-session edit. Until then the cg_r0 Ring-0 crypto gate stays RED and `build_iiis2 --check-corpus` exits
    5 *after* a clean corpus (59/0) + install — i.e. the produced iiis-2 is valid for Ring-3 (the only regression is the
    pre-existing Ring-0 crypto path).

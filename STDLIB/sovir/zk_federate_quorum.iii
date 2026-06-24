@@ -1,0 +1,122 @@
+/* zk_federate_quorum.iii -- Phase Omega6: FEDERATE the shipped attestation.  A COMMITTED GF(p^4) FRI proof's
+ * content-address is certified by a POST-QUANTUM (ML-DSA) BFT QUORUM of N = 3f+1 peers: each peer votes over the
+ * proof's mhash, and a 2f+1 quorum forms iff enough independent peers attest the SAME committed proof.  Composes the
+ * Omega5 committed proof (the block) + aether/pq_quorum (the 2f+1 ML-DSA quorum) -- the cross-node verify-and-fold of
+ * Omega5 generalised to a Byzantine-tolerant federation.
+ *
+ * f = 1 -> N = 4 peers, quorum = 3.  The "block" the peers vote on IS the committed proof's content-address
+ * (keccak of the committed FRI roots + final codeword), so the certificate attests the SAME proof shipped in Omega5.
+ *
+ * Returns 99 iff: (H) all 4 honest votes over the proof-mhash -> a 2f+1 quorum forms (pqq_verify==1); (T) ONE Byzantine
+ * peer (vote tampered, f=1) -> 3 valid remain -> the quorum STILL forms (Byzantine-tolerant); (S) TWO Byzantine peers
+ * (f=2 > the tolerated f=1) -> only 2 valid < 3 -> NO quorum (SAFETY: no false certificate past the fault bound). */
+module zk_federate_quorum
+
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn bq_nodes(f: u32) -> u32 from "bft_quorum.iii"
+extern @abi(c-msvc-x64) fn bq_quorum(f: u32) -> u32 from "bft_quorum.iii"
+extern @abi(c-msvc-x64) fn bq_safe(f: u32) -> u32 from "bft_quorum.iii"
+extern @abi(c-msvc-x64) fn pqq_keygen(i: u64, seed_byte: u8) -> i32 from "pq_quorum.iii"
+extern @abi(c-msvc-x64) fn pqq_set_block(block_mhash: u64, view: u64) -> i32 from "pq_quorum.iii"
+extern @abi(c-msvc-x64) fn pqq_vote(i: u64) -> i32 from "pq_quorum.iii"
+extern @abi(c-msvc-x64) fn pqq_valid_count(n_peers: u64) -> u64 from "pq_quorum.iii"
+extern @abi(c-msvc-x64) fn pqq_verify(n_peers: u64, threshold: u64) -> u8 from "pq_quorum.iii"
+extern @abi(c-msvc-x64) fn pqq_tamper(i: u64) -> i32 from "pq_quorum.iii"
+
+const PRIME : u32 = 998244353u32
+const DOM   : u64 = 16u64
+const G4    : u64 = 4294967298u64
+
+var OM   : [u32; 16]
+var FA   : [u64; 32]    var FB : [u64; 32]
+var ROOT : [u8; 128]
+var RR   : [u64; 8]      var RI : [u64; 8]
+var DIG  : [u8; 32]
+var LEAF : [u8; 256]
+var FRA  : [u64; 1]      var FRB : [u64; 1]
+var PMH  : [u8; 32]      var COMMIT : [u8; 256]   /* proof-mhash + the committed (roots||final) preimage */
+
+fn base_inv(v: u32) -> u32 { let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32  while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }  return r }
+fn fill_om() { let w : u32 = sf_rou(DOM as u32)  OM[0] = 1u32  let mut j : u64 = 1u64  while j < DOM { OM[j] = sf_mul(OM[j - 1u64], w)  j = j + 1u64 } }
+fn p4mul_a(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fa), ext2_mul(ext2_mul(rb, fb), G4)) }
+fn p4mul_b(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fb), ext2_mul(rb, fa)) }
+fn foldp4(loa: u64, lob: u64, hia: u64, hib: u64, ra: u64, rb: u64, x: u32) {
+    let inv2 : u32 = base_inv(2u32)  let i2x : u32 = base_inv(sf_add(x, x))
+    let fea : u64 = ext2_smul(inv2, ext2_add(loa, hia))  let feb : u64 = ext2_smul(inv2, ext2_add(lob, hib))
+    let foa : u64 = ext2_smul(i2x, ext2_sub(loa, hia))   let fob : u64 = ext2_smul(i2x, ext2_sub(lob, hib))
+    FRA[0] = ext2_add(fea, p4mul_a(ra, rb, foa, fob))  FRB[0] = ext2_add(feb, p4mul_b(ra, rb, foa, fob))
+}
+fn rd4(o: u64) -> u32 { let p : *u8 = ((&DIG as u64) + o) as *u8  let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)  while x >= PRIME { x = x - PRIME }  return x }
+fn ser_leaves(off: u64, size: u64) {
+    let mut i : u64 = 0u64
+    while i < size {
+        let a : u64 = FA[off + i]  let b : u64 = FB[off + i]  let base : u64 = i * 16u64
+        let mut k : u64 = 0u64  while k < 8u64 { LEAF[base + k] = ((a >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+        k = 0u64  while k < 8u64 { LEAF[base + 8u64 + k] = ((b >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+        i = i + 1u64
+    }
+}
+
+/* build the committed FRI (DOM=16, 2 folds) and set PMH = keccak( roots || final-codeword ) -- the committed proof's
+ * content-address (the same object Omega5 ships + a peer verifies). */
+fn build_proof_mhash() {
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let x : u32 = OM[j]  let mut aa : u64 = 0u64  let mut bb : u64 = 0u64  let mut k : u64 = 4u64
+        while k > 0u64 { k = k - 1u64  aa = ext2_smul(x, aa)  bb = ext2_smul(x, bb)  aa = ext2_add(aa, e2pack((k + 1u64) as u32, (k + 2u64) as u32))  bb = ext2_add(bb, e2pack((k + 3u64) as u32, (k + 4u64) as u32)) }
+        FA[j] = aa  FB[j] = bb  j = j + 1u64
+    }
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
+    while size > 4u64 {
+        ser_leaves(off, size)
+        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+        keccak256_oneshot((&ROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        RR[li] = e2pack(rd4(0u64), rd4(4u64))  RI[li] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut m : u64 = 0u64
+        while m < half { foldp4(FA[off + m], FB[off + m], FA[off + m + half], FB[off + m + half], RR[li], RI[li], OM[str * m])  FA[noff + m] = FRA[0]  FB[noff + m] = FRB[0]  m = m + 1u64 }
+        off = noff  size = half  li = li + 1u64
+    }
+    ser_leaves(off, size)
+    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+    /* preimage = (li+1) roots (96B) || final 4 leaves (64B) */
+    let mut b : u64 = 0u64
+    while b < (li + 1u64) * 32u64 { COMMIT[b] = ROOT[b]  b = b + 1u64 }
+    let mut c : u64 = 0u64
+    while c < 64u64 { COMMIT[(li + 1u64) * 32u64 + c] = LEAF[c]  c = c + 1u64 }
+    keccak256_oneshot((&COMMIT as u64), (li + 1u64) * 32u64 + 64u64, (&PMH as u64))
+}
+
+fn main() -> u64 {
+    fill_om()
+    /* the BFT shape: f=1 -> N=4, quorum=2f+1=3 (and N >= 3f+1 is safe). */
+    if bq_nodes(1u32) != 4u32 { return 1u64 }
+    if bq_quorum(1u32) != 3u32 { return 2u64 }
+    if bq_safe(1u32) != 1u32 { return 3u64 }
+    /* the block = the committed proof's content-address. */
+    build_proof_mhash()
+    /* (H) 4 peers keygen + vote over the proof-mhash -> a 2f+1 quorum forms. */
+    pqq_keygen(0u64, 0x11u8)  pqq_keygen(1u64, 0x22u8)  pqq_keygen(2u64, 0x33u8)  pqq_keygen(3u64, 0x44u8)
+    pqq_set_block((&PMH as u64), 1u64)
+    pqq_vote(0u64)  pqq_vote(1u64)  pqq_vote(2u64)  pqq_vote(3u64)
+    if pqq_valid_count(4u64) != 4u64 { return 4u64 }
+    if pqq_verify(4u64, 3u64) != 1u8 { return 5u64 }
+    /* (T) ONE Byzantine peer (f=1): tamper peer 3's vote -> 3 valid remain -> quorum STILL forms. */
+    pqq_tamper(3u64)
+    if pqq_valid_count(4u64) != 3u64 { return 6u64 }
+    if pqq_verify(4u64, 3u64) != 1u8 { return 7u64 }
+    /* (S) TWO Byzantine peers (f=2 > tolerated f=1): tamper peer 2 too -> 2 valid < 3 -> NO quorum (safety). */
+    pqq_tamper(2u64)
+    if pqq_valid_count(4u64) != 2u64 { return 8u64 }
+    if pqq_verify(4u64, 3u64) != 0u8 { return 9u64 }
+    return 99u64
+}

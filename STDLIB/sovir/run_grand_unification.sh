@@ -50,11 +50,15 @@ bash "$S/run_ext4_committed.sh" > /tmp/gu_e.log 2>&1; erc=$?
 bash "$S/run_here_to_there.sh" > /tmp/gu_f.log 2>&1; frc2=$?
 [ $frc2 -eq 0 ] && say "Omega.f    here->there  : PASS (committed proof serialised -> sealed_channel x25519+ChaCha20-Poly1305 -> peer verify-and-fold reading ONLY the artifact, prover state zeroed = no re-exec; tampered ciphertext + tampered artifact both rejected)" || { say "FAIL Omega.f (run_here_to_there rc=$frc2)"; fail=1; }
 
+# ---- Omega.g : federation -- a post-quantum 2f+1 BFT quorum certifies the shipped committed-proof attestation ----
+bash "$S/run_federate_quorum.sh" > /tmp/gu_g.log 2>&1; grc=$?
+[ $grc -eq 0 ] && say "Omega.g    federation   : PASS (post-quantum ML-DSA 2f+1 BFT quorum over the committed-proof content-address: honest quorum forms, 1 Byzantine tolerated, 2 Byzantine rejected = safety)" || { say "FAIL Omega.g (run_federate_quorum rc=$grc)"; fail=1; }
+
 # ---- the cross-view binding ----
 bindok=0; [ "$ga" = "$GOLD" ] && [ $f2rc -eq 99 ] && bindok=1
 
 if [ $fail -eq 0 ] && [ $bindok -eq 1 ]; then
-  say "GRAND UNIFICATION (single node + here->there) : the EIDOS ripple flows through the proven pipeline as ONE computation -- EIDOS->SVIR->run (Omega.a/d) + XII canonicalisation proof-carried (Omega.b) + committed GF(p^4) zkVM (Omega.e) -- its two proven views (SVIR EXECUTION and XII INTENT) BOUND by folding the ripple's event stream to the SAME $GOLD; and a committed proof SHIPS over the sealed channel to a second node that VERIFIES-AND-FOLDS it without the witness or re-exec (Omega.f).  Every organ is sound + committed + adversary-gated; F1 (committed production zkVM) closed, F2 (one-computation composition) realised, Omega5 (here->there) realised.  HONEST: XII does not lower to SVIR, so the cross-view binding is the shared COMPUTATION (one fold), not one object through both stages; ~2^-86 is the NQ query-count knob.  REMAINING for Omega6/Omega7: the multi-node federation QUORUM (2f+1 over shipped attestations) + the end-to-end trust-closure provenance certificate."
+  say "GRAND UNIFICATION (single node + here->there + federation) : the EIDOS ripple flows through the proven pipeline as ONE computation -- EIDOS->SVIR->run (Omega.a/d) + XII canonicalisation proof-carried (Omega.b) + committed GF(p^4) zkVM (Omega.e) -- its two proven views (SVIR EXECUTION and XII INTENT) BOUND by folding the ripple's event stream to the SAME $GOLD; a committed proof SHIPS over the sealed channel to a second node that VERIFIES-AND-FOLDS it without the witness or re-exec (Omega.f); and that attestation is certified by a post-quantum 2f+1 BFT QUORUM, Byzantine-tolerant (Omega.g).  Every organ is sound + committed + adversary-gated; F1 (committed production zkVM) closed, F2 (one-computation composition) realised, Omega5 (here->there) + Omega6 (federation) realised.  HONEST: XII does not lower to SVIR, so the cross-view binding is the shared COMPUTATION (one fold), not one object through both stages; ~2^-86 is the NQ query-count knob.  REMAINING for Omega7: the end-to-end trust-closure provenance certificate (chaining the toolchain DDC trust-closure to this gate's artifact mhash)."
 else
   say "FAIL grand-unification: a/d=$arc b=$brc f2=$f2rc e=$erc bind=$bindok(ga=$ga gold=$GOLD)"; fail=1
 fi

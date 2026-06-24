@@ -367,7 +367,15 @@ receiver that **verifies π and folds without re-exec**.
 WITHOUT re-exec; tampered bundle rejected. **Manual verify:** confirm node B's binary has no path that executes
 R0 (disassemble / symbol-table check); confirm the fold changed B's state to the proven value.
 
-### Phase Ω6 — The full Grand Unification (single-node ∪ here→there)
+### Phase Ω6 — The full Grand Unification (single-node ∪ here→there ∪ federation)
+**✅✅ CORE GREEN — `run_grand_unification.sh` composes Ω.a/d + Ω.b + F2 + Ω.e + Ω.f + Ω.g in one gate (GU_FULL_EXIT 0).**
+Ω.g (`run_federate_quorum.sh`, `sovir/zk_federate_quorum.iii`): the committed-proof content-address (keccak of the
+committed FRI roots + final codeword — the same object Ω5 ships) is certified by a **post-quantum (ML-DSA) 2f+1 BFT
+quorum** over N=3f+1 peers (`aether/pq_quorum` + `numera/bft_quorum`). Honest votes form the quorum; **1 Byzantine peer
+tolerated** (f=1: 3 valid → quorum holds); **2 Byzantine rejected** (f=2 > bound: 2 valid < 3 → no false certificate =
+safety). So the full pipeline runs single-node, cross-node, and federated, every organ sound + committed +
+adversary-gated. Remaining: Ω7 (the end-to-end trust-closure provenance certificate chaining the toolchain DDC closure
+to this gate's artifact mhash) + Ω0 (binary-level DDC, the ccsv worker).
 **Objective:** one gate = Ω4 ∪ Ω5 = the complete FR-Ω on R0. **Task:** `run_grand_unification.sh --federated`
 chains Ω4 then Ω5. **Acceptance:** exit 0; the README-level claim "a real EIDOS computation, compiled-canonicalised-
 built-run-attested-shipped-verified-folded, all proven, no unverified link" is now a *re-runnable gate*, not prose.

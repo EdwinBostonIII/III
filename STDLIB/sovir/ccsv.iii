@@ -206,7 +206,8 @@ fn lpt(t: u32) -> i32 { let li:i32=lidx(t)  if li<0i32 {return 0i32-1i32}  retur
 fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 }  LN=LN+1u32 } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
 fn emit_lget(slot:u32) { let mem:i64=LMEM[slot as u64]  if mem>=0i64 { econst(mem)  eload(LSZ[slot as u64], LSG[slot as u64]) } else { eu8(0x10u32, slot) } }   /* spilled local -> typed LOAD from its memory addr ; else LOCAL_GET (byte-identical for non-spilled) */
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
-var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed */
+var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AISC : [u32; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed ; AISC=1 if a global SCALAR (bare read = LOAD value, not array->ptr decay) */
+fn aisc(t: u32) -> u32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AISC[k as u64]}  k=k+1u32 }  return 0u32 }   /* is t a global scalar? */
 fn abase(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AB[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
 fn awmask(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AW[k as u64]}  k=k+1u32 }  return 0i64 }
 fn aesize(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AESZ[k as u64]}  k=k+1u32 }  return 8i64 }
@@ -656,7 +657,8 @@ fn eprim() {
                 eload(fe, fsg)  return }
         }
         if kw(t,"true" as u64,4u32)==1u32 { econst(1i64)  return }  if kw(t,"false" as u64,5u32)==1u32 { econst(0i64)  return }  if kw(t,"NULL" as u64,4u32)==1u32 { econst(0i64)  return }   /* bool / null literals */
-        let ad:i64=abase(t)  if ad>=0i64 { econst(ad)  return }               /* bare array name -> &arr[0] (array->pointer decay) */
+        let ad:i64=abase(t)  if ad>=0i64 { let lck:i32=lidx(t)  if lck<0i32 {   /* (a shadowing local wins -> fall through to lidx) */
+            if aisc(t)==1u32 { econst(ad)  eload(aesize(t), asign(t)) } else { econst(ad) }  return } }   /* global SCALAR -> LOAD value ; bare array -> &arr[0] (decay) */
         let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64])  return }   /* enum member / #define constant */
         let li:i32=lidx(t)  if li>=0i32 {
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_local(li as u32,0u32,1u32)  return }   /* i++ (postfix) */
@@ -992,7 +994,11 @@ fn pstmt() {
         let nt:u32=C  let bvt:i32=avtype(nt)
         if bvt>=0i32 { let at:u32=C+2u32  let avt:i32=avtype(at)  if avt>=0i32 {   /* struct VAR = struct VAR -> byte copy (STSZ bytes) */
             C=C+3u32  emit_bcopy(abase(nt), abase(at), STSZ[bvt as u64] as i64)  eat(Q_SEMI)  return } }
-        C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  eat(Q_SEMI)  return
+        let li:i32=lidx(nt)
+        if li>=0i32 { C=C+2u32  ebin(0u32)  emit_lset(li as u32)  eat(Q_SEMI)  return }                                    /* local scalar */
+        let gb:i64=abase(nt)  if gb>=0i64 { if aisc(nt)==1u32 {                                                              /* global SCALAR = e -> STORE */
+            C=C+2u32  econst(gb)  ebin(0u32)  let gm:i64=awmask(nt)  if gm!=0i64 {econst(gm)  eb(0x25u32)}  estore(aesize(nt))  eat(Q_SEMI)  return } }
+        C=C+2u32  ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return                                                              /* fallback: eval + drop */
     } } }
     ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)
 }
@@ -1058,9 +1064,10 @@ fn prescan() {
     while t<NT { if is_fn(t)==1u32 { if kw(fn_nametok(t),"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
 }
 fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SVIR linear memory (after strings) + init data */
-    AN=0u32  MTOP=DLEN  DEND=0u64  if DLEN>16u64 {DEND=DLEN}  let mut t:u32=0u32  let mut pd:u32=0u32   /* the [0..15] NULL reserve is implicit zeros (linear mem is zero-init) -> only emit a data section when REAL data (strings DLEN>16 / array inits) sits above it; keeps no-data modules data-section-free (cross-language DDC) */
+    AN=0u32  MTOP=DLEN  DEND=0u64  if DLEN>16u64 {DEND=DLEN}  let mut t:u32=0u32  let mut pd:u32=0u32  let mut bd:u32=0u32   /* the [0..15] NULL reserve is implicit zeros (linear mem is zero-init) -> only emit a data section when REAL data (strings DLEN>16 / array inits) sits above it; keeps no-data modules data-section-free (cross-language DDC) */
     while t<NT {
         if ispat(t,Q_LP)==1u32 {pd=pd+1u32}  if ispat(t,Q_RP)==1u32 { if pd>0u32 {pd=pd-1u32} }   /* paren depth: params live at pd>0, NOT global arrays */
+        if ispat(t,Q_LB)==1u32 {bd=bd+1u32}  if ispat(t,Q_RB)==1u32 { if bd>0u32 {bd=bd-1u32} }   /* brace depth: a SCALAR global lives at bd==0 (outside any fn body); struct bodies are jumped past, so their braces don't count */
         let mut isst:u32=0u32  if kw(t,"struct" as u64,6u32)==1u32 {isst=1u32}  if kw(t,"union" as u64,5u32)==1u32 {isst=1u32}
         let mut adv:u32=1u32
         if isst==1u32 {                                            /* struct/union body -> SKIP (fields are NOT global arrays) */
@@ -1096,6 +1103,19 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
                             let de:u64=base + idx*eszu  if de > DEND { DEND=de }
                         }
                     }
+                } else {   /* file-scope SCALAR global: `[quals] type [*] NAME [= const] ;` (bd==0, not a typedef) */
+                    let mut istd:u32=0u32  if kw(t,"typedef" as u64,7u32)==1u32 {istd=1u32}  if t>=1u32 { if kw(t-1u32,"typedef" as u64,7u32)==1u32 {istd=1u32} }
+                    if bd==0u32 { if istd==0u32 {
+                        let nx:u32=nt+1u32  let mut issc:u32=0u32
+                        if ispat(nx,Q_SEMI)==1u32 {issc=1u32}  if ispat(nx,Q_ASN)==1u32 {issc=1u32}  if ispat(nx,Q_COM)==1u32 {issc=1u32}
+                        if issc==1u32 {
+                            let mut sz2:i64=aesz_of(q)  if pelem==1u32 {sz2=8i64}  let base2:u64=MTOP
+                            AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base2  AVT[AN as u64]=0i32-1i32  AISC[AN as u64]=1u32  ALEN[AN as u64]=1u64
+                            if pelem==1u32 { AW[AN as u64]=0i64  AESZ[AN as u64]=8i64  ASGN[AN as u64]=0u32 } else { AW[AN as u64]=type_mask(q)  AESZ[AN as u64]=sz2  ASGN[AN as u64]=type_signed(q) }
+                            MTOP=MTOP+(sz2 as u64)  AN=AN+1u32
+                            if ispat(nx,Q_ASN)==1u32 { if TK[(nt+2u32) as u64]==2u32 { data_putn(sz2, base2, TV[(nt+2u32) as u64])  let de:u64=base2+(sz2 as u64)  if de>DEND {DEND=de} } else { let ci:i32=cidx(nt+2u32)  if ci>=0i32 { data_putn(sz2, base2, CNV[ci as u64])  let de:u64=base2+(sz2 as u64)  if de>DEND {DEND=de} } } }   /* = const init -> data section */
+                        }
+                    } }
                 } } }
             }
         }

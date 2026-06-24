@@ -1356,6 +1356,15 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
                             let de:u64=base + idx*eszu  if de > DEND { DEND=de }
                         }
                     }
+                    let mut ccp:u32=nt+1u32  let mut gsk:u32=1u32  while gsk==1u32 { if ispat(ccp,Q_LBR)==1u32 { ccp=ccp+1u32  let mut gx2:u32=1u32  while gx2==1u32 { if ispat(ccp,Q_RBR)==1u32 {gx2=0u32} else { if TK[ccp as u64]==0u32 {gx2=0u32} else {ccp=ccp+1u32} } }  ccp=ccp+1u32 } else {gsk=0u32} }   /* `T a[N], b[M], c[K]` : comma-continued SAME-TYPE array declarators -> register b,c,.. with q's elem type (ccp now past a's [..]) */
+                    let mut gmore2:u32=1u32  while gmore2==1u32 {
+                        if ispat(ccp,Q_COM)==1u32 { let cnm:u32=ccp+1u32
+                            if TK[cnm as u64]==1u32 { if ispat(cnm+1u32,Q_LBR)==1u32 { if TK[(cnm+2u32) as u64]==2u32 {
+                                let cnn:u64=TV[(cnm+2u32) as u64] as u64
+                                AO[AN as u64]=TO[cnm as u64]  AL[AN as u64]=TL[cnm as u64]  AB[AN as u64]=MTOP  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=type_mask(q)  AESZ[AN as u64]=esz  ALEN[AN as u64]=cnn  ASGN[AN as u64]=type_signed(q)  MTOP=MTOP+(cnn*eszu)  AN=AN+1u32
+                                ccp=cnm+4u32
+                            } else {gmore2=0u32} } else {gmore2=0u32} } else {gmore2=0u32} }
+                        else {gmore2=0u32} }
                 } else {   /* file-scope SCALAR global: `[quals] type [*] NAME [= const] ;` (bd==0, not a typedef) */
                     let mut istd:u32=0u32  if kw(t,"typedef" as u64,7u32)==1u32 {istd=1u32}  if t>=1u32 { if kw(t-1u32,"typedef" as u64,7u32)==1u32 {istd=1u32} }
                     if bd==0u32 { if istd==0u32 {

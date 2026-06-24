@@ -1133,6 +1133,7 @@ fn fn_has_body(nm: u32) -> u32 {
 fn is_fn(t: u32) -> u32 {
     if t>=1u32 { if isqual(t-1u32)==1u32 { return 0u32 }  if dtype(t-1u32)==1u32 { return 0u32 } }   /* t must be the START of the decl: a token PRECEDED by a qual/type (e.g. `void` in `static void f`) is NOT a new fn -- else `static void f` registers twice (at `static` AND `void`) */
     let mut ok:u32=0u32  if isqual(t)==1u32 {ok=1u32}  if dtype(t)==1u32 {ok=1u32}  if kw(t,"struct" as u64,6u32)==1u32 {ok=1u32}  if kw(t,"union" as u64,5u32)==1u32 {ok=1u32}
+    if ok==0u32 { if TK[t as u64]==1u32 { if ispat(t+1u32,Q_MUL)==1u32 { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LP)==1u32 {ok=1u32} } } else { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LP)==1u32 {ok=1u32} } } } }   /* `TYPEDEFNAME [*] NAME (` -> a fn def with a typedef-name return type (`ent *faddr(...)`); fn_has_body below filters non-defs.  No struct-registration / prescan-order dependency */
     if ok==0u32 { return 0u32 }
     let nm:u32=fn_nametok(t)  if TK[nm as u64]==1u32 { if ispat(nm+1u32,Q_LP)==1u32 { if fn_has_body(nm)==1u32 { return 1u32 } } }   /* DEFINITION only (not a prototype) */
     return 0u32

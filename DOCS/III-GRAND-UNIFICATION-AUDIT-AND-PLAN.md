@@ -85,9 +85,18 @@ committed proof at the claimed bits) and **F2** (Ω2/Ω3 don't compose). Those a
     leaf rejected (opening binds the value); corrupted committed root rejected (root binds the proof); degree-63
     rejected (low-degree). The soundness-bearing core that was missing now exists, the project's staged way (build the
     dangerous core in isolation with adversary arms, then integrate).
-  - **P2b NEXT:** migrate `zk_fused_prod`'s `build_layers`+`verify` (and the `zk_ext*` gadgets) onto this committed
-    path — route the CP + the line-755 consistency through committed openings too, so the full compute+memory+control
-    STARK is a committed witness-free proof. Only then is "~2⁻⁸⁶ committed production zkVM" earned end-to-end.
+  - **✅ P2b CORE DONE (same gate, `sovir/zk_ext4_stark_committed.iii`):** a COMMITTED, WITNESS-FREE GF(p⁴) STARK on a
+    REAL constraint (`next=cur²`, N=16, D=64) on the proven `zk_air` LDE+CP machinery — the trace LDE is Merkle-committed,
+    α is FS-derived from the committed trace root (sound commit-before-challenge), the CP is committed as FRI layer 0,
+    and the verifier OPENS `f(q)`,`f(q+B)` from the trace commitment, **recomputes `combine=α·(f_next−f²)` itself**
+    (witness-free — never reads the whole trace), opens `CP(q)`, and checks the construction-exact line-755
+    `CP·Z_H == combine·(x−ω^{n-1})` + the GF(p⁴) FRI fold-consistency. Adversary-verified: honest accepts; a violating
+    trace is rejected (CP not low-degree); a forged trace opening is rejected (Merkle); a corrupted root is rejected.
+    **This is the committed line-755 `zk_fused_prod` did over shared memory, now done against commitments.**
+  - **P2b SCALE-UP NEXT:** lift this to the full fused AIR (20 transition constraints + k=4 permutation, N=64) — i.e.
+    migrate `zk_fused_prod` itself — so the whole compute+memory+control zkVM is a committed witness-free proof at
+    ~2⁻⁸⁶. The core mechanism (committed FRI + committed line-755 + witness-free combine) is now proven; the rest is
+    scaling the constraint set + the permutation boundary onto the same committed openings.
 - **P3 — F2: compose Ω2 and Ω3 on R0.** Adopt the faithful architecture **EIDOS → XII-term → canonicalise(+Ω3 proof)
   → LOWER to SVIR (Ω2) → run/attest**. Make Ω2's R0 SVIR the LOWERING of the canonicalised XII term (use `xii_lower_*`),
   so the same object flows through Ω.b then Ω.a. **Teeth:** the lowered SVIR's result must equal the XII term's

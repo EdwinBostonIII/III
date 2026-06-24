@@ -17,10 +17,15 @@ fail=0; say(){ echo "[ext4-committed] $*"; }
 [ -s "$LIB" ] || { say "FAIL: libiii_native.a missing"; exit 1; }
 "$IIIS" "$S/zk_ext4_committed.iii" --compile-only --out "$W/zk_ext4_committed.o" >/tmp/e4c.log 2>&1 || { say "FAIL compile"; cat /tmp/e4c.log; fail=1; }
 gcc "$W/zk_ext4_committed.o" "$LIB" -lkernel32 -o "$W/zk_ext4_committed.exe" 2>/tmp/e4cl.log || { say "FAIL link"; cat /tmp/e4cl.log; fail=1; }
+# P2b CORE: the committed witness-free GF(p^4) STARK on a REAL constraint (next=cur^2).
+"$IIIS" "$S/zk_ext4_stark_committed.iii" --compile-only --out "$W/zk_ext4_stark_committed.o" >/tmp/e4s.log 2>&1 || { say "FAIL compile stark"; cat /tmp/e4s.log; fail=1; }
+gcc "$W/zk_ext4_stark_committed.o" "$LIB" -lkernel32 -o "$W/zk_ext4_stark_committed.exe" 2>/tmp/e4sl.log || { say "FAIL link stark"; cat /tmp/e4sl.log; fail=1; }
 if [ $fail -eq 0 ]; then
   timeout 60 "$W/zk_ext4_committed.exe" >/dev/null 2>&1; rc=$?
-  if [ $rc -eq 99 ]; then
-    say "GF(p^4) FRI COMMITTED + SUCCINCT : each layer's full 4-limb GF(p^4) elements MERKLE-COMMITTED (SHA-256, 16B leaves); fold challenge = keccak(root_L), queries = keccak(final root) -> bound to BOTH limbs (fixes the FA-only defect); the verifier OPENS queried leaves + merkle_verify_proof against the committed roots before fold-consistency (witness-free, O(log n)). Honest degree-15 ACCEPTS; flipped-leaf REJECTED (opening binds value); corrupted-root REJECTED (root binds proof); degree-63 REJECTED (low-degree). The soundness-bearing core F1 found missing is BUILT + adversary-verified. NEXT (P2b): migrate zk_fused_prod's verify onto this committed path (the full compute+memory+control STARK over committed GF(p^4) FRI)."
-  else say "FAIL ext4-committed: rc=$rc (1=honest-rejected 2=open-accept-fail 3=tamper-not-rejected 4=root-corrupt-not-rejected 5=nonLD-accepted 6=reprove-fail)"; fail=1; fi
+  timeout 90 "$W/zk_ext4_stark_committed.exe" >/dev/null 2>&1; src=$?
+  if [ $rc -eq 99 ] && [ $src -eq 99 ]; then
+    say "GF(p^4) FRI COMMITTED + SUCCINCT (P2a): each layer's full 4-limb GF(p^4) elements MERKLE-COMMITTED (SHA-256, 16B leaves); fold challenge = keccak(root_L), queries = keccak(final root) -> bound to BOTH limbs (fixes the FA-only defect); verifier OPENS queried leaves + merkle_verify_proof against the committed roots (witness-free, O(log n)). Honest degree-15 ACCEPTS; flipped-leaf REJECTED (opening binds value); corrupted-root REJECTED (root binds proof); degree-63 REJECTED (low-degree)."
+    say "GF(p^4) STARK COMMITTED + WITNESS-FREE (P2b core): a REAL constraint next=cur^2 (N=16, D=64) on the PROVEN zk_air LDE+CP machinery -- trace LDE MERKLE-COMMITTED, alpha FS-derived from the committed trace root, CP committed as FRI layer 0; the verifier OPENS f(q),f(q+B) from the trace commitment, RECOMPUTES combine=alpha*(f_next-f^2) ITSELF (witness-free), opens CP(q), and checks the construction-exact line-755 CP*Z_H==combine*(x-omega^{n-1}) + the GF(p^4) FRI fold-consistency. Honest ACCEPTS; VIOLATING trace REJECTED (CP not low-degree); forged trace OPENING REJECTED (Merkle); corrupted root REJECTED. The committed line-755 zk_fused_prod did over shared memory is now done against commitments. NEXT: scale to the full 20-constraint+k=4-perm fused AIR (zk_fused_prod) over this committed path."
+  else say "FAIL ext4-committed: fri=$rc stark=$src"; fail=1; fi
 fi
 exit $fail

@@ -665,6 +665,7 @@ fn eprim() {
             let ab:i64=abase(t)
             if ab>=0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)
                 estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
+                let vt0:i32=avtype(t)  if vt0>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ft0:u32=C  C=C+1u32  let foff0:i64=fieldoff(vt0,ft0)  if foff0>0i64 {econst(foff0)  eb(0x20u32)}  eload(fieldelem(vt0,ft0), fieldsign(vt0,ft0))  return } }   /* T[i].field : struct-array element field READ */
                 if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),0u32,1u32)  return }   /* arr[i]++ */
                 if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),1u32,1u32)  return }   /* arr[i]-- */
                 eload(sz, sg)  return }                 /* arr[i] : i*esz (+base) ; LOADn */
@@ -1090,6 +1091,7 @@ fn pstmt() {
         let nt:u32=C  let ab:i64=abase(nt)
         if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let sg:u32=asign(nt)  let am:i64=awmask(nt)   /* arr[i] [op]= e (typed width) */
             estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
+            let vt1:i32=avtype(nt)  if vt1>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ft1:u32=C  C=C+1u32  let foff1:i64=fieldoff(vt1,ft1)  if foff1>0i64 {econst(foff1)  eb(0x20u32)}  emit_av(fieldelem(vt1,ft1), fieldsign(vt1,ft1), fieldmask(vt1,ft1))  eat(Q_SEMI)  return } }   /* T[i].field = e : struct-array element field STORE */
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]++ ; (statement: eval + DROP) */
             if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,1u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]-- ; */
             emit_av(sz, sg, am)  eat(Q_SEMI)  return }
@@ -1178,6 +1180,52 @@ fn prescan() {
     while t<NT { if is_fn(t)==1u32 { if kw(fn_nametok(t),"main" as u64,4u32)==1u32 { rec_fn(t) } }  t=t+1u32 }
     t=0u32
     while t<NT { if is_fn(t)==1u32 { if kw(fn_nametok(t),"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
+}
+fn prescan_structarr() {   /* `[quals] StructName NAME[N|empty] [= { {f..},.. }]` -> a struct ARRAY (prescan_arr skips these: the element type isn't a dtype).  Runs AFTER prescan_struct (STSZ) + prescan_arr (MTOP continues). */
+    let mut t:u32=0u32  let mut pd:u32=0u32
+    while t<NT {
+        if ispat(t,Q_LP)==1u32 {pd=pd+1u32}  if ispat(t,Q_RP)==1u32 { if pd>0u32 {pd=pd-1u32} }   /* params live at pd>0, NOT global arrays */
+        let mut adv:u32=1u32
+        let mut isst:u32=0u32  if kw(t,"struct" as u64,6u32)==1u32 {isst=1u32}  if kw(t,"union" as u64,5u32)==1u32 {isst=1u32}
+        if isst==1u32 {   /* skip a struct/union body so its FIELD arrays aren't taken for globals */
+            let mut sq:u32=t+1u32  if TK[sq as u64]==1u32 {sq=sq+1u32}
+            if ispat(sq,Q_LB)==1u32 { let mut d:u32=0u32  let mut sg:u32=1u32  while sg==1u32 { if sq>=NT {sg=0u32} else { if ispat(sq,Q_LB)==1u32 {d=d+1u32}  if ispat(sq,Q_RB)==1u32 {d=d-1u32}  sq=sq+1u32  if d==0u32 {sg=0u32} } }  t=sq  adv=0u32 }
+        } else {
+            let si:i32=stidx(t)   /* register at the STRUCT-TYPE token itself (leading quals are skipped by t advancing -> one registration, not one per qual) */
+            if si>=0i32 { if pd==0u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LBR)==1u32 {   /* StructName NAME [ */
+                let nt:u32=t+1u32  let esz:i64=STSZ[si as u64] as i64  let eszu:u64=esz as u64  let base:u64=MTOP
+                let mut n:u64=0u64  let mut brc:u32=0u32  let mut have:u32=0u32
+                if TK[(nt+2u32) as u64]==2u32 { n=TV[(nt+2u32) as u64] as u64  if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32  have=1u32 } } }
+                else { if ispat(nt+2u32,Q_RBR)==1u32 { if ispat(nt+3u32,Q_ASN)==1u32 { if ispat(nt+4u32,Q_LB)==1u32 {
+                    brc=nt+5u32  have=1u32  let mut cq:u32=brc  let mut dd:i32=0i32  let mut gg:u32=1u32
+                    while gg==1u32 { if ispat(cq,Q_LB)==1u32 { if dd==0i32 {n=n+1u64}  dd=dd+1i32 } else { if ispat(cq,Q_RB)==1u32 { if dd==0i32 {gg=0u32} else {dd=dd-1i32} } }  if TK[cq as u64]==0u32 {gg=0u32}  if gg==1u32 {cq=cq+1u32} }
+                } } } }
+                if n>0u64 { if esz>0i64 {
+                    AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=si  AW[AN as u64]=0i64  AESZ[AN as u64]=esz  ALEN[AN as u64]=n  ASGN[AN as u64]=0u32  AISC[AN as u64]=0u32  MTOP=MTOP+(n*eszu)  AN=AN+1u32
+                    if have==1u32 {
+                        let fb:u32=STFB[si as u64]  let nf:u32=STNF[si as u64]
+                        let mut p:u32=brc  let mut ei:u64=0u64  let mut g2:u32=1u32
+                        while g2==1u32 {
+                            if ispat(p,Q_LB)==1u32 { p=p+1u32  let mut fj:u32=0u32  let mut g3:u32=1u32
+                                while g3==1u32 {
+                                    if ispat(p,Q_RB)==1u32 { g3=0u32  p=p+1u32 } else { if TK[p as u64]==0u32 {g3=0u32}
+                                    else { if ispat(p,Q_COM)==1u32 {p=p+1u32}
+                                    else { if fj<nf { let foff:u64=SFOFF[(fb+fj) as u64]  let fsz:i64=SFEL[(fb+fj) as u64]  let addr:u64=base + ei*eszu + foff
+                                                let mut v:i64=0i64  let mut hv2:u32=0u32
+                                                if TK[p as u64]==2u32 {v=TV[p as u64]  hv2=1u32}  if TK[p as u64]==4u32 {v=TV[p as u64]  hv2=1u32}  if hv2==0u32 { let ci:i32=cidx(p)  if ci>=0i32 {v=CNV[ci as u64]  hv2=1u32} }
+                                                if hv2==1u32 { data_putn(fsz, addr, v) } }
+                                          fj=fj+1u32  p=p+1u32 } } }
+                                }
+                                ei=ei+1u64  if ispat(p,Q_COM)==1u32 {p=p+1u32}
+                            } else { if ispat(p,Q_RB)==1u32 {g2=0u32} else { if TK[p as u64]==0u32 {g2=0u32} else {p=p+1u32} } }
+                        }
+                        let de:u64=base + n*eszu  if de>DEND {DEND=de}
+                    }
+                } }
+            } } } }
+        }
+        if adv==1u32 {t=t+1u32}
+    }
 }
 fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SVIR linear memory (after strings) + init data */
     AN=0u32  MTOP=DLEN  DEND=0u64  if DLEN>16u64 {DEND=DLEN}  let mut t:u32=0u32  let mut pd:u32=0u32  let mut bd:u32=0u32   /* the [0..15] NULL reserve is implicit zeros (linear mem is zero-init) -> only emit a data section when REAL data (strings DLEN>16 / array inits) sits above it; keeps no-data modules data-section-free (cross-language DDC) */
@@ -1324,11 +1372,11 @@ fn prescan_struct() {
     }
     t=0u32                                                         /* pass 2: var decls -> mem region + type */
     while t<NT {
-        if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 { reg_var(t+2u32, stidx(t+1u32)) } } }
-        if kw(t,"union" as u64,5u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 { reg_var(t+2u32, stidx(t+1u32)) } } }
+        if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LBR)==0u32 { reg_var(t+2u32, stidx(t+1u32)) } } } }   /* not `[` -> struct ARRAY, owned by prescan_structarr */
+        if kw(t,"union" as u64,5u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LBR)==0u32 { reg_var(t+2u32, stidx(t+1u32)) } } } }
         if TK[t as u64]==1u32 { if TK[(t+1u32) as u64]==1u32 {     /* TypedefName v ; (IDENT IDENT, first a registered type, not after struct/union/typedef) */
             let sti:i32=stidx(t)
-            if sti>=0i32 { let mut pk:u32=0u32  if t>0u32 { pk=istk(t-1u32) }  if pk==0u32 { reg_var(t+1u32, sti) } }
+            if sti>=0i32 { let mut pk:u32=0u32  if t>0u32 { pk=istk(t-1u32) }  if pk==0u32 { if ispat(t+2u32,Q_LBR)==0u32 { reg_var(t+1u32, sti) } } }   /* not `[` -> struct ARRAY (prescan_structarr) */
         } }
         t=t+1u32
     }
@@ -1522,7 +1570,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
     SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
     preprocess()                                                   /* strip inactive #ifdef/#ifndef/#if-0 branches before lex */
-    lex()  prescan()  prescan_str()  prescan_arr()  prescan_struct()  prescan_enum()
+    lex()  prescan()  prescan_str()  prescan_arr()  prescan_struct()  prescan_enum()  prescan_structarr()   /* struct ARRAYS last: needs STSZ (prescan_struct) + enum consts (prescan_enum) + MTOP after scalar arrays */
     if argc>=3i32 {   /* DEBUG: `ccsv file.c <any-2nd-arg>` -> print each registered fn's index + name (FNO/FNL into SRC), then exit -- maps SVIR fn-index to source */
         let mut fk:u32=0u32  while fk<FN { pdec(fk as u64)  pc(58u32)  pc(32u32)  let mut ci:u32=0u32  while ci<FNL[fk as u64] { pc(sb((FNO[fk as u64]+ci) as u64))  ci=ci+1u32 }  pc(10u32)  fk=fk+1u32 }
         return 0u64

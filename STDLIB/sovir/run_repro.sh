@@ -26,12 +26,23 @@ fail=0; say(){ echo "[repro] $*"; }
 #     build).  See DOCS/SVIR-DDC-RESIDUAL.md.  That is the host linker; III's own back-end is measured below.
 say "HOST gcc/mingw-ld : non-reproducible for iiis-1 at scale (timestamp + ld layout variance) -- documented"
 
-# --- III: sovas + sovld reproducibility (the robust, proven claim) ---
-if [ ! -f "$W/tn.s" ]; then
-  "$W/ccsv.exe" "$S/test_ternary.c" > "$W/gen_tn.iii" 2>/dev/null
-  "$ROOT/COMPILED/iiis-2.exe" "$W/gen_tn.iii" --compile-only --out "$W/gen_tn.o" >/dev/null 2>&1
-  gcc "$W/svir_x86.o" "$W/gen_tn.o" -o "$W/tx_tn.exe" 2>/dev/null; "$W/tx_tn.exe" > "$W/tn.s" 2>/dev/null
+# --- III FRONT-END reproducibility (ccsv -> iiis-2 -> svir_x86 -> .s), run TWICE FROM SCRATCH and diff EVERY stage.
+#     The front-end emits timestamp-free assembly TEXT, so it is genuinely diffable (unlike the host PE link).  This
+#     closes the prior gate's gap (it ran the front-end at most once, comparing only the back-end). ---
+"$W/ccsv.exe" "$S/test_ternary.c" > "$W/gen_tn_a.iii" 2>/dev/null
+"$ROOT/COMPILED/iiis-2.exe" "$W/gen_tn_a.iii" --compile-only --out "$W/gen_tn_a.o" >/dev/null 2>&1
+gcc "$W/svir_x86.o" "$W/gen_tn_a.o" -o "$W/tx_tn_a.exe" 2>/dev/null; "$W/tx_tn_a.exe" > "$W/tn_a.s" 2>/dev/null
+"$W/ccsv.exe" "$S/test_ternary.c" > "$W/gen_tn_b.iii" 2>/dev/null
+"$ROOT/COMPILED/iiis-2.exe" "$W/gen_tn_b.iii" --compile-only --out "$W/gen_tn_b.o" >/dev/null 2>&1
+gcc "$W/svir_x86.o" "$W/gen_tn_b.o" -o "$W/tx_tn_b.exe" 2>/dev/null; "$W/tx_tn_b.exe" > "$W/tn_b.s" 2>/dev/null
+if cmp -s "$W/gen_tn_a.iii" "$W/gen_tn_b.iii" && cmp -s "$W/gen_tn_a.o" "$W/gen_tn_b.o" && cmp -s "$W/tn_a.s" "$W/tn_b.s" && [ -s "$W/tn_a.s" ]; then
+  say "III  FRONT-END    : ccsv->iiis-2->.s run TWICE from scratch -> BYTE-IDENTICAL at EVERY stage (ccsv .iii, iiis-2 .o, svir_x86 .s ; sha $(sha256sum "$W/tn_a.s"|cut -c1-16)) -- the C-frontend + compiler + lowering are deterministic"
+else
+  say "III  FRONT-END    : FAIL -- front-end NOT reproducible (.iii $(cmp -s "$W/gen_tn_a.iii" "$W/gen_tn_b.iii" && echo ok || echo DIFF); .o $(cmp -s "$W/gen_tn_a.o" "$W/gen_tn_b.o" && echo ok || echo DIFF); .s $(cmp -s "$W/tn_a.s" "$W/tn_b.s" && echo ok || echo DIFF))"; fail=1
 fi
+cp "$W/tn_a.s" "$W/tn.s" 2>/dev/null
+
+# --- III: sovas + sovld reproducibility (the robust, proven claim) ---
 timeout 25 "$BOOT/sovas_main.exe" "$W/tn.s" > "$W/repro_a.o2" 2>/dev/null
 timeout 25 "$BOOT/sovlink_main.exe" "$BOOT/crt0_sov.o" "$W/repro_a.o2" > "$W/repro_a.exe" 2>/dev/null
 timeout 25 "$BOOT/sovas_main.exe" "$W/tn.s" > "$W/repro_b.o2" 2>/dev/null
@@ -44,8 +55,11 @@ else
 fi
 
 if [ $fail -eq 0 ]; then
-  say "VERDICT: III's SOVEREIGN back-end (sovas/sovld) is byte-reproducible -- where the host mingw-ld is NOT for"
-  say "         iiis-1 at scale.  Objective superiority, and the path to a clean binary-level seed-DDC: route iiis-1"
-  say "         through III's reproducible back-end with the C seed TUs compiled by ccsv->SVIR (not gcc)."
+  say "VERDICT: the FULL III pipeline is byte-reproducible -- the FRONT-END (ccsv->iiis-2->svir_x86) emits a"
+  say "         byte-identical .s across two from-scratch runs, AND the SOVEREIGN back-end (sovas/sovld) emits a"
+  say "         byte-identical PE -- where the host mingw-ld is NOT (PE-link layout/timestamp variance at iiis-1"
+  say "         scale, SVIR-DDC-RESIDUAL.md).  Two from-scratch III pieces (deterministic frontend+compiler+lowering"
+  say "         AND a reproducible assembler+linker) compose into a reproducible toolchain; the ONLY residual is the"
+  say "         host gcc-LINKED iiis-1 binary -- whose non-reproducibility this measures to the HOST, not to III."
 fi
 exit $fail

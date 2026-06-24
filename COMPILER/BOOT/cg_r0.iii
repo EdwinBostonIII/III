@@ -400,6 +400,8 @@ var R0_STR_COMMA_DASH : [u8; 3] = [44u8, 32u8, 45u8]
 const R0_STR_COMMA_DASH_LEN : u64 = 3u64
 var R0_STR_RBP_NL : [u8; 7] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 10u8]
 const R0_STR_RBP_NL_LEN : u64 = 7u64
+var R0_STR_RBP_CM_RAX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]   /* "(%rbp), %rax\n" -- finishes a `movq <off>(%rbp), %rax` load of a caller stack-arg */
+const R0_STR_RBP_CM_RAX_LEN : u64 = 13u64
 var R0_STR_MOVQ_LD : [u8; 9] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8]
 const R0_STR_MOVQ_LD_LEN : u64 = 9u64
 var R0_STR_MOVQ_RAX_C : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8]
@@ -1278,23 +1280,41 @@ fn r0_emit_function(node: u32, kind: u32) -> u32 {
     /* BUG-1 fix: spill MS x64 first 4 params to slots BEFORE the witness ENTER call.
        The witness ENTER sets %rcx = IIIW_ENTER and the call may clobber volatiles, so
        rcx/rdx/r8/r9 (the parameters) MUST be saved to their frame slots first. */
+    /* BUG-F11 fix: register + initialise a frame slot for EVERY parameter, not just the first 4.
+       Params 0-3 arrive in rcx/rdx/r8/r9 -> spill to the slot.  Params 5+ are Win64 STACK args at
+       [rbp + 48 + 8*(i-4)] (saved-rbp 8 + retaddr 8 + 32-byte shadow = 48) -> copy via rax into the slot.
+       Previously the spill was capped at 4, so a stack param had NO frame slot and a body reference fell
+       through to an undefined global L_p_<name> -- the Ring-0 backend could not compile any >4-param fn
+       (DOCS/III-F6-LEDGER-AUDIT.md F11). rax is dead here (params live in rcx/rdx/r8/r9 + the stack), and
+       this runs BEFORE the witness ENTER, so all params are slotted before any volatile-clobbering call. */
     let mut spi: u32 = 0u32
-    let mut pmax: u32 = pc
-    if pc > 4u32 { pmax = 4u32 }
-    while spi < pmax {
+    while spi < pc {
         let p: u32 = r0_get_param_at(node, kind, spi)
         let off: u32 = iii_ast_param_name_off(R0_G_AST, p)
         let len: u32 = iii_ast_param_name_len(R0_G_AST, p)
         let s: i32 = r0_local_add(off, len)
         if s >= 0i32 {
-            r0_emit_arr(&R0_STR_MOVQ_PCT as u64, R0_STR_MOVQ_PCT_LEN)
-            if spi == 0u32 { r0_emit_arr(&R0_REG_RCX as u64, R0_REG_RCX_LEN) }
-            if spi == 1u32 { r0_emit_arr(&R0_REG_RDX as u64, R0_REG_RDX_LEN) }
-            if spi == 2u32 { r0_emit_arr(&R0_REG_R8 as u64, R0_REG_R8_LEN) }
-            if spi == 3u32 { r0_emit_arr(&R0_REG_R9 as u64, R0_REG_R9_LEN) }
-            r0_emit_arr(&R0_STR_COMMA_DASH as u64, R0_STR_COMMA_DASH_LEN)
-            r0_emit_dec((((s as u32)+1u32)*8u32) as u64)
-            r0_emit_arr(&R0_STR_RBP_NL as u64, R0_STR_RBP_NL_LEN)
+            let slot: u64 = (((s as u32)+1u32)*8u32) as u64
+            if spi < 4u32 {
+                r0_emit_arr(&R0_STR_MOVQ_PCT as u64, R0_STR_MOVQ_PCT_LEN)
+                if spi == 0u32 { r0_emit_arr(&R0_REG_RCX as u64, R0_REG_RCX_LEN) }
+                if spi == 1u32 { r0_emit_arr(&R0_REG_RDX as u64, R0_REG_RDX_LEN) }
+                if spi == 2u32 { r0_emit_arr(&R0_REG_R8 as u64, R0_REG_R8_LEN) }
+                if spi == 3u32 { r0_emit_arr(&R0_REG_R9 as u64, R0_REG_R9_LEN) }
+                r0_emit_arr(&R0_STR_COMMA_DASH as u64, R0_STR_COMMA_DASH_LEN)
+                r0_emit_dec(slot)
+                r0_emit_arr(&R0_STR_RBP_NL as u64, R0_STR_RBP_NL_LEN)
+            } else {
+                let coff: u64 = (48u32 + (spi - 4u32)*8u32) as u64
+                r0_emit_arr(&R0_STR_MOVQ_LD as u64, R0_STR_MOVQ_LD_LEN)        /* movq <coff>(%rbp), %rax */
+                r0_emit_dec(coff)
+                r0_emit_arr(&R0_STR_RBP_CM_RAX as u64, R0_STR_RBP_CM_RAX_LEN)
+                r0_emit_arr(&R0_STR_MOVQ_PCT as u64, R0_STR_MOVQ_PCT_LEN)      /* movq %rax, -<slot>(%rbp) */
+                r0_emit_arr(&R0_REG_RAX as u64, R0_REG_RAX_LEN)
+                r0_emit_arr(&R0_STR_COMMA_DASH as u64, R0_STR_COMMA_DASH_LEN)
+                r0_emit_dec(slot)
+                r0_emit_arr(&R0_STR_RBP_NL as u64, R0_STR_RBP_NL_LEN)
+            }
         }
         spi = spi + 1u32
     }

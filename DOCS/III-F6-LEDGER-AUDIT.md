@@ -38,7 +38,16 @@ PROVEN), and tightened `affine_audit_gate.sh`'s soundness-probe assertion to the
 false-PROVEN regression (P=2) reddens. Codegen-independent (`--affine-audit` is a separate mode), so the corpus
 byte-equivalence is unaffected.
 
-## F11 — cg_r0 (Ring-0 backend) emits >4th (stack-passed) parameters as undefined globals. **[ROOT-CAUSED, pre-existing; gate-dep fixed; codegen fix owed]**
+## F11 — cg_r0 (Ring-0 backend) emitted >4th (stack-passed) parameters as undefined globals. **[FIXED + binary-verified 2026-06-24]**
+
+**RESOLUTION:** fixed at `cg_r0.iii` — the function prologue now registers a frame slot for EVERY parameter and,
+for params 5+ (Win64 stack args), copies the arg from the caller frame into its slot:
+`movq 48+8*(i-4)(%rbp), %rax ; movq %rax, -slot(%rbp)`. Added the `R0_STR_RBP_CM_RAX` constant. **Binary-verified**
+on `weave_blocks_r0.o` (the 10-param `wvb_arx_mix`): `nm` shows NO leaked `L_p_x/y/r0/r1`; `objdump -dr` shows
+`mov 0x30(%rbp),%rax; mov %rax,-0x30(%rbp)` … at offsets 0x30/0x38/0x40/0x48/0x50 = 48+8·(i-4) exactly. **Gated:**
+the cg_r0 crypto gate now `GATE PASS` (sha256/keccak/cad reproduce their FIPS vectors through the Ring-0 backend),
+cg_r0 width gate `PASS=11`, corpus equivalence `59/0` (Ring-3 codegen byte-identical — the fix is Ring-0-only),
+`build_iiis2 --check-corpus` exits 0. The original two-layer diagnosis follows:
 
 Surfaced by rebuilding iiis-2 (the affine fix forced a clean `build_iiis2`, which runs `cg_r0_crypto_gate.sh`). The
 gate was RED on BOTH the old and new iiis-2 (so **not** caused by the affine change). Two layers:

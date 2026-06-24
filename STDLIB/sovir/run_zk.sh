@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -43,6 +43,10 @@ else say "FAIL zkVM-BITOPS: zk_svir_bitops=$borc (1=AND 2=OR 3=XOR 4=result-tamp
 crc=$(runzk zk_svir_cmp)
 if [ "$crc" = "99" ]; then say "zkVM-CMP : SVIR EQ/NE arithmetized over GF(998244353) via the inverse-witness is-zero certificate (a-b-d=0 ; c=1-d*w ; c*d=0 => c=is_zero(a-b), w=d^{-1} forced when d!=0) ; EQ holds + NE holds with the REAL field inverse + forged-c (both cases) AND a FORGED inverse witness all rejected -> 99 (orderings reduce to EQ + the sub borrow)"
 else say "FAIL zkVM-CMP: zk_svir_cmp=$crc (1=EQ-hold 7=EQ-cp 2=NE-hold 3=EQ-forge-c 4=NE-forge-c 5=NE-forge-w 6=re-prove)"; fail=1; fi
+# (0c4) zkVM MEM: address-time-sorted access trace == program-order trace via a GRAND-PRODUCT permutation argument.
+memrc=$(runzk zk_svir_mem)
+if [ "$memrc" = "99" ]; then say "zkVM-MEM : SVIR memory consistency via a GRAND-PRODUCT multiset-equality (permutation) argument over GF(998244353) -- two accumulator chains PROD(alpha-enc) for program-order vs sorted-order, closed by air_boundaries_hold (NEW in zk_air: transitions bind rows 0..N-2, the permutation closure aO_0=aS_0=1 & aO_final=aS_final lives in boundaries) ; honest permutation holds on BOTH axes + a broken chain (transition-caught) AND a SELF-CONSISTENT non-permutation (product 576!=384, caught ONLY by the boundary) both rejected -> 99 (the master technique; the call-stack is the same argument)"
+else say "FAIL zkVM-MEM: zk_svir_mem=$memrc (1=trans 2=bound 7=cp 3=NEG-A 4=NEG-B-trans 5=NEG-B-BOUND 6/8=re-prove)"; fail=1; fi
 # (0d) zkVM TRACE LAYOUT: per-step opcode-dispatched execution (selector VM, ADD/MUL) -- arbitrary bytecode proven.
 vrc=$(runzk zk_svir_vm)
 if [ "$vrc" = "99" ]; then say "zkVM-TRACE : per-step opcode-dispatched VM (selector ADD/MUL, product materialized for degree-2) ; honest execution holds + forged acc AND forged opcode rejected -> 99"

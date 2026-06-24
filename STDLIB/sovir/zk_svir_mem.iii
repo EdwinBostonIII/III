@@ -1,0 +1,112 @@
+/* zk_svir_mem.iii -- the SVIR MEMORY-consistency brick: prove the address-time-sorted access trace is a
+ * PERMUTATION of the program-order access trace, via a GRAND-PRODUCT multiset-equality argument over GF(998244353).
+ * The first RELATIONAL-ACROSS-ROWS gadget (the master technique shared with the call-stack argument).
+ *
+ * A zkVM cannot re-run memory; it proves consistency by a permutation argument: emit every (addr,time,value,iswrite)
+ * access in program order AND in (addr,time)-sorted order, prove the two are the same multiset (so no access is
+ * fabricated or dropped), then read-consistency (a read returns the last write at its address) becomes a local
+ * check on the sorted trace.  Multiset equality is proven by a grand product: with a challenge alpha, the running
+ * products PROD(alpha - enc_i) over the two orders are EQUAL iff the encodings are a permutation.
+ *
+ * Demo (the permutation CORE): encoded accesses O=[3,7,5,9] in program order, S=[3,5,7,9] sorted; alpha=11.
+ * Columns W=4 [vO, aO(=PROD_O accumulator), vS, aS(=PROD_S accumulator)], N=8 (5 acc points + pad).  Two degree-2
+ * TRANSITION constraints chain the accumulators (acc_{i+1} = acc_i*(alpha - v_i)); FOUR BOUNDARY constraints close
+ * the argument: aO_0 = aS_0 = 1 (empty-product start) and aO_4 = aS_4 = 384 (both products equal the SAME claimed
+ * value -> permutation).  The boundaries are enforced by air_boundaries_hold (added to zk_air for exactly this:
+ * transitions bind rows 0..N-2, but the permutation CLOSURE lives only in the start/end pins).
+ *
+ * Returns 99 iff: the honest permutation satisfies BOTH air_constraints_hold (transitions) AND air_boundaries_hold
+ * (closure); a transition-breaking tamper is caught by constraints_hold; AND -- the boundary's teeth -- a
+ * NON-permutation with a SELF-CONSISTENT chain (every transition holds, but the product is 576 != 384) is caught
+ * ONLY by air_boundaries_hold.  HONEST RESIDUAL: alpha is a fixed public constant here (the demo); soundness vs an
+ * adaptive prover needs alpha Fiat-Shamir-derived (air_derive_alphas, present) -- the named follow-on.  The sortedness
+ * range-check (addr non-decreasing) + read-consistency (read == last write) are the layers atop this permutation core. */
+module zk_svir_mem
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundaries_hold() -> u8 from "zk_air.iii"
+
+/* program-order encoded accesses + the running grand-product accumulator (exclusive prefix: aO_0 = 1). */
+var VO : [u32; 8] = [3u32, 7u32, 5u32, 9u32, 10u32, 10u32, 10u32, 10u32]    /* row 4..7 vO=10 => (alpha-vO)=1, pad */
+var AO : [u32; 8] = [1u32, 8u32, 32u32, 192u32, 384u32, 384u32, 384u32, 384u32]
+/* (addr,time)-sorted encoded accesses + its accumulator (same multiset {3,5,7,9} => same final product 384). */
+var VS : [u32; 8] = [3u32, 5u32, 7u32, 9u32, 10u32, 10u32, 10u32, 10u32]
+var AS : [u32; 8] = [1u32, 8u32, 48u32, 192u32, 384u32, 384u32, 384u32, 384u32]
+
+fn fill_trace() {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, VO[i])
+        air_set_trace(i, 1u64, AO[i])
+        air_set_trace(i, 2u64, VS[i])
+        air_set_trace(i, 3u64, AS[i])
+        i = i + 1u64
+    }
+}
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    let am : u32 = p - 11u32                          /* -alpha (alpha = 11) */
+    /* vars: 0=const1 ; cur 1=vO 2=aO 3=vS 4=aS ; next 5=vO 6=aO 7=vS 8=aS. */
+    /* con0 (O grand-product): next.aO - aO*(alpha - vO) = next.aO - alpha*aO + aO*vO. */
+    air_add_term(0u32, 1u32, 6u32, 0u32)             /* + next.aO */
+    air_add_term(0u32, am, 2u32, 0u32)               /* - alpha*aO */
+    air_add_term(0u32, 1u32, 2u32, 1u32)             /* + aO*vO */
+    /* con1 (S grand-product): next.aS - aS*(alpha - vS). */
+    air_add_term(1u32, 1u32, 8u32, 0u32)             /* + next.aS */
+    air_add_term(1u32, am, 4u32, 0u32)               /* - alpha*aS */
+    air_add_term(1u32, 1u32, 4u32, 3u32)             /* + aS*vS */
+    air_set_alpha(0u64, 3u32)
+    air_set_alpha(1u64, 5u32)
+}
+
+fn build() {
+    air_reset(4u32, 8u32)
+    air_boundary_reset()
+    fill_trace()
+    setup_constraints()
+    air_add_boundary(1u32, 0u32, 1u32)               /* aO_0 = 1  (empty product start) */
+    air_add_boundary(3u32, 0u32, 1u32)               /* aS_0 = 1 */
+    air_add_boundary(1u32, 4u32, 384u32)             /* aO_final = 384 (claimed product) */
+    air_add_boundary(3u32, 4u32, 384u32)             /* aS_final = 384  => prod_O == prod_S => permutation */
+    air_build_lde()
+    air_build_cp()
+}
+
+fn main() -> u64 {
+    /* honest permutation: transitions chain both products + the boundaries close them to the same 384. */
+    build()
+    if air_constraints_hold() != 1u8 { return 1u64 }
+    if air_boundaries_hold() != 1u8 { return 2u64 }
+    if air_cp_consistent_at(1u64) != 1u8 { return 7u64 }
+    /* NEGATIVE A (transitions catch a BROKEN chain): tamper vS_1 (5->6) without fixing aS -> con1 at row 1 breaks. */
+    build()  air_set_trace(1u64, 2u64, 6u32)  air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 0u8 { return 3u64 }
+    /* NEGATIVE B (the BOUNDARY's teeth): a NON-permutation vS=[3,5,7,8] with a SELF-CONSISTENT chain
+     * (aS_4 = 192*(11-8) = 576, pad keeps 576).  Every transition holds -- but the product is 576 != 384, caught
+     * ONLY by air_boundaries_hold.  Without the boundary check this non-permutation would pass: the proof that
+     * air_boundaries_hold is load-bearing. */
+    build()
+    air_set_trace(3u64, 2u64, 8u32)                  /* vS_3: 9 -> 8 (multiset {3,5,7,8} != {3,7,5,9}) */
+    air_set_trace(4u64, 3u64, 576u32)                /* aS_4..7 recomputed consistent with vS_3 = 8 */
+    air_set_trace(5u64, 3u64, 576u32)
+    air_set_trace(6u64, 3u64, 576u32)
+    air_set_trace(7u64, 3u64, 576u32)
+    air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 1u8 { return 4u64 }   /* transitions STILL hold (the chain is self-consistent) */
+    if air_boundaries_hold() != 0u8 { return 5u64 }    /* but the product 576 != 384 -> boundary rejects */
+    /* honest re-proves on both axes. */
+    build()
+    if air_constraints_hold() != 1u8 { return 6u64 }
+    if air_boundaries_hold() != 1u8 { return 8u64 }
+    return 99u64
+}

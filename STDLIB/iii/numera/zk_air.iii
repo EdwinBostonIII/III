@@ -572,6 +572,23 @@ fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 @export {
     return 0i32
 }
 
+/* Boundary (public-input) satisfaction: every registered boundary cell (col,row) must equal its pinned value.
+ * Transition constraints (air_constraints_hold) bind rows 0..N-2; the closure of a PERMUTATION/grand-product
+ * argument (acc_0 = 1, acc_final = the claimed product) lives ONLY in boundaries -- without this check the last
+ * access pair is unconstrained and a tampered trace passes.  Separate from air_constraints_hold so existing
+ * transition-only gadgets are unaffected; a permutation gadget asserts BOTH hold.  Returns 1 iff all boundaries
+ * are satisfied, 0 if any cell mismatches its pin. */
+fn air_boundaries_hold() -> u8 @export {
+    let nb : u64 = ZKAIR_NB[0] as u64
+    let mut i : u64 = 0u64
+    while i < nb {
+        let got : u32 = air_get_trace(ZKAIR_BD_ROW[i] as u64, ZKAIR_BD_COL[i] as u64)
+        if got != ZKAIR_BD_VAL[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
 /* FS-derive the composition coefficients α_k from the current transcript (the
  * committed trace roots).  Binding α_k to the committed trace is what makes the
  * random-linear-combination of constraints sound: an adaptive prover cannot pick a

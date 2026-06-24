@@ -39,6 +39,12 @@ fn verify_body(base: u64, boff: u64, blen: u64, nfunc: u32) -> u64 {
         if op == 0x81u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE8 */
         if op == 0x82u32 { known = 1u32 }                                                     /* LOAD64: net 0 */
         if op == 0x83u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE64 */
+        if op == 0x84u32 { known = 1u32 }                                                     /* LOAD16_U: net 0 */
+        if op == 0x85u32 { known = 1u32 }                                                     /* LOAD16_S: net 0 */
+        if op == 0x86u32 { known = 1u32 }                                                     /* LOAD32_U: net 0 */
+        if op == 0x87u32 { known = 1u32 }                                                     /* LOAD32_S: net 0 */
+        if op == 0x88u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE16 */
+        if op == 0x89u32 { depth = depth - 2i64  known = 1u32 }                               /* STORE32 */
         if known == 0u32 { return 2u64 }
         if depth < 0i64 { return 8u64 }
     }

@@ -91,6 +91,12 @@ fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
         if op == 0x81u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovb %dl, (%rcx,%rax,1)\n~" as u64) }       /* STORE8 mem[addr]=val */
         if op == 0x82u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovq (%rcx,%rax,1), %rax\npushq %rax\n~" as u64) }     /* LOAD64 mem[addr] (8-byte) */
         if op == 0x83u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovq %rdx, (%rcx,%rax,1)\n~" as u64) }      /* STORE64 mem[addr]=val (8-byte) */
+        if op == 0x84u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovzwq (%rcx,%rax,1), %rax\npushq %rax\n~" as u64) }   /* LOAD16_U (zero-extend 16->64) */
+        if op == 0x85u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovswq (%rcx,%rax,1), %rax\npushq %rax\n~" as u64) }   /* LOAD16_S (sign-extend 16->64) */
+        if op == 0x86u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovl (%rcx,%rax,1), %eax\npushq %rax\n~" as u64) }     /* LOAD32_U (movl into %eax zero-extends to %rax) */
+        if op == 0x87u32 { ez("popq %rax\nleaq svir_mem(%rip), %rcx\nmovl (%rcx,%rax,1), %eax\nmovslq %eax, %rax\npushq %rax\n~" as u64) }   /* LOAD32_S (sign-extend 32->64) */
+        if op == 0x88u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovw %dx, (%rcx,%rax,1)\n~" as u64) }       /* STORE16 mem[addr]=val (low 2 bytes) */
+        if op == 0x89u32 { ez("popq %rdx\npopq %rax\nleaq svir_mem(%rip), %rcx\nmovl %edx, (%rcx,%rax,1)\n~" as u64) }      /* STORE32 mem[addr]=val (low 4 bytes) */
         if op == 0x24u32 { ez("popq %rcx\npopq %rax\ncqto\nidivq %rcx\npushq %rdx\n~" as u64) }   /* SREM -> remainder in %rdx */
         if op == 0x72u32 { ez("addq $8, %rsp\n~" as u64) }                                          /* DROP */
         if op == 0x71u32 { ez("popq %rcx\nmovq %rsp, -8(%rbp)\nandq $-16, %rsp\nsubq $32, %rsp\ncallq __putc\nmovq -8(%rbp), %rsp\n~" as u64) }   /* PRINT_CHAR -> __putc(char in rcx) */
@@ -148,6 +154,7 @@ fn mod_has_mem(base: u64) -> u32 {
             if o == 0x81u32 { return 1u32 }
             if o == 0x82u32 { return 1u32 }
             if o == 0x83u32 { return 1u32 }
+            if o >= 0x84u32 { if o <= 0x89u32 { return 1u32 } }   /* typed mem ops LOAD/STORE 16/32 */
             if o == 0x01u32 { s = s + 8u64 }
             if o == 0x10u32 { s = s + 1u64 }
             if o == 0x11u32 { s = s + 1u64 }

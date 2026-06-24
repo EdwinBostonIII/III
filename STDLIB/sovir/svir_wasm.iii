@@ -96,6 +96,12 @@ fn build_body(base: u64, boff: u64, blen: u64, params: u32) {
         if op == 0x81u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x3Cu32)  c_emit(0x00u32)  c_emit(0x00u32) }   /* STORE8: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store8 */
         if op == 0x82u32 { c_emit(0xA7u32)  c_emit(0x29u32)  c_emit(0x03u32)  c_emit(0x00u32) }   /* LOAD64: i32.wrap_i64 ; i64.load a3 o0 */
         if op == 0x83u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x37u32)  c_emit(0x03u32)  c_emit(0x00u32) }   /* STORE64: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store a3 o0 */
+        if op == 0x84u32 { c_emit(0xA7u32)  c_emit(0x33u32)  c_emit(0x01u32)  c_emit(0x00u32) }   /* LOAD16_U: i32.wrap_i64 ; i64.load16_u a1 o0 */
+        if op == 0x85u32 { c_emit(0xA7u32)  c_emit(0x32u32)  c_emit(0x01u32)  c_emit(0x00u32) }   /* LOAD16_S: i32.wrap_i64 ; i64.load16_s a1 o0 */
+        if op == 0x86u32 { c_emit(0xA7u32)  c_emit(0x35u32)  c_emit(0x02u32)  c_emit(0x00u32) }   /* LOAD32_U: i32.wrap_i64 ; i64.load32_u a2 o0 */
+        if op == 0x87u32 { c_emit(0xA7u32)  c_emit(0x34u32)  c_emit(0x02u32)  c_emit(0x00u32) }   /* LOAD32_S: i32.wrap_i64 ; i64.load32_s a2 o0 */
+        if op == 0x88u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x3Du32)  c_emit(0x01u32)  c_emit(0x00u32) }   /* STORE16: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store16 a1 o0 */
+        if op == 0x89u32 { c_emit(0x24u32)  c_emit(0x00u32)  c_emit(0xA7u32)  c_emit(0x23u32)  c_emit(0x00u32)  c_emit(0x3Eu32)  c_emit(0x02u32)  c_emit(0x00u32) }   /* STORE32: global.set0(val) ; wrap(addr) ; global.get0(val) ; i64.store32 a2 o0 */
     }
     c_emit(0x0Bu32)
 }
@@ -123,6 +129,7 @@ fn body_has_mem(base: u64, boff: u64, blen: u64) -> u32 {
         if o == 0x81u32 { return 1u32 }
         if o == 0x82u32 { return 1u32 }
         if o == 0x83u32 { return 1u32 }
+        if o >= 0x84u32 { if o <= 0x89u32 { return 1u32 } }   /* typed mem ops LOAD/STORE 16/32 */
         if o == 0x01u32 { s = s + 8u64 }
         if o == 0x10u32 { s = s + 1u64 }
         if o == 0x11u32 { s = s + 1u64 }

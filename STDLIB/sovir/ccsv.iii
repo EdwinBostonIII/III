@@ -942,6 +942,7 @@ fn loop_has_cont() -> u32 {
 }
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
+    if cp(Q_LB)==1u32 { pblock()  return }                         /* bare `{ ... }` compound block (switch-case body, nested scope) -> emit its inner statements sequentially; without this `{` fell to the expr handler -> spurious DROP underflow */
     if isqual(C)==1u32 { let mut sg:u32=1u32  while sg==1u32 { if isqual(C)==1u32 { if kw(C,"unsigned" as u64,8u32)==1u32 {sg=0u32} else { if kw(C,"signed" as u64,6u32)==1u32 {sg=0u32} else { if kw(C,"long" as u64,4u32)==1u32 {sg=0u32} else { if kw(C,"short" as u64,5u32)==1u32 {sg=0u32} else {C=C+1u32} } } } } else {sg=0u32} } }   /* skip leading const/static/volatile but KEEP the type specifiers unsigned/signed/long/short (the decl handler reads their size) */
     if cp(Q_INC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* ++lvalue ; (prefix inc statement -> eval + DROP) */
     if cp(Q_DEC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* --lvalue ; */

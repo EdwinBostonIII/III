@@ -161,6 +161,7 @@ fn ispat(t: u32, p: i64) -> u32 { if TK[t as u64]==3u32 { if TV[t as u64]==p {re
 var FNO : [u32; 4096]  var FNL : [u32; 4096]  var FNP : [u32; 4096]  var FNT : [u32; 4096]  var FRM : [i64; 4096]  var FN : u32 = 0u32  var CUR_RMASK : i64 = 0i64  var ENDED_RET : u32 = 0u32   /* FRM=per-fn return width-mask ; ENDED_RET=last stmt was a return */
 var FVAR : [u32; 4096]  var CUR_VAPTR : i32 = 0i32-1i32   /* FVAR[f]=variadic(has ...) ; FNP[f]=NAMED count ; CUR_VAPTR=this fn's hidden va-ptr local slot (-1 if not variadic) */
 const VA_BUF:i64=983040i64   /* svir_mem va-arg buffer (64KiB below HEAP_BASE): a variadic call writes its varargs here; the callee's va-ptr points at it */
+const FMT_SCRATCH:i64=982784i64   /* 256B digit-reversal scratch for vsnprintf number conversion (just below VA_BUF) */
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]  var LMEM : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width mask ; LMEM=spill memory addr if &-taken (-1=SVIR slot) */
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed */
@@ -357,6 +358,75 @@ fn emit_malloc() {
     econst(HEAP_BASE)  eu8(0x10u32,te)  eu8(0x10u32,tn)  econst(7i64)  eb(0x20u32)  econst(0i64-8i64)  eb(0x25u32)  eb(0x20u32)  eb(0x83u32)   /* *(HEAP_BASE) = te + ((size+7)&~7) */
     eu8(0x10u32,te)                                                                                       /* leave the block address */
 }
+/* vsnprintf core: emit the format-walk loop.  td=dst cursor, tf=fmt cursor, tap=va cursor (all temp slots,
+ * pre-loaded).  Supports %s %d %u %x %c %%.  Number->string via FMT_SCRATCH (reversed digits, copied forward).
+ * Verifier-safe: IF/ELSE that "produce" a value route through a temp; nested copy/digit loops are self-contained. */
+fn emit_putnum(td:u32, tn:u32, base:i64, signd:u32) {
+    let ts:u32=LN  if LN<255u32 {LN=LN+1u32}  let dg:u32=LN  if LN<255u32 {LN=LN+1u32}
+    if signd==1u32 { eu8(0x10u32,tn)  econst(0i64)  eb(0x32u32)  eb(0x42u32)   /* if tn<0 */
+        eu8(0x10u32,td)  econst(45i64)  eb(0x81u32)  eu8(0x10u32,td)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,td)   /* *td='-'; td++ */
+        econst(0i64)  eu8(0x10u32,tn)  eb(0x21u32)  eu8(0x11u32,tn)  eb(0x44u32) }                                 /* tn = -tn ; END */
+    econst(FMT_SCRATCH)  eu8(0x11u32,ts)                                          /* ts = scratch */
+    eb(0x40u32)  eb(0x41u32)                                                       /* BLOCK LOOP : extract digits reversed */
+    eu8(0x10u32,tn)  econst(base)  eb(0x24u32)  eu8(0x11u32,dg)                    /* dg = tn % base */
+    eu8(0x10u32,dg)  econst(10i64)  eb(0x32u32)  eb(0x42u32)                       /* if dg<10 */
+        eu8(0x10u32,dg)  econst(48i64)  eb(0x20u32)  eu8(0x11u32,dg)  eb(0x43u32)   /* '0'+dg ; ELSE */
+        eu8(0x10u32,dg)  econst(87i64)  eb(0x20u32)  eu8(0x11u32,dg)  eb(0x44u32)   /* 'a'-10+dg ; END */
+    eu8(0x10u32,ts)  eu8(0x10u32,dg)  eb(0x81u32)                                  /* *ts = digit char */
+    eu8(0x10u32,ts)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ts)                    /* ts++ */
+    eu8(0x10u32,tn)  econst(base)  eb(0x23u32)  eu8(0x11u32,tn)                    /* tn /= base */
+    eu8(0x10u32,tn)  econst(0i64)  eb(0x31u32)  eu8(0x51u32,0u32)                  /* if tn!=0 -> loop */
+    eb(0x44u32)  eb(0x44u32)
+    eb(0x40u32)  eb(0x41u32)                                                       /* BLOCK LOOP : reverse-copy [FMT_SCRATCH,ts) -> td */
+    eu8(0x10u32,ts)  econst(FMT_SCRATCH)  eb(0x34u32)  eu8(0x51u32,1u32)           /* if ts<=scratch -> break */
+    eu8(0x10u32,ts)  econst(1i64)  eb(0x21u32)  eu8(0x11u32,ts)                    /* ts-- */
+    eu8(0x10u32,td)  eu8(0x10u32,ts)  eb(0x80u32)  eb(0x81u32)                     /* *td = *ts */
+    eu8(0x10u32,td)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,td)                    /* td++ */
+    eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)
+}
+fn emit_fmt(td:u32, tf:u32, tap:u32) {
+    let tc:u32=LN  if LN<255u32 {LN=LN+1u32}  let tsp:u32=LN  if LN<255u32 {LN=LN+1u32}  let tn:u32=LN  if LN<255u32 {LN=LN+1u32}  let ts:u32=LN  if LN<255u32 {LN=LN+1u32}  let tc2:u32=LN  if LN<255u32 {LN=LN+1u32}
+    eb(0x40u32)  eb(0x41u32)                                                       /* BLOCK LOOP : walk fmt */
+    eu8(0x10u32,tf)  eb(0x80u32)  eu8(0x11u32,tc)                                  /* tc = *tf */
+    eu8(0x10u32,tc)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)                  /* if tc==0 -> break */
+    eu8(0x10u32,tc)  econst(37i64)  eb(0x30u32)  eb(0x42u32)                       /* if tc=='%' */
+        eu8(0x10u32,tf)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tf)                /* tf++ */
+        eu8(0x10u32,tf)  eb(0x80u32)  eu8(0x11u32,tsp)                            /* tsp = *tf */
+        eu8(0x10u32,tf)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tf)                /* tf++ */
+        eu8(0x10u32,tsp)  econst(115i64)  eb(0x30u32)  eb(0x42u32)                /* %s */
+            eu8(0x10u32,tap)  eb(0x82u32)  eu8(0x11u32,ts)  eu8(0x10u32,tap)  econst(8i64)  eb(0x20u32)  eu8(0x11u32,tap)   /* ts = va_arg */
+            eb(0x40u32)  eb(0x41u32)
+            eu8(0x10u32,ts)  eb(0x80u32)  eu8(0x11u32,tc2)  eu8(0x10u32,tc2)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)   /* tc2=*ts; if 0 break */
+            eu8(0x10u32,td)  eu8(0x10u32,tc2)  eb(0x81u32)  eu8(0x10u32,td)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,td)       /* *td=tc2; td++ */
+            eu8(0x10u32,ts)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ts)  eu8(0x50u32,0u32)                                    /* ts++; loop */
+            eb(0x44u32)  eb(0x44u32)
+        eb(0x44u32)
+        eu8(0x10u32,tsp)  econst(100i64)  eb(0x30u32)  eb(0x42u32)                /* %d */
+            eu8(0x10u32,tap)  eb(0x82u32)  eu8(0x11u32,tn)  eu8(0x10u32,tap)  econst(8i64)  eb(0x20u32)  eu8(0x11u32,tap)
+            emit_putnum(td, tn, 10i64, 1u32)
+        eb(0x44u32)
+        eu8(0x10u32,tsp)  econst(117i64)  eb(0x30u32)  eb(0x42u32)                /* %u */
+            eu8(0x10u32,tap)  eb(0x82u32)  eu8(0x11u32,tn)  eu8(0x10u32,tap)  econst(8i64)  eb(0x20u32)  eu8(0x11u32,tap)
+            emit_putnum(td, tn, 10i64, 0u32)
+        eb(0x44u32)
+        eu8(0x10u32,tsp)  econst(120i64)  eb(0x30u32)  eb(0x42u32)                /* %x */
+            eu8(0x10u32,tap)  eb(0x82u32)  eu8(0x11u32,tn)  eu8(0x10u32,tap)  econst(8i64)  eb(0x20u32)  eu8(0x11u32,tap)
+            emit_putnum(td, tn, 16i64, 0u32)
+        eb(0x44u32)
+        eu8(0x10u32,tsp)  econst(99i64)  eb(0x30u32)  eb(0x42u32)                 /* %c */
+            eu8(0x10u32,td)  eu8(0x10u32,tap)  eb(0x82u32)  eb(0x81u32)  eu8(0x10u32,td)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,td)  eu8(0x10u32,tap)  econst(8i64)  eb(0x20u32)  eu8(0x11u32,tap)
+        eb(0x44u32)
+        eu8(0x10u32,tsp)  econst(37i64)  eb(0x30u32)  eb(0x42u32)                 /* %% */
+            eu8(0x10u32,td)  econst(37i64)  eb(0x81u32)  eu8(0x10u32,td)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,td)
+        eb(0x44u32)
+    eb(0x43u32)                                                                   /* ELSE (literal char) */
+        eu8(0x10u32,td)  eu8(0x10u32,tc)  eb(0x81u32)  eu8(0x10u32,td)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,td)  eu8(0x10u32,tf)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,tf)
+    eb(0x44u32)                                                                   /* END (%) */
+    eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)                                                       /* END END (loop, block) */
+    eu8(0x10u32,td)  econst(0i64)  eb(0x81u32)                                     /* *td = 0 (NUL) */
+}
 /* ++ / -- on a scalar LOCAL (scale 1).  isdec:1=-- ; post:1=leave OLD (postfix) / 0=leave NEW (prefix). */
 fn pinc_local(slot:u32, isdec:u32, post:u32) {
     let tv:u32=LN  if LN<255u32 {LN=LN+1u32}
@@ -458,6 +528,22 @@ fn eprim() {
                 return
             }
             if kw(t,"va_end" as u64,6u32)==1u32 { let mut g:u32=1u32  while g==1u32 { if cp(Q_RP)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_RP)  econst(0i64)  return }   /* va_end -> no-op */
+            if kw(t,"vsnprintf" as u64,9u32)==1u32 {   /* vsnprintf(buf, size, fmt, ap) -> format ap into buf */
+                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}
+                ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eb(0x72u32)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tap)  eat(Q_RP)
+                emit_fmt(td, tf, tap)  econst(0i64)  return
+            }
+            if kw(t,"vsprintf" as u64,8u32)==1u32 {    /* vsprintf(buf, fmt, ap) (no size) */
+                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}
+                ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tap)  eat(Q_RP)
+                emit_fmt(td, tf, tap)  econst(0i64)  return
+            }
+            if kw(t,"snprintf" as u64,8u32)==1u32 {    /* snprintf(buf, size, fmt, ...) -> varargs to VA_BUF, format */
+                let td:u32=LN  if LN<255u32 {LN=LN+1u32}  let tf:u32=LN  if LN<255u32 {LN=LN+1u32}  let tap:u32=LN  if LN<255u32 {LN=LN+1u32}
+                ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eb(0x72u32)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tf)
+                let mut k:i64=0i64  if cp(Q_COM)==1u32 { let mut g:u32=1u32  while g==1u32 { if cp(Q_COM)==1u32 { C=C+1u32  econst(VA_BUF + (8i64*k))  ebin(0u32)  eb(0x83u32)  k=k+1i64 } else {g=0u32} } }
+                eat(Q_RP)  econst(VA_BUF)  eu8(0x11u32,tap)  emit_fmt(td, tf, tap)  econst(0i64)  return
+            }
             let fvi:i32=fidx(t)
             if fvi>=0i32 { if FVAR[fvi as u64]==1u32 {   /* VARIADIC call: named args -> the call ; varargs -> VA_BUF ; pass VA_BUF as the hidden last arg */
                 let nn:u32=FNP[fvi as u64]  let mut argi:u32=0u32

@@ -1,0 +1,87 @@
+/* zk_svir_sub.iii -- the SVIR 64-bit SUB opcode arithmetized over the 30-bit STARK field GF(998244353), the
+ * second per-opcode zkVM brick (Omega1-T1, sibling of zk_svir_add).
+ *
+ * SVIR SUB is c = a - b (i64, wrapping).  The clean arithmetization is the ADD carry chain RUN BACKWARD:
+ *   c = a - b   <=>   b + c = a (mod 2^64)
+ * so prove the 14-bit-limb carry chain of (subtrahend b) + (result c) == (minuend a).  Layout identical to
+ * zk_svir_add: W=4 cols [M(minuend a), S(subtrahend b), R(result c), carry_in], N=8 (5 limb rows + 3 zero pad),
+ * two degree-<=2 AIR constraints:
+ *   con0 (limb-sub carry chain): 2^14*next.carry_in + M - S - R - carry_in == 0
+ *       -- i.e. S_k + R_k + carry_in_k = M_k + 2^14*carry_out_k for every limb (the borrow chain run as an add).
+ *   con1 (carry boolean): carry_in^2 - carry_in == 0.
+ * Numbers reuse zk_svir_add's VERIFIED limbs relabelled: M = add's c, S = add's b, R = add's a, so S+R=M with the
+ * same carries [0,0,1,1,1] -- i.e. this proves a-b=c for a = 0x223344..., b = 0x0FED..., c = 0x1234... (a >= b).
+ *
+ * Returns 99 iff: the honest limb trace satisfies the AIR (constraints hold + CP consistent) AND a TAMPERED result
+ * limb AND a TAMPERED carry are both rejected.  HONEST RESIDUAL (symmetric to zk_svir_add's no-overflow scope):
+ * this is the no-BORROW case (a >= b, final carry_out = 0); the wrapping case a < b (final carry_out = 1, the i64
+ * underflow) drains a final borrow bit -- the named follow-on, exactly as add defers final-overflow + per-limb
+ * range (zk_svir_range supplies the latter for both). */
+module zk_svir_sub
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+
+var ML : [u32; 5] = [8721u32, 2184u32, 8738u32, 2184u32, 34u32]       /* minuend a's 14-bit limbs (= add's c) */
+var SL : [u32; 5] = [801u32, 7573u32, 15000u32, 15218u32, 15u32]      /* subtrahend b's (= add's b) */
+var RL : [u32; 5] = [7920u32, 10995u32, 10121u32, 3349u32, 18u32]     /* result c = a-b (= add's a) */
+var KIN : [u32; 5] = [0u32, 0u32, 1u32, 1u32, 1u32]                   /* carry_in per limb (carry_in_0 = 0) */
+
+fn fill_trace() {
+    let mut i : u64 = 0u64
+    while i < 5u64 {                                  /* rows 0..4 : the real limb borrow chain (run as S+R=M) */
+        air_set_trace(i, 0u64, ML[i])
+        air_set_trace(i, 1u64, SL[i])
+        air_set_trace(i, 2u64, RL[i])
+        air_set_trace(i, 3u64, KIN[i])
+        i = i + 1u64
+    }
+    while i < 8u64 {                                  /* rows 5..7 : zero padding (carry_in=0 -> constraints hold) */
+        air_set_trace(i, 0u64, 0u32)  air_set_trace(i, 1u64, 0u32)  air_set_trace(i, 2u64, 0u32)  air_set_trace(i, 3u64, 0u32)
+        i = i + 1u64
+    }
+}
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    let two14 : u32 = 16384u32
+    /* con0 (limb-sub carry chain): +2^14*next.carry_in + M - S - R - carry_in.  vars: 0=const1, cur 1=M 2=S 3=R
+     * 4=carry_in, next 5=M 6=S 7=R 8=carry_in -> next.carry_in = var 8.  Each term coeff*var*const1 (degree 1). */
+    air_add_term(0u32, two14, 8u32, 0u32)            /* + 2^14 * next.carry_in */
+    air_add_term(0u32, 1u32, 1u32, 0u32)             /* + M (minuend) */
+    air_add_term(0u32, p - 1u32, 2u32, 0u32)         /* - S (subtrahend) */
+    air_add_term(0u32, p - 1u32, 3u32, 0u32)         /* - R (result) */
+    air_add_term(0u32, p - 1u32, 4u32, 0u32)         /* - carry_in */
+    /* con1 (carry boolean): carry_in^2 - carry_in. */
+    air_add_term(1u32, 1u32, 4u32, 4u32)             /* + carry_in^2 */
+    air_add_term(1u32, p - 1u32, 4u32, 0u32)         /* - carry_in */
+    air_set_alpha(0u64, 3u32)
+    air_set_alpha(1u64, 5u32)
+}
+
+fn build_air() { air_reset(4u32, 8u32)  fill_trace()  setup_constraints()  air_build_lde()  air_build_cp() }
+
+fn main() -> u64 {
+    build_air()
+    /* honest: every limb-sub vanishes (S_k + R_k + carry_in_k = M_k + 2^14*carry_out_k) + every carry boolean; CP consistent */
+    if air_constraints_hold() != 1u8 { return 1u64 }
+    if air_cp_consistent_at(1u64) != 1u8 { return 2u64 }
+    if air_cp_consistent_at(5u64) != 1u8 { return 3u64 }
+    /* SOUNDNESS NEGATIVE 1: forge a result limb (R_2: 10121 -> 9999) -> the limb-sub at row 2 no longer vanishes ->
+     * a wrong 64-bit difference is caught. */
+    build_air()  air_set_trace(2u64, 2u64, 9999u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 4u64 }
+    /* SOUNDNESS NEGATIVE 2: a forged carry (carry_in_3: 1 -> 0) breaks the chain. */
+    build_air()  air_set_trace(3u64, 3u64, 0u32)  air_build_lde()
+    if air_constraints_hold() != 0u8 { return 5u64 }
+    /* tampers isolated: the honest trace proves again. */
+    build_air()
+    if air_constraints_hold() != 1u8 { return 6u64 }
+    return 99u64
+}

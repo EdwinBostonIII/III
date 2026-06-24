@@ -748,6 +748,11 @@ fn eprim() {
                 return
             } }
             C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)  let fm:i64=fieldmask(ptt,ft)
+                let fpt0a:i32=fieldpt(ptt,ft)  if fpt0a>=0i32 { if cp(Q_DOT)==1u32 {   /* p->f0.f1.f2.. : arrow into an INLINE aggregate field, then a DOT-chain -> pointer + summed offsets, typed load on the last (an->u.arg.arg_name.length) */
+                    emit_lget(lidx(t) as u32)  let mut cura:i32=fpt0a  let mut acca:i64=foff  let mut gca:u32=1u32
+                    while gca==1u32 { C=C+1u32  let nfa:u32=C  C=C+1u32  let nfoa:i64=fieldoff(cura,nfa)  acca=acca+nfoa  let npta:i32=fieldpt(cura,nfa)  let mut morea:u32=0u32  if npta>=0i32 { if cp(Q_DOT)==1u32 {morea=1u32} }
+                        if morea==1u32 { cura=npta } else { if acca>0i64 {econst(acca)  eb(0x20u32)}  eload(fieldelem(cura,nfa), fieldsign(cura,nfa))  gca=0u32 } }
+                    return } }
                 if cp(Q_LBR)==1u32 {
                     let elt:i32=fieldpt(ptt,ft)
                     if elt>=0i32 {   /* p->arrfield[i].subfield : ptr/embedded-struct array-element field READ -- lookahead past ] for a . */

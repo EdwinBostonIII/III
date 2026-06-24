@@ -701,6 +701,8 @@ fn eprim() {
                 eload(fe, fsg)  return }
         }
         if kw(t,"true" as u64,4u32)==1u32 { econst(1i64)  return }  if kw(t,"false" as u64,5u32)==1u32 { econst(0i64)  return }  if kw(t,"NULL" as u64,4u32)==1u32 { econst(0i64)  return }   /* bool / null literals */
+        if kw(t,"UINT8_MAX" as u64,9u32)==1u32 { econst(255i64)  return }  if kw(t,"UINT16_MAX" as u64,10u32)==1u32 { econst(65535i64)  return }  if kw(t,"UINT32_MAX" as u64,10u32)==1u32 { econst(4294967295i64)  return }  if kw(t,"UINT64_MAX" as u64,10u32)==1u32 { econst(0i64-1i64)  return }  if kw(t,"SIZE_MAX" as u64,8u32)==1u32 { econst(0i64-1i64)  return }   /* stdint limit macros (ccsv ignores <stdint.h>) */
+        if kw(t,"INT8_MAX" as u64,8u32)==1u32 { econst(127i64)  return }  if kw(t,"INT16_MAX" as u64,9u32)==1u32 { econst(32767i64)  return }  if kw(t,"INT32_MAX" as u64,9u32)==1u32 { econst(2147483647i64)  return }  if kw(t,"INT32_MIN" as u64,9u32)==1u32 { econst(0i64-2147483648i64)  return }  if kw(t,"INT_MAX" as u64,7u32)==1u32 { econst(2147483647i64)  return }  if kw(t,"INT_MIN" as u64,7u32)==1u32 { econst(0i64-2147483648i64)  return }
         let ad:i64=abase(t)  if ad>=0i64 { let lck:i32=lidx(t)  if lck<0i32 {   /* (a shadowing local wins -> fall through to lidx) */
             if aisc(t)==1u32 { econst(ad)  eload(aesize(t), asign(t)) } else { econst(ad) }  return } }   /* global SCALAR -> LOAD value ; bare array -> &arr[0] (decay) */
         let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64])  return }   /* enum member / #define constant */

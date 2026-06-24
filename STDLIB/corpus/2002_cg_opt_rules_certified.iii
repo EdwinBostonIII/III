@@ -1,0 +1,9 @@
+/* 2002 -- Path C: cg_r3's strength-reduction rule table (forcefield/cg_opt_rules.iii) is CIC-kernel-
+ * certified WIDTH-FAITHFULLY -- every tabled (factor 2^k -> emit `shl $k`) passes both the width-
+ * invariance guard (factor == 1<<k exactly) and the BV64 kernel proof (tc_check of x<<k == x*2^k mod
+ * 2^64) -- AND the certifier provably REJECTS unsound rules (non-pow2, off-by-one). The companion
+ * scripts/cg_optrules_bind_gate.sh binds THIS table to cg_r3's actual machine-code `shl` emission,
+ * closing the F6 "sovereign-optimizer" gap (proof-carrying with no proof->emit binding). 99 = GREEN. */
+module corpus_2002
+extern @abi(c-msvc-x64) fn cor_selftest() -> u64 from "cg_opt_rules.iii"
+fn main() -> u64 { return cor_selftest() }

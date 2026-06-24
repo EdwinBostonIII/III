@@ -1122,6 +1122,9 @@ MODULES=(
     "forcefield/daemon_scythe"
     "forcefield/scythe_census"
     "forcefield/sovereign_optimizer"
+    # Path C: the single-source SR rule table + CIC kernel certifier (width-invariance guard +
+    # per-rule BV64 proof) that the cg_optrules_bind_gate binds to cg_r3's real `shl` emission.
+    "forcefield/cg_opt_rules"
     # The verification missile on III's LIVE rules: drives the real xii_canonicalise
     # engine over the trit fragment and verifies it against an INDEPENDENT Kleene spec
     # (non-tautological, unlike corpus 670).  Externs only the live XII engine.

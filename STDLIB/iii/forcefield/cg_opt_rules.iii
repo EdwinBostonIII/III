@@ -1,0 +1,121 @@
+/* STDLIB/iii/forcefield/cg_opt_rules.iii -- Path C: the SINGLE SOURCE OF TRUTH for cg_r3's strength-
+ * reduction peephole rules, and the kernel CERTIFIER that proves each one width-faithfully.
+ *
+ * The F6 audit (DOCS/III-F6-LEDGER-AUDIT.md, "sovereign-optimizer") found the sov_isa BV64 shift-fold
+ * proof (sov_shift_fold_witness) is genuine + width-faithful but lives in a SANDBOX (corpus/1207) that
+ * never inspects the emitter -- "proof-carrying" with NO mechanical proof->emit binding (the binding was
+ * a prose citation comment).  This module closes that gap: ONE table (COR_FACTOR/COR_SHIFT) drives BOTH
+ *   (1) the KERNEL PROOF       -- cor_kernel_certify(i): tc_check( lam x:BV. refl(x<<k) ,
+ *                                  Pi x:BV. Id(BV, x<<k, x*2^k) ) over the CIC BV64 kernel, AND
+ *   (2) the WIDTH-INVARIANCE guard -- cor_width_invariant(i): factor == 1<<shift exactly.  Only an exact
+ *       power of two is a width-faithful strength reduction; a non-pow2 / overflowing const-fold is
+ *       REJECTED.  THE soundness contribution (the unary-model boundary, III-OPTIMIZER-PATH-C.md).
+ * The binding gate (scripts/cg_optrules_bind_gate.sh) then reads THIS SAME table and asserts cg_r3's
+ * ACTUAL emission for `x*factor` is `shl $shift` -- divergence (imul for a tabled pow2, or the wrong
+ * shift) reddens.  So the kernel proof, the soundness guard, and the real emitter are bound to one source.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: typecheck.iii CIC kernel only.
+ * Determinism: integer-only; ==/!= and UNSIGNED < ; no u64 div/mod; single-source table.
+ */
+module forcefield_cg_opt_rules
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bv() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvlit_u64(v: u64) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+/* The SR rule table: row i = (factor 2^shift  ->  emit `shl $shift`).  The codegen-relevant family
+ * (matches the sov_isa proof set {1,5,31,63} + the common {2,3,10}).  SINGLE SOURCE OF TRUTH. */
+const COR_N : u64 = 7u64
+var COR_SHIFT  : [u64; 7]
+var COR_FACTOR : [u64; 7]
+var COR_INIT : u64 = 0u64
+
+fn cor_init() -> u64 {
+    if COR_INIT == 1u64 { return 0u64 }
+    COR_SHIFT[0u64] = 1u64    COR_FACTOR[0u64] = 2u64
+    COR_SHIFT[1u64] = 2u64    COR_FACTOR[1u64] = 4u64
+    COR_SHIFT[2u64] = 3u64    COR_FACTOR[2u64] = 8u64
+    COR_SHIFT[3u64] = 5u64    COR_FACTOR[3u64] = 32u64
+    COR_SHIFT[4u64] = 10u64   COR_FACTOR[4u64] = 1024u64
+    COR_SHIFT[5u64] = 31u64   COR_FACTOR[5u64] = 0x80000000u64
+    COR_SHIFT[6u64] = 63u64   COR_FACTOR[6u64] = 0x8000000000000000u64
+    COR_INIT = 1u64
+    return 0u64
+}
+
+fn cor_rule_count() -> u64 @export { cor_init() return COR_N }
+fn cor_shift_at(i: u64) -> u64 @export { cor_init() if i >= COR_N { return 0u64 } return COR_SHIFT[i] }
+fn cor_factor_at(i: u64) -> u64 @export { cor_init() if i >= COR_N { return 0u64 } return COR_FACTOR[i] }
+
+/* (2) WIDTH-INVARIANCE guard: width-faithful iff factor is EXACTLY 2^shift (and shift in range). */
+fn cor_width_invariant_kf(shift: u64, factor: u64) -> u8 {
+    if shift >= 64u64 { return 0u8 }
+    let p : u64 = 1u64 << shift
+    if p == factor { return 1u8 }
+    return 0u8
+}
+fn cor_width_invariant(i: u64) -> u8 @export {
+    cor_init()
+    if i >= COR_N { return 0u8 }
+    return cor_width_invariant_kf(COR_SHIFT[i], COR_FACTOR[i])
+}
+
+/* (1) KERNEL PROOF: tc_check( lam x:BV. refl(x<<shift) ,  Pi x:BV. Id(BV, x<<shift, x*factor) ).
+ * 1 iff the CIC BV64 kernel certifies x<<shift == x*factor mod 2^64 (the same proof sov_isa runs). */
+fn cor_kernel_certify_kf(shift: u64, factor: u64) -> u8 {
+    tc_reset()
+    let lhs : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(shift))
+    let rhs : u32 = tc_bvmul(tc_var(0u32), tc_bvlit_u64(factor))
+    let goal : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, rhs))
+    let cert : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    return tc_check(cert, goal)
+}
+fn cor_kernel_certify(i: u64) -> u8 @export {
+    cor_init()
+    if i >= COR_N { return 0u8 }
+    return cor_kernel_certify_kf(COR_SHIFT[i], COR_FACTOR[i])
+}
+
+/* The CERTIFIER: every tabled rule must pass BOTH the width-invariance guard AND the kernel proof.
+ * 99 = all certified; (100+i) = rule i fails width-invariance; (200+i) = rule i fails the kernel proof. */
+fn cor_certify_all() -> u64 @export {
+    cor_init()
+    let mut i : u64 = 0u64
+    while i < COR_N {
+        if cor_width_invariant_kf(COR_SHIFT[i], COR_FACTOR[i]) != 1u8 { return 100u64 + i }
+        if cor_kernel_certify_kf(COR_SHIFT[i], COR_FACTOR[i]) != 1u8 { return 200u64 + i }
+        i = i + 1u64
+    }
+    return 99u64
+}
+
+/* PROVE-THE-NEGATIVE: the certifier has TEETH -- it REJECTS unsound rules, so 99 is not vacuous.
+ *   (a) a NON-pow2 factor (3) fails the width-invariance guard;
+ *   (b) a mismatched (shift=1, factor=4) fails BOTH the guard (1<<1=2 != 4) AND the kernel proof
+ *       (the x<<1 certificate does NOT prove x*4 -- sov_isa line 2614). 1 iff every unsound rule rejected. */
+fn cor_rejects_unsound() -> u8 @export {
+    if cor_width_invariant_kf(1u64, 3u64) != 0u8 { return 0u8 }       /* 3 not pow2 -> width REJECTS */
+    if cor_width_invariant_kf(1u64, 4u64) != 0u8 { return 0u8 }       /* 1<<1=2 != 4 -> width REJECTS */
+    tc_reset()
+    let lhs : u32 = tc_bvshl(tc_var(0u32), tc_bvlit_u64(1u64))
+    let bad : u32 = tc_pi(tc_bv(), tc_id(tc_bv(), lhs, tc_bvmul(tc_var(0u32), tc_bvlit_u64(4u64))))
+    let cert : u32 = tc_lam(tc_bv(), tc_refl(lhs))
+    if tc_check(cert, bad) != 0u8 { return 0u8 }                      /* kernel REJECTS the off-by-one fold */
+    return 1u8
+}
+
+/* The full self-test: certifier green AND the negative arm bites. 99 = the table is kernel-certified
+ * width-faithfully and the certifier provably rejects unsound rules. */
+fn cor_selftest() -> u64 @export {
+    if cor_certify_all() != 99u64 { return cor_certify_all() }
+    if cor_rejects_unsound() != 1u8 { return 5u64 }
+    return 99u64
+}

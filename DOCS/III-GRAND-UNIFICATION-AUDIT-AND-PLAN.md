@@ -93,6 +93,18 @@ ext2_mul` etc., even from `numera_zk_air.iii.o` itself). Surfaced when the P4 re
 **Fix:** added both to MODULES (leaf arithmetic, appended at end, BSS-safe) and restored them into the lib; the
 extension-field gadgets (incl. the new committed ones) link again.
 
+### F10 — The committed VERIFIER gadgets are gcc-linked, not sovereign-linked. **[NAMED RESIDUAL, verified 2026-06-24]**
+Turning the lens on the trust story Ω7 certifies: the GU's EXECUTION artifact IS genuinely sovereign-built — in
+`run_eidos_svir.sh`, R0's SVIR is translated to `.s`, then `sovas_main` (sovereign assembler) → `sovlink_main`
+(sovereign linker) + `crt0_sov` produce `r0.x86.exe`, and the gate verifies it is **kernel32-only** (objdump DLL
+check). gcc only builds the translator/verifier *tooling*, not the trusted artifact — so "no gcc/ld in the trusted
+path" holds for the execution leg. HOWEVER the committed-proof VERIFIER gadgets (Ω.e/f/g: `zk_fused_committed`,
+`zk_here_to_there`, `zk_federate_quorum`) are `.iii→.o` (sovereign iiis-2 frontend) then **gcc-linked** — their LINK
+step is gcc/ld, so those binaries are not yet sovereign. Honest scope: the EXECUTION proof's binary is sovereign; the
+verifier binaries are gcc-linked dev artifacts. Closing it = sovereign-link them via `sovld` over `libiii_native.a` +
+kernel32 (a larger sovereign-linker exercise than the single R0 PE — the gadgets pull keccak/merkle/zk_air/zk_ext*).
+This is now named in `run_trust_certificate.sh`'s honest-scope line, not hidden.
+
 ---
 
 ## PRIORITIZED PLAN (Pareto: the 20% that earns the unification)

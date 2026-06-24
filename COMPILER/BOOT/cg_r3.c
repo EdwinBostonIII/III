@@ -2384,12 +2384,12 @@ static int emit_stmt(iii_cg_r3_state_t *cg, uint32_t node)
                         if (icallee && icallee->kind == III_AST_EXPR_IDENT) {
                             uint32_t bid_rk = iii_ast_node_binder_id(
                                 cg->ast, init->u.call.callee);
-                            const iii_ast_node_t *cdecl = bid_rk
+                            const iii_ast_node_t *callee_decl = bid_rk
                                 ? iii_ast_get(cg->ast, bid_rk) : NULL;
-                            if (cdecl && cdecl->kind == III_AST_FN_DECL) {
+                            if (callee_decl && callee_decl->kind == III_AST_FN_DECL) {
                                 uint64_t ret_kind = 0;
                                 if (fn_modifier_extract_u64(
-                                        cg, cdecl->u.fn_decl.modifiers,
+                                        cg, callee_decl->u.fn_decl.modifiers,
                                         "returns_hexad", 13, &ret_kind)) {
                                     if (let_kind != ret_kind) {
                                         cg->last_error = III_CG_R3_E_INTERNAL;

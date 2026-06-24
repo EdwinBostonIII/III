@@ -61,5 +61,16 @@ challenges. Per the standard decision:
 ## Status ledger
 
 - ✅ STRUCTURAL soundness (no bypass of the binding) — proven by the malicious-prover oracles. **Not blocked.**
-- ⛔ PRODUCTION concrete soundness (80+ bits) — **blocked on extension-field challenges.** This is THE bottleneck
-  between demo and production; surpassing it (not deferring) is the next phase.
+- 🛠️ EXTENSION-FIELD TOOLS built + verified standalone — `GF(p²)` arithmetic + FRI fold + combination + a live CP
+  construction (`ZK-EXT2-*`), and `GF(p⁴) ~2¹²⁰` arithmetic (`ZK-EXT4`). **But NOT YET LOAD-BEARING.**
+- ⛔ PRODUCTION concrete soundness (80+ bits) — **still blocked.** The advisor's correction (do not let the tools
+  read as soundness): the extension field only matters for *random-challenge* terms, and **no real gadget samples a
+  random challenge over it** — `ZK-EXT2-LIVE` rejects its violating trace by *full O(N) consistency re-evaluation*
+  (and at the violated row, by evaluating the constraint directly), with a *vacuous* FRI fold (the shift-quotient is
+  always low-degree). So `GF(p⁴) ~2¹²⁰ verified` = the FIELD TOOL is verified, **NOT** "the zkVM is `2¹²⁰`-sound."
+  Every real gadget (`ZK-FUSED/MEMORY`) still runs the **base-field 30-bit** STARK; the bottleneck has not moved.
+- ➡️ THE soundness-bearing work: lift `air_stark_verify`'s **query layer** (commit → FS-challenge → open queries →
+  verify fold vs Merkle → final-codeword) to `GF(p²)`, proven by a **forged-CP malicious arm** (a prover commits a CP
+  that is the true quotient at the query points but high-degree elsewhere, and must be rejected by the query check).
+  Only when a query-based verifier rejects a forged CP does the field size become a real knob. Secondary blocker:
+  `N=8 / D=32` is too small to fit many independent FRI queries — real query soundness needs larger `N` too.

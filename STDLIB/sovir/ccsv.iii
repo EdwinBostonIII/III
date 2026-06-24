@@ -431,16 +431,24 @@ fn eprim() {
                 eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
-            let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)
-                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  econst(vb+foff)  eb(0x20u32)  eload(fe, fsg)  return }
+            let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)  let fm:i64=fieldmask(vt,ft)
+                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  econst(vb+foff)  eb(0x20u32)
+                    if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* v.field[i]++ */
+                    eload(fe, fsg)  return }
                 if fieldisarr(vt,ft)==1u32 { econst(vb+foff)  return }      /* bare array field -> &field[0] (decay) */
-                econst(vb + foff)  eload(fe, fsg)  return }
+                econst(vb + foff)
+                if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* v.field++ */
+                eload(fe, fsg)  return }
         }
         if cp(Q_ARROW)==1u32 {                                       /* p->field [/ p->field[i]] : struct-pointer field load */
-            let ptt:i32=lpt(t)  if ptt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)
-                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  eload(fe, fsg)  return }
+            let ptt:i32=lpt(t)  if ptt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)  let fm:i64=fieldmask(ptt,ft)
+                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}
+                    if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* p->field[i]++ */
+                    eload(fe, fsg)  return }
                 if fieldisarr(ptt,ft)==1u32 { emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  return }   /* bare array field -> p+foff (decay) */
-                emit_lget(lidx(t) as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  eload(fe, fsg)  return }
+                emit_lget(lidx(t) as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }
+                if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* p->field++ */
+                eload(fe, fsg)  return }
         }
         if kw(t,"true" as u64,4u32)==1u32 { econst(1i64)  return }  if kw(t,"false" as u64,5u32)==1u32 { econst(0i64)  return }  if kw(t,"NULL" as u64,4u32)==1u32 { econst(0i64)  return }   /* bool / null literals */
         let ad:i64=abase(t)  if ad>=0i64 { econst(ad)  return }               /* bare array name -> &arr[0] (array->pointer decay) */

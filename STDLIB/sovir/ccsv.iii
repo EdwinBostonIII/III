@@ -148,6 +148,7 @@ var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]  var LMEM : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width mask ; LMEM=spill memory addr if &-taken (-1=SVIR slot) */
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed */
+var LOVF : u32 = 0u32                                  /* LOUD local-overflow flag: the SVIR LOCAL_GET/SET operand is ONE byte, so >256 locals/fn would silently collide (slot 256&0xFF=0); set this instead, fail the whole compile clearly */
 var BLKD : i64 = 0i64                                  /* live structured-control nesting depth (BLOCK/LOOP/IF open count) -- read by `break` */
 var BRKT : [i64; 32]  var BRKN : u32 = 0u32            /* break-target stack: BLKD just inside each enclosing loop/switch's exit block ; break -> BR(BLKD - BRKT[top]) */
 var SWCC : [i64; 128]  var SWCN : u32 = 0u32           /* case constants of the switch being lowered (prescan, in source order) */
@@ -183,7 +184,7 @@ fn emit_lset(slot:u32) { let m:i64=LW[slot as u64]  if m!=0i64 { econst(m)  eb(0
     if mem>=0i64 { let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}  eu8(0x11u32,tmp)  econst(mem)  eu8(0x10u32,tmp)  estore(LSZ[slot as u64]) } else { eu8(0x11u32, slot) }
 }
 fn lpt(t: u32) -> i32 { let li:i32=lidx(t)  if li<0i32 {return 0i32-1i32}  return LPT[li as u64] }
-fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 }  LN=LN+1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM) */
+fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 }  LN=LN+1u32 } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
 fn emit_lget(slot:u32) { let mem:i64=LMEM[slot as u64]  if mem>=0i64 { econst(mem)  eload(LSZ[slot as u64], LSG[slot as u64]) } else { eu8(0x10u32, slot) } }   /* spilled local -> typed LOAD from its memory addr ; else LOCAL_GET (byte-identical for non-spilled) */
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
 var AO : [u32; 64]  var AL : [u32; 64]  var AB : [u64; 64]  var AW : [i64; 64]  var AESZ : [i64; 64]  var ALEN : [u64; 64]  var ASGN : [u32; 64]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed */
@@ -848,6 +849,7 @@ fn main(argc: i32, argv: u64) -> u64 {
         mb((DEND & 0xFFu64) as u32)  mb(((DEND >> 8u64) & 0xFFu64) as u32)
         let mut d:u64=0u64  while d<DEND { mb(SDAT[d] as u32)  d=d+1u64 }
     }
+    if LOVF==1u32 { pstr("// FATAL ccsv: a function exceeds the 256 SVIR-local cap -- needs LEB-encoded local indices (the silent slot-256->0 collision is refused).\n!!!CCSV_LOCAL_OVERFLOW!!!\n" as u64)  return 7u64 }   /* LOUD: emit unparseable iii + nonzero exit, never silently-corrupt SVIR */
     emit_module()
     return 0u64
 }

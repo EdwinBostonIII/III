@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle zk_svir_straightline zk_svir_stack zk_iiisv_attest zk_svir_mem_dynamic; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -102,6 +102,10 @@ gcc "$W/zk_iiisv_attest.o" "$W/gen_svir.o" "$LIB" -lkernel32 -o "$W/zk_iiisv_att
 timeout 60 "$W/zk_iiisv_attest.exe" >/dev/null 2>&1; oerc=$?
 if [ "$oerc" = "99" ]; then say "ZK-OMEGA-E: iiisv compiled a REAL .iii program (return 5*257+7) -> SVIR bytecode; this gadget READ the bytes (svir_ptr/svir_len), PARSED the 5 opcodes (CONST 5, CONST 257, MUL=0x22, CONST 7, ADD=0x20), confirmed they compute 1292, and PROVED the execution with the sound STARK -> witness-free verifier ACCEPTS the honest execution, REJECTS a forged stack-top by the math -> 99 (THE COMPILER'S OWN OUTPUT attested soundly: .iii -> iiisv -> SVIR -> sound ZK = Omega.e for a straight-line program)"
 else say "FAIL ZK-OMEGA-E: zk_iiisv_attest=$oerc (6=opcode-count 5=result!=1292 1=honest-rejected 2=forge-accepted; 0=link/run error)"; fail=1; fi
+# (0m) ZK-MEMORY: DYNAMIC memory consistency -- the real zkVM memory argument (permutation + read-consistency + sortedness), not a register-file.
+memrc=$(runzk zk_svir_mem_dynamic)
+if [ "$memrc" = "99" ]; then say "ZK-MEMORY : DYNAMIC memory (arbitrary STORE/LOAD) attested SOUNDLY -- a STORE[0]=5,STORE[1]=7,LOAD[0],LOAD[1] trace proven by (1) a grand-product PERMUTATION (FS-alpha,beta) that the (addr,val,iswrite)-sorted order matches program order, (2) READ-CONSISTENCY on the sorted trace (same-addr LOAD returns the prev value via an inverse-witness is-zero, new-addr LOAD returns 0), (3) SORTEDNESS -- all on one trace via air_stark_prove/verify. A forged LOAD value is REJECTED by read-consistency AND a fabricated (non-permutation) access is REJECTED by the permutation -> 99 (the hard part of a zkVM, done; residual: general range-check for sparse addrs + alpha,beta from committed roots)"
+else say "FAIL ZK-MEMORY: zk_svir_mem_dynamic=$memrc (1=honest-rejected 2=value-forge-accepted 3=fabricated-accepted 4=re-prove)"; fail=1; fi
 
 # (A) ZK-attested.  zk_air (with the additive air_lde_at accessor) is in libiii_native.a; link the archive.
 gcc "$W/zk_svir_exec.o" "$LIB" -lkernel32 -o "$W/zk_svir_exec.exe" 2>/dev/null

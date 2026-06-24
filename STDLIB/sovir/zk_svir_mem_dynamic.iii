@@ -1,0 +1,164 @@
+/* zk_svir_mem_dynamic.iii -- DYNAMIC MEMORY consistency, attested SOUNDLY: the real zkVM memory argument.
+ *
+ * A zkVM cannot re-run memory; it proves "every LOAD returns the most-recent STORE to its address" by an OFFLINE
+ * MEMORY-CHECKING argument with THREE soundness pillars, all on one trace, all transition-only (no register-file
+ * shortcut):
+ *   1. PERMUTATION (no fabricated/dropped access): the (addr,val,iswrite)-tuple multiset in PROGRAM order equals the
+ *      multiset in (addr,time)-SORTED order, via a grand product PROD(alpha - enc), enc = addr + beta*val +
+ *      beta^2*iswrite, with alpha,beta FIAT-SHAMIR-derived from the trace (the now-sound permutation, zk_perm_oracle).
+ *   2. READ-CONSISTENCY on the sorted trace: same-address (isz, certified by an inverse-witness is-zero on the
+ *      address-difference) LOAD returns the previous value; new-address LOAD returns 0 (uninitialised memory).
+ *   3. SORTEDNESS: the sorted address is non-decreasing (here d = addr_next-addr in {0,1}; dense small space -- a
+ *      general range-check is the named residual).
+ *
+ * Program (4 real accesses + 4 sorted-padding writes): STORE [0]=5, STORE [1]=7, LOAD [0]=>5, LOAD [1]=>7.
+ * A FORGED LOAD (addr 0 returns 99) still PERMUTES (the prover sorts the forged accesses) but VIOLATES read-
+ * consistency (sorted: (0,5,W),(0,99,R) -> 99 != 5) -> REJECTED BY THE MATH.  W=13, 13 constraints (AIR_CMAX=16).
+ * Returns 99 iff the honest memory trace VERIFIES (air_stark_prove/verify) and the forged LOAD is REJECTED. */
+module zk_svir_mem_dynamic
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+
+const NEG1 : u32 = 998244352u32
+const PRIME : u32 = 998244353u32
+
+/* program order [addr,val,iswrite] and (addr,time)-sorted order; pad rows 4..7 are identical writes to fresh addrs. */
+var AP : [u32; 8] = [0u32, 1u32, 0u32, 1u32, 2u32, 3u32, 4u32, 5u32]
+var VP : [u32; 8] = [5u32, 7u32, 5u32, 7u32, 10u32, 10u32, 10u32, 10u32]
+var WP : [u32; 8] = [1u32, 1u32, 0u32, 0u32, 1u32, 1u32, 1u32, 1u32]
+var AS : [u32; 8] = [0u32, 0u32, 1u32, 1u32, 2u32, 3u32, 4u32, 5u32]
+var VS : [u32; 8] = [5u32, 5u32, 7u32, 7u32, 10u32, 10u32, 10u32, 10u32]
+var WS : [u32; 8] = [1u32, 0u32, 1u32, 0u32, 1u32, 1u32, 1u32, 1u32]
+var ACP : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* program grand-product accumulator */
+var ACS : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* sorted  grand-product accumulator */
+var DD  : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* d = as_next - as */
+var WI  : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* inverse-witness (d^-1 or 0) */
+var IZ  : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* isz = is_zero(d) = same-address */
+var RA  : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* isz*(vs_next - vs) */
+var NRA : [u32; 8] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]   /* (1-isz)*vs_next */
+
+fn mod_pow(base: u32, ex: u32) -> u32 {
+    let mut r : u32 = 1u32
+    let mut b : u32 = base
+    let mut e : u32 = ex
+    while e > 0u32 {
+        if (e & 1u32) == 1u32 { r = sf_mul(r, b) }
+        b = sf_mul(b, b)
+        e = e >> 1u32
+    }
+    return r
+}
+fn inv(d: u32) -> u32 { if d == 0u32 { return 0u32 } return mod_pow(d, PRIME - 2u32) }
+
+/* FS challenge: a non-linear (square-mixing) hash of the program access tuples, seeded distinctly for alpha vs beta. */
+fn derive(seed: u32) -> u32 {
+    let mut a : u32 = seed
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        a = sf_add(sf_mul(a, 16777619u32), AP[i])  a = sf_add(sf_mul(a, a), 1u32)
+        a = sf_add(sf_mul(a, 16777619u32), VP[i])  a = sf_add(sf_mul(a, a), 2u32)
+        a = sf_add(sf_mul(a, 16777619u32), WP[i])  a = sf_add(sf_mul(a, a), 3u32)
+        i = i + 1u64
+    }
+    if a < 2u32 { a = 2u32 }
+    return a
+}
+
+/* build the full memory-checking trace + AIR with FS-derived alpha,beta; returns X = the claimed permutation product. */
+fn build() -> u32 {
+    let alpha : u32 = derive(169647555u32)
+    let beta  : u32 = derive(305419896u32)
+    let beta2 : u32 = sf_mul(beta, beta)
+    /* grand products: acc_{i+1} = acc_i * (alpha - enc_i), enc = addr + beta*val + beta^2*iswrite. */
+    ACP[0] = 1u32  ACS[0] = 1u32
+    let mut i : u64 = 0u64
+    while i < 7u64 {
+        let ep : u32 = sf_add(sf_add(AP[i], sf_mul(beta, VP[i])), sf_mul(beta2, WP[i]))
+        let es : u32 = sf_add(sf_add(AS[i], sf_mul(beta, VS[i])), sf_mul(beta2, WS[i]))
+        ACP[i + 1u64] = sf_mul(ACP[i], sf_sub(alpha, ep))
+        ACS[i + 1u64] = sf_mul(ACS[i], sf_sub(alpha, es))
+        i = i + 1u64
+    }
+    let x : u32 = ACP[4]
+    /* witnesses d,isz,winv,ra,nra over the SORTED trace (row i relates to row i+1; row 7 wraps, unchecked by Z_T). */
+    i = 0u64
+    while i < 8u64 {
+        let inx : u64 = (i + 1u64) & 7u64
+        let d : u32 = sf_sub(AS[inx], AS[i])
+        DD[i] = d
+        WI[i] = inv(d)
+        if d == 0u32 { IZ[i] = 1u32 } else { IZ[i] = 0u32 }
+        let dv : u32 = sf_sub(VS[inx], VS[i])
+        RA[i] = sf_mul(IZ[i], dv)
+        NRA[i] = sf_mul(sf_sub(1u32, IZ[i]), VS[inx])
+        i = i + 1u64
+    }
+    air_reset(13u32, 8u32)
+    air_boundary_reset()
+    i = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, AP[i])  air_set_trace(i, 1u64, VP[i])  air_set_trace(i, 2u64, WP[i])
+        air_set_trace(i, 3u64, AS[i])  air_set_trace(i, 4u64, VS[i])  air_set_trace(i, 5u64, WS[i])
+        air_set_trace(i, 6u64, ACP[i]) air_set_trace(i, 7u64, ACS[i])
+        air_set_trace(i, 8u64, DD[i])  air_set_trace(i, 9u64, WI[i])  air_set_trace(i, 10u64, IZ[i])
+        air_set_trace(i, 11u64, RA[i]) air_set_trace(i, 12u64, NRA[i])
+        i = i + 1u64
+    }
+    let am : u32 = sf_sub(0u32, alpha)
+    /* vars: 0=1 ; cur 1=ap 2=vp 3=wp 4=as 5=vs 6=ws 7=acp 8=acs 9=d 10=wi 11=iz 12=ra 13=nra ; next 14.. (as=17 vs=18 ws=19 acp=20 acs=21) */
+    air_add_term(0u32, 1u32, 20u32, 0u32)  air_add_term(0u32, am, 7u32, 0u32)              /* con0 perm_p */
+    air_add_term(0u32, 1u32, 7u32, 1u32)   air_add_term(0u32, beta, 7u32, 2u32)  air_add_term(0u32, beta2, 7u32, 3u32)
+    air_add_term(1u32, 1u32, 21u32, 0u32)  air_add_term(1u32, am, 8u32, 0u32)              /* con1 perm_s */
+    air_add_term(1u32, 1u32, 8u32, 4u32)   air_add_term(1u32, beta, 8u32, 5u32)  air_add_term(1u32, beta2, 8u32, 6u32)
+    air_add_term(2u32, 1u32, 9u32, 0u32)   air_add_term(2u32, NEG1, 17u32, 0u32)  air_add_term(2u32, 1u32, 4u32, 0u32)  /* con2 d = as_next - as */
+    air_add_term(3u32, 1u32, 11u32, 9u32)                                                   /* con3 isz*d = 0 */
+    air_add_term(4u32, 1u32, 11u32, 0u32)  air_add_term(4u32, 1u32, 9u32, 10u32)  air_add_term(4u32, NEG1, 0u32, 0u32) /* con4 isz + d*wi - 1 */
+    air_add_term(5u32, 1u32, 12u32, 0u32)  air_add_term(5u32, NEG1, 11u32, 18u32)  air_add_term(5u32, 1u32, 11u32, 5u32) /* con5 ra - isz*(vs_next - vs) */
+    air_add_term(6u32, 1u32, 12u32, 0u32)  air_add_term(6u32, NEG1, 19u32, 12u32)           /* con6 ra*(1 - ws_next) = read-consistency */
+    air_add_term(7u32, 1u32, 13u32, 0u32)  air_add_term(7u32, NEG1, 18u32, 0u32)  air_add_term(7u32, 1u32, 11u32, 18u32) /* con7 nra - (1-isz)*vs_next */
+    air_add_term(8u32, 1u32, 13u32, 0u32)  air_add_term(8u32, NEG1, 19u32, 13u32)           /* con8 nra*(1 - ws_next) = new-addr read => 0 */
+    air_add_term(9u32, 1u32, 9u32, 9u32)   air_add_term(9u32, NEG1, 9u32, 0u32)             /* con9 d in {0,1} (sortedness, dense) */
+    air_add_term(10u32, 1u32, 3u32, 3u32)  air_add_term(10u32, NEG1, 3u32, 0u32)            /* con10 wp boolean */
+    air_add_term(11u32, 1u32, 6u32, 6u32)  air_add_term(11u32, NEG1, 6u32, 0u32)            /* con11 ws boolean */
+    air_add_term(12u32, 1u32, 11u32, 11u32) air_add_term(12u32, NEG1, 11u32, 0u32)          /* con12 isz boolean */
+    let mut c : u64 = 0u64
+    while c < 13u64 { air_set_alpha(c, (7u32 + (c as u32)*4u32)) c = c + 1u64 }
+    air_add_boundary(6u32, 0u32, 1u32)  air_add_boundary(7u32, 0u32, 1u32)     /* acp_0 = acs_0 = 1 */
+    air_add_boundary(6u32, 4u32, x)     air_add_boundary(7u32, 4u32, x)        /* acp_4 = acs_4 = X (permutation) */
+    return x
+}
+
+fn main() -> u64 {
+    /* (1) HONEST memory trace: permutation + read-consistency + sortedness all hold -> the sound verifier ACCEPTS. */
+    build()  air_stark_prove()
+    if air_stark_verify() != 0u64 { return 1u64 }
+    /* (2) FORGED LOAD: addr 0 returns 99 (program vp[2] and its sorted image vs[1]).  Still a valid permutation, but
+     * sorted (0,5,W),(0,99,R) violates read-consistency (99 != 5) -> REJECT BY THE MATH. */
+    VP[2] = 99u32  VS[1] = 99u32
+    build()  air_stark_prove()
+    let forged : u64 = air_stark_verify()
+    VP[2] = 5u32   VS[1] = 5u32
+    if forged == 0u64 { return 2u64 }
+    /* (3) FABRICATED ACCESS (the PERMUTATION pillar): the prover makes the sorted addr-0 second access a WRITE
+     * (WS[1]=1), so the sorted multiset {(0,5,W),(0,5,W),...} is NOT a permutation of the program {...,(0,5,R),...}.
+     * Read-consistency passes (a write is unconstrained), but acs_4 != acp_4 -> the permutation boundary REJECTS. */
+    WS[1] = 1u32
+    build()  air_stark_prove()
+    let fab : u64 = air_stark_verify()
+    WS[1] = 0u32
+    if fab == 0u64 { return 3u64 }
+    /* (4) the honest trace re-proves. */
+    build()  air_stark_prove()
+    if air_stark_verify() != 0u64 { return 4u64 }
+    return 99u64
+}

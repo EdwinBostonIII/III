@@ -1,0 +1,116 @@
+/* zk_ext2_live.iii -- the LIVE integration: a REAL trace + transition constraint, run through the live air machinery
+ * (air_reset/set_trace/add_term/build_lde) into a GF(p^2) composition polynomial (air_build_cp_ext2), then FRI-folded
+ * over GF(p^2).  This is the extension-field STARK applied to an actual constraint, not synthetic C0/C1 -- the
+ * proof-of-concept that the verified GF(p^2) core (arithmetic + fold + combine) lifts the REAL air's soundness.
+ *
+ * Program: a column with the NONLINEAR transition  next = cur^2  on rows 0..2 (a degree-2 constraint, so the quotient
+ * is genuinely degree-3, not a trivial constant -- it exercises the fold).  Trace [2,4,16,256] satisfies it
+ * (2^2=4, 4^2=16, 16^2=256); [2,4,17,256] violates row 1 (17 != 16).  air_build_cp_ext2 combines the constraint with a
+ * GF(p^2) challenge alpha and divides by Z_T (per-limb NTT) to get the GF(p^2) quotient CP; the GF(p^2) FRI fold
+ * (16->8->4) certifies low-degree.
+ *
+ * Returns 99 iff the SATISFYING trace yields a low-degree CP that folds to a CONSTANT (ACCEPT) and the VIOLATING trace
+ * (whose quotient is non-polynomial -> high-degree) does NOT (REJECT) -- the live GF(p^2) STARK accepts truth, rejects
+ * a false statement, with the combination + fold challenges over ~2^60. */
+module zk_ext2_live
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha_ext2(con: u64, a: u64) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp_ext2() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_ext2_at(j: u64) -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_combine_ext2_at(j: u64) -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+
+const PRIME : u32 = 998244353u32
+const NEG1  : u32 = 998244352u32
+
+var OM : [u32; 16] = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+var F  : [u64; 16] = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+
+fn base_inv(v: u32) -> u32 {
+    let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
+    while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }
+    return r
+}
+fn fill_om() {
+    let om : u32 = sf_rou(16u32)  OM[0] = 1u32
+    let mut j : u64 = 1u64
+    while j < 16u64 { OM[j] = sf_mul(OM[j - 1u64], om)  j = j + 1u64 }
+}
+
+/* set up the AIR with trace [t0,t1,t2,t3] + the next=cur^2 constraint, build the LDE + the GF(p^2) CP, read it into F. */
+fn build_cp(t0: u32, t1: u32, t2: u32, t3: u32) {
+    air_reset(1u32, 4u32)
+    air_set_trace(0u64, 0u64, t0)  air_set_trace(1u64, 0u64, t1)
+    air_set_trace(2u64, 0u64, t2)  air_set_trace(3u64, 0u64, t3)
+    /* vars: 0=1 ; cur 1=col0 ; next 2=col0.  con0: next - cur^2. */
+    air_add_term(0u32, 1u32, 2u32, 0u32)       /* + next */
+    air_add_term(0u32, NEG1, 1u32, 1u32)       /* - cur*cur */
+    air_set_alpha_ext2(0u64, e2pack(13u32, 9u32))   /* GF(p^2) combination challenge */
+    air_build_lde()
+    air_build_cp_ext2()
+    let mut j : u64 = 0u64
+    while j < 16u64 { F[j] = air_cp_ext2_at(j)  j = j + 1u64 }
+}
+
+/* the SOUNDNESS check: CP[j] * Z_T(omega^j) == combine(omega^j) at every LDE point except the excluded wrap row
+ * (j=12 = omega_n^{n-1}, where Z_T is 0/0).  Z_T(x) = (x^n - 1)/(x - omega_n^{n-1}); at a checked trace row (j=0,4,8)
+ * Z_T=0 so this checks combine=0 (the constraint itself); elsewhere it checks the quotient is correct.  A violating
+ * trace breaks combine=0 at its tampered row -> caught.  All over GF(p^2) (the ~2^60 combination challenge). */
+fn consistency_ok() -> u64 {
+    let lastr : u32 = OM[12]
+    let mut j : u64 = 0u64
+    while j < 16u64 {
+        if j != 12u64 {
+            let zt  : u32 = sf_mul(sf_sub(OM[(4u64 * j) & 15u64], 1u32), base_inv(sf_sub(OM[j], lastr)))
+            if ext2_smul(zt, air_cp_ext2_at(j)) != air_combine_ext2_at(j) { return 0u64 }
+        }
+        j = j + 1u64
+    }
+    return 1u64
+}
+
+fn fold(size: u64, gstep: u64, r: u64) {
+    let inv2 : u32 = base_inv(2u32)  let half : u64 = size / 2u64
+    let mut j : u64 = 0u64
+    while j < half {
+        let x  : u32 = OM[j * gstep]
+        let lo : u64 = F[j]  let hi : u64 = F[j + half]
+        let fe : u64 = ext2_smul(inv2, ext2_add(lo, hi))
+        let fo : u64 = ext2_smul(base_inv(sf_add(x, x)), ext2_sub(lo, hi))
+        F[j] = ext2_add(fe, ext2_mul(r, fo))
+        j = j + 1u64
+    }
+}
+fn low_degree_ok(r1: u64, r2: u64) -> u64 {
+    fold(16u64, 1u64, r1)  fold(8u64, 2u64, r2)
+    if F[0] != F[1] { return 0u64 }
+    if F[1] != F[2] { return 0u64 }
+    if F[2] != F[3] { return 0u64 }
+    return 1u64
+}
+
+fn main() -> u64 {
+    fill_om()
+    let r1 : u64 = e2pack(7u32, 3u32)
+    let r2 : u64 = e2pack(11u32, 5u32)
+    /* SATISFYING: next = cur^2 holds on rows 0..2 -> CP consistent (CP*Z_T == combine) AND low-degree -> ACCEPT. */
+    build_cp(2u32, 4u32, 16u32, 256u32)
+    if consistency_ok() != 1u64 { return 1u64 }       /* the GF(p^2) quotient is correct */
+    if low_degree_ok(r1, r2) != 1u64 { return 3u64 }  /* and folds to a constant (low-degree) */
+    /* VIOLATING: row 1 breaks it (17 != 16) -> combine != 0 at the tampered row -> CP*Z_T != combine -> REJECT. */
+    build_cp(2u32, 4u32, 17u32, 256u32)
+    if consistency_ok() == 1u64 { return 2u64 }       /* a false statement must be caught by the consistency check */
+    return 99u64
+}

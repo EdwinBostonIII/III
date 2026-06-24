@@ -35,6 +35,12 @@ module numera_zk_air
 /* Shared NTT organ (§S.4) -- the SAME radix-2 butterfly zk_stark + the PQ schemes use. */
 extern @abi(c-msvc-x64) fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
 extern @abi(c-msvc-x64) fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+/* GF(p^2) arithmetic (numera/zk_ext2.iii) -- for the EXTENSION-FIELD composition polynomial (air_build_cp_ext2). */
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2lo(x: u64) -> u32 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2hi(x: u64) -> u32 from "zk_ext2.iii"
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
 /* APOTHEOSIS C.3 (item 4): the Merkle commitment + FRI fold route through the §S.6 merkle
  * build-once/open-many surface and the §C.3 ntt_fri_organ -- the SAME tree + fold zk_stark
@@ -71,6 +77,8 @@ var AIR_TRACE  : [u32; 2048]        /* row-major: T[row*W + col]  (WMAX*NMAX = 3
 var AIR_TCOEF  : [u32; 8192]        /* per-column coeffs, padded to D (WMAX*DMAX = 32*256) */
 var AIR_LDE    : [u32; 8192]        /* per-column LDE over H_D (WMAX*DMAX = 32*256) */
 var AIR_CP     : [u32; 256]         /* composition polynomial over H_D (DMAX) */
+var AIR_CP_R   : [u32; 256]         /* EXTENSION-FIELD composition polynomial, real limb (GF(p^2) value = AIR_CP_R + AIR_CP_I*u) */
+var AIR_CP_I   : [u32; 256]         /* ... imag limb (the FRI fold over GF(p^2) lifts the soundness floor off the 30-bit field) */
 /* transition constraint term lists */
 var AIR_TT_COEF : [u32; 64]
 var AIR_TT_A    : [u32; 64]
@@ -84,6 +92,7 @@ var AIR_PERM_START : [u32; 1]       /* first ACCESS column index (so gadgets who
 var AIR_NT      : [u32; 1]          /* number of terms */
 var AIR_NC      : [u32; 1]          /* number of transition constraints */
 var AIR_ALPHA   : [u32; 32]         /* per-constraint Fiat-Shamir coefficient (AIR_CMAX slots) */
+var AIR_ALPHA_EXT2 : [u64; 32]      /* per-constraint GF(p^2) combination challenge (packed a0|a1<<32) for air_combine_ext2 */
 
 /* ---- GF(998244353): consolidated into the shared ntt_fri_organ ----
  * Were inline + byte-identical to zk_stark's copies → the `L_sf_*` global-symbol
@@ -289,6 +298,62 @@ fn air_build_cp() -> i32 @export {
     ntt_forward_at((&AIR_CP as u64), d, AIR_Q, omegaD)
     return 0i32
 }
+
+/* ===== EXTENSION-FIELD composition polynomial: the SAME construction as air_build_cp, but the per-constraint
+ * combination challenge is a GF(p^2) value, so the CP is GF(p^2)-valued (two base-field limbs AIR_CP_R/AIR_CP_I).
+ * The NTT/shift/Z_T are LINEAR, so they apply per-limb -- the domain + trace stay base-field, only the challenge and
+ * the CP go up.  A GF(p^2) FRI fold of (AIR_CP_R, AIR_CP_I) then certifies low-degree with a ~2^60 challenge space.
+ * Additive: the base-field air_build_cp above is untouched.  (Perm terms are not lifted here -- this path is for the
+ * transition/boundary constraints; perm-over-GF(p^2) is a later refinement.) ===== */
+fn air_set_alpha_ext2(con: u64, a: u64) -> i32 @export { if con < AIR_CMAX { AIR_ALPHA_EXT2[con] = a } return 0i32 }
+
+fn air_combine_ext2(j: u64, w_cols: u64, d_dom: u64) -> u64 {
+    let wc : u64 = w_cols  let dd : u64 = d_dom
+    let mut acc : u64 = 0u64
+    let nt : u64 = AIR_NT[0] as u64
+    let mut t : u64 = 0u64
+    while t < nt {
+        let con : u64 = AIR_TT_CON[t] as u64
+        let va  : u32 = air_eval_var(AIR_TT_A[t] as u64, j, wc, dd)
+        let vb  : u32 = air_eval_var(AIR_TT_B[t] as u64, j, wc, dd)
+        let base_term : u32 = sf_mul(AIR_TT_COEF[t], sf_mul(va, vb))           /* coef * va * vb (base-field) */
+        acc = ext2_add(acc, ext2_smul(base_term, AIR_ALPHA_EXT2[con]))         /* + alpha_ext2[con] * base_term */
+        t = t + 1u64
+    }
+    return acc
+}
+
+fn air_build_cp_ext2() -> i32 @export {
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let omegaN : u32 = sf_rou(n as u32)
+    let lastr  : u32 = sf_pow(omegaN, n - 1u64)
+    let mut j : u64 = 0u64
+    while j < d {
+        let xj  : u32 = sf_pow(omegaD, j)
+        let cmb : u64 = air_combine_ext2(j, w_cols, d)
+        let factor : u32 = sf_sub(xj, lastr)
+        AIR_CP_R[j] = sf_mul(e2lo(cmb), factor)
+        AIR_CP_I[j] = sf_mul(e2hi(cmb), factor)
+        j = j + 1u64
+    }
+    ntt_inverse_at((&AIR_CP_R as u64), d, AIR_Q, omegaD)
+    ntt_inverse_at((&AIR_CP_I as u64), d, AIR_Q, omegaD)
+    j = 0u64
+    while j < d {
+        if j + n < d { AIR_CP_R[j] = AIR_CP_R[j + n]  AIR_CP_I[j] = AIR_CP_I[j + n] } else { AIR_CP_R[j] = 0u32  AIR_CP_I[j] = 0u32 }
+        j = j + 1u64
+    }
+    ntt_forward_at((&AIR_CP_R as u64), d, AIR_Q, omegaD)
+    ntt_forward_at((&AIR_CP_I as u64), d, AIR_Q, omegaD)
+    return 0i32
+}
+
+fn air_cp_ext2_at(j: u64) -> u64 @export { return e2pack(AIR_CP_R[j], AIR_CP_I[j]) }   /* read the GF(p^2) CP at LDE point j (packed) */
+/* the raw GF(p^2) combination at LDE point j (no Z_T factor) -- the verifier checks CP[j]*Z_T(omega^j) == this. */
+fn air_combine_ext2_at(j: u64) -> u64 @export { return air_combine_ext2(j, AIR_W[0] as u64, AIR_B * (AIR_N[0] as u64)) }
 
 /* The transition constraints must VANISH on the trace domain (j % B == 0) for an
  * honest witness -- this is the AIR satisfaction predicate.  Returns 1 if every

@@ -43,28 +43,29 @@ extern @abi(c-msvc-x64) fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32
 extern @abi(c-msvc-x64) fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 from "sealed_channel.iii"
 
 const PRIME : u32 = 998244353u32
-const DOM   : u64 = 16u64
-const NLAY  : u64 = 2u64           /* 16 -> 8 -> 4 */
+const DOM   : u64 = 256u64
+const NLAY  : u64 = 6u64           /* 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4 */
 const G4    : u64 = 4294967298u64
-const NQ    : u64 = 4u64
+const NQPB  : u64 = 32u64          /* FS queries per keccak batch */
+const NBATCH: u64 = 4u64           /* 4 re-hash batches * 32 = 128 FS queries -> PRODUCTION ~2^-86 */
 const BASEF : u64 = 257u64
 const MODP  : u64 = 1000000007u64
 
-var OM   : [u32; 16]
-var FA   : [u64; 32]    var FB : [u64; 32]      /* prover FRI layers (zeroed before node-2 verify) */
+var OM   : [u32; 256]
+var FA   : [u64; 512]    var FB : [u64; 512]     /* prover FRI layers (zeroed before node-2 verify) */
 var OFFS : [u64; 8]      var SIZES: [u64; 8]
-var ROOT : [u8; 128]                            /* prover layer roots (zeroed before node-2 verify) */
+var ROOT : [u8; 256]                            /* prover layer roots (7 layers * 32) */
 var RR   : [u64; 8]      var RI : [u64; 8]
 var DIG  : [u8; 32]
-var LEAF : [u8; 256]
-var PRF  : [u8; 256]
+var LEAF : [u8; 4096]                           /* one layer's leaves (256 * 16) */
+var PRF  : [u8; 512]                            /* one authentication path (plen<=8 * 33) */
 var QLEAF: [u8; 16]
 var FRA  : [u64; 1]      var FRB : [u64; 1]
-var ART  : [u8; 8192]    var ALEN : [u64; 1]    /* the serialised artifact + its length */
-var CIPH : [u8; 8192]    var TAG  : [u8; 16]
+var ART  : [u8; 720000]  var ALEN : [u64; 1]    /* the serialised production artifact + its length */
+var CIPH : [u8; 720000]  var TAG  : [u8; 16]
 var ASEC : [u8; 32]      var BSEC : [u8; 32]    var APUB : [u8; 32]  var BPUB : [u8; 32]  var BP9 : [u8; 32]
 /* node-2 scratch (reads ONLY the artifact) */
-var NROOT: [u8; 128]     var NLEAF : [u8; 16]   var NPATH : [u8; 256]
+var NROOT: [u8; 256]     var NLEAF : [u8; 16]   var NPATH : [u8; 512]
 var ATT  : [u64; 1]                              /* node-2 attestation fold state */
 
 fn base_inv(v: u32) -> u32 {
@@ -107,12 +108,12 @@ fn ap8(v: u8) { ART[SP[0]] = v  SP[0] = SP[0] + 1u64 }
 fn apblk(src: u64, n: u64) { let p : *u8 = src as *u8  let mut k : u64 = 0u64  while k < n { ART[SP[0]] = p[k]  SP[0] = SP[0] + 1u64  k = k + 1u64 } }
 
 fn build_and_serialise() {
-    /* degree-3 GF(p^4) codeword over the DOM-th roots (Horner; folds 16->4 to a constant). */
+    /* degree-63 GF(p^4) codeword over the DOM=256-th roots (Horner; blowup 4 -> folds 256->4 to a constant). */
     let mut j : u64 = 0u64
     while j < DOM {
         let x : u32 = OM[j]
         let mut aa : u64 = 0u64  let mut bb : u64 = 0u64
-        let mut k : u64 = 4u64
+        let mut k : u64 = 64u64
         while k > 0u64 {
             k = k - 1u64
             aa = ext2_smul(x, aa)  bb = ext2_smul(x, bb)
@@ -144,10 +145,12 @@ fn build_and_serialise() {
     apblk((&ROOT as u64), (NLAY + 1u64) * 32u64)
     let mut c : u64 = 0u64
     while c < 4u64 { put16((&LEAF as u64), 0u64, FA[off + c], FB[off + c])  apblk((&LEAF as u64), 16u64)  c = c + 1u64 }
-    /* queries from keccak(final root). */
+    /* queries from keccak(final root): NBATCH re-hash batches of NQPB -> 128 FS queries (~2^-86). */
     keccak256_oneshot((&ROOT as u64) + NLAY * 32u64, 32u64, (&DIG as u64))
-    let mut qi : u64 = 0u64
-    while qi < NQ {
+    let mut batch : u64 = 0u64
+    while batch < NBATCH {
+      let mut qi : u64 = 0u64
+      while qi < NQPB {
         let pq : *u8 = ((&DIG as u64) + qi) as *u8
         let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
         let mut L : u64 = 0u64
@@ -171,6 +174,9 @@ fn build_and_serialise() {
             L = L + 1u64
         }
         qi = qi + 1u64
+      }
+      keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))   /* re-hash for the next query batch */
+      batch = batch + 1u64
     }
     ALEN[0] = SP[0]
 }
@@ -198,8 +204,10 @@ fn verify_artifact(buf: u64) -> u64 {
     keccak256_oneshot((&NROOT as u64) + nlay * 32u64, 32u64, (&DIG as u64))
     /* cursor over the openings. */
     let mut cur : u64 = fcw_off + 4u64 * 16u64
-    let mut qi : u64 = 0u64
-    while qi < NQ {
+    let mut batch : u64 = 0u64
+    while batch < NBATCH {
+      let mut qi : u64 = 0u64
+      while qi < NQPB {
         let pq : *u8 = ((&DIG as u64) + qi) as *u8
         let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
         let mut size : u64 = DOM  let mut L2 : u64 = 0u64
@@ -235,6 +243,9 @@ fn verify_artifact(buf: u64) -> u64 {
             size = half  L2 = L2 + 1u64
         }
         qi = qi + 1u64
+      }
+      keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))   /* re-hash for the next query batch */
+      batch = batch + 1u64
     }
     return 1u64
 }

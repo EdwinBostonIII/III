@@ -1,0 +1,77 @@
+/* zk_eidos_fold.iii -- a SOUND zero-knowledge proof of an EIDOS-style EVENT-FOLD, via the now-sound STARK.
+ *
+ * EIDOS's primitive is the ripple: state is a FOLD over events (state_{i+1} = fold(state_i, event_i)).  This proves
+ * exactly that, for a real fold -- the polynomial rolling hash / content-address  state' = BASE*state + event  (mod
+ * GF(998244353)) -- the operation III uses to content-address.  The trace is MECHANICALLY COMPUTED (the states are
+ * folded, not hand-authored); the full STARK (air_stark_prove -> air_stark_verify) emits a real proof object and an
+ * independent, witness-free verifier checks it.  Because the underlying STARK was made sound (the Z_T true-quotient
+ * fix, DOCS/III-ZK-SOUNDNESS-GAP.md), a FORGED fold -- a tampered state or event that breaks state_{i+1} =
+ * BASE*state_i + event_i on any constrained row -- is REJECTED BY THE MATH, not by a hand-placed check.
+ *
+ * Columns W=2 [state, event], N=8.  One degree-1 transition con0: next.state - BASE*state - event == 0  (binds rows
+ * 0..N-2; folds events e_0..e_6 into state s_7).  Boundary: state_0 = 0 (empty fold).  BASE = 257.
+ *
+ * Returns 99 iff: the honest fold's proof VERIFIES (air_stark_verify == 0), a FORGED STATE is rejected, and a FORGED
+ * EVENT is rejected.  This is the EIDOS event-fold attested soundly -- the computational primitive of a ripple, with
+ * its correctness checked by a verifier that never sees the witness.  Toward Omega.e (a full EIDOS ripple compiled
+ * via iiisv -> SVIR -> trace -> this sound STARK), the fold is the kernel. */
+module zk_eidos_fold
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_get_trace(row: u64, col: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+
+const BASE : u32 = 257u32   /* the rolling-hash base (content-address multiplier) */
+
+/* the event sequence to fold (the INPUT to the ripple).  e_7 is unconstrained (the last row has no transition). */
+var EV : [u32; 8] = [3u32, 1u32, 4u32, 1u32, 5u32, 9u32, 2u32, 0u32]
+
+fn setup() {
+    let p : u32 = 998244353u32
+    air_reset(2u32, 8u32)
+    air_boundary_reset()
+    air_add_boundary(0u32, 0u32, 0u32)                /* state_0 = 0 (empty fold) */
+    /* vars: 0=const1 ; cur 1=state 2=event ; next 3=state 4=event. */
+    /* con0 (fold): next.state - BASE*state - event. */
+    air_add_term(0u32, 1u32, 3u32, 0u32)             /* + next.state */
+    air_add_term(0u32, p - BASE, 1u32, 0u32)         /* - BASE*state */
+    air_add_term(0u32, p - 1u32, 2u32, 0u32)         /* - event */
+    air_set_alpha(0u64, 7u32)
+}
+
+/* MECHANICAL trace: fold the events, writing each computed state.  state_{i+1} = BASE*state_i + event_i. */
+fn fill() {
+    let mut s : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, s)
+        air_set_trace(i, 1u64, EV[i])
+        let ns : u32 = sf_add(sf_mul(BASE, s), EV[i])
+        s = ns
+        i = i + 1u64
+    }
+}
+
+fn main() -> u64 {
+    /* (1) HONEST: the mechanically-folded trace, real STARK proof, independent verifier must ACCEPT. */
+    setup()  fill()  air_stark_prove()
+    if air_stark_verify() != 0u64 { return 1u64 }
+    /* (2) FORGED STATE: tamper state_4 -> the fold row 3->4 (state_4 = BASE*state_3 + e_3) is violated -> REJECT. */
+    setup()  fill()  air_set_trace(4u64, 0u64, 12345u32)  air_stark_prove()
+    if air_stark_verify() == 0u64 { return 2u64 }
+    /* (3) FORGED EVENT: tamper event_3 without recomputing -> state_4 no longer equals BASE*state_3 + e_3 -> REJECT. */
+    setup()  fill()  air_set_trace(3u64, 1u64, 99999u32)  air_stark_prove()
+    if air_stark_verify() == 0u64 { return 3u64 }
+    /* (4) the honest fold proves again (the forgeries did not corrupt prover state). */
+    setup()  fill()  air_stark_prove()
+    if air_stark_verify() != 0u64 { return 4u64 }
+    return 99u64
+}

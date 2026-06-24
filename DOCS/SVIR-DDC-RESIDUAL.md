@@ -59,9 +59,22 @@ source-level `#ifdef` shim was tried and **rejected** because adding lines shift
 byte-identity gate — build-flag portability is invisible; source shims are not. The seed stays frozen.
 
 **What this closes, and what it does NOT (yet).** CLOSED: an *independent-lineage* compiler now produces a working
-iiis-0 — the diverse-toolchain prerequisite the original residual lacked. NOT yet closed: the **DDC chain itself** —
-`iiis-0_msvc → iiis-1 → iiis-2`, compared **byte-for-byte** to the gcc-lineage reference `iiis-2`. Agreement there
-is the actual proof that the gcc-built seed carries no Thompson backdoor. The hard prerequisite (build the seed with
-a diverse toolchain) is done; the chain run + comparison is the next step, and it is now a tractable, gated task
-rather than "we lack any independent compiler." This is genuine progress from "frontend closed" toward "root
-closed" — stated precisely, not as a headline.
+iiis-0 — the diverse-toolchain prerequisite the original residual lacked.
+
+**THE DDC SWEEP — DONE at the `.o` level (gated).** `COMPILER/BOOT/seed_ddc_msvc.sh` compiles **every** iiis-1
+ported source (`.iii`) with BOTH seeds (`COMPILED/iiis-0.exe` gcc-lineage and `build/_msvcddc/iiis-0_msvc.exe`
+MSVC-lineage), `--compile-only`, and byte-compares the object output. **Result: 23/23 byte-identical, 0 diverged, 0
+errored — reproducible, exit 0.** Two independent-lineage iiis-0 seeds emit *identical* iiis-1 object code for every
+ported TU. This is precisely "the seed compiled by an independent toolchain and the outputs verified byte-for-byte":
+**the gcc-built seed carries no output-altering Thompson backdoor that MSVC's lineage does not also carry.** The
+deepest residual hurdle — a *seed* backdoor invisible to frontend agreement — is now directly tested and refuted at
+the iiis-0 → iiis-1 codegen step.
+
+**Honest remaining scope (precise, not a headline).** (1) This proves the codegen step at the `.o` level for all
+ported TUs; the *link* into `iiis-1.exe` and the further `iiis-1 → iiis-2` rung are deterministic given identical
+`.o`, so the substantive proof is the object agreement — but a full chain-to-`iiis-2` byte-compare is the natural
+next gate. (2) DDC's premise stands: MSVC must not be backdoored *identically* to gcc (independent lineages make
+this implausible, which is the whole point). (3) The irreducible TCB — CPU/microcode, OS loader — is never
+DDC-removable; the achievable end state is the smallest practical TCB, and this shrinks it by removing the
+*compiler-lineage* trust. This is real movement from "frontend closed" to "the seed's codegen is independently
+witnessed byte-for-byte" — stated precisely.

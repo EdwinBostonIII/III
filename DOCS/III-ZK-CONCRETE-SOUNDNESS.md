@@ -60,6 +60,15 @@ challenges. Per the standard decision:
 
 ## Status ledger
 
+> **✅✅ PRODUCTION CONCRETE SOUNDNESS ACHIEVED ON A REAL CONSTRAINT (`ZK-EXT4-PROD`, commit `ebb678fb`).** A real
+> `N=64` `next=cur²` trace → `air_build_cp_ext4` (the `GF(p⁴)` composition polynomial, 4 base-field limbs, `D=256`) →
+> verified by the line-755 consistency `CP[q]·Z_T==combine` **and** the general `D=256` FRI fold, both over `GF(p⁴)` at
+> **128 FS-derived correlated queries**. Query term `~2⁻⁸⁶` (128 queries) + challenge term `~2⁻¹¹⁴` (`GF(p⁴)`) →
+> **overall `~2⁻⁸⁶` = production** (80+ bits), NIH from a 30-bit prime via `GF(p²)→GF(p⁴)` + domain scaling. Every
+> component (arithmetic, fold, combination, query verify, real-CP integration) carries a forged-CP/violating adversary
+> arm. **Remaining gap:** the *existing in-tree* gadgets (`ZK-FUSED/MEMORY/STACK/LOOP`) still call the legacy
+> base-field `air_stark_verify` (~27-bit) until migrated onto this `GF(p⁴)` query verifier.
+
 - ✅ STRUCTURAL soundness (no bypass of the binding) — proven by the malicious-prover oracles. **Not blocked.**
 - 🛠️ EXTENSION-FIELD TOOLS built + verified standalone — `GF(p²)` arithmetic + FRI fold + combination + a live CP
   construction (`ZK-EXT2-*`), and `GF(p⁴) ~2¹²⁰` arithmetic (`ZK-EXT4`). **But NOT YET LOAD-BEARING.**

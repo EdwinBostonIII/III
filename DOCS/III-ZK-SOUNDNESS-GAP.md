@@ -57,13 +57,30 @@ boundary forge is caught.
   that violates its transition constraints. So "the SVIR ISA is attestable in zero knowledge" is **false as stated**;
   what exists is a per-opcode constraint library + a STARK whose low-degree binding is not tight.
 
-## The fix (the real next bottleneck to surpass)
+## The fix — DEEPER than the FRI bound (confirmed by attempting it)
 
-Make the FRI degree bound **tight**: the verifier must reject a `CP` of degree greater than the composition
-polynomial's true bound (≈`n`, not the LDE size `d`). Concretely, audit `air_stark_prove`'s `CP` construction +
-FRI-layer count `NL` and `air_stark_verify`'s final-layer / degree check so that a degree-`(d-1)` `CP` (the forged
-case) folds to an **inconsistent** final value and is rejected. `zk_svir_attest.exe` returns **99** when fixed (both
-forges rejected) and **92** while the gap remains — it is the regression oracle for the fix.
+First attempt: tighten the FRI to fold to the blowup size `AIR_B` (proving degree `< n`) instead of to 1 (proving
+degree `< d`, vacuous). Applied as a one-line change to `air_stark_prove`'s fold loop, recompiled, run against the
+oracle → **the HONEST proof stopped verifying** (`zk_svir_attest` → exit 1). That failure is the real diagnosis:
+**the honest `CP` is ALSO not low-degree**, so tightening the FRI rejects it too.
+
+Root cause, precise: `air_build_cp` (line ~228) builds `CP` **pointwise** as `combine·inv(Z_H)`, and sets `CP[j]=0`
+on the **trace domain** (`j & (AIR_B-1) == 0`, where `Z_H=0`). The LDE is the multiplicative **subgroup** of size
+`d=AIR_B·n`, which *contains* the trace subgroup of size `n`. So at the `n` trace-domain points the true quotient is
+a `0/0` limit, and the code substitutes `0` — making `CP` a degree-`(d-1)` interpolation of *{0 on the trace domain,
+combine/Z_H elsewhere}* rather than the genuine degree-`<n` quotient. This is high-degree for **honest and forged
+alike**; folding to size 1 (degree `< d`) accepted both, which is why the gap was invisible.
+
+**The real fix (substantial, the honest next bottleneck):** evaluate the LDE on a **coset** `g·⟨ω⟩` (with `g` a
+generator NOT in the subgroup) so `Z_H(x_j) = x_j^n - 1 ≠ 0` for *every* `j`. Then `CP[j] = combine[j]·inv(Z_H[j])`
+is the true quotient everywhere (no trace-domain special case), degree `< n` for honest, degree `~d-1` for forged.
+THEN tighten the FRI (fold `log₂(n)` times to size `AIR_B`, require the final layer constant). This touches
+`air_build_lde`, `air_build_cp`, the FRI fold/eval in both `air_stark_prove` and `air_stark_verify`, and `Z_H`
+evaluation — a careful, multi-function change to the whole STARK, not a one-liner. It must be done deliberately (a
+subtly-wrong STARK that *appears* to verify is worse than a known-gap one).
+
+`zk_svir_attest.exe` is the regression oracle throughout: **92** = the gap (today), **1** = honest broken (a partial
+fix), **99** = sound (honest accepts, both forges reject). Do not claim ZK soundness until it reads 99.
 
 ## Discipline note
 

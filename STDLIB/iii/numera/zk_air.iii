@@ -638,6 +638,11 @@ fn air_stark_prove() -> i32 @export {
     let friBase : u64 = (wc + 1u64) * tbsz
     let mut L : u64 = 0u64
     let mut lsize : u64 = d
+    /* NOTE (DOCS/III-ZK-SOUNDNESS-GAP.md): folding to 1 here proves only "degree < d" (vacuous) -- the FRI bound is
+     * not tight.  But tightening it alone is INSUFFICIENT: air_build_cp builds CP pointwise with CP=0 on the trace
+     * domain (the subgroup LDE INCLUDES the trace domain), so CP is degree-(d-1) even for an HONEST trace, not the
+     * true degree-<n quotient.  The real soundness fix is a COSET LDE (Z_H != 0 everywhere) so CP = combine*inv(Z_H)
+     * is the true quotient, THEN fold to AIR_B + require a constant final.  Substantial; tracked, not hidden. */
     while lsize > 1u64 {
         if L + 1u64 >= 12u64 { lsize = 1u64 } else {
             let floffL : u64 = ZKAIR_FLOFF[L] as u64

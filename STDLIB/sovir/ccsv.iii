@@ -1314,7 +1314,28 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
 }
 /* register a struct/union type: parse `int|char [*] field ;` entries from after_brace to the }, offsets cumulative
  * (struct) or all-0 (union).  is_union -> size 8 (max i64/ptr field). */
+var ANON_TOK:[u32;512]  var ANON_IDX:[i32;512]  var ANON_N:u32=0u32   /* ANONYMOUS aggregate field `union{..}u` / `struct{..}f`: its `{` token -> the implicit struct-table index (append-only; brace tokens are unique) */
+fn anon_lookup(bt:u32) -> i32 { let mut k:u32=0u32  while k<ANON_N { if ANON_TOK[k as u64]==bt {return ANON_IDX[k as u64]}  k=k+1u32 }  return 0i32-1i32 }
+fn match_rb(body:u32) -> u32 { let mut q:u32=body  let mut d:i32=0i32  let mut g:u32=1u32   /* the `}` that matches the brace whose body starts at `body` (depth-aware, unlike find_rb) */
+    while g==1u32 { if ispat(q,Q_LB)==1u32 {d=d+1i32} else { if ispat(q,Q_RB)==1u32 { if d==0i32 {g=0u32} else {d=d-1i32} } }  if TK[q as u64]==0u32 {g=0u32}  if g==1u32 {q=q+1u32} }  return q }
+fn pre_register_anons(body:u32) {   /* register each ANONYMOUS aggregate in this body DEPTH-FIRST (lower STN, fields contiguous) BEFORE the enclosing struct claims its slot -- so its field range stays contiguous */
+    let mut q:u32=body  let mut g:u32=1u32
+    while g==1u32 {
+        if ispat(q,Q_RB)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32}
+        else {
+            let mut isa:u32=0u32  let mut isu:u32=0u32
+            if kw(q,"struct" as u64,6u32)==1u32 { if ispat(q+1u32,Q_LB)==1u32 {isa=1u32} }
+            if kw(q,"union" as u64,5u32)==1u32 { if ispat(q+1u32,Q_LB)==1u32 {isa=1u32  isu=1u32} }
+            if isa==1u32 { let bt:u32=q+1u32  reg_type(bt, q+2u32, isu)   /* recurses: pre-registers ITS anons, then itself */
+                if ANON_N<512u32 { ANON_TOK[ANON_N as u64]=bt  ANON_IDX[ANON_N as u64]=(STN as i32)-1i32  ANON_N=ANON_N+1u32 }
+                let rb:u32=match_rb(q+2u32)  q=rb+1u32   /* past the anon `}` -> the field name */
+                let mut g2:u32=1u32  while g2==1u32 { if ispat(q,Q_SEMI)==1u32 {g2=0u32} else { if TK[q as u64]==0u32 {g2=0u32} else {q=q+1u32} } }  if ispat(q,Q_SEMI)==1u32 {q=q+1u32}
+            } else { let mut g3:u32=1u32  while g3==1u32 { if ispat(q,Q_SEMI)==1u32 {g3=0u32} else { if ispat(q,Q_RB)==1u32 {g3=0u32} else { if TK[q as u64]==0u32 {g3=0u32} else {q=q+1u32} } } }  if ispat(q,Q_SEMI)==1u32 {q=q+1u32} }   /* skip a normal field */
+        } }
+    }
+}
 fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
+    pre_register_anons(after_brace)   /* depth-first register nested anonymous aggregates FIRST (so this struct's field range is contiguous) */
     STNO[STN as u64]=TO[name_tok as u64]  STNL[STN as u64]=TL[name_tok as u64]  STFB[STN as u64]=SFN
     let mut q:u32=after_brace  let mut off:u64=0u64  let mut nf:u32=0u32  let mut maxal:u64=1u64  let mut maxsz:u64=0u64  let mut g:u32=1u32   /* maxsz = largest member size (union size = max member, not the old hardcoded 8) */
     while g==1u32 {
@@ -1333,6 +1354,18 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
             let mut g2:u32=1u32  while g2==1u32 { if ispat(q,Q_SEMI)==1u32 {g2=0u32} else { if TK[q as u64]==0u32 {g2=0u32} else {q=q+1u32} } }  q=q+1u32
         } else {
             /* struct-typed field: `struct TAG [*]f ;` / `union TAG [*]f ;` / `TypedefName [*]f ;` (the dtype branch only handles scalar fields) */
+            let mut isanf:u32=0u32
+            if kw(q,"struct" as u64,6u32)==1u32 { if ispat(q+1u32,Q_LB)==1u32 {isanf=1u32} }
+            if kw(q,"union" as u64,5u32)==1u32 { if ispat(q+1u32,Q_LB)==1u32 {isanf=1u32} }
+            if isanf==1u32 {   /* ANONYMOUS `union{..}NAME` / `struct{..}NAME` field -> the pre-registered implicit type (anon_lookup) */
+                let bt:u32=q+1u32  let aidx:i32=anon_lookup(bt)  let arb:u32=match_rb(q+2u32)  let nm:u32=arb+1u32
+                let mut aesz:i64=8i64  if aidx>=0i32 { aesz=STSZ[aidx as u64] as i64 }
+                if is_union==0u32 { let r:u64=off & 7u64  if r!=0u64 { off=off+(8u64-r) } }  if 8u64>maxal {maxal=8u64}
+                SFO[SFN as u64]=TO[nm as u64]  SFL[SFN as u64]=TL[nm as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=aesz  SFAR[SFN as u64]=0u32  SFMASK[SFN as u64]=0i64  SFSGN[SFN as u64]=0u32  SFPT[SFN as u64]=aidx
+                let afsz:u64=aesz as u64  if afsz>maxsz {maxsz=afsz}
+                SFN=SFN+1u32  nf=nf+1u32  if is_union==0u32 { off=off+afsz }
+                q=nm+1u32  let mut ga:u32=1u32  while ga==1u32 { if ispat(q,Q_SEMI)==1u32 {ga=0u32} else { if TK[q as u64]==0u32 {ga=0u32} else {q=q+1u32} } }  q=q+1u32
+            } else {
             let mut isstf:u32=0u32  let mut tnameb:u32=q  let mut styi:i32=0i32-1i32
             if kw(q,"struct" as u64,6u32)==1u32 { if TK[(q+1u32) as u64]==1u32 { isstf=1u32  styi=stidx(q+1u32)  tnameb=q+2u32 } }
             else { if kw(q,"union" as u64,5u32)==1u32 { if TK[(q+1u32) as u64]==1u32 { isstf=1u32  styi=stidx(q+1u32)  tnameb=q+2u32 } }
@@ -1363,7 +1396,7 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
                     SFN=SFN+1u32  nf=nf+1u32  if is_union==0u32 {off=off+fsz}
                     let mut g4:u32=1u32  while g4==1u32 { if ispat(q,Q_SEMI)==1u32 {g4=0u32} else { if TK[q as u64]==0u32 {g4=0u32} else {q=q+1u32} } }  q=q+1u32
                 } else { q=q+1u32 }
-            } } } }
+            } } } } }
     }
     let mut sz:u64=off  if is_union==1u32 { sz=maxsz }   /* union size = largest member */
     let r:u64=sz & (maxal - 1u64)  if r!=0u64 { sz=sz+(maxal-r) }   /* pad up to the largest member's alignment */
@@ -1385,13 +1418,13 @@ fn prescan_struct() {
         if kw(t,"union" as u64,5u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LB)==1u32 { reg_type(t+1u32, t+3u32, 1u32) } } }
         if kw(t,"typedef" as u64,7u32)==1u32 {
             if kw(t+1u32,"struct" as u64,6u32)==1u32 {
-                if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 0u32) }                                                /* typedef struct { } Name */
-                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=find_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 0u32) }     /* typedef struct TAG { } Name */
+                if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=match_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 0u32) }                                                /* typedef struct { } Name */
+                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=match_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 0u32) }     /* typedef struct TAG { } Name */
                        else { if TK[(t+3u32) as u64]==1u32 { let bp:u32=find_struct_body(t+2u32)  if bp>0u32 { reg_type(t+3u32, bp, 0u32) } } } } }       /* typedef struct TAG Name ; (opaque: TAG's body is elsewhere) */
             }
             if kw(t+1u32,"union" as u64,5u32)==1u32 {
-                if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) }
-                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=find_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 1u32) } } }   /* typedef union TAG { } Name */
+                if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=match_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) }
+                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=match_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 1u32) } } }   /* typedef union TAG { } Name */
             }
         }
         t=t+1u32

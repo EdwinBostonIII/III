@@ -57,17 +57,17 @@ const AIR_B : u64 = 4u64            /* LDE blowup factor (D = B*N) */
 /* Capacity (module-global; iiis runtime-indexed locals SIGSEGV -- all working arrays are module-scope by
  * necessity).  W<=16 columns (expanded from 4 to hold wide opcode tableaux -- e.g. the SVIR MUL gadget's
  * 11-column limb*limb schoolbook), N<=64 rows, D<=256.  Arrays sized WMAX*NMAX / WMAX*DMAX accordingly. */
-const AIR_WMAX : u64 = 16u64
+const AIR_WMAX : u64 = 32u64
 const AIR_NMAX : u64 = 64u64
 const AIR_DMAX : u64 = 256u64       /* WMAX irrelevant; per-column D */
 const AIR_TMAX : u64 = 64u64        /* transition terms */
-const AIR_CMAX : u64 = 8u64         /* transition constraints */
+const AIR_CMAX : u64 = 32u64        /* transition constraints (8->16 LOCAL, 16->32 for the fused compute+memory+control zkVM) */
 
 var AIR_W      : [u32; 1]
 var AIR_N      : [u32; 1]
-var AIR_TRACE  : [u32; 1024]        /* row-major: T[row*W + col]  (WMAX*NMAX = 16*64) */
-var AIR_TCOEF  : [u32; 4096]        /* per-column coeffs, padded to D (WMAX*DMAX = 16*256) */
-var AIR_LDE    : [u32; 4096]        /* per-column LDE over H_D (WMAX*DMAX = 16*256) */
+var AIR_TRACE  : [u32; 2048]        /* row-major: T[row*W + col]  (WMAX*NMAX = 32*64) */
+var AIR_TCOEF  : [u32; 8192]        /* per-column coeffs, padded to D (WMAX*DMAX = 32*256) */
+var AIR_LDE    : [u32; 8192]        /* per-column LDE over H_D (WMAX*DMAX = 32*256) */
 var AIR_CP     : [u32; 256]         /* composition polynomial over H_D (DMAX) */
 /* transition constraint term lists */
 var AIR_TT_COEF : [u32; 64]
@@ -76,7 +76,7 @@ var AIR_TT_B    : [u32; 64]
 var AIR_TT_CON  : [u32; 64]         /* which constraint k this term belongs to */
 var AIR_NT      : [u32; 1]          /* number of terms */
 var AIR_NC      : [u32; 1]          /* number of transition constraints */
-var AIR_ALPHA   : [u32; 8]          /* per-constraint Fiat-Shamir coefficient */
+var AIR_ALPHA   : [u32; 32]         /* per-constraint Fiat-Shamir coefficient (AIR_CMAX slots) */
 
 /* ---- GF(998244353): consolidated into the shared ntt_fri_organ ----
  * Were inline + byte-identical to zk_stark's copies → the `L_sf_*` global-symbol
@@ -305,8 +305,8 @@ fn air_cp_consistent_at(j: u64) -> u8 @export {
  * st_verify does at its (currently hard-coded) transition line, generalized to W
  * columns + the data-driven term lists.  Pinning air_combine_opened == air_combine
  * is the bridge that lets the general verifier replace the x^2+c special case. */
-var AIR_OPEN_CUR  : [u32; 16]
-var AIR_OPEN_NEXT : [u32; 16]
+var AIR_OPEN_CUR  : [u32; 32]
+var AIR_OPEN_NEXT : [u32; 32]
 
 fn air_set_open(col: u64, cur_v: u32, next_v: u32) -> i32 @export {
     if col >= AIR_WMAX { return 0i32 - 1i32 }   /* AIR_OPEN_CUR/NEXT have AIR_WMAX slots */
@@ -452,7 +452,7 @@ fn zk_air_merkle_selftest() -> u64 @export {
  * The transcript ZKAIR_TRANS holds the committed roots; FS field elements (FRI fold
  * coefficients) and query indices are derived from it. */
 var ZKAIR_FSBUF   : [u8; 1280]
-var ZKAIR_TRANS   : [u8; 512]    /* W trace roots + CP root + up to 12 FRI roots */
+var ZKAIR_TRANS   : [u8; 1536]   /* W trace roots + CP root + up to 12 FRI roots = (WMAX+13)*32 = 45*32 (was 512=16 roots: OVERFLOWED for W>3) */
 var ZKAIR_HASH    : [u8; 32]
 var ZKAIR_FS_TLEN : [u64; 1]
 var ZKAIR_FS_IDX  : [u64; 1]
@@ -556,7 +556,7 @@ fn zk_air_fs_selftest() -> u64 @export {
  * buffers.  Proves the multi-column TRANSITION system is satisfiable via FRI low-degree
  * (boundary/public-input binding is a follow-on).  Tree layout in ZKAIR_MT: trace col w
  * @ w*TB, CP @ W*TB, FRI @ (W+1)*TB + ftoff ; TB = 2*D*32 (a D-leaf tree's byte size). */
-var ZKAIR_TRACE_ROOTS : [u8; 128]   /* up to 4 cols * 32 */
+var ZKAIR_TRACE_ROOTS : [u8; 1024]  /* WMAX cols * 32 = 32*32 (was 128=4 cols: OVERFLOWED for W>4) */
 var ZKAIR_CP_ROOT     : [u8; 32]
 var ZKAIR_FRI_ROOTS   : [u8; 384]   /* 12 * 32 */
 var ZKAIR_FRI_NL      : [u32; 1]
@@ -566,13 +566,13 @@ var ZKAIR_FSIZE       : [u32; 12]
 var ZKAIR_FOMEGA      : [u32; 12]
 var ZKAIR_FLOFF       : [u32; 12]
 var ZKAIR_FTOFF       : [u32; 12]
-var ZKAIR_TQ          : [u32; 256]  /* 16 queries * up to WMAX=16 cols (stride = AIR_W, not a hardcoded 4) */
-var ZKAIR_TQN         : [u32; 256]
+var ZKAIR_TQ          : [u32; 512]  /* 16 queries * up to WMAX=32 cols (stride = AIR_W) */
+var ZKAIR_TQN         : [u32; 512]
 var ZKAIR_CQ          : [u32; 16]
 var ZKAIR_FQ          : [u32; 192]  /* 16 * 12 */
 var ZKAIR_FSIB        : [u32; 192]
-var ZKAIR_TPATH       : [u8; 81920] /* 16 queries * WMAX=16 cols * 10 levels * 32 */
-var ZKAIR_TNPATH      : [u8; 81920]
+var ZKAIR_TPATH       : [u8; 163840] /* 16 queries * WMAX=32 cols * 10 levels * 32 */
+var ZKAIR_TNPATH      : [u8; 163840]
 var ZKAIR_CPATH       : [u8; 5120]  /* 16 * 10 * 32 */
 var ZKAIR_FPATH       : [u8; 61440] /* 16*12 * 10 * 32 */
 /* boundary (public-input) constraints: trace cell (col,row) must equal value. */

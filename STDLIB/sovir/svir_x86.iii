@@ -199,9 +199,9 @@ fn main() -> u64 {
             ez(".section .data\n.global svir_mem\nsvir_mem:\n.byte ~" as u64)
             let mut d:u64=0u64
             while d < dlen { if d > 0u64 { ez(",~" as u64) }  let dp:*u8=(base+off+2u64+d) as *u8  edec(dp[0u64] as u64)  d=d+1u64 }
-            ez("\n.zero ~" as u64)  edec(65536u64 - dlen)  ez("\n~" as u64)
+            ez("\n.zero ~" as u64)  edec(4194304u64 - dlen)  ez("\n~" as u64)
         } else {
-            ez(".section .bss\n.global svir_mem\nsvir_mem:\n.zero 65536\n~" as u64)
+            ez(".section .bss\n.global svir_mem\nsvir_mem:\n.zero 4194304\n~" as u64)
         }
     }
     return 0u64

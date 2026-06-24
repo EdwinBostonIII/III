@@ -31,6 +31,7 @@ const Q_ADD:i64=16i64 const Q_SUB:i64=17i64 const Q_MUL:i64=18i64 const Q_DIV:i6
 const Q_AND:i64=21i64 const Q_OR:i64=22i64 const Q_XOR:i64=23i64 const Q_SHL:i64=24i64 const Q_SHR:i64=25i64 const Q_COM:i64=6i64
 const Q_LBR:i64=26i64 const Q_RBR:i64=27i64 const Q_DOT:i64=28i64 const Q_ARROW:i64=29i64 const Q_INC:i64=30i64 const Q_DEC:i64=31i64 const Q_NOT:i64=32i64 const Q_QUEST:i64=33i64 const Q_COLON:i64=34i64
 const Q_LAND:i64=35i64 const Q_LOR:i64=36i64 const Q_LNOT:i64=37i64   /* logical && / || / ! (distinct from bitwise Q_AND/Q_OR/Q_NOT) */
+const HEAP_BASE:i64=1048576i64   /* bump-heap base in svir_mem (4 MiB); static data below, heap above; cell@HEAP_BASE = the bump ptr (lazily init) */
 
 fn sp(c: u32) -> u32 { if c==32u32 {return 1u32} if c==9u32 {return 1u32} if c==10u32 {return 1u32} if c==13u32 {return 1u32} return 0u32 }
 fn dg(c: u32) -> u32 { if c>=48u32 { if c<=57u32 {return 1u32} } return 0u32 }
@@ -339,6 +340,17 @@ fn emit_memset() {
     eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)
     econst(0i64)
 }
+/* malloc(size): a bump allocator over svir_mem.  The 8-byte cell @HEAP_BASE holds the next-free pointer, lazily
+ * initialised (cell==0 -> HEAP_BASE+8) so library modules need no entry-init.  free()=no-op so every block is
+ * fresh zero memory (calloc needs no explicit clear).  `size` is already on the stack; leaves the block address. */
+fn emit_malloc() {
+    let tn:u32=LN  if LN<255u32 {LN=LN+1u32}  let tb:u32=LN  if LN<255u32 {LN=LN+1u32}  let te:u32=LN  if LN<255u32 {LN=LN+1u32}
+    eu8(0x11u32,tn)                                                                                       /* tn = size */
+    econst(HEAP_BASE)  eb(0x82u32)  eu8(0x11u32,tb)                                                       /* tb = *(HEAP_BASE) (current bump) */
+    eu8(0x10u32,tb)  econst(0i64)  eb(0x30u32)  econst(HEAP_BASE+8i64)  eb(0x22u32)  eu8(0x10u32,tb)  eb(0x20u32)  eu8(0x11u32,te)   /* te = (tb==0)*(HB+8) + tb  (lazy init, branchless) */
+    econst(HEAP_BASE)  eu8(0x10u32,te)  eu8(0x10u32,tn)  econst(7i64)  eb(0x20u32)  econst(0i64-8i64)  eb(0x25u32)  eb(0x20u32)  eb(0x83u32)   /* *(HEAP_BASE) = te + ((size+7)&~7) */
+    eu8(0x10u32,te)                                                                                       /* leave the block address */
+}
 /* ++ / -- on a scalar LOCAL (scale 1).  isdec:1=-- ; post:1=leave OLD (postfix) / 0=leave NEW (prefix). */
 fn pinc_local(slot:u32, isdec:u32, post:u32) {
     let tv:u32=LN  if LN<255u32 {LN=LN+1u32}
@@ -424,6 +436,9 @@ fn eprim() {
             C=C+1u32
             if kw(t,"memcpy" as u64,6u32)==1u32 { emit_memcpy()  eat(Q_RP)  return }
             if kw(t,"memset" as u64,6u32)==1u32 { emit_memset()  eat(Q_RP)  return }
+            if kw(t,"malloc" as u64,6u32)==1u32 { ebin(0u32)  emit_malloc()  eat(Q_RP)  return }                                  /* malloc(size) */
+            if kw(t,"calloc" as u64,6u32)==1u32 { ebin(0u32)  eat(Q_COM)  ebin(0u32)  eb(0x22u32)  emit_malloc()  eat(Q_RP)  return }   /* calloc(n,sz) = malloc(n*sz) (bump mem is fresh-zero) */
+            if kw(t,"free" as u64,4u32)==1u32 { ebin(0u32)  eb(0x72u32)  econst(0i64)  eat(Q_RP)  return }                          /* free(p) -> no-op (bump alloc); eval+drop, push 0 */
             let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)
             if kw(t,"putchar" as u64,7u32)==1u32 { eb(0x71u32)  econst(0i64) }    /* putchar(c) -> PRINT_CHAR ; push 0 as the (C) return */
             else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac) } }

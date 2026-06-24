@@ -203,9 +203,9 @@ fn main() -> u64 {
     let mut g : u32 = 0u32  while g < FN_N { flen = flen + leblen_u((g + IC) as u64)  g = g + 1u32 }
     pc(0x03u32)  pleb_u(flen)  pleb_u(FN_N as u64)
     g = 0u32  while g < FN_N { pleb_u((g + IC) as u64)  g = g + 1u32 }
-    /* Memory section (id 5): 1 page (64 KiB).  Global section (id 6): one mutable i64 scratch (STORE8 reorder). */
+    /* Memory section (id 5): 64 pages (4 MiB -- static data + bump heap).  Global section (id 6): one mutable i64 scratch. */
     if UM == 1u32 {
-        pc(0x05u32) pc(0x03u32) pc(0x01u32) pc(0x00u32) pc(0x01u32)
+        pc(0x05u32) pc(0x03u32) pc(0x01u32) pc(0x00u32) pc(0x40u32)
         pc(0x06u32) pc(0x06u32) pc(0x01u32) pc(0x7Eu32) pc(0x01u32) pc(0x42u32) pc(0x00u32) pc(0x0Bu32)
     }
     /* Export section: "main" -> func index IC (defined func 0, after imports) */

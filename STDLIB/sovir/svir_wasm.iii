@@ -13,17 +13,17 @@ fn pc(c: u32) { putchar((c & 0xFFu32) as i32) }
 fn pleb_u(n0: u64) { let mut n : u64 = n0  let mut go : u32 = 1u32  while go == 1u32 { if n >= 128u64 { pc(((n & 0x7Fu64) | 0x80u64) as u32)  n = n >> 7u64 } else { pc(n as u32)  go = 0u32 } } }
 fn leblen_u(n0: u64) -> u64 { let mut n : u64 = n0  let mut c : u64 = 1u64  while n >= 128u64 { c = c + 1u64  n = n >> 7u64 }  return c }
 
-var FN_PARAMS : [u32; 64]
-var FN_BOFF   : [u64; 64]
-var FN_BLEN   : [u64; 64]
+var FN_PARAMS : [u32; 4096]
+var FN_BOFF   : [u64; 4096]
+var FN_BLEN   : [u64; 4096]
 var FN_N : u32 = 0u32
 var IC : u32 = 0u32                 /* import count (1 if any PRINT_CHAR -> env.putc) */
 
-var CBUF : [u8; 32768]
+var CBUF : [u8; 4194304]            /* all functions' wasm bodies concatenated -- seed modules reach 100+ fns */
 var CLEN : u64 = 0u64
-var FN_COFF : [u64; 64]
-var FN_CLEN : [u64; 64]
-fn c_emit(byte: u32) { if CLEN < 32768u64 { CBUF[CLEN] = (byte & 0xFFu32) as u8  CLEN = CLEN + 1u64 } }
+var FN_COFF : [u64; 4096]
+var FN_CLEN : [u64; 4096]
+fn c_emit(byte: u32) { if CLEN < 4194303u64 { CBUF[CLEN] = (byte & 0xFFu32) as u8  CLEN = CLEN + 1u64 } }
 fn c_leb_u(n0: u64) { let mut n : u64 = n0  let mut go : u32 = 1u32  while go == 1u32 { if n >= 128u64 { c_emit(((n & 0x7Fu64) | 0x80u64) as u32)  n = n >> 7u64 } else { c_emit(n as u32)  go = 0u32 } } }
 fn c_leb_s64(v0: i64) {
     let mut v : i64 = v0  let mut more : u32 = 1u32

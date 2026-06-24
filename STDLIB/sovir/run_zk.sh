@@ -142,6 +142,7 @@ timeout 10 "$W/rec_cg.exe" >/dev/null 2>&1; crc=$?
 if [ $xrc -eq 99 ] && [ $wrc -eq 99 ] && [ $crc -eq 99 ] && [ "$k" = "1" ]; then say "SOVEREIGN-RUN : same recurrence -> iiisv -> SVIR -> x86(sovereign)=99 wasm=99 ; cg_r3=99 (x_7==254673617)"
 else say "FAIL sovereign: x86=$xrc wasm=$wrc cg_r3=$crc dlls=$k"; fail=1; fi
 
+say "CONCRETE-SOUNDNESS [applies to EVERY 'SOUND' above]: all 'SOUND' = STRUCTURAL soundness (no prover can bypass the FS binding -- proven by the malicious-prover oracles). It is NOT yet PRODUCTION security. Field p~2^30, blowup 4, 16 FRI queries => concrete error ~2^-11 (FRI-query-limited), every algebraic+folding challenge CAPPED at ~2^-27 by the 30-bit field, Fiat-Shamir GRINDABLE at ~2^27. Production targets 80-128 bits; we deliver ~11-27. THE BOTTLENECK = the base field: requires EXTENSION-FIELD challenges (GF(p^3)~2^90) + more queries. See DOCS/III-ZK-CONCRETE-SOUNDNESS.md. (advisor-surfaced; the asterisk is the honest word)"
 if [ $fail -eq 0 ]; then
   say "ZK-ATTESTED EXECUTION -- one recurrence, ZK-proven by III's general zk_air (tampered trace rejected) AND sovereign-run via the SVIR toolchain (x86+wasm, cg_r3-agreed), agreeing on x_7=254673617."
 fi

@@ -267,7 +267,7 @@ fn prescan_str() {
             while k<l {
                 let cc:u32=sb((o+k) as u64)
                 if cc==92u32 { let e:u32=sb((o+k+1u32) as u64)   /* escape \n \t \0 \r (\\ \" -> literal) */
-                    if e==110u32 {sbyte(10u32)} else { if e==116u32 {sbyte(9u32)} else { if e==48u32 {sbyte(0u32)} else { if e==114u32 {sbyte(13u32)} else {sbyte(e)} } } }
+                    if e==110u32 {sbyte(10u32)} else { if e==116u32 {sbyte(9u32)} else { if e==48u32 {sbyte(0u32)} else { if e==114u32 {sbyte(13u32)} else { if e==97u32 {sbyte(7u32)} else { if e==98u32 {sbyte(8u32)} else { if e==102u32 {sbyte(12u32)} else { if e==118u32 {sbyte(11u32)} else {sbyte(e)} } } } } } } }   /* \n \t \0 \r \a \b \f \v ; else literal (\\ \" \') */
                     k=k+2u32
                 } else { sbyte(cc)  k=k+1u32 }
             }
@@ -323,7 +323,7 @@ fn esizeof() {
                           else { if ab>=0i64 {
                               if ispat(C+1u32,Q_LBR)==1u32 { sz=aesize(C)  C=C+2u32  let mut g5:u32=1u32  while g5==1u32 { if cp(Q_RBR)==1u32 {g5=0u32} else { if TK[C as u64]==0u32 {g5=0u32} else {C=C+1u32} } }  eat(Q_RBR) }
                               else { sz=(alen(C) as i64)*aesize(C)  C=C+1u32 } }
-                          else { sz=8i64  C=C+1u32 } } }
+                          else { let sli:i32=lidx(C)  if sli>=0i32 {sz=LSZ[sli as u64]}  C=C+1u32 } } }   /* sizeof(scalar local) -> its declared byte size (LSZ), not a flat 8 */
                   } else { C=C+1u32 } } } } }
     if hasp==1u32 { eat(Q_RP) }
     econst(sz)

@@ -260,6 +260,11 @@ fn ol_classify(name_addr: u64, name_len: u64) {
     if ol_contains(da, dlen, ("tests" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
     if ol_contains(da, dlen, ("tools" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
     if ol_contains(da, dlen, ("KATABASIS" as u64), 9u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
+    /* sovir/ holds the ccsv (C->SVIR frontend) INPUT corpus -- the C reference programs the sovereign C
+     * frontend COMPILES as test data (sha256.c, chacha20.c, aes128.c, ... + their headers; run_ccsv.sh /
+     * run_repro.sh feed them).  They are the frontend's test inputs (legitimately C, by design), NOT III
+     * implementation -- none is in build_iiis2/build_stdlib.  Harness, exactly like tests/. */
+    if ol_contains(da, dlen, ("sovir" as u64), 5u64) == 1u8 { OL_N_HARN = OL_N_HARN + 1u64   return }
     /* 4 -- GAP: an unaccounted C file (the honest falsifier output). */
     OL_N_GAP = OL_N_GAP + 1u64
 }

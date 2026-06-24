@@ -135,6 +135,7 @@ var AA_LIT: u64 = 0u64         /* aa_const_u64 output */
 var AA_CE: u64 = 0u64          /* aa_prove_affine counterexample (first OOB i) */
 var AA_LV_BINDER: u32 = 0u32   /* aa_parse_loop outputs */
 var AA_LV_COUNT: u64 = 0u64
+var AA_LV_BINDER_KIND: u32 = 0u32   /* binder KIND of the loop counter: STMT_LET/PARAM (function-local) vs VAR_DECL (module-global, callee-name-mutable) */
 var AA_NUMBUF: [u8; 24]        /* decimal digit buffer (module global: local runtime-indexed arrays segfault) */
 
 /* ===================================================================== */
@@ -469,6 +470,64 @@ fn aa_addr_taken(node: u32, lvb: u32) -> u32 {
     return 0u32
 }
 
+/* 1 if a function CALL appears ANYWHERE in `node`'s subtree.  A module-GLOBAL loop counter is mutable by a
+ * callee BY NAME (no &) -- and aa_count_writes scores a bare call STMT_EXPR as 0 writes (line 393), so the
+ * sole-trailing-write rule alone is UNSOUND for a global counter when a callee can run mid-loop and drive it
+ * past N before an access (false PROVEN).  A function-LOCAL counter (let/param) is not name-visible to a callee,
+ * so its only external mutation is &i, which aa_addr_taken (G3) already catches.  Mirrors aa_addr_taken's walk. */
+fn aa_has_call(node: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(AA_G_AST, node)
+    if k == AA_K_EXPR_CALL { return 1u32 }
+    if k == AA_K_ARG { return aa_has_call(iii_ast_arg_value(AA_G_AST, node)) }
+    if k == AA_K_EXPR_UNARY { return aa_has_call(iii_ast_unary_operand(AA_G_AST, node)) }
+    if aa_is_block(node) == 1u32 {
+        let n: u32 = aa_blk_count(node)
+        let mut i: u32 = 0u32
+        while i < n { if aa_has_call(aa_blk_at(node, i)) == 1u32 { return 1u32 }; i = i + 1u32 }
+        return 0u32
+    }
+    if k == AA_K_STMT_ASSIGN {
+        if aa_has_call(iii_ast_assign_lvalue(AA_G_AST, node)) == 1u32 { return 1u32 }
+        return aa_has_call(iii_ast_assign_value(AA_G_AST, node))
+    }
+    if k == AA_K_STMT_LET { return aa_has_call(iii_ast_let_value(AA_G_AST, node)) }
+    if k == AA_K_STMT_RETURN { return aa_has_call(iii_ast_return_value(AA_G_AST, node)) }
+    if k == AA_K_STMT_EXPR { return aa_has_call(iii_ast_expr_stmt_expr(AA_G_AST, node)) }
+    if k == AA_K_STMT_IF {
+        if aa_has_call(iii_ast_if_cond(AA_G_AST, node)) == 1u32 { return 1u32 }
+        if aa_has_call(iii_ast_if_then(AA_G_AST, node)) == 1u32 { return 1u32 }
+        return aa_has_call(iii_ast_if_else(AA_G_AST, node))
+    }
+    if k == AA_K_STMT_WHILE {
+        if aa_has_call(iii_ast_while_cond(AA_G_AST, node)) == 1u32 { return 1u32 }
+        return aa_has_call(iii_ast_while_body(AA_G_AST, node))
+    }
+    if k == AA_K_STMT_FOR { return aa_has_call(iii_ast_for_body(AA_G_AST, node)) }
+    if k == AA_K_EXPR_BINARY {
+        if aa_has_call(iii_ast_binary_lhs(AA_G_AST, node)) == 1u32 { return 1u32 }
+        return aa_has_call(iii_ast_binary_rhs(AA_G_AST, node))
+    }
+    if k == AA_K_EXPR_INDEX {
+        if aa_has_call(iii_ast_index_object(AA_G_AST, node)) == 1u32 { return 1u32 }
+        return aa_has_call(iii_ast_index_index(AA_G_AST, node))
+    }
+    if k == AA_K_EXPR_CAST { return aa_has_call(iii_ast_cast_value(AA_G_AST, node)) }
+    if k == AA_K_EXPR_PAREN { return aa_has_call(iii_ast_paren_inner(AA_G_AST, node)) }
+    if k == AA_K_EXPR_FIELD { return aa_has_call(iii_ast_field_object(AA_G_AST, node)) }
+    return 0u32
+}
+
+/* the loop counter cannot be mutated mid-loop by anything the establishment guards miss:
+ *   - a function-LOCAL counter (STMT_LET / PARAM): only &i can leak it -> aa_addr_taken (G3) covers it -> SAFE.
+ *   - a module-GLOBAL counter (VAR_DECL): callee-name-mutable -> SAFE only if NO call can run mid-loop. */
+fn aa_counter_extern_safe(body: u32) -> u32 {
+    if AA_LV_BINDER_KIND == AA_K_STMT_LET { return 1u32 }
+    if AA_LV_BINDER_KIND == AA_K_PARAM { return 1u32 }
+    if aa_has_call(body) == 0u32 { return 1u32 }
+    return 0u32
+}
+
 /* parse `i < N` / `i <= N`: i an UNSIGNED-typed ident, N a constant. */
 /* sets AA_LV_BINDER (the loop var's decl) + AA_LV_COUNT (#iterations). returns 1/0. */
 fn aa_parse_loop(cond: u32) -> u32 {
@@ -486,6 +545,7 @@ fn aa_parse_loop(cond: u32) -> u32 {
     let n: u64 = AA_LIT
     if is_le == 1u32 { if n == AA_U64_MAX { return 0u32 }; AA_LV_COUNT = n + 1u64 } else { AA_LV_COUNT = n }
     AA_LV_BINDER = bid
+    AA_LV_BINDER_KIND = iii_ast_node_kind(AA_G_AST, bid)   /* record local-vs-global so the establishment guard can close the callee-name-mutation hole */
     return 1u32
 }
 
@@ -541,7 +601,7 @@ fn aa_walk_stmt(stmt: u32, lvb: u32, count: u64) -> u32 {
         if aa_parse_loop(cond) == 1u32 {
             let lb: u32 = AA_LV_BINDER
             let lc: u64 = AA_LV_COUNT
-            if aa_count_writes(body, lb) == 1u32 { if aa_last_stmt_writes(body, lb) == 1u32 { if aa_addr_taken(body, lb) == 0u32 { nb = lb; nc = lc } } }
+            if aa_count_writes(body, lb) == 1u32 { if aa_last_stmt_writes(body, lb) == 1u32 { if aa_addr_taken(body, lb) == 0u32 { if aa_counter_extern_safe(body) == 1u32 { nb = lb; nc = lc } } } }
         }
         aa_walk_block(body, nb, nc)
         return 0u32

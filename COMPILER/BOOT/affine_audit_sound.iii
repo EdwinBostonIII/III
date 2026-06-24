@@ -1,13 +1,15 @@
 /* affine_audit_sound.iii -- the NO-FALSE-PROVEN probe (the asymmetric risk).
  * Every fn here is a trap that a naive analyzer would wrongly PROVE.  The sound
- * pass MUST ABSTAIN on all of them.  Expected tally:  AA P=1 A=5 R=0
+ * pass MUST ABSTAIN on all of them.  Expected tally:  AA P=1 A=6 R=0
  *   s_control     : a clean scan  -> PROVEN (the one positive control).
  *   s_nested_if   : sole write to i is NESTED in an if (advisor's hole) -> ABSTAIN.
  *   s_two_writes  : a nested write + a trailing write (count!=1)        -> ABSTAIN.
  *   s_signed      : loop var is i32 (signed)                            -> ABSTAIN.
  *   s_mid_mutate  : i mutated BEFORE the access, increment not last     -> ABSTAIN.
  *   s_addr_escape : &i passed to a call (op-5 ADDR escape)              -> ABSTAIN.
- *                   (without aa_addr_taken this would be a FALSE PROVEN.) */
+ *                   (without aa_addr_taken this would be a FALSE PROVEN.)
+ *   s_global_callee_mutate : a MODULE-GLOBAL counter mutated by a callee BY NAME (no &) -> ABSTAIN.
+ *                   (without aa_counter_extern_safe this would be a FALSE PROVEN -- F6/F10 finding.) */
 module aaks
 
 var S_ARR : [u8; 16]
@@ -73,6 +75,24 @@ fn s_addr_escape() -> u32 {
         s_mutate(&i)
         s = s + (S_ARR[i] as u32)
         i = i + 1u32
+    }
+    return s
+}
+
+/* s_global_callee_mutate : the loop counter is a MODULE-GLOBAL, and a callee (s_bump) mutates it BY NAME --
+ * no &, no in-body assignment.  aa_count_writes scores the bare s_bump() call as 0 writes, aa_addr_taken sees
+ * no &S_G, and the trailing S_G=S_G+1 is the sole counted write -> the OLD analyzer PROVED S_G<N at the access
+ * (FALSE PROVEN: runtime S_G overshoots N because s_bump also advances it).  aa_counter_extern_safe ABSTAINS:
+ * a non-local (module-global) counter with a call in the body is not establishment-sound.  (F6/F10 finding.) */
+var S_G : u32 = 0u32
+fn s_bump() -> u32 { S_G = S_G + 5u32  return 0u32 }
+fn s_global_callee_mutate() -> u32 {
+    let mut s : u32 = 0u32
+    S_G = 0u32
+    while S_G < S_N {
+        s_bump()
+        s = s + (S_ARR[S_G] as u32)
+        S_G = S_G + 1u32
     }
     return s
 }

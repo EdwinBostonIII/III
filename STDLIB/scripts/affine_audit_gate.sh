@@ -4,6 +4,7 @@
 # Turns the one-off `--affine-audit` measurement into a pass/fail gate that re-verifies
 # the pass every run, using the INSTALLED (resealed) iiis-2:
 #   1. ground-truth fixtures hold EXACTLY (KAT P=1/A=1/R=1, soundness probe P=1/A=5/R=0)
+#      (KAT P=1/A=1/R=1, soundness probe P=1/A=6/R=0 -- the A=6 includes the global-callee-mutate trap)
 #      -- a regression that breaks PROVEN / REFUTED / ABSTAIN correctness reddens here;
 #   2. ZERO genuine REFUTED across III's real source (the only allowed REFUTED is the
 #      KAT fixture's deliberate OOB) -- a NEW out-of-bounds typed-array access reddens here;
@@ -39,8 +40,8 @@ katt="$(_tally "$KAT")"
 if [[ "$katt" == "1 1 1" ]]; then echo "  PASS  KAT fixture       : P/A/R = $katt"
 else echo "  FAIL  KAT fixture       : P/A/R = $katt  (expected 1 1 1)"; FAIL=$((FAIL+1)); fi
 sndt="$(_tally "$SND")"
-if [[ "$sndt" == "1 5 0" ]]; then echo "  PASS  soundness probe   : P/A/R = $sndt"
-else echo "  FAIL  soundness probe   : P/A/R = $sndt  (expected 1 5 0)"; FAIL=$((FAIL+1)); fi
+if [[ "$sndt" == "1 6 0" ]]; then echo "  PASS  soundness probe   : P/A/R = $sndt"
+else echo "  FAIL  soundness probe   : P/A/R = $sndt  (expected 1 6 0 -- a FALSE PROVEN, e.g. the global-callee-mutate trap, shows P=2)"; FAIL=$((FAIL+1)); fi
 
 # --- 2/3. sweep the real tree (fixtures excluded): zero REFUTED, PROVEN > 0 ---
 TP=0; TA=0; TR=0; NFILES=0; REFFILES=""

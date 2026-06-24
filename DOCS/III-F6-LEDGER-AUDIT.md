@@ -1,0 +1,49 @@
+# III F6 — Broad-Ledger Adversarial Audit (the wider sweep)
+
+**Date:** 2026-06-24. **Method:** a Workflow fanned 11 high-profile "COMPLETE/PROVEN/MEASURED" ledger claims through
+read-only adversarial auditors (default-to-refuted, file:line evidence), each finding then independently re-checked by
+a second refuting reviewer. The same lens that found F1–F10 in the Grand-Unification arc, turned on the rest of the
+ledger. This is the F6 the GU audit-and-plan named as owed.
+
+## Verdicts
+
+| Claim | Verdict | Sev | One-line |
+|---|---|---|---|
+| **zk-base-field** | ✅ CONFIRMED | — | `air_stark_verify` is genuinely Merkle-committed (reads only roots + opened values, recomputes constraint via `air_combine_opened`); malicious-prover arms reject. Honestly capped STRUCTURAL ~2⁻¹¹ in `run_zk.sh:207`. |
+| **cad-contentaddress** | ✅ CONFIRMED | — | `cad` is a real FIPS-180-4 SHA-256 / Keccak-256 commitment with re-derive-and-compare verification; negative arms flip input and assert digest differs. Understatement, not overclaim. |
+| **affine-audit** | ⚠️ GAP → **FIXED** | med (soundness) | A module-GLOBAL loop counter mutated by a callee **by name** passed all three establishment guards → **false PROVEN**. Fixed (see below). |
+| **crypto-speedup** | OVERCLAIMED | med | The one-liner "Montgomery ~2.4x SLOWER" is **stale and reversed** — the landed allocation-free CIOS REDC made it ~2.5× FASTER (bench 991 gates the faster *direction*; both primary docs say FASTER). "Knuth multiplication" mislabels **division** (bench 990 = `bigint_div_qr`). Magnitudes (177–258×, 2.5×) are correctness-/direction-gated but **magnitude-advisory** dev-host ratios, not enforced. |
+| **xii-confluence** | OVERCLAIMED | med | "Any redex order → same NF" is **refuted by the engine's own `xjn_gate()==0` (20 non-joining critical pairs)**; ARCH §10 itself disclaims global confluence. The route-R discharge of the 20 residuals is an **unconditional assignment** (`xdc_route_classify(assoc, 1u8, 0u8)` — `is_subterm`/`is_cost_equal` are literals), so `BOUNDARY==0` is a structural tautology, not a per-pair verification. The genuine, undisputed property is **Tier-1 determinism by a fixed bottom-up strategy** (with a real negative control). |
+| **sovereign-optimizer** | OVERCLAIMED | med | "Byte-MATCHES the codegen path it replaces" is **false** — the shift-fold emitter emits *fewer* bytes by design (`shl $imm` vs `imul`+count-load; ledger 1084→3594). "Proof-carrying" has **no mechanical proof→emit binding**: the BV64 kernel proof (`sov_isa.iii:2603-2618`) is genuine + width-faithful but lives in a sandbox driven by corpus/1207 and never inspects the emitter; the binding is a prose citation comment. The Path-C single-source-table + certifier-drift-gate that *would* bind it was designed (`III-OPTIMIZER-PATH-C.md`) but **not built** (no `cg_opt_rules.*`). The fold IS sound + behavior-preserving (corpus 808/0) — so this is claim/reality mismatch, not a miscompile. |
+| **apotheosis-invariants** | OVERCLAIMED | **high** | "All 13 Harmony Invariants hold / VERIFIED COMPLETE" overstates "**13 per-organ unit tests pass on hardcoded witnesses + each fold is falsifiable by a synthetic canary**". `charter_terminal` re-runs each organ's own `h{N}_selftest`; it performs no systemwide audit (no scan that every boundary is a SovVal / no second evaluator / no real-tree C scan). The doc's **own** consistency-audit lists **7 structural halves as unbuilt migrations**; each `h{N}_charter` docstring concedes its structural half is "a property a runtime clause cannot see." Green corpus-700 ≠ the systemwide invariants. |
+| **ccsv-cseed** | OVERCLAIMED | **high** | "Compiles the C seed subset through P3" overstates. **No gate ever feeds the real iiis-0 BOOT frontend** (`cg_r3/ast/parse/sema/lex/emit/main.c`, ~15.3k lines) to ccsv — the gate runs curated feature tests + standalone crypto + one extracted SHA leaf. Per the dev's own notes ccsv reaches only fn ~9-15 of each (files have 67-185 fns), the **dominant blocker (struct-array tables `T[i].field`) is OPEN/reverted**, and **"P3" (the cross-module linker) is unbuilt**. The substrate is genuine; the defect is SCOPE/LABEL. (The ccsv worker is concurrently active on the code.) |
+| **conjecture-faculty** | OVERCLAIMED | med | The propose→dispose→admit mechanism is **real and sound** (μ reduction-order termination, exhaustive bounded decision, congruence-closure joinability) but operates only over **toy, test-constructed carriers** (32 ground symbols / depth-1 f-terms / 5 hardcoded predicates), is wired to **no live consumer**, and the doc itself concedes completion vs III's live XII rule set is **vacuous** (XII already Knuth-Bendix-complete). The §2 flagship "mechanism-isolated regression" (case D) is over-determined (rejection is seed-driven, not candidate-driven). "Non-trivial conjectures (a real capability)" oversells a sound-but-inert standalone demonstration. |
+| **authentic-capability** | OVERCLAIMED | **high** | 7 of the demonstrated capabilities use genuinely independent verifiers (sha256sum, Python hashlib/cryptography, RFC/Ethereum vectors) and hold. But the **capstone** (cap-11, billed "PROVEN ON METAL, confirmed by the Windows kernel itself") has **zero retained on-metal evidence**: its cited artifact `m23_deploy_log.txt` is **absent from the tree**, the three "proven" `.sys` hashes are mutually inconsistent and live only in prose, the one surviving investigation artifact records the live run **FAILING (exit 7)**, and the only in-repo gate (corpus/1047 → `ks_selftest`) is a **user-mode self-graded KAT** comparing to an embedded FIPS constant + a self-computed seed. The live Ring-0 adversary arm is never exercised. |
+| **build-repro** | OVERCLAIMED | med | "The build is reproducible (byte-identical rebuild)" overstates. `run_repro.sh` only proves a **deterministic, timestamp-free back-end** (sovas+sovld) re-emits **one cached, gcc-linked, 591-byte-source `.s` byte-identically** — a near-tautological self-consistency check. It never re-runs/compares the compilation **front-end** (ccsv/iiis-2 run at most once, behind `[ ! -f tn.s ]`), and never executes the host gcc/ld twice to measure the non-reproducibility it claims superiority over (line 27 is an `echo`). |
+| production-readiness | UNVERIFIED | — | The second-stage refuting reviewer hit a transient 500 (API server error), so this claim was **not** adversarially confirmed this run. Re-audit owed. |
+
+## The one real soundness defect — FIXED (affine-audit)
+
+`COMPILER/BOOT/affine_audit.iii`'s establishment guards (`aa_count_writes==1` ∧ `aa_last_stmt_writes` ∧
+`aa_addr_taken==0`) are sound for a **function-local** loop counter (its only external-mutation path is `&i`, caught by
+G3) but **not** for a **module-global** counter, which a callee can mutate **by name** — and `aa_count_writes` scores a
+bare call as 0 writes, so the guards pass while the callee drives the counter past N before an access → a **false
+PROVEN** (the audit's one forbidden outcome). Counterexample: `var G; fn bump(){G=G+5} fn f(){ while G<16 { bump();
+A[G]; G=G+1 } }` → old audit PROVED `A[G]` in-bounds; runtime `G` reaches 17 → OOB.
+
+**Fix:** added `aa_counter_extern_safe(body)` — a local (`STMT_LET`/`PARAM`) counter keeps the existing guards; a
+module-global (`VAR_DECL`) counter is establishment-sound only if `aa_has_call(body)==0` (no callee can run mid-loop to
+mutate it by name). Added the `s_global_callee_mutate` trap to `affine_audit_sound.iii` (must ABSTAIN; was a false
+PROVEN), and tightened `affine_audit_gate.sh`'s soundness-probe assertion to the exact tally `P=1 A=6 R=0` so a
+false-PROVEN regression (P=2) reddens. Codegen-independent (`--affine-audit` is a separate mode), so the corpus
+byte-equivalence is unaffected.
+
+## Disposition of the OVERCLAIMED set
+
+These are **claim/reality mismatches**, not broken code (every audited mechanism is itself sound — the *prose* and the
+compressed MEMORY one-liners overstate scope or are stale). The fix is **honesty**: calibrate each claim to what the
+code does. The corrections are applied to the live MEMORY ledger one-liners (this turn). Two carry a feasible
+code-strengthening beyond re-wording (xii-confluence: a genuine per-pair BOUNDARY verification in `xdc_route_of`;
+build-repro: run the full front-end twice + diff the host) — logged here as the surpass path, distinct from the unbuilt
+large items (apotheosis 7 migrations, ccsv seed compilation, Path-C optimizer binding) whose honest fix is the
+calibrated claim until they are built.

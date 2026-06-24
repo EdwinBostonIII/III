@@ -845,7 +845,26 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
             SFN=SFN+1u32  nf=nf+1u32
             if is_union==0u32 { off=off+fsz }
             let mut g2:u32=1u32  while g2==1u32 { if ispat(q,Q_SEMI)==1u32 {g2=0u32} else { if TK[q as u64]==0u32 {g2=0u32} else {q=q+1u32} } }  q=q+1u32
-        } else { q=q+1u32 } } }
+        } else {
+            /* struct-typed field: `struct TAG [*]f ;` / `union TAG [*]f ;` / `TypedefName [*]f ;` (the dtype branch only handles scalar fields) */
+            let mut isstf:u32=0u32  let mut tnameb:u32=q  let mut styi:i32=0i32-1i32
+            if kw(q,"struct" as u64,6u32)==1u32 { if TK[(q+1u32) as u64]==1u32 { isstf=1u32  styi=stidx(q+1u32)  tnameb=q+2u32 } }
+            else { if kw(q,"union" as u64,5u32)==1u32 { if TK[(q+1u32) as u64]==1u32 { isstf=1u32  styi=stidx(q+1u32)  tnameb=q+2u32 } }
+                   else { if TK[q as u64]==1u32 { let ts:i32=stidx(q)  if ts>=0i32 { isstf=1u32  styi=ts  tnameb=q+1u32 } } } }
+            if isstf==1u32 {
+                let mut esz:i64=8i64  let mut fq:u32=tnameb
+                if ispat(fq,Q_MUL)==1u32 { fq=fq+1u32  esz=8i64 }                                      /* struct-pointer field -> 8 bytes */
+                else { if styi>=0i32 { esz=STSZ[styi as u64] as i64 } }                                /* embedded struct -> its size */
+                let mut isarr:u32=0u32  if ispat(fq+1u32,Q_LBR)==1u32 { isarr=1u32 }
+                if is_union==0u32 { let r:u64=off & 7u64  if r!=0u64 { off=off+(8u64-r) } }            /* ptr/struct align to 8 */
+                if 8u64>maxal { maxal=8u64 }
+                SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=0i64  SFSGN[SFN as u64]=0u32
+                let mut fsz:u64=esz as u64
+                if isarr==1u32 { if TK[(fq+2u32) as u64]==2u32 { fsz=(TV[(fq+2u32) as u64] as u64)*(esz as u64) } }
+                SFN=SFN+1u32  nf=nf+1u32
+                if is_union==0u32 { off=off+fsz }
+                let mut g3:u32=1u32  while g3==1u32 { if ispat(q,Q_SEMI)==1u32 {g3=0u32} else { if TK[q as u64]==0u32 {g3=0u32} else {q=q+1u32} } }  q=q+1u32
+            } else { q=q+1u32 } } } }
     }
     let mut sz:u64=off  if is_union==1u32 { sz=8u64 } else { let r:u64=sz & (maxal - 1u64)  if r!=0u64 { sz=sz+(maxal-r) } }   /* pad struct size up to its largest member's alignment */
     STNF[STN as u64]=nf  STSZ[STN as u64]=sz  STN=STN+1u32
@@ -860,8 +879,14 @@ fn prescan_struct() {
         if kw(t,"struct" as u64,6u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LB)==1u32 { reg_type(t+1u32, t+3u32, 0u32) } } }
         if kw(t,"union" as u64,5u32)==1u32 { if TK[(t+1u32) as u64]==1u32 { if ispat(t+2u32,Q_LB)==1u32 { reg_type(t+1u32, t+3u32, 1u32) } } }
         if kw(t,"typedef" as u64,7u32)==1u32 {
-            if kw(t+1u32,"struct" as u64,6u32)==1u32 { if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 0u32) } }
-            if kw(t+1u32,"union" as u64,5u32)==1u32 { if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) } }
+            if kw(t+1u32,"struct" as u64,6u32)==1u32 {
+                if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 0u32) }                                                /* typedef struct { } Name */
+                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=find_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 0u32) } } }   /* typedef struct TAG { } Name */
+            }
+            if kw(t+1u32,"union" as u64,5u32)==1u32 {
+                if ispat(t+2u32,Q_LB)==1u32 { let rb:u32=find_rb(t+3u32)  reg_type(rb+1u32, t+3u32, 1u32) }
+                else { if TK[(t+2u32) as u64]==1u32 { if ispat(t+3u32,Q_LB)==1u32 { let rb:u32=find_rb(t+4u32)  reg_type(rb+1u32, t+4u32, 1u32) } } }   /* typedef union TAG { } Name */
+            }
         }
         t=t+1u32
     }

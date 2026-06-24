@@ -49,6 +49,8 @@ extern @abi(c-msvc-x64) fn fri_fold_point(aa: u32, bb: u32, omega: u32, qmod: u6
 extern @abi(c-msvc-x64) fn zk_proof_seal_begin() -> i32 from "zk_stark_seal.iii"
 extern @abi(c-msvc-x64) fn zk_proof_seal_absorb(addr: u64, len: u64) -> i32 from "zk_stark_seal.iii"
 extern @abi(c-msvc-x64) fn zk_proof_seal_final(out32: u64) -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+var ZKAIR_PERM_DIG : [u8; 32]       /* keccak digest of the committed access roots -> the FS permutation challenges (vetted hash, not the bespoke square-mix) */
 extern @abi(c-msvc-x64) fn zk_proof_seal_eq(a: u64, b: u64) -> u8 from "zk_stark_seal.iii"
 
 const AIR_Q : u32 = 998244353u32
@@ -664,19 +666,15 @@ fn air_derive_alphas(tlen: u64) -> i32 {
 /* a non-linear (square-mixing) hash of the first nv committed column roots (nv*32 bytes of ZKAIR_TRACE_ROOTS) -> a
  * field element.  Both prover (air_perm_setup) and verifier (air_stark_verify) compute it from the SAME committed
  * roots, so the permutation challenge alpha is bound to the access commitment and the prover cannot choose it. */
-fn air_perm_field(start: u64, nv: u64, seed: u32) -> u32 {
-    let mut h : u32 = seed
-    let lo : u64 = start * 32u64
-    let nb : u64 = (start + nv) * 32u64
-    let mut i : u64 = lo
-    while i < nb {
-        let p : *u8 = ((&ZKAIR_TRACE_ROOTS as u64) + i) as *u8
-        h = sf_add(sf_mul(h, 16777619u32), p[0u64] as u32)
-        h = sf_add(sf_mul(h, h), 1u32)
-        i = i + 1u64
-    }
-    if h < 2u32 { h = 2u32 }
-    return h
+fn air_perm_field(start: u64, nv: u64, off: u64) -> u32 {
+    /* KECCAK-256 the committed access roots (vetted hash -> no algebraic shortcut), then take a 4-byte slice at `off`
+     * (0 -> alpha, 4 -> beta) reduced mod p.  Both prover and verifier hash the SAME committed roots. */
+    keccak256_oneshot((&ZKAIR_TRACE_ROOTS as u64) + start * 32u64, nv * 32u64, &ZKAIR_PERM_DIG as u64)
+    let p : *u8 = ((&ZKAIR_PERM_DIG as u64) + off) as *u8
+    let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)
+    while x >= AIR_Q { x = x - AIR_Q }
+    if x < 2u32 { x = 2u32 }
+    return x
 }
 
 /* PHASE 1 of the sound permutation: commit the first nv ACCESS columns, derive the permutation challenge alpha from
@@ -694,8 +692,8 @@ fn air_perm_setup(start: u64, nv: u64) -> u32 @export {
     }
     AIR_PERM_START[0] = start as u32
     AIR_PERM_NV[0] = nv as u32
-    AIR_PERM_A[0] = air_perm_field(start, nv, 169647555u32)
-    AIR_PERM_B[0] = air_perm_field(start, nv, 305419896u32)
+    AIR_PERM_A[0] = air_perm_field(start, nv, 0u64)
+    AIR_PERM_B[0] = air_perm_field(start, nv, 4u64)
     return AIR_PERM_A[0]
 }
 fn air_perm_beta() -> u32 @export { return AIR_PERM_B[0] }   /* the FS-derived tuple-encoding challenge (the gadget builds products with it) */
@@ -826,7 +824,7 @@ fn air_stark_verify() -> u64 @export {
         tlen = tlen + 32u64  w = w + 1u64
     }
     air_derive_alphas(tlen)   /* re-derive the FS composition coefficients (== prover's) */
-    if AIR_PERM_NV[0] > 0u32 { AIR_PERM_A[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 169647555u32)  AIR_PERM_B[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 305419896u32) }   /* re-derive alpha,beta from the committed access roots -> a prover-chosen alpha/beta is rejected */
+    if AIR_PERM_NV[0] > 0u32 { AIR_PERM_A[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 0u64)  AIR_PERM_B[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 4u64) }   /* re-derive alpha,beta (keccak of committed access roots) -> a prover-chosen alpha/beta is rejected */
     air_copy32((&ZKAIR_TRANS as u64) + tlen, &ZKAIR_CP_ROOT as u64)
     tlen = tlen + 32u64
     let NL : u64 = ZKAIR_FRI_NL[0] as u64

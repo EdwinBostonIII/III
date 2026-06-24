@@ -15,7 +15,7 @@
 | FRI queries `Q` | `16` | `ZKAIR_QUERIES[16]` |
 | Rows `N` | `8` | small; `D = 32` |
 | Constraints | `≤ 17` | the fused zkVM |
-| FS hash | bespoke square-mix (`air_perm_field`) + keccak Merkle | challenge derivation is NOT yet a vetted hash |
+| FS hash | **keccak-256** (`air_perm_field` keccaks the committed access roots) + keccak Merkle | ✅ vetted hash (weakness #2 closed, commit pending) |
 
 ## Per-check soundness error (Schwartz–Zippel / FRI, union bound)
 
@@ -41,8 +41,10 @@
 
 1. **Challenge-space size (30 bits)** → `~2²⁷` grinding + `~2⁻²⁷` cap, **uniform across ALL checks** (combination,
    permutation, FRI folding). This is the production blocker.
-2. **`air_perm_field` is a bespoke hash**, not vetted — may admit an *algebraic shortcut* solving for a colliding α
-   *below* `2²⁷`. Route FS challenges through **keccak** (already in the Merkle path). Cheap, correct — do regardless.
+2. ~~**`air_perm_field` is a bespoke hash**~~ ✅ **CLOSED**: `air_perm_field` now keccak-256-hashes the committed
+   access roots and slices the digest (offset 0 → α, 4 → β), reduced mod p. No algebraic shortcut below the `2²⁷`
+   grind floor. (Verified: `zk_perm_malicious`/`ZK-FUSED arm 5` still reject a prover-chosen α with the keccak hash.)
+   The combination-challenge derivation (`air_derive_alphas`) should be routed through keccak too (same pattern).
 
 ## The fix path (audit → number → targeted knob)
 

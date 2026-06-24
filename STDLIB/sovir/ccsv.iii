@@ -168,6 +168,7 @@ var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u
 var LOVF : u32 = 0u32                                  /* LOUD local-overflow flag: the SVIR LOCAL_GET/SET operand is ONE byte, so >256 locals/fn would silently collide (slot 256&0xFF=0); set this instead, fail the whole compile clearly */
 var BLKD : i64 = 0i64                                  /* live structured-control nesting depth (BLOCK/LOOP/IF open count) -- read by `break` */
 var BRKT : [i64; 32]  var BRKN : u32 = 0u32            /* break-target stack: BLKD just inside each enclosing loop/switch's exit block ; break -> BR(BLKD - BRKT[top]) */
+var CONTT : [i64; 32]  var CONTN : u32 = 0u32          /* continue-target stack: BLKD just inside each loop's continue block (wraps the body; END lands before the incr/cond) ; continue -> BR(BLKD - CONTT[top]) */
 var LBLO : [u32; 64]  var LBLL : [u32; 64]  var LBLBD : [i64; 64]  var LBLN : u32 = 0u32   /* per-fn FORWARD-goto labels: name offset/len + the BLKD of each label's goto-block (label[0]=innermost) */
 var SWCC : [i64; 128]  var SWCN : u32 = 0u32           /* case constants of the switch being lowered (prescan, in source order) */
 var ADN_O : [u32; 128]  var ADN_L : [u32; 128]  var ADN_N : u32 = 0u32   /* per-fn set of local names whose address is taken (-> spilled to memory) */
@@ -780,6 +781,16 @@ fn emit_switch_bodies(n:u32) {
         }
     }
 }
+/* does the loop body at C contain a `continue` (within its own brace/stmt scope)? -> only then wrap it in a
+ * continue block.  Over-detects a nested loop's continue (harmless extra block) but keeps continue-FREE loops
+ * byte-identical (no extra BLOCK/END -> the cross-language byte-DDC + smaller output). */
+fn loop_has_cont() -> u32 {
+    let mut q:u32=C
+    if ispat(q,Q_LB)==1u32 { let mut d:i32=0i32  let mut g:u32=1u32
+        while g==1u32 { if TK[q as u64]==0u32 {g=0u32} else { if ispat(q,Q_LB)==1u32 {d=d+1i32}  if ispat(q,Q_RB)==1u32 { d=d-1i32  if d==0i32 {g=0u32} }  if kw(q,"continue" as u64,8u32)==1u32 {return 1u32}  if g==1u32 {q=q+1u32} } }
+    } else { let mut g:u32=1u32  while g==1u32 { if ispat(q,Q_SEMI)==1u32 {g=0u32} else { if TK[q as u64]==0u32 {g=0u32} else { if kw(q,"continue" as u64,8u32)==1u32 {return 1u32}  q=q+1u32 } } } }
+    return 0u32
+}
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
     if isqual(C)==1u32 { skipquals() }                             /* leading qualifiers on a local decl -> skip */
@@ -858,7 +869,10 @@ fn pstmt() {
     }
     if kw(C,"while" as u64,5u32)==1u32 {
         C=C+1u32  eat(Q_LP)  eb(0x40u32)  BLKD=BLKD+1i64  if BRKN<32u32 { BRKT[BRKN as u64]=BLKD  BRKN=BRKN+1u32 }  eb(0x41u32)  BLKD=BLKD+1i64  ebin(0u32)  econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_RP)
-        pbody()  eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}  return   /* break target = the outer BLOCK */
+        let hc:u32=loop_has_cont()
+        if hc==1u32 { eb(0x40u32)  BLKD=BLKD+1i64  if CONTN<32u32 { CONTT[CONTN as u64]=BLKD  CONTN=CONTN+1u32 } }   /* continue block (only if used) */
+        pbody()  if hc==1u32 { eb(0x44u32)  BLKD=BLKD-1i64  if CONTN>0u32 {CONTN=CONTN-1u32} }                       /* close continue block (continue lands here -> re-check cond) */
+        eu8(0x50u32,0u32)  eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}  return   /* break target = the outer BLOCK */
     }
     if kw(C,"for" as u64,3u32)==1u32 {                              /* for (init; cond; incr) body */
         C=C+1u32  eat(Q_LP)
@@ -868,7 +882,10 @@ fn pstmt() {
         econst(0i64)  eb(0x30u32)  eu8(0x51u32,1u32)  eat(Q_SEMI)   /* cond==0 -> BR_IF 1 (break) */
         let incrC:u32=C                                            /* incr is emitted AFTER the body */
         let mut gI:u32=1u32  while gI==1u32 { if cp(Q_RP)==1u32 {gI=0u32} else { if TK[C as u64]==0u32 {gI=0u32} else {C=C+1u32} } }  eat(Q_RP)
+        let hc:u32=loop_has_cont()
+        if hc==1u32 { eb(0x40u32)  BLKD=BLKD+1i64  if CONTN<32u32 { CONTT[CONTN as u64]=BLKD  CONTN=CONTN+1u32 } }   /* continue block (continue -> END -> run the incr) */
         pbody()                                                    /* body */
+        if hc==1u32 { eb(0x44u32)  BLKD=BLKD-1i64  if CONTN>0u32 {CONTN=CONTN-1u32} }                 /* close continue block (before the incr) */
         let after:u32=C
         C=incrC  emit_for_incr()                                   /* replay the incr */
         eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}   /* BR 0 ; END END */
@@ -877,7 +894,10 @@ fn pstmt() {
     if kw(C,"do" as u64,2u32)==1u32 {                               /* do { body } while (cond) ; -> body runs first, cond at the loop tail */
         C=C+1u32
         eb(0x40u32)  BLKD=BLKD+1i64  if BRKN<32u32 { BRKT[BRKN as u64]=BLKD  BRKN=BRKN+1u32 }  eb(0x41u32)  BLKD=BLKD+1i64   /* BLOCK(break target) LOOP */
+        let hc:u32=loop_has_cont()
+        if hc==1u32 { eb(0x40u32)  BLKD=BLKD+1i64  if CONTN<32u32 { CONTT[CONTN as u64]=BLKD  CONTN=CONTN+1u32 } }   /* continue block (continue -> END -> the cond check) */
         pbody()
+        if hc==1u32 { eb(0x44u32)  BLKD=BLKD-1i64  if CONTN>0u32 {CONTN=CONTN-1u32} }
         if kw(C,"while" as u64,5u32)==1u32 { C=C+1u32 }  eat(Q_LP)  ebin(0u32)  eat(Q_RP)  eat(Q_SEMI)
         eu8(0x51u32, 0u32)                                          /* cond ; BR_IF 0 -> if nonzero, restart the LOOP */
         eb(0x44u32)  eb(0x44u32)  BLKD=BLKD-2i64  if BRKN>0u32 {BRKN=BRKN-1u32}   /* END(loop) END(block) */
@@ -885,6 +905,9 @@ fn pstmt() {
     }
     if kw(C,"break" as u64,5u32)==1u32 {                            /* break ; -> BR to the innermost loop/switch exit block */
         C=C+1u32  if BRKN>0u32 { let bt:i64=BRKT[(BRKN-1u32) as u64]  let d:i64=BLKD-bt  eu8(0x50u32, d as u32) }  eat(Q_SEMI)  return
+    }
+    if kw(C,"continue" as u64,8u32)==1u32 {                         /* continue ; -> BR to the innermost loop's continue block (lands before the incr/cond) */
+        C=C+1u32  if CONTN>0u32 { let ct:i64=CONTT[(CONTN-1u32) as u64]  let d:i64=BLKD-ct  eu8(0x50u32, d as u32) }  eat(Q_SEMI)  return
     }
     if kw(C,"switch" as u64,6u32)==1u32 {                           /* switch (e) { case C: ... default: ... } -> nested-BLOCK ladder */
         C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)                  /* selector e onto the stack */

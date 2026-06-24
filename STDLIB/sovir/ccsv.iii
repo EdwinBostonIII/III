@@ -144,6 +144,7 @@ fn dtype(t: u32) -> u32 {
     if kw(t,"uint32_t" as u64,8u32)==1u32 {return 1u32}  if kw(t,"uint64_t" as u64,8u32)==1u32 {return 1u32}  if kw(t,"uint16_t" as u64,8u32)==1u32 {return 1u32}  if kw(t,"uint8_t" as u64,7u32)==1u32 {return 1u32}
     if kw(t,"int32_t" as u64,7u32)==1u32 {return 1u32}  if kw(t,"int64_t" as u64,7u32)==1u32 {return 1u32}  if kw(t,"int16_t" as u64,7u32)==1u32 {return 1u32}  if kw(t,"int8_t" as u64,6u32)==1u32 {return 1u32}
     if kw(t,"size_t" as u64,6u32)==1u32 {return 1u32}  if kw(t,"ssize_t" as u64,7u32)==1u32 {return 1u32}  if kw(t,"bool" as u64,4u32)==1u32 {return 1u32}  if kw(t,"uintptr_t" as u64,9u32)==1u32 {return 1u32}  if kw(t,"intptr_t" as u64,8u32)==1u32 {return 1u32}
+    if kw(t,"va_list" as u64,7u32)==1u32 {return 1u32}   /* va_list -> an 8-byte cursor local (the varargs walker) */
     return 0u32
 }
 /* a C type qualifier / storage class (no-op for ccsv's i64-everything model). */
@@ -158,6 +159,8 @@ fn eat(p: i64) -> u32 { if cp(p)==1u32 { C=C+1u32  return 1u32 }  return 0u32 }
 fn ispat(t: u32, p: i64) -> u32 { if TK[t as u64]==3u32 { if TV[t as u64]==p {return 1u32} }  return 0u32 }
 
 var FNO : [u32; 4096]  var FNL : [u32; 4096]  var FNP : [u32; 4096]  var FNT : [u32; 4096]  var FRM : [i64; 4096]  var FN : u32 = 0u32  var CUR_RMASK : i64 = 0i64  var ENDED_RET : u32 = 0u32   /* FRM=per-fn return width-mask ; ENDED_RET=last stmt was a return */
+var FVAR : [u32; 4096]  var CUR_VAPTR : i32 = 0i32-1i32   /* FVAR[f]=variadic(has ...) ; FNP[f]=NAMED count ; CUR_VAPTR=this fn's hidden va-ptr local slot (-1 if not variadic) */
+const VA_BUF:i64=983040i64   /* svir_mem va-arg buffer (64KiB below HEAP_BASE): a variadic call writes its varargs here; the callee's va-ptr points at it */
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 256]  var LPT : [i32; 256]  var LW : [i64; 256]  var LMEM : [i64; 256]   /* LCH=char* ; LPT=struct-ptr type ; LW=width mask ; LMEM=spill memory addr if &-taken (-1=SVIR slot) */
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed */
@@ -442,6 +445,32 @@ fn eprim() {
             if kw(t,"malloc" as u64,6u32)==1u32 { ebin(0u32)  emit_malloc()  eat(Q_RP)  return }                                  /* malloc(size) */
             if kw(t,"calloc" as u64,6u32)==1u32 { ebin(0u32)  eat(Q_COM)  ebin(0u32)  eb(0x22u32)  emit_malloc()  eat(Q_RP)  return }   /* calloc(n,sz) = malloc(n*sz) (bump mem is fresh-zero) */
             if kw(t,"free" as u64,4u32)==1u32 { ebin(0u32)  eb(0x72u32)  econst(0i64)  eat(Q_RP)  return }                          /* free(p) -> no-op (bump alloc); eval+drop, push 0 */
+            if kw(t,"va_start" as u64,8u32)==1u32 {   /* va_start(ap, last) -> ap = the hidden va-ptr (points at VA_BUF) ; `last` ignored */
+                let api:i32=lidx(C)  let mut g:u32=1u32  while g==1u32 { if cp(Q_RP)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_RP)
+                if api>=0i32 { if CUR_VAPTR>=0i32 { emit_lget(CUR_VAPTR as u32)  emit_lset(api as u32) } }  econst(0i64)  return
+            }
+            if kw(t,"va_arg" as u64,6u32)==1u32 {     /* va_arg(ap, type) -> *(ap) ; ap += 8 */
+                let api:i32=lidx(C)  let mut g:u32=1u32  while g==1u32 { if cp(Q_RP)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_RP)
+                if api>=0i32 { let tv:u32=LN  if LN<255u32 {LN=LN+1u32}
+                    emit_lget(api as u32)  eb(0x82u32)  eu8(0x11u32,tv)                       /* tv = *ap */
+                    emit_lget(api as u32)  econst(8i64)  eb(0x20u32)  emit_lset(api as u32)   /* ap += 8 */
+                    eu8(0x10u32,tv) } else { econst(0i64) }
+                return
+            }
+            if kw(t,"va_end" as u64,6u32)==1u32 { let mut g:u32=1u32  while g==1u32 { if cp(Q_RP)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_RP)  econst(0i64)  return }   /* va_end -> no-op */
+            let fvi:i32=fidx(t)
+            if fvi>=0i32 { if FVAR[fvi as u64]==1u32 {   /* VARIADIC call: named args -> the call ; varargs -> VA_BUF ; pass VA_BUF as the hidden last arg */
+                let nn:u32=FNP[fvi as u64]  let mut argi:u32=0u32
+                if cp(Q_RP)==0u32 { let mut g:u32=1u32
+                    while g==1u32 {
+                        if argi<nn { ebin(0u32) }                                                              /* named arg -> leave on stack */
+                        else { econst(VA_BUF + (8i64*((argi-nn) as i64)))  ebin(0u32)  eb(0x83u32) }            /* vararg -> STORE64 VA_BUF[k] */
+                        argi=argi+1u32
+                        if cp(Q_COM)==1u32 { C=C+1u32 } else { g=0u32 }
+                    }
+                }
+                eat(Q_RP)  econst(VA_BUF)  eb(0x70u32)  eb(fvi as u32)  eb(nn+1u32)  return   /* CALL fi (named args + va-ptr) */
+            } }
             let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)
             if kw(t,"putchar" as u64,7u32)==1u32 { eb(0x71u32)  econst(0i64) }    /* putchar(c) -> PRINT_CHAR ; push 0 as the (C) return */
             else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac) } }
@@ -810,7 +839,19 @@ fn fn_nametok(ft: u32) -> u32 {
     return q
 }
 fn fn_retmask(ft: u32) -> i64 { let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }  return type_mask(q) }   /* the return type's width mask */
-fn rec_fn(ft: u32) { let nt:u32=fn_nametok(ft)  FNO[FN as u64]=TO[nt as u64]  FNL[FN as u64]=TL[nt as u64]  FNP[FN as u64]=cparams(nt)  FNT[FN as u64]=ft  FRM[FN as u64]=fn_retmask(ft)  FN=FN+1u32 }
+fn fn_variadic(nt:u32) -> u32 {   /* does the param list contain `...` (a Q_DOT) ? */
+    let mut q:u32=nt+2u32  let mut g:u32=1u32
+    while g==1u32 { if TK[q as u64]==0u32 {g=0u32} else { if ispat(q,Q_RP)==1u32 {g=0u32} else { if ispat(q,Q_DOT)==1u32 {return 1u32}  q=q+1u32 } } }
+    return 0u32
+}
+fn fn_named(nt:u32) -> u32 {   /* count NAMED params (those before `...`) */
+    let mut q:u32=nt+2u32
+    if ispat(q,Q_RP)==1u32 { return 0u32 }  if ispat(q,Q_DOT)==1u32 { return 0u32 }
+    let mut np:u32=1u32  let mut g:u32=1u32
+    while g==1u32 { if TK[q as u64]==0u32 {g=0u32} else { if ispat(q,Q_RP)==1u32 {g=0u32} else { if ispat(q,Q_DOT)==1u32 {g=0u32} else { if ispat(q,Q_COM)==1u32 { if ispat(q+1u32,Q_DOT)==0u32 {np=np+1u32} }  q=q+1u32 } } } }
+    return np
+}
+fn rec_fn(ft: u32) { let nt:u32=fn_nametok(ft)  FNO[FN as u64]=TO[nt as u64]  FNL[FN as u64]=TL[nt as u64]  FNP[FN as u64]=fn_named(nt)  FVAR[FN as u64]=fn_variadic(nt)  FNT[FN as u64]=ft  FRM[FN as u64]=fn_retmask(ft)  FN=FN+1u32 }
 /* nm = a function-name token, nm+1 = `(` : is this a DEFINITION `(...) {` (vs a prototype `(...) ;` from an
  * included header / forward decl)?  Walk to the matching `)` (paren-depth) and require the next token to be `{`. */
 fn fn_has_body(nm: u32) -> u32 {
@@ -988,8 +1029,10 @@ fn cfn(fk: u32) {
     let ft:u32=FNT[fk as u64]  C=fn_nametok(ft)  C=C+1u32  eat(Q_LP)   /* [quals] type [*] NAME ( -> at ( */
     CUR_RMASK=FRM[fk as u64]
     LN=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  lz=lz+1u32 }   /* reset per-fn local flags + control-depth */
-    let mut params:u32=0u32  let mut go:u32=1u32
+    let mut params:u32=0u32  let mut go:u32=1u32  CUR_VAPTR=0i32-1i32
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else {   /* [quals] type [*] NAME */
+        if ispat(C,Q_DOT)==1u32 { CUR_VAPTR=LN as i32  LN=LN+1u32  params=params+1u32  let mut gd:u32=1u32  while gd==1u32 { if cp(Q_DOT)==1u32 {C=C+1u32} else {gd=0u32} }  go=0u32 }   /* `...` -> hidden va-ptr param (slot CUR_VAPTR; the caller passes VA_BUF) */
+        else {
         skipquals()  let mut isc:u32=0u32  let mut styp:i32=0i32-1i32  let mut bsz:i64=8i64  let mut bsg:u32=0u32  let pm:i64=type_mask(C)
         if kw(C,"struct" as u64,6u32)==1u32 { C=C+1u32  styp=stidx(C)  C=C+1u32 }
         else { if kw(C,"union" as u64,5u32)==1u32 { C=C+1u32  styp=stidx(C)  C=C+1u32 }
@@ -1002,7 +1045,7 @@ fn cfn(fk: u32) {
         if styp>=0i32 { if isp==1u32 { LPT[sl as u64]=styp } }
         if isp==1u32 { if styp<0i32 { LPSZ[sl as u64]=bsz  LPSG[sl as u64]=bsg } }   /* scalar/array pointer param: pointee width+sign */
         if isp==0u32 { LW[sl as u64]=pm  LSZ[sl as u64]=bsz  LSG[sl as u64]=bsg }    /* scalar param: size + sign (spill) */
-        params=params+1u32  eat(Q_COM)
+        params=params+1u32  eat(Q_COM) }
     } } }
     eat(Q_RP)  prescan_addrof()  BL=0u64  ENDED_RET=0u32             /* mark &-taken locals (spill) BEFORE the body's ladd */
     let mut pp:u32=0u32                                              /* &-taken PARAMS: prescan_addrof runs AFTER the param loop, so spill them now + entry-store the incoming slot value (enables &param, e.g. update(s,&v,1)) */

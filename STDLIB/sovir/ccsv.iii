@@ -217,7 +217,8 @@ fn byc(ty: u32) -> u32 { if aesz_of(ty)==1i64 {return 1u32}  return 0u32 }   /* 
 /* struct types: NAME + a flattened field list (field name -> byte offset).  Struct vars reuse AO/AL/AB (base in
  * mem) + AVT (struct type index of that entry, -1 for plain arrays). */
 var STNO:[u32;1024]  var STNL:[u32;1024]  var STFB:[u32;1024]  var STNF:[u32;1024]  var STSZ:[u64;1024]  var STN:u32=0u32
-var SFO:[u32;8192]  var SFL:[u32;8192]  var SFOFF:[u64;8192]  var SFEL:[i64;8192]  var SFAR:[u32;8192]  var SFMASK:[i64;8192]  var SFSGN:[u32;8192]  var SFN:u32=0u32  var AVT:[i32;1024]   /* SFEL=elem size {1,2,4,8} ; SFAR=array? ; SFMASK=field width-mask ; SFSGN=field signed */
+var SFO:[u32;8192]  var SFL:[u32;8192]  var SFOFF:[u64;8192]  var SFEL:[i64;8192]  var SFAR:[u32;8192]  var SFMASK:[i64;8192]  var SFSGN:[u32;8192]  var SFPT:[i32;8192]  var SFN:u32=0u32  var AVT:[i32;1024]   /* SFEL=elem size {1,2,4,8} ; SFAR=array? ; SFMASK=field width-mask ; SFSGN=field signed ; SFPT=field's pointed-to/embedded STRUCT type (-1 if scalar) -> chained lvalue p->arr[i].subfield */
+fn fieldpt(sti:i32, ft:u32)->i32 { if sti<0i32 {return 0i32-1i32}  let b:u32=STFB[sti as u64]  let n:u32=STNF[sti as u64]  let mut k:u32=0u32  while k<n { let fi:u32=b+k  if neq(SFO[fi as u64],SFL[fi as u64],TO[ft as u64],TL[ft as u64])==1u32 {return SFPT[fi as u64]}  k=k+1u32 }  return 0i32-1i32 }   /* the struct type a field points to / embeds */
 /* named integer constants: enum members + object-like #define <number>.  Resolved in eprim -> econst. */
 var CNO:[u32;16384]  var CNL:[u32;16384]  var CNV:[i64;16384]  var CN:u32=0u32
 fn cadd(o:u32, l:u32, v:i64) { if CN<16384u32 { CNO[CN as u64]=o  CNL[CN as u64]=l  CNV[CN as u64]=v  CN=CN+1u32 } }
@@ -989,6 +990,18 @@ fn pstmt() {
             if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  econst(vb+foff)  eb(0x20u32)  emit_av(fe, fsg, fm)  eat(Q_SEMI)  return }
             C=C+3u32  econst(vb+foff)  emit_av(fe, fsg, fm)  eat(Q_SEMI)  return }
     } } }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_LBR)==1u32 {   /* p->arrfield[i].subfield = e ; (CHAINED: ptr-field array-element field store) */
+        let mut q:u32=C+4u32  let mut d:i32=0i32  let mut g:u32=1u32  while g==1u32 { if ispat(q,Q_LBR)==1u32 {d=d+1i32} else { if ispat(q,Q_RBR)==1u32 { if d==0i32 {g=0u32} else {d=d-1i32} } }  if TK[q as u64]==0u32 {g=0u32}  if g==1u32 {q=q+1u32} }   /* q -> the matching ] */
+        if ispat(q+1u32,Q_DOT)==1u32 {   /* . follows -> a chained field access */
+            let nt0:u32=C  let ptt0:i32=lpt(nt0)
+            if ptt0>=0i32 { let af:u32=C+2u32  let elt:i32=fieldpt(ptt0,af)  if elt>=0i32 {
+                let afoff:i64=fieldoff(ptt0,af)  let pl:i32=lidx(nt0)  let esz:i64=STSZ[elt as u64] as i64
+                let sub:u32=q+2u32  let soff:i64=fieldoff(elt,sub)  let se:i64=fieldelem(elt,sub)  let sm:i64=fieldmask(elt,sub)  let ssg:u32=fieldsign(elt,sub)
+                C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  emit_lget(pl as u32)  if afoff>0i64 {econst(afoff)  eb(0x20u32)}  eb(0x82u32)  eb(0x20u32)  if soff>0i64 {econst(soff)  eb(0x20u32)}   /* addr = idx*esz + *(p+afoff) + soff */
+                C=C+2u32  emit_av(se, ssg, sm)  eat(Q_SEMI)  return                                            /* skip .subfield ; store e */
+            } }
+        }
+    } } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ARROW {   /* p->field[/[i]] = e ; (struct-ptr field store) */
         let nt:u32=C  let ptt:i32=lpt(nt)
         if ptt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(ptt,ft)  let pl:i32=lidx(nt)  let fe:i64=fieldelem(ptt,ft)  let fm:i64=fieldmask(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)
@@ -1158,7 +1171,7 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
             let mut isarr:u32=0u32  if ispat(fq+1u32,Q_LBR)==1u32 { isarr=1u32 }
             let al:u64=esz as u64  if is_union==0u32 { let r:u64=off & (al - 1u64)  if r!=0u64 { off=off+(al-r) } }   /* C natural alignment: align off up to the element/scalar size */
             if al>maxal { maxal=al }
-            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmask  SFSGN[SFN as u64]=fsgn
+            SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmask  SFSGN[SFN as u64]=fsgn  SFPT[SFN as u64]=0i32-1i32
             let mut fsz:u64=esz as u64                                                          /* scalar field size */
             if isarr==1u32 { if TK[(fq+2u32) as u64]==2u32 { fsz=(TV[(fq+2u32) as u64] as u64)*(esz as u64) } }   /* array field: NUM*elem */
             SFN=SFN+1u32  nf=nf+1u32
@@ -1177,7 +1190,7 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
                 let mut isarr:u32=0u32  if ispat(fq+1u32,Q_LBR)==1u32 { isarr=1u32 }
                 if is_union==0u32 { let r:u64=off & 7u64  if r!=0u64 { off=off+(8u64-r) } }            /* ptr/struct align to 8 */
                 if 8u64>maxal { maxal=8u64 }
-                SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=0i64  SFSGN[SFN as u64]=0u32
+                SFO[SFN as u64]=TO[fq as u64]  SFL[SFN as u64]=TL[fq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=esz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=0i64  SFSGN[SFN as u64]=0u32  SFPT[SFN as u64]=styi   /* the field's pointed-to/embedded struct type */
                 let mut fsz:u64=esz as u64
                 if isarr==1u32 { if TK[(fq+2u32) as u64]==2u32 { fsz=(TV[(fq+2u32) as u64] as u64)*(esz as u64) } }
                 SFN=SFN+1u32  nf=nf+1u32
@@ -1189,7 +1202,7 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
                 if isf==1u32 {
                     let al:u64=fesz as u64  if is_union==0u32 { let r:u64=off & (al-1u64)  if r!=0u64 { off=off+(al-r) } }  if al>maxal {maxal=al}
                     let mut isarr:u32=0u32  if ispat(ffq+1u32,Q_LBR)==1u32 {isarr=1u32}
-                    SFO[SFN as u64]=TO[ffq as u64]  SFL[SFN as u64]=TL[ffq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=fesz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmsk  SFSGN[SFN as u64]=fsg
+                    SFO[SFN as u64]=TO[ffq as u64]  SFL[SFN as u64]=TL[ffq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=fesz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmsk  SFSGN[SFN as u64]=fsg  SFPT[SFN as u64]=0i32-1i32
                     let mut fsz:u64=fesz as u64  if isarr==1u32 { if TK[(ffq+2u32) as u64]==2u32 { fsz=(TV[(ffq+2u32) as u64] as u64)*(fesz as u64) } }
                     SFN=SFN+1u32  nf=nf+1u32  if is_union==0u32 {off=off+fsz}
                     let mut g4:u32=1u32  while g4==1u32 { if ispat(q,Q_SEMI)==1u32 {g4=0u32} else { if TK[q as u64]==0u32 {g4=0u32} else {q=q+1u32} } }  q=q+1u32

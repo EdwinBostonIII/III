@@ -68,7 +68,7 @@ const AIR_B : u64 = 4u64            /* LDE blowup factor (D = B*N) */
 const AIR_WMAX : u64 = 32u64
 const AIR_NMAX : u64 = 64u64
 const AIR_DMAX : u64 = 256u64       /* WMAX irrelevant; per-column D */
-const AIR_TMAX : u64 = 64u64        /* transition terms */
+const AIR_TMAX : u64 = 128u64       /* transition terms (64->128 for the full FUSED: k=4 perm + memory + compute + control) */
 const AIR_CMAX : u64 = 32u64        /* transition constraints (8->16 LOCAL, 16->32 for the fused compute+memory+control zkVM) */
 
 var AIR_W      : [u32; 1]
@@ -84,15 +84,19 @@ var AIR_CP4_1  : [u32; 256]         /* a1 */
 var AIR_CP4_2  : [u32; 256]         /* b0 */
 var AIR_CP4_3  : [u32; 256]         /* b1 (4 base-field limbs -> the PRODUCTION-bit-count CP, challenge over GF(p^4) ~2^120) */
 /* transition constraint term lists */
-var AIR_TT_COEF : [u32; 64]
-var AIR_TT_A    : [u32; 64]
-var AIR_TT_B    : [u32; 64]
-var AIR_TT_CON  : [u32; 64]         /* which constraint k this term belongs to */
-var AIR_TT_PERM : [u32; 64]         /* 1 = this term's coefficient is the FS-derived permutation challenge -AIR_PERM_A */
+var AIR_TT_COEF : [u32; 128]
+var AIR_TT_A    : [u32; 128]
+var AIR_TT_B    : [u32; 128]
+var AIR_TT_CON  : [u32; 128]        /* which constraint k this term belongs to */
+var AIR_TT_PERM : [u32; 128]        /* perm-term kind: 1=-a1 2=b1 3=b1^2 4=-a2 5=-a3 6=b2 7=b2^2 8=b3 9=b3^2 10=-a4 11=b4 12=b4^2 */
 var AIR_PERM_A  : [u32; 1]          /* the grand-product permutation challenge, Fiat-Shamir-derived from the committed access-column roots (air_perm_setup) */
 var AIR_PERM_B  : [u32; 1]          /* the tuple-ENCODING challenge beta (also FS-derived); perm-term kinds: 1 = -alpha, 2 = beta, 3 = beta^2 */
 var AIR_PERM_R2 : [u32; 1]          /* 2nd INDEPENDENT permutation challenge (perm-term kind 4 = -R2) -- for k-repeated grand products */
 var AIR_PERM_R3 : [u32; 1]          /* 3rd independent permutation challenge (kind 5 = -R3); k=3 -> perm soundness ~(n/p)^3 ~2^-81 */
+var AIR_PERM_R4 : [u32; 1]          /* encoding challenge beta2 (kinds 6=beta2, 7=beta2^2) for the 2nd independent tuple grand-product */
+var AIR_PERM_R5 : [u32; 1]          /* beta3 (kinds 8, 9) for the 3rd */
+var AIR_PERM_R6 : [u32; 1]          /* alpha4 (kind 10 = -R6) for the 4th grand-product -> k=4 -> perm ~2^-89 (production) */
+var AIR_PERM_R7 : [u32; 1]          /* beta4 (kinds 11, 12) for the 4th */
 var AIR_PERM_NV : [u32; 1]          /* number of ACCESS columns whose committed roots derive AIR_PERM_A/B */
 var AIR_PERM_START : [u32; 1]       /* first ACCESS column index (so gadgets whose accesses are not column-0-first can still FS-bind) */
 var AIR_NT      : [u32; 1]          /* number of terms */
@@ -126,6 +130,10 @@ fn air_reset(w_cols: u32, n_rows: u32) -> i32 @export {
     AIR_PERM_B[0] = 0u32
     AIR_PERM_R2[0] = 0u32
     AIR_PERM_R3[0] = 0u32
+    AIR_PERM_R4[0] = 0u32
+    AIR_PERM_R5[0] = 0u32
+    AIR_PERM_R6[0] = 0u32
+    AIR_PERM_R7[0] = 0u32
     AIR_PERM_START[0] = 0u32
     AIR_PERM_NV[0] = 0u32
     let mut k : u64 = 0u64
@@ -395,6 +403,13 @@ fn air_combine_ext4(j: u64, w_cols: u64, d_dom: u64) {
         if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) }
         if AIR_TT_PERM[t] == 4u32 { coef = sf_sub(0u32, AIR_PERM_R2[0]) }
         if AIR_TT_PERM[t] == 5u32 { coef = sf_sub(0u32, AIR_PERM_R3[0]) }
+        if AIR_TT_PERM[t] == 6u32 { coef = AIR_PERM_R4[0] }                          /* beta2 */
+        if AIR_TT_PERM[t] == 7u32 { coef = sf_mul(AIR_PERM_R4[0], AIR_PERM_R4[0]) }   /* beta2^2 */
+        if AIR_TT_PERM[t] == 8u32 { coef = AIR_PERM_R5[0] }                          /* beta3 */
+        if AIR_TT_PERM[t] == 9u32 { coef = sf_mul(AIR_PERM_R5[0], AIR_PERM_R5[0]) }   /* beta3^2 */
+        if AIR_TT_PERM[t] == 10u32 { coef = sf_sub(0u32, AIR_PERM_R6[0]) }           /* -alpha4 */
+        if AIR_TT_PERM[t] == 11u32 { coef = AIR_PERM_R7[0] }                         /* beta4 */
+        if AIR_TT_PERM[t] == 12u32 { coef = sf_mul(AIR_PERM_R7[0], AIR_PERM_R7[0]) }  /* beta4^2 */
         let base_term : u32 = sf_mul(coef, sf_mul(va, vb))
         acca = ext2_add(acca, ext2_smul(base_term, AIR_ALPHA_EXT4_A[con]))
         accb = ext2_add(accb, ext2_smul(base_term, AIR_ALPHA_EXT4_B[con]))
@@ -845,13 +860,21 @@ fn air_perm_setup(start: u64, nv: u64) -> u32 @export {
     AIR_PERM_NV[0] = nv as u32
     AIR_PERM_A[0] = air_perm_field(start, nv, 0u64)
     AIR_PERM_B[0] = air_perm_field(start, nv, 4u64)
-    AIR_PERM_R2[0] = air_perm_field(start, nv, 16u64)   /* 2nd/3rd independent challenges: distinct digest slices */
+    AIR_PERM_R2[0] = air_perm_field(start, nv, 16u64)   /* independent challenges: distinct 4-byte digest slices */
     AIR_PERM_R3[0] = air_perm_field(start, nv, 24u64)
+    AIR_PERM_R4[0] = air_perm_field(start, nv, 8u64)
+    AIR_PERM_R5[0] = air_perm_field(start, nv, 12u64)
+    AIR_PERM_R6[0] = air_perm_field(start, nv, 20u64)
+    AIR_PERM_R7[0] = air_perm_field(start, nv, 28u64)
     return AIR_PERM_A[0]
 }
 fn air_perm_beta() -> u32 @export { return AIR_PERM_B[0] }   /* the FS-derived tuple-encoding challenge (the gadget builds products with it) */
 fn air_perm_r2() -> u32 @export { return AIR_PERM_R2[0] }     /* 2nd independent FS-derived permutation challenge (k-repeated grand products) */
 fn air_perm_r3() -> u32 @export { return AIR_PERM_R3[0] }     /* 3rd independent FS-derived permutation challenge */
+fn air_perm_r4() -> u32 @export { return AIR_PERM_R4[0] }     /* beta2 (2nd tuple-encoding challenge) */
+fn air_perm_r5() -> u32 @export { return AIR_PERM_R5[0] }     /* beta3 */
+fn air_perm_r6() -> u32 @export { return AIR_PERM_R6[0] }     /* alpha4 */
+fn air_perm_r7() -> u32 @export { return AIR_PERM_R7[0] }     /* beta4 */
 
 fn air_stark_prove() -> i32 @export {
     air_build_lde()

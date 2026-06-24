@@ -1,4 +1,12 @@
-# III — CRITICAL zkVM soundness hole: the committed STARK has NO low-degree test on the TRACE
+# III — CRITICAL zkVM soundness hole: the committed STARK has NO low-degree test on the TRACE  **[FIXED 2026-06-24]**
+
+> **STATUS: FIXED in `zk_ext4_stark_committed.iii`.** `trace_fri_commit()` adds a FRI low-degree test directly on
+> the committed trace LDE (lifted to GF(p⁴); layer 0 tied to `TROOT` by a per-query consistency open); `verify()`
+> checks its final-constant + fold-consistency. The executable attack (`build_attack`/`zk_trace_attack_k`) now finds
+> NO accepting `kk` (was rc=6 ACCEPT → now rc=99), and the gadget's own (S)/(S2) checks confirm the attack is
+> rejected **specifically by the trace LDT** (code ≥20, load-bearing — not a dead check). Honest accepts; V/O/R still
+> reject. **Owed:** carry the identical fix into `zk_air.iii::air_stark_verify` (shares the gap, more cleanly broken)
+> before the full-fused "production" claim is restored; recompute the production bound at the real query count.
 
 **Found:** 2026-06-24, by an adversarial soundness-audit Workflow (5 surfaces, each finding independently
 re-checked by a second refuter; the polynomial identity in the attack advisor-reconfirmed). **Severity:

@@ -18,15 +18,18 @@
  * (a claimed f value inconsistent with TROOT) is REJECTED; (R) a corrupted committed root is REJECTED; (S) the
  * trace-low-degree SOUNDNESS gap is CLOSED (see below).
  *
- * !!! SOUNDNESS GAP (found 2026-06-24, DOCS/III-ZKVM-TRACE-LDT-GAP.md) -- the (S) check, currently RED !!!
- * verify() bound the trace by MERKLE ONLY (values, not degree); FRI ran only on the CP layers, never the trace.  A
- * malicious prover commits an HONEST low-degree CP + a SEPARATELY-committed HIGH-DEGREE trace agreeing with the LDE
- * off-H but violating next=cur^2 at one row -> verify() ACCEPTS a FALSE statement (build_attack/zk_trace_attack_k
- * demonstrate it executably).  The ~2^-86 "production soundness" presumed a low-degree trace the protocol never
- * enforced.  FIX (in progress): a FRI low-degree test on the trace LDE (deg < N) -> G=zh*CP-fac*combine has deg < 2N,
- * so vanishing at N of D random queries forces G==0.  Until the trace LDT lands, (S) returns 6 and this gadget is NOT
- * production-sound.  Adversary-verified end-to-end: a committed, witness-free STARK whose soundness rests on the
- * Merkle binding AND (after the fix) the trace+CP low-degree tests. */
+ * SOUNDNESS GAP found + FIXED 2026-06-24 (DOCS/III-ZKVM-TRACE-LDT-GAP.md).  Originally verify() bound the trace by
+ * MERKLE ONLY (values, not degree) and FRI touched only the CP layers, so a malicious prover could commit an HONEST
+ * low-degree CP + a SEPARATELY-committed HIGH-DEGREE trace (agreeing with the LDE off-H but violating next=cur^2 at
+ * one row) and verify() ACCEPTED a FALSE statement -- build_attack/zk_trace_attack_k demonstrate it executably.
+ * FIX (LANDED): trace_fri_commit() adds a FRI LOW-DEGREE TEST directly on the committed trace LDE (lifted to GF(p^4),
+ * layer 0 tied to TROOT by a per-query consistency open), and verify() checks its final-constant + fold-consistency.
+ * A high-degree committed trace folds to a NON-constant final layer -> REJECT (codes 20-24).  With deg(trace)<N,
+ * G=zh*CP-fac*combine has degree<2N so vanishing at the queried points forces G==0.  The (S)/(S2) checks confirm the
+ * attack is now REJECTED *by the trace LDT* (load-bearing, not a dead check).  Adversary-verified end-to-end: a
+ * committed, witness-free STARK whose soundness now rests on the Merkle binding AND the trace+CP low-degree tests.
+ * (This N=16/16-query gadget gives ~2^-16 line-755 soundness; the ~2^-86 PRODUCTION figure is the full fused zkVM at
+ * 128 queries -- the SAME trace-LDT fix must be carried into zk_air::air_stark_verify, which shares the gap.) */
 module zk_ext4_stark_committed
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
@@ -81,6 +84,13 @@ var TQ   : [u8; 4]
 var FRA  : [u64; 1]      var FRB : [u64; 1]
 var TF   : [u32; 16]                            /* the trace column */
 var TT   : [u32; 16]                            /* SOUNDNESS-DEMO: the tampered (decoupled, high-degree) committed trace */
+/* TRACE low-degree test (the soundness fix): a SECOND FRI directly on the committed trace LDE (lifted to GF(p^4)),
+ * mirroring the CP FRI.  Layer 0 = lift(committed trace) committed as TFROOT[0] + tied to TROOT by a per-query
+ * consistency check; folding to a constant final layer proves the committed trace is degree < N. */
+var TFA  : [u64; 124]   var TFB : [u64; 124]    /* trace FRI layers (GF(p^4) lift of the committed trace) */
+var TFROOT : [u8; 256]                          /* per-trace-FRI-layer Merkle root */
+var TFRR : [u64; 8]     var TFRI : [u64; 8]     /* trace fold challenges (FS from each trace layer root) */
+var TFOFFS: [u64; 8]    var TFSIZES: [u64; 8]
 
 fn base_inv(v: u32) -> u32 {
     let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
@@ -116,10 +126,58 @@ fn ser_leaf(idx: u64, off: u64) {
     while k < 8u64 { LEAF[base + 8u64 + k] = ((b >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
 }
 fn ser_layer(off: u64, size: u64) { let mut i : u64 = 0u64  while i < size { ser_leaf(i, off)  i = i + 1u64 } }
+fn ser_leaf_tf(idx: u64, off: u64) {
+    let a : u64 = TFA[off + idx]  let b : u64 = TFB[off + idx]
+    let base : u64 = idx * 16u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { LEAF[base + k] = ((a >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+    k = 0u64
+    while k < 8u64 { LEAF[base + 8u64 + k] = ((b >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+}
+fn ser_layer_tf(off: u64, size: u64) { let mut i : u64 = 0u64  while i < size { ser_leaf_tf(i, off)  i = i + 1u64 } }
+/* TRACE low-degree test (the soundness fix): a FRI on the committed trace LDE (lifted to GF(p^4)), mirroring the CP
+ * FRI.  Layer 0 = lift(committed TLEAF); fold to a constant final layer.  A high-degree committed trace folds to a
+ * NON-constant final layer -> the verifier rejects.  Committed AFTER the CP FRI; the queries bind the final trace root. */
+fn trace_fri_commit() {
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let f : u32 = (TLEAF[j * 4u64] as u32) | ((TLEAF[j * 4u64 + 1u64] as u32) << 8u32) | ((TLEAF[j * 4u64 + 2u64] as u32) << 16u32) | ((TLEAF[j * 4u64 + 3u64] as u32) << 24u32)
+        TFA[j] = e2pack(f, 0u32)  TFB[j] = e2pack(0u32, 0u32)
+        j = j + 1u64
+    }
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
+    while size > 4u64 {
+        TFOFFS[li] = off  TFSIZES[li] = size
+        ser_layer_tf(off, size)
+        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&TFROOT as u64) + li * 32u64)
+        keccak256_oneshot((&TFROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        TFRR[li] = e2pack(rd4(0u64), rd4(4u64))  TFRI[li] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut k : u64 = 0u64
+        while k < half {
+            foldp4(TFA[off + k], TFB[off + k], TFA[off + k + half], TFB[off + k + half], TFRR[li], TFRI[li], OM[str * k])
+            TFA[noff + k] = FRA[0]  TFB[noff + k] = FRB[0]
+            k = k + 1u64
+        }
+        off = noff  size = half  li = li + 1u64
+    }
+    TFOFFS[li] = off  TFSIZES[li] = size
+    ser_layer_tf(off, size)
+    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&TFROOT as u64) + li * 32u64)
+}
 fn qleaf_a() -> u64 { let mut a : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 { a = a | ((QLEAF[k] as u64) << (8u64 * k))  k = k + 1u64 }  return a }
 fn qleaf_b() -> u64 { let mut b : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 { b = b | ((QLEAF[8u64 + k] as u64) << (8u64 * k))  k = k + 1u64 }  return b }
 fn open_leaf(off: u64, size: u64, idx: u64) -> u32 {
     ser_layer(off, size)
+    let plen : u32 = merkle_proof_len_for(size as u32, idx as u32)
+    merkle_compute_proof((&LEAF as u64), 16u64, merkle_pack_count_index(size as u32, idx as u32), (&PRF as u64))
+    let lp : *u8 = ((&LEAF as u64) + idx * 16u64) as *u8
+    let mut k : u64 = 0u64  while k < 16u64 { QLEAF[k] = lp[k]  k = k + 1u64 }
+    return plen
+}
+/* open trace-FRI layer leaf (16-byte GF(p^4)) -- serializes TFA/TFB; caller merkle_verify_proof's against TFROOT. */
+fn open_leaf_tf(off: u64, size: u64, idx: u64) -> u32 {
+    ser_layer_tf(off, size)
     let plen : u32 = merkle_proof_len_for(size as u32, idx as u32)
     merkle_compute_proof((&LEAF as u64), 16u64, merkle_pack_count_index(size as u32, idx as u32), (&PRF as u64))
     let lp : *u8 = ((&LEAF as u64) + idx * 16u64) as *u8
@@ -198,10 +256,12 @@ fn build(forge: u64) {
     OFFS[li] = off  SIZES[li] = size
     ser_layer(off, size)
     merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+    trace_fri_commit()                               /* SOUNDNESS FIX: low-degree test on the committed trace itself */
 }
 
 /* VERIFIER: re-derive challenges from the committed roots; final-constant; per query open+verify trace + CP + FRI
- * layers against their roots; check line-755 (CP*Z_T == alpha*(f_next - f^2)) + FRI fold-consistency. */
+ * layers against their roots; check line-755 (CP*Z_T == alpha*(f_next - f^2)) + FRI fold-consistency + the TRACE
+ * low-degree FRI (binds the committed trace to degree < N, closing the trace-LDT soundness gap). */
 fn verify() -> u64 {
     /* re-derive alpha from the committed trace root. */
     keccak256_oneshot((&TROOT as u64), 32u64, (&DIG as u64))
@@ -219,8 +279,22 @@ fn verify() -> u64 {
     let fa0 : u64 = FA[foff]  let fb0 : u64 = FB[foff]
     let mut c : u64 = 1u64
     while c < 4u64 { if FA[foff + c] != fa0 { return 2u64 }  if FB[foff + c] != fb0 { return 2u64 }  c = c + 1u64 }
-    /* queries from keccak(final FRI root). */
-    keccak256_oneshot((&ROOT as u64) + nl * 32u64, 32u64, (&DIG as u64))
+    /* TRACE low-degree FRI: re-derive its fold challenges from the committed trace-FRI roots. */
+    let mut tsz : u64 = DOM  let mut toff : u64 = 0u64  let mut ti : u64 = 0u64
+    while tsz > 4u64 {
+        TFOFFS[ti] = toff  TFSIZES[ti] = tsz
+        keccak256_oneshot((&TFROOT as u64) + ti * 32u64, 32u64, (&DIG as u64))
+        TFRR[ti] = e2pack(rd4(0u64), rd4(4u64))  TFRI[ti] = e2pack(rd4(8u64), rd4(12u64))
+        toff = toff + tsz  tsz = tsz / 2u64  ti = ti + 1u64
+    }
+    let tnl : u64 = ti  let tfoff : u64 = toff
+    TFOFFS[tnl] = tfoff  TFSIZES[tnl] = 4u64
+    /* trace FRI final-constant: a degree-<N committed trace folds to a constant; a HIGH-degree one does NOT -> REJECT. */
+    let tfa0 : u64 = TFA[tfoff]  let tfb0 : u64 = TFB[tfoff]
+    let mut tc : u64 = 1u64
+    while tc < 4u64 { if TFA[tfoff + tc] != tfa0 { return 20u64 }  if TFB[tfoff + tc] != tfb0 { return 20u64 }  tc = tc + 1u64 }
+    /* queries from keccak(final TRACE-FRI root) -- the LAST commitment, so the query set binds the trace LDT too. */
+    keccak256_oneshot((&TFROOT as u64) + tnl * 32u64, 32u64, (&DIG as u64))
     let mut qi : u64 = 0u64
     while qi < 16u64 {
         let pq : *u8 = ((&DIG as u64) + qi) as *u8
@@ -260,6 +334,31 @@ fn verify() -> u64 {
             if FRA[0] != nxa { return 9u64 }
             if FRB[0] != nxb { return 9u64 }
             li = li + 1u64
+        }
+        /* TRACE FRI per query: (a) layer-0 consistency -- the FRI's layer 0 IS the committed trace lift(f(q0)); */
+        let pt0 : u32 = open_leaf_tf(0u64, DOM, q0)
+        if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, q0 as u32, pt0), (&PRF as u64), (&TFROOT as u64)) == 0u8 { return 21u64 }
+        if qleaf_a() != e2pack(fq, 0u32) { return 22u64 }
+        if qleaf_b() != e2pack(0u32, 0u32) { return 22u64 }
+        /* (b) fold-consistency down to the constant final layer -- a high-degree committed trace fails this/return 20. */
+        let mut tli : u64 = 0u64
+        while tli < tnl {
+            let ts : u64 = TFSIZES[tli]  let to : u64 = TFOFFS[tli]  let thalf : u64 = ts / 2u64
+            let tqm : u64 = q0 & (thalf - 1u64)
+            let tp1 : u32 = open_leaf_tf(to, ts, tqm)
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, tqm as u32, tp1), (&PRF as u64), (&TFROOT as u64) + tli * 32u64) == 0u8 { return 23u64 }
+            let tloa : u64 = qleaf_a()  let tlob : u64 = qleaf_b()
+            let tp2 : u32 = open_leaf_tf(to, ts, tqm + thalf)
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, (tqm + thalf) as u32, tp2), (&PRF as u64), (&TFROOT as u64) + tli * 32u64) == 0u8 { return 23u64 }
+            let thia : u64 = qleaf_a()  let thib : u64 = qleaf_b()
+            let tno : u64 = TFOFFS[tli + 1u64]  let tns : u64 = TFSIZES[tli + 1u64]
+            let tp3 : u32 = open_leaf_tf(tno, tns, tqm)
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, tqm as u32, tp3), (&PRF as u64), (&TFROOT as u64) + (tli + 1u64) * 32u64) == 0u8 { return 23u64 }
+            let tnxa : u64 = qleaf_a()  let tnxb : u64 = qleaf_b()
+            foldp4(tloa, tlob, thia, thib, TFRR[tli], TFRI[tli], OM[(DOM / ts) * tqm])
+            if FRA[0] != tnxa { return 24u64 }
+            if FRB[0] != tnxb { return 24u64 }
+            tli = tli + 1u64
         }
         qi = qi + 1u64
     }
@@ -325,6 +424,7 @@ fn build_attack(kk: u32) {
     OFFS[li] = off  SIZES[li] = size
     ser_layer(off, size)
     merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+    trace_fri_commit()                               /* the attack also commits a trace FRI -- but on the HIGH-degree trace */
 }
 fn zk_trace_attack_k() -> u32 @export {
     fill_om()
@@ -363,5 +463,10 @@ fn main() -> u64 {
      * tampered trace agreeing with the LDE off-H) must be REJECTED.  zk_trace_attack_k()!=0 means verify() ACCEPTED
      * a false trace -> the trace is not degree-bound.  RED (returns 6) until a trace low-degree test is added. */
     if zk_trace_attack_k() != 0u32 { return 6u64 }
+    /* (S2) confirm the trace LDT is the LOAD-BEARING catcher (not a dead check beside an incidental reject): the
+     * attack must reject with a TRACE-FRI code -- 20 (final-constant non-constant), 21/22 (layer-0 consistency),
+     * 23/24 (fold-consistency) -- NOT an unrelated <20 code. */
+    build_attack(1u32)
+    if verify() < 20u64 { return 7u64 }
     return 99u64
 }

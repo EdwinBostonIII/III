@@ -631,8 +631,21 @@ fn pstmt() {
         while more==1u32 {
             let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }
             let nt:u32=C
-            if ispat(C+1u32, Q_LBR)==1u32 {                         /* NAME[NUM] local array -> prescan_arr; skip to , or ; */
-                C=C+1u32  let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if cp(Q_COM)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } }
+            if ispat(C+1u32, Q_LBR)==1u32 {                         /* NAME[NUM] [= {...}] local array (base from prescan_arr) */
+                let arrnt:u32=nt  C=C+1u32                          /* at [ */
+                let mut gd:u32=1u32  while gd==1u32 { if cp(Q_RBR)==1u32 {gd=0u32} else { if TK[C as u64]==0u32 {gd=0u32} else {C=C+1u32} } }  eat(Q_RBR)   /* skip [NUM] */
+                let mut g2d:u32=1u32  while g2d==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  let mut gx:u32=1u32  while gx==1u32 { if cp(Q_RBR)==1u32 {gx=0u32} else { if TK[C as u64]==0u32 {gx=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else {g2d=0u32} }   /* skip extra dims */
+                if cp(Q_ASN)==1u32 { C=C+1u32
+                    if cp(Q_LB)==1u32 { C=C+1u32                    /* = { e0, e1, ... } -> RUNTIME element stores (re-inits each call; handles expression inits, not just constants) */
+                        let ab:i64=abase(arrnt)  let esz:i64=aesize(arrnt)  let am:i64=awmask(arrnt)  let mut k:i64=0i64  let mut ge:u32=1u32
+                        while ge==1u32 {
+                            if cp(Q_RB)==1u32 {ge=0u32} else { if TK[C as u64]==0u32 {ge=0u32}
+                            else { econst(ab + (k*esz))  ebin(0u32)  if am!=0i64 {econst(am)  eb(0x25u32)}  estore(esz)  k=k+1i64
+                                   if cp(Q_COM)==1u32 {C=C+1u32} } }
+                        }
+                        eat(Q_RB)
+                    } else { ebin(0u32)  eb(0x72u32) }              /* = non-brace (defensive) */
+                }
             } else {
                 C=C+1u32  let s:u32=ladd(nt)
                 if isp==1u32 { LPSZ[s as u64]=bsz  LPSG[s as u64]=bsg  if isc==1u32 { LCH[s as u64]=1u32 } }   /* pointer local: pointee width+sign */

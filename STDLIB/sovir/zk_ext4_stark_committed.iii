@@ -15,8 +15,18 @@
  *
  * Returns 99 iff: (H) the honest trace ACCEPTS; (V) a VIOLATING trace (a row breaks next=cur^2) is REJECTED (CP is not
  * the true low-degree quotient -> final FRI layer not constant / line-755 fails at a query); (O) a forged trace OPENING
- * (a claimed f value inconsistent with TROOT) is REJECTED; (R) a corrupted committed root is REJECTED.  Adversary-
- * verified end-to-end: a committed, witness-free STARK whose soundness rests on the Merkle binding, not shared memory. */
+ * (a claimed f value inconsistent with TROOT) is REJECTED; (R) a corrupted committed root is REJECTED; (S) the
+ * trace-low-degree SOUNDNESS gap is CLOSED (see below).
+ *
+ * !!! SOUNDNESS GAP (found 2026-06-24, DOCS/III-ZKVM-TRACE-LDT-GAP.md) -- the (S) check, currently RED !!!
+ * verify() bound the trace by MERKLE ONLY (values, not degree); FRI ran only on the CP layers, never the trace.  A
+ * malicious prover commits an HONEST low-degree CP + a SEPARATELY-committed HIGH-DEGREE trace agreeing with the LDE
+ * off-H but violating next=cur^2 at one row -> verify() ACCEPTS a FALSE statement (build_attack/zk_trace_attack_k
+ * demonstrate it executably).  The ~2^-86 "production soundness" presumed a low-degree trace the protocol never
+ * enforced.  FIX (in progress): a FRI low-degree test on the trace LDE (deg < N) -> G=zh*CP-fac*combine has deg < 2N,
+ * so vanishing at N of D random queries forces G==0.  Until the trace LDT lands, (S) returns 6 and this gadget is NOT
+ * production-sound.  Adversary-verified end-to-end: a committed, witness-free STARK whose soundness rests on the
+ * Merkle binding AND (after the fix) the trace+CP low-degree tests. */
 module zk_ext4_stark_committed
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
@@ -70,6 +80,7 @@ var QLEAF: [u8; 16]
 var TQ   : [u8; 4]
 var FRA  : [u64; 1]      var FRB : [u64; 1]
 var TF   : [u32; 16]                            /* the trace column */
+var TT   : [u32; 16]                            /* SOUNDNESS-DEMO: the tampered (decoupled, high-degree) committed trace */
 
 fn base_inv(v: u32) -> u32 {
     let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
@@ -255,6 +266,77 @@ fn verify() -> u64 {
     return 1u64
 }
 
+/* ============================ SOUNDNESS DEMONSTRATION (the trace-LDT gap) ============================
+ * MALICIOUS PROVER: commit an HONEST low-degree CP (= alpha*Q_h, FRI-valid) but a SEPARATELY-committed,
+ * genuinely HIGH-DEGREE trace that equals the honest LDE at the 48 non-H points yet violates next=cur^2 at
+ * exactly one row (4->5).  Because verify() binds the trace by MERKLE ONLY (values, not degree) and FRI
+ * never touches it, the pointwise line-755 catches the violation at exactly ONE of 64 queries.  We GRIND the
+ * violation magnitude kk so that the proof's own 16-query set misses that one bad point -> verify() ACCEPTS a
+ * FALSE statement.  zk_trace_attack_k() returns the first kk for which verify ACCEPTS (0 = none in range =
+ * the hole is CLOSED, e.g. after a trace low-degree test is added). */
+fn build_attack(kk: u32) {
+    air_reset(1u32, N as u32)
+    let mut v : u32 = 2u32  let mut i : u64 = 0u64
+    while i < N { TF[i] = v  v = sf_mul(v, v)  i = i + 1u64 }
+    i = 0u64  while i < N { air_set_trace(i, 0u64, TF[i])  i = i + 1u64 }
+    air_build_lde()                                  /* HONEST air state -> CP will be the honest low-degree quotient */
+    /* tampered COMMITTED rows: honest 0..4, row5 = row4^2 + kk (break 4->5), re-square forward (only 4->5 breaks) */
+    i = 0u64  while i < N { TT[i] = TF[i]  i = i + 1u64 }
+    TT[5u64] = sf_add(sf_mul(TF[4u64], TF[4u64]), kk)
+    i = 6u64  while i < N { TT[i] = sf_mul(TT[i - 1u64], TT[i - 1u64])  i = i + 1u64 }
+    /* commit TLEAF: H points (j%BLOW==0, row r=j/BLOW) = tampered TT[r]; non-H = honest LDE extension. */
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let mut f : u32 = 0u32
+        if (j & (BLOW - 1u64)) == 0u64 { f = TT[j / BLOW] }
+        if (j & (BLOW - 1u64)) != 0u64 { f = air_lde_at(0u64, j) }
+        TLEAF[j * 4u64]        = (f & 0xFFu32) as u8
+        TLEAF[j * 4u64 + 1u64] = ((f >> 8u32) & 0xFFu32) as u8
+        TLEAF[j * 4u64 + 2u64] = ((f >> 16u32) & 0xFFu32) as u8
+        TLEAF[j * 4u64 + 3u64] = ((f >> 24u32) & 0xFFu32) as u8
+        j = j + 1u64
+    }
+    merkle_compute_root((&TLEAF as u64), DOM as u32, 4u64, (&TROOT as u64))
+    keccak256_oneshot((&TROOT as u64), 32u64, (&DIG as u64))
+    ALA[0] = e2pack(rd4(0u64), rd4(4u64))  ALB[0] = e2pack(rd4(8u64), rd4(12u64))
+    air_add_term(0u32, 1u32, 2u32, 0u32)
+    air_add_term(0u32, NEG1, 1u32, 1u32)
+    air_set_alpha_ext4(0u64, ALA[0], ALB[0])
+    air_build_cp_ext4()                              /* CP = alpha*Q_h from the HONEST air state -> genuinely low-degree */
+    j = 0u64
+    while j < DOM { FA[j] = air_cp_ext4_a(j)  FB[j] = air_cp_ext4_b(j)  j = j + 1u64 }
+    /* FRI fold + per-layer Merkle commit (identical to build()) -- FRI ACCEPTS this honest CP. */
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
+    while size > 4u64 {
+        OFFS[li] = off  SIZES[li] = size
+        ser_layer(off, size)
+        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+        keccak256_oneshot((&ROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        RR[li] = e2pack(rd4(0u64), rd4(4u64))  RI[li] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut k : u64 = 0u64
+        while k < half {
+            foldp4(FA[off + k], FB[off + k], FA[off + k + half], FB[off + k + half], RR[li], RI[li], OM[str * k])
+            FA[noff + k] = FRA[0]  FB[noff + k] = FRB[0]
+            k = k + 1u64
+        }
+        off = noff  size = half  li = li + 1u64
+    }
+    OFFS[li] = off  SIZES[li] = size
+    ser_layer(off, size)
+    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+}
+fn zk_trace_attack_k() -> u32 @export {
+    fill_om()
+    let mut kk : u32 = 1u32
+    while kk < 256u32 {
+        build_attack(kk)
+        if verify() == 1u64 { return kk }           /* ACCEPT of a false trace -> the hole, at this kk */
+        kk = kk + 1u32
+    }
+    return 0u32                                      /* no false accept in range -> hole CLOSED */
+}
+
 fn main() -> u64 {
     fill_om()
     /* (H) honest trace: committed STARK ACCEPTS. */
@@ -277,5 +359,9 @@ fn main() -> u64 {
     /* (D) honest re-proves. */
     build(0u64)
     if verify() != 1u64 { return 5u64 }
+    /* (S) SOUNDNESS -- the trace low-degree gap: a decoupled HIGH-DEGREE committed trace (honest low-degree CP +
+     * tampered trace agreeing with the LDE off-H) must be REJECTED.  zk_trace_attack_k()!=0 means verify() ACCEPTED
+     * a false trace -> the trace is not degree-bound.  RED (returns 6) until a trace low-degree test is added. */
+    if zk_trace_attack_k() != 0u32 { return 6u64 }
     return 99u64
 }

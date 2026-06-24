@@ -119,6 +119,11 @@ fn build_cp(forge: u64) {
     while j < DOM { FA[j] = air_cp_ext4_a(j)  FB[j] = air_cp_ext4_b(j)  j = j + 1u64 }
 }
 fn boundaries_ok() -> u64 {   /* the permutation: equal products at all 3 independent challenges (k=3 -> ~2^-81). */
+    /* SEED PIN (grand-product Z(1)=1): each accumulator MUST start at 1 -- else a non-permutation rigs
+     * S_k[0]=Pi_p_k*inv(Pi_s_k) so the final equality holds vacuously (DOCS/III-ZK-PERM-SEED-GAP.md). */
+    if P1[0] != 1u32 { return 0u64 }  if S1[0] != 1u32 { return 0u64 }
+    if P2[0] != 1u32 { return 0u64 }  if S2[0] != 1u32 { return 0u64 }
+    if P3[0] != 1u32 { return 0u64 }  if S3[0] != 1u32 { return 0u64 }
     if P1[63] != S1[63] { return 0u64 }
     if P2[63] != S2[63] { return 0u64 }
     if P3[63] != S3[63] { return 0u64 }

@@ -1,0 +1,66 @@
+/* vdbg.iii -- debug verifier: returns the INDEX of the first function whose body fails verification
+ * (eval-stack underflow / unknown opcode / control imbalance), or 250 if all valid.  Mirrors
+ * svir_verify's verify_body exactly; used to localize ccsv codegen gaps in the large seed modules. */
+module vdbg
+extern @abi(c-msvc-x64) fn svir_ptr() -> u64 from "svir_prog.iii"
+extern @abi(c-msvc-x64) fn svir_len() -> u64 from "svir_prog.iii"
+
+fn vb(base: u64, i: u64) -> u32 { let p : *u8 = (base + i) as *u8  return p[0u64] as u32 }
+var CSN : u32 = 0u32
+
+fn body_ok(base: u64, boff: u64, blen: u64) -> u32 {
+    CSN = 0u32
+    let mut depth : i64 = 0i64
+    let mut p : u64 = 0u64
+    while p < blen {
+        let op : u32 = vb(base, boff + p)
+        p = p + 1u64
+        let mut known : u32 = 0u32
+        if op == 0x01u32 { p = p + 8u64  depth = depth + 1i64  known = 1u32 }
+        if op == 0x10u32 { p = p + 1u64  depth = depth + 1i64  known = 1u32 }
+        if op == 0x11u32 { p = p + 1u64  depth = depth - 1i64  known = 1u32 }
+        if op >= 0x20u32 { if op <= 0x35u32 { depth = depth - 1i64  known = 1u32 } }
+        if op == 0x40u32 { CSN = CSN + 1u32  known = 1u32 }
+        if op == 0x41u32 { CSN = CSN + 1u32  known = 1u32 }
+        if op == 0x42u32 { depth = depth - 1i64  CSN = CSN + 1u32  known = 1u32 }
+        if op == 0x43u32 { known = 1u32 }
+        if op == 0x44u32 { if CSN == 0u32 { return 5u32 }  CSN = CSN - 1u32  known = 1u32 }
+        if op == 0x50u32 { p = p + 1u64  known = 1u32 }
+        if op == 0x51u32 { p = p + 1u64  depth = depth - 1i64  known = 1u32 }
+        if op == 0x60u32 { depth = depth - 1i64  known = 1u32 }
+        if op == 0x70u32 { let ac : u32 = vb(base, boff + p + 1u64)  p = p + 2u64  depth = depth - (ac as i64) + 1i64  known = 1u32 }
+        if op == 0x71u32 { depth = depth - 1i64  known = 1u32 }
+        if op == 0x72u32 { depth = depth - 1i64  known = 1u32 }
+        if op == 0x80u32 { known = 1u32 }
+        if op == 0x81u32 { depth = depth - 2i64  known = 1u32 }
+        if op == 0x82u32 { known = 1u32 }
+        if op == 0x83u32 { depth = depth - 2i64  known = 1u32 }
+        if op == 0x84u32 { known = 1u32 }
+        if op == 0x85u32 { known = 1u32 }
+        if op == 0x86u32 { known = 1u32 }
+        if op == 0x87u32 { known = 1u32 }
+        if op == 0x88u32 { depth = depth - 2i64  known = 1u32 }
+        if op == 0x89u32 { depth = depth - 2i64  known = 1u32 }
+        if known == 0u32 { return 2u32 }
+        if depth < 0i64 { return 8u32 }
+    }
+    if CSN != 0u32 { return 5u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let src : u64 = svir_ptr()
+    let len : u64 = svir_len()
+    let nfunc : u32 = vb(src, 0u64)
+    let mut off : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < nfunc {
+        let blen : u64 = (vb(src, off + 2u64) as u64) | ((vb(src, off + 3u64) as u64) << 8u64)
+        let boff : u64 = off + 4u64
+        let r : u32 = body_ok(src, boff, blen)
+        if r != 0u32 { return i as u64 }      /* exit code = index of first failing function */
+        off = boff + blen
+        i = i + 1u32
+    }
+    return 250u64
+}

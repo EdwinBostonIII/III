@@ -768,10 +768,23 @@ fn fn_nametok(ft: u32) -> u32 {
 }
 fn fn_retmask(ft: u32) -> i64 { let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }  return type_mask(q) }   /* the return type's width mask */
 fn rec_fn(ft: u32) { let nt:u32=fn_nametok(ft)  FNO[FN as u64]=TO[nt as u64]  FNL[FN as u64]=TL[nt as u64]  FNP[FN as u64]=cparams(nt)  FNT[FN as u64]=ft  FRM[FN as u64]=fn_retmask(ft)  FN=FN+1u32 }
+/* nm = a function-name token, nm+1 = `(` : is this a DEFINITION `(...) {` (vs a prototype `(...) ;` from an
+ * included header / forward decl)?  Walk to the matching `)` (paren-depth) and require the next token to be `{`. */
+fn fn_has_body(nm: u32) -> u32 {
+    let mut q:u32=nm+2u32  let mut depth:i32=1i32  let mut g:u32=1u32
+    while g==1u32 {
+        if TK[q as u64]==0u32 { return 0u32 }
+        if ispat(q,Q_LP)==1u32 { depth=depth+1i32 }
+        if ispat(q,Q_RP)==1u32 { depth=depth-1i32 }
+        if depth==0i32 { g=0u32 } else { q=q+1u32 }
+    }
+    if ispat(q+1u32,Q_LB)==1u32 { return 1u32 }   /* `) {` = definition ; `) ;` = prototype -> skip */
+    return 0u32
+}
 fn is_fn(t: u32) -> u32 {
-    let mut ok:u32=0u32  if isqual(t)==1u32 {ok=1u32}  if dtype(t)==1u32 {ok=1u32}  if kw(t,"struct" as u64,6u32)==1u32 {ok=1u32}
+    let mut ok:u32=0u32  if isqual(t)==1u32 {ok=1u32}  if dtype(t)==1u32 {ok=1u32}  if kw(t,"struct" as u64,6u32)==1u32 {ok=1u32}  if kw(t,"union" as u64,5u32)==1u32 {ok=1u32}
     if ok==0u32 { return 0u32 }
-    let nm:u32=fn_nametok(t)  if TK[nm as u64]==1u32 { if ispat(nm+1u32,Q_LP)==1u32 { return 1u32 } }
+    let nm:u32=fn_nametok(t)  if TK[nm as u64]==1u32 { if ispat(nm+1u32,Q_LP)==1u32 { if fn_has_body(nm)==1u32 { return 1u32 } } }   /* DEFINITION only (not a prototype) */
     return 0u32
 }
 fn prescan() {

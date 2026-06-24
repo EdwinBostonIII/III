@@ -324,7 +324,11 @@ fn air_combine_ext2(j: u64, w_cols: u64, d_dom: u64) -> u64 {
         let con : u64 = AIR_TT_CON[t] as u64
         let va  : u32 = air_eval_var(AIR_TT_A[t] as u64, j, wc, dd)
         let vb  : u32 = air_eval_var(AIR_TT_B[t] as u64, j, wc, dd)
-        let base_term : u32 = sf_mul(AIR_TT_COEF[t], sf_mul(va, vb))           /* coef * va * vb (base-field) */
+        let mut coef : u32 = AIR_TT_COEF[t]                                    /* perm terms: FS-derived coefficient */
+        if AIR_TT_PERM[t] == 1u32 { coef = sf_sub(0u32, AIR_PERM_A[0]) }       /* -alpha */
+        if AIR_TT_PERM[t] == 2u32 { coef = AIR_PERM_B[0] }                     /* beta */
+        if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) } /* beta^2 */
+        let base_term : u32 = sf_mul(coef, sf_mul(va, vb))                     /* (perm-aware) coef * va * vb (base-field) */
         acc = ext2_add(acc, ext2_smul(base_term, AIR_ALPHA_EXT2[con]))         /* + alpha_ext2[con] * base_term */
         t = t + 1u64
     }
@@ -377,7 +381,11 @@ fn air_combine_ext4(j: u64, w_cols: u64, d_dom: u64) {
         let con : u64 = AIR_TT_CON[t] as u64
         let va  : u32 = air_eval_var(AIR_TT_A[t] as u64, j, wc, dd)
         let vb  : u32 = air_eval_var(AIR_TT_B[t] as u64, j, wc, dd)
-        let base_term : u32 = sf_mul(AIR_TT_COEF[t], sf_mul(va, vb))
+        let mut coef : u32 = AIR_TT_COEF[t]                                    /* perm terms: FS-derived coefficient */
+        if AIR_TT_PERM[t] == 1u32 { coef = sf_sub(0u32, AIR_PERM_A[0]) }
+        if AIR_TT_PERM[t] == 2u32 { coef = AIR_PERM_B[0] }
+        if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) }
+        let base_term : u32 = sf_mul(coef, sf_mul(va, vb))
         acca = ext2_add(acca, ext2_smul(base_term, AIR_ALPHA_EXT4_A[con]))
         accb = ext2_add(accb, ext2_smul(base_term, AIR_ALPHA_EXT4_B[con]))
         t = t + 1u64

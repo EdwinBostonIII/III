@@ -67,7 +67,8 @@ const NN    : u64 = 64u64
 const BLOW  : u64 = 4u64
 const WCOL  : u64 = 19u64
 const G4    : u64 = 4294967298u64
-const NQ    : u64 = 16u64           /* FS query count (demo; the production knob is 128 for ~2^-86) */
+const NQPB  : u64 = 32u64           /* FS queries per keccak batch */
+const NBATCH: u64 = 4u64            /* 4 re-hash batches * 32 = 128 FS queries -> PRODUCTION query soundness ~2^-86 */
 
 var OM   : [u32; 256]
 var FA   : [u64; 512]    var FB : [u64; 512]
@@ -330,11 +331,13 @@ fn verify() -> u64 {
     let fa0 : u64 = FA[foff]  let fb0 : u64 = FB[foff]
     let mut cc : u64 = 1u64
     while cc < 4u64 { if FA[foff + cc] != fa0 { return 0u64 }  if FB[foff + cc] != fb0 { return 0u64 }  cc = cc + 1u64 }
-    /* queries from keccak(final FRI root). */
+    /* queries from keccak(final FRI root): NBATCH re-hash batches of NQPB -> 128 FS-derived queries (~2^-86). */
     keccak256_oneshot((&FROOT as u64) + nl * 32u64, 32u64, (&DIG as u64))
-    let mut qi : u64 = 0u64
-    while qi < NQ {
-        let pq : *u8 = ((&DIG as u64) + (qi & 31u64)) as *u8
+    let mut batch : u64 = 0u64
+    while batch < NBATCH {
+      let mut qi : u64 = 0u64
+      while qi < NQPB {
+        let pq : *u8 = ((&DIG as u64) + qi) as *u8
         let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
         /* bind air's combine: open+verify ALL 19 columns at q0 and at q0+B (every leaf air_eval_var reads). */
         let qn : u64 = (q0 + BLOW) & (DOM - 1u64)
@@ -368,6 +371,9 @@ fn verify() -> u64 {
             li = li + 1u64
         }
         qi = qi + 1u64
+      }
+      keccak256_oneshot((&DIG as u64), 32u64, (&DIG as u64))   /* re-hash for the next query batch */
+      batch = batch + 1u64
     }
     return 1u64
 }

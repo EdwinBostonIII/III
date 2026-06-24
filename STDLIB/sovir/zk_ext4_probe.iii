@@ -1,0 +1,22 @@
+/* zk_ext4_probe.iii -- find a GF(p^2) NON-RESIDUE g (a non-square), the modulus for the GF(p^4) = GF(p^2)[v]/(v^2-g)
+ * tower.  g is a non-square iff the Legendre symbol g^((p^2-1)/2) == -1 (in GF(p^2): e2pack(p-1,0)), == +1 if square.
+ * Tests candidates g = c + u (e2pack(c,1)) for c = 0..30 and returns the first c that is a NON-residue. */
+module zk_ext4_probe
+
+extern @abi(c-msvc-x64) fn ext2_pow(g: u64, e: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+
+const PRIME : u32 = 998244353u32
+
+fn main() -> u64 {
+    let pp : u64 = (PRIME as u64) * (PRIME as u64)
+    let e  : u64 = (pp - 1u64) / 2u64                 /* (p^2 - 1)/2 */
+    let neg1 : u64 = e2pack(PRIME - 1u32, 0u32)       /* -1 in GF(p^2) */
+    let mut c : u32 = 0u32
+    while c < 31u32 {
+        let g : u64 = e2pack(c, 1u32)                 /* g = c + u */
+        if ext2_pow(g, e) == neg1 { return c as u64 } /* first non-residue */
+        c = c + 1u32
+    }
+    return 200u64                                      /* none found in range (unexpected) */
+}

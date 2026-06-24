@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -51,6 +51,10 @@ else say "FAIL zkVM-MEM: zk_svir_mem=$memrc (1=trans 2=bound 7=cp 3=NEG-A 4=NEG-
 ctlrc=$(runzk zk_svir_control)
 if [ "$ctlrc" = "99" ]; then say "zkVM-CONTROL : SVIR control flow (BR/BR_IF + structured BLOCK/LOOP/IF) via a pc-TRANSITION AIR over GF(998244353) -- one-hot (sel_seq,sel_br) selector, next.pc = sel_seq*(pc+1) + sel_br*target ; a back-edge loop pc=[0,1,2,0,1,2,3,4] holds + a FORGED JUMP DESTINATION AND a FAKED FALL-THROUGH both rejected -> 99 (the last new-technique brick; binding selectors to the program table is the follow-on)"
 else say "FAIL zkVM-CONTROL: zk_svir_control=$ctlrc (1=honest 7=cp 2=NEG1-jump-dest 3=NEG2-fake-seq 4=re-prove)"; fail=1; fi
+# (0c6) zkVM CALL: SVIR CALL(0x70)/RETURN(0x60) stack BALANCE via a depth-counter chain closed by air_boundaries_hold.
+callrc=$(runzk zk_svir_call)
+if [ "$callrc" = "99" ]; then say "zkVM-CALL : SVIR CALL/RETURN stack-balance over GF(998244353) -- depth counter (next.depth = depth + is_call - is_ret), closed by air_boundaries_hold (depth_0 = depth_halt = 0) ; nested+sequential calls (depth=[0,1,2,1,2,1,0,0]) balance + a broken counter (transition-caught) AND an UN-RETURNED call (self-consistent chain, depth ends 1!=0, caught ONLY by the boundary) both rejected -> 99 (2nd boundary consumer; LIFO match = the mem permutation layer)"
+else say "FAIL zkVM-CALL: zk_svir_call=$callrc (1=trans 2=bound 7=cp 3=NEG-A 4=NEG-B-trans 5=NEG-B-BOUND 6/8=re-prove)"; fail=1; fi
 # (0d) zkVM TRACE LAYOUT: per-step opcode-dispatched execution (selector VM, ADD/MUL) -- arbitrary bytecode proven.
 vrc=$(runzk zk_svir_vm)
 if [ "$vrc" = "99" ]; then say "zkVM-TRACE : per-step opcode-dispatched VM (selector ADD/MUL, product materialized for degree-2) ; honest execution holds + forged acc AND forged opcode rejected -> 99"

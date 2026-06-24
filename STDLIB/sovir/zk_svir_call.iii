@@ -1,0 +1,105 @@
+/* zk_svir_call.iii -- the SVIR CALL(0x70)/RETURN(0x60) opcodes' STACK-BALANCE arithmetized over GF(998244353) as a
+ * DEPTH-COUNTER chain closed by air_boundaries_hold.  A call stack is consistent iff every CALL is matched by a
+ * RETURN: the stack depth starts at 0, rises +1 per CALL, falls -1 per RETURN, and must return to 0 (balanced) --
+ * an un-returned call (depth doesn't reach 0) or a return-without-call (depth would go negative) is rejected.
+ *
+ * This is the second consumer of air_boundaries_hold (added for the grand-product permutation), but a DISTINCT
+ * argument: a running COUNTER, not a multiset product.  Columns W=3 [is_call, is_ret, depth], N=8.  One degree-1
+ * transition + two booleans:
+ *   con0 (depth update): next.depth - depth - is_call + is_ret == 0     (CALL: +1, RETURN: -1, neither: hold)
+ *   con1 (is_call boolean): is_call^2 - is_call == 0    con2 (is_ret boolean): is_ret^2 - is_ret == 0
+ * Boundaries: depth_0 = 0 (empty stack) and depth_6 = 0 (balanced at halt) -- the BALANCE lives in boundaries
+ * exactly as the permutation closure does; transitions alone leave the endpoints free.
+ * Program: CALL CALL RETURN CALL RETURN RETURN halt -> depth = [0,1,2,1,2,1,0,0] (nested + sequential calls, all
+ * returned).
+ *
+ * Returns 99 iff: the balanced honest trace satisfies BOTH air_constraints_hold (the depth chain) AND
+ * air_boundaries_hold (start = end = 0); a transition-breaking tamper is caught by constraints_hold; AND -- the
+ * boundary's teeth -- an UN-RETURNED call with a SELF-CONSISTENT chain (one RETURN dropped, depth ends at 1, every
+ * transition still holds) is caught ONLY by air_boundaries_hold (depth_6 = 1 != 0).  HONEST RESIDUAL: this proves
+ * the depth BALANCE; the LIFO match (a RETURN pops the most-recent CALL's address) + non-negativity (no underflow)
+ * are the grand-product permutation (zk_svir_mem) + range (zk_svir_range) layers atop -- the named follow-on. */
+module zk_svir_call
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_cp_consistent_at(j: u64) -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundaries_hold() -> u8 from "zk_air.iii"
+
+var ISC : [u32; 8] = [1u32, 1u32, 0u32, 1u32, 0u32, 0u32, 0u32, 0u32]    /* is_call per step */
+var ISR : [u32; 8] = [0u32, 0u32, 1u32, 0u32, 1u32, 1u32, 0u32, 0u32]    /* is_ret  per step */
+var DEP : [u32; 8] = [0u32, 1u32, 2u32, 1u32, 2u32, 1u32, 0u32, 0u32]    /* stack depth BEFORE the step */
+
+fn fill_trace() {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, ISC[i])
+        air_set_trace(i, 1u64, ISR[i])
+        air_set_trace(i, 2u64, DEP[i])
+        i = i + 1u64
+    }
+}
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    /* vars: 0=const1 ; cur 1=is_call 2=is_ret 3=depth ; next 4=is_call 5=is_ret 6=depth. */
+    /* con0 (depth update): next.depth - depth - is_call + is_ret. */
+    air_add_term(0u32, 1u32, 6u32, 0u32)             /* + next.depth */
+    air_add_term(0u32, p - 1u32, 3u32, 0u32)         /* - depth */
+    air_add_term(0u32, p - 1u32, 1u32, 0u32)         /* - is_call */
+    air_add_term(0u32, 1u32, 2u32, 0u32)             /* + is_ret */
+    /* con1 (is_call boolean): is_call^2 - is_call. */
+    air_add_term(1u32, 1u32, 1u32, 1u32)             /* + is_call^2 */
+    air_add_term(1u32, p - 1u32, 1u32, 0u32)         /* - is_call */
+    /* con2 (is_ret boolean): is_ret^2 - is_ret. */
+    air_add_term(2u32, 1u32, 2u32, 2u32)             /* + is_ret^2 */
+    air_add_term(2u32, p - 1u32, 2u32, 0u32)         /* - is_ret */
+    air_set_alpha(0u64, 3u32)
+    air_set_alpha(1u64, 5u32)
+    air_set_alpha(2u64, 7u32)
+}
+
+fn build() {
+    air_reset(3u32, 8u32)
+    air_boundary_reset()
+    fill_trace()
+    setup_constraints()
+    air_add_boundary(2u32, 0u32, 0u32)               /* depth_0 = 0 (empty stack at entry) */
+    air_add_boundary(2u32, 6u32, 0u32)               /* depth at halt = 0 (every call returned) */
+    air_build_lde()
+    air_build_cp()
+}
+
+fn main() -> u64 {
+    /* honest: balanced calls/returns -- the depth chain holds AND closes to 0 at both ends. */
+    build()
+    if air_constraints_hold() != 1u8 { return 1u64 }
+    if air_boundaries_hold() != 1u8 { return 2u64 }
+    if air_cp_consistent_at(1u64) != 1u8 { return 7u64 }
+    /* NEGATIVE A (transition catches a broken counter): tamper depth_3 (1 -> 9) without fixing the chain ->
+     * con0 at row 2: next.depth(9) - 2 - 0 + 1 = 8 != 0. */
+    build()  air_set_trace(3u64, 2u64, 9u32)  air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 0u8 { return 3u64 }
+    /* NEGATIVE B (the boundary's teeth -- an UN-RETURNED call, SELF-CONSISTENT chain): drop one RETURN
+     * (is_ret_5: 1 -> 0) and carry the depth (depth_6,7: 0 -> 1).  Every transition still holds, but the stack
+     * ends at depth 1, not 0 -- caught ONLY by air_boundaries_hold (depth_6 = 1 != 0). */
+    build()
+    air_set_trace(5u64, 1u64, 0u32)                  /* is_ret_5: 1 -> 0 (a call that never returns) */
+    air_set_trace(6u64, 2u64, 1u32)                  /* depth_6: 0 -> 1 (consistent with the dropped return) */
+    air_set_trace(7u64, 2u64, 1u32)
+    air_build_lde()  air_build_cp()
+    if air_constraints_hold() != 1u8 { return 4u64 }   /* transitions STILL hold (self-consistent counter) */
+    if air_boundaries_hold() != 0u8 { return 5u64 }    /* but the stack is unbalanced -> boundary rejects */
+    /* honest re-proves on both axes. */
+    build()
+    if air_constraints_hold() != 1u8 { return 6u64 }
+    if air_boundaries_hold() != 1u8 { return 8u64 }
+    return 99u64
+}

@@ -5,8 +5,21 @@
 > checks its final-constant + fold-consistency. The executable attack (`build_attack`/`zk_trace_attack_k`) now finds
 > NO accepting `kk` (was rc=6 ACCEPT → now rc=99), and the gadget's own (S)/(S2) checks confirm the attack is
 > rejected **specifically by the trace LDT** (code ≥20, load-bearing — not a dead check). Honest accepts; V/O/R still
-> reject. **Owed:** carry the identical fix into `zk_air.iii::air_stark_verify` (shares the gap, more cleanly broken)
-> before the full-fused "production" claim is restored; recompute the production bound at the real query count.
+> reject.
+>
+> **SCOPE CORRECTION (verified 2026-06-24 — the gap is gadget-SPECIFIC, not systemwide):** the decoupling attack
+> requires a verifier that reads a STORED, separately-openable trace decoupled from the CP. That is true ONLY of this
+> gadget (`zk_ext4_stark_committed`): it stores `TLEAF`, `open_trace` opens it, and `combine` is recomputed from the
+> opened value — so a malicious prover stores a high-degree `TLEAF` ≠ the honest CP's LDE. **`zk_fused_committed` (the
+> ~2⁻⁸⁶ full-fused) is NOT vulnerable:** its `verify()` computes the constraint via `air_combine_ext4_at` over the
+> **LIVE air LDE** (`air_lde_at`, which `air_build_lde` constructs as degree-<N by interpolation), and `open_col`
+> binds `air_lde_at` to the per-column commitments — the committed trace is inherently low-degree, so no high-degree
+> decoupled trace can be opened. (Trade-off: reading the live air state makes it less "witness-free" than the gadget's
+> stored-commitment design — a separate, lesser concern, not a soundness hole.) **`zk_air::air_stark_verify`** has a
+> DIFFERENT, already-documented gap (`DOCS/III-ZK-SOUNDNESS-GAP.md`): its CP FRI folds to 1 (vacuous "degree < d")
+> and `air_build_cp` puts CP=0 on the trace domain (non-coset LDE) — the fix there is the **coset LDE** (substantial,
+> tracked), which subsumes any trace-degree concern. So this gadget's trace-LDT fix is COMPLETE for the gadget; no
+> blanket carry is owed. (The `~2⁻⁸⁶` figure is the full-fused at 128 queries; this N=16/16-query gadget is ~2⁻¹⁶.)
 
 **Found:** 2026-06-24, by an adversarial soundness-audit Workflow (5 surfaces, each finding independently
 re-checked by a second refuter; the polynomial identity in the attack advisor-reconfirmed). **Severity:

@@ -352,13 +352,30 @@ fn emit_memset() {
 /* malloc(size): a bump allocator over svir_mem.  The 8-byte cell @HEAP_BASE holds the next-free pointer, lazily
  * initialised (cell==0 -> HEAP_BASE+8) so library modules need no entry-init.  free()=no-op so every block is
  * fresh zero memory (calloc needs no explicit clear).  `size` is already on the stack; leaves the block address. */
-fn emit_malloc() {
-    let tn:u32=LN  if LN<255u32 {LN=LN+1u32}  let tb:u32=LN  if LN<255u32 {LN=LN+1u32}  let te:u32=LN  if LN<255u32 {LN=LN+1u32}
+fn emit_malloc() {   /* size on the stack -> user ptr ; an 8-byte SIZE HEADER sits at ptr-8 (so realloc can read the old size) */
+    let tn:u32=LN  if LN<255u32 {LN=LN+1u32}  let tb:u32=LN  if LN<255u32 {LN=LN+1u32}
     eu8(0x11u32,tn)                                                                                       /* tn = size */
-    econst(HEAP_BASE)  eb(0x82u32)  eu8(0x11u32,tb)                                                       /* tb = *(HEAP_BASE) (current bump) */
-    eu8(0x10u32,tb)  econst(0i64)  eb(0x30u32)  econst(HEAP_BASE+8i64)  eb(0x22u32)  eu8(0x10u32,tb)  eb(0x20u32)  eu8(0x11u32,te)   /* te = (tb==0)*(HB+8) + tb  (lazy init, branchless) */
-    econst(HEAP_BASE)  eu8(0x10u32,te)  eu8(0x10u32,tn)  econst(7i64)  eb(0x20u32)  econst(0i64-8i64)  eb(0x25u32)  eb(0x20u32)  eb(0x83u32)   /* *(HEAP_BASE) = te + ((size+7)&~7) */
-    eu8(0x10u32,te)                                                                                       /* leave the block address */
+    econst(HEAP_BASE)  eb(0x82u32)  eu8(0x11u32,tb)                                                       /* tb = *(HEAP_BASE) (current bump = the header slot) */
+    eu8(0x10u32,tb)  econst(0i64)  eb(0x30u32)  econst(HEAP_BASE+8i64)  eb(0x22u32)  eu8(0x10u32,tb)  eb(0x20u32)  eu8(0x11u32,tb)   /* tb = (tb==0)*(HB+8) + tb  (lazy init) */
+    eu8(0x10u32,tb)  eu8(0x10u32,tn)  eb(0x83u32)                                                         /* *(tb) = size  (the header) */
+    econst(HEAP_BASE)  eu8(0x10u32,tb)  econst(8i64)  eb(0x20u32)  eu8(0x10u32,tn)  econst(7i64)  eb(0x20u32)  econst(0i64-8i64)  eb(0x25u32)  eb(0x20u32)  eb(0x83u32)   /* *(HEAP_BASE) = tb + 8 + ((size+7)&~7) */
+    eu8(0x10u32,tb)  econst(8i64)  eb(0x20u32)                                                            /* leave the user ptr = tb + 8 */
+}
+fn emit_realloc() {   /* [p, newsize] -> new ptr (header-based: copy min(oldsize,newsize); the old block leaks -- bump heap) */
+    let tnw:u32=LN  if LN<255u32 {LN=LN+1u32}  let tp:u32=LN  if LN<255u32 {LN=LN+1u32}  let tr:u32=LN  if LN<255u32 {LN=LN+1u32}  let tc:u32=LN  if LN<255u32 {LN=LN+1u32}  let ti:u32=LN  if LN<255u32 {LN=LN+1u32}
+    eu8(0x11u32,tnw)  eu8(0x11u32,tp)                                                                     /* tnw=newsize (top), tp=p */
+    eu8(0x10u32,tnw)  emit_malloc()  eu8(0x11u32,tr)                                                      /* tr = malloc(newsize) */
+    eu8(0x10u32,tp)  econst(0i64)  eb(0x31u32)  eb(0x42u32)                                               /* if p != 0 */
+        eu8(0x10u32,tp)  econst(8i64)  eb(0x21u32)  eb(0x82u32)  eu8(0x11u32,tc)                          /* tc = *(p-8) = old size */
+        eu8(0x10u32,tc)  eu8(0x10u32,tnw)  eb(0x34u32)  eb(0x42u32)  eb(0x43u32)  eu8(0x10u32,tnw)  eu8(0x11u32,tc)  eb(0x44u32)   /* tc = min(oldsize, newsize) */
+        econst(0i64)  eu8(0x11u32,ti)
+        eb(0x40u32)  eb(0x41u32)                                                                          /* copy tc bytes p->newp */
+        eu8(0x10u32,ti)  eu8(0x10u32,tc)  eb(0x33u32)  eu8(0x51u32,1u32)                                  /* if i>=tc break */
+        eu8(0x10u32,tr)  eu8(0x10u32,ti)  eb(0x20u32)  eu8(0x10u32,tp)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eb(0x81u32)   /* newp[i] = p[i] */
+        eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)  eu8(0x50u32,0u32)
+        eb(0x44u32)  eb(0x44u32)
+    eb(0x44u32)
+    eu8(0x10u32,tr)                                                                                       /* return new ptr */
 }
 fn emit_bcopy(dst:i64, src:i64, n:i64) {   /* copy n bytes dst<-src (compile-time addresses), inline byte loop */
     let ti:u32=LN  if LN<255u32 {LN=LN+1u32}
@@ -579,6 +596,7 @@ fn eprim() {
             if kw(t,"malloc" as u64,6u32)==1u32 { ebin(0u32)  emit_malloc()  eat(Q_RP)  return }                                  /* malloc(size) */
             if kw(t,"calloc" as u64,6u32)==1u32 { ebin(0u32)  eat(Q_COM)  ebin(0u32)  eb(0x22u32)  emit_malloc()  eat(Q_RP)  return }   /* calloc(n,sz) = malloc(n*sz) (bump mem is fresh-zero) */
             if kw(t,"free" as u64,4u32)==1u32 { ebin(0u32)  eb(0x72u32)  econst(0i64)  eat(Q_RP)  return }                          /* free(p) -> no-op (bump alloc); eval+drop, push 0 */
+            if kw(t,"realloc" as u64,7u32)==1u32 { ebin(0u32)  eat(Q_COM)  ebin(0u32)  emit_realloc()  eat(Q_RP)  return }          /* realloc(p, newsize) */
             if kw(t,"va_start" as u64,8u32)==1u32 {   /* va_start(ap, last) -> ap = the hidden va-ptr (points at VA_BUF) ; `last` ignored */
                 let api:i32=lidx(C)  let mut g:u32=1u32  while g==1u32 { if cp(Q_RP)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_RP)
                 if api>=0i32 { if CUR_VAPTR>=0i32 { emit_lget(CUR_VAPTR as u32)  emit_lset(api as u32) } }  econst(0i64)  return

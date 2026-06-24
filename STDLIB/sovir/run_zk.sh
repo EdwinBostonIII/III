@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_cmp zk_svir_mem zk_svir_control zk_svir_call zk_svir_shift zk_svir_vm zk_svir_prog zk_svir_attest zk_eidos_fold zk_eidos_ripple zk_perm_oracle; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -78,8 +78,13 @@ if [ "$foldrc" = "99" ]; then say "ZK-FOLD : EIDOS event-fold (rolling-hash cont
 else say "FAIL ZK-FOLD: zk_eidos_fold=$foldrc (1=honest-rejected 2=forged-state-accepted 3=forged-event-accepted 4=re-prove)"; fail=1; fi
 # (0h) ZK-ATTESTED REAL EIDOS RIPPLE: the events are EMITTED BY THE REAL eidos::ripple module (verbs derived from hex-rank gradients), folded + soundly proven.
 riprc=$(runzk zk_eidos_ripple)
-if [ "$riprc" = "99" ]; then say "ZK-RIPPLE: a REAL eidos::ripple run (eidos_ripple_emit derives each <verb,a,b> from the hex-rank gradient) -> its >=7 emitted events READ BACK + folded (content-address enc=verb*65536+a*256+b) + proven by the sound STARK -> witness-free verifier ACCEPTS the honest fold, REJECTS a forged EVENT and a forged STATE by the math -> 99 (a REAL EIDOS computation's temporal state attested soundly -- the module's own emit feeds the trace)"
+if [ "$riprc" = "99" ]; then say "ZK-RIPPLE: a REAL eidos::ripple run (eidos_ripple_emit derives each <verb,a,b> from real hex-rank geometry) -> its >=7 emitted events READ BACK + folded by OUR content-address (enc=verb*65536+a*256+b -- NOT the module's sha256 isub witness) + proven by the sound STARK -> witness-free verifier ACCEPTS the honest fold, REJECTS a forged EVENT and a forged STATE by the math -> 99 (HONEST SCOPE: the ripple's real EVENT STREAM is attested under our fold; matching the module's actual sha256 witness identity needs a keccak AIR, not yet built)"
 else say "FAIL ZK-RIPPLE: zk_eidos_ripple=$riprc (5=<7-events 1=honest-rejected 2=forged-event-accepted 3=forged-state-accepted 4=re-prove)"; fail=1; fi
+# (0i) PERMUTATION-QUARANTINE: the discriminating oracle for the grand-product memory argument (zk_svir_mem). Fixed public alpha is forgeable; this surfaces it honestly.
+permrc=$(runzk zk_perm_oracle)
+if [ "$permrc" = "99" ]; then say "PERMUTATION : FS-alpha SOUND -- a colliding non-permutation is rejected (the memory argument is safe to make load-bearing)"
+elif [ "$permrc" = "50" ]; then say "PERMUTATION-QUARANTINE: zk_perm_oracle=50 -- the fixed-alpha=11 grand product is FORGEABLE (the colliding non-permutation {3,3,5,10}, product 384 == the honest {3,7,5,9}, is ACCEPTED). QUARANTINED: NOT wired into any sound attestation (ZK-SOUNDNESS/FOLD/RIPPLE use the sound TRANSITION STARK, not the permutation). The fix = alpha Fiat-Shamir-derived from the committed column roots (air_derive_alphas); this oracle flips to 99 then -- REQUIRED before any memory/loop zkVM. (advisor-surfaced)"
+else say "FAIL PERMUTATION: zk_perm_oracle=$permrc (unexpected -- expected 50 quarantined or 99 fixed)"; fail=1; fi
 
 # (A) ZK-attested.  zk_air (with the additive air_lde_at accessor) is in libiii_native.a; link the archive.
 gcc "$W/zk_svir_exec.o" "$LIB" -lkernel32 -o "$W/zk_svir_exec.exe" 2>/dev/null

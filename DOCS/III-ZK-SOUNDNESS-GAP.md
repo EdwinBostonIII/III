@@ -101,3 +101,24 @@ expected answer is designed to appear. The DDC work earlier was sound precisely 
 independent compilers must agree byte-for-byte). `zk_svir_attest` restores an oracle to the zk layer: an independent
 verifier that must reject a false statement. Until it returns 99, the zk attestation is not sound, and no report
 should claim otherwise.
+
+## The SECOND landmine — the permutation argument (QUARANTINED, advisor-surfaced 2026-06-24)
+
+The Z_T fix above made the **transition** quotient sound. It did **nothing** for the **grand-product permutation**
+argument (`zk_svir_mem`, the memory/stack-consistency brick). That argument proves multiset equality by
+`∏(α − v_i)` over two orders with **α a fixed public constant (11)** — and a fixed public α is unsound against an
+adaptive prover, who picks a NON-permutation whose product *collides* at that one α.
+
+- **Oracle (`STDLIB/sovir/zk_perm_oracle.iii`, exit 50 = UNSOUND):** the honest sorted multiset `{3,5,7,9}` has
+  `∏(11−x) = 8·6·4·2 = 384`. The non-permutation `{3,3,5,10}` (factor 384 as `8·8·6·1`) has `∏(11−x) = 384` too.
+  It is **not** a permutation of the program order `{3,7,5,9}`, yet the boundary `aS_4 = 384` is satisfied and every
+  transition holds — so `air_constraints_hold` AND `air_boundaries_hold` **both accept the forged memory trace**.
+  `zk_svir_mem`'s own NEG-B only ever used a non-permutation whose product *differs* (576≠384), so it never caught this.
+- **Why it isn't currently exploited:** the sound attestations (`ZK-SOUNDNESS`, `ZK-FOLD`, `ZK-RIPPLE`) use only the
+  sound **transition** STARK; none routes through the permutation. So the gap is **quarantined**, gated as
+  `PERMUTATION-QUARANTINE` (reports 50, does not fail), and the oracle stands guard.
+- **The fix (the named follow-on, required before ANY memory/loop/LOAD-STORE zkVM):** derive α by **Fiat-Shamir from
+  the committed `v`-column roots** (commit-then-challenge, exactly as `air_derive_alphas` does for the composition
+  coefficients), so α is unknown when the prover commits its accesses and cannot be collided. `zk_perm_oracle` flips
+  to **99** when this lands. Do not wire the permutation into a sound zkVM until it does — that would re-enter the
+  self-confirming-99 failure through a different door.

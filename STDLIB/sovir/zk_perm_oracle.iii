@@ -1,0 +1,85 @@
+/* zk_perm_oracle.iii -- the DISCRIMINATING ORACLE for the grand-product PERMUTATION argument (zk_svir_mem).
+ *
+ * The advisor's landmine: zk_svir_mem proves multiset equality by PROD(alpha - v_i) over two orders, with alpha a
+ * FIXED PUBLIC constant (11).  That is UNSOUND against an adaptive prover: it can choose a NON-permutation whose
+ * grand product COLLIDES at that one alpha.  zk_svir_mem's own NEG-B uses a non-permutation whose product DIFFERS
+ * (576 != 384), so the boundary catches it -- it never tests a COLLIDING non-permutation.  This oracle does.
+ *
+ * The honest sorted multiset is {3,5,7,9}, product PROD(11 - x) = 8*6*4*2 = 384.  A COLLIDING non-permutation:
+ * factor 384 differently -> {8,8,6,1} -> x = 11 - factor = {3,3,5,10}, product 8*8*6*1 = 384.  {3,3,5,10} is NOT a
+ * permutation of the program order {3,7,5,9}, yet its grand product is the SAME 384 at alpha=11.  So the boundary
+ * aS_4 = 384 is satisfied and every transition holds -> zk_svir_mem's check ACCEPTS a forged memory trace.
+ *
+ * Returns 50 (UNSOUND) if the colliding non-permutation is ACCEPTED (air_constraints_hold AND air_boundaries_hold),
+ * 99 (SOUND) if it is REJECTED.  Like zk_svir_attest for the STARK, this reads 50 today and 99 only once alpha is
+ * Fiat-Shamir-derived from the committed column roots (air_derive_alphas) -- the named fix.  DO NOT wire the
+ * permutation into a sound zkVM until this reads 99. */
+module zk_perm_oracle
+
+extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_lde() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_build_cp() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_boundaries_hold() -> u8 from "zk_air.iii"
+
+/* program order O = {3,7,5,9}, product 384.  AO = running product (exclusive prefix). */
+var VO : [u32; 8] = [3u32, 7u32, 5u32, 9u32, 10u32, 10u32, 10u32, 10u32]
+var AO : [u32; 8] = [1u32, 8u32, 32u32, 192u32, 384u32, 384u32, 384u32, 384u32]
+/* FORGED "sorted" = {3,3,5,10} -- NOT a permutation of {3,7,5,9}, but PROD(11-x) = 8*8*6*1 = 384 (COLLIDES). */
+var VF : [u32; 8] = [3u32, 3u32, 5u32, 10u32, 10u32, 10u32, 10u32, 10u32]
+var AF : [u32; 8] = [1u32, 8u32, 64u32, 384u32, 384u32, 384u32, 384u32, 384u32]
+
+fn setup_constraints() {
+    let p : u32 = 998244353u32
+    let am : u32 = p - 11u32                          /* -alpha (alpha = 11, FIXED PUBLIC -- the unsound part) */
+    air_add_term(0u32, 1u32, 6u32, 0u32)             /* con0: + next.aO */
+    air_add_term(0u32, am, 2u32, 0u32)               /*       - alpha*aO */
+    air_add_term(0u32, 1u32, 2u32, 1u32)             /*       + aO*vO */
+    air_add_term(1u32, 1u32, 8u32, 0u32)             /* con1: + next.aS */
+    air_add_term(1u32, am, 4u32, 0u32)               /*       - alpha*aS */
+    air_add_term(1u32, 1u32, 4u32, 3u32)             /*       + aS*vS */
+    air_set_alpha(0u64, 3u32)
+    air_set_alpha(1u64, 5u32)
+}
+
+fn boundaries() {
+    air_add_boundary(1u32, 0u32, 1u32)               /* aO_0 = 1 */
+    air_add_boundary(3u32, 0u32, 1u32)               /* aS_0 = 1 */
+    air_add_boundary(1u32, 4u32, 384u32)             /* aO_4 = 384 */
+    air_add_boundary(3u32, 4u32, 384u32)             /* aS_4 = 384 -> claimed permutation */
+}
+
+/* fill with O in cols 0,1 and the FORGED colliding non-permutation in cols 2,3. */
+fn fill_forged() {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, VO[i])
+        air_set_trace(i, 1u64, AO[i])
+        air_set_trace(i, 2u64, VF[i])
+        air_set_trace(i, 3u64, AF[i])
+        i = i + 1u64
+    }
+}
+
+fn main() -> u64 {
+    air_reset(4u32, 8u32)
+    air_boundary_reset()
+    fill_forged()
+    setup_constraints()
+    boundaries()
+    air_build_lde()
+    air_build_cp()
+    /* the forged trace: a colliding NON-permutation.  Do the transitions hold AND does the boundary close? */
+    let ch : u8 = air_constraints_hold()
+    let bh : u8 = air_boundaries_hold()
+    if ch == 1u8 {
+        if bh == 1u8 { return 50u64 }                /* ACCEPTED: a non-permutation passed -> UNSOUND (fixed alpha) */
+        return 60u64                                  /* boundary rejected (would mean the product did NOT collide) */
+    }
+    return 99u64                                      /* transitions rejected -> SOUND (only after FS-derived alpha) */
+}

@@ -76,12 +76,28 @@ autonomously — an authorization/safety boundary, not an III capability gap. So
 *mechanism* works on metal (Ring 0 + Ring −1, disposable guest); the *live-OS takeover* is
 designed-but-uncrossed, awaiting the operator's explicit go.
 
+**Retained-evidence residual (F6 — see `III-F6-LEDGER-AUDIT.md`):** the two rows marked *proven on
+metal* (Ring 0 / Ring −1) rest on the operator-machine run narrated in `RING-MINUS-1-MILESTONE.md`
+plus byte-verification of the *emitted* artifacts — there is **no retained in-tree kernel-load
+transcript** (the analogous M23 `m23_deploy_log.txt` is absent from the tree, and the one surviving
+investigation log records the live measure failing `exit 7`). What is mechanically re-checkable
+in-tree *today* is the **user-mode** tier: corpus `1047` `ks_selftest` (self-graded vs an embedded
+FIPS constant) and the `cg_r0` PE emission + objdump. So read *proven on metal* as
+**operator-attested** (one machine, narrated + artifact-byte-verified), **not** CI-reproducible from
+this repo. The mechanism's in-tree, re-runnable proof stops at Ring-3 user mode.
+
 ---
 
 ## 3. Evidence (this checkpoint)
 
+> **Snapshot caveat (2026-06-24):** the PASS counts below are the **2026-06-03 snapshot**. They are a
+> floor, not a fixed total — they *grow* as the corpus/lib evolve (the F6 sweep observed `build_stdlib`
+> at **PASS ≈ 698**), and the **lib mhash has changed** since (the 2026-06-24 affine-soundness,
+> cg_r0 >4-param, and xii per-pair-discharge fixes reseal it). Re-run each gate for the live number;
+> the load-bearing invariant is **FAIL = 0**, which holds across the change.
+
 - **Self-hosted build:** `build_stdlib.sh` — **PASS = 456, FAIL = 0**; cartographer gate + Forge
-  closure meta-gate green; deterministic (mhash reproduces). Lib mhash `833c51f9…`.
+  closure meta-gate green; deterministic (mhash reproduces). Lib mhash `833c51f9…` *(this snapshot)*.
 - **Stdlib conformance corpus:** `run_corpus.sh` — **PASS = 769, FAIL = 0**, SKIP = 100 (XII band +
   perf benches, run by their own drivers).
 - **XII corpus:** `run_xii_corpus.sh` — **PASS = 92, FAIL = 0** (incl. `344` R042 positive + negative).

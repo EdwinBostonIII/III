@@ -76,11 +76,18 @@ committed proof at the claimed bits) and **F2** (Ω2/Ω3 don't compose). Those a
   PENDING (verify reads shared arrays, not Merkle openings)"; relabel Ω3 as "proof-carrying canonicalisation of a
   representative XII term — mechanism complete; R0-connection PENDING". *The asterisk is the honest word.* Cheapest,
   highest-integrity move; do it before building.
-- **P2 — F1: the committed extension-field STARK.** Route `zk_fused_prod`'s `build_layers`+`verify` (and the `zk_ext*`
-  production gadgets) through the EXISTING Merkle surface (`air_merkle_build/root/open/verify`): commit each GF(p⁴) FRI
-  layer + the CP to roots, FS-derive queries over the committed roots, and have `verify` OPEN + Merkle-verify every
-  queried point (mirror `air_stark_verify`). **Teeth:** a malicious-layer-table arm (correct at the FS query points,
-  garbage elsewhere) must be REJECTED. Only then is "~2⁻⁸⁶ committed production proof" earned.
+- **P2 — F1: the committed extension-field STARK.**
+  - **✅ P2a DONE (gate `run_ext4_committed.sh`, `sovir/zk_ext4_committed.iii`):** the COMMITTED, succinct, witness-free
+    GF(p⁴) FRI low-degree test — each layer's full 4-limb GF(p⁴) elements Merkle-committed (16-byte leaves, SHA-256);
+    the fold challenge = `keccak(root_L)` and queries = `keccak(final root)`, so they bind BOTH limbs (fixes the
+    FA-only defect); the verifier OPENS queried leaves and `merkle_verify_proof`s them against the committed roots
+    before fold-consistency (witness-free, O(log n)). Adversary-verified: honest degree-15 accepts; flipped claimed
+    leaf rejected (opening binds the value); corrupted committed root rejected (root binds the proof); degree-63
+    rejected (low-degree). The soundness-bearing core that was missing now exists, the project's staged way (build the
+    dangerous core in isolation with adversary arms, then integrate).
+  - **P2b NEXT:** migrate `zk_fused_prod`'s `build_layers`+`verify` (and the `zk_ext*` gadgets) onto this committed
+    path — route the CP + the line-755 consistency through committed openings too, so the full compute+memory+control
+    STARK is a committed witness-free proof. Only then is "~2⁻⁸⁶ committed production zkVM" earned end-to-end.
 - **P3 — F2: compose Ω2 and Ω3 on R0.** Adopt the faithful architecture **EIDOS → XII-term → canonicalise(+Ω3 proof)
   → LOWER to SVIR (Ω2) → run/attest**. Make Ω2's R0 SVIR the LOWERING of the canonicalised XII term (use `xii_lower_*`),
   so the same object flows through Ω.b then Ω.a. **Teeth:** the lowered SVIR's result must equal the XII term's

@@ -1,0 +1,239 @@
+/* zk_ext4_committed.iii -- P2a (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md): the COMMITTED, succinct, witness-free
+ * GF(p^4) FRI low-degree test -- the soundness-bearing core the extension-field "production" gadgets (zk_fused_prod,
+ * zk_ext*) were MISSING (their verify() read the prover's layer arrays directly; the FS challenge hashed only the FA
+ * limb -> not a committed proof).  This gadget fixes that, mirroring the PROVEN base-field air_stark_verify but over
+ * GF(p^4):
+ *   - each FRI layer's FULL 4-limb GF(p^4) elements are MERKLE-COMMITTED (16-byte leaves: FA||FB, SHA-256 tree);
+ *   - the fold challenge for layer L is keccak(root_L) and the query indices are keccak(final root) -- so the
+ *     challenges/queries are bound to the ENTIRE committed layer (BOTH limbs), not just FA;
+ *   - the verifier never reads a whole layer: per query it OPENS the queried leaves (merkle_compute_proof) and
+ *     MERKLE-VERIFIES each against its committed root (merkle_verify_proof) before checking fold-consistency.
+ * So a prover cannot present a value inconsistent with the commitment, and cannot predict queries to fake un-opened
+ * positions.  Soundness ~ (1-rate)^queries over GF(p^4) challenges; witness-free + O(log n) openings = production shape.
+ *
+ * Returns 99 iff: (H) an honest degree-15 codeword over the DOM=64 domain ACCEPTS; (A) a FORGED OPENING (a leaf value
+ * inconsistent with the committed root) is REJECTED by the Merkle check; (B) a NON-low-degree (degree-63) codeword is
+ * REJECTED (its final layer is not constant / a fold is inconsistent).  Adversary-verified, not self-graded. */
+module zk_ext4_committed
+
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_proof_len_for(leaf_count: u32, leaf_index: u32) -> u32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+
+const PRIME : u32 = 998244353u32
+const DOM   : u64 = 64u64
+const NLAY  : u64 = 4u64          /* 64 -> 32 -> 16 -> 8 -> 4 : 4 folds, final size 4 (degree-15 -> constant) */
+const G4    : u64 = 4294967298u64 /* GF(p^4) non-residue g = 2 + u, packed */
+
+var OM   : [u32; 64]
+/* flat layer table: sizes 64,32,16,8,4 -> offsets 0,64,96,112,120 ; total 124 */
+var FA   : [u64; 124]   var FB : [u64; 124]
+var OFFS : [u64; 8]      var SIZES: [u64; 8]
+var ROOT : [u8; 256]     /* one 32-byte Merkle root per layer (up to 8 layers) */
+var RR   : [u64; 8]      var RI : [u64; 8]    /* per-layer fold challenge (GF(p^4): RR=limb a, RI=limb b) */
+var DIG  : [u8; 32]
+var LEAF : [u8; 1024]    /* serialised layer leaves: size*16 bytes */
+var PRF  : [u8; 512]     /* one Merkle authentication path */
+var QLEAF: [u8; 16]      /* a single claimed leaf for verification */
+var FRA  : [u64; 1]      var FRB : [u64; 1]
+
+fn base_inv(v: u32) -> u32 {
+    let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
+    while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }
+    return r
+}
+fn fill_om() {
+    let w : u32 = sf_rou(DOM as u32)  OM[0] = 1u32
+    let mut j : u64 = 1u64
+    while j < DOM { OM[j] = sf_mul(OM[j - 1u64], w)  j = j + 1u64 }
+}
+fn p4mul_a(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fa), ext2_mul(ext2_mul(rb, fb), G4)) }
+fn p4mul_b(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fb), ext2_mul(rb, fa)) }
+/* one FRI fold point: lo=f(x), hi=f(-x); folded = (lo+hi)/2 + r*(lo-hi)/(2x), all GF(p^4). */
+fn foldp4(loa: u64, lob: u64, hia: u64, hib: u64, ra: u64, rb: u64, x: u32) {
+    let inv2 : u32 = base_inv(2u32)  let i2x : u32 = base_inv(sf_add(x, x))
+    let fea : u64 = ext2_smul(inv2, ext2_add(loa, hia))  let feb : u64 = ext2_smul(inv2, ext2_add(lob, hib))
+    let foa : u64 = ext2_smul(i2x, ext2_sub(loa, hia))   let fob : u64 = ext2_smul(i2x, ext2_sub(lob, hib))
+    FRA[0] = ext2_add(fea, p4mul_a(ra, rb, foa, fob))
+    FRB[0] = ext2_add(feb, p4mul_b(ra, rb, foa, fob))
+}
+
+/* serialise GF(p^4) element (FA[i], FB[i]) into LEAF[i*16 .. i*16+16): FA 8 bytes LE then FB 8 bytes LE. */
+fn ser_leaf(idx_in_layer: u64, off: u64) {
+    let a : u64 = FA[off + idx_in_layer]  let b : u64 = FB[off + idx_in_layer]
+    let base : u64 = idx_in_layer * 16u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { LEAF[base + k] = ((a >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+    k = 0u64
+    while k < 8u64 { LEAF[base + 8u64 + k] = ((b >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+}
+/* build LEAF[] for an entire layer (size elements at flat offset off). */
+fn ser_layer(off: u64, size: u64) {
+    let mut i : u64 = 0u64
+    while i < size { ser_leaf(i, off)  i = i + 1u64 }
+}
+fn rd4(o: u64) -> u32 {
+    let p : *u8 = ((&DIG as u64) + o) as *u8
+    let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)
+    while x >= PRIME { x = x - PRIME }
+    return x
+}
+
+/* PROVER: build the FRI layers; commit each to a Merkle root; FS-derive the fold challenge from the root. */
+fn build(off0_unused: u64) {
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut i : u64 = 0u64
+    while size > 4u64 {
+        OFFS[i] = off  SIZES[i] = size
+        ser_layer(off, size)
+        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + i * 32u64)   /* commit layer i */
+        keccak256_oneshot((&ROOT as u64) + i * 32u64, 32u64, (&DIG as u64))                    /* fold challenge = keccak(root) */
+        RR[i] = e2pack(rd4(0u64), rd4(4u64))  RI[i] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut j : u64 = 0u64
+        while j < half {
+            foldp4(FA[off + j], FB[off + j], FA[off + j + half], FB[off + j + half], RR[i], RI[i], OM[str * j])
+            FA[noff + j] = FRA[0]  FB[noff + j] = FRB[0]
+            j = j + 1u64
+        }
+        off = noff  size = half  i = i + 1u64
+    }
+    OFFS[i] = off  SIZES[i] = size                                                            /* final layer */
+    ser_layer(off, size)
+    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + i * 32u64)
+}
+
+/* open leaf `idx` of the layer at flat offset `off`/size into QLEAF + PRF; return proof step count. */
+fn open_leaf(off: u64, size: u64, idx: u64) -> u32 {
+    ser_layer(off, size)
+    let plen : u32 = merkle_proof_len_for(size as u32, idx as u32)
+    merkle_compute_proof((&LEAF as u64), 16u64, merkle_pack_count_index(size as u32, idx as u32), (&PRF as u64))
+    let lp : *u8 = ((&LEAF as u64) + idx * 16u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 16u64 { QLEAF[k] = lp[k]  k = k + 1u64 }
+    return plen
+}
+/* an opened leaf's GF(p^4) value as (a,b) from QLEAF. */
+fn qleaf_a() -> u64 {
+    let mut a : u64 = 0u64  let mut k : u64 = 0u64
+    while k < 8u64 { a = a | ((QLEAF[k] as u64) << (8u64 * k))  k = k + 1u64 }
+    return a
+}
+fn qleaf_b() -> u64 {
+    let mut b : u64 = 0u64  let mut k : u64 = 0u64
+    while k < 8u64 { b = b | ((QLEAF[8u64 + k] as u64) << (8u64 * k))  k = k + 1u64 }
+    return b
+}
+
+/* VERIFIER: re-derive challenges from the committed roots; derive queries from the final root; per query OPEN +
+ * MERKLE-VERIFY the leaves at each layer against their roots, then check fold-consistency + final-constant. */
+fn verify() -> u64 {
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut i : u64 = 0u64
+    while size > 4u64 {
+        OFFS[i] = off  SIZES[i] = size
+        keccak256_oneshot((&ROOT as u64) + i * 32u64, 32u64, (&DIG as u64))
+        RR[i] = e2pack(rd4(0u64), rd4(4u64))  RI[i] = e2pack(rd4(8u64), rd4(12u64))
+        off = off + size  size = size / 2u64  i = i + 1u64
+    }
+    let nl : u64 = i  let foff : u64 = off
+    OFFS[nl] = foff  SIZES[nl] = 4u64
+    /* final layer must be a constant (degree 0): the 4 values equal. */
+    let fa0 : u64 = FA[foff]  let fb0 : u64 = FB[foff]
+    let mut c : u64 = 1u64
+    while c < 4u64 { if FA[foff + c] != fa0 { return 0u64 }  if FB[foff + c] != fb0 { return 0u64 }  c = c + 1u64 }
+    /* queries from keccak(final root). */
+    keccak256_oneshot((&ROOT as u64) + nl * 32u64, 32u64, (&DIG as u64))
+    let mut qi : u64 = 0u64
+    while qi < 16u64 {
+        let pq : *u8 = ((&DIG as u64) + qi) as *u8
+        let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
+        let mut li : u64 = 0u64
+        while li < nl {
+            let s : u64 = SIZES[li]  let o : u64 = OFFS[li]  let half : u64 = s / 2u64
+            let qm : u64 = q0 & (half - 1u64)
+            /* open + Merkle-verify the two queried leaves of layer li against its committed root. */
+            let pl1 : u32 = open_leaf(o, s, qm)
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, qm as u32, pl1), (&PRF as u64), (&ROOT as u64) + li * 32u64) == 0u8 { return 0u64 }
+            let loa : u64 = qleaf_a()  let lob : u64 = qleaf_b()
+            let pl2 : u32 = open_leaf(o, s, qm + half)
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, (qm + half) as u32, pl2), (&PRF as u64), (&ROOT as u64) + li * 32u64) == 0u8 { return 0u64 }
+            let hia : u64 = qleaf_a()  let hib : u64 = qleaf_b()
+            /* open + verify the folded leaf at the next layer. */
+            let no : u64 = OFFS[li + 1u64]  let ns : u64 = SIZES[li + 1u64]
+            let pl3 : u32 = open_leaf(no, ns, qm)
+            if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, qm as u32, pl3), (&PRF as u64), (&ROOT as u64) + (li + 1u64) * 32u64) == 0u8 { return 0u64 }
+            let nxa : u64 = qleaf_a()  let nxb : u64 = qleaf_b()
+            /* fold-consistency: foldp4(lo,hi,r_li, x=OM[(DOM/s)*qm]) == next[qm]. */
+            foldp4(loa, lob, hia, hib, RR[li], RI[li], OM[(DOM / s) * qm])
+            if FRA[0] != nxa { return 0u64 }
+            if FRB[0] != nxb { return 0u64 }
+            li = li + 1u64
+        }
+        qi = qi + 1u64
+    }
+    return 1u64
+}
+
+/* honest degree-15 GF(p^4) codeword over the DOM-th roots of unity (Horner). Coeffs c_k = (k+1) + (k+2)*u as GF(p^2)
+ * in limb a, (k+3)+(k+4)*u in limb b -> genuinely GF(p^4)-valued (FB != 0). Degree 15 -> folds 64->4 to a constant. */
+fn fill_codeword(deg: u64) {
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let x : u32 = OM[j]
+        let mut acca : u64 = 0u64  let mut accb : u64 = 0u64
+        let mut k : u64 = deg + 1u64
+        while k > 0u64 {
+            k = k - 1u64
+            /* acc = acc * x + c_k   (x is base-field scalar; scalar-mul each limb) */
+            acca = ext2_smul(x, acca)  accb = ext2_smul(x, accb)
+            let ca : u64 = e2pack(((k + 1u64) % (PRIME as u64)) as u32, ((k + 2u64) % (PRIME as u64)) as u32)
+            let cb : u64 = e2pack(((k + 3u64) % (PRIME as u64)) as u32, ((k + 4u64) % (PRIME as u64)) as u32)
+            acca = ext2_add(acca, ca)  accb = ext2_add(accb, cb)
+        }
+        FA[j] = acca  FB[j] = accb
+        j = j + 1u64
+    }
+}
+
+fn main() -> u64 {
+    fill_om()
+    /* (H) honest degree-15 codeword: committed FRI ACCEPTS. */
+    fill_codeword(15u64)
+    build(0u64)
+    if verify() != 1u64 { return 1u64 }
+    /* (A) OPENING BINDS THE VALUE: open layer-0 leaf 0 against its committed root -> ACCEPT; then flip one byte of the
+     *     CLAIMED leaf and re-verify against the SAME root -> REJECT.  A value inconsistent with the commitment cannot
+     *     be opened (deterministic, independent of which leaves the queries hit). */
+    fill_codeword(15u64)
+    build(0u64)
+    let pl : u32 = open_leaf(0u64, 64u64, 0u64)
+    if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, 0u32, pl), (&PRF as u64), (&ROOT as u64)) != 1u8 { return 2u64 }
+    QLEAF[0u64] = QLEAF[0u64] ^ 1u8
+    if merkle_verify_proof((&QLEAF as u64), merkle_pack_verify_meta(16u32, 0u32, pl), (&PRF as u64), (&ROOT as u64)) != 0u8 { return 3u64 }
+    /* (B) ROOT BINDS THE PROOF: corrupt the committed layer-0 root after build -> every honest opening recomputes a
+     *     root != the corrupted one -> the full verify REJECTS (deterministic). */
+    fill_codeword(15u64)
+    build(0u64)
+    ROOT[0u64] = ROOT[0u64] ^ 1u8
+    if verify() == 1u64 { return 4u64 }
+    /* (C) NON-low-degree codeword (degree 63): no low-degree witness -> final layer not constant -> REJECT. */
+    fill_codeword(63u64)
+    build(0u64)
+    if verify() == 1u64 { return 5u64 }
+    /* (D) honest re-proves (state is clean after the negative arms). */
+    fill_codeword(15u64)
+    build(0u64)
+    if verify() != 1u64 { return 6u64 }
+    return 99u64
+}

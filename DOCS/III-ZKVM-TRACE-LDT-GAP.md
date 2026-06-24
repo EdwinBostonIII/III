@@ -1,6 +1,23 @@
 # III — CRITICAL zkVM soundness hole: the committed STARK has NO low-degree test on the TRACE  **[FIXED 2026-06-24]**
 
-> **STATUS: FIXED in `zk_ext4_stark_committed.iii`.** `trace_fri_commit()` adds a FRI low-degree test directly on
+> **STATUS UPDATE 2026-06-24 — the first fix (`6e6cc75b`) was INSUFFICIENT; an FS audit on the fixed verifier found
+> TWO deeper CRITICAL holes (both refuter-confirmed). Re-fix required, NOT yet landed.**
+> 1. **Binding gap:** the trace FRI (`TFA`/`TFROOT`, the LDT) is a SEPARATE Merkle commitment from the
+>    constraint-tested trace (`TROOT`/`TLEAF`); `verify()` ties them ONLY pointwise at the 16 queries
+>    (`open_leaf_tf(0,DOM,q0)==lift(fq)`). A prover commits `TROOT` on a violating trace + the trace-FRI on a
+>    DECOUPLED low-degree decoy `L=honest LDE` → the LDT passes on the decoy; the violation is caught only if a query
+>    hits the tamper point (~0.6, grindable). My self-test only folded the COUPLED tampered `TLEAF`, so it never
+>    modeled this — false assurance. **Fix:** make the trace-FRI layer 0 BE the `TROOT`-committed trace (single
+>    commitment, no decoupled column), bound globally not just at queries.
+> 2. **Adaptive-CP (deeper, pre-existing):** the queries derive from `keccak(final TFROOT)` ALONE — they do NOT bind
+>    the CP roots `ROOT[*]`. A prover commits a genuinely degree-<N violating trace, computes the queries offline, then
+>    interpolates a degree-<N CP satisfying line-755 at exactly those ≤16 points (`zh≠0` off-H lets CP solve for any
+>    combine) → bad set = 1 point, grindable to ~1. Defeats the claimed ~2⁻¹⁶ AND the production ~2⁻⁸⁶. **Fix:** derive
+>    the query challenge from a RUNNING TRANSCRIPT absorbing every root in commit order (`TROOT`, `ROOT[*]`, `TFROOT[*]`)
+>    so the CP commitment is bound before the queries; chain the fold challenges off the transcript too.
+>
+> ---
+> *(original first-fix note, now known insufficient:)* `trace_fri_commit()` adds a FRI low-degree test directly on
 > the committed trace LDE (lifted to GF(p⁴); layer 0 tied to `TROOT` by a per-query consistency open); `verify()`
 > checks its final-constant + fold-consistency. The executable attack (`build_attack`/`zk_trace_attack_k`) now finds
 > NO accepting `kk` (was rc=6 ACCEPT → now rc=99), and the gadget's own (S)/(S2) checks confirm the attack is

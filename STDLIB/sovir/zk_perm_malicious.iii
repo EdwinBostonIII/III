@@ -1,53 +1,50 @@
-/* zk_perm_malicious.iii -- the DISCRIMINATING test the FS-alpha "fix" never ran: a MALICIOUS PROVER who CHOOSES the
- * permutation challenge alpha (instead of deriving it from the trace), through the FULL STARK (air_stark_prove/verify).
+/* zk_perm_malicious.iii -- the MALICIOUS-PROVER oracle for permutation soundness, now against the FS-BOUND alpha.
  *
- * The advisor's hole: air_stark_verify re-derives the CONSTRAINT-COMBINATION alphas (air_derive_alphas) from the
- * committed transcript, but the PERMUTATION challenge alpha is baked into the constraint COEFFICIENTS by air_add_term
- * before proving -- and the verifier NEVER re-derives it from the commitment.  So an adaptive prover picks a
- * NON-permutation AND a colliding alpha', bakes alpha' in, and the verifier has no basis to reject.
+ * The adversary holds a NON-permutation: program order {3,7,5,9}, forged "sorted" {3,3,5,10} (these collide at the
+ * alpha=11 the OLD baked-alpha verifier could not reject).  It builds the grand-product accumulators with its OWN
+ * chosen alpha'=11 (so both products reach 384 and the boundary closes).  But the constraint's -alpha*acc term is now
+ * an air_add_perm_term, so the verifier uses AIR_PERM_A = Fiat-Shamir-DERIVED from the committed ACCESS-column roots
+ * (air_perm_setup, columns 0=vO and 1=vS) -- NOT the prover's 11.  The honest alpha != 11 (with overwhelming
+ * probability), so the transitions next.acc = acc*(alpha_fs - v) do NOT hold for products built at 11 -> REJECT.
  *
- * Here: program order {3,7,5,9} (product PROD(11-x)=8*4*6*2=384), forged "sorted" NON-permutation {3,3,5,10}
- * (PROD(11-x)=8*8*6*1=384 -- collides at alpha'=11, the prover's chosen challenge).  The accumulators are built with
- * alpha'=11; both grand products reach the SAME 384, so the boundary aO_4==aS_4 closes and every transition holds.
- * Routed through air_stark_prove -> air_stark_verify.
- *
- * Returns 50 if air_stark_verify ACCEPTS (the permutation is UNSOUND in-protocol: a malicious prover forged memory ->
- * ZK-MEMORY + ZK-FUSED inherit it), 99 if it REJECTS (the verifier somehow binds alpha to the commitment). */
+ * Layout (access columns FIRST so air_perm_setup commits them): 0=vO 1=vS 2=aO 3=aS.
+ * Returns 50 if air_stark_verify ACCEPTS (still unsound), 99 if it REJECTS (the FS-bind works -- a prover-chosen alpha
+ * is defeated; ZK-MEMORY/ZK-FUSED can be re-made sound by the same air_perm_setup + air_add_perm_term). */
 module zk_perm_malicious
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_trace(row: u64, col: u64, v: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_term(con: u32, coeff: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_perm_term(con: u32, kind: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_setup(nv: u64) -> u32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_set_alpha(con: u64, a: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
 
-const NEG11 : u32 = 998244342u32   /* -11 mod p = the prover's CHOSEN colliding alpha' baked into the constraints */
-
-/* program order {3,7,5,9} and a NON-permutation "sorted" {3,3,5,10}; running products at alpha'=11. */
 var VO : [u32; 8] = [3u32, 7u32, 5u32, 9u32, 10u32, 10u32, 10u32, 10u32]
-var AO : [u32; 8] = [1u32, 8u32, 32u32, 192u32, 384u32, 384u32, 384u32, 384u32]
-var VS : [u32; 8] = [3u32, 3u32, 5u32, 10u32, 10u32, 10u32, 10u32, 10u32]
+var VS : [u32; 8] = [3u32, 3u32, 5u32, 10u32, 10u32, 10u32, 10u32, 10u32]   /* NON-permutation, collides at alpha'=11 */
+var AO : [u32; 8] = [1u32, 8u32, 32u32, 192u32, 384u32, 384u32, 384u32, 384u32]    /* products at the prover's alpha'=11 */
 var AS : [u32; 8] = [1u32, 8u32, 64u32, 384u32, 384u32, 384u32, 384u32, 384u32]
 
 fn main() -> u64 {
     air_reset(4u32, 8u32)
     air_boundary_reset()
+    /* PHASE 1: set the ACCESS columns (vO,vS) and let the STARK commit them + derive alpha (the prover cannot choose it). */
     let mut i : u64 = 0u64
-    while i < 8u64 {
-        air_set_trace(i, 0u64, VO[i])  air_set_trace(i, 1u64, AO[i])
-        air_set_trace(i, 2u64, VS[i])  air_set_trace(i, 3u64, AS[i])
-        i = i + 1u64
-    }
-    /* vars: 0=1 ; cur 1=vO 2=aO 3=vS 4=aS ; next 5=vO 6=aO 7=vS 8=aS.  alpha' = 11 baked in (NEG11 = -alpha'). */
-    air_add_term(0u32, 1u32, 6u32, 0u32)  air_add_term(0u32, NEG11, 2u32, 0u32)  air_add_term(0u32, 1u32, 2u32, 1u32) /* con0: next.aO - 11*aO + aO*vO */
-    air_add_term(1u32, 1u32, 8u32, 0u32)  air_add_term(1u32, NEG11, 4u32, 0u32)  air_add_term(1u32, 1u32, 4u32, 3u32) /* con1: next.aS - 11*aS + aS*vS */
+    while i < 8u64 { air_set_trace(i, 0u64, VO[i])  air_set_trace(i, 1u64, VS[i])  i = i + 1u64 }
+    air_perm_setup(2u64)
+    /* PHASE 2 (MALICIOUS): build the product columns with the prover's OWN alpha'=11 (ignoring the derived alpha). */
+    i = 0u64
+    while i < 8u64 { air_set_trace(i, 2u64, AO[i])  air_set_trace(i, 3u64, AS[i])  i = i + 1u64 }
+    /* vars: 0=1 ; cur 1=vO 2=vS 3=aO 4=aS ; next 5=vO 6=vS 7=aO 8=aS.  -alpha*acc is now an FS-BOUND perm term. */
+    air_add_term(0u32, 1u32, 7u32, 0u32)  air_add_perm_term(0u32, 1u32, 3u32, 0u32)  air_add_term(0u32, 1u32, 3u32, 1u32) /* con0: next.aO - alpha*aO + aO*vO */
+    air_add_term(1u32, 1u32, 8u32, 0u32)  air_add_perm_term(1u32, 1u32, 4u32, 0u32)  air_add_term(1u32, 1u32, 4u32, 2u32) /* con1: next.aS - alpha*aS + aS*vS */
     air_set_alpha(0u64, 3u32)  air_set_alpha(1u64, 5u32)
-    air_add_boundary(1u32, 0u32, 1u32)  air_add_boundary(3u32, 0u32, 1u32)        /* aO_0 = aS_0 = 1 */
-    air_add_boundary(1u32, 4u32, 384u32)  air_add_boundary(3u32, 4u32, 384u32)    /* aO_4 = aS_4 = 384 (collides) */
+    air_add_boundary(2u32, 0u32, 1u32)  air_add_boundary(3u32, 0u32, 1u32)
+    air_add_boundary(2u32, 4u32, 384u32)  air_add_boundary(3u32, 4u32, 384u32)
     air_stark_prove()
-    if air_stark_verify() == 0u64 { return 50u64 }   /* ACCEPTED a non-permutation with prover-chosen alpha -> UNSOUND */
-    return 99u64                                       /* REJECTED -> the verifier binds alpha (sound) */
+    if air_stark_verify() == 0u64 { return 50u64 }   /* ACCEPTED -> still unsound */
+    return 99u64                                       /* REJECTED -> FS-bound alpha defeats the prover-chosen challenge */
 }

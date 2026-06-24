@@ -25,6 +25,9 @@ extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_stark_prove() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_stark_verify() -> u64 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_add_perm_term(con: u32, kind: u32, va: u32, vb: u32) -> i32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_setup(nv: u64) -> u32 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn air_perm_beta() -> u32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
 extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
@@ -76,12 +79,21 @@ fn derive(seed: u32) -> u32 {
 
 /* build the full memory-checking trace + AIR with FS-derived alpha,beta; returns X = the claimed permutation product. */
 fn build() -> u32 {
-    let alpha : u32 = derive(169647555u32)
-    let beta  : u32 = derive(305419896u32)
-    let beta2 : u32 = sf_mul(beta, beta)
-    /* grand products: acc_{i+1} = acc_i * (alpha - enc_i), enc = addr + beta*val + beta^2*iswrite. */
-    ACP[0] = 1u32  ACS[0] = 1u32
+    air_reset(13u32, 8u32)
+    air_boundary_reset()
     let mut i : u64 = 0u64
+    /* PHASE 1: set the ACCESS columns (0-5) ONLY, commit them, derive alpha,beta from their roots (prover can't choose). */
+    while i < 8u64 {
+        air_set_trace(i, 0u64, AP[i])  air_set_trace(i, 1u64, VP[i])  air_set_trace(i, 2u64, WP[i])
+        air_set_trace(i, 3u64, AS[i])  air_set_trace(i, 4u64, VS[i])  air_set_trace(i, 5u64, WS[i])
+        i = i + 1u64
+    }
+    let alpha : u32 = air_perm_setup(6u64)
+    let beta  : u32 = air_perm_beta()
+    let beta2 : u32 = sf_mul(beta, beta)
+    /* PHASE 2: grand products with the FS-bound alpha,beta; enc = addr + beta*val + beta^2*iswrite. */
+    ACP[0] = 1u32  ACS[0] = 1u32
+    i = 0u64
     while i < 7u64 {
         let ep : u32 = sf_add(sf_add(AP[i], sf_mul(beta, VP[i])), sf_mul(beta2, WP[i]))
         let es : u32 = sf_add(sf_add(AS[i], sf_mul(beta, VS[i])), sf_mul(beta2, WS[i]))
@@ -90,7 +102,6 @@ fn build() -> u32 {
         i = i + 1u64
     }
     let x : u32 = ACP[4]
-    /* witnesses d,isz,winv,ra,nra over the SORTED trace (row i relates to row i+1; row 7 wraps, unchecked by Z_T). */
     i = 0u64
     while i < 8u64 {
         let inx : u64 = (i + 1u64) & 7u64
@@ -103,23 +114,19 @@ fn build() -> u32 {
         NRA[i] = sf_mul(sf_sub(1u32, IZ[i]), VS[inx])
         i = i + 1u64
     }
-    air_reset(13u32, 8u32)
-    air_boundary_reset()
+    /* set the product + witness columns (6-12) -- built with the FS challenges. */
     i = 0u64
     while i < 8u64 {
-        air_set_trace(i, 0u64, AP[i])  air_set_trace(i, 1u64, VP[i])  air_set_trace(i, 2u64, WP[i])
-        air_set_trace(i, 3u64, AS[i])  air_set_trace(i, 4u64, VS[i])  air_set_trace(i, 5u64, WS[i])
         air_set_trace(i, 6u64, ACP[i]) air_set_trace(i, 7u64, ACS[i])
         air_set_trace(i, 8u64, DD[i])  air_set_trace(i, 9u64, WI[i])  air_set_trace(i, 10u64, IZ[i])
         air_set_trace(i, 11u64, RA[i]) air_set_trace(i, 12u64, NRA[i])
         i = i + 1u64
     }
-    let am : u32 = sf_sub(0u32, alpha)
     /* vars: 0=1 ; cur 1=ap 2=vp 3=wp 4=as 5=vs 6=ws 7=acp 8=acs 9=d 10=wi 11=iz 12=ra 13=nra ; next 14.. (as=17 vs=18 ws=19 acp=20 acs=21) */
-    air_add_term(0u32, 1u32, 20u32, 0u32)  air_add_term(0u32, am, 7u32, 0u32)              /* con0 perm_p */
-    air_add_term(0u32, 1u32, 7u32, 1u32)   air_add_term(0u32, beta, 7u32, 2u32)  air_add_term(0u32, beta2, 7u32, 3u32)
-    air_add_term(1u32, 1u32, 21u32, 0u32)  air_add_term(1u32, am, 8u32, 0u32)              /* con1 perm_s */
-    air_add_term(1u32, 1u32, 8u32, 4u32)   air_add_term(1u32, beta, 8u32, 5u32)  air_add_term(1u32, beta2, 8u32, 6u32)
+    air_add_term(0u32, 1u32, 20u32, 0u32)  air_add_perm_term(0u32, 1u32, 7u32, 0u32)              /* con0 perm_p: next.acp -alpha*acp +acp*ap +beta*acp*vp +beta^2*acp*wp (alpha,beta FS-bound) */
+    air_add_term(0u32, 1u32, 7u32, 1u32)   air_add_perm_term(0u32, 2u32, 7u32, 2u32)  air_add_perm_term(0u32, 3u32, 7u32, 3u32)
+    air_add_term(1u32, 1u32, 21u32, 0u32)  air_add_perm_term(1u32, 1u32, 8u32, 0u32)              /* con1 perm_s */
+    air_add_term(1u32, 1u32, 8u32, 4u32)   air_add_perm_term(1u32, 2u32, 8u32, 5u32)  air_add_perm_term(1u32, 3u32, 8u32, 6u32)
     air_add_term(2u32, 1u32, 9u32, 0u32)   air_add_term(2u32, NEG1, 17u32, 0u32)  air_add_term(2u32, 1u32, 4u32, 0u32)  /* con2 d = as_next - as */
     air_add_term(3u32, 1u32, 11u32, 9u32)                                                   /* con3 isz*d = 0 */
     air_add_term(4u32, 1u32, 11u32, 0u32)  air_add_term(4u32, 1u32, 9u32, 10u32)  air_add_term(4u32, NEG1, 0u32, 0u32) /* con4 isz + d*wi - 1 */

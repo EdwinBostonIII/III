@@ -1,0 +1,295 @@
+/* zk_here_to_there.iii -- Phase Omega5 (here->there): a COMMITTED GF(p^4) FRI proof is SERIALISED into a transportable
+ * artifact (roots + per-query openings + Merkle paths -- NOT the codeword/witness), SHIPPED over the real sealed_channel
+ * (x25519 ECDH + ChaCha20-Poly1305), and VERIFIED-AND-FOLDED by a SECOND node that holds ONLY the artifact -- never the
+ * witness, never re-executing the prover.  The "no re-execution" property is PROVEN, not asserted: before the verifier
+ * runs, the prover's working arrays (the codeword FA/FB and the live roots) are ZEROED, so verification can only succeed
+ * by reading the shipped artifact.
+ *
+ * Node 1 (prover): build a committed FRI over a degree-3 GF(p^4) codeword (DOM=16, 2 folds 16->8->4 to a constant);
+ *   commit each layer (SHA-256 Merkle root over 16B GF(p^4) leaves); FS-derive the fold challenges from the roots and
+ *   the queries from the final root; OPEN the queried leaves with their authentication paths; serialise
+ *   {nlay, roots, final codeword, per-query (leaf+path) openings} into ARTIFACT.
+ * Channel: x25519 handshake (Alice<->Bob) -> a sealed channel; sc_send encrypts+authenticates ARTIFACT; sc_recv on the
+ *   peer decrypts+verifies the Poly1305 tag (a tampered ciphertext is rejected here).
+ * Node 2 (verifier): with the prover arrays ZEROED, read ONLY the decrypted artifact -- recompute OM + the fold
+ *   challenges (from the shipped roots) + the queries (from the final root), MERKLE-VERIFY every opened leaf against its
+ *   shipped root, check the GF(p^4) FRI fold-consistency at each query, confirm the final layer is constant -> ACCEPT;
+ *   then FOLD the artifact's content-address (keccak) into its attestation state -- verify-and-fold WITHOUT re-exec.
+ *
+ * Returns 99 iff: (H) the honest artifact ships + verifies-and-folds with the prover state zeroed (no re-exec); (C) a
+ * tampered ciphertext is REJECTED by the channel's auth tag; (A) a tampered artifact leaf is REJECTED by the Merkle
+ * check on node 2.  A real cross-node attestation: the proof travels, the witness does not. */
+module zk_here_to_there
+
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_proof_len_for(leaf_count: u32, leaf_index: u32) -> u32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 from "sealed_channel.iii"
+
+const PRIME : u32 = 998244353u32
+const DOM   : u64 = 16u64
+const NLAY  : u64 = 2u64           /* 16 -> 8 -> 4 */
+const G4    : u64 = 4294967298u64
+const NQ    : u64 = 4u64
+const BASEF : u64 = 257u64
+const MODP  : u64 = 1000000007u64
+
+var OM   : [u32; 16]
+var FA   : [u64; 32]    var FB : [u64; 32]      /* prover FRI layers (zeroed before node-2 verify) */
+var OFFS : [u64; 8]      var SIZES: [u64; 8]
+var ROOT : [u8; 128]                            /* prover layer roots (zeroed before node-2 verify) */
+var RR   : [u64; 8]      var RI : [u64; 8]
+var DIG  : [u8; 32]
+var LEAF : [u8; 256]
+var PRF  : [u8; 256]
+var QLEAF: [u8; 16]
+var FRA  : [u64; 1]      var FRB : [u64; 1]
+var ART  : [u8; 8192]    var ALEN : [u64; 1]    /* the serialised artifact + its length */
+var CIPH : [u8; 8192]    var TAG  : [u8; 16]
+var ASEC : [u8; 32]      var BSEC : [u8; 32]    var APUB : [u8; 32]  var BPUB : [u8; 32]  var BP9 : [u8; 32]
+/* node-2 scratch (reads ONLY the artifact) */
+var NROOT: [u8; 128]     var NLEAF : [u8; 16]   var NPATH : [u8; 256]
+var ATT  : [u64; 1]                              /* node-2 attestation fold state */
+
+fn base_inv(v: u32) -> u32 {
+    let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
+    while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }
+    return r
+}
+fn fill_om() { let w : u32 = sf_rou(DOM as u32)  OM[0] = 1u32  let mut j : u64 = 1u64  while j < DOM { OM[j] = sf_mul(OM[j - 1u64], w)  j = j + 1u64 } }
+fn p4mul_a(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fa), ext2_mul(ext2_mul(rb, fb), G4)) }
+fn p4mul_b(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fb), ext2_mul(rb, fa)) }
+fn foldp4(loa: u64, lob: u64, hia: u64, hib: u64, ra: u64, rb: u64, x: u32) {
+    let inv2 : u32 = base_inv(2u32)  let i2x : u32 = base_inv(sf_add(x, x))
+    let fea : u64 = ext2_smul(inv2, ext2_add(loa, hia))  let feb : u64 = ext2_smul(inv2, ext2_add(lob, hib))
+    let foa : u64 = ext2_smul(i2x, ext2_sub(loa, hia))   let fob : u64 = ext2_smul(i2x, ext2_sub(lob, hib))
+    FRA[0] = ext2_add(fea, p4mul_a(ra, rb, foa, fob))
+    FRB[0] = ext2_add(feb, p4mul_b(ra, rb, foa, fob))
+}
+fn rd4(o: u64) -> u32 {
+    let p : *u8 = ((&DIG as u64) + o) as *u8
+    let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)
+    while x >= PRIME { x = x - PRIME }
+    return x
+}
+/* pack/unpack a GF(p^4) element (a,b) <-> 16 bytes at a buffer */
+fn put16(buf: u64, off: u64, a: u64, b: u64) {
+    let p : *u8 = (buf + off) as *u8
+    let mut k : u64 = 0u64  while k < 8u64 { p[k] = ((a >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+    k = 0u64  while k < 8u64 { p[8u64 + k] = ((b >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+}
+fn get16a(buf: u64, off: u64) -> u64 { let p : *u8 = (buf + off) as *u8  let mut a : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 { a = a | ((p[k] as u64) << (8u64 * k))  k = k + 1u64 }  return a }
+fn get16b(buf: u64, off: u64) -> u64 { let p : *u8 = (buf + off) as *u8  let mut b : u64 = 0u64  let mut k : u64 = 0u64  while k < 8u64 { b = b | ((p[8u64 + k] as u64) << (8u64 * k))  k = k + 1u64 }  return b }
+fn ser_layer_leaves(off: u64, size: u64) {
+    let mut i : u64 = 0u64
+    while i < size { put16((&LEAF as u64), i * 16u64, FA[off + i], FB[off + i])  i = i + 1u64 }
+}
+
+/* ---- PROVER: build committed FRI + serialise the artifact ---- */
+var SP : [u64; 1]
+fn ap8(v: u8) { ART[SP[0]] = v  SP[0] = SP[0] + 1u64 }
+fn apblk(src: u64, n: u64) { let p : *u8 = src as *u8  let mut k : u64 = 0u64  while k < n { ART[SP[0]] = p[k]  SP[0] = SP[0] + 1u64  k = k + 1u64 } }
+
+fn build_and_serialise() {
+    /* degree-3 GF(p^4) codeword over the DOM-th roots (Horner; folds 16->4 to a constant). */
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let x : u32 = OM[j]
+        let mut aa : u64 = 0u64  let mut bb : u64 = 0u64
+        let mut k : u64 = 4u64
+        while k > 0u64 {
+            k = k - 1u64
+            aa = ext2_smul(x, aa)  bb = ext2_smul(x, bb)
+            aa = ext2_add(aa, e2pack((k + 1u64) as u32, (k + 2u64) as u32))
+            bb = ext2_add(bb, e2pack((k + 3u64) as u32, (k + 4u64) as u32))
+        }
+        FA[j] = aa  FB[j] = bb
+        j = j + 1u64
+    }
+    /* fold + commit layers. */
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
+    while size > 4u64 {
+        OFFS[li] = off  SIZES[li] = size
+        ser_layer_leaves(off, size)
+        merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+        keccak256_oneshot((&ROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        RR[li] = e2pack(rd4(0u64), rd4(4u64))  RI[li] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut m : u64 = 0u64
+        while m < half { foldp4(FA[off + m], FB[off + m], FA[off + m + half], FB[off + m + half], RR[li], RI[li], OM[str * m])  FA[noff + m] = FRA[0]  FB[noff + m] = FRB[0]  m = m + 1u64 }
+        off = noff  size = half  li = li + 1u64
+    }
+    OFFS[li] = off  SIZES[li] = size
+    ser_layer_leaves(off, size)
+    merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+    /* serialise: [nlay][ (NLAY+1) roots ][ final 4 leaves ][ per query per layer: lo(16)+path, hi(16)+path, next(16)+path ] */
+    SP[0] = 0u64
+    ap8(NLAY as u8)
+    apblk((&ROOT as u64), (NLAY + 1u64) * 32u64)
+    let mut c : u64 = 0u64
+    while c < 4u64 { put16((&LEAF as u64), 0u64, FA[off + c], FB[off + c])  apblk((&LEAF as u64), 16u64)  c = c + 1u64 }
+    /* queries from keccak(final root). */
+    keccak256_oneshot((&ROOT as u64) + NLAY * 32u64, 32u64, (&DIG as u64))
+    let mut qi : u64 = 0u64
+    while qi < NQ {
+        let pq : *u8 = ((&DIG as u64) + qi) as *u8
+        let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
+        let mut L : u64 = 0u64
+        while L < NLAY {
+            let s : u64 = SIZES[L]  let o : u64 = OFFS[L]  let half : u64 = s / 2u64  let qm : u64 = q0 & (half - 1u64)
+            let no : u64 = OFFS[L + 1u64]  let ns : u64 = SIZES[L + 1u64]
+            /* lo @ qm of layer L */
+            ser_layer_leaves(o, s)
+            let pl : u32 = merkle_proof_len_for(s as u32, qm as u32)
+            merkle_compute_proof((&LEAF as u64), 16u64, merkle_pack_count_index(s as u32, qm as u32), (&PRF as u64))
+            apblk((&LEAF as u64) + qm * 16u64, 16u64)  apblk((&PRF as u64), (pl as u64) * 33u64)
+            /* hi @ qm+half of layer L */
+            ser_layer_leaves(o, s)
+            merkle_compute_proof((&LEAF as u64), 16u64, merkle_pack_count_index(s as u32, (qm + half) as u32), (&PRF as u64))
+            apblk((&LEAF as u64) + (qm + half) * 16u64, 16u64)  apblk((&PRF as u64), (pl as u64) * 33u64)
+            /* next @ qm of layer L+1 */
+            ser_layer_leaves(no, ns)
+            let pl2 : u32 = merkle_proof_len_for(ns as u32, qm as u32)
+            merkle_compute_proof((&LEAF as u64), 16u64, merkle_pack_count_index(ns as u32, qm as u32), (&PRF as u64))
+            apblk((&LEAF as u64) + qm * 16u64, 16u64)  apblk((&PRF as u64), (pl2 as u64) * 33u64)
+            L = L + 1u64
+        }
+        qi = qi + 1u64
+    }
+    ALEN[0] = SP[0]
+}
+
+/* ---- NODE 2: verify reading ONLY the artifact buffer `buf` (prover state is zeroed); fold on accept. ---- */
+fn verify_artifact(buf: u64) -> u64 {
+    let p : *u8 = buf as *u8
+    let nlay : u64 = p[0u64] as u64
+    let roots_off : u64 = 1u64
+    /* copy roots into NROOT. */
+    let mut k : u64 = 0u64  while k < (nlay + 1u64) * 32u64 { NROOT[k] = p[roots_off + k]  k = k + 1u64 }
+    let fcw_off : u64 = roots_off + (nlay + 1u64) * 32u64
+    /* re-derive fold challenges from the shipped roots. */
+    let mut L : u64 = 0u64
+    while L < nlay {
+        keccak256_oneshot((&NROOT as u64) + L * 32u64, 32u64, (&DIG as u64))
+        RR[L] = e2pack(rd4(0u64), rd4(4u64))  RI[L] = e2pack(rd4(8u64), rd4(12u64))
+        L = L + 1u64
+    }
+    /* final layer constant? (4 equal GF(p^4) leaves) */
+    let fa0 : u64 = get16a(buf, fcw_off)  let fb0 : u64 = get16b(buf, fcw_off)
+    let mut c : u64 = 1u64
+    while c < 4u64 { if get16a(buf, fcw_off + c * 16u64) != fa0 { return 0u64 }  if get16b(buf, fcw_off + c * 16u64) != fb0 { return 0u64 }  c = c + 1u64 }
+    /* recompute layer sizes/str; queries from keccak(final root). */
+    keccak256_oneshot((&NROOT as u64) + nlay * 32u64, 32u64, (&DIG as u64))
+    /* cursor over the openings. */
+    let mut cur : u64 = fcw_off + 4u64 * 16u64
+    let mut qi : u64 = 0u64
+    while qi < NQ {
+        let pq : *u8 = ((&DIG as u64) + qi) as *u8
+        let q0 : u64 = (pq[0u64] as u64) & (DOM - 1u64)
+        let mut size : u64 = DOM  let mut L2 : u64 = 0u64
+        while L2 < nlay {
+            let s : u64 = size  let half : u64 = s / 2u64  let qm : u64 = q0 & (half - 1u64)  let ns : u64 = s / 2u64
+            let pl : u32 = merkle_proof_len_for(s as u32, qm as u32)
+            let pl2 : u32 = merkle_proof_len_for(ns as u32, qm as u32)
+            /* lo */
+            let mut b : u64 = 0u64  while b < 16u64 { NLEAF[b] = p[cur + b]  b = b + 1u64 }
+            let loa : u64 = get16a((&NLEAF as u64), 0u64)  let lob : u64 = get16b((&NLEAF as u64), 0u64)
+            cur = cur + 16u64
+            b = 0u64  while b < (pl as u64) * 33u64 { NPATH[b] = p[cur + b]  b = b + 1u64 }
+            cur = cur + (pl as u64) * 33u64
+            if merkle_verify_proof((&NLEAF as u64), merkle_pack_verify_meta(16u32, qm as u32, pl), (&NPATH as u64), (&NROOT as u64) + L2 * 32u64) == 0u8 { return 0u64 }
+            /* hi */
+            b = 0u64  while b < 16u64 { NLEAF[b] = p[cur + b]  b = b + 1u64 }
+            let hia : u64 = get16a((&NLEAF as u64), 0u64)  let hib : u64 = get16b((&NLEAF as u64), 0u64)
+            cur = cur + 16u64
+            b = 0u64  while b < (pl as u64) * 33u64 { NPATH[b] = p[cur + b]  b = b + 1u64 }
+            cur = cur + (pl as u64) * 33u64
+            if merkle_verify_proof((&NLEAF as u64), merkle_pack_verify_meta(16u32, (qm + half) as u32, pl), (&NPATH as u64), (&NROOT as u64) + L2 * 32u64) == 0u8 { return 0u64 }
+            /* next */
+            b = 0u64  while b < 16u64 { NLEAF[b] = p[cur + b]  b = b + 1u64 }
+            let nxa : u64 = get16a((&NLEAF as u64), 0u64)  let nxb : u64 = get16b((&NLEAF as u64), 0u64)
+            cur = cur + 16u64
+            b = 0u64  while b < (pl2 as u64) * 33u64 { NPATH[b] = p[cur + b]  b = b + 1u64 }
+            cur = cur + (pl2 as u64) * 33u64
+            if merkle_verify_proof((&NLEAF as u64), merkle_pack_verify_meta(16u32, qm as u32, pl2), (&NPATH as u64), (&NROOT as u64) + (L2 + 1u64) * 32u64) == 0u8 { return 0u64 }
+            /* fold-consistency */
+            foldp4(loa, lob, hia, hib, RR[L2], RI[L2], OM[(DOM / s) * qm])
+            if FRA[0] != nxa { return 0u64 }
+            if FRB[0] != nxb { return 0u64 }
+            size = half  L2 = L2 + 1u64
+        }
+        qi = qi + 1u64
+    }
+    return 1u64
+}
+fn fold_attestation(buf: u64, len: u64) {
+    keccak256_oneshot(buf, len, (&DIG as u64))
+    let h : u64 = (rd4(0u64) as u64) | ((rd4(4u64) as u64) << 32u64)
+    ATT[0] = (BASEF * ATT[0] + (h % MODP)) % MODP
+}
+fn zero_prover() {
+    let mut i : u64 = 0u64  while i < 32u64 { FA[i] = 0u64  FB[i] = 0u64  i = i + 1u64 }
+    i = 0u64  while i < 128u64 { ROOT[i] = 0u8  i = i + 1u64 }
+}
+
+fn main() -> u64 {
+    fill_om()
+    /* node 1: build the committed proof + serialise. */
+    build_and_serialise()
+    let alen : u64 = ALEN[0]
+    /* sealed channel: x25519 keypairs (basepoint u=9), handshake both sides. */
+    sc_reset_all()
+    let mut i : u64 = 0u64  while i < 32u64 { ASEC[i] = (i + 1u64) as u8  BSEC[i] = (i + 33u64) as u8  BP9[i] = 0u8  i = i + 1u64 }
+    BP9[0u64] = 9u8
+    x25519(&APUB as *u8, &ASEC as *u8, &BP9 as *u8)
+    x25519(&BPUB as *u8, &BSEC as *u8, &BP9 as *u8)
+    let ch_a : u64 = sc_handshake_init((&BPUB as u64), (&ASEC as u64))   /* Alice -> Bob */
+    let ch_b : u64 = sc_handshake_init((&APUB as u64), (&BSEC as u64))   /* Bob   <- Alice */
+    /* copy plaintext into CIPH, encrypt in place (sc_send), then decrypt on the peer (sc_recv) into the same buffer. */
+    i = 0u64  while i < alen { CIPH[i] = ART[i]  i = i + 1u64 }
+    if sc_send(ch_a, (&CIPH as u64), alen as u32, (&TAG as u64)) != 0i32 { return 1u64 }
+    /* (H) honest path: ZERO the prover state -> node 2 must verify from the shipped artifact alone. */
+    zero_prover()
+    if sc_recv(ch_b, (&CIPH as u64), alen as u32, (&TAG as u64)) != 0i32 { return 2u64 }   /* decrypt + auth */
+    ATT[0] = 0u64
+    if verify_artifact((&CIPH as u64)) != 1u64 { return 3u64 }                              /* verify reading ONLY CIPH (artifact) */
+    fold_attestation((&CIPH as u64), alen)
+    if ATT[0] == 0u64 { return 4u64 }                                                       /* the fold actually happened */
+    /* (C) tampered ciphertext: re-encrypt, flip a ciphertext byte -> sc_recv auth tag REJECTS. */
+    i = 0u64  while i < alen { CIPH[i] = ART[i]  i = i + 1u64 }
+    sc_reset_all()
+    let cha2 : u64 = sc_handshake_init((&BPUB as u64), (&ASEC as u64))
+    let chb2 : u64 = sc_handshake_init((&APUB as u64), (&BSEC as u64))
+    sc_send(cha2, (&CIPH as u64), alen as u32, (&TAG as u64))
+    CIPH[5u64] = CIPH[5u64] ^ 1u8                                                            /* tamper the ciphertext */
+    if sc_recv(chb2, (&CIPH as u64), alen as u32, (&TAG as u64)) == 0i32 { return 5u64 }     /* must REJECT (auth) */
+    /* (A) tampered artifact (auth intact): flip an opened leaf byte in a freshly-decrypted artifact -> Merkle REJECTS. */
+    i = 0u64  while i < alen { CIPH[i] = ART[i]  i = i + 1u64 }
+    sc_reset_all()
+    let cha3 : u64 = sc_handshake_init((&BPUB as u64), (&ASEC as u64))
+    let chb3 : u64 = sc_handshake_init((&APUB as u64), (&BSEC as u64))
+    sc_send(cha3, (&CIPH as u64), alen as u32, (&TAG as u64))
+    if sc_recv(chb3, (&CIPH as u64), alen as u32, (&TAG as u64)) != 0i32 { return 6u64 }
+    /* flip a byte well inside the openings region (past header+roots+final codeword). */
+    let off_open : u64 = 1u64 + (NLAY + 1u64) * 32u64 + 4u64 * 16u64
+    CIPH[off_open] = CIPH[off_open] ^ 1u8
+    zero_prover()
+    if verify_artifact((&CIPH as u64)) == 1u64 { return 7u64 }                               /* must REJECT (Merkle) */
+    return 99u64
+}

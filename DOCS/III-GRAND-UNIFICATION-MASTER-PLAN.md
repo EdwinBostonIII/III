@@ -339,6 +339,16 @@ fold + the trust-closure provenance certificate.
 verify:** flip one byte of R0's SVIR; confirm the gate goes red at exactly the verifier/zk arm.
 
 ### Phase Ω5 — here→there: ship the attested ripple to a second node
+**✅✅ CORE GREEN — `STDLIB/sovir/run_here_to_there.sh` (composed into `run_grand_unification.sh` as Ω.f).** A COMMITTED
+GF(p⁴) FRI proof is SERIALISED into a transportable artifact (Merkle roots + per-query openings + authentication paths
+— **not** the codeword/witness), SHIPPED over the real `sealed_channel` (x25519 ECDH-derived key + ChaCha20-Poly1305
+AEAD), and on the PEER node decrypted + Poly1305-authenticated, then VERIFIED reading ONLY the artifact — the prover's
+codeword + roots are **zeroed first**, so verification (recompute fold challenges from the shipped roots, Merkle-verify
+every opened leaf, check the GF(p⁴) fold-consistency + final-constant) provably uses no witness and does not
+re-execute the prover — and the artifact's content-address is FOLDED into the peer's attestation state. Teeth: a
+tampered ciphertext is rejected by the auth tag; a tampered artifact leaf by the Merkle check. *The proof travels, the
+witness does not.* Remaining for full federation: the multi-node 2f+1 quorum over shipped attestations (the
+`pattern_set_federation`/`pq_quorum` wiring) — Ω6.
 **Objective:** Ω.f — a second node verifies R0's proof and folds the result WITHOUT re-executing R0.
 **Open-audit task:** read `aether/sealed_channel.iii` + `pattern_set_federation.iii` + `backend_remote.iii`;
 determine the wire format, whether the channel is byte-tested end-to-end, and how a "fold" is represented.

@@ -1183,7 +1183,18 @@ fn reg_type(name_tok:u32, after_brace:u32, is_union:u32) {
                 SFN=SFN+1u32  nf=nf+1u32
                 if is_union==0u32 { off=off+fsz }
                 let mut g3:u32=1u32  while g3==1u32 { if ispat(q,Q_SEMI)==1u32 {g3=0u32} else { if TK[q as u64]==0u32 {g3=0u32} else {q=q+1u32} } }  q=q+1u32
-            } else { q=q+1u32 } } } }
+            } else {   /* unrecognized typedef field `TypedefName [*] f ;` (enum / forward typedef): scalar=4B (enum=int) / ptr=8B -- else the field is SKIPPED and the struct layout is wrong */
+                let nx2:u32=q+1u32  let mut isf:u32=0u32  let mut ffq:u32=nx2  let mut fesz:i64=4i64  let mut fmsk:i64=4294967295i64  let mut fsg:u32=1u32
+                if ispat(nx2,Q_MUL)==1u32 { isf=1u32  ffq=q+2u32  fesz=8i64  fmsk=0i64  fsg=0u32 } else { if TK[nx2 as u64]==1u32 { isf=1u32  ffq=nx2 } }
+                if isf==1u32 {
+                    let al:u64=fesz as u64  if is_union==0u32 { let r:u64=off & (al-1u64)  if r!=0u64 { off=off+(al-r) } }  if al>maxal {maxal=al}
+                    let mut isarr:u32=0u32  if ispat(ffq+1u32,Q_LBR)==1u32 {isarr=1u32}
+                    SFO[SFN as u64]=TO[ffq as u64]  SFL[SFN as u64]=TL[ffq as u64]  SFOFF[SFN as u64]=off  SFEL[SFN as u64]=fesz  SFAR[SFN as u64]=isarr  SFMASK[SFN as u64]=fmsk  SFSGN[SFN as u64]=fsg
+                    let mut fsz:u64=fesz as u64  if isarr==1u32 { if TK[(ffq+2u32) as u64]==2u32 { fsz=(TV[(ffq+2u32) as u64] as u64)*(fesz as u64) } }
+                    SFN=SFN+1u32  nf=nf+1u32  if is_union==0u32 {off=off+fsz}
+                    let mut g4:u32=1u32  while g4==1u32 { if ispat(q,Q_SEMI)==1u32 {g4=0u32} else { if TK[q as u64]==0u32 {g4=0u32} else {q=q+1u32} } }  q=q+1u32
+                } else { q=q+1u32 }
+            } } } }
     }
     let mut sz:u64=off  if is_union==1u32 { sz=8u64 } else { let r:u64=sz & (maxal - 1u64)  if r!=0u64 { sz=sz+(maxal-r) } }   /* pad struct size up to its largest member's alignment */
     STNF[STN as u64]=nf  STSZ[STN as u64]=sz  STN=STN+1u32

@@ -89,6 +89,8 @@ var FNO : [u32; 256]  var FNL : [u32; 256]  var FNP : [u32; 256]  var FNT : [u32
 fn fidx(t: u32) -> i32 { let mut k:u32=0u32  while k<FN { if neq(FNO[k as u64],FNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var AO : [u32; 64]  var AL : [u32; 64]  var AB : [u64; 64]  var AN : u32 = 0u32  var MTOP : u64 = 0u64
 fn abase(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AB[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
+var CNO : [u32; 128]  var CNL : [u32; 128]  var CNV : [i64; 128]  var CN : u32 = 0u32   /* module-level const NAME : T = LIT */
+fn cidx(t: u32) -> i32 { let mut k:u32=0u32  while k<CN { if neq(CNO[k as u64],CNL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32
 fn lidx(t: u32) -> i32 { let mut k:u32=0u32  while k<LN { if neq(LO[k as u64],LL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return k as i32}  k=k+1u32 }  return 0i32-1i32 }
 fn ladd(t: u32) -> u32 { let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LN=LN+1u32 }  return s }
@@ -123,7 +125,8 @@ fn opc(p: i64) -> u32 {
 
 /* SHUNTING-YARD expression engine (the algorithmic difference from iiisv). */
 var OPSTK : [i64; 256]  var OPSN : u32 = 0u32
-fn emit_primary() {
+fn skipas() { while kw(C,"as" as u64,2u32)==1u32 { C=C+1u32  C=C+1u32 } }   /* `expr as T`: cast is a no-op (all->i64) */
+fn emit_atom() {
     if cp(Q_LP)==1u32 { C=C+1u32  emit_expr()  eat(Q_RP)  return }
     if TK[C as u64]==2u32 { econst(TV[C as u64])  C=C+1u32  return }
     if TK[C as u64]==1u32 {
@@ -139,11 +142,13 @@ fn emit_primary() {
             let ab:i64=abase(t)
             if ab>=0i64 { C=C+1u32  emit_expr()  eat(Q_RBR)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eb(0x80u32)  return }
         }
-        let li:i32=lidx(t)  if li>=0i32 { eu8(0x10u32, li as u32) }
+        let li:i32=lidx(t)  if li>=0i32 { eu8(0x10u32, li as u32)  return }
+        let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64]) }
         return
     }
     C=C+1u32
 }
+fn emit_primary() { emit_atom()  skipas() }
 fn emit_expr() {
     let base : u32 = OPSN
     emit_primary()
@@ -212,11 +217,21 @@ fn prescan() {
     while t<NT { if kw(t,"fn" as u64,2u32)==1u32 { if kw(t+1u32,"main" as u64,4u32)==0u32 { rec_fn(t) } }  t=t+1u32 }
 }
 fn prescan_arr() {
-    AN=0u32  MTOP=0u64
+    AN=0u32  MTOP=16u64   /* reserve [0..15] for NULL -- match iiisv/ccsv data origin so address 0 is never a real object (byte-DDC alignment) */
     let mut t:u32=0u32
     while t<NT {
         if kw(t,"var" as u64,3u32)==1u32 { let nt:u32=t+1u32  if isp(nt+2u32,Q_LBR)==1u32 { if TK[(nt+5u32) as u64]==2u32 {
             AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=MTOP  MTOP=MTOP+(TV[(nt+5u32) as u64] as u64)  AN=AN+1u32
+        } } }
+        t=t+1u32
+    }
+}
+fn prescan_const() {   /* const NAME : T = LIT  ->  record name -> literal value */
+    CN=0u32
+    let mut t:u32=0u32
+    while t<NT {
+        if kw(t,"const" as u64,5u32)==1u32 { let nt:u32=t+1u32  if TK[(nt+4u32) as u64]==2u32 { if CN<128u32 {
+            CNO[CN as u64]=TO[nt as u64]  CNL[CN as u64]=TL[nt as u64]  CNV[CN as u64]=TV[(nt+4u32) as u64]  CN=CN+1u32
         } } }
         t=t+1u32
     }
@@ -226,7 +241,9 @@ fn cfn(fk: u32) {
     LN=0u32  let mut params:u32=0u32  let mut go:u32=1u32
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else { let pt:u32=C  C=C+1u32  eat(Q_COL)  C=C+1u32  ladd(pt)  params=params+1u32  eat(Q_COM) } } }
     eat(Q_RP)  if cp(Q_ARR)==1u32 { C=C+1u32  C=C+1u32 }
+    let mut sg:u32=1u32  while sg==1u32 { if TK[C as u64]==0u32 {sg=0u32} else { if cp(Q_LB)==1u32 {sg=0u32} else {C=C+1u32} } }   /* skip @export etc. before body */
     BL=0u64  pblock()
+    econst(0i64)  eb(0x60u32)   /* trailing default return (see iiisv): every fn pushes one value for the CALL convention */
     mb(params)  mb(1u32)  mb((BL & 0xFFu64) as u32)  mb(((BL >> 8u64) & 0xFFu64) as u32)
     let mut i:u64=0u64  while i<BL { mb(BD[i] as u32)  i=i+1u64 }
 }
@@ -251,7 +268,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     if f == 0u64 { return 3u64 }
     SLEN = fread(&SRC as u64, 1u64, 65535u64, f)
     fclose(f)
-    lex()  prescan()  prescan_arr()
+    lex()  prescan()  prescan_arr()  prescan_const()
     ML=0u64  OPSN=0u32
     let mut k:u32=0u32
     while k<FN { cfn(k)  k=k+1u32 }

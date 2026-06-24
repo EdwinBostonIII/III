@@ -134,6 +134,17 @@ fn arr_base(t: u32) -> i64 {   /* base offset if t names an array, else -1 */
     return 0i64 - 1i64
 }
 
+/* module-level constants (const NAME : T = LIT) -> compile-time literal substitution at reference sites */
+var CON_OFF : [u32; 128]
+var CON_LEN : [u32; 128]
+var CON_VAL : [i64; 128]
+var CON_N : u32 = 0u32
+fn con_index(t: u32) -> i32 {
+    let mut k : u32 = 0u32
+    while k < CON_N { if names_eq(CON_OFF[k as u64], CON_LEN[k as u64], TK_OFF[t as u64], TK_LEN[t as u64]) == 1u32 { return k as i32 }  k = k + 1u32 }
+    return 0i32 - 1i32
+}
+
 var LOC_OFF : [u32; 256]
 var LOC_LEN : [u32; 256]
 var LOC_N : u32 = 0u32
@@ -175,7 +186,8 @@ fn op_svir(p: i64) -> u32 {
     return 0u32
 }
 
-fn parse_primary() {
+fn skip_as() { while tok_kw(TP, "as" as u64, 2u32) == 1u32 { TP = TP + 1u32  TP = TP + 1u32 } }   /* `expr as T`: all types lower to i64, so a cast is a no-op (consume `as` + the type token) */
+fn parse_atom() {
     if eat(PU_LP) == 1u32 { parse_bin(0u32)  eat(PU_RP)  return }
     if TK_KIND[TP as u64] == 2u32 { e_const(TK_VAL[TP as u64])  TP = TP + 1u32  return }
     if TK_KIND[TP as u64] == 1u32 {
@@ -194,11 +206,14 @@ fn parse_primary() {
         }
         if cur_punct(PU_LBR) == 1u32 { let ab : i64 = arr_base(t)  if ab >= 0i64 { TP = TP + 1u32  parse_bin(0u32)  eat(PU_RBR)  if ab > 0i64 { e_const(ab)  e_op(0x20u32) }  e_op(0x80u32)  return } }   /* array load: addr=index(+base) ; LOAD8 */
         let li : i32 = loc_index(t)
-        if li >= 0i32 { e_u8(0x10u32, li as u32) }
+        if li >= 0i32 { e_u8(0x10u32, li as u32)  return }
+        let ci : i32 = con_index(t)
+        if ci >= 0i32 { e_const(CON_VAL[ci as u64]) }
         return
     }
     TP = TP + 1u32
 }
+fn parse_primary() { parse_atom()  skip_as() }
 fn parse_bin(minp: u32) {
     parse_primary()
     let mut go : u32 = 1u32
@@ -305,6 +320,24 @@ fn prescan_arrays() {   /* var NAME : [ T ; SIZE ]  -> assign a base offset in S
     }
 }
 
+fn prescan_consts() {   /* const NAME : T = LIT  ->  record name -> literal value (compile-time substitution) */
+    CON_N = 0u32
+    let mut t : u32 = 0u32
+    while t < NTOK {
+        if tok_kw(t, "const" as u64, 5u32) == 1u32 {
+            let nt : u32 = t + 1u32                       /* const(t) NAME(t+1) :(t+2) T(t+3) =(t+4) NUM(t+5) */
+            if TK_KIND[(nt + 4u32) as u64] == 2u32 {
+                if CON_N < 128u32 {
+                    CON_OFF[CON_N as u64] = TK_OFF[nt as u64]  CON_LEN[CON_N as u64] = TK_LEN[nt as u64]
+                    CON_VAL[CON_N as u64] = TK_VAL[(nt + 4u32) as u64]
+                    CON_N = CON_N + 1u32
+                }
+            }
+        }
+        t = t + 1u32
+    }
+}
+
 fn compile_fn(fk: u32) {
     TP = FN_TOK[fk as u64]
     TP = TP + 1u32  TP = TP + 1u32        /* fn name */
@@ -319,8 +352,11 @@ fn compile_fn(fk: u32) {
     }
     eat(PU_RP)
     if cur_punct(PU_ARROW) == 1u32 { TP = TP + 1u32  TP = TP + 1u32 }
+    let mut sg : u32 = 1u32   /* skip annotation tokens (e.g. @export) between the signature and the body `{` */
+    while sg == 1u32 { if TK_KIND[TP as u64] == 0u32 { sg = 0u32 } else { if cur_punct(PU_LB) == 1u32 { sg = 0u32 } else { TP = TP + 1u32 } } }
     BLEN = 0u64
     parse_block()
+    e_const(0i64)  e_op(0x60u32)   /* trailing default return: a void fn (or any fall-through) returns 0, so EVERY fn pushes exactly one value -- the SVIR CALL convention (svir_verify: depth+1 per call) requires it; an explicit `return e` makes this dead code */
     mb(params)  mb(1u32)  mb((BLEN & 0xFFu64) as u32)  mb(((BLEN >> 8u64) & 0xFFu64) as u32)
     let mut i : u64 = 0u64  while i < BLEN { mb(BODY[i] as u32)  i = i + 1u64 }
 }
@@ -350,6 +386,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     lex()
     prescan()
     prescan_arrays()
+    prescan_consts()
     MLEN = 0u64
     let mut k : u32 = 0u32
     while k < FN_NF { compile_fn(k)  k = k + 1u32 }

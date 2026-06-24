@@ -51,33 +51,38 @@ fn parse() {
     let mut p : u64 = 5u64
     let mut row : u64 = 0u64
     let mut nops : u32 = 0u32
+    let mut done : u32 = 0u32                              /* set once the function's logical RETURN is reached */
     while row < 8u64 {
-        let past : u32 = 0u32
-        if p >= len {
-            /* past the body: pad with ADD-0 (a nop preserving the stack top). */
-            ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32
+        if done == 1u32 {
+            ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32   /* after RETURN: pad (nop), ignore trailing dead opcodes */
             row = row + 1u64
         } else {
-            let op : u32 = rdbyte(base, p)
-            if op == 1u32 {                                  /* CONST 0x01 + 8-byte LE immediate */
-                let b0 : u32 = rdbyte(base, p + 1u64)
-                let b1 : u32 = rdbyte(base, p + 2u64)
-                let b2 : u32 = rdbyte(base, p + 3u64)
-                let b3 : u32 = rdbyte(base, p + 4u64)
-                ISC[row] = 1u32  ISM[row] = 0u32  ISA[row] = 0u32
-                ARG[row] = b0 + b1*256u32 + b2*65536u32 + b3*16777216u32
-                p = p + 9u64  row = row + 1u64  nops = nops + 1u32
+            if p >= len {
+                /* past the body: pad with ADD-0 (a nop preserving the stack top). */
+                ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32
+                row = row + 1u64
             } else {
-                if op == 34u32 {                             /* MUL 0x22 */
-                    ISC[row] = 0u32  ISM[row] = 1u32  ISA[row] = 0u32  ARG[row] = 0u32
-                    p = p + 1u64  row = row + 1u64  nops = nops + 1u32
+                let op : u32 = rdbyte(base, p)
+                if op == 1u32 {                                  /* CONST 0x01 + 8-byte LE immediate */
+                    let b0 : u32 = rdbyte(base, p + 1u64)
+                    let b1 : u32 = rdbyte(base, p + 2u64)
+                    let b2 : u32 = rdbyte(base, p + 3u64)
+                    let b3 : u32 = rdbyte(base, p + 4u64)
+                    ISC[row] = 1u32  ISM[row] = 0u32  ISA[row] = 0u32
+                    ARG[row] = b0 + b1*256u32 + b2*65536u32 + b3*16777216u32
+                    p = p + 9u64  row = row + 1u64  nops = nops + 1u32
                 } else {
-                    if op == 32u32 {                         /* ADD 0x20 */
-                        ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32
+                    if op == 34u32 {                             /* MUL 0x22 */
+                        ISC[row] = 0u32  ISM[row] = 1u32  ISA[row] = 0u32  ARG[row] = 0u32
                         p = p + 1u64  row = row + 1u64  nops = nops + 1u32
-                    } else {                                  /* RETURN 0x60 / trailing -> treat as nop, keep padding */
-                        ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32
-                        p = p + 1u64  row = row + 1u64
+                    } else {
+                        if op == 32u32 {                         /* ADD 0x20 */
+                            ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32
+                            p = p + 1u64  row = row + 1u64  nops = nops + 1u32
+                        } else {                                  /* RETURN 0x60 (or any non-compute op): the logical end -- pad here, ignore the rest */
+                            ISC[row] = 0u32  ISM[row] = 0u32  ISA[row] = 1u32  ARG[row] = 0u32
+                            p = p + 1u64  row = row + 1u64  done = 1u32
+                        }
                     }
                 }
             }

@@ -1,0 +1,68 @@
+/* eidos_ripple_probe.iii -- a cg_r3 driver over the REAL eidos::ripple organ.  It runs the canonical Omega2
+ * geometry through the live ripple (eidos_ripple_emit derives each event's verb from the hex-rank gradient via
+ * rf_rank, logs <verb,a,b> on the isub bus), reads the events back, and folds their content-addresses
+ * enc = verb*65536 + a*256 + b into a rolling temporal state (state' = (BASE*state + enc) % MODP).
+ *
+ * It PRINTS: the rank vector rf_rank(0..15), the achieved event count, and the canonical fold.  Those values are
+ * baked (certified) into eidos_ripple_r0.iii (the SVIR-route replica) -- the byte-match against this live organ is
+ * what makes the SVIR route FAITHFUL, not a toy (the R0 replica shares zero code with the organ's externs). */
+module eidos_ripple_probe
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_reset() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_is_ripple(hex_from: u8, hex_to: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_emit(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_verb(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_a(i: u32) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_event_b(i: u32) -> u32 from "ripple.iii"
+
+const BASE : u64 = 257u64
+const MODP : u64 = 1000000007u64
+const NEV  : u32 = 16u32
+
+var DB : [u8; 24]
+fn pdec(v0: u64) { if v0 == 0u64 { putchar(48i32)  return }  let mut v : u64 = v0  let mut n : u32 = 0u32  while v > 0u64 { DB[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }  while n > 0u32 { n = n - 1u32  putchar(DB[n as u64] as i32) } }
+
+fn run_geometry() -> u32 {
+    eidos_ripple_reset()
+    let mut emitted : u32 = 0u32
+    let mut h : u32 = 0u32
+    while emitted < NEV {
+        if h >= 256u32 { return emitted }
+        let hf : u8 = (h & 15u32) as u8
+        let ht : u8 = (((h >> 4u32) + 1u32) & 15u32) as u8
+        if eidos_ripple_is_ripple(hf, ht) == 1u32 {
+            eidos_ripple_emit((emitted + 1u32) as u8, (emitted + 2u32) as u8, hf, ht)
+            emitted = emitted + 1u32
+        }
+        h = h + 1u32
+    }
+    return emitted
+}
+
+fn fold() -> u64 {
+    let cnt : u32 = eidos_ripple_count()
+    let mut state : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < cnt {
+        let v : u64 = eidos_ripple_event_verb(i) as u64
+        let a : u64 = eidos_ripple_event_a(i) as u64
+        let b : u64 = eidos_ripple_event_b(i) as u64
+        let enc : u64 = v * 65536u64 + a * 256u64 + b
+        state = (BASE * state + enc) % MODP
+        i = i + 1u32
+    }
+    return state
+}
+
+fn main() -> u64 {
+    let mut h : u32 = 0u32
+    while h < 16u32 { pdec(rf_rank(h as u8) as u64)  putchar(32i32)  h = h + 1u32 }
+    putchar(10i32)
+    let em : u32 = run_geometry()
+    pdec(em as u64)  putchar(32i32)  pdec(eidos_ripple_count() as u64)  putchar(10i32)
+    pdec(fold())  putchar(10i32)
+    return 0u64
+}

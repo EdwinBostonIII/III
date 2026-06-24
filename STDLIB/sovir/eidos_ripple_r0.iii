@@ -1,0 +1,76 @@
+/* eidos_ripple_r0.iii -- R0: the canonical demonstrator EIDOS ripple, in the iiisv-compilable subset.
+ *
+ * This is the SELF-CONTAINED computational kernel of eidos::ripple (DOCS/III-EIDOS-ARCHITECTURE.md FR-1), authored
+ * so it lowers through the INDEPENDENT iiisv (.iii -> SVIR) front-end -> x86(sovereign) + wasm.  It exercises the
+ * ripple's full event->fold->inverse semantics:
+ *   - DIRECTION: each edge's verb is DERIVED (never a free label) from the dominance-rank gradient -- rank(b)>rank(a)
+ *     => V_BELOW (the edge climbs), rank(b)<rank(a) => V_REFLECT (the order-reversing involution), equal => V_NONE
+ *     (flat = no ripple, emitted nothing).  This is the SAME 3-way decision eidos_ripple_direction makes.
+ *   - CONTENT-ADDRESS (the inverse-form identity): enc = verb*65536 + a*256 + b binds the spatial edge and the
+ *     temporal event to ONE address.
+ *   - FOLD (the temporal view): state' = (BASE*state + enc) % MODP -- the rolling content-address of the event stream.
+ *
+ * The dominance ranks rf_rank(0..15) are a SEALED boundary input (rf_rank derives them via the ternary-lattice join
+ * xii_hj_join -- a sub-organ, not the ripple's own computation), embedded here as data.  Their faithfulness is NOT
+ * assumed: eidos_ripple_probe.iii folds the LIVE organ's event stream and the gate (run_eidos_svir.sh) checks this
+ * replica's fold equals the live organ's fold byte-for-byte.  If any rank entry or the direction logic diverged from
+ * reality, a verb would flip and the fold would differ -- so GOLDEN below is certified by the real organ, not guessed.
+ *
+ * Returns 99 iff the kernel reproduces the canonical fold (GOLDEN, certified against the live organ).  Compiles by
+ * BOTH cg_r3 and iiisv; runs identically on x86(sovereign)+wasm. */
+module eidos_ripple_r0
+
+/* the dominance-rank vector rf_rank(0..15) -- a sealed boundary input (populated at runtime: iiisv zero-inits
+ * module memory and does not load array initializers, so the table is set by explicit stores). */
+var RANK : [u8; 16]
+
+const BASE   : u64 = 257u64
+const MODP   : u64 = 1000000007u64
+const NEV    : u32 = 16u32          /* the canonical event count of this geometry */
+const GOLDEN : u64 = 675673294u64   /* the live organ's fold over the SAME geometry (eidos_ripple_probe.iii) */
+const V_NONE : u32 = 2u32           /* flat sentinel: not a legal verb */
+
+fn init_ranks() {
+    RANK[0] = 0u8   RANK[1] = 1u8   RANK[2] = 2u8   RANK[3] = 3u8
+    RANK[4] = 4u8   RANK[5] = 5u8   RANK[6] = 0u8   RANK[7] = 6u8
+    RANK[8] = 0u8   RANK[9] = 0u8   RANK[10] = 0u8  RANK[11] = 0u8
+    RANK[12] = 0u8  RANK[13] = 0u8  RANK[14] = 0u8  RANK[15] = 0u8
+}
+
+/* the verb IS the spatial direction, derived from the rank gradient (the same decision eidos_ripple_direction makes). */
+fn direction(hf: u32, ht: u32) -> u32 @export {
+    let rf : u32 = RANK[hf] as u32
+    let rt : u32 = RANK[ht] as u32
+    if rt > rf { return 0u32 }      /* V_BELOW: a sits under b, the edge climbs */
+    if rt < rf { return 1u32 }      /* V_REFLECT: the order-reversing involution */
+    return V_NONE                   /* flat: no ripple */
+}
+
+/* run the canonical geometry, content-address each real ripple event, fold into the rolling temporal state. */
+fn fold_ripple() -> u64 @export {
+    let mut state : u64 = 0u64
+    let mut emitted : u32 = 0u32
+    let mut h : u32 = 0u32
+    while emitted < NEV {
+        if h >= 256u32 { return state }
+        let hf : u32 = h & 15u32
+        let ht : u32 = ((h >> 4u32) + 1u32) & 15u32
+        let verb : u32 = direction(hf, ht)
+        if verb < V_NONE {                                   /* a real ripple direction (BELOW or REFLECT) */
+            let a : u64 = (emitted + 1u32) as u64
+            let b : u64 = (emitted + 2u32) as u64
+            let enc : u64 = (verb as u64) * 65536u64 + a * 256u64 + b
+            state = (BASE * state + enc) % MODP
+            emitted = emitted + 1u32
+        }
+        h = h + 1u32
+    }
+    return state
+}
+
+fn main() -> u64 {
+    init_ranks()
+    let f : u64 = fold_ripple()
+    if f == GOLDEN { return 99u64 }
+    return 1u64
+}

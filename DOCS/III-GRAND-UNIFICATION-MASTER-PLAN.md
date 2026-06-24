@@ -119,12 +119,12 @@ with the negative arm (a semantics-BREAKING candidate) REJECTED at Σ.b.
 |---|---|---|---|
 | **SVIR + verifier** | Mature (R4) | ISA `0x01`–`0x89` incl. typed mem; 80-line anchor | none for the spine; verifier must stay ≤~80 lines as ISA-used-by-R is fixed |
 | **ccsv (C→SVIR)** | Growing (R5) | real C subset, crypto compiles, seed features climbing | finish enough seed coverage to compile iiis-0 C TUs (the sovereign-witness path) |
-| **iiisv (.iii→SVIR)** | Partial (R5) | integer core: fn/let/if/while/return/calls/ops, all→i64 | **extend to EIDOS's constructs** (structs, arrays, the ripple ops) — FR-1 |
+| **iiisv (.iii→SVIR)** | **Ω2 done (R5)** | integer core + fixed arrays + `const`/`as`/`@export` + void-fn returns; `iiisv2` byte-mirrors all | EIDOS ripple R0 routes through it (FR-1 ✅); structs only if a later phase needs them |
 | **sovas / sovld** | Mature (R2/repro) | sovereign assemble+link; **byte-reproducible** | route iiis-1's C TUs through it for binary-level DDC (Ω0) |
 | **DDC (trust)** | Mature (session) | both axes gated; `run_trust_closure.sh` PASS | extend to binary-level via reproducible back-end (Ω0) |
 | **XII** | Near-complete (R3) | 41 modules: canonicalise/rewrite/termination/joinability/critpair; sealed manifest | emit a *checkable* `eqv_equal` proof artifact per canonicalisation (FR-2/Ω3) |
 | **zkVM-over-SVIR** | Partial (R2) | per-opcode AIRs (ADD/MUL/RANGE), 2-opcode trace VM, prover+verifier+soundness | **full-ISA trace** (compare/control/mem/call) + real-i64 limbs (FR-4/Ω1) |
-| **EIDOS** | Mature-but-unrouted (R3/R4) | 18 modules; `eqv_equal`/memo live; ripple substrate | route a real ripple **through SVIR** so it's attestable (FR-1/Ω2) |
+| **EIDOS** | **Ω2 routed (R3/R4)** | 18 modules; `eqv_equal`/memo live; ripple substrate; **ripple R0 now SVIR-attestable** | (Ω3) emit a checkable `eqv_equal` proof for R0's SVIR under the sealed manifest |
 | **Transport** | Partial (R5) | `sealed_channel` x25519+ChaCha20; `pattern_set_federation` | wire verify-and-fold-without-re-exec across two nodes (FR-7/Ω5) |
 | **Self-improve** | Partial (R4) | `self_reformatter`, `sov_isa`, `verified_search` | close discovery→proof→witness→attest→federate loop (FR-8/Σ) |
 
@@ -232,6 +232,21 @@ two opcode classes, hand-trace one AIR row and confirm the constraint polynomial
 non-zero on the forged datum.
 
 ### Phase Ω2 — Route a real EIDOS ripple through SVIR (the EIDOS→SVIR completion)
+**✅✅ CLOSED — gate `STDLIB/sovir/run_eidos_svir.sh` (all clauses green).** ADR-Ω2 honoured: `iiisv` was EXTENDED
+(not the ripple down-scoped). `R0 = STDLIB/sovir/eidos_ripple_r0.iii` — the self-contained event→fold→inverse kernel
+of `eidos::ripple` (rank-gradient-derived verbs V_BELOW/V_REFLECT/V_NONE, content-address `enc=verb*65536+a*256+b`,
+temporal fold `state'=(BASE*state+enc)%p`) — lowers through the INDEPENDENT `iiisv` → SVIR (3964 B),
+`svir_verify`-accepted, runs **99 on x86(sovereign, kernel32-only) AND wasm**, with `iiisv == iiisv2`
+**byte-identical** (the DDC frontend axis holds across the new constructs). The SVIR fold == the **LIVE** organ's
+fold == `675673294` byte-for-byte (`eidos_ripple_native.iii`/`eidos_ripple_probe.iii` link the real
+`ripple_field`+`isub` and certify the golden — R0 shares zero code with the organ's externs, so the match is a
+faithful cross-check, not two copies of one guess); the cg_r3 native route also runs 99; and a corrupted-rank R0 is
+REJECTED (negative arm). **iiisv extensions (mirrored in `iiisv2`):** `const` literal substitution, `as T` casts
+(no-op→i64), `@export`/annotation skip, and the void-function fix (trailing default `CONST 0; RETURN` so every fn
+satisfies the SVIR CALL convention). Two latent bugs surfaced + fixed: `iiisv2` was missing iiisv's address-0/NULL
+reservation (`MTOP` 0→16, which had silently broken the `run_ddc.sh` byte gate for array programs), and
+`zk_iiisv_attest`'s parser now stops at the logical RETURN (robust to the trailing default return). **EIDOS is now
+attestable through SVIR.** Regression: `run_svir.sh`, `run_ddc.sh`, ZK-OMEGA-E all green.
 **Objective:** make a real EIDOS computation attestable by getting it into SVIR (today EIDOS is cg_r3→x86 direct).
 **Open-audit task:** read `eidos/ripple.iii` + `eidos/memo.iii` + `eidos/compose.iii`; list the language
 constructs they use beyond `iiisv`'s integer core (structs, fixed arrays, the `eqv_equal` call, any function

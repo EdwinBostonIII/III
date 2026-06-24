@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"; S="$ROOT/STDLIB/sovir"; BOOT="$ROOT/STDLIB/build/_sovboot"
 W="$ROOT/STDLIB/build/sovir"; LIB="$ROOT/STDLIB/build/iii/libiii_native.a"; mkdir -p "$W"
 fail=0; say(){ echo "[zk] $*"; }
-for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
+for m in svir_x86 svir_wasm iiisv zk_svir_exec zk_svir_add zk_svir_sub zk_svir_range zk_svir_mul zk_svir_bitops zk_svir_vm; do "$IIIS" "$S/$m.iii" --compile-only --out "$W/$m.o" >/dev/null 2>&1 || { say "FAIL compile $m"; fail=1; }; done
 gcc "$W/iiisv.o" -o "$W/iiisv.exe" 2>/dev/null
 runzk(){ gcc "$W/$1.o" "$LIB" -lkernel32 -o "$W/$1.exe" 2>/dev/null; timeout 30 "$W/$1.exe" >/dev/null 2>&1; echo $?; }
 
@@ -35,6 +35,10 @@ else say "FAIL zkVM-RANGE: zk_svir_range=$rrc"; fail=1; fi
 mrc=$(runzk zk_svir_mul)
 if [ "$mrc" = "99" ]; then say "zkVM-MUL : SVIR MUL via 2-limb schoolbook (degree-2 column constraints + carry) ; honest a*b holds + forged result AND forged carry rejected -> 99"
 else say "FAIL zkVM-MUL: zk_svir_mul=$mrc"; fail=1; fi
+# (0c2) zkVM BITOPS: the SVIR AND(0x25)/OR(0x26)/XOR(0x27) opcodes via per-bit op + boolean + recomposition AIR.
+borc=$(runzk zk_svir_bitops)
+if [ "$borc" = "99" ]; then say "zkVM-BITOPS : SVIR AND/OR/XOR arithmetized over GF(998244353) -- per-bit op constraint (AND c=ab, OR c=a+b-ab, XOR c=a+b-2ab) + booleanity + doubling-accumulator recomposition boundary (binds bits to the value, no lookup) ; all 3 ops hold + recompose AND forged result-bit AND non-boolean bit both rejected -> 99 (14-bit limb unit; 64-bit = 5 limbs, no carry)"
+else say "FAIL zkVM-BITOPS: zk_svir_bitops=$borc (1=AND 2=OR 3=XOR 4=result-tamper 5=boolean-tamper 6=re-verify)"; fail=1; fi
 # (0d) zkVM TRACE LAYOUT: per-step opcode-dispatched execution (selector VM, ADD/MUL) -- arbitrary bytecode proven.
 vrc=$(runzk zk_svir_vm)
 if [ "$vrc" = "99" ]; then say "zkVM-TRACE : per-step opcode-dispatched VM (selector ADD/MUL, product materialized for degree-2) ; honest execution holds + forged acc AND forged opcode rejected -> 99"

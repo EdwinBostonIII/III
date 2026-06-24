@@ -28,10 +28,10 @@ fn arg_reg(j: u32) {                                                          /*
     if j == 3u32 { ez("%r9~"  as u64) }
 }
 
-var CS_KIND : [u32; 64]
-var CS_TGT  : [u32; 64]
-var CS_ELSE : [u32; 64]
-var CS_ELSEEN : [u32; 64]
+var CS_KIND : [u32; 4096]
+var CS_TGT  : [u32; 4096]
+var CS_ELSE : [u32; 4096]
+var CS_ELSEEN : [u32; 4096]   /* structured-control nesting depth: a switch with N cases -> N+2 nested BLOCKs ; ast.c's big switch exceeds 64 */
 var CS_N : u32 = 0u32
 var LBLCTR : u32 = 0u32
 

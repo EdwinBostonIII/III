@@ -283,6 +283,18 @@ fn emit_memcpy() {
     eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)                   /* BR 0 ; END END */
     econst(0i64)                                                      /* call result */
 }
+/* memset(dst,val,n) builtin: inline byte-fill loop. */
+fn emit_memset() {
+    let td:u32=LN  let tv:u32=LN+1u32  let tn:u32=LN+2u32  let ti:u32=LN+3u32  if LN<252u32 {LN=LN+4u32}
+    ebin(0u32)  eu8(0x11u32,td)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tv)  eat(Q_COM)  ebin(0u32)  eu8(0x11u32,tn)
+    econst(0i64)  eu8(0x11u32,ti)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ti)  eu8(0x10u32,tn)  eb(0x33u32)  eu8(0x51u32,1u32)  /* if i>=n: break */
+    eu8(0x10u32,td)  eu8(0x10u32,ti)  eb(0x20u32)  eu8(0x10u32,tv)  eb(0x81u32)   /* dst[i] = val (STORE8) */
+    eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)
+    eb(0x50u32)  eb(0u32)  eb(0x44u32)  eb(0x44u32)
+    econst(0i64)
+}
 fn eprim() {
     if cp(Q_MUL)==1u32 { C=C+1u32                                  /* *p : pointer deref */
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 { if LCH[dli as u64]==1u32 { emit_lget(dli as u32)  C=C+1u32  eb(0x80u32)  return } } }   /* char* -> LOAD8 */
@@ -312,6 +324,7 @@ fn eprim() {
         if cp(Q_LP)==1u32 {                                          /* call (or a builtin: putchar/memcpy) */
             C=C+1u32
             if kw(t,"memcpy" as u64,6u32)==1u32 { emit_memcpy()  eat(Q_RP)  return }
+            if kw(t,"memset" as u64,6u32)==1u32 { emit_memset()  eat(Q_RP)  return }
             let mut ac:u32=0u32  if cp(Q_RP)==0u32 { ebin(0u32)  ac=1u32  while cp(Q_COM)==1u32 { C=C+1u32  ebin(0u32)  ac=ac+1u32 } }  eat(Q_RP)
             if kw(t,"putchar" as u64,7u32)==1u32 { eb(0x71u32)  econst(0i64) }    /* putchar(c) -> PRINT_CHAR ; push 0 as the (C) return */
             else { let fi:i32=fidx(t)  if fi>=0i32 { eb(0x70u32)  eb(fi as u32)  eb(ac) } }
@@ -340,6 +353,7 @@ fn eprim() {
                 if fieldisarr(ptt,ft)==1u32 { emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  return }   /* bare array field -> p+foff (decay) */
                 emit_lget(lidx(t) as u32)  if foff>0i64 { econst(foff)  eb(0x20u32) }  eb(0x82u32)  return }
         }
+        if kw(t,"true" as u64,4u32)==1u32 { econst(1i64)  return }  if kw(t,"false" as u64,5u32)==1u32 { econst(0i64)  return }  if kw(t,"NULL" as u64,4u32)==1u32 { econst(0i64)  return }   /* bool / null literals */
         let ad:i64=abase(t)  if ad>=0i64 { econst(ad)  return }               /* bare array name -> &arr[0] (array->pointer decay) */
         let ci:i32=cidx(t)  if ci>=0i32 { econst(CNV[ci as u64])  return }   /* enum member / #define constant */
         let li:i32=lidx(t)  if li>=0i32 { emit_lget(li as u32) }  return

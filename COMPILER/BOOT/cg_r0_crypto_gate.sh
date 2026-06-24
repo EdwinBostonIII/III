@@ -74,7 +74,7 @@ EOF
 }
 
 # --- sha256: cg_r0 sha256("abc") must equal FIPS-180-2 ba7816bf..f20015ad ---
-probe sha256 STDLIB/iii/numera/sha256.iii "" '
+probe sha256 STDLIB/iii/numera/sha256.iii "STDLIB/iii/numera/weave_blocks.iii" '
 extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_oneshot(msg: *u8, len: u64, out: *u8) -> u32 from "sha256.iii"
 var IN : [u8; 4]
@@ -98,7 +98,7 @@ fn cg_r0_probe() -> u32 @export {
 #     slotted "abc" probe above passes even when byte-packed hashing over-reads 8x, because the
 #     corruption only shows across block boundaries on NON-slotted input.  Absolute FIPS, not a
 #     peer differential (cg_r3 shares index defects -> a differential agrees on a wrong answer). ---
-probe cad_packed_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_packed_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii STDLIB/iii/numera/weave_blocks.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 var OUT: [u8; 32]
 var EXP: [u8; 32]
@@ -117,7 +117,7 @@ fn cg_r0_probe() -> u32 @export {
 #     within the buffer (a trailing PAGE_NOACCESS page faults the process if it over-reads).  This
 #     is the exact mechanism of the BSOD (the .text self-measure walked off the image); zero-filled
 #     VirtualAlloc memory means no cg_r0 byte-STORE is needed to set it up. ---
-probe cad_packed_guard STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_packed_guard STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii STDLIB/iii/numera/weave_blocks.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn VirtualAlloc(addr: u64, size: u64, typ: u32, prot: u32) -> u64 from "kernel32"
 extern @abi(c-msvc-x64) fn VirtualProtect(addr: u64, size: u64, newprot: u32, oldprot: u64) -> u32 from "kernel32"
@@ -139,7 +139,7 @@ fn cg_r0_probe() -> u32 @export {
 #     read byte-packed and mismatched, 2026-06-04).  Reading the output as *u64 here is the
 #     prove-the-negative: a regression to slotted output yields u64[0]=0x..00..00d0 != the packed
 #     EXPW and the gate reddens. ---
-probe cad_packed_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_packed_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii STDLIB/iii/numera/weave_blocks.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 var OUT: [u8; 64]
 var EXPW: [u64; 4]
@@ -155,7 +155,7 @@ fn cg_r0_probe() -> u32 @export {
 #     byte-packed (4 u64s LE = 4e03657a...).  Prove-the-negative for the cg_r0 KECCAK ENGINE: the
 #     _kk_load_lane/_kk_store_lane mixed-units defect gave a10df1f9 (every lane>0 shifted), so q=0
 #     mismatched and this returns 1 -> the gate reddens. SHA-256 alone never exercised the keccak path. ---
-probe cad_keccak_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii" '
+probe cad_keccak_bp_fips STDLIB/iii/numera/cad.iii "STDLIB/iii/numera/sha256.iii STDLIB/iii/numera/sha256_dispatch.iii STDLIB/iii/numera/sha256_ni.iii STDLIB/iii/numera/keccak256.iii STDLIB/iii/numera/keccak.iii STDLIB/iii/numera/weave_blocks.iii" '
 extern @abi(c-msvc-x64) fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 var OUT: [u8; 64]
 var EXPW: [u64; 4]

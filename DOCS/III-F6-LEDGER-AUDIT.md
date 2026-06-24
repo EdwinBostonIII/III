@@ -38,6 +38,28 @@ PROVEN), and tightened `affine_audit_gate.sh`'s soundness-probe assertion to the
 false-PROVEN regression (P=2) reddens. Codegen-independent (`--affine-audit` is a separate mode), so the corpus
 byte-equivalence is unaffected.
 
+## F11 — cg_r0 (Ring-0 backend) emits >4th (stack-passed) parameters as undefined globals. **[ROOT-CAUSED, pre-existing; gate-dep fixed; codegen fix owed]**
+
+Surfaced by rebuilding iiis-2 (the affine fix forced a clean `build_iiis2`, which runs `cg_r0_crypto_gate.sh`). The
+gate was RED on BOTH the old and new iiis-2 (so **not** caused by the affine change). Two layers:
+
+1. **Gate dependency (FIXED):** `sha256`/`keccak` were refactored to extern `wvb_maj32`/`wvb_rotl64` from
+   `numera/weave_blocks.iii`, but the cg_r0 gate's probe `deps` lists were never updated, so `weave_blocks_r0.o` was
+   never compiled/linked → `undefined reference to L_p_wvb_maj32 / L_p_wvb_rotl64`. Fixed: added `weave_blocks.iii` to
+   the 5 crypto probes' deps in `cg_r0_crypto_gate.sh`.
+
+2. **cg_r0 codegen defect (the real bug, ROOT-CAUSED, owed):** with `weave_blocks` now linked, it fails to link
+   *itself* — `weave_blocks_r0.o` references `undefined L_p_x / L_p_r0 / L_p_r1 / L_p_y`. These are the **stack-passed
+   parameters** of `wvb_arx_mix(va,vb,vc,vd, x,y, r0,r1,r2,r3)` — a **10-parameter** function. The Win64 ABI passes
+   params 1-4 in registers (rcx/rdx/r8/r9) and 5+ on the stack; **cg_r0 emits a reference to each stack param as an
+   undefined GLOBAL symbol `L_p_<name>` instead of loading it from the caller's stack frame.** So the Ring-0 backend
+   cannot correctly compile any function with >4 parameters. This is the parameter-handling defect class the
+   CRASH-DEBUGGING-PROTOCOL flags; the fix is in `cg_r0.iii`'s parameter-resolution codegen and must follow the
+   protocol (read the whole param path, audit before edit, disassemble-verify the fixed `.o`) — a focused backend pass,
+   not a tail-of-session edit. Until then the cg_r0 Ring-0 crypto gate stays RED and `build_iiis2 --check-corpus` exits
+   5 *after* a clean corpus (59/0) + install — i.e. the produced iiis-2 is valid for Ring-3 (the only regression is the
+   pre-existing Ring-0 crypto path).
+
 ## Disposition of the OVERCLAIMED set
 
 These are **claim/reality mismatches**, not broken code (every audited mechanism is itself sound — the *prose* and the

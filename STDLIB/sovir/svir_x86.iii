@@ -35,10 +35,27 @@ var CS_ELSEEN : [u32; 4096]   /* structured-control nesting depth: a switch with
 var CS_N : u32 = 0u32
 var LBLCTR : u32 = 0u32
 
+/* scan a body for the highest LOCAL_GET/SET slot -> the function's local count (the SVIR header carries no
+ * count).  Drives the frame size so functions with >62 locals don't overrun a fixed frame. */
+fn max_local(base: u64, boff: u64, blen: u64) -> u32 {
+    let mut mx : u32 = 0u32  let mut s : u64 = 0u64
+    while s < blen {
+        let op : *u8 = (base + boff + s) as *u8  let o : u32 = op[0u64] as u32  s = s + 1u64
+        if o == 0x01u32 { s = s + 8u64 }
+        if o == 0x10u32 { let lp : *u8 = (base + boff + s) as *u8  let li : u32 = lp[0u64] as u32  if li > mx { mx = li }  s = s + 1u64 }
+        if o == 0x11u32 { let lp : *u8 = (base + boff + s) as *u8  let li : u32 = lp[0u64] as u32  if li > mx { mx = li }  s = s + 1u64 }
+        if o == 0x50u32 { s = s + 1u64 }
+        if o == 0x51u32 { s = s + 1u64 }
+        if o == 0x70u32 { s = s + 2u64 }
+    }
+    return mx
+}
 fn emit_function(base: u64, fidx: u32, boff: u64, blen: u64, params: u32) {
     CS_N = 0u32
     if fidx == 0u32 { ez(".global main\nmain:\n~" as u64) } else { ez("Lfn~" as u64)  edec(fidx as u64)  ez(":\n~" as u64) }
-    ez("pushq %rbp\nmovq %rsp, %rbp\nsubq $512, %rsp\n~" as u64)
+    let ml : u32 = max_local(base, boff, blen)  let need : u32 = ((((16u32 + (8u32*(ml+1u32))) + 64u32) + 15u32) / 16u32) * 16u32   /* locals region (16-aligned) + slack */
+    let mut fsz : u32 = need  if fsz < 512u32 { fsz = 512u32 }   /* never below the historical 512 */
+    ez("pushq %rbp\nmovq %rsp, %rbp\nsubq $~" as u64)  edec(fsz as u64)  ez(", %rsp\n~" as u64)
     let mut j : u32 = 0u32                                                    /* spill params to locals: 0-3 from regs, 4+ from the incoming stack args [rbp+48+8*(j-4)] */
     while j < params {
         if j < 4u32 { ez("movq ~" as u64)  arg_reg(j)  ez(", -~" as u64)  edec(loc_off(j) as u64)  ez("(%rbp)\n~" as u64) }

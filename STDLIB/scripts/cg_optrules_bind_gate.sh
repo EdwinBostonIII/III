@@ -23,10 +23,12 @@ MOD="$ROOT/STDLIB/iii/forcefield/cg_opt_rules.iii"
 W="$ROOT/STDLIB/build/sovir"; mkdir -p "$W"
 FAIL=0; say(){ echo "[path-c] $*"; }
 
-# compile the module + a driver, link against the lib, run, echo the exit code.
+# compile the module ONCE (it externs typecheck.iii's CIC kernel -- the expensive compile), then reuse.
+"$IIIS" "$MOD" --compile-only --out "$W/_pcmod.o" >/dev/null 2>&1 || { echo "[path-c] FATAL: module did not compile"; exit 9; }
+
+# compile a driver, link against the cached module + lib, run, echo the exit code.
 _run() {  # $1 = driver .iii text -> echoes rc
   printf '%s\n' "$1" > "$W/_pcdrv.iii"
-  "$IIIS" "$MOD" --compile-only --out "$W/_pcmod.o" >/dev/null 2>&1 || { echo 255; return; }
   "$IIIS" "$W/_pcdrv.iii" --compile-only --out "$W/_pcdrv.o" >/dev/null 2>&1 || { echo 254; return; }
   gcc "$W/_pcdrv.o" "$W/_pcmod.o" "$LIB" -lkernel32 -o "$W/_pcdrv.exe" 2>/dev/null || { echo 253; return; }
   timeout 30 "$W/_pcdrv.exe" >/dev/null 2>&1; echo $?

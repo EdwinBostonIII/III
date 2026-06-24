@@ -31,22 +31,22 @@ extern @abi(c-msvc-x64) fn tc_bvmul(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_bvshl(a: u32, b: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
 
-/* The SR rule table: row i = (factor 2^shift  ->  emit `shl $shift`).  The codegen-relevant family
- * (matches the sov_isa proof set {1,5,31,63} + the common {2,3,10}).  SINGLE SOURCE OF TRUTH. */
-const COR_N : u64 = 7u64
-var COR_SHIFT  : [u64; 7]
-var COR_FACTOR : [u64; 7]
+/* The SR rule table: row i = (factor 2^shift  ->  emit `shl $shift`).  Covers the FULL emittable range
+ * shift 1..63 -- exactly what cg_r3's r3_mul_pow2_k can emit (an F6 re-audit flagged that the old 7-row
+ * sample, like the sov_isa proof set, UNDER-COVERED the emitter).  SINGLE SOURCE OF TRUTH. */
+const COR_N : u64 = 63u64
+var COR_SHIFT  : [u64; 63]
+var COR_FACTOR : [u64; 63]
 var COR_INIT : u64 = 0u64
 
 fn cor_init() -> u64 {
     if COR_INIT == 1u64 { return 0u64 }
-    COR_SHIFT[0u64] = 1u64    COR_FACTOR[0u64] = 2u64
-    COR_SHIFT[1u64] = 2u64    COR_FACTOR[1u64] = 4u64
-    COR_SHIFT[2u64] = 3u64    COR_FACTOR[2u64] = 8u64
-    COR_SHIFT[3u64] = 5u64    COR_FACTOR[3u64] = 32u64
-    COR_SHIFT[4u64] = 10u64   COR_FACTOR[4u64] = 1024u64
-    COR_SHIFT[5u64] = 31u64   COR_FACTOR[5u64] = 0x80000000u64
-    COR_SHIFT[6u64] = 63u64   COR_FACTOR[6u64] = 0x8000000000000000u64
+    let mut i : u64 = 0u64
+    while i < COR_N {
+        COR_SHIFT[i] = i + 1u64                 /* shifts 1..63 */
+        COR_FACTOR[i] = 1u64 << (i + 1u64)      /* the exact power of two 2^1..2^63 */
+        i = i + 1u64
+    }
     COR_INIT = 1u64
     return 0u64
 }

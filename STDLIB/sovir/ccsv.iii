@@ -1160,7 +1160,7 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
         if isd==1u32 {
             let mut q:u32=t  let mut g0:u32=1u32  while g0==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g0=0u32} }   /* skip quals */
             if dtype(q)==1u32 {
-                let mut nt:u32=q+1u32  let mut pelem:u32=0u32  if ispat(nt,Q_MUL)==1u32 { pelem=1u32  nt=nt+1u32 }   /* `type * NAME[]` -> pointer elements (8B) */
+                let mut nt:u32=q+1u32  let mut pelem:u32=0u32  let mut gpp:u32=1u32  while gpp==1u32 { if ispat(nt,Q_MUL)==1u32 { pelem=1u32  nt=nt+1u32 } else { if isqual(nt)==1u32 { nt=nt+1u32 } else {gpp=0u32} } }   /* `type *[const] NAME[]` -> pointer elements (8B) ; skip `*` runs + quals after (`char *const`) */
                 if TK[nt as u64]==1u32 { if ispat(nt+1u32,Q_LBR)==1u32 {                                             /* NAME [ NUM | empty ] [= {...}] */
                     let mut esz:i64=aesz_of(q)  if pelem==1u32 {esz=8i64}  let eszu:u64=esz as u64  let base:u64=MTOP
                     let mut n:u64=0u64  let mut brc:u32=0u32  let mut have:u32=0u32  let mut strt:u32=0u32

@@ -78,7 +78,7 @@ fn main() -> u64 {
     setup()  fill()  air_set_trace(0u64, 0u64, 99u32)  air_stark_prove()
     let boundary : u64 = air_stark_verify()
     /* characterize: 0 = ACCEPT (verify passed); nonzero = REJECT (sound). */
-    if honest != 0u64 { return 1u64 }                  /* honest MUST verify; if not, the API is misused */
+    if honest != 0u64 { return 1u64 }                  /* honest MUST verify (a real computation's proof accepts) */
     if interior != 0u64 {                              /* interior forge REJECTED */
         if boundary != 0u64 { return 99u64 }           /* both rejected -> the STARK is SOUND */
         return 80u64

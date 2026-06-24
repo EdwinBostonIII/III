@@ -1,4 +1,16 @@
-# III zk layer — the soundness gap (honest ledger), found by the discriminating test
+# III zk layer — the soundness gap, found AND FIXED by the discriminating test
+
+> **✅ RESOLVED.** The gap below was closed. Root cause: `air_build_cp` divided `combine` by `Z_H = x^n-1` (vanishes
+> on all `n` rows), but the transition binds only rows `0..n-2`, so the correct vanishing poly is `Z_T = Z_H/(x -
+> ω^{n-1})`; and `CP` was built pointwise (degree `d-1`, vacuous FRI). Fix: build `CP` as the TRUE quotient
+> `combine·(x-ω^{n-1}) / Z_H` (= `combine/Z_T`) via INTT → coefficient shift → NTT, and apply the same `(x-ω^{n-1})`
+> factor in the two verifier-side checks (`air_stark_verify` line-755, `air_cp_consistent_at`). Now `CP·Z_H ==
+> combine·(x-ω^{n-1})` holds for honest traces and FAILS at FS-random openings for forged ones. **`zk_svir_attest`
+> reads 99** (honest accepts, interior + boundary forges rejected by the MATH); zk gate 15/15 green; STARK corpus
+> (proof_stark, zk_air_stark, zk_stark_fri, zk_rev, zk_stark_seal) all 99 — no regression. III's STARK soundly
+> proves a real computation, verified by an independent witness-free verifier. The historical analysis follows.
+
+
 
 > **One line:** `air_stark_verify` accepts a proof of a FALSE computation (a forged interior/transition trace
 > cell), so III's STARK does **not** soundly prove computation. Boundary constraints and proof-integrity *are*

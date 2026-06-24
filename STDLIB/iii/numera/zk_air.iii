@@ -217,24 +217,44 @@ fn air_build_lde() -> i32 @export {
 
 /* Build the composition polynomial CP[j] = combine(j)/Z_H(j) for non-trace points
  * (j % B != 0); 0 at trace points (where Z_H = 0 and an honest combine also = 0). */
+/* SOUNDNESS-FIXED composition polynomial: CP = the TRUE polynomial QUOTIENT combine / Z_H (degree < n), built by
+ * FFT division -- NOT the old pointwise combine*inv(Z_H) (which set CP=0 on the trace domain, giving a degree-(d-1)
+ * object that is high-degree for honest AND forged, so the verifier's line-755 check (CP*Z_H==combine) passed
+ * vacuously and a false computation verified -- see DOCS/III-ZK-SOUNDNESS-GAP.md).
+ *
+ * Z_H = x^n - 1, so combine = Q*(x^n - 1) + R with deg R < n, and the polynomial quotient has coeffs Q[k] =
+ * combine_coeff[k+n] (drop the low n, shift down).  For an HONEST trace the constraint vanishes on the trace domain
+ * => Z_H | combine => R = 0 => CP*Z_H == combine exactly (line 755 ACCEPTS).  For a FORGED trace the constraint is
+ * violated => Z_H does NOT divide combine => R != 0 => CP*Z_H = combine - R != combine at the random query points
+ * where R != 0 => line 755 REJECTS.  CP itself is degree < n (FRI passes for both; soundness is the R != 0 check). */
 fn air_build_cp() -> i32 @export {
     let w_cols : u64 = AIR_W[0] as u64
     let n : u64 = AIR_N[0] as u64
     let d : u64 = AIR_B * n
     let omegaD : u32 = sf_rou(d as u32)
-    let bmask : u64 = AIR_B - 1u64
+    /* The transition binds rows 0..n-2 only (the last row has no successor), so `combine` vanishes on those n-1
+     * points, NOT all n -- the correct vanishing poly is Z_T = Z_H/(x - omega^{n-1}).  Divide by Z_T by first
+     * multiplying combine by (x - omega^{n-1}) [so it vanishes on all n rows -> divisible by Z_H], then dividing by
+     * Z_H via the coefficient shift.  The verifier's line-755 check multiplies combine_opened by the same factor. */
+    let omegaN : u32 = sf_rou(n as u32)
+    let lastr  : u32 = sf_pow(omegaN, n - 1u64)        /* omega^{n-1} = the last trace row's domain point */
+    /* 1. evaluate combine*(x - omega^{n-1}) on the whole LDE into the CP buffer */
     let mut j : u64 = 0u64
     while j < d {
-        if (j & bmask) == 0u64 { AIR_CP[j] = 0u32 }
-        else {
-            let xj  : u32 = sf_pow(omegaD, j)
-            let xN  : u32 = sf_pow(xj, n)
-            let zh  : u32 = sf_sub(xN, 1u32)
-            let num : u32 = air_combine(j, w_cols, d)
-            AIR_CP[j] = sf_mul(num, sf_inv(zh))
-        }
+        let xj : u32 = sf_pow(omegaD, j)
+        AIR_CP[j] = sf_mul(air_combine(j, w_cols, d), sf_sub(xj, lastr))
         j = j + 1u64
     }
+    /* 2. INTT -> coefficients of combine*(x-omega^{n-1}) (degree <= 2n-1 < d) */
+    ntt_inverse_at((&AIR_CP as u64), d, AIR_Q, omegaD)
+    /* 3. divide by Z_H = x^n - 1 in coefficient space: Q[k] = combine_coeff[k+n] (read-ahead, in place) */
+    j = 0u64
+    while j < d {
+        if j + n < d { AIR_CP[j] = AIR_CP[j + n] } else { AIR_CP[j] = 0u32 }
+        j = j + 1u64
+    }
+    /* 4. NTT -> CP = Q evaluated on the LDE (the true quotient) */
+    ntt_forward_at((&AIR_CP as u64), d, AIR_Q, omegaD)
     return 0i32
 }
 
@@ -270,7 +290,9 @@ fn air_cp_consistent_at(j: u64) -> u8 @export {
     let xN  : u32 = sf_pow(xj, n)
     let zh  : u32 = sf_sub(xN, 1u32)
     let lhs : u32 = sf_mul(AIR_CP[jj], zh)
-    let rhs : u32 = air_combine(jj, w_cols, d)
+    /* CP = combine/Z_T = combine*(x - omega^{n-1})/Z_H, so CP*Z_H == combine*(x - omega^{n-1}). */
+    let lastr : u32 = sf_pow(sf_rou(n as u32), n - 1u64)
+    let rhs : u32 = sf_mul(air_combine(jj, w_cols, d), sf_sub(xj, lastr))
     if lhs == rhs { return 1u8 }
     return 0u8
 }
@@ -756,7 +778,12 @@ fn air_stark_verify() -> u64 @export {
         let x   : u32 = sf_pow(omegaD, jq)
         let zh  : u32 = sf_sub(sf_pow(x, n), 1u32)
         let lhs : u32 = sf_mul(ZKAIR_CQ[i], zh)
-        let rhs : u32 = air_combine_opened(wc)
+        /* CP = combine/Z_T = combine*(x - omega^{n-1})/Z_H (air_build_cp), so CP*Z_H == combine*(x - omega^{n-1}).
+         * Multiply the recomputed combine by the SAME (x - omega^{n-1}) factor.  This is the soundness check: for a
+         * forged trace the constraint does not vanish on rows 0..n-2, so Z_T does not divide combine, the remainder
+         * is nonzero, and CP*Z_H != combine*(x-omega^{n-1}) at the random query points -> reject (code 4). */
+        let lastr : u32 = sf_pow(sf_rou(n as u32), n - 1u64)
+        let rhs : u32 = sf_mul(air_combine_opened(wc), sf_sub(x, lastr))
         if lhs != rhs { return 4u64 }
         let mut qcur : u64 = jq
         let mut cur  : u32 = ZKAIR_CQ[i]

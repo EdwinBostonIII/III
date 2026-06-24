@@ -38,7 +38,7 @@ fn hv(c: u32) -> i64 { if c<=57u32 {return (c-48u32) as i64}  if c>=97u32 {retur
 fn idc(c: u32) -> u32 { if c==95u32 {return 1u32} if c>=48u32 { if c<=57u32 {return 1u32} } if c>=65u32 { if c<=90u32 {return 1u32} } if c>=97u32 { if c<=122u32 {return 1u32} } return 0u32 }
 fn ids(c: u32) -> u32 { if c==95u32 {return 1u32} if c>=65u32 { if c<=90u32 {return 1u32} } if c>=97u32 { if c<=122u32 {return 1u32} } return 0u32 }
 fn sb(i: u64) -> u32 { let p : *u8 = ((&SRC as u64) + i) as *u8  return p[0u64] as u32 }
-fn pt(k: u32, v: i64, o: u32, l: u32) { if NT < 8192u32 { TK[NT as u64]=k  TV[NT as u64]=v  TO[NT as u64]=o  TL[NT as u64]=l  NT=NT+1u32 } }
+fn pt(k: u32, v: i64, o: u32, l: u32) { if NT < 262143u32 { TK[NT as u64]=k  TV[NT as u64]=v  TO[NT as u64]=o  TL[NT as u64]=l  NT=NT+1u32 } }   /* token cap = the TK[262144] array (was 8192 -> silently truncated the seed core's tens of thousands of tokens) */
 
 fn lex() {
     NT = 0u32

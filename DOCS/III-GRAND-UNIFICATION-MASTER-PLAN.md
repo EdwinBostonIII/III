@@ -247,6 +247,11 @@ satisfies the SVIR CALL convention). Two latent bugs surfaced + fixed: `iiisv2` 
 reservation (`MTOP` 0→16, which had silently broken the `run_ddc.sh` byte gate for array programs), and
 `zk_iiisv_attest`'s parser now stops at the logical RETURN (robust to the trailing default return). **EIDOS is now
 attestable through SVIR.** Regression: `run_svir.sh`, `run_ddc.sh`, ZK-OMEGA-E all green.
+**⚠️ AUDIT CORRECTION (2026-06-24, AUDIT-AND-PLAN F4/F5):** the verb-derivation cross-check against the LIVE organ is
+genuine, but R0's "content-address" is the homomorphic stand-in `enc = verb·65536+a·256+b`, **not** isub's real
+`sha256(verb‖a‖b)` (which the native driver also does not compute). So the byte-match certifies the *direction logic* +
+a homomorphic fold — the true inverse-form identity is a stand-in (plan P5). Ω2's executable claim (R0 lowers through
+iiisv→SVIR→x86+wasm, byte-equal to the live organ's fold) holds as stated.
 **Objective:** make a real EIDOS computation attestable by getting it into SVIR (today EIDOS is cg_r3→x86 direct).
 **Open-audit task:** read `eidos/ripple.iii` + `eidos/memo.iii` + `eidos/compose.iii`; list the language
 constructs they use beyond `iiisv`'s integer core (structs, fixed arrays, the `eqv_equal` call, any function
@@ -283,6 +288,12 @@ sealed-but-non-matching rule (rc 3). `xad_admit()` (root-confluent + terminating
 manifest-sealed trusted base) but is independent of the *canonicalisation strategy* (never runs the canonicaliser) —
 exactly the ADR-Ω3 proof-carrying model. The cryptographic manifest *signature* (`verify_xii_manifest`) remains the
 separate build-time seal. New files: `omnia/xii_proof.iii`, `omnia/xii_proof_check.iii`, `sovir/xii_proof_demo.iii`.
+**⚠️ AUDIT CORRECTION (2026-06-24, DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md F2):** the proof-carrying MECHANISM is
+sound and verified, but the term Ω3 canonicalises is a HAND-BUILT REPRESENTATIVE XII term — it has **zero structural
+connection to Ω2's R0 SVIR** (the "eidos-ripple" framing is narrative). So Ω.a and Ω.b do **not** compose on the same
+object yet; "canonicalise R0's SVIR" is **PENDING** (plan P3: EIDOS→XII-term→canonicalise→lower-to-SVIR). Also F3: the
+two new `omnia/xii_proof*` modules are not in `build_stdlib` MODULES (not resealed/corpus-gated). Re-label: Ω3
+*mechanism* closed; Ω3 *R0-connection + integration* open.
 **Objective:** canonicalise `R0`'s SVIR under the *sealed* manifest and emit a *checkable* `eqv_equal` proof.
 **Open-audit task:** read `xii_canonicalise.iii`, `xii_rewrite.iii`, `xii_discharge.iii`, `xii_mig4_seal.iii`,
 and `verify_xii_manifest.c`; determine (a) whether `eqv_equal` is total over the SVIR term algebra or partial,

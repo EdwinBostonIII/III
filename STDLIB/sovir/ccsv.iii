@@ -359,6 +359,15 @@ fn emit_malloc() {
     econst(HEAP_BASE)  eu8(0x10u32,te)  eu8(0x10u32,tn)  econst(7i64)  eb(0x20u32)  econst(0i64-8i64)  eb(0x25u32)  eb(0x20u32)  eb(0x83u32)   /* *(HEAP_BASE) = te + ((size+7)&~7) */
     eu8(0x10u32,te)                                                                                       /* leave the block address */
 }
+fn emit_bcopy(dst:i64, src:i64, n:i64) {   /* copy n bytes dst<-src (compile-time addresses), inline byte loop */
+    let ti:u32=LN  if LN<255u32 {LN=LN+1u32}
+    econst(0i64)  eu8(0x11u32,ti)
+    eb(0x40u32)  eb(0x41u32)
+    eu8(0x10u32,ti)  econst(n)  eb(0x33u32)  eu8(0x51u32,1u32)        /* if ti>=n break (GE_S) */
+    econst(dst)  eu8(0x10u32,ti)  eb(0x20u32)  econst(src)  eu8(0x10u32,ti)  eb(0x20u32)  eb(0x80u32)  eb(0x81u32)   /* *(dst+ti) = *(src+ti) */
+    eu8(0x10u32,ti)  econst(1i64)  eb(0x20u32)  eu8(0x11u32,ti)  eu8(0x50u32,0u32)
+    eb(0x44u32)  eb(0x44u32)
+}
 /* libc string builtins (no libc on the sovereign target) -- inline loops, result left on the stack.
  * Verifier-safe: results held in a temp, loops break via BR_IF (no IF-with-break). */
 fn emit_strcmp() {   /* strcmp(a,b) -> (unsigned char)*a - *b at the first difference (0 if equal) */
@@ -980,7 +989,10 @@ fn pstmt() {
         if li>=0i32 { emit_lget(li as u32)  ebin(0u32)  eb(opc(opn))  emit_lset(li as u32) }  eat(Q_SEMI)  return
     } } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_ASN {   /* x = e ; */
-        let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  eat(Q_SEMI)  return
+        let nt:u32=C  let bvt:i32=avtype(nt)
+        if bvt>=0i32 { let at:u32=C+2u32  let avt:i32=avtype(at)  if avt>=0i32 {   /* struct VAR = struct VAR -> byte copy (STSZ bytes) */
+            C=C+3u32  emit_bcopy(abase(nt), abase(at), STSZ[bvt as u64] as i64)  eat(Q_SEMI)  return } }
+        C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  eat(Q_SEMI)  return
     } } }
     ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)
 }

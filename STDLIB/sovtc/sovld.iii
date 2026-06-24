@@ -37,9 +37,9 @@ extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 
 var LDPOS : u32 = 0u32
 var TEXTBUF : [u8; 8388608]   /* the whole .text, loaded for reloc patching -- seed modules reach 150-200KB code (was 16384) */
-var EXT_DLL    : [u32; 64]   /* DLL id (0=kernel32, 1=msvcrt) per import */
-var EXT_HNRVA  : [u32; 64]   /* hint/name RVA per import */
-var EXT_IATRVA : [u32; 64]   /* IAT-entry RVA per import */
+var EXT_DLL    : [u32; 4096]   /* DLL id per import -- indexed by k=sov_ext_n() ; seed modules have 100s of symbols (was 64 -> overflow at k>64) */
+var EXT_HNRVA  : [u32; 4096]   /* hint/name RVA per import */
+var EXT_IATRVA : [u32; 4096]   /* IAT-entry RVA per import */
 var DLL_USED   : [u32; 4]
 var DLL_COUNT  : [u32; 4]
 var DLL_ILTRVA : [u32; 4]

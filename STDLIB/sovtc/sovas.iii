@@ -41,8 +41,8 @@ var RODATA_LEN : u32 = 0u32
 var BSS_SIZE   : u32 = 0u32
 fn sov_data_reset() -> i32 @export { DATA_LEN = 0u32  RODATA_LEN = 0u32  BSS_SIZE = 0u32  return 0i32 }
 fn sov_data_emit(sec: u32, b: u32) -> i32 @export {   /* sec 1=.data 2=.rodata */
-    if sec == 1u32 { if DATA_LEN < 8192u32 { DATA_BUF[DATA_LEN as u64] = (b & 0xFFu32) as u8  DATA_LEN = DATA_LEN + 1u32 } }
-    if sec == 2u32 { if RODATA_LEN < 8192u32 { RODATA_BUF[RODATA_LEN as u64] = (b & 0xFFu32) as u8  RODATA_LEN = RODATA_LEN + 1u32 } }
+    if sec == 1u32 { if DATA_LEN < 1048575u32 { DATA_BUF[DATA_LEN as u64] = (b & 0xFFu32) as u8  DATA_LEN = DATA_LEN + 1u32 } }   /* = the 1MB DATA_BUF (was 8192 -> seed data/rodata tables truncated) */
+    if sec == 2u32 { if RODATA_LEN < 1048575u32 { RODATA_BUF[RODATA_LEN as u64] = (b & 0xFFu32) as u8  RODATA_LEN = RODATA_LEN + 1u32 } }
     return 0i32
 }
 fn sov_bss_add(n: u32) -> i32 @export { BSS_SIZE = BSS_SIZE + n  return 0i32 }

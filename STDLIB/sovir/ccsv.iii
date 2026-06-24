@@ -58,7 +58,7 @@ fn lex() {
                 let mut g2:u32=1u32  while g2==1u32 { if i>=SLEN {g2=0u32} else { let w2:u32=sb(i)  if w2==32u32 {i=i+1u64} else { if w2==9u32 {i=i+1u64} else {g2=0u32} } } }
                 let no:u64=i  let mut g3:u32=1u32  while g3==1u32 { if i>=SLEN {g3=0u32} else { if idc(sb(i))==1u32 {i=i+1u64} else {g3=0u32} } }
                 let nl:u64=i-no
-                let mut g4:u32=1u32  while g4==1u32 { if i>=SLEN {g4=0u32} else { let w4:u32=sb(i)  if w4==32u32 {i=i+1u64} else { if w4==9u32 {i=i+1u64} else {g4=0u32} } } }
+                let mut g4:u32=1u32  while g4==1u32 { if i>=SLEN {g4=0u32} else { let w4:u32=sb(i)  if w4==32u32 {i=i+1u64} else { if w4==9u32 {i=i+1u64} else { if w4==92u32 { i=i+1u64  if i<SLEN { if sb(i)==13u32 {i=i+1u64} }  if i<SLEN { if sb(i)==10u32 {i=i+1u64} } } else {g4=0u32} } } } }   /* `\`-newline continuation -> the value (e.g. a multi-line array-count macro) is on the next line */
                 let mut sp2:u32=1u32  while sp2==1u32 { if i>=SLEN {sp2=0u32} else { let pc:u32=sb(i)   /* skip leading `(` + `(cast)` prefixes: ((size_t)4096), (64), 0x.. , 4096 */
                     if pc==40u32 {i=i+1u64} else { if pc==32u32 {i=i+1u64} else { if pc==9u32 {i=i+1u64}
                     else { let isal:u32=idc(pc)  let isdg:u32=dg(pc)
@@ -85,7 +85,7 @@ fn lex() {
                     cadd(no as u32, nl as u32, v)
                 } }
             }
-            let mut g6:u32=1u32  while g6==1u32 { if i>=SLEN {g6=0u32} else { if sb(i)==10u32 {g6=0u32} else {i=i+1u64} } }
+            let mut g6:u32=1u32  while g6==1u32 { if i>=SLEN {g6=0u32} else { if sb(i)==92u32 { i=i+1u64  if i<SLEN { if sb(i)==13u32 {i=i+1u64} }  if i<SLEN { if sb(i)==10u32 {i=i+1u64} } } else { if sb(i)==10u32 {g6=0u32} else {i=i+1u64} } } }   /* `\`-newline continues the #define; a bare newline ends it (so the continuation line is NOT lexed as code) */
             done=1u32
         } }
         if done==0u32 { if c==39u32 {   /* 'x' char literal -> a NUM token with the ASCII value (incl \n \t \0 \r \\ \') */

@@ -324,8 +324,10 @@ fn emit_memset() {
 }
 fn eprim() {
     if cp(Q_MUL)==1u32 { C=C+1u32                                  /* *p : pointer deref (typed by pointee width) */
-        if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 { if LPT[dli as u64]<0i32 { emit_lget(dli as u32)  C=C+1u32  eload(LPSZ[dli as u64], LPSG[dli as u64])  return } } }
-        eprim()  eb(0x82u32)  return                              /* fallback (pointer expr) -> LOAD64 */
+        if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 {
+            let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]  let psg:u32=LPSG[dli as u64]   /* read into lets BEFORE branching (inline LPT[dli]<0 after lidx miscompiles -> skips, LOAD64) */
+            if lp<0i32 { emit_lget(dli as u32)  C=C+1u32  eload(psz, psg)  return } } }
+        eprim()  eb(0x82u32)  return                              /* fallback (struct-ptr / complex deref) -> LOAD64 */
     }
     if cp(Q_AND)==1u32 {                                            /* &arr[i] / &arr : address-of (no load) */
         C=C+1u32
@@ -361,8 +363,8 @@ fn eprim() {
             let ab:i64=abase(t)
             if ab>=0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)
                 estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }  eload(sz, sg)  return }                 /* arr[i] : i*esz (+base) ; LOADn */
-            let pli:i32=lidx(t)  if pli>=0i32 { emit_lget(pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)
-                let psz:i64=LPSZ[pli as u64]  estride(psz)  eb(0x20u32)  eload(psz, LPSG[pli as u64])  return }   /* p[i]=*(p+i*esz) ; LOADn */
+            let pli:i32=lidx(t)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+1u32  ebin(0u32)  eat(Q_RBR)
+                estride(psz)  eb(0x20u32)  eload(psz, psg)  return }   /* p[i]=*(p+i*esz) ; LOADn (pointee width: direct read, pli) */
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)
@@ -416,12 +418,13 @@ fn emit_for_incr() {   /* the for-loop's incr clause (no trailing ;): i++ / i-- 
  * mask=width mask or 0).  Compound uses a fresh temp so the address is computed once: SET tmp; GET(store-addr);
  * GET;LOAD(cur val); rhs; OP; [mask]; STORE. */
 fn emit_av(esz:i64, sgn:u32, mask:i64) {
+    let sgv:u32=sgn                                              /* bind the single-use param to a local -> forces spill (param-spill family) */
     let op:i64=TV[C as u64]
     if op==Q_ASN { C=C+1u32  ebin(0u32)  if mask!=0i64 {econst(mask)  eb(0x25u32)}  estore(esz) }
     else {
         C=C+2u32  let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}
         eu8(0x11u32,tmp)  eu8(0x10u32,tmp)  eu8(0x10u32,tmp)
-        eload(esz, sgn)
+        eload(esz, sgv)
         ebin(0u32)  eb(opc(op))  if mask!=0i64 {econst(mask)  eb(0x25u32)}
         estore(esz)
     }
@@ -432,9 +435,9 @@ fn pstmt() {
     if cp(Q_MUL)==1u32 {                                            /* *p = e ;  (pointer deref store, typed width) */
         C=C+1u32
         if TK[C as u64]==1u32 { let dli:i32=lidx(C)  if dli>=0i32 {
-            let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]   /* read BEFORE eprim (dli fresh + multi-use -> spilled); immutable lets survive */
+            let lp:i32=LPT[dli as u64]  let psz:i64=LPSZ[dli as u64]   /* read into immutable lets BEFORE eprim (direct read, multi-use dli -> spilled) */
             eprim()  eat(Q_ASN)  ebin(0u32)
-            if lp<0i32 { estore(psz) } else { estore(8i64) }          /* scalar/array ptr -> pointee width ; struct-ptr -> 8 */
+            if lp<0i32 { estore(psz) } else { estore(8i64) }
             eat(Q_SEMI)  return } }
         eprim()  eat(Q_ASN)  ebin(0u32)  estore(8i64)  eat(Q_SEMI)  return   /* complex deref expr -> 8 */
     }
@@ -528,8 +531,8 @@ fn pstmt() {
         if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let sg:u32=asign(nt)  let am:i64=awmask(nt)   /* arr[i] [op]= e (typed width) */
             estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
             emit_av(sz, sg, am)  eat(Q_SEMI)  return }
-        let pli:i32=lidx(nt)  if pli>=0i32 { emit_lget(pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)   /* pointer p[i] [op]= e (typed width) */
-            let psz:i64=LPSZ[pli as u64]  estride(psz)  eb(0x20u32)  emit_av(psz, LPSG[pli as u64], 0i64)
+        let pli:i32=lidx(nt)  if pli>=0i32 { let psz:i64=LPSZ[pli as u64]  let psg:u32=LPSG[pli as u64]  emit_lget(pli as u32)  C=C+2u32  ebin(0u32)  eat(Q_RBR)
+            estride(psz)  eb(0x20u32)  emit_av(psz, psg, 0i64)   /* pointee width: direct read, pli */
             eat(Q_SEMI)  return }
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if prec(TV[(C+1u32) as u64])>0u32 { if TK[(C+2u32) as u64]==3u32 { if TV[(C+2u32) as u64]==Q_ASN {   /* x op= e ; (compound assign, local: += -= *= &= |= ^= >>= <<= ...) */

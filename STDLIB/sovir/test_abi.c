@@ -43,5 +43,17 @@ int main() {
     if (la[0] != big)        { return 32; }          /* LOAD32_S sign-extends -> -2000000000 */
     if (la[1] != 2000000000) { return 33; }
 
+    /* signed reads/writes THROUGH POINTERS, packed (the *p / p[i] / p[i]= paths the P1 fix hardened) */
+    int32_t lp[2];  lp[0] = big;  lp[1] = 2000000000;
+    int32_t *q = &lp[0];
+    if (*q != big)          { return 40; }           /* *q LOAD32_S, packed -- a wrong-width LOAD64 reads lp[1] too */
+    if (q[1] != 2000000000) { return 41; }           /* q[1] LOAD32_S */
+    *q = 0 - 5;    if (lp[0] != 0 - 5) { return 42; } /* *q = e  (STORE32, not STORE64 clobbering lp[1]) */
+    q[1] = 0 - 7;  if (lp[1] != 0 - 7) { return 43; } /* q[1] = e */
+    int16_t sp[2];  sp[0] = 12345;  sp[1] = 6789;
+    int16_t *r = &sp[1];
+    if (*r != 6789) { return 44; }                   /* *r packed (sp[0] nonzero) */
+    r[0] = 0 - 1000;  if (sp[1] != 0 - 1000) { return 45; }   /* int16_t* signed store/load */
+
     return 99;
 }

@@ -84,6 +84,15 @@ audit's scope) = drive the corpus coverage of the drifted exports back to the pi
 it:** the `xii_proof*` modules were intentionally left OUT of `build_stdlib` MODULES (see P4) so the ratchet is not
 pushed further from its pin by un-coverable test-hook exports.
 
+### F9 — `numera/zk_ext2`,`numera/zk_ext4` were missing from `build_stdlib` MODULES. **[FIXED 2026-06-24]**
+`zk_air.iii`'s GF(p⁴) composition-polynomial path (`air_combine_ext4`/`air_build_cp_ext4`) references
+`ext2_*`/`e2pack`/`e2lo`/`e2hi` and the GF(p⁴) ops, so `libiii_native.a` is INCOMPLETE without `numera/zk_ext2` +
+`numera/zk_ext4` — yet neither was in the MODULES list (the old lib carried them via a manual `ar`; a clean rebuild
+drops them, leaving every extension-field zk gadget — including `run_zk.sh`'s — un-linkable: `undefined reference to
+ext2_mul` etc., even from `numera_zk_air.iii.o` itself). Surfaced when the P4 rebuild produced a lib without them.
+**Fix:** added both to MODULES (leaf arithmetic, appended at end, BSS-safe) and restored them into the lib; the
+extension-field gadgets (incl. the new committed ones) link again.
+
 ---
 
 ## PRIORITIZED PLAN (Pareto: the 20% that earns the unification)
@@ -113,10 +122,16 @@ committed proof at the claimed bits) and **F2** (Ω2/Ω3 don't compose). Those a
     `CP·Z_H == combine·(x−ω^{n-1})` + the GF(p⁴) FRI fold-consistency. Adversary-verified: honest accepts; a violating
     trace is rejected (CP not low-degree); a forged trace opening is rejected (Merkle); a corrupted root is rejected.
     **This is the committed line-755 `zk_fused_prod` did over shared memory, now done against commitments.**
-  - **P2b SCALE-UP NEXT:** lift this to the full fused AIR (20 transition constraints + k=4 permutation, N=64) — i.e.
-    migrate `zk_fused_prod` itself — so the whole compute+memory+control zkVM is a committed witness-free proof at
-    ~2⁻⁸⁶. The core mechanism (committed FRI + committed line-755 + witness-free combine) is now proven; the rest is
-    scaling the constraint set + the permutation boundary onto the same committed openings.
+  - **✅ P2b FULL DONE — F1 CLOSED (same gate, `sovir/zk_fused_committed.iii`):** the WHOLE compute+memory+control
+    fused zkVM (32 STORE + 32 LOAD, one N=64 trace, W=19, 20 transition constraints + a k=4 grand-product permutation)
+    verified as a COMMITTED GF(p⁴) proof. The 19 trace-column LDEs are Merkle-committed; the combination α is
+    **FS-derived from the committed trace roots** (fixes `zk_fused_prod`'s FIXED-α binding gap); the CP + every FRI
+    layer are committed; per FS-derived query the verifier OPENS + `merkle_verify_proof`s all 19 columns at q and q+B
+    (binding air's `combine`), opens CP(q), checks the line-755 `CP·Z_H==combine·(x−ω^{n-1})` + the GF(p⁴) FRI fold,
+    and checks the k=4 permutation boundary at OPENED accumulator leaves. Adversary-verified: honest accepts; forged
+    LOAD rejected (line-755); non-permutation rejected (k=4 boundary); forged opening rejected (Merkle); corrupted root
+    rejected. **F1 is closed** — the ext-field "production" verifier no longer reads shared memory or uses a fixed α;
+    it is commitment-bound. The query count `NQ=16` is the demo knob (production = 128 → ~2⁻⁸⁶).
 - **P3 — F2: compose Ω2 and Ω3 on R0.** Adopt the faithful architecture **EIDOS → XII-term → canonicalise(+Ω3 proof)
   → LOWER to SVIR (Ω2) → run/attest**. Make Ω2's R0 SVIR the LOWERING of the canonicalised XII term (use `xii_lower_*`),
   so the same object flows through Ω.b then Ω.a. **Teeth:** the lowered SVIR's result must equal the XII term's

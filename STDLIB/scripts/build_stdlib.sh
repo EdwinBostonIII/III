@@ -1560,6 +1560,12 @@ MODULES=(
     # bus).  Colour IS the content-address (palette over isub_cav); composes canvas + palette + isub (no island,
     # NO hand-built web).  Compiler-unreferenced -> LIBNATIVE; last.  Proven corpus 1987.
     "eidos/web"
+    # GF(p^2)/GF(p^4) extension-field arithmetic libraries (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md F9): zk_air's
+    # GF(p^4) composition-polynomial path (air_combine_ext4 / air_build_cp_ext4) references ext2_*/e2pack/e2lo/e2hi +
+    # the GF(p^4) ops, so the lib is INCOMPLETE without them.  They were present in the old lib (manual ar) but absent
+    # from this MODULES list -- a real omission that a clean rebuild exposes.  Leaf arithmetic; appended at end (BSS-safe).
+    "numera/zk_ext2"
+    "numera/zk_ext4"
     # Omega3 proof-carrying XII canonicalisation (omnia/xii_proof + omnia/xii_proof_check) is INTENTIONALLY NOT in this
     # MODULES list: it is proof-GADGET support, gated standalone by STDLIB/sovir/run_xii_proof.sh (which compiles it
     # directly against libiii_native.a).  It carries test-tamper @export hooks (xii_proof_set_rid/flip_ahash) that are

@@ -991,11 +991,14 @@ fn pstmt() {
     let mut lsz:i64=0i64  let mut lsk:u32=0u32  let lq:u32=C+usk                 /* `long`/`short` size word (after the optional sign) -- isqual-skipped elsewhere, so capture SIZE here */
     if kw(lq,"long" as u64,4u32)==1u32 {lsz=8i64  lsk=1u32  if kw(lq+1u32,"long" as u64,4u32)==1u32 {lsk=2u32}} else { if kw(lq,"short" as u64,5u32)==1u32 {lsz=2i64  lsk=1u32} }
     let mut isdcl:u32=0u32  if dtype(C)==1u32 {isdcl=1u32}  if uovs>=0i32 {isdcl=1u32}  if lsz!=0i64 {isdcl=1u32}
+    let mut isopq:u32=0u32                                         /* `UnknownType *name` : opaque-typedef pointer (FILE*, etc. -- type unknown because ccsv skips its <header>) -> an 8-byte pointer decl, NOT a multiply */
+    if isdcl==0u32 { if is_label_kw(C)==0u32 { if TK[C as u64]==1u32 { if ispat(C+1u32,Q_MUL)==1u32 { if stidx(C)<0i32 { if lidx(C)<0i32 { let abq:i64=abase(C)  let ciq:i32=cidx(C)  if abq<0i64 { if ciq<0i32 { isopq=1u32  isdcl=1u32 } } } } } } } }   /* is_label_kw excludes return/sizeof/if/... -- `return *p` must NOT be read as a `return`-typed pointer decl */
     if isdcl==1u32 {                                               /* int/char/short/long/[un]signed decl, incl MULTI: `T a [=e], *p, b[N], c=e ;` */
         let dtt:u32=C+usk  let mut tt:u32=C  let mut bsz:i64=4i64  let mut tym:i64=4294967295i64  let mut bsg:u32=0u32  let mut adv:u32=1u32
-        if lsz!=0i64 { bsz=lsz  bsg=1u32  if uovs>=0i32 {bsg=uovs as u32}  adv=usk+lsk  if lsz==2i64 {tym=65535i64} else {tym=0i64}  let dd:u32=C+usk+lsk  if dtype(dd)==1u32 {adv=adv+1u32} }   /* [un]signed short/long [long] [int] : size 2/8 + optional trailing base */
+        if isopq==1u32 { tt=C  bsz=8i64  tym=0i64  bsg=0u32  adv=1u32 }   /* opaque pointer base: 8-byte pointee placeholder, skip the unknown type word */
+        else { if lsz!=0i64 { bsz=lsz  bsg=1u32  if uovs>=0i32 {bsg=uovs as u32}  adv=usk+lsk  if lsz==2i64 {tym=65535i64} else {tym=0i64}  let dd:u32=C+usk+lsk  if dtype(dd)==1u32 {adv=adv+1u32} }   /* [un]signed short/long [long] [int] : size 2/8 + optional trailing base */
         else { if uovs>=0i32 { bsg=uovs as u32  if dtype(dtt)==1u32 { tt=dtt  bsz=type_size(dtt)  tym=type_mask(dtt)  adv=2u32 } }   /* `unsigned int/char` ; bare `unsigned` -> int (4B/0xFFFFFFFF) */
-               else { bsz=type_size(C)  tym=type_mask(C)  bsg=type_signed(C) } }
+               else { bsz=type_size(C)  tym=type_mask(C)  bsg=type_signed(C) } } }
         let isc:u32=byc(tt)  C=C+adv  let mut more:u32=1u32
         while more==1u32 {
             let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }

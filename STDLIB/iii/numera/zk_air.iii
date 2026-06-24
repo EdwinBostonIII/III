@@ -79,6 +79,10 @@ var AIR_LDE    : [u32; 8192]        /* per-column LDE over H_D (WMAX*DMAX = 32*2
 var AIR_CP     : [u32; 256]         /* composition polynomial over H_D (DMAX) */
 var AIR_CP_R   : [u32; 256]         /* EXTENSION-FIELD composition polynomial, real limb (GF(p^2) value = AIR_CP_R + AIR_CP_I*u) */
 var AIR_CP_I   : [u32; 256]         /* ... imag limb (the FRI fold over GF(p^2) lifts the soundness floor off the 30-bit field) */
+var AIR_CP4_0  : [u32; 256]         /* GF(p^4) composition polynomial: value = (a0+a1 u) + (b0+b1 u) v ; this is a0 */
+var AIR_CP4_1  : [u32; 256]         /* a1 */
+var AIR_CP4_2  : [u32; 256]         /* b0 */
+var AIR_CP4_3  : [u32; 256]         /* b1 (4 base-field limbs -> the PRODUCTION-bit-count CP, challenge over GF(p^4) ~2^120) */
 /* transition constraint term lists */
 var AIR_TT_COEF : [u32; 64]
 var AIR_TT_A    : [u32; 64]
@@ -93,6 +97,10 @@ var AIR_NT      : [u32; 1]          /* number of terms */
 var AIR_NC      : [u32; 1]          /* number of transition constraints */
 var AIR_ALPHA   : [u32; 32]         /* per-constraint Fiat-Shamir coefficient (AIR_CMAX slots) */
 var AIR_ALPHA_EXT2 : [u64; 32]      /* per-constraint GF(p^2) combination challenge (packed a0|a1<<32) for air_combine_ext2 */
+var AIR_ALPHA_EXT4_A : [u64; 32]    /* per-constraint GF(p^4) combination challenge, GF(p^2) limb a (of a+b*v) */
+var AIR_ALPHA_EXT4_B : [u64; 32]    /* ... limb b */
+var AIR_CMB4_A : [u64; 1]           /* air_combine_ext4 result scratch, limb a */
+var AIR_CMB4_B : [u64; 1]           /* ... limb b */
 
 /* ---- GF(998244353): consolidated into the shared ntt_fri_organ ----
  * Were inline + byte-identical to zk_stark's copies → the `L_sf_*` global-symbol
@@ -354,6 +362,64 @@ fn air_build_cp_ext2() -> i32 @export {
 fn air_cp_ext2_at(j: u64) -> u64 @export { return e2pack(AIR_CP_R[j], AIR_CP_I[j]) }   /* read the GF(p^2) CP at LDE point j (packed) */
 /* the raw GF(p^2) combination at LDE point j (no Z_T factor) -- the verifier checks CP[j]*Z_T(omega^j) == this. */
 fn air_combine_ext2_at(j: u64) -> u64 @export { return air_combine_ext2(j, AIR_W[0] as u64, AIR_B * (AIR_N[0] as u64)) }
+
+/* ===== GF(p^4) composition polynomial: the SAME construction, combination challenge in GF(p^4) (the PRODUCTION
+ * challenge bit-count ~2^-114).  A GF(p^4) value a+b*v is 2 GF(p^2) words (a,b); the CP is 4 base-field limbs; the
+ * combination + Z_T-division are per-limb (linear).  Additive; the ext2/base paths are untouched. ===== */
+fn air_set_alpha_ext4(con: u64, a: u64, b: u64) -> i32 @export { if con < AIR_CMAX { AIR_ALPHA_EXT4_A[con] = a  AIR_ALPHA_EXT4_B[con] = b } return 0i32 }
+
+fn air_combine_ext4(j: u64, w_cols: u64, d_dom: u64) {
+    let wc : u64 = w_cols  let dd : u64 = d_dom
+    let mut acca : u64 = 0u64  let mut accb : u64 = 0u64
+    let nt : u64 = AIR_NT[0] as u64
+    let mut t : u64 = 0u64
+    while t < nt {
+        let con : u64 = AIR_TT_CON[t] as u64
+        let va  : u32 = air_eval_var(AIR_TT_A[t] as u64, j, wc, dd)
+        let vb  : u32 = air_eval_var(AIR_TT_B[t] as u64, j, wc, dd)
+        let base_term : u32 = sf_mul(AIR_TT_COEF[t], sf_mul(va, vb))
+        acca = ext2_add(acca, ext2_smul(base_term, AIR_ALPHA_EXT4_A[con]))
+        accb = ext2_add(accb, ext2_smul(base_term, AIR_ALPHA_EXT4_B[con]))
+        t = t + 1u64
+    }
+    AIR_CMB4_A[0] = acca  AIR_CMB4_B[0] = accb
+}
+
+fn air_build_cp_ext4() -> i32 @export {
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let omegaN : u32 = sf_rou(n as u32)
+    let lastr  : u32 = sf_pow(omegaN, n - 1u64)
+    let mut j : u64 = 0u64
+    while j < d {
+        let xj  : u32 = sf_pow(omegaD, j)
+        air_combine_ext4(j, w_cols, d)
+        let factor : u32 = sf_sub(xj, lastr)
+        let cpa : u64 = ext2_smul(factor, AIR_CMB4_A[0])
+        let cpb : u64 = ext2_smul(factor, AIR_CMB4_B[0])
+        AIR_CP4_0[j] = e2lo(cpa)  AIR_CP4_1[j] = e2hi(cpa)
+        AIR_CP4_2[j] = e2lo(cpb)  AIR_CP4_3[j] = e2hi(cpb)
+        j = j + 1u64
+    }
+    ntt_inverse_at((&AIR_CP4_0 as u64), d, AIR_Q, omegaD)  ntt_inverse_at((&AIR_CP4_1 as u64), d, AIR_Q, omegaD)
+    ntt_inverse_at((&AIR_CP4_2 as u64), d, AIR_Q, omegaD)  ntt_inverse_at((&AIR_CP4_3 as u64), d, AIR_Q, omegaD)
+    j = 0u64
+    while j < d {
+        if j + n < d { AIR_CP4_0[j] = AIR_CP4_0[j + n]  AIR_CP4_1[j] = AIR_CP4_1[j + n]  AIR_CP4_2[j] = AIR_CP4_2[j + n]  AIR_CP4_3[j] = AIR_CP4_3[j + n] }
+        else { AIR_CP4_0[j] = 0u32  AIR_CP4_1[j] = 0u32  AIR_CP4_2[j] = 0u32  AIR_CP4_3[j] = 0u32 }
+        j = j + 1u64
+    }
+    ntt_forward_at((&AIR_CP4_0 as u64), d, AIR_Q, omegaD)  ntt_forward_at((&AIR_CP4_1 as u64), d, AIR_Q, omegaD)
+    ntt_forward_at((&AIR_CP4_2 as u64), d, AIR_Q, omegaD)  ntt_forward_at((&AIR_CP4_3 as u64), d, AIR_Q, omegaD)
+    return 0i32
+}
+
+fn air_cp_ext4_a(j: u64) -> u64 @export { return e2pack(AIR_CP4_0[j], AIR_CP4_1[j]) }
+fn air_cp_ext4_b(j: u64) -> u64 @export { return e2pack(AIR_CP4_2[j], AIR_CP4_3[j]) }
+fn air_combine_ext4_at(j: u64) -> u64 @export { air_combine_ext4(j, AIR_W[0] as u64, AIR_B * (AIR_N[0] as u64))  return AIR_CMB4_A[0] }
+fn air_cmb4_b() -> u64 @export { return AIR_CMB4_B[0] }
 
 /* The transition constraints must VANISH on the trace domain (j % B == 0) for an
  * honest witness -- this is the AIR satisfaction predicate.  Returns 1 if every

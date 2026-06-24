@@ -681,7 +681,14 @@ fn eprim() {
                 eload(fe, fsg)  return }
         }
         if cp(Q_ARROW)==1u32 {                                       /* p->field [/ p->field[i]] : struct-pointer field load */
-            let ptt:i32=lpt(t)  if ptt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)  let fm:i64=fieldmask(ptt,ft)
+            let ptt:i32=lpt(t)  if ptt>=0i32 { if ispat(C+2u32,Q_ARROW)==1u32 { let elt1:i32=fieldpt(ptt,C+1u32)  if elt1>=0i32 {   /* p->f1->f2->... : CHAINED pointer-field read (a->head->used) */
+                emit_lget(lidx(t) as u32)  let mut cur:i32=ptt  let mut gc:u32=1u32
+                while gc==1u32 { C=C+1u32  let ftc:u32=C  C=C+1u32  let fo:i64=fieldoff(cur,ftc)
+                    if cp(Q_ARROW)==1u32 { if fo>0i64 {econst(fo)  eb(0x20u32)}  eb(0x82u32)  cur=fieldpt(cur,ftc) }   /* intermediate `->` : load the pointer */
+                    else { if fo>0i64 {econst(fo)  eb(0x20u32)}  eload(fieldelem(cur,ftc), fieldsign(cur,ftc))  gc=0u32 } }   /* last field : typed load */
+                return
+            } }
+            C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)  let fm:i64=fieldmask(ptt,ft)
                 if cp(Q_LBR)==1u32 {
                     let elt:i32=fieldpt(ptt,ft)
                     if elt>=0i32 {   /* p->arrfield[i].subfield : ptr/embedded-struct array-element field READ -- lookahead past ] for a . */

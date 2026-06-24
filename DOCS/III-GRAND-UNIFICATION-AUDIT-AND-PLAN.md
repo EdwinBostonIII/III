@@ -64,6 +64,26 @@ gradient. (The verb-derivation cross-check against the live organ is genuine; th
 The template that found F1–F4 (Is the verifier independent of the prover's memory? Is there a commitment? Does the
 negative arm test the *real* adversary, or a forged input through the honest pipeline?) should be run across them.
 
+### F7 — `build_stdlib`'s cartographer gate was RED (pre-existing). **[FIXED 2026-06-24]**
+Running `build_stdlib.sh` (for P4) surfaced that its architectural gate FAILED on duplicate `@export` symbols
+`svir_ptr`/`svir_len`. Root cause: these are the per-program data-buffer entry points of the ~20 STANDALONE SVIR
+programs in `STDLIB/sovir/` (svir_prog/svir_loop/svir_fact/iiisv/…) — each compiled to its own `.exe`, linked against
+the lib INDIVIDUALLY, NEVER co-linked — i.e. exactly the benign "separate link trees" class already allowlisted for
+`cpufeat_has_*`. Since the 2026-06-17 carto walk fix (skip `build/`, raise MAXF → it now sees `sovir/`), the gate has
+been red on this whenever `build_stdlib` runs its full path (the project's routine gate is `run_corpus.sh`, which
+doesn't invoke carto). **Not** caused by the new `xii_proof*` modules (their exports are uniquely `xii_proof_*`).
+**Fix:** added `svir_ptr`,`svir_len` to `III-CARTOGRAPHER/gate_allow.json` `exports` with rationale; carto gate → PASS.
+
+### F8 — `build_stdlib`'s coverage ratchets are RED (pre-existing drift). **[NOTED, pre-existing]**
+With the carto gate fixed, `build_stdlib` compiled all modules (PASS=698, FAIL=0, lib aggregated) but exited 3 on three
+DOWN-ONLY coverage ratchets: `uncovered=39 > 0`, `dark-surface=58 > 0`, `under-proven=2 > 0` (every `@export` must be
+KAT-proven + reachable from the corpus). Since `uncovered=39` far exceeds the ~22 exports of the two new `xii_proof*`
+modules, the ratchets were already red BEFORE this session (the project's routine gate is `run_corpus.sh`, which does
+not run these ratchets; the full `build_stdlib` path is run rarely). A separate pre-existing cleanup (out of this
+audit's scope) = drive the corpus coverage of the drifted exports back to the pinned 0. **This session does NOT worsen
+it:** the `xii_proof*` modules were intentionally left OUT of `build_stdlib` MODULES (see P4) so the ratchet is not
+pushed further from its pin by un-coverable test-hook exports.
+
 ---
 
 ## PRIORITIZED PLAN (Pareto: the 20% that earns the unification)
@@ -101,8 +121,12 @@ committed proof at the claimed bits) and **F2** (Ω2/Ω3 don't compose). Those a
   → LOWER to SVIR (Ω2) → run/attest**. Make Ω2's R0 SVIR the LOWERING of the canonicalised XII term (use `xii_lower_*`),
   so the same object flows through Ω.b then Ω.a. **Teeth:** the lowered SVIR's result must equal the XII term's
   denotation, and the Ω3 proof must be over the term that lowers to R0.
-- **P4 — F3: integrate.** Add `xii_proof`/`xii_proof_check` to `build_stdlib` MODULES; clear cartographer
-  export-collision/cycle; reseal; corpus-regress.
+- **P4 — F3: PARTIAL.** The carto-gate blocker (F7) is FIXED and the full `build_stdlib` compiles
+  `xii_proof`/`xii_proof_check` cleanly into the lib (FAIL=0). But they are kept OUT of MODULES on purpose: they carry
+  test-tamper `@export` hooks (`set_rid`/`flip_ahash`) unsuitable for library export, and adding un-corpus-covered
+  exports worsens the down-only coverage ratchets (F8). Clean closure = split the library API from the test
+  scaffolding (move tamper hooks into the demo) + add a corpus KAT, then list them. For now Ω3 is gated standalone
+  (`run_xii_proof.sh`) — proof-gadget support, the right home until that split.
 - **P5 — F4 (optional fidelity):** compute the real `sha256(verb‖a‖b)` content-address inside R0's fold (sha256 is pure
   arithmetic, SVIR-lowerable) so R0 attests the genuine inverse-form identity. Larger lift, lower priority.
 - **P6 — Ω4 keystone (after P2+P3):** `run_grand_unification.sh` composing the now-connected + committed stages on R0,

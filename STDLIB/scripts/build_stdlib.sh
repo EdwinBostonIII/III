@@ -1560,6 +1560,12 @@ MODULES=(
     # bus).  Colour IS the content-address (palette over isub_cav); composes canvas + palette + isub (no island,
     # NO hand-built web).  Compiler-unreferenced -> LIBNATIVE; last.  Proven corpus 1987.
     "eidos/web"
+    # Omega3 proof-carrying XII canonicalisation (omnia/xii_proof + omnia/xii_proof_check) is INTENTIONALLY NOT in this
+    # MODULES list: it is proof-GADGET support, gated standalone by STDLIB/sovir/run_xii_proof.sh (which compiles it
+    # directly against libiii_native.a).  It carries test-tamper @export hooks (xii_proof_set_rid/flip_ahash) that are
+    # unsuitable library exports and cannot be covered by a positive corpus KAT, so adding it here would WORSEN the
+    # down-only coverage ratchets.  Lib-integration is a clean future task = split the library API from the test
+    # scaffolding + add a corpus KAT (DOCS/III-GRAND-UNIFICATION-AUDIT-AND-PLAN.md F3).
 )
 # NOTE: the proposer-layer restructure is IN-PLACE (no new module): bayes_search gained bs2_observe/
 # bs2_budget/bs2_lead, and harmony_synth/refactor_propose now bayes-throttle their own enumeration and

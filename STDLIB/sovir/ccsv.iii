@@ -633,7 +633,12 @@ fn eprim() {
     if cp(Q_LNOT)==1u32 { C=C+1u32  eprim()  econst(0i64)  eb(0x30u32)  return }   /* !x = (x == 0) -> 0/1 (logical NOT) */
     if cp(Q_SUB)==1u32 { C=C+1u32  econst(0i64)  eprim()  eb(0x21u32)  return }          /* -x = 0 - x (eprim had NO unary minus -> `-var` underflowed the eval stack) */
     if cp(Q_LP)==1u32 {
-        if is_type_start(C+1u32)==1u32 { C=C+1u32  let cm:i64=cast_mask()  eat(Q_RP)  eprim()  if cm!=0i64 { econst(cm)  eb(0x25u32) }  return }   /* (TYPE)expr cast: i64-noop except narrowing -> AND-mask */
+        if is_type_start(C+1u32)==1u32 { C=C+1u32  let mut cm:i64=cast_mask()
+            if cp(Q_LP)==1u32 { cm=0i64                            /* `(Type (*)[N])expr` : pointer-to-array CAST -> a pointer (8B, no narrowing mask); skip the (*)[N] declarator */
+                let mut gpc:u32=1u32  while gpc==1u32 { if cp(Q_RP)==1u32 {gpc=0u32} else { if TK[C as u64]==0u32 {gpc=0u32} else {C=C+1u32} } }  eat(Q_RP)
+                let mut gbc:u32=1u32  while gbc==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  let mut gxc:u32=1u32  while gxc==1u32 { if cp(Q_RBR)==1u32 {gxc=0u32} else { if TK[C as u64]==0u32 {gxc=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else {gbc=0u32} }
+            }
+            eat(Q_RP)  eprim()  if cm!=0i64 { econst(cm)  eb(0x25u32) }  return }   /* (TYPE)expr cast: i64-noop except narrowing -> AND-mask */
         C=C+1u32  ebin(0u32)  let mut gc:u32=1u32  while gc==1u32 { if cp(Q_COM)==1u32 { eb(0x72u32)  C=C+1u32  ebin(0u32) } else {gc=0u32} }  eat(Q_RP)  return   /* ( a, b, c ) : comma operator -> eval a (DROP), ..., result = last */
     }
     if TK[C as u64]==2u32 { econst(TV[C as u64])  C=C+1u32  return }
@@ -1000,6 +1005,14 @@ fn pstmt() {
         else { if uovs>=0i32 { bsg=uovs as u32  if dtype(dtt)==1u32 { tt=dtt  bsz=type_size(dtt)  tym=type_mask(dtt)  adv=2u32 } }   /* `unsigned int/char` ; bare `unsigned` -> int (4B/0xFFFFFFFF) */
                else { bsz=type_size(C)  tym=type_mask(C)  bsg=type_signed(C) } } }
         let isc:u32=byc(tt)  C=C+adv  let mut more:u32=1u32
+        if cp(Q_LP)==1u32 {                                        /* `Type (*+name)[N] [= e]` : pointer-to-ARRAY declarator (uint8_t (**mh)[32]) -> an 8-byte pointer local (the seed uses it via realloc/memset/ptr-arith; stride approximated) */
+            C=C+1u32  let mut gpp:u32=1u32  while gpp==1u32 { if cp(Q_MUL)==1u32 {C=C+1u32} else {gpp=0u32} }   /* ( then *+ */
+            let pnt:u32=C  C=C+1u32  let ps:u32=ladd(pnt)  LPSZ[ps as u64]=8i64  LPSG[ps as u64]=0u32
+            let mut grp:u32=1u32  while grp==1u32 { if cp(Q_RP)==1u32 {grp=0u32} else { if TK[C as u64]==0u32 {grp=0u32} else {C=C+1u32} } }  eat(Q_RP)   /* to ) */
+            let mut gbr:u32=1u32  while gbr==1u32 { if cp(Q_LBR)==1u32 { C=C+1u32  let mut gx:u32=1u32  while gx==1u32 { if cp(Q_RBR)==1u32 {gx=0u32} else { if TK[C as u64]==0u32 {gx=0u32} else {C=C+1u32} } }  eat(Q_RBR) } else {gbr=0u32} }   /* skip [N] dims */
+            if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  emit_lset(ps) }   /* = e */
+            eat(Q_SEMI)  return
+        }
         while more==1u32 {
             let mut isp:u32=0u32  if cp(Q_MUL)==1u32 { C=C+1u32  isp=1u32 }
             let nt:u32=C

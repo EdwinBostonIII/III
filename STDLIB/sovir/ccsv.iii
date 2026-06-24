@@ -872,6 +872,49 @@ fn flatten_buf(base:u64, len:u64, depth:u32) {
         else { let ch:u32=bb(base,i)  src_emit(ch)  if ch==10u32 {atls=1u32} else {atls=0u32}  i=i+1u64 }
     }
 }
+/* ---- preprocessor: conditional compilation (#ifdef/#ifndef/#if 0/#else/#endif + #undef) ---------------------
+ * The seed uses ONLY definedness conditionals (40 #ifdef, 23 #ifndef, 1 `#if 0`; zero #elif).  A single in-place
+ * compacting pass over the flattened SRC strips inactive branches BEFORE lex; the defined-set is built from
+ * #define (which lex still consumes for numeric -> named constants).  No-op for conditional-free files. */
+var PPDBUF : [u8; 16384]  var PPD_OFF : [u32; 1024]  var PPD_LEN : [u32; 1024]  var PPD_N : u32 = 0u32  var PPD_BE : u32 = 0u32   /* defined-name set (copied bytes; offsets stable across compaction) */
+var PPCSTK : [u32; 64]  var PPCSP : u32 = 0u32                                                       /* conditional stack: 1=active 0=inactive */
+fn pp_wsb(c:u32) -> u32 { if c==32u32 {return 1u32}  if c==9u32 {return 1u32}  return 0u32 }
+fn pp_kw(o:u64, s:u64, n:u64) -> u32 { let mut k:u64=0u64  while k<n { let q:*u8=(s+k) as *u8  if sb(o+k)!=(q[0u64] as u32) {return 0u32}  k=k+1u64 }  if idc(sb(o+n))==1u32 {return 0u32}  return 1u32 }
+fn pp_active() -> u32 { if PPCSP==0u32 {return 1u32}  return PPCSTK[(PPCSP-1u32) as u64] }
+fn pp_push(a:u32) { if PPCSP<64u32 { PPCSTK[PPCSP as u64]=a  PPCSP=PPCSP+1u32 } }
+fn pp_pop() { if PPCSP>0u32 { PPCSP=PPCSP-1u32 } }
+fn pp_skipws(o:u64, le:u64) -> u64 { let mut p:u64=o  let mut g:u32=1u32  while g==1u32 { if p>=le {g=0u32} else { if pp_wsb(sb(p))==1u32 {p=p+1u64} else {g=0u32} } }  return p }
+fn pp_namelen(o:u64) -> u64 { let mut l:u64=0u64  let mut g:u32=1u32  while g==1u32 { if idc(sb(o+l))==1u32 {l=l+1u64} else {g=0u32} }  return l }
+fn ppdef_add(o:u64, l:u64) { if PPD_N<1024u32 { if (PPD_BE+(l as u32))<16384u32 { PPD_OFF[PPD_N as u64]=PPD_BE  PPD_LEN[PPD_N as u64]=l as u32  let mut k:u64=0u64  while k<l { let p:*u8=((&PPDBUF as u64)+(PPD_BE as u64)+k) as *u8  p[0u64]=sb(o+k) as u8  k=k+1u64 }  PPD_BE=PPD_BE+(l as u32)  PPD_N=PPD_N+1u32 } } }
+fn ppdef_has(o:u64, l:u64) -> u32 { if l==0u64 {return 0u32}  let mut e:u32=0u32  while e<PPD_N { if PPD_LEN[e as u64]==(l as u32) { let mut k:u64=0u64  let mut eq:u32=1u32  while k<l { let p:*u8=((&PPDBUF as u64)+(PPD_OFF[e as u64] as u64)+k) as *u8  if (p[0u64] as u32)!=sb(o+k) {eq=0u32}  k=k+1u64 }  if eq==1u32 {return 1u32} }  e=e+1u32 }  return 0u32 }
+fn ppdef_del(o:u64, l:u64) { let mut e:u32=0u32  while e<PPD_N { if PPD_LEN[e as u64]==(l as u32) { let mut k:u64=0u64  let mut eq:u32=1u32  while k<l { let p:*u8=((&PPDBUF as u64)+(PPD_OFF[e as u64] as u64)+k) as *u8  if (p[0u64] as u32)!=sb(o+k) {eq=0u32}  k=k+1u64 }  if eq==1u32 { PPD_LEN[e as u64]=0u32 } }  e=e+1u32 } }   /* #undef -> len 0, never matches */
+fn preprocess() {
+    PPD_N=0u32  PPD_BE=0u32  PPCSP=0u32
+    let mut ri:u64=0u64  let mut wi:u64=0u64
+    while ri<SLEN {
+        let ls:u64=ri
+        let mut le:u64=ri  let mut fe:u32=1u32  while fe==1u32 { if le>=SLEN {fe=0u32} else { if sb(le)==10u32 {le=le+1u64  fe=0u32} else {le=le+1u64} } }
+        let ds:u64=pp_skipws(ls, le)
+        let mut isdir:u32=0u32  if ds<le { if sb(ds)==35u32 {isdir=1u32} }
+        let mut copy:u32=pp_active()
+        if isdir==1u32 {
+            copy=0u32
+            let dk:u64=pp_skipws(ds+1u64, le)
+            let pa:u32=pp_active()
+            if pp_kw(dk,"ifdef" as u64,5u64)==1u32 { let no:u64=pp_skipws(dk+5u64,le)  let nl:u64=pp_namelen(no)  if pa==1u32 { pp_push(ppdef_has(no,nl)) } else { pp_push(0u32) } }
+            else { if pp_kw(dk,"ifndef" as u64,6u64)==1u32 { let no:u64=pp_skipws(dk+6u64,le)  let nl:u64=pp_namelen(no)  if pa==1u32 { if ppdef_has(no,nl)==1u32 {pp_push(0u32)} else {pp_push(1u32)} } else { pp_push(0u32) } }
+            else { if pp_kw(dk,"if" as u64,2u64)==1u32 { let vo:u64=pp_skipws(dk+2u64,le)  let mut act:u32=1u32  if sb(vo)==48u32 { if idc(sb(vo+1u64))==0u32 {act=0u32} }  if pa==1u32 { pp_push(act) } else { pp_push(0u32) } }   /* only `#if 0` matters in the seed */
+            else { if pp_kw(dk,"endif" as u64,5u64)==1u32 { pp_pop() }
+            else { if pp_kw(dk,"else" as u64,4u64)==1u32 { if PPCSP>0u32 { let top:u32=PPCSTK[(PPCSP-1u32) as u64]  let mut par:u32=1u32  if PPCSP>1u32 { par=PPCSTK[(PPCSP-2u32) as u64] }  if par==1u32 { if top==1u32 {PPCSTK[(PPCSP-1u32) as u64]=0u32} else {PPCSTK[(PPCSP-1u32) as u64]=1u32} } } }
+            else { if pp_kw(dk,"define" as u64,6u64)==1u32 { if pa==1u32 { let no:u64=pp_skipws(dk+6u64,le)  let nl:u64=pp_namelen(no)  ppdef_add(no,nl)  copy=1u32 } }   /* keep the #define line for lex (numeric -> named const) */
+            else { if pp_kw(dk,"undef" as u64,5u64)==1u32 { if pa==1u32 { let no:u64=pp_skipws(dk+5u64,le)  let nl:u64=pp_namelen(no)  ppdef_del(no,nl) } }
+            else { copy=pa } } } } } } }   /* unknown # (e.g. residual #include/#error/#pragma) -> copy if active so lex skips it */
+        }
+        if copy==1u32 { let mut c:u64=ls  while c<le { let p:*u8=((&SRC as u64)+wi) as *u8  p[0u64]=sb(c) as u8  wi=wi+1u64  c=c+1u64 } }
+        ri=le
+    }
+    SLEN=wi
+}
 fn main(argc: i32, argv: u64) -> u64 {
     if argc < 2i32 { return 2u64 }
     let pp : *u64 = argv as *u64
@@ -884,6 +927,7 @@ fn main(argc: i32, argv: u64) -> u64 {
     let mut gg:u32=1u32  while gg==1u32 { let ch:u32=mp[j] as u32  if ch==0u32 {gg=0u32} else { if ch==47u32 {last=j+1u64} if ch==92u32 {last=j+1u64}  j=j+1u64 } }
     let mut dd:u64=0u64  while dd<last { let ip:*u8=((&IPATH as u64)+dd) as *u8  ip[0u64]=mp[dd]  dd=dd+1u64 }  DIRLEN=last
     SLEN=0u64  flatten_buf(&RAW as u64, RLEN, 0u32)
+    preprocess()                                                   /* strip inactive #ifdef/#ifndef/#if-0 branches before lex */
     lex()  prescan()  prescan_str()  prescan_arr()  prescan_struct()  prescan_enum()
     ML=0u64
     let mut k:u32=0u32

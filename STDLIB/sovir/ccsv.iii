@@ -548,7 +548,7 @@ fn eprim() {
     if cp(Q_SUB)==1u32 { C=C+1u32  econst(0i64)  eprim()  eb(0x21u32)  return }          /* -x = 0 - x (eprim had NO unary minus -> `-var` underflowed the eval stack) */
     if cp(Q_LP)==1u32 {
         if is_type_start(C+1u32)==1u32 { C=C+1u32  let cm:i64=cast_mask()  eat(Q_RP)  eprim()  if cm!=0i64 { econst(cm)  eb(0x25u32) }  return }   /* (TYPE)expr cast: i64-noop except narrowing -> AND-mask */
-        C=C+1u32  ebin(0u32)  eat(Q_RP)  return
+        C=C+1u32  ebin(0u32)  let mut gc:u32=1u32  while gc==1u32 { if cp(Q_COM)==1u32 { eb(0x72u32)  C=C+1u32  ebin(0u32) } else {gc=0u32} }  eat(Q_RP)  return   /* ( a, b, c ) : comma operator -> eval a (DROP), ..., result = last */
     }
     if TK[C as u64]==2u32 { econst(TV[C as u64])  C=C+1u32  return }
     if TK[C as u64]==4u32 { econst(TV[C as u64])  C=C+1u32  return }   /* "str" -> its address in the string region */
@@ -707,18 +707,26 @@ fn ebin(minp: u32) {
     } }
 }
 
-fn for_init() {   /* the for-loop's init clause (no trailing ;): `int i = 0` or `i = 0` or an expression */
+fn for_init() {   /* the for-loop's init clause (no trailing ;): `T i=0[, j=1]` or `i=0[, j=1]` or an expression (comma-separated) */
     skipquals()
-    if dtype(C)==1u32 { let tym:i64=type_mask(C)  let bsz:i64=type_size(C)  let bsg:u32=type_signed(C)  C=C+1u32  let nt:u32=C  C=C+1u32  eat(Q_ASN)  ebin(0u32)  let s:u32=ladd(nt)  LW[s as u64]=tym  LSZ[s as u64]=bsz  LSG[s as u64]=bsg  emit_lset(s)  return }
-    if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ASN)==1u32 { let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  return } }
-    ebin(0u32)  eb(0x72u32)
+    if dtype(C)==1u32 { let tym:i64=type_mask(C)  let bsz:i64=type_size(C)  let bsg:u32=type_signed(C)  C=C+1u32  let mut more:u32=1u32
+        while more==1u32 { let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LW[s as u64]=tym  LSZ[s as u64]=bsz  LSG[s as u64]=bsg
+            if cp(Q_ASN)==1u32 { C=C+1u32  ebin(0u32)  emit_lset(s) }
+            if cp(Q_COM)==1u32 { C=C+1u32  more=1u32 } else { more=0u32 } }
+        return }
+    let mut m2:u32=1u32
+    while m2==1u32 {
+        if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ASN)==1u32 { let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) } } else { ebin(0u32)  eb(0x72u32) } } else { ebin(0u32)  eb(0x72u32) }
+        if cp(Q_COM)==1u32 { C=C+1u32  m2=1u32 } else { m2=0u32 }
+    }
 }
-fn emit_for_incr() {   /* the for-loop's incr clause (no trailing ;): i++ / i-- / i = e / expr */
+fn one_incr() {   /* one for-incr clause: i++ / i-- / i = e / expr */
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_INC)==1u32 { let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x20u32)  emit_lset(li as u32) }  C=C+2u32  return } }
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_DEC)==1u32 { let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x21u32)  emit_lset(li as u32) }  C=C+2u32  return } }
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_ASN)==1u32 { let nt:u32=C  C=C+2u32  ebin(0u32)  let li:i32=lidx(nt)  if li>=0i32 { emit_lset(li as u32) }  return } }
     ebin(0u32)  eb(0x72u32)
 }
+fn emit_for_incr() { one_incr()  while cp(Q_COM)==1u32 { C=C+1u32  one_incr() } }   /* comma-separated incr clauses */
 /* the lvalue ADDRESS is already on the stack; consume `= rhs` or `op= rhs` and emit the store (esz=elem byte size,
  * mask=width mask or 0).  Compound uses a fresh temp so the address is computed once: SET tmp; GET(store-addr);
  * GET;LOAD(cur val); rhs; OP; [mask]; STORE. */

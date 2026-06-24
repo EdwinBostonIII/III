@@ -1,0 +1,142 @@
+/* zk_ext2_friN.iii -- the GENERAL (any-D) query-based GF(p^2) FRI, the scale enabler.  zk_ext2_friq was hardcoded to
+ * D=16 / 2 folds; this folds an arbitrary power-of-two domain down to the blowup (4) through log2(D/4) layers stored in
+ * a flat array, with a CORRELATED query path (a single domain point x = omega^q0 traced through every layer:
+ * at layer i the check index is qm = q0 mod (size_i/2)).  Larger D => more independent query positions => the FRI
+ * soundness (1-delta)^queries reaches production levels (D=32 held too few; advisor's secondary bottleneck).
+ *
+ * Here D=64 (5 layers 64->32->16->8->4), with 16 FS-derived queries.  Returns 99 iff a true low-degree CP ACCEPTS, a
+ * garbage CP folded honestly is REJECTED by the final-codeword check, AND a garbage CP with faked low-degree layers is
+ * REJECTED by the correlated QUERY fold-consistency.  The forged arms are the self-check that the general fold + query
+ * propagation are correct (a wrong fold would let the forgery through). */
+module zk_ext2_friN
+
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+
+const PRIME : u32 = 998244353u32
+const DOM   : u64 = 64u64
+
+var OM   : [u32; 64]  = [0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32,0u32]
+var FLAT : [u64; 128] = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+var RS   : [u64; 8]   = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+var OFFS : [u64; 8]   = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+var SIZES: [u64; 8]   = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+var DIG  : [u8; 32]   = [0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8]
+var NL   : [u64; 1]   = [0u64]
+var CCT  : [u64; 16]  = [0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64,0u64]
+
+fn base_inv(v: u32) -> u32 {
+    let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32
+    while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }
+    return r
+}
+fn fill_om() {
+    let w : u32 = sf_rou(DOM as u32)  OM[0] = 1u32
+    let mut j : u64 = 1u64
+    while j < DOM { OM[j] = sf_mul(OM[j - 1u64], w)  j = j + 1u64 }
+}
+fn rd4(off: u64) -> u32 {
+    let p : *u8 = ((&DIG as u64) + off) as *u8
+    let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)
+    while x >= PRIME { x = x - PRIME }
+    return x
+}
+fn challenge(off: u64, size: u64) -> u64 {
+    keccak256_oneshot((&FLAT as u64) + off * 8u64, size * 8u64, &DIG as u64)
+    return e2pack(rd4(0u64), rd4(4u64))
+}
+fn foldpoint(lo: u64, hi: u64, r: u64, x: u32) -> u64 {
+    let inv2 : u32 = base_inv(2u32)
+    let fe : u64 = ext2_smul(inv2, ext2_add(lo, hi))
+    let fo : u64 = ext2_smul(base_inv(sf_add(x, x)), ext2_sub(lo, hi))
+    return ext2_add(fe, ext2_mul(r, fo))
+}
+/* compute the layer table (offsets, sizes, FS challenges) from the committed layers in FLAT; returns the layer count. */
+fn build_layers() {
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut i : u64 = 0u64
+    while size > 4u64 {
+        OFFS[i] = off  SIZES[i] = size
+        let r : u64 = challenge(off, size)
+        RS[i] = r
+        let half : u64 = size / 2u64  let noff : u64 = off + size
+        let str : u64 = DOM / size
+        let mut j : u64 = 0u64
+        while j < half {
+            FLAT[noff + j] = foldpoint(FLAT[off + j], FLAT[off + j + half], r, OM[str * j])
+            j = j + 1u64
+        }
+        off = noff  size = half  i = i + 1u64
+    }
+    OFFS[i] = off  SIZES[i] = size      /* the final (size-4) layer */
+    NL[0] = i
+}
+/* verifier: re-derive the table from the committed FLAT, check final-codeword + correlated-query fold-consistency. */
+fn verify() -> u64 {
+    /* re-derive RS/OFFS/SIZES from the committed layers (a prover who faked a layer gets a different RS -> caught). */
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut i : u64 = 0u64
+    while size > 4u64 {
+        OFFS[i] = off  SIZES[i] = size  RS[i] = challenge(off, size)
+        off = off + size  size = size / 2u64  i = i + 1u64
+    }
+    let foff : u64 = off                    /* final layer offset, size 4 */
+    if FLAT[foff] != FLAT[foff + 1u64] { return 0u64 }
+    if FLAT[foff + 1u64] != FLAT[foff + 2u64] { return 0u64 }
+    if FLAT[foff + 2u64] != FLAT[foff + 3u64] { return 0u64 }
+    keccak256_oneshot((&FLAT as u64) + foff * 8u64, 32u64, &DIG as u64)   /* queries from the final commitment */
+    let nl : u64 = i
+    let mut k : u64 = 0u64
+    while k < 16u64 {
+        let pq : *u8 = ((&DIG as u64) + (k & 31u64)) as *u8
+        let q0 : u64 = ((pq[0u64] as u64) | ((pq[1u64] as u64) << 8u64)) & (DOM - 1u64)   /* a domain index in 0..D-1 */
+        let mut li : u64 = 0u64
+        while li < nl {
+            let s : u64 = SIZES[li]  let o : u64 = OFFS[li]  let half : u64 = s / 2u64
+            let qm : u64 = q0 & (half - 1u64)                      /* q0 mod (size/2), size a power of two */
+            let no : u64 = OFFS[li + 1u64]
+            let exp : u64 = foldpoint(FLAT[o + qm], FLAT[o + qm + half], RS[li], OM[(DOM / s) * qm])
+            if FLAT[no + qm] != exp { return 0u64 }               /* correlated fold-consistency at this layer */
+            li = li + 1u64
+        }
+        k = k + 1u64
+    }
+    return 1u64
+}
+
+fn set_true() {   /* FLAT[0..63] = a degree-15 codeword (< D/blowup = 16): P(x) = sum_{k<16} c_k x^k. */
+    let mut k : u64 = 0u64
+    while k < 16u64 { CCT[k] = e2pack(((k as u32)*229u32)+3u32, ((k as u32)*97u32)+5u32)  k = k + 1u64 }
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let mut a : u64 = 0u64  let mut kk : u64 = 0u64
+        while kk < 16u64 { a = ext2_add(a, ext2_smul(OM[(j * kk) & (DOM - 1u64)], CCT[kk]))  kk = kk + 1u64 }
+        FLAT[j] = a  j = j + 1u64
+    }
+}
+fn set_garbage() {
+    let mut j : u64 = 0u64
+    while j < DOM { FLAT[j] = e2pack(((j as u32)*40503u32)+11u32, ((j as u32)*22277u32)+5u32)  j = j + 1u64 }
+}
+
+fn main() -> u64 {
+    fill_om()
+    /* (1) TRUE: a degree-15 codeword on D=64 -> the general fold + 16 correlated queries ACCEPT. */
+    set_true()  build_layers()
+    if verify() != 1u64 { return 1u64 }
+    /* (2) FORGED, honest fold: garbage -> final layer not a codeword -> REJECT. */
+    set_garbage()  build_layers()
+    if verify() == 1u64 { return 2u64 }
+    /* (3) FORGED, FAKED layers: keep the true fold (layers 1..) but overwrite layer 0 with garbage -> the correlated
+     * query fold-consistency REJECTS (committed layer 0 doesn't fold to layer 1 under the FS challenge). */
+    set_true()  build_layers()
+    let mut j : u64 = 0u64
+    while j < DOM { FLAT[j] = e2pack(((j as u32)*44851u32)+9u32, ((j as u32)*30011u32)+7u32)  j = j + 1u64 }
+    if verify() == 1u64 { return 3u64 }
+    return 99u64
+}

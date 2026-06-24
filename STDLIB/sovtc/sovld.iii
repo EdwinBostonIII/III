@@ -36,7 +36,7 @@ extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
 extern @abi(c-msvc-x64) fn _setmode(fd: i32, mode: i32) -> i32 from "msvcrt"
 
 var LDPOS : u32 = 0u32
-var TEXTBUF : [u8; 16384]
+var TEXTBUF : [u8; 8388608]   /* the whole .text, loaded for reloc patching -- seed modules reach 150-200KB code (was 16384) */
 var EXT_DLL    : [u32; 64]   /* DLL id (0=kernel32, 1=msvcrt) per import */
 var EXT_HNRVA  : [u32; 64]   /* hint/name RVA per import */
 var EXT_IATRVA : [u32; 64]   /* IAT-entry RVA per import */

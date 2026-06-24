@@ -321,6 +321,34 @@ fn air_build_cp() -> i32 @export {
     return 0i32
 }
 
+/* SOUNDNESS-DEMO -- the MALICIOUS prover (default OFF; ZKAIR_CP_MODE[0]==1 selects it in air_stark_prove).  Commit the
+ * POINTWISE quotient combine*(x-omega^{n-1})*inv(Z_H) at non-H points (Z_H!=0), 0 at H points.  For a FORGED trace
+ * Z_H does NOT divide combine*(x-lastr), so this object is degree-(d-1) (HIGH) -- yet it satisfies line-755 at EVERY
+ * non-H query by construction, and air_derive_queries SKIPS the H points.  Under the VACUOUS fold-to-1 FRI it is never
+ * rejected => a forged trace ACCEPTS.  A TIGHT FRI (fold-to-AIR_B + constant final) rejects this high-degree CP. */
+var ZKAIR_CP_MODE : [u32; 1]
+fn air_set_cp_mode(m: u32) -> i32 @export { ZKAIR_CP_MODE[0] = m  return 0i32 }
+fn air_build_cp_highdeg() -> i32 {
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let omegaN : u32 = sf_rou(n as u32)
+    let lastr  : u32 = sf_pow(omegaN, n - 1u64)
+    let mut j : u64 = 0u64
+    while j < d {
+        let xj : u32 = sf_pow(omegaD, j)
+        let zh : u32 = sf_sub(sf_pow(xj, n), 1u32)
+        if zh == 0u32 { AIR_CP[j] = 0u32 }
+        if zh != 0u32 {
+            let cmb : u32 = sf_mul(air_combine(j, w_cols, d), sf_sub(xj, lastr))
+            AIR_CP[j] = sf_mul(cmb, sf_inv(zh))
+        }
+        j = j + 1u64
+    }
+    return 0i32
+}
+
 /* ===== EXTENSION-FIELD composition polynomial: the SAME construction as air_build_cp, but the per-constraint
  * combination challenge is a GF(p^2) value, so the CP is GF(p^2)-valued (two base-field limbs AIR_CP_R/AIR_CP_I).
  * The NTT/shift/Z_T are LINEAR, so they apply per-limb -- the domain + trace stay base-field, only the challenge and
@@ -762,7 +790,7 @@ var ZKAIR_TRACE_ROOTS : [u8; 1024]  /* WMAX cols * 32 = 32*32 (was 128=4 cols: O
 var ZKAIR_CP_ROOT     : [u8; 32]
 var ZKAIR_FRI_ROOTS   : [u8; 384]   /* 12 * 32 */
 var ZKAIR_FRI_NL      : [u32; 1]
-var ZKAIR_FRI_FINAL   : [u32; 1]
+var ZKAIR_FRI_FINAL   : [u32; 4]    /* the size-AIR_B final FRI layer (constant iff CP is degree-<n) */
 var ZKAIR_FRI         : [u32; 512]  /* FRI layers, D + D/2 + ... < 2D */
 var ZKAIR_FSIZE       : [u32; 12]
 var ZKAIR_FOMEGA      : [u32; 12]
@@ -896,7 +924,8 @@ fn air_stark_prove() -> i32 @export {
     /* FS-derive the composition coefficients from the trace commitment, THEN build
      * the composition polynomial with them (sound order: commit before challenge). */
     air_derive_alphas(tlen)
-    air_build_cp()
+    if ZKAIR_CP_MODE[0] == 1u32 { air_build_cp_highdeg() }   /* SOUNDNESS-DEMO malicious prover (default OFF) */
+    if ZKAIR_CP_MODE[0] != 1u32 { air_build_cp() }
     /* commit CP + extend the transcript */
     air_merkle_build(&AIR_CP as u64, wc*tbsz, 0u64, d)
     air_copy32(&ZKAIR_CP_ROOT as u64, air_merkle_root(wc*tbsz))
@@ -909,13 +938,14 @@ fn air_stark_prove() -> i32 @export {
     let friBase : u64 = (wc + 1u64) * tbsz
     let mut L : u64 = 0u64
     let mut lsize : u64 = d
-    /* NOTE (DOCS/III-ZK-SOUNDNESS-GAP.md): folding to 1 here proves only "degree < d" (vacuous) -- the FRI bound is
-     * not tight.  But tightening it alone is INSUFFICIENT: air_build_cp builds CP pointwise with CP=0 on the trace
-     * domain (the subgroup LDE INCLUDES the trace domain), so CP is degree-(d-1) even for an HONEST trace, not the
-     * true degree-<n quotient.  The real soundness fix is a COSET LDE (Z_H != 0 everywhere) so CP = combine*inv(Z_H)
-     * is the true quotient, THEN fold to AIR_B + require a constant final.  Substantial; tracked, not hidden. */
-    while lsize > 1u64 {
-        if L + 1u64 >= 12u64 { lsize = 1u64 } else {
+    /* SOUNDNESS (DOCS/III-ZK-SOUNDNESS-GAP.md): the FRI used to fold to 1 (VACUOUS -- proves only "degree < d"), so a
+     * malicious prover could commit a HIGH-degree pointwise CP that passed line-755 at every non-H query.  FIXED below:
+     * fold to AIR_B + the verifier requires a CONSTANT final layer.  (The earlier note here that a COSET LDE was ALSO
+     * needed was STALE: air_build_cp already builds the TRUE degree-<n quotient by FFT division, so the honest CP folds
+     * to a constant final and only the high-degree malicious CP fails -- no coset LDE required.  Repro: corpus 2012.) */
+    while lsize > AIR_B {              /* HOLE FIX: fold to AIR_B (not 1) so the final layer is constant ONLY for a
+                                       * degree-<n CP -- a high-degree (malicious) CP folds to a NON-constant final. */
+        if L + 1u64 >= 12u64 { lsize = AIR_B } else {
             let floffL : u64 = ZKAIR_FLOFF[L] as u64
             let ftoffL : u64 = ZKAIR_FTOFF[L] as u64
             let szL    : u64 = ZKAIR_FSIZE[L] as u64
@@ -940,7 +970,9 @@ fn air_stark_prove() -> i32 @export {
         }
     }
     ZKAIR_FRI_NL[0] = L as u32
-    ZKAIR_FRI_FINAL[0] = ZKAIR_FRI[ZKAIR_FLOFF[L] as u64]
+    let fff : u64 = ZKAIR_FLOFF[L] as u64                 /* the size-AIR_B final layer: store all AIR_B values */
+    let mut fkk : u64 = 0u64
+    while fkk < AIR_B { ZKAIR_FRI_FINAL[fkk] = ZKAIR_FRI[fff + fkk]  fkk = fkk + 1u64 }
     air_derive_queries(tlen, d)
     /* open every query: W cols' trace[q]+trace_next[q], CP[q], FRI siblings */
     let mut qi : u64 = 0u64
@@ -1061,7 +1093,11 @@ fn air_stark_verify() -> u64 @export {
             omegaL = sf_mul(omegaL, omegaL)
             l2 = l2 + 1u64
         }
-        if cur != ZKAIR_FRI_FINAL[0] { return 7u64 }
+        /* HOLE FIX: the size-AIR_B final layer must be CONSTANT (degree-<n CP) -- a high-degree malicious CP folds to
+         * a NON-constant final -> reject (8).  And this query's fold must reach it at its position qcur in [0,AIR_B). */
+        let mut fcc : u64 = 1u64
+        while fcc < AIR_B { if ZKAIR_FRI_FINAL[fcc] != ZKAIR_FRI_FINAL[0] { return 8u64 }  fcc = fcc + 1u64 }
+        if cur != ZKAIR_FRI_FINAL[qcur] { return 7u64 }
         i = i + 1u64
     }
     /* boundary checks: verify each LDE_col[row*B] opening vs the trace-col root + value */

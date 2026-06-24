@@ -1,6 +1,20 @@
 # III zk layer — the soundness gap, found AND FIXED by the discriminating test
 
-> **✅ RESOLVED.** The gap below was closed. Root cause: `air_build_cp` divided `combine` by `Z_H = x^n-1` (vanishes
+> **✅ FULLY RESOLVED 2026-06-24 — in TWO stages (the first was honest-prover-only).** Stage 1 (below) fixed the
+> HONEST-prover transition soundness (the Z_T/true-quotient fix). Stage 2 closed a remaining **MALICIOUS-prover** hole:
+> the FRI folded the CP all the way to size 1 (VACUOUS — proves nothing about degree), so a malicious prover could
+> commit a HIGH-degree CP = `combine·(x-ω^{n-1})·inv(Z_H)` pointwise at the non-H points — satisfying line-755 at every
+> (H-skipping) query BY CONSTRUCTION — and a FORGED trace ACCEPTED. **Reproduced executably** (`air_set_cp_mode(1)` →
+> `air_build_cp_highdeg`; corpus `2012_zk_air_mal_cp` read **rc=2 = ACCEPT** before the fix). **FIX:** tighten the FRI
+> to fold to `AIR_B` and require a **CONSTANT final layer** (`air_stark_prove`/`air_stark_verify`) — a high-degree CP
+> folds to a NON-constant final → REJECT (exactly what `zk_fused_committed` does). Corpus `2012` now **rc=99**; honest
+> path unregressed (`zk_svir_attest`, `999_zk_air_stark`, `1708_proof_stark`, `376_zk_stark_fri`, `1739_zk_rev`,
+> `1005_zk_stark_seal` all **99**). **SCOPE NOTE:** the earlier `zk_air.iii:912` comment claiming a COSET LDE was ALSO
+> required was STALE — `air_build_cp` already builds the true degree-<n quotient (FFT division), so the FRI tightening
+> alone suffices; no coset LDE was needed. Production `zk_fused_committed` (~2⁻⁸⁶) was never affected (it already
+> fold-to-4 + constant-final). *(Stage-1 banner retained below.)*
+>
+> **✅ RESOLVED (Stage 1).** The gap below was closed. Root cause: `air_build_cp` divided `combine` by `Z_H = x^n-1` (vanishes
 > on all `n` rows), but the transition binds only rows `0..n-2`, so the correct vanishing poly is `Z_T = Z_H/(x -
 > ω^{n-1})`; and `CP` was built pointwise (degree `d-1`, vacuous FRI). Fix: build `CP` as the TRUE quotient
 > `combine·(x-ω^{n-1}) / Z_H` (= `combine/Z_T`) via INTT → coefficient shift → NTT, and apply the same `(x-ω^{n-1})`

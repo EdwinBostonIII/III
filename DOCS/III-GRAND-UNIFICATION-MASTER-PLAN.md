@@ -122,7 +122,7 @@ with the negative arm (a semantics-BREAKING candidate) REJECTED at Σ.b.
 | **iiisv (.iii→SVIR)** | **Ω2 done (R5)** | integer core + fixed arrays + `const`/`as`/`@export` + void-fn returns; `iiisv2` byte-mirrors all | EIDOS ripple R0 routes through it (FR-1 ✅); structs only if a later phase needs them |
 | **sovas / sovld** | Mature (R2/repro) | sovereign assemble+link; **byte-reproducible** | route iiis-1's C TUs through it for binary-level DDC (Ω0) |
 | **DDC (trust)** | Mature (session) | both axes gated; `run_trust_closure.sh` PASS | extend to binary-level via reproducible back-end (Ω0) |
-| **XII** | Near-complete (R3) | 41 modules: canonicalise/rewrite/termination/joinability/critpair; sealed manifest | emit a *checkable* `eqv_equal` proof artifact per canonicalisation (FR-2/Ω3) |
+| **XII** | **Ω3 done (R3)** | 41 modules + `xii_proof`/`xii_proof_check`: canonicalisation now emits a checkable, independently-re-checkable proof bound to the sealed rule set | (Ω4) compose into the single-node gate |
 | **zkVM-over-SVIR** | Partial (R2) | per-opcode AIRs (ADD/MUL/RANGE), 2-opcode trace VM, prover+verifier+soundness | **full-ISA trace** (compare/control/mem/call) + real-i64 limbs (FR-4/Ω1) |
 | **EIDOS** | **Ω2 routed (R3/R4)** | 18 modules; `eqv_equal`/memo live; ripple substrate; **ripple R0 now SVIR-attestable** | (Ω3) emit a checkable `eqv_equal` proof for R0's SVIR under the sealed manifest |
 | **Transport** | Partial (R5) | `sealed_channel` x25519+ChaCha20; `pattern_set_federation` | wire verify-and-fold-without-re-exec across two nodes (FR-7/Ω5) |
@@ -266,6 +266,23 @@ the supported subset. *No-deferral rule:* prefer **extending `iiisv`** (the hard
 matches the native EIDOS result. **Manual verify:** diff the SVIR-route output against the cg_r3 output byte-for-byte.
 
 ### Phase Ω3 — XII proof-carrying canonicalisation of the ripple's SVIR
+**✅✅ CLOSED — gate `STDLIB/sovir/run_xii_proof.sh` (all clauses green).** XII canonicalisation is now a FIRST-CLASS
+CHECKABLE OBJECT. `omnia/xii_proof.iii` emits the proof — a linear sequence of single-rule steps
+`(rule_id, preorder_position, before_hash, after_hash)`, **mhash-chained**, where before/after are arena-independent
+**content hashes** (cad/SHA-256 over a `kind|subform|aux` preorder serialisation). `omnia/xii_proof_check.iii` is the
+**independent verifier**: it re-derives `canon` WITHOUT ever calling `xii_canonicalise` — per step it binds the
+`rule_id` to the manifest-admitted sealed set (`xii_proof_rule_sealed`), checks the before-hash, RE-APPLIES exactly
+that one sealed rule at the stated position (`xii_rewrite_apply_specific`), checks the after-hash, extends the chain,
+and finally confirms the term is canonical. `R0` (a real XII term — the eidos-ripple temporal fold:
+`F.COMPOSE(F.IF(p, F.WITH(NULL, F.LOOP(F.LOOP(K12,2),3)), e), NULL)`) canonicalises by dropping identity/no-op edges
+(R017/R016) and folding the nested iteration to one loop of the combined count (R014: 2·3=6). **Verified:** the
+emitter's canon == the production `xii_canonicalise`'s canon (same normal form); the checker ACCEPTS the honest proof;
+and four adversary arms all REJECT — out-of-manifest rule (rc 1), tampered after-hash (rc 4), wrong position (rc 3),
+sealed-but-non-matching rule (rc 3). `xad_admit()` (root-confluent + terminating) is the manifest-admission precondition.
+**Honest scope:** the checker shares the *sealed rule implementations* + term store with the prover (that is the
+manifest-sealed trusted base) but is independent of the *canonicalisation strategy* (never runs the canonicaliser) —
+exactly the ADR-Ω3 proof-carrying model. The cryptographic manifest *signature* (`verify_xii_manifest`) remains the
+separate build-time seal. New files: `omnia/xii_proof.iii`, `omnia/xii_proof_check.iii`, `sovir/xii_proof_demo.iii`.
 **Objective:** canonicalise `R0`'s SVIR under the *sealed* manifest and emit a *checkable* `eqv_equal` proof.
 **Open-audit task:** read `xii_canonicalise.iii`, `xii_rewrite.iii`, `xii_discharge.iii`, `xii_mig4_seal.iii`,
 and `verify_xii_manifest.c`; determine (a) whether `eqv_equal` is total over the SVIR term algebra or partial,

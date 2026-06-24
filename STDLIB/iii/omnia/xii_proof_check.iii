@@ -1,0 +1,180 @@
+/* STDLIB/iii/omnia/xii_proof_check.iii -- Omega3-T2/T3: the INDEPENDENT re-checker for an XII canonicalisation proof.
+ *
+ * Given a freshly-rebuilt initial term T0 and the proof artifact (xii_proof.iii: RID/POS/BHASH/AHASH/CHAIN), this
+ * verifier re-derives canon(T0) WITHOUT ever calling xii_canonicalise or the emitter.  For each step it:
+ *   (1) binds the rule to the SEALED MANIFEST set -- xad_admit() (the rule set is root-confluent + terminating) is a
+ *       precondition, and every rule_id must be in xii_proof_rule_sealed (the active cascade R005-R044 + trit 101-105);
+ *   (2) checks the current term's content hash == the step's before_hash;
+ *   (3) locates the node at the step's SELF-FIRST PREORDER position and RE-APPLIES exactly that one sealed rule there
+ *       via xii_rewrite_apply_specific -- if the rule does not actually fire at that position, the step is REJECTED;
+ *   (4) checks the new term's content hash == the step's after_hash;
+ *   (5) extends the mhash chain and, at the end, checks it equals the proof's chain (no step reordered/dropped);
+ *   (6) checks the final term is CANONICAL (no sealed rule fires anywhere) -- the proof actually reached canon.
+ *
+ * Returns 0 iff the proof is valid; a distinct nonzero code per failure (so the gate's negative arms can assert the
+ * EXACT rejection reason).  The checker shares ONLY the sealed rules + the term store + the same content hash; it
+ * does not trust the canonicalisation strategy.  This is the ADR-Omega3 proof-carrying model.
+ *
+ * Hexad: kind_prove.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_proof + xii_admission only.
+ */
+module omnia_xii_proof_check
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+extern @abi(c-msvc-x64) fn xii_proof_count() -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_rid(step: u32) -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_pos(step: u32) -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_bhash_byte(step: u32, i: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_ahash_byte(step: u32, i: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_chain_byte(i: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_rule_sealed(rid: u32) -> u8 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_tree_hash(root: u32, out_addr: u64) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_is_canon(root: u32) -> u8 from "xii_proof.iii"
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+const XPC_NULL_REF : u32 = 0xFFFFFFFFu32
+const XPC_FCOMPOSE : u8  = 18u8
+const XPC_FLOOP    : u8  = 23u8
+const XPC_FIF      : u8  = 22u8
+const XPC_SUITE    : u32 = 0u32
+
+var XPC_PRE   : u32 = 0u32
+var XPC_DONE  : u8  = 0u8
+var XPC_OK    : u8  = 0u8
+var XPC_POS   : u32 = 0u32
+var XPC_RID   : u32 = 0u32
+var XPC_HBUF  : [u8; 32]
+var XPC_CHAIN : [u8; 32]
+var XPC_SBUF  : [u8; 8]
+var XPC_HCOPY : [u8; 32]
+
+/* locate the node at SELF-FIRST PREORDER index XPC_POS; re-apply XPC_RID there; rewire the parent on the way up.
+ * SETS XPC_OK=1 iff the rule actually fired at that position (else 0 -> the step is invalid). */
+fn _xpc_walk(node: u32) -> u32 {
+    if node == XPC_NULL_REF { return node }
+    if XPC_DONE == 1u8 { return node }
+    let here : u32 = XPC_PRE
+    XPC_PRE = XPC_PRE + 1u32
+    if here == XPC_POS {
+        let r : u32 = xii_rewrite_apply_specific(XPC_RID, node)
+        if xii_rewrite_last_rule_fired() == XPC_RID {
+            XPC_DONE = 1u8  XPC_OK = 1u8
+            return r
+        }
+        XPC_DONE = 1u8  XPC_OK = 0u8
+        return node            /* rule did not fire here: invalid step (r would be NULL; do not use it) */
+    }
+    let kind : u8 = xii_term_get_kind(node)
+    if kind >= XPC_FCOMPOSE {
+        let a : u32 = xii_term_get_child_a(node)
+        let na : u32 = _xpc_walk(a)
+        if na != a { xii_term_set_child_a(node, na) }
+        if XPC_DONE == 1u8 { return node }
+        if kind != XPC_FLOOP {
+            let b : u32 = xii_term_get_child_b(node)
+            let nb : u32 = _xpc_walk(b)
+            if nb != b { xii_term_set_child_b(node, nb) }
+            if XPC_DONE == 1u8 { return node }
+            if kind == XPC_FIF {
+                let c : u32 = xii_term_get_child_c(node)
+                let nc : u32 = _xpc_walk(c)
+                if nc != c { xii_term_set_child_c(node, nc) }
+            }
+        }
+    }
+    return node
+}
+
+fn _xpc_bhash_eq(step: u32, root: u32) -> u8 {
+    xii_proof_tree_hash(root, (&XPC_HBUF as u64))
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if XPC_HBUF[i as u64] != xii_proof_bhash_byte(step, i) { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+fn _xpc_ahash_eq(step: u32, root: u32) -> u8 {
+    xii_proof_tree_hash(root, (&XPC_HBUF as u64))
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if XPC_HBUF[i as u64] != xii_proof_ahash_byte(step, i) { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* recompute the chain over the PROOF's stored step (must match xii_proof._xpf_chain_step byte-for-byte). */
+fn _xpc_chain_step(step: u32) -> i32 {
+    let rid : u32 = xii_proof_rid(step)
+    let pos : u32 = xii_proof_pos(step)
+    cad_begin(XPC_SUITE)
+    cad_payload((&XPC_CHAIN as u64), 32u64)
+    XPC_SBUF[0u64] = (rid & 0xFFu32) as u8
+    XPC_SBUF[1u64] = ((rid >> 8u32) & 0xFFu32) as u8
+    XPC_SBUF[2u64] = ((rid >> 16u32) & 0xFFu32) as u8
+    XPC_SBUF[3u64] = ((rid >> 24u32) & 0xFFu32) as u8
+    XPC_SBUF[4u64] = (pos & 0xFFu32) as u8
+    XPC_SBUF[5u64] = ((pos >> 8u32) & 0xFFu32) as u8
+    XPC_SBUF[6u64] = ((pos >> 16u32) & 0xFFu32) as u8
+    XPC_SBUF[7u64] = ((pos >> 24u32) & 0xFFu32) as u8
+    cad_payload((&XPC_SBUF as u64), 8u64)
+    let mut i : u32 = 0u32
+    while i < 32u32 { XPC_HCOPY[i as u64] = xii_proof_bhash_byte(step, i)  i = i + 1u32 }
+    cad_payload((&XPC_HCOPY as u64), 32u64)
+    let mut j : u32 = 0u32
+    while j < 32u32 { XPC_HCOPY[j as u64] = xii_proof_ahash_byte(step, j)  j = j + 1u32 }
+    cad_payload((&XPC_HCOPY as u64), 32u64)
+    cad_final((&XPC_CHAIN as u64))
+    return 0i32
+}
+
+/* THE CHECK.  root = a freshly-rebuilt T0 (same construction the prover used).  Returns 0 = VALID; else a reason:
+ *   1 = an out-of-manifest rule_id   2 = before-hash mismatch   3 = rule did not fire at the stated position
+ *   4 = after-hash mismatch          5 = chain mismatch         6 = final term not canonical (proof incomplete)
+ *  10 = the rule set is not manifest-admitted (xad_admit) */
+fn xii_proof_check(root: u32) -> u32 @export {
+    /* NOTE: the manifest ADMISSION gate (xad_admit -- the rule set is root-confluent + terminating) is a GLOBAL
+     * precondition the caller verifies ONCE up front (xad_admit builds its own terms in the shared arena, so calling
+     * it here would clobber `root`).  Per-rule manifest binding is enforced below via xii_proof_rule_sealed. */
+    let n : u32 = xii_proof_count()
+    let mut k : u64 = 0u64
+    while k < 32u64 { XPC_CHAIN[k] = 0u8  k = k + 1u64 }
+    let mut cur : u32 = root
+    let mut i : u32 = 0u32
+    while i < n {
+        let rid : u32 = xii_proof_rid(i)
+        if xii_proof_rule_sealed(rid) == 0u8 { return 1u32 }
+        if _xpc_bhash_eq(i, cur) == 0u8 { return 2u32 }
+        XPC_PRE = 0u32
+        XPC_DONE = 0u8
+        XPC_OK = 0u8
+        XPC_POS = xii_proof_pos(i)
+        XPC_RID = rid
+        let nc : u32 = _xpc_walk(cur)
+        if XPC_OK == 0u8 { return 3u32 }
+        cur = nc
+        if _xpc_ahash_eq(i, cur) == 0u8 { return 4u32 }
+        _xpc_chain_step(i)
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        if XPC_CHAIN[j as u64] != xii_proof_chain_byte(j) { return 5u32 }
+        j = j + 1u32
+    }
+    if xii_proof_is_canon(cur) == 0u8 { return 6u32 }
+    return 0u32
+}

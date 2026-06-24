@@ -1,0 +1,236 @@
+/* STDLIB/iii/omnia/xii_proof.iii -- Omega3-T1/T2: the FIRST-CLASS PROOF ARTIFACT for XII canonicalisation.
+ *
+ * canon(T) is computed by xii_canonicalise by firing the sealed reduction rules (xii_rewrite) to fixpoint.  This
+ * module makes that derivation a CHECKABLE OBJECT: a linear sequence of single-rule steps, each
+ *   step = (rule_id, position, before_hash, after_hash)
+ * where position is the SELF-FIRST PREORDER INDEX of the redex node in the current term, and before/after_hash are
+ * the arena-independent CONTENT HASHES of the whole term (cad/SHA-256 over a kind|subform|aux preorder serialisation,
+ * the same walk as xii_mig4_seal).  The step list is MHASH-CHAINED (xii_proof_chain) so no step can be reordered,
+ * dropped, or altered without detection.  The independent re-checker is omnia/xii_proof_check.iii.
+ *
+ * Soundness of the format: the rule set is confluence-certified (xii_critpairs_verify_all()==0) and terminating
+ * (MPO), so ANY redex order reaches the SAME normal form -- the emitter's self-first-preorder order is one such
+ * order, and the proof it emits is replayable step-for-step by a verifier that shares only the SEALED rules
+ * (xii_rewrite_apply_specific) + the term store, never the canonicalise driver.  Each step's rule_id is bound to the
+ * manifest-admitted set (xii_proof_rule_sealed), so an out-of-manifest rule is rejected at check time.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + cad only.
+ */
+module omnia_xii_proof
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+const XPF_NULL_REF : u32 = 0xFFFFFFFFu32
+const XPF_FCOMPOSE : u8  = 18u8
+const XPF_FLOOP    : u8  = 23u8
+const XPF_FIF      : u8  = 22u8
+const XPF_TVAL     : u8  = 24u8
+const XPF_NODEMARK : u8  = 0xFFu8
+const XPF_SUITE    : u32 = 0u32        /* cad suite 0 = SHA-256 */
+const XPF_MAXSTEPS : u32 = 256u32
+
+/* ---- the proof artifact (parallel arrays; read by the independent checker via the getters) ---- */
+var XPF_RID   : [u32; 256]
+var XPF_POS   : [u32; 256]
+var XPF_BHASH : [u8; 8192]    /* 256 steps * 32 bytes */
+var XPF_AHASH : [u8; 8192]
+var XPF_N     : [u32; 1]
+var XPF_CHAIN : [u8; 32]       /* mhash chain over all steps */
+
+var XPF_NODE  : [u8; 16]       /* one node's serialised bytes */
+
+/* ---- arena-independent CONTENT hash of a term tree (same preorder serialisation as xii_mig4_seal) ---- */
+fn _xpf_feed_node(t: u32) -> i32 {
+    let sf : u32 = xii_term_get_subform(t)
+    let ax : u64 = xii_term_get_aux(t)
+    XPF_NODE[0u64] = xii_term_get_kind(t)
+    XPF_NODE[1u64] = (sf & 0xFFu32) as u8
+    XPF_NODE[2u64] = ((sf >> 8u32) & 0xFFu32) as u8
+    XPF_NODE[3u64] = ((sf >> 16u32) & 0xFFu32) as u8
+    XPF_NODE[4u64] = ((sf >> 24u32) & 0xFFu32) as u8
+    XPF_NODE[5u64] = (ax & 0xFFu64) as u8
+    XPF_NODE[6u64] = ((ax >> 8u64) & 0xFFu64) as u8
+    XPF_NODE[7u64] = ((ax >> 16u64) & 0xFFu64) as u8
+    XPF_NODE[8u64] = ((ax >> 24u64) & 0xFFu64) as u8
+    XPF_NODE[9u64] = ((ax >> 32u64) & 0xFFu64) as u8
+    XPF_NODE[10u64] = ((ax >> 40u64) & 0xFFu64) as u8
+    XPF_NODE[11u64] = ((ax >> 48u64) & 0xFFu64) as u8
+    XPF_NODE[12u64] = ((ax >> 56u64) & 0xFFu64) as u8
+    cad_payload((&XPF_NODE as u64), 13u64)
+    return 0i32
+}
+fn _xpf_walk(t: u32) -> i32 {
+    if t == XPF_NULL_REF {
+        XPF_NODE[0u64] = XPF_NODEMARK
+        cad_payload((&XPF_NODE as u64), 1u64)
+        return 0i32
+    }
+    _xpf_feed_node(t)
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= 17u8 { return 0i32 }
+    if kind == XPF_TVAL { return 0i32 }
+    if kind == XPF_FLOOP { _xpf_walk(xii_term_get_child_a(t))  return 0i32 }
+    _xpf_walk(xii_term_get_child_a(t))
+    _xpf_walk(xii_term_get_child_b(t))
+    if kind == XPF_FIF { _xpf_walk(xii_term_get_child_c(t)) }
+    return 0i32
+}
+/* hash a whole term tree into the 32-byte buffer at out_addr (exported: the checker uses the SAME hash). */
+fn xii_proof_tree_hash(root: u32, out_addr: u64) -> i32 @export {
+    cad_begin(XPF_SUITE)
+    _xpf_walk(root)
+    cad_final(out_addr)
+    return 0i32
+}
+
+/* ---- the manifest-admitted rule set: the active sealed cascade is R005..R044 + trit ops 101..105.
+ * R001..R004 are RETIRED (associativity is structural at the constructor), so they are NOT sealed-valid. ---- */
+fn xii_proof_rule_sealed(rid: u32) -> u8 @export {
+    if rid >= 5u32 { if rid <= 44u32 { return 1u8 } }
+    if rid >= 101u32 { if rid <= 105u32 { return 1u8 } }
+    return 0u8
+}
+
+/* ---- step recording ---- */
+fn _xpf_store_hash(base_is_after: u32, step: u32, src_addr: u64) -> i32 {
+    let p : *u8 = src_addr as *u8
+    let off : u64 = (step as u64) * 32u64
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if base_is_after == 0u32 { XPF_BHASH[off + k] = p[k] }
+        if base_is_after == 1u32 { XPF_AHASH[off + k] = p[k] }
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+/* ---- the emitter: self-first preorder scan; at the FIRST node where a rule fires, apply it, record the step. ---- */
+var XPF_PRE   : u32 = 0u32
+var XPF_FIRED : u8  = 0u8
+var XPF_FRID  : u32 = 0u32
+var XPF_FPOS  : u32 = 0u32
+
+fn _xpf_scan(node: u32) -> u32 {
+    if node == XPF_NULL_REF { return node }
+    if XPF_FIRED == 1u8 { return node }
+    let here : u32 = XPF_PRE
+    XPF_PRE = XPF_PRE + 1u32
+    /* apply_one only mutates when a rule fires; if it fires here, this is the redex. */
+    let r : u32 = xii_rewrite_apply_one(node)
+    let fired : u32 = xii_rewrite_last_rule_fired()
+    if fired != 0u32 {
+        XPF_FIRED = 1u8
+        XPF_FRID = fired
+        XPF_FPOS = here
+        return r
+    }
+    let kind : u8 = xii_term_get_kind(node)
+    if kind >= XPF_FCOMPOSE {
+        let a : u32 = xii_term_get_child_a(node)
+        let na : u32 = _xpf_scan(a)
+        if na != a { xii_term_set_child_a(node, na) }
+        if XPF_FIRED == 1u8 { return node }
+        if kind != XPF_FLOOP {
+            let b : u32 = xii_term_get_child_b(node)
+            let nb : u32 = _xpf_scan(b)
+            if nb != b { xii_term_set_child_b(node, nb) }
+            if XPF_FIRED == 1u8 { return node }
+            if kind == XPF_FIF {
+                let c : u32 = xii_term_get_child_c(node)
+                let nc : u32 = _xpf_scan(c)
+                if nc != c { xii_term_set_child_c(node, nc) }
+            }
+        }
+    }
+    return node
+}
+
+fn _xpf_chain_step(step: u32) -> i32 {
+    /* chain_{i+1} = SHA( chain_i || rid || pos || before(32) || after(32) ) */
+    cad_begin(XPF_SUITE)
+    cad_payload((&XPF_CHAIN as u64), 32u64)
+    XPF_NODE[0u64] = (XPF_RID[step] & 0xFFu32) as u8
+    XPF_NODE[1u64] = ((XPF_RID[step] >> 8u32) & 0xFFu32) as u8
+    XPF_NODE[2u64] = ((XPF_RID[step] >> 16u32) & 0xFFu32) as u8
+    XPF_NODE[3u64] = ((XPF_RID[step] >> 24u32) & 0xFFu32) as u8
+    XPF_NODE[4u64] = (XPF_POS[step] & 0xFFu32) as u8
+    XPF_NODE[5u64] = ((XPF_POS[step] >> 8u32) & 0xFFu32) as u8
+    XPF_NODE[6u64] = ((XPF_POS[step] >> 16u32) & 0xFFu32) as u8
+    XPF_NODE[7u64] = ((XPF_POS[step] >> 24u32) & 0xFFu32) as u8
+    cad_payload((&XPF_NODE as u64), 8u64)
+    let bo : u64 = (step as u64) * 32u64
+    cad_payload((&XPF_BHASH as u64) + bo, 32u64)
+    cad_payload((&XPF_AHASH as u64) + bo, 32u64)
+    cad_final((&XPF_CHAIN as u64))
+    return 0i32
+}
+
+/* PROVE: canonicalise `root`, emitting the proof.  Returns the canonical term ref.  The proof (RID/POS/BHASH/AHASH,
+ * count XPF_N, chain XPF_CHAIN) is left in module memory for the independent checker. */
+var XPF_HBUF : [u8; 32]
+fn xii_proof_prove(root: u32) -> u32 @export {
+    XPF_N[0] = 0u32
+    let mut k : u64 = 0u64
+    while k < 32u64 { XPF_CHAIN[k] = 0u8  k = k + 1u64 }
+    let mut cur : u32 = root
+    let mut guard : u32 = 0u32
+    while guard < 100000u32 {
+        guard = guard + 1u32
+        XPF_PRE = 0u32
+        XPF_FIRED = 0u8
+        XPF_FRID = 0u32
+        XPF_FPOS = 0u32
+        /* hash BEFORE this candidate step */
+        xii_proof_tree_hash(cur, (&XPF_HBUF as u64))
+        let next : u32 = _xpf_scan(cur)
+        if XPF_FIRED == 0u8 { return cur }   /* no redex: canonical */
+        let s : u32 = XPF_N[0]
+        if s >= XPF_MAXSTEPS { return cur }  /* proof buffer full (shouldn't happen for real terms) */
+        XPF_RID[s] = XPF_FRID
+        XPF_POS[s] = XPF_FPOS
+        _xpf_store_hash(0u32, s, (&XPF_HBUF as u64))   /* before */
+        cur = next
+        xii_proof_tree_hash(cur, (&XPF_HBUF as u64))
+        _xpf_store_hash(1u32, s, (&XPF_HBUF as u64))   /* after */
+        XPF_N[0] = s + 1u32
+        _xpf_chain_step(s)
+    }
+    return cur
+}
+
+/* canonical-form scan (used by the checker for the final "the proof reached canon" check): 1 iff NO sealed rule
+ * fires anywhere (a single self-first apply_one pass finds no redex; apply_one is non-mutating when nothing fires). */
+fn xii_proof_is_canon(root: u32) -> u8 @export {
+    XPF_PRE = 0u32  XPF_FIRED = 0u8  XPF_FRID = 0u32  XPF_FPOS = 0u32
+    _xpf_scan(root)
+    if XPF_FIRED == 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* ---- proof getters (the checker reads the artifact through these) ---- */
+fn xii_proof_count() -> u32 @export { return XPF_N[0] }
+fn xii_proof_rid(step: u32) -> u32 @export { if step >= XPF_MAXSTEPS { return 0u32 }  return XPF_RID[step] }
+fn xii_proof_pos(step: u32) -> u32 @export { if step >= XPF_MAXSTEPS { return 0u32 }  return XPF_POS[step] }
+fn xii_proof_bhash_byte(step: u32, i: u32) -> u8 @export { return XPF_BHASH[((step as u64) * 32u64) + (i as u64)] }
+fn xii_proof_ahash_byte(step: u32, i: u32) -> u8 @export { return XPF_AHASH[((step as u64) * 32u64) + (i as u64)] }
+fn xii_proof_chain_byte(i: u32) -> u8 @export { return XPF_CHAIN[i as u64] }
+
+/* test hooks: corrupt the stored proof (the gate's negative arms call these, then re-check). */
+fn xii_proof_set_rid(step: u32, rid: u32) -> i32 @export { if step < XPF_MAXSTEPS { XPF_RID[step] = rid }  return 0i32 }
+fn xii_proof_set_pos(step: u32, pos: u32) -> i32 @export { if step < XPF_MAXSTEPS { XPF_POS[step] = pos }  return 0i32 }
+fn xii_proof_flip_ahash(step: u32, i: u32) -> i32 @export { let o : u64 = ((step as u64) * 32u64) + (i as u64)  XPF_AHASH[o] = XPF_AHASH[o] ^ 1u8  return 0i32 }

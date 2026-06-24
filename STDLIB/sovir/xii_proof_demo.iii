@@ -1,0 +1,110 @@
+/* xii_proof_demo.iii -- Omega3 GATE driver: proof-carrying XII canonicalisation, end to end, with the adversary arms.
+ *
+ * R0-as-XII-term: a CONDITIONAL ITERATED EVENT-FOLD with identity/no-op edges --
+ *   F.COMPOSE( F.IF(pred, F.WITH(NULL, F.LOOP(F.LOOP(K12, 2), 3)), else), NULL )
+ * The ripple's temporal fold is an iterated composition (LOOP) of the event-fold step (K12 THEN), gated by a
+ * condition (IF) and wrapped with identity/no-op edges (NULL -- the flat edges that emit nothing, eidos::ripple's
+ * V_NONE).  XII canonicalisation drops the identity edges (R017 compose-identity, R016 with-identity) and collapses
+ * the nested iteration to one loop of the COMBINED event count (R014: 2*3 = 6).
+ *
+ * Returns 99 iff: (P) the emitter's canon == xii_canonicalise's canon (same normal form, SAME content hash) AND the
+ * independent checker ACCEPTS the proof (rc 0); (A) an out-of-manifest rule_id is REJECTED (rc 1); (B) a flipped
+ * after_hash is REJECTED (rc 4); (C) a wrong position is REJECTED (rc 3); (D) a sealed-but-non-matching rule at a
+ * position is REJECTED (rc 3).  Any deviation returns a distinct code. */
+module xii_proof_demo
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+
+extern @abi(c-msvc-x64) fn xii_proof_prove(root: u32) -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_tree_hash(root: u32, out_addr: u64) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_count() -> u32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_set_rid(step: u32, rid: u32) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_set_pos(step: u32, pos: u32) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_flip_ahash(step: u32, i: u32) -> i32 from "xii_proof.iii"
+extern @abi(c-msvc-x64) fn xii_proof_check(root: u32) -> u32 from "xii_proof_check.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const D_K01      : u8  = 0u8
+const D_K06      : u8  = 5u8
+const D_K12      : u8  = 11u8
+const D_FCOMPOSE : u8  = 18u8
+const D_FWITH    : u8  = 20u8
+const D_NULLFORM : u32 = 0xFFFFFFFFu32
+
+var D_H1 : [u8; 32]
+var D_H2 : [u8; 32]
+
+/* build a fresh copy of the R0 term in the (just-reset) arena.  Deterministic: same refs every call. */
+fn build_r0() -> u32 {
+    let k12  : u32 = xii_term_make_basis(D_K12, 1u32)
+    let li   : u32 = xii_term_make_loop(k12, 2u64)
+    let lo   : u32 = xii_term_make_loop(li, 3u64)
+    let nulw : u32 = xii_term_make_basis(D_K06, D_NULLFORM)
+    let wth  : u32 = xii_term_make_fusion2(D_FWITH, nulw, lo)
+    let pred : u32 = xii_term_make_basis(D_K01, 1u32)
+    let els  : u32 = xii_term_make_basis(D_K01, 2u32)
+    let iff  : u32 = xii_term_make_if(pred, wth, els)
+    let nulc : u32 = xii_term_make_basis(D_K06, D_NULLFORM)
+    return xii_term_make_fusion2(D_FCOMPOSE, iff, nulc)
+}
+
+fn hash_eq() -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { if D_H1[i] != D_H2[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* (M) Omega3-T3 precondition: the active rule set is MANIFEST-ADMITTED (root-confluent + terminating).
+     * Checked ONCE up front -- xad_admit builds its own terms in the shared arena, so it must run before any
+     * term we hold a ref to.  Per-step rule binding (rule_id in the sealed set) is enforced inside the checker. */
+    if xad_admit() != 1u32 { return 9u64 }
+
+    /* (P1) the emitter reaches the SAME normal form as the production canonicaliser. */
+    xii_term_arena_reset()
+    let c1 : u32 = xii_canonicalise(build_r0())
+    xii_proof_tree_hash(c1, (&D_H1 as u64))
+    xii_term_arena_reset()
+    let c2 : u32 = xii_proof_prove(build_r0())
+    xii_proof_tree_hash(c2, (&D_H2 as u64))
+    if hash_eq() != 1u8 { return 1u64 }               /* emitter's canon != canonicalise's canon */
+    if xii_proof_count() == 0u32 { return 2u64 }      /* the proof must have at least one step */
+
+    /* (P2) the independent checker ACCEPTS the honest proof. */
+    xii_term_arena_reset()
+    let prc : u32 = xii_proof_check(build_r0())
+    if prc != 0u32 { return (30u32 + prc) as u64 }
+
+    /* (A) out-of-manifest rule: re-prove a clean proof, set step 0's rule_id to 200 (not in the sealed set). */
+    xii_term_arena_reset()  xii_proof_prove(build_r0())
+    xii_proof_set_rid(0u32, 200u32)
+    xii_term_arena_reset()
+    if xii_proof_check(build_r0()) != 1u32 { return 4u64 }
+
+    /* (B) tampered hash: flip a byte of the last step's after_hash. */
+    xii_term_arena_reset()  let nb : u32 = xii_proof_prove(build_r0())
+    let last : u32 = xii_proof_count() - 1u32
+    xii_proof_flip_ahash(last, 0u32)
+    xii_term_arena_reset()
+    if xii_proof_check(build_r0()) != 4u32 { return 5u64 }
+
+    /* (C) wrong position: set step 0's position to a node that does not exist / is not the redex. */
+    xii_term_arena_reset()  xii_proof_prove(build_r0())
+    xii_proof_set_pos(0u32, 99u32)
+    xii_term_arena_reset()
+    if xii_proof_check(build_r0()) != 3u32 { return 6u64 }
+
+    /* (D) sealed-but-non-matching rule: set step 0's rule to R013 (loop-unit) -- in the manifest, but the step-0
+     * redex is a COMPOSE, not a unit LOOP, so it does NOT fire there -> the rewrite is unjustified -> REJECT. */
+    xii_term_arena_reset()  xii_proof_prove(build_r0())
+    xii_proof_set_rid(0u32, 13u32)
+    xii_term_arena_reset()
+    if xii_proof_check(build_r0()) != 3u32 { return 7u64 }
+
+    return 99u64
+}

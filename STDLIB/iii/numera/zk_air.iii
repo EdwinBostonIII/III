@@ -91,6 +91,8 @@ var AIR_TT_CON  : [u32; 64]         /* which constraint k this term belongs to *
 var AIR_TT_PERM : [u32; 64]         /* 1 = this term's coefficient is the FS-derived permutation challenge -AIR_PERM_A */
 var AIR_PERM_A  : [u32; 1]          /* the grand-product permutation challenge, Fiat-Shamir-derived from the committed access-column roots (air_perm_setup) */
 var AIR_PERM_B  : [u32; 1]          /* the tuple-ENCODING challenge beta (also FS-derived); perm-term kinds: 1 = -alpha, 2 = beta, 3 = beta^2 */
+var AIR_PERM_R2 : [u32; 1]          /* 2nd INDEPENDENT permutation challenge (perm-term kind 4 = -R2) -- for k-repeated grand products */
+var AIR_PERM_R3 : [u32; 1]          /* 3rd independent permutation challenge (kind 5 = -R3); k=3 -> perm soundness ~(n/p)^3 ~2^-81 */
 var AIR_PERM_NV : [u32; 1]          /* number of ACCESS columns whose committed roots derive AIR_PERM_A/B */
 var AIR_PERM_START : [u32; 1]       /* first ACCESS column index (so gadgets whose accesses are not column-0-first can still FS-bind) */
 var AIR_NT      : [u32; 1]          /* number of terms */
@@ -122,6 +124,8 @@ fn air_reset(w_cols: u32, n_rows: u32) -> i32 @export {
     AIR_NC[0] = 0u32
     AIR_PERM_A[0] = 0u32
     AIR_PERM_B[0] = 0u32
+    AIR_PERM_R2[0] = 0u32
+    AIR_PERM_R3[0] = 0u32
     AIR_PERM_START[0] = 0u32
     AIR_PERM_NV[0] = 0u32
     let mut k : u64 = 0u64
@@ -232,6 +236,8 @@ fn air_combine(j: u64, w_cols: u64, d_dom: u64) -> u32 {
         if AIR_TT_PERM[t] == 1u32 { coef = sf_sub(0u32, AIR_PERM_A[0]) }            /* -alpha (FS-bound) */
         if AIR_TT_PERM[t] == 2u32 { coef = AIR_PERM_B[0] }                          /* beta */
         if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) }   /* beta^2 */
+        if AIR_TT_PERM[t] == 4u32 { coef = sf_sub(0u32, AIR_PERM_R2[0]) }           /* -R2 (repeated challenge) */
+        if AIR_TT_PERM[t] == 5u32 { coef = sf_sub(0u32, AIR_PERM_R3[0]) }           /* -R3 */
         let cw  : u32 = sf_mul(AIR_ALPHA[con], coef)
         acc = sf_add(acc, sf_mul(cw, pr))
         t = t + 1u64
@@ -328,6 +334,8 @@ fn air_combine_ext2(j: u64, w_cols: u64, d_dom: u64) -> u64 {
         if AIR_TT_PERM[t] == 1u32 { coef = sf_sub(0u32, AIR_PERM_A[0]) }       /* -alpha */
         if AIR_TT_PERM[t] == 2u32 { coef = AIR_PERM_B[0] }                     /* beta */
         if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) } /* beta^2 */
+        if AIR_TT_PERM[t] == 4u32 { coef = sf_sub(0u32, AIR_PERM_R2[0]) }
+        if AIR_TT_PERM[t] == 5u32 { coef = sf_sub(0u32, AIR_PERM_R3[0]) }
         let base_term : u32 = sf_mul(coef, sf_mul(va, vb))                     /* (perm-aware) coef * va * vb (base-field) */
         acc = ext2_add(acc, ext2_smul(base_term, AIR_ALPHA_EXT2[con]))         /* + alpha_ext2[con] * base_term */
         t = t + 1u64
@@ -385,6 +393,8 @@ fn air_combine_ext4(j: u64, w_cols: u64, d_dom: u64) {
         if AIR_TT_PERM[t] == 1u32 { coef = sf_sub(0u32, AIR_PERM_A[0]) }
         if AIR_TT_PERM[t] == 2u32 { coef = AIR_PERM_B[0] }
         if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) }
+        if AIR_TT_PERM[t] == 4u32 { coef = sf_sub(0u32, AIR_PERM_R2[0]) }
+        if AIR_TT_PERM[t] == 5u32 { coef = sf_sub(0u32, AIR_PERM_R3[0]) }
         let base_term : u32 = sf_mul(coef, sf_mul(va, vb))
         acca = ext2_add(acca, ext2_smul(base_term, AIR_ALPHA_EXT4_A[con]))
         accb = ext2_add(accb, ext2_smul(base_term, AIR_ALPHA_EXT4_B[con]))
@@ -512,6 +522,8 @@ fn air_combine_opened(w_cols: u64) -> u32 @export {
         if AIR_TT_PERM[t] == 1u32 { coef = sf_sub(0u32, AIR_PERM_A[0]) }            /* -alpha (re-derived) */
         if AIR_TT_PERM[t] == 2u32 { coef = AIR_PERM_B[0] }                          /* beta (re-derived) */
         if AIR_TT_PERM[t] == 3u32 { coef = sf_mul(AIR_PERM_B[0], AIR_PERM_B[0]) }   /* beta^2 (re-derived) */
+        if AIR_TT_PERM[t] == 4u32 { coef = sf_sub(0u32, AIR_PERM_R2[0]) }
+        if AIR_TT_PERM[t] == 5u32 { coef = sf_sub(0u32, AIR_PERM_R3[0]) }
         let cw  : u32 = sf_mul(AIR_ALPHA[con], coef)
         acc = sf_add(acc, sf_mul(cw, sf_mul(va, vb)))
         t = t + 1u64
@@ -833,9 +845,13 @@ fn air_perm_setup(start: u64, nv: u64) -> u32 @export {
     AIR_PERM_NV[0] = nv as u32
     AIR_PERM_A[0] = air_perm_field(start, nv, 0u64)
     AIR_PERM_B[0] = air_perm_field(start, nv, 4u64)
+    AIR_PERM_R2[0] = air_perm_field(start, nv, 16u64)   /* 2nd/3rd independent challenges: distinct digest slices */
+    AIR_PERM_R3[0] = air_perm_field(start, nv, 24u64)
     return AIR_PERM_A[0]
 }
 fn air_perm_beta() -> u32 @export { return AIR_PERM_B[0] }   /* the FS-derived tuple-encoding challenge (the gadget builds products with it) */
+fn air_perm_r2() -> u32 @export { return AIR_PERM_R2[0] }     /* 2nd independent FS-derived permutation challenge (k-repeated grand products) */
+fn air_perm_r3() -> u32 @export { return AIR_PERM_R3[0] }     /* 3rd independent FS-derived permutation challenge */
 
 fn air_stark_prove() -> i32 @export {
     air_build_lde()
@@ -963,7 +979,7 @@ fn air_stark_verify() -> u64 @export {
         tlen = tlen + 32u64  w = w + 1u64
     }
     air_derive_alphas(tlen)   /* re-derive the FS composition coefficients (== prover's) */
-    if AIR_PERM_NV[0] > 0u32 { AIR_PERM_A[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 0u64)  AIR_PERM_B[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 4u64) }   /* re-derive alpha,beta (keccak of committed access roots) -> a prover-chosen alpha/beta is rejected */
+    if AIR_PERM_NV[0] > 0u32 { AIR_PERM_A[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 0u64)  AIR_PERM_B[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 4u64)  AIR_PERM_R2[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 16u64)  AIR_PERM_R3[0] = air_perm_field(AIR_PERM_START[0] as u64, AIR_PERM_NV[0] as u64, 24u64) }   /* re-derive alpha,beta,R2,R3 (keccak of committed access roots) -> a prover-chosen challenge is rejected */
     air_copy32((&ZKAIR_TRANS as u64) + tlen, &ZKAIR_CP_ROOT as u64)
     tlen = tlen + 32u64
     let NL : u64 = ZKAIR_FRI_NL[0] as u64

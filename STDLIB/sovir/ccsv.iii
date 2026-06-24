@@ -970,12 +970,14 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==1u32 { let stc:i32=stidx(C)  if stc>=0i32 {   /* TypedefName v [= e] ; -> struct-VALUE local: reserve STSZ inline, `p.field` via abase/avtype */
         let isval:u32=ispat(C+2u32,Q_SEMI)  let isini:u32=ispat(C+2u32,Q_ASN)   /* ONLY a scalar `Foo v ;` / `Foo v = e ;` (NOT `Foo v[N]`, `Foo v, w`, `Foo v(...)` -> those fall to the old skip) */
         if isval==1u32 { C=C+1u32  let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LVT[s as u64]=stc  LVB[s as u64]=MTOP as i64  MTOP=MTOP+STSZ[stc as u64]  eat(Q_SEMI)  return }
-        if isini==1u32 { C=C+1u32  let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LVT[s as u64]=stc  LVB[s as u64]=MTOP as i64  MTOP=MTOP+STSZ[stc as u64]  C=C+1u32  let srcvt:i32=avtype(C)
-            if srcvt>=0i32 { if ispat(C+1u32,Q_SEMI)==1u32 {   /* = otherStructVar/value : byte copy STSZ bytes (addr,value order) */
-                let srcb:i64=abase(C)  let dstb:i64=LVB[s as u64]  let szc:i64=STSZ[stc as u64] as i64  let mut bc:i64=0i64
-                while bc<szc { econst(dstb+bc)  econst(srcb+bc)  eb(0x80u32)  eb(0x81u32)  bc=bc+1i64 }  C=C+1u32
-            } else { let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } } }
-            else { let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } }   /* unknown init (field-chain copy) -> skip; reserved but uninit (verify-safe) */
+        if isini==1u32 { C=C+1u32  let nt:u32=C  C=C+1u32  let s:u32=ladd(nt)  LVT[s as u64]=stc  LVB[s as u64]=MTOP as i64  MTOP=MTOP+STSZ[stc as u64]  C=C+1u32  let szc:i64=STSZ[stc as u64] as i64
+            if szc<=8i64 { econst(LVB[s as u64])  ebin(0u32)  eb(0x83u32) }   /* `T r = <expr>` (<=8B): the init yields the packed value (call RETURN / struct-var packing) -> STORE64 to r */
+            else { let srcvt:i32=avtype(C)
+                if srcvt>=0i32 { if ispat(C+1u32,Q_SEMI)==1u32 {   /* = otherStructVar (>8B) : byte copy STSZ bytes */
+                    let srcb:i64=abase(C)  let dstb:i64=LVB[s as u64]  let mut bc:i64=0i64
+                    while bc<szc { econst(dstb+bc)  econst(srcb+bc)  eb(0x80u32)  eb(0x81u32)  bc=bc+1i64 }  C=C+1u32
+                } else { let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } } }
+                else { let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } } } }   /* >8B unknown init (field-chain copy) -> skip */
             eat(Q_SEMI)  return }
         let mut g:u32=1u32  while g==1u32 { if cp(Q_SEMI)==1u32 {g=0u32} else { if TK[C as u64]==0u32 {g=0u32} else {C=C+1u32} } }  eat(Q_SEMI)  return   /* `Foo v[N]` / `Foo v, w` / other -> OLD skip (unchanged behavior) */
     } } }

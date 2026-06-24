@@ -680,6 +680,11 @@ fn eprim() {
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)  let fm:i64=fieldmask(vt,ft)
+                let fpt0:i32=fieldpt(vt,ft)  if fpt0>=0i32 { if cp(Q_DOT)==1u32 {   /* p.f1.f2.. : nested struct/union member chain (union members at +0) -> sum offsets via fieldpt, typed LOAD on the last */
+                    let mut cur:i32=fpt0  let mut acc:i64=foff  let mut gc:u32=1u32
+                    while gc==1u32 { C=C+1u32  let nf:u32=C  C=C+1u32  let nfo:i64=fieldoff(cur,nf)  acc=acc+nfo  let npt:i32=fieldpt(cur,nf)  let mut more:u32=0u32  if npt>=0i32 { if cp(Q_DOT)==1u32 {more=1u32} }
+                        if more==1u32 { cur=npt } else { econst(vb+acc)  eload(fieldelem(cur,nf), fieldsign(cur,nf))  gc=0u32 } }
+                    return } }
                 if cp(Q_LBR)==1u32 {
                     let elt:i32=fieldpt(vt,ft)
                     if elt>=0i32 {   /* v.arrfield[i].subfield : struct-value array-element field READ */
@@ -1069,6 +1074,11 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT {   /* v.field[/[i]] = e ; (struct field store) */
         let nt:u32=C  let vt:i32=avtype(nt)
         if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  let fe:i64=fieldelem(vt,ft)  let fm:i64=fieldmask(vt,ft)  let fsg:u32=fieldsign(vt,ft)
+            let fpt0:i32=fieldpt(vt,ft)  if fpt0>=0i32 { if ispat(C+3u32,Q_DOT)==1u32 {   /* p.f1.f2.. = e : nested struct/union member chain STORE */
+                let mut cur:i32=fpt0  let mut acc:i64=foff  C=C+3u32  let mut gc:u32=1u32
+                while gc==1u32 { C=C+1u32  let nf:u32=C  C=C+1u32  let nfo:i64=fieldoff(cur,nf)  acc=acc+nfo  let npt:i32=fieldpt(cur,nf)  let mut more:u32=0u32  if npt>=0i32 { if cp(Q_DOT)==1u32 {more=1u32} }
+                    if more==1u32 { cur=npt } else { econst(vb+acc)  emit_av(fieldelem(cur,nf), fieldsign(cur,nf), fieldmask(cur,nf))  eat(Q_SEMI)  gc=0u32 } }
+                return } }
             if ispat(C+3u32,Q_LBR)==1u32 { C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  econst(vb+foff)  eb(0x20u32)  emit_av(fe, fsg, fm)  eat(Q_SEMI)  return }
             C=C+3u32  econst(vb+foff)  emit_av(fe, fsg, fm)  eat(Q_SEMI)  return }
     } } }

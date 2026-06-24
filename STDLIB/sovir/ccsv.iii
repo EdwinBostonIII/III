@@ -660,7 +660,17 @@ fn eprim() {
         }
         if cp(Q_DOT)==1u32 {                                         /* v.field [/ v.field[i]] : struct field load */
             let vt:i32=avtype(t)  if vt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(t)  let fe:i64=fieldelem(vt,ft)  let fsg:u32=fieldsign(vt,ft)  let fm:i64=fieldmask(vt,ft)
-                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  econst(vb+foff)  eb(0x20u32)
+                if cp(Q_LBR)==1u32 {
+                    let elt:i32=fieldpt(vt,ft)
+                    if elt>=0i32 {   /* v.arrfield[i].subfield : struct-value array-element field READ */
+                        let mut q:u32=C+1u32  let mut dd:i32=0i32  let mut gg:u32=1u32  while gg==1u32 { if ispat(q,Q_LBR)==1u32 {dd=dd+1i32} else { if ispat(q,Q_RBR)==1u32 { if dd==0i32 {gg=0u32} else {dd=dd-1i32} } }  if TK[q as u64]==0u32 {gg=0u32}  if gg==1u32 {q=q+1u32} }
+                        if ispat(q+1u32,Q_DOT)==1u32 {
+                            let esz:i64=STSZ[elt as u64] as i64  let sub:u32=q+2u32  let soff:i64=fieldoff(elt,sub)  let se:i64=fieldelem(elt,sub)  let ssg:u32=fieldsign(elt,sub)
+                            C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  econst(vb+foff)  if fe==8i64 {eb(0x82u32)}  eb(0x20u32)  if soff>0i64 {econst(soff) eb(0x20u32)}
+                            C=C+2u32  eload(se, ssg)  return
+                        }
+                    }
+                    C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  econst(vb+foff)  eb(0x20u32)
                     if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* v.field[i]++ */
                     eload(fe, fsg)  return }
                 if fieldisarr(vt,ft)==1u32 { econst(vb+foff)  return }      /* bare array field -> &field[0] (decay) */
@@ -670,7 +680,17 @@ fn eprim() {
         }
         if cp(Q_ARROW)==1u32 {                                       /* p->field [/ p->field[i]] : struct-pointer field load */
             let ptt:i32=lpt(t)  if ptt>=0i32 { C=C+1u32  let ft:u32=C  C=C+1u32  let foff:i64=fieldoff(ptt,ft)  let fe:i64=fieldelem(ptt,ft)  let fsg:u32=fieldsign(ptt,ft)  let fm:i64=fieldmask(ptt,ft)
-                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}
+                if cp(Q_LBR)==1u32 {
+                    let elt:i32=fieldpt(ptt,ft)
+                    if elt>=0i32 {   /* p->arrfield[i].subfield : ptr/embedded-struct array-element field READ -- lookahead past ] for a . */
+                        let mut q:u32=C+1u32  let mut dd:i32=0i32  let mut gg:u32=1u32  while gg==1u32 { if ispat(q,Q_LBR)==1u32 {dd=dd+1i32} else { if ispat(q,Q_RBR)==1u32 { if dd==0i32 {gg=0u32} else {dd=dd-1i32} } }  if TK[q as u64]==0u32 {gg=0u32}  if gg==1u32 {q=q+1u32} }
+                        if ispat(q+1u32,Q_DOT)==1u32 {
+                            let esz:i64=STSZ[elt as u64] as i64  let sub:u32=q+2u32  let soff:i64=fieldoff(elt,sub)  let se:i64=fieldelem(elt,sub)  let ssg:u32=fieldsign(elt,sub)
+                            C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  if fe==8i64 {eb(0x82u32)}  eb(0x20u32)  if soff>0i64 {econst(soff) eb(0x20u32)}   /* (i*STSZ) + [*](p+foff) + soff */
+                            C=C+2u32  eload(se, ssg)  return
+                        }
+                    }
+                    C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(fe)  emit_lget(lidx(t) as u32)  eb(0x20u32)  if foff>0i64 {econst(foff) eb(0x20u32)}
                     if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,0u32,1u32)  return }  if cp(Q_DEC)==1u32 { C=C+1u32  pinc_mem(fe,fsg,fm,1u32,1u32)  return }   /* p->field[i]++ */
                     eload(fe, fsg)  return }
                 if fieldisarr(ptt,ft)==1u32 { emit_lget(lidx(t) as u32)  if foff>0i64 {econst(foff) eb(0x20u32)}  return }   /* bare array field -> p+foff (decay) */
@@ -984,6 +1004,17 @@ fn pstmt() {
     if TK[C as u64]==1u32 { if ispat(C+1u32,Q_DEC)==1u32 {          /* i-- ; */
         let nt:u32=C  let li:i32=lidx(nt)  if li>=0i32 { emit_lget(li as u32)  econst(1i64)  eb(0x21u32)  emit_lset(li as u32) }  C=C+2u32  eat(Q_SEMI)  return
     } }
+    if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT { if TK[(C+2u32) as u64]==1u32 { if ispat(C+3u32,Q_LBR)==1u32 {   /* v.arrfield[i].subfield = e ; (CHAINED struct-value store) */
+        let mut q:u32=C+4u32  let mut d:i32=0i32  let mut g:u32=1u32  while g==1u32 { if ispat(q,Q_LBR)==1u32 {d=d+1i32} else { if ispat(q,Q_RBR)==1u32 { if d==0i32 {g=0u32} else {d=d-1i32} } }  if TK[q as u64]==0u32 {g=0u32}  if g==1u32 {q=q+1u32} }
+        if ispat(q+1u32,Q_DOT)==1u32 { let vt0:i32=avtype(C)
+            if vt0>=0i32 { let af:u32=C+2u32  let elt:i32=fieldpt(vt0,af)  if elt>=0i32 {
+                let vb0:i64=abase(C)  let afoff:i64=fieldoff(vt0,af)  let fe0:i64=fieldelem(vt0,af)  let esz:i64=STSZ[elt as u64] as i64
+                let sub:u32=q+2u32  let soff:i64=fieldoff(elt,sub)  let se:i64=fieldelem(elt,sub)  let sm:i64=fieldmask(elt,sub)  let ssg:u32=fieldsign(elt,sub)
+                C=C+4u32  ebin(0u32)  eat(Q_RBR)  estride(esz)  econst(vb0+afoff)  if fe0==8i64 {eb(0x82u32)}  eb(0x20u32)  if soff>0i64 {econst(soff) eb(0x20u32)}
+                C=C+2u32  emit_av(se, ssg, sm)  eat(Q_SEMI)  return
+            } }
+        }
+    } } } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_DOT {   /* v.field[/[i]] = e ; (struct field store) */
         let nt:u32=C  let vt:i32=avtype(nt)
         if vt>=0i32 { let ft:u32=C+2u32  let foff:i64=fieldoff(vt,ft)  let vb:i64=abase(nt)  let fe:i64=fieldelem(vt,ft)  let fm:i64=fieldmask(vt,ft)  let fsg:u32=fieldsign(vt,ft)

@@ -1,0 +1,86 @@
+/* zk_trust_cert.iii -- Phase Omega7 helper: emit the committed proof's CONTENT-ADDRESS (the same committed GF(p^4)
+ * FRI proof Omega5 ships + Omega6 federates) as hex, plus the cross-view fold binding value, so the trust-certificate
+ * gate (run_trust_certificate.sh) can bind TOOLCHAIN (libiii_native.a mhash + DDC closure) + PROOF (this mhash) +
+ * RESULT (the fold) into one provenance certificate.  Prints "PMH <64-hex>\nGOLD <dec>\n" and returns 99. */
+module zk_trust_cert
+
+extern @abi(c-msvc-x64) fn putchar(c: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ext2_add(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_mul(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_sub(a: u64, b: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn ext2_smul(s: u32, a: u64) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn e2pack(a0: u32, a1: u32) -> u64 from "zk_ext2.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+
+const PRIME : u32 = 998244353u32
+const DOM   : u64 = 16u64
+const G4    : u64 = 4294967298u64
+const GOLD  : u64 = 675673294u64
+
+var OM : [u32; 16]
+var FA : [u64; 32]   var FB : [u64; 32]
+var ROOT : [u8; 128]   var RR : [u64; 8]   var RI : [u64; 8]
+var DIG : [u8; 32]   var LEAF : [u8; 256]   var FRA : [u64; 1]   var FRB : [u64; 1]
+var PMH : [u8; 32]   var COMMIT : [u8; 256]
+var HEX : [u8; 16] = [48u8,49u8,50u8,51u8,52u8,53u8,54u8,55u8,56u8,57u8,97u8,98u8,99u8,100u8,101u8,102u8]
+var DB : [u8; 24]
+
+fn base_inv(v: u32) -> u32 { let mut r : u32 = 1u32  let mut b : u32 = v  let mut e : u32 = PRIME - 2u32  while e > 0u32 { if (e & 1u32) == 1u32 { r = sf_mul(r, b) }  b = sf_mul(b, b)  e = e >> 1u32 }  return r }
+fn fill_om() { let w : u32 = sf_rou(DOM as u32)  OM[0] = 1u32  let mut j : u64 = 1u64  while j < DOM { OM[j] = sf_mul(OM[j - 1u64], w)  j = j + 1u64 } }
+fn p4mul_a(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fa), ext2_mul(ext2_mul(rb, fb), G4)) }
+fn p4mul_b(ra: u64, rb: u64, fa: u64, fb: u64) -> u64 { return ext2_add(ext2_mul(ra, fb), ext2_mul(rb, fa)) }
+fn foldp4(loa: u64, lob: u64, hia: u64, hib: u64, ra: u64, rb: u64, x: u32) {
+    let inv2 : u32 = base_inv(2u32)  let i2x : u32 = base_inv(sf_add(x, x))
+    let fea : u64 = ext2_smul(inv2, ext2_add(loa, hia))  let feb : u64 = ext2_smul(inv2, ext2_add(lob, hib))
+    let foa : u64 = ext2_smul(i2x, ext2_sub(loa, hia))   let fob : u64 = ext2_smul(i2x, ext2_sub(lob, hib))
+    FRA[0] = ext2_add(fea, p4mul_a(ra, rb, foa, fob))  FRB[0] = ext2_add(feb, p4mul_b(ra, rb, foa, fob))
+}
+fn rd4(o: u64) -> u32 { let p : *u8 = ((&DIG as u64) + o) as *u8  let mut x : u32 = (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)  while x >= PRIME { x = x - PRIME }  return x }
+fn ser_leaves(off: u64, size: u64) {
+    let mut i : u64 = 0u64
+    while i < size {
+        let a : u64 = FA[off + i]  let b : u64 = FB[off + i]  let base : u64 = i * 16u64
+        let mut k : u64 = 0u64  while k < 8u64 { LEAF[base + k] = ((a >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+        k = 0u64  while k < 8u64 { LEAF[base + 8u64 + k] = ((b >> (8u64 * k)) & 0xFFu64) as u8  k = k + 1u64 }
+        i = i + 1u64
+    }
+}
+fn build_proof_mhash() {
+    let mut j : u64 = 0u64
+    while j < DOM {
+        let x : u32 = OM[j]  let mut aa : u64 = 0u64  let mut bb : u64 = 0u64  let mut k : u64 = 4u64
+        while k > 0u64 { k = k - 1u64  aa = ext2_smul(x, aa)  bb = ext2_smul(x, bb)  aa = ext2_add(aa, e2pack((k + 1u64) as u32, (k + 2u64) as u32))  bb = ext2_add(bb, e2pack((k + 3u64) as u32, (k + 4u64) as u32)) }
+        FA[j] = aa  FB[j] = bb  j = j + 1u64
+    }
+    let mut size : u64 = DOM  let mut off : u64 = 0u64  let mut li : u64 = 0u64
+    while size > 4u64 {
+        ser_leaves(off, size)  merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+        keccak256_oneshot((&ROOT as u64) + li * 32u64, 32u64, (&DIG as u64))
+        RR[li] = e2pack(rd4(0u64), rd4(4u64))  RI[li] = e2pack(rd4(8u64), rd4(12u64))
+        let half : u64 = size / 2u64  let noff : u64 = off + size  let str : u64 = DOM / size
+        let mut m : u64 = 0u64
+        while m < half { foldp4(FA[off + m], FB[off + m], FA[off + m + half], FB[off + m + half], RR[li], RI[li], OM[str * m])  FA[noff + m] = FRA[0]  FB[noff + m] = FRB[0]  m = m + 1u64 }
+        off = noff  size = half  li = li + 1u64
+    }
+    ser_leaves(off, size)  merkle_compute_root((&LEAF as u64), size as u32, 16u64, (&ROOT as u64) + li * 32u64)
+    let mut b : u64 = 0u64  while b < (li + 1u64) * 32u64 { COMMIT[b] = ROOT[b]  b = b + 1u64 }
+    let mut c : u64 = 0u64  while c < 64u64 { COMMIT[(li + 1u64) * 32u64 + c] = LEAF[c]  c = c + 1u64 }
+    keccak256_oneshot((&COMMIT as u64), (li + 1u64) * 32u64 + 64u64, (&PMH as u64))
+}
+fn phex(b: u8) { putchar(HEX[((b >> 4u8) & 15u8) as u64] as i32)  putchar(HEX[(b & 15u8) as u64] as i32) }
+fn pstr(s: u64) { let mut i : u64 = 0u64  let mut g : u32 = 1u32  while g == 1u32 { let p : *u8 = (s + i) as *u8  let c : u32 = p[0u64] as u32  if c == 126u32 { g = 0u32 } else { putchar(c as i32)  i = i + 1u64 } } }
+fn pdec(v0: u64) { if v0 == 0u64 { putchar(48i32)  return }  let mut v : u64 = v0  let mut n : u32 = 0u32  while v > 0u64 { DB[n as u64] = (48u64 + (v % 10u64)) as u8  n = n + 1u32  v = v / 10u64 }  while n > 0u32 { n = n - 1u32  putchar(DB[n as u64] as i32) } }
+
+fn main() -> u64 {
+    fill_om()
+    build_proof_mhash()
+    pstr("PMH ~" as u64)
+    let mut i : u64 = 0u64  while i < 32u64 { phex(PMH[i])  i = i + 1u64 }
+    putchar(10i32)
+    pstr("GOLD ~" as u64)  pdec(GOLD)  putchar(10i32)
+    return 99u64
+}

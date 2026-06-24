@@ -405,6 +405,15 @@ semantics-breaking negative arm REJECTS. **Manual verify:** confirm the new rule
 form of the witness program AND that the cost metric decreased AND that trust-closure stayed green.
 
 ### Phase Ω7 — The irreducible-TCB certificate
+**✅ PROVENANCE CERTIFICATE GREEN — `STDLIB/sovir/run_trust_certificate.sh` (composed into `run_grand_unification.sh`).**
+A single content-address binds the whole result to the toolchain that produced it:
+`CERT = SHA-256(lib_mhash ‖ committed_proof_mhash ‖ fold ‖ frontend-DDC-verdict)` — the built `libiii_native.a` mhash
+(toolchain bytes) + the verified frontend-DDC closure (iiisv==iiisv2 byte-identical) + the committed-proof
+content-address (the same object Ω5 ships / Ω6 federates) + the cross-view fold `675673294`. REPRODUCIBLE
+(recomputed identical), NON-TRIVIAL, and TAMPER-SENSITIVE (a perturbed toolchain mhash → a different certificate). So
+a swapped toolchain binary or a swapped proof/result breaks the cert. **Honest residual:** the seed-LINEAGE DDC axis
+(vendor-diverse bootstrap) is env-heavy and remains the documented residual (`SVIR-DDC-RESIDUAL.md`); the binary-level
+DDC (Ω0) is the ccsv worker's track. The certificate names the irreducible TCB (CPU/microcode + OS loader) honestly.
 **Objective:** state, as a checkable document + gate, exactly what trust remains and prove it's minimal.
 **Tasks:** an audited enumeration: the verifier (≤~80 lines, hand-read), the sealed manifest root, the seed
 (now MSVC-witnessed), the CPU/loader (irreducible). A `run_tcb_audit.sh` that asserts the verifier line-count

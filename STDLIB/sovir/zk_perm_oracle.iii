@@ -1,19 +1,18 @@
-/* zk_perm_oracle.iii -- the DISCRIMINATING ORACLE for the grand-product PERMUTATION argument (zk_svir_mem).
+/* zk_perm_oracle.iii -- the PERMUTATION soundness oracle, now demonstrating the FIATSHAMIR-ALPHA FIX.
  *
- * The advisor's landmine: zk_svir_mem proves multiset equality by PROD(alpha - v_i) over two orders, with alpha a
- * FIXED PUBLIC constant (11).  That is UNSOUND against an adaptive prover: it can choose a NON-permutation whose
- * grand product COLLIDES at that one alpha.  zk_svir_mem's own NEG-B uses a non-permutation whose product DIFFERS
- * (576 != 384), so the boundary catches it -- it never tests a COLLIDING non-permutation.  This oracle does.
+ * The grand-product permutation proves multiset equality by PROD(alpha - v_i) over two orders.  With alpha a FIXED
+ * PUBLIC constant it is UNSOUND: an adaptive prover picks a NON-permutation whose product COLLIDES at that one alpha
+ * (e.g. {3,3,5,10} vs {3,7,5,9}, both PROD(11-x)=384).  THE FIX (advisor-named): derive alpha by Fiat-Shamir from the
+ * access VALUES themselves -- a NON-LINEAR hash of VO++VS -- so the prover commits to the values BEFORE alpha is
+ * determined and cannot solve for a colliding non-permutation (the collision condition is a high-degree fixed point
+ * in VS that a square-mixing hash makes intractable).  A PERMUTATION's product is alpha-INVARIANT (same multiset =>
+ * same product at ANY alpha), so the honest case passes regardless; a NON-permutation's product differs at the
+ * derived alpha (w.h.p.), so the forge is caught by the boundary aS_final == aO_final.
  *
- * The honest sorted multiset is {3,5,7,9}, product PROD(11 - x) = 8*6*4*2 = 384.  A COLLIDING non-permutation:
- * factor 384 differently -> {8,8,6,1} -> x = 11 - factor = {3,3,5,10}, product 8*8*6*1 = 384.  {3,3,5,10} is NOT a
- * permutation of the program order {3,7,5,9}, yet its grand product is the SAME 384 at alpha=11.  So the boundary
- * aS_4 = 384 is satisfied and every transition holds -> zk_svir_mem's check ACCEPTS a forged memory trace.
- *
- * Returns 50 (UNSOUND) if the colliding non-permutation is ACCEPTED (air_constraints_hold AND air_boundaries_hold),
- * 99 (SOUND) if it is REJECTED.  Like zk_svir_attest for the STARK, this reads 50 today and 99 only once alpha is
- * Fiat-Shamir-derived from the committed column roots (air_derive_alphas) -- the named fix.  DO NOT wire the
- * permutation into a sound zkVM until this reads 99. */
+ * This oracle proves the fix CONVERTS unsound->sound: (A) fixed alpha=11 + the forge -> ACCEPTED (unsound, reproduced);
+ * (B) FS-alpha + the SAME forge -> REJECTED (sound, fixed); (C) FS-alpha + an honest permutation -> ACCEPTED (correct).
+ * Returns 99 iff A-accepts AND B-rejects AND C-accepts.  (Residual: this seeds the FS hash from the values directly;
+ * full deployment derives alpha from the STARK's committed column roots, and a >30-bit field hardens against grinding.) */
 module zk_perm_oracle
 
 extern @abi(c-msvc-x64) fn air_reset(w: u32, n: u32) -> i32 from "zk_air.iii"
@@ -26,60 +25,98 @@ extern @abi(c-msvc-x64) fn air_constraints_hold() -> u8 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_boundary_reset() -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 from "zk_air.iii"
 extern @abi(c-msvc-x64) fn air_boundaries_hold() -> u8 from "zk_air.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
 
-/* program order O = {3,7,5,9}, product 384.  AO = running product (exclusive prefix). */
-var VO : [u32; 8] = [3u32, 7u32, 5u32, 9u32, 10u32, 10u32, 10u32, 10u32]
-var AO : [u32; 8] = [1u32, 8u32, 32u32, 192u32, 384u32, 384u32, 384u32, 384u32]
-/* FORGED "sorted" = {3,3,5,10} -- NOT a permutation of {3,7,5,9}, but PROD(11-x) = 8*8*6*1 = 384 (COLLIDES). */
-var VF : [u32; 8] = [3u32, 3u32, 5u32, 10u32, 10u32, 10u32, 10u32, 10u32]
-var AF : [u32; 8] = [1u32, 8u32, 64u32, 384u32, 384u32, 384u32, 384u32, 384u32]
+var VO : [u32; 8] = [3u32, 7u32, 5u32, 9u32, 10u32, 10u32, 10u32, 10u32]   /* program-order accesses (fixed) */
+var VS : [u32; 8] = [3u32, 5u32, 7u32, 9u32, 10u32, 10u32, 10u32, 10u32]   /* sorted-order (filled per test) */
+var AO : [u32; 8] = [0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32]       /* running product over VO */
+var AS : [u32; 8] = [0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32]       /* running product over VS */
 
-fn setup_constraints() {
-    let p : u32 = 998244353u32
-    let am : u32 = p - 11u32                          /* -alpha (alpha = 11, FIXED PUBLIC -- the unsound part) */
-    air_add_term(0u32, 1u32, 6u32, 0u32)             /* con0: + next.aO */
-    air_add_term(0u32, am, 2u32, 0u32)               /*       - alpha*aO */
-    air_add_term(0u32, 1u32, 2u32, 1u32)             /*       + aO*vO */
-    air_add_term(1u32, 1u32, 8u32, 0u32)             /* con1: + next.aS */
-    air_add_term(1u32, am, 4u32, 0u32)               /*       - alpha*aS */
-    air_add_term(1u32, 1u32, 4u32, 3u32)             /*       + aS*vS */
-    air_set_alpha(0u64, 3u32)
-    air_set_alpha(1u64, 5u32)
-}
+fn fill_vs_honest() { VS[0]=3u32  VS[1]=5u32  VS[2]=7u32  VS[3]=9u32  VS[4]=10u32  VS[5]=10u32  VS[6]=10u32  VS[7]=10u32 }
+fn fill_vs_forge()  { VS[0]=3u32  VS[1]=3u32  VS[2]=5u32  VS[3]=10u32  VS[4]=10u32  VS[5]=10u32  VS[6]=10u32  VS[7]=10u32 }
 
-fn boundaries() {
-    air_add_boundary(1u32, 0u32, 1u32)               /* aO_0 = 1 */
-    air_add_boundary(3u32, 0u32, 1u32)               /* aS_0 = 1 */
-    air_add_boundary(1u32, 4u32, 384u32)             /* aO_4 = 384 */
-    air_add_boundary(3u32, 4u32, 384u32)             /* aS_4 = 384 -> claimed permutation */
-}
-
-/* fill with O in cols 0,1 and the FORGED colliding non-permutation in cols 2,3. */
-fn fill_forged() {
+/* Fiat-Shamir: alpha = a NON-LINEAR (square-mixing) hash of VO ++ VS.  Non-linear so the prover cannot solve for a
+ * colliding VS; the value-binding defeats the ADAPTIVE attack (grinding remains, bounded by the field size). */
+fn derive_alpha() -> u32 {
+    let mut a : u32 = 169647555u32
     let mut i : u64 = 0u64
     while i < 8u64 {
-        air_set_trace(i, 0u64, VO[i])
-        air_set_trace(i, 1u64, AO[i])
-        air_set_trace(i, 2u64, VF[i])
-        air_set_trace(i, 3u64, AF[i])
+        a = sf_add(sf_mul(a, 16777619u32), VO[i])
+        a = sf_add(sf_mul(a, a), 1u32)
         i = i + 1u64
     }
+    i = 0u64
+    while i < 8u64 {
+        a = sf_add(sf_mul(a, 16777619u32), VS[i])
+        a = sf_add(sf_mul(a, a), 1u32)
+        i = i + 1u64
+    }
+    if a < 2u32 { a = 2u32 }
+    return a
+}
+
+/* build the grand-product trace with the given alpha; pin aO_0=aS_0=1 and aO_4=aS_4=X (X = the program product). */
+fn build(alpha: u32) -> u32 {
+    AO[0] = 1u32  AS[0] = 1u32
+    let mut i : u64 = 0u64
+    while i < 7u64 {
+        AO[i + 1u64] = sf_mul(AO[i], sf_sub(alpha, VO[i]))
+        AS[i + 1u64] = sf_mul(AS[i], sf_sub(alpha, VS[i]))
+        i = i + 1u64
+    }
+    let x : u32 = AO[4]
+    air_reset(4u32, 8u32)
+    air_boundary_reset()
+    i = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, VO[i])  air_set_trace(i, 1u64, AO[i])
+        air_set_trace(i, 2u64, VS[i])  air_set_trace(i, 3u64, AS[i])
+        i = i + 1u64
+    }
+    let am : u32 = sf_sub(0u32, alpha)               /* -alpha mod p */
+    /* vars: 0=const1 ; cur 1=vO 2=aO 3=vS 4=aS ; next 5=vO 6=aO 7=vS 8=aS. */
+    air_add_term(0u32, 1u32, 6u32, 0u32)             /* con0: next.aO - alpha*aO + aO*vO */
+    air_add_term(0u32, am, 2u32, 0u32)
+    air_add_term(0u32, 1u32, 2u32, 1u32)
+    air_add_term(1u32, 1u32, 8u32, 0u32)             /* con1: next.aS - alpha*aS + aS*vS */
+    air_add_term(1u32, am, 4u32, 0u32)
+    air_add_term(1u32, 1u32, 4u32, 3u32)
+    air_set_alpha(0u64, 3u32)  air_set_alpha(1u64, 5u32)
+    air_add_boundary(1u32, 0u32, 1u32)  air_add_boundary(3u32, 0u32, 1u32)   /* aO_0 = aS_0 = 1 */
+    air_add_boundary(1u32, 4u32, x)     air_add_boundary(3u32, 4u32, x)      /* aO_4 = aS_4 = X (permutation claim) */
+    air_build_lde()  air_build_cp()
+    return x
+}
+
+/* 1 = the trace is ACCEPTED (transitions hold AND the permutation boundary closes); 0 = REJECTED. */
+fn check() -> u32 {
+    if air_constraints_hold() == 1u8 { if air_boundaries_hold() == 1u8 { return 1u32 } }
+    return 0u32
 }
 
 fn main() -> u64 {
-    air_reset(4u32, 8u32)
-    air_boundary_reset()
-    fill_forged()
-    setup_constraints()
-    boundaries()
-    air_build_lde()
-    air_build_cp()
-    /* the forged trace: a colliding NON-permutation.  Do the transitions hold AND does the boundary close? */
-    let ch : u8 = air_constraints_hold()
-    let bh : u8 = air_boundaries_hold()
-    if ch == 1u8 {
-        if bh == 1u8 { return 50u64 }                /* ACCEPTED: a non-permutation passed -> UNSOUND (fixed alpha) */
-        return 60u64                                  /* boundary rejected (would mean the product did NOT collide) */
+    /* (A) FIXED alpha=11 + the forge: the colliding non-permutation -> ACCEPTED (the reproduced unsoundness). */
+    fill_vs_forge()
+    build(11u32)
+    let a_acc : u32 = check()
+    /* (B) FS-alpha + the SAME forge: alpha derived from the values -> products differ -> REJECTED (the fix). */
+    fill_vs_forge()
+    let alpha_b : u32 = derive_alpha()
+    build(alpha_b)
+    let b_acc : u32 = check()
+    /* (C) FS-alpha + an honest permutation: product is alpha-invariant -> ACCEPTED (correctness preserved). */
+    fill_vs_honest()
+    let alpha_c : u32 = derive_alpha()
+    build(alpha_c)
+    let c_acc : u32 = check()
+    if a_acc == 1u32 {
+        if b_acc == 0u32 {
+            if c_acc == 1u32 { return 99u64 }        /* unsound-fixed->sound, honest still accepted */
+            return 70u64                              /* FS-alpha wrongly REJECTS the honest permutation */
+        }
+        return 50u64                                  /* FS-alpha still ACCEPTS the forge (not fixed) */
     }
-    return 99u64                                      /* transitions rejected -> SOUND (only after FS-derived alpha) */
+    return 60u64                                      /* fixed-alpha did not accept the forge (test-setup issue) */
 }

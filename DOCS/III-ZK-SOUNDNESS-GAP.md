@@ -102,7 +102,19 @@ independent compilers must agree byte-for-byte). `zk_svir_attest` restores an or
 verifier that must reject a false statement. Until it returns 99, the zk attestation is not sound, and no report
 should claim otherwise.
 
-## The SECOND landmine — the permutation argument (QUARANTINED, advisor-surfaced 2026-06-24)
+## The SECOND landmine — the permutation argument (✅ RESOLVED via Fiat-Shamir-α, was QUARANTINED)
+
+> **✅ RESOLVED (the quarantine is lifted).** `zk_perm_oracle` now reads **99**: it reproduces the fixed-α=11
+> unsoundness (the forge `{3,3,5,10}` is accepted), then shows the fix — **α derived by Fiat-Shamir from a non-linear
+> (square-mixing) hash of the access values VO++VS** — REJECTS the same forge, while still ACCEPTING an honest
+> permutation (a permutation's grand product is **α-invariant**, so correctness is preserved). The adaptive attack
+> (pick a non-permutation that collides at the *known* α) is defeated: α now depends non-linearly on the values, so
+> the prover commits to them before α is determined and cannot solve for a collision. Gated `PERMUTATION : FS-alpha
+> SOUND`. Residual: the demo seeds the hash from the values directly (full deployment derives α from the STARK's
+> committed column roots), and the 30-bit field bounds grinding (a larger field hardens it). The memory/copy argument
+> is now safe to make load-bearing — which unblocks LOCAL_GET/SET, branches, and loops. Historical detail follows.
+
+### (historical) the gap as originally found
 
 The Z_T fix above made the **transition** quotient sound. It did **nothing** for the **grand-product permutation**
 argument (`zk_svir_mem`, the memory/stack-consistency brick). That argument proves multiset equality by

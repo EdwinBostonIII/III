@@ -1242,10 +1242,12 @@ fn cparams(nt: u32) -> u32 {   /* int NAME ( int a, int b ) -> count the comma-s
 /* the function-name token = after [quals] returntype [*] (returntype: struct/union Name = 2 toks, else 1). */
 fn fn_nametok(ft: u32) -> u32 {
     let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }
-    if ispat(q+1u32,Q_LP)==0u32 {   /* q is the NAME iff the next token is `(` -> for a BARE type-specifier return (`static unsigned foo(`) the qual-skip already consumed the type, so DON'T skip again (else `foo` is eaten as the type and the fn is never registered -> FNT drift) */
-        if kw(q,"struct" as u64,6u32)==1u32 { q=q+2u32 } else { if kw(q,"union" as u64,5u32)==1u32 { q=q+2u32 } else { q=q+1u32 } }
-        if ispat(q,Q_MUL)==1u32 { q=q+1u32 }
-    }
+    if dtype(q)==1u32 { if ispat(q+1u32,Q_LP)==1u32 {   /* COMPLEX declarator `Type (** name (params)) [N]` (ptr-to-array / fn-ptr return, e.g. `uint8_t (**iii_pool_mhash(...))[32]`) -> the name is INSIDE the parens */
+        q=q+2u32  let mut gp:u32=1u32  while gp==1u32 { if ispat(q,Q_MUL)==1u32 {q=q+1u32} else {gp=0u32} }
+        return q } }
+    if ispat(q+1u32,Q_LP)==1u32 { return q }   /* BARE type-specifier return (`static unsigned foo(`): the qual-skip already consumed the type, so q IS the name (else `foo` is eaten as the type -> fn never registered -> FNT drift) */
+    if kw(q,"struct" as u64,6u32)==1u32 { q=q+2u32 } else { if kw(q,"union" as u64,5u32)==1u32 { q=q+2u32 } else { q=q+1u32 } }
+    let mut gs:u32=1u32  while gs==1u32 { if ispat(q,Q_MUL)==1u32 {q=q+1u32} else {gs=0u32} }   /* skip ALL leading `*`s -> handles `T **` / `T ***` returns (the one-`*` `if` dropped every double-pointer-returning fn: iii_pool_array, iii_pool_pos_first) */
     return q
 }
 fn fn_retmask(ft: u32) -> i64 { let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }  return type_mask(q) }   /* the return type's width mask */
@@ -1273,7 +1275,10 @@ fn fn_has_body(nm: u32) -> u32 {
         if ispat(q,Q_RP)==1u32 { depth=depth-1i32 }
         if depth==0i32 { g=0u32 } else { q=q+1u32 }
     }
-    if ispat(q+1u32,Q_LB)==1u32 { return 1u32 }   /* `) {` = definition ; `) ;` = prototype -> skip */
+    let mut q2:u32=q+1u32   /* after the params `)`, skip a COMPLEX declarator's trailing `) [N]` (ptr-to-array return) before testing for `{` */
+    let mut gt:u32=1u32  while gt==1u32 { if ispat(q2,Q_RP)==1u32 {q2=q2+1u32} else { if ispat(q2,Q_MUL)==1u32 {q2=q2+1u32} else {gt=0u32} } }
+    if ispat(q2,Q_LBR)==1u32 { let mut bd:i32=0i32  let mut gb:u32=1u32  while gb==1u32 { if ispat(q2,Q_LBR)==1u32 {bd=bd+1i32} else { if ispat(q2,Q_RBR)==1u32 { bd=bd-1i32  if bd==0i32 {gb=0u32} } }  if TK[q2 as u64]==0u32 {gb=0u32}  if gb==1u32 {q2=q2+1u32} }  q2=q2+1u32 }
+    if ispat(q2,Q_LB)==1u32 { return 1u32 }   /* `) {` = definition ; `) ;` = prototype -> skip */
     return 0u32
 }
 fn is_fn(t: u32) -> u32 {

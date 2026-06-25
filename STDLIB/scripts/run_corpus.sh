@@ -146,6 +146,7 @@ declare -A EXPECTED=(
     [2052_eidos_synth_exec]=99
     [2053_eidos_palindrome]=99
     [2054_eidos_palindrome_substrate]=99
+    [2055_eidos_causal_substrate]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

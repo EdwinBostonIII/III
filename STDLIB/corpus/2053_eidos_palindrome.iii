@@ -1,59 +1,24 @@
-/* STDLIB/corpus/2053_eidos_palindrome.iii -- INTENT (x) INTUITION: the palindromic involution, EXECUTED.
- *
- * Intent (forward) synthesizes the form for v; Intuition (inverse-lookup) reads v back out of the form's
- * e-class.  seg_palindrome(v) is the checksum f^-1(f(v))==v -- the involution.  A PARADOX (v1*x==v2*x for
- * v1!=v2) is force-injected and must be CAUGHT (the substrate cannot hold a non-invertible state -- the
- * ban on inconsistency, mechanical).  99 = the involution holds, the inverse is real, the paradox is rejected.
+/* STDLIB/corpus/2053_eidos_palindrome.iii -- INTUITION on the e-graph: the inverse-LOOKUP (the e-graph's
+ * backward read).  The palindrome LAW (the checksum + paradox) lives on the real substrate -- eidos/ripple's
+ * V_REFLECT involution and event_substrate's evt_detect_cycle (corpus 2054).  Here we only prove the e-graph
+ * can read an origin back out of a class, and that the recovered origin is REAL (it computes the multiply).
  */
 module corpus_2053_eidos_palindrome
 
-extern @abi(c-msvc-x64) fn seg_palindrome(v: u64) -> u8 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_intuit(v: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_paradox_caught(v1: u64, v2: u64) -> u32 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_eval_mul(v: u64, x: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_no_false_merge() -> u32 from "ser_egraph.iii"
-
-const EG_MUL : u32 = 4u32
 
 fn main() -> u64 {
-    /* THE INVOLUTION f^-1(f(v)) = v: forward-construct the form, then read v back from its class. */
-    if seg_palindrome(7u64)    != 1u8 { return 1u64 }
-    if seg_palindrome(10u64)   != 1u8 { return 2u64 }
-    if seg_palindrome(14u64)   != 1u8 { return 3u64 }
-    if seg_palindrome(11u64)   != 1u8 { return 4u64 }
-    if seg_palindrome(100u64)  != 1u8 { return 5u64 }
-    if seg_palindrome(1000u64) != 1u8 { return 6u64 }
+    /* the e-graph reads the ORIGIN back out of the synthesized form's class (inverse-lookup, not recompute). */
+    if seg_intuit(7u64)    != 7u64    { return 1u64 }
+    if seg_intuit(10u64)   != 10u64   { return 2u64 }
+    if seg_intuit(14u64)   != 14u64   { return 3u64 }
+    if seg_intuit(11u64)   != 11u64   { return 4u64 }
+    if seg_intuit(100u64)  != 100u64  { return 5u64 }
+    if seg_intuit(1000u64) != 1000u64 { return 6u64 }
 
-    /* the BACKWARD leg is REAL, not a no-op: the recovered origin then COMPUTES the multiply. */
-    if seg_intuit(10u64) != 10u64 { return 7u64 }
-    if seg_eval_mul(seg_intuit(10u64), 123456789u64) != 10u64 * 123456789u64 { return 8u64 }
-    if seg_eval_mul(seg_intuit(14u64), 9223372036854775808u64) != 14u64 * 9223372036854775808u64 { return 9u64 }
-
-    /* PARADOX REJECTION: a forced contradiction v1*x==v2*x (v1!=v2) is DETECTED -- the substrate rejects it. */
-    if seg_paradox_caught(7u64, 9u64)    != 1u32 { return 10u64 }
-    if seg_paradox_caught(10u64, 14u64)  != 1u32 { return 11u64 }
-    if seg_paradox_caught(2u64, 1000u64) != 1u32 { return 12u64 }
-
-    /* TEETH: v1==v2 is NOT a paradox (one origin) -- the detector is not constant-1. */
-    if seg_paradox_caught(10u64, 10u64)  != 0u32 { return 13u64 }
-
-    /* THE NON-INJECTED PROPERTY (tests the RULES, not the injection): saturate a batch of DISTINCT factors
-     * with NO forced union -- the sound rewrite rules must fabricate NO two-origin class on their own. */
-    seg_reset()
-    let x2 : u64 = seg_var()
-    seg_intern(EG_MUL, x2, seg_const(7u64))
-    seg_intern(EG_MUL, x2, seg_const(9u64))
-    seg_intern(EG_MUL, x2, seg_const(10u64))
-    seg_intern(EG_MUL, x2, seg_const(14u64))
-    seg_intern(EG_MUL, x2, seg_const(11u64))
-    seg_intern(EG_MUL, x2, seg_const(15u64))
-    seg_intern(EG_MUL, x2, seg_const(28u64))
-    seg_saturate()
-    if seg_no_false_merge() != 1u32 { return 14u64 }
+    /* the recovered origin is REAL (not a no-op): it then COMPUTES the multiply, over the wrap edge. */
+    if seg_eval_mul(seg_intuit(10u64), 123456789u64) != 10u64 * 123456789u64 { return 7u64 }
+    if seg_eval_mul(seg_intuit(14u64), 9223372036854775808u64) != 14u64 * 9223372036854775808u64 { return 8u64 }
     return 99u64
 }

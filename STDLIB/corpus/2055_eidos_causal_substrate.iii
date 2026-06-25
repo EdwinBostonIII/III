@@ -1,0 +1,46 @@
+/* STDLIB/corpus/2055_eidos_causal_substrate.iii -- CAUSAL on the event substrate (the island, fixed).
+ *
+ * ser_causal was a pure function taking bare (op,arg) tuples -- yet its whole job is event-ordering.  Now
+ * ripples are EVENTS perceived on the substrate, commutativity READS them, and the collapse verdict is EMITTED
+ * + WITNESSED.  Two ripple-events commute iff the V_REFLECT swap is valid (no chronological order) -> they fold
+ * into one epoch.  99 = the event-driven layer collapses a commuting set, refuses a causally-ordered pair, is
+ * witnessed, and agrees bit-for-bit with the pure kernel.
+ */
+module corpus_2055_eidos_causal_substrate
+
+extern @abi(c-msvc-x64) fn caus_reset() -> i32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_ripple(op: u32, arg: u64) -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_commute_events(i: u32, j: u32) -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_collapse(n: u32) -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_witness() -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_commute(opA: u32, argA: u64, opB: u32, argB: u64) -> u8 from "ser_causal.iii"
+
+const CAUS_ADD : u32 = 0u32
+const CAUS_MUL : u32 = 2u32
+const CAUS_SHL : u32 = 3u32
+
+fn main() -> u64 {
+    /* COLLAPSE: three commuting ripples (adds) perceived on the log fold into ONE unordered epoch. */
+    caus_reset()
+    caus_ripple(CAUS_ADD, 3u64)
+    caus_ripple(CAUS_ADD, 5u64)
+    caus_ripple(CAUS_ADD, 7u64)
+    if caus_collapse(3u32) != 1u8 { return 1u64 }
+    if caus_witness() == 0u64 { return 2u64 }              /* the causal fold is witnessed (content-addressed) */
+
+    /* a CAUSALLY-ORDERED pair: ADD then SHL do NOT commute -> no collapse (teeth: not constant-collapse). */
+    caus_reset()
+    caus_ripple(CAUS_ADD, 3u64)
+    caus_ripple(CAUS_SHL, 2u64)
+    if caus_collapse(2u32) != 0u8 { return 3u64 }
+
+    /* the event-driven verdict AGREES with the pure kernel (no divergence between the two layers). */
+    if caus_commute_events(0u32, 1u32) != caus_commute(CAUS_ADD, 3u64, CAUS_SHL, 2u64) { return 4u64 }
+
+    /* a commuting pair on the log agrees too (MUL commutes with MUL). */
+    caus_reset()
+    caus_ripple(CAUS_MUL, 3u64)
+    caus_ripple(CAUS_MUL, 5u64)
+    if caus_commute_events(0u32, 1u32) != 1u8 { return 5u64 }
+    return 99u64
+}

@@ -159,6 +159,12 @@ fn evt_find_payload(value: u64, upto: u32) -> u32 @export {
     return EVT_NOTFOUND
 }
 
+/* positional readers: the i-th event's payload / kind / priority -- so an organ can CONSUME the events on the
+ * log (not just append), the read half of the event-driven contract. */
+fn evt_payload_at(i: u32) -> u64 @export { if i >= EVT_COUNT { return 0u64 }  return EVT_PAYLOAD[i] }
+fn evt_kind_at(i: u32) -> u64 @export { if i >= EVT_COUNT { return 0u64 }  return EVT_KIND[i] }
+fn evt_prio_at(i: u32) -> u64 @export { if i >= EVT_COUNT { return 0u64 }  return EVT_PRIORITY[i] }
+
 /* evt_detect_cycle: find the FIRST payload that recurs -- a repeated position/term -- and set the cycle to
  * [first_occurrence, here).  Returns the cycle LENGTH (here - first_occurrence), or 0 if no payload
  * recurs in the whole history (a finite/terminating stream -- the honest negative).  This is the lasso

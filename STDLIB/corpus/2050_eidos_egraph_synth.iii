@@ -1,0 +1,79 @@
+/* STDLIB/corpus/2050_eidos_egraph_synth.iii -- THE E-GRAPH AS SYNTHESIS SKELETON (EIDOS-VM, the impossible part).
+ *
+ * ser_egraph carries ONLY generic algebraic laws -- pow2 (MUL(x,2^k)~SHL(x,k)), constant-split
+ * (MUL(x,c)~ADD(MUL(x,2^hi),MUL(x,c-2^hi))), MUL(x,1)~x -- plus congruence closure.  From those, saturation
+ * DISCOVERS the optimal shift-decomposition of a constant multiply that NO per-factor rule names:
+ *   x*10  ==  (x<<3)+(x<<1)                 -- derived, not a hardcoded 2-shift rule
+ *   x*11  ==  (x<<3)+((x<<1)+x)             -- a factor with NO named family (currently compiles to imul!)
+ * The falsifier (the conscience's teeth): the engine carries no 2-shift / no x*11 rule anywhere, yet the
+ * e-classes merge -- and it REFUSES to merge x*10 with 12x.  99 = discovery is real and sound.
+ */
+module corpus_2050_eidos_egraph_synth
+
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_find(x: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
+
+const EG_ADD : u32 = 2u32
+const EG_MUL : u32 = 4u32
+const EG_SHL : u32 = 5u32
+
+fn main() -> u64 {
+    /* CASE 1 -- DISCOVER x*10 == (x<<3)+(x<<1) from the generic laws (build the target BEFORE saturating so
+     * congruence can merge the whole ADD; the engine has NO 2-shift rule). */
+    seg_reset()
+    let x : u64 = seg_var()
+    let m10 : u64 = seg_intern(EG_MUL, x, seg_const(10u64))
+    let sh3 : u64 = seg_intern(EG_SHL, x, seg_const(3u64))
+    let sh1 : u64 = seg_intern(EG_SHL, x, seg_const(1u64))
+    let form10 : u64 = seg_intern(EG_ADD, sh3, sh1)
+    seg_saturate()
+    if seg_find(m10) != seg_find(form10) { return 1u64 }       /* DISCOVERED equal */
+
+    /* TEETH -- x*10 must NOT be merged with 12x = (x<<3)+(x<<2). */
+    let sh2 : u64 = seg_intern(EG_SHL, x, seg_const(2u64))
+    let twelvex : u64 = seg_intern(EG_ADD, sh3, sh2)
+    seg_saturate()
+    if seg_find(m10) == seg_find(twelvex) { return 2u64 }      /* sound: no false merge */
+
+    /* CASE 2 -- DISCOVER x*11, a factor with NO named family (the compiler emits imul for it today).
+     * 11 = 8 + 2 + 1  ->  (x<<3) + ((x<<1) + x), derived purely by split + pow2 + MUL(x,1)~x + congruence. */
+    seg_reset()
+    let y : u64 = seg_var()
+    let m11 : u64 = seg_intern(EG_MUL, y, seg_const(11u64))
+    let s3 : u64 = seg_intern(EG_SHL, y, seg_const(3u64))
+    let s1 : u64 = seg_intern(EG_SHL, y, seg_const(1u64))
+    let inner : u64 = seg_intern(EG_ADD, s1, y)                /* (x<<1) + x */
+    let form11 : u64 = seg_intern(EG_ADD, s3, inner)          /* (x<<3) + ((x<<1)+x) = 11x */
+    seg_saturate()
+    if seg_find(m11) != seg_find(form11) { return 3u64 }       /* DISCOVERED a reduction no rule named */
+
+    /* CASE 3 -- COST-OPTIMAL extraction is the honest arbiter: for x*7 the e-class holds BOTH the subk form
+     * SUB(SHL(x,3),x) [cost 2] and the binary split (x<<2)+((x<<1)+x) [cost 4]; min-cost extraction picks the
+     * cheaper subk (2), beating imul (3).  This is how the engine decides "is it worth it" -- math, not me. */
+    seg_reset()
+    let z : u64 = seg_var()
+    let m7 : u64 = seg_intern(EG_MUL, z, seg_const(7u64))
+    seg_saturate()
+    if seg_best_cost(m7) != 2u32 { return 4u64 }               /* extracted the cost-optimal form */
+
+    /* CASE 4 -- DISCOVER a MULTI-SET-BIT constant: x*100 (= 64+32+4) -> (x<<6)+((x<<5)+(x<<2)).  Three shifts,
+     * derived by REPEATED split + pow2 + congruence -- the engine handles arbitrary binary structure, not a
+     * two-term special case. */
+    seg_reset()
+    let w : u64 = seg_var()
+    let m100 : u64 = seg_intern(EG_MUL, w, seg_const(100u64))
+    let w6 : u64 = seg_intern(EG_SHL, w, seg_const(6u64))
+    let w5 : u64 = seg_intern(EG_SHL, w, seg_const(5u64))
+    let w2 : u64 = seg_intern(EG_SHL, w, seg_const(2u64))
+    let in2 : u64 = seg_intern(EG_ADD, w5, w2)
+    let form100 : u64 = seg_intern(EG_ADD, w6, in2)
+    seg_saturate()
+    if seg_find(m100) != seg_find(form100) { return 5u64 }       /* DISCOVERED a 3-shift decomposition */
+
+    return 99u64
+}

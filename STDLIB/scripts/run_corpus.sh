@@ -141,6 +141,7 @@ declare -A EXPECTED=(
     [2039_eidos_fsm]=99
     [2040_eidos_kinduct_general]=99
     [2041_eidos_tgraph_general]=99
+    [2050_eidos_egraph_synth]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

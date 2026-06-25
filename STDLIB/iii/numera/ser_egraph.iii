@@ -29,11 +29,13 @@ const EG_SUB : u32 = 3u32
 const EG_MUL : u32 = 4u32
 const EG_SHL : u32 = 5u32
 
-const EG_CAP : u64 = 64u64
-var EG_OP     : [u32; 64]
-var EG_A      : [u64; 64]   /* child-1 node id, or for CONST the literal value */
-var EG_B      : [u64; 64]   /* child-2 node id */
-var EG_PARENT : [u64; 64]   /* union-find */
+/* node capacity raised 64 -> 512 so the synthesis engine handles arbitrary-popcount constants (a 64-bit
+ * constant's full shift-decomposition needs up to ~4*popcount nodes).  No down-scaling. */
+const EG_CAP : u64 = 512u64
+var EG_OP     : [u32; 512]
+var EG_A      : [u64; 512]   /* child-1 node id, or for CONST the literal value */
+var EG_B      : [u64; 512]   /* child-2 node id */
+var EG_PARENT : [u64; 512]   /* union-find */
 var EG_N      : [u32; 1]
 
 fn seg_reset() -> i32 @export { EG_N[0u64] = 0u32  return 0i32 }
@@ -89,6 +91,26 @@ fn seg_is_subk(v: u64) -> u32 {
     return 1u32
 }
 
+/* is v an exact power of two (>=2)?  the generic pow2 law MUL(x,2^k) ~ SHL(x,k). */
+fn seg_is_pow2(v: u64) -> u32 {
+    if v < 2u64 { return 0u32 }
+    if (v & (v - 1u64)) == 0u64 { return 1u32 }
+    return 0u32
+}
+fn seg_pow2_k(v: u64) -> u64 {
+    let mut k : u64 = 0u64
+    let mut t : u64 = v
+    while t > 1u64 { t = t >> 1u64  k = k + 1u64 }
+    return k
+}
+/* 2^floor(log2 v) -- the highest power of two <= v (the constant-split pivot). */
+fn seg_high_pow2(v: u64) -> u64 {
+    let mut h : u64 = 1u64
+    let mut t : u64 = v
+    while t > 1u64 { t = t >> 1u64  h = h << 1u64 }
+    return h
+}
+
 /* ONE saturation pass: apply the rewrite rules, union equivalent classes.  Returns 1 if anything merged. */
 fn seg_saturate_pass() -> u32 {
     let n : u32 = EG_N[0u64]
@@ -108,6 +130,24 @@ fn seg_saturate_pass() -> u32 {
                     if seg_union(i as u64, su) == 1u32 { changed = 1u32 }
                 }
                 if v == 1u64 { if seg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } }
+                /* GENERIC pow2 law: MUL(x, 2^k) ~ SHL(x, k). */
+                if seg_is_pow2(v) == 1u32 {
+                    let pk : u64 = seg_pow2_k(v)
+                    let psh : u64 = seg_intern(EG_SHL, EG_A[i as u64], seg_const(pk))
+                    if seg_union(i as u64, psh) == 1u32 { changed = 1u32 }
+                }
+                /* GENERIC constant-split: MUL(x, c) ~ ADD(MUL(x, 2^hi), MUL(x, c - 2^hi)).  Saturation recurses
+                 * (the remainder re-splits, pow2 collapses the power-of-two parts), so the e-graph DISCOVERS the
+                 * full shift-decomposition of ANY constant -- no per-factor rule. */
+                if v >= 3u64 {
+                    if seg_is_pow2(v) == 0u32 {
+                        let hi : u64 = seg_high_pow2(v)
+                        let mh : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(hi))
+                        let mr : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(v - hi))
+                        let ad : u64 = seg_intern(EG_ADD, mh, mr)
+                        if seg_union(i as u64, ad) == 1u32 { changed = 1u32 }
+                    }
+                }
             }
         }
         if op == EG_ADD {
@@ -120,6 +160,31 @@ fn seg_saturate_pass() -> u32 {
         }
         i = i + 1u32
     }
+    /* CONGRUENCE CLOSURE: children-equal => parents-equal.  This is the law that lifts ser_egraph from a
+     * peephole rewriter to a REAL e-graph: once split makes MUL(x,8)~SHL(x,3) and MUL(x,2)~SHL(x,1), it merges
+     * ADD(MUL(x,8),MUL(x,2)) with ADD(SHL(x,3),SHL(x,1)) -- so saturation DISCOVERS the equivalence of the whole
+     * decomposition, not just the leaf rewrites.  O(n^2) per pass, n <= 64. */
+    let nn : u32 = EG_N[0u64]
+    let mut p : u32 = 0u32
+    while p < nn {
+        let opp : u32 = EG_OP[p as u64]
+        if opp != EG_VAR {
+            if opp != EG_CONST {
+                let mut q : u32 = p + 1u32
+                while q < nn {
+                    if EG_OP[q as u64] == opp {
+                        if seg_find(EG_A[p as u64]) == seg_find(EG_A[q as u64]) {
+                            if seg_find(EG_B[p as u64]) == seg_find(EG_B[q as u64]) {
+                                if seg_union(p as u64, q as u64) == 1u32 { changed = 1u32 }
+                            }
+                        }
+                    }
+                    q = q + 1u32
+                }
+            }
+        }
+        p = p + 1u32
+    }
     return changed
 }
 
@@ -128,7 +193,7 @@ fn seg_saturate() -> u32 @export {
     let mut steps : u32 = 0u32
     while seg_saturate_pass() == 1u32 {
         steps = steps + 1u32
-        if steps >= 64u32 { return steps }
+        if steps >= 512u32 { return steps }
     }
     return steps
 }
@@ -141,7 +206,7 @@ fn seg_op_cost(op: u32) -> u32 {
     return 0u32   /* VAR, CONST */
 }
 
-var EG_BEST : [u32; 64]
+var EG_BEST : [u32; 512]
 const EG_INF : u32 = 1000000u32
 
 /* min-cost extraction: best[class] = min over class members of (op_cost + best[child classes]). */
@@ -150,7 +215,7 @@ fn seg_best_cost(node: u64) -> u32 @export {
     let mut i : u32 = 0u32
     while i < n { EG_BEST[i as u64] = EG_INF  i = i + 1u32 }
     let mut iter : u32 = 0u32
-    while iter < 64u32 {
+    while iter < 512u32 {
         let mut changed : u32 = 0u32
         let mut m : u32 = 0u32
         while m < n {
@@ -167,7 +232,7 @@ fn seg_best_cost(node: u64) -> u32 @export {
             if c < EG_BEST[r] { EG_BEST[r] = c  changed = 1u32 }
             m = m + 1u32
         }
-        if changed == 0u32 { iter = 64u32 } else { iter = iter + 1u32 }
+        if changed == 0u32 { iter = 512u32 } else { iter = iter + 1u32 }
     }
     return EG_BEST[seg_find(node)]
 }

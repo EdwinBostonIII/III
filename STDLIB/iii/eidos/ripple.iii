@@ -80,6 +80,23 @@ fn eidos_ripple_magnitude(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) 
     return rf_edge_field(prim_from, prim_to, hex_from, hex_to)
 }
 
+/* ── THE PALINDROME CHECKSUM (intent (x) intuition), on the REAL ripple field ──
+ * V_REFLECT is the order-reversing involution -- the inverse field.  The checksum f^-1(f(state)) == state is,
+ * concretely: the forward gradient a->b and its inverse b->a must CANCEL (the inverse field negates), AND the
+ * verb must reflect (a CLIMB one way is a REFLECT the other; FLAT stays FLAT).  This is the involution law
+ * R^2 = id, verified on the legacy ripple_field itself -- not a separate engine.  1 = the inverse is exact. */
+fn eidos_ripple_involution(prim_a: u8, prim_b: u8, hex_a: u8, hex_b: u8) -> u32 @export {
+    let fwd : i64 = eidos_ripple_magnitude(prim_a, prim_b, hex_a, hex_b)
+    let inv : i64 = eidos_ripple_magnitude(prim_b, prim_a, hex_b, hex_a)
+    if (fwd + inv) != 0i64 { return 0u32 }                 /* the inverse field must negate -> sum 0 */
+    let df : u32 = eidos_ripple_direction(hex_a, hex_b)
+    let db : u32 = eidos_ripple_direction(hex_b, hex_a)
+    if df == ER_V_NONE   { if db == ER_V_NONE   { return 1u32 }  return 0u32 }   /* FLAT <-> FLAT */
+    if df == ER_V_BELOW  { if db == ER_V_REFLECT { return 1u32 }  return 0u32 }   /* CLIMB <-> REFLECT */
+    if df == ER_V_REFLECT { if db == ER_V_BELOW  { return 1u32 }  return 0u32 }   /* REFLECT <-> CLIMB */
+    return 0u32
+}
+
 /* clear the temporal log (= the isub bus). */
 fn eidos_ripple_reset() -> i32 @export { return isub_reset() }
 

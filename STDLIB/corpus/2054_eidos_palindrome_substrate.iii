@@ -1,0 +1,53 @@
+/* STDLIB/corpus/2054_eidos_palindrome_substrate.iii -- the INTENT (x) INTUITION palindrome on the REAL
+ * substrate (no island): eidos/ripple's V_REFLECT involution is the checksum, event_substrate's
+ * evt_detect_cycle is the paradox gate -- and unlike the always-injective multiply domain, a cyclic event
+ * stream is a GENUINE paradox (a causal loop), so the gate actually has to fire.  99 = the involution holds
+ * on the real ripple field, intent and intuition are the same edge read both ways, and the real paradox is caught.
+ */
+module corpus_2054_eidos_palindrome_substrate
+
+extern @abi(c-msvc-x64) fn eidos_ripple_involution(pa: u8, pb: u8, ha: u8, hb: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_direction(hf: u8, ht: u8) -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_emit(pf: u8, pt: u8, hf: u8, ht: u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_reset() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn eidos_ripple_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_detect_cycle() -> u32 from "event_substrate.iii"
+
+const ER_V_BELOW   : u32 = 0u32
+const ER_V_REFLECT : u32 = 1u32
+
+fn main() -> u64 {
+    /* THE CHECKSUM, on the REAL ripple field: f^-1(f(state)) == state -- the V_REFLECT reflection is a true
+     * involution (forward + inverse gradient cancel, the verb reflects).  Verified on the legacy ripple_field. */
+    if eidos_ripple_involution(5u8, 4u8, 5u8, 4u8) != 1u32 { return 1u64 }
+    if eidos_ripple_involution(3u8, 1u8, 3u8, 1u8) != 1u32 { return 2u64 }
+    if eidos_ripple_involution(2u8, 0u8, 2u8, 0u8) != 1u32 { return 3u64 }
+
+    /* INTENT vs INTUITION are the SAME edge read both ways (the palindrome): the ascending read is the forward
+     * climb (V_BELOW = intent), the descending read is the inverse backward-pull (V_REFLECT = intuition). */
+    if eidos_ripple_direction(4u8, 5u8) != ER_V_BELOW   { return 4u64 }   /* intent  (forward construction) */
+    if eidos_ripple_direction(5u8, 4u8) != ER_V_REFLECT { return 5u64 }   /* intuition (inverse deduction)  */
+
+    /* emit the unified ripple quantum on the real substrate (one <verb,a,b> block, both views). */
+    eidos_ripple_reset()
+    if eidos_ripple_emit(4u8, 5u8, 4u8, 5u8) == 0u64 { return 6u64 }
+    if eidos_ripple_count() != 1u32 { return 7u64 }
+
+    /* THE PARADOX -- the REAL, non-injective one: a CYCLIC event stream is a causal loop (a state recurs),
+     * which CANNOT consistently exist.  evt_detect_cycle must fire (the ban on inconsistency, enforced). */
+    evt_reset()
+    evt_perceive(1u64, 0u64, 5u64, 100u64)
+    evt_perceive(1u64, 0u64, 5u64, 200u64)
+    evt_perceive(1u64, 0u64, 5u64, 100u64)               /* payload 100 RECURS -> a loop -> PARADOX */
+    if evt_detect_cycle() == 0u32 { return 8u64 }         /* the gate MUST catch the real cycle */
+
+    /* a CONSISTENT (acyclic) stream has no paradox (teeth: the gate is not constant-fire). */
+    evt_reset()
+    evt_perceive(1u64, 0u64, 5u64, 10u64)
+    evt_perceive(1u64, 0u64, 5u64, 20u64)
+    evt_perceive(1u64, 0u64, 5u64, 30u64)
+    if evt_detect_cycle() != 0u32 { return 9u64 }
+    return 99u64
+}

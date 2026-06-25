@@ -1,0 +1,65 @@
+/* STDLIB/corpus/2018_seraphyte_petri_membrane.iii -- the DISCOVER-phase MEMBRANE, gated.
+ *
+ * Proves the concrete-fuzzing membrane (numera/ser_petri) does its job: it CHEAPLY refutes hallucinated
+ * candidates on concrete integers BEFORE the expensive proof, its overflow edges are LOAD-BEARING, and a
+ * survivor hands off to the real sieve (bv_ring) which PROVES it.  99 = all arms.
+ *
+ *   ARM 1-2  PLAUSIBLE: two TRUE candidates (shl-sub (x<<3)-x==7x ; shladd (x<<3)+x==9x) survive the membrane.
+ *   ARM 3    INSTANT DEATH: a hallucinated WRONG candidate ((x<<3)+x claimed == 7x, but it is 9x) is killed
+ *            at a concrete integer -- the membrane bites, cheaply, no proof engine touched.
+ *   ARM 4    OVERFLOW TEETH: a round-trip candidate ((x<<1)>>1 == x) wrong ONLY in the high bit SLIPS the
+ *            weak small-only membrane but is KILLED by the full membrane at 2^63 -- the overflow edge vectors
+ *            are load-bearing, not decoration.
+ *   ARM 5    MEMBRANE -> SIEVE: the survivor is PROVEN by bv_ring (the cheap filter hands off to the proof),
+ *            and the membrane's cheap kill AGREES with the sieve's verdict on the wrong candidate (both refuse).
+ *   ARM 6    DETERMINISM: same seed => same verdict; a large seeded sample does NOT false-kill a true rule.
+ */
+module corpus_2018_seraphyte_petri_membrane
+
+extern @abi(c-msvc-x64) fn sp_membrane(form: u32, k: u32, v: u64, seed: u64, nsample: u32) -> u32 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_membrane_smallonly(form: u32, k: u32, v: u64) -> u32 from "ser_petri.iii"
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+const PM_SEED : u64 = 11400714819323198485u64   /* the Grace start seed 0x9E3779B97F4A7C15 */
+
+fn main() -> u64 {
+    /* ARM 1: TRUE shl-sub (form 2, k=3) claims x*7 -- (x<<3)-x == 7x.  Survives the membrane. */
+    if sp_membrane(2u32, 3u32, 7u64, PM_SEED, 32u32) != 1u32 { return 1u64 }
+    /* ARM 2: TRUE shladd (form 1, k=3) claims x*9 -- (x<<3)+x == 9x.  Survives. */
+    if sp_membrane(1u32, 3u32, 9u64, PM_SEED, 32u32) != 1u32 { return 2u64 }
+
+    /* ARM 3: HALLUCINATED WRONG -- (x<<3)+x is 9x, but the candidate CLAIMS x*7.  Killed at x=1 (9 != 7),
+     *        cheaply, before any proof.  This is the membrane's whole purpose. */
+    if sp_membrane(1u32, 3u32, 7u64, PM_SEED, 32u32) != 0u32 { return 3u64 }
+
+    /* ARM 4: OVERFLOW TEETH -- round-trip (form 3, k=1) claims (x<<1)>>1 == x (v=1).  True for x < 2^63,
+     *        FALSE at x >= 2^63 (the top bit is lost in the wrap).  The weak small-only membrane SLIPS it;
+     *        the full membrane KILLS it at the 2^63 edge.  The overflow vectors are load-bearing. */
+    if sp_membrane_smallonly(3u32, 1u32, 1u64) != 1u32 { return 4u64 }   /* slips the weak filter */
+    if sp_membrane(3u32, 1u32, 1u64, PM_SEED, 32u32) != 0u32 { return 5u64 }  /* caught by the full battery */
+
+    /* ARM 5: MEMBRANE -> SIEVE.  The survivor (shl-sub, x*7) is handed to the real proof engine (bv_ring),
+     *        which PROVES (x<<3)-x == 7x over Z/2^64.  And the wrong candidate the membrane killed cheaply
+     *        ((x<<3)+x == 7x) the sieve ALSO refuses -- cheap kill agrees with the expensive verdict. */
+    bv_reset()
+    let x1 : u32 = bv_var(0u32)
+    if bv_equal(bv_sub(bv_shl(x1, 3u32), x1), bv_mul(x1, bv_const(7u64))) != 1u8 { return 6u64 }  /* proven */
+    bv_reset()
+    let x2 : u32 = bv_var(0u32)
+    if bv_equal(bv_add(bv_shl(x2, 3u32), x2), bv_mul(x2, bv_const(7u64))) != 0u8 { return 7u64 }  /* refused */
+
+    /* ARM 6: DETERMINISM -- same seed => same verdict; a LARGE seeded sample (128) does not false-kill a
+     *        true rule (the membrane never refutes a true identity, only refutes false ones). */
+    if sp_membrane(2u32, 3u32, 7u64, PM_SEED, 16u32) != sp_membrane(2u32, 3u32, 7u64, PM_SEED, 16u32) { return 8u64 }
+    if sp_membrane(2u32, 5u32, 31u64, PM_SEED, 128u32) != 1u32 { return 9u64 }   /* (x<<5)-x == 31x, 128-sample */
+
+    return 99u64
+}

@@ -1,0 +1,101 @@
+/* STDLIB/iii/numera/ser_petri.iii -- THE CONCRETE-FUZZING MEMBRANE of the DISCOVER-phase petri dish.
+ *
+ * The petri dish (the DISCOVER phase) is allowed to HALLUCINATE candidate rewrites non-deterministically --
+ * but the multi-engine proof sieve (bv_ring + bv_bits + the CIC kernel) is COMPUTATIONALLY HEAVY.  Feeding
+ * 10,000 hallucinated candidates straight to the sieve would halt the system.  This module is the cellular
+ * MEMBRANE: a CHEAP, deterministic fast-fail filter that kills implausible candidates on CONCRETE integers
+ * BEFORE any formal proof is attempted.  Only candidates that match the reference on EVERY probe survive to
+ * the sieve.  This is "fuzzing as a filter" -- the architectural piece that makes the dish tractable.
+ *
+ * IT IS A REFUTER, NOT A PROVER (the honest scope): a single concrete divergence REFUTES a universal
+ * identity (sound -- one counterexample kills it); surviving the battery is PLAUSIBLE, never PROVEN.  The
+ * proof is still the sieve's job.  So the membrane can only ever ADMIT FEWER candidates to the proof; it
+ * cannot make a false rule pass (that is the kernel's wall).
+ *
+ * NO-ML / determinism-of-method (the hard lock, honored): the membrane LEARNS NOTHING.  It accumulates no
+ * cross-run statistics, trains no cost model, reinforces no pathway.  The battery is FIXED source; the
+ * sample is SEEDED (egraph_stochastic/egs_next -- same seed => same verdict), the Grace-seed exception.
+ * The proposer it gates (numera/mcmc_egraph) is likewise cost-DIRECTED by a FIXED cost landscape, never
+ * cost-LEARNED -- "adaptive WITHOUT learning" (EIDOS).  The line: search direction is a function of the
+ * CANDIDATE (its deterministic cost / concrete behaviour), never of accumulated success HISTORY.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 0.99.  NIH: composes egraph_stochastic/egs_next only (the seeded
+ * RNG -- no island, no reinvented xorshift).  Determinism: integer-only; seeded; no proof-engine externs
+ * (THAT is what makes it cheap -- it never touches bv_ring/bv_bits/tc_check).  Compiler-UNREFERENCED -> LIBNATIVE.
+ */
+module numera_ser_petri
+
+extern @abi(c-msvc-x64) fn egs_next(state: u64) -> u64 from "egraph_stochastic.iii"
+
+/* The candidate EMITTED form over a machine word, mod 2^64 (the shl+OP strength-reduction family + the
+ * shift round-trip, the forms the sieve+emitter actually handle):
+ *   form 0: x << k            (pure shift; claims x*2^k)
+ *   form 1: (x << k) + x      (shladd;     claims x*(2^k+1))
+ *   form 2: (x << k) - x      (shl-sub;    claims x*(2^k-1))
+ *   form 3: (x << k) >> k     (round-trip; claims x -- FALSE for any x with a bit in the top k positions) */
+fn sp_emit(form: u32, k: u32, t: u64) -> u64 @export {
+    let kk : u64 = k as u64
+    if form == 0u32 { return t << kk }
+    if form == 1u32 { return (t << kk) + t }
+    if form == 2u32 { return (t << kk) - t }
+    if form == 3u32 { return (t << kk) >> kk }
+    return 0u64
+}
+
+/* The reference RHS: x * v mod 2^64.  v is a RUNTIME word (a parameter), so this is the honest full
+ * multiply -- the ground truth the candidate's emitted form must match. */
+fn sp_ref(t: u64, v: u64) -> u64 @export { return t * v }
+
+/* The fixed edge battery: small values + the OVERFLOW edges where a wrap-sensitive candidate diverges. */
+const SP_NEDGE : u64 = 7u64
+var SP_EDGE : [u64; 7]
+var SP_INIT : u8 = 0u8
+fn sp_init() -> i32 @export {
+    if SP_INIT == 1u8 { return 0i32 }
+    SP_EDGE[0u64] = 0u64
+    SP_EDGE[1u64] = 1u64
+    SP_EDGE[2u64] = 2u64
+    SP_EDGE[3u64] = 3u64
+    SP_EDGE[4u64] = 2305843009213693952u64    /* 2^61 */
+    SP_EDGE[5u64] = 9223372036854775808u64    /* 2^63 -- the high-bit overflow edge */
+    SP_EDGE[6u64] = 18446744073709551615u64   /* 2^64 - 1 */
+    SP_INIT = 1u8
+    return 0i32
+}
+
+/* THE MEMBRANE: 1 = PLAUSIBLE (emitted == reference on the WHOLE battery AND a seeded sample of nsample
+ * values), 0 = DEAD (refuted at the first divergence -- cheap, no proof engine touched).  The candidate
+ * claims  sp_emit(form,k,x) == x*v  for all x; the membrane tries to refute it concretely. */
+fn sp_membrane(form: u32, k: u32, v: u64, seed: u64, nsample: u32) -> u32 @export {
+    sp_init()
+    let mut i : u64 = 0u64
+    while i < SP_NEDGE {
+        if sp_emit(form, k, SP_EDGE[i]) != sp_ref(SP_EDGE[i], v) { return 0u32 }
+        i = i + 1u64
+    }
+    let mut s : u64 = seed
+    let mut j : u32 = 0u32
+    while j < nsample {
+        s = egs_next(s)
+        if sp_emit(form, k, s) != sp_ref(s, v) { return 0u32 }
+        j = j + 1u32
+    }
+    return 1u32
+}
+
+/* A DELIBERATELY-WEAK membrane that probes ONLY small values (0..3) -- no overflow edges, no sample.  Its
+ * sole purpose is to demonstrate (in the KAT) that the overflow vectors are LOAD-BEARING: a candidate
+ * wrong ONLY in the high bits slips THIS but is killed by the full sp_membrane.  Never used in production. */
+fn sp_membrane_smallonly(form: u32, k: u32, v: u64) -> u32 @export {
+    let mut t : u64 = 0u64
+    while t <= 3u64 {
+        if sp_emit(form, k, t) != sp_ref(t, v) { return 0u32 }
+        t = t + 1u64
+    }
+    return 1u32
+}
+
+/* battery accessors -- so the CEGIS oracle (numera/ser_cegis) composes the SAME fixed probe set (no island,
+ * no duplicated battery): the membrane OWNS the edge vectors; the synthesizer borrows them. */
+fn sp_edge_n() -> u64 @export { return SP_NEDGE }
+fn sp_edge_at(i: u64) -> u64 @export { sp_init() if i >= SP_NEDGE { return 0u64 } return SP_EDGE[i] }

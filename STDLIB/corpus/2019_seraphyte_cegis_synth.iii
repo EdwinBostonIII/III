@@ -1,0 +1,78 @@
+/* STDLIB/corpus/2019_seraphyte_cegis_synth.iii -- CEGIS closes the descriptor seam, gated.
+ *
+ * The compiler DECIDES WHAT to optimise: given a target factor v, cg_synth PRODUCES the cost-minimal
+ * strength-reduction descriptor {form,k} -- counterexample-guided, cost-ordered, deterministic, NO human,
+ * NO learning.  Then the SYMBOLIC sieve (bv_ring) PROVES the produced descriptor universal.  99 = all arms.
+ *
+ *   ARM 1-4  SYNTHESIS: cg_synth finds shift-sub for x*7, shladd for x*9, pow2 for x*8, NONE (imul) for x*11.
+ *   ARM 5    COST/K-RATCHET: the cheaper form wins -- cost(pow2 x*8)=1 < cost(shl-op x*7)=2 < cost(imul x*11)=3.
+ *   ARM 6    THE CEGIS DIALOGUE: the oracle RETURNS the counterexample x=1 for the wrong shladd-for-7 guess,
+ *            and CG_NOCE (no concrete CE) for the correct shift-sub-for-7 -- propose/refute made concrete.
+ *   ARM 7    OVERFLOW COUNTEREXAMPLE: the oracle finds the HARD CE at 2^63 for an overflow-wrong candidate
+ *            (round-trip (x<<1)>>1 == x) -- the edge battery makes the dialogue find wrap bugs, not just x=1.
+ *   ARM 8    SEAM CLOSED + SYMBOLIC PROOF: the descriptor cg_synth produced for x*7 is handed to bv_ring,
+ *            which PROVES (x<<3)-x == 7x over Z/2^64 -- plausible (concrete) becomes proven (symbolic).
+ *   ARM 9    DETERMINISM: same v + same seed => same descriptor (perfect on day one, no drift).
+ */
+module corpus_2019_seraphyte_cegis_synth
+
+extern @abi(c-msvc-x64) fn cg_synth(v: u64, seed: u64) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_oracle_ce(form: u32, k: u32, v: u64, seed: u64, nsample: u32) -> u64 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_form(packed: u32) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_k(packed: u32) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_cost(packed: u32) -> u32 from "ser_cegis.iii"
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+const CG_SEED : u64 = 11400714819323198485u64
+const CG_NOCE : u64 = 18446744073709551615u64
+
+fn main() -> u64 {
+    /* ARM 1: x*7 -> the compiler synthesizes shift-sub (form 2, k=3). */
+    let d7 : u32 = cg_synth(7u64, CG_SEED)
+    if cg_form(d7) != 2u32 { return 1u64 }
+    if cg_k(d7) != 3u32 { return 2u64 }
+    /* ARM 2: x*9 -> shladd (form 1, k=3). */
+    let d9 : u32 = cg_synth(9u64, CG_SEED)
+    if cg_form(d9) != 1u32 { return 3u64 }
+    if cg_k(d9) != 3u32 { return 4u64 }
+    /* ARM 3: x*8 -> pow2 (form 0, k=3) -- the CHEAPEST form. */
+    let d8 : u32 = cg_synth(8u64, CG_SEED)
+    if cg_form(d8) != 0u32 { return 5u64 }
+    if cg_k(d8) != 3u32 { return 6u64 }
+    /* ARM 4: x*11 -> NONE (no cheaper rewrite; keep the imul). */
+    let d11 : u32 = cg_synth(11u64, CG_SEED)
+    if cg_cost(d11) != 3u32 { return 7u64 }
+
+    /* ARM 5: COST / K-ratchet ordering: pow2(1) < shl-op(2) < imul(3). */
+    if cg_cost(d8) != 1u32 { return 8u64 }
+    if cg_cost(d7) != 2u32 { return 9u64 }
+    if cg_cost(d8) >= cg_cost(d7) { return 10u64 }
+    if cg_cost(d7) >= cg_cost(d11) { return 11u64 }
+
+    /* ARM 6: the CEGIS dialogue made concrete -- the oracle RETURNS the counterexample. */
+    if cg_oracle_ce(1u32, 3u32, 7u64, CG_SEED, 64u32) != 1u64 { return 12u64 }      /* shladd-for-7 (9x) fails at x=1 */
+    if cg_oracle_ce(2u32, 3u32, 7u64, CG_SEED, 64u32) != CG_NOCE { return 13u64 }   /* shift-sub-for-7 (7x): no concrete CE */
+
+    /* ARM 7: the HARD overflow counterexample -- round-trip (x<<1)>>1 == x (form 3, v=1) is wrong only in
+     *        the high bit; the oracle returns 2^63 (where the wrap drops the bit). */
+    if cg_oracle_ce(3u32, 1u32, 1u64, CG_SEED, 64u32) != 9223372036854775808u64 { return 14u64 }
+
+    /* ARM 8: SEAM CLOSED -> SYMBOLIC PROOF.  The descriptor synthesized for x*7 (shift-sub, k=3) is PROVEN
+     *        universal by bv_ring: (x<<3)-x == 7x over Z/2^64.  Concrete-plausible became symbolic-proven. */
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    let kk : u32 = cg_k(d7)
+    if bv_equal(bv_sub(bv_shl(x, kk), x), bv_mul(x, bv_const(7u64))) != 1u8 { return 15u64 }
+
+    /* ARM 9: DETERMINISM -- same v + same seed => same descriptor. */
+    if cg_synth(7u64, CG_SEED) != d7 { return 16u64 }
+
+    return 99u64
+}

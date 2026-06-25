@@ -1,0 +1,89 @@
+/* STDLIB/iii/numera/ser_cegis.iii -- CEGIS over the shl+OP grammar: the compiler DECIDES WHAT to optimize.
+ *
+ * This closes the "descriptor seam" deterministically, the RL-free way the user named: Counterexample-Guided
+ * Inductive Synthesis.  Given a target factor v (an unoptimised `x*v` the IR profiler flagged), the
+ * SYNTHESIZER enumerates the strength-reduction grammar in COST order (the ILP/K-ratchet objective) and
+ * PRODUCES the cost-minimal descriptor {form,k} that the ORACLE cannot refute -- with NO human supplying it
+ * and NO learning: it is mathematically perfect on termination or it returns NONE (keep the imul).  No drift,
+ * no epochs, no reward.
+ *
+ *   GRAMMAR (cost-ordered):  form 0: x<<k      (1 op,  claims x*2^k)
+ *                            form 1: (x<<k)+x  (2 ops, claims x*(2^k+1))   <- shladd
+ *                            form 2: (x<<k)-x  (2 ops, claims x*(2^k-1))   <- shift-sub
+ *                            none  : imul      (3+ ops -- the baseline the K-ratchet must beat)
+ *
+ * TWO-STAGE ORACLE (the honest math, the conscience point): a CONCRETE oracle (cg_oracle_ce, fuzzing on the
+ * membrane's edge battery + a seeded sample) is a sound REFUTER -- a returned counterexample truly kills a
+ * candidate -- but it CANNOT prove universality.  cg_synth returns a candidate that is merely PLAUSIBLE (no
+ * concrete CE).  Universality is then the SYMBOLIC sieve's job (bv_ring polynomial equality / bv_bits SAT
+ * over ALL 2^64) -- the caller (corpus 2019) discharges it there.  "No concrete CE => universal" is FALSE;
+ * "no SYMBOLIC CE => universal" is the real wall.  CEGIS uses the cheap concrete stage to kill the 99%, the
+ * expensive symbolic stage to PROVE the survivor.
+ *
+ * NO-ML / determinism-of-method: the search is cost-DIRECTED by a FIXED objective (cg_cost), seeded
+ * (egs_next), and accumulates only HARD deductive counterexamples -- never statistics, never a trained
+ * model, never reinforcement.  Same v + same seed => same descriptor, on day one.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.  NIH: composes numera/ser_petri (sp_emit/sp_ref/sp_edge_*) +
+ * numera/egraph_stochastic (egs_next) -- no island.  Determinism: integer-only; seeded; bit-packed descriptor.
+ */
+module numera_ser_cegis
+
+extern @abi(c-msvc-x64) fn sp_emit(form: u32, k: u32, t: u64) -> u64 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_ref(t: u64, v: u64) -> u64 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_edge_n() -> u64 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn sp_edge_at(i: u64) -> u64 from "ser_petri.iii"
+extern @abi(c-msvc-x64) fn egs_next(state: u64) -> u64 from "egraph_stochastic.iii"
+
+const CG_NOCE : u64 = 18446744073709551615u64   /* 2^64-1 sentinel: the concrete oracle found NO counterexample */
+const CG_NONE : u32 = 4294967295u32             /* 0xFFFFFFFF: no cheaper rewrite -- keep the imul */
+
+/* THE CONCRETE ORACLE (the CEGIS dialogue's reply): scan the membrane's fixed edge battery + a seeded
+ * sample; return the FIRST input where candidate (form,k) for target v diverges from x*v -- the
+ * COUNTEREXAMPLE -- or CG_NOCE if none found (PLAUSIBLE, not proven). */
+fn cg_oracle_ce(form: u32, k: u32, v: u64, seed: u64, nsample: u32) -> u64 @export {
+    let n : u64 = sp_edge_n()
+    let mut i : u64 = 0u64
+    while i < n {
+        let t : u64 = sp_edge_at(i)
+        if sp_emit(form, k, t) != sp_ref(t, v) { return t }
+        i = i + 1u64
+    }
+    let mut s : u64 = seed
+    let mut j : u32 = 0u32
+    while j < nsample {
+        s = egs_next(s)
+        if sp_emit(form, k, s) != sp_ref(s, v) { return s }
+        j = j + 1u32
+    }
+    return CG_NOCE
+}
+
+fn cg_pack(form: u32, k: u32) -> u32 { return (form << 8u32) | k }
+fn cg_form(packed: u32) -> u32 @export { if packed == CG_NONE { return 255u32 } return packed >> 8u32 }
+fn cg_k(packed: u32) -> u32 @export { if packed == CG_NONE { return 0u32 } return packed & 255u32 }
+
+/* the K-ratchet / ILP cost of a descriptor: 1 = pow2 (cheapest), 2 = shl+op, 3 = imul (none). */
+fn cg_cost(packed: u32) -> u32 @export {
+    if packed == CG_NONE { return 3u32 }
+    let f : u32 = packed >> 8u32
+    if f == 0u32 { return 1u32 }
+    return 2u32
+}
+
+/* THE SYNTHESIZER: cost-ordered enumeration of the grammar; return the cheapest descriptor the concrete
+ * oracle cannot refute, else CG_NONE.  The compiler choosing WHAT to optimise, deterministically. */
+fn cg_synth(v: u64, seed: u64) -> u32 @export {
+    let mut k : u32 = 1u32
+    while k <= 63u32 {                                   /* cost 1: pow2 */
+        if cg_oracle_ce(0u32, k, v, seed, 64u32) == CG_NOCE { return cg_pack(0u32, k) }
+        k = k + 1u32
+    }
+    k = 1u32
+    while k <= 63u32 {                                   /* cost 2: shladd, then shift-sub */
+        if cg_oracle_ce(1u32, k, v, seed, 64u32) == CG_NOCE { return cg_pack(1u32, k) }
+        if cg_oracle_ce(2u32, k, v, seed, 64u32) == CG_NOCE { return cg_pack(2u32, k) }
+        k = k + 1u32
+    }
+    return CG_NONE
+}

@@ -1259,7 +1259,7 @@ fn fn_nametok(ft: u32) -> u32 {
     let mut gs:u32=1u32  while gs==1u32 { if ispat(q,Q_MUL)==1u32 {q=q+1u32} else {gs=0u32} }   /* skip ALL leading `*`s -> handles `T **` / `T ***` returns (the one-`*` `if` dropped every double-pointer-returning fn: iii_pool_array, iii_pool_pos_first) */
     return q
 }
-fn fn_retmask(ft: u32) -> i64 { let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }  return type_mask(q) }   /* the return type's width mask */
+fn fn_retmask(ft: u32) -> i64 { let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }  if ispat(q+1u32,Q_MUL)==1u32 { return 0i64 }  if ispat(q+1u32,Q_LP)==1u32 { return 0i64 }  return type_mask(q) }   /* the return type's width mask ; a POINTER return (`T *` or a `Type (**name(..))` declarator) is NOT masked -- masking `char *` to type_mask(char)=0xFF TRUNCATED every pointer return to 8 bits */
 fn fn_variadic(nt:u32) -> u32 {   /* does the param list contain `...` (a Q_DOT) ? */
     let mut q:u32=nt+2u32  let mut g:u32=1u32
     while g==1u32 { if TK[q as u64]==0u32 {g=0u32} else { if ispat(q,Q_RP)==1u32 {g=0u32} else { if ispat(q,Q_DOT)==1u32 {return 1u32}  q=q+1u32 } } }

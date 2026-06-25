@@ -10,7 +10,7 @@
  *   union     : equivalent nodes share an e-class (union-find).
  *   saturate  : apply  MUL(x, 2^k-1) ~ SUB(SHL(x,k), x) ;  MUL(x,1) ~ x ;  ADD(x,0) ~ x ;  SUB(x,0) ~ x
  *               until no new equivalence (the fixpoint -- terminates: classes only ever MERGE, monotone).
- *   extract   : eg_best_cost(n) = min over the class of (op_cost + best(children)) -- the cheapest form.
+ *   extract   : seg_best_cost(n) = min over the class of (op_cost + best(children)) -- the cheapest form.
  *
  * The win the operator named: x*7 and a *31 buried in unrelated code both land in classes whose cheapest
  * member is a shift-sub; extraction collapses them with no per-site search.  Behaviour is preserved because
@@ -36,10 +36,10 @@ var EG_B      : [u64; 64]   /* child-2 node id */
 var EG_PARENT : [u64; 64]   /* union-find */
 var EG_N      : [u32; 1]
 
-fn eg_reset() -> i32 @export { EG_N[0u64] = 0u32  return 0i32 }
+fn seg_reset() -> i32 @export { EG_N[0u64] = 0u32  return 0i32 }
 
 /* hash-cons: return the existing structurally-equal node, or add a new one (parent = self). */
-fn eg_intern(op: u32, a: u64, b: u64) -> u64 @export {
+fn seg_intern(op: u32, a: u64, b: u64) -> u64 @export {
     let n : u32 = EG_N[0u64]
     let mut i : u32 = 0u32
     while i < n {
@@ -58,30 +58,30 @@ fn eg_intern(op: u32, a: u64, b: u64) -> u64 @export {
     EG_N[0u64] = n + 1u32
     return n as u64
 }
-fn eg_var() -> u64 @export { return eg_intern(EG_VAR, 0u64, 0u64) }
-fn eg_const(v: u64) -> u64 @export { return eg_intern(EG_CONST, v, 0u64) }
+fn seg_var() -> u64 @export { return seg_intern(EG_VAR, 0u64, 0u64) }
+fn seg_const(v: u64) -> u64 @export { return seg_intern(EG_CONST, v, 0u64) }
 
-fn eg_find(x: u64) -> u64 @export {
+fn seg_find(x: u64) -> u64 @export {
     let mut r : u64 = x
     while EG_PARENT[r] != r { r = EG_PARENT[r] }
     return r
 }
-fn eg_union(x: u64, y: u64) -> u32 @export {
-    let rx : u64 = eg_find(x)
-    let ry : u64 = eg_find(y)
+fn seg_union(x: u64, y: u64) -> u32 @export {
+    let rx : u64 = seg_find(x)
+    let ry : u64 = seg_find(y)
     if rx == ry { return 0u32 }
     /* lower id becomes the rep (determinism) */
     if rx < ry { EG_PARENT[ry] = rx } else { EG_PARENT[rx] = ry }
     return 1u32
 }
 
-fn eg_subk_k(v: u64) -> u64 {
+fn seg_subk_k(v: u64) -> u64 {
     let mut k : u64 = 0u64
     let mut t : u64 = v + 1u64
     while t > 1u64 { t = t >> 1u64  k = k + 1u64 }
     return k
 }
-fn eg_is_subk(v: u64) -> u32 {
+fn seg_is_subk(v: u64) -> u32 {
     if v < 7u64 { return 0u32 }
     if (v >> 63u64) != 0u64 { return 0u32 }
     let p : u64 = v + 1u64
@@ -90,7 +90,7 @@ fn eg_is_subk(v: u64) -> u32 {
 }
 
 /* ONE saturation pass: apply the rewrite rules, union equivalent classes.  Returns 1 if anything merged. */
-fn eg_saturate_pass() -> u32 {
+fn seg_saturate_pass() -> u32 {
     let n : u32 = EG_N[0u64]
     let mut changed : u32 = 0u32
     let mut i : u32 = 0u32
@@ -100,23 +100,23 @@ fn eg_saturate_pass() -> u32 {
             let bch : u64 = EG_B[i as u64]
             if EG_OP[bch] == EG_CONST {
                 let v : u64 = EG_A[bch]
-                if eg_is_subk(v) == 1u32 {
-                    let k : u64 = eg_subk_k(v)
-                    let kc : u64 = eg_const(k)
-                    let sh : u64 = eg_intern(EG_SHL, EG_A[i as u64], kc)
-                    let su : u64 = eg_intern(EG_SUB, sh, EG_A[i as u64])
-                    if eg_union(i as u64, su) == 1u32 { changed = 1u32 }
+                if seg_is_subk(v) == 1u32 {
+                    let k : u64 = seg_subk_k(v)
+                    let kc : u64 = seg_const(k)
+                    let sh : u64 = seg_intern(EG_SHL, EG_A[i as u64], kc)
+                    let su : u64 = seg_intern(EG_SUB, sh, EG_A[i as u64])
+                    if seg_union(i as u64, su) == 1u32 { changed = 1u32 }
                 }
-                if v == 1u64 { if eg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } }
+                if v == 1u64 { if seg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } }
             }
         }
         if op == EG_ADD {
             let bch : u64 = EG_B[i as u64]
-            if EG_OP[bch] == EG_CONST { if EG_A[bch] == 0u64 { if eg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } } }
+            if EG_OP[bch] == EG_CONST { if EG_A[bch] == 0u64 { if seg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } } }
         }
         if op == EG_SUB {
             let bch : u64 = EG_B[i as u64]
-            if EG_OP[bch] == EG_CONST { if EG_A[bch] == 0u64 { if eg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } } }
+            if EG_OP[bch] == EG_CONST { if EG_A[bch] == 0u64 { if seg_union(i as u64, EG_A[i as u64]) == 1u32 { changed = 1u32 } } }
         }
         i = i + 1u32
     }
@@ -124,16 +124,16 @@ fn eg_saturate_pass() -> u32 {
 }
 
 /* saturate to the FIXPOINT (classes only merge -> monotone -> terminates). Returns pass count. */
-fn eg_saturate() -> u32 @export {
+fn seg_saturate() -> u32 @export {
     let mut steps : u32 = 0u32
-    while eg_saturate_pass() == 1u32 {
+    while seg_saturate_pass() == 1u32 {
         steps = steps + 1u32
         if steps >= 64u32 { return steps }
     }
     return steps
 }
 
-fn eg_op_cost(op: u32) -> u32 {
+fn seg_op_cost(op: u32) -> u32 {
     if op == EG_MUL { return 3u32 }
     if op == EG_SHL { return 1u32 }
     if op == EG_ADD { return 1u32 }
@@ -145,7 +145,7 @@ var EG_BEST : [u32; 64]
 const EG_INF : u32 = 1000000u32
 
 /* min-cost extraction: best[class] = min over class members of (op_cost + best[child classes]). */
-fn eg_best_cost(node: u64) -> u32 @export {
+fn seg_best_cost(node: u64) -> u32 @export {
     let n : u32 = EG_N[0u64]
     let mut i : u32 = 0u32
     while i < n { EG_BEST[i as u64] = EG_INF  i = i + 1u32 }
@@ -155,19 +155,19 @@ fn eg_best_cost(node: u64) -> u32 @export {
         let mut m : u32 = 0u32
         while m < n {
             let op : u32 = EG_OP[m as u64]
-            let mut c : u32 = eg_op_cost(op)
+            let mut c : u32 = seg_op_cost(op)
             if op != EG_VAR {
                 if op != EG_CONST {
-                    let ba : u32 = EG_BEST[eg_find(EG_A[m as u64])]
-                    let bb : u32 = EG_BEST[eg_find(EG_B[m as u64])]
+                    let ba : u32 = EG_BEST[seg_find(EG_A[m as u64])]
+                    let bb : u32 = EG_BEST[seg_find(EG_B[m as u64])]
                     if ba >= EG_INF { c = EG_INF } else { if bb >= EG_INF { c = EG_INF } else { c = c + ba + bb } }
                 }
             }
-            let r : u64 = eg_find(m as u64)
+            let r : u64 = seg_find(m as u64)
             if c < EG_BEST[r] { EG_BEST[r] = c  changed = 1u32 }
             m = m + 1u32
         }
         if changed == 0u32 { iter = 64u32 } else { iter = iter + 1u32 }
     }
-    return EG_BEST[eg_find(node)]
+    return EG_BEST[seg_find(node)]
 }

@@ -1163,6 +1163,76 @@ MODULES=(
     # MDL boundary penalty, acyclic insertion, H10 anti-thrashing) permitting a new-file write.
     # Composes congruence + ripple_metric + commit_gate. Compiler-unreferenced -> LIBNATIVE.
     "forcefield/ripple_extract"
+    # SERAPHYTE Phase-1 keystone: the deterministic INTEGER K-functor K=C*H*R over the
+    # ripple_metric graph (C=saturating good-complexity, H=good/(good+noise) coherence,
+    # R=communion penalised by separation). Fixed source-constant weights; NO floats, NO
+    # learned values (Canon VII no-ml). Resolves the Seraphyte spec's Open Question O6/M1
+    # (K measurement) by construction. Composes ripple_metric. Compiler-unreferenced ->
+    # LIBNATIVE. See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md.
+    # SERAPHYTE Phase-8 energy ledger: the semantic-energy economy (NOUS-units) made PHYSICALLY
+    # real -- NU = region bytes, so conservation (used+remaining==capacity) is the allocator's own
+    # invariant; catabolism income = dead edges a cut frees (same ripple_metric graph the K-functor
+    # rewards); starvation = arena-cap exhaustion (the one honest death: immortal vs error, mortal vs
+    # physics, Canon X). Composes memoria/arena + ripple_metric. Compiler-unreferenced -> LIBNATIVE.
+    # SERAPHYTE membrane (M) + judgment (KRISIS): the unified admission boundary -- behaviour
+    # preservation (rm_cut_valid) AND the 5-dim commit_gate (cg_decide: rule/module/seal/conservative/
+    # KERNEL) AND the inverted-2nd-law K-ratchet (sk_kvalue). ADMIT iff all three; located reject codes
+    # (prove-both-arms). The behavioural-immortality safety property as a gated faculty. Composes
+    # commit_gate + ripple_metric + ser_kvalue. Compiler-unreferenced -> LIBNATIVE.
+    # SERAPHYTE capstone -- the autopoietic loop, ALIVE: binds membrane + K-functor + energy into one
+    # living cycle with the inverted-2nd-law as PERSISTENT down-only state (the K-floor ratchet). The
+    # organism emerges, grows (K climbs through the membrane, energy-positive), cannot regress (ratchet
+    # refuses), cannot die from error (membrane refuses fatal moves) -- only from physics (energy/arena).
+    # Composes ser_membrane + ser_kvalue + ser_energy + ripple_metric + commit_gate. -> LIBNATIVE.
+    # SERAPHYTE on a REAL target: runs the loop on III's actual crypto-primitive proof-web
+    # (numera/weave_graph -- SHA-2 Ch/Maj, rotations as bv circuits). LIVE membrane (ws_edge_proven =
+    # SAT-proven equivalence, not modelled), real cost-truth K-gain (ws_node_cost_at AND-gate count),
+    # real obsolescence (ws_strand_retires), both arms (refuses Ch<->Maj, proven distinct). Phase-4
+    # real-target liveness, no synthetic fixture. Composes weave_graph. -> LIBNATIVE.
+    # SERAPHYTE commit-half: the organism COMMITS (changes state) by sealing a kernel-proven optimisation
+    # into its phenome -- composes forcefield/cg_autocatalyst (cga_dispose: dream->kernel tc_check->cad-seal,
+    # the ONLY autonomous commit III permits; volatile registry, permanent source stays operator-gated).
+    # Grows monotonically with proven optimisations, never commits a false one (cga_all_true). -> LIBNATIVE.
+    # SERAPHYTE discovery (step 1 of the real deliverable, NOT a wrapper): the organism DISCOVERS
+    # strength-reductions by SEEDED SEARCH (egraph_stochastic, handed no candidates), proves each at the
+    # kernel membrane (cg_autocatalyst), and verifies every discovered-proven reduction IS III's LIVE cg_r3
+    # codegen emission (COMPILER/BOOT cg_opt_rules cgopt_mul_admit/shift_k -- the real mul->shl emit law).
+    # Connects discovery -> proof -> a real emit path. Composes egraph_stochastic+cg_autocatalyst+cg_opt_rules.
+    # SERAPHYTE autonomous optimisation metabolism (done right -- composes EXISTING robust engines, not a
+    # hand-rolled disposer): drives cg_autocatalyst's autonomous-discovery faculties -- cga_mixed_discover
+    # (6 mixed bitwise-arith strength laws, bv_bits SAT/UNSAT) + cga_bv_discover (pow2 strength diagonal,
+    # BV64 kernel) -- proving machine-faithful peephole optimisations and refusing the unsound (SAT
+    # countermodel = real teeth). The mixed/shift laws are outside cg_r3's pow2-only strength reduction.
+    # Every component clean-probe-verified robust in isolation. Composes cg_autocatalyst + bv_bits + cg_opt_rules.
+    # SERAPHYTE as PROCESS (the architectural pivot: event-based, not object-based): expresses the
+    # Seraphyte's life on omnia::isub (the Ring-(-1) Merkle-witnessed metal bus = the spec's CHORA), the
+    # way omnia::xii_isub encapsulates XII. Membrane-PROVEN optimisations become content-addressed BELOW
+    # ripples (replayable + tamper-evident life; state = FOLD over the log); autopoiesis = event_substrate's
+    # evt_detect_cycle (cycle 0 = progress/terminates, cycle>0 = the self-sustaining loop). Composes isub +
+    # cg_autocatalyst + event_substrate. The symbiosis with the existing pathways, no island. -> LIBNATIVE.
+    # SERAPHYTE immune-ripple (resilience #7): a proven-BAD rewrite becomes a vaccine. The SAT membrane
+    # (bv_bits) judges a candidate; the verdict is a witnessed isub ripple -- proven-equal=BELOW (good),
+    # proven-distinct=REFLECT (the immune anti-event). im_is_immune folds the shared bus so any consumer
+    # NEVER retries a refuted rewrite (immune memory; tamper-evident; observation-free = a proof not a
+    # frequency). Composes isub + bv_bits. -> LIBNATIVE.
+    # SERAPHYTE cross-prover differential (trust/soundness monitor): two INDEPENDENT deciders over Z/2^64
+    # -- bv_ring (polynomial) + bv_bits (Tseitin/CDCL SAT) -- cross-check each other on a shared add/shift
+    # law; agreement on both arms + a FORCED discrepancy detected (catches a prover regression in the
+    # trusted base), witnessed on isub. No new prover -- a regression detector. Composes bv_ring+bv_bits+isub.
+    # SERAPHYTE memoised proving (efficiency): the witnessed substrate means never prove twice. sm_step
+    # FOLDS the shared isub bus before proving -- a KNOWN candidate (BELOW good / REFLECT bad-vaccine) is
+    # SKIPPED with no prover-call; each distinct candidate meets the prover at most ONCE, ever, across the
+    # whole process + every instance folding the same content-addressed log. Cost metric proves the saving.
+    # Composes bv_bits + isub. -> LIBNATIVE.
+    "numera/ser_petri"
+    "numera/ser_cegis"
+    "numera/ser_antiunify"
+    "numera/ser_absint"
+    "numera/ser_cascade"
+    "numera/ser_cascade2"
+    "numera/ser_regalloc"
+    "numera/ser_egraph"
+    "numera/ser_intent"
     # Phase C: Proof-Carrying Code -- the one permitted generative synthesis. pcc_verify =
     # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
     # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.

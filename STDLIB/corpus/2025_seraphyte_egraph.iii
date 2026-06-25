@@ -12,41 +12,41 @@
  */
 module corpus_2025_seraphyte_egraph
 
-extern @abi(c-msvc-x64) fn eg_reset() -> i32 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_var() -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_const(v: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_saturate() -> u32 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
 
 const EG_ADD : u32 = 2u32
 const EG_MUL : u32 = 4u32
 
 fn main() -> u64 {
-    eg_reset()
-    let x  : u64 = eg_var()
-    let m7 : u64 = eg_intern(EG_MUL, x, eg_const(7u64))
-    let m15: u64 = eg_intern(EG_MUL, x, eg_const(15u64))
-    let z  : u64 = eg_intern(EG_ADD, m7, eg_const(0u64))   /* (x*7) + 0 -- nested */
-    let one: u64 = eg_intern(EG_MUL, x, eg_const(1u64))    /* x*1 */
-    let m11: u64 = eg_intern(EG_MUL, x, eg_const(11u64))   /* irreducible */
+    seg_reset()
+    let x  : u64 = seg_var()
+    let m7 : u64 = seg_intern(EG_MUL, x, seg_const(7u64))
+    let m15: u64 = seg_intern(EG_MUL, x, seg_const(15u64))
+    let z  : u64 = seg_intern(EG_ADD, m7, seg_const(0u64))   /* (x*7) + 0 -- nested */
+    let one: u64 = seg_intern(EG_MUL, x, seg_const(1u64))    /* x*1 */
+    let m11: u64 = seg_intern(EG_MUL, x, seg_const(11u64))   /* irreducible */
 
-    let steps : u32 = eg_saturate()
+    let steps : u32 = seg_saturate()
     if steps == 0u32 { return 1u64 }   /* it actually saturated */
 
     /* ARM 1-2: x*7, x*15 -> shift-sub, cost 2 */
-    if eg_best_cost(m7) != 2u32 { return 2u64 }
-    if eg_best_cost(m15) != 2u32 { return 3u64 }
+    if seg_best_cost(m7) != 2u32 { return 2u64 }
+    if seg_best_cost(m15) != 2u32 { return 3u64 }
     /* ARM 3: nested (x*7)+0 -> 2 */
-    if eg_best_cost(z) != 2u32 { return 4u64 }
+    if seg_best_cost(z) != 2u32 { return 4u64 }
     /* ARM 4: x*1 -> x, cost 0 */
-    if eg_best_cost(one) != 0u32 { return 5u64 }
+    if seg_best_cost(one) != 0u32 { return 5u64 }
     /* ARM 5: x*11 irreducible -> 3 (the solver's residue) */
-    if eg_best_cost(m11) != 3u32 { return 6u64 }
+    if seg_best_cost(m11) != 3u32 { return 6u64 }
 
     /* ARM 6: confluence -- saturating again changes nothing; costs stable */
-    if eg_saturate() != 0u32 { return 7u64 }
-    if eg_best_cost(m7) != 2u32 { return 8u64 }
+    if seg_saturate() != 0u32 { return 7u64 }
+    if seg_best_cost(m7) != 2u32 { return 8u64 }
 
     return 99u64
 }

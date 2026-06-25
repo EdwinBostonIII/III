@@ -231,3 +231,21 @@ it universal, and the family is proven to PROVABLY extend beyond the observed in
   GREEN 59/0) — NOT an operator blocker.
 - BEYOND this closure (deferred, not claimed): the population/ecology (Phases 7–9) and the optional
   iiis-0 seed re-freeze (supply-chain hygiene, off the critical path).
+
+---
+
+## PART XIV — HORIZON CLOSED (2026-06-25): the named frontiers, landed + gated
+
+Each frontier from Part XIII is now a gated organ (pinned-iiis-2 standalone), no-ML, no-island:
+
+| Frontier | Resolution | Gate |
+|---|---|---|
+| Deeper cascade (collapse → DCE) | `ser_cascade2` — terminating + behaviour-preserving multi-pass fixpoint; + the worse-before-better non-local optimum via annealed `mcmc_egraph` | **2023=99**; teeth rc=5 |
+| Register reallocation | `ser_regalloc` (`sra_*`) — the cascade's DCE frees a register; a required spill is eliminated | **2024=99**; teeth rc=5 |
+| Arbitrary-IR e-graphs | `ser_egraph` (`seg_*`) — hash-cons + union-find + saturate-to-fixpoint + min-cost extraction over general `+,−,*,<<` trees | **2025=99** |
+| **Intent as a target e-class** (capstone) | `ser_intent` — the e-graph as an INTER-MODULE SYNTHESIS LINKER: a contract is a target class, a bv_ring PROOF triggers the e-class merge, extraction yields the cheapest provably-correct impl. Intent = inverse of intuition (a Galois adjunction). Supersedes Curry-Howard for automated discovery (machine bridges the gap, not the human). | **2026=99**; teeth rc=4 |
+| Event-substrate wiring | `ser_absint` (2021) routes candidates on the witnessed `event_substrate` log; `ser_intent` (2026) emits declare/propose/merge as a replayable stream | 2021=99, 2026=99 |
+| **Build hygiene / carto ledger** | RESOLVED — genuine `@export` collisions renamed (`eg_→seg_`, `ra_→sra_`, `cb_→cf_`); prior-WIP `sd/sm_selftest` duplicates deduped. **carto GATE PASS** (exit 0). All 9 organs in `build_stdlib` MODULES; the canonical build compiles them in. | carto exit 0 |
+
+Still open (named, not blurred): a FULLER end-to-end event-driven pipeline (discover→prove→apply→cascade as
+one witnessed fold); and Curry-Howard→silicon, which the **intent-linker supersedes** for this architecture.

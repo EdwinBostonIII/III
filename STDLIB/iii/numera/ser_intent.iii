@@ -26,12 +26,12 @@
  */
 module numera_ser_intent
 
-extern @abi(c-msvc-x64) fn eg_reset() -> i32 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_var() -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_const(v: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_union(x: u64, y: u64) -> u32 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn eg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_union(x: u64, y: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
 
 extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
 extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
@@ -55,12 +55,12 @@ var IN_V : [u64; 1]   /* the contract's target factor v */
 
 /* Module A's INTENT: declare the contract "a value == x*v" as a TARGET e-class.  Returns the target handle. */
 fn in_declare(v: u64) -> u64 @export {
-    eg_reset()
+    seg_reset()
     evt_reset()
-    let x : u64 = eg_var()
+    let x : u64 = seg_var()
     IN_X[0u64] = x
     IN_V[0u64] = v
-    let spec : u64 = eg_intern(IN_MUL, x, eg_const(v))
+    let spec : u64 = seg_intern(IN_MUL, x, seg_const(v))
     evt_perceive(1u64, 1u64, v, spec)          /* INTENT declared */
     return spec
 }
@@ -75,15 +75,15 @@ fn in_propose_shlsub(handle: u64, k: u64) -> u32 @export {
     evt_perceive(1u64, 2u64, k, proven as u64)   /* PROPOSAL (with its verdict) */
     if proven != 1u8 { return 0u32 }              /* no proof -> NO merge (soundness) */
     let x : u64 = IN_X[0u64]
-    let cand : u64 = eg_intern(IN_SUB, eg_intern(IN_SHL, x, eg_const(k)), x)
-    eg_union(handle, cand)
+    let cand : u64 = seg_intern(IN_SUB, seg_intern(IN_SHL, x, seg_const(k)), x)
+    seg_union(handle, cand)
     evt_perceive(1u64, 3u64, k, cand)             /* MERGE (proof-triggered) */
     return 1u32
 }
 
 /* EXTRACTION: the cheapest PROVABLY-CORRECT implementation of the contract (the naive multiply is the
  * fallback at cost 3; a proven shl-sub lowers it to 2). */
-fn in_resolve(handle: u64) -> u32 @export { return eg_best_cost(handle) }
+fn in_resolve(handle: u64) -> u32 @export { return seg_best_cost(handle) }
 
 /* the replayable witness of the whole intent resolution (declare -> propose -> merge). */
 fn in_witness() -> u64 @export { return evt_witness(evt_count()) }

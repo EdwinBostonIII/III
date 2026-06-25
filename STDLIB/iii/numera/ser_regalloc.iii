@@ -7,13 +7,13 @@
  *
  * THE ALLOCATOR (deterministic, no heuristics, no ML): live values are intervals [start,end] on the linear
  * schedule.  The register DEMAND at any point is the number of simultaneously-live intervals; for interval
- * graphs the chromatic number equals the MAX overlap (ra_pressure).  With K physical registers, the values
+ * graphs the chromatic number equals the MAX overlap (sra_pressure).  With K physical registers, the values
  * that cannot be coloured are SPILLED: spills(K) = max(0, pressure - K).  Spilling is behaviour-preserving
  * (a spilled value is stored/reloaded, same result, only slower) -- so the allocation never changes meaning.
  *
- * THE CASCADE: ra_kill(i) removes a DEAD interval (a value the cascade's DCE proved unused).  Killing a dead
- * value at the pressure peak drops ra_pressure -> drops spills.  So: cascade collapses ops -> DCE kills a
- * value -> ra_kill drops pressure -> a spill is gone.  One proof, propagating to the register file.
+ * THE CASCADE: sra_kill(i) removes a DEAD interval (a value the cascade's DCE proved unused).  Killing a dead
+ * value at the pressure peak drops sra_pressure -> drops spills.  So: cascade collapses ops -> DCE kills a
+ * value -> sra_kill drops pressure -> a spill is gone.  One proof, propagating to the register file.
  *
  * NO-ML: a fixed interval-overlap computation; no learned allocation, no statistics.  Determinism: integer.
  * Hexad: kind_act.  Ring: R0.  K: 0.99.  NIH: self-contained interval model (composes the cf_ block's DCE).
@@ -25,8 +25,8 @@ var RA_END   : [u64; 32]
 var RA_DEAD  : [u32; 32]    /* 1 = killed by the cascade's DCE (excluded from pressure) */
 var RA_N     : [u32; 1]
 
-fn ra_reset() -> i32 @export { RA_N[0u64] = 0u32  return 0i32 }
-fn ra_push(start: u64, end: u64) -> i32 @export {
+fn sra_reset() -> i32 @export { RA_N[0u64] = 0u32  return 0i32 }
+fn sra_push(start: u64, end: u64) -> i32 @export {
     let n : u32 = RA_N[0u64]
     if n >= 32u32 { return -1i32 }
     RA_START[n as u64] = start
@@ -37,10 +37,10 @@ fn ra_push(start: u64, end: u64) -> i32 @export {
 }
 
 /* the cascade's DCE killed value i -- it no longer occupies a register. */
-fn ra_kill(i: u32) -> i32 @export { if i < RA_N[0u64] { RA_DEAD[i as u64] = 1u32 }  return 0i32 }
+fn sra_kill(i: u32) -> i32 @export { if i < RA_N[0u64] { RA_DEAD[i as u64] = 1u32 }  return 0i32 }
 
 /* live at point p? (alive interval covering p, not killed) */
-fn ra_live_at(i: u32, p: u64) -> u32 {
+fn sra_live_at(i: u32, p: u64) -> u32 {
     if RA_DEAD[i as u64] == 1u32 { return 0u32 }
     if RA_START[i as u64] > p { return 0u32 }
     if RA_END[i as u64] < p { return 0u32 }
@@ -49,7 +49,7 @@ fn ra_live_at(i: u32, p: u64) -> u32 {
 
 /* MAX register pressure = the largest number of simultaneously-live (non-dead) intervals over the schedule.
  * For interval graphs this is exactly the registers required (chromatic number). */
-fn ra_pressure() -> u32 @export {
+fn sra_pressure() -> u32 @export {
     let n : u32 = RA_N[0u64]
     let mut maxp : u32 = 0u32
     /* sweep the schedule points 0..maxend */
@@ -60,7 +60,7 @@ fn ra_pressure() -> u32 @export {
     while p <= maxend {
         let mut live : u32 = 0u32
         let mut i : u32 = 0u32
-        while i < n { live = live + ra_live_at(i, p)  i = i + 1u32 }
+        while i < n { live = live + sra_live_at(i, p)  i = i + 1u32 }
         if live > maxp { maxp = live }
         p = p + 1u64
     }
@@ -68,8 +68,8 @@ fn ra_pressure() -> u32 @export {
 }
 
 /* spills with K physical registers: the values that cannot be coloured at the pressure peak. */
-fn ra_spills(k: u32) -> u32 @export {
-    let pr : u32 = ra_pressure()
+fn sra_spills(k: u32) -> u32 @export {
+    let pr : u32 = sra_pressure()
     if pr > k { return pr - k }
     return 0u32
 }

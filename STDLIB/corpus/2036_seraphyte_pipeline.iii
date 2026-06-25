@@ -25,6 +25,8 @@ extern @abi(c-msvc-x64) fn svp_pipeline(v: u64) -> u64 from "ser_pipeline.iii"
 extern @abi(c-msvc-x64) fn svp_pipeline_rejects(v: u64) -> u8 from "ser_pipeline.iii"
 extern @abi(c-msvc-x64) fn svp_selftest() -> u64 from "ser_pipeline.iii"
 extern @abi(c-msvc-x64) fn svp_autopoietic_wave() -> u64 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_absint_predecide(k: u32, v: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_kinduct_sym() -> u8 from "ser_pipeline.iii"
 
 fn main() -> u64 {
     /* ARM 1 -- INTUITION: cg_synth picks shift-sub {2,3,cost 2} for x*7 */
@@ -39,6 +41,8 @@ fn main() -> u64 {
     if svp_fixpoint_dce(7u64) != 1u8 { return 6u64 }             /* COLLAPSE: fixpoint + DCE */
     if svp_regalloc_frees() != 1u8 { return 7u64 }               /* COLLAPSE: regalloc spill elimination */
     if svp_aligned() != 1u8 { return 8u64 }                      /* ALIGN: temporal safe + live */
+    if svp_absint_predecide(3u32, 7u64) != 1u8 { return 14u64 }  /* ABSTRACT (ser_absint): O(1) shift-sub pre-decide */
+    if svp_kinduct_sym() != 1u8 { return 15u64 }                 /* SYMBOLIC k-induction (ser_kinduct_sym) */
 
     /* ARM 7 -- the full pipeline accepts 7 (every gate green; eidos committed) */
     if svp_pipeline(7u64) != 99u64 { return 9u64 }

@@ -114,6 +114,25 @@ fn svp_regalloc_frees() -> u8 @export {
 /* ALIGN: the rewrite's temporal choreography is provably safe + live (k-induction + causal + liveness). */
 fn svp_aligned() -> u8 @export { return tdrv_compile() }
 
+/* ABSTRACT PRE-DECIDE (ser_absint -- the Astrée O(1) abstract, no solver): the shift-linear abstract decides
+ * x*v's shift-sub form VALID and the wrong (shladd) form REFUTED in closed form, BEFORE the kernel proof --
+ * the prune that keeps the solver viable.  1 = the O(1) verdicts hold (and agree with the kernel). */
+extern @abi(c-msvc-x64) fn ai_decide(kind: u32, j: u32, m: u32, v: u64) -> u32 from "ser_absint.iii"
+fn svp_absint_predecide(k: u32, v: u64) -> u8 @export {
+    if ai_decide(4u32, k, 0u32, v) != 1u32 { return 0u8 }   /* (x<<k)-x == v*x  : O(1) VALID   */
+    if ai_decide(3u32, k, 0u32, v) != 0u32 { return 0u8 }   /* (x<<k)+x (=2^k+1, wrong) : O(1) REFUTED */
+    return 1u8
+}
+
+/* SYMBOLIC k-INDUCTION (ser_kinduct_sym -- complements tdrv's concrete k-induction in ALIGN): a symbolic
+ * invariant -- x+2 preserves evenness (proven), x+1 breaks it (refuted).  1 = both hold. */
+extern @abi(c-msvc-x64) fn sks_pres_even(inc: u64) -> u8 from "ser_kinduct_sym.iii"
+fn svp_kinduct_sym() -> u8 @export {
+    if sks_pres_even(2u64) != 1u8 { return 0u8 }
+    if sks_pres_even(1u64) != 0u8 { return 0u8 }
+    return 1u8
+}
+
 /* THE FULL PIPELINE for a real family factor v: intuition -> prove -> intent -> collapse x3 -> align ->
  * witness(eidos ACCEPT).  Returns 99 iff EVERY organ's real output succeeds.  The eidos frontier commits only
  * when all gates are green -- so each organ is load-bearing in the accept decision. */
@@ -127,6 +146,8 @@ fn svp_pipeline(v: u64) -> u64 @export {
     let mut verdict: u64 = 0u64
     if cga_dispose(k, k, 64u32) == 1u8 { verdict = SVP_GATE }
     if verdict != SVP_GATE { return 3u64 }
+    /* ABSTRACT (ser_absint, Astrée O(1), no solver): pre-decide the shift-sub VALID before the heavy work. */
+    if svp_absint_predecide(k, v) != 1u8 { return 11u64 }
     /* INTENT: the contract is fulfilled by the proof (the e-class merge). */
     if svp_intent_fulfilled(v, k as u64) != 1u8 { return 4u64 }
     /* COLLAPSE: non-local cascade, deeper fixpoint+DCE, regalloc spill elimination. */
@@ -135,6 +156,8 @@ fn svp_pipeline(v: u64) -> u64 @export {
     if svp_regalloc_frees() != 1u8 { return 7u64 }
     /* ALIGN: temporal safe + live. */
     if svp_aligned() != 1u8 { return 8u64 }
+    /* SYMBOLIC k-induction (ser_kinduct_sym -- complements the concrete ALIGN above). */
+    if svp_kinduct_sym() != 1u8 { return 12u64 }
     /* WITNESS: reset the field clean (the align/collapse organs share the event_substrate), then record the
      * ACCEPT in isolation so the committed frontier reflects exactly this pipeline's decision. */
     sev_begin()

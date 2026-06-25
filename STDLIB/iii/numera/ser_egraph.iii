@@ -207,13 +207,14 @@ fn seg_op_cost(op: u32) -> u32 {
 }
 
 var EG_BEST : [u32; 512]
+var EG_CHOICE : [u64; 512]   /* the min-cost member node chosen for each class (the extracted form) */
 const EG_INF : u32 = 1000000u32
 
 /* min-cost extraction: best[class] = min over class members of (op_cost + best[child classes]). */
 fn seg_best_cost(node: u64) -> u32 @export {
     let n : u32 = EG_N[0u64]
     let mut i : u32 = 0u32
-    while i < n { EG_BEST[i as u64] = EG_INF  i = i + 1u32 }
+    while i < n { EG_BEST[i as u64] = EG_INF  EG_CHOICE[i as u64] = i as u64  i = i + 1u32 }
     let mut iter : u32 = 0u32
     while iter < 512u32 {
         let mut changed : u32 = 0u32
@@ -229,10 +230,73 @@ fn seg_best_cost(node: u64) -> u32 @export {
                 }
             }
             let r : u64 = seg_find(m as u64)
-            if c < EG_BEST[r] { EG_BEST[r] = c  changed = 1u32 }
+            if c < EG_BEST[r] { EG_BEST[r] = c  EG_CHOICE[r] = m as u64  changed = 1u32 }
             m = m + 1u32
         }
         if changed == 0u32 { iter = 512u32 } else { iter = iter + 1u32 }
     }
     return EG_BEST[seg_find(node)]
+}
+
+/* ====== SYNTHESIS -> PROOF: translate the extracted form into bv_ring and prove it == x*v (EIDOS-VM) ====== */
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+/* walk the EXTRACTED min-cost form (EG_CHOICE, populated by seg_best_cost) into a bv_ring expression.
+ * SHL's second child is the constant shift amount -- read its value, do not recurse it as a bv const. */
+fn seg_to_bv(node: u64) -> u32 {
+    let c : u64 = EG_CHOICE[seg_find(node)]
+    let op : u32 = EG_OP[c]
+    if op == EG_VAR { return bv_var(0u32) }
+    if op == EG_CONST { return bv_const(EG_A[c]) }
+    if op == EG_SHL {
+        let sa : u32 = seg_to_bv(EG_A[c])
+        let k : u64 = EG_A[EG_B[c]]
+        return bv_shl(sa, k as u32)
+    }
+    let la : u32 = seg_to_bv(EG_A[c])
+    let lb : u32 = seg_to_bv(EG_B[c])
+    if op == EG_ADD { return bv_add(la, lb) }
+    if op == EG_SUB { return bv_sub(la, lb) }
+    if op == EG_MUL { return bv_mul(la, lb) }
+    return la
+}
+
+/* THE SYNTHESIS->PROOF LOOP: saturate MUL(x,v), extract the cost-optimal form, prove it == x*v over ALL 2^64
+ * (bv_ring).  1 = the discovered form is CERTIFIED equivalent -- with no per-factor rule: the e-graph derived
+ * the form from generic laws, bv_ring proves it.  This is what makes the synthesis proof-carrying. */
+fn seg_prove_mul(v: u64) -> u8 @export {
+    seg_reset()
+    let x : u64 = seg_var()
+    let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
+    seg_saturate()
+    let bc : u32 = seg_best_cost(mul)
+    if bc >= EG_INF { return 0u8 }
+    bv_reset()
+    let xb : u32 = bv_var(0u32)
+    let target : u32 = bv_mul(xb, bv_const(v))
+    let formb : u32 = seg_to_bv(mul)
+    return bv_equal(formb, target)
+}
+
+/* the falsifier: the SAME extracted form proven against a WRONG target (x*wrong) must REJECT -- the proof is
+ * specific to v, not vacuously true. */
+fn seg_prove_mul_wrong(v: u64, wrong: u64) -> u8 @export {
+    seg_reset()
+    let x : u64 = seg_var()
+    let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
+    seg_saturate()
+    let bc : u32 = seg_best_cost(mul)
+    if bc >= EG_INF { return 0u8 }
+    bv_reset()
+    let xb : u32 = bv_var(0u32)
+    let target : u32 = bv_mul(xb, bv_const(wrong))
+    let formb : u32 = seg_to_bv(mul)
+    return bv_equal(formb, target)
 }

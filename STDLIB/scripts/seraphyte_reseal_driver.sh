@@ -228,7 +228,7 @@ else say "  DECISION: REJECT (gate not all-green) -- leaving emitted source for 
 
 hr; say "STEP 5 -- ROLLBACK teeth: emit an UNSOUND variant, prove the gate refuses + auto-revert byte-exact"
 SOUND_SHA="$(sha256sum "$BOOT" | cut -d' ' -f1)"
-git checkout HEAD -- "${F3[@]}"                                  # back to rule-absent
+git checkout "$BASELINE_REF" -- "${F3[@]}"                       # back to rule-absent (the baseline, NOT HEAD which now HAS the rule -- else the idempotent emitter skips the unsound emit)
 bash STDLIB/scripts/seraphyte_emit_rule.sh subk 7 R3_STR_SUBQ subq unsound >/dev/null 2>&1   # over-admitting rule
 rebuild_iiis2
 RCU="$(gate_cor_selftest)"

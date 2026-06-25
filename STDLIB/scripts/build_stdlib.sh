@@ -1698,6 +1698,31 @@ if [[ $FAIL -eq 0 ]]; then
         OBJS+=("$RH_OBJ")
     fi
 
+    # Path C: the strength-reduction RULE TABLE the STDLIB certifier (forcefield/cg_opt_rules.iii ->
+    # cor_selftest, corpus 2002) kernel-/SAT-proves and the bind gate binds to cg_r3's real emission.
+    # The table lives in the TRUSTED BASE (COMPILER/BOOT/cg_opt_rules.iii, module boot_cg_opt_rules) --
+    # zero-deps, integer-only -- so compile it into the archive HERE.  Without this, a fresh archive (the
+    # MODULES loop has no boot entry) drops boot_cg_opt_rules.iii.o, and cor_selftest cannot link
+    # cgopt_mul_admit/shift_k/shladd_admit/shladd_k -> corpus 2002 link-fails.  Previously the member was
+    # hand-injected into the committed archive; this phase makes a CLEAN rebuild reproduce it.
+    CGOPT_SRC="$STDLIB_DIR/../COMPILER/BOOT/cg_opt_rules.iii"
+    CGOPT_OBJ="$BUILD_DIR/boot_cg_opt_rules.iii.o"
+    if [[ -f "$CGOPT_SRC" ]]; then
+        _cgc=1
+        for _co in 1 2 3; do
+            rm -f "$CGOPT_OBJ"
+            if "$IIIS" "$CGOPT_SRC" --compile-only --out "$CGOPT_OBJ" 2>"$BUILD_DIR/boot_cg_opt_rules.build.log"; then _cgc=0; break; fi
+            sleep 1
+        done
+        if [[ $_cgc -eq 0 ]]; then
+            echo "[build_stdlib] OK   COMPILER/BOOT/cg_opt_rules.iii -> $CGOPT_OBJ"
+            OBJS+=("$CGOPT_OBJ")
+        else
+            echo "[build_stdlib] FAIL COMPILER/BOOT/cg_opt_rules.iii (see $BUILD_DIR/boot_cg_opt_rules.build.log)" >&2
+            FAIL=$((FAIL+1)); FAILED+=("boot/cg_opt_rules")
+        fi
+    fi
+
     # Build the archive FRESH. ar's `r` (insert/replace) does NOT remove members
     # absent from OBJS, so a module dropped from MODULES (e.g. the sid->crystal_deps
     # rename) leaves a STALE .o baked in -> duplicate L_* symbols under --whole-archive

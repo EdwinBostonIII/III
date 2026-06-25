@@ -125,6 +125,7 @@ declare -A EXPECTED=(
     [2023_seraphyte_cascade_fixpoint]=99
     [2024_seraphyte_regalloc]=99
     [2025_seraphyte_egraph]=99
+    [2026_seraphyte_intent]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

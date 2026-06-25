@@ -66,7 +66,7 @@ fn eg_find(x: u64) -> u64 @export {
     while EG_PARENT[r] != r { r = EG_PARENT[r] }
     return r
 }
-fn eg_union(x: u64, y: u64) -> u32 {
+fn eg_union(x: u64, y: u64) -> u32 @export {
     let rx : u64 = eg_find(x)
     let ry : u64 = eg_find(y)
     if rx == ry { return 0u32 }

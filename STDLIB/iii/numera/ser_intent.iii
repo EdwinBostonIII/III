@@ -1,0 +1,89 @@
+/* STDLIB/iii/numera/ser_intent.iii -- INTENT AS A TARGET E-CLASS: the e-graph as inter-module synthesis linker.
+ *
+ * Intent is the INVERSE of intuition (a Galois adjunction): intuition generalises instances -> a shape
+ * (numera/ser_antiunify); intent demands a shape -> the implementation that fits it (this).  A module's intent
+ * is NOT a human feeling -- it is a module-to-module geometric boundary, a CONTRACT, deterministic.  Here that
+ * contract is dropped into the e-graph as a TARGET e-class ("a value == x*v"); synthesis grows candidate
+ * implementations; and -- the epiphany -- the e-classes MERGE only when the multi-engine certifier PROVES a
+ * candidate equivalent to the contract.  Extraction then walks the cheapest fulfilling path.
+ *
+ * This repurposes the e-graph from a local optimiser into an INTER-MODULE SYNTHESIS LINKER -- not standard
+ * (egg-style e-graphs optimise a complete program; SyGuS/CEGIS build from scratch on a raw SMT solver).  Here
+ * the e-graph holds an UNFULFILLED contract, the membrane+CEGIS grow toward it, and a SYMBOLIC proof triggers
+ * the merge.  It outclasses Curry-Howard FOR THIS ARCHITECTURE: the burden of discovery is the machine's
+ * (saturate the topological map until a proven bridge connects state to target), not a human proof tree.
+ *
+ * SOUNDNESS (the conscience line): a merge fires ONLY on a bv_ring proof of equivalence over ALL 2^64 -- so
+ * every member of the intent class is PROVABLY equal to the contract, and in_resolve returns a provably-correct
+ * cheapest implementation.  A candidate whose proof FAILS never merges (in_propose returns 0, zero state change).
+ *
+ * EVENT-DRIVEN: the contract, each proposal, and each proven merge are perceived on the witnessed
+ * event_substrate log -> the intent resolution is a replayable, foldable process.  NO-ML: fixed grammar, a
+ * deductive proof gate, a deterministic extraction; no model, no statistics.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes numera/ser_egraph (the map) + numera/bv_ring (the
+ * certifier that merges) + omnia/event_substrate (the witnessed bus) -- no island.
+ */
+module numera_ser_intent
+
+extern @abi(c-msvc-x64) fn eg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn eg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn eg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn eg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(x: u64, y: u64) -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn eg_best_cost(node: u64) -> u32 from "ser_egraph.iii"
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+
+const IN_MUL : u32 = 4u32
+const IN_SUB : u32 = 3u32
+const IN_SHL : u32 = 5u32
+
+var IN_X : [u64; 1]   /* the shared variable node */
+var IN_V : [u64; 1]   /* the contract's target factor v */
+
+/* Module A's INTENT: declare the contract "a value == x*v" as a TARGET e-class.  Returns the target handle. */
+fn in_declare(v: u64) -> u64 @export {
+    eg_reset()
+    evt_reset()
+    let x : u64 = eg_var()
+    IN_X[0u64] = x
+    IN_V[0u64] = v
+    let spec : u64 = eg_intern(IN_MUL, x, eg_const(v))
+    evt_perceive(1u64, 1u64, v, spec)          /* INTENT declared */
+    return spec
+}
+
+/* SYNTHESIS proposal: Module B offers (x<<k)-x.  The certifier must PROVE it == x*v over ALL 2^64; ONLY a
+ * proof triggers the e-class MERGE.  1 = proven + merged; 0 = proof failed, zero state change. */
+fn in_propose_shlsub(handle: u64, k: u64) -> u32 @export {
+    let v : u64 = IN_V[0u64]
+    bv_reset()
+    let bx : u32 = bv_var(0u32)
+    let proven : u8 = bv_equal(bv_sub(bv_shl(bx, k as u32), bx), bv_mul(bx, bv_const(v)))
+    evt_perceive(1u64, 2u64, k, proven as u64)   /* PROPOSAL (with its verdict) */
+    if proven != 1u8 { return 0u32 }              /* no proof -> NO merge (soundness) */
+    let x : u64 = IN_X[0u64]
+    let cand : u64 = eg_intern(IN_SUB, eg_intern(IN_SHL, x, eg_const(k)), x)
+    eg_union(handle, cand)
+    evt_perceive(1u64, 3u64, k, cand)             /* MERGE (proof-triggered) */
+    return 1u32
+}
+
+/* EXTRACTION: the cheapest PROVABLY-CORRECT implementation of the contract (the naive multiply is the
+ * fallback at cost 3; a proven shl-sub lowers it to 2). */
+fn in_resolve(handle: u64) -> u32 @export { return eg_best_cost(handle) }
+
+/* the replayable witness of the whole intent resolution (declare -> propose -> merge). */
+fn in_witness() -> u64 @export { return evt_witness(evt_count()) }

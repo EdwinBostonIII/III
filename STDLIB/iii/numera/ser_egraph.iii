@@ -311,7 +311,8 @@ fn seg_prove_mul_against(v: u64, target: u64) -> u8 @export {
     let formb : u32 = seg_to_bv(mul)
     return bv_equal(formb, tgt)
 }
-fn seg_prove_mul(v: u64) -> u8 @export { return seg_prove_mul_against(v, v) }
+/* (seg_prove_mul wrapper removed -- redundant with seg_prove_mul_against(v,v); the corpus calls against directly,
+ *  proving BOTH outcomes of the one symbol.) */
 
 /* the cost of the cost-optimal extracted form for x*v.  < seg_op_cost(EG_MUL)=4 means a genuine shift
  * reduction was chosen (not imul-in-disguise); callers gate emission on this. */

@@ -1,26 +1,24 @@
-/* STDLIB/corpus/2051_eidos_synth_proof.iii -- SYNTHESIS -> PROOF, the loop USED (EIDOS-VM capstone half).
- *
- * For each factor v: the e-graph DISCOVERS the cost-optimal shift-form by saturation (generic laws only),
- * seg_to_bv translates it to bv_ring, and bv_equal PROVES it == x*v over ALL 2^64 -- proof-carrying synthesis
- * with no per-factor rule.  Includes a factor with NO named family (11) and the conscience's teeth: the
- * discovered form is proven SPECIFIC to v (the 7-form is refuted against 8x).  99 = every form certified.
+/* STDLIB/corpus/2051_eidos_synth_proof.iii -- SYNTHESIS -> SYMBOLIC PROOF (one of several witnesses; the
+ * load-bearing one is the gold standard / seg_eval).  seg_prove_mul_against(v, target) saturates MUL(x,v),
+ * extracts the cost-optimal form, and bv_ring-checks it against x*target.  BOTH outcomes of the one symbol are
+ * proven: against(v,v)==1 (the discovered form IS x*v) and against(v,wrong)==0 (it is SPECIFIC to v, not vacuous).
  */
 module corpus_2051_eidos_synth_proof
 
-extern @abi(c-msvc-x64) fn seg_prove_mul(v: u64) -> u8 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_prove_mul_against(v: u64, wrong: u64) -> u8 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_prove_mul_against(v: u64, target: u64) -> u8 from "ser_egraph.iii"
 
 fn main() -> u64 {
-    if seg_prove_mul(2u64) != 1u8 { return 1u64 }     /* pow2: x<<1 */
-    if seg_prove_mul(7u64) != 1u8 { return 2u64 }     /* subk: (x<<3)-x */
-    if seg_prove_mul(10u64) != 1u8 { return 3u64 }    /* 2-shift: (x<<3)+(x<<1) */
-    if seg_prove_mul(11u64) != 1u8 { return 4u64 }    /* NO named family (imul today) */
-    if seg_prove_mul(100u64) != 1u8 { return 5u64 }   /* multi-bit */
-    if seg_prove_mul(255u64) != 1u8 { return 6u64 }   /* 2^8-1 (subk) */
-    if seg_prove_mul(1000u64) != 1u8 { return 7u64 }  /* big */
+    /* outcome 1: the synthesized form for v is PROVEN == x*v over all 2^64. */
+    if seg_prove_mul_against(2u64, 2u64)       != 1u8 { return 1u64 }   /* pow2 */
+    if seg_prove_mul_against(7u64, 7u64)       != 1u8 { return 2u64 }   /* subk */
+    if seg_prove_mul_against(10u64, 10u64)     != 1u8 { return 3u64 }   /* 2-shift */
+    if seg_prove_mul_against(11u64, 11u64)     != 1u8 { return 4u64 }   /* no named family */
+    if seg_prove_mul_against(100u64, 100u64)   != 1u8 { return 5u64 }   /* multi-bit */
+    if seg_prove_mul_against(255u64, 255u64)   != 1u8 { return 6u64 }   /* 2^8-1 (subk) */
+    if seg_prove_mul_against(1000u64, 1000u64) != 1u8 { return 7u64 }   /* big */
 
-    /* TEETH: the proof is specific to v, not vacuous. */
-    if seg_prove_mul_against(7u64, 8u64) != 0u8 { return 8u64 }    /* (x<<3)-x is NOT 8x */
-    if seg_prove_mul_against(10u64, 12u64) != 0u8 { return 9u64 }  /* (x<<3)+(x<<1) is NOT 12x */
+    /* outcome 0 (TEETH): the form is SPECIFIC to v -- proving it against a WRONG target REJECTS. */
+    if seg_prove_mul_against(7u64, 8u64)   != 0u8 { return 8u64 }       /* (x<<3)-x is NOT 8x */
+    if seg_prove_mul_against(10u64, 12u64) != 0u8 { return 9u64 }       /* (x<<3)+(x<<1) is NOT 12x */
     return 99u64
 }

@@ -13,6 +13,7 @@ extern @abi(c-msvc-x64) fn caus_ripple(op: u32, arg: u64) -> u64 from "ser_causa
 extern @abi(c-msvc-x64) fn caus_commute_events(i: u32, j: u32) -> u8 from "ser_causal.iii"
 extern @abi(c-msvc-x64) fn caus_collapse(n: u32) -> u32 from "ser_causal.iii"
 extern @abi(c-msvc-x64) fn caus_epoch_of(i: u32) -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_n_epochs() -> u32 from "ser_causal.iii"
 extern @abi(c-msvc-x64) fn caus_orderings_to_check(n: u32) -> u64 from "ser_causal.iii"
 extern @abi(c-msvc-x64) fn caus_witness() -> u64 from "ser_causal.iii"
 extern @abi(c-msvc-x64) fn caus_commute(opA: u32, argA: u64, opB: u32, argB: u64) -> u8 from "ser_causal.iii"
@@ -28,6 +29,7 @@ fn main() -> u64 {
     caus_ripple(CAUS_ADD, 5u64)
     caus_ripple(CAUS_SUB, 2u64)
     if caus_collapse(3u32) != 1u32 { return 1u64 }
+    if caus_n_epochs() != 1u32 { return 11u64 }                 /* the partition-size accessor agrees */
     if caus_orderings_to_check(3u32) != 1u64 { return 2u64 }     /* 6 -> 1: O(N!) -> O(1), measured */
     if caus_witness() == 0u64 { return 3u64 }
 

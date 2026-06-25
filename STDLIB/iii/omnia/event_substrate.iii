@@ -163,7 +163,7 @@ fn evt_find_payload(value: u64, upto: u32) -> u32 @export {
  * log (not just append), the read half of the event-driven contract. */
 fn evt_payload_at(i: u32) -> u64 @export { if i >= EVT_COUNT { return 0u64 }  return EVT_PAYLOAD[i] }
 fn evt_kind_at(i: u32) -> u64 @export { if i >= EVT_COUNT { return 0u64 }  return EVT_KIND[i] }
-fn evt_prio_at(i: u32) -> u64 @export { if i >= EVT_COUNT { return 0u64 }  return EVT_PRIORITY[i] }
+/* (evt_prio_at removed -- speculative/unused export; add it back when a real consumer needs it.) */
 
 /* evt_detect_cycle: find the FIRST payload that recurs -- a repeated position/term -- and set the cycle to
  * [first_occurrence, here).  Returns the cycle LENGTH (here - first_occurrence), or 0 if no payload

@@ -1,0 +1,44 @@
+/* STDLIB/corpus/2032_seraphyte_causal.iii -- causal-collapse via proven commutativity, gated.
+ *
+ * The defeat of the O(N!) interleaving explosion: bv_ring proves which ripples commute, collapsing them into
+ * one unordered causal epoch (no ordering to unroll).  99 = the proofs are correct.
+ *
+ *   ARM 1-6  commutativity verdicts: ADD+ADD, MUL+MUL, ADD+SUB, SHL+SHL commute; ADD+SHL, ADD+MUL do NOT.
+ *   ARM 7    a set of pairwise-commuting ripples {ADD,ADD,SUB} collapses to ONE epoch (O(N!) -> O(1) here).
+ *   ARM 8    a set with a non-commuting pair {ADD,SHL} does NOT collapse -- it is genuinely causally ordered.
+ */
+module corpus_2032_seraphyte_causal
+
+extern @abi(c-msvc-x64) fn caus_commute(opA: u32, argA: u64, opB: u32, argB: u64) -> u8 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_one_epoch(ops: *u32, args: *u64, n: u32) -> u8 from "ser_causal.iii"
+
+const ADD : u32 = 0u32
+const SUB : u32 = 1u32
+const MUL : u32 = 2u32
+const SHL : u32 = 3u32
+
+var EP_OPS  : [u32; 3]
+var EP_ARGS : [u64; 3]
+
+fn main() -> u64 {
+    /* ARM 1-6: the commutativity certificates (proven over all 2^64) */
+    if caus_commute(ADD, 3u64, ADD, 5u64) != 1u8 { return 1u64 }   /* +3,+5 commute             */
+    if caus_commute(ADD, 3u64, SHL, 2u64) != 0u8 { return 2u64 }   /* +3 and <<2 do NOT          */
+    if caus_commute(MUL, 3u64, MUL, 5u64) != 1u8 { return 3u64 }   /* *3,*5 commute              */
+    if caus_commute(ADD, 3u64, SUB, 5u64) != 1u8 { return 4u64 }   /* +3,-5 commute              */
+    if caus_commute(ADD, 3u64, MUL, 5u64) != 0u8 { return 5u64 }   /* +3 and *5 do NOT           */
+    if caus_commute(SHL, 1u64, SHL, 2u64) != 1u8 { return 6u64 }   /* <<1,<<2 commute (= <<3)    */
+
+    /* ARM 7: {+3, +5, -2} all pairwise commute -> ONE causal epoch */
+    EP_OPS[0u64] = ADD  EP_ARGS[0u64] = 3u64
+    EP_OPS[1u64] = ADD  EP_ARGS[1u64] = 5u64
+    EP_OPS[2u64] = SUB  EP_ARGS[2u64] = 2u64
+    if caus_one_epoch((&EP_OPS as u64) as *u32, (&EP_ARGS as u64) as *u64, 3u32) != 1u8 { return 7u64 }
+
+    /* ARM 8: {+3, <<2} does NOT collapse -- causally ordered */
+    EP_OPS[0u64] = ADD  EP_ARGS[0u64] = 3u64
+    EP_OPS[1u64] = SHL  EP_ARGS[1u64] = 2u64
+    if caus_one_epoch((&EP_OPS as u64) as *u32, (&EP_ARGS as u64) as *u64, 2u32) != 0u8 { return 8u64 }
+
+    return 99u64
+}

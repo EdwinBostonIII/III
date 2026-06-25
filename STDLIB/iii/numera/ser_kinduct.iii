@@ -1,0 +1,103 @@
+/* STDLIB/iii/numera/ser_kinduct.iii -- the TEMPORAL SIEVE: k-induction for the proof-gated temporal merge.
+ *
+ * The temporal membrane (ser_tgraph) is a BOUNDED refuter -- it can find a deadlock in k steps, but it cannot
+ * PROVE infinite safety, so it cannot trigger an e-class merge.  The operator named the fix exactly:
+ * k-INDUCTION.  To prove an LTL safety invariant P holds for ALL reachable states (infinite time):
+ *     BASE:      the initial state satisfies P.
+ *     INDUCTIVE: for ANY state s with P(s), EVERY transition s -> s' preserves P(s').
+ * If both discharge, P is invariant -- universally, for all time.  This is the temporal cousin of the
+ * spatial sieve: the combinational miter P(s) & T(s,s') & ~P(s') must be UNSAT (here, exhaustively over the
+ * finite state geometry -- the bit-blast bv_bits would do for larger systems).
+ *
+ * The system: a lock-based MUTEX, state = (lock, p1_cs, p2_cs) (3 bits, 8 states).  The temporal intent is
+ * MUTUAL EXCLUSION: G ~(p1_cs & p2_cs).  The subtlety the sieve exposes (and the membrane misses): the bare
+ * invariant ~(p1 & p2) is NOT 1-inductive -- an UNREACHABLE state (p1 in CS with the lock free) satisfies it
+ * yet steps to a violation.  The STRENGTHENED invariant (lock == p1|p2) & ~(p1&p2) IS 1-inductive -> the
+ * merge fires, proving mutual exclusion for every reachable state.  Strengthening-to-induction is the
+ * mathematical handshake the operator described.
+ *
+ * NO-ML: a fixed transition relation + exhaustive induction; no statistics.  Hexad: kind_essence.  Ring: R0.
+ * K: 1.00.  NIH: self-contained finite-state model checker (the bv_bits-backed lift is the unbounded path).
+ */
+module numera_ser_kinduct
+
+fn ski_lock(s: u32) -> u32 { return s & 1u32 }
+fn ski_p1(s: u32) -> u32 { return (s >> 1u32) & 1u32 }
+fn ski_p2(s: u32) -> u32 { return (s >> 2u32) & 1u32 }
+
+/* the transition relation: successor of s under move m (disabled move = stutter).
+ * moves: 0 p1-enter, 1 p1-exit, 2 p2-enter, 3 p2-exit, 4 stutter. */
+fn ski_succ(s: u32, m: u32) -> u32 @export {
+    if m == 0u32 { if ski_lock(s) == 0u32 { return s | 3u32 }  return s }   /* enter: set lock + p1_cs */
+    if m == 1u32 { if ski_p1(s) == 1u32 { return s & 4u32 }    return s }   /* exit: clear lock + p1_cs  */
+    if m == 2u32 { if ski_lock(s) == 0u32 { return s | 5u32 }  return s }   /* enter: set lock + p2_cs */
+    if m == 3u32 { if ski_p2(s) == 1u32 { return s & 2u32 }    return s }   /* exit: clear lock + p2_cs  */
+    return s
+}
+
+/* the bare temporal intent: ~(p1_cs & p2_cs). */
+fn ski_weak(s: u32) -> u32 { if ski_p1(s) == 1u32 { if ski_p2(s) == 1u32 { return 0u32 } }  return 1u32 }
+/* the strengthened (inductive) invariant: (lock == p1|p2) & ~(p1&p2). */
+fn ski_strong(s: u32) -> u32 {
+    if ski_weak(s) == 0u32 { return 0u32 }
+    let pv : u32 = ski_p1(s) | ski_p2(s)
+    if ski_lock(s) == pv { return 1u32 }
+    return 0u32
+}
+fn ski_inv(s: u32, strong: u32) -> u32 { if strong == 1u32 { return ski_strong(s) }  return ski_weak(s) }
+
+/* BASE: the initial state (0 = lock=0,p1=0,p2=0) satisfies the invariant. */
+fn ski_base(strong: u32) -> u32 { return ski_inv(0u32, strong) }
+
+/* INDUCTIVE: every P-state's every successor is a P-state (the miter P(s)&T(s,s')&~P(s') is UNSAT). */
+fn ski_inductive(strong: u32) -> u32 @export {
+    let mut s : u32 = 0u32
+    while s < 8u32 {
+        if ski_inv(s, strong) == 1u32 {
+            let mut m : u32 = 0u32
+            while m < 5u32 {
+                if ski_inv(ski_succ(s, m), strong) == 0u32 { return 0u32 }
+                m = m + 1u32
+            }
+        }
+        s = s + 1u32
+    }
+    return 1u32
+}
+
+/* the universal verdict: base & inductive => P holds for ALL reachable states, all time (the merge). */
+fn ski_universal(strong: u32) -> u32 @export {
+    if ski_base(strong) == 0u32 { return 0u32 }
+    if ski_inductive(strong) == 0u32 { return 0u32 }
+    return 1u32
+}
+
+/* independent ground truth: the reachable closure from init; 1 iff every reachable state is mutually-exclusive. */
+var SKI_MARK : [u32; 8]
+fn ski_reachable_safe() -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < 8u32 { SKI_MARK[i as u64] = 0u32  i = i + 1u32 }
+    SKI_MARK[0u64] = 1u32
+    let mut changed : u32 = 1u32
+    while changed == 1u32 {
+        changed = 0u32
+        let mut s : u32 = 0u32
+        while s < 8u32 {
+            if SKI_MARK[s as u64] == 1u32 {
+                let mut m : u32 = 0u32
+                while m < 5u32 {
+                    let sp : u32 = ski_succ(s, m)
+                    if SKI_MARK[sp as u64] == 0u32 { SKI_MARK[sp as u64] = 1u32  changed = 1u32 }
+                    m = m + 1u32
+                }
+            }
+            s = s + 1u32
+        }
+    }
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        if SKI_MARK[k as u64] == 1u32 { if ski_weak(k) == 0u32 { return 0u32 } }
+        k = k + 1u32
+    }
+    return 1u32
+}

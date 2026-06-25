@@ -1,0 +1,60 @@
+/* STDLIB/corpus/2030_seraphyte_tgraph.iii -- the TEMPORAL MEMBRANE (bounded model check), gated.
+ *
+ * The intent-linker rotated into time: a candidate event trace ALIGNS with the global temporal intent
+ * G(A => F B) & G ~(C & D) iff it MODELS the LTL invariant.  This is the temporal MEMBRANE -- a bounded
+ * refuter (like the concrete membrane for the spatial sieve): a violating trace is a counterexample (a
+ * deadlock or a safety breach) and is instantly rejected.  99 = truth aligns, violations are refused.
+ *
+ *   ARM 1  ALIGNED: A fires at t0, B follows at t2; C,D never coincide -> liveness + safety hold.
+ *   ARM 2  LIVENESS VIOLATION: A fires but B never follows -> rejected (the deadlock counterexample).
+ *   ARM 3  SAFETY VIOLATION: C and D hold simultaneously at t1 -> rejected (the race counterexample).
+ *   ARM 4  ALIGNED (two obligations): A at t0->B at t1, A at t2->B at t3.
+ */
+module corpus_2030_seraphyte_tgraph
+
+extern @abi(c-msvc-x64) fn stg_build() -> i32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_atom(i: u64) -> u64 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_aligned(len: u64) -> u8 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 from "temporal_logic.iii"
+
+/* set atom i's truth across a length-4 trace (b0..b3). */
+fn settrace(i: u64, b0: u8, b1: u8, b2: u8, b3: u8) {
+    let a : u64 = stg_atom(i)
+    tl_trace_set(a, 0u64, b0)  tl_trace_set(a, 1u64, b1)  tl_trace_set(a, 2u64, b2)  tl_trace_set(a, 3u64, b3)
+}
+
+fn main() -> u64 {
+    /* ARM 1: ALIGNED -- A@t0, B@t2 ; no C&D */
+    stg_build()
+    settrace(0u64, 1u8,0u8,0u8,0u8)   /* A */
+    settrace(1u64, 0u8,0u8,1u8,0u8)   /* B */
+    settrace(2u64, 0u8,0u8,0u8,0u8)   /* C */
+    settrace(3u64, 0u8,0u8,0u8,0u8)   /* D */
+    if stg_aligned(4u64) != 1u8 { return 1u64 }
+
+    /* ARM 2: LIVENESS VIOLATION -- A@t0 but B never */
+    stg_build()
+    settrace(0u64, 1u8,0u8,0u8,0u8)   /* A */
+    settrace(1u64, 0u8,0u8,0u8,0u8)   /* B never */
+    settrace(2u64, 0u8,0u8,0u8,0u8)
+    settrace(3u64, 0u8,0u8,0u8,0u8)
+    if stg_aligned(4u64) != 0u8 { return 2u64 }
+
+    /* ARM 3: SAFETY VIOLATION -- C&D at t1 */
+    stg_build()
+    settrace(0u64, 0u8,0u8,0u8,0u8)
+    settrace(1u64, 0u8,0u8,0u8,0u8)
+    settrace(2u64, 0u8,1u8,0u8,0u8)   /* C@t1 */
+    settrace(3u64, 0u8,1u8,0u8,0u8)   /* D@t1 */
+    if stg_aligned(4u64) != 0u8 { return 3u64 }
+
+    /* ARM 4: ALIGNED -- two liveness obligations, both met */
+    stg_build()
+    settrace(0u64, 1u8,0u8,1u8,0u8)   /* A@t0,t2 */
+    settrace(1u64, 0u8,1u8,0u8,1u8)   /* B@t1,t3 */
+    settrace(2u64, 0u8,0u8,0u8,0u8)
+    settrace(3u64, 0u8,0u8,0u8,0u8)
+    if stg_aligned(4u64) != 1u8 { return 4u64 }
+
+    return 99u64
+}

@@ -1,0 +1,69 @@
+/* STDLIB/iii/numera/ser_causal.iii -- CAUSAL-COLLAPSE: defeat the interleaving explosion by proving commutativity.
+ *
+ * The graveyard of asynchronous verification is the O(N!) interleaving explosion: to k-induct over a system of
+ * N concurrent ripples, the naive harness must consider every ordering A-then-B, B-then-A, ...  The operator's
+ * insight: STOP MODELLING TIME, MODEL CAUSALITY.  Two ripples that COMMUTE -- A then B yields the bit-for-bit
+ * same state as B then A -- have no chronological order between them; they collapse into one unordered CAUSAL
+ * EPOCH.  The k-induction (numera/ser_kinduct) then unrolls k EPOCHS, not k! interleavings.
+ *
+ * The epiphany the operator named: III discovers commutativity as a NATIVE byproduct of its spatial oracle.
+ * caus_commute(A,B) hands the e-graph's bv_ring the miter  A(B(x)) == B(A(x))  over ALL 2^64 states; a proof
+ * merges the two orderings into one e-class -- a mathematical certificate that order is irrelevant.  Then
+ * SYMMETRY-BREAKING (pick an arbitrary canonical order for the proven-commutative pair) shears the redundant
+ * mirrored timelines from the search: O(N!) -> ~O(N).
+ *
+ * Ripples here are state transforms over GF-free Z/2^64: ADD(a), SUB(a), MUL(a), SHL(k).  This is the SOUND
+ * core; bv_bits lifts it to bitwise ripples (&,^,>>) where bv_ring (a ring) cannot reach.
+ *
+ * NO-ML: the commutativity verdict is a deductive proof, never a heuristic.  Hexad: kind_sensitivity.  Ring:
+ * R0.  K: 1.00.  NIH: composes numera/bv_ring (the same oracle that proves the spatial rewrites) -- no island.
+ */
+module numera_ser_causal
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+const CAUS_ADD : u32 = 0u32
+const CAUS_SUB : u32 = 1u32
+const CAUS_MUL : u32 = 2u32
+const CAUS_SHL : u32 = 3u32
+
+/* apply ripple (op,arg) to a bv_ring node x, returning the transformed node. */
+fn caus_apply(op: u32, arg: u64, x: u32) -> u32 {
+    if op == CAUS_ADD { return bv_add(x, bv_const(arg)) }
+    if op == CAUS_SUB { return bv_sub(x, bv_const(arg)) }
+    if op == CAUS_MUL { return bv_mul(x, bv_const(arg)) }
+    if op == CAUS_SHL { return bv_shl(x, arg as u32) }
+    return x
+}
+
+/* THE COMMUTATIVITY PROOF: 1 iff A(B(x)) == B(A(x)) for ALL x in Z/2^64 (the e-class merge of the two
+ * orderings -- order is provably irrelevant).  This is the causal-collapse certificate. */
+fn caus_commute(opA: u32, argA: u64, opB: u32, argB: u64) -> u8 @export {
+    bv_reset()
+    let x  : u32 = bv_var(0u32)
+    let ab : u32 = caus_apply(opA, argA, caus_apply(opB, argB, x))   /* A then B */
+    let ba : u32 = caus_apply(opB, argB, caus_apply(opA, argA, x))   /* B then A */
+    return bv_equal(ab, ba)
+}
+
+/* a candidate causal EPOCH = a set of pairwise-commuting ripples (encoded op<<32|arg in the array).  1 iff
+ * every pair commutes -> the whole set collapses to ONE unordered epoch (no interleaving to unroll). */
+fn caus_one_epoch(ops: *u32, args: *u64, n: u32) -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32
+        while j < n {
+            if caus_commute(ops[i as u64], args[i as u64], ops[j as u64], args[j as u64]) != 1u8 { return 0u8 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return 1u8
+}

@@ -1,0 +1,40 @@
+/* STDLIB/corpus/2031_seraphyte_kinduct.iii -- the TEMPORAL SIEVE (k-induction), gated.
+ *
+ * Universal infinite-time safety for a lock-mutex by base + inductive step -- the proof that triggers the
+ * temporal e-class merge (where the bounded membrane can only refute).  99 = all arms.
+ *
+ *   ARM 0  the transition relation is correct (p1 enters from init -> lock+p1; p1 exits -> init).
+ *   ARM 1  the BARE intent ~(p1&p2) is NOT 1-inductive -- an unreachable state steps to a violation (the gap
+ *          the bounded membrane misses but k-induction exposes).
+ *   ARM 2  so the bare intent is NOT universally proven.
+ *   ARM 3  the STRENGTHENED invariant (lock==p1|p2)&~(p1&p2) IS 1-inductive.
+ *   ARM 4  => MUTUAL EXCLUSION is PROVEN for ALL reachable states, all time (the merge fires).
+ *   ARM 5  ground truth: the reachable closure from init is in fact mutually-exclusive (the proof is sound,
+ *          not vacuous).
+ */
+module corpus_2031_seraphyte_kinduct
+
+extern @abi(c-msvc-x64) fn ski_succ(s: u32, m: u32) -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_inductive(strong: u32) -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_universal(strong: u32) -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_reachable_safe() -> u32 from "ser_kinduct.iii"
+
+fn main() -> u64 {
+    /* ARM 0: transition sanity */
+    if ski_succ(0u32, 0u32) != 3u32 { return 1u64 }   /* p1 enter from init -> lock+p1 (0b011) */
+    if ski_succ(0u32, 2u32) != 5u32 { return 2u64 }   /* p2 enter from init -> lock+p2 (0b101) */
+    if ski_succ(3u32, 1u32) != 0u32 { return 3u64 }   /* p1 exit from (lock,p1) -> init */
+
+    /* ARM 1-2: the bare invariant fails induction => not universally proven */
+    if ski_inductive(0u32) != 0u32 { return 4u64 }
+    if ski_universal(0u32) != 0u32 { return 5u64 }
+
+    /* ARM 3-4: the strengthened invariant is inductive => mutual exclusion proven for all time (the merge) */
+    if ski_inductive(1u32) != 1u32 { return 6u64 }
+    if ski_universal(1u32) != 1u32 { return 7u64 }
+
+    /* ARM 5: the proof is sound -- every reachable state really is mutually-exclusive */
+    if ski_reachable_safe() != 1u32 { return 8u64 }
+
+    return 99u64
+}

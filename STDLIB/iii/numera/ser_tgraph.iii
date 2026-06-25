@@ -1,0 +1,74 @@
+/* STDLIB/iii/numera/ser_tgraph.iii -- TEMPORAL E-GRAPH: the intent-linker rotated 90 degrees into TIME.
+ *
+ * ser_intent (corpus 2026) makes a SPATIAL contract a target e-class -- "a value == x*v" -- and merges a
+ * candidate only on a proof.  This is the TEMPORAL rotation the operator named: the target is no longer a
+ * value but the MATHEMATICAL INVARIANT OF A GLOBAL STATE OVER TIME, written in Linear Temporal Logic.  The
+ * "alignment metric" (the e-class handshake) becomes: a candidate event TRACE merges with the temporal intent
+ * iff the certifier proves the trace SATISFIES the LTL invariant -- emergent choreography, deadlock made
+ * mathematically impossible at compile time.
+ *
+ * This is NOT a new engine: III already verifies LTL (numera/temporal_logic: G/F/U) and uses it in production
+ * (aether/hotstuff proves G(quorum => F advance), the BFT liveness theorem).  This organ COMPOSES it as the
+ * temporal target.  The intent here, the canonical safety+liveness pair:
+ *     G(A => F B)   -- liveness: whenever ripple A fires, state B must EVENTUALLY follow
+ *     G ~(C & D)    -- safety:   states C and D must NEVER hold simultaneously
+ * A candidate trace is ALIGNED iff it models both.  The bounded check (tl_trace_eval over a length-len trace)
+ * is the temporal cousin of bv_bits' combinational miter -- the event_substrate log IS the trace.
+ *
+ * NO-ML: fixed LTL semantics, a deterministic trace evaluator; no statistics.  Hexad: kind_essence.  Ring: R0.
+ * K: 1.00.  NIH: composes numera/temporal_logic (tl_*) -- no island, no reinvented model checker.
+ */
+module numera_ser_tgraph
+
+extern @abi(c-msvc-x64) fn tl_init() -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_alloc_formula() -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_atom(slot: u32, pred_slot: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_not(slot: u32, child: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_bin(slot: u32, tag: u8, l: u32, r: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_unary_temp(slot: u32, tag: u8, child: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_set_root(slot: u32, root: u32) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_trace_eval(formula_slot: u32, len: u64) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_trace_holds(node: u64, pos: u64) -> u8 from "temporal_logic.iii"
+
+const STG_NOT : u8 = 1u8
+const STG_AND : u8 = 2u8
+const STG_IMPL : u8 = 4u8
+const STG_ALWAYS : u8 = 6u8   /* G */
+const STG_EVENT : u8 = 7u8    /* F */
+
+var STG_F    : [u32; 1]
+var STG_ATOM : [u64; 4]   /* A, B, C, D atom nodes */
+var STG_ROOT : [u64; 1]
+
+/* build the GLOBAL TEMPORAL INTENT: G(A => F B) & G ~(C & D). */
+fn stg_build() -> i32 @export {
+    tl_init()
+    let f : u32 = tl_alloc_formula()
+    STG_F[0u64] = f
+    let a : u32 = tl_append_atom(f, 0u32)
+    let b : u32 = tl_append_atom(f, 1u32)
+    let c : u32 = tl_append_atom(f, 2u32)
+    let d : u32 = tl_append_atom(f, 3u32)
+    STG_ATOM[0u64] = a as u64   STG_ATOM[1u64] = b as u64
+    STG_ATOM[2u64] = c as u64   STG_ATOM[3u64] = d as u64
+    let fb   : u32 = tl_append_unary_temp(f, STG_EVENT, b)        /* F B          */
+    let im   : u32 = tl_append_bin(f, STG_IMPL, a, fb)           /* A => F B     */
+    let live : u32 = tl_append_unary_temp(f, STG_ALWAYS, im)      /* G(A => F B)  */
+    let cd   : u32 = tl_append_bin(f, STG_AND, c, d)             /* C & D        */
+    let ncd  : u32 = tl_append_not(f, cd)                         /* ~(C & D)     */
+    let safe : u32 = tl_append_unary_temp(f, STG_ALWAYS, ncd)     /* G ~(C & D)   */
+    let root : u32 = tl_append_bin(f, STG_AND, live, safe)        /* live & safe  */
+    STG_ROOT[0u64] = root as u64
+    tl_set_root(f, root)
+    return 0i32
+}
+
+/* the atom-node handle for atom i (0=A,1=B,2=C,3=D) -- used by the caller to set the candidate trace. */
+fn stg_atom(i: u64) -> u64 @export { if i >= 4u64 { return 0u64 }  return STG_ATOM[i] }
+
+/* THE TEMPORAL ALIGNMENT VERDICT: 1 iff the current length-len candidate trace MODELS the temporal intent
+ * (the temporal e-class merge).  A trace that violates liveness or safety does NOT align. */
+fn stg_aligned(len: u64) -> u8 @export {
+    tl_trace_eval(STG_F[0u64], len)
+    return tl_trace_holds(STG_ROOT[0u64], 0u64)
+}

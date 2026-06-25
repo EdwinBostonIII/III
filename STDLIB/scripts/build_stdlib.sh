@@ -1233,6 +1233,9 @@ MODULES=(
     "numera/ser_regalloc"
     "numera/ser_egraph"
     "numera/ser_intent"
+    "numera/ser_tgraph"
+    "numera/ser_kinduct"
+    "numera/ser_causal"
     # Phase C: Proof-Carrying Code -- the one permitted generative synthesis. pcc_verify =
     # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
     # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.

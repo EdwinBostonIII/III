@@ -72,3 +72,12 @@ fn stg_aligned(len: u64) -> u8 @export {
     tl_trace_eval(STG_F[0u64], len)
     return tl_trace_holds(STG_ROOT[0u64], 0u64)
 }
+
+/* ====== PARAMETRIC BMC: evaluate ANY caller-built LTL formula against the caller's trace (EIDOS-VM Phase 1.2) ==
+ * The fixture above (G(A=>FB) & G~(C&D)) is now ONE instance; stg_check evaluates the formula the CALLER built
+ * via temporal_logic (tl_alloc_formula + tl_append_* + tl_set_root, passing the root node it created) over the
+ * trace the caller set (tl_trace_set) -- so the bounded model checker is a reusable engine over ANY property. */
+fn stg_check(formula: u32, root: u64, len: u64) -> u8 @export {
+    tl_trace_eval(formula, len)
+    return tl_trace_holds(root, 0u64)
+}

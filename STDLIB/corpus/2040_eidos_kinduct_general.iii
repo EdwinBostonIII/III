@@ -1,0 +1,45 @@
+/* STDLIB/corpus/2040_eidos_kinduct_general.iii -- k-induction over ANY caller-registered FSM (EIDOS-VM 1.1), gated.
+ * Two different FSMs proven through the general engine + the mutex SUBSUMED (general == the fixture).  99 = all. */
+module corpus_2040_eidos_kinduct_general
+
+extern @abi(c-msvc-x64) fn sfsm_reset() -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_n(n: u32) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_add_trans(src: u32, to: u32) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_inv(s: u32, holds: u8) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_init(s: u32, is_init: u8) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn ski_base_g() -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_inductive_g() -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_universal_g() -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_register_mutex() -> i32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_universal(strong: u32) -> u32 from "ser_kinduct.iii"
+
+/* FSM A: states {0,1,2}; invariant = {0,2}; edges 0->1, 1->2; init 0.  NOT inductive (0->1 leaves the invariant). */
+fn build_a() -> i32 {
+    sfsm_reset()  sfsm_set_n(3u32)
+    sfsm_add_trans(0u32, 1u32)  sfsm_add_trans(1u32, 2u32)
+    sfsm_set_inv(0u32, 1u8)  sfsm_set_inv(2u32, 1u8)
+    sfsm_set_init(0u32, 1u8)  return 0i32
+}
+/* FSM B: a 2-cycle {0<->1}; invariant = {0,1}; init 0.  Inductive. */
+fn build_b() -> i32 {
+    sfsm_reset()  sfsm_set_n(2u32)
+    sfsm_add_trans(0u32, 1u32)  sfsm_add_trans(1u32, 0u32)
+    sfsm_set_inv(0u32, 1u8)  sfsm_set_inv(1u32, 1u8)
+    sfsm_set_init(0u32, 1u8)  return 0i32
+}
+
+fn main() -> u64 {
+    build_a()
+    if ski_base_g() != 1u32 { return 1u64 }          /* init 0 is in the invariant */
+    if ski_inductive_g() != 0u32 { return 2u64 }     /* TEETH: 0->1 breaks the invariant -> NOT inductive */
+    if ski_universal_g() != 0u32 { return 3u64 }
+
+    build_b()
+    if ski_universal_g() != 1u32 { return 4u64 }     /* the 2-cycle invariant IS inductive */
+
+    /* SUBSUMPTION: the general engine reproduces the hardcoded mutex fixture exactly. */
+    ski_register_mutex()
+    if ski_universal_g() != ski_universal(1u32) { return 5u64 }   /* same verdict as the legacy fixture */
+    if ski_universal_g() != 1u32 { return 6u64 }                  /* the mutex strong invariant IS inductive */
+    return 99u64
+}

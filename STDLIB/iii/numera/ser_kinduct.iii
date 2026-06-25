@@ -101,3 +101,60 @@ fn ski_reachable_safe() -> u32 @export {
     }
     return 1u32
 }
+
+/* ====== GENERALIZED k-INDUCTION over ANY FSM registered in ser_fsm (EIDOS Verification Membrane Phase 1.1) ===
+ * The mutex above is now ONE instance; ski_*_g verify the CALLER's registered transition system + invariant
+ * (numera/ser_fsm), so k-induction is a reusable engine, not a demonstration of one example. */
+extern @abi(c-msvc-x64) fn sfsm_reset() -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_n(n: u32) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_add_trans(src: u32, to: u32) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_inv(s: u32, holds: u8) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_init(s: u32, is_init: u8) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_n() -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_trans_n() -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_trans_from(e: u32) -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_trans_to(e: u32) -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_inv(s: u32) -> u8 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_init(s: u32) -> u8 from "ser_fsm.iii"
+
+/* BASE: every initial state of the registered FSM satisfies the registered invariant. */
+fn ski_base_g() -> u32 @export {
+    let n : u32 = sfsm_n()
+    let mut s : u32 = 0u32
+    while s < n {
+        if sfsm_init(s) == 1u8 { if sfsm_inv(s) != 1u8 { return 0u32 } }
+        s = s + 1u32
+    }
+    return 1u32
+}
+/* INDUCTIVE STEP: every transition out of an invariant-state lands in an invariant-state (the UNSAT miter). */
+fn ski_inductive_g() -> u32 @export {
+    let m : u32 = sfsm_trans_n()
+    let mut e : u32 = 0u32
+    while e < m {
+        let f : u32 = sfsm_trans_from(e)
+        if sfsm_inv(f) == 1u8 { if sfsm_inv(sfsm_trans_to(e)) != 1u8 { return 0u32 } }
+        e = e + 1u32
+    }
+    return 1u32
+}
+fn ski_universal_g() -> u32 @export {
+    if ski_base_g() != 1u32 { return 0u32 }
+    if ski_inductive_g() != 1u32 { return 0u32 }
+    return 1u32
+}
+/* SUBSUMPTION: register the hardcoded mutex INTO ser_fsm (strong invariant + all edges), so the GENERAL engine
+ * reproduces the fixture -- proof the generalization is faithful (ski_universal_g here == ski_universal(1)). */
+fn ski_register_mutex() -> i32 @export {
+    sfsm_reset()
+    sfsm_set_n(8u32)
+    let mut s : u32 = 0u32
+    while s < 8u32 {
+        if ski_strong(s) == 1u32 { sfsm_set_inv(s, 1u8) }
+        let mut m : u32 = 0u32
+        while m < 5u32 { sfsm_add_trans(s, ski_succ(s, m))  m = m + 1u32 }
+        s = s + 1u32
+    }
+    sfsm_set_init(0u32, 1u8)
+    return 0i32
+}

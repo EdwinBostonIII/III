@@ -1,0 +1,55 @@
+/* STDLIB/corpus/2041_eidos_tgraph_general.iii -- BMC over ANY caller-built LTL formula (EIDOS-VM 1.2), gated.
+ * stg_check is called DIRECTLY with BOTH outcomes (1 and 0) over distinct caller-built formulas; each formula
+ * is isolated by tl_init.  99 = the parametric BMC engine distinguishes satisfied from violated properties. */
+module corpus_2041_eidos_tgraph_general
+
+extern @abi(c-msvc-x64) fn tl_init() -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_alloc_formula() -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_atom(slot: u32, pred_slot: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_unary_temp(slot: u32, tag: u8, child: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_set_root(slot: u32, root: u32) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn stg_check(formula: u32, root: u64, len: u64) -> u8 from "ser_tgraph.iii"
+
+const TL_ALWAYS : u8 = 6u8   /* G */
+const TL_EVENT  : u8 = 7u8   /* F */
+
+fn main() -> u64 {
+    /* DIRECT outcome 1 -- G A with A always true. */
+    tl_init()
+    let f1 : u32 = tl_alloc_formula()
+    let a1 : u32 = tl_append_atom(f1, 0u32)
+    let g1 : u32 = tl_append_unary_temp(f1, TL_ALWAYS, a1)
+    tl_set_root(f1, g1)
+    tl_trace_set(a1 as u64, 0u64, 1u8)  tl_trace_set(a1 as u64, 1u64, 1u8)  tl_trace_set(a1 as u64, 2u64, 1u8)
+    if stg_check(f1, g1 as u64, 3u64) != 1u8 { return 1u64 }
+
+    /* DIRECT outcome 0 (TEETH) -- G A violated at t=2. */
+    tl_init()
+    let f2 : u32 = tl_alloc_formula()
+    let a2 : u32 = tl_append_atom(f2, 0u32)
+    let g2 : u32 = tl_append_unary_temp(f2, TL_ALWAYS, a2)
+    tl_set_root(f2, g2)
+    tl_trace_set(a2 as u64, 0u64, 1u8)  tl_trace_set(a2 as u64, 1u64, 1u8)  tl_trace_set(a2 as u64, 2u64, 0u8)
+    if stg_check(f2, g2 as u64, 3u64) != 0u8 { return 2u64 }
+
+    /* a DIFFERENT operator (F), DIRECT outcome 1 -- F B holds (B true at t=1). */
+    tl_init()
+    let f3 : u32 = tl_alloc_formula()
+    let b3 : u32 = tl_append_atom(f3, 0u32)
+    let fb3 : u32 = tl_append_unary_temp(f3, TL_EVENT, b3)
+    tl_set_root(f3, fb3)
+    tl_trace_set(b3 as u64, 0u64, 0u8)  tl_trace_set(b3 as u64, 1u64, 1u8)  tl_trace_set(b3 as u64, 2u64, 0u8)
+    if stg_check(f3, fb3 as u64, 3u64) != 1u8 { return 3u64 }
+
+    /* F B, DIRECT outcome 0 (TEETH) -- B never true. */
+    tl_init()
+    let f4 : u32 = tl_alloc_formula()
+    let b4 : u32 = tl_append_atom(f4, 0u32)
+    let fb4 : u32 = tl_append_unary_temp(f4, TL_EVENT, b4)
+    tl_set_root(f4, fb4)
+    tl_trace_set(b4 as u64, 0u64, 0u8)  tl_trace_set(b4 as u64, 1u64, 0u8)  tl_trace_set(b4 as u64, 2u64, 0u8)
+    if stg_check(f4, fb4 as u64, 3u64) != 0u8 { return 4u64 }
+
+    return 99u64
+}

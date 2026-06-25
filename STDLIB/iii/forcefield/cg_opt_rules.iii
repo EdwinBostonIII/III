@@ -43,6 +43,9 @@ extern @abi(c-msvc-x64) fn cgopt_mul_subk_k(v: u64) -> u32 from "cg_opt_rules.ii
 extern @abi(c-msvc-x64) fn cgopt_mul_2sh_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2sh_j(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2sh_m(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_2ss_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_2ss_j(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_2ss_m(v: u64) -> u32 from "cg_opt_rules.iii"
 /* TWO INDEPENDENT proof engines for the shladd law (the kernel's refl CANNOT distribute mul over add, so
  * the pow2 certifier's engine does not transfer -- empirically confirmed).  (1) bv_ring: ALGEBRAIC, proves
  * the full range k=1..63 by polynomial normalization over Z/2^64 (distributivity, circuit-independent,
@@ -497,6 +500,90 @@ fn cor_2s_boot_agrees() -> u8 @export {
     return 1u8
 }
 
+/* ============================================================================================
+ * 2-SHIFT-SUBTRACT STRENGTH REDUCTION -- the SECOND emitter-produced family (seraphyte_add_2sub.sh):
+ * x*(2^j-2^m) -> (x<<j)-(x<<m) for CONTIGUOUS-RUN factors (14,28,30,56,60,...; even, popcount>=3, run not
+ * from bit 0).  Disjoint from 2-shift-add (popcount 2) and subk (run from bit 0).  Certified like cor_2s:
+ * bv_ring proves (x<<j)-(x<<m) == (2^j-2^m)*x across a representative table; shape + negative + boot agreement. */
+var COR_2SS_J      : [u64; 12]
+var COR_2SS_M      : [u64; 12]
+var COR_2SS_FACTOR : [u64; 12]
+var COR_2SS_INIT   : u64 = 0u64
+const COR_2SS_N    : u64 = 12u64
+fn cor_2ss_set(i: u64, j: u64, m: u64) -> u64 {
+    COR_2SS_J[i] = j
+    COR_2SS_M[i] = m
+    COR_2SS_FACTOR[i] = (1u64 << j) - (1u64 << m)
+    return 0u64
+}
+fn cor_2ss_init() -> u64 {
+    if COR_2SS_INIT == 1u64 { return 0u64 }
+    cor_2ss_set(0u64, 4u64, 1u64)      /* 14    */
+    cor_2ss_set(1u64, 5u64, 2u64)      /* 28    */
+    cor_2ss_set(2u64, 5u64, 1u64)      /* 30    */
+    cor_2ss_set(3u64, 6u64, 3u64)      /* 56    */
+    cor_2ss_set(4u64, 6u64, 2u64)      /* 60    */
+    cor_2ss_set(5u64, 10u64, 1u64)     /* 1022  */
+    cor_2ss_set(6u64, 8u64, 4u64)      /* 240   */
+    cor_2ss_set(7u64, 20u64, 3u64)
+    cor_2ss_set(8u64, 31u64, 1u64)
+    cor_2ss_set(9u64, 40u64, 20u64)
+    cor_2ss_set(10u64, 63u64, 1u64)    /* 2^63 - 2^1 */
+    cor_2ss_set(11u64, 63u64, 60u64)   /* 2^63 - 2^60 */
+    COR_2SS_INIT = 1u64
+    return 0u64
+}
+fn cor_2ss_rule_count() -> u64 @export { cor_2ss_init() return COR_2SS_N }
+/* SHAPE: factor == 2^j - 2^m, j > m >= 1, run length j-m >= 3. */
+fn cor_2ss_shape_jmf(j: u64, m: u64, factor: u64) -> u8 {
+    if m < 1u64 { return 0u8 }
+    if j <= m { return 0u8 }
+    if (j - m) < 3u64 { return 0u8 }
+    if j > 63u64 { return 0u8 }
+    if ((1u64 << j) - (1u64 << m)) != factor { return 0u8 }
+    return 1u8
+}
+/* ALGEBRAIC (bv_ring): (x<<j)-(x<<m) and x*factor are the SAME polynomial over Z/2^64. */
+fn cor_2ss_ring_certify_jmf(j: u64, m: u64, factor: u64) -> u8 {
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    return bv_equal(bv_sub(bv_shl(x, j as u32), bv_shl(x, m as u32)), bv_mul(x, bv_const(factor)))
+}
+/* 99 = every table rule passes; (900+i) shape fail; (950+i) algebraic fail. */
+fn cor_2ss_certify_all() -> u64 @export {
+    cor_2ss_init()
+    let mut i : u64 = 0u64
+    while i < COR_2SS_N {
+        if cor_2ss_shape_jmf(COR_2SS_J[i], COR_2SS_M[i], COR_2SS_FACTOR[i]) != 1u8 { return 900u64 + i }
+        if cor_2ss_ring_certify_jmf(COR_2SS_J[i], COR_2SS_M[i], COR_2SS_FACTOR[i]) != 1u8 { return 950u64 + i }
+        i = i + 1u64
+    }
+    return 99u64
+}
+fn cor_2ss_rejects_unsound() -> u8 @export {
+    if cor_2ss_shape_jmf(4u64, 1u64, 28u64) != 0u8 { return 0u8 }   /* 2^4-2^1=14 != 28 -> shape REJECTS */
+    if cor_2ss_shape_jmf(3u64, 1u64, 6u64) != 0u8 { return 0u8 }    /* j-m=2 < 3 (popcount-2, 2-add's) -> REJECTS */
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    if bv_equal(bv_sub(bv_shl(x, 4u32), bv_shl(x, 1u32)), bv_mul(x, bv_const(28u64))) != 0u8 { return 0u8 }  /* 14x != 28x */
+    return 1u8
+}
+fn cor_2ss_boot_agrees() -> u8 @export {
+    cor_2ss_init()
+    let mut i : u64 = 0u64
+    while i < COR_2SS_N {
+        if cgopt_mul_2ss_admit(COR_2SS_FACTOR[i]) != 1u32 { return 0u8 }
+        if (cgopt_mul_2ss_j(COR_2SS_FACTOR[i]) as u64) != COR_2SS_J[i] { return 0u8 }
+        if (cgopt_mul_2ss_m(COR_2SS_FACTOR[i]) as u64) != COR_2SS_M[i] { return 0u8 }
+        i = i + 1u64
+    }
+    if cgopt_mul_2ss_admit(24u64) != 0u32 { return 0u8 }   /* popcount-2 (2-add's) */
+    if cgopt_mul_2ss_admit(7u64) != 0u32 { return 0u8 }    /* odd (subk's) */
+    if cgopt_mul_2ss_admit(8u64) != 0u32 { return 0u8 }    /* pow2 */
+    if cgopt_mul_2ss_admit(22u64) != 0u32 { return 0u8 }   /* not a contiguous run */
+    return 1u8
+}
+
 fn cor_selftest() -> u64 @export {
     if cor_certify_all() != 99u64 { return cor_certify_all() }
     if cor_rejects_unsound() != 1u8 { return 5u64 }
@@ -513,5 +600,9 @@ fn cor_selftest() -> u64 @export {
     if c2s != 99u64 { return c2s }
     if cor_2s_rejects_unsound() != 1u8 { return 11u64 }
     if cor_2s_boot_agrees() != 1u8 { return 12u64 }
+    let c2ss : u64 = cor_2ss_certify_all()
+    if c2ss != 99u64 { return c2ss }
+    if cor_2ss_rejects_unsound() != 1u8 { return 13u64 }
+    if cor_2ss_boot_agrees() != 1u8 { return 14u64 }
     return 99u64
 }

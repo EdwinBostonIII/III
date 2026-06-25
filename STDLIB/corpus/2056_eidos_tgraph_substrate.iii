@@ -1,0 +1,45 @@
+/* STDLIB/corpus/2056_eidos_tgraph_substrate.iii -- BMC on the EVENT LOG (the tgraph island, fixed).
+ *
+ * ser_tgraph checked LTL over a synthetic tl_trace.  Now stg_check_events binds the EVENT LOG as the trace
+ * (atom a holds at position i iff event i has KIND a) and model-checks over evt_count() real events -- the
+ * membrane runs on the actual choreography on event_substrate.  99 = G(kind-0) holds over an all-kind-0
+ * stream and FAILS the instant an off-kind event is perceived (the property tracks the real event stream).
+ */
+module corpus_2056_eidos_tgraph_substrate
+
+extern @abi(c-msvc-x64) fn tl_init() -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_alloc_formula() -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_atom(slot: u32, pred_slot: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_unary_temp(slot: u32, tag: u8, child: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_set_root(slot: u32, root: u32) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn stg_check_events(formula: u32, root: u64, atom_nodes: *u64, n: u32) -> u8 from "ser_tgraph.iii"
+
+const TL_ALWAYS : u8 = 6u8   /* G */
+
+var ATOMS : [u64; 2]
+
+fn main() -> u64 {
+    /* property: G(kind-0) -- EVERY event in the stream is kind 0. */
+    tl_init()
+    let f : u32 = tl_alloc_formula()
+    let a0 : u32 = tl_append_atom(f, 0u32)
+    let a1 : u32 = tl_append_atom(f, 1u32)
+    let g : u32 = tl_append_unary_temp(f, TL_ALWAYS, a0)
+    tl_set_root(f, g)
+    ATOMS[0u64] = a0 as u64
+    ATOMS[1u64] = a1 as u64
+
+    /* an all-kind-0 event stream -> G(kind-0) HOLDS over the real log. */
+    evt_reset()
+    evt_perceive(1u64, 0u64, 0u64, 100u64)
+    evt_perceive(1u64, 0u64, 0u64, 200u64)
+    evt_perceive(1u64, 0u64, 0u64, 300u64)
+    if stg_check_events(f, g as u64, (&ATOMS as u64) as *u64, 2u32) != 1u8 { return 1u64 }
+
+    /* perceive an off-kind (kind-1) event -> G(kind-0) now FAILS (the property tracks the real stream). */
+    evt_perceive(1u64, 1u64, 0u64, 400u64)
+    if stg_check_events(f, g as u64, (&ATOMS as u64) as *u64, 2u32) != 0u8 { return 2u64 }
+    return 99u64
+}

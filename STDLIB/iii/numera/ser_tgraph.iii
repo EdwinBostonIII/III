@@ -29,6 +29,9 @@ extern @abi(c-msvc-x64) fn tl_append_unary_temp(slot: u32, tag: u8, child: u32) 
 extern @abi(c-msvc-x64) fn tl_set_root(slot: u32, root: u32) -> i32 from "temporal_logic.iii"
 extern @abi(c-msvc-x64) fn tl_trace_eval(formula_slot: u32, len: u64) -> i32 from "temporal_logic.iii"
 extern @abi(c-msvc-x64) fn tl_trace_holds(node: u64, pos: u64) -> u8 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_kind_at(i: u32) -> u64 from "event_substrate.iii"
 
 const STG_NOT : u8 = 1u8
 const STG_AND : u8 = 2u8
@@ -80,4 +83,26 @@ fn stg_aligned(len: u64) -> u8 @export {
 fn stg_check(formula: u32, root: u64, len: u64) -> u8 @export {
     tl_trace_eval(formula, len)
     return tl_trace_holds(root, 0u64)
+}
+
+/* ============================================================================================================
+ * EVENT-DRIVEN BMC (the architectural fix): the LTL trace IS the EVENT LOG, not a synthetic tl_trace.  Atom a
+ * holds at position i iff event i has KIND a -- so the membrane model-checks the REAL choreography on the
+ * substrate (event_substrate.evt_perceive).  atom_nodes[a] = the atom node bound to kind a; n = #atoms;
+ * the trace length = evt_count().  This is ser_tgraph CONSUMING the event log, the read half it was missing. */
+fn stg_check_events(formula: u32, root: u64, atom_nodes: *u64, n: u32) -> u8 @export {
+    let len : u64 = evt_count() as u64
+    let mut i : u64 = 0u64
+    while i < len {
+        let k : u64 = evt_kind_at(i as u32)
+        let mut a : u32 = 0u32
+        while a < n {
+            let mut truth : u8 = 0u8
+            if (a as u64) == k { truth = 1u8 }
+            tl_trace_set(atom_nodes[a as u64], i, truth)
+            a = a + 1u32
+        }
+        i = i + 1u64
+    }
+    return stg_check(formula, root, len)
 }

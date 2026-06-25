@@ -219,7 +219,7 @@ fn lpt(t: u32) -> i32 { let li:i32=lidx(t)  if li<0i32 {return 0i32-1i32}  retur
 fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 }  LN=LN+1u32  if LN>NLOC {NLOC=LN} } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
 fn emit_lget(slot:u32) { let mem:i64=LMEM[slot as u64]  if mem>=0i64 { econst(mem)  eload(LSZ[slot as u64], LSG[slot as u64]) } else { eu8(0x10u32, slot) } }   /* spilled local -> typed LOAD from its memory addr ; else LOCAL_GET (byte-identical for non-spilled) */
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
-var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AISC : [u32; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed ; AISC=1 if a global SCALAR (bare read = LOAD value, not array->ptr decay) */
+var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AISC : [u32; 1024]  var AROW : [i64; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed ; AISC=1 if a global SCALAR (bare read = LOAD value, not array->ptr decay) */
 fn aisc(t: u32) -> u32 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AISC[k as u64]}  k=k+1u32 }  return 0u32 }   /* is t a global scalar? */
 var DCM_MO:[u32;128]  var DCM_ML:[u32;128]  var DCM_AO:[u32;128]  var DCM_AL:[u32;128]  var DCM_N:u32=0u32   /* deferred array-count macros: `#define N (sizeof(ARR)/sizeof(ARR[0]))` -> resolve N to ALEN(ARR) at the USE site (ARR registered by then) */
 fn alen_by_name(o:u32, l:u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],o,l)==1u32 {return ALEN[k as u64] as i64}  k=k+1u32 }  return 0i64-1i64 }
@@ -335,6 +335,7 @@ fn opc(p: i64) -> u32 {
 }
 
 fn alen(t: u32) -> u64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return ALEN[k as u64]}  k=k+1u32 }  return 0u64 }
+fn arow(t: u32) -> i64 { let mut k:u32=0u32  while k<AN { if neq(AO[k as u64],AL[k as u64],TO[t as u64],TL[t as u64])==1u32 {return AROW[k as u64]}  k=k+1u32 }  return 0i64 }   /* row stride (C*esz) for a 2D array `T[R][C]` ; 0 = 1D */
 /* sizeof( type | TypedefName | struct/union X [*] | array | array[i] | struct-var | scalar ).  CCSV-consistent
  * sizes (int/uint32_t=8, char/uint8_t=1, ptr=8, struct=STSZ, array=count*elem) -- see GAP-MAP §4 re: vs C. */
 fn esizeof() {
@@ -708,7 +709,11 @@ fn eprim() {
         }
         if cp(Q_LBR)==1u32 {                                         /* NAME[i] : array / pointer index load (typed width) */
             let ab:i64=abase(t)
-            if ab>=0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)
+            if ab>=0i64 { let rs2d:i64=arow(t)
+                if rs2d>0i64 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  estride(rs2d)  if ab>0i64 { econst(ab)  eb(0x20u32) }   /* 2D `T ring[R][C]` READ: ring[i] -> base + i*rowstride (a row address) */
+                    if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz2:i64=aesize(t)  estride(sz2)  eb(0x20u32)  eload(sz2, asign(t)) }   /* ring[i][j] -> + j*esz ; LOADn (Step D) ; ring[i] alone leaves the row ptr (decay) */
+                    return }
+                C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(t)  let sg:u32=asign(t)
                 estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
                 let vt0:i32=avtype(t)  if vt0>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ft0:u32=C  C=C+1u32  let foff0:i64=fieldoff(vt0,ft0)  if foff0>0i64 {econst(foff0)  eb(0x20u32)}  eload(fieldelem(vt0,ft0), fieldsign(vt0,ft0))  return } }   /* T[i].field : struct-array element field READ */
                 if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,awmask(t),0u32,1u32)  return }   /* arr[i]++ */
@@ -1196,7 +1201,11 @@ fn pstmt() {
     } } }
     if TK[C as u64]==1u32 { if TK[(C+1u32) as u64]==3u32 { if TV[(C+1u32) as u64]==Q_LBR {   /* NAME[i] = e ; */
         let nt:u32=C  let ab:i64=abase(nt)
-        if ab>=0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let sg:u32=asign(nt)  let am:i64=awmask(nt)   /* arr[i] [op]= e (typed width) */
+        if ab>=0i64 { let rs2s:i64=arow(nt)
+            if rs2s>0i64 { C=C+2u32  ebin(0u32)  eat(Q_RBR)  estride(rs2s)  if ab>0i64 { econst(ab)  eb(0x20u32) }   /* 2D `T ring[R][C]` STORE: ring[i] -> base + i*rowstride */
+                if cp(Q_LBR)==1u32 { C=C+1u32  ebin(0u32)  eat(Q_RBR)  let sz2:i64=aesize(nt)  estride(sz2)  eb(0x20u32)  emit_av(sz2, asign(nt), awmask(nt)) }   /* ring[i][j] = e -> + j*esz ; emit_av store (Step D) */
+                eat(Q_SEMI)  return }
+            C=C+2u32  ebin(0u32)  eat(Q_RBR)  let sz:i64=aesize(nt)  let sg:u32=asign(nt)  let am:i64=awmask(nt)   /* arr[i] [op]= e (typed width) */
             estride(sz)  if ab>0i64 { econst(ab)  eb(0x20u32) }
             let vt1:i32=avtype(nt)  if vt1>=0i32 { if cp(Q_DOT)==1u32 { C=C+1u32  let ft1:u32=C  C=C+1u32  let foff1:i64=fieldoff(vt1,ft1)  if foff1>0i64 {econst(foff1)  eb(0x20u32)}  emit_av(fieldelem(vt1,ft1), fieldsign(vt1,ft1), fieldmask(vt1,ft1))  eat(Q_SEMI)  return } }   /* T[i].field = e : struct-array element field STORE */
             if cp(Q_INC)==1u32 { C=C+1u32  pinc_mem(sz,sg,am,0u32,1u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* arr[i]++ ; (statement: eval + DROP) */
@@ -1360,9 +1369,10 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
                 let mut nt:u32=q+1u32  let mut pelem:u32=0u32  let mut gpp:u32=1u32  while gpp==1u32 { if ispat(nt,Q_MUL)==1u32 { pelem=1u32  nt=nt+1u32 } else { if isqual(nt)==1u32 { nt=nt+1u32 } else {gpp=0u32} } }   /* `type *[const] NAME[]` -> pointer elements (8B) ; skip `*` runs + quals after (`char *const`) */
                 if TK[nt as u64]==1u32 { if ispat(nt+1u32,Q_LBR)==1u32 {                                             /* NAME [ NUM | empty ] [= {...}] */
                     let mut esz:i64=aesz_of(q)  if pelem==1u32 {esz=8i64}  let eszu:u64=esz as u64  let base:u64=MTOP
-                    let mut n:u64=0u64  let mut brc:u32=0u32  let mut have:u32=0u32  let mut strt:u32=0u32
+                    let mut n:u64=0u64  let mut brc:u32=0u32  let mut have:u32=0u32  let mut strt:u32=0u32  let mut arow_v:i64=0i64
                     if TK[(nt+2u32) as u64]==2u32 { n=TV[(nt+2u32) as u64] as u64                                   /* [NUM] */
-                        if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32  have=1u32 } else { if TK[(nt+5u32) as u64]==4u32 { strt=nt+5u32 } } } }
+                        if ispat(nt+4u32,Q_LBR)==1u32 { let cdim:u64=TV[(nt+5u32) as u64] as u64  arow_v=(cdim as i64)*esz  n=n*cdim }   /* `T NAME[R][C]` TRUE 2D array -> contiguous: row stride C*esz, total R*C elems (Step D) */
+                        else { if ispat(nt+4u32,Q_ASN)==1u32 { if ispat(nt+5u32,Q_LB)==1u32 { brc=nt+6u32  have=1u32 } else { if TK[(nt+5u32) as u64]==4u32 { strt=nt+5u32 } } } } }
                     else { if ispat(nt+2u32,Q_RBR)==1u32 { if ispat(nt+3u32,Q_ASN)==1u32 {
                         if ispat(nt+4u32,Q_LB)==1u32 {   /* [] = { ... } -> size from init count */
                             brc=nt+5u32  have=1u32  let mut cq:u32=brc  let mut cg2:u32=1u32
@@ -1371,7 +1381,7 @@ fn prescan_arr() {   /* `[quals] type NAME[NUM] [= { v0, ... }] ;` -> base in SV
                     } } }
                     if strt>0u32 { base=TV[strt as u64] as u64 }   /* char[] = "..." : ALIAS the string literal's data section bytes (no new storage / copy) */
                     if n>0u64 {
-                        AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=type_mask(q)  AESZ[AN as u64]=esz  ALEN[AN as u64]=n  ASGN[AN as u64]=type_signed(q)  AN=AN+1u32
+                        AO[AN as u64]=TO[nt as u64]  AL[AN as u64]=TL[nt as u64]  AB[AN as u64]=base  AVT[AN as u64]=0i32-1i32  AW[AN as u64]=type_mask(q)  AESZ[AN as u64]=esz  ALEN[AN as u64]=n  ASGN[AN as u64]=type_signed(q)  AROW[AN as u64]=arow_v  AN=AN+1u32
                         if strt==0u32 { MTOP=MTOP+(n*eszu) }   /* a string-aliased array owns no storage */
                         if have==1u32 {
                             let mut p:u32=brc  let mut idx:u64=0u64  let mut gg:u32=1u32

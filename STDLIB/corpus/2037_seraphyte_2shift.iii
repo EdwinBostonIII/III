@@ -30,7 +30,18 @@ fn chk(x: u64) -> u32 {
     return 0u32
 }
 
+extern @abi(c-msvc-x64) fn cor_2s_certify_all() -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_2s_rejects_unsound() -> u8 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_2s_boot_agrees() -> u8 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_2s_rule_count() -> u64 from "cg_opt_rules.iii"
+
 fn main() -> u64 {
+    /* the 2-shift rule is multi-engine CERTIFIED (bv_ring over a representative table) + the negative arm
+     * bites + the BOOT emitter agrees -- the same standing gate as subk/shladd, re-proven every build. */
+    if cor_2s_rule_count() == 0u64 { return 20u64 }
+    if cor_2s_certify_all() != 99u64 { return 21u64 }
+    if cor_2s_rejects_unsound() != 1u8 { return 22u64 }
+    if cor_2s_boot_agrees() != 1u8 { return 23u64 }
     if chk(0u64) != 0u32 { return 1u64 }
     if chk(1u64) != 0u32 { return 2u64 }
     if chk(2u64) != 0u32 { return 3u64 }

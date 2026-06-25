@@ -40,6 +40,9 @@ extern @abi(c-msvc-x64) fn cgopt_mul_shladd_k(v: u64) -> u32 from "cg_opt_rules.
 /* The NEW shl-sub emission law cg_r3 gained THIS SESSION (x*(2^k-1) -> (x<<k)-x), certified below identically. */
 extern @abi(c-msvc-x64) fn cgopt_mul_subk_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_subk_k(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_2sh_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_2sh_j(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_2sh_m(v: u64) -> u32 from "cg_opt_rules.iii"
 /* TWO INDEPENDENT proof engines for the shladd law (the kernel's refl CANNOT distribute mul over add, so
  * the pow2 certifier's engine does not transfer -- empirically confirmed).  (1) bv_ring: ALGEBRAIC, proves
  * the full range k=1..63 by polynomial normalization over Z/2^64 (distributivity, circuit-independent,
@@ -405,6 +408,95 @@ fn cor_ss_boot_agrees() -> u8 @export {
  * shl): kernel-certified width-faithfully, negative arm bites, boot emitter agrees.  SHL-ADD (x*(2^k+1) ->
  * shl+add) and SHL-SUB (x*(2^k-1) -> shl+sub): each certified by TWO independent engines (bv_ring full range
  * + bv_bits SAT sample), shape guard + negative arm + boot emitter agreement. 99 = every arm of ALL THREE. */
+/* ============================================================================================
+ * TWO-SHIFT STRENGTH REDUCTION -- the rule cg_r3 GAINED via seraphyte_add_2shift.sh (x*(2^j+2^m) ->
+ * (x<<j)+(x<<m): two shifts + one add in place of a full imul, for popcount-2 EVEN factors 6,10,12,20,...).
+ * Certified to the SAME standard as subk/shladd: the bv_ring ALGEBRAIC engine proves the EXACT emitted form
+ * (x<<j)+(x<<m) normalizes to the polynomial (2^j+2^m)*x over Z/2^64 across a representative table; a shape
+ * guard + negative arm + BOOT-emitter agreement make 99 non-vacuous. */
+var COR_2S_J      : [u64; 14]
+var COR_2S_M      : [u64; 14]
+var COR_2S_FACTOR : [u64; 14]
+var COR_2S_INIT   : u64 = 0u64
+const COR_2S_N    : u64 = 14u64
+fn cor_2s_set(i: u64, j: u64, m: u64) -> u64 {
+    COR_2S_J[i] = j
+    COR_2S_M[i] = m
+    COR_2S_FACTOR[i] = (1u64 << j) + (1u64 << m)
+    return 0u64
+}
+fn cor_2s_init() -> u64 {
+    if COR_2S_INIT == 1u64 { return 0u64 }
+    cor_2s_set(0u64, 2u64, 1u64)      /* 6    */
+    cor_2s_set(1u64, 3u64, 1u64)      /* 10   */
+    cor_2s_set(2u64, 3u64, 2u64)      /* 12   */
+    cor_2s_set(3u64, 4u64, 2u64)      /* 20   */
+    cor_2s_set(4u64, 5u64, 1u64)      /* 34   */
+    cor_2s_set(5u64, 5u64, 3u64)      /* 40   */
+    cor_2s_set(6u64, 5u64, 4u64)      /* 48   */
+    cor_2s_set(7u64, 10u64, 1u64)     /* 1026 */
+    cor_2s_set(8u64, 20u64, 4u64)
+    cor_2s_set(9u64, 31u64, 1u64)
+    cor_2s_set(10u64, 40u64, 20u64)
+    cor_2s_set(11u64, 62u64, 1u64)
+    cor_2s_set(12u64, 63u64, 1u64)    /* large edge: 2^63 + 2^1 */
+    cor_2s_set(13u64, 63u64, 62u64)   /* 2^63 + 2^62 */
+    COR_2S_INIT = 1u64
+    return 0u64
+}
+fn cor_2s_rule_count() -> u64 @export { cor_2s_init() return COR_2S_N }
+/* SHAPE: factor == 2^j + 2^m exactly, j > m >= 1. */
+fn cor_2s_shape_jmf(j: u64, m: u64, factor: u64) -> u8 {
+    if m < 1u64 { return 0u8 }
+    if j <= m { return 0u8 }
+    if j > 63u64 { return 0u8 }
+    if ((1u64 << j) + (1u64 << m)) != factor { return 0u8 }
+    return 1u8
+}
+/* ALGEBRAIC (bv_ring): (x<<j)+(x<<m) and x*factor are the SAME polynomial over Z/2^64. */
+fn cor_2s_ring_certify_jmf(j: u64, m: u64, factor: u64) -> u8 {
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    return bv_equal(bv_add(bv_shl(x, j as u32), bv_shl(x, m as u32)), bv_mul(x, bv_const(factor)))
+}
+/* 99 = every table rule passes shape + algebraic; (800+i) shape fail; (850+i) algebraic fail. */
+fn cor_2s_certify_all() -> u64 @export {
+    cor_2s_init()
+    let mut i : u64 = 0u64
+    while i < COR_2S_N {
+        if cor_2s_shape_jmf(COR_2S_J[i], COR_2S_M[i], COR_2S_FACTOR[i]) != 1u8 { return 800u64 + i }
+        if cor_2s_ring_certify_jmf(COR_2S_J[i], COR_2S_M[i], COR_2S_FACTOR[i]) != 1u8 { return 850u64 + i }
+        i = i + 1u64
+    }
+    return 99u64
+}
+/* PROVE-THE-NEGATIVE: a wrong decomposition is rejected by shape AND by the algebraic engine. */
+fn cor_2s_rejects_unsound() -> u8 @export {
+    if cor_2s_shape_jmf(3u64, 1u64, 12u64) != 0u8 { return 0u8 }    /* 2^3+2^1=10 != 12 -> shape REJECTS */
+    if cor_2s_shape_jmf(0u64, 0u64, 1u64) != 0u8 { return 0u8 }     /* m<1 -> REJECTS */
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    if bv_equal(bv_add(bv_shl(x, 3u32), bv_shl(x, 1u32)), bv_mul(x, bv_const(12u64))) != 0u8 { return 0u8 }  /* 10x != 12x */
+    return 1u8
+}
+/* BOOT-emitter agreement: the ACTUAL cgopt_mul_2sh_* cg_r3 delegates to agree with the certified table and
+ * REJECT what the certifier rejects (odd, pow2, popcount != 2). */
+fn cor_2s_boot_agrees() -> u8 @export {
+    cor_2s_init()
+    let mut i : u64 = 0u64
+    while i < COR_2S_N {
+        if cgopt_mul_2sh_admit(COR_2S_FACTOR[i]) != 1u32 { return 0u8 }
+        if (cgopt_mul_2sh_j(COR_2S_FACTOR[i]) as u64) != COR_2S_J[i] { return 0u8 }
+        if (cgopt_mul_2sh_m(COR_2S_FACTOR[i]) as u64) != COR_2S_M[i] { return 0u8 }
+        i = i + 1u64
+    }
+    if cgopt_mul_2sh_admit(7u64) != 0u32 { return 0u8 }    /* odd popcount-3 */
+    if cgopt_mul_2sh_admit(9u64) != 0u32 { return 0u8 }    /* 2^3+1 odd (shladd's) */
+    if cgopt_mul_2sh_admit(8u64) != 0u32 { return 0u8 }    /* pow2 */
+    if cgopt_mul_2sh_admit(11u64) != 0u32 { return 0u8 }   /* popcount-3 */
+    return 1u8
+}
+
 fn cor_selftest() -> u64 @export {
     if cor_certify_all() != 99u64 { return cor_certify_all() }
     if cor_rejects_unsound() != 1u8 { return 5u64 }
@@ -417,5 +509,9 @@ fn cor_selftest() -> u64 @export {
     if ss != 99u64 { return ss }
     if cor_ss_rejects_unsound() != 1u8 { return 9u64 }
     if cor_ss_boot_agrees() != 1u8 { return 10u64 }
+    let c2s : u64 = cor_2s_certify_all()
+    if c2s != 99u64 { return c2s }
+    if cor_2s_rejects_unsound() != 1u8 { return 11u64 }
+    if cor_2s_boot_agrees() != 1u8 { return 12u64 }
     return 99u64
 }

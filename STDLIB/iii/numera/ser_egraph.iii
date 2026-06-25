@@ -352,3 +352,80 @@ fn seg_eval_mul(v: u64, x: u64) -> u64 @export {
     seg_best_cost(mul)
     return seg_eval(mul, x)
 }
+
+/* ============================================================================================================
+ * INTENT (x) INTUITION -- the palindromic involution, realized (EIDOS-VM; the intent==inverse-of-intuition law).
+ *
+ * INTENT  is forward construction: v -> the synthesized form (the heavy e-graph saturation, above).
+ * INTUITION is the inverse-LOOKUP: given a STATE (a form node), read the ORIGIN v straight out of its e-class
+ *   (the class holds MUL(x,v) because the e-graph merged the form with it) -- no recomputation, an O(class)
+ *   retrieval, the divergence the thought experiment demands.
+ * The CHECKSUM is the involution f^-1(f(v)) == v.  A PARADOX is a class with TWO different origins (v1*x==v2*x
+ * for v1!=v2): a contradiction the sound engine never makes -- and if force-injected, seg_class_paradox CATCHES
+ * it.  This is the ban-on-inconsistency made mechanical: the substrate cannot hold a non-invertible state. */
+
+/* INTUITION: the origin v such that MUL(x,v) lies in `form`'s class (0 if none) -- inverse-lookup, not compute. */
+fn seg_class_const(form: u64) -> u64 {
+    let r : u64 = seg_find(form)
+    let n : u32 = EG_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        if seg_find(i as u64) == r {
+            if EG_OP[i as u64] == EG_MUL {
+                let b : u64 = EG_B[i as u64]
+                if EG_OP[b] == EG_CONST { return EG_A[b] }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u64
+}
+/* PARADOX DETECTOR: 1 iff `form`'s class holds two DIFFERENT MUL origins (v1*x == v2*x, v1!=v2 -- impossible). */
+fn seg_class_paradox(form: u64) -> u32 {
+    let r : u64 = seg_find(form)
+    let n : u32 = EG_N[0u64]
+    let mut seen : u32 = 0u32
+    let mut found : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < n {
+        if seg_find(i as u64) == r {
+            if EG_OP[i as u64] == EG_MUL {
+                let b : u64 = EG_B[i as u64]
+                if EG_OP[b] == EG_CONST {
+                    let cv : u64 = EG_A[b]
+                    if seen == 0u32 { found = cv  seen = 1u32 }
+                    else { if cv != found { return 1u32 } }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* INTUITION on a factor: synthesize the form for v (INTENT), then read v back out of its class (the inverse). */
+fn seg_intuit(v: u64) -> u64 @export {
+    seg_reset()
+    let xn : u64 = seg_var()
+    let mul : u64 = seg_intern(EG_MUL, xn, seg_const(v))
+    seg_saturate()
+    seg_best_cost(mul)
+    let form : u64 = EG_CHOICE[seg_find(mul)]   /* the extracted STATE (the cost-optimal form) */
+    return seg_class_const(form)                 /* read the ORIGIN back from the state's class */
+}
+/* THE PALINDROME CHECKSUM: intuition(intent(v)) == v -- the involution f^-1(f(v))=v, verified mechanically. */
+fn seg_palindrome(v: u64) -> u8 @export {
+    if seg_intuit(v) == v { return 1u8 }
+    return 0u8
+}
+/* PARADOX REJECTION: force the contradiction v1*x == v2*x (a merge no sound rule makes), then prove the
+ * substrate CATCHES it.  Returns 1 iff the paradox is detected (v1!=v2) -- the ban on inconsistency, enforced. */
+fn seg_paradox_caught(v1: u64, v2: u64) -> u32 @export {
+    seg_reset()
+    let xn : u64 = seg_var()
+    let m1 : u64 = seg_intern(EG_MUL, xn, seg_const(v1))
+    let m2 : u64 = seg_intern(EG_MUL, xn, seg_const(v2))
+    seg_saturate()
+    seg_union(m1, m2)                  /* INJECT the contradiction: assert v1*x == v2*x */
+    return seg_class_paradox(m1)       /* the substrate must detect two origins -> paradox */
+}

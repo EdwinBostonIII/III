@@ -420,7 +420,7 @@ fn lay_assign_positions() -> i32 {
 }
 
 /* select the projection: 0 = stripes (layered), 1 = radial/orbital.  Takes effect on the next build. */
-fn layout_set_proj(mode: u32) -> i32 @export { LAY_PROJ = mode  return 0i32 }
+fn layout_set_proj(mode: u32) -> i32 { LAY_PROJ = mode  return 0i32 }
 
 /* THE LAYOUT: bucket -> adjacency -> barycentric sweeps -> positions.  Returns 0 (or -1 over capacity). */
 fn layout_build() -> i32 @export {

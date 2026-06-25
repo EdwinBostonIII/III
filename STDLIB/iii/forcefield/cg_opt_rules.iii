@@ -83,7 +83,7 @@ fn cor_init() -> u64 {
 
 fn cor_rule_count() -> u64 @export { cor_init() return COR_N }
 fn cor_shift_at(i: u64) -> u64 @export { cor_init() if i >= COR_N { return 0u64 } return COR_SHIFT[i] }
-fn cor_factor_at(i: u64) -> u64 @export { cor_init() if i >= COR_N { return 0u64 } return COR_FACTOR[i] }
+fn cor_factor_at(i: u64) -> u64 { cor_init() if i >= COR_N { return 0u64 } return COR_FACTOR[i] }
 
 /* (2) WIDTH-INVARIANCE guard: width-faithful iff factor is EXACTLY 2^shift (and shift in range). */
 fn cor_width_invariant_kf(shift: u64, factor: u64) -> u8 {
@@ -92,7 +92,7 @@ fn cor_width_invariant_kf(shift: u64, factor: u64) -> u8 {
     if p == factor { return 1u8 }
     return 0u8
 }
-fn cor_width_invariant(i: u64) -> u8 @export {
+fn cor_width_invariant(i: u64) -> u8 {
     cor_init()
     if i >= COR_N { return 0u8 }
     return cor_width_invariant_kf(COR_SHIFT[i], COR_FACTOR[i])
@@ -108,7 +108,7 @@ fn cor_kernel_certify_kf(shift: u64, factor: u64) -> u8 {
     let cert : u32 = tc_lam(tc_bv(), tc_refl(lhs))
     return tc_check(cert, goal)
 }
-fn cor_kernel_certify(i: u64) -> u8 @export {
+fn cor_kernel_certify(i: u64) -> u8 {
     cor_init()
     if i >= COR_N { return 0u8 }
     return cor_kernel_certify_kf(COR_SHIFT[i], COR_FACTOR[i])
@@ -194,7 +194,7 @@ fn cor_sl_init() -> u64 {
 
 fn cor_sl_rule_count() -> u64 @export { cor_sl_init() return COR_N }
 fn cor_sl_shift_at(i: u64) -> u64 @export { cor_sl_init() if i >= COR_N { return 0u64 } return COR_SL_K[i] }
-fn cor_sl_factor_at(i: u64) -> u64 @export { cor_sl_init() if i >= COR_N { return 0u64 } return COR_SL_FACTOR[i] }
+fn cor_sl_factor_at(i: u64) -> u64 { cor_sl_init() if i >= COR_N { return 0u64 } return COR_SL_FACTOR[i] }
 
 /* SHAPE guard: width-faithful shladd iff factor == 2^k+1 exactly and k in 1..63. */
 fn cor_sl_shape_kf(k: u64, factor: u64) -> u8 {
@@ -213,7 +213,7 @@ fn cor_sl_ring_certify_kf(k: u64, factor: u64) -> u8 {
     let rhs : u32 = bv_mul(x, bv_const(factor))
     return bv_equal(lhs, rhs)
 }
-fn cor_sl_kernel_certify(i: u64) -> u8 @export {
+fn cor_sl_kernel_certify(i: u64) -> u8 {
     cor_sl_init()
     if i >= COR_N { return 0u8 }
     return cor_sl_ring_certify_kf(COR_SL_K[i], COR_SL_FACTOR[i])
@@ -314,7 +314,7 @@ fn cor_ss_init() -> u64 {
 
 fn cor_ss_rule_count() -> u64 @export { cor_ss_init() return COR_SS_N }
 fn cor_ss_shift_at(i: u64) -> u64 @export { cor_ss_init() if i >= COR_SS_N { return 0u64 } return COR_SS_K[i] }
-fn cor_ss_factor_at(i: u64) -> u64 @export { cor_ss_init() if i >= COR_SS_N { return 0u64 } return COR_SS_FACTOR[i] }
+fn cor_ss_factor_at(i: u64) -> u64 { cor_ss_init() if i >= COR_SS_N { return 0u64 } return COR_SS_FACTOR[i] }
 
 /* SHAPE guard: width-faithful shl-sub iff factor == 2^k-1 exactly and k in 3..63. */
 fn cor_ss_shape_kf(k: u64, factor: u64) -> u8 {
@@ -333,7 +333,7 @@ fn cor_ss_ring_certify_kf(k: u64, factor: u64) -> u8 {
     let rhs : u32 = bv_mul(x, bv_const(factor))
     return bv_equal(lhs, rhs)
 }
-fn cor_ss_kernel_certify(i: u64) -> u8 @export {
+fn cor_ss_kernel_certify(i: u64) -> u8 {
     cor_ss_init()
     if i >= COR_SS_N { return 0u8 }
     return cor_ss_ring_certify_kf(COR_SS_K[i], COR_SS_FACTOR[i])

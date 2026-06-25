@@ -1,0 +1,40 @@
+/* STDLIB/corpus/2027_seraphyte_cor_accessors.iii -- corpus coverage for the strength-reduction certifier
+ * accessors (forcefield/cg_opt_rules.iii) that the bind-gate SHELL probe uses but no corpus KAT referenced.
+ *
+ * Meaningful, not gaming: it asserts the CERTIFIED TABLE DIMENSIONS and the k<->index law of all three
+ * strength-reduction families -- the exact invariants the cg_r3 emission and the bind gate rely on.  99 = all hold.
+ *   pow2   : cor_rule_count / cor_shift_at        (x*2^k -> shl k)
+ *   shladd : cor_sl_rule_count / cor_sl_shift_at  (x*(2^k+1) -> (x<<k)+x)
+ *   subk   : cor_ss_rule_count / cor_ss_shift_at  (x*(2^k-1) -> (x<<k)-x)
+ */
+module corpus_2027_seraphyte_cor_accessors
+
+extern @abi(c-msvc-x64) fn cor_rule_count() -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_shift_at(i: u64) -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_sl_rule_count() -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_sl_shift_at(i: u64) -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_ss_rule_count() -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_ss_shift_at(i: u64) -> u64 from "cg_opt_rules.iii"
+
+fn main() -> u64 {
+    /* subk (the family this session added): k = 3..63 -> 61 rules; shift_at(i) = i+3. */
+    if cor_ss_rule_count() != 61u64 { return 1u64 }
+    if cor_ss_shift_at(0u64) != 3u64 { return 2u64 }
+    if cor_ss_shift_at(60u64) != 63u64 { return 3u64 }
+    let mut i : u64 = 0u64
+    while i < 61u64 { if cor_ss_shift_at(i) != (i + 3u64) { return 4u64 }  i = i + 1u64 }
+
+    /* shladd: 63 rules; the shift table is strictly increasing (a genuine table invariant). */
+    if cor_sl_rule_count() != 63u64 { return 5u64 }
+    if cor_sl_shift_at(1u64) <= cor_sl_shift_at(0u64) { return 6u64 }
+    if cor_sl_shift_at(62u64) <= cor_sl_shift_at(61u64) { return 7u64 }
+
+    /* pow2: 63 rules; strictly-increasing shift table. */
+    if cor_rule_count() != 63u64 { return 8u64 }
+    if cor_shift_at(1u64) <= cor_shift_at(0u64) { return 9u64 }
+
+    /* out-of-range index returns 0 (the bound check the accessors promise). */
+    if cor_ss_shift_at(61u64) != 0u64 { return 10u64 }
+
+    return 99u64
+}

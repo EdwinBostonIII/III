@@ -106,7 +106,7 @@ fn cli_drive_trace() -> u32 {
 }
 
 /* the full command: walk the real tree, render the mandala, write the artifact.  Returns the node count. */
-fn eidos_cli_render_map(cap: u64, root_ptr: u64, root_len: u64, path_ptr: u64) -> u32 @export {
+fn eidos_cli_render_map(cap: u64, root_ptr: u64, root_len: u64, path_ptr: u64) -> u32 {
     let nc : u32 = scarto_map(cap, root_ptr, root_len)
     if nc == 0u32 { return 0u32 }
     render_atlas()

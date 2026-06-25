@@ -86,14 +86,14 @@ fn canvas_plot(col: u32, row: u32) -> i32 @export {
 }
 
 /* read a pixel (0 if empty / out of bounds). */
-fn canvas_get(col: u32, row: u32) -> u32 @export {
+fn canvas_get(col: u32, row: u32) -> u32 {
     if col >= CANVAS_W { return 0u32 }
     if row >= CANVAS_H { return 0u32 }
     let idx : u32 = row * CANVAS_W + col
     return CANVAS_FB[idx as u64]
 }
 
-fn canvas_clipped() -> u32 @export { return CANVAS_CLIP }
+fn canvas_clipped() -> u32 { return CANVAS_CLIP }
 
 /* integer Bresenham line, GRADIENT-coloured from CANVAS_PEN (start) to CANVAS_PEN2 (end) -- each pixel
  * interpolates by its position along the line, so an edge flows from the source node's identity-colour

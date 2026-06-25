@@ -305,9 +305,9 @@ fn web_render() -> u32 @export {
 fn web_iterated()    -> u32 @export { return WEB_ITER }
 fn web_on_plane()    -> u32 @export { return WEB_ON }
 fn web_off_plane()   -> u32 @export { return WEB_OFF }
-fn web_collisions()  -> u32 @export { return WEB_COLL }
-fn web_edges()       -> u32 @export { return WEB_EDGES }
-fn web_edge_capped() -> u8  @export { return WEB_EDGE_CUT }
+fn web_collisions()  -> u32 { return WEB_COLL }
+fn web_edges()       -> u32 { return WEB_EDGES }
+fn web_edge_capped() -> u8  { return WEB_EDGE_CUT }
 
 /* count quanta in the BELOW (verb 0) / REFLECT (verb 1) bands -- the legend's direction census. */
 fn web_below_count() -> u32 @export {

@@ -22,7 +22,7 @@ fn ext4_add(rAddr: u64, aAddr: u64, bAddr: u64) -> i32 @export {
     r[1u64] = ext2_add(a[1u64], b[1u64])
     return 0i32
 }
-fn ext4_sub(rAddr: u64, aAddr: u64, bAddr: u64) -> i32 @export {
+fn ext4_sub(rAddr: u64, aAddr: u64, bAddr: u64) -> i32 {
     let a : *u64 = aAddr as *u64  let b : *u64 = bAddr as *u64  let r : *u64 = rAddr as *u64
     r[0u64] = ext2_sub(a[0u64], b[0u64])
     r[1u64] = ext2_sub(a[1u64], b[1u64])

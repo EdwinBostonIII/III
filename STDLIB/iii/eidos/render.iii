@@ -182,7 +182,7 @@ fn render_atlas() -> u32 @export {
 fn render_iterated() -> u32 @export { return RND_ITER }
 fn render_on_plane() -> u32 @export { return RND_ON }
 fn render_off_plane() -> u32 @export { return RND_OFF }
-fn render_collisions() -> u32 @export { return RND_COLL }
+fn render_collisions() -> u32 { return RND_COLL }
 
 /* a one-line legend appended UNDER the image (the lens summary, ASCII). */
 fn render_caption(b: u64) -> i32 @export {

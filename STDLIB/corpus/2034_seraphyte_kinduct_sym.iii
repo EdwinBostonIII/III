@@ -1,0 +1,20 @@
+/* STDLIB/corpus/2034_seraphyte_kinduct_sym.iii -- symbolic (bit-blast) k-induction, gated.
+ *
+ * The unbounded sieve: bv_bits discharges the inductive miter over ALL 2^64 states at once (no enumeration).
+ * The invariant P(x) = "x even"; the transition x' = x + inc.  99 = the bit-blast verdicts are correct.
+ *
+ *   even increments PRESERVE evenness for every one of the 2^64 states (UNSAT miter -> inductive);
+ *   odd increments do NOT (the miter is satisfiable -- any even x is a counterexample).
+ */
+module corpus_2034_seraphyte_kinduct_sym
+
+extern @abi(c-msvc-x64) fn sks_pres_even(inc: u64) -> u8 from "ser_kinduct_sym.iii"
+
+fn main() -> u64 {
+    if sks_pres_even(2u64) != 1u8 { return 1u64 }   /* x+2 preserves even (proven over 2^64) */
+    if sks_pres_even(1u64) != 0u8 { return 2u64 }   /* x+1 breaks even (counterexample exists) */
+    if sks_pres_even(4u64) != 1u8 { return 3u64 }
+    if sks_pres_even(3u64) != 0u8 { return 4u64 }
+    if sks_pres_even(6u64) != 1u8 { return 5u64 }
+    return 99u64
+}

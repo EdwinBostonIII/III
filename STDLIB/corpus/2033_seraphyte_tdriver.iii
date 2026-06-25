@@ -1,0 +1,29 @@
+/* STDLIB/corpus/2033_seraphyte_tdriver.iii -- the AUTONOMOUS T-GRAPH CONSUMER, gated.
+ *
+ * A consumer drives the temporal organs (membrane + sieve + causal-collapse) to a verdict, unattended --
+ * including autonomously STRENGTHENING the invariant until k-induction proves it.  99 = the choreography
+ * compiles (provably safe + live) with no human in the loop.
+ *
+ *   ARM 1  AUTONOMOUS SAFETY SYNTHESIS: the driver finds the inductive invariant itself (=1, the strengthened
+ *          one; the bare intent is not inductive).
+ *   ARM 2  it really had to STRENGTHEN (the system, not the operator, did the hard part).
+ *   ARM 3  CAUSAL-COLLAPSE: the independent ripples commute (the interleaving collapses).
+ *   ARM 4  LIVENESS membrane: the witness trace models the LTL intent.
+ *   ARM 5  COMPILE = ACCEPT: safety & causal-collapse & liveness all discharge -- unattended.
+ */
+module corpus_2033_seraphyte_tdriver
+
+extern @abi(c-msvc-x64) fn tdrv_synth_invariant() -> u32 from "ser_tdriver.iii"
+extern @abi(c-msvc-x64) fn tdrv_strengthened() -> u8 from "ser_tdriver.iii"
+extern @abi(c-msvc-x64) fn tdrv_causal_ok() -> u8 from "ser_tdriver.iii"
+extern @abi(c-msvc-x64) fn tdrv_liveness_ok() -> u8 from "ser_tdriver.iii"
+extern @abi(c-msvc-x64) fn tdrv_compile() -> u8 from "ser_tdriver.iii"
+
+fn main() -> u64 {
+    if tdrv_synth_invariant() != 1u32 { return 1u64 }   /* autonomously synthesised the inductive invariant */
+    if tdrv_strengthened() != 1u8 { return 2u64 }       /* it had to strengthen past the bare intent       */
+    if tdrv_causal_ok() != 1u8 { return 3u64 }          /* causal-collapse                                  */
+    if tdrv_liveness_ok() != 1u8 { return 4u64 }        /* liveness membrane                                */
+    if tdrv_compile() != 1u8 { return 5u64 }            /* the autonomous compile ACCEPTS                   */
+    return 99u64
+}

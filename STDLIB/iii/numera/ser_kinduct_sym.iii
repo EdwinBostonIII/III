@@ -1,0 +1,39 @@
+/* STDLIB/iii/numera/ser_kinduct_sym.iii -- the BIT-BLAST RUNG: symbolic k-induction over bv_bits (not enumeration).
+ *
+ * ser_kinduct proved safety by EXHAUSTIVELY walking a finite state geometry (8 states).  The operator's push
+ * is exactly right: III already holds the bit-blast SAT engine (numera/bv_bits), so the induction need not
+ * enumerate -- it can discharge the inductive step SYMBOLICALLY over the ENTIRE state space at once.
+ *
+ * The inductive step for an invariant P over a transition T is the miter:  P(x) & ~P(T(x))  must be UNSAT --
+ * there must be NO state x where P holds yet the successor violates P.  bv_bits bit-blasts this over ALL 2^64
+ * valuations of the symbolic state x; bb_equal(miter, 0) == 1 iff the miter is unsatisfiable (inductive).
+ *
+ * The witnessed system: a 64-bit register with transition  x' = x + inc.  The invariant P(x) = "x is even"
+ * (low bit 0).  Symbolic k-induction proves: x'=x+2 PRESERVES evenness for every one of the 2^64 states
+ * (UNSAT counterexample), while x'=x+1 does NOT (the miter is satisfiable -- any even x is a counterexample).
+ * This is the unbounded sieve the finite enumeration could only approximate.
+ *
+ * NO-ML: a deductive SAT discharge, no statistics.  Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: composes
+ * numera/bv_bits (the same bit-blast oracle behind the spatial SAT certifier) -- no island, no new solver.
+ */
+module numera_ser_kinduct_sym
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+/* SYMBOLIC k-induction: is "x even => (x+inc) even" valid over ALL 2^64 states?  1 iff inductive (UNSAT miter).
+ * even(x) bit = (x&1)^1 ; odd(x+inc) bit = (x+inc)&1 ; the miter F = even(x) & odd(x+inc) must be 0 everywhere. */
+fn sks_pres_even(inc: u64) -> u8 @export {
+    bb_reset(64u64)
+    let x   : u32 = bb_var(0u32)
+    let evn : u32 = bb_xor(bb_and(x, bb_const(1u64)), bb_const(1u64))   /* x is even          */
+    let xp  : u32 = bb_add(x, bb_const(inc))                            /* x' = x + inc       */
+    let odd : u32 = bb_and(xp, bb_const(1u64))                          /* x' is odd          */
+    let miter : u32 = bb_and(evn, odd)                                  /* even(x) & odd(x')  */
+    return bb_equal(miter, bb_const(0u64))                              /* 1 iff UNSAT (inductive) */
+}

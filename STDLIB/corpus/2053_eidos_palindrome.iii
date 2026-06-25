@@ -11,6 +11,14 @@ extern @abi(c-msvc-x64) fn seg_palindrome(v: u64) -> u8 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_intuit(v: u64) -> u64 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_paradox_caught(v1: u64, v2: u64) -> u32 from "ser_egraph.iii"
 extern @abi(c-msvc-x64) fn seg_eval_mul(v: u64, x: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_reset() -> i32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_var() -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_const(v: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_intern(op: u32, a: u64, b: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_saturate() -> u32 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_no_false_merge() -> u32 from "ser_egraph.iii"
+
+const EG_MUL : u32 = 4u32
 
 fn main() -> u64 {
     /* THE INVOLUTION f^-1(f(v)) = v: forward-construct the form, then read v back from its class. */
@@ -33,5 +41,19 @@ fn main() -> u64 {
 
     /* TEETH: v1==v2 is NOT a paradox (one origin) -- the detector is not constant-1. */
     if seg_paradox_caught(10u64, 10u64)  != 0u32 { return 13u64 }
+
+    /* THE NON-INJECTED PROPERTY (tests the RULES, not the injection): saturate a batch of DISTINCT factors
+     * with NO forced union -- the sound rewrite rules must fabricate NO two-origin class on their own. */
+    seg_reset()
+    let x2 : u64 = seg_var()
+    seg_intern(EG_MUL, x2, seg_const(7u64))
+    seg_intern(EG_MUL, x2, seg_const(9u64))
+    seg_intern(EG_MUL, x2, seg_const(10u64))
+    seg_intern(EG_MUL, x2, seg_const(14u64))
+    seg_intern(EG_MUL, x2, seg_const(11u64))
+    seg_intern(EG_MUL, x2, seg_const(15u64))
+    seg_intern(EG_MUL, x2, seg_const(28u64))
+    seg_saturate()
+    if seg_no_false_merge() != 1u32 { return 14u64 }
     return 99u64
 }

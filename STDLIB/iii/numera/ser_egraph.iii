@@ -429,3 +429,18 @@ fn seg_paradox_caught(v1: u64, v2: u64) -> u32 @export {
     seg_union(m1, m2)                  /* INJECT the contradiction: assert v1*x == v2*x */
     return seg_class_paradox(m1)       /* the substrate must detect two origins -> paradox */
 }
+
+/* THE NON-INJECTED PROPERTY (the one that tests the RULES, not the injection): after normal saturation, NO
+ * e-class holds two different MUL origins.  1 = the sound rewrite rules NEVER fabricate a paradox on their
+ * own.  (Caller interns a batch of distinct MUL(x,vi) and saturates -- no forced union.) */
+fn seg_no_false_merge() -> u32 @export {
+    let n : u32 = EG_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        if seg_find(i as u64) == i as u64 {                /* i is a class root */
+            if seg_class_paradox(i as u64) == 1u32 { return 0u32 }
+        }
+        i = i + 1u32
+    }
+    return 1u32
+}

@@ -165,6 +165,49 @@ still emits `imul`), so this is not post-hoc rediscovery.
   close. So, honestly: *the compiler writes and self-applies its own source under a proof gate; the human
   still says which optimization to target.* Wiring discovery→descriptor (the compiler deciding **what** to
   optimize, not just **how**) is the next frontier — explicitly NOT claimed here.
+
+---
+
+## PART XIII — DETERMINISTIC INTUITION: the DISCOVER-phase petri dish, LANDED (2026-06-25)
+
+The petri dish the operator named — explosive non-deterministic *proposal*, ruthless deterministic
+*disposal* — is realized WITHOUT crossing the no-ML lock. RL is replaced by CEGIS; learned cost-models by
+fixed-cost extraction; statistical generalization by anti-unification. "Deterministic intuition" is a
+mechanical hunch about the math's topography — Abstract Interpretation + Symmetry-Breaking + Anti-Unification
+woven around the CEGIS loop — that lets the synthesizer navigate the SMT cliff-edge. Three faculties landed:
+
+| Faculty | Organ / KAT | What it is | Gate |
+|---|---|---|---|
+| **MEMBRANE** | `numera/ser_petri` (2018) | concrete-fuzzing fast-fail; a sound *refuter* that quarantines the heavy proof | **99**; teeth rc=1 |
+| **CEGIS SYNTH** | `numera/ser_cegis` (2019) | the compiler PRODUCES the cost-min descriptor (decides *what* to optimize), counterexample-guided | **99**; teeth rc=1 |
+| **ANTI-UNIFY** | `numera/ser_antiunify` (2020) | {7,15,31} → the 2^k-1 family → ONE symbolic full-range proof (cor_ss, k=3..63) | **99**; teeth rc=5 |
+
+**The two-stage oracle (the conscience line, held everywhere):** a CONCRETE oracle refutes (cheap, kills
+the 99%); only the SYMBOLIC sieve (bv_ring/bv_bits over all 2^64) *proves* universality. "No concrete CE ⇒
+universal" is FALSE; the symbolic engine is the warrant. Anti-unification likewise *suggests* a family from
+instances (a conjecture — 3 points prove nothing); `au_prove_family` (the full-range certifier) is what makes
+it universal, and the family is proven to PROVABLY extend beyond the observed instances (covers 63, 127, …).
+
+**The deterministic-intuition layers (Astrée / SAT-solver instincts, made exact — all no-ML):**
+- **Abstract Interpretation (Astrée):** a cheap width/type pre-filter that kills a candidate whose output
+  cannot fit the target (a 65-bit result for a 64-bit slot) BEFORE the membrane — composing `sov_isa`
+  bit-widths. `[ARCHITECTED — the next build; it prunes the space above the concrete membrane.]`
+- **Symmetry-Breaking / Anti-Unification:** `2020`, LANDED — collapse N per-constant proofs into one
+  parametric family proof. Structural match, not statistics.
+- **Equality Saturation:** `numera/mcmc_egraph`, EXISTS+gated — apply all rules simultaneously, saturate,
+  then fixed-cost extract the cheapest path (no path-guessing). The deterministic cousin of ILP extraction;
+  cost-DIRECTED by a fixed landscape + seeded annealing, never cost-LEARNED ("adaptive without learning").
+
+**FRONTIERS (named, not blurred):**
+- Generalize the grammar from the shl+OP family to **arbitrary IR e-graphs** — wire `mcmc_egraph` extraction
+  + `cegar_refine`'s dynamic counterexample-accumulation over the heat-mapped IR.
+- **Event-based (EIDOS / isub):** emit each discover/generalize/prove as a content-addressed ripple on the
+  witnessed bus (`numera/ser_isub` already puts the loop on `isub`, Part XIII pivot) → a replayable, foldable
+  DISCOVER process.
+- The Abstract-Interpretation width pre-filter build.
+- **Curry-Howard → VLSI** (proof-as-silicon-geometry): the digital logic is provable; the physical silicon
+  (clock skew, thermal, cosmic-ray bit-flips) is not. III carries the witnessed-substrate primitives, but
+  this is a research horizon — named as aspiration, **not** a claim.
 - Evergreen = reproduced from source by the canonical build (cg_r3.c + cg_r3.iii + cg_opt_rules.iii edited
   identically; iiis-2/3 rebuilt; archive members recompiled). The iiis-0==iiis-2 27-divergence is
   pre-existing benign non-.text metadata, OFF the self-improvement path (the accept gate is iiis-2==iiis-3,

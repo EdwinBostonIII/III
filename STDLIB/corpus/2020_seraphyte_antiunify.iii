@@ -1,0 +1,52 @@
+/* STDLIB/corpus/2020_seraphyte_antiunify.iii -- anti-unification + one-shot family proof, gated.
+ *
+ * The "deterministic intuition": from a few discovered instances, GENERALIZE to the parametric family and
+ * prove ALL its members in ONE symbolic shot -- not one proof per constant.  99 = all arms.
+ *
+ *   ARM 1-2  GENERALIZE + PROVE: instances {7,15,31} all anti-unify to the 2^k-1 family; the family is then
+ *            proven UNIVERSAL in one shot (cor_ss over k=3..63 -- 61 members at once).
+ *   ARM 3    the OTHER family: {9,17,33} anti-unify to the 2^k+1 (shladd) family; proven in one shot.
+ *   ARM 4    NO OVER-GENERALIZATION: a MIXED set {7,9,31} (9 is shladd, not shift-sub) yields AU_NONE.
+ *   ARM 5    PROVABLY BEYOND THE OBSERVED (the 7,15 -> 31,63 intuition): from {7,15,31}, the proven family
+ *            covers 63 (=2^6-1, k=6) which was NEVER observed -- the generalization extends, and every member
+ *            is symbolically proven (cor_ss covers k=6), not inductively assumed from the 3 samples.
+ *   ARM 6    THE WARRANT IS THE PROOF, NOT THE SAMPLES: au_generalize is a conjecture from 3 points;
+ *            au_prove_family (the symbolic full-range certifier) is what makes it universal.  Both asserted.
+ */
+module corpus_2020_seraphyte_antiunify
+
+extern @abi(c-msvc-x64) fn au_generalize(v0: u64, v1: u64, v2: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_family(family: u32) -> u8 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_is_subk(v: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+
+const AU_NONE   : u32 = 255u32
+const AU_SUBK   : u32 = 2u32
+const AU_SHLADD : u32 = 1u32
+const AU_SEED   : u64 = 11400714819323198485u64
+
+fn main() -> u64 {
+    /* ARM 1: {7,15,31} -- three shift-sub instances -- anti-unify to the 2^k-1 family. */
+    let fam : u32 = au_generalize(7u64, 15u64, 31u64, AU_SEED)
+    if fam != AU_SUBK { return 1u64 }
+    /* ARM 2: prove the WHOLE family in ONE shot (cor_ss over k=3..63, 61 members). */
+    if au_prove_family(fam) != 1u8 { return 2u64 }
+
+    /* ARM 3: {9,17,33} anti-unify to the 2^k+1 (shladd) family; proven in one shot. */
+    let fam2 : u32 = au_generalize(9u64, 17u64, 33u64, AU_SEED)
+    if fam2 != AU_SHLADD { return 3u64 }
+    if au_prove_family(fam2) != 1u8 { return 4u64 }
+
+    /* ARM 4: a MIXED set does NOT over-generalize -- 9 is shladd, breaking the shift-sub family. */
+    if au_generalize(7u64, 9u64, 31u64, AU_SEED) != AU_NONE { return 5u64 }
+
+    /* ARM 5: the generalization PROVABLY extends beyond the observed instances.  63 = 2^6-1 (k=6) was NOT in
+     *        {7,15,31}, yet it is a proven member of the family (au_is_subk(63)==1, and cor_ss covers k=6). */
+    if au_is_subk(63u64, AU_SEED) != 1u32 { return 6u64 }
+    if au_is_subk(127u64, AU_SEED) != 1u32 { return 7u64 }   /* 2^7-1, also covered, also unobserved */
+
+    /* ARM 6: the warrant is the SYMBOLIC proof, not the samples -- au_prove_family on the AU_NONE non-family
+     *        refuses (no family to prove), so a generalization is only ever "proven" through the certifier. */
+    if au_prove_family(AU_NONE) != 0u8 { return 8u64 }
+
+    return 99u64
+}

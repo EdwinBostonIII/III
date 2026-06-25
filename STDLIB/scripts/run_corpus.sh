@@ -119,6 +119,7 @@ declare -A EXPECTED=(
     [2017_seraphyte_subk_runtime]=99
     [2018_seraphyte_petri_membrane]=99
     [2019_seraphyte_cegis_synth]=99
+    [2020_seraphyte_antiunify]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

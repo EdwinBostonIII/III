@@ -1,0 +1,84 @@
+/* STDLIB/iii/numera/ser_antiunify.iii -- DETERMINISTIC INTUITION: anti-unification + one-shot family proof.
+ *
+ * The CEGIS synthesizer (numera/ser_cegis) discovers rewrites ONE CONSTANT at a time (x*7 -> shift-sub,
+ * x*15 -> shift-sub, ...).  Proving each constant individually is the combinatorial waste.  Anti-unification
+ * is the "deterministic intuition" (the SAT-solver symmetry-breaking instinct, made exact): from a few
+ * concrete instances that share STRUCTURE, GENERALIZE to the PARAMETRIC family, and hand the symbolic sieve
+ * the family to prove in ONE SHOT over its whole emittable range -- not 61 separate proofs.
+ *
+ *   instances {7, 15, 31}  --(anti-unify: all form-2, each v = 2^k - 1)-->  family  x*(2^k - 1) = (x<<k) - x
+ *   family  --(ONE symbolic proof: cor_ss_certify_all over k=3..63)-->  PROVEN for ALL 61 members at once.
+ *
+ * THE CONSCIENCE LINE (honored, not blurred): anti-unification is a DETERMINISTIC PROPOSER -- "3 instances
+ * fit a family" is a CONJECTURE, never a proof (3 points do not prove a law).  Soundness comes ONLY from
+ * au_prove_family, which is the SYMBOLIC full-range certifier (cor_ss / cor_sl over the entire k-range),
+ * exactly as for a single rule.  The generalization may PROVABLY extend beyond the observed instances (it
+ * covers k=6 -> 63 too), but every member is symbolically proven, never inductively assumed from samples.
+ *
+ * NO-ML: the generalization is a STRUCTURAL match on the instances' descriptors (a fixed predicate), not a
+ * learned pattern; no statistics, no training.  Same instances => same family, deterministically.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.  NIH: composes numera/ser_cegis (the instance synthesizer) +
+ * forcefield/cg_opt_rules (cor_ss_certify_all / cor_sl_certify_all -- the family provers) -- no island.
+ */
+module numera_ser_antiunify
+
+extern @abi(c-msvc-x64) fn cg_synth(v: u64, seed: u64) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_form(packed: u32) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cg_k(packed: u32) -> u32 from "ser_cegis.iii"
+extern @abi(c-msvc-x64) fn cor_ss_certify_all() -> u64 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cor_sl_certify_all() -> u64 from "cg_opt_rules.iii"
+
+const AU_NONE   : u32 = 255u32   /* the instances do not share a parametric family */
+const AU_SUBK   : u32 = 2u32     /* the 2^k-1 family (shift-sub): each member v = 2^k-1, emit (x<<k)-x */
+const AU_SHLADD : u32 = 1u32     /* the 2^k+1 family (shladd):    each member v = 2^k+1, emit (x<<k)+x */
+
+/* does cg_synth classify v as shift-sub with v == 2^k-1 exactly? (a member of the AU_SUBK family) */
+fn au_is_subk(v: u64, seed: u64) -> u32 @export {
+    let d : u32 = cg_synth(v, seed)
+    if cg_form(d) != 2u32 { return 0u32 }
+    let k : u32 = cg_k(d)
+    let pk : u64 = 1u64 << (k as u64)
+    if (pk - 1u64) == v { return 1u32 }
+    return 0u32
+}
+
+/* does cg_synth classify v as shladd with v == 2^k+1 exactly? (a member of the AU_SHLADD family) */
+fn au_is_shladd(v: u64, seed: u64) -> u32 @export {
+    let d : u32 = cg_synth(v, seed)
+    if cg_form(d) != 1u32 { return 0u32 }
+    let k : u32 = cg_k(d)
+    let pk : u64 = 1u64 << (k as u64)
+    if (pk + 1u64) == v { return 1u32 }
+    return 0u32
+}
+
+/* ANTI-UNIFY three discovered instances -> the parametric family they all belong to, or AU_NONE.  Pure
+ * structural generalization: every instance must share the same form AND the same k<->v law. */
+fn au_generalize(v0: u64, v1: u64, v2: u64, seed: u64) -> u32 @export {
+    if au_is_subk(v0, seed) == 1u32 {
+        if au_is_subk(v1, seed) == 1u32 {
+            if au_is_subk(v2, seed) == 1u32 { return AU_SUBK }
+        }
+    }
+    if au_is_shladd(v0, seed) == 1u32 {
+        if au_is_shladd(v1, seed) == 1u32 {
+            if au_is_shladd(v2, seed) == 1u32 { return AU_SHLADD }
+        }
+    }
+    return AU_NONE
+}
+
+/* PROVE THE WHOLE FAMILY in ONE symbolic shot (the full emittable k-range), via the existing full-range
+ * certifier.  1 iff the family is universally sound -- the warrant for the generalization. */
+fn au_prove_family(family: u32) -> u8 @export {
+    if family == AU_SUBK {
+        if cor_ss_certify_all() == 99u64 { return 1u8 }
+        return 0u8
+    }
+    if family == AU_SHLADD {
+        if cor_sl_certify_all() == 99u64 { return 1u8 }
+        return 0u8
+    }
+    return 0u8
+}

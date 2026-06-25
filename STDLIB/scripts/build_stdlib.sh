@@ -1269,6 +1269,9 @@ MODULES=(
     # EIDOS Verification Membrane (DOCS/III-EIDOS-VERIFICATION-MEMBRANE-PLAN.md): ser_fsm = the parametric
     # finite-state substrate that lifts the hardcoded mutex out of ser_kinduct (Phase 0).
     "numera/ser_fsm"
+    # ser_protocol = concurrent protocols encoded as transition relations, so ser_tgraph's real BMC + ser_kinduct's
+    # real k-induction model-check them (the input is a protocol, not a hand-fed trace).
+    "numera/ser_protocol"
     # Phase C: Proof-Carrying Code -- the one permitted generative synthesis. pcc_verify =
     # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
     # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.

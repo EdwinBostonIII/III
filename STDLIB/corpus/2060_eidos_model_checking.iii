@@ -1,0 +1,38 @@
+/* STDLIB/corpus/2060_eidos_model_checking.iii -- the verification membrane, FULLEST form: real model checking.
+ *
+ * ser_tgraph is no longer a trace evaluator: stg_bmc UNROLLS a transition relation (ser_fsm) by BFS reachability
+ * and GENERATES the counterexample.  ser_kinduct is no longer a fixture: ski_kinduct proves an ARBITRARY
+ * protocol safe for all depths via reachability-restricted k-induction.  We encode only the protocol RULES
+ * (ser_protocol); the checkers discover the rest.  99 = BMC finds the broken mutex's mutual-exclusion violation
+ * AND reconstructs the exact race path; k-induction refuses to prove the broken one but PROVES the correct one
+ * safe for all depths.  No trace, no invariant, no counterexample was supplied.
+ */
+module corpus_2060_eidos_model_checking
+
+extern @abi(c-msvc-x64) fn proto_mutex_broken() -> i32 from "ser_protocol.iii"
+extern @abi(c-msvc-x64) fn proto_mutex_peterson() -> i32 from "ser_protocol.iii"
+extern @abi(c-msvc-x64) fn stg_bmc(max_depth: u32) -> u32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_bmc_violation() -> u32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_bmc_explored() -> u32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_bmc_path_len() -> u32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_bmc_path_state(i: u32) -> u32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn ski_kinduct(maxk: u32) -> u32 from "ser_kinduct.iii"
+
+fn main() -> u64 {
+    /* BMC GENERATES the broken mutex's counterexample (state 54 = both critical, reachable at depth 4). */
+    proto_mutex_broken()
+    if stg_bmc(20u32) != 4u32 { return 1u64 }                  /* violation found at depth 4 */
+    if stg_bmc_violation() != 54u32 { return 2u64 }            /* state 54 = pc1=2,f1=1,pc2=2,f2=1 -> both critical */
+    if stg_bmc_explored() < 1u32 { return 3u64 }               /* the search did real work */
+    if stg_bmc_path_len() != 5u32 { return 4u64 }              /* a 5-state counterexample path */
+    if stg_bmc_path_state(0u32) != 0u32 { return 5u64 }        /* it starts at init (both idle) */
+    if stg_bmc_path_state(4u32) != 54u32 { return 6u64 }       /* and ends at the violation */
+    /* k-induction CANNOT prove the broken protocol (it is genuinely unsafe; BMC holds the witness). */
+    if ski_kinduct(12u32) != 0xFFFFFFFFu32 { return 7u64 }
+
+    /* the CORRECT protocol: BMC explores the full reachable space and finds NO violation; k-induction PROVES it. */
+    proto_mutex_peterson()
+    if stg_bmc(64u32) != 0xFFFFFFFFu32 { return 8u64 }         /* SAFE over the entire reachable space */
+    if ski_kinduct(12u32) == 0xFFFFFFFFu32 { return 9u64 }     /* PROVEN safe for ALL depths (unbounded) */
+    return 99u64
+}

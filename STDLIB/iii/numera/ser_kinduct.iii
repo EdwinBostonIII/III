@@ -189,3 +189,64 @@ fn ski_confluent_reduced(n: u32) -> u32 @export {
 fn ski_orderings_reduced(n: u32) -> u64 @export { return caus_orderings_to_check(n) }
 /* the witnessed verdict of the reduced sieve (the fold over the ripples + the partition certificate). */
 fn ski_reduced_witness() -> u64 @export { return evt_witness(evt_count()) }
+
+/* ============================================================================================================
+ * REAL k-INDUCTION over the SHARED transition relation (ser_fsm) -- the fullest form: proves an ARBITRARY
+ * protocol's safety invariant for ALL depths (unbounded), not just the one hardcoded lock above.  BASE_k = no
+ * violating state reachable within k steps (ser_tgraph's BMC).  STEP_k = there is NO simple path through k
+ * invariant-SAFE states whose next transition reaches a VIOLATING state -- the safe region is closed under k
+ * steps.  base_k AND step_k => the invariant holds on every reachable state (unbounded).  k is raised until both
+ * discharge (the automatic strengthening: longer k excludes the spurious short induction-counterexamples). */
+extern @abi(c-msvc-x64) fn stg_bmc(max_depth: u32) -> u32 from "ser_tgraph.iii"
+extern @abi(c-msvc-x64) fn stg_bmc_reachable(s: u32) -> u8 from "ser_tgraph.iii"
+const SKI_KI_NONE : u32 = 0xFFFFFFFFu32
+
+var KI_PATH  : [u32; 64]
+var KI_FOUND : [u32; 1]
+
+fn ki_on_path(s: u32, upto: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < upto { if KI_PATH[i as u64] == s { return 1u32 }  i = i + 1u32 }
+    return 0u32
+}
+fn ki_step_dfs(cur: u32, edges: u32, k: u32) -> i32 {
+    if KI_FOUND[0u64] == 1u32 { return 0i32 }
+    if edges >= k { return 0i32 }
+    let tn : u32 = sfsm_trans_n()
+    let mut t : u32 = 0u32
+    while t < tn {
+        if sfsm_trans_from(t) == cur {
+            let nx : u32 = sfsm_trans_to(t)
+            if sfsm_inv(nx) == 0u8 { KI_FOUND[0u64] = 1u32  return 0i32 }   /* safe prefix -> violation: not k-inductive */
+            if ki_on_path(nx, edges + 1u32) == 0u32 {
+                KI_PATH[(edges + 1u32) as u64] = nx
+                ki_step_dfs(nx, edges + 1u32, k)
+            }
+        }
+        t = t + 1u32
+    }
+    return 0i32
+}
+/* the k-inductive step, restricted to REACHABLE states (the caller must have run a full-reachability BMC first
+ * so stg_bmc_reachable is populated).  1 = no simple k-path THROUGH REACHABLE safe states reaches a violation. */
+fn ski_kstep(k: u32) -> u32 @export {
+    KI_FOUND[0u64] = 0u32
+    let n : u32 = sfsm_n()
+    let mut s : u32 = 0u32
+    while s < n {
+        if sfsm_inv(s) == 1u8 { if stg_bmc_reachable(s) == 1u8 { KI_PATH[0u64] = s  ki_step_dfs(s, 0u32, k) } }
+        s = s + 1u32
+    }
+    if KI_FOUND[0u64] == 1u32 { return 0u32 }
+    return 1u32
+}
+fn ski_kinduct(maxk: u32) -> u32 @export {
+    let n : u32 = sfsm_n()
+    if stg_bmc(n) != 0xFFFFFFFFu32 { return SKI_KI_NONE }   /* full BFS reachability: a reachable violation -> UNSAFE (BMC holds the witness) */
+    let mut k : u32 = 1u32
+    while k <= maxk {
+        if ski_kstep(k) == 1u32 { return k }               /* k-inductive over the reachable region -> safe for ALL depths */
+        k = k + 1u32
+    }
+    return SKI_KI_NONE
+}

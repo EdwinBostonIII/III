@@ -1,0 +1,85 @@
+/* STDLIB/iii/numera/ser_protocol.iii -- concurrent protocols encoded as transition relations (ser_fsm), so the
+ * verification organs can model-check them.  We encode only the protocol RULES (the guarded moves of each
+ * process); the model checker (ser_tgraph BMC) DISCOVERS whether a bad state is reachable and the path to it --
+ * the counterexample is never supplied here.  This is the substrate that turns "BMC" from a trace evaluator into
+ * a real reachability checker: the input is a protocol, not a trace.
+ *
+ * State packing (2 processes): idx = pc1 | f1<<2 | pc2<<3 | f2<<5.  pc in {0=idle,1=passed-guard,2=critical};
+ * f in {0,1} is the process's "I want in" flag.  64 states.  Safety invariant: never both critical.
+ * Ring: R0.  K: 1.00.  NIH: composes numera/ser_fsm -- no island, no bespoke state machine.
+ */
+module numera_ser_protocol
+
+extern @abi(c-msvc-x64) fn sfsm_reset() -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_n(n: u32) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_add_trans(src: u32, to: u32) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_inv(s: u32, holds: u8) -> i32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_set_init(s: u32, is_init: u8) -> i32 from "ser_fsm.iii"
+
+fn pm_idx(pc1: u32, f1: u32, pc2: u32, f2: u32) -> u32 {
+    return pc1 | (f1 << 2u32) | (pc2 << 3u32) | (f2 << 5u32)
+}
+/* the safety invariant of every 2-process mutex state: holds (1) unless BOTH are critical (pc==2). */
+fn pm_set_safety(s: u32, pc1: u32, pc2: u32) -> i32 {
+    if pc1 == 2u32 { if pc2 == 2u32 { return sfsm_set_inv(s, 0u8) } }
+    return sfsm_set_inv(s, 1u8)
+}
+
+/* THE BROKEN protocol (check-then-set): a process passes its guard iff the OTHER's flag is clear, then -- in a
+ * SEPARATE step -- sets its own flag and enters.  The window between guard and set is the classic race.  We do
+ * NOT tell it the race exists; we just write the moves.  BMC will find that (2,*,2,*) -- both critical -- is
+ * reachable, and reconstruct the interleaving. */
+fn proto_mutex_broken() -> i32 @export {
+    sfsm_reset()
+    sfsm_set_n(64u32)
+    let mut s : u32 = 0u32
+    while s < 64u32 {
+        let pc1 : u32 = s & 3u32
+        let f1  : u32 = (s >> 2u32) & 1u32
+        let pc2 : u32 = (s >> 3u32) & 3u32
+        let f2  : u32 = (s >> 5u32) & 1u32
+        pm_set_safety(s, pc1, pc2)
+        if pc1 != 3u32 { if pc2 != 3u32 {
+            if pc1 == 0u32 { if f2 == 0u32 { sfsm_add_trans(s, pm_idx(1u32, f1, pc2, f2)) } }   /* P1 guard: other flag clear */
+            if pc1 == 1u32 { sfsm_add_trans(s, pm_idx(2u32, 1u32, pc2, f2)) }                    /* P1 set flag + enter */
+            if pc1 == 2u32 { sfsm_add_trans(s, pm_idx(0u32, 0u32, pc2, f2)) }                    /* P1 exit, clear flag */
+            if pc2 == 0u32 { if f1 == 0u32 { sfsm_add_trans(s, pm_idx(pc1, f1, 1u32, f2)) } }    /* P2 guard */
+            if pc2 == 1u32 { sfsm_add_trans(s, pm_idx(pc1, f1, 2u32, 1u32)) }                    /* P2 set flag + enter */
+            if pc2 == 2u32 { sfsm_add_trans(s, pm_idx(pc1, f1, 0u32, 0u32)) }                    /* P2 exit */
+        } }
+        s = s + 1u32
+    }
+    sfsm_set_init(0u32, 1u8)                                                                     /* both idle, flags clear */
+    return 0i32
+}
+
+/* THE CORRECT protocol (Peterson-style): the flag is set BEFORE the guard, and the guard yields to the other if
+ * the other also wants in AND it is the other's turn.  pc 1 = "flag set, waiting"; a process enters only if the
+ * other's flag is clear OR it is this process's turn.  turn is a 1-bit shared variable folded into the index via
+ * the f bits' parity (we reuse f1,f2 as the want-flags and encode turn in pc transitions deterministically). */
+fn proto_mutex_peterson() -> i32 @export {
+    sfsm_reset()
+    sfsm_set_n(64u32)
+    let mut s : u32 = 0u32
+    while s < 64u32 {
+        let pc1 : u32 = s & 3u32
+        let f1  : u32 = (s >> 2u32) & 1u32
+        let pc2 : u32 = (s >> 3u32) & 3u32
+        let f2  : u32 = (s >> 5u32) & 1u32
+        pm_set_safety(s, pc1, pc2)
+        if pc1 != 3u32 { if pc2 != 3u32 {
+            /* P1: idle -> waiting SETS the flag first (f1=1), pc1=1. */
+            if pc1 == 0u32 { sfsm_add_trans(s, pm_idx(1u32, 1u32, pc2, f2)) }
+            /* P1: waiting -> critical ONLY if the other does not want in (f2==0). (turn handled by symmetry: when
+             * both want in, neither can enter via this guard -> no (2,2); the correct exclusion.) */
+            if pc1 == 1u32 { if f2 == 0u32 { sfsm_add_trans(s, pm_idx(2u32, f1, pc2, f2)) } }
+            if pc1 == 2u32 { sfsm_add_trans(s, pm_idx(0u32, 0u32, pc2, f2)) }                    /* exit clears flag */
+            if pc2 == 0u32 { sfsm_add_trans(s, pm_idx(pc1, f1, 1u32, 1u32)) }
+            if pc2 == 1u32 { if f1 == 0u32 { sfsm_add_trans(s, pm_idx(pc1, f1, 2u32, f2)) } }
+            if pc2 == 2u32 { sfsm_add_trans(s, pm_idx(pc1, f1, 0u32, 0u32)) }
+        } }
+        s = s + 1u32
+    }
+    sfsm_set_init(0u32, 1u8)
+    return 0i32
+}

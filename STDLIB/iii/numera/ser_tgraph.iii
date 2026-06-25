@@ -32,6 +32,12 @@ extern @abi(c-msvc-x64) fn tl_trace_holds(node: u64, pos: u64) -> u8 from "tempo
 extern @abi(c-msvc-x64) fn tl_trace_set(atom_node: u64, pos: u64, truth: u8) -> i32 from "temporal_logic.iii"
 extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
 extern @abi(c-msvc-x64) fn evt_kind_at(i: u32) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn sfsm_n() -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_trans_n() -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_trans_from(e: u32) -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_trans_to(e: u32) -> u32 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_inv(s: u32) -> u8 from "ser_fsm.iii"
+extern @abi(c-msvc-x64) fn sfsm_init(s: u32) -> u8 from "ser_fsm.iii"
 
 const STG_NOT : u8 = 1u8
 const STG_AND : u8 = 2u8
@@ -106,3 +112,85 @@ fn stg_check_events(formula: u32, root: u64, atom_nodes: *u64, n: u32) -> u8 @ex
     }
     return stg_check(formula, root, len)
 }
+
+/* ============================================================================================================
+ * REAL BOUNDED MODEL CHECKING (the fullest form -- it GENERATES the counterexample, it does not consume a trace).
+ * Over the shared transition relation (ser_fsm: states, guarded transitions, init set, safety invariant), unroll
+ * by breadth-first reachability to depth max_depth, checking the invariant at EVERY reachable state.  If a state
+ * with inv==0 is reachable, the safety property is VIOLATED; stg_bmc records it and the shortest path to it, so
+ * the witness trace is RECONSTRUCTED from the search -- never supplied.  Returns the depth of the violation, or
+ * STG_BMC_SAFE if the invariant holds on all states reachable within max_depth. */
+const STG_BMC_SAFE : u32 = 0xFFFFFFFFu32
+
+var BMC_SEEN   : [u8;  256]
+var BMC_DEPTH  : [u32; 256]
+var BMC_PARENT : [u32; 256]
+var BMC_QUEUE  : [u32; 256]
+var BMC_VIOL   : [u32; 1]
+var BMC_EXPL   : [u32; 1]   /* how many states the search actually expanded (the work it did) */
+
+fn stg_bmc(max_depth: u32) -> u32 @export {
+    let n : u32 = sfsm_n()
+    let mut i : u32 = 0u32
+    while i < n { BMC_SEEN[i as u64] = 0u8  i = i + 1u32 }
+    let mut qh : u32 = 0u32
+    let mut qt : u32 = 0u32
+    i = 0u32
+    while i < n {                                            /* seed the frontier with every init state */
+        if sfsm_init(i) == 1u8 {
+            BMC_SEEN[i as u64] = 1u8  BMC_DEPTH[i as u64] = 0u32  BMC_PARENT[i as u64] = i
+            BMC_QUEUE[qt as u64] = i  qt = qt + 1u32
+        }
+        i = i + 1u32
+    }
+    let mut expl : u32 = 0u32
+    while qh < qt {
+        let cur : u32 = BMC_QUEUE[qh as u64]  qh = qh + 1u32
+        expl = expl + 1u32
+        let d : u32 = BMC_DEPTH[cur as u64]
+        if sfsm_inv(cur) == 0u8 {                            /* a REACHABLE violating state -> counterexample */
+            BMC_VIOL[0u64] = cur  BMC_EXPL[0u64] = expl
+            return d
+        }
+        if d < max_depth {
+            let tn : u32 = sfsm_trans_n()
+            let mut t : u32 = 0u32
+            while t < tn {                                   /* expand: every enabled transition out of cur */
+                if sfsm_trans_from(t) == cur {
+                    let nx : u32 = sfsm_trans_to(t)
+                    if nx < n { if BMC_SEEN[nx as u64] == 0u8 {
+                        BMC_SEEN[nx as u64] = 1u8  BMC_DEPTH[nx as u64] = d + 1u32  BMC_PARENT[nx as u64] = cur
+                        BMC_QUEUE[qt as u64] = nx  qt = qt + 1u32
+                    } }
+                }
+                t = t + 1u32
+            }
+        }
+    }
+    BMC_VIOL[0u64] = STG_BMC_SAFE  BMC_EXPL[0u64] = expl
+    return STG_BMC_SAFE
+}
+fn stg_bmc_violation() -> u32 @export { return BMC_VIOL[0u64] }     /* the violating state, or STG_BMC_SAFE */
+fn stg_bmc_explored() -> u32 @export { return BMC_EXPL[0u64] }      /* states expanded (the search's real work) */
+/* the counterexample path: number of states from an init state to the violation, inclusive. */
+fn stg_bmc_path_len() -> u32 @export {
+    if BMC_VIOL[0u64] == STG_BMC_SAFE { return 0u32 }
+    let mut s : u32 = BMC_VIOL[0u64]
+    let mut len : u32 = 1u32
+    while BMC_PARENT[s as u64] != s { s = BMC_PARENT[s as u64]  len = len + 1u32 }
+    return len
+}
+/* path_state(i): the i-th state on the reconstructed counterexample (0 = init, path_len-1 = the violation). */
+fn stg_bmc_path_state(i: u32) -> u32 @export {
+    if BMC_VIOL[0u64] == STG_BMC_SAFE { return STG_BMC_SAFE }
+    let len : u32 = stg_bmc_path_len()
+    if i >= len { return STG_BMC_SAFE }
+    let mut back : u32 = len - 1u32 - i
+    let mut s : u32 = BMC_VIOL[0u64]
+    while back > 0u32 { s = BMC_PARENT[s as u64]  back = back - 1u32 }
+    return s
+}
+/* was state s reached by the last BMC run? (1 = reachable from init).  k-induction restricts its inductive
+ * step to reachable states -- the bare invariant is often not inductive on UNREACHABLE states (the classic
+ * k-induction trap), and reachability is exactly the strengthening that closes it. */
+fn stg_bmc_reachable(s: u32) -> u8 @export { if s >= 256u32 { return 0u8 }  return BMC_SEEN[s as u64] }

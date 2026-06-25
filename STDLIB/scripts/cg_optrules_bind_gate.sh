@@ -68,6 +68,39 @@ fn main() -> u64 { return cor_shift_at(${i}u64) }")
   i=$((i+1))
 done
 
+# ---- (B-shladd) emit binding: each tabled SHLADD shift k => x*(2^k+1) must emit `shl $k` + `add %rcx,%rax`, NO imul ----
+NS=$(_run 'module d
+extern @abi(c-msvc-x64) fn cor_sl_rule_count() -> u64 from "cg_opt_rules.iii"
+fn main() -> u64 { return cor_sl_rule_count() }')
+say "shladd rule count (from module) = $NS"
+i=0
+while [ "$i" -lt "$NS" ]; do
+  K=$(_run "module d
+extern @abi(c-msvc-x64) fn cor_sl_shift_at(idx: u64) -> u64 from \"cg_opt_rules.iii\"
+fn main() -> u64 { return cor_sl_shift_at(${i}u64) }")
+  FACTOR=$(( (1 << K) + 1 ))            # 2^k+1 (printf %u below reinterprets the bits for k=63)
+  HEXK=$(printf '%x' "$K")
+  printf 'module p\nfn f(x: u64) -> u64 { return x * %uu64 }\nfn main() -> u64 { return f(1u64) }\n' "$FACTOR" > "$W/_pcsl.iii"
+  "$IIIS" "$W/_pcsl.iii" --compile-only --out "$W/_pcsl.o" >/dev/null 2>&1
+  asm="$(objdump -d "$W/_pcsl.o" 2>/dev/null | grep -iE 'shl|sal|imul|add[[:space:]]+%rcx,%rax')"
+  if printf '%s' "$asm" | grep -qiE "(shl|sal)[[:space:]]+\\\$(0x${HEXK}|${K})," && printf '%s' "$asm" | grep -qiE 'add[[:space:]]+%rcx,%rax' && ! printf '%s' "$asm" | grep -qi imul; then
+    say "(B-shladd) rule $i : x*$FACTOR (2^$K+1) -> 'shl \$0x$HEXK' + 'add %rcx,%rax', NO imul  [shl+add bound: certified == emitted]"
+  else
+    say "(B-shladd) FAIL rule $i : x*$FACTOR (2^$K+1) did NOT emit shl+add -- got: $(printf '%s' "$asm" | tr '\n' ';')"; FAIL=$((FAIL+1))
+  fi
+  i=$((i+1))
+done
+
+# ---- (C-shladd) emit negative: a non-pow2, non-(2^k+1) factor (7) must emit imul, NOT shl+add ----
+printf 'module p\nfn f(x: u64) -> u64 { return x * 7u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcslneg.iii"
+"$IIIS" "$W/_pcslneg.iii" --compile-only --out "$W/_pcslneg.o" >/dev/null 2>&1
+slneg="$(objdump -d "$W/_pcslneg.o" 2>/dev/null | grep -iE 'shl|sal|imul')"
+if printf '%s' "$slneg" | grep -qi imul && ! printf '%s' "$slneg" | grep -qiE 'shl|sal'; then
+  say "(C-shladd) negative : x*7 (non-pow2, non-2^k+1) -> 'imul', NO shift  [shl+add binding has teeth]"
+else
+  say "(C-shladd) FAIL negative : x*7 did not emit imul-without-shift -- got: $(printf '%s' "$slneg" | tr '\n' ';')"; FAIL=$((FAIL+1))
+fi
+
 # ---- (C) emit negative: a non-pow2 factor must emit imul, NOT shl ----
 printf 'module p\nfn f(x: u64) -> u64 { return x * 6u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcneg.iii"
 "$IIIS" "$W/_pcneg.iii" --compile-only --out "$W/_pcneg.o" >/dev/null 2>&1

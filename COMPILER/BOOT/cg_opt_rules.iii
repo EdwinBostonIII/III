@@ -27,3 +27,25 @@ fn cgopt_mul_shift_k(v: u64) -> u32 @export {
     while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
     return k
 }
+
+/* shladd_admit: is `x * v` a WIDTH-FAITHFUL shift-and-add strength reduction (mul -> shl+add)?  1 iff
+ * v == 2^k + 1 for k in 1..63, i.e. v >= 3 and (v-1) is an exact power of two.  Then
+ * x*v == x*(2^k+1) == (x<<k) + x mod 2^64 (proven over bv_ring: (2^k+1)x = 2^k x + x).  Disjoint from
+ * cgopt_mul_admit (2^k+1 is always odd, never a power of two), so cg_r3 tries the pow2 shift first, then
+ * this shl+add for the non-pow2 (2^k+1) factors it would otherwise emit as a full imul.  This replaces an
+ * imul with one shl + one add -- strictly cheaper on the metal, and cg_r3 did not have it before. */
+fn cgopt_mul_shladd_admit(v: u64) -> u32 @export {
+    if v < 3u64 { return 0u32 }
+    let m: u64 = v - 1u64
+    if (m & (m - 1u64)) != 0u64 { return 0u32 }
+    return 1u32
+}
+
+/* shladd_k: the shift amount k such that v == 2^k + 1.  Caller guarantees cgopt_mul_shladd_admit(v)==1,
+ * so v-1 is an exact power of two in 2^1..2^63 and this returns 1..63 (= log2(v-1)). */
+fn cgopt_mul_shladd_k(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut t: u64 = v - 1u64
+    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
+    return k
+}

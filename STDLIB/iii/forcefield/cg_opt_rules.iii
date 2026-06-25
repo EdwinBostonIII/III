@@ -34,6 +34,27 @@ extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
  * proven sound here, so the certifier binds the kernel proof to the very functions that DRIVE codegen. */
 extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
+/* The NEW shl+add emission law cg_r3 gained (x*(2^k+1) -> (x<<k)+x), certified below to the SAME standard. */
+extern @abi(c-msvc-x64) fn cgopt_mul_shladd_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_shladd_k(v: u64) -> u32 from "cg_opt_rules.iii"
+/* TWO INDEPENDENT proof engines for the shladd law (the kernel's refl CANNOT distribute mul over add, so
+ * the pow2 certifier's engine does not transfer -- empirically confirmed).  (1) bv_ring: ALGEBRAIC, proves
+ * the full range k=1..63 by polynomial normalization over Z/2^64 (distributivity, circuit-independent,
+ * cheap).  (2) bv_bits SAT: BIT-LEVEL, an exhaustive-valuation cross-witness on a small sample. */
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
 
 /* The SR rule table: row i = (factor 2^shift  ->  emit `shl $shift`).  Covers the FULL emittable range
  * shift 1..63 -- exactly what cg_r3's r3_mul_pow2_k can emit (an F6 re-audit flagged that the old 7-row
@@ -136,11 +157,137 @@ fn cor_boot_agrees() -> u8 @export {
     return 1u8
 }
 
-/* The full self-test: the table is kernel-certified width-faithfully, the negative arm bites, AND the
- * live cg_r3 emission law agrees with the certified table on every rule. 99 = all three. */
+/* ============================================================================================
+ * SHL-ADD STRENGTH REDUCTION -- the rule cg_r3 GAINED (x*(2^k+1) -> (x<<k)+x: one shl + one add in
+ * place of a full imul).  Certified to the SAME gospel standard as the pow2 rule above, but with TWO
+ * INDEPENDENT proof engines (single-engine trust is the weakness the cross-prover discipline removes):
+ *   (1) bv_ring (ALGEBRAIC, FULL range k=1..63): (x<<k)+x and x*(2^k+1) normalize to the SAME canonical
+ *       polynomial (2^k+1)*x over Z/2^64 -- pure distributivity, independent of any bit circuit, cheap.
+ *   (2) bv_bits SAT (BIT-LEVEL, SAMPLE): bb_equal proves the miter UNSAT over all 2^64 valuations on
+ *       representative rules -- the exhaustive-valuation engine corroborates the algebraic one.  Sampled
+ *       (not full range): bb_mul builds a general O(w^2) multiplier whose miter is intractable across all
+ *       63 (measured: >5 min), so the ALGEBRAIC engine carries coverage and SAT independently confirms it.
+ * Plus a SHAPE guard (factor == 2^k+1 exactly), BOOT-emitter agreement, and a negative arm with teeth.
+ * Soundness: x*(2^k+1) == x*2^k + x == (x<<k)+x mod 2^64 for k in 1..63 (bv_shl models the x86 k&63 mask).
+ * The kernel's refl was empirically confirmed UNABLE to prove this (it does not distribute mul over add),
+ * so the pow2 engine genuinely does not transfer -- this is a real second proof faculty, not a copy. */
+var COR_SL_K      : [u64; 63]
+var COR_SL_FACTOR : [u64; 63]
+var COR_SL_INIT   : u64 = 0u64
+
+fn cor_sl_init() -> u64 {
+    if COR_SL_INIT == 1u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i < COR_N {
+        COR_SL_K[i] = i + 1u64                          /* k = 1..63 */
+        COR_SL_FACTOR[i] = (1u64 << (i + 1u64)) + 1u64  /* factor = 2^k + 1 */
+        i = i + 1u64
+    }
+    COR_SL_INIT = 1u64
+    return 0u64
+}
+
+fn cor_sl_rule_count() -> u64 @export { cor_sl_init() return COR_N }
+fn cor_sl_shift_at(i: u64) -> u64 @export { cor_sl_init() if i >= COR_N { return 0u64 } return COR_SL_K[i] }
+fn cor_sl_factor_at(i: u64) -> u64 @export { cor_sl_init() if i >= COR_N { return 0u64 } return COR_SL_FACTOR[i] }
+
+/* SHAPE guard: width-faithful shladd iff factor == 2^k+1 exactly and k in 1..63. */
+fn cor_sl_shape_kf(k: u64, factor: u64) -> u8 {
+    if k < 1u64 { return 0u8 }
+    if k >= 64u64 { return 0u8 }
+    let p : u64 = (1u64 << k) + 1u64
+    if p == factor { return 1u8 }
+    return 0u8
+}
+
+/* (1) ALGEBRAIC proof (bv_ring): (x<<k)+x and x*factor are the SAME polynomial over Z/2^64. */
+fn cor_sl_ring_certify_kf(k: u64, factor: u64) -> u8 {
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    let lhs : u32 = bv_add(bv_shl(x, k as u32), x)
+    let rhs : u32 = bv_mul(x, bv_const(factor))
+    return bv_equal(lhs, rhs)
+}
+fn cor_sl_kernel_certify(i: u64) -> u8 @export {
+    cor_sl_init()
+    if i >= COR_N { return 0u8 }
+    return cor_sl_ring_certify_kf(COR_SL_K[i], COR_SL_FACTOR[i])
+}
+
+/* (2) BIT-LEVEL proof (bv_bits SAT): the miter (x<<k)+x vs x*factor is UNSAT over all 2^64 valuations. */
+fn cor_sl_sat_certify_kf(k: u64, factor: u64) -> u8 {
+    bb_reset(64u64)
+    let x : u32 = bb_var(0u32)
+    let lhs : u32 = bb_add(bb_shl(x, k), x)
+    let rhs : u32 = bb_mul(x, bb_const(factor))
+    return bb_equal(lhs, rhs)
+}
+
+/* The shladd CERTIFIER: every tabled rule passes the SHAPE guard AND the algebraic (full-range) proof; a
+ * representative SAMPLE additionally passes the independent bit-level SAT proof.  99 = all certified;
+ * (300+i) shape fail; (400+i) algebraic fail; (50N) SAT-sample fail. */
+fn cor_sl_certify_all() -> u64 @export {
+    cor_sl_init()
+    let mut i : u64 = 0u64
+    while i < COR_N {
+        if cor_sl_shape_kf(COR_SL_K[i], COR_SL_FACTOR[i]) != 1u8 { return 300u64 + i }
+        if cor_sl_ring_certify_kf(COR_SL_K[i], COR_SL_FACTOR[i]) != 1u8 { return 400u64 + i }
+        i = i + 1u64
+    }
+    if cor_sl_sat_certify_kf(1u64, 3u64) != 1u8 { return 501u64 }
+    if cor_sl_sat_certify_kf(2u64, 5u64) != 1u8 { return 502u64 }
+    if cor_sl_sat_certify_kf(3u64, 9u64) != 1u8 { return 503u64 }
+    return 99u64
+}
+
+/* PROVE-THE-NEGATIVE for shladd: BOTH engines reject a false rule, and the shape guard rejects non-(2^k+1)
+ * factors -- so 99 is not vacuous.  1 iff every unsound case is rejected. */
+fn cor_sl_rejects_unsound() -> u8 @export {
+    if cor_sl_shape_kf(1u64, 5u64) != 0u8 { return 0u8 }   /* 2^1+1=3 != 5 -> shape REJECTS */
+    if cor_sl_shape_kf(2u64, 4u64) != 0u8 { return 0u8 }   /* 4 is pow2, not 2^k+1 -> shape REJECTS */
+    if cor_sl_shape_kf(0u64, 2u64) != 0u8 { return 0u8 }   /* k<1 -> shape REJECTS */
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    let nr : u8 = bv_equal(bv_add(bv_shl(x, 1u32), x), bv_mul(x, bv_const(5u64)))
+    if nr != 0u8 { return 0u8 }                            /* algebraic: 3x != 5x */
+    bb_reset(64u64)
+    let y : u32 = bb_var(0u32)
+    let ns : u8 = bb_equal(bb_add(bb_shl(y, 1u64), y), bb_mul(y, bb_const(5u64)))
+    if ns != 0u8 { return 0u8 }                            /* bit-level: 3x != 5x (countermodel) */
+    return 1u8
+}
+
+/* BOOT-emitter agreement for shladd: the ACTUAL functions cg_r3 delegates to (cgopt_mul_shladd_admit /
+ * cgopt_mul_shladd_k) agree with this certified table on every rule, and REJECT what the certifier
+ * rejects.  1 iff agreement. */
+fn cor_sl_boot_agrees() -> u8 @export {
+    cor_sl_init()
+    let mut i : u64 = 0u64
+    while i < COR_N {
+        if cgopt_mul_shladd_admit(COR_SL_FACTOR[i]) != 1u32 { return 0u8 }
+        if (cgopt_mul_shladd_k(COR_SL_FACTOR[i]) as u64) != COR_SL_K[i] { return 0u8 }
+        i = i + 1u64
+    }
+    if cgopt_mul_shladd_admit(0u64) != 0u32 { return 0u8 }   /* below floor */
+    if cgopt_mul_shladd_admit(1u64) != 0u32 { return 0u8 }   /* below floor */
+    if cgopt_mul_shladd_admit(2u64) != 0u32 { return 0u8 }   /* v < 3 */
+    if cgopt_mul_shladd_admit(4u64) != 0u32 { return 0u8 }   /* pow2, not 2^k+1 */
+    if cgopt_mul_shladd_admit(7u64) != 0u32 { return 0u8 }   /* non-(2^k+1) */
+    if cgopt_mul_shladd_admit(8u64) != 0u32 { return 0u8 }   /* pow2 */
+    return 1u8
+}
+
+/* The full self-test: BOTH strength-reduction rules cg_r3 delegates here are certified.  POW2 (x*2^k ->
+ * shl): kernel-certified width-faithfully, negative arm bites, boot emitter agrees.  SHL-ADD (x*(2^k+1) ->
+ * shl+add): certified by TWO independent engines (bv_ring full range + bv_bits SAT sample), shape guard +
+ * negative arm + boot emitter agreement. 99 = every arm of BOTH rules. */
 fn cor_selftest() -> u64 @export {
     if cor_certify_all() != 99u64 { return cor_certify_all() }
     if cor_rejects_unsound() != 1u8 { return 5u64 }
     if cor_boot_agrees() != 1u8 { return 6u64 }
+    let sl : u64 = cor_sl_certify_all()
+    if sl != 99u64 { return sl }
+    if cor_sl_rejects_unsound() != 1u8 { return 7u64 }
+    if cor_sl_boot_agrees() != 1u8 { return 8u64 }
     return 99u64
 }

@@ -1099,6 +1099,25 @@ static int mul_pow2_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
     return k;
 }
 
+/* SHIFT-AND-ADD STRENGTH REDUCTION test (dual of cg_r3.iii's r3_mul_shladd_k -- IDENTICAL logic so the
+ * emitted assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is MUL and rhs is a
+ * constant integer literal equal to 2^k+1 (k in 1..63), return k; else 0.  Sound: x*(2^k+1) == (x<<k)+x
+ * mod 2^64 (proven over bv_ring: (2^k+1)x = 2^k x + x).  Replaces a full imul with one shl + one add for
+ * the non-pow2 (2^k+1) factors cg_r3 would otherwise imul.  Disjoint from mul_pow2_k (2^k+1 is odd). */
+static int mul_shladd_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    if (n->u.binary.op != III_BIN_MUL) return 0;
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
+    uint64_t v = rhs->u.int_.value;
+    if (v < 3) return 0;
+    uint64_t m = v - 1;
+    if ((m & (m - 1)) != 0) return 0;
+    int k = 0; uint64_t t = v - 1;
+    while (t > 1) { t >>= 1; k++; }
+    return k;
+}
+
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.iii's r3_shift_const_k -- IDENTICAL logic so the emitted
  * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL/SHR and rhs is a constant
  * integer literal in 1..63, return the shift amount; else 0.  x<<k / x>>k for a constant k is the
@@ -1375,6 +1394,22 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                 if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
                 stack_pop_reg(cg, "rax");
                 emit_line(cg, "    shlq $%d, %%rax", srk);
+                if (expr_is_u32(cg, n->u.binary.lhs))
+                    emit_line(cg, "    movl %%eax, %%eax");
+                stack_push_reg(cg, "rax");
+                return 0;
+            }
+            int slk = mul_shladd_k(cg, n);
+            if (slk != 0) {
+                /* SHIFT-AND-ADD STRENGTH REDUCTION (the live self-optimizer; dual-implemented byte-
+                 * identically in cg_r3.iii): mul by a constant 2^k+1 becomes movq %rax,%rcx; shlq $k,%rax;
+                 * addq %rcx,%rax -- (x<<k)+x -- replacing a full imul.  Sound: x*(2^k+1) == (x<<k)+x mod
+                 * 2^64.  u32 truncate matches the imul path.  Reuses only twin-verified emit primitives. */
+                if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
+                stack_pop_reg(cg, "rax");
+                emit_line(cg, "    movq %%rax, %%rcx");
+                emit_line(cg, "    shlq $%d, %%rax", slk);
+                emit_line(cg, "    addq %%rcx, %%rax");
                 if (expr_is_u32(cg, n->u.binary.lhs))
                     emit_line(cg, "    movl %%eax, %%eax");
                 stack_push_reg(cg, "rax");

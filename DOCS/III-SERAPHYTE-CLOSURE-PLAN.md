@@ -318,5 +318,43 @@ Re-exported; and because re-exporting re-triggers the gate-outcome ratchet, `200
 proves `sm_admit`'s ADMIT arm + all three REJECT arms directly (was: only via `sm_selftest`).
 
 **Canonical build (the gate, confirmed before commit):** carto GATE PASS, FAIL=0, all 28 `ser_*` organs
-compiled into `libiii_native.a`, coverage `uncovered≤5`, gate-outcome `under-proven≤2`, reachability
-`dark-surface≤14`. Evergreen (reproduced from source).
+compiled into `libiii_native.a`, coverage `uncovered=5`, gate-outcome `under-proven=2`, reachability
+`dark-surface=14`. Evergreen (reproduced from source).
+
+---
+
+## PART XVII — THE FULL SELF-REWRITE, EXECUTED (2026-06-25); and the HONEST TIERS
+
+PART XV/XVI calibrated the full rule-absent self-rebuild as "wired + un-staled but NOT executed this session
+(pinned-compiler safety)." **That deferral is now CLOSED** — `bash seraphyte_reseal_driver.sh` (no args) ran
+end-to-end, **rc=0**:
+
+- STEP 0 rule-absent baseline (`f52c6ac8`) → iiis-2 rebuilt without subk.
+- STEP 1 GAP: bv_ring & bv_bits PROVE `x*7==(x<<3)-x`; rule-absent cg_r3 emits `imul`.
+- STEP 2 INTUITION: `cg_synth(7)` (`ser_cegis`) chose rule `subk` — **the descriptor seam closed IN THE REAL
+  APPLY PATH** (the compiler, not the operator, decided WHAT to emit).
+- STEP 3-4 the EMITTER wrote the rule; iiis-2 + iiis-3 rebuilt; `x*7` now emits `shl $0x3,%rax; sub %rcx,%rax`
+  (binary); self-host fixpoint iiis-2==iiis-3 = **59/0**; cor_selftest = **99** → ACCEPT; eidos/field witnessed.
+- STEP 5 TEETH: an unsound over-admit variant → cor_selftest = **10** RED → ROLLBACK: eidos `field_rewind`
+  (provenance=1), rule-table restored **BYTE-EXACT**, re-greens 99.
+
+So the genuinely load-bearing wire (`ser_cegis` choosing the descriptor in the apply path) is **PROVEN by the
+self-rewrite**, not merely wired. F3 is restored byte-exact (self-restoring). A driver-staleness bug — STEP 5
+reverted to `HEAD`, which now HAS the committed rule, so the idempotent emitter skipped the unsound emit and
+the teeth didn't bite — was EXPOSED by running it, and fixed (revert to `BASELINE_REF`).
+
+**HONEST TIERS (what fires where — no "load-bearing" inflation):**
+- **TIER 1 — real apply path, executed:** the self-rewrite above (`cg_synth` descriptor → compiler rewrites
+  itself → byte-exact rollback), and the eidos/field accept/rollback witness (`--eidos-proof` rc=0). These
+  fire in III's real self-modification path.
+- **TIER 2 — ships + gates, NOT load-bearing:** the 12 first-wave organs (2004-2015) were silently broken
+  (KATs in EXPECTED, organs not in MODULES → could not link); now they build + gate + ship. A genuine fix of
+  12 dead modules — not a runtime consumer.
+- **TIER 3 — built + executed, consumed only by a KAT / the `--pipeline` proof-mode:** `ser_pipeline`
+  (`svp_pipeline`) + `svp_autopoietic_wave`. Nothing in III's production compile path invokes them; they prove
+  the organs COMPOSE and discharge, they do not yet fire in a production build. `svp_autopoietic_wave` is a
+  proof aggregator (runs the 12 first-wave selftests), not a production consumer — stated plainly.
+
+**Frontier (unchanged, named not blurred):** routing III's PRODUCTION compile-time rule-discovery through this
+loop at every emit site (the reseal driver proves it for the one shift-sub rule on demand; making it the
+compiler's standing behavior is the next step).

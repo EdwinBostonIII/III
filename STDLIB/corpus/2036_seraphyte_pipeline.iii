@@ -1,0 +1,58 @@
+/* STDLIB/corpus/2036_seraphyte_pipeline.iii -- the FULL Seraphyte pipeline, every organ load-bearing, gated.
+ *
+ * collapse + intent + intuition + alignment in ONE fold, the fold the reseal driver consumes.  99 = all arms.
+ * (Unit proof + coverage; the lie-undone evidence is the driver's `--pipeline` executed output.)
+ *
+ *   ARM 1   INTUITION: cg_synth picks shift-sub {form 2, k 3, cost 2} for x*7 -- the compiler decides WHAT.
+ *   ARM 2-6 EACH ORGAN-CLASS produces its real result for the family factor 7: INTENT (merge on proof),
+ *           COLLAPSE x3 (non-local cascade, fixpoint+DCE, regalloc spill elimination), ALIGN (temporal safe+live).
+ *   ARM 7   THE FULL PIPELINE accepts 7 (every gate green; eidos committed).
+ *   ARM 8   THE NEGATIVE: a non-member (x*11) is rejected (no rewrite synthesized) and rolled back (provenance).
+ *   ARM 9   the unit fold svp_selftest = 99.
+ */
+module corpus_2036_seraphyte_pipeline
+
+extern @abi(c-msvc-x64) fn svp_descriptor(v: u64) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_form(packed: u32) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_k(packed: u32) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_cost(packed: u32) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_intent_fulfilled(v: u64, k: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_cascade_covers(v: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_fixpoint_dce(v: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_regalloc_frees() -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_aligned() -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_pipeline(v: u64) -> u64 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_pipeline_rejects(v: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_selftest() -> u64 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_autopoietic_wave() -> u64 from "ser_pipeline.iii"
+
+fn main() -> u64 {
+    /* ARM 1 -- INTUITION: cg_synth picks shift-sub {2,3,cost 2} for x*7 */
+    let d : u32 = svp_descriptor(7u64)
+    if svp_form(d) != 2u32 { return 1u64 }
+    if svp_k(d) != 3u32 { return 2u64 }
+    if svp_cost(d) != 2u32 { return 3u64 }
+
+    /* ARM 2-6 -- each organ-class produces its real result for the family factor 7 */
+    if svp_intent_fulfilled(7u64, 3u64) != 1u8 { return 4u64 }   /* INTENT: merge on proof */
+    if svp_cascade_covers(7u64) != 1u8 { return 5u64 }           /* COLLAPSE: non-local cascade */
+    if svp_fixpoint_dce(7u64) != 1u8 { return 6u64 }             /* COLLAPSE: fixpoint + DCE */
+    if svp_regalloc_frees() != 1u8 { return 7u64 }               /* COLLAPSE: regalloc spill elimination */
+    if svp_aligned() != 1u8 { return 8u64 }                      /* ALIGN: temporal safe + live */
+
+    /* ARM 7 -- the full pipeline accepts 7 (every gate green; eidos committed) */
+    if svp_pipeline(7u64) != 99u64 { return 9u64 }
+
+    /* ARM 8 -- the negative: a non-member is rejected + rolled back */
+    if svp_pipeline_rejects(11u64) != 1u8 { return 10u64 }
+    if svp_pipeline(11u64) == 99u64 { return 11u64 }   /* NON-VACUOUS: the pipeline must REFUSE a non-member */
+
+    /* ARM 9 -- the unit fold */
+    if svp_selftest() != 99u64 { return 12u64 }
+
+    /* ARM 10 -- THE FIRST WAVE made load-bearing: every 2004-2015 organ (discover/optimize/commit, immune/
+     * memo/diff/isub, kvalue/energy/real/membrane/autopoiesis) discharges through the pipeline consumer. */
+    if svp_autopoietic_wave() != 99u64 { return 13u64 }
+
+    return 99u64
+}

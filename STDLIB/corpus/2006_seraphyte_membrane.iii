@@ -1,0 +1,19 @@
+/* 2006 -- SERAPHYTE membrane (M) + judgment (KRISIS) (numera/ser_membrane.iii). The unified admission
+ * boundary: ADMIT iff behaviour-preserving (ripple_metric/rm_cut_valid) AND the 5-dim commit_gate holds
+ * (commit_gate/cg_decide: rule/module/seal/conservative/KERNEL) AND K does not regress (ser_kvalue).
+ * sm_selftest proves the behavioural-immortality safety property AND both negative arms: a capability-
+ * losing cut, a kernel-down gate, and a K-lowering move are each REJECTED with a located code. Rejection
+ * is non-fatal (return to the pool). 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Parts I.1, III. */
+module corpus_2006
+extern @abi(c-msvc-x64) fn sm_selftest() -> u64 from "ser_membrane.iii"
+extern @abi(c-msvc-x64) fn sm_admit(cut_valid: u32, cg_verdict: u32, k_before: u32, k_after: u32) -> u32 from "ser_membrane.iii"
+fn main() -> u64 {
+    /* directly prove the unified membrane decision sm_admit -- the ADMIT arm AND all three REJECT arms.
+     * (sm_admit is @export and consumed by ser_autopoiesis, so the gate-outcome ratchet wants both outcomes
+     * proven by a corpus KAT, not only exercised indirectly through sm_selftest.) */
+    if sm_admit(1u32, 99u32, 5u32, 6u32) != 99u32 { return 90u64 }   /* ADMIT: valid cut, gate pass, K climbs */
+    if sm_admit(0u32, 99u32, 5u32, 6u32) == 99u32 { return 91u64 }   /* REJECT: capability-losing cut */
+    if sm_admit(1u32, 50u32, 5u32, 6u32) == 99u32 { return 92u64 }   /* REJECT: commit-gate failed */
+    if sm_admit(1u32, 99u32, 6u32, 5u32) == 99u32 { return 93u64 }   /* REJECT: K regression */
+    return sm_selftest()
+}

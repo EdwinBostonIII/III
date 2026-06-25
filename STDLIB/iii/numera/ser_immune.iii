@@ -1,0 +1,101 @@
+/* STDLIB/iii/numera/ser_immune.iii -- THE IMMUNE-RIPPLE: a proven-bad rewrite becomes a vaccine.
+ *
+ * The substrate-level resilience the architecture map named (#7) + the user's spec: "the organism's Death
+ * is mathematically proven and permanently logged to isub, instantly becoming a vaccine (an immune ripple)
+ * for every other process folding that log."  Realised honestly on the existing witnessed substrate:
+ *
+ *   - A candidate rewrite (lhs,rhs circuits) meets the SAT MEMBRANE (numera/bv_bits bb_equal -- UNSAT of
+ *     the miter = proof of equality; a countermodel = proof of DISTINCTNESS).  No new prover.
+ *   - The verdict is written to the shared omnia::isub bus as a WITNESSED, content-addressed ripple:
+ *       proven-EQUAL    -> BELOW(law,ground)    (admit -- the good rewrite, as ser_isub emits)
+ *       proven-DISTINCT -> REFLECT(law,ground)  (the IMMUNE ANTI-EVENT -- the order-reversing verb is
+ *                                                geometrically honest: a rejected mutation is reflected
+ *                                                BACK, never admitted into the organism).
+ *   - THE VACCINE (im_is_immune): any process folds the bus and asks "is this candidate proven-BAD?"
+ *     before re-attempting it -- so a refuted rewrite is NEVER retried, by ANY consumer of the log.  The
+ *     immune memory is the fold; it is tamper-evident (isub's Merkle witness) and shared (one bus).
+ *
+ * This is genuinely new (the proven-bad anti-event + the fold-based vaccine), grounded in pre-existing
+ * gated faculties (isub + bb_bits), and observation-free (the verdict is a PROOF, never a frequency).
+ *
+ * HONEST SCOPE: isub (the bus) and bb_bits (the SAT membrane) PRE-EXIST + are gated; this organ is the new
+ * BRIDGE -- the immune semantics (REFLECT = vaccine, fold = immune memory).  It blocks RE-ATTEMPTS at the
+ * log level; wiring it as a precondition into a live optimiser's candidate loop is the next operator step.
+ *
+ * Hexad: kind_seal (the rejecting/sealing act).  Ring: R0.  K: 1.00.  NIH: composes isub + bv_bits only.
+ * Determinism: integer; the membrane is the deterministic SAT solver.  Compiler-UNREFERENCED -> LIBNATIVE.
+ * See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md Part XIII (resilience #7).
+ */
+module numera_ser_immune
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const IM_V_BELOW   : u32 = 0u32   /* proven-good verdict (admit) */
+const IM_V_REFLECT : u32 = 1u32   /* proven-BAD verdict -- the immune anti-event (vaccine) */
+const IM_GROUND    : u32 = 1u32
+
+/* Present a candidate to the SAT membrane; emit the witnessed verdict ripple.  Returns 1 good / 0 bad. */
+fn im_present(law_id: u32, lhs: u32, rhs: u32) -> u8 @export {
+    let eq : u8 = bb_equal(lhs, rhs)
+    if eq == 1u8 {
+        isub_emit(IM_V_BELOW, law_id, IM_GROUND)
+        return 1u8
+    }
+    isub_emit(IM_V_REFLECT, law_id, IM_GROUND)
+    return 0u8
+}
+
+/* THE VACCINE: fold the shared bus -- is law_id recorded as PROVEN-BAD (a REFLECT anti-event)? */
+fn im_is_immune(law_id: u32) -> u32 @export {
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == IM_V_REFLECT {
+            if isub_a(i) == law_id { return 1u32 }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* The immune KAT.  99 = the membrane's verdicts become a shared, tamper-evident immune memory:
+ *   ARM 1  a TRUE law (x&y)+(x|y)==x+y is proven-GOOD (BELOW).
+ *   ARM 2  a FALSE law (x&y)+(x|y)==x^y is proven-BAD (REFLECT = the immune anti-event).
+ *   ARM 3  THE VACCINE: the proven-bad law is now IMMUNE (the fold remembers -> never retried).
+ *   ARM 4  a proven-good law is NOT immune; ARM 5 an unseen law is NOT immune (no false memory).
+ *   ARM 6  both verdicts live on the witnessed bus.
+ */
+fn im_selftest() -> u64 @export {
+    isub_reset()
+
+    bb_reset(32u64)
+    let x1 : u32 = bb_var(0u32)
+    let y1 : u32 = bb_var(1u32)
+    let v_good : u8 = im_present(10u32, bb_add(bb_and(x1, y1), bb_or(x1, y1)), bb_add(x1, y1))
+    if v_good != 1u8 { return 1u64 }
+
+    bb_reset(32u64)
+    let x2 : u32 = bb_var(0u32)
+    let y2 : u32 = bb_var(1u32)
+    let v_bad : u8 = im_present(20u32, bb_add(bb_and(x2, y2), bb_or(x2, y2)), bb_xor(x2, y2))
+    if v_bad != 0u8 { return 2u64 }
+
+    if im_is_immune(20u32) != 1u32 { return 3u64 }
+    if im_is_immune(10u32) != 0u32 { return 4u64 }
+    if im_is_immune(99u32) != 0u32 { return 5u64 }
+
+    if isub_count() != 2u32 { return 6u64 }
+
+    return 99u64
+}

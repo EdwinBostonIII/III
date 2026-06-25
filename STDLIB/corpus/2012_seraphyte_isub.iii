@@ -1,0 +1,11 @@
+/* 2012 -- SERAPHYTE as PROCESS on the witnessed ripple bus (numera/ser_isub.iii). The symbiosis the
+ * user proposed: the Seraphyte's membrane-PROVEN optimisations (cg_autocatalyst SAT membrane) are emitted
+ * as content-addressed BELOW ripples on omnia::isub (the Ring-(-1) Merkle-witnessed metal bus) -- exactly
+ * as omnia::xii_isub encapsulates XII's rewrite trajectory. si_selftest proves: all 6 proven laws become
+ * witnessed ripples (isub_count==6); STATE=FOLD re-derives the proven-frontier from the log (not a stored
+ * cell); the life is REPLAYABLE (same membrane -> same witness ROOT) and WITNESSED (non-zero hash-chain).
+ * The Seraphyte's discoveries become first-class blocks in III's inverse substrate, symbiotic with every
+ * existing consumer (xii_isub, eidos::ripple, the optimiser) -- no island. 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Part V. */
+module corpus_2012
+extern @abi(c-msvc-x64) fn si_selftest() -> u64 from "ser_isub.iii"
+fn main() -> u64 { return si_selftest() }

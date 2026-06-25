@@ -1,0 +1,10 @@
+/* 2009 -- SERAPHYTE commit-half (numera/ser_commit.iii): the organism COMMITS, not just observes.
+ * sc_selftest composes forcefield/cg_autocatalyst (cga_dispose = dream -> CIC kernel tc_check -> cad-seal)
+ * to prove: EMERGENCE (empty phenome); COMMIT (a kernel-PROVEN strength identity is sealed -> count 0->1,
+ * real STATE CHANGE); GROWTH (a second proven identity -> count 1->2, monotone); MEMBRANE REFUSES a FALSE
+ * identity -> ZERO state change (return to pool, non-fatal); SOUNDNESS (cga_all_true -- never sealed a false
+ * one). The commit is to the in-run certified-rewrite registry (real, kernel-proven); permanent compiler
+ * assimilation stays OPERATOR-GATED by sovereignty. 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Part III. */
+module corpus_2009
+extern @abi(c-msvc-x64) fn sc_selftest() -> u64 from "ser_commit.iii"
+fn main() -> u64 { return sc_selftest() }

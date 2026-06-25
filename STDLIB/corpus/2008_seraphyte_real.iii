@@ -1,0 +1,10 @@
+/* 2008 -- SERAPHYTE on a REAL III target (numera/ser_real.iii): the loop runs on III's actual crypto-
+ * primitive proof-web (weave_graph -- SHA-2 Ch/Maj as bv circuits), no synthetic fixture. sr_selftest
+ * proves: the strands ARE primweb theorems (real target); the LIVE membrane admits the SAT-proven-equal
+ * Ch spec<->optform replacement and REFUSES the proven-distinct Ch<->Maj swap (both arms, real proofs);
+ * the K-gain is the real AND-gate cost-truth (optform 1 AND < spec 2 ANDs); the move is a real obsolescence
+ * (ws_strand_retires: proven-equal AND cheaper). The organism optimises a REAL III primitive. 99 = GREEN.
+ * See III-SERAPHYTE-INTEGRATION-PLAN.md Part III (liveness on a real target). */
+module corpus_2008
+extern @abi(c-msvc-x64) fn sr_selftest() -> u64 from "ser_real.iii"
+fn main() -> u64 { return sr_selftest() }

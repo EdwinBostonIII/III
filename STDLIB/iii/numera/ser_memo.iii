@@ -1,0 +1,102 @@
+/* STDLIB/iii/numera/ser_memo.iii -- MEMOISED PROVING: the witnessed substrate means never prove twice.
+ *
+ * The concrete EFFICIENCY the Seraphyte/EIDOS substrate buys, closing the immune loop (ser_immune): because
+ * every verdict is a content-addressed ripple on the SHARED omnia::isub bus, a discovery process can FOLD
+ * the bus before attempting a candidate -- if the candidate is already KNOWN (proven-good = BELOW, or
+ * proven-bad = REFLECT, the vaccine), it is SKIPPED, with NO proof-call.  So each distinct candidate meets
+ * the prover at most ONCE, EVER -- across the whole process and (because the address is content-derived)
+ * across every process and instance folding the same log.  The cost saved is the redundant proving avoided.
+ *
+ * This is memoisation with a TWIST that only the witnessed substrate gives: the memo is the tamper-evident
+ * Merkle log, not a private cache -- so it is shareable, replayable, and observation-free (the decision to
+ * skip is a fold of recorded PROOFS, never a frequency or a heuristic).
+ *
+ * HONEST SCOPE: the prover (bv_bits) and the bus (isub) PRE-EXIST + are gated; the new value is the
+ * memoise-by-fold loop + the COST METRIC that proves the saving (proof-calls == unique candidates, not the
+ * stream length).  It demonstrates the efficiency; wiring it as the front of a live optimiser's candidate
+ * loop is the operator step.
+ *
+ * Hexad: kind_act (the economising act).  Ring: R0.  K: 1.00.  NIH: composes bv_bits + isub only.
+ * Determinism: integer; the prover + content-addresses are deterministic.  Compiler-UNREFERENCED -> LIBNATIVE.
+ * See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md Part XIII (efficiency: memoised proving).
+ */
+module numera_ser_memo
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_a(i: u32) -> u32 from "isub.iii"
+
+const SM_V_BELOW   : u32 = 0u32   /* proven-good */
+const SM_V_REFLECT : u32 = 1u32   /* proven-bad (vaccine) */
+const SM_GROUND    : u32 = 1u32
+
+var SM_PROOFS : [u32; 1]   /* the COST METRIC: how many actual prover-calls happened */
+
+/* fold the shared bus: is candidate id already KNOWN (any verdict recorded for it)? */
+fn sm_known(id: u32) -> u32 @export {
+    let n : u32 = isub_count()
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_a(i) == id { return 1u32 }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* PROVE-OR-SKIP.  Known -> SKIP (return 2, no proof-call -- the saving).  Else -> ONE proof-call, record
+ * the verdict (BELOW good / REFLECT bad), return 1/0. */
+fn sm_step(id: u32, lhs: u32, rhs: u32) -> u8 @export {
+    if sm_known(id) == 1u32 { return 2u8 }
+    SM_PROOFS[0u64] = SM_PROOFS[0u64] + 1u32
+    let eq : u8 = bb_equal(lhs, rhs)
+    if eq == 1u8 {
+        isub_emit(SM_V_BELOW, id, SM_GROUND)
+        return 1u8
+    }
+    isub_emit(SM_V_REFLECT, id, SM_GROUND)
+    return 0u8
+}
+
+/* The memoised-proving KAT.  99 = a candidate stream with repeats proves each DISTINCT candidate once:
+ *   stream = [c10 good, c20 bad, c10 again, c20 again] -> 4 steps, but only 2 prover-calls (2 repeats skipped).
+ *   ARM 1  c10 (4x==4x) -> PROVEN GOOD.
+ *   ARM 2  c20 (4x==2x) -> PROVEN BAD.
+ *   ARM 3  c10 again -> SKIPPED (memoised good).
+ *   ARM 4  c20 again -> SKIPPED (immune bad).
+ *   ARM 5  EFFICIENCY: exactly 2 prover-calls for 4 steps (the redundant proving was avoided).
+ */
+fn smemo_selftest() -> u64 @export {
+    isub_reset()
+    SM_PROOFS[0u64] = 0u32
+
+    bb_reset(32u64)
+    let xa : u32 = bb_var(0u32)
+    let v1 : u8 = sm_step(10u32, bb_add(bb_shl(xa, 1u64), bb_shl(xa, 1u64)), bb_shl(xa, 2u64))
+    if v1 != 1u8 { return 1u64 }
+
+    bb_reset(32u64)
+    let xb : u32 = bb_var(0u32)
+    let v2 : u8 = sm_step(20u32, bb_add(bb_shl(xb, 1u64), bb_shl(xb, 1u64)), bb_shl(xb, 1u64))
+    if v2 != 0u8 { return 2u64 }
+
+    bb_reset(32u64)
+    let xc : u32 = bb_var(0u32)
+    let v3 : u8 = sm_step(10u32, bb_add(bb_shl(xc, 1u64), bb_shl(xc, 1u64)), bb_shl(xc, 2u64))
+    if v3 != 2u8 { return 3u64 }
+
+    bb_reset(32u64)
+    let xd : u32 = bb_var(0u32)
+    let v4 : u8 = sm_step(20u32, bb_add(bb_shl(xd, 1u64), bb_shl(xd, 1u64)), bb_shl(xd, 1u64))
+    if v4 != 2u8 { return 4u64 }
+
+    /* the efficiency: 4 steps, only 2 prover-calls */
+    if SM_PROOFS[0u64] != 2u32 { return 5u64 }
+
+    return 99u64
+}

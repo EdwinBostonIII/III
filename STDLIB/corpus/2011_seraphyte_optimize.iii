@@ -1,0 +1,11 @@
+/* 2011 -- SERAPHYTE autonomous optimisation metabolism (numera/ser_optimize.iii). so_selftest composes
+ * III's EXISTING robust autonomous-discovery engines (forcefield/cg_autocatalyst): the organism
+ * autonomously DISCOVERS + PROVES a catalog of machine-faithful peephole optimisations -- 6 mixed
+ * bitwise-arithmetic strength laws via numera/bv_bits SAT (UNSAT miter over all valuations at w=8/16/32/64)
+ * + the width-faithful pow2 strength diagonal via the BV64 CIC kernel -- and REFUSES the unsound (a false
+ * law yields a SAT countermodel; an out-of-catalog shape and a false pow2 reduction are rejected). The
+ * mixed/shift laws are OUTSIDE cg_r3's pow2-only strength reduction (a structural gap III's own prover
+ * fills). Deterministic, observation-free (exhaustive, anti-ML). 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md. */
+module corpus_2011
+extern @abi(c-msvc-x64) fn so_selftest() -> u64 from "ser_optimize.iii"
+fn main() -> u64 { return so_selftest() }

@@ -1,0 +1,110 @@
+/* STDLIB/iii/numera/ser_autopoiesis.iii -- THE SERAPHYTE, ALIVE: the autopoietic loop (spec Sec 7).
+ *
+ * The capstone that binds the four organs into ONE living organism, with the Inverted Second Law as
+ * PERSISTENT, DOWN-ONLY organism state (the K-floor ratchet -- spec dA/dt <= 0 over the organism's life):
+ *
+ *   EMERGENCE (GENESIS): the organism forms on a structure (CHORA) and commits its initial reality-weight
+ *                        as the K-floor.
+ *   GROWTH (AUXESIS):    a metabolic cycle DREAMS a move (a noise-edge cut), the MEMBRANE (ser_membrane:
+ *                        behaviour-preserving AND commit-gated AND non-regressing) admits it, the move is
+ *                        applied, K CLIMBS, the floor ratchets up, and catabolism returns positive ENERGY
+ *                        (ser_energy) -- the structure pays for its own optimisation.
+ *   RATCHET (the law):   a regressive commit (lower K) is REFUSED -- the floor never drops.  This is the
+ *                        inverted second law as a refusing gate, not a tendency.
+ *   IMMORTALITY:         a fatal move (cutting a load-bearing edge) is REFUSED by the membrane -- the
+ *                        organism cannot express a capability-losing mutation; rejection is non-fatal.
+ *
+ * So the organism climbs KLIMAX (rising K), pays its own way (energy-positive), cannot regress (ratchet),
+ * and cannot die from error (membrane).  It dies only to physics (ser_energy arena cap, the honest death).
+ *
+ * Hexad: kind_act (the autopoietic act).  Ring: R0.  K: 1.00.  NIH: composes ser_membrane + ser_kvalue +
+ * ser_energy + ripple_metric + commit_gate only.  Determinism: integer-only; persistent BSS K-floor; no
+ * allocator (the energy region is ser_energy's); no recursion.  Compiler-UNREFERENCED -> LIBNATIVE.
+ * See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md (Part VI lifecycle, Part III liveness).
+ */
+module numera_ser_autopoiesis
+
+extern @abi(c-msvc-x64) fn sm_admit(cut_valid: u32, cg_verdict: u32, k_before: u32, k_after: u32) -> u32 from "ser_membrane.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn sk_kvalue() -> u32 from "ser_kvalue.iii"
+extern @abi(c-msvc-x64) fn se_income(freed: u32) -> u64 from "ser_energy.iii"
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_cut_valid(e: u32) -> u32 from "ripple_metric.iii"
+
+/* The persistent inverted-2nd-law ratchet: the organism's committed K-floor (down-only). */
+var SA_KFLOOR : [u32; 1]
+
+fn sa_floor() -> u32 @export { return SA_KFLOOR[0u32] }
+
+/* The ratchet commit: accept a new K iff it does not regress; the floor NEVER drops. */
+fn sa_commit(k_new: u32) -> u32 @export {
+    let f : u32 = SA_KFLOOR[0u32]
+    if k_new < f { return 0u32 }
+    SA_KFLOOR[0u32] = k_new
+    return 1u32
+}
+
+fn sa_build_g1() -> i32 {
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    rm_add_edge(0u32, 2u32, 0u32, 0u32)
+    return 0i32
+}
+
+fn sa_build_g2() -> i32 {
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    return 0i32
+}
+
+/* The living organism KAT.  99 = the full autopoietic life:
+ *   ARM 1  EMERGENCE: form on CHORA (G1), commit the initial K-floor.
+ *   ARM 2  GROWTH: dream the noise-cut, the membrane ADMITS, apply, K CLIMBS, ratchet up, energy positive.
+ *   ARM 3  RATCHET: a regressive commit is REFUSED, the floor holds (dA/dt<=0 as a gate).
+ *   ARM 4  IMMORTALITY: a fatal (load-bearing) cut is REFUSED by the membrane -- non-fatal.
+ */
+fn sa_selftest() -> u64 @export {
+    SA_KFLOOR[0u32] = 0u32
+
+    /* ARM 1 -- emergence */
+    sa_build_g1()
+    let k0 : u32 = sk_kvalue()
+    sa_commit(k0)
+    if sa_floor() != k0 { return 1u64 }
+
+    /* ARM 2 -- growth through the membrane */
+    let cv : u32 = rm_cut_valid(2u32)
+    let cg : u32 = cg_decide(1u32, 1u32, 1u32, 1u32, 1u32)
+    sa_build_g2()
+    let k1 : u32 = sk_kvalue()
+    let adm : u32 = sm_admit(cv, cg, k0, k1)
+    if adm != 99u32 { return 2u64 }
+    if k1 <= k0 { return 3u64 }
+    sa_commit(k1)
+    if sa_floor() != k1 { return 4u64 }
+    let income : u64 = se_income(1u32)
+    if income == 0u64 { return 5u64 }
+
+    /* ARM 3 -- the ratchet refuses regression */
+    let reg : u32 = sa_commit(k0)
+    if reg != 0u32 { return 6u64 }
+    if sa_floor() != k1 { return 7u64 }
+
+    /* ARM 4 -- immortality: a fatal move is refused */
+    sa_build_g1()
+    let cv_bad : u32 = rm_cut_valid(0u32)
+    let adm_bad : u32 = sm_admit(cv_bad, cg, k1, k1)
+    if adm_bad == 99u32 { return 8u64 }
+
+    return 99u64
+}

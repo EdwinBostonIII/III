@@ -1,0 +1,39 @@
+/* STDLIB/corpus/2035_seraphyte_eidos.iii -- the Seraphyte reseal decision WITNESSED on the real eidos/field, gated.
+ *
+ * The autopoietic accept/rollback now runs on the MATURED eidos/field substrate (NOT dome, the superseded POC):
+ * a proof-gated ACCEPT commits a witnessed event; a REFUTE field_rewinds, the abandoned rule RETAINED as
+ * field_provenance.  Driven by the REAL cga_dispose CIC-kernel gate.  99 = all arms.
+ *
+ * SCOPE (honest): this is the UNIT PROOF of the organ + coverage of its exports.  The lie-undone evidence is
+ * the reseal DRIVER's executed output (seraphyte_reseal_driver.sh), where the driver's REAL gate verdict is
+ * recorded on the field -- a corpus KAT proves the organ, it does not prove the wire.
+ *
+ *   ARM 1  the organ's end-to-end unit proof (real kernel gate on the field): sound ACCEPT, unsound ROLLBACK.
+ *   ARM 2  the WIRE arms the driver calls: an ACCEPT verdict (99) commits a witnessed frontier...
+ *   ARM 3  ...and a REFUTE verdict (RED, e.g. cor_selftest=10) field_rewinds, retaining the rule as provenance.
+ */
+module corpus_2035_seraphyte_eidos
+
+extern @abi(c-msvc-x64) fn sev_begin() -> i32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_reseal_record(verdict: u64, rule_id: u64) -> u64 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_frontier() -> u32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_provenance() -> u32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_witness() -> u64 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_selftest() -> u64 from "ser_eidos.iii"
+
+fn main() -> u64 {
+    /* ARM 1 -- the organ's end-to-end unit proof (real CIC-kernel gate on the field). */
+    if sev_selftest() != 99u64 { return 1u64 }
+
+    /* ARM 2/3 -- the WIRE arms directly (what the reseal driver invokes with its real verdict): an ACCEPT
+     * verdict commits a witnessed frontier; a REFUTE verdict field_rewinds, retaining the rule as provenance. */
+    sev_begin()
+    if sev_reseal_record(99u64, 7u64) != 1u64 { return 2u64 }   /* gate all-green -> ACCEPT */
+    if sev_frontier() != 1u32 { return 3u64 }                   /* committed, witnessed */
+    if sev_reseal_record(10u64, 9u64) != 0u64 { return 4u64 }   /* gate RED (cor_selftest=10) -> ROLLBACK */
+    if sev_frontier() != 1u32 { return 5u64 }                   /* the refuted rule did NOT commit */
+    if sev_provenance() == 0u32 { return 6u64 }                 /* the refuted rule retained as provenance */
+    if sev_witness() == 0u64 { return 7u64 }                    /* the accept is witnessed (non-zero root) */
+
+    return 99u64
+}

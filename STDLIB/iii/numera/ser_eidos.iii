@@ -1,0 +1,90 @@
+/* STDLIB/iii/numera/ser_eidos.iii -- THE SERAPHYTE RESEAL DECISION, WITNESSED ON THE REAL EIDOS FIELD.
+ *
+ * The autopoietic loop's accept/rollback was CLAIMED "event-driven / on EIDOS / byte-exact rollback retaining
+ * provenance" but ran on nothing III consumes -- an island.  This organ makes it literally true on the MATURED
+ * eidos/field substrate (which itself encapsulates ripple_field + event_substrate + dome -- so I build on
+ * field, NEVER on dome, the superseded proof-of-concept):
+ *
+ *   field_mark  ->  speculatively field_branch a candidate rule  ->  the REAL gate verdict decides:
+ *     ACCEPT (verdict==99): field_record the commit  -> a non-zero field_temporal_witness (permanent, witnessed)
+ *     ROLLBACK (else)     : field_rewind to the mark  -> the abandoned rule is RETAINED as field_provenance
+ *                           (the immune memory) -- a byte-exact undo on the substrate, not a narrated claim.
+ *
+ * THE CONSUMER IS THE RESEAL DRIVER (STDLIB/scripts/seraphyte_reseal_driver.sh), not a corpus test: the driver
+ * passes its REAL gate verdict (the cor_selftest exit code) into sev_reseal_record, so a real self-application
+ * run WITNESSES its accept/rollback on the field.  STATE = FOLD: the committed frontier (field_event_count) and
+ * the rolled-back provenance (field_provenance) are RE-DERIVED from the substrate, never stored cells.
+ *
+ * NIH: composes eidos/field + forcefield/cg_autocatalyst only -- authors no log, no gate, no crypto.  The
+ * verdict is the caller's (the real certifier); the witness is field's; this organ only RECORDS the decision on
+ * the shared substrate.  Ring R0.  K 1.00.  Determinism: integer; the witness is content-addressed (replayable).
+ */
+module numera_ser_eidos
+
+extern @abi(c-msvc-x64) fn field_reset() -> i32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_mark() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_branch(participant: u64, kind: u64, value: u64, payload: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_rewind(bp: u32) -> i32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_provenance() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_record(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn field_event_count() -> u32 from "field.iii"
+extern @abi(c-msvc-x64) fn field_temporal_witness(upto: u32) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+
+const SEV_K_ATTEMPT : u64 = 1u64    /* a speculative apply (a branch on the field) */
+const SEV_K_ACCEPT  : u64 = 2u64    /* a committed reduction (a permanent witnessed event) */
+const SEV_ACCEPT_RC : u64 = 99u64   /* the gate's all-green verdict (cor_selftest == 99) */
+
+/* begin a reseal session: clear the field (all three substrate views: spatial, temporal, rewind). */
+fn sev_begin() -> i32 @export { return field_reset() }
+
+/* THE WIRE: record the driver's REAL gate verdict for candidate `rule_id` on the eidos field.
+ * `verdict` is the certifier's exit code (the driver passes the cor_selftest RC).  Returns 1 = ACCEPTED
+ * (committed + witnessed), 0 = ROLLED BACK (field_rewind; the abandoned span -> provenance). */
+fn sev_reseal_record(verdict: u64, rule_id: u64) -> u64 @export {
+    let bp : u32 = field_mark()
+    field_branch(rule_id, SEV_K_ATTEMPT, rule_id, 0u64)     /* speculatively apply the candidate */
+    if verdict == SEV_ACCEPT_RC {
+        field_record(rule_id, SEV_K_ACCEPT, 1u64, rule_id)  /* commit: a permanent, witnessed event */
+        return 1u64
+    }
+    field_rewind(bp)                                        /* rollback: the abandoned span -> provenance */
+    return 0u64
+}
+
+/* STATE = FOLD: the committed frontier, re-derived from the evt log (not a stored counter). */
+fn sev_frontier() -> u32 @export { return field_event_count() }
+
+/* STATE = FOLD: the rolled-back rules retained as provenance (the immune memory), re-derived from dome. */
+fn sev_provenance() -> u32 @export { return field_provenance() }
+
+/* the temporal witness ROOT over the committed prefix -- content-addressed, replayable, tamper-evident. */
+fn sev_witness() -> u64 @export { return field_temporal_witness(field_event_count()) }
+
+/* THE UNIT PROOF (organ self-test, real CIC-kernel gate end-to-end on the field).  99 = all arms:
+ *   A  sound (3,3) candidate: cga_dispose ADMITs -> sev_reseal_record(99) -> ACCEPT (1).
+ *   B  unsound (3,4) candidate: cga_dispose REFUSEs -> sev_reseal_record(0) -> ROLLBACK (0).
+ *   then: frontier == 1 (only A committed), provenance >= 1 (B retained), witness != 0 (witnessed),
+ *   and REPLAYABLE (a fresh run yields the SAME content-addressed witness root). */
+fn sev_selftest() -> u64 @export {
+    sev_begin()
+    let mut va : u64 = 0u64
+    if cga_dispose(3u32, 3u32, 64u32) == 1u8 { va = 99u64 }
+    if sev_reseal_record(va, 3u64) != 1u64 { return 1u64 }          /* sound -> ACCEPT */
+    let mut vb : u64 = 0u64
+    if cga_dispose(3u32, 4u32, 64u32) == 1u8 { vb = 99u64 }
+    if sev_reseal_record(vb, 4u64) != 0u64 { return 2u64 }          /* unsound -> ROLLBACK */
+    if sev_frontier() != 1u32 { return 3u64 }                       /* exactly one committed (A) */
+    if sev_provenance() == 0u32 { return 4u64 }                     /* B retained as provenance */
+    let w1 : u64 = sev_witness()
+    if w1 == 0u64 { return 5u64 }                                   /* the witness chain formed */
+
+    /* REPLAYABLE: a fresh run reproduces the same content-addressed witness root. */
+    sev_begin()
+    let mut va2 : u64 = 0u64
+    if cga_dispose(3u32, 3u32, 64u32) == 1u8 { va2 = 99u64 }
+    sev_reseal_record(va2, 3u64)
+    let w2 : u64 = sev_witness()
+    if w1 != w2 { return 6u64 }
+    return 99u64
+}

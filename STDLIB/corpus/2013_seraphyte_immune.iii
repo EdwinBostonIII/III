@@ -1,0 +1,8 @@
+/* 2013 -- SERAPHYTE immune-ripple (numera/ser_immune.iii): a proven-bad rewrite becomes a vaccine. The
+ * SAT membrane (bv_bits) judges a candidate; the verdict is a witnessed isub ripple -- proven-equal=BELOW
+ * (good), proven-distinct=REFLECT (the immune anti-event). im_is_immune folds the shared bus so any consumer
+ * NEVER retries a refuted rewrite (immune memory; tamper-evident; observation-free -- a proof, not a
+ * frequency). Composes isub + bv_bits. 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Part XIII (#7). */
+module corpus_2013
+extern @abi(c-msvc-x64) fn im_selftest() -> u64 from "ser_immune.iii"
+fn main() -> u64 { return im_selftest() }

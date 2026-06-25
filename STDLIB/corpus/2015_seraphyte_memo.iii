@@ -1,0 +1,9 @@
+/* 2015 -- SERAPHYTE memoised proving (numera/ser_memo.iii): the witnessed substrate means never prove
+ * twice. Each verdict is a content-addressed isub ripple; sm_step FOLDS the bus before proving -- a KNOWN
+ * candidate (BELOW good / REFLECT bad-vaccine) is SKIPPED with no prover-call. smemo_selftest runs a 4-step
+ * stream with 2 repeats and proves that only 2 prover-calls happen (the redundant proving is avoided) --
+ * memoisation whose memo is the shareable, tamper-evident Merkle log, not a private cache. Composes
+ * bv_bits + isub. 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Part XIII (efficiency). */
+module corpus_2015
+extern @abi(c-msvc-x64) fn smemo_selftest() -> u64 from "ser_memo.iii"
+fn main() -> u64 { return smemo_selftest() }

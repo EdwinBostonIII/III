@@ -18,6 +18,9 @@ LIB="$ROOT/STDLIB/build/iii/libiii_native.a"
 FF="$ROOT/STDLIB/iii/forcefield/cg_opt_rules.iii"
 BOOT="$ROOT/COMPILER/BOOT/cg_opt_rules.iii"
 F3=(COMPILER/BOOT/cg_opt_rules.iii COMPILER/BOOT/cg_r3.iii COMPILER/BOOT/cg_r3.c)   # the 3 codegen files
+# the rule-absent BASELINE: the subk shl-sub rule was committed in c9dfd87d, so HEAD now CONTAINS it; its parent
+# f52c6ac8 is the rule-absent state the full driver must start from (overridable via RESEAL_BASELINE).
+BASELINE_REF="${RESEAL_BASELINE:-f52c6ac8}"
 W="$ROOT/STDLIB/build/_reseal"; mkdir -p "$W"
 say(){ printf '[reseal] %s\n' "$*"; }
 hr(){  printf '%s\n' "------------------------------------------------------------"; }
@@ -35,9 +38,131 @@ gate_cor_selftest(){ update_archive
   gcc "$W/_gd.o" "$LIB" -lkernel32 -o "$W/_gd.exe" >/dev/null 2>&1 || { echo 253; return; }
   timeout 120 "$W/_gd.exe" >/dev/null 2>&1; echo $?; }
 
+# === EIDOS WIRE: witness the reseal accept/rollback decision on the matured eidos/field substrate ==========
+# The autopoietic accept/rollback ran on nothing III consumes (island).  These record the driver's REAL gate
+# verdict on eidos/field (numera/ser_eidos -> eidos/field, which encapsulates ripple_field+event_substrate+dome
+# -- we build on field, NEVER on dome the POC).  ACCEPT -> a witnessed field_record; REFUTE -> field_rewind,
+# the abandoned rule retained as field_provenance.  Proof is THIS driver's executed output, not a corpus test.
+sev_field_accept() {   # $1=verdict $2=rule_id  -> exit code: committed frontier (1=accepted+witnessed), else 0
+  cat > "$W/_sev_a.iii" <<EOF
+module sa
+extern @abi(c-msvc-x64) fn sev_begin() -> i32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_reseal_record(verdict: u64, rule_id: u64) -> u64 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_frontier() -> u32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_witness() -> u64 from "ser_eidos.iii"
+fn main() -> u64 {
+    sev_begin()
+    sev_reseal_record(${1}u64, ${2}u64)
+    let w: u64 = sev_witness()
+    if w == 0u64 { return 0u64 }
+    let f: u32 = sev_frontier()
+    return f as u64
+}
+EOF
+  "$IIIS" "$W/_sev_a.iii" --compile-only --out "$W/_sev_a.o" >/dev/null 2>&1 || { echo 250; return; }
+  gcc "$W/_sev_a.o" "$LIB" -lkernel32 -o "$W/_sev_a.exe" >/dev/null 2>&1 || { echo 251; return; }
+  timeout 30 "$W/_sev_a.exe" >/dev/null 2>&1; echo $?
+}
+sev_field_rollback() {   # $1=verdict $2=rule_id  -> exit code: field_provenance (>=1 = field_rewound + retained)
+  cat > "$W/_sev_r.iii" <<EOF
+module sr
+extern @abi(c-msvc-x64) fn sev_begin() -> i32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_reseal_record(verdict: u64, rule_id: u64) -> u64 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_provenance() -> u32 from "ser_eidos.iii"
+fn main() -> u64 {
+    sev_begin()
+    sev_reseal_record(${1}u64, ${2}u64)
+    let p: u32 = sev_provenance()
+    return p as u64
+}
+EOF
+  "$IIIS" "$W/_sev_r.iii" --compile-only --out "$W/_sev_r.o" >/dev/null 2>&1 || { echo 250; return; }
+  gcc "$W/_sev_r.o" "$LIB" -lkernel32 -o "$W/_sev_r.exe" >/dev/null 2>&1 || { echo 251; return; }
+  timeout 30 "$W/_sev_r.exe" >/dev/null 2>&1; echo $?
+}
+# A REAL CIC-kernel refutation (cga_dispose on a FALSE candidate) driving a real field_rewind -- the SAFE-path
+# rollback proof (the full STEP 5 below uses a real cor_selftest RED, which needs the rule-absent rebuild).
+sev_field_rollback_kernel() {
+  cat > "$W/_sev_rk.iii" <<EOF
+module srk
+extern @abi(c-msvc-x64) fn sev_begin() -> i32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_reseal_record(verdict: u64, rule_id: u64) -> u64 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn sev_provenance() -> u32 from "ser_eidos.iii"
+extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+fn main() -> u64 {
+    sev_begin()
+    let mut v: u64 = 0u64
+    if cga_dispose(3u32, 4u32, 64u32) == 1u8 { v = 99u64 }
+    sev_reseal_record(v, 9u64)
+    let p: u32 = sev_provenance()
+    return p as u64
+}
+EOF
+  "$IIIS" "$W/_sev_rk.iii" --compile-only --out "$W/_sev_rk.o" >/dev/null 2>&1 || { echo 250; return; }
+  gcc "$W/_sev_rk.o" "$LIB" -lkernel32 -o "$W/_sev_rk.exe" >/dev/null 2>&1 || { echo 251; return; }
+  timeout 30 "$W/_sev_rk.exe" >/dev/null 2>&1; echo $?
+}
+# SAFE eidos proof (real verdicts, no iiis rebuild, no committed mutation): exercises the SAME wire STEP 4/5 use.
+reseal_eidos_proof() {
+  hr; say "EIDOS PROOF -- the reseal decision witnessed on the REAL eidos/field (real verdicts, safe path)"
+  local RC_ACC AWIT RPROV
+  RC_ACC="$(gate_cor_selftest)"
+  AWIT="$(sev_field_accept "$RC_ACC" 7)"
+  say "  ACCEPT  : real cor_selftest=$RC_ACC -> eidos/field committed + witnessed (frontier=$AWIT)"
+  RPROV="$(sev_field_rollback_kernel)"
+  say "  ROLLBACK: real CIC-kernel REFUTE (cga_dispose 3,4) -> field_rewind, provenance=$RPROV (abandoned rule retained)"
+  if [ "$AWIT" = "1" ] && [ "$RPROV" = "1" ]; then say "  EIDOS WIRE PROVEN on the real substrate (accept witnessed, rollback retained)."; return 0
+  else say "  EIDOS WIRE FAILED (accept=$AWIT rollback=$RPROV)"; return 1; fi
+}
+
+# === FULL PIPELINE: collapse + intent + intuition + alignment, every organ load-bearing in ONE real fold =====
+# svp_run evaluates a ser_pipeline expression and returns its value via the (8-bit) exit code.
+svp_run() {
+  cat > "$W/_svp.iii" <<EOF
+module svpr
+extern @abi(c-msvc-x64) fn svp_descriptor(v: u64) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_form(packed: u32) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_k(packed: u32) -> u32 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_pipeline(v: u64) -> u64 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_pipeline_rejects(v: u64) -> u8 from "ser_pipeline.iii"
+extern @abi(c-msvc-x64) fn svp_autopoietic_wave() -> u64 from "ser_pipeline.iii"
+fn main() -> u64 { return ${1} }
+EOF
+  "$IIIS" "$W/_svp.iii" --compile-only --out "$W/_svp.o" >/dev/null 2>&1 || { echo 250; return; }
+  gcc "$W/_svp.o" "$LIB" -lkernel32 -o "$W/_svp.exe" >/dev/null 2>&1 || { echo 251; return; }
+  timeout 90 "$W/_svp.exe" >/dev/null 2>&1; echo $?
+}
+# the COMPILER-CHOSEN emit rule for factor v (INTUITION/CEGIS): cg_synth form 2 = shift-sub = 'subk'.  Closes
+# the descriptor seam -- the operator no longer hand-picks 'subk'; the synthesizer does.
+synth_rule_for() {  # $1 = factor (decimal)
+  local f; f="$(svp_run "svp_form(svp_descriptor(${1}u64)) as u64")"
+  if [ "$f" = "2" ]; then echo "subk"; else echo ""; fi
+}
+reseal_pipeline_proof() {
+  hr; say "FULL SERAPHYTE PIPELINE -- collapse + intent + intuition + alignment, each load-bearing (executed output)"
+  local FORM K PIPE REJ RULE
+  FORM="$(svp_run 'svp_form(svp_descriptor(7u64)) as u64')"
+  K="$(svp_run 'svp_k(svp_descriptor(7u64)) as u64')"
+  RULE="$(synth_rule_for 7)"
+  say "  INTUITION (CEGIS)    : x*7 -> descriptor {form=$FORM, k=$K} -> emit rule '$RULE' -- the COMPILER chose (seam closed)"
+  PIPE="$(svp_run 'svp_pipeline(7u64)')"
+  say "  INTENT+COLLAPSE+ALIGN : svp_pipeline(7)=$PIPE  (intent merged on proof; cascade+fixpoint+regalloc collapsed; temporal safe+live; eidos committed)"
+  REJ="$(svp_run 'svp_pipeline_rejects(11u64) as u64')"
+  say "  NEGATIVE (x*11)      : svp_pipeline_rejects=$REJ  (no rewrite synthesized -> rolled back, provenance retained)"
+  WAVE="$(svp_run 'svp_autopoietic_wave()')"
+  say "  FIRST WAVE (2004-15) : svp_autopoietic_wave=$WAVE  (discover/optimize/commit + immune/memo/diff/isub + kvalue/energy/real/membrane/autopoiesis all discharge)"
+  if [ "$FORM" = "2" ] && [ "$K" = "3" ] && [ "$PIPE" = "99" ] && [ "$REJ" = "1" ] && [ "$WAVE" = "99" ]; then
+    say "  PIPELINE PROVEN: second-wave (collapse/intent/intuition/alignment) + first-wave (autopoietic loop) ALL load-bearing (executed)."; return 0
+  else say "  PIPELINE FAILED (form=$FORM k=$K pipe=$PIPE rej=$REJ wave=$WAVE)"; return 1; fi
+}
+if [ "${1:-}" = "--pipeline" ]; then cd "$ROOT"; reseal_pipeline_proof; exit $?; fi
+
+# safe entry: prove the eidos wire with real verdicts WITHOUT the heavy rule-absent rebuild
+if [ "${1:-}" = "--eidos-proof" ]; then cd "$ROOT"; reseal_eidos_proof; exit $?; fi
+
 cd "$ROOT"
-hr; say "STEP 0 -- BASELINE (rule-absent): revert the 3 codegen files to HEAD (no shl-sub), rebuild iiis-2"
-git checkout HEAD -- "${F3[@]}"
+hr; say "STEP 0 -- BASELINE (rule-absent): revert the 3 codegen files to the rule-absent ref ($BASELINE_REF), rebuild iiis-2"
+git checkout "$BASELINE_REF" -- "${F3[@]}"
 [ "$(grep -c cgopt_mul_subk_admit "$BOOT")" = "0" ] || { say "FAIL: not rule-absent"; exit 1; }
 rebuild_iiis2
 say "  rule-absent compiler built (no subk rule)."
@@ -78,7 +203,11 @@ if [ "$GP" = "99" ] && printf '%s' "$BASE_ASM" | grep -qi imul && ! printf '%s' 
 else say "  STEP 1 unexpected (GP=$GP asm=$(printf '%s' "$BASE_ASM"|tr '\n' ';'))"; bash STDLIB/scripts/seraphyte_emit_rule.sh subk >/dev/null 2>&1; exit 2; fi
 
 hr; say "STEP 2 -- EMIT: the patch-emitter writes the rule's source from a descriptor (no human)"
-bash STDLIB/scripts/seraphyte_emit_rule.sh subk 2>&1 | grep -E '^\[emit\]' | sed 's/^/  /'
+# DESCRIPTOR SEAM CLOSED: the CEGIS synthesizer (ser_pipeline -> ser_cegis) chooses WHICH rule to emit, not
+# the operator.  cg_synth(7) -> form 2 (shift-sub) -> 'subk'.  INTUITION made load-bearing in the real wire.
+PIPE_RULE="$(synth_rule_for 7)"; [ -n "$PIPE_RULE" ] || { say "  INTUITION: cg_synth did NOT pick a shift-sub for 7 -- aborting"; exit 2; }
+say "  INTUITION (CEGIS): cg_synth(7) chose rule '$PIPE_RULE' -- the descriptor seam is closed (compiler, not operator)"
+bash STDLIB/scripts/seraphyte_emit_rule.sh "$PIPE_RULE" 2>&1 | grep -E '^\[emit\]' | sed 's/^/  /'
 
 hr; say "STEP 3 -- APPLY + REBUILD: rebuild iiis-2 (emitter source) + iiis-3, then GATE"
 rebuild_iiis2
@@ -93,6 +222,8 @@ say "  self-host fixpoint iiis-2==iiis-3 : $FIX"
 say "  multi-engine certifier cor_selftest : $RC"
 if printf '%s' "$NEW_ASM" | grep -qiE 'sub[[:space:]]+%rcx' && ! printf '%s' "$NEW_ASM" | grep -qi imul && [ "$FIX" = "59 passed, 0 failed" ] && [ "$RC" = "99" ]; then
   say "  DECISION: ACCEPT -- the EMITTER's rule closed a real gap; fixpoint + cert green; no human in the loop."
+  AWIT="$(sev_field_accept "$RC" 7)"
+  say "  eidos/field: ACCEPT witnessed on the REAL substrate (committed frontier=$AWIT, non-zero temporal witness)"
 else say "  DECISION: REJECT (gate not all-green) -- leaving emitted source for inspection"; exit 3; fi
 
 hr; say "STEP 5 -- ROLLBACK teeth: emit an UNSOUND variant, prove the gate refuses + auto-revert byte-exact"
@@ -102,6 +233,7 @@ bash STDLIB/scripts/seraphyte_emit_rule.sh subk 7 R3_STR_SUBQ subq unsound >/dev
 rebuild_iiis2
 RCU="$(gate_cor_selftest)"
 if [ "$RCU" != "99" ]; then say "  GATE RED (cor_selftest=$RCU) -> ROLLBACK: the unsound (over-admit) rule is REFUSED."
+  RPROV="$(sev_field_rollback "$RCU" 9)"; say "  eidos/field: ROLLBACK went through field_rewind (provenance=$RPROV retains the abandoned unsound rule)"
 else say "  FAIL: unsound rule passed -- no teeth"; git checkout HEAD -- "${F3[@]}"; bash STDLIB/scripts/seraphyte_emit_rule.sh subk >/dev/null 2>&1; rebuild_iiis2; gate_cor_selftest >/dev/null; exit 4; fi
 git checkout HEAD -- "${F3[@]}"; bash STDLIB/scripts/seraphyte_emit_rule.sh subk >/dev/null 2>&1   # revert + re-emit SOUND
 rebuild_iiis2; RCR="$(gate_cor_selftest)"; REV_SHA="$(sha256sum "$BOOT" | cut -d' ' -f1)"

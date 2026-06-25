@@ -1,0 +1,108 @@
+/* STDLIB/iii/numera/ser_energy.iii -- THE SERAPHYTE SEMANTIC-ENERGY LEDGER (Phase 8 / Book III).
+ *
+ * The Seraphyte V12 spec gives the organism an energy economy (NOUS-units NU, metabolic rate, an
+ * income/expenditure budget, Sec 10-12) that III had no unified faculty for.  This makes it PHYSICALLY
+ * REAL, not metaphor: NU IS a region of real backing memory (memoria/arena over region), so
+ *
+ *     CONSERVATION (spec "Sum NU = const"):   region_used(a) + region_remaining(a) == region_capacity(a)
+ *
+ * is region's OWN invariant -- not asserted by us, enforced by the bump allocator.  The economy:
+ *   - EXPENDITURE: a dream / membrane proof attempt costs SE_DREAM NU (region_alloc).
+ *   - INCOME (catabolism, spec Sec 10.3.2 "breaking down complex meaning releases stored energy"):
+ *       a real NOISE-EDGE CUT on the ripple_metric graph frees SE_NU_EDGE per removed dead edge --
+ *       the SAME cut the K-functor (ser_kvalue) rewards.  A productive optimisation PAYS FOR ITSELF
+ *       (income > the dream cost) -- the spec's "growth" balance.
+ *   - STARVATION = PHYSICS (the one honest death, Canon X / spec Sec 8.5): when the pool cannot fund
+ *       another dream (region_remaining < SE_DREAM) the budget gate REFUSES -- the organism starves at
+ *       the arena cap.  It is IMMORTAL against error (the membrane never expresses a fatal mutation),
+ *       but MORTAL against physics (the proven memory ceiling).  Detected, never crashed.
+ *
+ * Hexad: kind_substance (the energy pool is real substance).  Ring: R0.  K: 0.99.  NIH: composes
+ * memoria/arena (region) + forcefield/ripple_metric only.  Determinism: integer-only; call results
+ * bound to locals before arithmetic; sentinel-controlled loop (no break); underflow guarded.
+ * Compiler-UNREFERENCED -> LIBNATIVE.  See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md (Part VI-B).
+ */
+module numera_ser_energy
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn region_alloc(id: u64, n: u64, align: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_used(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_remaining(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_capacity(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_reset(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_noise() -> u32 from "ripple_metric.iii"
+
+const SE_CAP     : u64 = 65536u64    /* the physical NU pool: one region */
+const SE_DREAM   : u64 = 1024u64     /* NU cost of one dream / membrane proof attempt (expenditure) */
+const SE_NU_EDGE : u64 = 4096u64     /* NU freed per dead edge catabolised (income) */
+
+/* Income (NU) released by catabolising `freed` dead edges. */
+fn se_income(freed: u32) -> u64 @export {
+    return (freed as u64) * SE_NU_EDGE
+}
+
+/* The budget gate: 1 iff the pool can fund another dream (else starvation). */
+fn se_can_dream(a: u64) -> u32 @export {
+    let rem : u64 = region_remaining(a)
+    if rem < SE_DREAM { return 0u32 }
+    return 1u32
+}
+
+/* The Seraphyte energy KAT.  99 = every arm green:
+ *   ARM 1  CONSERVATION: used + remaining == capacity after a spend (region's own invariant).
+ *   ARM 2  INCOME: a real noise-edge cut frees NU (income > 0) AND pays for the dream (growth).
+ *   ARM 3  STARVATION = PHYSICS: exhausting the pool makes the budget gate REFUSE (detected, not crashed).
+ */
+fn se_selftest() -> u64 @export {
+    let a : u64 = arena_new(SE_CAP)
+    if a == 0u64 { return 1u64 }
+    let cap : u64 = region_capacity(a)
+
+    /* --- ARM 1: expenditure + conservation --- */
+    region_alloc(a, SE_DREAM, 8u64)
+    let used1 : u64 = region_used(a)
+    let rem1  : u64 = region_remaining(a)
+    if used1 + rem1 != cap { return 2u64 }
+    if used1 < SE_DREAM { return 3u64 }
+
+    /* --- ARM 2: catabolism income on the live ripple_metric graph --- */
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    rm_add_edge(0u32, 2u32, 0u32, 0u32)
+    let noise_b : u32 = rm_noise()
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    let noise_a : u32 = rm_noise()
+    if noise_a >= noise_b { return 4u64 }
+    let income : u64 = se_income(noise_b - noise_a)
+    if income <= SE_DREAM { return 5u64 }
+
+    /* --- ARM 3: starvation = physics (the budget gate refuses at the cap) --- */
+    region_reset(a)
+    let mut spent : u64 = 0u64
+    while spent < cap {
+        let rem : u64 = region_remaining(a)
+        if rem < SE_DREAM {
+            spent = cap
+        } else {
+            region_alloc(a, SE_DREAM, 8u64)
+            spent = spent + SE_DREAM
+        }
+    }
+    let still : u32 = se_can_dream(a)
+    if still != 0u32 { return 6u64 }
+    region_release(a)
+    return 99u64
+}

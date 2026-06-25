@@ -1224,6 +1224,23 @@ MODULES=(
     # SKIPPED with no prover-call; each distinct candidate meets the prover at most ONCE, ever, across the
     # whole process + every instance folding the same content-addressed log. Cost metric proves the saving.
     # Composes bv_bits + isub. -> LIBNATIVE.
+    # === Seraphyte FIRST WAVE (corpus 2004-2015): complete organs the prior session wrote + KAT'd but left
+    # UNREGISTERED (orphans -- their KATs were in run_corpus EXPECTED yet could not link). Now integrated:
+    # the autopoietic core (kvalue/energy/real/membrane), the loop stages (commit/discover/optimize), the
+    # proving infrastructure (immune vaccine / cross-prover diff / memoised proving / isub witnessed bus), and
+    # the autopoiesis loop itself (composes energy+kvalue+membrane via the re-exported sm_admit). ===
+    "numera/ser_kvalue"
+    "numera/ser_energy"
+    "numera/ser_real"
+    "numera/ser_membrane"
+    "numera/ser_commit"
+    "numera/ser_discover"
+    "numera/ser_optimize"
+    "numera/ser_immune"
+    "numera/ser_diff"
+    "numera/ser_memo"
+    "numera/ser_isub"
+    "numera/ser_autopoiesis"
     "numera/ser_petri"
     "numera/ser_cegis"
     "numera/ser_antiunify"
@@ -1236,6 +1253,19 @@ MODULES=(
     "numera/ser_tgraph"
     "numera/ser_kinduct"
     "numera/ser_causal"
+    "numera/ser_tdriver"
+    "numera/ser_kinduct_sym"
+    # ser_eidos -- THE RESEAL DECISION WITNESSED ON THE REAL eidos/field substrate (not dome, the superseded
+    # POC). The autopoietic accept/rollback was CLAIMED event-driven/on-EIDOS but ran on nothing III consumes;
+    # this records the driver's REAL gate verdict on the field: ACCEPT -> a witnessed field_record; REFUTE ->
+    # field_rewind, the abandoned rule retained as field_provenance (immune memory). CONSUMED BY the reseal
+    # driver (seraphyte_reseal_driver.sh), not a test. Composes eidos/field + cg_autocatalyst. -> LIBNATIVE.
+    "numera/ser_eidos"
+    # ser_pipeline -- THE FULL SERAPHYTE PIPELINE: collapse+intent+intuition+alignment in ONE fold, the fold
+    # the reseal driver CONSUMES to make its real self-modification decision (so each organ is load-bearing:
+    # INTUITION ser_cegis synthesizes the descriptor, INTENT ser_intent merges on proof, COLLAPSE
+    # ser_cascade/cascade2/regalloc, ALIGN ser_tdriver, WITNESS ser_eidos). Composes those organs only. -> LIBNATIVE.
+    "numera/ser_pipeline"
     # Phase C: Proof-Carrying Code -- the one permitted generative synthesis. pcc_verify =
     # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
     # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.

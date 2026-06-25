@@ -1,0 +1,66 @@
+/* STDLIB/iii/numera/ser_commit.iii -- THE SERAPHYTE COMMITS (the commit-half of liveness).
+ *
+ * ser_real closed the MEMBRANE half: a live SAT proof gates a replacement, but it only OBSERVES -- it
+ * commits nothing.  This organ closes the COMMIT half: the organism actually CHANGES STATE by sealing a
+ * kernel-proven optimisation into its phenome.  It composes III's existing autonomous-commit faculty,
+ * forcefield/cg_autocatalyst (no island, no reimplementation): cga_dispose IS the full autopoietic cycle --
+ *
+ *   Β DREAM (anabolism): hallucinate a candidate strength identity (a,b)  [egraph_stochastic + sov_isa]
+ *   Μ MEMBRANE (judgment): the CIC kernel tc_check is the SOLE arbiter -- proven TRUE or discarded
+ *   Θ PHENOME (commit): if proven -> cad-SEAL into the certified-rewrite registry (state CHANGES, count++)
+ *   ΧΩΡΑ (rejection): if false / arena-cap -> ZERO state change, the dream returns to the pool (NON-FATAL)
+ *
+ * So the organism here does not merely decide -- it COMMITS a kernel-proven rewrite into its (volatile)
+ * phenome, and grows monotonically with proven optimisations while NEVER committing a false one
+ * (cga_all_true).  This is the bounded-reflexivity commit -- the ONLY autonomous commit III permits: the
+ * registry is volatile (evaporates on exit BY DESIGN); PERMANENT assimilation into compiler source stays
+ * OPERATOR-GATED (a reseal), never an autonomous self-edit (sovereignty, M20/ADR-FORGE-4).
+ *
+ * HONEST SCOPE: the commit is to the in-run certified-rewrite REGISTRY (a real state change, kernel-
+ * proven), NOT yet an applied edit to a live cg_r3 emit path (that is the width-faithful cga_dispose_bv +
+ * operator reseal -- named frontier).  The COMMIT happens; the live-compiler APPLICATION is bounded by
+ * sovereignty.
+ *
+ * Hexad: kind_act (the committing act).  Ring: R0.  K: 1.00.  NIH: composes forcefield/cg_autocatalyst
+ * only (sov_isa + typecheck + cad, all in-tree).  Determinism: integer ==/!= ; no own allocator; no
+ * recursion.  Compiler-UNREFERENCED -> LIBNATIVE.  See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md (Part III).
+ */
+module numera_ser_commit
+
+extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_all_true() -> u8 from "cg_autocatalyst.iii"
+
+const SC_BUDGET : u32 = 64u32
+
+/* One autopoietic COMMIT cycle: dream (a,b), the kernel membrane admits+seals iff proven (returns 1,
+ * state changes), else returns to the pool (returns 0, zero state). */
+fn sc_commit(a: u32, b: u32) -> u8 @export {
+    return cga_dispose(a, b, SC_BUDGET)
+}
+
+/* The commit KAT.  99 = the organism COMMITS real kernel-proven optimisations (state changes):
+ *   ARM 1  EMERGENCE: reset -> empty phenome (count 0).
+ *   ARM 2  COMMIT: a kernel-PROVEN identity (mul(x,2^2)==double^2(x), a==b==2) is sealed -> count 0->1 (STATE CHANGED).
+ *   ARM 3  GROWTH: a second proven identity (a==b==3) -> count 1->2 (monotone autopoietic growth).
+ *   ARM 4  MEMBRANE REFUSES (non-fatal): a FALSE identity (a=2,b=3) -> ZERO state change (return to pool).
+ *   ARM 5  SOUNDNESS: every committed entry is a kernel-true identity -- the membrane never sealed a false one.
+ */
+fn sc_selftest() -> u64 @export {
+    cga_reset()
+    if cga_count() != 0u32 { return 1u64 }
+
+    if sc_commit(2u32, 2u32) != 1u8 { return 2u64 }
+    if cga_count() != 1u32 { return 3u64 }
+
+    if sc_commit(3u32, 3u32) != 1u8 { return 4u64 }
+    if cga_count() != 2u32 { return 5u64 }
+
+    if sc_commit(2u32, 3u32) != 0u8 { return 6u64 }
+    if cga_count() != 2u32 { return 7u64 }
+
+    if cga_all_true() != 1u8 { return 8u64 }
+
+    return 99u64
+}

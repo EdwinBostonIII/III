@@ -1,0 +1,10 @@
+/* 2007 -- SERAPHYTE capstone: the autopoietic loop, ALIVE (numera/ser_autopoiesis.iii). Binds the four
+ * organs into one living cycle: sa_selftest proves EMERGENCE (form on CHORA, commit the K-floor); GROWTH
+ * (dream a noise-cut, the membrane ADMITS, apply, K CLIMBS, ratchet up, catabolism returns positive
+ * energy); the RATCHET (a regressive commit is refused, the floor holds -- inverted 2nd law as a gate);
+ * and IMMORTALITY (a fatal load-bearing cut is refused by the membrane -- non-fatal). The organism climbs
+ * KLIMAX, pays its own way, cannot regress, and cannot die from error. 99 = GREEN. See
+ * III-SERAPHYTE-INTEGRATION-PLAN.md Part VI (lifecycle) + Part III (liveness). */
+module corpus_2007
+extern @abi(c-msvc-x64) fn sa_selftest() -> u64 from "ser_autopoiesis.iii"
+fn main() -> u64 { return sa_selftest() }

@@ -1,0 +1,90 @@
+/* STDLIB/iii/numera/ser_optimize.iii -- THE SERAPHYTE'S AUTONOMOUS OPTIMISATION METABOLISM (done right).
+ *
+ * The ser_super attempt hand-rolled the bv_dispose proof and produced a context-dependent ARTIFACT (it
+ * omitted the kernel setup cga_dispose does, so its 99 was uninitialised-state luck -- refuted + deleted).
+ * The lesson: do NOT reinvent the disposer; COMPOSE III's EXISTING, gated, robust autonomous-discovery
+ * machinery (forcefield/cg_autocatalyst), and verify every claim with a CLEAN DIRECT-CALL PROBE.
+ *
+ * Both engines were re-verified ROBUST in clean isolation (direct call, multi-pass link) before this organ
+ * was written:
+ *   - cga_mixed_discover / cga_dispose_mixed: the MIXED bitwise-arithmetic strength laws, each proven by
+ *     numera/bv_bits SAT -- UNSAT of the lhs!=rhs miter at widths 8/16/32/64 is a resolution proof of
+ *     equality over ALL 2^(2w) valuations.  Catalog (6 textbook laws a code generator lives on):
+ *       (x&y)+(x|y)==x+y ; x-(x&y)==x&~y ; (x|y)-(x&y)==x^y ; (x&y)|(x^y)==x|y ; x+(~x&y)==x|y ;
+ *       (x+y)-((x&y)<<1)==x^y.   Probed: cga_dispose_mixed(1)->1, (7)->0, cga_mixed_discover->6.
+ *   - cga_bv_discover / cga_dispose_bv: the WIDTH-FAITHFUL pow2 strength diagonal mul(x,2^a)==shl(x,b),
+ *     proven by the BV64 CIC kernel (count-mask iota).   Probed: (3,3)->1, (3,4)->0, discover(8)->9.
+ *
+ * THE METABOLISM (Β anabolise candidates -> Μ SAT/kernel membrane proves -> Θ seal): exhaustive
+ * enumeration (anti-ML: no counting/observing/thresholds -- every candidate meets the prover, the prover
+ * decides) + deterministic + each optimisation PROVEN before sealing.  The membrane REFUSES the unsound:
+ * a false law yields a SAT countermodel (bb_equal==0) and a false pow2 reduction fails the kernel.
+ *
+ * THE cg_r3 GAP (honest, structural): cg_r3's ONLY strength reduction is cgopt_mul_admit -- multiply by an
+ * exact power of two.  The MIXED bitwise-arithmetic laws and the shift-combining family are a DIFFERENT
+ * domain cg_r3 has no peephole for -- so they are optimisations III autonomously discovers + proves that
+ * its own hand-written code generator does not emit.  (The pow2 diagonal, by contrast, cg_r3 HAS --
+ * cga_bv_discover REDISCOVERS it; the genuinely-new ones are the mixed + shift families.)
+ *
+ * HONEST SCOPE: the discovery ENGINE is pre-existing cg_autocatalyst (robust, gated).  This organ WIRES it
+ * into the Seraphyte's autopoietic loop and proves the whole pipeline end-to-end with a real SAT-refutation
+ * negative arm.  APPLYING a discovered mixed/shift law to cg_r3's live emission is the operator-gated reseal.
+ *
+ * Hexad: kind_act (the optimising metabolism).  Ring: R0.  K: 1.00.  NIH: composes cg_autocatalyst +
+ * bv_bits + cg_opt_rules only.  Determinism: exhaustive enumeration; integer; the provers are deterministic.
+ * Compiler-UNREFERENCED -> LIBNATIVE.  See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md Part III.
+ */
+module numera_ser_optimize
+
+extern @abi(c-msvc-x64) fn cga_mixed_discover(budget: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose_mixed(shape: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_mixed_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_bv_discover(max_exp: u32, budget: u32) -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose_bv(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_and(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_or(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_xor(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+
+const SO_BUDGET : u32 = 64u32
+
+/* The autonomous-metabolism KAT.  99 = the organism autonomously DISCOVERS + PROVES a catalog of
+ * machine-faithful optimisations and REFUSES the unsound:
+ *   ARM 1  the SAT membrane proves ALL 6 mixed bitwise-arithmetic strength laws (autonomous sweep).
+ *   ARM 2  TEETH: the SAT engine REFUTES a FALSE law (countermodel) and PROVES its TRUE pairing.
+ *   ARM 3  an out-of-catalog mixed shape is refused (fail-closed).
+ *   ARM 4  the width-faithful kernel discovers the pow2 strength diagonal (9 machine-true pairs).
+ *   ARM 5  a FALSE pow2 reduction (x*8 == x<<4) is refused by the kernel.
+ */
+fn so_selftest() -> u64 @export {
+    /* ARM 1 -- autonomous discovery via the SAT membrane */
+    let nm : u32 = cga_mixed_discover(SO_BUDGET)
+    if nm != 6u32 { return 1u64 }
+    if cga_mixed_count() != 6u32 { return 2u64 }
+
+    /* ARM 2 -- TEETH: false law refuted, true law proven (the membrane is sound + load-bearing) */
+    bb_reset(32u64)
+    let xf : u32 = bb_var(0u32)
+    let yf : u32 = bb_var(1u32)
+    let false_eq : u8 = bb_equal(bb_add(bb_and(xf, yf), bb_or(xf, yf)), bb_xor(xf, yf))
+    if false_eq != 0u8 { return 3u64 }
+    bb_reset(32u64)
+    let xt : u32 = bb_var(0u32)
+    let yt : u32 = bb_var(1u32)
+    let true_eq : u8 = bb_equal(bb_add(bb_and(xt, yt), bb_or(xt, yt)), bb_add(xt, yt))
+    if true_eq != 1u8 { return 4u64 }
+
+    /* ARM 3 -- out-of-catalog mixed shape refused */
+    if cga_dispose_mixed(7u32, SO_BUDGET) != 0u8 { return 5u64 }
+
+    /* ARM 4 -- the width-faithful kernel rediscovers the pow2 strength diagonal */
+    if cga_bv_discover(8u32, SO_BUDGET) != 9u32 { return 6u64 }
+
+    /* ARM 5 -- a FALSE pow2 reduction is refused */
+    if cga_dispose_bv(3u32, 4u32, SO_BUDGET) != 0u8 { return 7u64 }
+
+    return 99u64
+}

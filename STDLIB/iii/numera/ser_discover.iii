@@ -1,0 +1,93 @@
+/* STDLIB/iii/numera/ser_discover.iii -- THE SERAPHYTE DISCOVERS (step 1 of the real deliverable).
+ *
+ * Not a wrapper: this is the discovery loop the frontier has named -- the organism DISCOVERS rewrites by
+ * SEEDED SEARCH (it is handed NO candidates), proves them at the kernel membrane, and verifies the
+ * discovered-proven set IS III's LIVE cg_r3 codegen emission.  It composes THREE faculties into one loop
+ * that exists nowhere else:
+ *
+ *   DISCOVER (Β, the Grace-seeded search): egraph_stochastic/egs_hallucinate -- a seeded xorshift mutagen
+ *     proposes candidate strength identities (a,b); the seed is varied across the search, so the candidates
+ *     are FOUND, not chosen by the author.
+ *   MEMBRANE (Μ, the kernel): cg_autocatalyst/cga_dispose -- the CIC kernel tc_check is the sole arbiter;
+ *     a candidate is sealed iff PROVEN (a==b => mul(x,2^a) == 2^a-fold-double == x<<a), else discarded.
+ *   REAL EMIT PATH (Θ, the live codegen): every discovered-PROVEN reduction is checked against
+ *     COMPILER/BOOT/cg_opt_rules -- cgopt_mul_admit / cgopt_mul_shift_k, the SINGLE SOURCE of cg_r3's
+ *     strength-reduction EMISSION law (mul by 2^k -> emit `shl k`).  So a reduction the organism DISCOVERED
+ *     and the kernel PROVED is verified to be EXACTLY what cg_r3 actually emits.
+ *
+ * This connects organism discovery -> kernel proof -> a REAL emit path.  HONEST BOUND: it REDISCOVERS
+ * cg_r3's EXISTING strength reductions (proving the discovery loop works on a real codegen target, not a
+ * synthetic fixture); discovering a rewrite cg_r3 does NOT yet have, and applying it, is the further
+ * frontier.  Commit stays at cg_autocatalyst's volatile registry; permanent emit-law change is operator-gated.
+ *
+ * Hexad: kind_act (the discovering act).  Ring: R0.  K: 1.00.  NIH: composes egraph_stochastic +
+ * cg_autocatalyst + cg_opt_rules only.  Determinism: seeded (same start seed -> same discovery); integer
+ * only; factor by doubling loop (no variable shift); out-param reads.  -> LIBNATIVE.
+ */
+module numera_ser_discover
+
+extern @abi(c-msvc-x64) fn egs_hallucinate(state: u64, out_a: *u32, out_b: *u32) -> u64 from "egraph_stochastic.iii"
+extern @abi(c-msvc-x64) fn cga_reset() -> u64 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_dispose(a: u32, b: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cga_count() -> u32 from "cg_autocatalyst.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
+
+const SD_SEEDS  : u32 = 16u32
+const SD_BUDGET : u32 = 64u32
+const SD_SEED0  : u64 = 11400714819323198485u64   /* the fixed Grace start seed (0x9E3779B97F4A7C15) */
+
+var SD_A : [u32; 1]
+var SD_B : [u32; 1]
+
+/* 2^a by a doubling loop (a small; avoids a variable shift count). */
+fn sd_pow2(a: u32) -> u64 @export {
+    let mut f : u64 = 1u64
+    let mut i : u32 = 0u32
+    while i < a { f = f * 2u64  i = i + 1u32 }
+    return f
+}
+
+/* The discovery KAT.  99 = the organism DISCOVERS proven strength-reductions by seeded search and every
+ * one IS III's live cg_r3 emission:
+ *   - drive egs_hallucinate over SD_SEEDS seeds -> DISCOVER candidates (a,b) [not hardcoded];
+ *   - the kernel membrane (cga_dispose) seals the PROVEN ones (a==b), discards the false (a!=b);
+ *   - every discovered-PROVEN reduction `a` agrees with cg_r3's real emit law:
+ *         cgopt_mul_admit(2^a)==1  AND  cgopt_mul_shift_k(2^a)==a;
+ *   - the search actually DISCOVERS at least one (non-empty); the sealed count == the discovered count.
+ */
+fn sd_selftest() -> u64 @export {
+    cga_reset()
+    let ap : *u32 = (&SD_A as u64) as *u32
+    let bp : *u32 = (&SD_B as u64) as *u32
+    let mut state : u64 = SD_SEED0
+    let mut discovered : u32 = 0u32
+    let mut rejected : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < SD_SEEDS {
+        state = egs_hallucinate(state, ap, bp)
+        let a : u32 = SD_A[0u64]
+        let b : u32 = SD_B[0u64]
+        let admitted : u8 = cga_dispose(a, b, SD_BUDGET)
+        if admitted == 1u8 {
+            /* PROVEN (a==b): a real strength reduction.  cg_r3 emits a shift for 2^a... */
+            let factor : u64 = sd_pow2(a)
+            if cgopt_mul_admit(factor) != 1u32 { return 1u64 }
+            if cgopt_mul_shift_k(factor) != a { return 2u64 }
+            /* ...and the emit law is NOT a constant -- it DISCRIMINATES: the non-pow2 neighbour
+             * 2^a+1 is REFUSED (a real boundary, so the admit above is non-vacuous). */
+            if cgopt_mul_admit(factor + 1u64) != 0u32 { return 5u64 }
+            discovered = discovered + 1u32
+        } else {
+            /* the kernel REJECTED a discovered candidate (a!=b): the search proposes false rewrites too,
+             * and the membrane refuses them -- both arms of the discovery are exercised. */
+            if a == b { return 6u64 }
+            rejected = rejected + 1u32
+        }
+        s = s + 1u32
+    }
+    if discovered == 0u32 { return 3u64 }      /* the seeded search DISCOVERED valid reductions */
+    if rejected == 0u32 { return 7u64 }        /* ...and also FALSE candidates the kernel refused */
+    if cga_count() != discovered { return 4u64 }
+    return 99u64
+}

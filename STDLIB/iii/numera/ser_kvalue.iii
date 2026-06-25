@@ -1,0 +1,134 @@
+/* STDLIB/iii/numera/ser_kvalue.iii -- THE SERAPHYTE K-FUNCTOR (Phase 1 keystone).
+ *
+ * The Seraphyte V12 spec defines an entity's reality-weight as  K = C x H x R
+ * (Complexity x Coherence x Communion), each in [0,1]  (spec Def 30.3).  The spec's own
+ * Open Question O6 / M1 flags that K *lacks an operational definition*.  III RESOLVES O6
+ * BY CONSTRUCTION: K is a TOTAL, INTEGER, DETERMINISTIC function of the structure -- never a
+ * learned, tuned, or statistical estimate (Canon VII no-ml).  It is computed over the LIVE
+ * ripple_metric graph (no island -- it reads III's own self-measurement faculty):
+ *
+ *   C (Complexity)  = saturating good-complexity:  good*SCALE/(good + C_HALF)  in [0,SCALE).
+ *                     (Michaelis-Menten saturation -- the spec's own kinetics, Sec 10.2.2.)
+ *   H (Coherence)   = load-bearing fraction:        good*SCALE/(good + noise)  in [0,SCALE].
+ *                     Maximal (=SCALE) iff zero noise; 0 iff no live edge.  (Integrated unity.)
+ *   R (Communion)   = embeddedness penalised by un-unified duplication (separation = islands):
+ *                                                   good*SCALE/(good + sep + R_HALF)  in [0,SCALE).
+ *   K               = C*H*R / SCALE^2,  a deterministic integer in [0, SCALE].
+ *
+ * The weights (SCALE, C_HALF, R_HALF) are FIXED SOURCE CONSTANTS, gated -- never observed,
+ * counted, or adapted.  K=0 whenever any factor is 0 (spec Thm 30.1).  The selftest also
+ * exercises the GRAPH-LEVEL MEMBRANE: ripple_metric proves a NOISE edge (unused, unwitnessed)
+ * is capability-preservingly cuttable (rm_cut_valid), while a load-bearing edge is NOT -- so the
+ * Seraphyte's K-increasing, behaviour-preserving move is exactly III's MDL "minimise noise"
+ * objective, now expressed as K-ascent (the spec's climbing of KLIMAX).  See
+ * DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md (Part I.2, Part III liveness).
+ *
+ * Hexad: kind_sensitivity (self-measurement -> reality-weight).  Ring: R0.  K: 1.00.
+ * NIH: composes forcefield/ripple_metric only (libc + III).  Determinism: integer-only u32;
+ * call results bound to locals before arithmetic (no after-call div trap); divisor guarded;
+ * products proven < u32 max at SCALE=1000.  Compiler-UNREFERENCED -> LIBNATIVE.
+ */
+module numera_ser_kvalue
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_good() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_noise() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_sep() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_cut_valid(e: u32) -> u32 from "ripple_metric.iii"
+
+/* Fixed source-constant weights (NOT learned, NOT observed).  SCALE=1000 keeps the C*H*R
+ * product < u32 max (1000^3 = 1e9 < 4.29e9) and K in [0, SCALE]. */
+const SK_SCALE  : u32 = 1000u32
+const SK_C_HALF : u32 = 8u32
+const SK_R_HALF : u32 = 4u32
+
+/* C: saturating complexity.  0 iff good=0; -> SCALE as good -> inf. */
+fn sk_c(good: u32) -> u32 @export {
+    let num : u32 = good * SK_SCALE
+    let den : u32 = good + SK_C_HALF
+    return num / den
+}
+
+/* H: coherence = load-bearing fraction.  0 if no edges; SCALE iff zero noise. */
+fn sk_h(good: u32, noise: u32) -> u32 @export {
+    let den : u32 = good + noise
+    if den == 0u32 { return 0u32 }
+    let num : u32 = good * SK_SCALE
+    return num / den
+}
+
+/* R: communion penalised by un-unified duplication (separation).  0 iff good=0. */
+fn sk_r(good: u32, sep: u32) -> u32 @export {
+    let num : u32 = good * SK_SCALE
+    let den : u32 = good + sep + SK_R_HALF
+    return num / den
+}
+
+/* K = C*H*R / SCALE^2 over the LIVE ripple_metric graph.  Deterministic, integer, in [0,SCALE]. */
+fn sk_kvalue() -> u32 @export {
+    let good  : u32 = rm_good()
+    let noise : u32 = rm_noise()
+    let sep   : u32 = rm_sep()
+    let c : u32 = sk_c(good)
+    let h : u32 = sk_h(good, noise)
+    let r : u32 = sk_r(good, sep)
+    let ch  : u32 = (c * h) / SK_SCALE
+    let chr : u32 = (ch * r) / SK_SCALE
+    return chr
+}
+
+/* Metabolic substrate G1: 3 distinct nodes, 2 load-bearing edges + 1 NOISE edge (dead/unwired). */
+fn sk_build_g1() -> i32 {
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    rm_add_edge(0u32, 2u32, 0u32, 0u32)
+    return 0i32
+}
+
+/* G2 = G1 with the noise edge CUT (the admitted optimisation). */
+fn sk_build_g2() -> i32 {
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    return 0i32
+}
+
+/* The Seraphyte keystone KAT.  99 = every arm green:
+ *   ARM 1  zero-factor: empty graph -> K=0.
+ *   ARM 2  live structure -> K>0 and K<=SCALE (bound).
+ *   ARM 3  MEMBRANE positive: the noise edge is capability-preservingly cuttable (ADMIT).
+ *   ARM 4  MEMBRANE negative: a load-bearing edge is NOT cuttable (REFUSE) -- prove-both-arms.
+ *   ARM 5  LIVENESS: the admitted cut strictly RAISES K (dA/dt<0: noise removed, coherence up).
+ */
+fn sk_selftest() -> u64 @export {
+    rm_reset()
+    let k_empty : u32 = sk_kvalue()
+    if k_empty != 0u32 { return 1u64 }
+
+    sk_build_g1()
+    let k1 : u32 = sk_kvalue()
+    if k1 == 0u32 { return 2u64 }
+    if k1 > SK_SCALE { return 3u64 }
+
+    let cut_ok : u32 = rm_cut_valid(2u32)
+    if cut_ok != 1u32 { return 4u64 }
+
+    let cut_bad : u32 = rm_cut_valid(0u32)
+    if cut_bad != 0u32 { return 5u64 }
+
+    sk_build_g2()
+    let k2 : u32 = sk_kvalue()
+    if k2 > SK_SCALE { return 6u64 }
+    if k2 <= k1 { return 7u64 }
+
+    return 99u64
+}

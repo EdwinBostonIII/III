@@ -1,0 +1,10 @@
+/* 2004 -- SERAPHYTE Phase-1 keystone: the deterministic integer K-functor (numera/ser_kvalue.iii).
+ * K = C x H x R computed over the LIVE ripple_metric graph, fixed source-constant weights, no floats,
+ * no learned values (Canon VII no-ml) -- resolving the Seraphyte spec's Open Question O6/M1 by
+ * construction. sk_selftest proves, all in one run: K is bounded [0,SCALE] and 0 on any zero factor;
+ * the graph-level MEMBRANE admits cutting a dead/noise edge (capability-preserving) and REFUSES cutting
+ * a load-bearing edge (prove-both-arms); and the admitted cut STRICTLY RAISES K (liveness = the spec's
+ * dA/dt<0, KLIMAX ascent). 99 = GREEN. See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md (Parts I.2, III). */
+module corpus_2004
+extern @abi(c-msvc-x64) fn sk_selftest() -> u64 from "ser_kvalue.iii"
+fn main() -> u64 { return sk_selftest() }

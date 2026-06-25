@@ -249,3 +249,74 @@ Each frontier from Part XIII is now a gated organ (pinned-iiis-2 standalone), no
 
 Still open (named, not blurred): a FULLER end-to-end event-driven pipeline (discover→prove→apply→cascade as
 one witnessed fold); and Curry-Howard→silicon, which the **intent-linker supersedes** for this architecture.
+
+---
+
+## PART XV — THE ISLAND CHARGE ANSWERED (2026-06-25): the reseal wire runs on the REAL eidos/field
+
+PART XIV called the `ser_*` cluster "landed." Checked against the live tree, that was an OVERCLAIM in the one
+exact sense the advisor named: **every consumer of every `ser_*` organ is a `corpus/` KAT, a `build/_petri`
+mutation probe, or another `ser_*` organ** (`grep 'from "ser_…'` → only those). Zero live consumers in III's
+real path. They ship in `libiii_native.a` (MODULES) and were STILL islands — registration was never the cure.
+`ser_tdriver` "closing the realization box" was an island consuming islands. The dome moment surfaced it: the
+integration had never touched the real substrate; the one attempt grabbed `dome` (the superseded POC), not
+matured EIDOS.
+
+**What is now TRUE, by EXECUTED OUTPUT (not a KAT):** the reseal driver — `STDLIB/scripts/seraphyte_reseal_driver.sh`,
+the ONE real Seraphyte→`cg_opt_rules`→`cg_r3` self-modification wire (the shift-sub rule, c9dfd87d) — now
+records its accept/rollback on the matured **`eidos/field`** substrate (which encapsulates
+`ripple_field`+`event_substrate`+`dome`; we build on `field`, NEVER on `dome`):
+
+| Arm | Real verdict | eidos/field effect | Executed proof |
+|---|---|---|---|
+| ACCEPT | real `cor_selftest = 99` (live archive) | `field_record` commit → non-zero `field_temporal_witness` | `frontier=1` |
+| ROLLBACK | real CIC-kernel `cga_dispose(3,4)` REFUTE | `field_rewind` → abandoned rule retained as `field_provenance` | `provenance=1` |
+
+`bash seraphyte_reseal_driver.sh --eidos-proof` → `EIDOS WIRE PROVEN … (accept witnessed, rollback retained)`,
+exit 0. The MEANS is `numera/ser_eidos` (`sev_*`, composes `eidos/field` + `forcefield/cg_autocatalyst`); its
+**consumer is the driver**, not the corpus. Verified: field-contract probe = 99, organ unit proof = 99,
+**teeth** (gate removed → refuted rule commits) → mutant rc=2, KAT `2035_seraphyte_eidos = 99` (pinned iiis-2).
+
+**Honest scope (NOT claimed):**
+- The driver's STEP 4/STEP 5 are wired to witness on `eidos/field`, and STEP 0 is un-staled to the rule-absent
+  baseline `f52c6ac8`, so the FULL rule-absent self-rebuild runs end-to-end — but I executed the SAFE
+  `--eidos-proof` path (real verdicts, no iiis rebuild) rather than the multi-rebuild path, to avoid transiently
+  un-pinning `COMPILED/iiis-2.exe` / reverting committed codegen this session. The wire is identical on both
+  paths (same `sev_field_accept/rollback` calls).
+- The ROLLBACK proof used a real CIC-kernel `cga_dispose` refutation; a real `cor_selftest` RED needs the
+  rule-absent rebuild (the full STEP 5).
+- This wire lands ONE organ-loop (the reseal/self-application loop) on the real substrate. The OTHER 12 `ser_*`
+  organs still lack live consumers; and routing III's PRODUCTION compile-time rule-discovery through this at
+  emit time remains the named frontier. **[SUPERSEDED by PART XVI — both waves are now load-bearing.]**
+
+---
+
+## PART XVI — EVERY ISLAND WIRED + THE FIRST WAVE INTEGRATED (2026-06-25)
+
+PART XV's "the OTHER 12 `ser_*` organs still lack live consumers" is SUPERSEDED. Two things landed, each proven
+by EXECUTED OUTPUT (not a KAT):
+
+**(A) The second wave is load-bearing.** `numera/ser_pipeline` (`svp_*`) is the fold the reseal driver CONSUMES:
+INTUITION (`ser_cegis` synthesizes the descriptor — the driver's emit step now asks `cg_synth` WHICH rule to
+write, closing the human-picked-`subk` seam) → INTENT (`ser_intent` merges on proof) → PROVE (`cga_dispose`) →
+COLLAPSE (`ser_cascade`/`cascade2`/`regalloc`) → ALIGN (`ser_tdriver`/`tgraph`/`kinduct`/`causal`) → WITNESS
+(`ser_eidos`). Each organ gates the decision. `bash seraphyte_reseal_driver.sh --pipeline` → exit 0:
+`INTUITION {form=2,k=3}->'subk'`, `svp_pipeline(7)=99`, rejects `x*11`. Gated: corpus `2036=99`.
+
+**(B) The FIRST WAVE (corpus 2004-2015) integrated.** The prior session ALSO left 12 complete-but-unregistered
+organs — the autopoietic core (`kvalue`/`energy`/`real`/`membrane`), the loop stages (`commit`/`discover`/
+`optimize`), the proving infra (`immune` vaccine / `memo` / `diff` / `isub`), and the `autopoiesis` loop. Their
+KATs were in run_corpus `EXPECTED` but the organs were NOT in MODULES → the KATs could not link (silently
+broken). All 12 now: verified rc=99, registered in MODULES, and made load-bearing via `svp_autopoietic_wave`
+(the APPLY-half pipeline gates on the DISCOVER/COMMIT-half first wave) — `svp_autopoietic_wave=99` in the
+driver's `--pipeline` output. They compose REAL substrates (`cg_autocatalyst`, `cg_opt_rules`, `ripple_metric`,
+`commit_gate`, `bv_bits`, `isub`) — more wired than the second wave ever was.
+
+**One fix the integration forced:** `ser_autopoiesis` needs `sm_admit` (the membrane decision), which a prior
+session DE-GLOBALIZED (removed `@export`) to silence a dark-surface ratchet — breaking its real consumer.
+Re-exported; and because re-exporting re-triggers the gate-outcome ratchet, `2006_seraphyte_membrane` now
+proves `sm_admit`'s ADMIT arm + all three REJECT arms directly (was: only via `sm_selftest`).
+
+**Canonical build (the gate, confirmed before commit):** carto GATE PASS, FAIL=0, all 28 `ser_*` organs
+compiled into `libiii_native.a`, coverage `uncovered≤5`, gate-outcome `under-proven≤2`, reachability
+`dark-surface≤14`. Evergreen (reproduced from source).

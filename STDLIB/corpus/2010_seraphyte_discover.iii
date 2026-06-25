@@ -1,0 +1,10 @@
+/* 2010 -- SERAPHYTE discovery (numera/ser_discover.iii): the organism DISCOVERS, not handed. sd_selftest
+ * drives egraph_stochastic over a seed range (seeded search -> FOUND candidates, not hardcoded), proves each
+ * at the kernel membrane (cg_autocatalyst/cga_dispose), and verifies every discovered-PROVEN strength
+ * reduction IS III's LIVE cg_r3 codegen emission (COMPILER/BOOT cg_opt_rules: cgopt_mul_admit(2^a)==1 AND
+ * cgopt_mul_shift_k(2^a)==a -- the real mul->shl emit law). Connects discovery -> kernel proof -> a real emit
+ * path. Honest: rediscovers cg_r3's EXISTING reductions (the loop on a real target); a NEW reduction + its
+ * application is the further frontier. 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Part III. */
+module corpus_2010
+extern @abi(c-msvc-x64) fn sd_selftest() -> u64 from "ser_discover.iii"
+fn main() -> u64 { return sd_selftest() }

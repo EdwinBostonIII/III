@@ -1,0 +1,10 @@
+/* 2005 -- SERAPHYTE Phase-8 semantic-energy ledger (numera/ser_energy.iii).  NOUS-units made
+ * physically real over memoria/arena (region): se_selftest proves CONSERVATION (used+remaining==
+ * capacity, the allocator's own invariant = spec Sum NU=const); CATABOLISM INCOME (a real noise-edge
+ * cut on the ripple_metric graph frees NU and pays for the dream -- the spec's growth balance); and
+ * STARVATION = PHYSICS (exhausting the pool makes the budget gate refuse -- the one honest death:
+ * immortal vs error, mortal vs the arena cap, Canon X). 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md
+ * Part VI-B. */
+module corpus_2005
+extern @abi(c-msvc-x64) fn se_selftest() -> u64 from "ser_energy.iii"
+fn main() -> u64 { return se_selftest() }

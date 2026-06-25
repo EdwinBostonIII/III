@@ -1,0 +1,155 @@
+/* STDLIB/iii/numera/ser_isub.iii -- THE SERAPHYTE AS PROCESS: its life on the witnessed ripple bus.
+ *
+ * The user's architectural insight (and the right one): EIDOS is PROCESS/EVENT-based (event primary, state
+ * = fold over a witnessed log), not object-based.  The earlier organs were objects (ser_kvalue/membrane/
+ * optimize -- modules with state + a selftest).  This organ expresses the Seraphyte's optimisation life the
+ * III-native way: as a sequence of content-addressed RIPPLES on omnia::isub (the Ring-(-1) Merkle-witnessed
+ * metal bus), exactly as omnia::xii_isub already encapsulates XII's rewrite trajectory.  ENCAPSULATION, not
+ * reimplementation: the proofs come from the REAL cg_autocatalyst SAT/kernel membrane; the bus comes from
+ * the REAL isub; this organ only EMITS + FOLDS + WITNESSES -- authoring no proof and no crypto.
+ *
+ * THE SYMBIOSIS (the preexisting pathways + the Seraphyte, one substrate): each optimisation the Seraphyte
+ * MEMBRANE proves (cga_dispose_mixed -- a machine-faithful law, SAT-verified) is emitted as the uniform
+ * block BELOW(law, ground): "the proven law sits below the ground term -- it is a reduction".  The SAME
+ * witnessed bus is read by xii_isub (XII's trace), eidos::ripple (the spatial gradient the optimiser
+ * follows), and event_substrate (the termination fold).  So the Seraphyte's discoveries become first-class
+ * blocks in III's inverse substrate -- symbiotic with every existing consumer, not an island.
+ *
+ * WHAT THE PROCESS FORM BUYS (real properties the object form lacks):
+ *   - REPLAYABLE / Grace-seed honest: re-running the same membrane yields the SAME content-addressed
+ *     trajectory -> the SAME witness ROOT (sha256 hash-chain).  The life is reproducible from the log.
+ *   - TAMPER-EVIDENT: the root is a function of the content-addresses; any change to what was "proven"
+ *     changes the root (isub's Merkle witness).
+ *   - STATE = FOLD: the proven-frontier is RE-DERIVED from the witnessed log (si_fold_count), never a
+ *     stored cell -- the inverse form (xii_isub's discipline).
+ *
+ * HONEST SCOPE: the PROOFS pre-exist (cg_autocatalyst, gated) and the BUS pre-exists (isub/xii_isub, gated);
+ * the new value is the BRIDGE -- the Seraphyte's optimisation loop AS a witnessed process on the shared
+ * substrate (the symbiosis).  It does NOT invent a new optimisation, and applying a law to cg_r3's emission
+ * stays the operator-gated reseal.
+ *
+ * Hexad: kind_mobius (a process over a temporal order).  Ring: R0.  K: 1.00.  NIH: composes isub +
+ * cg_autocatalyst only (the xii_isub pattern).  Determinism: integer; content-addresses are deterministic.
+ * Compiler-UNREFERENCED -> LIBNATIVE.  See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md Part V (Relations Ρ).
+ */
+module numera_ser_isub
+
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_verb(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_b(i: u32) -> u32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_witness_into(out32: *u8) -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn cga_dispose_mixed(shape: u32, budget: u32) -> u8 from "cg_autocatalyst.iii"
+/* AUTOPOIESIS as a FOLD (the user's part 3): the temporal substrate whose evt_detect_cycle is the
+ * termination witness -- a recurring proof-payload = a rewrite loop (the spec's "Life", non-termination);
+ * its ABSENCE over distinct proofs = the trajectory makes PROGRESS (terminates).  State = fold, no cell. */
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_detect_cycle() -> u32 from "event_substrate.iii"
+
+const SI_V_BELOW  : u32 = 0u32     /* the isub reduction verb (proven law sits below the ground) */
+const SI_GROUND   : u32 = 1u32     /* the ground address every proven law reduces toward */
+const SI_K_MOVE   : u64 = 0u64     /* EVT_K_MOVE: a rewrite step / behavioural act */
+
+var SI_W1 : [u8; 32]
+var SI_W2 : [u8; 32]
+
+/* Emit the Seraphyte's membrane-PROVEN optimisations as witnessed ripples on the isub bus.  Resets the
+ * bus first so it holds exactly this run's proof-trajectory.  Returns the number emitted (= proven). */
+fn si_emit_proofs(budget: u32) -> u32 @export {
+    isub_reset()
+    let mut emitted : u32 = 0u32
+    let mut shape : u32 = 1u32
+    while shape <= 6u32 {
+        let ok : u8 = cga_dispose_mixed(shape, budget)
+        if ok == 1u8 {
+            isub_emit(SI_V_BELOW, shape, SI_GROUND)
+            emitted = emitted + 1u32
+        }
+        shape = shape + 1u32
+    }
+    return emitted
+}
+
+/* STATE = FOLD: re-derive the proven-frontier size from the witnessed log (not a stored counter). */
+fn si_fold_count() -> u32 @export {
+    let n : u32 = isub_count()
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        if isub_verb(i) == SI_V_BELOW {
+            if isub_b(i) == SI_GROUND { c = c + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* AUTOPOIESIS as the EIDOS fold (part 3): feed the proof-trajectory to the temporal substrate as MOVE
+ * events (payload = the proven law id) and return evt_detect_cycle (the CYCLE LENGTH).  DISTINCT proofs
+ * do not recur -> cycle length 0 = no rewrite-loop = the trajectory makes PROGRESS (terminates). */
+fn si_termination_witness() -> u32 @export {
+    evt_reset()
+    let mut shape : u32 = 1u32
+    while shape <= 6u32 {
+        if cga_dispose_mixed(shape, 64u32) == 1u8 {
+            evt_perceive(0u64, SI_K_MOVE, 1u64, shape as u64)
+        }
+        shape = shape + 1u32
+    }
+    return evt_detect_cycle()
+}
+
+/* the negative: a RECURRING trajectory (a re-derived law) is a loop the fold DETECTS (non-termination). */
+fn si_loop_witness() -> u32 @export {
+    evt_reset()
+    evt_perceive(0u64, SI_K_MOVE, 1u64, 3u64)
+    evt_perceive(0u64, SI_K_MOVE, 1u64, 5u64)
+    evt_perceive(0u64, SI_K_MOVE, 1u64, 3u64)   /* law 3 recurs -> a rewrite loop */
+    return evt_detect_cycle()
+}
+
+/* The symbiosis KAT.  99 = the Seraphyte's proven optimisations live as a witnessed, foldable,
+ * reproducible process on the shared isub bus AND its autopoietic loop has an EIDOS termination witness:
+ *   ARM 1  EMIT: all 6 membrane-proven laws become ripples (isub_count == 6).
+ *   ARM 2  STATE=FOLD: the proven-frontier re-derived from the log equals 6 (inverse form, no stored cell).
+ *   ARM 3  REPLAYABLE: re-running the SAME membrane yields the SAME witness ROOT (content-addressed life).
+ *   ARM 4  WITNESSED: the root is non-zero (the Merkle hash-chain actually formed).
+ *   ARM 5  AUTOPOIESIS/PROGRESS: distinct proofs make progress -> termination witness (SI_NOTFOUND).
+ *   ARM 6  LOOP DETECTED (the dual): a recurring trajectory IS caught by the fold (!= SI_NOTFOUND).
+ */
+fn si_selftest() -> u64 @export {
+    let e : u32 = si_emit_proofs(64u32)
+    if e != 6u32 { return 1u64 }
+    if isub_count() != 6u32 { return 2u64 }
+
+    if si_fold_count() != 6u32 { return 3u64 }
+
+    isub_witness_into((&SI_W1 as u64) as *u8)
+    si_emit_proofs(64u32)
+    isub_witness_into((&SI_W2 as u64) as *u8)
+    let mut same : u32 = 1u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if SI_W1[i] != SI_W2[i] { same = 0u32 }
+        i = i + 1u64
+    }
+    if same != 1u32 { return 4u64 }
+
+    let mut nz : u32 = 0u32
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        if SI_W1[j] != 0u8 { nz = 1u32 }
+        j = j + 1u64
+    }
+    if nz != 1u32 { return 5u64 }
+
+    /* ARM 5 -- autopoiesis/progress: distinct proofs -> cycle length 0 -> no rewrite-loop -> TERMINATES */
+    if si_termination_witness() != 0u32 { return 6u64 }
+    /* ARM 6 -- the dual (the spec's "Life"): a recurring trajectory IS a self-sustaining loop the fold
+     * DETECTS as a non-zero cycle length (here, the law-3 recurrence at distance 2). */
+    if si_loop_witness() == 0u32 { return 7u64 }
+
+    return 99u64
+}

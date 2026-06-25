@@ -1,0 +1,95 @@
+/* STDLIB/iii/numera/ser_diff.iii -- THE CROSS-PROVER DIFFERENTIAL: independent provers cross-check.
+ *
+ * The trust/resilience direction from the architecture map: III carries TWO genuinely INDEPENDENT decision
+ * procedures over Z/2^64 -- numera/bv_ring (a canonical POLYNOMIAL decider) and numera/bv_bits (a TSEITIN +
+ * CDCL SAT solver).  They share no code and decide by different mathematics.  A Seraphyte that runs the SAME
+ * candidate through BOTH and witnesses their AGREEMENT is a soundness MONITOR: if either prover ever regresses
+ * (blesses a false rewrite, or refuses a true one), the differential reddens.  This is the no-ML differential
+ * discipline (a fixed cross-check, never a statistic) made a first-class organ.
+ *
+ * The two provers cover overlapping fragments; this organ exercises their SHARED add/shift fragment (both
+ * have +, <<), clean-probed first: on  (x<<1)+(x<<1) == x<<2  [4x==4x, TRUE] both say EQUAL; on the FALSE
+ * pairing  ...==x<<1  [4x==2x] both say DISTINCT.  sd_consistent is the differential verdict; the KAT proves
+ * agreement on both arms AND that a FORCED discrepancy IS detected (the monitor's whole value), and witnesses
+ * the cross-validation on the omnia::isub bus.
+ *
+ * HONEST SCOPE: bv_ring, bv_bits, isub PRE-EXIST + are gated; the new value is the CROSS-CHECK itself -- no
+ * existing faculty validates one prover against the other on a common candidate.  It is a regression DETECTOR
+ * for the trusted base, not a new prover.
+ *
+ * Hexad: kind_witness (the cross-witnessing act).  Ring: R0.  K: 1.00.  NIH: composes bv_ring + bv_bits +
+ * isub only.  Determinism: integer; both provers are deterministic; returns kept < 256 (8-bit exit honesty).
+ * Compiler-UNREFERENCED -> LIBNATIVE.  See DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md Part XIII (trust/differential).
+ */
+module numera_ser_diff
+
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_add(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn isub_reset() -> i32 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_emit(verb: u32, a: u32, b: u32) -> u64 from "isub.iii"
+extern @abi(c-msvc-x64) fn isub_count() -> u32 from "isub.iii"
+
+const SD_V_BELOW : u32 = 0u32
+const SD_GROUND  : u32 = 1u32
+
+/* The differential verdict: 1 iff the two independent provers AGREE; 0 = a DISCREPANCY (a prover bug). */
+fn sd_consistent(bb_verdict: u8, bv_verdict: u8) -> u8 @export {
+    if bb_verdict == bv_verdict { return 1u8 }
+    return 0u8
+}
+
+/* bb_bits SAT verdict on the TRUE/FALSE add-shl law (sel: 1 true (x<<2), 0 false (x<<1)). */
+fn sd_bb(sel: u32) -> u8 @export {
+    bb_reset(32u64)
+    let x : u32 = bb_var(0u32)
+    let lhs : u32 = bb_add(bb_shl(x, 1u64), bb_shl(x, 1u64))
+    if sel == 1u32 { return bb_equal(lhs, bb_shl(x, 2u64)) }
+    return bb_equal(lhs, bb_shl(x, 1u64))
+}
+
+/* bv_ring polynomial verdict on the same law. */
+fn sd_bv(sel: u32) -> u8 @export {
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    let lhs : u32 = bv_add(bv_shl(x, 1u32), bv_shl(x, 1u32))
+    if sel == 1u32 { return bv_equal(lhs, bv_shl(x, 2u32)) }
+    return bv_equal(lhs, bv_shl(x, 1u32))
+}
+
+/* The differential KAT.  99 = the two independent provers cross-validate and discrepancies are detected:
+ *   ARM 1  TRUE law: bb_bits says EQUAL, bv_ring says EQUAL, the differential AGREES.
+ *   ARM 2  FALSE law: bb_bits says DISTINCT, bv_ring says DISTINCT, the differential AGREES.
+ *   ARM 3  a FORCED discrepancy (equal-verdict vs distinct-verdict) IS DETECTED (the monitor's value).
+ *   ARM 4  the cross-validation is witnessed on the isub bus.
+ */
+fn sdiff_selftest() -> u64 @export {
+    let bt : u8 = sd_bb(1u32)
+    let rt : u8 = sd_bv(1u32)
+    if bt != 1u8 { return 1u64 }
+    if rt != 1u8 { return 2u64 }
+    if sd_consistent(bt, rt) != 1u8 { return 3u64 }
+
+    let bf : u8 = sd_bb(0u32)
+    let rf : u8 = sd_bv(0u32)
+    if bf != 0u8 { return 4u64 }
+    if rf != 0u8 { return 5u64 }
+    if sd_consistent(bf, rf) != 1u8 { return 6u64 }
+
+    /* ARM 3 -- the monitor DETECTS a discrepancy (equal vs distinct) */
+    if sd_consistent(bt, rf) != 0u8 { return 7u64 }
+
+    /* ARM 4 -- witness the cross-validation */
+    isub_reset()
+    isub_emit(SD_V_BELOW, 1u32, SD_GROUND)
+    if isub_count() != 1u32 { return 8u64 }
+
+    return 99u64
+}

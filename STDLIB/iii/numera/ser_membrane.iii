@@ -1,0 +1,106 @@
+/* STDLIB/iii/numera/ser_membrane.iii -- THE SERAPHYTE MEMBRANE (M) + JUDGMENT (KRISIS).
+ *
+ * The conceptual heart: the unified admission boundary every genome move must cross to enter the
+ * sealed phenome.  It is the conjunction of THREE real layers (no island -- it wires III's own gates):
+ *
+ *   1. BEHAVIOUR PRESERVATION (graph) -- ripple_metric/rm_cut_valid: only a capability-preserving
+ *      move (cutting a DEAD edge, never a load-bearing one) may pass.  This is the graph-level
+ *      equivalence the spec's M demands.
+ *   2. THE FIVE-DIMENSIONAL COMMIT GATE (semantic/kernel) -- commit_gate/cg_decide: rule-confluence,
+ *      module-coherence, determinism-seal, conservativity (the honest Loebian ceiling), and KERNEL
+ *      soundness (tc_check via the Sovereign Pipeline).  A move is admitted only if III's own prover
+ *      underwrites it -- if the kernel is down, the membrane refuses (ripple_loop's "self-edit NOTHING").
+ *   3. THE INVERTED-SECOND-LAW RATCHET (thermodynamic) -- K must not regress: K_after >= K_before
+ *      (ser_kvalue).  A move that lowers the organism's reality-weight is refused.
+ *
+ * THE SAFETY PROPERTY (spec: behavioural immortality; plan Part III.1): every ADMITTED move is
+ * behaviour-preserving AND commit-admitted AND non-regressing -- so no expressed mutation is fatal.
+ * REJECTION IS NON-FATAL: a refused candidate simply does not cross the membrane (returns to the pool).
+ * The negative arms PROVE the refusal (prove-both-arms): a capability-losing cut, a kernel-down gate,
+ * and a K-lowering move are each REJECTED with a LOCATED code -- never a bare 0.
+ *
+ * Hexad: kind_sensitivity (admission).  Ring: R0.  K: 1.00.  NIH: composes forcefield/commit_gate +
+ * forcefield/ripple_metric + numera/ser_kvalue only.  Determinism: integer ==/!= and a single fixed
+ * decision order; no allocator; no recursion.  Compiler-UNREFERENCED -> LIBNATIVE.  See
+ * DOCS/III-SERAPHYTE-INTEGRATION-PLAN.md (Part I.1, Part III).
+ */
+module numera_ser_membrane
+
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_cut_valid(e: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn sk_kvalue() -> u32 from "ser_kvalue.iii"
+
+const SM_ADMIT    : u32 = 99u32   /* all three layers hold */
+const SM_REJ_CAP  : u32 = 1u32    /* capability-losing move (graph behaviour change) */
+const SM_REJ_GATE : u32 = 2u32    /* a commit_gate dimension failed (located by cg_decide) */
+const SM_REJ_K    : u32 = 3u32    /* K regression (inverted-2nd-law ratchet) */
+
+/* The unified membrane decision -- LOCATED, fixed order (capability, gate, ratchet).  A pure total
+ * predicate so the prove-the-negative arm exercises every reject directly. */
+fn sm_admit(cut_valid: u32, cg_verdict: u32, k_before: u32, k_after: u32) -> u32 @export {
+    if cut_valid != 1u32 { return SM_REJ_CAP }
+    if cg_verdict != 99u32 { return SM_REJ_GATE }
+    if k_after < k_before { return SM_REJ_K }
+    return SM_ADMIT
+}
+
+/* Build the metabolic substrate G1 (2 load-bearing + 1 noise edge) into the live ripple_metric graph. */
+fn sm_build_g1() -> i32 {
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    rm_add_edge(0u32, 2u32, 0u32, 0u32)
+    return 0i32
+}
+
+/* G2 = G1 with the noise edge cut (the admitted optimisation). */
+fn sm_build_g2() -> i32 {
+    rm_reset()
+    rm_add_node(100u64, 0u32)
+    rm_add_node(200u64, 0u32)
+    rm_add_node(300u64, 0u32)
+    rm_add_edge(0u32, 1u32, 1u32, 0u32)
+    rm_add_edge(1u32, 2u32, 1u32, 0u32)
+    return 0i32
+}
+
+/* The membrane KAT.  99 = every arm green:
+ *   ARM 1  POSITIVE: a capability-preserving noise-cut, all 5 commit dims hold, K rises -> ADMIT.
+ *   ARM 2  NEGATIVE (capability): cutting a load-bearing edge (cut_valid=0) -> REJ_CAP.
+ *   ARM 3  NEGATIVE (kernel-down gate): cg_decide kernel_sound=0 -> REJ_GATE (refuse while the prover is blind).
+ *   ARM 4  NEGATIVE (ratchet): a K-lowering move -> REJ_K (the inverted-2nd-law refusal).
+ */
+fn sm_selftest() -> u64 @export {
+    sm_build_g1()
+    let k1 : u32 = sk_kvalue()
+    let cut_noise : u32 = rm_cut_valid(2u32)
+    let cut_load  : u32 = rm_cut_valid(0u32)
+    sm_build_g2()
+    let k2 : u32 = sk_kvalue()
+
+    /* ARM 1 -- positive admission */
+    let cg_all : u32 = cg_decide(1u32, 1u32, 1u32, 1u32, 1u32)
+    let v1 : u32 = sm_admit(cut_noise, cg_all, k1, k2)
+    if v1 != SM_ADMIT { return 1u64 }
+
+    /* ARM 2 -- capability refusal (load-bearing cut) */
+    let v2 : u32 = sm_admit(cut_load, cg_all, k1, k2)
+    if v2 != SM_REJ_CAP { return 2u64 }
+
+    /* ARM 3 -- kernel-down gate refusal */
+    let cg_blind : u32 = cg_decide(1u32, 1u32, 1u32, 1u32, 0u32)
+    let v3 : u32 = sm_admit(cut_noise, cg_blind, k1, k2)
+    if v3 != SM_REJ_GATE { return 3u64 }
+
+    /* ARM 4 -- ratchet refusal (K would drop: swap before/after) */
+    let v4 : u32 = sm_admit(cut_noise, cg_all, k2, k1)
+    if v4 != SM_REJ_K { return 4u64 }
+
+    return 99u64
+}

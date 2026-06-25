@@ -1,0 +1,9 @@
+/* 2014 -- SERAPHYTE cross-prover differential (numera/ser_diff.iii): two INDEPENDENT decision procedures
+ * over Z/2^64 -- bv_ring (polynomial) + bv_bits (Tseitin/CDCL SAT) -- cross-check each other on a shared
+ * add/shift law. sdiff_selftest proves: both say EQUAL on the true law, both say DISTINCT on the false law,
+ * a FORCED discrepancy IS detected (the monitor's value -- catches a prover regression), and the
+ * cross-validation is witnessed on isub. A soundness regression detector for the trusted base, not a new
+ * prover. Composes bv_ring+bv_bits+isub. 99 = GREEN. See III-SERAPHYTE-INTEGRATION-PLAN.md Part XIII. */
+module corpus_2014
+extern @abi(c-msvc-x64) fn sdiff_selftest() -> u64 from "ser_diff.iii"
+fn main() -> u64 { return sdiff_selftest() }

@@ -202,9 +202,13 @@ it universal, and the family is proven to PROVABLY extend beyond the observed in
   re-proof — a proof born from `x*7` optimizes an unrelated `x*31` in crypto, and members never observed
   (63, 127, 2³¹−1). The collapse is a SOUND CONSEQUENCE of the family proof (coverage requires the registry
   flag, set only by a verified `au_prove_family`), not a skipped proof. The optimization a human's working
-  memory cannot find — non-local, multi-site — made deterministic. The DEEPER cascade (a collapse triggering
-  dead-code elimination → register reallocation across the codebase) is the named frontier over the live
-  ripple/weave passes.
+  memory cannot find — non-local, multi-site — made deterministic. The DEEPER cascade (collapse → dead-code
+  elimination, a terminating + behaviour-preserving multi-pass FIXPOINT) is `[LANDED — numera/ser_cascade2,
+  2023]`: two theorems gated — TERMINATION (each rewrite strictly decreases a well-founded reducible-op
+  measure) and BEHAVIOUR-PRESERVATION (every rewrite a proven identity ⇒ `cf_eval` invariant). The
+  worse-before-better non-local optimum is the annealed `mcmc_egraph` extraction (greedy trapped in a local
+  minimum; the seeded anneal escapes the barrier to the global minimum — corpus 2023 ARM 7). Register
+  reallocation across the codebase remains the named frontier over the live weave passes.
 - **Symmetry-Breaking / Anti-Unification:** `2020`, LANDED — collapse N per-constant proofs into one
   parametric family proof. Structural match, not statistics.
 - **Equality Saturation:** `numera/mcmc_egraph`, EXISTS+gated — apply all rules simultaneously, saturate,

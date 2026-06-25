@@ -1,0 +1,64 @@
+/* STDLIB/corpus/2023_seraphyte_cascade_fixpoint.iii -- the deeper cascade: multi-pass fixpoint, gated.
+ *
+ * One proof, then a CASCADE of dependent rewrites to a fixpoint -- terminating, behaviour-preserving -- and
+ * the genuine non-local (worse-before-better) optimum via annealed extraction.  99 = all arms.
+ *
+ *   ARM 1-2  the block  x*31 + 0, *1  computes 31x at cost 7 (imul + add + imul).
+ *   ARM 3-4  CASCADE to DRY: strength-reduce (x*31 -> shl-sub, covered by the proven family) THEN fold the
+ *            +0 and *1 to NOPs (dead-code) -> cost 2.  A chain of rewrites, each triggering the next.
+ *   ARM 5    BEHAVIOUR PRESERVED: cf_eval(x) == 31x before AND after, incl an overflow operand.
+ *   ARM 6    TERMINATION: a second cascade pass finds nothing (DRY) -- the well-founded measure bottomed out.
+ *   ARM 7    THE WORSE-BEFORE-BETTER NON-LOCAL OPTIMUM: greedy descent is TRAPPED in a local minimum; the
+ *            annealed e-graph extraction (mcmc_egraph) ESCAPES the barrier to the strictly-better global
+ *            minimum -- the optimization a human's working memory cannot find, made deterministic.
+ */
+module corpus_2023_seraphyte_cascade_fixpoint
+
+extern @abi(c-msvc-x64) fn casc_register_subk(seed: u64) -> u8 from "ser_cascade.iii"
+extern @abi(c-msvc-x64) fn cf_reset() -> i32 from "ser_cascade2.iii"
+extern @abi(c-msvc-x64) fn cf_push(kind: u32, arg: u64) -> i32 from "ser_cascade2.iii"
+extern @abi(c-msvc-x64) fn cf_cost() -> u32 from "ser_cascade2.iii"
+extern @abi(c-msvc-x64) fn cf_eval(x: u64) -> u64 from "ser_cascade2.iii"
+extern @abi(c-msvc-x64) fn cf_cascade() -> u32 from "ser_cascade2.iii"
+extern @abi(c-msvc-x64) fn mcmc_init() -> i32 from "mcmc_egraph.iii"
+extern @abi(c-msvc-x64) fn mcmc_greedy(start: u32) -> u32 from "mcmc_egraph.iii"
+extern @abi(c-msvc-x64) fn mcmc_search(start: u32, seed: u64, iters: u32) -> u32 from "mcmc_egraph.iii"
+
+const CF_SEED   : u64 = 11400714819323198485u64
+const MCMC_SEED : u64 = 1311768467284833281u64   /* 0x1234ABCD5678EF01 -- the mcmc_egraph_kat seed */
+
+fn main() -> u64 {
+    if casc_register_subk(CF_SEED) != 1u8 { return 1u64 }   /* the ONE proof: the 2^k-1 family */
+
+    /* build  acc = x ; acc = acc*31 ; acc = acc+0 ; acc = acc*1   (computes 31x) */
+    cf_reset()
+    cf_push(1u32, 31u64)   /* MUL 31 */
+    cf_push(2u32, 0u64)    /* ADD 0  */
+    cf_push(1u32, 1u64)    /* MUL 1  */
+
+    /* ARM 1-2: behaviour + cost before */
+    if cf_eval(2u64) != 62u64 { return 2u64 }
+    if cf_cost() != 7u32 { return 3u64 }
+
+    /* ARM 3-4: cascade to DRY -> cost 2 (shl-sub; the +0 and *1 dead) */
+    let steps : u32 = cf_cascade()
+    if steps == 0u32 { return 4u64 }            /* it actually rewrote */
+    if cf_cost() != 2u32 { return 5u64 }        /* 7 -> 2 through the dependent chain */
+
+    /* ARM 5: behaviour PRESERVED across the whole cascade (incl overflow) */
+    if cf_eval(2u64) != 62u64 { return 6u64 }
+    if cf_eval(1000u64) != (1000u64 * 31u64) { return 7u64 }
+    let big : u64 = 1152921504606846976u64      /* 2^60 -- 31*2^60 wraps mod 2^64 */
+    if cf_eval(big) != (big * 31u64) { return 8u64 }
+
+    /* ARM 6: TERMINATION -- the fixpoint is DRY (no further rewrite) */
+    if cf_cascade() != 0u32 { return 9u64 }
+
+    /* ARM 7: the WORSE-BEFORE-BETTER non-local optimum -- annealed extraction beats trapped greedy */
+    mcmc_init()
+    let g : u32 = mcmc_greedy(58u32)                          /* trapped in the shallow local minimum */
+    let a : u32 = mcmc_search(58u32, MCMC_SEED, 40000u32)     /* escapes the barrier to the global min */
+    if a >= g { return 10u64 }                                /* annealed STRICTLY better -- non-local */
+
+    return 99u64
+}

@@ -177,6 +177,7 @@ var LO : [u32; 256]  var LL : [u32; 256]  var LN : u32 = 0u32  var LCH : [u32; 2
 var LSZ : [i64; 256]  var LSG : [u32; 256]  var LPSZ : [i64; 256]  var LPSG : [u32; 256]   /* P1 ABI: LSZ=scalar byte size (spill width) ; LSG=scalar signed ; LPSZ=pointee size ; LPSG=pointee signed */
 var LVT : [i32; 256]  var LVB : [i64; 256]   /* local struct-VALUE: LVT=struct type (-1=not a struct value) ; LVB=its inline frame base (STSZ bytes reserved) -> `p.field` via abase/avtype */
 var LOVF : u32 = 0u32                                  /* LOUD local-overflow flag: the SVIR LOCAL_GET/SET operand is ONE byte, so >256 locals/fn would silently collide (slot 256&0xFF=0); set this instead, fail the whole compile clearly */
+var NLOC : u32 = 0u32                                  /* DECLARED-local count (params + body decls + switch selectors). EXPRESSION temps live ABOVE NLOC and are reused per-statement (pstmt resets LN=NLOC) -- bounds LN well under the 256 cap (the header nlocals is hardcoded 1; backends scan the body for the real frame size, so slot REUSE is safe) */
 var BLKD : i64 = 0i64                                  /* live structured-control nesting depth (BLOCK/LOOP/IF open count) -- read by `break` */
 var BRKT : [i64; 32]  var BRKN : u32 = 0u32            /* break-target stack: BLKD just inside each enclosing loop/switch's exit block ; break -> BR(BLKD - BRKT[top]) */
 var CONTT : [i64; 32]  var CONTN : u32 = 0u32          /* continue-target stack: BLKD just inside each loop's continue block (wraps the body; END lands before the incr/cond) ; continue -> BR(BLKD - CONTT[top]) */
@@ -215,7 +216,7 @@ fn emit_lset(slot:u32) { let m:i64=LW[slot as u64]  if m!=0i64 { econst(m)  eb(0
     if mem>=0i64 { let tmp:u32=LN  if LN<255u32 {LN=LN+1u32}  eu8(0x11u32,tmp)  econst(mem)  eu8(0x10u32,tmp)  estore(LSZ[slot as u64]) } else { eu8(0x11u32, slot) }
 }
 fn lpt(t: u32) -> i32 { let li:i32=lidx(t)  if li<0i32 {return 0i32-1i32}  return LPT[li as u64] }
-fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 }  LN=LN+1u32 } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
+fn ladd(t: u32) -> u32 { let ex:i32=lidx(t)  if ex>=0i32 { return ex as u32 }  let s:u32=LN  if LN<256u32 { LO[LN as u64]=TO[t as u64]  LL[LN as u64]=TL[t as u64]  LMEM[LN as u64]=0i64-1i64  if adn_has(TO[t as u64],TL[t as u64])==1u32 { LMEM[LN as u64]=MTOP as i64  MTOP=MTOP+8u64 }  LN=LN+1u32  if LN>NLOC {NLOC=LN} } else { LOVF=1u32 }  return s }   /* re-declared name reuses its slot; &-taken names spill to memory (LMEM); >256 -> LOUD overflow */
 fn emit_lget(slot:u32) { let mem:i64=LMEM[slot as u64]  if mem>=0i64 { econst(mem)  eload(LSZ[slot as u64], LSG[slot as u64]) } else { eu8(0x10u32, slot) } }   /* spilled local -> typed LOAD from its memory addr ; else LOCAL_GET (byte-identical for non-spilled) */
 /* global C arrays: `int NAME[NUM];` -> a cumulative base offset in SVIR linear memory (NAME[i] -> LOAD8/STORE8). */
 var AO : [u32; 1024]  var AL : [u32; 1024]  var AB : [u64; 1024]  var AW : [i64; 1024]  var AESZ : [i64; 1024]  var ALEN : [u64; 1024]  var ASGN : [u32; 1024]  var AISC : [u32; 1024]  var AN : u32 = 0u32  var MTOP : u64 = 0u64   /* AW=elem width-mask ; AESZ=elem byte size {1,2,4,8} ; ALEN=element count (for sizeof) ; ASGN=elem signed ; AISC=1 if a global SCALAR (bare read = LOAD value, not array->ptr decay) */
@@ -952,6 +953,7 @@ fn loop_has_cont() -> u32 {
 }
 fn pstmt() {
     ENDED_RET=0u32                                                 /* cleared each statement; the return handler sets it */
+    LN=NLOC                                                        /* free the previous statement's expression temps (they're dead) -> temps reuse slots [NLOC..] each stmt, keeping LN under the 256 cap; declared locals + the switch selector live below NLOC and persist */
     if cp(Q_LB)==1u32 { pblock()  return }                         /* bare `{ ... }` compound block (switch-case body, nested scope) -> emit its inner statements sequentially; without this `{` fell to the expr handler -> spurious DROP underflow */
     if isqual(C)==1u32 { let mut sg:u32=1u32  while sg==1u32 { if isqual(C)==1u32 { if kw(C,"unsigned" as u64,8u32)==1u32 {sg=0u32} else { if kw(C,"signed" as u64,6u32)==1u32 {sg=0u32} else { if kw(C,"long" as u64,4u32)==1u32 {sg=0u32} else { if kw(C,"short" as u64,5u32)==1u32 {sg=0u32} else {C=C+1u32} } } } } else {sg=0u32} } }   /* skip leading const/static/volatile but KEEP the type specifiers unsigned/signed/long/short (the decl handler reads their size) */
     if cp(Q_INC)==1u32 { ebin(0u32)  eb(0x72u32)  eat(Q_SEMI)  return }   /* ++lvalue ; (prefix inc statement -> eval + DROP) */
@@ -1104,7 +1106,7 @@ fn pstmt() {
     }
     if kw(C,"switch" as u64,6u32)==1u32 {                           /* switch (e) { case C: ... default: ... } -> nested-BLOCK ladder */
         C=C+1u32  eat(Q_LP)  ebin(0u32)  eat(Q_RP)                  /* selector e onto the stack */
-        let t:u32=LN  if LN<255u32 {LN=LN+1u32}  eu8(0x11u32,t)     /* t = e (a fresh temp local) */
+        let t:u32=LN  if LN<255u32 {LN=LN+1u32}  if LN>NLOC {NLOC=LN}  eu8(0x11u32,t)     /* t = e (the selector; PERSISTENT across the case bodies -> bump NLOC so the per-stmt LN reset can't reuse its slot) */
         eat(Q_LB)  let bodyC:u32=C
         SWCN=0u32  let mut q:u32=C  let mut bd2:i32=1i32  let mut gp:u32=1u32   /* prescan: case constants in source order, brace-depth 1 */
         while gp==1u32 {
@@ -1575,7 +1577,7 @@ fn prescan_addrof() {
 fn cfn(fk: u32) {
     let ft:u32=FNT[fk as u64]  C=fn_nametok(ft)  C=C+1u32  eat(Q_LP)   /* [quals] type [*] NAME ( -> at ( */
     CUR_RMASK=FRM[fk as u64]
-    LN=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  LVT[lz as u64]=0i32-1i32  LVB[lz as u64]=0i64  lz=lz+1u32 }   /* reset per-fn local flags + control-depth */
+    LN=0u32  NLOC=0u32  BLKD=0i64  BRKN=0u32  let mut lz:u32=0u32  while lz<256u32 { LCH[lz as u64]=0u32  LPT[lz as u64]=0i32-1i32  LW[lz as u64]=0i64  LMEM[lz as u64]=0i64-1i64  LSZ[lz as u64]=8i64  LSG[lz as u64]=0u32  LPSZ[lz as u64]=8i64  LPSG[lz as u64]=0u32  LVT[lz as u64]=0i32-1i32  LVB[lz as u64]=0i64  lz=lz+1u32 }   /* reset per-fn local flags + control-depth */
     let mut params:u32=0u32  let mut go:u32=1u32  CUR_VAPTR=0i32-1i32  ADN_N=0u32   /* clear &-taken set BEFORE the param loop: ladd(param) must see THIS fn's ADN (empty until prescan_addrof), not the caller's -- else `f(&x)` in the caller spuriously spills f's param x (read from an un-stored spill slot) */
     if kw(C,"void" as u64,4u32)==1u32 { if ispat(C+1u32,Q_RP)==1u32 { C=C+1u32 } }   /* (void) = ZERO params: skip the `void` so the loop sees `)` */
     while go==1u32 { if cp(Q_RP)==1u32 {go=0u32} else { if TK[C as u64]==0u32 {go=0u32} else {   /* [quals] type [*] NAME */

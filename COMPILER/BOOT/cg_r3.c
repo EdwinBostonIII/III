@@ -1195,6 +1195,21 @@ static int mul_2ss_j(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
     while ((s & 1) == 0) { m++; s >>= 1; }
     return m + c;
 }
+/* [EMITTED] DIVIDE-BY-POW2 STRENGTH REDUCTION test (dual of cg_r3.iii's r3_div_pow2_k -- IDENTICAL logic):
+ * if op is DIV and rhs == 2^k (k in 1..63), return k; else 0.  Caller GATES on UNSIGNED (signed x/2^k != x>>k).
+ * Sound: for unsigned x, x/2^k == x>>k.  Replaces idiv/divq with one shr; cg_r3 had no division reduction. */
+static int div_pow2_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    if (n->u.binary.op != III_BIN_DIV) return 0;
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
+    uint64_t v = rhs->u.int_.value;
+    if (v < 2) return 0;
+    if ((v & (v - 1)) != 0) return 0;
+    int k = 0; uint64_t t = v;
+    while (t > 1) { t >>= 1; k++; }
+    return k;
+}
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.iii's r3_shift_const_k -- IDENTICAL logic so the emitted
  * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL/SHR and rhs is a constant
  * integer literal in 1..63, return the shift amount; else 0.  x<<k / x>>k for a constant k is the
@@ -1554,6 +1569,19 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                 }
                 stack_push_reg(cg, "rax");
                 return 0;
+            }
+            int dpk = div_pow2_k(cg, n);
+            if (dpk != 0) {
+                if (!expr_is_signed(cg, n->u.binary.lhs) && !expr_is_signed(cg, n->u.binary.rhs)) {
+                    /* [EMITTED] DIVIDE-BY-POW2 (the live self-optimizer; dual-implemented byte-identically in
+                     * cg_r3.iii): UNSIGNED x/2^k becomes an immediate shr -- emit only the lhs, skip loading
+                     * the divisor + the divq.  Sound: for unsigned x, x/2^k == x>>k (floor == logical shift). */
+                    if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
+                    stack_pop_reg(cg, "rax");
+                    emit_line(cg, "    shrq $%d, %%rax", dpk);
+                    stack_push_reg(cg, "rax");
+                    return 0;
+                }
             }
             int idn = arith_identity(cg, n);
             if (idn != 0) {

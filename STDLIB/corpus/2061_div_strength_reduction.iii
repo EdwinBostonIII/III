@@ -1,0 +1,28 @@
+/* STDLIB/corpus/2061_div_strength_reduction.iii -- artifact #2: the optimization cg_r3 LACKED, now installed.
+ *
+ * cg_r3 emitted a full divq even for x/8 (no division strength reduction at all).  The synthesizer-certified
+ * rule (cgopt_div_*, dual-implemented byte-identically in cg_r3.iii + cg_r3.c) now lowers UNSIGNED x/2^k to a
+ * single shr -- objdump confirms `shr $0x3,%rax` for x/8.  This KAT proves the reduced shr computes IDENTICALLY
+ * to a real divq (variable divisor = the independent oracle the constant-folder cannot reduce) on the wrap
+ * edges where it matters.  99 = the installed reduction is correct for all probed inputs.
+ */
+module corpus_2061_div_strength_reduction
+
+var D8    : [u64; 1] = [8u64]
+var D1024 : [u64; 1] = [1024u64]
+
+fn red8(x: u64) -> u64 { return x / 8u64 }           /* constant 2^3 -> shr $3 (the reduction) */
+fn ref8(x: u64) -> u64 { return x / D8[0u64] }       /* variable divisor -> real divq (oracle) */
+fn red1024(x: u64) -> u64 { return x / 1024u64 }     /* constant 2^10 -> shr $10 */
+fn ref1024(x: u64) -> u64 { return x / D1024[0u64] }
+
+fn main() -> u64 {
+    if red8(0u64)                    != ref8(0u64)                    { return 1u64 }
+    if red8(7u64)                    != ref8(7u64)                    { return 2u64 }   /* 7/8 = 0 */
+    if red8(123456789u64)            != ref8(123456789u64)            { return 3u64 }
+    if red8(9223372036854775808u64)  != ref8(9223372036854775808u64)  { return 4u64 }  /* 2^63 */
+    if red8(18446744073709551615u64) != ref8(18446744073709551615u64) { return 5u64 }  /* 2^64-1 */
+    if red1024(18446744073709551615u64) != ref1024(18446744073709551615u64) { return 6u64 }
+    if red1024(9223372036854775808u64)  != ref1024(9223372036854775808u64)  { return 7u64 }
+    return 99u64
+}

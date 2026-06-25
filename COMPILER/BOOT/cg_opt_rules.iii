@@ -28,6 +28,25 @@ fn cgopt_mul_shift_k(v: u64) -> u32 @export {
     return k
 }
 
+/* div_admit: is UNSIGNED `x / v` a width-faithful pow2 strength reduction (div -> shr)?  1 iff v is an exact
+ * power of two >= 2 (then x/v == x>>log2(v) for unsigned: floor division IS the logical shift).  Signed div is
+ * NOT reduced here (signed x/2^k rounds toward zero, != arithmetic shift) -- cg_r3 gates the emission on
+ * unsignedness.  cg_r3 had NO division strength reduction at all (it emitted divq even for x/8); this is the
+ * optimization the synthesizer found that the compiler lacked. */
+fn cgopt_div_admit(v: u64) -> u32 @export {
+    if v < 2u64 { return 0u32 }
+    if (v & (v - 1u64)) != 0u64 { return 0u32 }
+    return 1u32
+}
+/* shift_k for the div reduction: k such that v == 2^k.  Caller guarantees cgopt_div_admit(v)==1, so v is an
+ * exact power of two in 2^1..2^63 and this returns 1..63 (identical to cgopt_mul_shift_k). */
+fn cgopt_div_shift_k(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut t: u64 = v
+    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
+    return k
+}
+
 /* shladd_admit: is `x * v` a WIDTH-FAITHFUL shift-and-add strength reduction (mul -> shl+add)?  1 iff
  * v == 2^k + 1 for k in 1..63, i.e. v >= 3 and (v-1) is an exact power of two.  Then
  * x*v == x*(2^k+1) == (x<<k) + x mod 2^64 (proven over bv_ring: (2^k+1)x = 2^k x + x).  Disjoint from

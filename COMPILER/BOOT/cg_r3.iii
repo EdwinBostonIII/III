@@ -223,6 +223,8 @@ extern @abi(c-msvc-x64) fn cgopt_mul_2sh_m(v: u64) -> u32 from "cg_opt_rules.iii
 extern @abi(c-msvc-x64) fn cgopt_mul_2ss_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2ss_j(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_2ss_m(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_div_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_div_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
 
 extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
@@ -922,6 +924,17 @@ fn r3_mul_2ss_m(op: u32, rhs: u32) -> u32 {
     if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
     let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
     return cgopt_mul_2ss_m(v)
+}
+/* [EMITTED] DIVIDE-BY-POW2 STRENGTH REDUCTION test (dual of cg_r3.c's div_pow2_k -- IDENTICAL logic): if op is
+ * DIV(4) and rhs == 2^k (k in 1..63), return k via the single-source law cgopt_div_*.  Caller GATES on UNSIGNED
+ * (signed x/2^k != x>>k).  Replaces an idiv/divq (tens of cycles) with one shr -- cg_r3 had NO division
+ * strength reduction at all (it emitted divq even for x/8). */
+fn r3_div_pow2_k(op: u32, rhs: u32) -> u32 {
+    if op != 4u32 { return 0u32 }
+    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
+    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+    if cgopt_div_admit(v) != 1u32 { return 0u32 }
+    return cgopt_div_shift_k(v)
 }
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.c's shift_const_k -- IDENTICAL logic so the emitted assembly
  * is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL(9)/SHR(10) and rhs is a constant
@@ -2592,6 +2605,18 @@ fn r3_emit_expr(node: u32) -> u32 {
                 r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(shk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
             }
             r3_push_rax(); return R3_OK
+        }
+        let dpk: u32 = r3_div_pow2_k(op, rhs)
+        if dpk != 0u32 {
+            if r3_either_is_signed(lhs, rhs) == 0u32 {
+                /* [EMITTED] DIVIDE-BY-POW2 (the live self-optimizer; dual-implemented byte-identically in
+                 * cg_r3.c): UNSIGNED x/2^k becomes an immediate shr -- emit only the lhs, skip loading the
+                 * divisor + the divq.  Sound: for unsigned x, x/2^k == x>>k (floor division == logical shift).
+                 * Mirrors the SHR const-fold's emit primitives, so iiis-0 == iiis-2 holds. */
+                r3_emit_expr(lhs); r3_pop_rax()
+                r3_emit_arr(&R3_STR_SHRQ_DOLLAR as u64, R3_STR_SHRQ_DOLLAR_LEN); r3_emit_dec(dpk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+                r3_push_rax(); return R3_OK
+            }
         }
         let idn: u32 = r3_arith_identity(op, rhs)
         if idn != 0u32 {

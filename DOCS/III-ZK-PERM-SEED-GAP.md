@@ -48,5 +48,22 @@ Not affected: `zk_ext4_perm` (constraint-only, no boundary), `zk_perm_malicious`
 
 This corrects the session's earlier "production sound on 3 axes" claim — that covered the trace LDE + CP-FRI +
 query binding (the **transition** soundness, genuinely sound). The **permutation** argument was a **4th axis**
-not checked; it is now sound. *(A separate, distinct finding — the last-access (row 63) exclusion from the
-`i<63` product, demonstrated by `zk_fused_forge63` rc=42 — is tracked separately.)*
+not checked; it is now sound.
+
+## SEPARATE, DISTINCT FINDING (CONFIRMED, fix NOT yet landed) — the last-access (row 63) exclusion
+
+The grand-product recurrence runs `while i < 63` (`zk_fused_committed.iii:215`), so `P_k[63] = prod_{i=0..62}` —
+**access 63 (the last row, a LOAD) is EXCLUDED from the product** (the i→i+1 recurrence has no successor at row 63).
+The sorted-order read-consistency loop (line 223, cyclic `inx=(i+1)&63`) is on the SORTED columns and does NOT link
+the forged PROGRAM access 63. So a malicious prover forges `VP[63]` (the last load value) → it is in neither the
+product (excluded) nor a transition (no row-64 successor) → **ACCEPTED**. `zk_fused_forge63.iii` DEMONSTRATES this:
+its `main` returns **rc=42** ("read-inconsistent trace ACCEPTED: verify==1 AND boundary==1") for `forge==3` (`VP[63]`).
+Present in `zk_fused_committed` (production) + `zk_fused_prod` + `zk_perm_k3prod` (all share the `i<63` product).
+
+**FIX RECIPE (the boundary must include the last access):** in `boundary_ok`/`boundaries_ok`, after the seed pin,
+check `P_k[63]·encf(prog_63) == S_k[63]·encf(sort_63)` instead of `P_k[63]==S_k[63]` — i.e. open the access-63
+columns (program AP/VP/WP = cols 1,2,3 and sorted AS/VS/WS = cols 4,5,6 at row 63), re-derive the perm challenges
+(`air_perm_a`/`air_perm_beta` from the committed access roots; they are currently local to `build()`), compute
+`encf` (line 119) for both, and fold the last term into the comparison. `zk_fused_forge63` (rc 42→21) is the
+reproduce-then-fix gate. Deep (re-derive challenges + 6 opens + encf across 4 files) — the next focused effort,
+to be done with the same reproduce-then-fix rigor as the seed pin, not rushed.

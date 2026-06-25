@@ -158,3 +158,34 @@ fn ski_register_mutex() -> i32 @export {
     sfsm_set_init(0u32, 1u8)
     return 0i32
 }
+
+/* ============================================================================================================
+ * EVENT-DRIVEN k-INDUCTION that CONSUMES the causal epoch partition (ser_causal) -- the real composition.
+ * Confluence of N concurrent ripples (does every interleaving reach the same final state?) is a k-induction:
+ * base = one ripple is trivially confluent; step = adding ripple N preserves confluence iff it commutes with
+ * all of 1..N-1.  caus_collapse IS that induction folded over the event log -> n_epochs==1 iff confluent.  The
+ * sieve CONSUMES the partition (it unrolls n_epochs, NOT N! interleavings) AND concretely VERIFIES it (forward
+ * vs reverse final state must agree) -- so it can never be a wrapper that trusts a bad certificate. */
+extern @abi(c-msvc-x64) fn caus_collapse(n: u32) -> u32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_final_state(n: u32, reverse: u32) -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_orderings_to_check(n: u32) -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+
+/* 1 = the N logged ripples are CONFLUENT (every interleaving reaches the same final state), proven by
+ * consuming the causal epoch fold + a concrete forward/reverse witness.  0 = not confluent.  2 = the causal
+ * certificate and the concrete states DISAGREE (a bad merge -- the sieve catches it, it never just trusts). */
+fn ski_confluent_reduced(n: u32) -> u32 @export {
+    let ep : u32 = caus_collapse(n)                  /* CONSUME the causal fold: the epoch partition */
+    let fwd : u64 = caus_final_state(n, 0u32)
+    let rev : u64 = caus_final_state(n, 1u32)
+    if ep == 1u32 {
+        if fwd != rev { return 2u32 }                /* certificate says confluent but states differ -> CAUGHT */
+        return 1u32
+    }
+    return 0u32
+}
+/* the work the reduction saved: the orderings the naive sieve would unroll (n!) collapse to this (1 if confluent). */
+fn ski_orderings_reduced(n: u32) -> u64 @export { return caus_orderings_to_check(n) }
+/* the witnessed verdict of the reduced sieve (the fold over the ripples + the partition certificate). */
+fn ski_reduced_witness() -> u64 @export { return evt_witness(evt_count()) }

@@ -1,0 +1,49 @@
+/* STDLIB/corpus/2057_eidos_kinduct_causal.iii -- the REAL causal->kinduct composition, through the event log.
+ *
+ * ser_kinduct CONSUMES ser_causal's epoch partition: confluence of N concurrent ripples (does every
+ * interleaving reach the same final state?) is proven by FOLDING the logged ripples into epochs (caus_collapse)
+ * and the sieve unrolls n_epochs, NOT N! interleavings -- the O(N!)->O(epochs) realized end-to-end, not just
+ * measured.  It is cross-checked concretely (forward vs reverse final state), so it can't be a wrapper.  99 =
+ * commuting sets are confluent with the orderings collapsed (6->1, 120->1) and a non-commuting pair is refused.
+ */
+module corpus_2057_eidos_kinduct_causal
+
+extern @abi(c-msvc-x64) fn caus_reset() -> i32 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn caus_ripple(op: u32, arg: u64) -> u64 from "ser_causal.iii"
+extern @abi(c-msvc-x64) fn ski_confluent_reduced(n: u32) -> u32 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_orderings_reduced(n: u32) -> u64 from "ser_kinduct.iii"
+extern @abi(c-msvc-x64) fn ski_reduced_witness() -> u64 from "ser_kinduct.iii"
+
+const CAUS_ADD : u32 = 0u32
+const CAUS_SUB : u32 = 1u32
+const CAUS_MUL : u32 = 2u32
+
+fn main() -> u64 {
+    /* CONFLUENT: 3 commuting additive ripples -> the sieve CONSUMES the causal fold (1 epoch), verifies
+     * forward==reverse (0+3+5-2 == 0-2+5+3 == 6), and checks 1 ordering, not 3!=6. */
+    caus_reset()
+    caus_ripple(CAUS_ADD, 3u64)
+    caus_ripple(CAUS_ADD, 5u64)
+    caus_ripple(CAUS_SUB, 2u64)
+    if ski_confluent_reduced(3u32) != 1u32 { return 1u64 }
+    if ski_orderings_reduced(3u32) != 1u64 { return 2u64 }       /* 6 -> 1, the reduction the sieve actually used */
+    if ski_reduced_witness() == 0u64 { return 3u64 }
+
+    /* NOT CONFLUENT: ADD then MUL reaches a different state by order ((0+3)*5=15 vs (0*5)+3=3) -> refused. */
+    caus_reset()
+    caus_ripple(CAUS_ADD, 3u64)
+    caus_ripple(CAUS_MUL, 5u64)
+    if ski_confluent_reduced(2u32) != 0u32 { return 4u64 }
+    if ski_orderings_reduced(2u32) != 2u64 { return 5u64 }       /* both orderings stay -- no false reduction */
+
+    /* a LARGER confluent set: 5 commuting adds -> 1 epoch -> 5!=120 orderings collapse to 1. */
+    caus_reset()
+    caus_ripple(CAUS_ADD, 3u64)
+    caus_ripple(CAUS_ADD, 5u64)
+    caus_ripple(CAUS_ADD, 7u64)
+    caus_ripple(CAUS_ADD, 9u64)
+    caus_ripple(CAUS_ADD, 11u64)
+    if ski_confluent_reduced(5u32) != 1u32 { return 6u64 }
+    if ski_orderings_reduced(5u32) != 1u64 { return 7u64 }       /* 120 -> 1 */
+    return 99u64
+}

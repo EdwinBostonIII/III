@@ -161,5 +161,29 @@ fn caus_orderings_to_check(n: u32) -> u64 @export {
     return caus_fact(n) / denom
 }
 
+/* CONCRETE application (integer, the dual of caus_apply's bv form): apply ripple (op,arg) to a state s. */
+fn caus_apply_one(op: u32, arg: u64, s: u64) -> u64 {
+    if op == CAUS_ADD { return s + arg }
+    if op == CAUS_SUB { return s - arg }
+    if op == CAUS_MUL { return s * arg }
+    if op == CAUS_SHL { return s << arg }
+    return s
+}
+/* apply the first n LOGGED ripples to init=0, forward (reverse=0) or reverse (reverse=1).  This is the
+ * concrete confluence WITNESS the sieve (ser_kinduct) checks the causal certificate against: if the partition
+ * says "confluent" (one epoch) then forward and reverse MUST agree -- a disagreement would expose a bad merge. */
+fn caus_final_state(n: u32, reverse: u32) -> u64 @export {
+    let mut s : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < n {
+        let mut idx : u32 = k
+        if reverse == 1u32 { idx = n - 1u32 - k }
+        let p : u64 = evt_payload_at(idx)
+        s = caus_apply_one(caus_p_op(p), caus_p_arg(p), s)
+        k = k + 1u32
+    }
+    return s
+}
+
 /* the content-addressed witness of the causal fold (the ripples + the partition certificate). */
 fn caus_witness() -> u64 @export { return evt_witness(evt_count()) }

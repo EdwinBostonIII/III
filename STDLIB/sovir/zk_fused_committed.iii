@@ -201,6 +201,7 @@ fn build(forge: u64) {
     if forge == 1u64 { VS[1] = 99u32 }
     if forge == 2u64 { VP[32] = 99u32 }
     if forge == 3u64 { VP[63u64] = 99u32 }   /* LAST-ACCESS forge: row-63 load value (excluded from the i<63 product) */
+    if forge == 4u64 { VP[32] = 99u32 }      /* SEED-RIG forge: non-perm (like forge 2); the rig is applied after the product */
     let mut i : u64 = 0u64
     while i < 64u64 {
         air_set_trace(i, 0u64, i as u32)  air_set_trace(i, 1u64, AP[i])  air_set_trace(i, 2u64, VP[i])  air_set_trace(i, 3u64, WP[i])
@@ -219,6 +220,20 @@ fn build(forge: u64) {
         P3[i + 1u64] = sf_mul(P3[i], encf(AP[i], VP[i], WP[i], aa3, b3b, q3))  S3[i + 1u64] = sf_mul(S3[i], encf(AS[i], VS[i], WS[i], aa3, b3b, q3))
         P4[i + 1u64] = sf_mul(P4[i], encf(AP[i], VP[i], WP[i], aa4, b4b, q4))  S4[i + 1u64] = sf_mul(S4[i], encf(AS[i], VS[i], WS[i], aa4, b4b, q4))
         i = i + 1u64
+    }
+    if forge == 4u64 {   /* SEED-RIG: set S_k[0] = Pi_p_full_k * inv(Pi_s_full_k) (FULL products incl. access 63) + re-run S_k
+                          * -> the FULL-product boundary holds for a non-perm, so ONLY the seed pin (S_k[0]!=1) can reject. */
+        let qf1 : u32 = sf_mul(S1[63], encf(AS[63u64], VS[63u64], WS[63u64], aa1, b1b, q1))  let pf1 : u32 = sf_mul(P1[63], encf(AP[63u64], VP[63u64], WP[63u64], aa1, b1b, q1))
+        let qf2 : u32 = sf_mul(S2[63], encf(AS[63u64], VS[63u64], WS[63u64], aa2, b2b, q2))  let pf2 : u32 = sf_mul(P2[63], encf(AP[63u64], VP[63u64], WP[63u64], aa2, b2b, q2))
+        let qf3 : u32 = sf_mul(S3[63], encf(AS[63u64], VS[63u64], WS[63u64], aa3, b3b, q3))  let pf3 : u32 = sf_mul(P3[63], encf(AP[63u64], VP[63u64], WP[63u64], aa3, b3b, q3))
+        let qf4 : u32 = sf_mul(S4[63], encf(AS[63u64], VS[63u64], WS[63u64], aa4, b4b, q4))  let pf4 : u32 = sf_mul(P4[63], encf(AP[63u64], VP[63u64], WP[63u64], aa4, b4b, q4))
+        S1[0] = sf_mul(pf1, base_inv(qf1))  S2[0] = sf_mul(pf2, base_inv(qf2))  S3[0] = sf_mul(pf3, base_inv(qf3))  S4[0] = sf_mul(pf4, base_inv(qf4))
+        let mut ri : u64 = 0u64
+        while ri < 63u64 {
+            S1[ri + 1u64] = sf_mul(S1[ri], encf(AS[ri], VS[ri], WS[ri], aa1, b1b, q1))  S2[ri + 1u64] = sf_mul(S2[ri], encf(AS[ri], VS[ri], WS[ri], aa2, b2b, q2))
+            S3[ri + 1u64] = sf_mul(S3[ri], encf(AS[ri], VS[ri], WS[ri], aa3, b3b, q3))  S4[ri + 1u64] = sf_mul(S4[ri], encf(AS[ri], VS[ri], WS[ri], aa4, b4b, q4))
+            ri = ri + 1u64
+        }
     }
     i = 0u64
     while i < 64u64 {
@@ -424,6 +439,11 @@ fn main() -> u64 {
     build(3u64)
     if verify() != 1u64 { return 14u64 }
     if boundary_ok() == 1u64 { return 15u64 }
+    /* (SR) SEED-RIG: a non-permutation whose S_k[0] is rigged so the FULL-product equality holds -> ONLY the SEED PIN
+     * (S_k[0]==1) on the REAL boundary_ok can reject it.  Gates the seed pin on the real module (not just corpus/2300). */
+    build(4u64)
+    if verify() != 1u64 { return 16u64 }
+    if boundary_ok() == 1u64 { return 17u64 }
     /* (O) forged trace OPENING: claim a wrong leaf -> Merkle REJECTS. */
     build(0u64)
     commit_col(0u64)

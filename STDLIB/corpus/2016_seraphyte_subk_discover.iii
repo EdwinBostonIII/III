@@ -1,0 +1,105 @@
+/* STDLIB/corpus/2016_seraphyte_subk_discover.iii -- THE GENUINE-DISCOVERY ORGAN (closure C4).
+ *
+ * The Seraphyte DISCOVERS the shift-sub strength-reduction class by SWEEPING the constant-multiply space
+ * and letting the proof ENGINES partition it -- shl-sub EMERGES as a certified class; it is NOT hardcoded
+ * (the anti-ser_super requirement: a hardcoded target is ser_super in a new hat).  For each candidate
+ * factor v the organism asks the engines which strength-reduction SHAPE v admits, by TESTING the identity
+ * for each shift k (the test IS the discovery, not a table lookup):
+ *     SUBK : x*v == (x<<k)-x   (v == 2^k-1)   <- the class cg_r3 GAINED this session
+ *     NONE : imul              (no such k)
+ * Proof is MULTI-ENGINE: bv_ring (algebraic, primary) AND bv_bits SAT (bit-level, exhaustive valuations)
+ * must AGREE before a discovery is accepted -- a single-engine soundness bug cannot pass.  The discovered
+ * SUBK class is then BOUND to cg_r3's REAL emission law (cgopt_mul_subk_admit/_k): every v the organism
+ * discovered as SUBK is exactly what cg_r3 now emits as shl+sub, and every NONE v is exactly what cg_r3
+ * still imuls.  Deterministic + exhaustive (anti-ML: no counting/promoting -- every candidate meets the
+ * engines, the engines decide).  99 = discovery emerges, multi-engine agrees, boot-bound both ways,
+ * negative refuses, and the proof BITES IN ISOLATION (the ser_super-trap guard).
+ */
+module corpus_2016_seraphyte_subk_discover
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bb_reset(w: u64) -> i32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_var(v: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_const(c: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_sub(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_mul(a: u32, b: u32) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_shl(a: u32, k: u64) -> u32 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn bb_equal(a: u32, b: u32) -> u8 from "bv_bits.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_subk_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_subk_k(v: u64) -> u32 from "cg_opt_rules.iii"
+
+/* ALGEBRAIC discovery: does v admit the SUBK shape?  Return k (3..63) if x*v == (x<<k)-x for some k, else 0.
+ * The organism DISCOVERS k by trying each shift -- the identity test is the discovery, not a lookup.  Fresh
+ * bv_reset() per attempt: the proof is self-contained, so it BITES IN ISOLATION (no uninitialised state). */
+fn subk_discover_ring(v: u64) -> u32 {
+    let mut k : u32 = 3u32
+    while k <= 63u32 {
+        bv_reset()
+        let x : u32 = bv_var(0u32)
+        let lhs : u32 = bv_sub(bv_shl(x, k), x)
+        let rhs : u32 = bv_mul(x, bv_const(v))
+        if bv_equal(lhs, rhs) == 1u8 { return k }
+        k = k + 1u32
+    }
+    return 0u32
+}
+
+/* SAT cross-witness: confirm x*v == (x<<k)-x at width 64 (bit-level, ALL 2^64 valuations).  Independent of
+ * the polynomial engine -- a second authority that must AGREE before a discovery counts. */
+fn subk_confirm_sat(v: u64, k: u32) -> u8 {
+    bb_reset(64u64)
+    let x : u32 = bb_var(0u32)
+    let lhs : u32 = bb_sub(bb_shl(x, k as u64), x)
+    let rhs : u32 = bb_mul(x, bb_const(v))
+    return bb_equal(lhs, rhs)
+}
+
+fn main() -> u64 {
+    /* (1) THE DISCOVERY SWEEP: sweep v=2..127; the engines CLASSIFY each v.  Every v the algebraic engine
+     *     discovers as SUBK must (a) be re-confirmed by the independent SAT engine (multi-engine
+     *     authorization), and (b) match cg_r3's REAL emission law -- discovery bound to the live emitter.
+     *     Every v with NO subk shape must NOT be emitted as shl-sub (bound the other way too). */
+    let mut discovered : u32 = 0u32
+    let mut v : u64 = 2u64
+    while v <= 127u64 {
+        let k : u32 = subk_discover_ring(v)
+        if k != 0u32 {
+            if subk_confirm_sat(v, k) != 1u8 { return 1u64 }          /* SAT must agree with bv_ring */
+            if cgopt_mul_subk_admit(v) != 1u32 { return 2u64 }        /* cg_r3 actually emits it... */
+            if cgopt_mul_subk_k(v) != k { return 3u64 }               /* ...with the SAME shift k */
+            discovered = discovered + 1u32
+        } else {
+            if cgopt_mul_subk_admit(v) != 0u32 { return 4u64 }        /* no shape -> cg_r3 does NOT shl-sub */
+        }
+        v = v + 1u64
+    }
+
+    /* (2) EMERGENCE: the sweep DISCOVERED exactly the Mersenne class {7,15,31,63,127} in 2..127 -- five
+     *     factors cg_r3 previously imul'd, now proven + emitted as shl+sub.  Found, not hardcoded. */
+    if discovered != 5u32 { return 10u64 + (discovered as u64) }
+
+    /* (3) NEGATIVE: a NONE-class factor is discovered as NEITHER subk by the engine NOR emitted.  11,13 are
+     *     none of pow2/2^k+1/2^k-1: the engine returns 0 and the boot admit rejects (both bound). */
+    if subk_discover_ring(11u64) != 0u32 { return 20u64 }
+    if subk_discover_ring(13u64) != 0u32 { return 21u64 }
+    if cgopt_mul_subk_admit(11u64) != 0u32 { return 22u64 }
+
+    /* (4) DISCRIMINATION (the engine is non-vacuous): the SAT engine REFUTES a false (v,k) pairing --
+     *     7 is NOT (x<<4)-x (that is 15x).  If it "agreed" the engine would be broken. */
+    if subk_confirm_sat(7u64, 4u32) != 0u8 { return 30u64 }
+
+    /* (5) ISOLATION GUARD (the ser_super-trap, the documented prior failure): the proof BITES IN ISOLATION
+     *     -- subk_discover_ring is called fresh, with its own bv_reset, and returns the TRUE shift in THIS
+     *     call context (not a wrapper-only/uninitialised-kernel-state artifact). */
+    if subk_discover_ring(7u64) != 3u32 { return 40u64 }     /* 7 == 2^3-1 -> k=3 */
+    if subk_discover_ring(63u64) != 6u32 { return 41u64 }    /* 63 == 2^6-1 -> k=6 */
+    if subk_discover_ring(127u64) != 7u32 { return 42u64 }   /* 127 == 2^7-1 -> k=7 */
+
+    return 99u64
+}

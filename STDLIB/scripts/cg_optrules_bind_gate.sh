@@ -91,14 +91,48 @@ fn main() -> u64 { return cor_sl_shift_at(${i}u64) }")
   i=$((i+1))
 done
 
-# ---- (C-shladd) emit negative: a non-pow2, non-(2^k+1) factor (7) must emit imul, NOT shl+add ----
-printf 'module p\nfn f(x: u64) -> u64 { return x * 7u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcslneg.iii"
+# ---- (C-shladd) emit negative: a factor that is NONE of pow2/2^k+1/2^k-1 (11) must emit imul, NOT shl+add ----
+# (was x*7, but 7 = 2^3-1 now binds to the shl-sub rule below; 11 is none of the three strength classes.)
+printf 'module p\nfn f(x: u64) -> u64 { return x * 11u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcslneg.iii"
 "$IIIS" "$W/_pcslneg.iii" --compile-only --out "$W/_pcslneg.o" >/dev/null 2>&1
 slneg="$(objdump -d "$W/_pcslneg.o" 2>/dev/null | grep -iE 'shl|sal|imul')"
 if printf '%s' "$slneg" | grep -qi imul && ! printf '%s' "$slneg" | grep -qiE 'shl|sal'; then
-  say "(C-shladd) negative : x*7 (non-pow2, non-2^k+1) -> 'imul', NO shift  [shl+add binding has teeth]"
+  say "(C-shladd) negative : x*11 (non-pow2, non-2^k+1, non-2^k-1) -> 'imul', NO shift  [shl+add binding has teeth]"
 else
-  say "(C-shladd) FAIL negative : x*7 did not emit imul-without-shift -- got: $(printf '%s' "$slneg" | tr '\n' ';')"; FAIL=$((FAIL+1))
+  say "(C-shladd) FAIL negative : x*11 did not emit imul-without-shift -- got: $(printf '%s' "$slneg" | tr '\n' ';')"; FAIL=$((FAIL+1))
+fi
+
+# ---- (B-subk) emit binding: each tabled SUBK shift k => x*(2^k-1) must emit `shl $k` + `sub %rcx,%rax`, NO imul ----
+NB=$(_run 'module d
+extern @abi(c-msvc-x64) fn cor_ss_rule_count() -> u64 from "cg_opt_rules.iii"
+fn main() -> u64 { return cor_ss_rule_count() }')
+say "subk rule count (from module) = $NB"
+i=0
+while [ "$i" -lt "$NB" ]; do
+  K=$(_run "module d
+extern @abi(c-msvc-x64) fn cor_ss_shift_at(idx: u64) -> u64 from \"cg_opt_rules.iii\"
+fn main() -> u64 { return cor_ss_shift_at(${i}u64) }")
+  FACTOR=$(( (1 << K) - 1 ))            # 2^k-1 (Mersenne; positive int64 for k<=63)
+  HEXK=$(printf '%x' "$K")
+  printf 'module p\nfn f(x: u64) -> u64 { return x * %uu64 }\nfn main() -> u64 { return f(1u64) }\n' "$FACTOR" > "$W/_pcss.iii"
+  "$IIIS" "$W/_pcss.iii" --compile-only --out "$W/_pcss.o" >/dev/null 2>&1
+  asm="$(objdump -d "$W/_pcss.o" 2>/dev/null | grep -iE 'shl|sal|imul|sub[[:space:]]+%rcx,%rax')"
+  if printf '%s' "$asm" | grep -qiE "(shl|sal)[[:space:]]+\\\$(0x${HEXK}|${K})," && printf '%s' "$asm" | grep -qiE 'sub[[:space:]]+%rcx,%rax' && ! printf '%s' "$asm" | grep -qi imul; then
+    say "(B-subk) rule $i : x*$FACTOR (2^$K-1) -> 'shl \$0x$HEXK' + 'sub %rcx,%rax', NO imul  [shl+sub bound: certified == emitted]"
+  else
+    say "(B-subk) FAIL rule $i : x*$FACTOR (2^$K-1) did NOT emit shl+sub -- got: $(printf '%s' "$asm" | tr '\n' ';')"; FAIL=$((FAIL+1))
+  fi
+  i=$((i+1))
+done
+
+# ---- (C-subk) emit negative: a non-pow2/2^k+1/2^k-1 factor (13) must emit imul, NOT shl+sub ----
+printf 'module p\nfn f(x: u64) -> u64 { return x * 13u64 }\nfn main() -> u64 { return f(1u64) }\n' > "$W/_pcssneg.iii"
+"$IIIS" "$W/_pcssneg.iii" --compile-only --out "$W/_pcssneg.o" >/dev/null 2>&1
+ssneg="$(objdump -d "$W/_pcssneg.o" 2>/dev/null | grep -iE 'shl|sal|imul')"
+if printf '%s' "$ssneg" | grep -qi imul && ! printf '%s' "$ssneg" | grep -qiE 'shl|sal'; then
+  say "(C-subk) negative : x*13 (non-pow2/2^k+1/2^k-1) -> 'imul', NO shift  [shl+sub binding has teeth]"
+else
+  say "(C-subk) FAIL negative : x*13 did not emit imul-without-shift -- got: $(printf '%s' "$ssneg" | tr '\n' ';')"; FAIL=$((FAIL+1))
 fi
 
 # ---- (C) emit negative: a non-pow2 factor must emit imul, NOT shl ----

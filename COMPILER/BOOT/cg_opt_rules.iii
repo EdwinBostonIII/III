@@ -49,3 +49,21 @@ fn cgopt_mul_shladd_k(v: u64) -> u32 @export {
     while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
     return k
 }
+
+/* [EMITTED by seraphyte_emit_rule.sh from descriptor NAME=subk FLOOR=7 SHAPE=2^k-1 OP=subq]
+ * is `x * v` a width-faithful shl-sub strength reduction?  1 iff v == 2^k-1 for k in 3..63 (v >= 7
+ * and v+1 an exact power of two).  Then x*v == subk: (x<<k) - x mod 2^64.  v=3 (=2^2-1) is excluded
+ * (floor 7): 3 is also 2^1+1 (shladd's by dispatch).  Replaces an imul with one shl + one subq. */
+fn cgopt_mul_subk_admit(v: u64) -> u32 @export {
+    if v < 7u64 { return 0u32 }
+    if (v >> 63u64) != 0u64 { return 0u32 }   /* v >= 2^63: outside k<=63; also guards the v+1 overflow */
+    let p: u64 = v + 1u64                       /* v < 2^63, so v+1 does not overflow */
+    if (p & v) != 0u64 { return 0u32 }          /* v+1 must be an exact power of two: v == 2^k - 1 */
+    return 1u32
+}
+fn cgopt_mul_subk_k(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut t: u64 = v + 1u64
+    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
+    return k
+}

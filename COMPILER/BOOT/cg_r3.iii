@@ -215,6 +215,8 @@ extern @abi(c-msvc-x64) fn cgopt_mul_admit(v: u64) -> u32 from "cg_opt_rules.iii
 extern @abi(c-msvc-x64) fn cgopt_mul_shift_k(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_shladd_admit(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn cgopt_mul_shladd_k(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_subk_admit(v: u64) -> u32 from "cg_opt_rules.iii"
+extern @abi(c-msvc-x64) fn cgopt_mul_subk_k(v: u64) -> u32 from "cg_opt_rules.iii"
 extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
 
 extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
@@ -875,6 +877,15 @@ fn r3_mul_shladd_k(op: u32, rhs: u32) -> u32 {
     let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
     if cgopt_mul_shladd_admit(v) != 1u32 { return 0u32 }
     return cgopt_mul_shladd_k(v)
+}
+/* [EMITTED] SHIFT-AND-SUBQ STRENGTH REDUCTION test (dual of cg_r3.c's mul_subk_k -- IDENTICAL logic):
+ * if op is MUL(3) and rhs == 2^k-1 (k in 3..63), return k via the single-source law cgopt_mul_subk_*. */
+fn r3_mul_subk_k(op: u32, rhs: u32) -> u32 {
+    if op != 3u32 { return 0u32 }
+    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
+    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+    if cgopt_mul_subk_admit(v) != 1u32 { return 0u32 }
+    return cgopt_mul_subk_k(v)
 }
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.c's shift_const_k -- IDENTICAL logic so the emitted assembly
  * is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL(9)/SHR(10) and rhs is a constant
@@ -2491,6 +2502,17 @@ fn r3_emit_expr(node: u32) -> u32 {
             r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
             r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(slk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
             r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN)
+            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
+            r3_push_rax(); return R3_OK
+        }
+        let ssubk: u32 = r3_mul_subk_k(op, rhs)
+        if ssubk != 0u32 {
+            /* [EMITTED] SHIFT-AND-SUBQ: mul by 2^k-1 -> movq %rax,%rcx; shlq $k,%rax; subq %rcx,%rax --
+             * (x<<k)-x -- replacing a full imul.  Sound: x*(2^k-1) == (x<<k)-x mod 2^64.  Twin-verified prims. */
+            r3_emit_expr(lhs); r3_pop_rax()
+            r3_emit_arr(&R3_STR_MOVQ_RAX_RCX as u64, R3_STR_MOVQ_RAX_RCX_LEN)
+            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(ssubk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+            r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN)
             if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
             r3_push_rax(); return R3_OK
         }

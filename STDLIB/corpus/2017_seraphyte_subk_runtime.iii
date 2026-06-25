@@ -1,0 +1,49 @@
+/* STDLIB/corpus/2017_seraphyte_subk_runtime.iii -- RUNTIME EXECUTION of the emitted shl-sub code.
+ *
+ * Everything else in the closure is PROOF (bv_ring/bv_bits) + disassembly + the self-host fixpoint -- this
+ * KAT actually RUNS the emitted strength reduction on real operands and asserts the integer result.  The
+ * optimized path (`x * 7u64`, a constant 2^k-1 literal) compiles to the emitted `shl $3; sub %rcx,%rax`;
+ * the reference path (`x * m`, m a RUNTIME variable -> no strength reduction -> a full imul) is the ground
+ * truth.  Equal for every operand (incl. the overflow edges where x*7 wraps mod 2^64) == the emitted shl-sub
+ * is not merely proven-equivalent but VERIFIED-WORKING.  99 = all operands agree.
+ */
+module corpus_2017_seraphyte_subk_runtime
+
+fn mul_opt7(x: u64)  -> u64 { return x * 7u64 }    /* 7  = 2^3-1 -> emitted: shl $3; sub %rcx,%rax */
+fn mul_opt15(x: u64) -> u64 { return x * 15u64 }   /* 15 = 2^4-1 -> shl $4; sub */
+fn mul_opt31(x: u64) -> u64 { return x * 31u64 }   /* 31 = 2^5-1 -> shl $5; sub */
+fn mul_opt127(x: u64) -> u64 { return x * 127u64 } /* 127 = 2^7-1 -> shl $7; sub */
+fn mul_ref(x: u64, m: u64) -> u64 { return x * m } /* m RUNTIME -> imul: the ground-truth reference */
+
+fn main() -> u64 {
+    /* fixed checks: 0, 1, small */
+    if mul_opt7(0u64) != 0u64 { return 1u64 }
+    if mul_opt7(1u64) != 7u64 { return 2u64 }
+    if mul_opt15(3u64) != 45u64 { return 3u64 }
+    if mul_opt31(2u64) != 62u64 { return 4u64 }
+    if mul_opt127(1u64) != 127u64 { return 5u64 }
+
+    /* sweep: 100000 runtime operands, optimized vs imul reference, for all four factors */
+    let mut i : u64 = 0u64
+    while i < 100000u64 {
+        if mul_opt7(i)   != mul_ref(i, 7u64)   { return 10u64 }
+        if mul_opt15(i)  != mul_ref(i, 15u64)  { return 11u64 }
+        if mul_opt31(i)  != mul_ref(i, 31u64)  { return 12u64 }
+        if mul_opt127(i) != mul_ref(i, 127u64) { return 13u64 }
+        i = i + 1u64
+    }
+
+    /* OVERFLOW edges: x where x*factor wraps mod 2^64 -- the shl-sub two's-complement subtract must wrap
+     * identically to the imul.  2^61, 2^63, 2^64-1. */
+    let e0 : u64 = 2305843009213693952u64     /* 2^61 */
+    if mul_opt7(e0)   != mul_ref(e0, 7u64)   { return 20u64 }
+    if mul_opt15(e0)  != mul_ref(e0, 15u64)  { return 21u64 }
+    let e1 : u64 = 9223372036854775808u64     /* 2^63 */
+    if mul_opt7(e1)   != mul_ref(e1, 7u64)   { return 22u64 }
+    if mul_opt31(e1)  != mul_ref(e1, 31u64)  { return 23u64 }
+    let e2 : u64 = 18446744073709551615u64    /* 2^64-1 */
+    if mul_opt7(e2)   != mul_ref(e2, 7u64)   { return 24u64 }
+    if mul_opt127(e2) != mul_ref(e2, 127u64) { return 25u64 }
+
+    return 99u64
+}

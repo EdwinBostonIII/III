@@ -1118,6 +1118,22 @@ static int mul_shladd_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
     return k;
 }
 
+/* [EMITTED] SHIFT-AND-SUBQ STRENGTH REDUCTION test (dual of cg_r3.iii's r3_mul_subk_k -- IDENTICAL
+ * logic so the emitted assembly is byte-for-byte the same): rhs == 2^k-1 (k in 3..63) -> k, else 0. */
+static int mul_subk_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    if (n->u.binary.op != III_BIN_MUL) return 0;
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
+    uint64_t v = rhs->u.int_.value;
+    if (v < 7) return 0;
+    if ((v >> 63) != 0) return 0;
+    uint64_t p = v + 1;
+    if ((p & v) != 0) return 0;
+    int k = 0; uint64_t t = v + 1;
+    while (t > 1) { t >>= 1; k++; }
+    return k;
+}
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.iii's r3_shift_const_k -- IDENTICAL logic so the emitted
  * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL/SHR and rhs is a constant
  * integer literal in 1..63, return the shift amount; else 0.  x<<k / x>>k for a constant k is the
@@ -1410,6 +1426,20 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                 emit_line(cg, "    movq %%rax, %%rcx");
                 emit_line(cg, "    shlq $%d, %%rax", slk);
                 emit_line(cg, "    addq %%rcx, %%rax");
+                if (expr_is_u32(cg, n->u.binary.lhs))
+                    emit_line(cg, "    movl %%eax, %%eax");
+                stack_push_reg(cg, "rax");
+                return 0;
+            }
+            int ssubk = mul_subk_k(cg, n);
+            if (ssubk != 0) {
+                /* [EMITTED] SHIFT-AND-SUBQ: mul by 2^k-1 -> movq %rax,%rcx; shlq $k,%rax; subq %rcx,%rax
+                 * -- (x<<k)-x -- replacing a full imul.  Sound: x*(2^k-1) == (x<<k)-x mod 2^64. */
+                if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
+                stack_pop_reg(cg, "rax");
+                emit_line(cg, "    movq %%rax, %%rcx");
+                emit_line(cg, "    shlq $%d, %%rax", ssubk);
+                emit_line(cg, "    subq %%rcx, %%rax");
                 if (expr_is_u32(cg, n->u.binary.lhs))
                     emit_line(cg, "    movl %%eax, %%eax");
                 stack_push_reg(cg, "rax");

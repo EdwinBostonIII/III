@@ -183,10 +183,16 @@ fn boundaries_ok() -> u64 {   /* the permutation under k=4 independent challenge
     if P2[0] != 1u32 { return 0u64 }  if S2[0] != 1u32 { return 0u64 }
     if P3[0] != 1u32 { return 0u64 }  if S3[0] != 1u32 { return 0u64 }
     if P4[0] != 1u32 { return 0u64 }  if S4[0] != 1u32 { return 0u64 }
-    if P1[63] != S1[63] { return 0u64 }
-    if P2[63] != S2[63] { return 0u64 }
-    if P3[63] != S3[63] { return 0u64 }
-    if P4[63] != S4[63] { return 0u64 }
+    /* LAST-ACCESS FIX: access 63 is excluded from the i<63 product -> fold encf(access_63) into the final compare
+     * (re-derive the SAME FS challenges as build). A forged last LOAD value is then caught. (DOCS/III-ZK-PERM-SEED-GAP.md) */
+    let aa1 : u32 = air_perm_setup(1u64, 6u64)
+    let b1b : u32 = air_perm_beta()  let b2b : u32 = air_perm_r4()  let b3b : u32 = air_perm_r5()  let b4b : u32 = air_perm_r7()
+    let aa2 : u32 = air_perm_r2()  let aa3 : u32 = air_perm_r3()  let aa4 : u32 = air_perm_r6()
+    let q1 : u32 = sf_mul(b1b, b1b)  let q2 : u32 = sf_mul(b2b, b2b)  let q3 : u32 = sf_mul(b3b, b3b)  let q4 : u32 = sf_mul(b4b, b4b)
+    if sf_mul(P1[63], encf(AP[63u64], VP[63u64], WP[63u64], aa1, b1b, q1)) != sf_mul(S1[63], encf(AS[63u64], VS[63u64], WS[63u64], aa1, b1b, q1)) { return 0u64 }
+    if sf_mul(P2[63], encf(AP[63u64], VP[63u64], WP[63u64], aa2, b2b, q2)) != sf_mul(S2[63], encf(AS[63u64], VS[63u64], WS[63u64], aa2, b2b, q2)) { return 0u64 }
+    if sf_mul(P3[63], encf(AP[63u64], VP[63u64], WP[63u64], aa3, b3b, q3)) != sf_mul(S3[63], encf(AS[63u64], VS[63u64], WS[63u64], aa3, b3b, q3)) { return 0u64 }
+    if sf_mul(P4[63], encf(AP[63u64], VP[63u64], WP[63u64], aa4, b4b, q4)) != sf_mul(S4[63], encf(AS[63u64], VS[63u64], WS[63u64], aa4, b4b, q4)) { return 0u64 }
     return 1u64
 }
 fn build_layers() {

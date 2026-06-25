@@ -50,7 +50,15 @@ This corrects the session's earlier "production sound on 3 axes" claim — that 
 query binding (the **transition** soundness, genuinely sound). The **permutation** argument was a **4th axis**
 not checked; it is now sound.
 
-## SEPARATE, DISTINCT FINDING (CONFIRMED, fix NOT yet landed) — the last-access (row 63) exclusion
+## SEPARATE, DISTINCT FINDING — the last-access (row 63) exclusion  **[✅ FIXED 2026-06-24]**
+
+> **FIXED + verified (reproduce-then-fix).** `boundary_ok`/`boundaries_ok` now fold access 63 into the final product
+> (`P_k[63]·encf(prog₆₃) == S_k[63]·encf(sort₆₃)`, re-deriving the same FS challenges). `zk_fused_forge63` 42→99
+> (last-access forge now REJECTED); committed's `main` gained a (LA) arm so `run_ext4_committed` gates it on the REAL
+> boundary_ok (EXIT 0); propagated to `zk_fused_prod` + `zk_perm_k3prod` (live zk gate EXIT 0, honest 99). The
+> permutation argument now constrains ALL 64 accesses — seed (row 0) + every interior + the last (row 63).
+>
+> *(original analysis:)*
 
 The grand-product recurrence runs `while i < 63` (`zk_fused_committed.iii:215`), so `P_k[63] = prod_{i=0..62}` —
 **access 63 (the last row, a LOAD) is EXCLUDED from the product** (the i→i+1 recurrence has no successor at row 63).

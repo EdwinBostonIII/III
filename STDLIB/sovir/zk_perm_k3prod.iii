@@ -124,9 +124,12 @@ fn boundaries_ok() -> u64 {   /* the permutation: equal products at all 3 indepe
     if P1[0] != 1u32 { return 0u64 }  if S1[0] != 1u32 { return 0u64 }
     if P2[0] != 1u32 { return 0u64 }  if S2[0] != 1u32 { return 0u64 }
     if P3[0] != 1u32 { return 0u64 }  if S3[0] != 1u32 { return 0u64 }
-    if P1[63] != S1[63] { return 0u64 }
-    if P2[63] != S2[63] { return 0u64 }
-    if P3[63] != S3[63] { return 0u64 }
+    /* LAST-ACCESS FIX: access 63 (value VP[63]) is excluded from the i<63 product -> fold (a_k - V_63) into the final
+     * compare (re-derive the SAME FS challenges as build). A forged last value is then caught. (DOCS/III-ZK-PERM-SEED-GAP.md) */
+    let a1 : u32 = air_perm_setup(0u64, 2u64)  let a2 : u32 = air_perm_r2()  let a3 : u32 = air_perm_r3()
+    if sf_mul(P1[63], sf_sub(a1, VP[63u64])) != sf_mul(S1[63], sf_sub(a1, VS[63u64])) { return 0u64 }
+    if sf_mul(P2[63], sf_sub(a2, VP[63u64])) != sf_mul(S2[63], sf_sub(a2, VS[63u64])) { return 0u64 }
+    if sf_mul(P3[63], sf_sub(a3, VP[63u64])) != sf_mul(S3[63], sf_sub(a3, VS[63u64])) { return 0u64 }
     return 1u64
 }
 fn build_layers() {

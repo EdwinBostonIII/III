@@ -200,6 +200,7 @@ fn build(forge: u64) {
     }
     if forge == 1u64 { VS[1] = 99u32 }
     if forge == 2u64 { VP[32] = 99u32 }
+    if forge == 3u64 { VP[63u64] = 99u32 }   /* LAST-ACCESS forge: row-63 load value (excluded from the i<63 product) */
     let mut i : u64 = 0u64
     while i < 64u64 {
         air_set_trace(i, 0u64, i as u32)  air_set_trace(i, 1u64, AP[i])  air_set_trace(i, 2u64, VP[i])  air_set_trace(i, 3u64, WP[i])
@@ -295,25 +296,41 @@ fn build(forge: u64) {
  * P_k[0]==S_k[0]==1 (Z(1)=1) AND the final equality P_k[63]==S_k[63].  Without the seed pin a malicious prover rigs
  * S_k[0]=Pi_p_k*inv(Pi_s_k) so a NON-permutation satisfies the final equality -> ACCEPT (DOCS/III-ZK-PERM-SEED-GAP).
  * With both seeds pinned to 1, P_k[63]==S_k[63] forces Pi_p_k==Pi_s_k -> genuine permutation. All leaves merkle-opened. */
+fn tq4_u32() -> u32 { return (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32) }
 fn boundary_ok() -> u64 {
     let bi : u64 = 63u64 * BLOW
     let bi0 : u64 = 0u64                               /* trace row 0 -> LDE index 0: the accumulator SEED */
+    /* re-derive the k=4 perm challenges (same FS derivation as build, from the committed access columns 1..6). */
+    let aa1 : u32 = air_perm_setup(1u64, 6u64)
+    let b1b : u32 = air_perm_beta()  let b2b : u32 = air_perm_r4()  let b3b : u32 = air_perm_r5()  let b4b : u32 = air_perm_r7()
+    let aa2 : u32 = air_perm_r2()  let aa3 : u32 = air_perm_r3()  let aa4 : u32 = air_perm_r6()
+    let q1 : u32 = sf_mul(b1b, b1b)  let q2 : u32 = sf_mul(b2b, b2b)  let q3 : u32 = sf_mul(b3b, b3b)  let q4 : u32 = sf_mul(b4b, b4b)
+    /* LAST-ACCESS FIX (DOCS/III-ZK-PERM-SEED-GAP): access 63 is EXCLUDED from the i<63 product, so open it (program
+     * cols 1,2,3 + sorted 4,5,6 at row 63) and fold encf(access_63) into the final product -- a forged last LOAD is caught. */
+    if open_col(1u64, bi) == 0u64 { return 0u64 }  let ap63 : u32 = tq4_u32()
+    if open_col(2u64, bi) == 0u64 { return 0u64 }  let vp63 : u32 = tq4_u32()
+    if open_col(3u64, bi) == 0u64 { return 0u64 }  let wp63 : u32 = tq4_u32()
+    if open_col(4u64, bi) == 0u64 { return 0u64 }  let as63 : u32 = tq4_u32()
+    if open_col(5u64, bi) == 0u64 { return 0u64 }  let vs63 : u32 = tq4_u32()
+    if open_col(6u64, bi) == 0u64 { return 0u64 }  let ws63 : u32 = tq4_u32()
     let mut kk : u64 = 0u64
     while kk < 4u64 {
         let pcol : u64 = 7u64 + 2u64 * kk  let scol : u64 = 8u64 + 2u64 * kk
         /* SEED PIN (Z(1)=1): P_k[0] and S_k[0] must BOTH equal 1, opened+verified at row 0. */
         if open_col(pcol, bi0) == 0u64 { return 0u64 }
-        let p0 : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if p0 != 1u32 { return 0u64 }
+        if tq4_u32() != 1u32 { return 0u64 }
         if open_col(scol, bi0) == 0u64 { return 0u64 }
-        let s0 : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if s0 != 1u32 { return 0u64 }
-        /* FINAL EQUALITY: P_k[63]==S_k[63] (with both seeds pinned to 1 -> Pi_p_k==Pi_s_k -> permutation). */
-        if open_col(pcol, bi) == 0u64 { return 0u64 }
-        let pv : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if open_col(scol, bi) == 0u64 { return 0u64 }
-        let sv : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if pv != sv { return 0u64 }
+        if tq4_u32() != 1u32 { return 0u64 }
+        /* FINAL with the LAST access folded in: P_k[63]*encf(prog_63) == S_k[63]*encf(sort_63). */
+        if open_col(pcol, bi) == 0u64 { return 0u64 }  let pv : u32 = tq4_u32()
+        if open_col(scol, bi) == 0u64 { return 0u64 }  let sv : u32 = tq4_u32()
+        let mut aak : u32 = aa1  let mut bk : u32 = b1b  let mut qk : u32 = q1
+        if kk == 1u64 { aak = aa2  bk = b2b  qk = q2 }
+        if kk == 2u64 { aak = aa3  bk = b3b  qk = q3 }
+        if kk == 3u64 { aak = aa4  bk = b4b  qk = q4 }
+        let ep : u32 = encf(ap63, vp63, wp63, aak, bk, qk)
+        let es : u32 = encf(as63, vs63, ws63, aak, bk, qk)
+        if sf_mul(pv, ep) != sf_mul(sv, es) { return 0u64 }
         kk = kk + 1u64
     }
     return 1u64
@@ -402,6 +419,11 @@ fn main() -> u64 {
     build(2u64)
     if verify() != 1u64 { return 5u64 }
     if boundary_ok() == 1u64 { return 4u64 }
+    /* (LA) forged LAST-access load VP[63] (row 63, EXCLUDED from the i<63 product): transitions hold (no row-64
+     * successor) but boundary_ok's last-access fold REJECTS -> gates the last-access pin on the REAL boundary_ok. */
+    build(3u64)
+    if verify() != 1u64 { return 14u64 }
+    if boundary_ok() == 1u64 { return 15u64 }
     /* (O) forged trace OPENING: claim a wrong leaf -> Merkle REJECTS. */
     build(0u64)
     commit_col(0u64)

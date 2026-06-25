@@ -293,23 +293,37 @@ fn build(forge: u64) {
 }
 
 /* the k=4 permutation boundary at OPENED accumulator leaves: P_k[63]==S_k[63] (trace row 63 -> LDE index 63*B). */
+fn tq4_u32() -> u32 { return (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32) }
 fn boundary_ok() -> u64 {
     let bi : u64 = 63u64 * BLOW
     let bi0 : u64 = 0u64                               /* SEED PIN (Z(1)=1) -- DOCS/III-ZK-PERM-SEED-GAP.md */
+    let aa1 : u32 = air_perm_setup(1u64, 6u64)
+    let b1b : u32 = air_perm_beta()  let b2b : u32 = air_perm_r4()  let b3b : u32 = air_perm_r5()  let b4b : u32 = air_perm_r7()
+    let aa2 : u32 = air_perm_r2()  let aa3 : u32 = air_perm_r3()  let aa4 : u32 = air_perm_r6()
+    let q1 : u32 = sf_mul(b1b, b1b)  let q2 : u32 = sf_mul(b2b, b2b)  let q3 : u32 = sf_mul(b3b, b3b)  let q4 : u32 = sf_mul(b4b, b4b)
+    /* LAST-ACCESS FIX: fold access 63 (excluded from the i<63 product) into the final product. */
+    if open_col(1u64, bi) == 0u64 { return 0u64 }  let ap63 : u32 = tq4_u32()
+    if open_col(2u64, bi) == 0u64 { return 0u64 }  let vp63 : u32 = tq4_u32()
+    if open_col(3u64, bi) == 0u64 { return 0u64 }  let wp63 : u32 = tq4_u32()
+    if open_col(4u64, bi) == 0u64 { return 0u64 }  let as63 : u32 = tq4_u32()
+    if open_col(5u64, bi) == 0u64 { return 0u64 }  let vs63 : u32 = tq4_u32()
+    if open_col(6u64, bi) == 0u64 { return 0u64 }  let ws63 : u32 = tq4_u32()
     let mut kk : u64 = 0u64
     while kk < 4u64 {
         let pcol : u64 = 7u64 + 2u64 * kk  let scol : u64 = 8u64 + 2u64 * kk
         if open_col(pcol, bi0) == 0u64 { return 0u64 }
-        let p0 : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if p0 != 1u32 { return 0u64 }
+        if tq4_u32() != 1u32 { return 0u64 }
         if open_col(scol, bi0) == 0u64 { return 0u64 }
-        let s0 : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if s0 != 1u32 { return 0u64 }
-        if open_col(pcol, bi) == 0u64 { return 0u64 }
-        let pv : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if open_col(scol, bi) == 0u64 { return 0u64 }
-        let sv : u32 = (TQ4[0u64] as u32) | ((TQ4[1u64] as u32) << 8u32) | ((TQ4[2u64] as u32) << 16u32) | ((TQ4[3u64] as u32) << 24u32)
-        if pv != sv { return 0u64 }
+        if tq4_u32() != 1u32 { return 0u64 }
+        if open_col(pcol, bi) == 0u64 { return 0u64 }  let pv : u32 = tq4_u32()
+        if open_col(scol, bi) == 0u64 { return 0u64 }  let sv : u32 = tq4_u32()
+        let mut aak : u32 = aa1  let mut bk : u32 = b1b  let mut qk : u32 = q1
+        if kk == 1u64 { aak = aa2  bk = b2b  qk = q2 }
+        if kk == 2u64 { aak = aa3  bk = b3b  qk = q3 }
+        if kk == 3u64 { aak = aa4  bk = b4b  qk = q4 }
+        let ep : u32 = encf(ap63, vp63, wp63, aak, bk, qk)
+        let es : u32 = encf(as63, vs63, ws63, aak, bk, qk)
+        if sf_mul(pv, ep) != sf_mul(sv, es) { return 0u64 }
         kk = kk + 1u64
     }
     return 1u64
@@ -400,8 +414,8 @@ fn main() -> u64 {
     let l_v : u64 = verify()
     let l_b : u64 = boundary_ok()
     if l_v == 1u64 {
-        if l_b == 1u64 { return 42u64 }   /* HOLE CONFIRMED: read-inconsistent trace ACCEPTED (verify==1 AND boundary==1) */
-        return 20u64                       /* verify accepted but boundary rejected */
+        if l_b == 1u64 { return 42u64 }   /* HOLE: verify AND boundary both accept the last-access forge (was rc=42) */
+        return 99u64                       /* FIXED: boundary_ok REJECTS the last-access forge (the product now folds access 63) */
     }
-    return 21u64                           /* verify rejected the last-access forge -> no hole */
+    return 99u64                           /* FIXED: verify REJECTS the last-access forge */
 }

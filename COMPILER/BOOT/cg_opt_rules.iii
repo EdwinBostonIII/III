@@ -67,3 +67,40 @@ fn cgopt_mul_subk_k(v: u64) -> u32 @export {
     while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
     return k
 }
+
+/* [EMITTED by seraphyte_emit_2shift.sh] is `x * v` a width-faithful TWO-SHIFT strength reduction?  1 iff
+ * v == 2^j + 2^m with j > m >= 1 (popcount 2 and EVEN -- disjoint from pow2/shladd/subk).  Then
+ * x*v == (x<<j) + (x<<m) mod 2^64.  Replaces a full imul with two shifts + one add. */
+fn cgopt_mul_2sh_admit(v: u64) -> u32 @export {
+    if (v & 1u64) != 0u64 { return 0u32 }              /* must be EVEN (low bit m >= 1) */
+    let mut c: u32 = 0u32
+    let mut t: u64 = v
+    while t != 0u64 {
+        if (t & 1u64) != 0u64 { c = c + 1u32 }
+        t = t >> 1u64
+    }
+    if c != 2u32 { return 0u32 }                       /* exactly two set bits */
+    return 1u32
+}
+/* the HIGH set-bit position j (caller guarantees cgopt_mul_2sh_admit(v)==1). */
+fn cgopt_mul_2sh_j(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut hi: u32 = 0u32
+    let mut t: u64 = v
+    while t != 0u64 {
+        if (t & 1u64) != 0u64 { hi = k }
+        k = k + 1u32
+        t = t >> 1u64
+    }
+    return hi
+}
+/* the LOW set-bit position m (caller guarantees cgopt_mul_2sh_admit(v)==1). */
+fn cgopt_mul_2sh_m(v: u64) -> u32 @export {
+    let mut k: u32 = 0u32
+    let mut t: u64 = v
+    while (t & 1u64) == 0u64 {
+        k = k + 1u32
+        t = t >> 1u64
+    }
+    return k
+}

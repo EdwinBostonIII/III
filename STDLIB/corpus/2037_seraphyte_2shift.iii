@@ -1,0 +1,45 @@
+/* STDLIB/corpus/2037_seraphyte_2shift.iii -- the NEW 2-shift strength reduction cg_r3 gained, gated by VALUE.
+ *
+ * cg_r3 now emits  x * (2^j+2^m) -> (x<<j)+(x<<m)  (e.g. x*10 -> shl $3;shl $1;add) instead of a full imul --
+ * a rule the Seraphyte loop discovered+proved+emitted+applied (seraphyte_add_2shift.sh).  This KAT gates the
+ * VALUE, not the mnemonics: the literal multiply (the RULE = two shifts) must equal an IMUL REFERENCE
+ * (x * MULS[i], a memory-load multiply the compiler cannot strength-reduce) over random + overflow edges.
+ * It also REGRESSES the sibling rules (subk x*7, shladd x*9, pow2 x*8) and non-optimised factors (x*11).
+ * 99 = every strength reduction is bit-exact to the reference on every edge.
+ */
+module corpus_2037_seraphyte_2shift
+
+var MULS : [u64; 12] = [10u64, 6u64, 12u64, 20u64, 34u64, 7u64, 9u64, 8u64, 15u64, 11u64, 40u64, 48u64]
+
+/* the IMUL REFERENCE: x * (a memory load) -- NOT a literal, so cg_r3 emits a real imul, not a reduction. */
+fn refmul(x: u64, i: u64) -> u64 { return x * MULS[i] }
+
+fn chk(x: u64) -> u32 {
+    if (x * 10u64) != refmul(x, 0u64)  { return 1u32 }    /* 2-shift  (2^3+2^1) */
+    if (x * 6u64)  != refmul(x, 1u64)  { return 2u32 }    /* 2-shift  (2^2+2^1) */
+    if (x * 12u64) != refmul(x, 2u64)  { return 3u32 }    /* 2-shift  (2^3+2^2) */
+    if (x * 20u64) != refmul(x, 3u64)  { return 4u32 }    /* 2-shift  (2^4+2^2) */
+    if (x * 34u64) != refmul(x, 4u64)  { return 5u32 }    /* 2-shift  (2^5+2^1) */
+    if (x * 7u64)  != refmul(x, 5u64)  { return 6u32 }    /* subk regression  */
+    if (x * 9u64)  != refmul(x, 6u64)  { return 7u32 }    /* shladd regression */
+    if (x * 8u64)  != refmul(x, 7u64)  { return 8u32 }    /* pow2 regression   */
+    if (x * 15u64) != refmul(x, 8u64)  { return 9u32 }    /* subk regression   */
+    if (x * 11u64) != refmul(x, 9u64)  { return 10u32 }   /* non-optimised (imul == imul) */
+    if (x * 40u64) != refmul(x, 10u64) { return 11u32 }   /* 2-shift  (2^5+2^3) */
+    if (x * 48u64) != refmul(x, 11u64) { return 12u32 }   /* 2-shift  (2^5+2^4) */
+    return 0u32
+}
+
+fn main() -> u64 {
+    if chk(0u64) != 0u32 { return 1u64 }
+    if chk(1u64) != 0u32 { return 2u64 }
+    if chk(2u64) != 0u32 { return 3u64 }
+    if chk(255u64) != 0u32 { return 4u64 }
+    if chk(123456789u64) != 0u32 { return 5u64 }
+    if chk(9999999999u64) != 0u32 { return 6u64 }
+    if chk(2305843009213693952u64) != 0u32 { return 7u64 }    /* 2^61 */
+    if chk(9223372036854775808u64) != 0u32 { return 8u64 }    /* 2^63 */
+    if chk(18446744073709551615u64) != 0u32 { return 9u64 }   /* 2^64-1 */
+    if chk(13835058055282163712u64) != 0u32 { return 10u64 }  /* 3*2^62 (wraps) */
+    return 99u64
+}

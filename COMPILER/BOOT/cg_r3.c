@@ -1134,6 +1134,34 @@ static int mul_subk_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
     while (t > 1) { t >>= 1; k++; }
     return k;
 }
+/* [EMITTED] TWO-SHIFT STRENGTH REDUCTION extractors (dual of cg_r3.iii's r3_mul_2sh_j/_m -- IDENTICAL logic
+ * so the emitted assembly is byte-for-byte the same): rhs == 2^j+2^m (j>m>=1) -> j/m, else 0. */
+static int mul_2sh_admit_c(uint64_t v)
+{
+    if ((v & 1) != 0) return 0;
+    int c = 0; uint64_t t = v;
+    while (t != 0) { if ((t & 1) != 0) c++; t >>= 1; }
+    return (c == 2) ? 1 : 0;
+}
+static int mul_2sh_j(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    if (n->u.binary.op != III_BIN_MUL) return 0;
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
+    uint64_t v = rhs->u.int_.value;
+    if (!mul_2sh_admit_c(v)) return 0;
+    int hi = 0, k = 0; uint64_t t = v;
+    while (t != 0) { if ((t & 1) != 0) hi = k; k++; t >>= 1; }
+    return hi;
+}
+static int mul_2sh_m(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    uint64_t v = rhs->u.int_.value;
+    int k = 0; uint64_t t = v;
+    while ((t & 1) == 0) { k++; t >>= 1; }
+    return k;
+}
 /* CONSTANT-SHIFT FOLD test (dual of cg_r3.iii's r3_shift_const_k -- IDENTICAL logic so the emitted
  * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is SHL/SHR and rhs is a constant
  * integer literal in 1..63, return the shift amount; else 0.  x<<k / x>>k for a constant k is the
@@ -1440,6 +1468,22 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
                 emit_line(cg, "    movq %%rax, %%rcx");
                 emit_line(cg, "    shlq $%d, %%rax", ssubk);
                 emit_line(cg, "    subq %%rcx, %%rax");
+                if (expr_is_u32(cg, n->u.binary.lhs))
+                    emit_line(cg, "    movl %%eax, %%eax");
+                stack_push_reg(cg, "rax");
+                return 0;
+            }
+            int j2sh = mul_2sh_j(cg, n);
+            if (j2sh != 0) {
+                /* [EMITTED] TWO-SHIFT: mul by 2^j+2^m -> movq %rax,%rcx; shlq $j,%rax; shlq $m,%rcx; addq
+                 * %rcx,%rax -- (x<<j)+(x<<m) -- replacing a full imul.  Sound mod 2^64. */
+                int m2sh = mul_2sh_m(cg, n);
+                if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
+                stack_pop_reg(cg, "rax");
+                emit_line(cg, "    movq %%rax, %%rcx");
+                emit_line(cg, "    shlq $%d, %%rax", j2sh);
+                emit_line(cg, "    shlq $%d, %%rcx", m2sh);
+                emit_line(cg, "    addq %%rcx, %%rax");
                 if (expr_is_u32(cg, n->u.binary.lhs))
                     emit_line(cg, "    movl %%eax, %%eax");
                 stack_push_reg(cg, "rax");

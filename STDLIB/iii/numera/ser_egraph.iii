@@ -103,12 +103,24 @@ fn seg_pow2_k(v: u64) -> u64 {
     while t > 1u64 { t = t >> 1u64  k = k + 1u64 }
     return k
 }
-/* 2^floor(log2 v) -- the highest power of two <= v (the constant-split pivot). */
+/* 2^floor(log2 v) -- the highest power of two <= v (the additive-split pivot). */
 fn seg_high_pow2(v: u64) -> u64 {
     let mut h : u64 = 1u64
     let mut t : u64 = v
     while t > 1u64 { t = t >> 1u64  h = h << 1u64 }
     return h
+}
+/* smallest power of two STRICTLY greater than v (the subtractive-split pivot). */
+fn seg_ceil_pow2(v: u64) -> u64 {
+    let mut h : u64 = 1u64
+    while h <= v { h = h << 1u64 }
+    return h
+}
+fn seg_popcount(v: u64) -> u32 {
+    let mut c : u32 = 0u32
+    let mut t : u64 = v
+    while t != 0u64 { if (t & 1u64) != 0u64 { c = c + 1u32 }  t = t >> 1u64 }
+    return c
 }
 
 /* ONE saturation pass: apply the rewrite rules, union equivalent classes.  Returns 1 if anything merged. */
@@ -146,6 +158,17 @@ fn seg_saturate_pass() -> u32 {
                         let mr : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(v - hi))
                         let ad : u64 = seg_intern(EG_ADD, mh, mr)
                         if seg_union(i as u64, ad) == 1u32 { changed = 1u32 }
+                        /* GENERIC subtractive split: MUL(x,c) ~ SUB(MUL(x,2^ceil), MUL(x,2^ceil - c)) -- reaches
+                         * the shift-SUB forms (e.g. x*14 = (x<<4)-(x<<1)).  Guarded to popcount(rem)<popcount(c)
+                         * so it fires only for near-power-of-two factors (bounds node growth). */
+                        let cl : u64 = seg_ceil_pow2(v)
+                        let rem : u64 = cl - v
+                        if seg_popcount(rem) < seg_popcount(v) {
+                            let mc : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(cl))
+                            let mrr : u64 = seg_intern(EG_MUL, EG_A[i as u64], seg_const(rem))
+                            let sb : u64 = seg_intern(EG_SUB, mc, mrr)
+                            if seg_union(i as u64, sb) == 1u32 { changed = 1u32 }
+                        }
                     }
                 }
             }
@@ -199,7 +222,7 @@ fn seg_saturate() -> u32 @export {
 }
 
 fn seg_op_cost(op: u32) -> u32 {
-    if op == EG_MUL { return 3u32 }
+    if op == EG_MUL { return 4u32 }   /* imul is dearer than any 2-op shift form, so the 2-shift families WIN */
     if op == EG_SHL { return 1u32 }
     if op == EG_ADD { return 1u32 }
     if op == EG_SUB { return 1u32 }
@@ -271,7 +294,11 @@ fn seg_to_bv(node: u64) -> u32 {
 /* THE SYNTHESIS->PROOF LOOP: saturate MUL(x,v), extract the cost-optimal form, prove it == x*v over ALL 2^64
  * (bv_ring).  1 = the discovered form is CERTIFIED equivalent -- with no per-factor rule: the e-graph derived
  * the form from generic laws, bv_ring proves it.  This is what makes the synthesis proof-carrying. */
-fn seg_prove_mul(v: u64) -> u8 @export {
+/* the SYMBOLIC cross-check (one of several witnesses, NOT the proof on its own): does the extracted form
+ * normalize to the same bv_ring polynomial as x*target?  seg_prove_mul(v) = against(v,v); against(v,wrong)
+ * is the falsifier.  bv_ring is an INDEPENDENT engine from the rewrite e-graph, but it is still my code --
+ * the load-bearing witness is seg_eval below (the form's arithmetic actually executed). */
+fn seg_prove_mul_against(v: u64, target: u64) -> u8 @export {
     seg_reset()
     let x : u64 = seg_var()
     let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
@@ -280,23 +307,48 @@ fn seg_prove_mul(v: u64) -> u8 @export {
     if bc >= EG_INF { return 0u8 }
     bv_reset()
     let xb : u32 = bv_var(0u32)
-    let target : u32 = bv_mul(xb, bv_const(v))
+    let tgt : u32 = bv_mul(xb, bv_const(target))
     let formb : u32 = seg_to_bv(mul)
-    return bv_equal(formb, target)
+    return bv_equal(formb, tgt)
+}
+fn seg_prove_mul(v: u64) -> u8 @export { return seg_prove_mul_against(v, v) }
+
+/* the cost of the cost-optimal extracted form for x*v.  < seg_op_cost(EG_MUL)=4 means a genuine shift
+ * reduction was chosen (not imul-in-disguise); callers gate emission on this. */
+fn seg_mul_cost(v: u64) -> u32 @export {
+    seg_reset()
+    let x : u64 = seg_var()
+    let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
+    seg_saturate()
+    return seg_best_cost(mul)
 }
 
-/* the falsifier: the SAME extracted form proven against a WRONG target (x*wrong) must REJECT -- the proof is
- * specific to v, not vacuously true. */
-fn seg_prove_mul_wrong(v: u64, wrong: u64) -> u8 @export {
+/* THE LOAD-BEARING WITNESS: EXECUTE the extracted form's actual arithmetic on a concrete x.  This is not a
+ * symbolic assertion -- the CPU computes a<<k, a+b, a-b for the chosen shift form, and the caller compares
+ * the result to v*x (also CPU-computed).  Over the wrap edges (2^63 etc.) a wrong decomposition diverges. */
+fn seg_eval(node: u64, x: u64) -> u64 {
+    let c : u64 = EG_CHOICE[seg_find(node)]
+    let op : u32 = EG_OP[c]
+    if op == EG_VAR { return x }
+    if op == EG_CONST { return EG_A[c] }
+    if op == EG_SHL {
+        let a : u64 = seg_eval(EG_A[c], x)
+        return a << EG_A[EG_B[c]]
+    }
+    let la : u64 = seg_eval(EG_A[c], x)
+    let lb : u64 = seg_eval(EG_B[c], x)
+    if op == EG_ADD { return la + lb }
+    if op == EG_SUB { return la - lb }
+    if op == EG_MUL { return la * lb }
+    return la
+}
+/* synthesize the cost-optimal form for x*v, then EXECUTE it on concrete x.  seg_eval_mul(v,x) == v*x iff the
+ * synthesized form genuinely computes the multiply -- proven by running it, not by a self-authored check. */
+fn seg_eval_mul(v: u64, x: u64) -> u64 @export {
     seg_reset()
-    let x : u64 = seg_var()
-    let mul : u64 = seg_intern(EG_MUL, x, seg_const(v))
+    let xn : u64 = seg_var()
+    let mul : u64 = seg_intern(EG_MUL, xn, seg_const(v))
     seg_saturate()
-    let bc : u32 = seg_best_cost(mul)
-    if bc >= EG_INF { return 0u8 }
-    bv_reset()
-    let xb : u32 = bv_var(0u32)
-    let target : u32 = bv_mul(xb, bv_const(wrong))
-    let formb : u32 = seg_to_bv(mul)
-    return bv_equal(formb, target)
+    seg_best_cost(mul)
+    return seg_eval(mul, x)
 }

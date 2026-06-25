@@ -8,7 +8,7 @@
 module corpus_2051_eidos_synth_proof
 
 extern @abi(c-msvc-x64) fn seg_prove_mul(v: u64) -> u8 from "ser_egraph.iii"
-extern @abi(c-msvc-x64) fn seg_prove_mul_wrong(v: u64, wrong: u64) -> u8 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_prove_mul_against(v: u64, wrong: u64) -> u8 from "ser_egraph.iii"
 
 fn main() -> u64 {
     if seg_prove_mul(2u64) != 1u8 { return 1u64 }     /* pow2: x<<1 */
@@ -20,7 +20,7 @@ fn main() -> u64 {
     if seg_prove_mul(1000u64) != 1u8 { return 7u64 }  /* big */
 
     /* TEETH: the proof is specific to v, not vacuous. */
-    if seg_prove_mul_wrong(7u64, 8u64) != 0u8 { return 8u64 }    /* (x<<3)-x is NOT 8x */
-    if seg_prove_mul_wrong(10u64, 12u64) != 0u8 { return 9u64 }  /* (x<<3)+(x<<1) is NOT 12x */
+    if seg_prove_mul_against(7u64, 8u64) != 0u8 { return 8u64 }    /* (x<<3)-x is NOT 8x */
+    if seg_prove_mul_against(10u64, 12u64) != 0u8 { return 9u64 }  /* (x<<3)+(x<<1) is NOT 12x */
     return 99u64
 }

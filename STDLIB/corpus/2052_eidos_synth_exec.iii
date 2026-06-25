@@ -1,0 +1,40 @@
+/* STDLIB/corpus/2052_eidos_synth_exec.iii -- the synthesized form EXECUTED (EIDOS-VM; the un-scripted proof).
+ *
+ * Not a symbolic self-check: seg_eval_mul runs the e-graph's COST-OPTIMAL extracted form's actual arithmetic
+ * (shifts/adds/subs) on concrete integers, and we compare to v*x -- both computed by the CPU.  Over the wrap
+ * edges (2^61, 2^63, 2^64-1) a wrong decomposition diverges, so equality there is real evidence.  The cost
+ * (< imul=4) proves a genuine shift-reduction was synthesized, not imul-in-disguise.  99 = the synthesized
+ * reductions compute v*x on the metal, for families the compiler ships AND a factor it keeps as imul.
+ */
+module corpus_2052_eidos_synth_exec
+
+extern @abi(c-msvc-x64) fn seg_eval_mul(v: u64, x: u64) -> u64 from "ser_egraph.iii"
+extern @abi(c-msvc-x64) fn seg_mul_cost(v: u64) -> u32 from "ser_egraph.iii"
+
+/* execute the synthesized form for v over random + overflow edges; each must equal v*x (both CPU-computed). */
+fn chk(v: u64) -> u32 {
+    if seg_eval_mul(v, 1u64) != v { return 1u32 }
+    if seg_eval_mul(v, 3u64) != v * 3u64 { return 2u32 }
+    if seg_eval_mul(v, 123456789u64) != v * 123456789u64 { return 3u32 }
+    if seg_eval_mul(v, 2305843009213693952u64) != v * 2305843009213693952u64 { return 4u32 }   /* 2^61 */
+    if seg_eval_mul(v, 9223372036854775808u64) != v * 9223372036854775808u64 { return 5u32 }   /* 2^63 */
+    if seg_eval_mul(v, 18446744073709551615u64) != v * 18446744073709551615u64 { return 6u32 } /* 2^64-1 */
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* SHIPPED families: cost < imul(4) means a real shift-reduction was synthesized, and it EXECUTES == v*x. */
+    if seg_mul_cost(8u64)  >= 4u32 { return 14u64 }   if chk(8u64)  != 0u32 { return 1u64 }   /* pow2  : x<<3 */
+    if seg_mul_cost(9u64)  >= 4u32 { return 15u64 }   if chk(9u64)  != 0u32 { return 2u64 }   /* shladd: (x<<3)+x */
+    if seg_mul_cost(7u64)  >= 4u32 { return 16u64 }   if chk(7u64)  != 0u32 { return 3u64 }   /* subk  : (x<<3)-x */
+    if seg_mul_cost(10u64) >= 4u32 { return 17u64 }   if chk(10u64) != 0u32 { return 4u64 }   /* 2-add : (x<<3)+(x<<1) */
+    if seg_mul_cost(14u64) >= 4u32 { return 18u64 }   if chk(14u64) != 0u32 { return 5u64 }   /* 2-sub : (x<<4)-(x<<1) */
+
+    /* x*11 has NO cheaper form: cost == imul(4); the engine correctly keeps MUL -- and even that executes == 11*x. */
+    if seg_mul_cost(11u64) != 4u32 { return 19u64 }
+    if chk(11u64) != 0u32 { return 6u64 }
+
+    /* TEETH: the form for 10 computes 10*x SPECIFICALLY (not 11*x). */
+    if seg_eval_mul(10u64, 123456789u64) == 11u64 * 123456789u64 { return 20u64 }
+    return 99u64
+}

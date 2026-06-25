@@ -1242,8 +1242,10 @@ fn cparams(nt: u32) -> u32 {   /* int NAME ( int a, int b ) -> count the comma-s
 /* the function-name token = after [quals] returntype [*] (returntype: struct/union Name = 2 toks, else 1). */
 fn fn_nametok(ft: u32) -> u32 {
     let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }
-    if kw(q,"struct" as u64,6u32)==1u32 { q=q+2u32 } else { if kw(q,"union" as u64,5u32)==1u32 { q=q+2u32 } else { q=q+1u32 } }
-    if ispat(q,Q_MUL)==1u32 { q=q+1u32 }
+    if ispat(q+1u32,Q_LP)==0u32 {   /* q is the NAME iff the next token is `(` -> for a BARE type-specifier return (`static unsigned foo(`) the qual-skip already consumed the type, so DON'T skip again (else `foo` is eaten as the type and the fn is never registered -> FNT drift) */
+        if kw(q,"struct" as u64,6u32)==1u32 { q=q+2u32 } else { if kw(q,"union" as u64,5u32)==1u32 { q=q+2u32 } else { q=q+1u32 } }
+        if ispat(q,Q_MUL)==1u32 { q=q+1u32 }
+    }
     return q
 }
 fn fn_retmask(ft: u32) -> i64 { let mut q:u32=ft  let mut g:u32=1u32  while g==1u32 { if isqual(q)==1u32 {q=q+1u32} else {g=0u32} }  return type_mask(q) }   /* the return type's width mask */

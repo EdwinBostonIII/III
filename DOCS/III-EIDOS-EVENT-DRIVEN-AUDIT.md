@@ -79,10 +79,20 @@ other's verdicts off the log instead of being wired by hand). The temporal organ
 *natural input* — the events they were always supposed to reason about. That is the difference between a pile
 of pure functions and an event-driven verification substrate.
 
+## Correction (this turn, per review) — the bar for "event-driven"
+The first `ser_causal` rewrite was COSMETIC and is the kind of thing this whole effort exists to kill: a
+write-only "epoch verdict" event nothing read, plus a pack→perceive→read→unpack round-trip to the same pure
+function. The event log was decoration, not load-bearing. It was caught and replaced with the genuine version:
+`caus_collapse` is now a FOLD over the logged ripples producing the causal epoch partition (consumable via
+`caus_epoch_of`), and the realized `O(N!)→O(epochs)` reduction is MEASURED (`caus_orderings_to_check`,
+6→1/6→3/2→2). **The bar: the verdict must emerge from folding the log and be consumable — not the API shape
+bolted on to pass a grep.** Every Tier-A/B item below is held to that bar.
+
 ## Status
-- DONE this pass: pruned the e-graph palindrome law-duplicates (kept `seg_intuit`); `ser_causal` made
-  event-driven (2055); `event_substrate` gained positional readers (`evt_payload_at/kind_at/prio_at`).
-- NEXT, in order of architectural payoff: `ser_tgraph` (consume the log) → `ser_tdriver` → `ser_kinduct`
-  (witness) → the Tier-B verdict-emissions. Each KAT-gated and executed.
+- DONE this pass (genuine, executed): pruned the e-graph palindrome law-duplicates (kept `seg_intuit`);
+  `ser_causal` made event-driven via a real fold (2055); `ser_tgraph` consumes the event log as its LTL trace
+  (2056); `event_substrate` gained positional readers (`evt_payload_at/kind_at/prio_at`).
+- NEXT, in order of architectural payoff: `ser_tdriver` (orchestrate one stream) → `ser_kinduct` (witness;
+  consume the epoch partition) → the Tier-B verdict-emissions. Each KAT-gated, executed, held to the bar above.
 - OWED: `build_stdlib` green since `d4b12beb` (predicted gate-outcome-ratchet hit) — clears before the Tier-B
   sweep.

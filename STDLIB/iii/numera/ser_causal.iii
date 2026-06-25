@@ -81,7 +81,11 @@ extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.i
 extern @abi(c-msvc-x64) fn evt_payload_at(i: u32) -> u64 from "event_substrate.iii"
 
 const CAUS_K_RIPPLE : u64 = 7u64   /* event kind: a ripple (state transform) on the log */
-const CAUS_K_EPOCH  : u64 = 8u64   /* event kind: the collapse verdict (V_REFLECT valid: order is irrelevant) */
+const CAUS_K_EPOCH  : u64 = 8u64   /* event kind: the epoch-partition certificate (payload = n_epochs) */
+
+var CAUS_EPOCH : [u32; 256]   /* FOLD output: the epoch each logged ripple i belongs to (consumable) */
+var CAUS_ESIZE : [u32; 256]   /* size of each epoch */
+var CAUS_NEP   : [u32; 1]      /* number of epochs = the REDUCED unroll dimension (k epochs, not k! orderings) */
 
 fn caus_pack(op: u32, arg: u64) -> u64 { return ((op as u64) << 60u64) | (arg & 0x0FFFFFFFFFFFFFFFu64) }
 fn caus_p_op(p: u64) -> u32 { return (p >> 60u64) as u32 }
@@ -98,22 +102,64 @@ fn caus_commute_events(i: u32, j: u32) -> u8 @export {
     return caus_commute(caus_p_op(pi), caus_p_arg(pi), caus_p_op(pj), caus_p_arg(pj))
 }
 
-/* CAUSAL COLLAPSE on the substrate: read the first n logged ripples; if EVERY pair commutes the set folds to
- * ONE unordered epoch -- EMIT the collapse verdict as a witnessed event and return 1.  A non-commuting pair is
- * a real causal order -> return 0 (no collapse), the interleaving stays. */
-fn caus_collapse(n: u32) -> u8 @export {
+/* THE GENUINE FOLD over the logged ripples -> the causal EPOCH PARTITION.  Folding the event stream in order:
+ * ripple i joins the first epoch ALL of whose members it commutes with (safe: it can reorder freely within
+ * that epoch); else it opens a new epoch.  The partition EMERGES from the fold (not a pairwise bool), it is
+ * CONSUMABLE (caus_epoch_of / caus_orderings_to_check), and n_epochs IS the reduced unroll dimension.  Returns
+ * the number of epochs; emits the partition certificate (payload = n_epochs) for a downstream to read. */
+fn caus_collapse(n: u32) -> u32 @export {
+    let mut z : u32 = 0u32
+    while z < n { CAUS_ESIZE[z as u64] = 0u32  z = z + 1u32 }
+    let mut nep : u32 = 0u32
     let mut i : u32 = 0u32
     while i < n {
-        let mut j : u32 = i + 1u32
-        while j < n {
-            if caus_commute_events(i, j) != 1u8 { return 0u8 }
-            j = j + 1u32
+        let mut joined : u32 = 0u32
+        let mut e : u32 = 0u32
+        while e < nep {
+            if joined == 0u32 {
+                let mut ok : u32 = 1u32
+                let mut j : u32 = 0u32
+                while j < i {
+                    if CAUS_EPOCH[j as u64] == e { if caus_commute_events(i, j) != 1u8 { ok = 0u32 } }
+                    j = j + 1u32
+                }
+                if ok == 1u32 {
+                    CAUS_EPOCH[i as u64] = e
+                    CAUS_ESIZE[e as u64] = CAUS_ESIZE[e as u64] + 1u32
+                    joined = 1u32
+                }
+            }
+            e = e + 1u32
+        }
+        if joined == 0u32 {
+            CAUS_EPOCH[i as u64] = nep
+            CAUS_ESIZE[nep as u64] = 1u32
+            nep = nep + 1u32
         }
         i = i + 1u32
     }
-    evt_perceive(1u64, CAUS_K_EPOCH, n as u64, 0u64)   /* the COLLAPSE certificate, on the log */
-    return 1u8
+    CAUS_NEP[0u64] = nep
+    evt_perceive(1u64, CAUS_K_EPOCH, nep as u64, 0u64)   /* the partition certificate (consumable: payload = n_epochs) */
+    return nep
+}
+fn caus_epoch_of(i: u32) -> u32 @export { return CAUS_EPOCH[i as u64] }
+fn caus_n_epochs() -> u32 @export { return CAUS_NEP[0u64] }
+
+fn caus_fact(k: u32) -> u64 {
+    let mut f : u64 = 1u64
+    let mut i : u32 = 2u32
+    while i <= k { f = f * (i as u64)  i = i + 1u32 }
+    return f
+}
+/* THE CONSUMER + the REALIZED reduction: after collapse, the distinct orderings the membrane must still check
+ * = n! / product(epoch_size!).  All-commuting -> 1 (the O(N!)->O(1) the header claims, MEASURED).  This reads
+ * the partition the fold produced -- the event-driven output genuinely drives a smaller search. */
+fn caus_orderings_to_check(n: u32) -> u64 @export {
+    let mut denom : u64 = 1u64
+    let mut e : u32 = 0u32
+    while e < CAUS_NEP[0u64] { denom = denom * caus_fact(CAUS_ESIZE[e as u64])  e = e + 1u32 }
+    return caus_fact(n) / denom
 }
 
-/* the content-addressed witness of the causal fold (ripples + collapse verdict). */
+/* the content-addressed witness of the causal fold (the ripples + the partition certificate). */
 fn caus_witness() -> u64 @export { return evt_witness(evt_count()) }

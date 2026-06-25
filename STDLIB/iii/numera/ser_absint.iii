@@ -1,0 +1,98 @@
+/* STDLIB/iii/numera/ser_absint.iii -- ABSTRACT INTERPRETATION (Astrée) as the DISCOVER-phase pre-decider,
+ * event-driven, so the SMT only ever sees the irreducible residue (viable on machinery lesser than a datacenter).
+ *
+ * Astrée proved the A380 flight code free of runtime errors by pruning impossible state spaces INSTANTLY --
+ * without executing.  Here the same instinct, exact: a candidate rewrite that is SHIFT-LINEAR (any sum/
+ * difference of left-shifts of x) has a CLOSED-FORM abstract -- its multiplier  M = Σ ±2^k_i  -- computable
+ * in O(#terms) with NO execution and NO solver.  And the abstract is not a heuristic: emitted(x) = M*x
+ * EXACTLY over Z/2^64, so for the shift-linear fragment  M == v  <=>  the rewrite is UNIVERSAL for target
+ * x*v.  So ai_decide is a SOUND + COMPLETE decision procedure for that whole fragment -- it both PROVES
+ * (M==v) and REFUTES (M!=v) without the SMT.  The symbolic sieve (bv_bits/tc_check) is reserved ONLY for the
+ * genuinely irreducible candidates (bitwise: &, |, ^, >>) where the multiplier abstract is TOP (unknown).
+ *
+ * THE PAYOFF (the operator's point): a grammar sweep is mostly shift-linear; the abstract decides that
+ * majority in O(1) each, and the solver -- the datacenter-hungry part -- sees only the bitwise residue.
+ * The combinatorial explosion is pruned ABOVE the solver, not inside it.
+ *
+ * EVENT-DRIVEN (EIDOS): each candidate is PERCEIVED as an event on the append-only witnessed log
+ * (omnia/event_substrate); the abstract folds over the stream; an SMT-OBLIGATION event is emitted ONLY for
+ * the residue.  State = fold over the log; same stream => same witness (replayable, incremental -- no
+ * monolithic batch held in memory).  NO-ML: a closed-form abstract + a fixed fold; no statistics, no model.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 0.99.  NIH: composes omnia/event_substrate (the witnessed bus) --
+ * no island, no reinvented log.  Determinism: integer-only; closed-form; append-only fold.
+ */
+module numera_ser_absint
+
+extern @abi(c-msvc-x64) fn evt_reset() -> i32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_perceive(observer: u64, kind: u64, priority: u64, payload: u64) -> u64 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_count() -> u32 from "event_substrate.iii"
+extern @abi(c-msvc-x64) fn evt_witness(upto: u32) -> u64 from "event_substrate.iii"
+
+const AI_REFUTED : u32 = 0u32   /* the abstract proved it CANNOT equal x*v -- killed, no solver */
+const AI_VALID   : u32 = 1u32   /* the abstract proved it IS x*v (M==v) -- universal, no solver */
+const AI_DEFER   : u32 = 2u32   /* irreducible (bitwise): abstract is TOP -> hand to the SMT */
+
+/* the closed-form abstract multiplier of a shift-linear candidate.  kinds: 0 x<<j ; 1 (x<<j)+(x<<m) ;
+ * 2 (x<<j)-(x<<m) ; 3 (x<<j)+x [shladd] ; 4 (x<<j)-x [shift-sub] ; >=5 bitwise (no multiplier). */
+fn ai_mult(kind: u32, j: u32, m: u32) -> u64 @export {
+    let jj : u64 = j as u64
+    let mm : u64 = m as u64
+    if kind == 0u32 { return 1u64 << jj }
+    if kind == 1u32 { return (1u64 << jj) + (1u64 << mm) }
+    if kind == 2u32 { return (1u64 << jj) - (1u64 << mm) }
+    if kind == 3u32 { return (1u64 << jj) + 1u64 }
+    if kind == 4u32 { return (1u64 << jj) - 1u64 }
+    return 0u64
+}
+
+fn ai_is_linear(kind: u32) -> u32 @export { if kind <= 4u32 { return 1u32 } return 0u32 }
+
+/* THE ASTRÉE DECISION (O(1), no execution, no solver): shift-linear -> DECIDE vs target v; bitwise -> DEFER. */
+fn ai_decide(kind: u32, j: u32, m: u32, v: u64) -> u32 @export {
+    if ai_is_linear(kind) == 0u32 { return AI_DEFER }
+    let mlt : u64 = ai_mult(kind, j, m)
+    if mlt == v { return AI_VALID }
+    return AI_REFUTED
+}
+
+/* candidate packing: (kind<<16)|(j<<8)|m */
+fn ai_kind(c: u64) -> u32 @export { return ((c >> 16u64) & 255u64) as u32 }
+fn ai_j(c: u64) -> u32 @export { return ((c >> 8u64) & 255u64) as u32 }
+fn ai_m(c: u64) -> u32 @export { return (c & 255u64) as u32 }
+
+const AI_OBS   : u64 = 7777u64
+const AI_KCAND : u64 = 1u64    /* a candidate event */
+const AI_KOBL  : u64 = 2u64    /* an SMT-obligation event (only the residue) */
+
+/* THE EVENT-DRIVEN ROUTER: perceive each candidate as an event; fold the abstract; emit an SMT-obligation
+ * event ONLY for the irreducible residue.  Returns the pruning ledger packed (valid<<32|refuted<<16|deferred)
+ * -- how few candidates the solver must see.  The full stream is on the witnessed log (ai_witness replays it). */
+fn ai_route(cands: *u64, n: u32, v: u64) -> u64 @export {
+    evt_reset()
+    let mut valid : u32 = 0u32
+    let mut refuted : u32 = 0u32
+    let mut deferred : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let c : u64 = cands[i as u64]
+        evt_perceive(AI_OBS, AI_KCAND, c, c)
+        let verdict : u32 = ai_decide(ai_kind(c), ai_j(c), ai_m(c), v)
+        if verdict == AI_VALID { valid = valid + 1u32 }
+        else {
+            if verdict == AI_REFUTED { refuted = refuted + 1u32 }
+            else {
+                deferred = deferred + 1u32
+                evt_perceive(AI_OBS, AI_KOBL, c, c)
+            }
+        }
+        i = i + 1u32
+    }
+    return ((valid as u64) << 32u64) | ((refuted as u64) << 16u64) | (deferred as u64)
+}
+
+fn ai_route_valid(r: u64) -> u32 @export { return ((r >> 32u64) & 65535u64) as u32 }
+fn ai_route_refuted(r: u64) -> u32 @export { return ((r >> 16u64) & 65535u64) as u32 }
+fn ai_route_deferred(r: u64) -> u32 @export { return (r & 65535u64) as u32 }
+/* the replayable fold root over the whole event log (candidates + obligations) -- EIDOS witness. */
+fn ai_witness() -> u64 @export { return evt_witness(evt_count()) }

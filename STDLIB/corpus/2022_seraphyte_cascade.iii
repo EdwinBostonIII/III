@@ -1,0 +1,63 @@
+/* STDLIB/corpus/2022_seraphyte_cascade.iii -- one proof, non-local cascade, gated.
+ *
+ * A proof born from x*7 collapses an unrelated x*31, deterministically.  99 = all arms.
+ *
+ *   ARM 1  BEFORE: with nothing proven, an x*31 site stays imul (no coverage without a proof).
+ *   ARM 2  ONE PROOF: register the 2^k-1 family (anti-unify {7,15,31}, prove k=3..63 once).
+ *   ARM 3  THE CASCADE: the UNRELATED x*31 (crypto) now collapses INSTANTLY -- covered, cost imul->shl-sub,
+ *          NO re-proof (a registry lookup, not a solver call).
+ *   ARM 4  NON-LOCAL REACH: sites NEVER in the instance set {7,15,31} are also covered by the one proof
+ *          (63=2^6-1, 127=2^7-1, 2^31-1) -- the proof reaches code the generalization never observed.
+ *   ARM 5  NON-MEMBER: x*11 is not in the family -> not covered -> stays imul (no false collapse).
+ *   ARM 6  PAYOFF: across a codebase of multiply-sites, ONE proof saves an op at every covered site.
+ *   ARM 7  THE WARRANT IS THE PROOF: reset the registry -> x*31 stops being covered -> coverage requires the
+ *          family proof (the cascade re-uses a proof, never skips one).
+ */
+module corpus_2022_seraphyte_cascade
+
+extern @abi(c-msvc-x64) fn casc_register_subk(seed: u64) -> u8 from "ser_cascade.iii"
+extern @abi(c-msvc-x64) fn casc_site_covered(v: u64) -> u32 from "ser_cascade.iii"
+extern @abi(c-msvc-x64) fn casc_cost(v: u64) -> u32 from "ser_cascade.iii"
+extern @abi(c-msvc-x64) fn casc_savings(sites: *u64, n: u32) -> u32 from "ser_cascade.iii"
+extern @abi(c-msvc-x64) fn casc_reset() -> i32 from "ser_cascade.iii"
+
+const CASC_SEED : u64 = 11400714819323198485u64
+var SITES : [u64; 6]
+
+fn main() -> u64 {
+    casc_reset()
+    /* ARM 1: BEFORE any proof -- x*31 (an unrelated crypto multiply) is NOT covered, stays imul. */
+    if casc_site_covered(31u64) != 0u32 { return 1u64 }
+    if casc_cost(31u64) != 3u32 { return 2u64 }
+
+    /* ARM 2: ONE proof -- register the 2^k-1 family (proven over k=3..63 in one shot). */
+    if casc_register_subk(CASC_SEED) != 1u8 { return 3u64 }
+
+    /* ARM 3: THE CASCADE -- the unrelated x*31 collapses INSTANTLY, no re-proof. */
+    if casc_site_covered(31u64) != 1u32 { return 4u64 }
+    if casc_cost(31u64) != 2u32 { return 5u64 }       /* imul (3) -> shl-sub (2) */
+
+    /* ARM 4: NON-LOCAL -- members never observed in {7,15,31} are covered too. */
+    if casc_site_covered(63u64) != 1u32 { return 6u64 }            /* 2^6-1 */
+    if casc_site_covered(127u64) != 1u32 { return 7u64 }           /* 2^7-1 */
+    if casc_site_covered(2147483647u64) != 1u32 { return 8u64 }    /* 2^31-1 */
+
+    /* ARM 5: NON-MEMBER -- x*11 is not 2^k-1, never falsely collapsed. */
+    if casc_site_covered(11u64) != 0u32 { return 9u64 }
+    if casc_cost(11u64) != 3u32 { return 10u64 }
+
+    /* ARM 6: PAYOFF -- one proof saves an op at every covered site across a codebase. */
+    SITES[0u64] = 7u64      /* member   */
+    SITES[1u64] = 31u64     /* member (crypto) */
+    SITES[2u64] = 63u64     /* member   */
+    SITES[3u64] = 11u64     /* NOT      */
+    SITES[4u64] = 255u64    /* member (2^8-1) */
+    SITES[5u64] = 100u64    /* NOT      */
+    if casc_savings((&SITES as u64) as *u64, 6u32) != 4u32 { return 11u64 }   /* 7,31,63,255 covered */
+
+    /* ARM 7: THE WARRANT -- without the proof, no coverage (the cascade re-uses a proof, never skips one). */
+    casc_reset()
+    if casc_site_covered(31u64) != 0u32 { return 12u64 }
+
+    return 99u64
+}

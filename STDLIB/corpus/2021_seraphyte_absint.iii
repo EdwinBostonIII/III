@@ -1,0 +1,72 @@
+/* STDLIB/corpus/2021_seraphyte_absint.iii -- Astrée abstract pre-decider + event-driven routing, gated.
+ *
+ * The "deterministic intuition" that makes the solver viable on modest hardware: a closed-form abstract
+ * (the multiplier M = Sum +/-2^k_i) DECIDES the whole shift-linear fragment in O(1) -- no execution, no
+ * solver -- and the SMT sees ONLY the irreducible bitwise residue.  Event-driven + replayable.  99 = all arms.
+ *
+ *   ARM 1-4  THE O(1) DECISION: shift-sub-for-7 -> VALID; shladd-for-7 (M=9) -> REFUTED instantly; a 2-shift
+ *            (x<<1)+(x<<3) -> VALID for 10; a bitwise candidate -> DEFER (the solver's job).
+ *   ARM 5    THE PRUNING (event-driven): route 6 candidates for v=7; the abstract decides 4 (1 valid + 3
+ *            refuted) WITHOUT the solver, and emits an SMT-obligation event for only the 2 bitwise ones.
+ *   ARM 6    SOUND vs SYMBOLIC: the abstract's O(1) VALID/REFUTED verdicts AGREE with bv_ring over all 2^64
+ *            -- but the solver never had to run for the linear fragment.  Cheap intuition == expensive truth.
+ *   ARM 7    EVENT-DRIVEN REPLAY (EIDOS): same candidate stream => same witnessed fold root (deterministic,
+ *            incremental -- no monolithic batch), and the log is non-empty (events really happened).
+ */
+module corpus_2021_seraphyte_absint
+
+extern @abi(c-msvc-x64) fn ai_decide(kind: u32, j: u32, m: u32, v: u64) -> u32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_route(cands: *u64, n: u32, v: u64) -> u64 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_route_valid(r: u64) -> u32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_route_refuted(r: u64) -> u32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_route_deferred(r: u64) -> u32 from "ser_absint.iii"
+extern @abi(c-msvc-x64) fn ai_witness() -> u64 from "ser_absint.iii"
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const(c: u64) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_mul(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_shl(a: u32, k: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_equal(a: u32, b: u32) -> u8 from "bv_ring.iii"
+
+var CANDS : [u64; 6]
+fn enc(kind: u32, j: u32, m: u32) -> u64 { return ((kind as u64) << 16u64) | ((j as u64) << 8u64) | (m as u64) }
+
+fn main() -> u64 {
+    /* ARM 1-4: the O(1) abstract decision, no solver */
+    if ai_decide(4u32, 3u32, 0u32, 7u64)  != 1u32 { return 1u64 }   /* (x<<3)-x == 7x  -> VALID  */
+    if ai_decide(3u32, 3u32, 0u32, 7u64)  != 0u32 { return 2u64 }   /* (x<<3)+x = 9x   -> REFUTED */
+    if ai_decide(1u32, 1u32, 3u32, 10u64) != 1u32 { return 3u64 }   /* (x<<1)+(x<<3)=10x -> VALID */
+    if ai_decide(5u32, 0u32, 0u32, 7u64)  != 2u32 { return 4u64 }   /* bitwise -> DEFER (SMT)     */
+
+    /* ARM 5: event-driven route for v=7 -- 6 candidates, only the bitwise residue reaches the solver */
+    CANDS[0u64] = enc(4u32, 3u32, 0u32)   /* shift-sub-3 -> VALID   */
+    CANDS[1u64] = enc(3u32, 3u32, 0u32)   /* shladd-3 (9) -> REFUTED */
+    CANDS[2u64] = enc(0u32, 3u32, 0u32)   /* pow2-3 (8)  -> REFUTED  */
+    CANDS[3u64] = enc(1u32, 1u32, 3u32)   /* 2add (10)   -> REFUTED  */
+    CANDS[4u64] = enc(5u32, 0u32, 0u32)   /* bitwise     -> DEFER    */
+    CANDS[5u64] = enc(6u32, 0u32, 0u32)   /* bitwise     -> DEFER    */
+    let r : u64 = ai_route((&CANDS as u64) as *u64, 6u32, 7u64)
+    if ai_route_valid(r)    != 1u32 { return 5u64 }
+    if ai_route_refuted(r)  != 3u32 { return 6u64 }
+    if ai_route_deferred(r) != 2u32 { return 7u64 }    /* the solver sees 2, not 6 */
+
+    /* ARM 6: the O(1) verdicts AGREE with the symbolic engine over all 2^64 (sound), solver unused for these */
+    bv_reset()
+    let x : u32 = bv_var(0u32)
+    if bv_equal(bv_sub(bv_shl(x, 3u32), x), bv_mul(x, bv_const(7u64))) != 1u8 { return 8u64 }   /* VALID confirmed   */
+    bv_reset()
+    let y : u32 = bv_var(0u32)
+    if bv_equal(bv_add(bv_shl(y, 3u32), y), bv_mul(y, bv_const(7u64))) != 0u8 { return 9u64 }   /* REFUTED confirmed */
+
+    /* ARM 7: event-driven replay -- same stream => same witnessed fold root; non-empty log */
+    let w1 : u64 = ai_witness()
+    let r2 : u64 = ai_route((&CANDS as u64) as *u64, 6u32, 7u64)
+    let w2 : u64 = ai_witness()
+    if w1 != w2 { return 10u64 }
+    if w1 == 0u64 { return 11u64 }
+
+    return 99u64
+}

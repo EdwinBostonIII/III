@@ -181,6 +181,8 @@ woven around the CEGIS loop — that lets the synthesizer navigate the SMT cliff
 | **MEMBRANE** | `numera/ser_petri` (2018) | concrete-fuzzing fast-fail; a sound *refuter* that quarantines the heavy proof | **99**; teeth rc=1 |
 | **CEGIS SYNTH** | `numera/ser_cegis` (2019) | the compiler PRODUCES the cost-min descriptor (decides *what* to optimize), counterexample-guided | **99**; teeth rc=1 |
 | **ANTI-UNIFY** | `numera/ser_antiunify` (2020) | {7,15,31} → the 2^k-1 family → ONE symbolic full-range proof (cor_ss, k=3..63) | **99**; teeth rc=5 |
+| **ABSTRACT-INTERP** | `numera/ser_absint` (2021) | Astrée: the closed-form multiplier `M=Σ±2^kᵢ` DECIDES the shift-linear fragment in O(1) (no solver); event-driven router emits an SMT-obligation only for the bitwise residue | **99**; teeth rc=1 |
+| **CASCADE** | `numera/ser_cascade` (2022) | one family proof updates the shared registry → an UNRELATED `x*31` collapses instantly (no re-proof); non-local, proof-warranted | **99**; teeth rc=1 |
 
 **The two-stage oracle (the conscience line, held everywhere):** a CONCRETE oracle refutes (cheap, kills
 the 99%); only the SYMBOLIC sieve (bv_ring/bv_bits over all 2^64) *proves* universality. "No concrete CE ⇒
@@ -189,9 +191,20 @@ instances (a conjecture — 3 points prove nothing); `au_prove_family` (the full
 it universal, and the family is proven to PROVABLY extend beyond the observed instances (covers 63, 127, …).
 
 **The deterministic-intuition layers (Astrée / SAT-solver instincts, made exact — all no-ML):**
-- **Abstract Interpretation (Astrée):** a cheap width/type pre-filter that kills a candidate whose output
-  cannot fit the target (a 65-bit result for a 64-bit slot) BEFORE the membrane — composing `sov_isa`
-  bit-widths. `[ARCHITECTED — the next build; it prunes the space above the concrete membrane.]`
+- **Abstract Interpretation (Astrée):** `[LANDED — numera/ser_absint, 2021]` the closed-form multiplier
+  `M=Σ±2^kᵢ` is the EXACT invariant of any shift-linear candidate, so `M==v ⇔ universal` — a SOUND+COMPLETE
+  O(1) decision for that whole fragment, **no solver**. The SMT sees ONLY the irreducible bitwise residue;
+  the combinatorial explosion is pruned ABOVE the solver (viable on machinery lesser than a datacenter).
+  Event-driven: candidates perceived on the witnessed `event_substrate` log, the abstract folded over the
+  stream, an SMT-obligation emitted only for the residue — replayable, incremental.
+- **The UNIFIED CASCADE (non-local optimization):** `[LANDED — numera/ser_cascade, 2022]` a family proven
+  ONCE updates a shared proven-rule registry; thereafter ANY site using a member collapses instantly with NO
+  re-proof — a proof born from `x*7` optimizes an unrelated `x*31` in crypto, and members never observed
+  (63, 127, 2³¹−1). The collapse is a SOUND CONSEQUENCE of the family proof (coverage requires the registry
+  flag, set only by a verified `au_prove_family`), not a skipped proof. The optimization a human's working
+  memory cannot find — non-local, multi-site — made deterministic. The DEEPER cascade (a collapse triggering
+  dead-code elimination → register reallocation across the codebase) is the named frontier over the live
+  ripple/weave passes.
 - **Symmetry-Breaking / Anti-Unification:** `2020`, LANDED — collapse N per-constant proofs into one
   parametric family proof. Structural match, not statistics.
 - **Equality Saturation:** `numera/mcmc_egraph`, EXISTS+gated — apply all rules simultaneously, saturate,

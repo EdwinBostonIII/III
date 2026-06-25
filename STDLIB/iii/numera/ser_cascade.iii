@@ -1,0 +1,75 @@
+/* STDLIB/iii/numera/ser_cascade.iii -- THE UNIFIED CASCADE: one proof, non-local collapse everywhere.
+ *
+ * The optimization a human's working memory can never find is NON-LOCAL: a proof born in one context that
+ * collapses an UNRELATED context.  When anti-unification (numera/ser_antiunify) proves a generalization ONCE
+ * -- x*7 -> shift-sub, generalized to the family x*(2^k-1), proven over k=3..63 by the symbolic sieve -- that
+ * universal fact updates a SHARED proven-rule registry (the genome).  Now ANY site anywhere using a member of
+ * that family -- a multiply by 31 buried in unrelated cryptographic logic -- COLLAPSES INSTANTLY: it is
+ * covered by the already-proven family, with NO re-proof.  One deterministic generalization, a cascade of
+ * collapses across the whole codebase.
+ *
+ * THE CONSCIENCE LINE: the instant collapse is NOT a new assumption -- it is a SOUND CONSEQUENCE of the
+ * family proof.  casc_site_covered(31) returns "optimize" ONLY because au_prove_family already proved EVERY
+ * member k=3..63 (31 = 2^5-1 is k=5, inside the proven range).  No proof => no coverage (casc requires the
+ * registry flag, set only by a verified au_prove_family).  The cascade re-uses a proof; it never skips one.
+ *
+ * NO-ML: the registry holds a PROVEN flag (a deductive fact), never a frequency or a learned weight; coverage
+ * is a structural membership test, not a statistic.
+ *
+ * Hexad: kind_act.  Ring: R0.  K: 0.99.  NIH: composes numera/ser_antiunify (the family prover) + numera/
+ * ser_cegis (the per-site descriptor) -- no island.  Determinism: integer-only; a single registry flag.
+ */
+module numera_ser_cascade
+
+extern @abi(c-msvc-x64) fn au_generalize(v0: u64, v1: u64, v2: u64, seed: u64) -> u32 from "ser_antiunify.iii"
+extern @abi(c-msvc-x64) fn au_prove_family(family: u32) -> u8 from "ser_antiunify.iii"
+
+const CASC_SUBK : u32 = 2u32
+
+var CASC_SUBK_PROVEN : u8 = 0u8   /* the shared registry (genome): is the 2^k-1 family proven? */
+
+/* REGISTER the 2^k-1 family as proven -- anti-unify {7,15,31} then prove the WHOLE family ONCE (the only
+ * place a proof is paid).  1 iff registered. */
+fn casc_register_subk(seed: u64) -> u8 @export {
+    let fam : u32 = au_generalize(7u64, 15u64, 31u64, seed)
+    if fam != CASC_SUBK { return 0u8 }
+    if au_prove_family(fam) != 1u8 { return 0u8 }
+    CASC_SUBK_PROVEN = 1u8
+    return 1u8
+}
+
+/* structural membership of the 2^k-1 family: v >= 7 and v+1 an exact power of two (k = 3..63). */
+fn casc_is_subk_member(v: u64) -> u32 @export {
+    if v < 7u64 { return 0u32 }
+    if (v >> 63u64) != 0u64 { return 0u32 }
+    let p : u64 = v + 1u64
+    if (p & v) != 0u64 { return 0u32 }
+    return 1u32
+}
+
+/* THE INSTANT COLLAPSE: is the site x*v covered by the PROVEN family?  1 = optimize to shl-sub with NO
+ * re-proof; 0 = not covered (keep imul).  Coverage REQUIRES the registry flag -- the family proof is the warrant. */
+fn casc_site_covered(v: u64) -> u32 @export {
+    if CASC_SUBK_PROVEN != 1u8 { return 0u32 }
+    return casc_is_subk_member(v)
+}
+
+/* the shared cost-model value at a site: imul (3) collapses to shl-sub (2) once covered. */
+fn casc_cost(v: u64) -> u32 @export {
+    if casc_site_covered(v) == 1u32 { return 2u32 }
+    return 3u32
+}
+
+/* the cascade payoff: total ops saved across a whole codebase of multiply-sites, from the ONE family proof. */
+fn casc_savings(sites: *u64, n: u32) -> u32 @export {
+    let mut saved : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        if casc_site_covered(sites[i as u64]) == 1u32 { saved = saved + 1u32 }
+        i = i + 1u32
+    }
+    return saved
+}
+
+/* reset (for the KAT's before/after contrast). */
+fn casc_reset() -> i32 @export { CASC_SUBK_PROVEN = 0u8  return 0i32 }

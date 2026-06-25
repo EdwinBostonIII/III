@@ -1,0 +1,87 @@
+/* STDLIB/iii/numera/ser_fsm.iii -- THE PARAMETRIC FINITE-STATE TRANSITION SUBSTRATE (EIDOS Verification Membrane,
+ * Phase 0).  The root cause of ser_kinduct being fixture-locked is that ski_succ HARDCODES the lock-mutex
+ * transition relation.  This module lifts the transition relation, the invariant, and the initial set into a
+ * caller-REGISTERED table, so ANY finite-state system can be k-inducted (ser_kinduct, Phase 1) and causally
+ * collapsed (ser_causal, Phase 3).  The mutex becomes ONE instance a caller registers, not the only one.
+ *
+ * Representation (general, minimal): N states (0..N-1), a list of directed transition edges (from -> to; the
+ * "move" is the edge index), the invariant as a state->bool table (which states are "good"), and the initial
+ * set as a state->bool table.  k-induction needs exactly these.  No allocator; module-scope arrays (W4: no
+ * fn-local var arrays); runtime indices touch module arrays only.  Ring R0.  K 1.00.  NIH: authors no proof.
+ */
+module numera_ser_fsm
+
+const SFSM_MAXS : u32 = 256u32      /* max states */
+const SFSM_MAXE : u32 = 2048u32     /* max transition edges */
+
+var SFSM_N    : [u32; 1]            /* state count */
+var SFSM_EN   : [u32; 1]            /* edge count */
+var SFSM_TF   : [u32; 2048]         /* edge from */
+var SFSM_TT   : [u32; 2048]         /* edge to */
+var SFSM_INV  : [u8; 256]           /* invariant: 1 iff state s is "good" */
+var SFSM_INIT : [u8; 256]           /* initial set: 1 iff state s is initial */
+
+fn sfsm_reset() -> i32 @export {
+    SFSM_N[0u64] = 0u32
+    SFSM_EN[0u64] = 0u32
+    let mut i : u32 = 0u32
+    while i < SFSM_MAXS {
+        SFSM_INV[i as u64] = 0u8
+        SFSM_INIT[i as u64] = 0u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+fn sfsm_set_n(n: u32) -> i32 @export { if n > SFSM_MAXS { return -1i32 }  SFSM_N[0u64] = n  return 0i32 }
+fn sfsm_add_trans(src: u32, to: u32) -> i32 @export {
+    let e : u32 = SFSM_EN[0u64]
+    if e >= SFSM_MAXE { return -1i32 }
+    SFSM_TF[e as u64] = src
+    SFSM_TT[e as u64] = to
+    SFSM_EN[0u64] = e + 1u32
+    return 0i32
+}
+fn sfsm_set_inv(s: u32, holds: u8) -> i32 @export { if s >= SFSM_MAXS { return -1i32 }  SFSM_INV[s as u64] = holds  return 0i32 }
+fn sfsm_set_init(s: u32, is_init: u8) -> i32 @export { if s >= SFSM_MAXS { return -1i32 }  SFSM_INIT[s as u64] = is_init  return 0i32 }
+
+fn sfsm_n() -> u32 @export { return SFSM_N[0u64] }
+fn sfsm_trans_n() -> u32 @export { return SFSM_EN[0u64] }
+fn sfsm_trans_from(e: u32) -> u32 @export { if e >= SFSM_EN[0u64] { return 0u32 }  return SFSM_TF[e as u64] }
+fn sfsm_trans_to(e: u32) -> u32 @export { if e >= SFSM_EN[0u64] { return 0u32 }  return SFSM_TT[e as u64] }
+fn sfsm_inv(s: u32) -> u8 @export { if s >= SFSM_MAXS { return 0u8 }  return SFSM_INV[s as u64] }
+fn sfsm_init(s: u32) -> u8 @export { if s >= SFSM_MAXS { return 0u8 }  return SFSM_INIT[s as u64] }
+
+/* the edge-removal primitive ser_causal (Phase 3) uses to write back the collapsed quotient. */
+fn sfsm_drop_trans(e: u32) -> i32 @export {
+    let n : u32 = SFSM_EN[0u64]
+    if e >= n { return -1i32 }
+    let mut i : u32 = e
+    while i + 1u32 < n {
+        SFSM_TF[i as u64] = SFSM_TF[(i + 1u32) as u64]
+        SFSM_TT[i as u64] = SFSM_TT[(i + 1u32) as u64]
+        i = i + 1u32
+    }
+    SFSM_EN[0u64] = n - 1u32
+    return 0i32
+}
+
+/* UNIT PROOF: register a small system, read it back, drop an edge.  99 = the substrate is faithful. */
+fn sfsm_selftest() -> u64 @export {
+    sfsm_reset()
+    sfsm_set_n(4u32)
+    sfsm_add_trans(0u32, 1u32)
+    sfsm_add_trans(1u32, 2u32)
+    sfsm_add_trans(2u32, 3u32)
+    sfsm_set_inv(0u32, 1u8)
+    sfsm_set_init(0u32, 1u8)
+    if sfsm_n() != 4u32 { return 1u64 }
+    if sfsm_trans_n() != 3u32 { return 2u64 }
+    if sfsm_trans_to(1u32) != 2u32 { return 3u64 }
+    if sfsm_inv(0u32) != 1u8 { return 4u64 }
+    if sfsm_inv(1u32) != 0u8 { return 5u64 }       /* unset state -> no invariant (teeth) */
+    if sfsm_init(0u32) != 1u8 { return 6u64 }
+    sfsm_drop_trans(1u32)                           /* remove 1->2 */
+    if sfsm_trans_n() != 2u32 { return 7u64 }
+    if sfsm_trans_to(1u32) != 3u32 { return 8u64 }  /* the old edge[2] (2->3) shifted into slot 1 */
+    return 99u64
+}

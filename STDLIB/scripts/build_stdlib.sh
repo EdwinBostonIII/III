@@ -1266,6 +1266,9 @@ MODULES=(
     # INTUITION ser_cegis synthesizes the descriptor, INTENT ser_intent merges on proof, COLLAPSE
     # ser_cascade/cascade2/regalloc, ALIGN ser_tdriver, WITNESS ser_eidos). Composes those organs only. -> LIBNATIVE.
     "numera/ser_pipeline"
+    # EIDOS Verification Membrane (DOCS/III-EIDOS-VERIFICATION-MEMBRANE-PLAN.md): ser_fsm = the parametric
+    # finite-state substrate that lifts the hardcoded mutex out of ser_kinduct (Phase 0).
+    "numera/ser_fsm"
     # Phase C: Proof-Carrying Code -- the one permitted generative synthesis. pcc_verify =
     # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
     # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.

@@ -138,6 +138,7 @@ declare -A EXPECTED=(
     [2036_seraphyte_pipeline]=99
     [2037_seraphyte_2shift]=99
     [2038_seraphyte_2sub]=99
+    [2039_eidos_fsm]=99
     [1982_dome_accessor_coverage]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186

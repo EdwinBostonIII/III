@@ -1,0 +1,92 @@
+/* STDLIB/iii/eidos/reactor.iii -- THE RESIDENT REACTOR LOOP (Ripple Merge, top-level driver; the SOUND core of the
+ * proposed "Dynamic Reactor").  Ties the writers (planner / optimizer / nous / Seraphytes) into a continuous,
+ * deterministic loop over the EXISTING substrate -- it authors no log, no proof, no crypto:
+ *
+ *   SUBMIT : a writer offers a ripple <verb,a,b> with its obligation Omega (a VACUOUS geometry tick, or a CRYSTAL
+ *            self-edit).  The LAZY MEMBRANE (eidos/membrane mbr_verify) gates it AT SUBMIT: VACUOUS is FREE; a
+ *            CRYSTAL is admitted only if crystal_verify passes -- a forged / absent proof is DROPPED, never folded.
+ *   TICK   : seal the epoch (eidos/epoch epoch_seal -- a deterministic content-address sort + involution fold, so the
+ *            epoch root is a pure function of the SET, byte-identical across writer order), chain that root into the
+ *            running witness (FNV-1a, O(32) -- INCREMENTAL: each tick folds only the NEW epoch, never the whole
+ *            history), and clear the pending for the next tick.  `while(1){ submit*; tick }` is the residency -- the
+ *            loop body is here; the forever-wrapper is a one-line daemon (cf. forcefield/daemon_dream).
+ *   QUEUE  : an admitted CRYSTAL self-edit is QUEUED (its crystal id) for the GATED promotion -- the byte-identical
+ *            reseal (Gate 7) that re-verifies the WHOLE compiler.  The reactor NEVER hot-swaps the live compiler.
+ *
+ * SOUNDNESS (DOCS/III-DYNAMIC-REACTOR-VERDICT.md): the proposed Phase IV -- mutate the live cg_r3 rule pointer on a
+ * per-rule crystal, reseal lazily -- is REFUTED.  A per-rule crystal proves the RULE; only the byte-fixpoint
+ * (iiis-2==iiis-3) + corpus proves the WHOLE compiler, and the self-hosting fixpoint breaks under mid-compile
+ * mutation.  So: fast discovery + proof here (resident, incremental, no OS spawn); the live-compiler promotion stays
+ * behind the byte gate, drained from this queue -- never bypassed.
+ *
+ * Ring R0.  K 1.00.  NIH: composes eidos/epoch + eidos/membrane + omnia/involution only; no new crypto, no island. */
+module eidos_reactor
+
+extern @abi(c-msvc-x64) fn epoch_reset() -> i32 from "epoch.iii"
+extern @abi(c-msvc-x64) fn epoch_submit(verb: u32, a_ptr: u64, b_ptr: u64) -> i32 from "epoch.iii"
+extern @abi(c-msvc-x64) fn epoch_seal(out_root: u64) -> u32 from "epoch.iii"
+extern @abi(c-msvc-x64) fn mbr_reset() -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_set_vacuous(h_ptr: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_set_crystal(h_ptr: u64, crystal_id: u64) -> i32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn mbr_verify(h_ptr: u64) -> u32 from "membrane.iii"
+extern @abi(c-msvc-x64) fn inv_address(verb: u32, a_ptr: u64, b_ptr: u64, out32: u64) -> i32 from "involution.iii"
+
+const RX_VACUOUS   : u32 = 1u32
+const RX_CRYSTAL   : u32 = 2u32
+const RX_QCAP      : u32 = 256u32
+const RX_FNV_PRIME : u64 = 1099511628211u64
+
+/* the running witness: FNV-1a fold of the per-epoch byte-identical roots (offset basis at reset). */
+var RX_RUNNING : u64 = 14695981039346656037u64
+var RX_QUEUE   : [u64; 256]   /* admitted CRYSTAL self-edit ids awaiting the GATED byte-identical promotion */
+var RX_QN      : u32 = 0u32
+var RX_REJECT  : u32 = 0u32   /* forged/absent self-edits dropped by the membrane (the proof gate biting) */
+var RX_TICKS   : u32 = 0u32
+var RX_H       : [u8; 32]     /* scratch: the obligation content-address */
+
+fn reactor_reset() -> i32 @export {
+    RX_RUNNING = 14695981039346656037u64
+    RX_QN = 0u32
+    RX_REJECT = 0u32
+    RX_TICKS = 0u32
+    epoch_reset()
+    mbr_reset()
+    return 0i32
+}
+
+/* a writer submits a ripple with its obligation; PROOF-GATED AT SUBMIT.  1 = admitted (entered the epoch),
+ * 0 = rejected (forged/absent proof -> dropped, never folded). */
+fn reactor_submit(verb: u32, a_ptr: u64, b_ptr: u64, omega: u32, cid: u64) -> u32 @export {
+    inv_address(verb, a_ptr, b_ptr, (&RX_H[0u64]) as u64)
+    if omega == RX_VACUOUS { mbr_set_vacuous((&RX_H[0u64]) as u64) }
+    if omega == RX_CRYSTAL { mbr_set_crystal((&RX_H[0u64]) as u64, cid) }
+    let v : u32 = mbr_verify((&RX_H[0u64]) as u64)
+    if v != 1u32 { RX_REJECT = RX_REJECT + 1u32   return 0u32 }
+    epoch_submit(verb, a_ptr, b_ptr)
+    if omega == RX_CRYSTAL { if RX_QN < RX_QCAP { RX_QUEUE[RX_QN as u64] = cid   RX_QN = RX_QN + 1u32 } }
+    return 1u32
+}
+
+/* one reactor tick: seal the epoch (byte-identical root -> out_root), chain it into the running witness
+ * (incremental, O(32)), clear the pending.  Returns the count of ripples folded this tick. */
+fn reactor_tick(out_root: u64) -> u32 @export {
+    let n : u32 = epoch_seal(out_root)
+    let p : *u8 = out_root as *u8
+    let mut h : u64 = RX_RUNNING
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        h = h ^ (p[i] as u64)
+        h = h * RX_FNV_PRIME
+        i = i + 1u64
+    }
+    RX_RUNNING = h
+    epoch_reset()
+    RX_TICKS = RX_TICKS + 1u32
+    return n
+}
+
+fn reactor_running() -> u64 @export { return RX_RUNNING }
+fn reactor_queue_count() -> u32 @export { return RX_QN }
+fn reactor_queue_cid(i: u32) -> u64 @export { if i >= RX_QN { return 0u64 }   return RX_QUEUE[i as u64] }
+fn reactor_rejected() -> u32 @export { return RX_REJECT }
+fn reactor_ticks() -> u32 @export { return RX_TICKS }

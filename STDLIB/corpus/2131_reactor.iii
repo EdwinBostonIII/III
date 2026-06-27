@@ -1,0 +1,88 @@
+/* 2131_reactor.iii -- THE RESIDENT REACTOR LOOP (Ripple Merge top-level; the SOUND "Dynamic Reactor" core).
+ * Proves the continuous loop over the existing substrate: VACUOUS geometry ticks fold FREE; the epoch fold is
+ * BYTE-IDENTICAL across writer order; a CRYSTAL self-edit is admitted ONLY with a valid crystal (a forged one is
+ * DROPPED by the lazy membrane) and is QUEUED for the GATED byte-identical promotion -- the live compiler is NEVER
+ * hot-swapped; the running witness advances INCREMENTALLY per tick; a replay is deterministic.
+ * 99 = the sound reactor (the unsound Phase IV live hot-swap is refused -- DOCS/III-DYNAMIC-REACTOR-VERDICT.md). */
+module m2131_reactor
+
+extern @abi(c-msvc-x64) fn reactor_reset() -> i32 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_submit(verb: u32, a_ptr: u64, b_ptr: u64, omega: u32, cid: u64) -> u32 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_tick(out_root: u64) -> u32 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_running() -> u64 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_queue_count() -> u32 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_queue_cid(i: u32) -> u64 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_rejected() -> u32 from "reactor.iii"
+extern @abi(c-msvc-x64) fn reactor_ticks() -> u32 from "reactor.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+
+const VAC   : u32 = 1u32
+const CRY   : u32 = 2u32
+const BELOW : u32 = 0u32
+
+var A1 : [u8; 32]   var B1 : [u8; 32]   var A2 : [u8; 32]   var B2 : [u8; 32]   var A3 : [u8; 32]   var B3 : [u8; 32]
+var SITE : [u8; 32]   var ROOT : [u8; 32]
+
+fn fill(p: u64, seed: u32) -> i32 {
+    let pp : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { pp[i] = ((seed + (i as u32)) & 255u32) as u8   i = i + 1u64 }
+    return 0i32
+}
+
+fn fill_all() -> i32 {
+    fill((&A1[0u64]) as u64, 1u32)     fill((&B1[0u64]) as u64, 50u32)
+    fill((&A2[0u64]) as u64, 100u32)   fill((&B2[0u64]) as u64, 150u32)
+    fill((&A3[0u64]) as u64, 200u32)   fill((&B3[0u64]) as u64, 250u32)
+    fill((&SITE[0u64]) as u64, 77u32)
+    return 0i32
+}
+
+fn main() -> u64 {
+    fill_all()
+
+    /* (1) tick 1: three VACUOUS geometry ripples fold FREE */
+    reactor_reset()
+    if reactor_submit(BELOW, (&A1[0u64]) as u64, (&B1[0u64]) as u64, VAC, 0u64) != 1u32 { return 1u64 }
+    if reactor_submit(BELOW, (&A2[0u64]) as u64, (&B2[0u64]) as u64, VAC, 0u64) != 1u32 { return 2u64 }
+    if reactor_submit(BELOW, (&A3[0u64]) as u64, (&B3[0u64]) as u64, VAC, 0u64) != 1u32 { return 3u64 }
+    let n1 : u32 = reactor_tick((&ROOT[0u64]) as u64)
+    if n1 != 3u32 { return 4u64 }
+    let r1 : u64 = reactor_running()
+    if reactor_queue_count() != 0u32 { return 5u64 }     /* geometry queues nothing */
+    if reactor_ticks() != 1u32 { return 6u64 }
+
+    /* (2) BYTE-IDENTICAL across writer ORDER: the SAME set in REVERSE order -> the SAME running witness */
+    reactor_reset()
+    if reactor_submit(BELOW, (&A3[0u64]) as u64, (&B3[0u64]) as u64, VAC, 0u64) != 1u32 { return 7u64 }
+    if reactor_submit(BELOW, (&A2[0u64]) as u64, (&B2[0u64]) as u64, VAC, 0u64) != 1u32 { return 8u64 }
+    if reactor_submit(BELOW, (&A1[0u64]) as u64, (&B1[0u64]) as u64, VAC, 0u64) != 1u32 { return 9u64 }
+    reactor_tick((&ROOT[0u64]) as u64)
+    let r2 : u64 = reactor_running()
+    if r2 != r1 { return 10u64 }                          /* order-independent (epoch deterministic sort) */
+
+    /* (3) tick 2 (continuing the same reactor): a CRYSTAL self-edit, PROOF-GATED */
+    let vc : u64 = crystal_mint(7u32, (&SITE[0u64]) as u64, 1u64, 0u64)
+    if crystal_verify(vc) != 1u8 { return 11u64 }         /* the mint is valid */
+    if reactor_submit(BELOW, (&A1[0u64]) as u64, (&B2[0u64]) as u64, CRY, vc) != 1u32 { return 12u64 }   /* admitted */
+    if reactor_submit(BELOW, (&A2[0u64]) as u64, (&B3[0u64]) as u64, CRY, 0u64) != 0u32 { return 13u64 } /* FORGED -> rejected */
+    if reactor_rejected() != 1u32 { return 14u64 }
+    let n2 : u32 = reactor_tick((&ROOT[0u64]) as u64)
+    if n2 != 1u32 { return 15u64 }                        /* only the admitted self-edit folded; forged dropped */
+    if reactor_queue_count() != 1u32 { return 16u64 }     /* the self-edit QUEUED for GATED promotion (not hot-swapped) */
+    if reactor_queue_cid(0u32) != vc { return 17u64 }     /* the valid crystal id */
+    let r3 : u64 = reactor_running()
+    if r3 == r1 { return 18u64 }                          /* tick 2 advanced the witness INCREMENTALLY */
+    if reactor_ticks() != 2u32 { return 19u64 }
+
+    /* (4) determinism: a fresh identical 3-vacuous run reproduces r1 */
+    reactor_reset()
+    reactor_submit(BELOW, (&A1[0u64]) as u64, (&B1[0u64]) as u64, VAC, 0u64)
+    reactor_submit(BELOW, (&A2[0u64]) as u64, (&B2[0u64]) as u64, VAC, 0u64)
+    reactor_submit(BELOW, (&A3[0u64]) as u64, (&B3[0u64]) as u64, VAC, 0u64)
+    reactor_tick((&ROOT[0u64]) as u64)
+    if reactor_running() != r1 { return 20u64 }
+
+    return 99u64
+}
